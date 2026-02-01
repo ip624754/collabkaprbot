@@ -65,6 +65,26 @@ function fmtWait(sec) {
   return `${Math.ceil(s / 3600)} ч.`;
 }
 
+// Small numeric helper (used in callback parsing)
+function num(v, def = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : def;
+}
+
+// Unique string array (trim + dedupe, preserves order)
+function uniqStrArr(arr) {
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const x of arr) {
+    const s = String(x ?? '').trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
 // Sponsors helpers (Jobs-style clarity)
 function normalizeSponsorsList(raw) {
   if (!Array.isArray(raw)) return [];
@@ -4944,7 +4964,8 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
   const replyText = buildBrandAppTemplateText(brandName, key);
 
   const cUrl = prof?.contact ? brandContactUrl(prof.contact) : null;
-  const linkLine = prof?.link ? `\n🔗 Сайт/ссылка: ${escapeHtml(String(prof.link))}` : '';
+  const link = String(prof?.brand_link || '').trim();
+  const linkLine = link ? `\n🔗 Сайт/ссылка: ${escapeHtml(link)}` : '';
   const contactLine = cUrl ? `\n✍️ Контакт: ${escapeHtml(String(prof.contact))}` : '';
 
   const outText =
@@ -5064,7 +5085,8 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
   const replyText = buildBrandAppTemplateText(brandName, key);
 
   const cUrl = prof?.contact ? brandContactUrl(prof.contact) : null;
-  const linkLine = prof?.link ? `\n🔗 Сайт/ссылка: ${escapeHtml(String(prof.link))}` : '';
+  const link = String(prof?.brand_link || '').trim();
+  const linkLine = link ? `\n🔗 Сайт/ссылка: ${escapeHtml(link)}` : '';
   const contactLine = cUrl ? `\n✍️ Контакт: ${escapeHtml(String(prof.contact))}` : '';
 
   const outText =
@@ -8772,10 +8794,9 @@ ${escapeHtml(payLine)}
       const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
       const cUrl = prof?.contact ? brandContactUrl(prof.contact) : null;
-      const linkLine = prof?.link ? `
-🔗 Сайт/ссылка: ${escapeHtml(String(prof.link))}` : '';
-      const contactLine = cUrl ? `
-✍️ Контакт: ${escapeHtml(String(prof.contact))}` : '';
+      const link = String(prof?.brand_link || '').trim();
+      const linkLine = link ? `\n🔗 Сайт/ссылка: ${escapeHtml(link)}` : '';
+      const contactLine = cUrl ? `\n✍️ Контакт: ${escapeHtml(String(prof.contact))}` : '';
 
       const outText =
         `📩 <b>Ответ бренда</b>
