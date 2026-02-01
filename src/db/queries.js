@@ -2349,8 +2349,9 @@ export async function listBrandsDirectoryFiltered(limit = 10, offset = 0, filter
   const ctPatternsByOffer = (t) => {
     const v = String(t || '').toLowerCase();
     if (!v) return null;
-    if (v === 'ad') return ['%,integration,%'];
+    if (v === 'ad') return ['%,integration,%', '%,stories,%', '%,reels,%', '%,post,%', '%,ambassador,%'];
     if (v === 'review') return ['%,review,%', '%,unboxing,%'];
+    if (v === 'ugc') return ['%,ugc,%'];
     if (v === 'giveaway') return ['%,giveaway,%'];
     if (v === 'other') return ['%,other,%'];
     return null;
@@ -2361,6 +2362,7 @@ export async function listBrandsDirectoryFiltered(limit = 10, offset = 0, filter
     if (!v) return null;
     if (v === 'barter') return ['%,barter,%'];
     if (v === 'cert') return ['%,cert,%'];
+    if (v === 'paid') return ['%,paid,%'];
     if (v === 'rub') return ['%,paid,%'];
     if (v === 'mixed') return ['%,mixed,%'];
     return null;
@@ -3535,3 +3537,4 @@ export async function searchWorkspaceProfilesByMatrix(verticals = [], formats = 
 
   return r.rows;
 }
+ 
