@@ -2128,8 +2128,8 @@ function brandDirFiltersKb(f, page = 0) {
     .row();
 
   kb
-    .text('♻️ Сбросить', `a:bd_freset|p:${page}`)
-    .text('⬅️ Назад', `a:brands_home|p:${page}`);
+    .text('♻️ Сбросить', `a:bd_freset|p:0`)
+    .text('📋 Показать бренды', `a:brands_home|p:0`);
 
   return kb;
 }
@@ -2200,15 +2200,67 @@ function brandDirMultiPickKb(key, page, selected) {
 async function renderBrandDirFilters(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
   const f = await getBrandDirFilter(ctx.from.id);
-  const text = `🎛 <b>Фильтры брендов</b>\n<i>Режим: 🎬 Креатор · Ты ищешь: 🏷 бренды</i>\n\n${escapeHtml(brandDirFilterSummary(f))}\n\n<i>Фильтры берутся из настроек брендов (профиль бренда → 🧩 Форматы + расширенный профиль).</i>\n\nВыбери, какие бренды показывать.`;
-  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: brandDirFiltersKb(f, page) });
+
+  // Small helper count: makes it obvious whether "0 results" is data vs filter logic
+  let matchCount = null;
+  try {
+    const c = await safeBrandProfiles(() => db.countBrandsDirectoryFiltered(f), async () => null);
+    matchCount = c === null || c === undefined ? null : Number(c);
+    if (!Number.isFinite(matchCount)) matchCount = null;
+  } catch {
+    matchCount = null;
+  }
+
+  const text = `🎛 <b>Фильтры брендов</b>
+<i>Режим: 🎬 Креатор · Ты ищешь: 🏷 бренды</i>
+<i>Фильтруем бренды по тому, что бренд заполнил в профиле.</i>
+
+${escapeHtml(brandDirFilterSummary(f))}
+${matchCount !== null ? `
+Совпадений брендов: <b>${matchCount}</b>` : ''}
+
+<i>Настройки применяются к каталогу сразу. Нажми «📋 Показать бренды», чтобы увидеть выдачу.</i>`;
+
+  await ctx.editMessageText(text, {
+    parse_mode: 'HTML',
+    reply_markup: brandDirFiltersKb(f, page),
+    disable_web_page_preview: true
+  });
 }
 
 async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
   const key = String(params.key || 'cat');
   const title = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : (key === 'comp' ? 'Оплата' : 'Бюджет'));
-  await ctx.editMessageText(`🎛 <b>${title}</b>\n\nВыбери значение:`, { parse_mode: 'HTML', reply_markup: brandDirPickKb(key, page) });
+
+  const f = await getBrandDirFilter(ctx.from.id);
+
+  const hint =
+    key === 'cat' ? 'По нише, указанной брендом (поле «Ниша»).' :
+    key === 'type' ? 'По 🧩 форматам сотрудничества в профиле бренда.' :
+    key === 'comp' ? 'По 💳 оплате, указанной брендом в профиле.' :
+    key === 'bud' ? 'По 💰 бюджету из расширенного профиля бренда.' :
+    'По данным профиля бренда.';
+
+  const cur =
+    key === 'cat' ? (f.category ? (BX_CATEGORIES.find((x) => x.key === f.category)?.label || f.category) : 'Все') :
+    key === 'type' ? (f.offerType ? brandDirTypeLabel(f.offerType) : 'Все') :
+    key === 'comp' ? (f.compensationType ? brandDirCompLabel(f.compensationType) : 'Все') :
+    key === 'bud' ? (f.budgetBucket ? brandBudgetBucketTitle(f.budgetBucket) : 'Все') :
+    '—';
+
+  const text = `🎛 <b>${title}</b>
+<i>${escapeHtml(hint)}</i>
+
+Текущее: <b>${escapeHtml(cur)}</b>
+
+Выбери значение:`;
+
+  await ctx.editMessageText(text, {
+    parse_mode: 'HTML',
+    reply_markup: brandDirPickKb(key, page),
+    disable_web_page_preview: true
+  });
 }
 
 async function renderBrandDirMultiPick(ctx, viewerUserId, params = {}) {
@@ -2217,7 +2269,23 @@ async function renderBrandDirMultiPick(ctx, viewerUserId, params = {}) {
   const f = await getBrandDirFilter(ctx.from.id);
   const selected = key === 'goals' ? f.goalsTags : f.reqTags;
   const title = key === 'goals' ? 'Цели (теги)' : 'Требования (теги)';
-  await ctx.editMessageText(`🎛 <b>${title}</b>\n\nВыбери теги:`, { parse_mode: 'HTML', reply_markup: brandDirMultiPickKb(key, page, selected) });
+
+  const hint = key === 'goals'
+    ? 'По 🎯 целям, которые бренд отметил в расширенном профиле.'
+    : 'По 📎 требованиям, которые бренд отметил в расширенном профиле.';
+
+  const text = `🎛 <b>${title}</b>
+<i>${escapeHtml(hint)}</i>
+
+Выбрано: <b>${selected.length || 0}</b>
+
+Выбери теги:`;
+
+  await ctx.editMessageText(text, {
+    parse_mode: 'HTML',
+    reply_markup: brandDirMultiPickKb(key, page, selected),
+    disable_web_page_preview: true
+  });
 }
 async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
@@ -2492,7 +2560,7 @@ function bxFiltersKb(wsId, f, page = 0) {
     .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|p:${page}`)
     .text('♻️ Сбросить', `a:bx_freset|ws:${wsId}|p:${page}`)
     .row()
-    .text('⬅️ Назад', `a:bx_feed|ws:${wsId}|p:${page}`);
+    .text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0`);
   return kb;
 }
 
@@ -6146,10 +6214,11 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0) {
   const f = await getBxFilter(ctx.from.id, wsNum);
   const text = `🎛 <b>Фильтры креаторов</b>
 <i>Режим: 🏷 Бренд · Ты ищешь: 🎬 креаторов</i>
+<i>Фильтруем креаторов по тому, что они указали в оффере.</i>
 
 ${escapeHtml(bxFilterSummary(f))}
 
-Выбери, каких креаторов показывать в ленте.`;
+<i>Настройки применяются к ленте сразу. Нажми «📋 Показать креаторов», чтобы увидеть выдачу.</i>`;
   await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: bxFiltersKb(wsNum, f, page)
@@ -6165,11 +6234,29 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0) {
   }
 
   const title = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : 'Оплата');
-  await ctx.editMessageText(`🎛 <b>${title}</b>
+  const f = await getBxFilter(ctx.from.id, wsNum);
 
-Выбери значение:`, {
+  const hint =
+    key === 'cat' ? 'По категории оффера креатора.' :
+    key === 'type' ? 'По формату оффера креатора.' :
+    'По оплате в оффере креатора.';
+
+  const cur =
+    key === 'cat' ? bxAnyLabel(f.category, 'cat') :
+    key === 'type' ? bxAnyLabel(f.offerType, 'type') :
+    bxAnyLabel(f.compensationType, 'comp');
+
+  const text = `🎛 <b>${title}</b>
+<i>${escapeHtml(hint)}</i>
+
+Текущее: <b>${escapeHtml(cur)}</b>
+
+Выбери значение:`;
+
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
-    reply_markup: bxPickKb(wsNum, key, page)
+    reply_markup: bxPickKb(wsNum, key, page),
+    disable_web_page_preview: true
   });
 }
 
