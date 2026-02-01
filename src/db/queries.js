@@ -2427,6 +2427,112 @@ export async function listBrandsDirectoryFiltered(limit = 10, offset = 0, filter
 }
 
 
+// Count Brand Directory matches (same logic as listBrandsDirectoryFiltered, but COUNT only)
+export async function countBrandsDirectoryFiltered(filter = {}) {
+  const f = filter || {};
+  const cat = f.category ? String(f.category) : null;
+  const offerType = f.offerType ? String(f.offerType) : null;
+  const compType = f.compensationType ? String(f.compensationType) : null;
+
+  const baseWhere = `
+    where coalesce(nullif(trim(bp.brand_name), ''), null) is not null
+      and coalesce(nullif(trim(bp.niche), ''), null) is not null
+      and coalesce(nullif(trim(bp.contact), ''), null) is not null
+      and coalesce(nullif(trim(bp.brand_link), ''), null) is not null
+  `;
+
+  const params = [];
+  let idx = 1;
+  let extraWhere = '';
+
+  const nichePatterns = (c) => {
+    const v = String(c || '').toLowerCase();
+    if (!v) return null;
+    if (v === 'cosmetics') return ['%косм%', '%cosm%', '%beauty%', '%makeup%', '%skin%'];
+    if (v === 'fashion') return ['%одеж%', '%fashion%', '%cloth%', '%apparel%', '%style%'];
+    if (v === 'unboxing') return ['%распак%', '%unbox%'];
+    if (v === 'other') return ['%друг%', '%other%'];
+    return null;
+  };
+
+  const ctPatternsByOffer = (t) => {
+    const v = String(t || '').toLowerCase();
+    if (!v) return null;
+    if (v === 'ad') return ['%,integration,%', '%,stories,%', '%,reels,%', '%,post,%', '%,ambassador,%'];
+    if (v === 'review') return ['%,review,%', '%,unboxing,%'];
+    if (v === 'ugc') return ['%,ugc,%'];
+    if (v === 'giveaway') return ['%,giveaway,%'];
+    if (v === 'other') return ['%,other,%'];
+    return null;
+  };
+
+  const ctPatternsByComp = (t) => {
+    const v = String(t || '').toLowerCase();
+    if (!v) return null;
+    if (v === 'barter') return ['%,barter,%'];
+    if (v === 'cert') return ['%,cert,%'];
+    if (v === 'paid') return ['%,paid,%'];
+    if (v === 'rub') return ['%,paid,%'];
+    if (v === 'mixed') return ['%,mixed,%'];
+    return null;
+  };
+
+  const catP = nichePatterns(cat);
+  if (catP && catP.length) {
+    extraWhere += ` and (lower(bp.niche) like any($${idx}))`;
+    params.push(catP);
+    idx++;
+  }
+
+  const ctOfferP = ctPatternsByOffer(offerType);
+  if (ctOfferP && ctOfferP.length) {
+    extraWhere += ` and ((',' || regexp_replace(lower(coalesce(bp.collab_types,'')), '\\s+', '', 'g') || ',') like any($${idx}))`;
+    params.push(ctOfferP);
+    idx++;
+  }
+
+  const ctCompP = ctPatternsByComp(compType);
+  if (ctCompP && ctCompP.length) {
+    extraWhere += ` and ((',' || regexp_replace(lower(coalesce(bp.collab_types,'')), '\\s+', '', 'g') || ',') like any($${idx}))`;
+    params.push(ctCompP);
+    idx++;
+  }
+
+  // Advanced structured meta (brand_profiles.meta)
+  const bb = String(f.budgetBucket || '').trim();
+  if (bb) {
+    extraWhere += ` and (coalesce(bp.meta->>'budget_bucket','') = $${idx})`;
+    params.push(bb);
+    idx++;
+  }
+
+  const goalsTags = Array.isArray(f.goalsTags) ? f.goalsTags.map((x) => String(x || '').trim()).filter(Boolean) : [];
+  if (goalsTags.length) {
+    extraWhere += ` and (coalesce(bp.meta->'goals_tags','[]'::jsonb) ?& $${idx}::text[])`;
+    params.push(goalsTags);
+    idx++;
+  }
+
+  const reqTags = Array.isArray(f.reqTags) ? f.reqTags.map((x) => String(x || '').trim()).filter(Boolean) : [];
+  if (reqTags.length) {
+    extraWhere += ` and (coalesce(bp.meta->'req_tags','[]'::jsonb) ?& $${idx}::text[])`;
+    params.push(reqTags);
+    idx++;
+  }
+
+  const q = `
+    select count(*)::int as c
+      from brand_profiles bp
+      join users u on u.id = bp.user_id
+      ${baseWhere}
+      ${extraWhere}
+  `;
+
+  const r = await pool.query(q, params);
+  return Number(r.rows?.[0]?.c || 0);
+}
+
+
 // -----------------------------
 // Workspace channel folders + editors (v1.1.2)
 // -----------------------------
