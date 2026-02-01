@@ -1620,15 +1620,12 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 Выбери поле для редактирования:`;
     kb
       .text('✏️ Название', `a:brand_prof_set${suf}|f:bn|from:home`)
-      .row()
       .text('🏷 Ниша', `a:brand_prof_set${suf}|f:ni|from:home`)
       .row()
       .text('📞 Контакт', `a:brand_prof_set${suf}|f:co|from:home`)
-      .row()
       .text('🔗 Ссылка', `a:brand_prof_set${suf}|f:li|from:home`)
       .row()
       .text('✨ Расширенный профиль', `a:brand_profile_more${suf}`)
-      .row()
       .text('🧹 Сбросить профиль', `a:brand_prof_reset${suf}`)
       .row()
       .text('✅ Готово', `a:brand_profile${suf}`)
@@ -1642,10 +1639,14 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
     return;
   }
 
-  kb.text('✏️ Редактировать', `a:brand_profile_edit${suf}`).row();
-  kb.text('✨ Расширенный профиль', `a:brand_profile_more${suf}`).row();
-  kb.text('🧹 Сбросить профиль', `a:brand_prof_reset${suf}`).row();
-  kb.text('⬅️ Назад', brandBackCb({ wsId, ret, backOfferId: bo, backPage: bp })).text('🏠 Меню', 'a:menu');
+  kb
+    .text('✏️ Редактировать', `a:brand_profile_edit${suf}`)
+    .text('✨ Расширенный профиль', `a:brand_profile_more${suf}`)
+    .row()
+    .text('🧹 Сбросить профиль', `a:brand_prof_reset${suf}`)
+    .text('🏠 Меню', 'a:menu')
+    .row()
+    .text('⬅️ Назад', brandBackCb({ wsId, ret, backOfferId: bo, backPage: bp }));
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(baseText, extra);
@@ -1923,14 +1924,17 @@ function brandCollabTagBadgesSplit(raw, opts = {}) {
 
   const payKeys = new Set(['barter', 'cert', 'paid', 'mixed']);
   const offerPref = {
-    ad: ['integration'],
+    ad: ['integration', 'stories', 'reels', 'post', 'ambassador'],
     review: ['review', 'unboxing'],
+    ugc: ['ugc'],
     giveaway: ['giveaway'],
     other: ['other']
   };
   const compPref = {
     barter: ['barter'],
     cert: ['cert'],
+    paid: ['paid'],
+    // backward-compat: older filters used 'rub'
     rub: ['paid'],
     mixed: ['mixed']
   };
@@ -2032,6 +2036,15 @@ async function getBrandDirFilter(viewerUserId) {
   if (!f.compensationType || f.compensationType === 'all') f.compensationType = null;
   if (!f.budgetBucket || f.budgetBucket === 'all') f.budgetBucket = null;
 
+  // Backward-compat: older values used 'rub' for money. Canonical is 'paid' in Brand Directory.
+  if (f.compensationType === 'rub') f.compensationType = 'paid';
+
+  const allowedTypes = new Set(['ad', 'review', 'ugc', 'giveaway', 'other']);
+  const allowedComp = new Set(['barter', 'cert', 'paid', 'mixed']);
+
+  if (f.offerType && !allowedTypes.has(f.offerType)) f.offerType = null;
+  if (f.compensationType && !allowedComp.has(f.compensationType)) f.compensationType = null;
+
   if (f.budgetBucket && !BRAND_BUDGET_KEYS.has(f.budgetBucket)) f.budgetBucket = null;
   f.goalsTags = uniqStrArr(f.goalsTags).filter((k) => BRAND_GOALS_KEYS.has(k));
   f.reqTags = uniqStrArr(f.reqTags).filter((k) => BRAND_REQ_KEYS.has(k));
@@ -2044,10 +2057,45 @@ async function setBrandDirFilter(viewerUserId, filter) {
   await redis.set(key, JSON.stringify(filter || {}), { ex: 60 * 60 * 24 * 14 });
 }
 
+
+function kbAddPairs(kb, items, perRow = 2) {
+  const n = Math.max(1, Math.min(3, Number(perRow) || 2));
+  let i = 0;
+  for (const it of (items || [])) {
+    if (!it) continue;
+    kb.text(it.text, it.cb);
+    i++;
+    if (i % n === 0) kb.row();
+  }
+  if (i % n !== 0) kb.row();
+}
+
+function brandDirTypeLabel(t) {
+  switch (String(t || '')) {
+    case 'ad': return '📣 Реклама';
+    case 'review': return '🎥 Обзор';
+    case 'ugc': return '🎬 UGC';
+    case 'giveaway': return '🎁 Розыгрыш';
+    case 'other':
+    default: return '✍️ Другое';
+  }
+}
+
+function brandDirCompLabel(p) {
+  switch (String(p || '')) {
+    case 'barter': return '🤝 Бартер';
+    case 'cert': return '🎟 Сертификат';
+    case 'paid':
+    case 'rub': return '💸 ₽';
+    case 'mixed':
+    default: return '🔁 Смешано';
+  }
+}
+
 function brandDirFilterSummary(f) {
   const catLabel = f.category ? (BX_CATEGORIES.find((x) => x.key === f.category)?.label || f.category) : 'Все';
-  const typeLabel = f.offerType ? OFFER_TYPE_LABELS[f.offerType] || f.offerType : 'Все';
-  const compLabel = f.compensationType ? COMP_TYPE_LABELS[f.compensationType] || f.compensationType : 'Все';
+  const typeLabel = f.offerType ? brandDirTypeLabel(f.offerType) : 'Все';
+  const compLabel = f.compensationType ? brandDirCompLabel(f.compensationType) : 'Все';
   const budLabel = f.budgetBucket ? brandBudgetBucketTitle(f.budgetBucket) : 'Все';
   const goalsLabel = f.goalsTags?.length ? `${f.goalsTags.length} тег(а)` : 'Все';
   const reqLabel = f.reqTags?.length ? `${f.reqTags.length} тег(а)` : 'Все';
@@ -2060,8 +2108,8 @@ function brandDirFiltersKb(f, page = 0) {
   const kb = new InlineKeyboard();
 
   const catLabel = f.category ? (BX_CATEGORIES.find((x) => x.key === f.category)?.label || f.category) : 'Все';
-  const typeLabel = f.offerType ? OFFER_TYPE_LABELS[f.offerType] || f.offerType : 'Все';
-  const compLabel = f.compensationType ? COMP_TYPE_LABELS[f.compensationType] || f.compensationType : 'Все';
+  const typeLabel = f.offerType ? brandDirTypeLabel(f.offerType) : 'Все';
+  const compLabel = f.compensationType ? brandDirCompLabel(f.compensationType) : 'Все';
   const budLabel = f.budgetBucket ? brandBudgetBucketTitle(f.budgetBucket) : 'Все';
   const goalsLabel = f.goalsTags?.length ? `${f.goalsTags.length}` : 'Все';
   const reqLabel = f.reqTags?.length ? `${f.reqTags.length}` : 'Все';
@@ -2084,34 +2132,46 @@ function brandDirFiltersKb(f, page = 0) {
   return kb;
 }
 
+
 function brandDirPickKb(key, page = 0) {
   const kb = new InlineKeyboard();
+
   if (key === 'cat') {
     kb.text('Все', `a:bd_fset|k:cat|v:all|p:${page}`).row();
-    for (const c of BX_CATEGORIES) {
-      kb.text(c.label, `a:bd_fset|k:cat|v:${c.key}|p:${page}`).row();
-    }
+    const items = BX_CATEGORIES.map((c) => ({ text: c.label, cb: `a:bd_fset|k:cat|v:${c.key}|p:${page}` }));
+    kbAddPairs(kb, items, 2);
   }
+
   if (key === 'type') {
     kb.text('Все', `a:bd_fset|k:type|v:all|p:${page}`).row();
-    kb.text('📣 Реклама', `a:bd_fset|k:type|v:ad|p:${page}`).row();
-    kb.text('🎥 Обзор', `a:bd_fset|k:type|v:review|p:${page}`).row();
-    kb.text('🎁 Розыгрыш', `a:bd_fset|k:type|v:giveaway|p:${page}`).row();
-    kb.text('✍️ Другое', `a:bd_fset|k:type|v:other|p:${page}`).row();
+    const items = [
+      { text: '📣 Реклама', cb: `a:bd_fset|k:type|v:ad|p:${page}` },
+      { text: '🎥 Обзор', cb: `a:bd_fset|k:type|v:review|p:${page}` },
+      { text: '🎬 UGC', cb: `a:bd_fset|k:type|v:ugc|p:${page}` },
+      { text: '🎁 Розыгрыш', cb: `a:bd_fset|k:type|v:giveaway|p:${page}` },
+      { text: '✍️ Другое', cb: `a:bd_fset|k:type|v:other|p:${page}` },
+    ];
+    kbAddPairs(kb, items, 2);
   }
+
   if (key === 'comp') {
     kb.text('Все', `a:bd_fset|k:comp|v:all|p:${page}`).row();
-    kb.text('🤝 Бартер', `a:bd_fset|k:comp|v:barter|p:${page}`).row();
-    kb.text('🎟 Сертификат', `a:bd_fset|k:comp|v:cert|p:${page}`).row();
-    kb.text('💸 ₽', `a:bd_fset|k:comp|v:rub|p:${page}`).row();
-    kb.text('🔁 Смешано', `a:bd_fset|k:comp|v:mixed|p:${page}`).row();
+    const items = [
+      { text: '🤝 Бартер', cb: `a:bd_fset|k:comp|v:barter|p:${page}` },
+      { text: '🎟 Сертификат', cb: `a:bd_fset|k:comp|v:cert|p:${page}` },
+      // Canonical is paid (stored in brand_profiles.collab_types)
+      { text: '💸 ₽', cb: `a:bd_fset|k:comp|v:paid|p:${page}` },
+      { text: '🔁 Смешано', cb: `a:bd_fset|k:comp|v:mixed|p:${page}` },
+    ];
+    kbAddPairs(kb, items, 2);
   }
+
   if (key === 'bud') {
     kb.text('Все', `a:bd_fset|k:bud|v:all|p:${page}`).row();
-    for (const b of BRAND_BUDGET_BUCKETS) {
-      kb.text(b.title, `a:bd_fset|k:bud|v:${b.key}|p:${page}`).row();
-    }
+    const items = BRAND_BUDGET_BUCKETS.map((b) => ({ text: b.title, cb: `a:bd_fset|k:bud|v:${b.key}|p:${page}` }));
+    kbAddPairs(kb, items, 2);
   }
+
   kb.text('⬅️ Назад', `a:brands_filters|p:${page}`);
   return kb;
 }
@@ -2425,38 +2485,46 @@ function bxCompKb(wsId) {
 function bxFiltersKb(wsId, f, page = 0) {
   const kb = new InlineKeyboard()
     .text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|p:${page}`)
-    .row()
     .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|p:${page}`)
     .row()
     .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|p:${page}`)
-    .row()
     .text('♻️ Сбросить', `a:bx_freset|ws:${wsId}|p:${page}`)
+    .row()
     .text('⬅️ Назад', `a:bx_feed|ws:${wsId}|p:${page}`);
   return kb;
 }
 
 function bxPickKb(wsId, key, page = 0) {
   const kb = new InlineKeyboard();
+
   if (key === 'cat') {
     kb.text('Все', `a:bx_fset|ws:${wsId}|k:cat|v:all|p:${page}`).row();
-    for (const c of BX_CATEGORIES) {
-      kb.text(c.label, `a:bx_fset|ws:${wsId}|k:cat|v:${c.key}|p:${page}`).row();
-    }
+    const items = BX_CATEGORIES.map((c) => ({ text: c.label, cb: `a:bx_fset|ws:${wsId}|k:cat|v:${c.key}|p:${page}` }));
+    kbAddPairs(kb, items, 2);
   }
+
   if (key === 'type') {
     kb.text('Все', `a:bx_fset|ws:${wsId}|k:type|v:all|p:${page}`).row();
-    kb.text('📣 Реклама', `a:bx_fset|ws:${wsId}|k:type|v:ad|p:${page}`).row();
-    kb.text('🎥 Обзор', `a:bx_fset|ws:${wsId}|k:type|v:review|p:${page}`).row();
-    kb.text('🎁 Розыгрыш', `a:bx_fset|ws:${wsId}|k:type|v:giveaway|p:${page}`).row();
-    kb.text('✍️ Другое', `a:bx_fset|ws:${wsId}|k:type|v:other|p:${page}`).row();
+    const items = [
+      { text: '📣 Реклама', cb: `a:bx_fset|ws:${wsId}|k:type|v:ad|p:${page}` },
+      { text: '🎥 Обзор', cb: `a:bx_fset|ws:${wsId}|k:type|v:review|p:${page}` },
+      { text: '🎁 Розыгрыш', cb: `a:bx_fset|ws:${wsId}|k:type|v:giveaway|p:${page}` },
+      { text: '✍️ Другое', cb: `a:bx_fset|ws:${wsId}|k:type|v:other|p:${page}` },
+    ];
+    kbAddPairs(kb, items, 2);
   }
+
   if (key === 'comp') {
     kb.text('Все', `a:bx_fset|ws:${wsId}|k:comp|v:all|p:${page}`).row();
-    kb.text('🤝 Бартер', `a:bx_fset|ws:${wsId}|k:comp|v:barter|p:${page}`).row();
-    kb.text('🎟 Сертификат', `a:bx_fset|ws:${wsId}|k:comp|v:cert|p:${page}`).row();
-    kb.text('💸 ₽', `a:bx_fset|ws:${wsId}|k:comp|v:rub|p:${page}`).row();
-    kb.text('🔁 Смешано', `a:bx_fset|ws:${wsId}|k:comp|v:mixed|p:${page}`).row();
+    const items = [
+      { text: '🤝 Бартер', cb: `a:bx_fset|ws:${wsId}|k:comp|v:barter|p:${page}` },
+      { text: '🎟 Сертификат', cb: `a:bx_fset|ws:${wsId}|k:comp|v:cert|p:${page}` },
+      { text: '💸 ₽', cb: `a:bx_fset|ws:${wsId}|k:comp|v:rub|p:${page}` },
+      { text: '🔁 Смешано', cb: `a:bx_fset|ws:${wsId}|k:comp|v:mixed|p:${page}` },
+    ];
+    kbAddPairs(kb, items, 2);
   }
+
   kb.text('⬅️ Назад', `a:bx_filters|ws:${wsId}|p:${page}`);
   return kb;
 }
@@ -10792,7 +10860,11 @@ if (p.a === 'a:brands_home') {
       const next = { ...base };
       if (key === 'cat') next.category = val === 'all' ? null : val;
       if (key === 'type') next.offerType = val === 'all' ? null : val;
-      if (key === 'comp') next.compensationType = val === 'all' ? null : val;
+      if (key === 'comp') {
+        const v = val === 'all' ? null : val;
+        // Canonical is 'paid' for money in Brand Directory filters
+        next.compensationType = v === 'rub' ? 'paid' : v;
+      }
       if (key === 'bud') next.budgetBucket = val === 'all' ? null : val;
 
       await setBrandDirFilter(u.id, next);
