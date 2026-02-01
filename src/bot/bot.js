@@ -460,7 +460,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
 
   const kb = new InlineKeyboard()
   .text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0')
-  .text('🎛 Фильтры ленты', 'a:bx_filters|ws:0|p:0')
+  .text('🎛 Фильтры креаторов', 'a:bx_filters|ws:0|p:0')
   .row()
   .text('🎯 Smart-подбор', 'a:bx_smart|ws:0')
   .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
@@ -1296,7 +1296,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0) {
   const planLabel = plan?.active ? (plan.name === 'max' ? 'Max ✅' : 'Basic ✅') : 'OFF';
   const kb = new InlineKeyboard()
 .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0`)
-.text('🎛 Фильтры ленты', `a:bx_filters|ws:${wsId}|p:0`)
+.text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0`)
 .row()
 .text('🎯 Smart-подбор', `a:bx_smart|ws:${wsId}`)
 .text('🔎 Поиск креаторов', `a:pm_home|ws:${wsId}`)
@@ -2200,7 +2200,7 @@ function brandDirMultiPickKb(key, page, selected) {
 async function renderBrandDirFilters(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
   const f = await getBrandDirFilter(ctx.from.id);
-  const text = `🎛 <b>Фильтры каталога</b>\n\n${escapeHtml(brandDirFilterSummary(f))}\n\n<i>Фильтры берутся из настроек брендов (профиль бренда → 🧩 Форматы + расширенный профиль).</i>\n\nВыбери, какие бренды показывать.`;
+  const text = `🎛 <b>Фильтры брендов</b>\n<i>Режим: 🎬 Креатор · Ты ищешь: 🏷 бренды</i>\n\n${escapeHtml(brandDirFilterSummary(f))}\n\n<i>Фильтры берутся из настроек брендов (профиль бренда → 🧩 Форматы + расширенный профиль).</i>\n\nВыбери, какие бренды показывать.`;
   await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: brandDirFiltersKb(f, page) });
 }
 
@@ -2243,8 +2243,8 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   const items = list.slice(0, PAGE_SIZE);
 
   const hasActiveFilters = !!(f.category || f.offerType || f.compensationType || f.budgetBucket || (f.goalsTags && f.goalsTags.length) || (f.reqTags && f.reqTags.length));
-  let text = `🏷 <b>Каталог брендов</b>\n\n` +
-    `Фильтры: <b>${escapeHtml(brandDirFilterSummary(f))}</b>\n\n` +
+  let text = `🏷 <b>Каталог брендов</b>\n<i>Режим: 🎬 Креатор · Ты ищешь: 🏷 бренды</i>\n\n` +
+    `Фильтры брендов: <b>${escapeHtml(brandDirFilterSummary(f))}</b>\n\n` +
     `<i>Фильтры берутся из настроек брендов (профиль → 🧩 Форматы + расширенный профиль: 💠 Бюджет/🎯 Цели/📎 Требования).</i>\n\n` +
     `Показываю бренды с заполненным профилем (4/4).\n\n`;
 
@@ -2262,7 +2262,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   }
 
   const kb = new InlineKeyboard();
-  kb.text('🎛 Фильтры', `a:brands_filters|p:${page}`);
+  kb.text('🎛 Фильтры брендов', `a:brands_filters|p:${page}`);
   if (hasActiveFilters) kb.text('♻️ Сброс', `a:bd_freset|p:${page}`);
   kb.row();
   for (const bp of items) {
@@ -2578,7 +2578,7 @@ function bxFeedNavKb(wsId, page, hasPrev, hasNext) {
   if (hasPrev) kb.text('⬅️', `a:bx_feed|ws:${wsId}|p:${page - 1}`);
   if (hasNext) kb.text('➡️', `a:bx_feed|ws:${wsId}|p:${page + 1}`);
     kb.row()
-    .text('🎛 Фильтры ленты', `a:bx_filters|ws:${wsId}|p:${page}`)
+    .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:${page}`)
     .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0`);
     kb.row().text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
   return kb;
@@ -5665,6 +5665,7 @@ function bxBrandOnlyNoticeKb() {
 
 async function renderBxBrandOnlyNotice(ctx) {
   const text = `📰 <b>Лента креаторов</b>
+<i>Режим: 🎬 Креатор · Ты ищешь: 🏷 бренды</i>
 
 Этот раздел доступен только в режиме <b>Brand</b>.
 
@@ -5724,7 +5725,7 @@ function bxSmartPrefillText(next, info, totalAll, totalFiltered) {
   const hint = totalFiltered === 0
     ? `
 
-💡 Сейчас <b>0</b> результатов. Попробуй «🎛 Фильтры ленты» или «♻️ Сбросить» (всё).`
+💡 Сейчас <b>0</b> результатов. Попробуй «🎛 Фильтры креаторов» или «♻️ Сбросить» (всё).`
     : '';
 
   return `🎯 <b>Smart-подбор</b>
@@ -5744,7 +5745,7 @@ ${compLine}
 function bxSmartKb(wsId) {
   return new InlineKeyboard()
     .text('📰 Открыть ленту', `a:bx_feed|ws:${wsId}|p:0`)
-    .text('🎛 Фильтры ленты', `a:bx_filters|ws:${wsId}|p:0`)
+    .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0`)
     .row()
     .text('♻️ Сбросить', `a:bx_smart_reset|ws:${wsId}`)
     .text('⬅️ Меню', 'a:menu');
@@ -5853,7 +5854,8 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0) {
   const featured = await db.listActiveFeatured(CFG.FEATURED_MAX_SLOTS);
 
   const header = `📰 <b>Лента креаторов</b>
-<tg-spoiler>${escapeHtml(bxFilterSummary(filter))}</tg-spoiler>`;
+<i>Режим: 🏷 Бренд · Ты ищешь: 🎬 креаторов</i>
+<tg-spoiler>Фильтры: ${escapeHtml(bxFilterSummary(filter))}</tg-spoiler>`;
 
   const featLines = featured.map((f) => {
     const title = (f.title || 'Featured').toString();
@@ -6142,11 +6144,12 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0) {
   }
 
   const f = await getBxFilter(ctx.from.id, wsNum);
-  const text = `🎛 <b>Фильтры ленты</b>
+  const text = `🎛 <b>Фильтры креаторов</b>
+<i>Режим: 🏷 Бренд · Ты ищешь: 🎬 креаторов</i>
 
 ${escapeHtml(bxFilterSummary(f))}
 
-Выбери, что показывать в ленте.`;
+Выбери, каких креаторов показывать в ленте.`;
   await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: bxFiltersKb(wsNum, f, page)
