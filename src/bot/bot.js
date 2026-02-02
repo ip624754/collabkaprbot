@@ -934,9 +934,12 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
   // We never want the UI to "do nothing": fallback to sending a new message.
   if (preferEdit && ctx?.callbackQuery?.message) {
     try {
-      return await safeEditOrReply(ctx, text, extra);
-    } catch (_) {
-      // ignore and fallback to reply
+      return await ctx.editMessageText(text, extra);
+    } catch (e) {
+      const msg = String(e?.description || e?.message || e);
+      // If nothing changes — treat as success.
+      if (msg.includes('message is not modified')) return;
+      // Some messages can't be edited (invoice/service) — fallthrough to reply.
     }
   }
   try {
@@ -945,10 +948,8 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
     // Last resort: try edit again if reply is blocked (rare).
     if (ctx?.callbackQuery?.message) {
       try {
-        return await safeEditOrReply(ctx, text, extra);
-      } catch (_) {
-        // noop
-      }
+        return await ctx.editMessageText(text, extra);
+      } catch (_) {}
     }
     throw e;
   }
@@ -1900,6 +1901,13 @@ async function renderBrandBudgetBucketPicker(ctx, ownerUserId, params = {}) {
   const meta = parseBrandMeta(prof?.meta);
   const cur = String(meta.budget_bucket || '');
 
+  const currentVal =
+    key === 'cat' ? (f.category || null) :
+    key === 'type' ? (f.offerType || null) :
+    key === 'comp' ? (f.compensationType || null) :
+    key === 'bud' ? (f.budgetBucket || null) :
+    null;
+
   const text = `💰 <b>Бюджет (категория)</b>
 
 ` +
@@ -2247,14 +2255,48 @@ function brandDirectoryButtonLabel(bp, filter = null) {
 
 
 // Brand Directory filters (Creator): stored in Redis per viewer (tgId)
-// Shape: { category, offerType, compensationType }
-async function getBrandDirFilter(viewerUserId) {
-  const key = `bd_filter:${viewerUserId}`;
-  const raw = await redis.get(key);
-  let base = {};
-  if (raw) {
-    try { base = JSON.parse(raw); } catch { base = {}; }
+// Shape: { category, offerType, compensationType, budgetBucket, goalsTags[], reqTags[] }
+const BD_FILTER_TTL_SEC = 60 * 60 * 24 * 14;
+
+function brandDirFilterKey(tgId) {
+  const id = Number(tgId || 0);
+  return k(['bd_filter', id]);
+}
+
+function parseMaybeJson(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'object') return raw;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return null; }
   }
+  return null;
+}
+
+async function getBrandDirFilter(tgId, legacyUserId = null) {
+  const id = Number(tgId || 0);
+  const legacyId = Number(legacyUserId || 0);
+
+  // 1) Preferred: namespaced key
+  const keyNew = brandDirFilterKey(id);
+  let raw = null;
+  try { raw = await redis.get(keyNew); } catch { raw = null; }
+
+  // 2) Legacy fallbacks (older commits stored by tgId or by db userId)
+  let usedLegacy = false;
+  if (!raw) {
+    try {
+      raw = await redis.get(`bd_filter:${id}`);
+      if (raw) usedLegacy = true;
+    } catch {}
+  }
+  if (!raw && legacyId) {
+    try {
+      raw = await redis.get(`bd_filter:${legacyId}`);
+      if (raw) usedLegacy = true;
+    } catch {}
+  }
+
+  const base = parseMaybeJson(raw) || {};
 
   const f = {
     category: typeof base.category === 'string' ? base.category : null,
@@ -2280,17 +2322,34 @@ async function getBrandDirFilter(viewerUserId) {
   if (f.compensationType && !allowedComp.has(f.compensationType)) f.compensationType = null;
 
   if (f.budgetBucket && !BRAND_BUDGET_KEYS.has(f.budgetBucket)) f.budgetBucket = null;
-  f.goalsTags = uniqStrArr(f.goalsTags).filter((k) => BRAND_GOALS_KEYS.has(k));
-  f.reqTags = uniqStrArr(f.reqTags).filter((k) => BRAND_REQ_KEYS.has(k));
+  f.goalsTags = uniqStrArr(f.goalsTags).filter((k2) => BRAND_GOALS_KEYS.has(k2));
+  f.reqTags = uniqStrArr(f.reqTags).filter((k2) => BRAND_REQ_KEYS.has(k2));
+
+  // Migrate legacy payload to namespaced key (best-effort)
+  if (usedLegacy) {
+    try { await redis.set(keyNew, f, { ex: BD_FILTER_TTL_SEC }); } catch {}
+  }
 
   return f;
 }
 
-async function setBrandDirFilter(viewerUserId, filter) {
-  const key = `bd_filter:${viewerUserId}`;
-  await redis.set(key, JSON.stringify(filter || {}), { ex: 60 * 60 * 24 * 14 });
-}
+async function setBrandDirFilter(tgId, filter, legacyUserId = null) {
+  const id = Number(tgId || 0);
+  const legacyId = Number(legacyUserId || 0);
+  if (!id) return;
 
+  const payload = filter || {};
+  const keyNew = brandDirFilterKey(id);
+
+  // Preferred
+  await redis.set(keyNew, payload, { ex: BD_FILTER_TTL_SEC });
+
+  // Back-compat: also write legacy raw keys (stringified JSON)
+  try { await redis.set(`bd_filter:${id}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
+  if (legacyId) {
+    try { await redis.set(`bd_filter:${legacyId}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
+  }
+}
 
 function kbAddPairs(kb, items, perRow = 2) {
   const n = Math.max(1, Math.min(3, Number(perRow) || 2));
@@ -2368,48 +2427,73 @@ function brandDirFiltersKb(f, page = 0) {
 }
 
 
-function brandDirPickKb(key, page = 0) {
+function brandDirPickKb(key, page = 0, currentVal = null) {
   const kb = new InlineKeyboard();
+  const cur = currentVal == null ? null : String(currentVal);
+
+  const mark = (val, label) => {
+    const v = val == null ? 'all' : String(val);
+    const on = (cur == null && v === 'all') || (cur != null && v === cur);
+    return `${on ? '✅ ' : ''}${label}`;
+  };
+
+  const cb = (k2, v2) => `a:bd_fset|k:${k2}|v:${v2}|p:${page}|s:1`;
 
   if (key === 'cat') {
-    kb.text('Все', `a:bd_fset|k:cat|v:all|p:${page}`).row();
-    const items = BX_CATEGORIES.map((c) => ({ text: c.label, cb: `a:bd_fset|k:cat|v:${c.key}|p:${page}` }));
+    kb.text(mark(null, 'Все'), cb('cat', 'all')).row();
+    const items = BX_CATEGORIES.map((c) => ({
+      text: mark(c.key, c.label),
+      cb: cb('cat', c.key)
+    }));
     kbAddPairs(kb, items, 2);
   }
 
   if (key === 'type') {
-    kb.text('Все', `a:bd_fset|k:type|v:all|p:${page}`).row();
+    kb.text(mark(null, 'Все'), cb('type', 'all')).row();
     const items = [
-      { text: '📣 Реклама', cb: `a:bd_fset|k:type|v:ad|p:${page}` },
-      { text: '🎥 Обзор', cb: `a:bd_fset|k:type|v:review|p:${page}` },
-      { text: '🎬 UGC', cb: `a:bd_fset|k:type|v:ugc|p:${page}` },
-      { text: '🎁 Розыгрыш', cb: `a:bd_fset|k:type|v:giveaway|p:${page}` },
-      { text: '✍️ Другое', cb: `a:bd_fset|k:type|v:other|p:${page}` },
-    ];
+      { key: 'ad', title: '📣 Реклама' },
+      { key: 'review', title: '🎥 Обзор' },
+      { key: 'ugc', title: '🎬 UGC' },
+      { key: 'giveaway', title: '🎁 Розыгрыш' },
+      { key: 'other', title: '✍️ Другое' },
+    ].map((t) => ({
+      text: mark(t.key, t.title),
+      cb: cb('type', t.key)
+    }));
     kbAddPairs(kb, items, 2);
   }
 
   if (key === 'comp') {
-    kb.text('Все', `a:bd_fset|k:comp|v:all|p:${page}`).row();
+    kb.text(mark(null, 'Все'), cb('comp', 'all')).row();
     const items = [
-      { text: '🤝 Бартер', cb: `a:bd_fset|k:comp|v:barter|p:${page}` },
-      { text: '🎟 Сертификат', cb: `a:bd_fset|k:comp|v:cert|p:${page}` },
+      { key: 'barter', title: '🤝 Бартер' },
+      { key: 'cert', title: '🎟 Сертификат' },
       // Canonical is paid (stored in brand_profiles.collab_types)
-      { text: '💸 ₽', cb: `a:bd_fset|k:comp|v:paid|p:${page}` },
-      { text: '🔁 Смешано', cb: `a:bd_fset|k:comp|v:mixed|p:${page}` },
-    ];
+      { key: 'paid', title: '💸 ₽' },
+      { key: 'mixed', title: '🔁 Смешано' },
+    ].map((t) => ({
+      text: mark(t.key, t.title),
+      cb: cb('comp', t.key)
+    }));
     kbAddPairs(kb, items, 2);
   }
 
   if (key === 'bud') {
-    kb.text('Все', `a:bd_fset|k:bud|v:all|p:${page}`).row();
-    const items = BRAND_BUDGET_BUCKETS.map((b) => ({ text: b.title, cb: `a:bd_fset|k:bud|v:${b.key}|p:${page}` }));
+    kb.text(mark(null, 'Все'), cb('bud', 'all')).row();
+    const items = BRAND_BUDGET_BUCKETS.map((b) => ({
+      text: mark(b.key, b.title),
+      cb: cb('bud', b.key)
+    }));
     kbAddPairs(kb, items, 2);
   }
+
+  // Explicit "done" to return to filters
+  kb.row().text('✅ Готово', `a:brands_filters|p:${page}`);
 
   kbNavRow(kb, `a:brands_filters|p:${page}`);
   return kb;
 }
+
 
 function brandDirMultiPickKb(key, page, selected) {
   const kb = new InlineKeyboard();
@@ -2432,7 +2516,7 @@ function brandDirMultiPickKb(key, page, selected) {
 
 async function renderBrandDirFilters(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
-  const f = await getBrandDirFilter(viewerUserId);
+  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
 
   // Small helper count: makes it obvious whether "0 results" is data vs filter logic
   let matchCount = null;
@@ -2466,7 +2550,7 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
   const key = String(params.key || 'cat');
   const title = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : (key === 'comp' ? 'Оплата' : 'Бюджет'));
 
-  const f = await getBrandDirFilter(viewerUserId);
+  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
 
   const hint =
     key === 'cat' ? 'По нише, указанной брендом (поле «Ниша»).' :
@@ -2482,6 +2566,13 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
     key === 'bud' ? (f.budgetBucket ? brandBudgetBucketTitle(f.budgetBucket) : 'Все') :
     '—';
 
+  const currentVal =
+    key === 'cat' ? (f.category || null) :
+    key === 'type' ? (f.offerType || null) :
+    key === 'comp' ? (f.compensationType || null) :
+    key === 'bud' ? (f.budgetBucket || null) :
+    null;
+
   const text = `🎛 <b>${title}</b>
 <i>${escapeHtml(hint)}</i>
 
@@ -2491,7 +2582,7 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
-    reply_markup: brandDirPickKb(key, page),
+    reply_markup: brandDirPickKb(key, page, currentVal),
     disable_web_page_preview: true
   });
 }
@@ -2499,7 +2590,7 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
 async function renderBrandDirMultiPick(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
   const key = String(params.key || 'goals');
-  const f = await getBrandDirFilter(viewerUserId);
+  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
   const selected = key === 'goals' ? f.goalsTags : f.reqTags;
   const title = key === 'goals' ? 'Цели (теги)' : 'Требования (теги)';
 
@@ -2526,7 +2617,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   const PAGE_SIZE = 8;
   const offset = page * PAGE_SIZE;
 
-  const f = await getBrandDirFilter(viewerUserId);
+  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
 
   const rows = await safeBrandProfiles(
     () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
@@ -2614,7 +2705,7 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
 
   let viewerFilter = null;
   try {
-    viewerFilter = await getBrandDirFilter(viewerUserId);
+    viewerFilter = await getBrandDirFilter(viewerUserId, params.legacyUserId);
   } catch (_) {
     viewerFilter = null;
   }
@@ -11783,19 +11874,20 @@ if (p.a === 'a:support_write') {
 if (p.a === 'a:brands_home') {
   await ctx.answerCallbackQuery();
   const page = Math.max(0, Number(p.p || 0));
-  await renderBrandsDirectory(ctx, u.id, { page, edit: true });
+  await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id });
   return;
 }
 
     if (p.a === 'a:brands_filters') {
       await ctx.answerCallbackQuery();
-      await renderBrandDirFilters(ctx, u.id, { page: num(p.p || 0, 0) });
+      await renderBrandDirFilters(ctx, ctx.from.id, { page: num(p.p || 0, 0), legacyUserId: u.id });
       return;
     }
 
     if (p.a === 'a:bd_fpick') {
       await ctx.answerCallbackQuery();
-      await renderBrandDirFilterPick(ctx, u.id, {
+      await renderBrandDirFilterPick(ctx, ctx.from.id, {
+        legacyUserId: u.id,
         key: String(p.k || ''),
         page: num(p.p || 0, 0),
       });
@@ -11804,7 +11896,7 @@ if (p.a === 'a:brands_home') {
 
     if (p.a === 'a:bd_fset') {
       await ctx.answerCallbackQuery();
-      const base = await getBrandDirFilter(u.id);
+      const base = await getBrandDirFilter(ctx.from.id, u.id);
       const key = String(p.k || '');
       const val = String(p.v || 'all');
       const page = num(p.p || 0, 0);
@@ -11819,14 +11911,25 @@ if (p.a === 'a:brands_home') {
       }
       if (key === 'bud') next.budgetBucket = val === 'all' ? null : val;
 
-      await setBrandDirFilter(u.id, next);
-      await renderBrandDirFilters(ctx, u.id, { page });
+      await setBrandDirFilter(ctx.from.id, next, u.id);
+
+      const stay = String(p.s || '') === '1';
+      if (stay) {
+        await renderBrandDirFilterPick(ctx, ctx.from.id, {
+          legacyUserId: u.id,
+          key,
+          page,
+        });
+      } else {
+        await renderBrandDirFilters(ctx, ctx.from.id, { page, legacyUserId: u.id });
+      }
       return;
     }
 
     if (p.a === 'a:bd_mpick') {
       await ctx.answerCallbackQuery();
-      await renderBrandDirMultiPick(ctx, u.id, {
+      await renderBrandDirMultiPick(ctx, ctx.from.id, {
+        legacyUserId: u.id,
         key: String(p.k || ''),
         page: num(p.p || 0, 0),
       });
@@ -11835,7 +11938,7 @@ if (p.a === 'a:brands_home') {
 
     if (p.a === 'a:bd_mt') {
       await ctx.answerCallbackQuery();
-      const base = await getBrandDirFilter(u.id);
+      const base = await getBrandDirFilter(ctx.from.id, u.id);
       const key = String(p.k || '');
       const tag = String(p.v || '');
       const page = num(p.p || 0, 0);
@@ -11849,42 +11952,42 @@ if (p.a === 'a:brands_home') {
         base.reqTags = cur.includes(tag) ? cur.filter((x) => x !== tag) : [...cur, tag];
       }
 
-      await setBrandDirFilter(u.id, base);
-      await renderBrandDirMultiPick(ctx, u.id, { key, page });
+      await setBrandDirFilter(ctx.from.id, base, u.id);
+      await renderBrandDirMultiPick(ctx, ctx.from.id, { legacyUserId: u.id, key, page });
       return;
     }
 
     if (p.a === 'a:bd_mclear') {
       await ctx.answerCallbackQuery();
-      const base = await getBrandDirFilter(u.id);
+      const base = await getBrandDirFilter(ctx.from.id, u.id);
       const key = String(p.k || '');
       const page = num(p.p || 0, 0);
 
       if (key === 'goals') base.goalsTags = [];
       if (key === 'req') base.reqTags = [];
 
-      await setBrandDirFilter(u.id, base);
-      await renderBrandDirMultiPick(ctx, u.id, { key, page });
+      await setBrandDirFilter(ctx.from.id, base, u.id);
+      await renderBrandDirMultiPick(ctx, ctx.from.id, { legacyUserId: u.id, key, page });
       return;
     }
 
     if (p.a === 'a:bd_mdone') {
       await ctx.answerCallbackQuery();
-      await renderBrandDirFilters(ctx, u.id, { page: num(p.p || 0, 0) });
+      await renderBrandDirFilters(ctx, ctx.from.id, { page: num(p.p || 0, 0), legacyUserId: u.id });
       return;
     }
 
     if (p.a === 'a:bd_freset') {
       await ctx.answerCallbackQuery();
-      await setBrandDirFilter(u.id, {
+      await setBrandDirFilter(ctx.from.id, {
         category: null,
         offerType: null,
         compensationType: null,
         budgetBucket: null,
         goalsTags: [],
         reqTags: [],
-      });
-      await renderBrandDirFilters(ctx, u.id, { page: num(p.p || 0, 0) });
+      }, u.id);
+      await renderBrandDirFilters(ctx, ctx.from.id, { page: num(p.p || 0, 0), legacyUserId: u.id });
       return;
     }
 
@@ -11892,7 +11995,7 @@ if (p.a === 'a:brand_dir_open') {
   await ctx.answerCallbackQuery();
   const brandUserId = Number(p.u || 0);
   const backPage = Math.max(0, Number(p.p || 0));
-  await renderBrandDirectoryCard(ctx, u.id, { brandUserId, backPage, edit: true });
+  await renderBrandDirectoryCard(ctx, ctx.from.id, { brandUserId, backPage, edit: true, legacyUserId: u.id });
   return;
 }
 
