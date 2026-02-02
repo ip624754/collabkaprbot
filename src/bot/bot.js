@@ -455,7 +455,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 }
 
 function mainMenuBrandKb(flags = {}, opts = {}) {
-  const { isModerator = false, isAdmin = false, isCurator = false } = flags;
+  const { isModerator = false, isAdmin = false } = flags;
   const { isManager = false, hasMultipleBrands = false, canManager = false, teamLocked = false } = opts;
 
   const kb = new InlineKeyboard()
@@ -495,7 +495,6 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['👤 Куратор', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -1299,76 +1298,16 @@ function wsSettingsKb(wsId, s) {
     .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
-function curManageKb(wsId, ws = null) {
-  const enabled = !!ws?.curator_enabled;
-  const toggleLabel = enabled ? '👤 Куратор: ✅ ВКЛ' : '👤 Куратор: ❌ ВЫКЛ';
+function curManageKb(wsId) {
   return new InlineKeyboard()
-    .text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`)
-    .row()
     .text('👤 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
     .row()
     .text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)
     .row()
     .text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
     .row()
-    .text('🧾 История', `a:ws_history|ws:${wsId}`)
-    .row()
     .text('⬅️ Назад', `a:ws_settings|ws:${wsId}`)
     .text('📋 Меню', 'a:menu');
-}
-
-async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
-  const notice = opts.notice ? String(opts.notice) : '';
-  const ws = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
-    return;
-  }
-  try { await db.ensureWorkspaceSettings(wsId); } catch {}
-
-  const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `Канал #${wsId}`);
-  const curators = await db.listCurators(wsId);
-  const count = curators?.length || 0;
-
-  const curList = (curators || []).slice(0, 8).map(c => {
-    const uname = c?.tg_username ? '@' + escapeHtml(c.tg_username) : (c?.tg_id ? 'id:' + String(c.tg_id) : '—');
-    return `• ${uname}`;
-  }).join('\n');
-
-  let activityLines = [];
-  try {
-    const items = await db.listWorkspaceAudit(wsId, 20);
-    const curItems = (items || []).filter(i => {
-      const a = String(i?.action || '');
-      return a.includes('curator') || a.includes('ws.curator') || a.includes('gw.cur') || a.includes('gw.reminder');
-    }).slice(0, 6);
-    activityLines = curItems.map(i => `• ${fmtTs(i.created_at)} — <code>${escapeHtml(String(i.action || ''))}</code>`);
-  } catch {
-    activityLines = [];
-  }
-
-  const enabled = !!ws.curator_enabled;
-  const status = enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
-
-  const text = `${notice ? `✅ ${escapeHtml(notice)}\n\n` : ''}👥 <b>Куратор HQ</b>
-
-Канал: <b>${escapeHtml(title)}</b>
-Доступ кураторов: <b>${status}</b>
-Кураторов в списке: <b>${count}</b>
-
-<b>Команда:</b>
-${count ? curList : 'Пока нет.'}
-
-<b>Последние события:</b>
-${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
-
-💡 Включи «👤 Куратор: ВКЛ» — и кураторы смогут помогать с конкурсами (статы/лог/напоминания/пометки).`;
-
-  await safeEditOrReply(ctx, text, {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: curManageKb(wsId, ws)
-  });
 }
 
 
@@ -3109,14 +3048,9 @@ function bxFiltersKb(wsId, f, page = 0, opts = {}) {
 
 function bxPickKb(wsId, key, selectedValue, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
-  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-  const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
+  const h = opts.h ? String(opts.h) : (wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
-  // Key is one of: cat | type | comp
-  const values = key === 'cat' ? BX_CATS : (key === 'type' ? BX_TYPES : BX_COMPS);
-  const kind = key === 'comp' ? 'comp' : (key === 'type' ? 'type' : 'cat');
-  const list = (values || []).filter(Boolean).map((v) => ({ value: String(v), label: bxAnyLabel(String(v), kind) }));
-
+  const list = key === 'cat' ? bxCats : (key === 'type' ? bxTypes : bxComps);
   const perPage = 10;
   const start = page * perPage;
   const slice = list.slice(start, start + perPage);
@@ -3125,29 +3059,29 @@ function bxPickKb(wsId, key, selectedValue, page = 0, opts = {}) {
 
   // 'All' option
   const isAll = !selectedValue;
-  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${page}|h:${h}|r:${r}`).row();
+  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${page}|h:${h}`).row();
 
   // Options
   for (const it of slice) {
-    const selected = String(selectedValue || '') === String(it.value);
+    const selected = selectedValue === it.value;
     const label = selected ? `✅ ${it.label}` : it.label;
-    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|p:${page}|h:${h}|r:${r}`).row();
+    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|p:${page}|h:${h}`).row();
   }
 
   // Pagination
   if (list.length > perPage) {
     kb.row();
-    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${page - 1}|h:${h}|r:${r}`);
+    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${page - 1}|h:${h}`);
     kb.text(`${page + 1}/${Math.ceil(list.length / perPage)}`, 'a:nop');
-    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${page + 1}|h:${h}|r:${r}`);
+    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${page + 1}|h:${h}`);
   }
 
   // Actions
   kb.row();
-  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${page}|h:${h}|r:${r}`);
-  kb.text('✅ Готово', `a:bx_filters|ws:${wsNum}|p:0|h:${h}|r:${r}`);
+  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${page}|h:${h}`);
+  kb.text('✅ Готово', `a:bx_filters|ws:${wsNum}|p:0|h:${h}`);
 
-  kbNavRow(kb, `a:bx_filters|ws:${wsNum}|p:0|h:${h}|r:${r}`);
+  kbNavRow(kb, `a:bx_filters|ws:${wsNum}|p:0|h:${h}`);
   return kb;
 }
 
@@ -3157,8 +3091,7 @@ function bxMultiPickKb(wsId, key, selected, page = 0, opts = {}) {
   const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
 
   const pickTitle = key === 'goals' ? '🎯 Цели' : '📎 Требования';
-  const defs = key === 'goals' ? BRAND_GOALS_TAGS : BRAND_REQ_TAGS;
-  const items = (defs || []).map((it) => ({ value: it.key, label: it.title }));
+  const items = key === 'goals' ? BX_GOALS_TAGS : BX_REQUIREMENTS_TAGS;
   const selSet = new Set((selected || []).map(String));
 
   const kb = new InlineKeyboard();
@@ -6984,11 +6917,6 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = 
     key === 'type' ? bxAnyLabel(f.offerType, 'type') :
     bxAnyLabel(f.compensationType, 'comp');
 
-  const selectedValue =
-    key === 'cat' ? (f.category || null) :
-    key === 'type' ? (f.offerType || null) :
-    (f.compensationType || null);
-
   const text = `🎛 <b>${title}</b>
 <i>${escapeHtml(hint)}</i>
 
@@ -6998,7 +6926,7 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = 
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
-    reply_markup: bxPickKb(wsNum, key, selectedValue, page, opts),
+    reply_markup: bxPickKb(wsNum, key, selectedVal, page, opts),
     disable_web_page_preview: true
   });
   } catch (e) {
@@ -9185,7 +9113,9 @@ ${escapeHtml(safe)}`;
       await db.addCurator(exp.wsId, curator.id, u.id);
       const ws = await db.getWorkspaceAny(Number(exp.wsId));
       const wsTitle = ws ? wsLabelNice(ws) : `Канал #${exp.wsId}`;
-      await renderCuratorManage(ctx, u.id, exp.wsId, { notice: `Куратор @${username} добавлен` });
+      await ctx.reply(`✅ Куратор @${username} добавлен.
+
+Включи 👤 Куратор: ВКЛ, если хочешь чтобы он мог помогать с конкурсами (статы/лог/напоминания).`);
 
       // best-effort notify curator in DM
       try {
@@ -14546,7 +14476,7 @@ if (p.a === 'a:match_home') {
       const prof = await safeBrandProfiles(() => db.getBrandProfile(bmRes.userId), async () => null);
       const info = deriveBxSmartPrefillFromBrandProfile(prof);
 
-      const next = await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, {
+      const next = await setBxFilterScoped(ctx.from.id, wsId, {
         category: null,
         offerType: info.offerType,
         compensationType: info.compensationType,
@@ -14581,7 +14511,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', 0);
       if (!bmRes) return;
 
-	      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
+	      await setBxFilterScoped(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
       await renderBxFeed(ctx, bmRes.userId, wsId, 0, { h });
       return;
     }
@@ -14682,7 +14612,7 @@ if (p.a === 'a:match_home') {
 	      if (set.has(v)) set.delete(v);
 	      else set.add(v);
 
-	      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { [field]: Array.from(set) });
+	      await setBxFilterScoped(ctx.from.id, wsId, { [field]: Array.from(set) });
 	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
@@ -14781,7 +14711,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
-      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { [key]: v });
+      await setBxFilterScoped(ctx.from.id, wsId, { [key]: v });
       await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
@@ -16019,22 +15949,26 @@ if (p.a === 'a:bx_cat') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await db.setWorkspaceSetting(wsId, { curator_enabled: !ws.curator_enabled });
       await db.auditWorkspace(wsId, u.id, 'ws.curator_toggled', { enabled: !ws.curator_enabled });
-      const ret = String(p.ret || 'ws');
-      if (ret === 'cur_manage') {
-        await renderCuratorManage(ctx, u.id, wsId);
-      } else {
-        await renderWsSettings(ctx, u.id, wsId);
-      }
+      await renderWsSettings(ctx, u.id, wsId);
       return;
     }
 
-	// Curators
-	if (p.a === 'a:cur_manage') {
-	  const wsId = Number(p.ws);
-	  await ctx.answerCallbackQuery();
-	  await renderCuratorManage(ctx, u.id, wsId);
-	  return;
-	}
+    // Curators
+if (p.a === 'a:cur_manage') {
+  const wsId = Number(p.ws);
+  const ws = await db.getWorkspace(u.id, wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  const curators = await db.listCurators(wsId);
+  const count = curators?.length || 0;
+
+  await ctx.answerCallbackQuery();
+  await safeEditOrReply(ctx, 
+    `👥 <b>Кураторы</b>\n\nКураторы помогают проверять конкурсы и заявки.\n\nСейчас в списке: <b>${count}</b>`,
+    { parse_mode: 'HTML', reply_markup: curManageKb(wsId) }
+  );
+  return;
+}
 
     if (p.a === 'a:cur_invite') {
       const wsId = Number(p.ws);
