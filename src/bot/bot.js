@@ -455,7 +455,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 }
 
 function mainMenuBrandKb(flags = {}, opts = {}) {
-  const { isModerator = false, isAdmin = false, isCurator = false } = flags;
+  const { isModerator = false, isAdmin = false } = flags;
   const { isManager = false, hasMultipleBrands = false, canManager = false, teamLocked = false } = opts;
 
   const kb = new InlineKeyboard()
@@ -495,7 +495,6 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['👤 Куратор', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -1299,76 +1298,16 @@ function wsSettingsKb(wsId, s) {
     .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
-function curManageKb(wsId, ws = null) {
-  const enabled = !!ws?.curator_enabled;
-  const toggleLabel = enabled ? '👤 Куратор: ✅ ВКЛ' : '👤 Куратор: ❌ ВЫКЛ';
+function curManageKb(wsId) {
   return new InlineKeyboard()
-    .text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`)
-    .row()
     .text('👤 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
     .row()
     .text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)
     .row()
     .text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
     .row()
-    .text('🧾 История', `a:ws_history|ws:${wsId}`)
-    .row()
     .text('⬅️ Назад', `a:ws_settings|ws:${wsId}`)
     .text('📋 Меню', 'a:menu');
-}
-
-async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
-  const notice = opts.notice ? String(opts.notice) : '';
-  const ws = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
-    return;
-  }
-  try { await db.ensureWorkspaceSettings(wsId); } catch {}
-
-  const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `Канал #${wsId}`);
-  const curators = await db.listCurators(wsId);
-  const count = curators?.length || 0;
-
-  const curList = (curators || []).slice(0, 8).map(c => {
-    const uname = c?.tg_username ? '@' + escapeHtml(c.tg_username) : (c?.tg_id ? 'id:' + String(c.tg_id) : '—');
-    return `• ${uname}`;
-  }).join('\n');
-
-  let activityLines = [];
-  try {
-    const items = await db.listWorkspaceAudit(wsId, 20);
-    const curItems = (items || []).filter(i => {
-      const a = String(i?.action || '');
-      return a.includes('curator') || a.includes('ws.curator') || a.includes('gw.cur') || a.includes('gw.reminder');
-    }).slice(0, 6);
-    activityLines = curItems.map(i => `• ${fmtTs(i.created_at)} — <code>${escapeHtml(String(i.action || ''))}</code>`);
-  } catch {
-    activityLines = [];
-  }
-
-  const enabled = !!ws.curator_enabled;
-  const status = enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
-
-  const text = `${notice ? `✅ ${escapeHtml(notice)}\n\n` : ''}👥 <b>Куратор HQ</b>
-
-Канал: <b>${escapeHtml(title)}</b>
-Доступ кураторов: <b>${status}</b>
-Кураторов в списке: <b>${count}</b>
-
-<b>Команда:</b>
-${count ? curList : 'Пока нет.'}
-
-<b>Последние события:</b>
-${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
-
-💡 Включи «👤 Куратор: ВКЛ» — и кураторы смогут помогать с конкурсами (статы/лог/напоминания/пометки).`;
-
-  await safeEditOrReply(ctx, text, {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: curManageKb(wsId, ws)
-  });
 }
 
 
@@ -9174,7 +9113,9 @@ ${escapeHtml(safe)}`;
       await db.addCurator(exp.wsId, curator.id, u.id);
       const ws = await db.getWorkspaceAny(Number(exp.wsId));
       const wsTitle = ws ? wsLabelNice(ws) : `Канал #${exp.wsId}`;
-      await renderCuratorManage(ctx, u.id, exp.wsId, { notice: `Куратор @${username} добавлен` });
+      await ctx.reply(`✅ Куратор @${username} добавлен.
+
+Включи 👤 Куратор: ВКЛ, если хочешь чтобы он мог помогать с конкурсами (статы/лог/напоминания).`);
 
       // best-effort notify curator in DM
       try {
@@ -16008,22 +15949,26 @@ if (p.a === 'a:bx_cat') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await db.setWorkspaceSetting(wsId, { curator_enabled: !ws.curator_enabled });
       await db.auditWorkspace(wsId, u.id, 'ws.curator_toggled', { enabled: !ws.curator_enabled });
-      const ret = String(p.ret || 'ws');
-      if (ret === 'cur_manage') {
-        await renderCuratorManage(ctx, u.id, wsId);
-      } else {
-        await renderWsSettings(ctx, u.id, wsId);
-      }
+      await renderWsSettings(ctx, u.id, wsId);
       return;
     }
 
-	// Curators
-	if (p.a === 'a:cur_manage') {
-	  const wsId = Number(p.ws);
-	  await ctx.answerCallbackQuery();
-	  await renderCuratorManage(ctx, u.id, wsId);
-	  return;
-	}
+    // Curators
+if (p.a === 'a:cur_manage') {
+  const wsId = Number(p.ws);
+  const ws = await db.getWorkspace(u.id, wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  const curators = await db.listCurators(wsId);
+  const count = curators?.length || 0;
+
+  await ctx.answerCallbackQuery();
+  await safeEditOrReply(ctx, 
+    `👥 <b>Кураторы</b>\n\nКураторы помогают проверять конкурсы и заявки.\n\nСейчас в списке: <b>${count}</b>`,
+    { parse_mode: 'HTML', reply_markup: curManageKb(wsId) }
+  );
+  return;
+}
 
     if (p.a === 'a:cur_invite') {
       const wsId = Number(p.ws);
