@@ -566,7 +566,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
   if (bm.dbMissing) {
-    const kb = new InlineKeyboard().text('🏠 Меню', 'a:menu');
+    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
@@ -577,7 +577,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
 
   if (bm.revoked || !(bm.brands || []).length) {
     await disableBrandManagerState(ctx.from.id);
-    const kb = new InlineKeyboard().text('🏠 Меню', 'a:menu');
+    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
@@ -607,7 +607,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
     'a:menu'
   );
 
-  kb.row().text('⬅️ Назад', backCb).text('🏠 Меню', 'a:menu');
+  kbNavRow(kb, backCb);
 
   const text = `🧑‍💼 <b>Выбери бренд для работы</b>
 
@@ -623,7 +623,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0) {
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
   if (bm.dbMissing) {
-    const kb = new InlineKeyboard().text('🏠 Меню', 'a:menu');
+    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
@@ -633,7 +633,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0) {
 
   if (bm.revoked) {
     await disableBrandManagerState(ctx.from.id);
-    const kb = new InlineKeyboard().text('🏠 Меню', 'a:menu');
+    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
@@ -705,14 +705,14 @@ async function renderMainMenu(ctx, flags, params = {}) {
       text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-      kb = new InlineKeyboard().text('🏠 Меню', 'a:menu');
+      kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     } else if (bm.revoked) {
       await disableBrandManagerState(ctx.from.id);
       modeHuman = 'Brand Manager';
       text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-      kb = new InlineKeyboard().text('🏠 Меню', 'a:menu');
+      kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     } else if (bm.enabled && bm.needsPick) {
       await renderBmPickBrand(ctx, u, { ret: 'menu', wsId: 0, page: 0, edit });
       return;
@@ -1142,7 +1142,7 @@ function wsMenuKb(wsId) {
     .text('👥 Кураторы', `a:ws_settings|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', 'a:ws_list');
+    .text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
 }
 
 
@@ -1156,7 +1156,7 @@ function wsSettingsKb(wsId, s) {
     .row()
     .text('👥 Управление кураторами', `a:cur_manage|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`);
+    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
 function curManageKb(wsId) {
@@ -1168,7 +1168,7 @@ function curManageKb(wsId) {
     .text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
     .row()
     .text('⬅️ Назад', `a:ws_settings|ws:${wsId}`)
-    .text('🏠 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 }
 
 
@@ -1246,7 +1246,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: false });
 
   if (bm.dbMissing) {
-    const kb = new InlineKeyboard().text('🏠 Меню', 'a:menu');
+    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>\n\nВ Neon должна быть таблица <code>brand_managers</code>.`;
     if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -1254,7 +1254,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   }
 
   if (bm.enabled && bm.brandUserId !== u.id) {
-    const kb = new InlineKeyboard().text('⬅️ Назад', 'a:menu').text('🏠 Меню', 'a:menu');
+    const kb = navKb('a:menu');
     const text = `⛔ <b>Только владелец бренда</b>\n\nМенеджер не может управлять «👥 Команда бренда».`;
     if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -1264,7 +1264,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   const st = await getBrandTeamGateState(u.id);
 
   if (st.missingRelation) {
-    const kb = new InlineKeyboard().text('🏠 Меню', 'a:menu');
+    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⚠️ <b>Нужна миграция 024_brand_profiles</b>\n\nВ Neon должна быть таблица <code>brand_profiles</code>.`;
     if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -1297,7 +1297,7 @@ function brandManagersListKb(managers) {
     const label = m.tg_username ? `@${m.tg_username}` : `id:${m.tg_id}`;
     kb.text(`🗑 ${label}`, `a:bm_rm_q|ws:0|u:${m.user_id}`).row();
   }
-  kb.text('⬅️ Назад', 'a:brand_team|ws:0').text('🏠 Меню', 'a:menu');
+  kb.text('⬅️ Назад', 'a:brand_team|ws:0').text('📋 Меню', 'a:menu');
   return kb;
 }
 
@@ -1306,7 +1306,7 @@ function brandManagerRemoveConfirmKb(managerUserId) {
     .text('✅ Удалить', `a:bm_rm_ok|ws:0|u:${managerUserId}`)
     .row()
     .text('⬅️ Отмена', 'a:bm_list|ws:0')
-    .text('🏠 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 }
 
 function netConfirmKb(wsId, enabled, ret) {
@@ -1316,7 +1316,7 @@ function netConfirmKb(wsId, enabled, ret) {
   return new InlineKeyboard()
     .text(actionLabel, `a:net_set|ws:${wsId}|v:${v}|ret:${String(ret) === 'bx' ? 'bx' : 'ws'}`)
     .row()
-    .text('⬅️ Отмена', cancelCb);
+    .text('⬅️ Отмена', cancelCb).text('📋 Меню', 'a:menu');
 }
 
 async function renderNetConfirm(ctx, ownerUserId, wsId, ret = 'ws') {
@@ -1342,7 +1342,7 @@ function curListKb(wsId, curators) {
     const label = c.tg_username ? `@${c.tg_username}` : `id:${c.tg_id}`;
     kb.text(`🗑 ${label}`, `a:cur_rm_q|ws:${wsId}|u:${c.user_id}`).row();
   }
-  kb.text('⬅️ Назад', `a:cur_manage|ws:${wsId}`).text('🏠 Меню', 'a:menu');
+  kb.text('⬅️ Назад', `a:cur_manage|ws:${wsId}`).text('📋 Меню', 'a:menu');
   return kb;
 }
 
@@ -1362,7 +1362,7 @@ function bxMenuKb(wsId, networkEnabled = true) {
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
   kb.row().text(net, `a:net_q|ws:${wsId}|ret:bx`);
-  kb.row().text('⬅️ Назад', `a:ws_open|ws:${wsId}`);
+  kbNavRow(kb, `a:ws_open|ws:${wsId}`);
   return kb;
 }
 
@@ -1391,7 +1391,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
-  kb.row().text('⬅️ Назад', 'a:menu');
+  kbNavRow(kb, 'a:menu');
   return kb;
 }
 
@@ -1680,9 +1680,9 @@ function brandFieldPrompt(field) {
 function brandFieldPromptKb(params = {}) {
   const suf = brandCbSuffix(params);
   const from = String(params.from || '');
-  if (from === 'more') return new InlineKeyboard().text('⬅️ Назад', `a:brand_profile_more${suf}`);
+  if (from === 'more') return new InlineKeyboard().text('⬅️ Назад', `a:brand_profile_more${suf}`).text('📋 Меню', 'a:menu');
   // default: back to edit view of base profile
-  return new InlineKeyboard().text('⬅️ Назад', `a:brand_profile_edit${suf}`);
+  return new InlineKeyboard().text('⬅️ Назад', `a:brand_profile_edit${suf}`).text('📋 Меню', 'a:menu');
 }
 
 async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
@@ -1747,7 +1747,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
       .text('✅ Готово', `a:brand_profile${suf}`)
       .row()
       .text('⬅️ Назад', brandBackCb({ wsId, ret, backOfferId: bo, backPage: bp }))
-      .text('🏠 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu');
 
     const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
     if (ctx.callbackQuery?.message) await ctx.editMessageText(text, extra);
@@ -1760,7 +1760,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
     .text('✨ Расширенный', `a:brand_profile_more${suf}`)
     .row()
     .text('🧹 Сбросить профиль', `a:brand_prof_reset${suf}`)
-    .text('🏠 Меню', 'a:menu')
+    .text('📋 Меню', 'a:menu')
     .row()
     .text('⬅️ Назад', brandBackCb({ wsId, ret, backOfferId: bo, backPage: bp }));
 
@@ -1969,8 +1969,8 @@ async function renderBrandProfileMore(ctx, ownerUserId, params = {}) {
     .row()
     .text('📎 Требования (текст)', `a:brand_prof_set${suf}|f:rq|from:more`)
     .text('🏷 Теги', `a:brand_rt_pick${suf}`)
-    .row()
-    .text('⬅️ Назад', `a:brand_profile${suf}`);
+    .row();
+  kbNavRow(kb, `a:brand_profile${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (params.edit && ctx.callbackQuery?.message) {
@@ -2243,6 +2243,7 @@ function brandDirFiltersKb(f, page = 0) {
     .text('♻️ Сбросить', `a:bd_freset|p:0`)
     .text('📋 Показать бренды', `a:brands_home|p:0`);
 
+  kbNavRow(kb, `a:brands_home|p:${page}`);
   return kb;
 }
 
@@ -2286,7 +2287,7 @@ function brandDirPickKb(key, page = 0) {
     kbAddPairs(kb, items, 2);
   }
 
-  kb.text('⬅️ Назад', `a:brands_filters|p:${page}`);
+  kbNavRow(kb, `a:brands_filters|p:${page}`);
   return kb;
 }
 
@@ -2304,7 +2305,7 @@ function brandDirMultiPickKb(key, page, selected) {
   if (set.size) kb.text('🧹 Очистить', `a:bd_mclear|k:${key}|p:${page}`);
   kb.text('✅ Готово', `a:bd_mdone|p:${page}`);
   kb.row();
-  kb.text('⬅️ Назад', `a:brands_filters|p:${page}`);
+  kbNavRow(kb, `a:brands_filters|p:${page}`);
 
   return kb;
 }
@@ -2479,7 +2480,8 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
     return;
   }
   if (!prof) {
-    const kb = new InlineKeyboard().text('⬅️ Назад', `a:brands_home|p:${backPage}`).row().text('⬅️ Меню', 'a:menu');
+    const kb = new InlineKeyboard();
+    kbNavRow(kb, `a:brands_home|p:${backPage}`);
     if (edit && ctx.callbackQuery?.message) await ctx.editMessageText('⚠️ Бренд не найден.', { reply_markup: kb });
     else await ctx.reply('⚠️ Бренд не найден.', { reply_markup: kb });
     return;
@@ -2565,7 +2567,7 @@ function bxNeedNetworkKb(wsId) {
   return new InlineKeyboard()
     .text('🌐 Сеть: ❌ ВЫКЛ', `a:net_q|ws:${wsId}|ret:bx`)
     .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`);
+    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
 
@@ -2586,7 +2588,7 @@ function bxCategoryKb(wsId) {
     kb.text(c.label, `a:bx_cat|ws:${wsId}|c:${c.key}`).row();
   }
   kb.text('🧩 Шаблоны', `a:bx_preset_home|ws:${wsId}`).row();
-  kb.text('⬅️ Отмена', `a:bx_open|ws:${wsId}`);
+  kb.text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
   return kb;
 }
 
@@ -2594,7 +2596,7 @@ function bxKindKb(wsId) {
   return new InlineKeyboard()
     .text('🎬 UGC', `a:bx_kind|ws:${wsId}|k:ugc`).row()
     .text('📣 Интеграция', `a:bx_kind|ws:${wsId}|k:integration`).row()
-    .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`);
+    .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
 const BX_PRESETS = [
@@ -2635,7 +2637,7 @@ function bxPresetKb(wsId) {
     .row()
     .text(BX_PRESETS[2].title, `a:bx_preset_apply|ws:${wsId}|id:${BX_PRESETS[2].id}`)
     .row()
-    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`);
+    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`).text('📋 Меню', 'a:menu');
   }
 
 function bxTypeKb(wsId) {
@@ -2648,7 +2650,7 @@ function bxTypeKb(wsId) {
     .row()
     .text('✍️ Другое', `a:bx_type|ws:${wsId}|t:other`)
     .row()
-    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`);
+    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
 function bxCompKb(wsId) {
@@ -2661,7 +2663,7 @@ function bxCompKb(wsId) {
     .row()
     .text('🔁 Смешано', `a:bx_comp|ws:${wsId}|p:mixed`)
     .row()
-    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`);
+    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
 function bxOfferTagsKb(wsId, meta, opts = {}) {
@@ -2776,7 +2778,7 @@ async function renderBxOfferTextStep(ctx, wsId) {
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', `a:bx_ottags|ws:${wsId}`)
     .row()
-    .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`);
+    .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 
   const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -2807,6 +2809,7 @@ function bxFiltersKb(wsId, f, page = 0) {
     .row();
 
   kb.text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0`);
+  kbNavRow(kb, `a:bx_open|ws:${wsId}`);
   return kb;
 }
 
@@ -2841,7 +2844,7 @@ function bxPickKb(wsId, key, page = 0) {
     kbAddPairs(kb, items, 2);
   }
 
-  kb.text('⬅️ Назад', `a:bx_filters|ws:${wsId}|p:${page}`);
+  kbNavRow(kb, `a:bx_filters|ws:${wsId}|p:${page}`);
   return kb;
 }
 
@@ -2861,7 +2864,7 @@ function bxMultiPickKb(wsId, key, selected = [], page = 0) {
   kb.text('🧹 Очистить', `a:bx_mclear|ws:${wsId}|k:${key}|p:${page}`)
     .text('✅ Готово', `a:bx_mdone|ws:${wsId}|k:${key}|p:${page}`)
     .row();
-  kb.text('⬅️ Назад', `a:bx_filters|ws:${wsId}|p:${page}`);
+  kbNavRow(kb, `a:bx_filters|ws:${wsId}|p:${page}`);
   kb.__title = pickTitle; // internal (for rendering)
   return kb;
 }
@@ -2870,7 +2873,7 @@ function bxInboxNavKb(wsId, page, hasPrev, hasNext) {
   const kb = new InlineKeyboard();
   if (hasPrev) kb.text('⬅️', `a:bx_inbox|ws:${wsId}|p:${page - 1}`);
   if (hasNext) kb.text('➡️', `a:bx_inbox|ws:${wsId}|p:${page + 1}`);
-    kb.row().text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
+    kbNavRow(kb, `a:bx_open|ws:${wsId}`);
   return kb;
 }
 
@@ -2904,7 +2907,7 @@ function bxThreadKb(wsId, threadId, opts = {}) {
 
   if (offerId) kb.row().text('🔎 Оффер', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}`);
     kb.row().text('🚩 Жалоба', `a:bx_report_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`);
-    kb.row().text('⬅️ Назад', back === 'offer' && offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}` : `a:bx_inbox|ws:${wsId}|p:${page}`);
+    kbNavRow(kb, back === 'offer' && offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}` : `a:bx_inbox|ws:${wsId}|p:${page}`);
   return kb;
 }
 
@@ -2915,7 +2918,7 @@ function bxFeedNavKb(wsId, page, hasPrev, hasNext) {
     kb.row()
     .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:${page}`)
     .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0`);
-    kb.row().text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
+    kbNavRow(kb, `a:bx_open|ws:${wsId}`);
   return kb;
 }
 
@@ -2931,7 +2934,7 @@ function gwNewStepPrizeKb(wsId) {
     .row()
     .text('Пресеты', `a:gw_preset_home|ws:${wsId}`)
     .row()
-    .text('⬅️ Отмена', `a:ws_open|ws:${wsId}`);
+    .text('⬅️ Отмена', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
 const GW_PRESETS = [
@@ -3903,7 +3906,7 @@ function wsProfileKb(wsId, ws) {
     .text('🧩 Режим', `a:ws_prof_mode|ws:${wsId}`)
     .text('📌 IG шаблоны', `a:ws_ig_templates|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`);
+    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 
   return kb;
 }
@@ -4039,8 +4042,8 @@ async function renderWsShareMenu(ctx, ownerUserId, wsId) {
   const kb = new InlineKeyboard()
     .text('📄 Коротко', `a:ws_share_send|ws:${wsId}|v:short`)
     .text('📄 Подробно', `a:ws_share_send|ws:${wsId}|v:long`)
-    .row()
-    .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`);
+    .row();
+  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -4094,8 +4097,8 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
   const kb = new InlineKeyboard()
     .url('📨 Отправить', shareUrl)
     .row()
-    .text('⬅️ Назад', `a:ws_share|ws:${wsId}`)
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`);
+  kbNavRow(kb, `a:ws_share|ws:${wsId}`);
 
   try {
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -4132,8 +4135,8 @@ async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
     .row()
     .text('💬 DM бренду', `a:ws_ig_templates_send|ws:${wsId}|t:dm`)
     .text('🔖 Bio', `a:ws_ig_templates_send|ws:${wsId}|t:bio`)
-    .row()
-    .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`);
+    .row();
+  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -4350,7 +4353,7 @@ async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', varia
     .row()
     .text('📤 Ещё вариант', `a:ws_ig_dm|ws:${wsId}|tone:${toneNorm}|i:${i + 1}`)
     .row()
-    .text('⬅️ Назад', `a:ws_ig_templates|ws:${wsId}`);
+    .text('⬅️ Назад', `a:ws_ig_templates|ws:${wsId}`).text('📋 Меню', 'a:menu');
 
   try {
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -4382,8 +4385,8 @@ async function sendWsIgTemplateMessage(ctx, ownerUserId, wsId, type = 'story') {
 
   // Показываем шаблон в этом же сообщении (без лишнего спама в чате)
   const kb = new InlineKeyboard()
-    .text('⬅️ Назад', `a:ws_ig_templates|ws:${wsId}`)
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`);
+  kbNavRow(kb, `a:ws_ig_templates|ws:${wsId}`);
 
   try {
     await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -4433,9 +4436,8 @@ async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
     if (i % 2 === 1) kb.row();
   });
 
-  kb.row()
-    .text('🧹 Сброс', `a:ws_prof_vert_clear|ws:${wsId}`)
-    .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`);
+  kb.row().text('🧹 Сброс', `a:ws_prof_vert_clear|ws:${wsId}`);
+  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   const text =
     `🏷 <b>Ниши</b> (максимум 3)\n\n` +
@@ -4460,9 +4462,8 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
     if (i % 2 === 1) kb.row();
   });
 
-  kb.row()
-    .text('🧹 Сброс', `a:ws_prof_fmt_clear|ws:${wsId}`)
-    .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`);
+  kb.row().text('🧹 Сброс', `a:ws_prof_fmt_clear|ws:${wsId}`);
+  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   const text =
     `🎬 <b>Форматы</b> (максимум 5)\n\n` +
@@ -4660,7 +4661,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
     else kb.row().text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}`);
   }
 
-  kb.row().text('⬅️ Назад', `a:ws_profile|ws:${wsId}`);
+  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
     await ctx.editMessageText(textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -4709,8 +4710,8 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:closed|ws:${wsId}|s:${back.status}|p:${back.page}`)
     .row()
     .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:spam|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('⬅️ Назад', `a:ws_leads|ws:${wsId}|s:${back.status}|p:${back.page}`);
+    .row();
+  kbNavRow(kb, `a:ws_leads|ws:${wsId}|s:${back.status}|p:${back.page}`);
 
   try {
     try {
@@ -5249,7 +5250,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
 
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
-    .text('🏠 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 
   const text =
     `✍️ <b>Ответ креатору</b>
@@ -5596,7 +5597,7 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
 
   const kb = new InlineKeyboard()
     .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
-    .text('🏠 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 
   const text =
     `💬 <b>Сообщение бренду</b>\n\n` +
@@ -6025,7 +6026,7 @@ function bxBrandOnlyNoticeKb() {
     .text('🏷 Каталог брендов', 'a:brands_home|p:0')
     .text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
     .row()
-    .text('🏠 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 }
 
 async function renderBxBrandOnlyNotice(ctx) {
@@ -6113,7 +6114,7 @@ function bxSmartKb(wsId) {
     .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0`)
     .row()
     .text('♻️ Сбросить', `a:bx_smart_reset|ws:${wsId}`)
-    .text('⬅️ Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 }
 
 async function renderBxOpen(ctx, ownerUserId, wsId) {
@@ -6317,7 +6318,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
   const kb = new InlineKeyboard();
 
   if (!rows.length) {
-    kb.text('⬅️ Назад', `a:bx_my|ws:${wsId}|p:0`).row().text('🏠 Меню', 'a:menu');
+    kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
     await ctx.editMessageText(
       `📁 <b>Архив офферов</b>
 
@@ -6343,7 +6344,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
     kb.inline_keyboard.push(nav.inline_keyboard[0]);
   }
 
-  kb.text('⬅️ Назад', `a:bx_my|ws:${wsId}|p:0`).row().text('🏠 Меню', 'a:menu');
+  kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
 
   await ctx.editMessageText(
     `📁 <b>Архив офферов</b>
@@ -7028,7 +7029,7 @@ async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
     .text(`⚙️ По умолчанию (${defaultDays}д)`, `a:off_req|ws:${wsId}|o:${offerId}|days:${defaultDays}|p:${page}`)
     .row()
     .text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`)
-    .text('🏠 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 
   if (ctx.callbackQuery) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -9375,7 +9376,7 @@ ${escapeHtml(payLine)}
         .text('🔎 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
         .row()
         .text('⬅️ Назад к списку', `a:brands_home|p:${backPage}`)
-        .text('🏠 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu');
 
       const doneText = stored
         ? '✅ Заявка отправлена. Бренд увидит её в Inbox.'
@@ -9453,7 +9454,7 @@ ${escapeHtml(reply)}`;
       const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:new|p:0`);
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', backCb)
-        .text('🏠 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu');
 
       return ctx.reply('✅ Ответ отправлен креатору.', { reply_markup: kb });
     }
@@ -9467,7 +9468,7 @@ if (exp.type === 'brand_deals_search') {
 
   const backCb = String(exp.backCb || `a:brand_deals|ws:0|st:${stage}|p:${page}`);
 
-  const kb = new InlineKeyboard().text('⬅️ Назад', backCb).text('🏠 Меню', 'a:menu');
+  const kb = navKb(backCb);
 
   if (!brandUserId) {
     await clearExpectText(ctx.from.id);
@@ -9578,7 +9579,7 @@ if (exp.type === 'brand_deals_search') {
       return ctx.reply('✅ Сообщение доставлено бренду.', {
         reply_markup: new InlineKeyboard()
           .text('📨 Открыть заявку', `a:brand_app_view|id:${appId}|s:in_progress|p:0`)
-          .text('🏠 Меню', 'a:menu')
+          .text('📋 Меню', 'a:menu')
       });
     }
 
@@ -9953,7 +9954,7 @@ if (exp.type === 'brand_deals_search') {
         .row()
         .text('⏭ Пропустить', `a:bx_view|ws:${wsId}|o:${offer.id}|back:my`)
         .row()
-        .text('🏠 Меню бартер-биржи', `a:bx_open|ws:${wsId}`);
+        .text('📋 Меню бартер-биржи', `a:bx_open|ws:${wsId}`);
 
       await ctx.reply(
         `✅ Оффер опубликован в ленте сети.
@@ -10767,7 +10768,7 @@ ${list}
         .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0')
         .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
         .row()
-        .text('🏠 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu');
 
       await ctx.reply(
         `✅ Ты добавлен в <b>команду бренда</b>: <b>${escapeHtml(brandLabel)}</b>
@@ -11516,7 +11517,7 @@ if (p.a === 'a:guide') {
       .text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu');
   }
 
-  kb.row().text('💬 Поддержка', 'a:support').text('🏠 Меню', 'a:menu');
+  kb.row().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
 
   await ctx.editMessageText(text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
   await maybeSendBanner(ctx, 'guide', CFG.GUIDE_BANNER_FILE_ID);
@@ -11547,7 +11548,7 @@ if (p.a === 'a:support') {
     .text('✍️ Написать в поддержку', 'a:support_write')
     .row()
     .text('🧭 Быстрый старт', 'a:guide')
-    .text('🏠 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 
   await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   return;
@@ -11704,7 +11705,7 @@ if (p.a === 'a:brand_apply') {
 
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
-    .text('🏠 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 
   const text = `📝 <b>Заявка бренду</b>
 
@@ -12569,7 +12570,7 @@ if (p.a === 'a:lead_set') {
         .row()
         .text('🎬 UGC / Офферы', 'a:bx_home')
         .row()
-        .text('⬅️ Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu');
       await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -12589,7 +12590,7 @@ if (p.a === 'a:lead_set') {
         .row()
         .text('🎫 Brand Pass', 'a:brand_pass|ws:0')
         .row()
-        .text('⬅️ Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu');
       await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -14388,7 +14389,7 @@ if (p.a === 'a:match_home') {
           reply_markup: new InlineKeyboard()
             .text('⬅️ Назад', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${Number(p.p || 0)}`)
             .row()
-            .text('🏠 Меню', 'a:menu')
+            .text('📋 Меню', 'a:menu')
         }
       );
       return;
@@ -15436,7 +15437,7 @@ if (p.a === 'a:cur_manage') {
       await ctx.editMessageText('➕ Введи @username куратора (он должен уже запускать бота /start).', {
         reply_markup: new InlineKeyboard()
           .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
-          .text('🏠 Меню', 'a:menu')
+          .text('📋 Меню', 'a:menu')
       });
       await setExpectText(ctx.from.id, { type: 'curator_username', wsId });
       return;
@@ -16024,7 +16025,7 @@ ${list}
         .row()
         .text('⬅️ Назад', `a:gw_open|i:${gwId}`)
         .row()
-        .text('🏠 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu');
 
       await ctx.editMessageText(
         `🗑 <b>Удалить конкурс #${gwId}?</b>
@@ -16767,7 +16768,7 @@ ${actionHint}`;
 async function renderVerifyInfo(ctx) {
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', 'a:verify_home')
-    .text('⬅️ Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu');
 
   const text = `✅ <b>Верификация</b>
 
@@ -17171,7 +17172,7 @@ async function renderModHome(ctx) {
     kb.row().text('📣 Офиц.канал', 'a:off_queue|p:0');
   }
 
-  kb.row().text('⬅️ Меню', 'a:menu');
+  kb.row().text('📋 Меню', 'a:menu');
   await ctx.editMessageText('🛡 <b>Модерация</b>\n\nВыбери действие:', { parse_mode: 'HTML', reply_markup: kb });
 }
 
