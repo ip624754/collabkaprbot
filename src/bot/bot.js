@@ -1459,21 +1459,35 @@ async function getBrandTeamGateState(ownerUserId) {
       ok: false,
       missingRelation: true,
       basicDone: 0,
-      missingBasic: ['Название', 'Ниша', 'Контакт', 'Ссылка'],
+      missingBasic: ['Название', 'Ниши', 'Контакт', 'Ссылка'],
       teamPaid: false
     };
   }
 
   const p = prof || {};
+  const meta = parseBrandMeta(p.meta);
+  const hasNicheKey = !!String(meta?.niche_key || '').trim();
+  const hasNicheText = !!String(p.niche || '').trim();
+  const nicheDone = hasNicheKey || hasNicheText;
   const basic = [
     { key: 'brand_name', label: 'Название' },
-    { key: 'niche', label: 'Ниша' },
+    { key: 'niche', label: 'Ниши' },
     { key: 'contact', label: 'Контакт' },
     { key: 'brand_link', label: 'Ссылка' }
   ];
 
-  const basicDone = basic.filter((x) => String(p[x.key] || '').trim()).length;
-  const missingBasic = basic.filter((x) => !String(p[x.key] || '').trim()).map((x) => x.label);
+  const basicDone = [
+    !!String(p.brand_name || '').trim(),
+    nicheDone,
+    !!String(p.contact || '').trim(),
+    !!String(p.brand_link || '').trim()
+  ].filter(Boolean).length;
+  const missingBasic = [
+    !String(p.brand_name || '').trim() ? 'Название' : null,
+    !nicheDone ? 'Ниши' : null,
+    !String(p.contact || '').trim() ? 'Контакт' : null,
+    !String(p.brand_link || '').trim() ? 'Ссылка' : null,
+  ].filter(Boolean);
 
   let teamPaid = false;
   try {
@@ -1659,9 +1673,12 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 
 function isBrandBasicComplete(p) {
   if (!p) return false;
+  const meta = parseBrandMeta(p.meta);
+  const hasNicheKey = !!String(meta?.niche_key || '').trim();
+  const hasNicheText = !!String(p.niche || '').trim();
   return !!(
     String(p.brand_name || '').trim() &&
-    String(p.niche || '').trim() &&
+    (hasNicheKey || hasNicheText) &&
     String(p.contact || '').trim() &&
     String(p.brand_link || '').trim()
   );
@@ -1923,13 +1940,13 @@ function brandBackCb(params = {}) {
 function brandFieldPrompt(field) {
   const map = {
     brand_name: 'Название бренда',
-    niche: 'Ниша/категория',
+    niche: 'Ниша (текст, legacy)',
     contact: 'Контакт для связи (TG @username или ссылка)',
     brand_link: 'Ссылка на бренд (сайт/Instagram/Telegram)',
     geo: 'Гео (город/страна)',
-    budget: 'Бюджет (текст, если нужно)',
-    goals: 'Цели (текст)',
-    requirements: 'Требования (текст)'
+    budget: 'Детали бюджета (опционально)',
+    goals: 'Детали целей (опционально)',
+    requirements: 'Детали требований (опционально)'
   };
   const title = map[field] || 'Поле профиля';
   return `✍️ <b>${escapeHtml(title)}</b>
@@ -1963,9 +1980,16 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
   }
 
   const p = prof || {};
+  const meta = parseBrandMeta(p.meta);
+  const nicheKey = String(meta.niche_key || '').trim();
+  const nicheLabel = BX_CATEGORIES.find((x) => x.key === nicheKey)?.label || '';
+  const nicheText = String(p.niche || '').trim();
+  const nicheDisplay = nicheLabel || nicheText || '—';
+  const nicheOk = !!nicheLabel || !!nicheText;
+
   const filled = [
     !!String(p.brand_name || '').trim(),
-    !!String(p.niche || '').trim(),
+    nicheOk,
     !!String(p.contact || '').trim(),
     !!String(p.brand_link || '').trim()
   ].filter(Boolean).length;
@@ -1977,7 +2001,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 ` +
     `• Название: <b>${escapeHtml(p.brand_name || '—')}</b>
 ` +
-    `• Ниша: <b>${escapeHtml(p.niche || '—')}</b>
+    `• Ниши: <b>${escapeHtml(nicheDisplay)}</b>
 ` +
     `• Контакт: <b>${escapeHtml(p.contact || '—')}</b>
 ` +
@@ -1996,7 +2020,9 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 Выбери поле для редактирования:`;
     kb
       .text('✏️ Название', `a:brand_prof_set${suf}|f:bn|from:home`)
-      .text('🏷 Ниша', `a:brand_prof_set${suf}|f:ni|from:home`)
+      .row()
+      .text('🏷 Ниши', `a:brand_niche_pick${suf}|from:home`)
+      .text('✍️ Ниша (текст)', `a:brand_prof_set${suf}|f:ni|from:home`)
       .row()
       .text('📞 Контакт', `a:brand_prof_set${suf}|f:ct|from:home`)
       .text('🔗 Ссылка', `a:brand_prof_set${suf}|f:bl|from:home`)
@@ -2030,6 +2056,52 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
   else await ctx.reply(baseText, extra);
 }
 
+async function renderBrandNichePicker(ctx, ownerUserId, params = {}) {
+  const wsId = Number(params.wsId || 0);
+  const ret = String(params.ret || 'brand');
+  const bo = params.backOfferId ? Number(params.backOfferId) : null;
+  const bp = params.backPage ? Number(params.backPage) : 0;
+  const from = String(params.from || 'home'); // home | more
+
+  const prof = await safeBrandProfiles(() => db.getBrandProfile(ownerUserId), async () => null);
+  const p = prof || {};
+  const meta = parseBrandMeta(p.meta);
+  const curKey = String(meta.niche_key || '').trim();
+  const curLabel = BX_CATEGORIES.find((x) => x.key === curKey)?.label || '';
+  const curText = String(p.niche || '').trim();
+
+  const now = curLabel || curText || '—';
+
+  const suf = brandCbSuffix({ wsId, ret, backOfferId: bo, backPage: bp });
+  const backCb = from === 'more' ? `a:brand_profile_more${suf}` : `a:brand_profile_edit${suf}`;
+
+  const mark = (key, label) => `${key === curKey ? '✅ ' : ''}${label}`;
+
+  const kb = new InlineKeyboard();
+  // Keep it very clear: single-select.
+  for (const c of BX_CATEGORIES) {
+    kb.text(mark(c.key, c.label), `a:brand_niche_set${suf}|k:${c.key}|from:${from}`).row();
+  }
+  kb.row();
+  if (curKey) kb.text('🧹 Очистить', `a:brand_niche_clear${suf}|from:${from}`);
+  kb.text('✅ Готово', backCb);
+  kb.row();
+  kbNavRow(kb, backCb);
+
+  const text = `🏷 <b>Ниши бренда</b>
+<i>Выбери категорию (как в фильтрах каталога брендов).</i>
+
+Сейчас: <b>${escapeHtml(now)}</b>
+
+Нажимай — ✅ покажет выбранное. Потом «✅ Готово» вернёт назад.`;
+
+  await safeEditOrReply(ctx, text, {
+    parse_mode: 'HTML',
+    reply_markup: kb,
+    disable_web_page_preview: true
+  });
+}
+
 async function renderBrandBudgetBucketPicker(ctx, ownerUserId, params = {}) {
   const wsId = Number(params.wsId || 0);
   const ret = String(params.ret || 'brand');
@@ -2039,13 +2111,6 @@ async function renderBrandBudgetBucketPicker(ctx, ownerUserId, params = {}) {
   const prof = await safeBrandProfiles(() => db.getBrandProfile(ownerUserId), async () => null);
   const meta = parseBrandMeta(prof?.meta);
   const cur = String(meta.budget_bucket || '');
-
-  const currentVal =
-    key === 'cat' ? (f.category || null) :
-    key === 'type' ? (f.offerType || null) :
-    key === 'comp' ? (f.compensationType || null) :
-    key === 'bud' ? (f.budgetBucket || null) :
-    null;
 
   const text = `💰 <b>Бюджет (категория)</b>
 
@@ -2228,13 +2293,13 @@ async function renderBrandProfileMore(ctx, ownerUserId, params = {}) {
     .text('🌍 Гео', `a:brand_prof_set${suf}|f:ge|from:more`)
     .text('🧩 Форматы', `a:brand_prof_set${suf}|f:ty|from:more`)
     .row()
-    .text('💰 Бюджет (текст)', `a:brand_prof_set${suf}|f:bu|from:more`)
+    .text('✍️ Детали бюджета', `a:brand_prof_set${suf}|f:bu|from:more`)
     .text('💠 Категория', `a:brand_bb_pick${suf}`)
     .row()
-    .text('🎬 Цели (текст)', `a:brand_prof_set${suf}|f:go|from:more`)
+    .text('✍️ Детали целей', `a:brand_prof_set${suf}|f:go|from:more`)
     .text('🎯 Теги', `a:brand_gt_pick${suf}`)
     .row()
-    .text('📎 Требования (текст)', `a:brand_prof_set${suf}|f:rq|from:more`)
+    .text('✍️ Детали требований', `a:brand_prof_set${suf}|f:rq|from:more`)
     .text('🏷 Теги', `a:brand_rt_pick${suf}`)
     .row();
   kbNavRow(kb, `a:brand_profile${suf}`);
@@ -10648,6 +10713,15 @@ ${msgText}
       }
 
       const patch = { [field]: value };
+
+      // If user edits niche as free-text, treat it as legacy override and reset picker state.
+      if (field === 'niche') {
+        const prof0 = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
+        const meta0 = parseBrandMeta(prof0?.meta);
+        const nextMeta = { ...meta0 };
+        delete nextMeta.niche_key;
+        patch.meta = nextMeta;
+      }
       const saved = await safeBrandProfiles(
         () => db.upsertBrandProfile(u.id, patch),
         async () => ({ __missing_relation: true })
@@ -10667,9 +10741,10 @@ ${msgText}
       const backOfferId = exp.backOfferId ? Number(exp.backOfferId) : null;
       const backPage = Number(exp.backPage || 0);
 
-      // Keep UX consistent: if user edits an "extended" field, stay on the extended screen.
-      const EXT_FIELDS = new Set(['niche', 'geo', 'collab_types', 'budget', 'goals', 'requirements']);
-      if (EXT_FIELDS.has(field)) {
+      // Keep UX consistent: return to the screen where the edit started.
+      const from = String(exp.from || '');
+      const EXT_FIELDS = new Set(['geo', 'collab_types', 'budget', 'goals', 'requirements']);
+      if (from === 'more' || EXT_FIELDS.has(field)) {
         await renderBrandProfileMore(ctx, u.id, { wsId, ret, backOfferId, backPage, edit: false });
       } else {
         await renderBrandProfileHome(ctx, u.id, { wsId, ret, backOfferId, backPage, edit: false });
@@ -13699,6 +13774,80 @@ ${link}`;
       return;
     }
 
+    // Brand profile niche picker (single select, checkmark UX)
+    if (p.a === 'a:brand_niche_pick') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws || 0);
+      const ret = String(p.ret || 'brand');
+      const bo = p.bo ? Number(p.bo) : null;
+      const bp = p.bp ? Number(p.bp) : 0;
+      const from = String(p.from || 'home');
+
+      const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
+      if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
+        await safeEditOrReply(ctx,
+          '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
+          { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
+        );
+        return;
+      }
+
+      await renderBrandNichePicker(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, from });
+      return;
+    }
+
+    if (p.a === 'a:brand_niche_set') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws || 0);
+      const ret = String(p.ret || 'brand');
+      const bo = p.bo ? Number(p.bo) : null;
+      const bp = p.bp ? Number(p.bp) : 0;
+      const from = String(p.from || 'home');
+      const k = String(p.k || '').trim();
+      const found = BX_CATEGORIES.find((x) => x.key === k);
+
+      if (!found) {
+        await renderBrandNichePicker(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, from });
+        return;
+      }
+
+      const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
+      const meta = parseBrandMeta(prof?.meta);
+      const nextMeta = { ...meta, niche_key: found.key };
+
+      await safeBrandProfiles(
+        () => db.upsertBrandProfile(u.id, { niche: found.label, meta: nextMeta }),
+        async () => null
+      );
+
+      await renderBrandNichePicker(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, from });
+      return;
+    }
+
+    if (p.a === 'a:brand_niche_clear') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws || 0);
+      const ret = String(p.ret || 'brand');
+      const bo = p.bo ? Number(p.bo) : null;
+      const bp = p.bp ? Number(p.bp) : 0;
+      const from = String(p.from || 'home');
+
+      const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
+      const p0 = prof || {};
+      const meta0 = parseBrandMeta(p0.meta);
+      const curText = String(p0.niche || '').trim();
+      const isCategoryLabel = BX_CATEGORIES.some((x) => String(x.label || '').trim() === curText);
+      const nextMeta = { ...meta0 };
+      delete nextMeta.niche_key;
+
+      const patch = { meta: nextMeta };
+      if (isCategoryLabel) patch.niche = null;
+
+      await safeBrandProfiles(() => db.upsertBrandProfile(u.id, patch), async () => null);
+      await renderBrandNichePicker(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, from });
+      return;
+    }
+
     // Alias: old callback id from keyboards
     if (p.a === 'a:brand_profile_more') {
       p.a = 'a:brand_prof_more';
@@ -13716,7 +13865,7 @@ ${link}`;
 
       const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
       if (!isBrandBasicComplete(prof)) {
-        await ctx.answerCallbackQuery({ text: 'Заполни 4 поля профиля (Название, Ниша, Контакт, Ссылка).', show_alert: true });
+        await ctx.answerCallbackQuery({ text: 'Заполни 4 поля профиля (Название, Ниши, Контакт, Ссылка).', show_alert: true });
         await renderBrandProfileHome(ctx, u.id, { wsId, ret: 'lead', edit: true });
         return;
       }
@@ -13770,8 +13919,12 @@ ${link}`;
         return;
       }
 
-      await setExpectText(ctx.from.id, { type: 'brand_prof_field', field: realField, wsId, ret, backOfferId: bo, backPage: bp });
-      await safeEditOrReply(ctx, brandFieldPrompt(realField), {
+      await setExpectText(ctx.from.id, { type: 'brand_prof_field', field: realField, wsId, ret, backOfferId: bo, backPage: bp, from: String(p.from || 'home') });
+      const promptTxt =
+        realField === 'niche'
+          ? `${brandFieldPrompt(realField)}\n\n<i>Подсказка: для удобной категории используй кнопку “🏷 Ниши” в редактировании профиля.</i>`
+          : brandFieldPrompt(realField);
+      await safeEditOrReply(ctx, promptTxt, {
         parse_mode: 'HTML',
         reply_markup: brandFieldPromptKb({ wsId, ret, backOfferId: bo, backPage: bp, from: String(p.from || "") })
       });
