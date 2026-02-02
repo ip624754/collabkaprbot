@@ -3235,40 +3235,50 @@ function bxFiltersKb(wsId, f, page = 0, opts = {}) {
 
 function bxPickKb(wsId, key, selectedValue, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
-  const h = opts.h ? String(opts.h) : (wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+  const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
 
-  const list = key === 'cat' ? bxCats : (key === 'type' ? bxTypes : bxComps);
+  // Canonical keys (cat/type/comp). "All" is represented by null.
+  const keys = key === 'cat' ? BX_CATS : (key === 'type' ? BX_TYPES : BX_COMPS);
+  const list = (Array.isArray(keys) ? keys : [])
+    .filter((v) => v) // remove null ("All"), it is rendered as separate button
+    .map((v) => ({
+      value: String(v),
+      label: bxAnyLabel(String(v), key)
+    }));
+
   const perPage = 10;
-  const start = page * perPage;
+  const safePage = Math.max(0, Number(page || 0));
+  const start = safePage * perPage;
   const slice = list.slice(start, start + perPage);
 
   const kb = new InlineKeyboard();
 
   // 'All' option
   const isAll = !selectedValue;
-  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${page}|h:${h}`).row();
+  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${safePage}|h:${h}|r:${r}`).row();
 
   // Options
   for (const it of slice) {
-    const selected = selectedValue === it.value;
+    const selected = String(selectedValue || '') === it.value;
     const label = selected ? `✅ ${it.label}` : it.label;
-    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|p:${page}|h:${h}`).row();
+    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|p:${safePage}|h:${h}|r:${r}`).row();
   }
 
   // Pagination
   if (list.length > perPage) {
     kb.row();
-    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${page - 1}|h:${h}`);
-    kb.text(`${page + 1}/${Math.ceil(list.length / perPage)}`, 'a:nop');
-    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${page + 1}|h:${h}`);
+    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${safePage - 1}|h:${h}|r:${r}`);
+    kb.text(`${safePage + 1}/${Math.ceil(list.length / perPage)}`, 'a:nop');
+    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${safePage + 1}|h:${h}|r:${r}`);
   }
 
   // Actions
   kb.row();
-  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${page}|h:${h}`);
-  kb.text('✅ Готово', `a:bx_filters|ws:${wsNum}|p:0|h:${h}`);
+  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${safePage}|h:${h}|r:${r}`);
+  kb.text('✅ Готово', `a:bx_filters|ws:${wsNum}|p:0|h:${h}|r:${r}`);
 
-  kbNavRow(kb, `a:bx_filters|ws:${wsNum}|p:0|h:${h}`);
+  kbNavRow(kb, `a:bx_filters|ws:${wsNum}|p:0|h:${h}|r:${r}`);
   return kb;
 }
 
@@ -3278,7 +3288,8 @@ function bxMultiPickKb(wsId, key, selected, page = 0, opts = {}) {
   const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
 
   const pickTitle = key === 'goals' ? '🎯 Цели' : '📎 Требования';
-  const items = key === 'goals' ? BX_GOALS_TAGS : BX_REQUIREMENTS_TAGS;
+  const raw = key === 'goals' ? BRAND_GOALS_TAGS : BRAND_REQ_TAGS;
+  const items = raw.map((t) => ({ value: String(t.key), label: String(t.title) }));
   const selSet = new Set((selected || []).map(String));
 
   const kb = new InlineKeyboard();
@@ -7098,6 +7109,8 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = 
   const title = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : 'Оплата');
   const f = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
 
+  const selectedValue = key === 'cat' ? f.category : (key === 'type' ? f.offerType : f.compensationType);
+
   const hint =
     key === 'cat' ? 'По категории оффера креатора.' :
     key === 'type' ? 'По формату оффера креатора.' :
@@ -7117,7 +7130,7 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = 
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
-    reply_markup: bxPickKb(wsNum, key, selectedVal, page, opts),
+    reply_markup: bxPickKb(wsNum, key, selectedValue, page, opts),
     disable_web_page_preview: true
   });
   } catch (e) {
@@ -14755,7 +14768,7 @@ if (p.a === 'a:match_home') {
       const prof = await safeBrandProfiles(() => db.getBrandProfile(bmRes.userId), async () => null);
       const info = deriveBxSmartPrefillFromBrandProfile(prof);
 
-      const next = await setBxFilterScoped(ctx.from.id, wsId, {
+      const next = await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, {
         category: null,
         offerType: info.offerType,
         compensationType: info.compensationType,
@@ -14790,7 +14803,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', 0);
       if (!bmRes) return;
 
-	      await setBxFilterScoped(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
+	      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
       await renderBxFeed(ctx, bmRes.userId, wsId, 0, { h });
       return;
     }
@@ -14891,7 +14904,7 @@ if (p.a === 'a:match_home') {
 	      if (set.has(v)) set.delete(v);
 	      else set.add(v);
 
-	      await setBxFilterScoped(ctx.from.id, wsId, { [field]: Array.from(set) });
+	      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { [field]: Array.from(set) });
 	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
@@ -14990,7 +15003,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
-      await setBxFilterScoped(ctx.from.id, wsId, { [key]: v });
+      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { [key]: v });
       await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
