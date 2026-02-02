@@ -4079,7 +4079,7 @@ function calcWsProfileProgress(ws) {
 }
 
 
-async function renderWsProfile(ctx, ownerUserId, wsId) {
+async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   const ws0 = await db.getWorkspace(ownerUserId, wsId);
   if (!ws0) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
   await db.ensureWorkspaceSettings(wsId);
@@ -4145,10 +4145,20 @@ async function renderWsProfile(ctx, ownerUserId, wsId) {
       ? `🔗 <b>Ссылка для брендов</b> (вставь в IG bio / сторис):\n<code>${escapeHtml(link)}</code>`
       : `⚠️ Не задан BOT_USERNAME — ссылка для брендов недоступна.`);
 
+  const extra = { parse_mode: 'HTML', reply_markup: wsProfileKb(wsId, ws), disable_web_page_preview: true };
+
+  const et = opts && opts.editTarget ? opts.editTarget : null;
+  if (et && et.chatId && et.messageId) {
+    try {
+      await ctx.api.editMessageText(Number(et.chatId), Number(et.messageId), text, extra);
+      return;
+    } catch {}
+  }
+
   try {
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: wsProfileKb(wsId, ws), disable_web_page_preview: true });
+    await ctx.editMessageText(text, extra);
   } catch {
-    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: wsProfileKb(wsId, ws), disable_web_page_preview: true });
+    await ctx.reply(text, extra);
   }
 }
 
@@ -4535,9 +4545,8 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
     .text(`${cur === 'channel' ? '✅ ' : ''}Канал`, `a:ws_prof_mode_set|ws:${wsId}|m:channel`)
     .text(`${cur === 'ugc' ? '✅ ' : ''}UGC`, `a:ws_prof_mode_set|ws:${wsId}|m:ugc`)
     .row()
-    .text(`${cur === 'both' ? '✅ ' : ''}Оба`, `a:ws_prof_mode_set|ws:${wsId}|m:both`)
-    .row()
-    .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`);
+    .text(`${cur === 'both' ? '✅ ' : ''}Оба`, `a:ws_prof_mode_set|ws:${wsId}|m:both`);
+  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   const text =
     `🧩 <b>Режим профиля</b>\n\n` +
@@ -4546,8 +4555,14 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
     `• <b>Оба</b> — лучше по РФ-рынку\n\n` +
     `Сейчас: <b>${escapeHtml(PROFILE_MODE_LABELS[cur] || PROFILE_MODE_LABELS.both)}</b>`;
 
-  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+  const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
+  try {
+    await ctx.editMessageText(text, extra);
+  } catch {
+    await ctx.reply(text, extra);
+  }
 }
+
 
 async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -4560,11 +4575,14 @@ async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
 
   PROFILE_VERTICALS.forEach((it, i) => {
     const on = selected.includes(it.key);
-    kb.text(`${on ? '✅' : '▫️'} ${it.title}`, `a:ws_prof_vert_t|ws:${wsId}|v:${it.key}`);
+    kb.text(`${on ? '✅ ' : ''}${it.title}`, `a:ws_prof_vert_t|ws:${wsId}|v:${it.key}`);
     if (i % 2 === 1) kb.row();
   });
 
-  kb.row().text('🧹 Сброс', `a:ws_prof_vert_clear|ws:${wsId}`);
+  kb.row()
+    .text('🧹 Очистить', `a:ws_prof_vert_clear|ws:${wsId}`)
+    .text('✅ Готово', `a:ws_profile|ws:${wsId}`);
+
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   const text =
@@ -4572,8 +4590,14 @@ async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
     `Выбери до 3 ниш — так брендам проще понять, ты про что.\n\n` +
     `Сейчас: <b>${escapeHtml(fmtMatrix(selected, PROFILE_VERTICALS))}</b>`;
 
-  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+  const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
+  try {
+    await ctx.editMessageText(text, extra);
+  } catch {
+    await ctx.reply(text, extra);
+  }
 }
+
 
 async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -4586,11 +4610,14 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
 
   PROFILE_FORMATS.forEach((it, i) => {
     const on = selected.includes(it.key);
-    kb.text(`${on ? '✅' : '▫️'} ${it.title}`, `a:ws_prof_fmt_t|ws:${wsId}|f:${it.key}`);
+    kb.text(`${on ? '✅ ' : ''}${it.title}`, `a:ws_prof_fmt_t|ws:${wsId}|f:${it.key}`);
     if (i % 2 === 1) kb.row();
   });
 
-  kb.row().text('🧹 Сброс', `a:ws_prof_fmt_clear|ws:${wsId}`);
+  kb.row()
+    .text('🧹 Очистить', `a:ws_prof_fmt_clear|ws:${wsId}`)
+    .text('✅ Готово', `a:ws_profile|ws:${wsId}`);
+
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   const text =
@@ -4598,8 +4625,14 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
     `Выбери форматы — так брендам проще сделать быстрый заказ.\n\n` +
     `Сейчас: <b>${escapeHtml(fmtMatrix(selected, PROFILE_FORMATS))}</b>`;
 
-  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+  const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
+  try {
+    await ctx.editMessageText(text, extra);
+  } catch {
+    await ctx.reply(text, extra);
+  }
 }
+
 
 async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const ws = await db.getWorkspaceAny(wsId);
@@ -9856,7 +9889,8 @@ if (exp.type === 'brand_deals_search') {
       await db.auditWorkspace(wsId, u.id, 'ws.profile_updated', { field });
 
       await clearExpectText(ctx.from.id);
-      await renderWsProfile(ctx, u.id, wsId);
+      const editTarget = (exp && exp.chatId && exp.messageId) ? { chatId: exp.chatId, messageId: exp.messageId } : null;
+      await renderWsProfile(ctx, u.id, wsId, { editTarget });
       return;
     }
 
@@ -13038,7 +13072,7 @@ if (p.a === 'a:ws_prof_mode') {
       await ctx.editMessageText(prompts[field] || prompts.title, {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu')
       });
-      await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field });
+      await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
       return;
     }
 
