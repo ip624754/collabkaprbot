@@ -455,7 +455,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 }
 
 function mainMenuBrandKb(flags = {}, opts = {}) {
-  const { isModerator = false, isAdmin = false } = flags;
+  const { isModerator = false, isAdmin = false, isCurator = false } = flags;
   const { isManager = false, hasMultipleBrands = false, canManager = false, teamLocked = false } = opts;
 
   const kb = new InlineKeyboard()
@@ -495,6 +495,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
+  if (isCurator) extra.push(['👤 Куратор', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -956,6 +957,24 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
 }
 
 
+async function uiGuard(ctx, tag, fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(`[UI:${tag}]`, e);
+    try {
+      await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
+
+Что-то пошло не так. Нажми «📋 Меню» и попробуй ещё раз.`, {
+        parse_mode: 'HTML',
+        reply_markup: navKb('a:menu'),
+        disable_web_page_preview: true,
+      });
+    } catch (_) {}
+  }
+}
+
+
 // -----------------------------
 // BX Navigation helpers (home/return context)
 // h: home anchor (mm=main_menu, mn=role hub, bo=bx_open)
@@ -1249,8 +1268,9 @@ async function setCurGwNote(gwId, meta) {
   try { await redis.set(k(['cur_gw_note', gwId]), meta, { ex: CUR_GW_META_TTL_SEC }); } catch {}
 }
 
-function wsMenuKb(wsId) {
-  return new InlineKeyboard()
+function wsMenuKb(wsId, opts = {}) {
+  const { showCurator = false } = opts || {};
+  const kb = new InlineKeyboard()
     .text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)
     .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
     .row()
@@ -1261,10 +1281,14 @@ function wsMenuKb(wsId) {
     .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
     .row()
     .text('👥 Кураторы', `a:ws_settings|ws:${wsId}`)
-    .text('🧾 История', `a:ws_history|ws:${wsId}`)
-    .row()
-    .text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
+    .text('🧾 История', `a:ws_history|ws:${wsId}`);
+
+  if (showCurator) kb.row().text('👤 Куратор', 'a:cur_home');
+
+  kb.row().text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
+  return kb;
 }
+
 
 
 function wsSettingsKb(wsId, s) {
@@ -1280,16 +1304,123 @@ function wsSettingsKb(wsId, s) {
     .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
-function curManageKb(wsId) {
+function curManageKb(wsId, ws = null) {
+  const enabled = !!ws?.curator_enabled;
+  const toggleLabel = enabled ? '👤 Куратор: ✅ ВКЛ' : '👤 Куратор: ❌ ВЫКЛ';
   return new InlineKeyboard()
+    .text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`)
+    .row()
     .text('👤 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
     .row()
     .text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)
     .row()
     .text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
     .row()
+    .text('🧾 История', `a:ws_history|ws:${wsId}`)
+    .row()
     .text('⬅️ Назад', `a:ws_settings|ws:${wsId}`)
     .text('📋 Меню', 'a:menu');
+}
+
+async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
+  const notice = opts.notice ? String(opts.notice) : '';
+  const ws = await db.getWorkspace(ownerUserId, wsId);
+  if (!ws) {
+    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    return;
+  }
+  try { await db.ensureWorkspaceSettings(wsId); } catch {}
+
+  const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `Канал #${wsId}`);
+  const curators = await db.listCurators(wsId);
+  const count = curators?.length || 0;
+
+  // Activity summary (last 30 days) from giveaway_audit
+  let statsRows = [];
+  try {
+    statsRows = await db.getCuratorWorkspaceSummary(wsId, 30, 50);
+  } catch {
+    statsRows = [];
+  }
+  const statsById = new Map();
+  for (const r of statsRows || []) {
+    const uid = Number(r.user_id || 0);
+    if (uid) statsById.set(uid, r);
+  }
+
+  const enabled = !!ws.curator_enabled;
+  const status = enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
+
+  const fmtUname = (c) => c?.tg_username ? '@' + escapeHtml(c.tg_username) : (c?.tg_id ? 'id:' + String(c.tg_id) : '—');
+
+  const cards = (curators || []).slice(0, 12).map((c) => {
+    const s = statsById.get(Number(c.user_id || 0)) || {};
+    const actions = Number(s.actions || 0);
+    const notes = Number(s.notes || 0);
+    const reminders = Number(s.reminders || 0);
+    const notifies = Number(s.notifies || 0);
+    const last = s.last_at ? fmtTs(s.last_at) : null;
+    const lines = [
+      `👤 <b>${fmtUname(c)}</b>`,
+      `• ⚡ Действий: <b>${actions}</b>`,
+      `• 📝 Заметок: <b>${notes}</b>`,
+      `• 📌 Напоминаний: <b>${reminders}</b>`,
+      `• 📩 Уведомлений владельцу: <b>${notifies}</b>`,
+      `• 🕒 Последнее: <b>${last ? escapeHtml(last) : '—'}</b>`,
+    ];
+    return lines.join('\n');
+  }).join('\n\n');
+
+  // Totals (only for listed curators)
+  let totActions = 0, totNotes = 0, totRem = 0, totNot = 0;
+  for (const c of curators || []) {
+    const s = statsById.get(Number(c.user_id || 0));
+    if (!s) continue;
+    totActions += Number(s.actions || 0);
+    totNotes += Number(s.notes || 0);
+    totRem += Number(s.reminders || 0);
+    totNot += Number(s.notifies || 0);
+  }
+
+  let activityLines = [];
+  try {
+    const items = await db.listWorkspaceAudit(wsId, 20);
+    const curItems = (items || []).filter(i => {
+      const a = String(i?.action || '');
+      return a.includes('curator') || a.includes('ws.curator') || a.includes('gw.cur') || a.includes('gw.reminder');
+    }).slice(0, 6);
+    activityLines = curItems.map(i => `• ${fmtTs(i.created_at)} — <code>${escapeHtml(String(i.action || ''))}</code>`);
+  } catch {
+    activityLines = [];
+  }
+
+  const text = `${notice ? `✅ ${escapeHtml(notice)}
+
+` : ''}👥 <b>Куратор HQ</b>
+
+Канал: <b>${escapeHtml(title)}</b>
+Доступ кураторов: <b>${status}</b>
+Кураторов в списке: <b>${count}</b>
+
+<b>Активность (30 дней):</b>
+• ⚡ Действий: <b>${totActions}</b>
+• 📝 Заметок: <b>${totNotes}</b>
+• 📌 Напоминаний: <b>${totRem}</b>
+• 📩 Уведомлений владельцу: <b>${totNot}</b>
+
+<b>Команда (карточки):</b>
+${count ? cards : 'Пока нет.'}
+
+<b>Последние события:</b>
+${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
+
+💡 Куратор открывает кабинет через «👤 Куратор» в меню (если он назначен куратором хотя бы в одном канале).`;
+
+  await safeEditOrReply(ctx, text, {
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    reply_markup: curManageKb(wsId, ws)
+  });
 }
 
 
@@ -1471,7 +1602,8 @@ function curListKb(wsId, curators) {
 // Barters Marketplace (v0.9.1)
 // -----------------------------
 
-function bxMenuKb(wsId, networkEnabled = true) {
+function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
+  const { showCurator = false } = opts || {};
   const net = networkEnabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
   const kb = new InlineKeyboard()
   .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
@@ -1482,6 +1614,8 @@ function bxMenuKb(wsId, networkEnabled = true) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
+  if (showCurator) kb.row().text('👤 Куратор', 'a:cur_home');
+
   kb.row().text(net, `a:net_q|ws:${wsId}|ret:bx`);
   kbNavRow(kb, `a:ws_open|ws:${wsId}`);
   return kb;
@@ -1489,7 +1623,9 @@ function bxMenuKb(wsId, networkEnabled = true) {
 
 
 
-function bxBrandMenuKb(wsId, credits, plan, retry = 0) {
+
+function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
+  const { showCurator = false } = opts || {};
   const planLabel = plan?.active ? (plan.name === 'max' ? 'Max ✅' : 'Basic ✅') : 'OFF';
   const kb = new InlineKeyboard()
 .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
@@ -1512,9 +1648,12 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
+  if (showCurator) kb.row().text('👤 Куратор', 'a:cur_home');
+
   kbNavRow(kb, 'a:menu');
   return kb;
 }
+
 
 
 
@@ -3021,36 +3160,49 @@ function bxFiltersKb(wsId, f, page = 0, opts = {}) {
     .row();
 
   kb.text('♻️ Сбросить', `a:bx_freset|ws:${wsId}|p:${page}|h:${h}|r:${r}`)
-    .text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo|h:${h}`)
+    .text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0|h:${h}`)
     .row();
 
   kbNavRow(kb, bxReturnCb(wsNum, page, h, r));
   return kb;
 }
 
-function bxPickKb(wsId, key, page = 0, opts = {}) {
+function bxPickKb(wsId, key, selectedValue, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
-  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-  const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
+  const h = opts.h ? String(opts.h) : (wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
+  const list = key === 'cat' ? bxCats : (key === 'type' ? bxTypes : bxComps);
+  const perPage = 10;
+  const start = page * perPage;
+  const slice = list.slice(start, start + perPage);
 
   const kb = new InlineKeyboard();
-  const pickTitle = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : 'Оплата');
 
-  const items =
-    key === 'cat' ? BX_CATEGORIES :
-    key === 'type' ? BX_OFFER_TYPES :
-    BX_COMPENSATION_TYPES;
+  // 'All' option
+  const isAll = !selectedValue;
+  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${page}|h:${h}`).row();
 
-  kb.text('Все', `a:bx_fset|ws:${wsId}|k:${key}|v:all|p:${page}|h:${h}|r:${r}`).row();
+  // Options
+  for (const it of slice) {
+    const selected = selectedValue === it.value;
+    const label = selected ? `✅ ${it.label}` : it.label;
+    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|p:${page}|h:${h}`).row();
+  }
 
-  const pairs = items.map((it) => ({
-    label: it.label,
-    cb: `a:bx_fset|ws:${wsId}|k:${key}|v:${it.value}|p:${page}|h:${h}|r:${r}`
-  }));
-  kbAddPairs(kb, pairs, 2);
+  // Pagination
+  if (list.length > perPage) {
+    kb.row();
+    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${page - 1}|h:${h}`);
+    kb.text(`${page + 1}/${Math.ceil(list.length / perPage)}`, 'a:nop');
+    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${page + 1}|h:${h}`);
+  }
 
-  kbNavRow(kb, `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:${r}`);
-  kb.__title = pickTitle;
+  // Actions
+  kb.row();
+  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${page}|h:${h}`);
+  kb.text('✅ Готово', `a:bx_filters|ws:${wsNum}|p:0|h:${h}`);
+
+  kbNavRow(kb, `a:bx_filters|ws:${wsNum}|p:0|h:${h}`);
   return kb;
 }
 
@@ -3576,9 +3728,10 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
   }
   await setActiveWorkspace(ctx.from.id, wsId);
   const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
+  const isCurator = await db.hasAnyCuratorRole(ownerUserId);
   await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
 
-Выбери действие:`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId) });
+Выбери действие:`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
 }
 
 async function renderWsSettings(ctx, ownerUserId, wsId) {
@@ -6219,73 +6372,96 @@ function bxAnyLabel(v, kind) {
   return bxCompLabel(v);
 }
 
-async function getBxFilter(tgId, wsId) {
-  const key = k(['bx_filter', tgId, wsId]);
-  const v = await redis.get(key);
-  const base = v || {};
 
-  // Canonical shape
-  const f = {
-    category: base.category ?? null,
-    offerType: base.offerType ?? null,
-    compensationType: base.compensationType ?? null,
-    goalsTags: Array.isArray(base.goalsTags) ? base.goalsTags : [],
-    reqTags: Array.isArray(base.reqTags) ? base.reqTags : [],
-  };
+const BX_FILTER_TTL_SEC = 30 * 24 * 3600;
 
-  // Back-compat: older UI stored short keys (cat/type/comp)
-  const norm = (x) => {
-    if (x == null) return null;
-    const s = String(x);
-    if (!s || s === 'all' || s === 'undefined' || s === 'null') return null;
-    return s;
-  };
-  if (f.category == null && base.cat != null) f.category = norm(base.cat);
-  if (f.offerType == null && base.type != null) f.offerType = norm(base.type);
-  if (f.compensationType == null && base.comp != null) f.compensationType = norm(base.comp);
+function bxFilterKeyScoped(tgId, ownerUserId, wsNum) {
+  const scopeId = Number(ownerUserId || 0) || Number(tgId || 0);
+  if (!scopeId) return null;
+  const w = Number(wsNum || 0);
+  if (w === 0) return k(['bx_filter_brand', scopeId]);
+  return k(['bx_filter_ws', scopeId, w]);
+}
 
-  // Back-compat: older versions could store these under shorter keys
-  if (!f.goalsTags.length && Array.isArray(base.goals)) f.goalsTags = base.goals;
-  if (!f.reqTags.length && Array.isArray(base.req)) f.reqTags = base.req;
+function bxLegacyFilterKey(tgId, wsNum) {
+  const id = Number(tgId || 0);
+  if (!id) return null;
+  return k(['bx_filter', id, Number(wsNum || 0)]);
+}
 
-  // Hard-normalize tag values
-  f.goalsTags = Array.from(new Set(f.goalsTags.map(String))).filter((k2) => BRAND_GOALS_KEYS.has(k2));
-  f.reqTags = Array.from(new Set(f.reqTags.map(String))).filter((k2) => BRAND_REQ_KEYS.has(k2));
+async function getBxFilterScoped(tgId, ownerUserId, wsId) {
+  const wsNum = Number(wsId || 0);
+  const key = bxFilterKeyScoped(tgId, ownerUserId, wsNum);
+  const legacyKey = bxLegacyFilterKey(tgId, wsNum);
 
-  // If we had to normalize anything, persist back in canonical shape
-  const needsPersist = (!base.category && !base.offerType && !base.compensationType && (base.cat || base.type || base.comp)) ||
-    (Array.isArray(base.goals) || Array.isArray(base.req));
-  if (needsPersist) {
+  let v = null;
+  let migrated = false;
+
+  if (key) {
+    try { v = await redis.get(key); } catch { v = null; }
+  }
+
+  // Legacy migration:
+  // - previously used: bx_filter:<tgId>:<wsNum>
+  // - now:
+  //   wsNum==0 -> bx_filter_brand:<ownerUserId>
+  //   wsNum>0  -> bx_filter_ws:<ownerUserId>:<wsNum>
+  if (!v && key && legacyKey) {
     try {
-      await redis.set(key, f, { ex: 30 * 24 * 3600 });
+      const old = await redis.get(legacyKey);
+      if (old) {
+        v = old;
+        migrated = true;
+      }
+    } catch {}
+  }
+
+  const base = v || {};
+  const f = {
+    category: base.category ?? base.cat ?? null,
+    offerType: base.offerType ?? base.type ?? null,
+    compensationType: base.compensationType ?? base.comp ?? null,
+    goalsTags: Array.isArray(base.goalsTags ?? base.goals) ? (base.goalsTags ?? base.goals) : [],
+    reqTags: Array.isArray(base.reqTags ?? base.req) ? (base.reqTags ?? base.req) : [],
+  };
+
+  // Normalize values
+  if (f.category === 'all') f.category = null;
+  if (f.offerType === 'all') f.offerType = null;
+  if (f.compensationType === 'all') f.compensationType = null;
+  if (!Array.isArray(f.goalsTags)) f.goalsTags = [];
+  if (!Array.isArray(f.reqTags)) f.reqTags = [];
+
+  const needsPersist =
+    migrated ||
+    ('cat' in base) || ('type' in base) || ('comp' in base) || ('goals' in base) || ('req' in base) ||
+    (base.category === 'all') || (base.offerType === 'all') || (base.compensationType === 'all') ||
+    !Array.isArray(base.goalsTags) || !Array.isArray(base.reqTags);
+
+  if (needsPersist && key) {
+    try {
+      await redis.set(key, f, { ex: BX_FILTER_TTL_SEC });
     } catch {}
   }
 
   return f;
 }
 
-async function setBxFilter(tgId, wsId, patch) {
-  const key = k(['bx_filter', tgId, wsId]);
-  const cur = await getBxFilter(tgId, wsId);
-  const next = { ...cur, ...patch };
+async function setBxFilterScoped(tgId, ownerUserId, wsId, patch) {
+  const wsNum = Number(wsId || 0);
+  const key = bxFilterKeyScoped(tgId, ownerUserId, wsNum);
+  const cur = await getBxFilterScoped(tgId, ownerUserId, wsNum);
+  const next = { ...cur, ...(patch || {}) };
 
-  // Normalize tag arrays (dedupe + whitelist)
+  // Normalize
+  if (next.category === 'all') next.category = null;
+  if (next.offerType === 'all') next.offerType = null;
+  if (next.compensationType === 'all') next.compensationType = null;
   if (!Array.isArray(next.goalsTags)) next.goalsTags = [];
   if (!Array.isArray(next.reqTags)) next.reqTags = [];
-  next.goalsTags = Array.from(new Set(next.goalsTags.map(String))).filter((k2) => BRAND_GOALS_KEYS.has(k2));
-  next.reqTags = Array.from(new Set(next.reqTags.map(String))).filter((k2) => BRAND_REQ_KEYS.has(k2));
 
-  // Normalize scalar values
-  const norm = (x) => {
-    if (x == null) return null;
-    const s = String(x);
-    if (!s || s === 'all' || s === 'undefined' || s === 'null') return null;
-    return s;
-  };
-  next.category = norm(next.category);
-  next.offerType = norm(next.offerType);
-  next.compensationType = norm(next.compensationType);
-  await redis.set(key, next, { ex: 30 * 24 * 3600 });
+  if (!key) return next;
+  await redis.set(key, next, { ex: BX_FILTER_TTL_SEC });
   return next;
 }
 
@@ -6401,6 +6577,7 @@ function bxSmartKb(wsId, opts = {}) {
 async function renderBxOpen(ctx, ownerUserId, wsId) {
   // BX cabinet is a navigation home for Back in BX flows
   if (ownerUserId) await setUiHome(ownerUserId, BX_HOME.BX_OPEN);
+  const isCurator = ownerUserId ? await db.hasAnyCuratorRole(ownerUserId) : false;
   const wsNum = Number(wsId || 0);
   if (wsNum === 0) {
     const credits = await db.getBrandCredits(ownerUserId);
@@ -6423,7 +6600,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 ⭐️ Brand Plan: <b>${active ? (planName === 'max' ? 'Max' : 'Basic') : 'OFF'}</b>${untilTxt}
 
 Выбери действие:`,
-      { parse_mode: 'HTML', reply_markup: bxBrandMenuKb(0, credits, plan, retry) }
+      { parse_mode: 'HTML', reply_markup: bxBrandMenuKb(0, credits, plan, retry, { showCurator: isCurator }) }
     );
     return;
   }
@@ -6451,11 +6628,12 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 • Разместить — твой UGC/оффер увидят бренды в «📰 Лента креаторов»
 • Inbox — сообщения и заявки от брендов
 • Мои офферы — пауза/удаление`,
-    { parse_mode: 'HTML', reply_markup: bxMenuKb(wsNum, ws.network_enabled) }
+    { parse_mode: 'HTML', reply_markup: bxMenuKb(wsNum, ws.network_enabled, { showCurator: isCurator }) }
   );
 }
 
 async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
+  try {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -6463,7 +6641,7 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
-  const filter = await getBxFilter(ctx.from.id, wsNum);
+  const filter = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
 
   const limit = CFG.BARTER_FEED_PAGE_SIZE;
   const offset = page * limit;
@@ -6558,6 +6736,16 @@ ${featLines.join('\n\n')}
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  } catch (e) {
+    console.error('[bx_feed]', e);
+    await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
+
+Не удалось загрузить экран. Нажми «📋 Меню» и попробуй ещё раз.`, {
+      parse_mode: 'HTML',
+      reply_markup: navKb('a:menu'),
+      disable_web_page_preview: true,
+    });
+  }
 }
 
 async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
@@ -6797,6 +6985,7 @@ ${contact ? `Контакт: <b>${escapeHtml(contact)}</b>` : ''}`;
 
 
 async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
+  try {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -6804,7 +6993,7 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
-  const f = await getBxFilter(ctx.from.id, wsNum);
+  const f = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
   const text = `🎛 <b>Фильтры креаторов</b>
 <i>Режим: 🏷 Бренд · Ты ищешь: 🎬 креаторов</i>
 <i>Фильтруем креаторов по тому, что они указали в оффере.</i>
@@ -6817,9 +7006,20 @@ ${escapeHtml(bxFilterSummary(f))}
     parse_mode: 'HTML',
     reply_markup: bxFiltersKb(wsNum, f, page, opts)
   });
+  } catch (e) {
+    console.error('[bx_filters]', e);
+    await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
+
+Не удалось загрузить экран. Нажми «📋 Меню» и попробуй ещё раз.`, {
+      parse_mode: 'HTML',
+      reply_markup: navKb('a:menu'),
+      disable_web_page_preview: true,
+    });
+  }
 }
 
 async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = {}) {
+  try {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -6828,7 +7028,7 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = 
   }
 
   const title = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : 'Оплата');
-  const f = await getBxFilter(ctx.from.id, wsNum);
+  const f = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
 
   const hint =
     key === 'cat' ? 'По категории оффера креатора.' :
@@ -6849,12 +7049,23 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = 
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
-    reply_markup: bxPickKb(wsNum, key, page, opts),
+    reply_markup: bxPickKb(wsNum, key, selectedVal, page, opts),
     disable_web_page_preview: true
   });
+  } catch (e) {
+    console.error('[bx_filter_pick]', e);
+    await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
+
+Не удалось загрузить экран. Нажми «📋 Меню» и попробуй ещё раз.`, {
+      parse_mode: 'HTML',
+      reply_markup: navKb('a:menu'),
+      disable_web_page_preview: true,
+    });
+  }
 }
 
 async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, opts = {}) {
+  try {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -6862,7 +7073,7 @@ async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, op
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
-  const f = await getBxFilter(ctx.from.id, wsNum);
+  const f = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
   const title = key === 'goals' ? '🎯 Цели' : '📎 Требования';
   const hint = key === 'goals'
     ? 'Фильтруем креаторов по целям в их оффере.'
@@ -6886,6 +7097,16 @@ async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, op
     reply_markup: bxMultiPickKb(wsNum, key, sel, page, opts),
     disable_web_page_preview: true
   });
+  } catch (e) {
+    console.error('[bx_filter_mpick]', e);
+    await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
+
+Не удалось загрузить экран. Нажми «📋 Меню» и попробуй ещё раз.`, {
+      parse_mode: 'HTML',
+      reply_markup: navKb('a:menu'),
+      disable_web_page_preview: true,
+    });
+  }
 }
 
 async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {}) {
@@ -8171,7 +8392,8 @@ async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
   const kb = { inline_keyboard: [[{ text: '🤖 Открыть бота', url: link }]] };
 
   try {
-    await ctx.api.sendMessage(chatId, msg, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
+    const replyParams = g.published_message_id ? { reply_parameters: { message_id: Number(g.published_message_id), allow_sending_without_reply: true } } : {};
+    await ctx.api.sendMessage(chatId, msg, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb, ...replyParams });
     await db.auditGiveaway(g.id, g.workspace_id, userId, 'gw.reminder_posted', { actor_role: 'curator' });
     await ctx.answerCallbackQuery({ text: '✅ Отправлено' });
   } catch (e) {
@@ -8696,9 +8918,11 @@ export function getBot() {
 
     await setActiveWorkspace(ctx.from.id, ws.id);
 
+    const isCurator = await db.hasAnyCuratorRole(u.id);
+
     await ctx.reply(`✅ Канал подключен: <b>${escapeHtml(channelUsername ? '@' + channelUsername : title)}</b>`, {
       parse_mode: 'HTML',
-      reply_markup: wsMenuKb(ws.id),
+      reply_markup: wsMenuKb(ws.id, { showCurator: isCurator }),
     });
   });
 
@@ -9014,9 +9238,7 @@ ${escapeHtml(safe)}`;
       await db.addCurator(exp.wsId, curator.id, u.id);
       const ws = await db.getWorkspaceAny(Number(exp.wsId));
       const wsTitle = ws ? wsLabelNice(ws) : `Канал #${exp.wsId}`;
-      await ctx.reply(`✅ Куратор @${username} добавлен.
-
-Включи 👤 Куратор: ВКЛ, если хочешь чтобы он мог помогать с конкурсами (статы/лог/напоминания).`);
+      await renderCuratorManage(ctx, u.id, exp.wsId, { notice: `Куратор @${username} добавлен` });
 
       // best-effort notify curator in DM
       try {
@@ -11338,7 +11560,7 @@ UGC vs Интеграция
     // Show BX filters for active workspace (if any)
     try {
       if (activeWs) {
-        const bx = await getBxFilter(ctx.from.id, activeWs);
+        const bx = await getBxFilterScoped(ctx.from.id, u.id, activeWs);
         lines.push('');
         lines.push('<b>BX filters</b> (active workspace)');
         lines.push(`• ws: <code>${activeWs}</code>`);
@@ -14377,7 +14599,7 @@ if (p.a === 'a:match_home') {
       const prof = await safeBrandProfiles(() => db.getBrandProfile(bmRes.userId), async () => null);
       const info = deriveBxSmartPrefillFromBrandProfile(prof);
 
-      const next = await setBxFilter(ctx.from.id, wsId, {
+      const next = await setBxFilterScoped(ctx.from.id, wsId, {
         category: null,
         offerType: info.offerType,
         compensationType: info.compensationType,
@@ -14412,7 +14634,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', 0);
       if (!bmRes) return;
 
-	      await setBxFilter(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
+	      await setBxFilterScoped(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
       await renderBxFeed(ctx, bmRes.userId, wsId, 0, { h });
       return;
     }
@@ -14501,7 +14723,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
-	      const cur = await getBxFilter(ctx.from.id, wsId);
+	      const cur = await getBxFilterScoped(ctx.from.id, bmRes.userId, wsId);
 	      const field = key === 'goals' ? 'goalsTags' : 'reqTags';
 	      const allowed = key === 'goals' ? BRAND_GOALS_KEYS : BRAND_REQ_KEYS;
 	      if (!allowed.has(v)) {
@@ -14513,7 +14735,7 @@ if (p.a === 'a:match_home') {
 	      if (set.has(v)) set.delete(v);
 	      else set.add(v);
 
-	      await setBxFilter(ctx.from.id, wsId, { [field]: Array.from(set) });
+	      await setBxFilterScoped(ctx.from.id, wsId, { [field]: Array.from(set) });
 	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
@@ -14538,7 +14760,7 @@ if (p.a === 'a:match_home') {
 	      if (!bmRes) return;
 
 	      const field = key === 'goals' ? 'goalsTags' : 'reqTags';
-	      await setBxFilter(ctx.from.id, wsId, { [field]: [] });
+	      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { [field]: [] });
 	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
@@ -14612,7 +14834,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
-      await setBxFilter(ctx.from.id, wsId, { [key]: v });
+      await setBxFilterScoped(ctx.from.id, wsId, { [key]: v });
       await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
@@ -14628,7 +14850,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
-      await setBxFilter(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null });
+      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
       await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
@@ -15850,26 +16072,22 @@ if (p.a === 'a:bx_cat') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await db.setWorkspaceSetting(wsId, { curator_enabled: !ws.curator_enabled });
       await db.auditWorkspace(wsId, u.id, 'ws.curator_toggled', { enabled: !ws.curator_enabled });
-      await renderWsSettings(ctx, u.id, wsId);
+      const ret = String(p.ret || 'ws');
+      if (ret === 'cur_manage') {
+        await renderCuratorManage(ctx, u.id, wsId);
+      } else {
+        await renderWsSettings(ctx, u.id, wsId);
+      }
       return;
     }
 
-    // Curators
-if (p.a === 'a:cur_manage') {
-  const wsId = Number(p.ws);
-  const ws = await db.getWorkspace(u.id, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-
-  const curators = await db.listCurators(wsId);
-  const count = curators?.length || 0;
-
-  await ctx.answerCallbackQuery();
-  await safeEditOrReply(ctx, 
-    `👥 <b>Кураторы</b>\n\nКураторы помогают проверять конкурсы и заявки.\n\nСейчас в списке: <b>${count}</b>`,
-    { parse_mode: 'HTML', reply_markup: curManageKb(wsId) }
-  );
-  return;
-}
+	// Curators
+	if (p.a === 'a:cur_manage') {
+	  const wsId = Number(p.ws);
+	  await ctx.answerCallbackQuery();
+	  await renderCuratorManage(ctx, u.id, wsId);
+	  return;
+	}
 
     if (p.a === 'a:cur_invite') {
       const wsId = Number(p.ws);
@@ -17179,10 +17397,12 @@ ${actionHint}`;
 `📣 <b>Напоминание участникам</b>\n\nЧтобы участие засчиталось ✅\n${line1}\n2) Открой бота и нажми <b>«Проверить»</b>\n\n🤖 Бот: ${escapeHtml(link)}`;
 
       try {
+        const replyParams = g.published_message_id ? { reply_parameters: { message_id: Number(g.published_message_id), allow_sending_without_reply: true } } : {};
         const sent = await ctx.api.sendMessage(Number(g.published_chat_id), text, {
           parse_mode: 'HTML',
           disable_web_page_preview: true,
-          reply_markup: { inline_keyboard: [[{ text: '🤖 Открыть бота', url: link }]] }
+          reply_markup: { inline_keyboard: [[{ text: '🤖 Открыть бота', url: link }]] },
+          ...replyParams
         });
         await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.reminder_posted', { chat_id: g.published_chat_id, message_id: sent.message_id });
         await ctx.answerCallbackQuery({ text: 'Отправлено ✅' });
