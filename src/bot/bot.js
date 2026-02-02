@@ -287,7 +287,8 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
 `
       : 'Не удалось отправить инвойс. Проверь, что Telegram обновлён и Stars доступны.';
     try {
-      await ctx.reply(text, backCb ? { reply_markup: new InlineKeyboard().text('⬅️ Назад', backCb) } : undefined);
+      const kb = backCb ? navKb(backCb) : new InlineKeyboard().text('📋 Меню', 'a:menu');
+      await ctx.reply(text, { reply_markup: kb });
     } catch {}
     return false;
   }
@@ -3828,7 +3829,7 @@ async function renderWsHistory(ctx, ownerUserId, wsId) {
   const text = `🧾 <b>История действий</b>
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) });
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb(`a:ws_open|ws:${wsId}`) });
 }
 
 
@@ -5789,7 +5790,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
     backCb
   });
 
-  const kb = new InlineKeyboard().text('⬅️ Назад', backCb);
+  const kb = navKb(backCb);
 
   const text =
     `✍️ <b>Ответ креатору</b>
@@ -5841,7 +5842,8 @@ async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage:
     .row()
     .text('⏱ Сроки', `a:brand_deal_tpl|id:${app.id}|k:timing|b:${back.stage}|p:${back.page}`)
     .row()
-    .text('⬅️ Назад', backCb);
+    .text('⬅️ Назад', backCb)
+    .text('📋 Меню', 'a:menu');
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -5888,7 +5890,7 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
   } catch (e) {
     const backCb = `a:brand_deal_view|id:${app.id}|st:${normDealStage(back.stage)}|p:${Math.max(0, Number(back.page) || 0)}`;
     await ctx.reply('❌ Не удалось отправить сообщение креатору. Возможно, он ещё не нажимал /start.', {
-      reply_markup: new InlineKeyboard().text('⬅️ Назад', backCb)
+      reply_markup: navKb(backCb)
     });
     return;
   }
@@ -6143,7 +6145,8 @@ async function renderLeadTemplates(ctx, actorUserId, leadId, back) {
     .row()
     .text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
     .row()
-    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`);
+    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('📋 Меню', 'a:menu');
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -6178,7 +6181,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   try {
     await ctx.api.sendMessage(brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
   } catch (e) {
-    await ctx.reply('❌ Не удалось отправить сообщение бренду. Возможно, он не писал боту первым.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`) });
+    await ctx.reply('❌ Не удалось отправить сообщение бренду. Возможно, он не писал боту первым.', { reply_markup: navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`) });
     return;
   }
 
@@ -8212,7 +8215,7 @@ async function renderGwLog(ctx, ownerUserIdOrNull, gwId) {
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
   const back = ownerUserIdOrNull ? `a:gw_open|i:${gwId}` : `a:gw_open_public|i:${gwId}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', back) });
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb(back) });
 }
 
 async function renderGwOpenPublic(ctx, gwId, userId) {
@@ -8410,7 +8413,7 @@ async function renderCuratorGiveawayLog(ctx, userId, wsId, gwId) {
   const text = `🧾 <b>Лог конкурса #${gwId}</b>
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
-  const kb = new InlineKeyboard().text('⬅️ Назад', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
+  const kb = navKb(`a:cur_gw_open|ws:${wsId}|i:${gwId}`);
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -12948,7 +12951,7 @@ if (p.a === 'a:wsp_preview') {
   if (!bmRes) return;
   const backCb = `a:brand_deals|ws:0|st:${stage}|p:${page}`;
   await setExpectText(ctx.from.id, { type: 'brand_deals_search', brandUserId: bmRes.userId, stage, page, backCb });
-  const kb = new InlineKeyboard().text('⬅️ Назад', backCb);
+  const kb = navKb(backCb);
   const t = '🔎 <b>Поиск по сделкам</b>\n\nВарианты:\n• <code>@username</code> — пример: <code>@zarinka</code>\n• <code>TG id</code> (цифры) — пример: <code>123456789</code>\n\nПодсказки:\n• если начинаешь с <code>@</code>, добавь минимум 2 символа после @\n• если вводишь цифры — обычно 6–12 цифр\n\nЧтобы сбросить: <code>сброс</code>';
   try { await safeEditOrReply(ctx, t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
   catch { await ctx.reply(t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
@@ -13294,7 +13297,7 @@ if (p.a === 'a:lead_set') {
 4) коротко: что предлагаешь / что ищешь
 
 <i>Важно:</i> только текст (1 сообщение).`,
-        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:verify_home') }
+        { parse_mode: 'HTML', reply_markup: navKb('a:verify_home') }
       );
       return;
     }
@@ -16066,7 +16069,7 @@ if (p.a === 'a:bx_cat') {
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'bx_media_photo', wsId, offerId, back });
 
-      const kb = new InlineKeyboard().text('⬅️ Назад', `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
+      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
       await safeEditOrReply(ctx, '🖼 Пришли <b>картинку</b> одним сообщением.', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -16078,7 +16081,7 @@ if (p.a === 'a:bx_cat') {
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'bx_media_gif', wsId, offerId, back });
 
-      const kb = new InlineKeyboard().text('⬅️ Назад', `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
+      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
       await safeEditOrReply(ctx, '🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно отправить как анимацию или как файл .gif)', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -16090,7 +16093,7 @@ if (p.a === 'a:bx_cat') {
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'bx_media_video', wsId, offerId, back });
 
-      const kb = new InlineKeyboard().text('⬅️ Назад', `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
+      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
       await safeEditOrReply(ctx, '🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -16383,7 +16386,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➕ <b>Новая папка</b>\n\nВведи название папки:', {
         parse_mode: 'HTML',
-        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folders_home|ws:${wsId}`)
+        reply_markup: navKb(`a:folders_home|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_create_title', wsId });
       return;
@@ -16403,7 +16406,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, `➕ Добавь @каналы (или ссылки t.me) списком — каждый с новой строки.\n\nСвободно мест: <b>${left}</b> из <b>${max}</b>.`, {
         parse_mode: 'HTML',
-        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folder_open|ws:${wsId}|f:${folderId}`)
+        reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_add_items', wsId, folderId });
       return;
@@ -16416,7 +16419,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➖ Укажи @каналы (или ссылки t.me) списком — удалю их из папки:', {
-        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folder_open|ws:${wsId}|f:${folderId}`)
+        reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_remove_items', wsId, folderId });
       return;
@@ -16429,7 +16432,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '✏️ Введи новое название папки:', {
-        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folder_open|ws:${wsId}|f:${folderId}`)
+        reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_rename_title', wsId, folderId });
       return;
@@ -16532,7 +16535,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       await safeEditOrReply(ctx, `👥 <b>Invite editor</b>\n\nСсылка на ${CFG.WORKSPACE_EDITOR_INVITE_TTL_MIN || 10} минут:\n${escapeHtml(link)}\n\nРедактор сможет управлять папками этого Workspace.`, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
-        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_editors|ws:${wsId}`)
+        reply_markup: navKb(`a:ws_editors|ws:${wsId}`)
       });
       return;
     }
@@ -16543,7 +16546,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➕ Введи @username редактора (он должен уже запускать бота /start).', {
-        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_editors|ws:${wsId}`)
+        reply_markup: navKb(`a:ws_editors|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'ws_editor_username', wsId });
       return;
@@ -17039,7 +17042,7 @@ ${winnersList}
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, 
         'ℹ️ <b>Почему не прошёл</b>\n\nПришли <b>user_id</b> участника (цифрами).\n\nПодсказка: участник может узнать свой id командой /whoami.',
-        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_stats|i:${gwId}`) }
+        { parse_mode: 'HTML', reply_markup: navKb(`a:gw_stats|i:${gwId}`) }
       );
       await setExpectText(ctx.from.id, { type: 'gw_why_userid', gwId });
       return;
@@ -17049,7 +17052,7 @@ ${winnersList}
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, 
         'ℹ️ <b>Почему не прошёл</b>\n\nПерешли сюда сообщение участника (forward).\n\nВажно: если у участника включена “Forward privacy”, бот не увидит user_id — тогда используй “Ввести ID”.',
-        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_why|i:${gwId}`) }
+        { parse_mode: 'HTML', reply_markup: navKb(`a:gw_why|i:${gwId}`) }
       );
       await setExpectText(ctx.from.id, { type: 'gw_why_forward', gwId });
       return;
@@ -17111,7 +17114,7 @@ if (p.a === 'a:gw_prize') {
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, gwPrizePrompt(type), {
         parse_mode: 'HTML',
-        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_new|ws:${wsId}`)
+        reply_markup: navKb(`a:gw_new|ws:${wsId}`)
       });
       await setDraft(ctx.from.id, { wsId, prize_type: type });
       await setExpectText(ctx.from.id, { type: 'gw_prize_text', wsId });
@@ -17155,7 +17158,7 @@ if (p.a === 'a:gw_prize') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, 'Введи число призовых мест (1..50):', {
-        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_new|ws:${wsId}`)
+        reply_markup: navKb(`a:gw_new|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'gw_winners_custom', wsId });
       return;
@@ -17214,7 +17217,7 @@ if (p.a === 'a:gw_prize') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, 'Введи дедлайн в формате DD.MM HH:MM (МСК). Пример: 20.01 18:00', {
-        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_step_deadline|ws:${wsId}`)
+        reply_markup: navKb(`a:gw_step_deadline|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'gw_deadline_custom', wsId });
       return;
@@ -17253,7 +17256,7 @@ if (p.a === 'a:gw_prize') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'gw_media_photo', wsId });
-      const kb = new InlineKeyboard().text('⬅️ Назад', `a:gw_media_step|ws:${wsId}`);
+      const kb = navKb(`a:gw_media_step|ws:${wsId}`);
       await safeEditOrReply(ctx, '🖼 Пришли <b>картинку</b> одним сообщением.\n\n(Можно пропустить этот шаг)', {
         parse_mode: 'HTML',
         reply_markup: kb
@@ -17265,7 +17268,7 @@ if (p.a === 'a:gw_prize') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'gw_media_gif', wsId });
-      const kb = new InlineKeyboard().text('⬅️ Назад', `a:gw_media_step|ws:${wsId}`);
+      const kb = navKb(`a:gw_media_step|ws:${wsId}`);
       await safeEditOrReply(ctx, '🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно пропустить этот шаг)', {
         parse_mode: 'HTML',
         reply_markup: kb
@@ -17276,7 +17279,7 @@ if (p.a === 'a:gw_prize') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'gw_media_video', wsId });
-      const kb = new InlineKeyboard().text('⬅️ Назад', `a:gw_media_step|ws:${wsId}`);
+      const kb = navKb(`a:gw_media_step|ws:${wsId}`);
       await safeEditOrReply(ctx, `🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)`, {
         parse_mode: 'HTML',
         reply_markup: kb
@@ -17564,7 +17567,7 @@ ${actionHint}`;
       } catch (e) {
         await redis.del(rlKey);
         await ctx.answerCallbackQuery({ text: 'Не удалось.' });
-        await safeEditOrReply(ctx, `⚠️ Ошибка отправки: ${escapeHtml(String(e?.message || e))}`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_open|i:${gwId}`) });
+        await safeEditOrReply(ctx, `⚠️ Ошибка отправки: ${escapeHtml(String(e?.message || e))}`, { parse_mode: 'HTML', reply_markup: navKb(`a:gw_open|i:${gwId}`) });
       }
       return;
     }
@@ -17870,7 +17873,7 @@ ${escapeHtml(lines)}`,
 async function renderAdminPaymentView(ctx, paymentId, backStatus = 'ORPHANED', page = 0) {
   const p = await db.getPaymentById(Number(paymentId));
   if (!p) {
-    await safeEditOrReply(ctx, '⚠️ Платеж не найден.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_payments|st:${backStatus}|p:${page}`) });
+    await safeEditOrReply(ctx, '⚠️ Платеж не найден.', { reply_markup: navKb(`a:admin_payments|st:${backStatus}|p:${page}`) });
     return;
   }
 
@@ -18043,7 +18046,7 @@ async function renderModReports(ctx, page = 0) {
 async function renderModReportView(ctx, reportId) {
   const r = await db.getBarterReport(reportId);
   if (!r) {
-    await safeEditOrReply(ctx, 'Жалоба не найдена.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:mod_reports') });
+    await safeEditOrReply(ctx, 'Жалоба не найдена.', { reply_markup: navKb('a:mod_reports') });
     return;
   }
   const who = r.reporter_username ? '@' + r.reporter_username : 'id ' + r.reporter_tg_id;
