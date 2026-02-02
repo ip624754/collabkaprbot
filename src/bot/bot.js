@@ -298,7 +298,7 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
   const kb = new InlineKeyboard();
   if (!wss.length) {
     kb.text('📋 Меню', 'a:menu');
-    await safeEditOrReply(ctx, 'Сначала подключи канал: нажми «🚀 Подключить канал» в меню.', { reply_markup: kb });
+    await ctx.editMessageText('Сначала подключи канал: нажми «🚀 Подключить канал» в меню.', { reply_markup: kb });
     return;
   }
 
@@ -308,7 +308,7 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
   }
   kbNavRow(kb, backCb);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `Выбери канал, где создать новый конкурс:`,
     { reply_markup: kb }
   );
@@ -572,7 +572,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
   }
@@ -583,7 +583,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
   }
@@ -619,7 +619,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
   const text = `🧑‍💼 <b>Выбери бренд для работы</b>
 
 Я запомню выбор и открою кабинет выбранного бренда.`;
-  if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -634,7 +634,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
 
@@ -644,7 +644,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
 
@@ -796,7 +796,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (edit && ctx.callbackQuery?.message) {
-    await safeEditOrReply(ctx, text, opts);
+    await ctx.editMessageText(text, opts);
   } else {
     await ctx.reply(text, opts);
   }
@@ -809,7 +809,7 @@ async function renderRoleHub(ctx, u, flags) {
   // Role hub: Creator -> active workspace; Brand -> brand dashboard; Curator mode -> curator cabinet menu.
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
   if (curMode) {
-    await safeEditOrReply(ctx, `👤 <b>Режим куратора</b>
+    await ctx.editMessageText(`👤 <b>Режим куратора</b>
 
 Здесь показаны только действия куратора, чтобы не путаться.
 Чтобы вернуть полное меню — нажми “🔓 Обычный режим”.`, {
@@ -830,7 +830,7 @@ async function renderRoleHub(ctx, u, flags) {
         const msg = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-        await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
+        await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
         return;
       }
       if (bm.revoked) {
@@ -838,7 +838,7 @@ async function renderRoleHub(ctx, u, flags) {
         const msg = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-        await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
+        await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
         return;
       }
 
@@ -927,33 +927,6 @@ function kbNavRow(kb, backCb) {
   kb.text('📋 Меню', 'a:menu');
   return kb;
 }
-
-
-async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
-  // Telegram sometimes rejects edits (old message, deleted message, not modified, etc.).
-  // We never want the UI to "do nothing": fallback to sending a new message.
-  if (preferEdit && ctx?.callbackQuery?.message) {
-    try {
-      return await safeEditOrReply(ctx, text, extra);
-    } catch (_) {
-      // ignore and fallback to reply
-    }
-  }
-  try {
-    return await ctx.reply(text, extra);
-  } catch (e) {
-    // Last resort: try edit again if reply is blocked (rare).
-    if (ctx?.callbackQuery?.message) {
-      try {
-        return await safeEditOrReply(ctx, text, extra);
-      } catch (_) {
-        // noop
-      }
-    }
-    throw e;
-  }
-}
-
 
 // -----------------------------
 // BX Navigation helpers (home/return context)
@@ -1368,7 +1341,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   if (bm.dbMissing) {
     const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>\n\nВ Neon должна быть таблица <code>brand_managers</code>.`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -1376,7 +1349,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   if (bm.enabled && bm.brandUserId !== u.id) {
     const kb = navKb('a:menu');
     const text = `⛔ <b>Только владелец бренда</b>\n\nМенеджер не может управлять «👥 Команда бренда».`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -1386,7 +1359,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   if (st.missingRelation) {
     const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⚠️ <b>Нужна миграция 024_brand_profiles</b>\n\nВ Neon должна быть таблица <code>brand_profiles</code>.`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -1403,7 +1376,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
     const text = `👥 <b>Команда бренда</b>\n\nДобавь менеджеров, чтобы быстрее отвечать на заявки и закрывать сделки.\n\n<b>Условия доступа:</b>\n1) Заполнить профиль бренда (4 поля: Название, Ниша, Контакт, Ссылка)\n2) Купить <b>Brand Pass</b> или <b>Brand Plan</b>\n\n<b>Статус:</b>\n${statusProfile}\n${statusPay}\n\n<i>Зачем:</i> защита от спама и ценность брендовой покупки.`;
 
     const kb = brandTeamLockedKb();
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -1450,7 +1423,7 @@ async function renderNetConfirm(ctx, ownerUserId, wsId, ret = 'ws') {
     : 'Если включить, твой канал появится в сети и сможет видеть ленту и публиковать офферы.';
 
   await ctx.answerCallbackQuery();
-  await safeEditOrReply(ctx, `🌐 <b>Сеть</b>\n\nСейчас: <b>${escapeHtml(state)}</b>\n\n${escapeHtml(hint)}`, {
+  await ctx.editMessageText(`🌐 <b>Сеть</b>\n\nСейчас: <b>${escapeHtml(state)}</b>\n\n${escapeHtml(hint)}`, {
     parse_mode: 'HTML',
     reply_markup: netConfirmKb(wsId, enabled, ret)
   });
@@ -1816,7 +1789,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
     async () => ({ __missing_relation: true })
   );
   if (prof && prof.__missing_relation) {
-    await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
+    await ctx.editMessageText('⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
       reply_markup: navKb('a:menu')
     });
     return;
@@ -1870,7 +1843,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
       .text('📋 Меню', 'a:menu');
 
     const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-    if (ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, extra);
+    if (ctx.callbackQuery?.message) await ctx.editMessageText(text, extra);
     else await ctx.reply(text, extra);
     return;
   }
@@ -1885,8 +1858,8 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
     .text('⬅️ Назад', brandBackCb({ wsId, ret, backOfferId: bo, backPage: bp }));
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-  if (params.edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, baseText, extra);
-  else if (ctx.callbackQuery?.message) await safeEditOrReply(ctx, baseText, extra);
+  if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(baseText, extra);
+  else if (ctx.callbackQuery?.message) await ctx.editMessageText(baseText, extra);
   else await ctx.reply(baseText, extra);
 }
 
@@ -1919,7 +1892,7 @@ async function renderBrandBudgetBucketPicker(ctx, ownerUserId, params = {}) {
   kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
-  if (params.edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
+  if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, opts);
   else await ctx.reply(text, opts);
 }
 
@@ -1953,7 +1926,7 @@ async function renderBrandGoalsTagsPicker(ctx, ownerUserId, params = {}) {
   kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
-  if (params.edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
+  if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, opts);
   else await ctx.reply(text, opts);
 }
 
@@ -1987,7 +1960,7 @@ async function renderBrandReqTagsPicker(ctx, ownerUserId, params = {}) {
   kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
-  if (params.edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
+  if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, opts);
   else await ctx.reply(text, opts);
 }
 
@@ -2038,7 +2011,7 @@ async function renderBrandCollabTypesPicker(ctx, ownerUserId, params = {}) {
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (params.edit && ctx.callbackQuery?.message) {
-    await safeEditOrReply(ctx, text, opts);
+    await ctx.editMessageText(text, opts);
   } else {
     await ctx.reply(text, opts);
   }
@@ -2094,9 +2067,9 @@ async function renderBrandProfileMore(ctx, ownerUserId, params = {}) {
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (params.edit && ctx.callbackQuery?.message) {
-    await safeEditOrReply(ctx, txt, opts);
+    await ctx.editMessageText(txt, opts);
   } else if (ctx.callbackQuery?.message) {
-    await safeEditOrReply(ctx, txt, opts);
+    await ctx.editMessageText(txt, opts);
   } else {
     await ctx.reply(txt, opts);
   }
@@ -2454,7 +2427,7 @@ ${matchCount !== null ? `
 
 <i>Настройки применяются к каталогу сразу. Нажми «📋 Показать бренды», чтобы увидеть выдачу.</i>`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: brandDirFiltersKb(f, page),
     disable_web_page_preview: true
@@ -2489,7 +2462,7 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
 
 Выбери значение:`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: brandDirPickKb(key, page),
     disable_web_page_preview: true
@@ -2514,7 +2487,7 @@ async function renderBrandDirMultiPick(ctx, viewerUserId, params = {}) {
 
 Выбери теги:`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: brandDirMultiPickKb(key, page, selected),
     disable_web_page_preview: true
@@ -2534,7 +2507,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   );
   if (rows && rows.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
-    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
+    if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(msg, { reply_markup: navKb('a:menu') });
     else await ctx.reply(msg, { reply_markup: navKb('a:menu') });
     return;
   }
@@ -2579,7 +2552,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   kb.text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb };
-  if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, extra);
+  if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, extra);
   else await ctx.reply(text, extra);
 }
 
@@ -2595,14 +2568,14 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   );
   if (prof && prof.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
-    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
+    if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(msg, { reply_markup: navKb('a:menu') });
     else await ctx.reply(msg, { reply_markup: navKb('a:menu') });
     return;
   }
   if (!prof) {
     const kb = new InlineKeyboard();
     kbNavRow(kb, `a:brands_home|p:${backPage}`);
-    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, '⚠️ Бренд не найден.', { reply_markup: kb });
+    if (edit && ctx.callbackQuery?.message) await ctx.editMessageText('⚠️ Бренд не найден.', { reply_markup: kb });
     else await ctx.reply('⚠️ Бренд не найден.', { reply_markup: kb });
     return;
   }
@@ -2678,7 +2651,7 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   kb.text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-  if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, extra);
+  if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, extra);
   else await ctx.reply(text, extra);
 }
 
@@ -2851,7 +2824,7 @@ async function renderBxOfferTagsStep(ctx, wsId, opts = {}) {
 💡 Теги помогут брендам быстро фильтровать офферы.${presetNote}`;
 
   const kb = bxOfferTagsKb(wsId, meta, { showParams: Boolean(opts.showParams) });
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
@@ -2874,7 +2847,7 @@ async function renderBxOfferTagsPicker(ctx, wsId, key) {
 
 Выбери теги:`;
 
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
@@ -2900,7 +2873,7 @@ async function renderBxOfferTextStep(ctx, wsId) {
     .row()
     .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
   await setExpectText(ctx.from.id, { type: 'bx_offer_text', wsId });
 }
@@ -3258,7 +3231,7 @@ ${sponsorLines}
 Если всё ок — жми “📣 Опубликовать”.`;
 
   const extra = { parse_mode: 'HTML', reply_markup: gwConfirmKb(wsId) };
-  if (edit) return safeEditOrReply(ctx, text, extra);
+  if (edit) return ctx.editMessageText(text, extra);
   return ctx.reply(text, extra);
 }
 
@@ -3280,7 +3253,7 @@ async function renderGwMediaStep(ctx, wsId, opts = {}) {
 Выбери действие:`;
 
   const extra = { parse_mode: 'HTML', reply_markup: gwMediaKb(wsId, hasMedia) };
-  if (edit) return safeEditOrReply(ctx, text, extra);
+  if (edit) return ctx.editMessageText(text, extra);
   return ctx.reply(text, extra);
 }
 
@@ -3453,7 +3426,7 @@ async function ensureWorkspaceForOwner(ctx, ownerUserId) {
 async function renderWsList(ctx, ownerUserId) {
   const items = await db.listWorkspaces(ownerUserId);
   if (!items.length) {
-    await safeEditOrReply(ctx, `У тебя пока нет подключенных каналов.
+    await ctx.editMessageText(`У тебя пока нет подключенных каналов.
 
 Нажми “🚀 Подключить канал”.`, { reply_markup: mainMenuKb(await getRoleFlags(await db.upsertUser(ctx.from.id, ctx.from.username ?? null), ctx.from.id)) });
     return;
@@ -3464,7 +3437,7 @@ async function renderWsList(ctx, ownerUserId) {
     kb.text(label, `a:ws_open|ws:${w.id}`).row();
   }
   kb.text('🚀 Подключить ещё', 'a:setup').text('⬅️ В меню', 'a:menu');
-  await safeEditOrReply(ctx, `📣 <b>Мои каналы</b>
+  await ctx.editMessageText(`📣 <b>Мои каналы</b>
 
 Это каналы, которые ты подключил к боту (workspace).
 
@@ -3485,7 +3458,7 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
   }
   await setActiveWorkspace(ctx.from.id, wsId);
   const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
-  await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
+  await ctx.editMessageText(`📣 <b>${escapeHtml(title)}</b>
 
 Выбери действие:`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId) });
 }
@@ -3501,7 +3474,7 @@ async function renderWsSettings(ctx, ownerUserId, wsId) {
     network_enabled: s.network_enabled,
     curator_enabled: s.curator_enabled
   };
-  await safeEditOrReply(ctx, `👥 <b>Кураторы и сеть</b>
+  await ctx.editMessageText(`👥 <b>Кураторы и сеть</b>
 
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>`, {
     parse_mode: 'HTML',
@@ -3519,7 +3492,7 @@ async function renderWsHistory(ctx, ownerUserId, wsId) {
   const text = `🧾 <b>История действий</b>
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) });
 }
 
 
@@ -3649,7 +3622,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     .row()
     .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
 async function renderProfileMatchingPick(ctx, ownerUserId, wsId, type) {
@@ -3674,7 +3647,7 @@ async function renderProfileMatchingPick(ctx, ownerUserId, wsId, type) {
     `Выбрано: <b>${sel.length}/${max}</b>\n` +
     `Нажимай по пунктам, чтобы включать/выключать ✅.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
 async function renderProfileMatchingResults(ctx, ownerUserId, wsId, page = 0) {
@@ -3703,7 +3676,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
       .text('⚙️ Изменить фильтры', `a:pm_home|ws:${wsId}`)
       .row()
       .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
-    return safeEditOrReply(ctx, 
+    return ctx.editMessageText(
       head + '😶 Ничего не нашёл по фильтрам.\n\nПопробуй упростить фильтр (меньше ниш/форматов).',
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
     );
@@ -3741,7 +3714,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
 
   kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
 
@@ -4183,7 +4156,7 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   }
 
   try {
-    await safeEditOrReply(ctx, text, extra);
+    await ctx.editMessageText(text, extra);
   } catch {
     await ctx.reply(text, extra);
   }
@@ -4211,7 +4184,7 @@ async function renderWsShareMenu(ctx, ownerUserId, wsId) {
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4266,7 +4239,7 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
   kbNavRow(kb, `a:ws_share|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4304,7 +4277,7 @@ async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4521,7 +4494,7 @@ async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', varia
     .text('⬅️ Назад', `a:ws_ig_templates|ws:${wsId}`).text('📋 Меню', 'a:menu');
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4554,7 +4527,7 @@ async function sendWsIgTemplateMessage(ctx, ownerUserId, wsId, type = 'story') {
   kbNavRow(kb, `a:ws_ig_templates|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4584,7 +4557,7 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
-    await safeEditOrReply(ctx, text, extra);
+    await ctx.editMessageText(text, extra);
   } catch {
     await ctx.reply(text, extra);
   }
@@ -4619,7 +4592,7 @@ async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
-    await safeEditOrReply(ctx, text, extra);
+    await ctx.editMessageText(text, extra);
   } catch {
     await ctx.reply(text, extra);
   }
@@ -4654,7 +4627,7 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
-    await safeEditOrReply(ctx, text, extra);
+    await ctx.editMessageText(text, extra);
   } catch {
     await ctx.reply(text, extra);
   }
@@ -4745,7 +4718,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   kb.row().text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-  if (ctx.callbackQuery) await safeEditOrReply(ctx, text, extra);
+  if (ctx.callbackQuery) await ctx.editMessageText(text, extra);
   else await ctx.reply(text, extra);
 
 }
@@ -4790,7 +4763,7 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
     .text('📋 Меню', 'a:menu');
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4852,7 +4825,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4903,7 +4876,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   try {
     try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5145,7 +5118,7 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
   const text = header + body;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5256,7 +5229,7 @@ async function renderBrandDealsList(ctx, actorUserId, brandUserId, stage = 'nego
 
   const text = header + body;
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5324,7 +5297,7 @@ if (threadBlock) {
   kb.text('⬅️ Назад', `a:brand_deals|ws:0|st:${bStage}|p:${bPage}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5409,7 +5382,7 @@ ${threadBlock}`;
     .text('⬅️ Назад', `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5450,7 +5423,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
     `Напиши ответ одним сообщением — я отправлю его креатору.`;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5492,7 +5465,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
     `Напиши ответ одним сообщением — я отправлю его креатору.`;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5535,7 +5508,7 @@ async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage:
     .text('⬅️ Назад', backCb);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5656,7 +5629,7 @@ async function renderBrandAppTemplates(ctx, actorUserId, appId, back) {
     .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5794,7 +5767,7 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
     `Напиши сообщение одним текстом — я доставлю его в Inbox бренда.`;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5837,7 +5810,7 @@ async function renderLeadTemplates(ctx, actorUserId, leadId, back) {
     .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5920,7 +5893,7 @@ ${escapeHtml(pro)}
   }
   kb.text('⬅️ Назад', `a:ws_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderWsProPinPick(ctx, ownerUserId, wsId) {
@@ -5944,7 +5917,7 @@ async function renderWsProPinPick(ctx, ownerUserId, wsId) {
   kb.text('❌ Снять пин', `a:ws_pro_pin_clear|ws:${wsId}`).row();
   kb.text('⬅️ Назад', `a:ws_pro|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, `📌 <b>Пин в ленте</b>
+  await ctx.editMessageText(`📌 <b>Пин в ленте</b>
 
 Выбери оффер, который будет закреплен в ленте (только для PRO).`, {
     parse_mode: 'HTML',
@@ -5997,7 +5970,7 @@ async function renderFoldersMy(ctx, userId) {
     ? `📁 <b>Папки</b>\n\nВыбери канал, где ты редактор:`
     : `📁 <b>Папки</b>\n\nПока тебя не назначили редактором папок ни в одном Workspace.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderFoldersHome(ctx, userId, wsId) {
@@ -6011,7 +5984,7 @@ async function renderFoldersHome(ctx, userId, wsId) {
   const title = access.ws.channel_username ? '@' + access.ws.channel_username : (access.ws.title || `ws:${wsId}`);
   const text = `📁 <b>Папки</b>\n\nКанал: <b>${escapeHtml(String(title))}</b>\nЛимит каналов в папке: <b>${max}</b>\n\nСоздай папку и добавь @каналы для совместных конкурсов/офферов.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: foldersHomeKb(access, folders) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: foldersHomeKb(access, folders) });
 }
 
 function folderViewKb(access, wsId, folderId) {
@@ -6064,7 +6037,7 @@ async function renderFolderView(ctx, userId, wsId, folderId) {
     (shown.length ? shown.join('\n') : 'Пока пусто.') +
     more;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: folderViewKb(access, Number(wsId), Number(folderId)) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: folderViewKb(access, Number(wsId), Number(folderId)) });
 }
 
 async function renderWsEditors(ctx, ownerUserId, wsId) {
@@ -6095,7 +6068,7 @@ async function renderWsEditors(ctx, ownerUserId, wsId) {
     `По умолчанию папки редактирует только owner.\n\n` +
     (lines.length ? lines.join('\n') : 'Пока нет редакторов.');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
@@ -6224,7 +6197,7 @@ async function renderBxBrandOnlyNotice(ctx) {
 Этот раздел доступен только в режиме <b>Brand</b>.
 
 В режиме <b>Creator</b> вместо ленты — 🏷 Каталог брендов.`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: bxBrandOnlyNoticeKb() });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: bxBrandOnlyNoticeKb() });
 }
 
 function deriveBxSmartPrefillFromBrandProfile(prof) {
@@ -6322,7 +6295,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
     const untilTxt = (active && planRow?.brand_plan_until) ? `
 До: <b>${escapeHtml(fmtTs(planRow.brand_plan_until))}</b>` : '';
 
-    await safeEditOrReply(ctx, 
+    await ctx.editMessageText(
       `🏷 <b>Для брендов</b>
 
 Здесь бренд может работать с UGC/офферами без подключения канала.
@@ -6341,7 +6314,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
   if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   if (!ws.network_enabled) {
-    await safeEditOrReply(ctx, 
+    await ctx.editMessageText(
       `🎬 <b>UGC / Офферы</b>
 
 Это лента UGC/Collab офферов: контент, интеграции, бартер/бюджет.
@@ -6352,7 +6325,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
     return;
   }
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🎬 <b>UGC / Офферы</b>
 
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
@@ -6466,7 +6439,7 @@ ${featLines.join('\n\n')}
   const nav = bxFeedNavKb(wsNum, page, hasPrev, hasNext);
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
@@ -6490,7 +6463,7 @@ async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `📦 <b>Мои офферы</b>
 
 Нажми оффер, чтобы открыть. Кнопка 🗑 — архивирует и сразу убирает из списка.`,
@@ -6511,7 +6484,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
 
   if (!rows.length) {
     kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
-    await safeEditOrReply(ctx, 
+    await ctx.editMessageText(
       `📁 <b>Архив офферов</b>
 
 Пока пусто. Нажми 🗑 в «Мои офферы», чтобы архивировать оффер (он останется в истории).`,
@@ -6538,7 +6511,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
 
   kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `📁 <b>Архив офферов</b>
 
 Открой оффер, чтобы посмотреть. ↩️ — вернуть в активные.`,
@@ -6595,7 +6568,7 @@ async function renderBxMediaStep(ctx, ownerUserId, wsId, offerId, back = 'my', o
 Выбери тип и пришли файл одним сообщением.`;
 
   const kb = bxMediaKb(wsId, offerId, back, hasMedia);
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, Boolean(edit));
+  const send = (edit && ctx.callbackQuery) ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -6701,7 +6674,7 @@ ${contact ? `Контакт: <b>${escapeHtml(contact)}</b>` : ''}`;
     : (back === 'arch' ? `a:bx_my_arch|ws:${wsId}|p:0` : `a:bx_feed|ws:${wsId}|p:0|h:bo`);
   kb.text('⬅️ Назад', backCb);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
@@ -6722,7 +6695,7 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
 ${escapeHtml(bxFilterSummary(f))}
 
 <i>Настройки применяются к ленте сразу. Нажми «📋 Показать креаторов», чтобы увидеть выдачу.</i>`;
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: bxFiltersKb(wsNum, f, page, opts)
   });
@@ -6756,7 +6729,7 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = 
 
 Выбери значение:`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: bxPickKb(wsNum, key, page, opts),
     disable_web_page_preview: true
@@ -6790,7 +6763,7 @@ async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, op
 Выбери теги (можно несколько):`;
 
   const sel = key === 'goals' ? f.goalsTags : f.reqTags;
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: bxMultiPickKb(wsNum, key, sel, page, opts),
     disable_web_page_preview: true
@@ -6865,7 +6838,7 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
   const backCb = isOwner ? `a:bx_feed|ws:${wsId}|p:${page}|h:${h}` : `a:bx_feed|ws:0|p:0|h:${h}`;
   kb.row().text('⬅️ Назад', backCb);
 
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -7171,7 +7144,7 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
 
   kb.text('⬅️ Назад к офферу', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
 
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -7225,7 +7198,7 @@ async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
     .text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`)
     .text('📋 Меню', 'a:menu');
 
-  if (ctx.callbackQuery) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  if (ctx.callbackQuery) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -7261,7 +7234,7 @@ async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0) {
   }
   kb.text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderOfficialQueue(ctx, userId, page = 0) {
@@ -7290,7 +7263,7 @@ Pending: <b>${rows.length}</b>${rows.length ? '' : '\n\nПока пусто.'}`;
   if (hasPrev || hasNext) kb.row();
   kb.text('⬅️ В админку', 'a:admin');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
   const cost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
@@ -7358,7 +7331,7 @@ ${trialLine}${limitLine}${verifyHintLine}
   kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching', `a:match_home|ws:${wsId}`).row();
   kb.text('⬅️ Назад', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
@@ -7413,7 +7386,7 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
   const nav = bxInboxNavKb(wsId, page, hasPrev, hasNext, { h });
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
-  await safeEditOrReply(ctx, header + (rows.length ? '' : '\n\nПока нет диалогов.'), { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(header + (rows.length ? '' : '\n\nПока нет диалогов.'), { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function buildBxThreadView(userId, threadId) {
@@ -7509,7 +7482,7 @@ async function renderBxThread(ctx, userId, wsId, threadId, opts = {}) {
     showRetryInfo,
     retryText: replySt.retry || ''
   });
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 function bxProofsKb(wsId, threadId, opts = {}) {
@@ -7558,7 +7531,7 @@ async function renderBxProofs(ctx, userId, wsId, threadId, opts = {}) {
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: bxProofsKb(wsId, threadId, { ...opts, offerId })
   });
@@ -7585,7 +7558,7 @@ async function renderBrandPassTopup(ctx, userId, wsId) {
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🎫 <b>Brand Pass</b>
 
 Баланс контактов: <b>${credits}</b>
@@ -7616,7 +7589,7 @@ async function renderBrandPlan(ctx, userId, wsId) {
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `⭐️ <b>Brand Plan</b>
 
 Статус: <b>${escapeHtml(status)}</b>
@@ -7635,7 +7608,7 @@ async function renderMatchingHome(ctx, wsId) {
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🎯 <b>Smart Matching</b>
 
 Платишь Stars за экономию времени: бот подберёт релевантные микро-каналы под твой бриф.
@@ -7652,7 +7625,7 @@ async function renderFeaturedHome(ctx, userId, wsId) {
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🔥 <b>Featured</b>
 
 Подними внимание: твой блок появится сверху в ленте у всех (бренд + блогеры).
@@ -7677,7 +7650,7 @@ async function renderFeaturedView(ctx, userId, wsId, id, page = 0) {
   }
   kb.text('⬅️ Назад', `a:bx_feed|ws:${wsId}|p:${page}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🔥 <b>${escapeHtml(String(title))}</b>
 
 ${escapeHtml(String(body))}
@@ -7729,7 +7702,7 @@ async function renderGwList(ctx, ownerUserId, wsId = null) {
 
   if (!filtered.length) {
     kb.text('⬅️ Назад', wsId ? `a:ws_open|ws:${wsId}` : 'a:menu');
-    await safeEditOrReply(ctx, `🎁 Розыгрышей пока нет.
+    await ctx.editMessageText(`🎁 Розыгрышей пока нет.
 
 Жми «➕ Новый розыгрыш», чтобы создать первый.`, { reply_markup: kb });
     return;
@@ -7744,7 +7717,7 @@ async function renderGwList(ctx, ownerUserId, wsId = null) {
   }
 
   kb.text('⬅️ Назад', wsId ? `a:ws_open|ws:${wsId}` : 'a:menu');
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🎁 <b>${wsId ? 'Розыгрыши канала' : 'Розыгрыши'}</b>
 
 Выбери розыгрыш (или создай новый):`,
@@ -7781,7 +7754,7 @@ ${checkedLine}
 ${notesBlock}
 
 Если ведёшь конкурс не один — пригласи помощника (👥 Кураторы канала → 👤 Пригласить куратора).`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: gwOpenKb(g, { isAdmin: isSuperAdminTg(ctx.from?.id) }) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: gwOpenKb(g, { isAdmin: isSuperAdminTg(ctx.from?.id) }) });
 }
 
 async function renderGwStats(ctx, ownerUserId, gwId) {
@@ -7824,7 +7797,7 @@ async function renderGwStats(ctx, ownerUserId, gwId) {
     .row()
     .text('⬅️ Назад', `a:gw_open|i:${gwId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderGwLog(ctx, ownerUserIdOrNull, gwId) {
@@ -7835,7 +7808,7 @@ async function renderGwLog(ctx, ownerUserIdOrNull, gwId) {
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
   const back = ownerUserIdOrNull ? `a:gw_open|i:${gwId}` : `a:gw_open_public|i:${gwId}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', back) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', back) });
 }
 
 async function renderGwOpenPublic(ctx, gwId, userId) {
@@ -7847,7 +7820,7 @@ async function renderGwOpenPublic(ctx, gwId, userId) {
   const sponsors = (sponsorRows || []).map(r => r.sponsor_text).filter(Boolean);
 
   const text = renderParticipantScreen(g, entry, { hint: true, sponsors });
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: true }) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: true }) });
 }
 
 // ----------------------
@@ -7894,7 +7867,7 @@ async function renderCuratorHome(ctx, userId) {
 🧹 <b>Режим куратора</b> — прячет лишнее меню (оставляет только кураторское).
 
 ${items.length ? 'Выбери канал:' : 'Пока тебя не назначили куратором ни в одном канале.'}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled) });
 }
 
 // Same as renderCuratorHome, but for /start (new message instead of edit)
@@ -7946,7 +7919,7 @@ async function renderCuratorWorkspace(ctx, userId, wsId) {
 Режим куратора в этом канале выключен владельцем.
 
 Если хочешь — выйди из канала (удалишь свою роль куратора).`;
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
   }
 
@@ -7958,7 +7931,7 @@ async function renderCuratorWorkspace(ctx, userId, wsId) {
 ${giveaways.length ? 'Конкурсы:' : 'Пока нет конкурсов.'}
 
 Если тебя назначили по ошибке или помощь больше не нужна — нажми “❌ Выйти из канала”.`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorWsKb(wsIdNum, giveaways) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: curatorWsKb(wsIdNum, giveaways) });
 }
 
 function curatorGwKb(wsId, gwId) {
@@ -8002,7 +7975,7 @@ ${checkedLine}
 ${notesBlock}
 
 Режим: <b>Куратор</b> (безопасные права)`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorGwKb(Number(wsId), Number(gwId)) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: curatorGwKb(Number(wsId), Number(gwId)) });
 }
 
 async function renderCuratorGiveawayStats(ctx, userId, wsId, gwId) {
@@ -8022,7 +7995,7 @@ async function renderCuratorGiveawayStats(ctx, userId, wsId, gwId) {
     .row()
     .text('⬅️ Назад', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderCuratorGiveawayLog(ctx, userId, wsId, gwId) {
@@ -8034,7 +8007,7 @@ async function renderCuratorGiveawayLog(ctx, userId, wsId, gwId) {
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
   const kb = new InlineKeyboard().text('⬅️ Назад', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderCuratorGiveawayRemindQ(ctx, userId, wsId, gwId) {
@@ -8049,7 +8022,7 @@ async function renderCuratorGiveawayRemindQ(ctx, userId, wsId, gwId) {
   const kb = new InlineKeyboard()
     .text('✅ Отправить', `a:cur_gw_remind_send|ws:${wsId}|i:${gwId}`)
     .text('⬅️ Отмена', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
@@ -8119,7 +8092,7 @@ ${curatorNotesBlock(notes)}
     .row()
     .text('❌ Отмена', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
 
-  await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
+  await ctx.editMessageText(msg, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
 }
 
 async function renderCuratorGiveawayOwnerNotifySend(ctx, userId, wsId, gwId) {
@@ -8222,7 +8195,7 @@ function accessLine(chat, a) {
 export async function renderGwPreflight(ctx, ownerUserId, gwId, { forceRecheck = false } = {}) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeEditOrReply(ctx, 'Нет доступа.');
+    await ctx.editMessageText('Нет доступа.');
     return;
   }
 
@@ -8289,7 +8262,7 @@ ${lines.join('\n')}
     .row()
     .text('⬅️ Назад', `a:gw_stats|i:${gwId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 
   try {
     await db.auditGiveaway(gwId, g.workspace_id, ownerUserId, 'gw.preflight_checked', {
@@ -8303,7 +8276,7 @@ ${lines.join('\n')}
 export async function renderGwWhyMenu(ctx, ownerUserId, gwId) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeEditOrReply(ctx, 'Нет доступа.');
+    await ctx.editMessageText('Нет доступа.');
     return;
   }
 
@@ -8314,7 +8287,7 @@ export async function renderGwWhyMenu(ctx, ownerUserId, gwId) {
     .row()
     .text('⬅️ Назад', `a:gw_stats|i:${gwId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `ℹ️ <b>Почему участник не прошёл</b>\n\nВыбери режим:\n• <b>Ввести ID</b> — быстро и надёжно.\n• <b>Переслать сообщение</b> — сработает только если у участника выключена “Forward privacy”.`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
@@ -8365,7 +8338,7 @@ ${lines.length ? lines.join('\n') : 'Нет каналов для проверк
 export async function renderGwWhyResult(ctx, ownerUserId, gwId, targetUserId, { forceRecheck = false } = {}) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeEditOrReply(ctx, 'Нет доступа.');
+    await ctx.editMessageText('Нет доступа.');
     return;
   }
 
@@ -8381,7 +8354,7 @@ export async function renderGwWhyResult(ctx, ownerUserId, gwId, targetUserId, { 
     .row()
     .text('⬅️ Назад', `a:gw_stats|i:${gwId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 export async function sendGwWhyResult(ctx, ownerUserId, gwId, targetUserId, { forceRecheck = false } = {}) {
@@ -8542,7 +8515,7 @@ async function renderSetupInstructions(ctx) {
 2) Перешли сюда любой пост из канала (forward).
 
 Бот создаст workspace и ты сможешь запускать конкурсы.`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ В меню', 'a:menu') });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ В меню', 'a:menu') });
 }
 
 export function getBot() {
@@ -11639,7 +11612,7 @@ if (p.a === 'a:ui_mode_set') {
   const flags = await getRoleFlags(u, ctx.from.id);
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
   if (curMode) {
-    await safeEditOrReply(ctx, 
+    await ctx.editMessageText(
       `🧹 <b>Режим куратора</b> включен.\n\nДля простоты я скрываю лишнее меню.\n\nТы сейчас в режиме: <b>Curator</b>`,
       { parse_mode: 'HTML', reply_markup: curatorModeMenuKb(flags) }
     );
@@ -11729,7 +11702,7 @@ if (p.a === 'a:guide') {
 
   kb.row().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
   await maybeSendBanner(ctx, 'guide', CFG.GUIDE_BANNER_FILE_ID);
   return;
 }
@@ -11760,7 +11733,7 @@ if (p.a === 'a:support') {
     .text('🧭 Быстрый старт', 'a:guide')
     .text('📋 Меню', 'a:menu');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   return;
 }
 
@@ -11774,7 +11747,7 @@ if (p.a === 'a:support_write') {
 
 Я отправлю это в поддержку.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:support') });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:support') });
   return;
 }
 
@@ -11931,7 +11904,7 @@ if (p.a === 'a:brand_apply') {
 Я отправлю это бренду и добавлю в их Inbox.`;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -11958,7 +11931,7 @@ if (p.a === 'a:brand_apply') {
         const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-        await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+        await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
 
@@ -11967,7 +11940,7 @@ if (p.a === 'a:brand_apply') {
         const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-        await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+        await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
 
@@ -11999,7 +11972,7 @@ if (p.a === 'a:brand_apply') {
 
 Если у тебя несколько брендов — используй «🔁 Сменить бренд» в меню.`;
 
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
       return;
     }
 
@@ -12012,7 +11985,7 @@ if (p.a === 'a:brand_apply') {
       if (ret === 'menu') {
         await renderMainMenu(ctx, flags, { edit: true, user: u });
       } else {
-        await safeEditOrReply(ctx, 'Готово.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+        await ctx.editMessageText('Готово.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
       }
       return;
     }
@@ -12051,7 +12024,7 @@ if (p.a === 'a:brand_apply') {
           const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-          await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+          await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
           return;
         }
         brands = [];
@@ -12062,7 +12035,7 @@ if (p.a === 'a:brand_apply') {
         const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-        await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+        await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
 
@@ -12125,7 +12098,7 @@ if (p.a === 'a:menu') {
       const flags = await getRoleFlags(u, ctx.from.id);
       const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
       if (curMode) {
-        await safeEditOrReply(ctx, `👤 <b>Режим куратора</b>
+        await ctx.editMessageText(`👤 <b>Режим куратора</b>
 
 Здесь показаны только действия куратора, чтобы не путаться.
 Чтобы вернуть полное меню — нажми “🔓 Обычный режим”.`, {
@@ -12230,7 +12203,7 @@ if (p.a === 'a:menu') {
       const kb = new InlineKeyboard()
         .text('✅ Выйти', `a:cur_leave_do|ws:${wsId}`)
         .text('❌ Отмена', `a:cur_ws|ws:${wsId}`);
-      await safeEditOrReply(ctx, `❌ <b>Выйти из канала</b>
+      await ctx.editMessageText(`❌ <b>Выйти из канала</b>
 
 Ты больше не будешь куратором: <b>${escapeHtml(wsTitle)}</b>
 
@@ -12365,7 +12338,7 @@ if (p.a === 'a:menu') {
         .text('✅ Подтвердить', `a:cur_gw_check_do|ws:${wsId}|i:${gwId}`)
         .text('❌ Отмена', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
 
-      await safeEditOrReply(ctx, `✅ <b>Отметить как проверено?</b>
+      await ctx.editMessageText(`✅ <b>Отметить как проверено?</b>
 
 Это внутренняя отметка для владельца и других кураторов.
 Ничего не меняет в конкурсе — только фиксирует “я проверил”.
@@ -12433,7 +12406,7 @@ if (p.a === 'a:menu') {
         .row()
         .text('⬅️ Назад', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
 
-      await safeEditOrReply(ctx, `📝 <b>Заметки к конкурсу #${gwId}</b>
+      await ctx.editMessageText(`📝 <b>Заметки к конкурсу #${gwId}</b>
 
 Это внутренние пометки для владельца и кураторов — участникам не показывается.
 Примеры: «согласовали приз», «ждём фото», «уточнить условия», «риск/сомнительно».
@@ -12550,7 +12523,7 @@ if (p.a === 'a:wsp_preview') {
   await setExpectText(ctx.from.id, { type: 'brand_deals_search', brandUserId: bmRes.userId, stage, page, backCb });
   const kb = new InlineKeyboard().text('⬅️ Назад', backCb);
   const t = '🔎 <b>Поиск по сделкам</b>\n\nВарианты:\n• <code>@username</code> — пример: <code>@zarinka</code>\n• <code>TG id</code> (цифры) — пример: <code>123456789</code>\n\nПодсказки:\n• если начинаешь с <code>@</code>, добавь минимум 2 символа после @\n• если вводишь цифры — обычно 6–12 цифр\n\nЧтобы сбросить: <code>сброс</code>';
-  try { await safeEditOrReply(ctx, t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
+  try { await ctx.editMessageText(t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
   catch { await ctx.reply(t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
   return;
 }
@@ -12771,10 +12744,10 @@ if (p.a === 'a:lead_set') {
       if (!leadId) return;
 
       const lead = await db.getBrandLeadById(leadId);
-      if (!lead) return safeEditOrReply(ctx, 'Заявка не найдена.');
+      if (!lead) return ctx.editMessageText('Заявка не найдена.');
 
       const ws = await db.getWorkspaceAny(Number(lead.workspace_id));
-      if (!ws) return safeEditOrReply(ctx, 'Канал не найден.');
+      if (!ws) return ctx.editMessageText('Канал не найден.');
 
       const isOwner = Number(ws.owner_user_id) === Number(u.id);
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -12785,7 +12758,7 @@ if (p.a === 'a:lead_set') {
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(p.s || 'new')}|p:${Number(p.p || 0)}`);
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✍️ <b>Ответ на заявку #${leadId}</b>
 
 Напиши ответ одним сообщением.`,
@@ -12814,7 +12787,7 @@ if (p.a === 'a:lead_set') {
         .text('🎬 UGC / Офферы', 'a:bx_home')
         .row()
         .text('📋 Меню', 'a:menu');
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -12834,7 +12807,7 @@ if (p.a === 'a:lead_set') {
         .text('🎫 Brand Pass', 'a:brand_pass|ws:0')
         .row()
         .text('📋 Меню', 'a:menu');
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -12842,7 +12815,7 @@ if (p.a === 'a:lead_set') {
     if (p.a === 'a:verify_home') {
       await ctx.answerCallbackQuery();
       if (!CFG.VERIFICATION_ENABLED) {
-        await safeEditOrReply(ctx, '✅ Верификация сейчас отключена.', { reply_markup: mainMenuKb(await getRoleFlags(u, ctx.from.id)) });
+        await ctx.editMessageText('✅ Верификация сейчас отключена.', { reply_markup: mainMenuKb(await getRoleFlags(u, ctx.from.id)) });
         return;
       }
       await renderVerifyHome(ctx, u);
@@ -12862,7 +12835,7 @@ if (p.a === 'a:lead_set') {
       if (kind === 'brand' && CFG.BRAND_VERIFY_REQUIRES_EXTENDED) {
         const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
         if (!isBrandExtendedComplete(prof)) {
-          await safeEditOrReply(ctx, 
+          await ctx.editMessageText(
             `🏷 <b>Верификация Brand</b>
 
 Чтобы подать заявку как бренд, заполни расширенный профиль:
@@ -12884,7 +12857,7 @@ if (p.a === 'a:lead_set') {
       }
 
       await setExpectText(ctx.from.id, { type: 'verify_submit', kind });
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✅ <b>Заявка на верификацию</b>
 
 Отправь одним сообщением:
@@ -13096,7 +13069,7 @@ if (p.a === 'a:ws_prof_mode') {
         contact: '✍️ Введи контакт (например: @username / ссылка / почта).',
         geo: '✍️ Введи город/гео.'
       };
-      await safeEditOrReply(ctx, prompts[field] || prompts.title, {
+      await ctx.editMessageText(prompts[field] || prompts.title, {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu')
       });
       await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
@@ -13187,7 +13160,7 @@ if (p.a === 'a:ws_prof_mode') {
 
 Сейчас менеджеров: <b>${count}</b>`;
 
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: brandTeamKb() });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: brandTeamKb() });
       return;
     }
 
@@ -13210,7 +13183,7 @@ if (p.a === 'a:ws_prof_mode') {
 
 ${link}`;
 
-      await safeEditOrReply(ctx, text, {
+      await ctx.editMessageText(text, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
         reply_markup: navKb('a:brand_team|ws:0'),
@@ -13223,7 +13196,7 @@ ${link}`;
       const gate = await ensureBrandTeamUnlocked(ctx, u);
       if (!gate) return;
       await setExpectText(ctx.from.id, { type: 'bm_username' });
-      await safeEditOrReply(ctx, 'Введи @username менеджера одним сообщением (пример: @manager).', {
+      await ctx.editMessageText('Введи @username менеджера одним сообщением (пример: @manager).', {
         reply_markup: navKb('a:brand_team|ws:0'),
       });
       return;
@@ -13235,7 +13208,7 @@ ${link}`;
       if (!gate) return;
       const managers = await db.listBrandManagers(u.id);
       if (!managers.length) {
-        await safeEditOrReply(ctx, 'Пока менеджеров нет. Добавь менеджера через приглашение или по @username.', {
+        await ctx.editMessageText('Пока менеджеров нет. Добавь менеджера через приглашение или по @username.', {
           reply_markup: navKb('a:brand_team|ws:0'),
         });
         return;
@@ -13246,7 +13219,7 @@ ${link}`;
         return `• ${escapeHtml(label)}`;
       }).join('\n');
 
-      await safeEditOrReply(ctx, `👥 <b>Менеджеры бренда</b>\n\n${lines}\n\nНажми на кнопку, чтобы удалить менеджера.`, {
+      await ctx.editMessageText(`👥 <b>Менеджеры бренда</b>\n\n${lines}\n\nНажми на кнопку, чтобы удалить менеджера.`, {
         parse_mode: 'HTML',
         reply_markup: brandManagersListKb(managers),
       });
@@ -13263,7 +13236,7 @@ ${link}`;
       const info = await db.getUserTgIdByUserId(managerUserId);
       const label = info?.tg_username ? `@${info.tg_username}` : (info?.tg_id ? `id:${info.tg_id}` : `user #${managerUserId}`);
 
-      await safeEditOrReply(ctx, `Удалить менеджера <b>${escapeHtml(label)}</b> из команды бренда?`, {
+      await ctx.editMessageText(`Удалить менеджера <b>${escapeHtml(label)}</b> из команды бренда?`, {
         parse_mode: 'HTML',
         reply_markup: brandManagerRemoveConfirmKb(managerUserId),
       });
@@ -13310,7 +13283,7 @@ ${link}`;
       // refresh list
       const managers = await db.listBrandManagers(u.id);
       if (!managers.length) {
-        await safeEditOrReply(ctx, '✅ Менеджер удалён. Сейчас менеджеров нет.', {
+        await ctx.editMessageText('✅ Менеджер удалён. Сейчас менеджеров нет.', {
           reply_markup: navKb('a:brand_team|ws:0'),
         });
         return;
@@ -13321,7 +13294,7 @@ ${link}`;
       }).join('\n');
 
       const note = notifyOk ? '\n\n📩 Менеджеру отправлено уведомление.' : '';
-      await safeEditOrReply(ctx, `✅ Менеджер удалён.${note}\n\n👥 <b>Менеджеры бренда</b>\n\n${lines}`, {
+      await ctx.editMessageText(`✅ Менеджер удалён.${note}\n\n👥 <b>Менеджеры бренда</b>\n\n${lines}`, {
         parse_mode: 'HTML',
         reply_markup: brandManagersListKb(managers),
       });
@@ -13339,7 +13312,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -13363,7 +13336,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -13446,7 +13419,7 @@ ${link}`;
       }
 
       await setExpectText(ctx.from.id, { type: 'brand_prof_field', field: realField, wsId, ret, backOfferId: bo, backPage: bp });
-      await safeEditOrReply(ctx, brandFieldPrompt(realField), {
+      await ctx.editMessageText(brandFieldPrompt(realField), {
         parse_mode: 'HTML',
         reply_markup: brandFieldPromptKb({ wsId, ret, backOfferId: bo, backPage: bp, from: String(p.from || "") })
       });
@@ -13474,7 +13447,7 @@ ${link}`;
         async () => ({ __missing_relation: true })
       );
       if (prof && prof.__missing_relation) {
-        await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
+        await ctx.editMessageText('⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
           reply_markup: navKb('a:menu')
         });
         return;
@@ -13491,7 +13464,7 @@ ${link}`;
         async () => ({ __missing_relation: true })
       );
       if (saved && saved.__missing_relation) {
-        await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
+        await ctx.editMessageText('⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
           reply_markup: navKb('a:menu')
         });
         return;
@@ -13515,7 +13488,7 @@ ${link}`;
         async () => ({ __missing_relation: true })
       );
       if (saved && saved.__missing_relation) {
-        await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
+        await ctx.editMessageText('⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
           reply_markup: navKb('a:menu')
         });
         return;
@@ -13731,7 +13704,7 @@ ${link}`;
       const txt = `🧹 <b>Сбросить профиль бренда?</b>
 
 Это удалит базовые и расширенные поля профиля. Действие необратимо.`;
-      await safeEditOrReply(ctx, txt, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText(txt, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -13768,7 +13741,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -13787,7 +13760,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -14014,7 +13987,7 @@ if (p.a === 'a:match_home') {
       }
       kb.text('❌ Снять пин', `a:ws_pro_pin_clear|ws:${wsId}`).row();
       kb.text('⬅️ Назад', `a:ws_pro|ws:${wsId}`);
-      await safeEditOrReply(ctx, '📌 Выбери оффер для пина в ленте (PRO):', { reply_markup: kb });
+      await ctx.editMessageText('📌 Выбери оффер для пина в ленте (PRO):', { reply_markup: kb });
       return;
     }
     if (p.a === 'a:ws_pro_pin_set') {
@@ -14076,7 +14049,7 @@ if (p.a === 'a:match_home') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➕ Введи @username модератора (он должен иметь username).', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home') });
+      await ctx.editMessageText('➕ Введи @username модератора (он должен иметь username).', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home') });
       await setExpectText(ctx.from.id, { type: 'admin_add_mod_username' });
       return;
     }
@@ -14223,7 +14196,7 @@ if (p.a === 'a:match_home') {
       if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
       const targetUserId = Number(p.uid);
       await setExpectText(ctx.from.id, { type: 'mod_verif_reject_reason', targetUserId, page: Number(p.p || 0) });
-      await safeEditOrReply(ctx, '❌ Напиши причиной отказа одним сообщением (текст), и я отправлю пользователю.', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:mod_verif_view|uid:${targetUserId}|p:${Number(p.p || 0)}`) });
+      await ctx.editMessageText('❌ Напиши причиной отказа одним сообщением (текст), и я отправлю пользователю.', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:mod_verif_view|uid:${targetUserId}|p:${Number(p.p || 0)}`) });
       return;
     }
 
@@ -14287,7 +14260,7 @@ if (p.a === 'a:match_home') {
         compensationType: next.compensationType,
       });
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         bxSmartPrefillText(next, info, totalAll, totalFiltered),
         { parse_mode: 'HTML', reply_markup: bxSmartKb(wsId, { h }) }
       );
@@ -14728,7 +14701,7 @@ if (p.a === 'a:match_home') {
       });
       if (!okInv) return;
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `💳 Счёт выставлен на **${d.price}⭐️**.
 
 Оплати Stars — и оффер попадёт в очередь на публикацию в офиц.канале.\n\nПосле оплаты модератор нажмёт Apply и поставит пост в канал.`,
@@ -14860,7 +14833,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:off_queue') {
       await ctx.answerCallbackQuery();
       if (!CFG.OFFICIAL_PUBLISH_ENABLED) {
-        await safeEditOrReply(ctx, 'Фича отключена.');
+        await ctx.editMessageText('Фича отключена.');
         return;
       }
       const can = await isModerator(u, ctx.from.id);
@@ -14877,7 +14850,7 @@ if (p.a === 'a:match_home') {
       const offerId = Number(p.o);
       const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      await safeEditOrReply(ctx, '🚩 Опиши проблему одним сообщением (почему жалоба).', {
+      await ctx.editMessageText('🚩 Опиши проблему одним сообщением (почему жалоба).', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_report', kind: 'offer', wsId, offerId, page, h });
@@ -14890,7 +14863,7 @@ if (p.a === 'a:match_home') {
       const threadId = Number(p.t);
       const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      await safeEditOrReply(ctx, '🚩 Опиши проблему одним сообщением (почему жалоба).', {
+      await ctx.editMessageText('🚩 Опиши проблему одним сообщением (почему жалоба).', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_report', kind: 'thread', wsId, threadId, page, h });
@@ -15092,7 +15065,7 @@ if (p.a === 'a:bx_retry_help') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      await safeEditOrReply(ctx, '🔗 Пришли ссылку на пост (пример: https://t.me/... )', {
+      await ctx.editMessageText('🔗 Пришли ссылку на пост (пример: https://t.me/... )', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, h, asUserId: bmRes.userId });
@@ -15111,7 +15084,7 @@ if (p.a === 'a:bx_retry_help') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      await safeEditOrReply(ctx, '🖼️ Пришли скриншот (как фото)', {
+      await ctx.editMessageText('🖼️ Пришли скриншот (как фото)', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, h, asUserId: bmRes.userId });
@@ -15163,7 +15136,7 @@ if (p.a === 'a:bx_retry_help') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      await safeEditOrReply(ctx, '✍️ Напиши сообщение покупателю:', {
+      await ctx.editMessageText('✍️ Напиши сообщение покупателю:', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_thread_msg', wsId, threadId, back, offerId, page, h, asUserId: bmRes.userId });
@@ -15183,7 +15156,7 @@ if (p.a === 'a:bx_retry_help') {
       const kb = new InlineKeyboard()
         .text('✅ Закрыть', `a:bx_thread_close_do|ws:${wsId}|t:${threadId}${cbTail}`)
         .text('❌ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}${cbTail}`);
-      await safeEditOrReply(ctx, 'Закрыть диалог? После закрытия писать нельзя.', { reply_markup: kb });
+      await ctx.editMessageText('Закрыть диалог? После закрытия писать нельзя.', { reply_markup: kb });
       return;
     }
 
@@ -15287,7 +15260,7 @@ if (p.a === 'a:bx_retry_help') {
       const maxOffers = isPro ? CFG.BARTER_MAX_ACTIVE_OFFERS_PRO : CFG.BARTER_MAX_ACTIVE_OFFERS_FREE;
       const cntOffers = await db.countActiveBarterOffers(wsId);
       if (cntOffers >= maxOffers) {
-        await safeEditOrReply(ctx, `⚠️ Достигнут лимит активных офферов: <b>${cntOffers}/${maxOffers}</b>.
+        await ctx.editMessageText(`⚠️ Достигнут лимит активных офферов: <b>${cntOffers}/${maxOffers}</b>.
 
 Хочешь больше — включи ⭐️ PRO.`, {
           parse_mode: 'HTML',
@@ -15298,7 +15271,7 @@ if (p.a === 'a:bx_retry_help') {
 
       await ctx.answerCallbackQuery();
       await clearDraft(ctx.from.id);
-      await safeEditOrReply(ctx, '➕ <b>Новый оффер</b>\n\nШаг 1/6: выбери тип:\n\n🎬 <b>UGC</b> — контент без аудитории (главное: вкус и качество)\n📣 <b>Интеграция</b> — публикация в TG/IG (нужна аудитория)', {
+      await ctx.editMessageText('➕ <b>Новый оффер</b>\n\nШаг 1/6: выбери тип:\n\n🎬 <b>UGC</b> — контент без аудитории (главное: вкус и качество)\n📣 <b>Интеграция</b> — публикация в TG/IG (нужна аудитория)', {
         parse_mode: 'HTML',
         reply_markup: bxKindKb(wsId)
       });
@@ -15312,7 +15285,7 @@ if (p.a === 'a:bx_retry_help') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         '🧩 <b>Шаблоны оффера</b>\n\nВыбери вариант — мы подготовим категорию/формат/оплату и перейдём к тегам (опционально), затем к тексту оффера.',
         { parse_mode: 'HTML', reply_markup: bxPresetKb(wsId) }
       );
@@ -15352,7 +15325,7 @@ if (p.a === 'a:bx_retry_help') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      await safeEditOrReply(ctx, 'Шаг 1/4: выбери категорию:', {
+      await ctx.editMessageText('Шаг 1/4: выбери категорию:', {
         parse_mode: 'HTML',
         reply_markup: bxCategoryKb(wsId)
       });
@@ -15367,7 +15340,7 @@ if (p.a === 'a:bx_retry_help') {
       draft.wsId = wsId;
       draft.kind = String(p.k || 'ugc');
       await setDraft(ctx.from.id, draft);
-      await safeEditOrReply(ctx, 'Шаг 2/6: выбери категорию:', {
+      await ctx.editMessageText('Шаг 2/6: выбери категорию:', {
         parse_mode: 'HTML',
         reply_markup: bxCategoryKb(wsId)
       });
@@ -15381,7 +15354,7 @@ if (p.a === 'a:bx_cat') {
       draft.wsId = wsId;
       draft.category = p.c;
       await setDraft(ctx.from.id, draft);
-      await safeEditOrReply(ctx, 'Шаг 3/6: выбери формат сотрудничества:', {
+      await ctx.editMessageText('Шаг 3/6: выбери формат сотрудничества:', {
         parse_mode: 'HTML',
         reply_markup: bxTypeKb(wsId)
       });
@@ -15395,7 +15368,7 @@ if (p.a === 'a:bx_cat') {
       draft.wsId = wsId;
       draft.offer_type = p.t;
       await setDraft(ctx.from.id, draft);
-      await safeEditOrReply(ctx, 'Шаг 4/6: выбери тип оплаты:', {
+      await ctx.editMessageText('Шаг 4/6: выбери тип оплаты:', {
         parse_mode: 'HTML',
         reply_markup: bxCompKb(wsId)
       });
@@ -15425,7 +15398,7 @@ if (p.a === 'a:bx_cat') {
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      await safeEditOrReply(ctx, 'Шаг 4/6: выбери тип оплаты:', {
+      await ctx.editMessageText('Шаг 4/6: выбери тип оплаты:', {
         parse_mode: 'HTML',
         reply_markup: bxCompKb(wsId)
       });
@@ -15589,7 +15562,7 @@ if (p.a === 'a:bx_cat') {
       await setExpectText(ctx.from.id, { type: 'bx_media_photo', wsId, offerId, back });
 
       const kb = new InlineKeyboard().text('⬅️ Назад', `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
-      await safeEditOrReply(ctx, '🖼 Пришли <b>картинку</b> одним сообщением.', { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText('🖼 Пришли <b>картинку</b> одним сообщением.', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -15601,7 +15574,7 @@ if (p.a === 'a:bx_cat') {
       await setExpectText(ctx.from.id, { type: 'bx_media_gif', wsId, offerId, back });
 
       const kb = new InlineKeyboard().text('⬅️ Назад', `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
-      await safeEditOrReply(ctx, '🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно отправить как анимацию или как файл .gif)', { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText('🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно отправить как анимацию или как файл .gif)', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -15613,7 +15586,7 @@ if (p.a === 'a:bx_cat') {
       await setExpectText(ctx.from.id, { type: 'bx_media_video', wsId, offerId, back });
 
       const kb = new InlineKeyboard().text('⬅️ Назад', `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
-      await safeEditOrReply(ctx, '🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)', { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText('🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -15691,7 +15664,7 @@ if (p.a === 'a:bx_cat') {
         .text('✅ Архивировать', `a:bx_del_do|ws:${wsId}|o:${offerId}`)
         .text('❌ Отмена', `a:bx_view|ws:${wsId}|o:${offerId}|back:my`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `Архивировать оффер <b>#${offerId}</b>?
+      await ctx.editMessageText(`Архивировать оффер <b>#${offerId}</b>?
 
 Он исчезнет из списка, но останется в базе для истории.`, { parse_mode: 'HTML', reply_markup: kb });
       return;
@@ -15761,7 +15734,7 @@ if (p.a === 'a:cur_manage') {
   const count = curators?.length || 0;
 
   await ctx.answerCallbackQuery();
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `👥 <b>Кураторы</b>\n\nКураторы помогают проверять конкурсы и заявки.\n\nСейчас в списке: <b>${count}</b>`,
     { parse_mode: 'HTML', reply_markup: curManageKb(wsId) }
   );
@@ -15783,7 +15756,7 @@ if (p.a === 'a:cur_manage') {
       const shareText = `Приглашение куратора (одноразовая, 10 минут).\nОткрой ссылку: ${link}`;
       const shareUrl = `https://t.me/share/url?url=&text=${encodeURIComponent(shareText)}`;
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, text, {
+      await ctx.editMessageText(text, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
         reply_markup: new InlineKeyboard()
@@ -15799,7 +15772,7 @@ if (p.a === 'a:cur_manage') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➕ Введи @username куратора (он должен уже запускать бота /start).', {
+      await ctx.editMessageText('➕ Введи @username куратора (он должен уже запускать бота /start).', {
         reply_markup: new InlineKeyboard()
           .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
           .text('📋 Меню', 'a:menu')
@@ -15815,7 +15788,7 @@ if (p.a === 'a:cur_manage') {
       const curators = await db.listCurators(wsId);
       const lines = curators.map(c => `• ${c.tg_username ? '@' + escapeHtml(c.tg_username) : 'id:' + c.tg_id}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `👥 <b>Кураторы</b>
+      await ctx.editMessageText(`👥 <b>Кураторы</b>
 
 Нажми на 🗑 рядом с именем, чтобы удалить.
 
@@ -15837,7 +15810,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
         .text('✅ Удалить', `a:cur_rm_do|ws:${wsId}|u:${curatorUserId}`)
         .text('❌ Отмена', `a:cur_list|ws:${wsId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `Удалить куратора <b>${escapeHtml(label)}</b>?`, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText(`Удалить куратора <b>${escapeHtml(label)}</b>?`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -15870,7 +15843,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       // refresh list
       const curators = await db.listCurators(wsId);
       const lines = curators.map(c => `• ${c.tg_username ? '@' + escapeHtml(c.tg_username) : 'id:' + c.tg_id}`);
-      await safeEditOrReply(ctx, `👥 <b>Кураторы</b>
+      await ctx.editMessageText(`👥 <b>Кураторы</b>
 
 Нажми на 🗑 рядом с именем, чтобы удалить.
 
@@ -15907,7 +15880,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➕ <b>Новая папка</b>\n\nВведи название папки:', {
+      await ctx.editMessageText('➕ <b>Новая папка</b>\n\nВведи название папки:', {
         parse_mode: 'HTML',
         reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folders_home|ws:${wsId}`)
       });
@@ -15927,7 +15900,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const left = Math.max(0, max - cnt);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `➕ Добавь @каналы (или ссылки t.me) списком — каждый с новой строки.\n\nСвободно мест: <b>${left}</b> из <b>${max}</b>.`, {
+      await ctx.editMessageText(`➕ Добавь @каналы (или ссылки t.me) списком — каждый с новой строки.\n\nСвободно мест: <b>${left}</b> из <b>${max}</b>.`, {
         parse_mode: 'HTML',
         reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folder_open|ws:${wsId}|f:${folderId}`)
       });
@@ -15941,7 +15914,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➖ Укажи @каналы (или ссылки t.me) списком — удалю их из папки:', {
+      await ctx.editMessageText('➖ Укажи @каналы (или ссылки t.me) списком — удалю их из папки:', {
         reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folder_open|ws:${wsId}|f:${folderId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_remove_items', wsId, folderId });
@@ -15954,7 +15927,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '✏️ Введи новое название папки:', {
+      await ctx.editMessageText('✏️ Введи новое название папки:', {
         reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folder_open|ws:${wsId}|f:${folderId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_rename_title', wsId, folderId });
@@ -15970,7 +15943,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
         .text('✅ Очистить', `a:folder_clear_do|ws:${wsId}|f:${folderId}`)
         .text('❌ Отмена', `a:folder_open|ws:${wsId}|f:${folderId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Очистить папку (удалить все каналы)?', { reply_markup: kb });
+      await ctx.editMessageText('Очистить папку (удалить все каналы)?', { reply_markup: kb });
       return;
     }
 
@@ -15995,7 +15968,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
         .text('🗑 Удалить', `a:folder_delete_do|ws:${wsId}|f:${folderId}`)
         .text('❌ Отмена', `a:folder_open|ws:${wsId}|f:${folderId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Удалить папку полностью?', { reply_markup: kb });
+      await ctx.editMessageText('Удалить папку полностью?', { reply_markup: kb });
       return;
     }
 
@@ -16055,7 +16028,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
 
       const link = `https://t.me/${CFG.BOT_USERNAME}?start=fed_${wsId}_${token}`;
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `👥 <b>Invite editor</b>\n\nСсылка на ${CFG.WORKSPACE_EDITOR_INVITE_TTL_MIN || 10} минут:\n${escapeHtml(link)}\n\nРедактор сможет управлять папками этого Workspace.`, {
+      await ctx.editMessageText(`👥 <b>Invite editor</b>\n\nСсылка на ${CFG.WORKSPACE_EDITOR_INVITE_TTL_MIN || 10} минут:\n${escapeHtml(link)}\n\nРедактор сможет управлять папками этого Workspace.`, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
         reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_editors|ws:${wsId}`)
@@ -16068,7 +16041,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➕ Введи @username редактора (он должен уже запускать бота /start).', {
+      await ctx.editMessageText('➕ Введи @username редактора (он должен уже запускать бота /start).', {
         reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_editors|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'ws_editor_username', wsId });
@@ -16085,7 +16058,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
         .text('✅ Удалить', `a:ws_editor_rm_do|ws:${wsId}|u:${targetUserId}`)
         .text('❌ Отмена', `a:ws_editors|ws:${wsId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Удалить редактора?', { reply_markup: kb });
+      await ctx.editMessageText('Удалить редактора?', { reply_markup: kb });
       return;
     }
 
@@ -16117,7 +16090,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       kb.text('⬅️ Назад', `a:bx_view|ws:${wsId}|o:${offerId}|back:my`);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '📁 Выбери папку совместных каналов (она будет показываться в оффере):', { reply_markup: kb });
+      await ctx.editMessageText('📁 Выбери папку совместных каналов (она будет показываться в оффере):', { reply_markup: kb });
       return;
     }
 
@@ -16165,7 +16138,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       await clearExpectText(ctx.from.id);
 
       await ctx.answerCallbackQuery({ text: 'Соло: без спонсоров ✅' });
-      await safeEditOrReply(ctx, 'Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
+      await ctx.editMessageText('Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
       return;
     }
 
@@ -16182,7 +16155,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const isPro = await db.isWorkspacePro(wsId);
       const max = isPro ? CFG.GIVEAWAY_SPONSORS_MAX_PRO : CFG.GIVEAWAY_SPONSORS_MAX_FREE;
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✍️ Пришли список спонсоров (до ${max}) — @каналы или ссылки t.me (через пробел/перенос строки).
 
 ` +
@@ -16206,7 +16179,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const max = isPro ? CFG.GIVEAWAY_SPONSORS_MAX_PRO : CFG.GIVEAWAY_SPONSORS_MAX_FREE;
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✍️ Пришли список спонсоров (до ${max}) — @каналы или ссылки t.me (через пробел/перенос строки).\n\nЕсли это соло — нажми «✅ Без спонсоров (соло)».`,
         { reply_markup: gwSponsorsOptionalKb(wsId) }
       );
@@ -16225,7 +16198,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       await clearExpectText(ctx.from.id);
 
       await ctx.answerCallbackQuery({ text: 'Соло: без спонсоров ✅' });
-      await safeEditOrReply(ctx, 'Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
+      await ctx.editMessageText('Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
       return;
     }
 
@@ -16241,7 +16214,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       await clearExpectText(ctx.from.id);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
+      await ctx.editMessageText('Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
       return;
     }
 
@@ -16262,7 +16235,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       if (b === 'step') backCb = `a:gw_step_sponsors|ws:${wsId}`;
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `🧭 Каналы-спонсоры (подписки)
 
 Это список каналов, на которые участник должен подписаться.
@@ -16292,7 +16265,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       kb.text('⬅️ Назад', `a:gw_step_sponsors|ws:${wsId}`);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `📁 Спонсоры из папки
+      await ctx.editMessageText(`📁 Спонсоры из папки
 
 Выбери папку — каналы из неё станут спонсорами (подписки) для конкурса.
 Если папок нет — создай папку в «Мои каналы» → «Папки».`, { reply_markup: kb });
@@ -16313,7 +16286,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const max = isPro ? CFG.GIVEAWAY_SPONSORS_MAX_PRO : CFG.GIVEAWAY_SPONSORS_MAX_FREE;
       if (items.length > max) {
         await ctx.answerCallbackQuery();
-        await safeEditOrReply(ctx, `⚠️ В этой папке <b>${items.length}</b> каналов, а лимит спонсоров — <b>${max}</b>.\n\nУменьши папку или включи ⭐️ PRO.`, {
+        await ctx.editMessageText(`⚠️ В этой папке <b>${items.length}</b> каналов, а лимит спонсоров — <b>${max}</b>.\n\nУменьши папку или включи ⭐️ PRO.`, {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard().text('⭐️ PRO', `a:ws_pro|ws:${wsId}`).row().text('⬅️ Назад', `a:gw_sponsors_from_folder|ws:${wsId}`)
         });
@@ -16328,7 +16301,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
 
       const list = sponsors.map(x => `• ${escapeHtml(String(x))}`).join('\n');
       await ctx.answerCallbackQuery({ text: 'Готово.' });
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✅ Спонсоры: <b>${sponsors.length}</b>
 ${list}
 
@@ -16392,7 +16365,7 @@ ${list}
         .row()
         .text('📋 Меню', 'a:menu');
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `🗑 <b>Удалить конкурс #${gwId}?</b>
 
 Это действие необратимо (удалятся спонсоры/участники/победители).
@@ -16563,7 +16536,7 @@ ${winnersList}
     if (p.a === 'a:gw_why_enter') {
       const gwId = Number(p.i);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         'ℹ️ <b>Почему не прошёл</b>\n\nПришли <b>user_id</b> участника (цифрами).\n\nПодсказка: участник может узнать свой id командой /whoami.',
         { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_stats|i:${gwId}`) }
       );
@@ -16573,7 +16546,7 @@ ${winnersList}
     if (p.a === 'a:gw_why_forward') {
       const gwId = Number(p.i);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         'ℹ️ <b>Почему не прошёл</b>\n\nПерешли сюда сообщение участника (forward).\n\nВажно: если у участника включена “Forward privacy”, бот не увидит user_id — тогда используй “Ввести ID”.',
         { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_why|i:${gwId}`) }
       );
@@ -16595,7 +16568,7 @@ ${winnersList}
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await clearDraft(ctx.from.id);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '🎁 <b>Новый конкурс</b>\n\nВыбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
+      await ctx.editMessageText('🎁 <b>Новый конкурс</b>\n\nВыбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
       return;
     }
 
@@ -16605,7 +16578,7 @@ ${winnersList}
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         '🧩 <b>Пресеты конкурса</b>\n\nВыбери вариант — мы подготовим тип приза и текст. Потом выберешь количество мест, спонсоров и дедлайн.',
         { parse_mode: 'HTML', reply_markup: gwPresetKb(wsId) }
       );
@@ -16622,7 +16595,7 @@ ${winnersList}
       await ctx.answerCallbackQuery();
       await clearDraft(ctx.from.id);
       await setDraft(ctx.from.id, { wsId, prize_type: preset.prize_type, prize_value_text: preset.prize_value_text });
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✅ Пресет применён.\n\n<b>Приз:</b> <code>${escapeHtml(preset.prize_value_text)}</code>\n\nТеперь выбери количество призовых мест:`,
         { parse_mode: 'HTML', reply_markup: gwNewStepWinnersKb(wsId) }
       );
@@ -16635,7 +16608,7 @@ if (p.a === 'a:gw_prize') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       const type = p.t;
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, gwPrizePrompt(type), {
+      await ctx.editMessageText(gwPrizePrompt(type), {
         parse_mode: 'HTML',
         reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_new|ws:${wsId}`)
       });
@@ -16665,7 +16638,7 @@ if (p.a === 'a:gw_prize') {
         .text('🧭 Что такое спонсоры?', `a:gw_sponsors_help|ws:${wsId}`)
         .row()
         .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `Спонсоры (необязательно, до ${max}).\n\n` +
         `Если это соло — нажми «✅ Без спонсоров (соло)».\n` +
         `Если есть партнёры — нажми «✍️ Ввести списком» и пришли список @каналов или t.me ссылками (можно просто прислать).`,
@@ -16680,7 +16653,7 @@ if (p.a === 'a:gw_prize') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Введи число призовых мест (1..50):', {
+      await ctx.editMessageText('Введи число призовых мест (1..50):', {
         reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_new|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'gw_winners_custom', wsId });
@@ -16702,7 +16675,7 @@ if (p.a === 'a:gw_prize') {
         .text('🧭 Что такое спонсоры?', `a:gw_sponsors_help|ws:${wsId}`)
         .row()
         .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `Спонсоры (необязательно, до ${max}).\n\n` +
         `Если соло — нажми «✅ Без спонсоров (соло)».\n` +
         `Если есть партнёры — нажми «✍️ Ввести списком» и пришли список @каналов или t.me ссылками (можно просто прислать).`,
@@ -16715,7 +16688,7 @@ if (p.a === 'a:gw_prize') {
     if (p.a === 'a:gw_step_deadline') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
+      await ctx.editMessageText('Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
       return;
     }
 
@@ -16739,7 +16712,7 @@ if (p.a === 'a:gw_prize') {
     if (p.a === 'a:gw_deadline_custom') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Введи дедлайн в формате DD.MM HH:MM (МСК). Пример: 20.01 18:00', {
+      await ctx.editMessageText('Введи дедлайн в формате DD.MM HH:MM (МСК). Пример: 20.01 18:00', {
         reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_step_deadline|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'gw_deadline_custom', wsId });
@@ -16780,7 +16753,7 @@ if (p.a === 'a:gw_prize') {
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'gw_media_photo', wsId });
       const kb = new InlineKeyboard().text('⬅️ Назад', `a:gw_media_step|ws:${wsId}`);
-      await safeEditOrReply(ctx, '🖼 Пришли <b>картинку</b> одним сообщением.\n\n(Можно пропустить этот шаг)', {
+      await ctx.editMessageText('🖼 Пришли <b>картинку</b> одним сообщением.\n\n(Можно пропустить этот шаг)', {
         parse_mode: 'HTML',
         reply_markup: kb
       });
@@ -16792,7 +16765,7 @@ if (p.a === 'a:gw_prize') {
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'gw_media_gif', wsId });
       const kb = new InlineKeyboard().text('⬅️ Назад', `a:gw_media_step|ws:${wsId}`);
-      await safeEditOrReply(ctx, '🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно пропустить этот шаг)', {
+      await ctx.editMessageText('🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно пропустить этот шаг)', {
         parse_mode: 'HTML',
         reply_markup: kb
       });
@@ -16803,7 +16776,7 @@ if (p.a === 'a:gw_prize') {
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'gw_media_video', wsId });
       const kb = new InlineKeyboard().text('⬅️ Назад', `a:gw_media_step|ws:${wsId}`);
-      await safeEditOrReply(ctx, `🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)`, {
+      await ctx.editMessageText(`🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)`, {
         parse_mode: 'HTML',
         reply_markup: kb
       });
@@ -16968,7 +16941,7 @@ ${actionHint}`;
         await renderGwOpen(ctx, u.id, created.id);
       } catch (e) {
         await ctx.answerCallbackQuery({ text: 'Не удалось опубликовать.' });
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           `⚠️ Не удалось отправить пост в канал.\n\nПроверь: бот админ в канале, есть право писать.\n\nОшибка: ${escapeHtml(String(e?.message || e))}`,
           { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) }
         );
@@ -16996,7 +16969,7 @@ ${actionHint}`;
       const kb = participantKb(gwId, entryNow, { pub });
 
       try {
-        await safeEditOrReply(ctx, screen, { parse_mode: 'HTML', reply_markup: kb });
+        await ctx.editMessageText(screen, { parse_mode: 'HTML', reply_markup: kb });
       } catch {
         await ctx.reply(screen, { parse_mode: 'HTML', reply_markup: kb });
       }
@@ -17018,7 +16991,7 @@ ${actionHint}`;
       await ctx.answerCallbackQuery({ text: '⏳ Проверяю…' });
       try {
         const text0 = renderParticipantScreen(g, entry0, { checking: true, sponsors });
-        await safeEditOrReply(ctx, text0, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry0, { pub: isPub }) });
+        await ctx.editMessageText(text0, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry0, { pub: isPub }) });
       } catch {
         // ignore edit errors
       }
@@ -17030,7 +17003,7 @@ ${actionHint}`;
       try {
         const entry = await db.getEntryStatus(gwId, u.id);
         const text1 = renderParticipantScreen(g, entry, { hint: true, sponsors, elig: check });
-        await safeEditOrReply(ctx, text1, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: isPub, blocker: check.firstBlocker, firstBlockerHandle: check.firstBlockerHandle }) });
+        await ctx.editMessageText(text1, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: isPub, blocker: check.firstBlocker, firstBlockerHandle: check.firstBlockerHandle }) });
       } catch {
         const msg = check.isEligible ? '✅ Участие подтверждено!' : '⚠️ Пока не подтверждено.';
         await ctx.reply(msg + (check.unknown ? '\n\n💡 Если бот не может проверить — попроси админа добавить бота в канал-спонсор.' : ''));
@@ -17050,7 +17023,7 @@ ${actionHint}`;
         .text('❌ Отмена', `a:gw_open|i:${gwId}`);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '📣 Отправить напоминание в канал конкурса?\n\nЭто поднимет Eligible %.', { reply_markup: kb });
+      await ctx.editMessageText('📣 Отправить напоминание в канал конкурса?\n\nЭто поднимет Eligible %.', { reply_markup: kb });
       return;
     }
 
@@ -17088,7 +17061,7 @@ ${actionHint}`;
       } catch (e) {
         await redis.del(rlKey);
         await ctx.answerCallbackQuery({ text: 'Не удалось.' });
-        await safeEditOrReply(ctx, `⚠️ Ошибка отправки: ${escapeHtml(String(e?.message || e))}`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_open|i:${gwId}`) });
+        await ctx.editMessageText(`⚠️ Ошибка отправки: ${escapeHtml(String(e?.message || e))}`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_open|i:${gwId}`) });
       }
       return;
     }
@@ -17102,7 +17075,7 @@ ${actionHint}`;
         .text('✅ Завершить', `a:gw_end_do|i:${gwId}`)
         .text('❌ Отмена', `a:gw_open|i:${gwId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '🏁 Завершить конкурс сейчас?', { reply_markup: kb });
+      await ctx.editMessageText('🏁 Завершить конкурс сейчас?', { reply_markup: kb });
       return;
     }
 
@@ -17147,7 +17120,7 @@ async function renderVerifyInfo(ctx) {
 2) Модератор проверит
 3) Получишь ответ в этом чате`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderVerifyHome(ctx, userRow) {
@@ -17206,7 +17179,7 @@ ${escapeHtml(v.rejection_reason)}` : '';
 ${benefits}
 Чтобы отправить заявку — выбери роль и пришли 1 сообщение с пруфами.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 // -----------------------------
@@ -17237,7 +17210,7 @@ async function renderAdminHome(ctx) {
     .row()
     .text('⬅️ Назад', 'a:menu');
 
-  await safeEditOrReply(ctx, text, { reply_markup: kb });
+  await ctx.editMessageText(text, { reply_markup: kb });
 }
 
 
@@ -17326,7 +17299,7 @@ async function renderAdminMetrics(ctx, days = 14) {
     .row()
     .text('⬅️ Админка', 'a:admin_home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderAdminModerators(ctx) {
@@ -17358,7 +17331,7 @@ async function renderAdminModerators(ctx) {
 
   kb.text('⬅️ Админка', 'a:admin_home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
@@ -17383,7 +17356,7 @@ async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
   if (rows.length === limit) kb.text('➡️ Далее', `a:admin_payments|st:${status}|p:${Number(page) + 1}`);
     kb.row().text('⬅️ Админка', 'a:admin_home');
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `💳 <b>Payments</b> • <b>${escapeHtml(status)}</b>
 
 ${escapeHtml(lines)}`,
@@ -17394,7 +17367,7 @@ ${escapeHtml(lines)}`,
 async function renderAdminPaymentView(ctx, paymentId, backStatus = 'ORPHANED', page = 0) {
   const p = await db.getPaymentById(Number(paymentId));
   if (!p) {
-    await safeEditOrReply(ctx, '⚠️ Платеж не найден.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_payments|st:${backStatus}|p:${page}`) });
+    await ctx.editMessageText('⚠️ Платеж не найден.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_payments|st:${backStatus}|p:${page}`) });
     return;
   }
 
@@ -17426,7 +17399,7 @@ Payload:
 Note:
 <tg-spoiler>${escapeHtml(String(p.note || '—'))}</tg-spoiler>`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORPHANED', page = 0) {
@@ -17538,7 +17511,7 @@ async function renderModHome(ctx) {
   }
 
   kb.row().text('📋 Меню', 'a:menu');
-  await safeEditOrReply(ctx, '🛡 <b>Модерация</b>\n\nВыбери действие:', { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText('🛡 <b>Модерация</b>\n\nВыбери действие:', { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderModReports(ctx, page = 0) {
@@ -17561,13 +17534,13 @@ async function renderModReports(ctx, page = 0) {
   if (rows.length === limit) kb.text('➡️ Далее', `a:mod_reports|p:${page + 1}`);
     kb.row().text('⬅️ Модерация', 'a:mod_home');
 
-  await safeEditOrReply(ctx, `🚩 <b>Очередь жалоб</b>\n\n${escapeHtml(lines)}`, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(`🚩 <b>Очередь жалоб</b>\n\n${escapeHtml(lines)}`, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderModReportView(ctx, reportId) {
   const r = await db.getBarterReport(reportId);
   if (!r) {
-    await safeEditOrReply(ctx, 'Жалоба не найдена.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:mod_reports') });
+    await ctx.editMessageText('Жалоба не найдена.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:mod_reports') });
     return;
   }
   const who = r.reporter_username ? '@' + r.reporter_username : 'id ' + r.reporter_tg_id;
@@ -17587,7 +17560,7 @@ async function renderModReportView(ctx, reportId) {
     (r.thread_id ? `Тред: #${r.thread_id}\n` : '') +
     `\nПричина:\n${escapeHtml(r.reason || '—')}`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
@@ -17623,7 +17596,7 @@ async function renderModVerifs(ctx, page = 0) {
     }).join('\n')
     : 'Пока нет заявок.');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderModVerifView(ctx, userId, page = 0) {
@@ -17653,5 +17626,5 @@ ${escapeHtml(v.submitted_text || '—')}`;
     .text('⬅️ К очереди', `a:mod_verifs|p:${page}`)
     .text('⬅️ Модерация', 'a:mod_home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
