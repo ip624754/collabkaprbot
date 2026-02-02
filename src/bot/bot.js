@@ -1520,6 +1520,17 @@ function offerMetaLinesHtml(meta) {
   return lines.length ? lines.join('\n') : '';
 }
 
+function offerMetaCountsInline(meta) {
+  const m = parseOfferMeta(meta);
+  const g = Array.isArray(m.goals_tags) ? m.goals_tags.length : 0;
+  const r = Array.isArray(m.req_tags) ? m.req_tags.length : 0;
+  if (!g && !r) return '';
+  const parts = [];
+  if (g) parts.push(`🎯 ${g}`);
+  if (r) parts.push(`📎 ${r}`);
+  return parts.join(' · ');
+}
+
 function brandBudgetBucketTitle(key) {
   if (!key) return '—';
   return BRAND_BUDGET_BUCKETS.find(x => x.key === key)?.title || '—';
@@ -1654,7 +1665,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
       .text('📞 Контакт', `a:brand_prof_set${suf}|f:co|from:home`)
       .text('🔗 Ссылка', `a:brand_prof_set${suf}|f:li|from:home`)
       .row()
-      .text('✨ Расширенный профиль', `a:brand_profile_more${suf}`)
+      .text('✨ Расширенный', `a:brand_profile_more${suf}`)
       .text('🧹 Сбросить профиль', `a:brand_prof_reset${suf}`)
       .row()
       .text('✅ Готово', `a:brand_profile${suf}`)
@@ -1670,7 +1681,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 
   kb
     .text('✏️ Редактировать', `a:brand_profile_edit${suf}`)
-    .text('✨ Расширенный профиль', `a:brand_profile_more${suf}`)
+    .text('✨ Расширенный', `a:brand_profile_more${suf}`)
     .row()
     .text('🧹 Сбросить профиль', `a:brand_prof_reset${suf}`)
     .text('🏠 Меню', 'a:menu')
@@ -2581,8 +2592,8 @@ function bxCompKb(wsId) {
 
 function bxOfferTagsKb(wsId, meta, opts = {}) {
   const m = parseOfferMeta(meta);
-  const goalsLabel = bxTagsLabel(m.goals_tags, 'goals');
-  const reqLabel = bxTagsLabel(m.req_tags, 'req');
+  const goalsLabel = bxTagsLabel(m.goals_tags, 'goals', 'Не выбрано');
+  const reqLabel = bxTagsLabel(m.req_tags, 'req', 'Не выбрано');
 
   const kb = new InlineKeyboard()
     .text(`🎯 Цели: ${goalsLabel}`, `a:bx_otpick|ws:${wsId}|k:goals`)
@@ -2629,8 +2640,8 @@ async function renderBxOfferTagsStep(ctx, wsId, opts = {}) {
   const draft = (await getDraft(ctx.from.id)) || {};
   const meta = draft.offer_meta || {};
   const parsed = parseOfferMeta(meta);
-  const goalsLabel = bxTagsLabel(parsed.goals_tags, 'goals');
-  const reqLabel = bxTagsLabel(parsed.req_tags, 'req');
+  const goalsLabel = bxTagsLabel(parsed.goals_tags, 'goals', 'Не выбрано');
+  const reqLabel = bxTagsLabel(parsed.req_tags, 'req', 'Не выбрано');
 
   const preset = opts.fromPreset || null;
   const presetNote = preset ? `\n\n<i>Шаблон: ${escapeHtml(String(preset.title || '')).slice(0, 60)}</i>` : '';
@@ -2655,7 +2666,7 @@ async function renderBxOfferTagsPicker(ctx, wsId, key) {
   const kb = bxOfferTagsPickerKb(wsId, key, meta);
   const title = kb.__title || (key === 'goals' ? '🎯 Цели оффера' : '📎 Требования');
   const parsed = parseOfferMeta(meta);
-  const cur = key === 'goals' ? bxTagsLabel(parsed.goals_tags, 'goals') : bxTagsLabel(parsed.req_tags, 'req');
+  const cur = key === 'goals' ? bxTagsLabel(parsed.goals_tags, 'goals', 'Не выбрано') : bxTagsLabel(parsed.req_tags, 'req', 'Не выбрано');
   const hint = key === 'goals'
     ? 'Выбери цели оффера (можно несколько).'
     : 'Выбери требования/условия для бренда (можно несколько).';
@@ -2699,9 +2710,9 @@ async function renderBxOfferTextStep(ctx, wsId) {
   await setExpectText(ctx.from.id, { type: 'bx_offer_text', wsId });
 }
 
-function bxTagsLabel(keys, kind) {
+function bxTagsLabel(keys, kind, emptyLabel = 'Все') {
   const arr = Array.isArray(keys) ? keys : [];
-  if (!arr.length) return 'Все';
+  if (!arr.length) return emptyLabel;
   const defs = kind === 'goals' ? BRAND_GOALS_TAGS : BRAND_REQ_TAGS;
   const prev = brandTagsPreview(arr, defs, { max: 2 });
   return prev || `... (${arr.length})`;
@@ -6159,9 +6170,11 @@ ${escapeHtml(blurb)}${body.length > 90 ? '…' : ''}` : ''}${c}`;
 
   const offerLines = rows.map((o) => {
     const ch = o.channel_username ? `@${o.channel_username}` : (o.ws_title || 'канал');
+    const metaCounts = offerMetaCountsInline(o.meta);
+    const metaSuffix = metaCounts ? ` · ${metaCounts}` : '';
     return `#${o.id} · ${escapeHtml(bxCategoryLabel(o.category))}
 <b>${escapeHtml(o.title)}</b>
-${escapeHtml(bxTypeLabel(o.offer_type))} · ${escapeHtml(bxCompLabel(o.compensation_type))}
+${escapeHtml(bxTypeLabel(o.offer_type))} · ${escapeHtml(bxCompLabel(o.compensation_type))}${metaSuffix}
 Канал: ${escapeHtml(ch)}${o.creator_verified ? ' ✅' : ''}`;
   });
 
@@ -6438,6 +6451,7 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0) {
   const text = `🎛 <b>Фильтры креаторов</b>
 <i>Режим: 🏷 Бренд · Ты ищешь: 🎬 креаторов</i>
 <i>Фильтруем креаторов по тому, что они указали в оффере.</i>
+<i>Для тегов: совпадение по любому из выбранных.</i>
 
 ${escapeHtml(bxFilterSummary(f))}
 
@@ -6503,6 +6517,7 @@ async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0) {
 
   const text = `🎛 <b>${escapeHtml(title)}</b>
 <i>${escapeHtml(hint)}</i>
+<i>Совпадение: любой из выбранных тегов.</i>
 
 Текущее: <b>${escapeHtml(cur)}</b>
 
@@ -9856,6 +9871,10 @@ if (exp.type === 'brand_deals_search') {
       db.trackEvent('bx_offer_published', { userId: u.id, wsId, meta: { offerId: offer.id, category: draft.category, offerType: draft.offer_type, compensationType: draft.compensation_type } });
       await clearDraft(ctx.from.id);
 
+      const metaWarn = offer && offer.__meta_missing
+        ? "\n\n⚠️ <b>Теги оффера временно не сохранены</b> (база не обновлена). Примени migrations/028_barter_offers_meta.sql и попробуй отредактировать оффер ещё раз."
+        : '';
+
       const kb = new InlineKeyboard()
         .text('📁 Прикрепить папку каналов', `a:bx_partner_folder_pick|ws:${wsId}|o:${offer.id}`)
         .row()
@@ -9869,7 +9888,7 @@ if (exp.type === 'brand_deals_search') {
 #${offer.id} · ${bxCategoryLabel(offer.category)}
 <b>${escapeHtml(offer.title)}</b>
 ${escapeHtml(bxTypeLabel(offer.offer_type))} · ${escapeHtml(bxCompLabel(offer.compensation_type))}
-Контакт: <b>${escapeHtml(contact)}</b>
+Контакт: <b>${escapeHtml(contact)}</b>${metaWarn}
 
 📁 Хочешь добавить папку совместных каналов (партнёры/спонсоры)?`,
         { parse_mode: 'HTML', reply_markup: kb }
@@ -10837,6 +10856,13 @@ UGC vs Интеграция
     const uiMode = await resolveUiMode(ctx.from.id);
     const activeWs = await getActiveWorkspace(ctx.from.id);
 
+    let offersMetaOk = null;
+    try {
+      offersMetaOk = await db.hasBarterOffersMetaColumn();
+    } catch {
+      offersMetaOk = null;
+    }
+
     // Raw BD filter payload (Redis JSON)
     let bdRaw = null;
     let bdRawObj = null;
@@ -10904,6 +10930,10 @@ UGC vs Интеграция
     lines.push('');
     lines.push(`TG: <code>${ctx.from.id}</code> · user_id: <code>${u.id}</code> · ${uname}`);
     lines.push(`UI mode: <b>${escapeHtml(uiModeHuman(uiMode))}</b> · active_ws: <code>${activeWs || 0}</code>`);
+    lines.push(`barter_offers.meta: <b>${offersMetaOk === null ? '—' : (offersMetaOk ? 'OK' : 'MISSING')}</b>`);
+    if (offersMetaOk === false) {
+      lines.push(`⚠️ Примени migrations/028_barter_offers_meta.sql — иначе теги офферов и tag-фильтры работать не будут.`);
+    }
     lines.push('');
 
     lines.push('<b>BD filter (normalized)</b>');
@@ -10935,10 +10965,39 @@ UGC vs Интеграция
         lines.push(`• category: <code>${escapeHtml(String(bx.category || ''))}</code>`);
         lines.push(`• offerType: <code>${escapeHtml(String(bx.offerType || ''))}</code>`);
         lines.push(`• compensationType: <code>${escapeHtml(String(bx.compensationType || ''))}</code>`);
+        lines.push(`• goalsTags: <code>${escapeHtml((bx.goalsTags || []).join(',') || '')}</code>`);
+        lines.push(`• reqTags: <code>${escapeHtml((bx.reqTags || []).join(',') || '')}</code>`);
+
+        // counts + sample ids for current BX filter (debug "0 results" cases)
+        try {
+          const bxCount = await db.countNetworkBarterOffers({
+            category: bx.category,
+            offerType: bx.offerType,
+            compensationType: bx.compensationType,
+            goalsTags: bx.goalsTags,
+            reqTags: bx.reqTags,
+          });
+          let sampleIds = [];
+          try {
+            const sampleRows = await db.listNetworkBarterOffers({
+              category: bx.category,
+              offerType: bx.offerType,
+              compensationType: bx.compensationType,
+              goalsTags: bx.goalsTags,
+              reqTags: bx.reqTags,
+              limit: 5,
+              offset: 0,
+            });
+            sampleIds = (sampleRows || []).map((x) => x.id).filter(Boolean);
+          } catch {}
+          lines.push(`• match_count: <b>${bxCount}</b>`);
+          if (sampleIds.length) lines.push(`• sample_ids: <code>${escapeHtml(sampleIds.join(','))}</code>`);
+        } catch {}
       }
     } catch {}
 
-    // Raw Redis (compact)
+// Raw Redis (compact)
+ (compact)
     if (bdRaw) {
       lines.push('');
       lines.push('<b>BD filter (raw redis)</b>');
@@ -11770,6 +11829,30 @@ if (p.a === 'a:menu') {
         });
         return;
       }
+      await renderMainMenu(ctx, flags, { edit: true });
+      await maybeSendBanner(ctx, 'menu', CFG.MENU_BANNER_FILE_ID);
+      return;
+    }
+
+    // Toggle Curator UI mode (stored in Redis). Missing handler used to create "dead" buttons.
+    if (p.a === 'a:cur_mode_set') {
+      await ctx.answerCallbackQuery();
+      const enabled = String(p.v || '0') === '1';
+      await setCuratorMode(ctx.from.id, enabled);
+
+      const ret = String(p.ret || 'menu');
+      const flags = await getRoleFlags(u, ctx.from.id);
+
+      // If user wants to stay in curator cabinet — render it. Otherwise refresh menu.
+      if (ret === 'cur') {
+        if (!flags.isCurator && !flags.isAdmin) {
+          await renderMainMenu(ctx, flags, { edit: true });
+          return;
+        }
+        await renderCuratorHome(ctx, u.id);
+        return;
+      }
+
       await renderMainMenu(ctx, flags, { edit: true });
       await maybeSendBanner(ctx, 'menu', CFG.MENU_BANNER_FILE_ID);
       return;
@@ -12926,8 +13009,35 @@ ${link}`;
         return;
       }
 
+      // Home view (non-edit). Edit view is `a:brand_profile_edit`.
+      await renderBrandProfileHome(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, edit: false });
+      return;
+    }
+
+    // Brand profile edit (base 4/4 fields)
+    if (p.a === 'a:brand_profile_edit') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws || 0);
+      const ret = String(p.ret || 'brand');
+      const bo = p.bo ? Number(p.bo) : null;
+      const bp = p.bp ? Number(p.bp) : 0;
+
+      const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
+      if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
+        await ctx.editMessageText(
+          '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
+          { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
+        );
+        return;
+      }
+
       await renderBrandProfileHome(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, edit: true });
       return;
+    }
+
+    // Alias: old callback id from keyboards
+    if (p.a === 'a:brand_profile_more') {
+      p.a = 'a:brand_prof_more';
     }
 
     if (p.a === 'a:brand_continue') {
@@ -13533,6 +13643,11 @@ if (p.a === 'a:match_home') {
     }
 
     // Admin / Moderation
+    if (p.a === 'a:admin') {
+      // Backward-compat alias
+      p.a = 'a:admin_home';
+    }
+
     if (p.a === 'a:admin_home') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -13989,6 +14104,20 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:bx_pub') {
       await ctx.answerCallbackQuery();
       await renderBxPublicView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
+      return;
+    }
+
+    // Back-link helper: return to offer view (used by Brand Profile flow)
+    if (p.a === 'a:offer_open') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws || 0);
+      const offerId = Number(p.id || 0);
+      const page = Number(p.p || 0);
+      if (!offerId) {
+        await ctx.answerCallbackQuery({ text: 'Оффер не найден.', show_alert: true });
+        return;
+      }
+      await renderBxPublicView(ctx, u.id, wsId, offerId, page);
       return;
     }
 
