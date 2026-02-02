@@ -2405,7 +2405,7 @@ function brandDirMultiPickKb(key, page, selected) {
 
 async function renderBrandDirFilters(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
-  const f = await getBrandDirFilter(ctx.from.id);
+  const f = await getBrandDirFilter(viewerUserId);
 
   // Small helper count: makes it obvious whether "0 results" is data vs filter logic
   let matchCount = null;
@@ -2439,7 +2439,7 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
   const key = String(params.key || 'cat');
   const title = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : (key === 'comp' ? 'Оплата' : 'Бюджет'));
 
-  const f = await getBrandDirFilter(ctx.from.id);
+  const f = await getBrandDirFilter(viewerUserId);
 
   const hint =
     key === 'cat' ? 'По нише, указанной брендом (поле «Ниша»).' :
@@ -2472,7 +2472,7 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
 async function renderBrandDirMultiPick(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
   const key = String(params.key || 'goals');
-  const f = await getBrandDirFilter(ctx.from.id);
+  const f = await getBrandDirFilter(viewerUserId);
   const selected = key === 'goals' ? f.goalsTags : f.reqTags;
   const title = key === 'goals' ? 'Цели (теги)' : 'Требования (теги)';
 
@@ -2499,7 +2499,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   const PAGE_SIZE = 8;
   const offset = page * PAGE_SIZE;
 
-  const f = await getBrandDirFilter(ctx.from.id);
+  const f = await getBrandDirFilter(viewerUserId);
 
   const rows = await safeBrandProfiles(
     () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
@@ -2587,7 +2587,7 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
 
   let viewerFilter = null;
   try {
-    viewerFilter = await getBrandDirFilter(ctx.from.id);
+    viewerFilter = await getBrandDirFilter(viewerUserId);
   } catch (_) {
     viewerFilter = null;
   }
