@@ -1831,8 +1831,8 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
       .text('✏️ Название', `a:brand_prof_set${suf}|f:bn|from:home`)
       .text('🏷 Ниша', `a:brand_prof_set${suf}|f:ni|from:home`)
       .row()
-      .text('📞 Контакт', `a:brand_prof_set${suf}|f:co|from:home`)
-      .text('🔗 Ссылка', `a:brand_prof_set${suf}|f:li|from:home`)
+      .text('📞 Контакт', `a:brand_prof_set${suf}|f:ct|from:home`)
+      .text('🔗 Ссылка', `a:brand_prof_set${suf}|f:bl|from:home`)
       .row()
       .text('✨ Расширенный', `a:brand_profile_more${suf}`)
       .text('🧹 Сбросить профиль', `a:brand_prof_reset${suf}`)
@@ -4145,7 +4145,11 @@ async function renderWsProfile(ctx, ownerUserId, wsId) {
       ? `🔗 <b>Ссылка для брендов</b> (вставь в IG bio / сторис):\n<code>${escapeHtml(link)}</code>`
       : `⚠️ Не задан BOT_USERNAME — ссылка для брендов недоступна.`);
 
-  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: wsProfileKb(wsId, ws), disable_web_page_preview: true });
+  try {
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: wsProfileKb(wsId, ws), disable_web_page_preview: true });
+  } catch {
+    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: wsProfileKb(wsId, ws), disable_web_page_preview: true });
+  }
 }
 
 
@@ -9851,7 +9855,8 @@ if (exp.type === 'brand_deals_search') {
       await db.setWorkspaceSetting(wsId, patch);
       await db.auditWorkspace(wsId, u.id, 'ws.profile_updated', { field });
 
-      await ctx.reply('✅ Сохранено.', { reply_markup: wsMenuKb(wsId) });
+      await clearExpectText(ctx.from.id);
+      await renderWsProfile(ctx, u.id, wsId);
       return;
     }
 
@@ -13031,7 +13036,7 @@ if (p.a === 'a:ws_prof_mode') {
         geo: '✍️ Введи город/гео.'
       };
       await ctx.editMessageText(prompts[field] || prompts.title, {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu')
       });
       await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field });
       return;
