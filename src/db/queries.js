@@ -492,6 +492,33 @@ export async function listCurators(workspaceId) {
   return r.rows;
 }
 
+
+// Curator activity summary for HQ (no migrations): aggregate giveaway_audit for the workspace.
+export async function getCuratorWorkspaceSummary(workspaceId, windowDays = 30, limit = 50) {
+  const days = Math.max(1, Math.min(365, Number(windowDays || 30)));
+  const lim = Math.max(1, Math.min(200, Number(limit || 50)));
+  const r = await pool.query(
+    `select
+       u.id as user_id,
+       u.tg_username,
+       count(*)::int as actions,
+       count(*) filter (where a.action='curator.note')::int as notes,
+       count(*) filter (where a.action='gw.reminder_posted' and (a.payload->>'actor_role')='curator')::int as reminders,
+       count(*) filter (where a.action='curator.owner_notified')::int as notifies,
+       max(a.created_at) as last_at
+     from giveaway_audit a
+     join users u on u.id = a.actor_user_id
+     where a.workspace_id=$1
+       and a.actor_user_id is not null
+       and a.created_at >= now() - ($2::text || ' days')::interval
+     group by u.id, u.tg_username
+     order by last_at desc nulls last
+     limit $3`,
+    [workspaceId, days, lim]
+  );
+  return r.rows;
+}
+
 export async function removeCurator(workspaceId, curatorUserId) {
   await pool.query(
     `delete from workspace_curators where workspace_id=$1 and user_id=$2`,
