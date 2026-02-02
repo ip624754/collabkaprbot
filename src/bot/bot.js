@@ -1493,6 +1493,33 @@ function parseBrandMeta(meta) {
   return meta;
 }
 
+// Creator offer structured meta (used for brand-side filtering)
+function parseOfferMeta(meta) {
+  const m = (meta && typeof meta === 'object') ? meta : {};
+  const goals = Array.isArray(m.goals_tags) ? m.goals_tags : [];
+  const req = Array.isArray(m.req_tags) ? m.req_tags : [];
+
+  const goalsSet = new Set(goals.map((x) => String(x || '')).filter((k) => BRAND_GOALS_KEYS.has(k)));
+  const reqSet = new Set(req.map((x) => String(x || '')).filter((k) => BRAND_REQ_KEYS.has(k)));
+
+  return {
+    goals_tags: Array.from(goalsSet),
+    req_tags: Array.from(reqSet)
+  };
+}
+
+function offerMetaLinesHtml(meta) {
+  const m = parseOfferMeta(meta);
+  const lines = [];
+  if (m.goals_tags.length) {
+    lines.push(`🎯 Цели: <code>${escapeHtml(brandTagsPreview(m.goals_tags, BRAND_GOALS_TAGS, 8))}</code>`);
+  }
+  if (m.req_tags.length) {
+    lines.push(`📎 Требования: <code>${escapeHtml(brandTagsPreview(m.req_tags, BRAND_REQ_TAGS, 8))}</code>`);
+  }
+  return lines.length ? lines.join('\n') : '';
+}
+
 function brandBudgetBucketTitle(key) {
   if (!key) return '—';
   return BRAND_BUDGET_BUCKETS.find(x => x.key === key)?.title || '—';
@@ -2552,15 +2579,150 @@ function bxCompKb(wsId) {
     .text('⬅️ Назад', `a:bx_new|ws:${wsId}`);
 }
 
-function bxFiltersKb(wsId, f, page = 0) {
+function bxOfferTagsKb(wsId, meta, opts = {}) {
+  const m = parseOfferMeta(meta);
+  const goalsLabel = bxTagsLabel(m.goals_tags, 'goals');
+  const reqLabel = bxTagsLabel(m.req_tags, 'req');
+
   const kb = new InlineKeyboard()
-    .text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|p:${page}`)
+    .text(`🎯 Цели: ${goalsLabel}`, `a:bx_otpick|ws:${wsId}|k:goals`)
+    .text(`📎 Требования: ${reqLabel}`, `a:bx_otpick|ws:${wsId}|k:req`)
+    .row()
+    .text('➡️ К тексту', `a:bx_otnext|ws:${wsId}`)
+    .text('⏭ Пропустить', `a:bx_otskip|ws:${wsId}`)
+    .row();
+
+  if (opts.showParams) {
+    kb.text('⚙️ Изменить параметры', `a:bx_params|ws:${wsId}`).row();
+  }
+
+  kb.text('⬅️ Назад', `a:bx_comp_pick|ws:${wsId}`).text('❌ Отмена', `a:bx_open|ws:${wsId}`).row();
+
+  return kb;
+}
+
+function bxOfferTagsPickerKb(wsId, key, meta, opts = {}) {
+  const m = parseOfferMeta(meta);
+  const sel = key === 'goals' ? m.goals_tags : m.req_tags;
+  const defs = key === 'goals' ? BRAND_GOALS_TAGS : BRAND_REQ_TAGS;
+  const title = key === 'goals' ? '🎯 Цели оффера' : '📎 Требования к бренду';
+
+  const set = new Set(sel);
+  const kb = new InlineKeyboard();
+
+  const items = defs.map((t) => ({
+    text: `${set.has(t.key) ? '✅ ' : ''}${t.title}`,
+    cb: `a:bx_ott|ws:${wsId}|k:${key}|v:${t.key}`,
+  }));
+  kbAddPairs(kb, items, 2);
+  kb.row();
+  kb.text('🧹 Очистить', `a:bx_otclr|ws:${wsId}|k:${key}`)
+    .text('✅ Готово', `a:bx_otdone|ws:${wsId}`)
+    .row();
+  kb.text('⬅️ Назад', `a:bx_ottags|ws:${wsId}`).row();
+  kb.__title = title;
+  return kb;
+}
+
+
+async function renderBxOfferTagsStep(ctx, wsId, opts = {}) {
+  const draft = (await getDraft(ctx.from.id)) || {};
+  const meta = draft.offer_meta || {};
+  const parsed = parseOfferMeta(meta);
+  const goalsLabel = bxTagsLabel(parsed.goals_tags, 'goals');
+  const reqLabel = bxTagsLabel(parsed.req_tags, 'req');
+
+  const preset = opts.fromPreset || null;
+  const presetNote = preset ? `\n\n<i>Шаблон: ${escapeHtml(String(preset.title || '')).slice(0, 60)}</i>` : '';
+
+  const text =
+`Шаг 5/6: <b>теги оффера</b>
+<i>Опционально — можно пропустить.</i>
+
+🎯 Цели: <b>${escapeHtml(goalsLabel)}</b>
+📎 Требования: <b>${escapeHtml(reqLabel)}</b>
+
+💡 Теги помогут брендам быстро фильтровать офферы.${presetNote}`;
+
+  const kb = bxOfferTagsKb(wsId, meta, { showParams: Boolean(opts.showParams) });
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
+  await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderBxOfferTagsPicker(ctx, wsId, key) {
+  const draft = (await getDraft(ctx.from.id)) || {};
+  const meta = draft.offer_meta || {};
+  const kb = bxOfferTagsPickerKb(wsId, key, meta);
+  const title = kb.__title || (key === 'goals' ? '🎯 Цели оффера' : '📎 Требования');
+  const parsed = parseOfferMeta(meta);
+  const cur = key === 'goals' ? bxTagsLabel(parsed.goals_tags, 'goals') : bxTagsLabel(parsed.req_tags, 'req');
+  const hint = key === 'goals'
+    ? 'Выбери цели оффера (можно несколько).'
+    : 'Выбери требования/условия для бренда (можно несколько).';
+
+  const text =
+`🎛 <b>${escapeHtml(title)}</b>
+<i>${escapeHtml(hint)}</i>
+
+Текущее: <b>${escapeHtml(cur)}</b>
+
+Выбери теги:`;
+
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
+  await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderBxOfferTextStep(ctx, wsId) {
+  const draft = (await getDraft(ctx.from.id)) || {};
+  const kind = String(draft.kind || 'ugc');
+  const example =
+    kind === 'integration'
+      ? 'Заголовок: Возьму интеграцию в канале/IG\n\nФормат: пост/сторис/репост. Аудитория/охваты: ... Гео: ... Дедлайн: ... Бюджет/условия: ... Контакт: @myname'
+      : 'Заголовок: Сниму UGC для бренда (без публикации)\n\nЧто сделаю: 1–3 вертикальных видео. Сроки: ... Референсы: ... Условия/бюджет: ... Контакт: @myname';
+
+  const text =
+`Шаг 6/6: отправь одним сообщением
+
+1-я строка — <b>заголовок</b>
+со 2-й строки — <b>детали</b> (что нужно / сроки / условия).
+
+Пример:
+<code>${escapeHtml(example)}</code>`;
+
+  const kb = new InlineKeyboard()
+    .text('⬅️ Назад', `a:bx_ottags|ws:${wsId}`)
+    .row()
+    .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`);
+
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
+  await send(text, { parse_mode: 'HTML', reply_markup: kb });
+  await setExpectText(ctx.from.id, { type: 'bx_offer_text', wsId });
+}
+
+function bxTagsLabel(keys, kind) {
+  const arr = Array.isArray(keys) ? keys : [];
+  if (!arr.length) return 'Все';
+  const defs = kind === 'goals' ? BRAND_GOALS_TAGS : BRAND_REQ_TAGS;
+  const prev = brandTagsPreview(arr, defs, { max: 2 });
+  return prev || `... (${arr.length})`;
+}
+
+function bxFiltersKb(wsId, f, page = 0) {
+  const kb = new InlineKeyboard();
+
+  kb.text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|p:${page}`)
     .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|p:${page}`)
-    .row()
-    .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|p:${page}`)
+    .row();
+
+  kb.text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|p:${page}`)
+    .text(`🎯 Цели: ${bxTagsLabel(f.goalsTags, 'goals')}`, `a:bx_mpick|ws:${wsId}|k:goals|p:${page}`)
+    .row();
+
+  kb.text(`📎 Требования: ${bxTagsLabel(f.reqTags, 'req')}`, `a:bx_mpick|ws:${wsId}|k:req|p:${page}`)
     .text('♻️ Сбросить', `a:bx_freset|ws:${wsId}|p:${page}`)
-    .row()
-    .text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0`);
+    .row();
+
+  kb.text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0`);
   return kb;
 }
 
@@ -2596,6 +2758,27 @@ function bxPickKb(wsId, key, page = 0) {
   }
 
   kb.text('⬅️ Назад', `a:bx_filters|ws:${wsId}|p:${page}`);
+  return kb;
+}
+
+function bxMultiPickKb(wsId, key, selected = [], page = 0) {
+  const defs = key === 'goals' ? BRAND_GOALS_TAGS : BRAND_REQ_TAGS;
+  const pickTitle = key === 'goals' ? '🎯 Цели' : '📎 Требования';
+  const set = new Set(Array.isArray(selected) ? selected : []);
+  const kb = new InlineKeyboard();
+
+  const items = defs.map((t) => ({
+    text: `${set.has(t.key) ? '✅ ' : ''}${t.title}`,
+    cb: `a:bx_mt|ws:${wsId}|k:${key}|v:${t.key}|p:${page}`,
+  }));
+  kbAddPairs(kb, items, 2);
+
+  kb.row();
+  kb.text('🧹 Очистить', `a:bx_mclear|ws:${wsId}|k:${key}|p:${page}`)
+    .text('✅ Готово', `a:bx_mdone|ws:${wsId}|k:${key}|p:${page}`)
+    .row();
+  kb.text('⬅️ Назад', `a:bx_filters|ws:${wsId}|p:${page}`);
+  kb.__title = pickTitle; // internal (for rendering)
   return kb;
 }
 
@@ -5681,7 +5864,9 @@ async function getBxFilter(tgId, wsId) {
   const f = {
     category: base.category ?? null,
     offerType: base.offerType ?? null,
-    compensationType: base.compensationType ?? null
+    compensationType: base.compensationType ?? null,
+    goalsTags: Array.isArray(base.goalsTags) ? base.goalsTags : [],
+    reqTags: Array.isArray(base.reqTags) ? base.reqTags : [],
   };
 
   // Back-compat: older UI stored short keys (cat/type/comp)
@@ -5695,8 +5880,17 @@ async function getBxFilter(tgId, wsId) {
   if (f.offerType == null && base.type != null) f.offerType = norm(base.type);
   if (f.compensationType == null && base.comp != null) f.compensationType = norm(base.comp);
 
+  // Back-compat: older versions could store these under shorter keys
+  if (!f.goalsTags.length && Array.isArray(base.goals)) f.goalsTags = base.goals;
+  if (!f.reqTags.length && Array.isArray(base.req)) f.reqTags = base.req;
+
+  // Hard-normalize tag values
+  f.goalsTags = Array.from(new Set(f.goalsTags.map(String))).filter((k2) => BRAND_GOALS_KEYS.has(k2));
+  f.reqTags = Array.from(new Set(f.reqTags.map(String))).filter((k2) => BRAND_REQ_KEYS.has(k2));
+
   // If we had to normalize anything, persist back in canonical shape
-  const needsPersist = !base.category && !base.offerType && !base.compensationType && (base.cat || base.type || base.comp);
+  const needsPersist = (!base.category && !base.offerType && !base.compensationType && (base.cat || base.type || base.comp)) ||
+    (Array.isArray(base.goals) || Array.isArray(base.req));
   if (needsPersist) {
     try {
       await redis.set(key, f, { ex: 30 * 24 * 3600 });
@@ -5710,6 +5904,23 @@ async function setBxFilter(tgId, wsId, patch) {
   const key = k(['bx_filter', tgId, wsId]);
   const cur = await getBxFilter(tgId, wsId);
   const next = { ...cur, ...patch };
+
+  // Normalize tag arrays (dedupe + whitelist)
+  if (!Array.isArray(next.goalsTags)) next.goalsTags = [];
+  if (!Array.isArray(next.reqTags)) next.reqTags = [];
+  next.goalsTags = Array.from(new Set(next.goalsTags.map(String))).filter((k2) => BRAND_GOALS_KEYS.has(k2));
+  next.reqTags = Array.from(new Set(next.reqTags.map(String))).filter((k2) => BRAND_REQ_KEYS.has(k2));
+
+  // Normalize scalar values
+  const norm = (x) => {
+    if (x == null) return null;
+    const s = String(x);
+    if (!s || s === 'all' || s === 'undefined' || s === 'null') return null;
+    return s;
+  };
+  next.category = norm(next.category);
+  next.offerType = norm(next.offerType);
+  next.compensationType = norm(next.compensationType);
   await redis.set(key, next, { ex: 30 * 24 * 3600 });
   return next;
 }
@@ -5719,6 +5930,8 @@ function bxFilterSummary(f) {
     `Кат: ${bxAnyLabel(f.category, 'cat')}`,
     `Формат: ${bxAnyLabel(f.offerType, 'type')}`,
     `Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`,
+    `🎯 ${bxTagsLabel(f.goalsTags, 'goals')}`,
+    `📎 ${bxTagsLabel(f.reqTags, 'req')}`,
   ];
   return parts.join(' · ');
 }
@@ -5890,6 +6103,8 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0) {
     category: filter.category,
     offerType: filter.offerType,
     compensationType: filter.compensationType,
+    goalsTags: filter.goalsTags,
+    reqTags: filter.reqTags,
   });
   let rows;
   if (CFG.VERIFICATION_ENABLED) {
@@ -5898,6 +6113,8 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0) {
         category: filter.category,
         offerType: filter.offerType,
         compensationType: filter.compensationType,
+        goalsTags: filter.goalsTags,
+        reqTags: filter.reqTags,
         limit,
         offset,
       }),
@@ -5905,6 +6122,8 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0) {
         category: filter.category,
         offerType: filter.offerType,
         compensationType: filter.compensationType,
+        goalsTags: filter.goalsTags,
+        reqTags: filter.reqTags,
         limit,
         offset,
       })
@@ -5914,6 +6133,8 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0) {
       category: filter.category,
       offerType: filter.offerType,
       compensationType: filter.compensationType,
+      goalsTags: filter.goalsTags,
+      reqTags: filter.reqTags,
       limit,
       offset,
     });
@@ -6152,6 +6373,8 @@ ${shown.map(x => escapeHtml(x)).join('\n')}${more}`;
     } catch (_) {}
   }
 
+  const metaLines = offerMetaLinesHtml(o.meta);
+
   const text =
 `🤝 <b>Оффер #${o.id}</b>
 
@@ -6159,7 +6382,7 @@ ${shown.map(x => escapeHtml(x)).join('\n')}${more}`;
 Категория: <b>${escapeHtml(bxCategoryLabel(o.category))}</b>
 Формат: <b>${escapeHtml(bxTypeLabel(o.offer_type))}</b>
 Оплата: <b>${escapeHtml(bxCompLabel(o.compensation_type))}</b>
-Медиа: <b>${escapeHtml(bxMediaLabel(o.media_type))}</b>
+${metaLines ? metaLines + '\n' : ''}Медиа: <b>${escapeHtml(bxMediaLabel(o.media_type))}</b>
 
 <b>${escapeHtml(o.title)}</b>
 
@@ -6260,6 +6483,39 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0) {
   });
 }
 
+async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0) {
+  const wsNum = Number(wsId || 0);
+  if (wsNum !== 0) {
+    const ws = await db.getWorkspace(ownerUserId, wsNum);
+    if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
+  }
+
+  const f = await getBxFilter(ctx.from.id, wsNum);
+  const title = key === 'goals' ? '🎯 Цели' : '📎 Требования';
+  const hint = key === 'goals'
+    ? 'Фильтруем креаторов по целям в их оффере.'
+    : 'Фильтруем креаторов по условиям/требованиям в их оффере.';
+
+  const cur = key === 'goals'
+    ? bxTagsLabel(f.goalsTags, 'goals')
+    : bxTagsLabel(f.reqTags, 'req');
+
+  const text = `🎛 <b>${escapeHtml(title)}</b>
+<i>${escapeHtml(hint)}</i>
+
+Текущее: <b>${escapeHtml(cur)}</b>
+
+Выбери теги (можно несколько):`;
+
+  const sel = key === 'goals' ? f.goalsTags : f.reqTags;
+  await ctx.editMessageText(text, {
+    parse_mode: 'HTML',
+    reply_markup: bxMultiPickKb(wsNum, key, sel, page),
+    disable_web_page_preview: true
+  });
+}
+
 async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0) {
   const o = CFG.VERIFICATION_ENABLED
     ? await safeUserVerifications(() => db.getBarterOfferPublicWithVerified(offerId), () => db.getBarterOfferPublic(offerId))
@@ -6291,11 +6547,14 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0) {
     } catch (_) {}
   }
 
+  const metaLines = offerMetaLinesHtml(o.meta);
+
   const text =
     `🤝 <b>Оффер #${o.id}</b>\n\n` +
     `Категория: <b>${escapeHtml(bxCategoryLabel(o.category))}</b>\n` +
     `Формат: <b>${escapeHtml(bxTypeLabel(o.offer_type))}</b>\n` +
     `Оплата: <b>${escapeHtml(bxCompLabel(o.compensation_type))}</b>\n\n` +
+    `${metaLines ? `${metaLines}\n\n` : ''}` +
     `<b>${escapeHtml(o.title)}</b>\n\n` +
     `${escapeHtml(o.description)}${partnerBlock}\n\n` +
     `Канал: <b>${escapeHtml(ch)}${o.creator_verified ? ' ✅' : ''}</b>\n` +
@@ -6367,6 +6626,7 @@ async function buildOfficialOfferPost(offerRow, opts = {}) {
   const cat = escapeHtml(bxCategoryLabel(offerRow.category));
   const fmt = escapeHtml(bxTypeLabel(offerRow.offer_type));
   const comp = escapeHtml(bxCompLabel(offerRow.compensation_type));
+  const metaLines = offerMetaLinesHtml(offerRow.meta);
 
   const text =
     `🤝 <b>Коллабка</b> · оффер #${offerId}
@@ -6379,6 +6639,9 @@ async function buildOfficialOfferPost(offerRow, opts = {}) {
     `Оплата: <b>${comp}</b>
 
 ` +
+    `${metaLines ? `${metaLines}
+
+` : ''}` +
     `<b>${title}</b>
 
 ` +
@@ -6904,10 +7167,12 @@ const retryLine = replySt.retry ? `Retry: <b>${escapeHtml(replySt.retry)}</b>` :
 
 const chargeLine = isBuyer ? formatBxChargeLine(thread) : '';
 const chargeHtml = chargeLine ? `${escapeHtml(chargeLine)}` : null;
+	const offerMeta = offerMetaLinesHtml(thread.offer_meta);
 
   const headLines = [
     `💬 <b>Диалог #${thread.id}</b>`,
     `Оффер: <b>${escapeHtml(thread.offer_title || '—')}</b>`,
+	    offerMeta ? offerMeta : null,
     `С кем: <b>${escapeHtml(other)}${otherMark}</b>`,
     `Статус: <b>${escapeHtml(status)}</b>`,
     stageTitle ? `CRM: <b>${escapeHtml(stageTitle)}</b>` : null,
@@ -9558,6 +9823,13 @@ if (exp.type === 'brand_deals_search') {
         return;
       }
 
+      // Structured meta tags (optional)
+      const parsedOfferMeta = parseOfferMeta(draft.offer_meta || {});
+      const offerMeta = {};
+      if (Array.isArray(parsedOfferMeta.goals_tags) && parsedOfferMeta.goals_tags.length) offerMeta.goals_tags = parsedOfferMeta.goals_tags;
+      if (Array.isArray(parsedOfferMeta.req_tags) && parsedOfferMeta.req_tags.length) offerMeta.req_tags = parsedOfferMeta.req_tags;
+
+
       // owner gate
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) {
@@ -9575,6 +9847,7 @@ if (exp.type === 'brand_deals_search') {
         category: draft.category,
         offerType: draft.offer_type,
         compensationType: draft.compensation_type,
+        meta: offerMeta,
         title,
         description,
         contact,
@@ -13518,7 +13791,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', 0);
       if (!bmRes) return;
 
-      await setBxFilter(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null });
+	      await setBxFilter(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
       await renderBxFeed(ctx, bmRes.userId, wsId, 0);
       return;
     }
@@ -13559,25 +13832,119 @@ if (p.a === 'a:match_home') {
       return;
     }
 
-    if (p.a === 'a:bx_fpick') {
-      await ctx.answerCallbackQuery();
+	    if (p.a === 'a:bx_mpick') {
+	      await ctx.answerCallbackQuery();
 
-      const mode = await resolveUiMode(ctx.from.id);
-      if (mode !== UI_MODES.BRAND) {
-        await renderBxBrandOnlyNotice(ctx);
-        return;
-      }
-      const wsId = Number(p.ws);
-      const page = Number(p.p || 0);
-      const key = String(p.k || '');
+	      const mode = await resolveUiMode(ctx.from.id);
+	      if (mode !== UI_MODES.BRAND) {
+	        await renderBxBrandOnlyNotice(ctx);
+	        return;
+	      }
+	      const wsId = Number(p.ws);
+	      const page = Number(p.p || 0);
+	      const key = String(p.k || '');
+	      if (!['goals', 'req'].includes(key)) return;
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
-      if (!bmRes) return;
+	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      if (!bmRes) return;
 
-      // Open picker (do NOT change the filter here)
-      await renderBxFilterPick(ctx, bmRes.userId, wsId, key, page);
-      return;
-    }
+	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page);
+	      return;
+	    }
+
+	    if (p.a === 'a:bx_mt') {
+	      await ctx.answerCallbackQuery();
+
+	      const mode = await resolveUiMode(ctx.from.id);
+	      if (mode !== UI_MODES.BRAND) {
+	        await renderBxBrandOnlyNotice(ctx);
+	        return;
+	      }
+	      const wsId = Number(p.ws);
+	      const page = Number(p.p || 0);
+	      const key = String(p.k || '');
+	      const v = String(p.v || '');
+	      if (!['goals', 'req'].includes(key)) return;
+
+	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      if (!bmRes) return;
+
+	      const cur = await getBxFilter(ctx.from.id, wsId);
+	      const field = key === 'goals' ? 'goalsTags' : 'reqTags';
+	      const allowed = key === 'goals' ? BRAND_GOALS_KEYS : BRAND_REQ_KEYS;
+	      if (!allowed.has(v)) {
+	        await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page);
+	        return;
+	      }
+
+	      const set = new Set(Array.isArray(cur[field]) ? cur[field] : []);
+	      if (set.has(v)) set.delete(v);
+	      else set.add(v);
+
+	      await setBxFilter(ctx.from.id, wsId, { [field]: Array.from(set) });
+	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page);
+	      return;
+	    }
+
+	    if (p.a === 'a:bx_mclear') {
+	      await ctx.answerCallbackQuery();
+
+	      const mode = await resolveUiMode(ctx.from.id);
+	      if (mode !== UI_MODES.BRAND) {
+	        await renderBxBrandOnlyNotice(ctx);
+	        return;
+	      }
+	      const wsId = Number(p.ws);
+	      const page = Number(p.p || 0);
+	      const key = String(p.k || '');
+	      if (!['goals', 'req'].includes(key)) return;
+
+	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      if (!bmRes) return;
+
+	      const field = key === 'goals' ? 'goalsTags' : 'reqTags';
+	      await setBxFilter(ctx.from.id, wsId, { [field]: [] });
+	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page);
+	      return;
+	    }
+
+	    if (p.a === 'a:bx_mdone') {
+	      await ctx.answerCallbackQuery();
+
+	      const mode = await resolveUiMode(ctx.from.id);
+	      if (mode !== UI_MODES.BRAND) {
+	        await renderBxBrandOnlyNotice(ctx);
+	        return;
+	      }
+	      const wsId = Number(p.ws);
+	      const page = Number(p.p || 0);
+
+	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      if (!bmRes) return;
+
+	      await renderBxFilters(ctx, bmRes.userId, wsId, page);
+	      return;
+	    }
+
+	    if (p.a === 'a:bx_fpick') {
+	      await ctx.answerCallbackQuery();
+
+	      const mode = await resolveUiMode(ctx.from.id);
+	      if (mode !== UI_MODES.BRAND) {
+	        await renderBxBrandOnlyNotice(ctx);
+	        return;
+	      }
+	      const wsId = Number(p.ws);
+	      const page = Number(p.p || 0);
+	      const key = String(p.k || '');
+
+	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      if (!bmRes) return;
+
+	      // Open picker (do NOT change the filter here)
+	      await renderBxFilterPick(ctx, bmRes.userId, wsId, key, page);
+	      return;
+	    }
 
     if (p.a === 'a:bx_fset') {
       await ctx.answerCallbackQuery();
@@ -14339,7 +14706,7 @@ if (p.a === 'a:bx_retry_help') {
 
       await ctx.answerCallbackQuery();
       await clearDraft(ctx.from.id);
-      await ctx.editMessageText('➕ <b>Новый оффер</b>\n\nШаг 1/5: выбери тип:\n\n🎬 <b>UGC</b> — контент без аудитории (главное: вкус и качество)\n📣 <b>Интеграция</b> — публикация в TG/IG (нужна аудитория)', {
+      await ctx.editMessageText('➕ <b>Новый оффер</b>\n\nШаг 1/6: выбери тип:\n\n🎬 <b>UGC</b> — контент без аудитории (главное: вкус и качество)\n📣 <b>Интеграция</b> — публикация в TG/IG (нужна аудитория)', {
         parse_mode: 'HTML',
         reply_markup: bxKindKb(wsId)
       });
@@ -14354,12 +14721,13 @@ if (p.a === 'a:bx_retry_help') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
       await ctx.editMessageText(
-        '🧩 <b>Шаблоны оффера</b>\n\nВыбери вариант — мы подготовим категорию/формат/оплату и сразу перейдём к тексту оффера.',
+        '🧩 <b>Шаблоны оффера</b>\n\nВыбери вариант — мы подготовим категорию/формат/оплату и перейдём к тегам (опционально), затем к тексту оффера.',
         { parse_mode: 'HTML', reply_markup: bxPresetKb(wsId) }
       );
       return;
     }
 
+    
     if (p.a === 'a:bx_preset_apply') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
@@ -14370,29 +14738,19 @@ if (p.a === 'a:bx_retry_help') {
       if (!preset) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
 
       await ctx.answerCallbackQuery();
-      // apply preset into draft and jump to step 4/4 (offer text)
-      await setDraft(ctx.from.id, {
-        wsId,
-        category: preset.category,
-        offer_type: preset.offer_type,
-        compensation_type: preset.compensation_type,
-        preset_id: presetId
-      });
+      await clearExpectText(ctx.from.id);
 
-      const example = preset.example;
-      await ctx.editMessageText(
-        `Шаг 4/4: отправь одним сообщением\n\n1-я строка — <b>заголовок</b>\nсо 2-й строки — <b>детали</b> (условия/гео/что хочешь получить).\n\nПример:\n<code>${escapeHtml(example)}</code>`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard()
-            .text('⚙️ Изменить параметры', `a:bx_params|ws:${wsId}`)
-            .row()
-            .text('⬅️ Назад', `a:bx_new|ws:${wsId}`)
-            .row()
-            .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`)
-        }
-      );
-      await setExpectText(ctx.from.id, { type: 'bx_offer_text', wsId });
+      // Apply preset into draft and jump to Tags step (optional)
+      const draft = (await getDraft(ctx.from.id)) || {};
+      draft.wsId = wsId;
+      draft.category = preset.category;
+      draft.offer_type = preset.offer_type;
+      draft.compensation_type = preset.compensation_type;
+      draft.preset_id = presetId;
+      if (!draft.offer_meta) draft.offer_meta = {};
+      await setDraft(ctx.from.id, draft);
+
+      await renderBxOfferTagsStep(ctx, wsId, { showParams: true, fromPreset: preset });
       return;
     }
 
@@ -14417,7 +14775,7 @@ if (p.a === 'a:bx_retry_help') {
       draft.wsId = wsId;
       draft.kind = String(p.k || 'ugc');
       await setDraft(ctx.from.id, draft);
-      await ctx.editMessageText('Шаг 2/5: выбери категорию:', {
+      await ctx.editMessageText('Шаг 2/6: выбери категорию:', {
         parse_mode: 'HTML',
         reply_markup: bxCategoryKb(wsId)
       });
@@ -14431,7 +14789,7 @@ if (p.a === 'a:bx_cat') {
       draft.wsId = wsId;
       draft.category = p.c;
       await setDraft(ctx.from.id, draft);
-      await ctx.editMessageText('Шаг 3/5: выбери формат сотрудничества:', {
+      await ctx.editMessageText('Шаг 3/6: выбери формат сотрудничества:', {
         parse_mode: 'HTML',
         reply_markup: bxTypeKb(wsId)
       });
@@ -14445,34 +14803,156 @@ if (p.a === 'a:bx_cat') {
       draft.wsId = wsId;
       draft.offer_type = p.t;
       await setDraft(ctx.from.id, draft);
-      await ctx.editMessageText('Шаг 4/5: выбери тип оплаты:', {
+      await ctx.editMessageText('Шаг 4/6: выбери тип оплаты:', {
         parse_mode: 'HTML',
         reply_markup: bxCompKb(wsId)
       });
       return;
     }
 
+    
     if (p.a === 'a:bx_comp') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
+
       const draft = (await getDraft(ctx.from.id)) || {};
       draft.wsId = wsId;
       draft.compensation_type = p.p;
+      if (!draft.offer_meta) draft.offer_meta = {};
       await setDraft(ctx.from.id, draft);
 
-      const kind = String(((await getDraft(ctx.from.id)) || {}).kind || 'ugc');
-      const example =
-        kind === 'integration'
-          ? 'Заголовок: Возьму интеграцию в канале/IG\n\nФормат: пост/сторис/репост. Аудитория/охваты: ... Гео: ... Дедлайн: ... Бюджет/условия: ... Контакт: @myname'
-          : 'Заголовок: Сниму UGC для бренда (без публикации)\n\nЧто сделаю: 1–3 вертикальных видео. Сроки: ... Референсы: ... Условия/бюджет: ... Контакт: @myname';
-      await ctx.editMessageText(
-        `Шаг 5/5: отправь одним сообщением\n\n1-я строка — <b>заголовок</b>\nсо 2-й строки — <b>детали</b> (что нужно / сроки / условия).\n\nПример:\n<code>${escapeHtml(example)}</code>`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_open|ws:${wsId}`)
-        }
-      );
-      await setExpectText(ctx.from.id, { type: 'bx_offer_text', wsId });
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferTagsStep(ctx, wsId);
+      return;
+    }
+
+    if (p.a === 'a:bx_comp_pick') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await ctx.editMessageText('Шаг 4/6: выбери тип оплаты:', {
+        parse_mode: 'HTML',
+        reply_markup: bxCompKb(wsId)
+      });
+      return;
+    }
+
+    if (p.a === 'a:bx_ottags') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferTagsStep(ctx, wsId);
+      return;
+    }
+
+    if (p.a === 'a:bx_otpick') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const key = String(p.k || '');
+      if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
+
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferTagsPicker(ctx, wsId, key);
+      return;
+    }
+
+    if (p.a === 'a:bx_ott') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const key = String(p.k || '');
+      const val = String(p.v || '');
+      if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
+
+      const allow = key === 'goals' ? BRAND_GOALS_KEYS : BRAND_REQ_KEYS;
+      if (!allow.has(val)) return ctx.answerCallbackQuery({ text: 'Неверный тег.' });
+
+      await ctx.answerCallbackQuery();
+
+      const draft = (await getDraft(ctx.from.id)) || {};
+      draft.wsId = wsId;
+      const meta = parseOfferMeta(draft.offer_meta || {});
+      const cur = key === 'goals' ? meta.goals_tags : meta.req_tags;
+      const set = new Set(cur);
+      if (set.has(val)) set.delete(val); else set.add(val);
+
+      if (key === 'goals') meta.goals_tags = Array.from(set);
+      else meta.req_tags = Array.from(set);
+
+      draft.offer_meta = meta;
+      await setDraft(ctx.from.id, draft);
+
+      await renderBxOfferTagsPicker(ctx, wsId, key);
+      return;
+    }
+
+    if (p.a === 'a:bx_otclr') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const key = String(p.k || '');
+      if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
+
+      await ctx.answerCallbackQuery();
+
+      const draft = (await getDraft(ctx.from.id)) || {};
+      draft.wsId = wsId;
+      const meta = parseOfferMeta(draft.offer_meta || {});
+      if (key === 'goals') meta.goals_tags = [];
+      else meta.req_tags = [];
+      draft.offer_meta = meta;
+      await setDraft(ctx.from.id, draft);
+
+      await renderBxOfferTagsPicker(ctx, wsId, key);
+      return;
+    }
+
+    if (p.a === 'a:bx_otdone') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferTagsStep(ctx, wsId);
+      return;
+    }
+
+    if (p.a === 'a:bx_otnext') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferTextStep(ctx, wsId);
+      return;
+    }
+
+    if (p.a === 'a:bx_otskip') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      await ctx.answerCallbackQuery();
+
+      const draft = (await getDraft(ctx.from.id)) || {};
+      draft.wsId = wsId;
+      draft.offer_meta = {};
+      await setDraft(ctx.from.id, draft);
+
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferTextStep(ctx, wsId);
       return;
     }
 
@@ -16052,6 +16532,7 @@ ${actionHint}`;
   BOT = bot;
   return bot;
   }
+
 
 // -----------------------------
 // Verification (feature-flag)
