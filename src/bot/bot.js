@@ -297,7 +297,7 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
   const wss = await db.listWorkspaces(ownerUserId);
   const kb = new InlineKeyboard();
   if (!wss.length) {
-    kb.text('⬅️ Меню', 'a:menu');
+    kb.text('📋 Меню', 'a:menu');
     await ctx.editMessageText('Сначала подключи канал: нажми «🚀 Подключить канал» в меню.', { reply_markup: kb });
     return;
   }
@@ -306,7 +306,7 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
     const label = `📣 ${String(ws.title || ws.channel_username || ws.id).slice(0, 32)}`;
     kb.text(label, `a:gw_new|ws:${ws.id}`).row();
   }
-  kb.text('⬅️ Назад', backCb).row().text('🏠 Меню', 'a:menu');
+  kbNavRow(kb, backCb);
 
   await ctx.editMessageText(
     `Выбери канал, где создать новый конкурс:`,
@@ -397,7 +397,7 @@ function mainMenuKb(flags = {}) {
   }
 
   kb.text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
-  kb.text('🔄 Обновить', 'a:menu').row();
+  kb.text('🔄 Обновить', 'a:main_menu').row();
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
@@ -791,6 +791,74 @@ async function renderMainMenu(ctx, flags, params = {}) {
 }
 
 
+async function renderRoleHub(ctx, u, flags) {
+  // Role hub: Creator -> active workspace; Brand -> brand dashboard; Curator mode -> curator cabinet menu.
+  const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
+  if (curMode) {
+    await ctx.editMessageText(`👤 <b>Режим куратора</b>
+
+Здесь показаны только действия куратора, чтобы не путаться.
+Чтобы вернуть полное меню — нажми “🔓 Обычный режим”.`, {
+      parse_mode: 'HTML',
+      reply_markup: curatorModeMenuKb(flags)
+    });
+    return;
+  }
+
+  const mode = await resolveUiMode(ctx.from.id);
+
+  if (mode === UI_MODES.BRAND) {
+    const isManagerMode = await getBrandManagerMode(ctx.from.id);
+    if (isManagerMode) {
+      const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
+
+      if (bm.dbMissing) {
+        const msg = `⚠️ <b>Нужна миграция 026_brand_managers</b>
+
+В Neon должна быть таблица <code>brand_managers</code>.`;
+        await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
+        return;
+      }
+      if (bm.revoked) {
+        await disableBrandManagerState(ctx.from.id);
+        const msg = `⛔ <b>Доступ менеджера отозван</b>
+
+Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
+        await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
+        return;
+      }
+
+      if (bm.enabled && bm.needsPick) {
+        await renderBmPickBrand(ctx, u, { ret: 'bx_inbox', wsId: 0, page: 0, edit: true });
+        return;
+      }
+
+      await renderBxInbox(ctx, bm.brandUserId, 0, 0, { bm });
+      return;
+    }
+
+    await renderBxOpen(ctx, u.id, 0);
+    return;
+  }
+
+  // Creator hub
+  const wsList = await db.listWorkspaces(u.id);
+  if (!wsList.length) {
+    await renderMainMenu(ctx, flags, { edit: true, user: u });
+    return;
+  }
+
+  const active = await getActiveWorkspace(ctx.from.id);
+  let wsId = wsList[0].id;
+  if (active) {
+    const a = wsList.find((w) => Number(w.id) === Number(active));
+    if (a) wsId = a.id;
+  }
+
+  await renderWsOpen(ctx, u.id, wsId);
+}
+
+
 function curatorModeMenuKb(flags = {}) {
   const { isModerator = false, isAdmin = false } = flags;
   const kb = new InlineKeyboard()
@@ -801,7 +869,7 @@ function curatorModeMenuKb(flags = {}) {
     .row()
     .text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:menu')
     .row()
-    .text('🔄 Обновить', 'a:menu');
+    .text('🔄 Обновить', 'a:main_menu');
 
   const extra = [];
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
@@ -823,7 +891,7 @@ function onboardingKb(flags = {}) {
     .row()
     .text('🏷 Я бренд', 'a:onb_brand')
     .row()
-    .text('📋 Открыть меню', 'a:menu');
+    .text('📋 Открыть меню', 'a:main_menu');
   // keep quick access for staff even in onboarding
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
   if (isModerator) kb.row().text('🛡 Модерация', 'a:mod_home');
@@ -833,8 +901,16 @@ function onboardingKb(flags = {}) {
 
 function navKb(backCb) {
   const kb = new InlineKeyboard();
-  if (backCb) kb.text('⬅️ Назад', backCb);
-  kb.text('🏠 Меню', 'a:menu');
+  if (backCb && backCb !== 'a:menu') kb.text('⬅️ Назад', backCb);
+  kb.text('📋 Меню', 'a:menu');
+  return kb;
+}
+
+function kbNavRow(kb, backCb) {
+  // Adds a unified navigation row to an existing keyboard (Back -> context, Menu -> role hub)
+  kb.row();
+  if (backCb && backCb !== 'a:menu') kb.text('⬅️ Назад', backCb);
+  kb.text('📋 Меню', 'a:menu');
   return kb;
 }
 
@@ -1719,9 +1795,8 @@ async function renderBrandBudgetBucketPicker(ctx, ownerUserId, params = {}) {
     kb.text(`${on ? '✅' : '▫️'} ${it.title}`, `a:brand_bb_set${suf}|k:${it.key}`).row();
   });
   kb.text('🧹 Очистить', `a:brand_bb_clear${suf}`)
-    .text('✅ Готово', `a:brand_bb_done${suf}`)
-    .row()
-    .text('⬅️ Назад', `a:brand_profile_more${suf}`);
+    .text('✅ Готово', `a:brand_bb_done${suf}`);
+  kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, opts);
@@ -1754,8 +1829,8 @@ async function renderBrandGoalsTagsPicker(ctx, ownerUserId, params = {}) {
     kb.text(`${on ? '✅' : '▫️'} ${it.title}`, `a:brand_gt_t${suf}|k:${it.key}`);
     if (i % 2 === 1) kb.row();
   });
-  kb.row().text('🧹 Сброс', `a:brand_gt_clear${suf}`).text('✅ Готово', `a:brand_gt_done${suf}`)
-    .row().text('⬅️ Назад', `a:brand_profile_more${suf}`);
+  kb.row().text('🧹 Сброс', `a:brand_gt_clear${suf}`).text('✅ Готово', `a:brand_gt_done${suf}`);
+  kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, opts);
@@ -1788,8 +1863,8 @@ async function renderBrandReqTagsPicker(ctx, ownerUserId, params = {}) {
     kb.text(`${on ? '✅' : '▫️'} ${it.title}`, `a:brand_rt_t${suf}|k:${it.key}`);
     if (i % 2 === 1) kb.row();
   });
-  kb.row().text('🧹 Сброс', `a:brand_rt_clear${suf}`).text('✅ Готово', `a:brand_rt_done${suf}`)
-    .row().text('⬅️ Назад', `a:brand_profile_more${suf}`);
+  kb.row().text('🧹 Сброс', `a:brand_rt_clear${suf}`).text('✅ Готово', `a:brand_rt_done${suf}`);
+  kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, opts);
@@ -1838,9 +1913,8 @@ async function renderBrandCollabTypesPicker(ctx, ownerUserId, params = {}) {
   });
   kb.row()
     .text('🧹 Сброс', `a:brand_ty_clear${suf}`)
-    .text('✅ Готово', `a:brand_ty_done${suf}`)
-    .row()
-    .text('⬅️ Назад', `a:brand_prof_more${suf}`);
+    .text('✅ Готово', `a:brand_ty_done${suf}`);
+  kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (params.edit && ctx.callbackQuery?.message) {
@@ -2381,7 +2455,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
     kb.row();
   }
 
-  kb.text('⬅️ Меню', 'a:menu');
+  kb.text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb };
   if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, extra);
@@ -2479,7 +2553,7 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   kb.text('📝 Оставить заявку', `a:brand_apply|u:${brandUserId}|p:${backPage}`).row();
 
   kb.text('⬅️ Назад к списку', `a:brands_home|p:${backPage}`).row();
-  kb.text('⬅️ Меню', 'a:menu');
+  kb.text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, extra);
@@ -2628,9 +2702,8 @@ function bxOfferTagsPickerKb(wsId, key, meta, opts = {}) {
   kbAddPairs(kb, items, 2);
   kb.row();
   kb.text('🧹 Очистить', `a:bx_otclr|ws:${wsId}|k:${key}`)
-    .text('✅ Готово', `a:bx_otdone|ws:${wsId}`)
-    .row();
-  kb.text('⬅️ Назад', `a:bx_ottags|ws:${wsId}`).row();
+    .text('✅ Готово', `a:bx_otdone|ws:${wsId}`);
+  kbNavRow(kb, `a:bx_ottags|ws:${wsId}`);
   kb.__title = title;
   return kb;
 }
@@ -5729,7 +5802,7 @@ async function renderFoldersMy(ctx, userId) {
         .row();
     }
   }
-  kb.text('⬅️ Меню', 'a:menu');
+  kb.text('📋 Меню', 'a:menu');
 
   const text = rows.length
     ? `📁 <b>Папки</b>\n\nВыбери канал, где ты редактор:`
@@ -11823,6 +11896,13 @@ if (p.a === 'a:brand_apply') {
 if (p.a === 'a:menu') {
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
+      await renderRoleHub(ctx, u, flags);
+      return;
+    }
+
+    if (p.a === 'a:main_menu') {
+      await ctx.answerCallbackQuery();
+      const flags = await getRoleFlags(u, ctx.from.id);
       const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
       if (curMode) {
         await ctx.editMessageText(`👤 <b>Режим куратора</b>
@@ -16742,7 +16822,7 @@ ${brandLimitLine}
     kb.text('🔁 Подать заново', `a:verify_kind|k:${kind}`).row();
   }
   kb.text('ℹ️ Как это работает', 'a:verify_info').row();
-  kb.text('⬅️ Меню', 'a:menu');
+  kb.text('📋 Меню', 'a:menu');
 
   const reason = status === 'REJECTED' && v?.rejection_reason ? `
 
