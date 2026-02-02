@@ -1019,6 +1019,7 @@ export async function createBarterOffer(input) {
     category,
     offerType,
     compensationType,
+    meta,
     title,
     description,
     partnerFolderId,
@@ -1027,16 +1028,16 @@ export async function createBarterOffer(input) {
 
   const r = await pool.query(
     `insert into barter_offers
-      (workspace_id, creator_user_id, category, offer_type, compensation_type, title, description, partner_folder_id, contact)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      (workspace_id, creator_user_id, category, offer_type, compensation_type, meta, title, description, partner_folder_id, contact)
+     values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)
      returning *`,
-    [workspaceId, creatorUserId || null, category, offerType, compensationType, title, description, partnerFolderId || null, contact || null]
+    [workspaceId, creatorUserId || null, category, offerType, compensationType, JSON.stringify(meta || {}), title, description, partnerFolderId || null, contact || null]
   );
   return r.rows[0];
 }
 
 export async function listNetworkBarterOffers(opts = {}) {
-  const { category = null, offerType = null, compensationType = null, limit = 5, offset = 0 } = opts;
+  const { category = null, offerType = null, compensationType = null, goalsTags = null, reqTags = null, limit = 5, offset = 0 } = opts;
   const r = await pool.query(
     `select o.*, w.title as ws_title, w.channel_username, w.channel_id
      from barter_offers o
@@ -1047,16 +1048,18 @@ export async function listNetworkBarterOffers(opts = {}) {
        and ($1::text is null or o.category=$1)
        and ($2::text is null or o.offer_type=$2)
        and ($3::text is null or o.compensation_type=$3)
+       and ($4::text[] is null or coalesce(o.meta->'goals_tags','[]'::jsonb) ?| $4::text[])
+       and ($5::text[] is null or coalesce(o.meta->'req_tags','[]'::jsonb) ?| $5::text[])
      order by case when s.plan='pro' and (s.pro_until is null or s.pro_until>now()) and s.pro_pinned_offer_id = o.id then 0 else 1 end,
               o.bump_at desc
-     limit $4 offset $5`,
-    [category, offerType, compensationType, limit, offset]
+     limit $6 offset $7`,
+    [category, offerType, compensationType, goalsTags && goalsTags.length ? goalsTags : null, reqTags && reqTags.length ? reqTags : null, limit, offset]
   );
   return r.rows;
 }
 
 export async function countNetworkBarterOffers(opts = {}) {
-  const { category = null, offerType = null, compensationType = null } = opts;
+  const { category = null, offerType = null, compensationType = null, goalsTags = null, reqTags = null } = opts;
   const r = await pool.query(
     `select count(*)::int as cnt
      from barter_offers o
@@ -1066,8 +1069,10 @@ export async function countNetworkBarterOffers(opts = {}) {
        and s.network_enabled=true
        and ($1::text is null or o.category=$1)
        and ($2::text is null or o.offer_type=$2)
-       and ($3::text is null or o.compensation_type=$3)`,
-    [category, offerType, compensationType]
+       and ($3::text is null or o.compensation_type=$3)
+       and ($4::text[] is null or coalesce(o.meta->'goals_tags','[]'::jsonb) ?| $4::text[])
+       and ($5::text[] is null or coalesce(o.meta->'req_tags','[]'::jsonb) ?| $5::text[])`,
+    [category, offerType, compensationType, goalsTags && goalsTags.length ? goalsTags : null, reqTags && reqTags.length ? reqTags : null]
   );
   return Number(r.rows[0]?.cnt || 0);
 }
@@ -1143,11 +1148,12 @@ export async function updateBarterOffer(offerId, patch) {
   const vals = [];
   let idx = 1;
 
-  const allowed = ['status', 'title', 'description', 'contact', 'bump_at', 'partner_folder_id', 'media_type', 'media_file_id'];
+  const allowed = ['status', 'title', 'description', 'contact', 'bump_at', 'partner_folder_id', 'media_type', 'media_file_id', 'meta'];
   for (const k2 of allowed) {
     if (patch[k2] === undefined) continue;
     fields.push(`${k2}=$${idx++}`);
-    vals.push(patch[k2]);
+    if (k2 === 'meta') vals.push(JSON.stringify(patch[k2] || {}));
+    else vals.push(patch[k2]);
   }
   fields.push(`updated_at=now()`);
   vals.push(offerId);
@@ -3004,7 +3010,7 @@ export async function getBarterOfferPublicWithVerified(offerId) {
 }
 
 export async function listNetworkBarterOffersWithVerified(opts = {}) {
-  const { category = null, offerType = null, compensationType = null, limit = 5, offset = 0 } = opts;
+  const { category = null, offerType = null, compensationType = null, goalsTags = null, reqTags = null, limit = 5, offset = 0 } = opts;
   const r = await pool.query(
     `select o.*, w.title as ws_title, w.channel_username, w.channel_id,
             (case when uv.status='APPROVED' then true else false end) as creator_verified
@@ -3017,10 +3023,12 @@ export async function listNetworkBarterOffersWithVerified(opts = {}) {
        and ($1::text is null or o.category=$1)
        and ($2::text is null or o.offer_type=$2)
        and ($3::text is null or o.compensation_type=$3)
+       and ($4::text[] is null or coalesce(o.meta->'goals_tags','[]'::jsonb) ?| $4::text[])
+       and ($5::text[] is null or coalesce(o.meta->'req_tags','[]'::jsonb) ?| $5::text[])
      order by case when s.plan='pro' and (s.pro_until is null or s.pro_until>now()) and s.pro_pinned_offer_id = o.id then 0 else 1 end,
               o.bump_at desc
-     limit $4 offset $5`,
-    [category, offerType, compensationType, limit, offset]
+     limit $6 offset $7`,
+    [category, offerType, compensationType, goalsTags && goalsTags.length ? goalsTags : null, reqTags && reqTags.length ? reqTags : null, limit, offset]
   );
   return r.rows;
 }
@@ -3083,7 +3091,7 @@ export async function listBarterThreadsForUser(userId, limit = 20, offset = 0) {
 
 export async function getBarterThreadForUserWithVerified(threadId, userId) {
   const r = await pool.query(
-    `select t.*, o.title as offer_title, o.category, o.offer_type, o.compensation_type,
+    `select t.*, o.title as offer_title, o.category, o.offer_type, o.compensation_type, o.meta as offer_meta,
             w.channel_username, w.title as ws_title,
             ub.tg_username as buyer_username, us.tg_username as seller_username,
             (case when uvb.status='APPROVED' then true else false end) as buyer_verified,
@@ -3106,7 +3114,7 @@ export async function getBarterThreadForUserWithVerified(threadId, userId) {
 
 export async function getBarterThreadForUser(threadId, userId) {
   const r = await pool.query(
-    `select t.*, o.title as offer_title, o.category, o.offer_type, o.compensation_type,
+    `select t.*, o.title as offer_title, o.category, o.offer_type, o.compensation_type, o.meta as offer_meta,
             w.channel_username, w.title as ws_title,
             ub.tg_username as buyer_username, us.tg_username as seller_username
      from barter_threads t
