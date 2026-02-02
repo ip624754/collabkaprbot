@@ -459,13 +459,13 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   const { isManager = false, hasMultipleBrands = false, canManager = false, teamLocked = false } = opts;
 
   const kb = new InlineKeyboard()
-  .text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0')
-  .text('🎛 Фильтры креаторов', 'a:bx_filters|ws:0|p:0')
+  .text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm')
+  .text('🎛 Фильтры креаторов', 'a:bx_filters|ws:0|p:0|h:mm|r:mm')
   .row()
-  .text('🎯 Smart-подбор', 'a:bx_smart|ws:0')
+  .text('🎯 Smart-подбор', 'a:bx_smart|ws:0|h:mm')
   .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
   .row()
-  .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0')
+  .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
   .text('📝 Заявки', 'a:brand_apps|ws:0|s:new|p:0')
   .row()
   .text('📌 Сделки', 'a:brand_deals|ws:0|st:negotiation|p:0');
@@ -562,6 +562,8 @@ async function renderBmPickBrand(ctx, u, params = {}) {
   const ret = String(params.ret || 'menu');
   const wsId = Number(params.wsId || 0);
   const page = Number(params.page || 0);
+  const h = normBxHome(params.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+  const r = normBxRet(params.r, wsId ? BX_HOME.BX_OPEN : h);
 
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
@@ -594,16 +596,21 @@ async function renderBmPickBrand(ctx, u, params = {}) {
     const id = Number(b.user_id);
     const label = bmBrandLabelFromRow(b).slice(0, 32);
     const prefix = (id && id === Number(active)) ? '✅ ' : '';
-    kb.text(`${prefix}${label}`, `a:bm_set_brand|bu:${id}|ret:${ret}|ws:${wsId}|p:${page}`).row();
+    kb.text(`${prefix}${label}`, `a:bm_set_brand|bu:${id}|ret:${ret}|ws:${wsId}|p:${page}|h:${h}|r:${r}`).row();
   }
 
+  const bxBack = bxReturnCb(wsId, page, h, r);
+
   const backCb = (
-    ret === 'bx_inbox' ? `a:bx_inbox|ws:${wsId}|p:${page}` :
-    ret === 'bx_feed' ? `a:bx_feed|ws:${wsId}|p:${page}` :
+    ret === 'bx_inbox' ? `a:bx_inbox|ws:${wsId}|p:${page}|h:${h}` :
+    ret === 'bx_feed' ? `a:bx_feed|ws:${wsId}|p:${page}|h:${h}` :
     ret === 'bx_open' ? `a:bx_open|ws:${wsId}` :
+    ret === 'bx_filters' ? bxBack :
+    ret === 'bx_fpick' ? bxBack :
+    ret === 'bx_mpick' ? bxBack :
     ret === 'pm_home' ? `a:pm_home|ws:${wsId}` :
     ret === 'brand_apps' ? `a:brand_apps|ws:0|s:new|p:${page}` :
-	    ret === 'brand_deals' ? `a:brand_deals|ws:0|st:negotiation|p:${page}` :
+    ret === 'brand_deals' ? `a:brand_deals|ws:0|st:negotiation|p:${page}` :
     'a:menu'
   );
 
@@ -616,7 +623,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
-async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0) {
+async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) {
   const wsNum = Number(wsId);
   if (!Number.isFinite(wsNum) || wsNum !== 0) return { bm: { enabled: false }, userId: u.id };
 
@@ -642,7 +649,9 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0) {
   }
 
   if (bm.enabled && bm.needsPick) {
-    await renderBmPickBrand(ctx, u, { ret, wsId: wsNum, page, edit: true });
+    const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+    const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
+    await renderBmPickBrand(ctx, u, { ret, wsId: wsNum, page, edit: true, h, r });
     return null;
   }
 
@@ -691,6 +700,9 @@ async function resolveBmBrandContext(ctx, u, opts = {}) {
 async function renderMainMenu(ctx, flags, params = {}) {
   const edit = params.edit !== false; // default true
   const u = params.user || (ctx.from ? await db.upsertUser(ctx.from.id, ctx.from.username ?? null) : null);
+
+  // Track last UI home for resilient Back in BX flows
+  if (ctx.from?.id) await setUiHome(ctx.from.id, BX_HOME.MAIN_MENU);
 
   const mode = await resolveUiMode(ctx.from?.id);
   let modeHuman = uiModeHuman(mode);
@@ -792,6 +804,8 @@ async function renderMainMenu(ctx, flags, params = {}) {
 
 
 async function renderRoleHub(ctx, u, flags) {
+  // Role hub is a navigation home for Back in BX flows
+  if (ctx.from?.id) await setUiHome(ctx.from.id, BX_HOME.MENU);
   // Role hub: Creator -> active workspace; Brand -> brand dashboard; Curator mode -> curator cabinet menu.
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
   if (curMode) {
@@ -912,6 +926,85 @@ function kbNavRow(kb, backCb) {
   if (backCb && backCb !== 'a:menu') kb.text('⬅️ Назад', backCb);
   kb.text('📋 Меню', 'a:menu');
   return kb;
+}
+
+// -----------------------------
+// BX Navigation helpers (home/return context)
+// h: home anchor (mm=main_menu, mn=role hub, bo=bx_open)
+// r: return anchor for nested screens (bf=bx_feed, mm/mn/bo)
+// -----------------------------
+
+const BX_HOME = { MAIN_MENU: 'mm', MENU: 'mn', BX_OPEN: 'bo' };
+
+const UI_HOME_TTL_SEC = 7 * 24 * 3600;
+
+function uiHomeKey(uid) {
+  return k(['ui_home', Number(uid || 0)]);
+}
+
+async function setUiHome(uid, home) {
+  try {
+    const id = Number(uid || 0);
+    if (!id) return;
+    const h = normBxHome(home, BX_HOME.MENU);
+    await redis.set(uiHomeKey(id), h, { ex: UI_HOME_TTL_SEC });
+  } catch {
+    // ignore
+  }
+}
+
+async function getUiHome(uid) {
+  try {
+    const id = Number(uid || 0);
+    if (!id) return null;
+    const v = await redis.get(uiHomeKey(id));
+    const s = String(v || '').trim();
+    if (!s) return null;
+    return normBxHome(s, BX_HOME.MENU);
+  } catch {
+    return null;
+  }
+}
+
+async function resolveBxHomeFromUi(ctx, wsId, rawH, fallback) {
+  const direct = String(rawH || '').trim();
+  if (direct) return normBxHome(direct, fallback);
+  const uid = ctx?.from?.id ? Number(ctx.from.id) : 0;
+  if (uid) {
+    const saved = await getUiHome(uid);
+    if (saved) return normBxHome(saved, fallback);
+  }
+  // Last-resort default
+  return normBxHome(fallback, BX_HOME.MENU);
+}
+
+function normBxHome(h, fallback = BX_HOME.MENU) {
+  const v = String(h || '').trim().toLowerCase();
+  if (v === BX_HOME.MAIN_MENU || v === BX_HOME.MENU || v === BX_HOME.BX_OPEN) return v;
+  return fallback;
+}
+
+function normBxRet(r, fallback = BX_HOME.BX_OPEN) {
+  const v = String(r || '').trim().toLowerCase();
+  if (v === 'bf' || v === 'bs' || v === BX_HOME.MAIN_MENU || v === BX_HOME.MENU || v === BX_HOME.BX_OPEN) return v;
+  return fallback;
+}
+
+function bxHomeCb(wsId, h) {
+  const home = normBxHome(h, BX_HOME.MENU);
+  if (home === BX_HOME.MAIN_MENU) return 'a:main_menu';
+  if (home === BX_HOME.BX_OPEN) return `a:bx_open|ws:${Number(wsId || 0)}`;
+  return 'a:menu';
+}
+
+function bxReturnCb(wsId, page, h, r) {
+  const home = normBxHome(h, BX_HOME.MENU);
+  const ret = normBxRet(r, home === BX_HOME.BX_OPEN ? BX_HOME.BX_OPEN : home);
+  if (ret === 'bf') return `a:bx_feed|ws:${Number(wsId || 0)}|p:${Number(page || 0)}|h:${home}`;
+  if (ret === 'bs') return `a:bx_smart|ws:${Number(wsId || 0)}|h:${home}`;
+  if (ret === BX_HOME.MAIN_MENU) return 'a:main_menu';
+  if (ret === BX_HOME.BX_OPEN) return `a:bx_open|ws:${Number(wsId || 0)}`;
+  return 'a:menu';
 }
 
 function expectBackCb(exp) {
@@ -1353,7 +1446,7 @@ function curListKb(wsId, curators) {
 function bxMenuKb(wsId, networkEnabled = true) {
   const net = networkEnabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
   const kb = new InlineKeyboard()
-  .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0`)
+  .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
   .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`)
   .row()
   .text('➕ Разместить оффер', `a:bx_new|ws:${wsId}`)
@@ -1371,13 +1464,13 @@ function bxMenuKb(wsId, networkEnabled = true) {
 function bxBrandMenuKb(wsId, credits, plan, retry = 0) {
   const planLabel = plan?.active ? (plan.name === 'max' ? 'Max ✅' : 'Basic ✅') : 'OFF';
   const kb = new InlineKeyboard()
-.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0`)
-.text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0`)
+.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
+.text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0|h:bo|r:bo`)
 .row()
-.text('🎯 Smart-подбор', `a:bx_smart|ws:${wsId}`)
+.text('🎯 Smart-подбор', `a:bx_smart|ws:${wsId}|h:bo`)
 .text('🔎 Поиск креаторов', `a:pm_home|ws:${wsId}`)
 .row()
-.text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0`)
+.text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
 .text('📝 Заявки', `a:brand_apps|ws:${wsId}|s:new|p:0`)
 .row()
 .text(`🎫 Brand Pass: ${credits}${retry ? ' · 🎟' + retry : ''}`, `a:brand_pass|ws:${wsId}`)
@@ -2793,87 +2886,91 @@ function bxTagsLabel(keys, kind, emptyLabel = 'Все') {
   return prev || `... (${arr.length})`;
 }
 
-function bxFiltersKb(wsId, f, page = 0) {
+function bxFiltersKb(wsId, f, page = 0, opts = {}) {
+  const wsNum = Number(wsId || 0);
+  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+  const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
+
   const kb = new InlineKeyboard();
 
-  kb.text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|p:${page}`)
-    .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|p:${page}`)
+  kb.text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|p:${page}|h:${h}|r:${r}`)
+    .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|p:${page}|h:${h}|r:${r}`)
+    .row()
+    .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|p:${page}|h:${h}|r:${r}`)
+    .text(`🎯 Цели: ${bxTagsLabel(f.goalsTags, 'goals')}`, `a:bx_mpick|ws:${wsId}|k:goals|p:${page}|h:${h}|r:${r}`)
+    .row()
+    .text(`📎 Требования: ${bxTagsLabel(f.reqTags, 'req')}`, `a:bx_mpick|ws:${wsId}|k:req|p:${page}|h:${h}|r:${r}`)
     .row();
 
-  kb.text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|p:${page}`)
-    .text(`🎯 Цели: ${bxTagsLabel(f.goalsTags, 'goals')}`, `a:bx_mpick|ws:${wsId}|k:goals|p:${page}`)
+  kb.text('♻️ Сбросить', `a:bx_freset|ws:${wsId}|p:${page}|h:${h}|r:${r}`)
+    .text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo|h:${h}`)
     .row();
 
-  kb.text(`📎 Требования: ${bxTagsLabel(f.reqTags, 'req')}`, `a:bx_mpick|ws:${wsId}|k:req|p:${page}`)
-    .text('♻️ Сбросить', `a:bx_freset|ws:${wsId}|p:${page}`)
-    .row();
-
-  kb.text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0`);
-  kbNavRow(kb, `a:bx_open|ws:${wsId}`);
+  kbNavRow(kb, bxReturnCb(wsNum, page, h, r));
   return kb;
 }
 
-function bxPickKb(wsId, key, page = 0) {
+function bxPickKb(wsId, key, page = 0, opts = {}) {
+  const wsNum = Number(wsId || 0);
+  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+  const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
+
   const kb = new InlineKeyboard();
+  const pickTitle = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : 'Оплата');
 
-  if (key === 'cat') {
-    kb.text('Все', `a:bx_fset|ws:${wsId}|k:cat|v:all|p:${page}`).row();
-    const items = BX_CATEGORIES.map((c) => ({ text: c.label, cb: `a:bx_fset|ws:${wsId}|k:cat|v:${c.key}|p:${page}` }));
-    kbAddPairs(kb, items, 2);
-  }
+  const items =
+    key === 'cat' ? BX_CATEGORIES :
+    key === 'type' ? BX_OFFER_TYPES :
+    BX_COMPENSATION_TYPES;
 
-  if (key === 'type') {
-    kb.text('Все', `a:bx_fset|ws:${wsId}|k:type|v:all|p:${page}`).row();
-    const items = [
-      { text: '📣 Реклама', cb: `a:bx_fset|ws:${wsId}|k:type|v:ad|p:${page}` },
-      { text: '🎥 Обзор', cb: `a:bx_fset|ws:${wsId}|k:type|v:review|p:${page}` },
-      { text: '🎁 Розыгрыш', cb: `a:bx_fset|ws:${wsId}|k:type|v:giveaway|p:${page}` },
-      { text: '✍️ Другое', cb: `a:bx_fset|ws:${wsId}|k:type|v:other|p:${page}` },
-    ];
-    kbAddPairs(kb, items, 2);
-  }
+  kb.text('Все', `a:bx_fset|ws:${wsId}|k:${key}|v:all|p:${page}|h:${h}|r:${r}`).row();
 
-  if (key === 'comp') {
-    kb.text('Все', `a:bx_fset|ws:${wsId}|k:comp|v:all|p:${page}`).row();
-    const items = [
-      { text: '🤝 Бартер', cb: `a:bx_fset|ws:${wsId}|k:comp|v:barter|p:${page}` },
-      { text: '🎟 Сертификат', cb: `a:bx_fset|ws:${wsId}|k:comp|v:cert|p:${page}` },
-      { text: '💸 ₽', cb: `a:bx_fset|ws:${wsId}|k:comp|v:rub|p:${page}` },
-      { text: '🔁 Смешано', cb: `a:bx_fset|ws:${wsId}|k:comp|v:mixed|p:${page}` },
-    ];
-    kbAddPairs(kb, items, 2);
-  }
-
-  kbNavRow(kb, `a:bx_filters|ws:${wsId}|p:${page}`);
-  return kb;
-}
-
-function bxMultiPickKb(wsId, key, selected = [], page = 0) {
-  const defs = key === 'goals' ? BRAND_GOALS_TAGS : BRAND_REQ_TAGS;
-  const pickTitle = key === 'goals' ? '🎯 Цели' : '📎 Требования';
-  const set = new Set(Array.isArray(selected) ? selected : []);
-  const kb = new InlineKeyboard();
-
-  const items = defs.map((t) => ({
-    text: `${set.has(t.key) ? '✅ ' : ''}${t.title}`,
-    cb: `a:bx_mt|ws:${wsId}|k:${key}|v:${t.key}|p:${page}`,
+  const pairs = items.map((it) => ({
+    label: it.label,
+    cb: `a:bx_fset|ws:${wsId}|k:${key}|v:${it.value}|p:${page}|h:${h}|r:${r}`
   }));
-  kbAddPairs(kb, items, 2);
+  kbAddPairs(kb, pairs, 2);
+
+  kbNavRow(kb, `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:${r}`);
+  kb.__title = pickTitle;
+  return kb;
+}
+
+function bxMultiPickKb(wsId, key, selected, page = 0, opts = {}) {
+  const wsNum = Number(wsId || 0);
+  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+  const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
+
+  const pickTitle = key === 'goals' ? '🎯 Цели' : '📎 Требования';
+  const items = key === 'goals' ? BX_GOALS_TAGS : BX_REQUIREMENTS_TAGS;
+  const selSet = new Set((selected || []).map(String));
+
+  const kb = new InlineKeyboard();
+  const pairs = items.map((it) => ({
+    label: selSet.has(String(it.value)) ? `✅ ${it.label}` : it.label,
+    cb: `a:bx_mt|ws:${wsId}|k:${key}|v:${it.value}|p:${page}|h:${h}|r:${r}`
+  }));
+  kbAddPairs(kb, pairs, 2);
 
   kb.row();
-  kb.text('🧹 Очистить', `a:bx_mclear|ws:${wsId}|k:${key}|p:${page}`)
-    .text('✅ Готово', `a:bx_mdone|ws:${wsId}|k:${key}|p:${page}`)
+  kb.text('🧹 Очистить', `a:bx_mclear|ws:${wsId}|k:${key}|p:${page}|h:${h}|r:${r}`)
+    .text('✅ Готово', `a:bx_mdone|ws:${wsId}|k:${key}|p:${page}|h:${h}|r:${r}`)
     .row();
-  kbNavRow(kb, `a:bx_filters|ws:${wsId}|p:${page}`);
-  kb.__title = pickTitle; // internal (for rendering)
+
+  kbNavRow(kb, `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:${r}`);
+  kb.__title = pickTitle;
   return kb;
 }
 
-function bxInboxNavKb(wsId, page, hasPrev, hasNext) {
+function bxInboxNavKb(wsId, page, hasPrev, hasNext, opts = {}) {
+  const wsNum = Number(wsId || 0);
+  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
   const kb = new InlineKeyboard();
-  if (hasPrev) kb.text('⬅️', `a:bx_inbox|ws:${wsId}|p:${page - 1}`);
-  if (hasNext) kb.text('➡️', `a:bx_inbox|ws:${wsId}|p:${page + 1}`);
-    kbNavRow(kb, `a:bx_open|ws:${wsId}`);
+  if (hasPrev) kb.text('⬅️', `a:bx_inbox|ws:${wsId}|p:${page - 1}|h:${h}`);
+  if (hasNext) kb.text('➡️', `a:bx_inbox|ws:${wsId}|p:${page + 1}|h:${h}`);
+
+  kbNavRow(kb, bxHomeCb(wsNum, h));
   return kb;
 }
 
@@ -2884,41 +2981,68 @@ function bxThreadKb(wsId, threadId, opts = {}) {
   const canStage = !!opts.canStage;
   const curStage = opts.stage ? String(opts.stage) : null;
   const proofsCount = Number.isFinite(Number(opts.proofsCount)) ? Number(opts.proofsCount) : null;
+  const h = normBxHome(opts.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
   const kb = new InlineKeyboard();
 
   if (canStage) {
     for (const st of CRM_STAGES) {
       const active = curStage && curStage === st.id;
-      kb.text(active ? `✅ ${st.title}` : st.title, `a:bx_stage|ws:${wsId}|t:${threadId}|s:${st.id}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`);
+      kb.text(
+        active ? `✅ ${st.title}` : st.title,
+        `a:bx_stage|ws:${wsId}|t:${threadId}|s:${st.id}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+      );
     }
     kb.row();
   }
 
-  kb.text('✍️ Ответить', `a:bx_thread_reply|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`)
-    .text(proofsCount !== null ? `🧾 Proofs: ${proofsCount}` : '🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`)
+  kb.text(
+      '✍️ Ответить',
+      `a:bx_thread_reply|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+    )
+    .text(
+      proofsCount !== null ? `🧾 Proofs: ${proofsCount}` : '🧾 Proofs',
+      `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+    )
     .row()
-    .text('✅ Закрыть', `a:bx_thread_close_q|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`);
+    .text(
+      '✅ Закрыть',
+      `a:bx_thread_close_q|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+    );
 
   if (opts.showRetryInfo) {
-    const cbTail = `${offerId ? `|o:${offerId}` : ''}|b:${back}|p:${page}`;
+    const cbTail = `${offerId ? `|o:${offerId}` : ''}|b:${back}|p:${page}|h:${h}`;
     kb.row().text('ℹ️ Retry', `a:bx_retry_help|ws:${wsId}|t:${threadId}${cbTail}`);
   }
 
-  if (offerId) kb.row().text('🔎 Оффер', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}`);
-    kb.row().text('🚩 Жалоба', `a:bx_report_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`);
-    kbNavRow(kb, back === 'offer' && offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}` : `a:bx_inbox|ws:${wsId}|p:${page}`);
+  if (offerId) kb.row().text('🔎 Оффер', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
+
+  kb.row().text(
+    '🚩 Жалоба',
+    `a:bx_report_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+  );
+
+  const backCb = back === 'offer' && offerId
+    ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`
+    : `a:bx_inbox|ws:${wsId}|p:${page}|h:${h}`;
+
+  kbNavRow(kb, backCb);
   return kb;
 }
 
-function bxFeedNavKb(wsId, page, hasPrev, hasNext) {
+function bxFeedNavKb(wsId, page, hasPrev, hasNext, opts = {}) {
+  const wsNum = Number(wsId || 0);
+  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
   const kb = new InlineKeyboard();
-  if (hasPrev) kb.text('⬅️', `a:bx_feed|ws:${wsId}|p:${page - 1}`);
-  if (hasNext) kb.text('➡️', `a:bx_feed|ws:${wsId}|p:${page + 1}`);
-    kb.row()
-    .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:${page}`)
-    .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0`);
-    kbNavRow(kb, `a:bx_open|ws:${wsId}`);
+  if (hasPrev) kb.text('⬅️', `a:bx_feed|ws:${wsId}|p:${page - 1}|h:${h}`);
+  if (hasNext) kb.text('➡️', `a:bx_feed|ws:${wsId}|p:${page + 1}|h:${h}`);
+
+  kb.row()
+    .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:bf`)
+    .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo|h:bo|h:${h}`);
+
+  kbNavRow(kb, bxHomeCb(wsNum, h));
   return kb;
 }
 
@@ -6108,16 +6232,20 @@ ${compLine}
 <tg-spoiler>${escapeHtml(src)}</tg-spoiler>${hint}`;
 }
 
-function bxSmartKb(wsId) {
+function bxSmartKb(wsId, opts = {}) {
+  const wsNum = Number(wsId || 0);
+  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
   return new InlineKeyboard()
-    .text('📰 Открыть ленту', `a:bx_feed|ws:${wsId}|p:0`)
-    .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0`)
+    .text('📰 Открыть ленту', `a:bx_feed|ws:${wsId}|p:0|h:${h}`)
+    .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0|h:${h}|r:bs`)
     .row()
-    .text('♻️ Сбросить', `a:bx_smart_reset|ws:${wsId}`)
+    .text('♻️ Сбросить', `a:bx_smart_reset|ws:${wsId}|h:${h}`)
     .text('📋 Меню', 'a:menu');
 }
 
 async function renderBxOpen(ctx, ownerUserId, wsId) {
+  // BX cabinet is a navigation home for Back in BX flows
+  if (ownerUserId) await setUiHome(ownerUserId, BX_HOME.BX_OPEN);
   const wsNum = Number(wsId || 0);
   if (wsNum === 0) {
     const credits = await db.getBrandCredits(ownerUserId);
@@ -6172,7 +6300,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
   );
 }
 
-async function renderBxFeed(ctx, ownerUserId, wsId, page = 0) {
+async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -6266,7 +6394,7 @@ ${featLines.join('\n\n')}
     kb.text(`🔥 #F${f.id}`, `a:feat_view|ws:${wsNum}|id:${f.id}|p:${page}`).row();
   }
   for (const o of rows) {
-    kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsNum}|o:${o.id}|p:${page}`).row();
+    kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsNum}|o:${o.id}|p:${page}|h:${h}`).row();
   }
 
   const hasPrev = page > 0;
@@ -6506,14 +6634,14 @@ ${contact ? `Контакт: <b>${escapeHtml(contact)}</b>` : ''}`;
 
   const backCb = back === 'my'
     ? `a:bx_my|ws:${wsId}|p:0`
-    : (back === 'arch' ? `a:bx_my_arch|ws:${wsId}|p:0` : `a:bx_feed|ws:${wsId}|p:0`);
+    : (back === 'arch' ? `a:bx_my_arch|ws:${wsId}|p:0` : `a:bx_feed|ws:${wsId}|p:0|h:bo`);
   kb.text('⬅️ Назад', backCb);
 
   await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
-async function renderBxFilters(ctx, ownerUserId, wsId, page = 0) {
+async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -6532,11 +6660,11 @@ ${escapeHtml(bxFilterSummary(f))}
 <i>Настройки применяются к ленте сразу. Нажми «📋 Показать креаторов», чтобы увидеть выдачу.</i>`;
   await ctx.editMessageText(text, {
     parse_mode: 'HTML',
-    reply_markup: bxFiltersKb(wsNum, f, page)
+    reply_markup: bxFiltersKb(wsNum, f, page, opts)
   });
 }
 
-async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0) {
+async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -6566,12 +6694,12 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0) {
 
   await ctx.editMessageText(text, {
     parse_mode: 'HTML',
-    reply_markup: bxPickKb(wsNum, key, page),
+    reply_markup: bxPickKb(wsNum, key, page, opts),
     disable_web_page_preview: true
   });
 }
 
-async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0) {
+async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -6600,12 +6728,12 @@ async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0) {
   const sel = key === 'goals' ? f.goalsTags : f.reqTags;
   await ctx.editMessageText(text, {
     parse_mode: 'HTML',
-    reply_markup: bxMultiPickKb(wsNum, key, sel, page),
+    reply_markup: bxMultiPickKb(wsNum, key, sel, page, opts),
     disable_web_page_preview: true
   });
 }
 
-async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0) {
+async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {}) {
   const o = CFG.VERIFICATION_ENABLED
     ? await safeUserVerifications(() => db.getBarterOfferPublicWithVerified(offerId), () => db.getBarterOfferPublic(offerId))
     : await db.getBarterOfferPublic(offerId);
@@ -6650,7 +6778,9 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0) {
     `${contact ? `Контакт: <b>${escapeHtml(contact)}</b>\n` : ''}` +
     `\nЕсли бот не может проверить каналы — попроси админа добавить бота в канал-спонсор.`;
 
-  const kb = new InlineKeyboard().text('💬 Написать', `a:bx_msg|ws:${wsId}|o:${offerId}|p:${page}`);
+  const h = normBxHome(opts.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
+  const kb = new InlineKeyboard().text('💬 Написать', `a:bx_msg|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
 
   const isOwner = Number(o.owner_user_id) === Number(userId);
   let canOfficial = false;
@@ -6663,12 +6793,12 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0) {
   }
 
   if (canOfficial) {
-    kb.row().text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`);
+    kb.row().text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
   }
 
-  kb.row().text('🚩 Жалоба', `a:bx_report_offer|ws:${wsId}|o:${offerId}|p:${page}`);
+  kb.row().text('🚩 Жалоба', `a:bx_report_offer|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
   // Back: for non-owners this wsId feed is inaccessible; send them to Brand Mode feed
-  const backCb = isOwner ? `a:bx_feed|ws:${wsId}|p:${page}` : `a:bx_feed|ws:0|p:0`;
+  const backCb = isOwner ? `a:bx_feed|ws:${wsId}|p:${page}|h:${h}` : `a:bx_feed|ws:0|p:0|h:${h}`;
   kb.row().text('⬅️ Назад', backCb);
 
   const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
@@ -7169,6 +7299,9 @@ ${trialLine}${limitLine}${verifyHintLine}
 
 async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
 
+  const wsNum = Number(wsId || 0);
+  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
   const limit = CFG.BARTER_INBOX_PAGE_SIZE;
   const offset = page * limit;
   const rows = CFG.VERIFICATION_ENABLED
@@ -7187,7 +7320,7 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
   const kb = new InlineKeyboard();
 
   if (opts?.bm?.enabled && (opts.bm.brands || []).length > 1) {
-    kb.text('🔁 Сменить бренд', `a:bm_pick_brand|ret:bx_inbox|ws:${wsId}|p:${page}`).row();
+    kb.text('🔁 Сменить бренд', `a:bm_pick_brand|ret:bx_inbox|ws:${wsId}|p:${page}|h:${h}`).row();
   }
 
   for (const t of rows) {
@@ -7320,12 +7453,13 @@ function bxProofsKb(wsId, threadId, opts = {}) {
   const page = Number(opts.page || 0);
   const offerId = opts.offerId ? Number(opts.offerId) : null;
 
-  const cbTail = `${offerId ? `|o:${offerId}` : ''}|b:${back}|p:${page}`;
+  const h = normBxHome(opts.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+  const cbTail = `${offerId ? `|o:${offerId}` : ''}|b:${back}|p:${page}|h:${h}`;
   return new InlineKeyboard()
     .text('➕ Ссылка', `a:bx_proof_link|ws:${wsId}|t:${threadId}${cbTail}`)
     .text('📎 Скрин', `a:bx_proof_photo|ws:${wsId}|t:${threadId}${cbTail}`)
     .row()
-    .text('⬅️ Назад', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`);
+    .text('⬅️ Назад', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`);
 }
 
 async function renderBxProofs(ctx, userId, wsId, threadId, opts = {}) {
@@ -9799,7 +9933,7 @@ if (exp.type === 'brand_deals_search') {
       if (!rows.length) {
         const kb = new InlineKeyboard()
           .text('🎯 Matching', `a:match_home|ws:${wsId}`)
-          .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0`)
+          .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
           .row()
           .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
         await ctx.reply(
@@ -9820,7 +9954,7 @@ if (exp.type === 'brand_deals_search') {
       for (const o of rows.slice(0, btnN)) {
         kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsId}|o:${o.id}|p:0`).row();
       }
-      kb.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0`)
+      kb.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
         .text('🎯 Matching', `a:match_home|ws:${wsId}`)
         .row()
         .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
@@ -9870,7 +10004,7 @@ if (exp.type === 'brand_deals_search') {
       const kb = new InlineKeyboard()
         .text('🔥 Посмотреть', `a:feat_view|ws:${wsId}|id:${f.id}|p:0`)
         .row()
-        .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0`)
+        .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
         .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
       await ctx.reply(`✅ Featured активирован до <b>${escapeHtml(String(ends))}</b>.`, { parse_mode: 'HTML', reply_markup: kb });
@@ -10765,7 +10899,7 @@ ${list}
       const kb = new InlineKeyboard()
         .text('🧑‍💼 Кабинет менеджера', 'a:bm_home')
         .row()
-        .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0')
+        .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
         .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
         .row()
         .text('📋 Меню', 'a:menu');
@@ -11379,7 +11513,7 @@ bot.on('message:successful_payment', async (ctx) => {
       const wsId = Number(data.wsId || 0);
       const kb = new InlineKeyboard()
         .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`)
-        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0`)
+        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
         .row()
         .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
@@ -11474,10 +11608,10 @@ if (p.a === 'a:guide') {
 `;
     }
 
-    kb.text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0')
+    kb.text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm')
       .text('🔎 Поиск', 'a:pm_home|ws:0')
       .row()
-      .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0');
+      .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm');
 
     if (!bm.enabled) {
       kb.text('🏷 Профиль', 'a:brand_profile|ws:0|ret:brand')
@@ -11813,8 +11947,11 @@ if (p.a === 'a:brand_apply') {
       const ret = String(p.ret || 'menu');
       const wsId = Number(p.ws || 0);
       const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
-      await renderBmPickBrand(ctx, u, { ret, wsId, page, edit: true });
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      await renderBmPickBrand(ctx, u, { ret, wsId, page, edit: true, h, r });
       return;
     }
 
@@ -11826,6 +11963,8 @@ if (p.a === 'a:brand_apply') {
       const ret = String(p.ret || 'menu');
       const wsId = Number(p.ws || 0);
       const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
       // Validate that manager is still assigned to this brand
       let brands = [];
@@ -11854,7 +11993,7 @@ if (p.a === 'a:brand_apply') {
       const ok = brands.some((b) => Number(b.user_id) === brandUserId);
       if (!ok) {
         await ctx.answerCallbackQuery({ text: 'Нет доступа к этому бренду.' });
-        await renderBmPickBrand(ctx, u, { ret, wsId, page, edit: true });
+        await renderBmPickBrand(ctx, u, { ret, wsId, page, edit: true, h, r });
         return;
       }
 
@@ -11865,11 +12004,15 @@ if (p.a === 'a:brand_apply') {
       // Route after pick
       if (ret === 'bx_inbox') {
         const bm = await resolveBmBrandContext(ctx, u);
-        await renderBxInbox(ctx, brandUserId, wsId, page, { bm });
+        await renderBxInbox(ctx, brandUserId, wsId, page, { bm, h });
         return;
       }
       if (ret === 'bx_feed') {
-        await renderBxFeed(ctx, brandUserId, wsId, page);
+        await renderBxFeed(ctx, brandUserId, wsId, page, { h });
+        return;
+      }
+      if (ret === 'bx_filters') {
+        await renderBxFilters(ctx, brandUserId, wsId, page, { h, r });
         return;
       }
       if (ret === 'bx_open') {
@@ -11962,6 +12105,8 @@ if (p.a === 'a:menu') {
       // Backward-compat: old buttons for disabled workspaces
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
       await renderCuratorWorkspace(ctx, u.id, wsId);
       return;
@@ -11977,6 +12122,8 @@ if (p.a === 'a:menu') {
         return;
       }
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
       await renderCuratorWorkspace(ctx, u.id, wsId);
       return;
@@ -11990,6 +12137,8 @@ if (p.a === 'a:menu') {
         return;
       }
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
 
       // ensure user is actually curator for this workspace
@@ -12024,6 +12173,8 @@ if (p.a === 'a:menu') {
         return;
       }
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
 
       const items = await db.listCuratorWorkspaces(u.id);
@@ -12129,6 +12280,8 @@ if (p.a === 'a:menu') {
         return;
       }
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const gwId = Number(p.i || 0);
       if (!wsId || !gwId) return;
 
@@ -12153,6 +12306,8 @@ if (p.a === 'a:menu') {
         return;
       }
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const gwId = Number(p.i || 0);
       if (!wsId || !gwId) return;
 
@@ -12184,6 +12339,8 @@ if (p.a === 'a:menu') {
         return;
       }
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const gwId = Number(p.i || 0);
       if (!wsId || !gwId) return;
 
@@ -12216,6 +12373,8 @@ if (p.a === 'a:menu') {
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const gwId = Number(p.i || 0);
       if (!wsId || !gwId) return;
       await renderCuratorGiveawayOpen(ctx, u.id, wsId, gwId);
@@ -12224,6 +12383,8 @@ if (p.a === 'a:menu') {
 
 if (p.a === 'a:wsp_preview') {
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return ctx.answerCallbackQuery({ text: 'Workspace не найден.' });
 
       try { await ctx.answerCallbackQuery({ text: 'Открываю витрину…' }); } catch {}
@@ -12236,6 +12397,8 @@ if (p.a === 'a:wsp_preview') {
     if (p.a === 'a:wsp_open') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
       await renderWsPublicProfile(ctx, wsId);
       return;
@@ -12243,6 +12406,8 @@ if (p.a === 'a:wsp_preview') {
 
     if (p.a === 'a:wsp_lead_new') {
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
 
       // Gate by Brand Profile (basic 3 fields) and skip Step 1 when complete
@@ -12481,6 +12646,8 @@ if (p.a === 'a:brand_app_chat') {
 if (p.a === 'a:ws_leads') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
       await renderWsLeadsList(ctx, u.id, wsId, String(p.s || 'new'), Number(p.p || 0));
       return;
@@ -12697,6 +12864,8 @@ if (p.a === 'a:lead_set') {
     if (p.a === 'a:ws_share') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
       await renderWsShareMenu(ctx, u.id, wsId);
       return;
@@ -12705,6 +12874,8 @@ if (p.a === 'a:lead_set') {
     if (p.a === 'a:ws_share_send') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
       const v = String(p.v || 'short') === 'long' ? 'long' : 'short';
       await sendWsShareTextMessage(ctx, u.id, wsId, v);
@@ -12891,6 +13062,8 @@ if (p.a === 'a:ws_prof_mode') {
       }
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const offerId = (p.o !== undefined && p.o !== null && p.o !== '') ? Number(p.o) : null;
       const packId = String(p.pack || 'S');
       const page = Number(p.p || 0);
@@ -13082,6 +13255,8 @@ ${link}`;
     if (p.a === 'a:brand_profile') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand'); // brand | offer | lead | verify
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13104,6 +13279,8 @@ ${link}`;
     if (p.a === 'a:brand_profile_edit') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13128,6 +13305,8 @@ ${link}`;
 
     if (p.a === 'a:brand_continue') {
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (String(p.ret || '') !== 'lead' || !wsId) {
         await ctx.answerCallbackQuery();
         await renderBrandProfileHome(ctx, u.id, { wsId, ret: String(p.ret || 'brand'), backOfferId: p.bo ? Number(p.bo) : null, backPage: p.bp ? Number(p.bp) : 0, edit: true });
@@ -13152,6 +13331,8 @@ ${link}`;
     if (p.a === 'a:brand_prof_more') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13162,6 +13343,8 @@ ${link}`;
     if (p.a === 'a:brand_prof_set') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13197,6 +13380,8 @@ ${link}`;
     // Brand profile: structured collab types multi-select
     if (p.a === 'a:brand_ty_t') {
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13243,6 +13428,8 @@ ${link}`;
     if (p.a === 'a:brand_ty_clear') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13265,6 +13452,8 @@ ${link}`;
     if (p.a === 'a:brand_ty_done') {
       await ctx.answerCallbackQuery({ text: '✅ Сохранено' });
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13277,6 +13466,8 @@ ${link}`;
     if (p.a === 'a:brand_bb_pick') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13287,6 +13478,8 @@ ${link}`;
     if (p.a === 'a:brand_bb_set') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13303,6 +13496,8 @@ ${link}`;
     if (p.a === 'a:brand_bb_clear') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13314,6 +13509,8 @@ ${link}`;
     if (p.a === 'a:brand_bb_done') {
       await ctx.answerCallbackQuery({ text: '✅ Сохранено' });
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13324,6 +13521,8 @@ ${link}`;
     if (p.a === 'a:brand_gt_pick') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13334,6 +13533,8 @@ ${link}`;
     if (p.a === 'a:brand_gt_t') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13354,6 +13555,8 @@ ${link}`;
     if (p.a === 'a:brand_gt_clear') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13365,6 +13568,8 @@ ${link}`;
     if (p.a === 'a:brand_gt_done') {
       await ctx.answerCallbackQuery({ text: '✅ Сохранено' });
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13375,6 +13580,8 @@ ${link}`;
     if (p.a === 'a:brand_rt_pick') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13385,6 +13592,8 @@ ${link}`;
     if (p.a === 'a:brand_rt_t') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13405,6 +13614,8 @@ ${link}`;
     if (p.a === 'a:brand_rt_clear') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13416,6 +13627,8 @@ ${link}`;
     if (p.a === 'a:brand_rt_done') {
       await ctx.answerCallbackQuery({ text: '✅ Сохранено' });
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13427,6 +13640,8 @@ ${link}`;
     if (p.a === 'a:brand_prof_reset') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13446,6 +13661,8 @@ ${link}`;
 
     if (p.a === 'a:brand_prof_reset_ok') {
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -13471,6 +13688,8 @@ ${link}`;
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
 
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
         await ctx.editMessageText(
@@ -13487,6 +13706,8 @@ ${link}`;
     if (p.a === 'a:brand_plan') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
@@ -13508,6 +13729,8 @@ ${link}`;
       }
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const plan = String(p.plan || 'basic').toLowerCase();
       if (plan !== 'basic' && plan !== 'max') {
         return ctx.answerCallbackQuery({ text: 'План не найден.' });
@@ -13537,6 +13760,8 @@ ${link}`;
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
 
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       const effectiveUserId = (wsId === 0 && bm.enabled) ? bm.brandUserId : u.id;
 
@@ -13547,6 +13772,8 @@ ${link}`;
     if (p.a === 'a:pm_reset') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       await pmResetState(ctx.from.id, wsId);
       await renderProfileMatchingHome(ctx, u.id, wsId);
       return;
@@ -13561,6 +13788,8 @@ ${link}`;
     if (p.a === 'a:pm_tog') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const type = String(p.t || 'v');
       const key = String(p.k || '');
 
@@ -13595,6 +13824,8 @@ ${link}`;
     if (p.a === 'a:pm_view') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const target = Number(p.id || 0);
       const page = Number(p.p || 0);
       if (!target) return;
@@ -13616,6 +13847,8 @@ if (p.a === 'a:match_home') {
       }
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const tierId = String(p.tier || 'S').toUpperCase();
       const tier = MATCH_TIERS.find(t => t.id === tierId);
       if (!tier) return ctx.answerCallbackQuery({ text: 'Тариф не найден.' });
@@ -13650,6 +13883,8 @@ if (p.a === 'a:match_home') {
       }
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const durId = String(p.dur || '1d');
       const d = FEATURED_DURATIONS.find(x => x.id === durId);
       if (!d) return ctx.answerCallbackQuery({ text: 'Тариф не найден.' });
@@ -13680,6 +13915,8 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:feat_stop') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const id = Number(p.id);
       const ok = await db.stopFeaturedPlacement(id, u.id);
       if (!ok) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
@@ -13947,6 +14184,8 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
 
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const mode = await resolveUiMode(ctx.from.id);
       if (mode !== UI_MODES.BRAND) {
         await renderBxBrandOnlyNotice(ctx);
@@ -13974,7 +14213,7 @@ if (p.a === 'a:match_home') {
 
       await ctx.editMessageText(
         bxSmartPrefillText(next, info, totalAll, totalFiltered),
-        { parse_mode: 'HTML', reply_markup: bxSmartKb(wsId) }
+        { parse_mode: 'HTML', reply_markup: bxSmartKb(wsId, { h }) }
       );
       return;
     }
@@ -13983,6 +14222,8 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
 
       const wsId = Number(p.ws || 0);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const mode = await resolveUiMode(ctx.from.id);
       if (mode !== UI_MODES.BRAND) {
         await renderBxBrandOnlyNotice(ctx);
@@ -13993,7 +14234,7 @@ if (p.a === 'a:match_home') {
       if (!bmRes) return;
 
 	      await setBxFilter(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
-      await renderBxFeed(ctx, bmRes.userId, wsId, 0);
+      await renderBxFeed(ctx, bmRes.userId, wsId, 0, { h });
       return;
     }
 
@@ -14008,10 +14249,12 @@ if (p.a === 'a:match_home') {
       const wsId = Number(p.ws);
       const page = Number(p.p || 0);
 
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
       if (!bmRes) return;
 
-      await renderBxFeed(ctx, bmRes.userId, wsId, page);
+      await renderBxFeed(ctx, bmRes.userId, wsId, page, { h });
       return;
     }
 
@@ -14026,10 +14269,13 @@ if (p.a === 'a:match_home') {
       const wsId = Number(p.ws);
       const page = Number(p.p || 0);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
-      await renderBxFilters(ctx, bmRes.userId, wsId, page);
+      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
 
@@ -14046,10 +14292,13 @@ if (p.a === 'a:match_home') {
 	      const key = String(p.k || '');
 	      if (!['goals', 'req'].includes(key)) return;
 
-	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
-	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page);
+	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
 
@@ -14067,14 +14316,17 @@ if (p.a === 'a:match_home') {
 	      const v = String(p.v || '');
 	      if (!['goals', 'req'].includes(key)) return;
 
-	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
 	      const cur = await getBxFilter(ctx.from.id, wsId);
 	      const field = key === 'goals' ? 'goalsTags' : 'reqTags';
 	      const allowed = key === 'goals' ? BRAND_GOALS_KEYS : BRAND_REQ_KEYS;
 	      if (!allowed.has(v)) {
-	        await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page);
+	        await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	        return;
 	      }
 
@@ -14083,7 +14335,7 @@ if (p.a === 'a:match_home') {
 	      else set.add(v);
 
 	      await setBxFilter(ctx.from.id, wsId, { [field]: Array.from(set) });
-	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page);
+	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
 
@@ -14100,12 +14352,15 @@ if (p.a === 'a:match_home') {
 	      const key = String(p.k || '');
 	      if (!['goals', 'req'].includes(key)) return;
 
-	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
 	      const field = key === 'goals' ? 'goalsTags' : 'reqTags';
 	      await setBxFilter(ctx.from.id, wsId, { [field]: [] });
-	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page);
+	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
 
@@ -14120,10 +14375,13 @@ if (p.a === 'a:match_home') {
 	      const wsId = Number(p.ws);
 	      const page = Number(p.p || 0);
 
-	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
-	      await renderBxFilters(ctx, bmRes.userId, wsId, page);
+	      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
 	      return;
 	    }
 
@@ -14139,11 +14397,14 @@ if (p.a === 'a:match_home') {
 	      const page = Number(p.p || 0);
 	      const key = String(p.k || '');
 
-	      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
 	      // Open picker (do NOT change the filter here)
-	      await renderBxFilterPick(ctx, bmRes.userId, wsId, key, page);
+	      await renderBxFilterPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
 
@@ -14166,11 +14427,14 @@ if (p.a === 'a:match_home') {
         : (keyRaw === 'type' ? 'offerType' : (keyRaw === 'comp' ? 'compensationType' : keyRaw));
       const v = vRaw === 'all' ? null : vRaw;
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
       await setBxFilter(ctx.from.id, wsId, { [key]: v });
-      await renderBxFilters(ctx, bmRes.userId, wsId, page);
+      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
 
@@ -14179,17 +14443,24 @@ if (p.a === 'a:match_home') {
       const wsId = Number(p.ws);
       const page = Number(p.p || 0);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
       await setBxFilter(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null });
-      await renderBxFilters(ctx, bmRes.userId, wsId, page);
+      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
 
     if (p.a === 'a:bx_pub') {
       await ctx.answerCallbackQuery();
-      await renderBxPublicView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
+      const wsId = Number(p.ws || 0);
+      const offerId = Number(p.o);
+      const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      await renderBxPublicView(ctx, u.id, wsId, offerId, page, { h });
       return;
     }
 
@@ -14203,7 +14474,8 @@ if (p.a === 'a:match_home') {
         await ctx.answerCallbackQuery({ text: 'Оффер не найден.', show_alert: true });
         return;
       }
-      await renderBxPublicView(ctx, u.id, wsId, offerId, page);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      await renderBxPublicView(ctx, u.id, wsId, offerId, page, { h });
       return;
     }
 
@@ -14527,10 +14799,12 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
+      const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       await ctx.editMessageText('🚩 Опиши проблему одним сообщением (почему жалоба).', {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${Number(p.p || 0)}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`)
       });
-      await setExpectText(ctx.from.id, { type: 'bx_report', kind: 'offer', wsId, offerId, page: Number(p.p || 0) });
+      await setExpectText(ctx.from.id, { type: 'bx_report', kind: 'offer', wsId, offerId, page, h });
       return;
     }
 
@@ -14538,10 +14812,12 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
+      const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       await ctx.editMessageText('🚩 Опиши проблему одним сообщением (почему жалоба).', {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${Number(p.p || 0)}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|h:${h}`)
       });
-      await setExpectText(ctx.from.id, { type: 'bx_report', kind: 'thread', wsId, threadId, page: Number(p.p || 0) });
+      await setExpectText(ctx.from.id, { type: 'bx_report', kind: 'thread', wsId, threadId, page, h });
       return;
     }
     if (p.a === 'a:bx_msg') {
@@ -14553,7 +14829,10 @@ if (p.a === 'a:match_home') {
       let actorUserId = u.id;
       let bm = { enabled: false };
       if (wsId === 0) {
-        const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+        const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
         if (!bmRes) return;
         actorUserId = bmRes.userId;
         bm = bmRes.bm || { enabled: false };
@@ -14568,7 +14847,7 @@ if (p.a === 'a:match_home') {
               text: '⚠️ Профиль бренда не заполнен. Попроси владельца бренда заполнить 4 базовых поля (Название, Ниша, Контакт, Ссылка).',
               show_alert: true
             });
-            await renderBxPublicView(ctx, actorUserId, wsId, offerId, page);
+            await renderBxPublicView(ctx, actorUserId, wsId, offerId, page, { h });
             return;
           }
 
@@ -14665,7 +14944,7 @@ if (p.a === 'a:match_home') {
         await ctx.answerCallbackQuery({ text: `🎟 Диалог открыт. Использован Retry credit.`, show_alert: true });
       }
 
-      await renderBxThread(ctx, actorUserId, wsId, res.thread.id, { back: 'offer', offerId, page });
+      await renderBxThread(ctx, actorUserId, wsId, res.thread.id, { back: 'offer', offerId, page, h });
       return;
     }
 
@@ -14673,11 +14952,12 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
       const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      await renderBxInbox(ctx, bmRes.userId, wsId, page, { bm: bmRes.bm });
+      await renderBxInbox(ctx, bmRes.userId, wsId, page, { bm: bmRes.bm, h });
       return;
     }
 
@@ -14686,13 +14966,14 @@ if (p.a === 'a:match_home') {
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
       const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page });
+      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h });
       return;
     }
 
@@ -14705,18 +14986,21 @@ if (p.a === 'a:bx_retry_help') {
     text: `Retry credit: если бренд написал, а ответа нет ${afterH}h → бот выдаёт 1 retry credit (действует ${expD}d). Следующий интро-диалог может открыться без списания Brand Pass.`
   });
   return;
-}    if (p.a === 'a:bx_proofs') {
+}
+
+    if (p.a === 'a:bx_proofs') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const page = Number(p.p || 0);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      await renderBxProofs(ctx, bmRes.userId, wsId, threadId, { back, offerId, page });
+      await renderBxProofs(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h });
       return;
     }
 
@@ -14726,13 +15010,14 @@ if (p.a === 'a:bx_retry_help') {
       const threadId = Number(p.t);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const page = Number(p.p || 0);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
       await ctx.editMessageText('🔗 Пришли ссылку на пост (пример: https://t.me/... )', {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, asUserId: bmRes.userId });
       return;
@@ -14744,13 +15029,14 @@ if (p.a === 'a:bx_retry_help') {
       const threadId = Number(p.t);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const page = Number(p.p || 0);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
       await ctx.editMessageText('🖼️ Пришли скриншот (как фото)', {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, asUserId: bmRes.userId });
       return;
@@ -14762,10 +15048,10 @@ if (p.a === 'a:bx_retry_help') {
       const stage = String(p.s || '');
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const page = Number(p.p || 0);
 
-
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', 0);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
       const stageOk = ['new', 'in_progress', 'done'].includes(stage);
@@ -14785,7 +15071,7 @@ if (p.a === 'a:bx_retry_help') {
         return;
       }
       await ctx.answerCallbackQuery({ text: '✅ Обновлено' });
-      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page });
+      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h });
       return;
     }
 
@@ -14794,16 +15080,17 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws || 0);
       const threadId = Number(p.t);
       const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
       await ctx.editMessageText('✍️ Напиши сообщение покупателю:', {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
-      await setExpectText(ctx.from.id, { type: 'bx_thread_msg', wsId, threadId, back, offerId, page, asUserId: bmRes.userId });
+      await setExpectText(ctx.from.id, { type: 'bx_thread_msg', wsId, threadId, back, offerId, page, h, asUserId: bmRes.userId });
       return;
     }
 
@@ -14812,9 +15099,10 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
       const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
-      const cbTail = `|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`;
+      const cbTail = `|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`;
 
       const kb = new InlineKeyboard()
         .text('✅ Закрыть', `a:bx_thread_close_do|ws:${wsId}|t:${threadId}${cbTail}`)
@@ -14828,8 +15116,9 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
       const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
       const ok = await db.closeBarterThread(threadId, bmRes.userId);
@@ -14838,7 +15127,7 @@ if (p.a === 'a:bx_retry_help') {
         return;
       }
       await ctx.answerCallbackQuery({ text: '✅ Тред закрыт' });
-      await renderBxInbox(ctx, bmRes.userId, wsId, page, { bm: bmRes.bm });
+      await renderBxInbox(ctx, bmRes.userId, wsId, page, { bm: bmRes.bm, h });
       return;
     }
 
