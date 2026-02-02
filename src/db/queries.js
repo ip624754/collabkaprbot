@@ -1012,6 +1012,27 @@ export async function listEntriesToCheck(limit = 50) {
 // Barters marketplace (v0.9.1)
 // -----------------------------
 
+function isMissingBarterOffersMetaColumnError(err) {
+  const code = String(err?.code || '');
+  const msg = String(err?.message || '').toLowerCase();
+  // 42703 = undefined_column (Postgres)
+  if (code === '42703' && msg.includes('meta')) return true;
+  if (msg.includes('column') && msg.includes('meta') && msg.includes('does not exist')) return true;
+  return false;
+}
+
+export async function hasBarterOffersMetaColumn() {
+  const r = await pool.query(
+    `select 1 as ok
+     from information_schema.columns
+     where table_name='barter_offers'
+       and column_name='meta'
+     limit 1`
+  );
+  return r.rows.length > 0;
+}
+
+
 export async function createBarterOffer(input) {
   const {
     workspaceId,
@@ -1026,55 +1047,111 @@ export async function createBarterOffer(input) {
     contact,
   } = input;
 
-  const r = await pool.query(
-    `insert into barter_offers
-      (workspace_id, creator_user_id, category, offer_type, compensation_type, meta, title, description, partner_folder_id, contact)
-     values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)
-     returning *`,
-    [workspaceId, creatorUserId || null, category, offerType, compensationType, JSON.stringify(meta || {}), title, description, partnerFolderId || null, contact || null]
-  );
-  return r.rows[0];
+  try {
+    const r = await pool.query(
+      `insert into barter_offers
+        (workspace_id, creator_user_id, category, offer_type, compensation_type, meta, title, description, partner_folder_id, contact)
+       values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)
+       returning *`,
+      [workspaceId, creatorUserId || null, category, offerType, compensationType, JSON.stringify(meta || {}), title, description, partnerFolderId || null, contact || null]
+    );
+    return r.rows[0];
+  } catch (err) {
+    // Soft-fallback: if migration 028_barter_offers_meta.sql is not applied yet, publish without meta.
+    if (!isMissingBarterOffersMetaColumnError(err)) throw err;
+    const r = await pool.query(
+      `insert into barter_offers
+        (workspace_id, creator_user_id, category, offer_type, compensation_type, title, description, partner_folder_id, contact)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       returning *`,
+      [workspaceId, creatorUserId || null, category, offerType, compensationType, title, description, partnerFolderId || null, contact || null]
+    );
+    const row = r.rows[0] || null;
+    if (row) row.__meta_missing = true;
+    return row;
+  }
 }
+
 
 export async function listNetworkBarterOffers(opts = {}) {
   const { category = null, offerType = null, compensationType = null, goalsTags = null, reqTags = null, limit = 5, offset = 0 } = opts;
-  const r = await pool.query(
-    `select o.*, w.title as ws_title, w.channel_username, w.channel_id
-     from barter_offers o
-     join workspaces w on w.id = o.workspace_id
-     join workspace_settings s on s.workspace_id = w.id
-     where o.status='ACTIVE'
-       and s.network_enabled=true
-       and ($1::text is null or o.category=$1)
-       and ($2::text is null or o.offer_type=$2)
-       and ($3::text is null or o.compensation_type=$3)
-       and ($4::text[] is null or coalesce(o.meta->'goals_tags','[]'::jsonb) ?| $4::text[])
-       and ($5::text[] is null or coalesce(o.meta->'req_tags','[]'::jsonb) ?| $5::text[])
-     order by case when s.plan='pro' and (s.pro_until is null or s.pro_until>now()) and s.pro_pinned_offer_id = o.id then 0 else 1 end,
-              o.bump_at desc
-     limit $6 offset $7`,
-    [category, offerType, compensationType, goalsTags && goalsTags.length ? goalsTags : null, reqTags && reqTags.length ? reqTags : null, limit, offset]
-  );
-  return r.rows;
+  try {
+    const r = await pool.query(
+      `select o.*, w.title as ws_title, w.channel_username, w.channel_id
+       from barter_offers o
+       join workspaces w on w.id = o.workspace_id
+       join workspace_settings s on s.workspace_id = w.id
+       where o.status='ACTIVE'
+         and s.network_enabled=true
+         and ($1::text is null or o.category=$1)
+         and ($2::text is null or o.offer_type=$2)
+         and ($3::text is null or o.compensation_type=$3)
+         and ($4::text[] is null or coalesce(o.meta->'goals_tags','[]'::jsonb) ?| $4::text[])
+         and ($5::text[] is null or coalesce(o.meta->'req_tags','[]'::jsonb) ?| $5::text[])
+       order by case when s.plan='pro' and (s.pro_until is null or s.pro_until>now()) and s.pro_pinned_offer_id = o.id then 0 else 1 end,
+                o.bump_at desc
+       limit $6 offset $7`,
+      [category, offerType, compensationType, goalsTags && goalsTags.length ? goalsTags : null, reqTags && reqTags.length ? reqTags : null, limit, offset]
+    );
+    return r.rows;
+  } catch (err) {
+    if (!isMissingBarterOffersMetaColumnError(err)) throw err;
+    // Soft-fallback: ignore tag filters until migration 028 is applied.
+    const r = await pool.query(
+      `select o.*, w.title as ws_title, w.channel_username, w.channel_id
+       from barter_offers o
+       join workspaces w on w.id = o.workspace_id
+       join workspace_settings s on s.workspace_id = w.id
+       where o.status='ACTIVE'
+         and s.network_enabled=true
+         and ($1::text is null or o.category=$1)
+         and ($2::text is null or o.offer_type=$2)
+         and ($3::text is null or o.compensation_type=$3)
+       order by case when s.plan='pro' and (s.pro_until is null or s.pro_until>now()) and s.pro_pinned_offer_id = o.id then 0 else 1 end,
+                o.bump_at desc
+       limit $4 offset $5`,
+      [category, offerType, compensationType, limit, offset]
+    );
+    const rows = r.rows || [];
+    for (const row of rows) row.__meta_missing = true;
+    return rows;
+  }
 }
 
 export async function countNetworkBarterOffers(opts = {}) {
   const { category = null, offerType = null, compensationType = null, goalsTags = null, reqTags = null } = opts;
-  const r = await pool.query(
-    `select count(*)::int as cnt
-     from barter_offers o
-     join workspaces w on w.id = o.workspace_id
-     join workspace_settings s on s.workspace_id = w.id
-     where o.status='ACTIVE'
-       and s.network_enabled=true
-       and ($1::text is null or o.category=$1)
-       and ($2::text is null or o.offer_type=$2)
-       and ($3::text is null or o.compensation_type=$3)
-       and ($4::text[] is null or coalesce(o.meta->'goals_tags','[]'::jsonb) ?| $4::text[])
-       and ($5::text[] is null or coalesce(o.meta->'req_tags','[]'::jsonb) ?| $5::text[])`,
-    [category, offerType, compensationType, goalsTags && goalsTags.length ? goalsTags : null, reqTags && reqTags.length ? reqTags : null]
-  );
-  return Number(r.rows[0]?.cnt || 0);
+  try {
+    const r = await pool.query(
+      `select count(*)::int as cnt
+       from barter_offers o
+       join workspaces w on w.id = o.workspace_id
+       join workspace_settings s on s.workspace_id = w.id
+       where o.status='ACTIVE'
+         and s.network_enabled=true
+         and ($1::text is null or o.category=$1)
+         and ($2::text is null or o.offer_type=$2)
+         and ($3::text is null or o.compensation_type=$3)
+         and ($4::text[] is null or coalesce(o.meta->'goals_tags','[]'::jsonb) ?| $4::text[])
+         and ($5::text[] is null or coalesce(o.meta->'req_tags','[]'::jsonb) ?| $5::text[])`,
+      [category, offerType, compensationType, goalsTags && goalsTags.length ? goalsTags : null, reqTags && reqTags.length ? reqTags : null]
+    );
+    return Number(r.rows[0]?.cnt || 0);
+  } catch (err) {
+    if (!isMissingBarterOffersMetaColumnError(err)) throw err;
+    const r = await pool.query(
+      `select count(*)::int as cnt
+       from barter_offers o
+       join workspaces w on w.id = o.workspace_id
+       join workspace_settings s on s.workspace_id = w.id
+       where o.status='ACTIVE'
+         and s.network_enabled=true
+         and ($1::text is null or o.category=$1)
+         and ($2::text is null or o.offer_type=$2)
+         and ($3::text is null or o.compensation_type=$3)`,
+      [category, offerType, compensationType]
+    );
+    return Number(r.rows[0]?.cnt || 0);
+  }
 }
 
 export async function listBarterOffersForOwnerWorkspace(ownerUserId, workspaceId, limit = 10, offset = 0) {
@@ -1158,9 +1235,38 @@ export async function updateBarterOffer(offerId, patch) {
   fields.push(`updated_at=now()`);
   vals.push(offerId);
   const sql = `update barter_offers set ${fields.join(', ')} where id=$${idx} returning *`;
-  const r = await pool.query(sql, vals);
-  return r.rows[0];
+
+  try {
+    const r = await pool.query(sql, vals);
+    return r.rows[0];
+  } catch (err) {
+    // Soft-fallback: if meta column is missing (migration 028 not applied) — retry without meta patch.
+    if (!isMissingBarterOffersMetaColumnError(err)) throw err;
+    if (patch && patch.meta === undefined) throw err;
+
+    const patch2 = { ...patch };
+    delete patch2.meta;
+
+    const f2 = [];
+    const v2 = [];
+    let i2 = 1;
+    for (const k2 of allowed) {
+      if (k2 === 'meta') continue;
+      if (patch2[k2] === undefined) continue;
+      f2.push(`${k2}=$${i2++}`);
+      v2.push(patch2[k2]);
+    }
+    f2.push(`updated_at=now()`);
+    v2.push(offerId);
+
+    const sql2 = `update barter_offers set ${f2.join(', ')} where id=$${i2} returning *`;
+    const r2 = await pool.query(sql2, v2);
+    const row = r2.rows[0] || null;
+    if (row) row.__meta_missing = true;
+    return row;
+  }
 }
+
 
 export async function auditBarterOffer(offerId, workspaceId, actorUserId, action, payload = {}) {
   await pool.query(
@@ -3011,26 +3117,50 @@ export async function getBarterOfferPublicWithVerified(offerId) {
 
 export async function listNetworkBarterOffersWithVerified(opts = {}) {
   const { category = null, offerType = null, compensationType = null, goalsTags = null, reqTags = null, limit = 5, offset = 0 } = opts;
-  const r = await pool.query(
-    `select o.*, w.title as ws_title, w.channel_username, w.channel_id,
-            (case when uv.status='APPROVED' then true else false end) as creator_verified
-     from barter_offers o
-     join workspaces w on w.id = o.workspace_id
-     join workspace_settings s on s.workspace_id = w.id
-     left join user_verifications uv on uv.user_id=o.creator_user_id and uv.status='APPROVED'
-     where o.status='ACTIVE'
-       and s.network_enabled=true
-       and ($1::text is null or o.category=$1)
-       and ($2::text is null or o.offer_type=$2)
-       and ($3::text is null or o.compensation_type=$3)
-       and ($4::text[] is null or coalesce(o.meta->'goals_tags','[]'::jsonb) ?| $4::text[])
-       and ($5::text[] is null or coalesce(o.meta->'req_tags','[]'::jsonb) ?| $5::text[])
-     order by case when s.plan='pro' and (s.pro_until is null or s.pro_until>now()) and s.pro_pinned_offer_id = o.id then 0 else 1 end,
-              o.bump_at desc
-     limit $6 offset $7`,
-    [category, offerType, compensationType, goalsTags && goalsTags.length ? goalsTags : null, reqTags && reqTags.length ? reqTags : null, limit, offset]
-  );
-  return r.rows;
+  try {
+    const r = await pool.query(
+      `select o.*, w.title as ws_title, w.channel_username, w.channel_id,
+              (case when uv.status='APPROVED' then true else false end) as creator_verified
+       from barter_offers o
+       join workspaces w on w.id = o.workspace_id
+       join workspace_settings s on s.workspace_id = w.id
+       left join user_verifications uv on uv.user_id = o.creator_user_id
+       where o.status='ACTIVE'
+         and s.network_enabled=true
+         and ($1::text is null or o.category=$1)
+         and ($2::text is null or o.offer_type=$2)
+         and ($3::text is null or o.compensation_type=$3)
+         and ($4::text[] is null or coalesce(o.meta->'goals_tags','[]'::jsonb) ?| $4::text[])
+         and ($5::text[] is null or coalesce(o.meta->'req_tags','[]'::jsonb) ?| $5::text[])
+       order by case when s.plan='pro' and (s.pro_until is null or s.pro_until>now()) and s.pro_pinned_offer_id = o.id then 0 else 1 end,
+                o.bump_at desc
+       limit $6 offset $7`,
+      [category, offerType, compensationType, goalsTags && goalsTags.length ? goalsTags : null, reqTags && reqTags.length ? reqTags : null, limit, offset]
+    );
+    return r.rows;
+  } catch (err) {
+    if (!isMissingBarterOffersMetaColumnError(err)) throw err;
+    const r = await pool.query(
+      `select o.*, w.title as ws_title, w.channel_username, w.channel_id,
+              (case when uv.status='APPROVED' then true else false end) as creator_verified
+       from barter_offers o
+       join workspaces w on w.id = o.workspace_id
+       join workspace_settings s on s.workspace_id = w.id
+       left join user_verifications uv on uv.user_id = o.creator_user_id
+       where o.status='ACTIVE'
+         and s.network_enabled=true
+         and ($1::text is null or o.category=$1)
+         and ($2::text is null or o.offer_type=$2)
+         and ($3::text is null or o.compensation_type=$3)
+       order by case when s.plan='pro' and (s.pro_until is null or s.pro_until>now()) and s.pro_pinned_offer_id = o.id then 0 else 1 end,
+                o.bump_at desc
+       limit $4 offset $5`,
+      [category, offerType, compensationType, limit, offset]
+    );
+    const rows = r.rows || [];
+    for (const row of rows) row.__meta_missing = true;
+    return rows;
+  }
 }
 
 export async function listBarterThreadsForUserWithVerified(userId, limit = 20, offset = 0) {
