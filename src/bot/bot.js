@@ -2819,10 +2819,10 @@ function bxThreadKb(wsId, threadId, opts = {}) {
     kb.row();
   }
 
-  kb.text('✍️ Ответить', `a:bx_thread_reply|ws:${wsId}|t:${threadId}|p:${page}`)
+  kb.text('✍️ Ответить', `a:bx_thread_reply|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`)
     .text(proofsCount !== null ? `🧾 Proofs: ${proofsCount}` : '🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`)
     .row()
-    .text('✅ Закрыть', `a:bx_thread_close_q|ws:${wsId}|t:${threadId}|p:${page}`);
+    .text('✅ Закрыть', `a:bx_thread_close_q|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`);
 
   if (opts.showRetryInfo) {
     const cbTail = `${offerId ? `|o:${offerId}` : ''}|b:${back}|p:${page}`;
@@ -2830,7 +2830,7 @@ function bxThreadKb(wsId, threadId, opts = {}) {
   }
 
   if (offerId) kb.row().text('🔎 Оффер', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}`);
-    kb.row().text('🚩 Жалоба', `a:bx_report_thread|ws:${wsId}|t:${threadId}|p:${page}`);
+    kb.row().text('🚩 Жалоба', `a:bx_report_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`);
     kb.row().text('⬅️ Назад', back === 'offer' && offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}` : `a:bx_inbox|ws:${wsId}|p:${page}`);
   return kb;
 }
@@ -3059,7 +3059,7 @@ async function renderGwMediaStep(ctx, wsId, opts = {}) {
 
 
 function gwOpenKb(g, flags = {}) {
-  const { isAdmin = false } = flags;
+  const { isAdmin = false, backCb } = flags;
   const gwId = g.id;
   const kb = new InlineKeyboard()
     .text('📊 Статистика', `a:gw_stats|i:${gwId}`)
@@ -3080,7 +3080,7 @@ function gwOpenKb(g, flags = {}) {
     .row()
     .text('🗑 Удалить', `a:gw_del_q|i:${gwId}|ws:${g.workspace_id}`)
     .row()
-    .text('⬅️ Назад', 'a:gw_list');
+    .text('⬅️ Назад', backCb || (g.workspace_id ? ('a:gw_list_ws|ws:' + g.workspace_id) : 'a:gw_list'));
   return kb;
 }
 
@@ -9965,10 +9965,15 @@ ${escapeHtml(bxTypeLabel(offer.offer_type))} · ${escapeHtml(bxCompLabel(offer.c
 
       // show updated thread in reply
       const again = await buildBxThreadView(asUserId, threadId);
+
+      const back = exp.back ? String(exp.back) : 'inbox';
+      const offerId = exp.offerId ? Number(exp.offerId) : null;
+      const page = Number(exp.page || 0);
+
       const kb = new InlineKeyboard()
-        .text('💬 Открыть диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:0`)
+        .text('💬 Открыть диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`)
         .row()
-        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0`);
+        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:${page}`);
       await ctx.reply(again ? again.text : '✅ Отправлено.', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -14599,13 +14604,14 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
+      const page = Number(p.p || 0);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', Number(p.p || 0));
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
       if (!bmRes) return;
 
-      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId });
+      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page });
       return;
     }
 
@@ -14675,6 +14681,8 @@ if (p.a === 'a:bx_retry_help') {
       const stage = String(p.s || '');
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
+      const page = Number(p.p || 0);
+
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', 0);
       if (!bmRes) return;
@@ -14696,7 +14704,7 @@ if (p.a === 'a:bx_retry_help') {
         return;
       }
       await ctx.answerCallbackQuery({ text: '✅ Обновлено' });
-      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId });
+      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page });
       return;
     }
 
@@ -14704,24 +14712,32 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
       const threadId = Number(p.t);
+      const page = Number(p.p || 0);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', 0);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
       if (!bmRes) return;
 
       await ctx.editMessageText('✍️ Напиши сообщение покупателю:', {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}${offerId ? `|o:${offerId}` : ''}|b:${back}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`)
       });
-      await setExpectText(ctx.from.id, { type: 'bx_thread_msg', wsId, threadId, back, offerId, asUserId: bmRes.userId });
+      await setExpectText(ctx.from.id, { type: 'bx_thread_msg', wsId, threadId, back, offerId, page, asUserId: bmRes.userId });
       return;
     }
 
     if (p.a === 'a:bx_thread_close_q') {
       await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      const threadId = Number(p.t);
+      const page = Number(p.p || 0);
+      const back = p.b ? String(p.b) : 'inbox';
+      const offerId = p.o ? Number(p.o) : null;
+      const cbTail = `|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`;
+
       const kb = new InlineKeyboard()
-        .text('✅ Закрыть', `a:bx_thread_close_do|ws:${Number(p.ws)}|t:${Number(p.t)}|p:${Number(p.p || 0)}`)
-        .text('❌ Отмена', `a:bx_thread|ws:${Number(p.ws)}|t:${Number(p.t)}|p:${Number(p.p || 0)}`);
+        .text('✅ Закрыть', `a:bx_thread_close_do|ws:${wsId}|t:${threadId}${cbTail}`)
+        .text('❌ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}${cbTail}`);
       await ctx.editMessageText('Закрыть диалог? После закрытия писать нельзя.', { reply_markup: kb });
       return;
     }
@@ -14730,8 +14746,9 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
+      const page = Number(p.p || 0);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', 0);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page);
       if (!bmRes) return;
 
       const ok = await db.closeBarterThread(threadId, bmRes.userId);
@@ -14740,7 +14757,7 @@ if (p.a === 'a:bx_retry_help') {
         return;
       }
       await ctx.answerCallbackQuery({ text: '✅ Тред закрыт' });
-      await renderBxInbox(ctx, bmRes.userId, wsId, 0, { bm: bmRes.bm });
+      await renderBxInbox(ctx, bmRes.userId, wsId, page, { bm: bmRes.bm });
       return;
     }
 
