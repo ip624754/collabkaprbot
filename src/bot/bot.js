@@ -1748,7 +1748,7 @@ function brandBackCb(params = {}) {
   const bo = params.backOfferId ? Number(params.backOfferId) : null;
   const bp = params.backPage ? Number(params.backPage) : 0;
   if (ret === 'offer' && bo) return `a:offer_open|ws:${wsId}|id:${bo}|p:${bp}`;
-  if (ret === 'lead') return `a:bx_inbox|ws:${wsId}|p:${bp}`;
+  if (ret === 'lead') return `a:bx_inbox|ws:${wsId}|p:${bp}|h:bo`;
   if (ret === 'verify') return 'a:verify_home';
   return wsId ? `a:bx_open|ws:${wsId}` : 'a:bx_open|ws:0';
 }
@@ -3040,7 +3040,7 @@ function bxFeedNavKb(wsId, page, hasPrev, hasNext, opts = {}) {
 
   kb.row()
     .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:bf`)
-    .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo|h:bo|h:${h}`);
+    .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`);
 
   kbNavRow(kb, bxHomeCb(wsNum, h));
   return kb;
@@ -7105,7 +7105,7 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
     kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}`).row();
   }
 
-  kb.text('⬅️ Назад к офферу', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}`);
+  kb.text('⬅️ Назад к офферу', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
 
   const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -7292,7 +7292,7 @@ ${trialLine}${limitLine}${verifyHintLine}
     kb.text(`⭐ ${p.title} · ${contacts} контактов`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
   }
   kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching', `a:match_home|ws:${wsId}`).row();
-  kb.text('⬅️ Назад', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}`);
+  kb.text('⬅️ Назад', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
 
   await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -7341,12 +7341,12 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
     const stLine = st.retry ? `${st.base} · ${st.retry}` : st.base;
 
     const line = `${prefix} · ${stLine} · ${escapeHtml(t.offer_title || 'оффер')} · ${escapeHtml(other)}${v}`;
-    kb.text(line.slice(0, 60), `a:bx_thread|ws:${wsId}|t:${t.id}|p:${page}`).row();
+    kb.text(line.slice(0, 60), `a:bx_thread|ws:${wsId}|t:${t.id}|p:${page}|b:inbox|h:${h}`).row();
   }
 
   const hasPrev = page > 0;
   const hasNext = rows.length >= limit; // heuristic
-  const nav = bxInboxNavKb(wsId, page, hasPrev, hasNext);
+  const nav = bxInboxNavKb(wsId, page, hasPrev, hasNext, { h });
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
   await ctx.editMessageText(header + (rows.length ? '' : '\n\nПока нет диалогов.'), { parse_mode: 'HTML', reply_markup: kb });
@@ -9952,7 +9952,7 @@ if (exp.type === 'brand_deals_search') {
       const kb = new InlineKeyboard();
       const btnN = Math.min(showN, 12);
       for (const o of rows.slice(0, btnN)) {
-        kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsId}|o:${o.id}|p:0`).row();
+        kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsId}|o:${o.id}|p:0|h:bo`).row();
       }
       kb.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
         .text('🎯 Matching', `a:match_home|ws:${wsId}`)
@@ -10165,9 +10165,14 @@ ${escapeHtml(bxTypeLabel(offer.offer_type))} · ${escapeHtml(bxCompLabel(offer.c
         const otherTgId = otherInfo?.tg_id ? Number(otherInfo.tg_id) : null;
         if (otherTgId) {
           const link = `https://t.me/${CFG.BOT_USERNAME}?start=bxth_${threadId}`;
+          const msgText = body.length > 400 ? `${body.slice(0, 397)}...` : body;
+          const notifyKb = new InlineKeyboard()
+            .text('💬 Открыть диалог', `a:bx_thread|ws:${Number(thread.workspace_id || 0)}|t:${threadId}|p:0|b:inbox|h:${BX_HOME.MENU}`);
           await ctx.api.sendMessage(otherTgId, `📨 Новое сообщение по офферу #${thread.offer_id}
 
-Открыть: ${link}`);
+${msgText}
+
+Открыть: ${link}`, { disable_web_page_preview: true, reply_markup: notifyKb });
         }
       } catch {}
 
@@ -10177,11 +10182,12 @@ ${escapeHtml(bxTypeLabel(offer.offer_type))} · ${escapeHtml(bxCompLabel(offer.c
       const back = exp.back ? String(exp.back) : 'inbox';
       const offerId = exp.offerId ? Number(exp.offerId) : null;
       const page = Number(exp.page || 0);
+      const h = normBxHome(exp.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       const kb = new InlineKeyboard()
-        .text('💬 Открыть диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`)
+        .text('💬 Открыть диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`)
         .row()
-        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:${page}`);
+        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:${page}|h:${h}`);
       await ctx.reply(again ? again.text : '✅ Отправлено.', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -10195,13 +10201,15 @@ ${escapeHtml(bxTypeLabel(offer.offer_type))} · ${escapeHtml(bxCompLabel(offer.c
       const page = Number(exp.page || 0);
       const asUserId = Number(exp.asUserId || u.id);
 
+      const h = normBxHome(exp.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
 
       const raw = String(ctx.message.text || '').trim();
       // allow bare t.me, https links, or @channel/... patterns
       const ok = raw.length >= 8 && raw.length <= 500 && (/^https?:\/\//i.test(raw) || /t\.me\//i.test(raw) || /^@?[a-zA-Z0-9_]{5,}/.test(raw));
       if (!ok) {
         await ctx.reply('Нужна ссылка на пост (пример: https://t.me/...)');
-        await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, asUserId });
+        await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, asUserId, h });
         return;
       }
 
@@ -10216,9 +10224,9 @@ ${escapeHtml(bxTypeLabel(offer.offer_type))} · ${escapeHtml(bxCompLabel(offer.c
       }
 
       const kb = new InlineKeyboard()
-        .text('🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`)
+        .text('🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
         .row()
-        .text('💬 Диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`);
+        .text('💬 Диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`);
       await ctx.reply('✅ Proof добавлен.', { reply_markup: kb });
       return;
     }
@@ -10488,13 +10496,15 @@ ${list}
       const page = Number(exp.page || 0);
       const asUserId = Number(exp.asUserId || u.id);
 
+      const h = normBxHome(exp.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
 
       const photos = ctx.message.photo || [];
       const last = photos.length ? photos[photos.length - 1] : null;
       const fileId = last?.file_id;
       if (!fileId) {
         await ctx.reply('Не вижу фото. Пришли скрин как картинку (не файл).');
-        await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, asUserId });
+        await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, asUserId, h });
         return;
       }
 
@@ -10509,9 +10519,9 @@ ${list}
       }
 
       const kb = new InlineKeyboard()
-        .text('🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`)
+        .text('🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
         .row()
-        .text('💬 Диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`);
+        .text('💬 Диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`);
       await ctx.reply('✅ Скрин добавлен.', { reply_markup: kb });
       return;
     }
@@ -11473,11 +11483,11 @@ bot.on('message:successful_payment', async (ctx) => {
 
       const kb = new InlineKeyboard();
       if (data.offerId) {
-        kb.text('↩️ Вернуться к офферу', `a:bx_pub|ws:${data.wsId}|o:${data.offerId}|p:${Number(data.page || 0)}`)
+        kb.text('↩️ Вернуться к офферу', `a:bx_pub|ws:${data.wsId}|o:${data.offerId}|p:${Number(data.page || 0)}|h:bo`)
           .row();
       }
       kb.text('🎫 Brand Pass', `a:brand_pass|ws:${data.wsId}`)
-        .text('📨 Inbox', `a:bx_inbox|ws:${data.wsId}|p:0`);
+        .text('📨 Inbox', `a:bx_inbox|ws:${data.wsId}|p:0|h:bo`);
 
       await markApplied('auto_apply_brand_pass');
       await ctx.reply(
@@ -13078,7 +13088,7 @@ if (p.a === 'a:ws_prof_mode') {
       );
 
       const payload = `brand_${u.id}_${pack.id}_${token}`;
-      const back = offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}` : `a:brand_pass|ws:${wsId}`;
+      const back = offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}` : `a:brand_pass|ws:${wsId}`;
       await sendStarsInvoice(ctx, {
         title: `Brand Pass · ${pack.credits} контактов`,
         description: 'Кредиты нужны только для открытия НОВОГО диалога. Переписка внутри диалога — бесплатна.',
@@ -15019,7 +15029,7 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.editMessageText('🔗 Пришли ссылку на пост (пример: https://t.me/... )', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
-      await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, asUserId: bmRes.userId });
+      await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, h, asUserId: bmRes.userId });
       return;
     }
 
@@ -15038,7 +15048,7 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.editMessageText('🖼️ Пришли скриншот (как фото)', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
-      await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, asUserId: bmRes.userId });
+      await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, h, asUserId: bmRes.userId });
       return;
     }
 
