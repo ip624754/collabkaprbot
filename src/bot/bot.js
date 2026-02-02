@@ -5642,7 +5642,7 @@ if (threadBlock) {
 
   const bStage = normDealStage(back.stage);
   const bPage = Math.max(0, Number(back.page) || 0);
-  kb.text('⬅️ Назад', `a:brand_deals|ws:0|st:${bStage}|p:${bPage}`);
+  kbNavRow(kb, `a:brand_deals|ws:0|st:${bStage}|p:${bPage}`);
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -6721,6 +6721,8 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
   }
 
   const filter = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
+  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
 
   const limit = CFG.BARTER_FEED_PAGE_SIZE;
   const offset = page * limit;
@@ -6803,7 +6805,7 @@ ${featLines.join('\n\n')}
   const kb = new InlineKeyboard();
 
   for (const f of featured) {
-    kb.text(`🔥 #F${f.id}`, `a:feat_view|ws:${wsNum}|id:${f.id}|p:${page}`).row();
+    kb.text(`🔥 #F${f.id}`, `a:feat_view|ws:${wsNum}|id:${f.id}|p:${page}|h:${h}`).row();
   }
   for (const o of rows) {
     kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsNum}|o:${o.id}|p:${page}|h:${h}`).row();
@@ -6811,7 +6813,7 @@ ${featLines.join('\n\n')}
 
   const hasPrev = page > 0;
   const hasNext = offset + rows.length < total;
-  const nav = bxFeedNavKb(wsNum, page, hasPrev, hasNext);
+  const nav = bxFeedNavKb(wsNum, page, hasPrev, hasNext, { h });
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -6842,11 +6844,11 @@ async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
     const st = String(o.status || 'ACTIVE').toUpperCase();
     const stEmoji = st === 'ACTIVE' ? '✅' : (st === 'PAUSED' ? '⏸' : '⛔');
     kb
-      .text(`${stEmoji} #${o.id} · ${o.title}`, `a:bx_view|ws:${wsId}|o:${o.id}|back:my`)
+      .text(`${stEmoji} #${o.id} · ${o.title}`, `a:bx_view|ws:${wsId}|o:${o.id}|back:my|p:${page}`)
       .text('🗑', `a:bx_archive|ws:${wsId}|o:${o.id}|p:${page}`)
       .row();
   }
-  kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
+  kbNavRow(kb, `a:bx_open|ws:${wsId}`);
 
   await safeEditOrReply(ctx, 
     `📦 <b>Мои офферы</b>
@@ -6880,7 +6882,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
 
   for (const o of rows) {
     kb
-      .text(`⛔ #${o.id} · ${o.title}`, `a:bx_view|ws:${wsId}|o:${o.id}|back:arch`)
+      .text(`⛔ #${o.id} · ${o.title}`, `a:bx_view|ws:${wsId}|o:${o.id}|back:arch|p:${page}`)
       .text('↩️', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`)
       .row();
   }
@@ -6913,23 +6915,36 @@ function bxMediaLabel(mt) {
   return '—';
 }
 
-function bxMediaKb(wsId, offerId, back = 'my', hasMedia = false) {
+function bxMediaKb(wsId, offerId, back = 'my', pageOrHasMedia = 0, maybeHasMedia = false) {
+  // Backward compatible:
+  // - old signature: (wsId, offerId, back, hasMedia)
+  // - new signature: (wsId, offerId, back, page, hasMedia)
+  let page = 0;
+  let hasMedia = false;
+  if (typeof pageOrHasMedia === 'boolean') {
+    hasMedia = pageOrHasMedia;
+  } else {
+    page = Math.max(0, Number(pageOrHasMedia || 0));
+    hasMedia = Boolean(maybeHasMedia);
+  }
+
   const kb = new InlineKeyboard()
-    .text('🖼 Фото', `a:bx_media_photo|ws:${wsId}|o:${offerId}|back:${back}`)
-    .text('🎞 GIF', `a:bx_media_gif|ws:${wsId}|o:${offerId}|back:${back}`)
+    .text('🖼 Фото', `a:bx_media_photo|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
+    .text('🎞 GIF', `a:bx_media_gif|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
     .row()
-    .text('🎥 Видео', `a:bx_media_video|ws:${wsId}|o:${offerId}|back:${back}`)
-    .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${offerId}|back:${back}`)
+    .text('🎥 Видео', `a:bx_media_video|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
+    .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
     .row();
 
   if (hasMedia) {
-    kb.text('🗑 Убрать', `a:bx_media_clear|ws:${wsId}|o:${offerId}|back:${back}`)
-      .text('✅ Готово', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}`);
+    kb
+      .text('🗑 Убрать', `a:bx_media_clear|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
+      .text('✅ Готово', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
   } else {
-    kb.text('✅ Готово', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}`);
+    kb.text('✅ Готово', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
   }
 
-  kb.row().text('⬅️ Назад', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}`);
+  kbNavRow(kb, `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
   return kb;
 }
 
@@ -6952,12 +6967,12 @@ async function renderBxMediaStep(ctx, ownerUserId, wsId, offerId, back = 'my', o
 
 Выбери тип и пришли файл одним сообщением.`;
 
-  const kb = bxMediaKb(wsId, offerId, back, hasMedia);
+  const kb = bxMediaKb(wsId, offerId, back, Number(opts.page || 0), hasMedia);
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, Boolean(edit));
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
-async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my') {
+async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my', page = 0) {
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
   if (!o) return ctx.reply('Оффер не найден или нет доступа.');
 
@@ -6980,10 +6995,10 @@ async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my') {
   }
 
   // Return user to offer view
-  await renderBxView(ctx, ownerUserId, wsId, offerId, back);
+  await renderBxView(ctx, ownerUserId, wsId, offerId, back, page);
 }
 
-async function renderBxView(ctx, ownerUserId, wsId, offerId, back = 'feed') {
+async function renderBxView(ctx, ownerUserId, wsId, offerId, back = 'feed', page = 0) {
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
   if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
@@ -7032,7 +7047,9 @@ ${contact ? `Контакт: <b>${escapeHtml(contact)}</b>` : ''}`;
     kb.text('⬆️ Поднять', `a:bx_bump|ws:${wsId}|o:${o.id}`).row();
 
     kb.text(partnerBtnLabel, `a:bx_partner_folder_pick|ws:${wsId}|o:${o.id}`).row();
-    kb.text('📎 Медиа', `a:bx_media_step|ws:${wsId}|o:${o.id}|back:${back}`).text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${o.id}|back:${back}`).row();
+    kb.text('📎 Медиа', `a:bx_media_step|ws:${wsId}|o:${o.id}|back:${back}|p:${page}`)
+      .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${o.id}|back:${back}|p:${page}`)
+      .row();
 
     const wsInfo = await db.getWorkspace(ownerUserId, wsId);
     const isPro = await db.isWorkspacePro(wsId);
@@ -7049,15 +7066,16 @@ ${contact ? `Контакт: <b>${escapeHtml(contact)}</b>` : ''}`;
   if (st === 'PAUSED') kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`).row();
 
   if (st === 'CLOSED') {
-    kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:0`).row();
+    kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`).row();
   } else {
-    kb.text('🗑 Архивировать', `a:bx_del_q|ws:${wsId}|o:${o.id}`).row();
+    kb.text('🗑 Архивировать', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
   }
 
+  const bPage = Math.max(0, Number(page) || 0);
   const backCb = back === 'my'
-    ? `a:bx_my|ws:${wsId}|p:0`
-    : (back === 'arch' ? `a:bx_my_arch|ws:${wsId}|p:0` : `a:bx_feed|ws:${wsId}|p:0|h:bo`);
-  kb.text('⬅️ Назад', backCb);
+    ? `a:bx_my|ws:${wsId}|p:${bPage}`
+    : (back === 'arch' ? `a:bx_my_arch|ws:${wsId}|p:${bPage}` : `a:bx_feed|ws:${wsId}|p:${bPage}|h:bo`);
+  kbNavRow(kb, backCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -8055,7 +8073,7 @@ async function renderFeaturedHome(ctx, userId, wsId) {
   );
 }
 
-async function renderFeaturedView(ctx, userId, wsId, id, page = 0) {
+async function renderFeaturedView(ctx, userId, wsId, id, page = 0, h = BX_HOME.MENU) {
   const f = await db.getFeaturedPlacement(id);
   if (!f || String(f.status) !== 'ACTIVE') return ctx.answerCallbackQuery({ text: 'Featured не найден.' });
 
@@ -8066,9 +8084,9 @@ async function renderFeaturedView(ctx, userId, wsId, id, page = 0) {
 
   const kb = new InlineKeyboard();
   if (Number(f.user_id) === Number(userId)) {
-    kb.text('⛔ Остановить', `a:feat_stop|ws:${wsId}|id:${id}|p:${page}`).row();
+    kb.text('⛔ Остановить', `a:feat_stop|ws:${wsId}|id:${id}|p:${page}|h:${h}`).row();
   }
-  kb.text('⬅️ Назад', `a:bx_feed|ws:${wsId}|p:${page}`);
+  kbNavRow(kb, `a:bx_feed|ws:${wsId}|p:${page}|h:${h}`);
 
   await safeEditOrReply(ctx, 
     `🔥 <b>${escapeHtml(String(title))}</b>
@@ -11025,6 +11043,7 @@ ${list}
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
+      const page = Math.max(0, Number(exp.page || 0));
 
       const photos = ctx.message.photo || [];
       const last = photos.length ? photos[photos.length - 1] : null;
@@ -11045,7 +11064,7 @@ ${list}
       await clearExpectText(ctx.from.id);
 
       await ctx.reply('✅ Картинка прикреплена. Продолжаем:', {
-        reply_markup: bxMediaKb(wsId, offerId, back, true)
+        reply_markup: bxMediaKb(wsId, offerId, back, page, true)
       });
       return;
     }
@@ -11082,6 +11101,7 @@ ${list}
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
+      const page = Math.max(0, Number(exp.page || 0));
 
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
@@ -11093,7 +11113,7 @@ ${list}
       await db.updateBarterOffer(offerId, { media_type: 'animation', media_file_id: fileId });
       await clearExpectText(ctx.from.id);
 
-      await ctx.reply('✅ GIF прикреплён. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, true) });
+      await ctx.reply('✅ GIF прикреплён. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, page, true) });
       return;
     }
 
@@ -11128,6 +11148,7 @@ ${list}
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
+      const page = Math.max(0, Number(exp.page || 0));
 
       const fileId = ctx.message.video?.file_id;
       if (!fileId) {
@@ -11146,7 +11167,7 @@ ${list}
       await clearExpectText(ctx.from.id);
 
       await ctx.reply('✅ Видео прикреплено. Продолжаем:', {
-        reply_markup: bxMediaKb(wsId, offerId, back, true)
+        reply_markup: bxMediaKb(wsId, offerId, back, page, true)
       });
       return;
     }
@@ -14478,7 +14499,9 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:feat_view') {
       await ctx.answerCallbackQuery();
-      await renderFeaturedView(ctx, u.id, Number(p.ws || 0), Number(p.id), Number(p.p || 0));
+      const wsId = Number(p.ws || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      await renderFeaturedView(ctx, u.id, wsId, Number(p.id), Number(p.p || 0), h);
       return;
     }
 
@@ -14491,7 +14514,7 @@ if (p.a === 'a:match_home') {
       const ok = await db.stopFeaturedPlacement(id, u.id);
       if (!ok) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery({ text: 'Остановлено.' });
-      await renderBxFeed(ctx, u.id, wsId, Number(p.p || 0));
+      await renderBxFeed(ctx, u.id, wsId, Number(p.p || 0), { h });
       return;
     }
     if (p.a === 'a:ws_pro_pin') {
@@ -16044,7 +16067,7 @@ if (p.a === 'a:bx_cat') {
 
     if (p.a === 'a:bx_view') {
       await ctx.answerCallbackQuery();
-      await renderBxView(ctx, u.id, Number(p.ws), Number(p.o), p.back || 'feed');
+      await renderBxView(ctx, u.id, Number(p.ws), Number(p.o), p.back || 'feed', Number(p.p || 0));
       return;
     }
 
@@ -16053,9 +16076,10 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
+      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      await renderBxMediaStep(ctx, u.id, wsId, offerId, back, { edit: true });
+      await renderBxMediaStep(ctx, u.id, wsId, offerId, back, { edit: true, page });
       return;
     }
 
@@ -16063,6 +16087,7 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
+      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
 
@@ -16071,7 +16096,7 @@ if (p.a === 'a:bx_cat') {
 
       await db.updateBarterOffer(offerId, { media_type: null, media_file_id: null });
       await ctx.answerCallbackQuery({ text: 'Убрано' });
-      await renderBxMediaStep(ctx, u.id, wsId, offerId, back, { edit: true });
+      await renderBxMediaStep(ctx, u.id, wsId, offerId, back, { edit: true, page });
       return;
     }
 
@@ -16079,10 +16104,11 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
+      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
-      await setExpectText(ctx.from.id, { type: 'bx_media_photo', wsId, offerId, back });
+      await setExpectText(ctx.from.id, { type: 'bx_media_photo', wsId, offerId, back, page });
 
-      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
+      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
       await safeEditOrReply(ctx, '🖼 Пришли <b>картинку</b> одним сообщением.', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -16091,10 +16117,11 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
+      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
-      await setExpectText(ctx.from.id, { type: 'bx_media_gif', wsId, offerId, back });
+      await setExpectText(ctx.from.id, { type: 'bx_media_gif', wsId, offerId, back, page });
 
-      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
+      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
       await safeEditOrReply(ctx, '🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно отправить как анимацию или как файл .gif)', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -16103,10 +16130,11 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
+      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
-      await setExpectText(ctx.from.id, { type: 'bx_media_video', wsId, offerId, back });
+      await setExpectText(ctx.from.id, { type: 'bx_media_video', wsId, offerId, back, page });
 
-      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
+      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
       await safeEditOrReply(ctx, '🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -16115,9 +16143,10 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
+      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      await sendBxPreview(ctx, u.id, wsId, offerId, back);
+      await sendBxPreview(ctx, u.id, wsId, offerId, back, page);
       return;
     }
 
@@ -16179,11 +16208,12 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_del_q') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
+      const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
       if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       const kb = new InlineKeyboard()
-        .text('✅ Архивировать', `a:bx_del_do|ws:${wsId}|o:${offerId}`)
-        .text('❌ Отмена', `a:bx_view|ws:${wsId}|o:${offerId}|back:my`);
+        .text('✅ Архивировать', `a:bx_del_do|ws:${wsId}|o:${offerId}|p:${page}`)
+        .text('❌ Отмена', `a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:${page}`);
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, `Архивировать оффер <b>#${offerId}</b>?
 
@@ -16194,12 +16224,13 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_del_do') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
+      const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
       if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await db.updateBarterOfferStatus(offerId, 'CLOSED');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_archived', {});
       await ctx.answerCallbackQuery({ text: 'Архивировано.' });
-      await renderBxMy(ctx, u.id, wsId, 0);
+      await renderBxMy(ctx, u.id, wsId, page);
       return;
     }
 
