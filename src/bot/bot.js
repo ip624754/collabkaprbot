@@ -5983,46 +5983,57 @@ async function renderBrandAppView(ctx, actorUserId, appId, back = { status: 'new
   // Micro-CRM thread (stored in meta.thread[])
   const thread = Array.isArray(app?.meta?.thread) ? app.meta.thread : [];
 
+  const stTitle = (LEAD_STATUSES[st] || LEAD_STATUSES.new).title;
+
+  const msgRaw = String(app.message || '').trim();
+  const msgText = msgRaw ? clipText(msgRaw, 2400) : '—';
+  const msgEsc = escapeHtml(msgText) + (msgRaw && msgRaw.length > 2400 ? '\n<i>(сокращено)</i>' : '');
+
+  const replyRaw = String(app.reply_text || '').trim();
+  const replyText = replyRaw ? clipText(replyRaw, 1600) : '';
+  const replyEsc = replyRaw ? (escapeHtml(replyText) + (replyRaw.length > 1600 ? '\n<i>(сокращено)</i>' : '')) : '';
+
   let text =
-    `✉️ <b>Заявка #${app.id}</b> ${leadStatusIcon(st)}
+    `✉️ <b>Заявка #${app.id}</b>  ·  <b>${escapeHtml(stTitle)}</b>
 
 ` +
-    `Бренд: <b>${escapeHtml(brandName)}</b>
+    `🏷️ Бренд: <b>${escapeHtml(brandName)}</b>
 ` +
-    `От: <b>${escapeHtml(who)}</b>
+    `🧑‍🎨 Креатор: <b>${escapeHtml(who)}</b>
 ` +
-    `Когда: <b>${escapeHtml(when)}</b>
+    `🕒 Дата: <code>${escapeHtml(when)}</code>
 
 ` +
-    `<b>Текст:</b>
-${escapeHtml(String(app.message || '—'))}`;
+    `📝 <b>Сообщение</b>
+${msgEsc}`;
 
   const dealStage = getAppDealStage(app);
   if (dealStage) {
     text += `
 
-📌 <b>Сделка:</b> ${escapeHtml(dealStageTitle(dealStage))}`;
+📌 <b>Сделка</b>
+${escapeHtml(dealStageTitle(dealStage))}`;
   }
 
-  if (app.reply_text) {
+  if (replyEsc) {
     text += `
 
-<b>Ответ:</b>
-${escapeHtml(String(app.reply_text))}`;
+✍️ <b>Ответ бренда</b>
+${replyEsc}`;
   }
 
   const threadBlock = formatBrandAppThread(thread, 6);
   if (threadBlock) {
     text += `
 
-<b>Диалог:</b>
+💬 <b>Диалог</b>
 ${threadBlock}`;
   }
 
   if (st === 'new') {
     text += `
 
-💡 Нажми <b>✅ Принять</b>, чтобы открыть диалог: креатор получит кнопку “💬 Написать бренду”.`;
+💡 <i>Нажми ✅ Принять, чтобы открыть диалог: креатор получит кнопку “💬 Написать бренду”.</i>`;
   }
 
   const kb = new InlineKeyboard();
