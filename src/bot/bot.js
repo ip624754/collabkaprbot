@@ -10512,17 +10512,13 @@ ${card}`;
 
       let deliveryLine = '';
       if (recipientsMap.size === 0) {
-        deliveryLine = '
-
-🔕 Уведомление: не отправлено (у бренда не найден tg_id).';
+        deliveryLine = `\n\n🔕 Уведомление: не отправлено (у бренда не найден tg_id).`;
       } else if (delivered > 0) {
         deliveryLine = `
 
 🔔 Уведомление (${whoNotified}): ${delivered}/${recipientsMap.size}`;
       } else {
-        deliveryLine = '
-
-🔕 Уведомление: не доставлено (ошибка отправки). Заявка уже в Inbox.';
+        deliveryLine = `\n\n🔕 Уведомление: не доставлено (ошибка отправки). Заявка уже в Inbox.`;
       }
 
       const doneText = baseDoneText + deliveryLine;
