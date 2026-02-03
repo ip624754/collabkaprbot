@@ -7331,44 +7331,75 @@ async function renderBxView(ctx, ownerUserId, wsId, offerId, back = 'feed', page
   if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const st = String(o.status || 'ACTIVE').toUpperCase();
-  const contact = (o.contact || '').trim();
+  const contact = String(o.contact || '').trim();
 
-  let partnerBlock = ''
-  let partnerBtnLabel = '📁 Папка партнёров'
+  const stEmoji = st === 'ACTIVE' ? '🟢' : (st === 'PAUSED' ? '⏸' : (st === 'CLOSED' ? '🗄' : 'ℹ️'));
+
+  let partnerSection = '';
+  let partnerBtnLabel = '📁 Папка партнёров';
   if (o.partner_folder_id) {
     try {
       const folder = await db.getChannelFolder(Number(o.partner_folder_id));
       if (folder && Number(folder.workspace_id) === Number(wsId)) {
         const items = await db.listChannelFolderItems(folder.id);
-        const shown = items.slice(0, 10).map(i => i.channel_username);
-        const more = items.length > shown.length ? `
+        const shown = items.slice(0, 10).map((i) => i.channel_username).filter(Boolean);
+        const moreLine = items.length > shown.length ? `
 … и ещё ${items.length - shown.length}` : '';
         const safeTitle = escapeHtml(String(folder.title || '').slice(0, 40));
-        partnerBlock = `
-
-Партнёры (папка “${safeTitle}”, ${items.length}):
-${shown.map(x => escapeHtml(x)).join('\n')}${more}`;
+        const shownList = shown.map((x) => escapeHtml(String(x))).join('\n');
+        partnerSection = `<b>Партнёры</b>
+• Папка: “${safeTitle}” (<b>${items.length}</b>)
+${shownList ? `<code>${shownList}</code>` : '<i>Папка пустая</i>'}${moreLine}`;
         partnerBtnLabel = `📁 Папка: ${String(folder.title || '').slice(0, 18)} (${items.length})`;
       }
-    } catch (_) {}
+    } catch (_) {
+      // ignore
+    }
   }
 
-  const metaLines = offerMetaLinesHtml(o.meta);
+  const m = parseOfferMeta(o.meta);
+  const tagLines = [];
+  if (m.goals_tags.length) {
+    const g = brandTagsPreviewPretty(m.goals_tags, BRAND_GOALS_TAGS, 8);
+    tagLines.push(`• 🎯 Цели: <code>${escapeHtml(g)}</code>`);
+  }
+  if (m.req_tags.length) {
+    const r = brandTagsPreviewPretty(m.req_tags, BRAND_REQ_TAGS, 8);
+    tagLines.push(`• 📎 Требования: <code>${escapeHtml(r)}</code>`);
+  }
+  const tagsBlock = tagLines.length ? `<b>Теги</b>
+${tagLines.join('\n')}
+
+` : '';
+
+  const paramsLines = [
+    `• Категория: <b>${escapeHtml(bxCategoryLabel(o.category))}</b>`,
+    `• Формат: <b>${escapeHtml(bxTypeLabel(o.offer_type))}</b>`,
+    `• Оплата: <b>${escapeHtml(bxCompLabel(o.compensation_type))}</b>`,
+    `• Медиа: <b>${escapeHtml(bxMediaLabel(o.media_type))}</b>`,
+  ];
+
+  const title = String(o.title || '').trim();
+  const desc = String(o.description || '').trim();
 
   const text =
 `🤝 <b>Оффер #${o.id}</b>
 
-Статус: <b>${escapeHtml(st)}</b>
-Категория: <b>${escapeHtml(bxCategoryLabel(o.category))}</b>
-Формат: <b>${escapeHtml(bxTypeLabel(o.offer_type))}</b>
-Оплата: <b>${escapeHtml(bxCompLabel(o.compensation_type))}</b>
-${metaLines ? metaLines + '\n' : ''}Медиа: <b>${escapeHtml(bxMediaLabel(o.media_type))}</b>
+<b>${escapeHtml(title || '—')}</b>
 
-<b>${escapeHtml(o.title)}</b>
+<b>Статус</b>
+• ${stEmoji} <b>${escapeHtml(st)}</b>
 
-${escapeHtml(o.description)}${partnerBlock}
+<b>Параметры</b>
+${paramsLines.join('\n')}
 
-${contact ? `Контакт: <b>${escapeHtml(contact)}</b>` : ''}`;
+${tagsBlock}<b>Описание</b>
+${escapeHtml(desc || '—')}${partnerSection ? `
+
+${partnerSection}` : ''}${contact ? `
+
+<b>Контакт</b>
+• <b>${escapeHtml(contact)}</b>` : ''}`;
 
   const kb = new InlineKeyboard();
   if (st === 'ACTIVE') {
@@ -7407,6 +7438,7 @@ ${contact ? `Контакт: <b>${escapeHtml(contact)}</b>` : ''}`;
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
+
 
 
 async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
