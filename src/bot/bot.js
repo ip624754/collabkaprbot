@@ -963,19 +963,48 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
 
 
 async function safeDeleteIncomingUserMessage(ctx) {
-  // Best-effort: remove user's text message after we consumed it,
-  // to keep the chat clean (especially in profile edit flows).
+  // Best-effort: remove the incoming user message after we consumed it
+  // to keep the chat clean in text-input flows.
+  //
+  // Notes:
+  // - In normal private chats, bots are allowed to delete incoming messages.
+  // - Some Telegram "business" message variants require deleteBusinessMessages.
   try {
-    const chat = ctx?.chat;
-    if (!chat || String(chat.type) !== 'private') return false;
-    const mid = ctx?.message?.message_id;
+    const msg = ctx?.message || ctx?.msg || ctx?.update?.message || null;
+    const chat = msg?.chat || ctx?.chat || null;
+
+    if (!chat || !chat.id) return false;
+
+    // Only attempt cleanup in private chats. Some update variants omit chat.type,
+    // so "missing" is treated as private-safe.
+    const ctype = String(chat.type || '').toLowerCase();
+    if (ctype && ctype !== 'private') return false;
+
+    const mid = msg?.message_id;
     if (!mid) return false;
+
     await ctx.api.deleteMessage(chat.id, mid);
     return true;
-  } catch (_) {
-    return false;
+  } catch (e) {
+    // Fallback: business connection messages
+    try {
+      const msg = ctx?.message || ctx?.msg || ctx?.update?.message || null;
+      const chat = msg?.chat || ctx?.chat || null;
+      const ctype = String((chat && chat.type) || '').toLowerCase();
+      if (ctype && ctype !== 'private') return false;
+
+      const mid = msg?.message_id;
+      const bcid = msg?.business_connection_id || msg?.businessConnectionId || null;
+      if (!bcid || !mid) return false;
+
+      await ctx.api.deleteBusinessMessages(bcid, [mid]);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }
+
 
 
 
