@@ -10374,10 +10374,7 @@ ${card}`;
         windowSec: CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC
       });
       if (!rl1.allowed) {
-        const resetSec = Number(rl1.resetSec);
-        const windowSec = Number(CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC || 600);
-        const sec = (Number.isFinite(resetSec) && resetSec > 0) ? resetSec : (Number.isFinite(windowSec) && windowSec > 0 ? windowSec : 600);
-        const waitMin = Math.max(1, Math.ceil(sec / 60));
+        const waitMin = Math.max(1, Math.ceil((Number(rl1.resetSec) || CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC || 600) / 60));
         return ctx.reply(`⏳ Слишком часто. Повтори через ~${waitMin} мин.`);
       }
 
@@ -10387,19 +10384,6 @@ ${card}`;
       });
       if (!rl2.allowed) {
         return ctx.reply('⏳ Лимит заявок на сегодня исчерпан. Попробуй позже.');
-      }
-
-            // Safety: require connected channel (workspace) for applications.
-      let wss0 = [];
-      try { wss0 = await db.listWorkspaces(u.id); } catch { wss0 = []; }
-      if (!wss0.length) {
-        await clearExpectText(ctx.from.id);
-        const kbGate = new InlineKeyboard()
-          .text('🚀 Подключить канал', 'a:setup')
-          .row()
-          .text('⬅️ Назад', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
-          .text('📋 Меню', 'a:menu');
-        return ctx.reply('⚠️ Заявка не отправлена: сначала подключи канал (бот должен быть админом).', { reply_markup: kbGate });
       }
 
       await safeDeleteIncomingUserMessage(ctx);
@@ -10441,30 +10425,8 @@ ${card}`;
       const creatorLink = `<a href="tg://user?id=${ctx.from.id}">${creatorDisplay}</a>`;
       const creatorUname = ctx.from.username ? '@' + String(ctx.from.username).replace(/^@/, '') : `id:${ctx.from.id}`;
       const showLine = creatorShowcase
-        ? `
-🪟 Витрина креатора: <a href="${wsBrandLink(creatorShowcase.id)}">открыть</a>`
+        ? `\n🪟 Витрина креатора: <a href="${wsBrandLink(creatorShowcase.id)}">открыть</a>`
         : '';
-
-      const channelLine = creatorShowcase
-        ? (() => {
-            const uname = String(creatorShowcase.channel_username || '').replace(/^@/, '').trim();
-            const title = String(creatorShowcase.title || '').trim();
-            if (uname) return `
-📣 Канал: @${escapeHtml(uname)}`;
-            if (title) return `
-📣 Канал: ${escapeHtml(title)}`;
-            return '';
-          })()
-        : '';
-
-      const contactLine = (() => {
-        const c = creatorShowcase ? String(creatorShowcase.profile_contact || '').trim() : '';
-        if (c) return `
-✍️ Контакт: ${escapeHtml(c)}`;
-        const uName = ctx.from.username ? '@' + String(ctx.from.username).replace(/^@/, '') : '';
-        return uName ? `
-✍️ Контакт: ${escapeHtml(uName)}` : '';
-      })();
 
       const inboxLine = stored && app
         ? `\n📥 Inbox: #${app.id}`
@@ -10474,8 +10436,6 @@ ${card}`;
         `📝 <b>Новая заявка от креатора</b>\n\n` +
         `Бренд: <b>${escapeHtml(brandName)}</b>\n` +
         `От: ${creatorLink} · <b>${escapeHtml(creatorUname)}</b>` +
-        channelLine +
-        contactLine +
         showLine +
         inboxLine +
         `\n\n<b>Сообщение:</b>\n${escapeHtml(msg)}`;
@@ -10490,34 +10450,50 @@ ${card}`;
       }
 
       // Recipients: owner + managers
-      const recipients = new Set();
+      const recipientsMap = new Map(); // tgId -> { tgId, role, tg_username }
+
       const ownerRow = await db.getUserTgIdByUserId(brandUserId);
       const ownerTgId = Number(ownerRow?.tg_id || 0);
-      if (ownerTgId) recipients.add(ownerTgId);
+      if (ownerTgId) {
+        recipientsMap.set(ownerTgId, { tgId: ownerTgId, role: 'owner', tg_username: ownerRow?.tg_username || null });
+      }
+
       let managers = [];
       try { managers = await db.listBrandManagers(brandUserId); } catch { managers = []; }
       for (const m of managers || []) {
-        const t = Number(m.tg_id || 0);
-        if (t) recipients.add(t);
+        const t = Number(m?.tg_id || 0);
+        if (t && !recipientsMap.has(t)) {
+          recipientsMap.set(t, { tgId: t, role: 'manager', tg_username: m?.tg_username || null });
+        }
       }
 
       let delivered = 0;
-      let firstSendErr = null;
-      for (const tgId of recipients) {
-        const to = Number(tgId || 0);
-        if (!Number.isFinite(to) || to <= 0) continue;
+      const deliveredTo = [];
+      const failedTo = [];
+      for (const rec of recipientsMap.values()) {
         try {
-          await bot.api.sendMessage(to, notifyText, {
+          await bot.api.sendMessage(rec.tgId, notifyText, {
             parse_mode: 'HTML',
             reply_markup: notifyKb.inline_keyboard?.length ? notifyKb : undefined,
             disable_web_page_preview: true
           });
           delivered++;
+          deliveredTo.push(rec);
         } catch (e) {
-          if (!firstSendErr) firstSendErr = e;
-          try { console.warn('[brand_apply] notify failed', { tgId: to, err: e?.description || e?.message || String(e) }); } catch {}
+          failedTo.push({ ...rec, err: e?.description || e?.message || String(e) });
+          try { console.warn('[brand_apply] notify failed', { tgId: rec.tgId, role: rec.role, err: e?.description || e?.message || String(e) }); } catch {}
         }
       }
+
+      try {
+        console.info('[brand_apply] notify summary', {
+          brandUserId,
+          appId: app?.id || null,
+          recipients: recipientsMap.size,
+          delivered,
+          deliveredTo: deliveredTo.map(x => ({ tgId: x.tgId, role: x.role, username: x.tg_username || null }))
+        });
+      } catch {}
 
       await clearExpectText(ctx.from.id);
 
@@ -10528,16 +10504,28 @@ ${card}`;
         .text('📋 Меню', 'a:menu');
 
       const baseDoneText = stored
-        ? '✅ Заявка сохранена и добавлена в Inbox бренда.'
+        ? '✅ Заявка отправлена. Бренд увидит её в Inbox.'
         : '✅ Заявка отправлена бренду. (Inbox временно недоступен — нужен апдейт бота.)';
 
-      const deliveryHint = (recipients.size > 0 && delivered === 0)
-        ? '
+      const hasManagers = Array.from(recipientsMap.values()).some(r => r.role === 'manager');
+      const whoNotified = hasManagers ? 'владелец + менеджеры' : 'владелец';
 
-🔕 Уведомление бренду не доставлено. Но заявка уже в Inbox — бренд увидит её, когда зайдёт в бот.'
-        : '';
+      let deliveryLine = '';
+      if (recipientsMap.size === 0) {
+        deliveryLine = '
 
-      const doneText = baseDoneText + deliveryHint;
+🔕 Уведомление: не отправлено (у бренда не найден tg_id).';
+      } else if (delivered > 0) {
+        deliveryLine = `
+
+🔔 Уведомление (${whoNotified}): ${delivered}/${recipientsMap.size}`;
+      } else {
+        deliveryLine = '
+
+🔕 Уведомление: не доставлено (ошибка отправки). Заявка уже в Inbox.';
+      }
+
+      const doneText = baseDoneText + deliveryLine;
 
       return ctx.reply(doneText, { reply_markup: doneKb });
     }
@@ -10697,7 +10685,6 @@ if (exp.type === 'brand_deals_search') {
       if (Number(app.creator_user_id) !== Number(u.id)) { await clearExpectText(ctx.from.id); return ctx.reply('Нет доступа.'); }
 
       const brandUserId = Number(app.brand_user_id);
-      await safeDeleteIncomingUserMessage(ctx);
 
       const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
       const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
@@ -10718,11 +10705,19 @@ if (exp.type === 'brand_deals_search') {
 
       // Notify brand owner + managers
       const managers = await safeBrandManagers(() => db.listBrandManagers(brandUserId), async () => []);
-      const targets = new Set();
+      const targetsMap = new Map(); // tgId -> { tgId, role, tg_username }
+
       const brandOwner = await db.getUserById(brandUserId);
-      if (brandOwner?.tg_id) targets.add(Number(brandOwner.tg_id));
+      const ownerTgId = Number(brandOwner?.tg_id || 0);
+      if (ownerTgId) {
+        targetsMap.set(ownerTgId, { tgId: ownerTgId, role: 'owner', tg_username: brandOwner?.tg_username || null });
+      }
+
       for (const m of managers || []) {
-        if (m?.manager_tg_id) targets.add(Number(m.manager_tg_id));
+        const t = Number(m?.tg_id || 0);
+        if (t && !targetsMap.has(t)) {
+          targetsMap.set(t, { tgId: t, role: 'manager', tg_username: m?.tg_username || null });
+        }
       }
 
       const preview = msg.replace(/\s+/g, ' ').slice(0, 280);
@@ -10733,14 +10728,42 @@ if (exp.type === 'brand_deals_search') {
         `${escapeHtml(preview)}${msg.length > preview.length ? '…' : ''}`;
 
       const kb = new InlineKeyboard().text('📨 Открыть в Inbox', `a:brand_app_view|id:${appId}|s:in_progress|p:0`);
-      for (const tgId of targets) {
+
+      let delivered = 0;
+      const deliveredTo = [];
+      const failedTo = [];
+      for (const rec of targetsMap.values()) {
         try {
-          await bot.api.sendMessage(tgId, notif, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-        } catch {}
+          await bot.api.sendMessage(rec.tgId, notif, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+          delivered++;
+          deliveredTo.push(rec);
+        } catch (e) {
+          failedTo.push({ ...rec, err: e?.description || e?.message || String(e) });
+          try { console.warn('[brand_app_chat_send] notify failed', { tgId: rec.tgId, role: rec.role, err: e?.description || e?.message || String(e) }); } catch {}
+        }
       }
 
+      try {
+        console.info('[brand_app_chat_send] notify summary', {
+          brandUserId,
+          appId,
+          recipients: targetsMap.size,
+          delivered,
+          deliveredTo: deliveredTo.map(x => ({ tgId: x.tgId, role: x.role, username: x.tg_username || null }))
+        });
+      } catch {}
+
       await clearExpectText(ctx.from.id);
-      return ctx.reply('✅ Сообщение доставлено бренду.', {
+      const hasManagers2 = Array.from(targetsMap.values()).some(r => r.role === 'manager');
+      const whoNotified2 = hasManagers2 ? 'владелец + менеджеры' : 'владелец';
+
+      const ackText = (targetsMap.size === 0)
+        ? '✅ Сообщение добавлено в диалог. 🔕 Уведомление: не отправлено (у бренда не найден tg_id).'
+        : (delivered > 0)
+          ? `✅ Сообщение добавлено в диалог. 🔔 Уведомление (${whoNotified2}): ${delivered}/${targetsMap.size}`
+          : '✅ Сообщение добавлено в диалог. 🔕 Уведомление: не доставлено (ошибка отправки).';
+
+      return ctx.reply(ackText, {
         reply_markup: new InlineKeyboard()
           .text('📨 Открыть заявку', `a:brand_app_view|id:${appId}|s:in_progress|p:0`)
           .text('📋 Меню', 'a:menu')
@@ -12855,25 +12878,6 @@ if (p.a === 'a:brand_apply') {
 
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
-
-  // Gate: only creators with a connected channel (workspace) can apply to brands.
-  // This prevents anonymous spam and allows brands to open creator showcase.
-  let wss = [];
-  try { wss = await db.listWorkspaces(u.id); } catch { wss = []; }
-  if (!wss.length) {
-    const kbGate = new InlineKeyboard()
-      .text('🚀 Подключить канал', 'a:setup')
-      .row()
-      .text('⬅️ Назад', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
-      .text('📋 Меню', 'a:menu');
-    const gateText =
-      `⚠️ Чтобы отправить заявку бренду, сначала подключи канал.
-
-` +
-      `Бот должен быть админом в канале — тогда я прикреплю твою витрину к заявке, и бренду будет проще принять решение.`;
-    await safeEditOrReply(ctx, gateText, { reply_markup: kbGate, disable_web_page_preview: true });
-    return;
-  }
 
   await setExpectText(ctx.from.id, {
     type: 'brand_apply',
