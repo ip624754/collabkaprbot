@@ -961,6 +961,24 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
 }
 
 
+
+async function safeDeleteIncomingUserMessage(ctx) {
+  // Best-effort: remove user's text message after we consumed it,
+  // to keep the chat clean (especially in profile edit flows).
+  try {
+    const chat = ctx?.chat;
+    if (!chat || String(chat.type) !== 'private') return false;
+    const mid = ctx?.message?.message_id;
+    if (!mid) return false;
+    await ctx.api.deleteMessage(chat.id, mid);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+
+
 async function uiGuard(ctx, tag, fn) {
   try {
     return await fn();
@@ -10544,6 +10562,7 @@ if (exp.type === 'brand_deals_search') {
       if (!ws) { await ctx.reply('Нет доступа к этому каналу.'); return; }
 
       const raw = String(ctx.message.text || '').trim();
+      await safeDeleteIncomingUserMessage(ctx);
       const rawLc = raw.toLowerCase();
       const wantClear = ['-', '—', 'нет', 'no', 'clear'].includes(rawLc);
 
@@ -11009,6 +11028,8 @@ ${msgText}
     if (exp.type === 'brand_prof_field') {
       const field = String(exp.field || '');
       const raw = String(ctx.message.text || '').trim();
+
+      await safeDeleteIncomingUserMessage(ctx);
 
       if (!field) {
         await clearExpectText(ctx.from.id);
