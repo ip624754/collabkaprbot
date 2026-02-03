@@ -3441,8 +3441,8 @@ export async function createBrandApplication({
 }) {
   const r = await pool.query(
     `insert into brand_applications
-      (brand_user_id, creator_user_id, creator_tg_id, creator_username, message, meta)
-     values ($1,$2,$3,$4,$5,$6::jsonb)
+      (brand_user_id, creator_user_id, creator_tg_id, creator_username, message, meta, status)
+     values ($1,$2,$3,$4,$5,$6::jsonb,'new')
      returning *`,
     [
       Number(brandUserId),
@@ -3481,7 +3481,7 @@ export async function listBrandApplications(brandUserId, status, limit = 10, off
   const r = await pool.query(
     `select *
      from brand_applications
-     where brand_user_id=$1 and status=$2
+     where brand_user_id=$1 and coalesce(status,'new')=$2
      order by created_at desc, id desc
      limit $3 offset $4`,
     [Number(brandUserId), String(status), Number(limit), Number(offset)]
