@@ -7299,11 +7299,7 @@ async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my', page 
   const backCb = `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${bPage}`;
   const kb = navKb(backCb);
 
-  const note = `
-
-<i>Это превью (пересылать не нужно).</i>
-<i>Кнопки официального канала появятся при публикации.</i>
-<i>Медиа попадёт в официальный канал только при PAID-размещении.</i>`;
+  const note = `\n\n<b>ℹ️ Превью</b>\n<i>• Это превью — пересылать не нужно\n• Кнопки официального канала появятся при публикации\n• Медиа попадёт в официальный канал только при PAID-размещении</i>`;
   const previewText = `${text}${note}`;
 
   // UX: превью — это экран (не «мертвое» сообщение). Всегда держим Back/Menu.
@@ -7313,11 +7309,11 @@ async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my', page 
   if (o.media_file_id) {
     try {
       if (String(o.media_type) === 'photo') {
-        await ctx.replyWithPhoto(o.media_file_id, { caption: previewText, parse_mode: 'HTML', reply_markup: kb });
+        await ctx.replyWithPhoto(o.media_file_id, { caption: text, parse_mode: 'HTML', reply_markup: kb });
       } else if (String(o.media_type) === 'animation') {
-        await ctx.replyWithAnimation(o.media_file_id, { caption: previewText, parse_mode: 'HTML', reply_markup: kb });
+        await ctx.replyWithAnimation(o.media_file_id, { caption: text, parse_mode: 'HTML', reply_markup: kb });
       } else if (String(o.media_type) === 'video') {
-        await ctx.replyWithVideo(o.media_file_id, { caption: previewText, parse_mode: 'HTML', reply_markup: kb });
+        await ctx.replyWithVideo(o.media_file_id, { caption: text, parse_mode: 'HTML', reply_markup: kb });
       }
     } catch (_) {
       // ignore: основной экран превью уже показан
