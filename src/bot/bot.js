@@ -405,7 +405,7 @@ function mainMenuKb(flags = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['👤 Куратор', 'a:cur_home']);
+  if (isCurator) extra.push(['👤 Куратор блогера', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -442,7 +442,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['👤 Куратор', 'a:cur_home']);
+  if (isCurator) extra.push(['👤 Куратор блогера', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -480,7 +480,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
       .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand')
       .text('⭐️ Подписка', 'a:brand_plan|ws:0')
       .row()
-      .text(teamLocked ? '👥 Команда бренда 🔒' : '👥 Команда бренда', 'a:brand_team|ws:0');
+      .text(teamLocked ? '👥 Менеджеры бренда 🔒' : '👥 Менеджеры бренда', 'a:brand_team|ws:0');
   } else {
     kb.text('ℹ️ Права менеджера', 'a:bm_help')
       .row();
@@ -499,7 +499,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['👤 Куратор', 'a:cur_home']);
+  if (isCurator) extra.push(['👤 Куратор блогера', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -587,7 +587,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
     const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
@@ -648,7 +648,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
     const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -728,7 +728,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
       modeHuman = 'Brand Manager';
       text = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
       kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     } else if (bm.enabled && bm.needsPick) {
       await renderBmPickBrand(ctx, u, { ret: 'menu', wsId: 0, page: 0, edit });
@@ -842,7 +842,7 @@ async function renderRoleHub(ctx, u, flags) {
         await disableBrandManagerState(ctx.from.id);
         const msg = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
         await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
         return;
       }
@@ -1362,7 +1362,7 @@ function wsMenuKb(wsId, opts = {}) {
     .text('👥 Кураторы', `a:ws_settings|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`);
 
-  if (showCurator) kb.row().text('👤 Куратор', 'a:cur_home');
+  if (showCurator) kb.row().text('👤 Куратор блогера', 'a:cur_home');
 
   kb.row().text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
   return kb;
@@ -1493,7 +1493,7 @@ ${count ? cards : 'Пока нет.'}
 <b>Последние события:</b>
 ${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
 
-💡 Куратор открывает кабинет через «👤 Куратор» в меню (если он назначен куратором хотя бы в одном канале).`;
+💡 Куратор открывает кабинет через «👤 Куратор блогера» в меню (если он назначен куратором хотя бы в одном канале).`;
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
@@ -1600,7 +1600,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
 
   if (bm.enabled && bm.brandUserId !== u.id) {
     const kb = navKb('a:menu');
-    const text = `⛔ <b>Только владелец бренда</b>\n\nМенеджер не может управлять «👥 Команда бренда».`;
+    const text = `⛔ <b>Только владелец бренда</b>\n\nМенеджер не может управлять «👥 Менеджеры бренда».`;
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
@@ -1625,7 +1625,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
       ? '• Покупка: ✅ найдена'
       : '• Покупка: ❌ нет (нужен Brand Pass / Brand Plan)';
 
-    const text = `👥 <b>Команда бренда</b>\n\nДобавь менеджеров, чтобы быстрее отвечать на заявки и закрывать сделки.\n\n<b>Условия доступа:</b>\n1) Заполнить профиль бренда (4 поля: Название, Ниша, Контакт, Ссылка)\n2) Купить <b>Brand Pass</b> или <b>Brand Plan</b>\n\n<b>Статус:</b>\n${statusProfile}\n${statusPay}\n\n<i>Зачем:</i> защита от спама и ценность брендовой покупки.`;
+    const text = `👥 <b>Менеджеры бренда</b>\n\nДобавь менеджеров, чтобы быстрее отвечать на заявки и закрывать сделки.\n\n<b>Условия доступа:</b>\n1) Заполнить профиль бренда (4 поля: Название, Ниша, Контакт, Ссылка)\n2) Купить <b>Brand Pass</b> или <b>Brand Plan</b>\n\n<b>Статус:</b>\n${statusProfile}\n${statusPay}\n\n<i>Зачем:</i> защита от спама и ценность брендовой покупки.`;
 
     const kb = brandTeamLockedKb();
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -1707,7 +1707,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
-  if (showCurator) kb.row().text('👤 Куратор', 'a:cur_home');
+  if (showCurator) kb.row().text('👤 Куратор блогера', 'a:cur_home');
 
   kb.row().text(net, `a:net_q|ws:${wsId}|ret:bx`);
   kbNavRow(kb, `a:ws_open|ws:${wsId}`);
@@ -1741,7 +1741,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
-  if (showCurator) kb.row().text('👤 Куратор', 'a:cur_home');
+  if (showCurator) kb.row().text('👤 Куратор блогера', 'a:cur_home');
 
   kbNavRow(kb, 'a:menu');
   return kb;
@@ -2230,7 +2230,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 ` +
     `⚠️ Заполни 4 поля, чтобы писать креаторам и попадать в каталог брендов.
 ` +
-    `ℹ️ Команда бренда (менеджеры) доступна после покупки <b>Brand Pass</b> или <b>Brand Plan</b>.`;
+    `ℹ️ Раздел «Менеджеры бренда» доступен после покупки <b>Brand Pass</b> или <b>Brand Plan</b>.`;
 
   const kb = new InlineKeyboard();
 
@@ -8118,7 +8118,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 
 Чтобы <b>написать блогеру</b> и открыть новый диалог, нужен <b>${cost}</b> кредит(ов).
 Переписка внутри открытого диалога — бесплатна.
-👥 Команда бренда (менеджеры) открывается после покупки Brand Pass или Brand Plan.
+👥 Раздел «Менеджеры бренда» открывается после покупки Brand Pass или Brand Plan.
 ${trialLine}${limitLine}${verifyHintLine}
 Твой баланс: <b>${credits}</b> кредит(ов)
 🎟 Retry credits: <b>${retry}</b>
@@ -8371,7 +8371,7 @@ async function renderBrandPassTopup(ctx, userId, wsId) {
 
 Retry начисляется, если блогер не отвечает за 24ч (действует 7 дней).
 
-👥 Команда бренда (менеджеры) открывается после покупки Brand Pass или Brand Plan.
+👥 Раздел «Менеджеры бренда» открывается после покупки Brand Pass или Brand Plan.
 
 Пополняй, чтобы открывать новые диалоги с микро-каналами.`,
     { parse_mode: 'HTML', reply_markup: kb }
@@ -8400,7 +8400,7 @@ async function renderBrandPlan(ctx, userId, wsId) {
 Статус: <b>${escapeHtml(status)}</b>
 
 Brand Plan даёт инструменты внутри Inbox (CRM-стадии) и быстрые действия.
-Также открывает «Команда бренда» (добавление менеджеров).
+Также открывает «Менеджеры бренда» (добавление менеджеров).
 Кредиты Brand Pass покупаются отдельно.`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
@@ -9787,7 +9787,7 @@ ${escapeHtml(safe)}`;
         const payLine = `• Покупка: ${st.paidOk ? '✅' : '❌'} (Brand Pass / Brand Plan)`;
 
         await ctx.reply(
-          `👥 <b>Команда бренда</b>
+          `👥 <b>Менеджеры бренда</b>
 
 ` +
           `Раздел доступен после заполнения профиля бренда и покупки Brand Pass/Plan.
@@ -9878,7 +9878,7 @@ ${escapeHtml(payLine)}
       const kb = new InlineKeyboard()
         .text('⬅️ Назад к конкурсу', `a:cur_gw_open|ws:${wsId}|i:${gwId}`)
         .row()
-        .text('👤 Куратор', 'a:cur_home');
+        .text('👤 Куратор блогера', 'a:cur_home');
 
       await ctx.reply('✅ Заметка сохранена.', { reply_markup: kb });
       return;
@@ -10354,6 +10354,7 @@ ${card}`;
       const backPage = Math.max(0, Number(exp.backPage || 0));
       const msg = String(((ctx.message && ctx.message.text) || (ctx.msg && ctx.msg.text) || '')).trim();
 
+      const wsId = Number(exp.wsId || 0) || (await getActiveWorkspace(ctx.from.id)) || 0;
       if (!brandUserId) {
         await clearExpectText(ctx.from.id);
         return ctx.reply('⚠️ Не найден бренд для заявки. Открой бренд в каталоге и нажми “Оставить заявку” ещё раз.');
@@ -10402,7 +10403,8 @@ ${card}`;
           message: msg,
           meta: {
             from_first_name: ctx.from.first_name || null,
-            from_last_name: ctx.from.last_name || null
+            from_last_name: ctx.from.last_name || null,
+            ws_id: wsId || null
           }
         });
       } catch (e) {
@@ -10414,12 +10416,20 @@ ${card}`;
         }
       }
 
-      // Optional: include creator showcase (workspace)
+      // Optional: include creator showcase (workspace) — prefer active wsId
       let creatorShowcase = null;
       try {
-        const wss = await db.listWorkspacesByOwner(u.id, { limit: 1, offset: 0 });
-        if (wss?.length) creatorShowcase = wss[0];
+        if (wsId) {
+          const ws = await db.getWorkspaceAny(wsId);
+          if (ws && Number(ws.owner_user_id || 0) === Number(u.id || 0)) creatorShowcase = ws;
+        }
       } catch {}
+      if (!creatorShowcase) {
+        try {
+          const wss = await db.listWorkspacesByOwner(u.id, { limit: 1, offset: 0 });
+          if (wss?.length) creatorShowcase = wss[0];
+        } catch {}
+      }
 
       const creatorDisplay = escapeHtml([ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ').trim() || (ctx.from.username ? '@' + String(ctx.from.username).replace(/^@/, '') : String(ctx.from.id)));
       const creatorLink = `<a href="tg://user?id=${ctx.from.id}">${creatorDisplay}</a>`;
@@ -12627,7 +12637,7 @@ if (p.a === 'a:guide') {
 ` +
       `3) Все заявки и ответы — в <b>Inbox</b>.
 ` +
-      `4) <b>Команда бренда</b> открывается после покупки <b>Brand Pass</b> или <b>Brand Plan</b>.
+      `4) <b>Менеджеры бренда</b> открывается после покупки <b>Brand Pass</b> или <b>Brand Plan</b>.
 
 `;
 
@@ -12872,6 +12882,44 @@ if (p.a === 'a:brand_apply') {
   const brandUserId = Number(p.u || 0);
   const backPage = Math.max(0, Number(p.p || 0));
 
+  // Gate: заявки брендам отправляются только от подключённой витрины (активный канал)
+  const activeWsId = await getActiveWorkspace(ctx.from.id);
+  if (!activeWsId) {
+    const backCb = `a:brand_dir_open|u:${brandUserId}|p:${backPage}`;
+    let hasAnyWs = false;
+    try { hasAnyWs = await db.userHasWorkspace(u.id); } catch {}
+
+    const kbGate = new InlineKeyboard()
+      .text('⬅️ Назад', backCb)
+      .text('📋 Меню', 'a:menu')
+      .row();
+
+    if (hasAnyWs) kbGate.text('📣 Мои каналы', 'a:ws_list');
+    else kbGate.text('🚀 Подключить канал', 'a:setup');
+
+    const gateText = hasAnyWs
+      ? '⚠️ Чтобы отправить заявку бренду, сначала выбери активный канал (витрину).\n\nОткрой «📣 Мои каналы», выбери канал и повтори.'
+      : '⚠️ Чтобы отправить заявку бренду, сначала подключи канал (витрину).\n\nНажми «🚀 Подключить канал», добавь бота админом в свой канал и повтори.';
+
+    await safeEditOrReply(ctx, gateText, { reply_markup: kbGate });
+    return;
+  }
+
+  // Validate active workspace belongs to this user (protect against stale/foreign active_ws)
+  let activeWs = null;
+  try { activeWs = await db.getWorkspaceAny(activeWsId); } catch {}
+  if (!activeWs || Number(activeWs.owner_user_id || 0) !== Number(u.id || 0)) {
+    const backCb = `a:brand_dir_open|u:${brandUserId}|p:${backPage}`;
+    const kbGate = new InlineKeyboard()
+      .text('⬅️ Назад', backCb)
+      .text('📣 Мои каналы', 'a:ws_list')
+      .row()
+      .text('📋 Меню', 'a:menu');
+
+    await safeEditOrReply(ctx, '⚠️ Выбери активный канал (витрину) в «📣 Мои каналы» и повтори.', { reply_markup: kbGate });
+    return;
+  }
+
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
@@ -12879,12 +12927,18 @@ if (p.a === 'a:brand_apply') {
     type: 'brand_apply',
     brandUserId,
     backPage,
+    wsId: activeWsId,
     backCb: `a:brand_dir_open|u:${brandUserId}|p:${backPage}`
   });
 
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
     .text('📋 Меню', 'a:menu');
+
+  // Быстрый вход в контакт (если не заполнен) — повышает шанс ответа
+  const missingContact = !String(activeWs?.profile_contact || '').trim() && !String(ctx.from.username || '').trim();
+  if (missingContact) kb.row().text('✍️ Добавить контакт', `a:ws_prof_edit|ws:${activeWsId}|f:contact`);
+
 
   const text = `📝 <b>Заявка бренду</b>
 
@@ -12935,7 +12989,7 @@ if (p.a === 'a:brand_apply') {
         await disableBrandManagerState(ctx.from.id);
         const text = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
         await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
@@ -13030,7 +13084,7 @@ if (p.a === 'a:brand_apply') {
         await disableBrandManagerState(ctx.from.id);
         const text = `⛔ <b>Доступ менеджера отозван</b>
 
-Попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
+Попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
         await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
@@ -14149,7 +14203,7 @@ if (p.a === 'a:ws_prof_mode') {
       const managers = await db.listBrandManagers(u.id);
       const count = managers.length;
 
-      const text = `👥 <b>Команда бренда</b>
+      const text = `👥 <b>Менеджеры бренда</b>
 
 Добавь менеджеров — они смогут быстрее отвечать на заявки и закрывать сделки.
 У менеджера нет доступа к оплатам, профилю бренда и управлению командой.
