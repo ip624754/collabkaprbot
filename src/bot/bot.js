@@ -2009,7 +2009,12 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 
   const suf = brandCbSuffix({ wsId, ret, backOfferId: bo, backPage: bp });
 
-  const baseText = `🏷 <b>Профиль бренда</b> (${filled}/4)
+  const flash = String(params.flash || '').trim();
+  const flashBlock = flash ? `<i>${escapeHtml(flash)}</i>
+
+` : '';
+
+  const baseText = flashBlock + `🏷 <b>Профиль бренда</b> (${filled}/4)
 
 ` +
     `• Название: <b>${escapeHtml(p.brand_name || '—')}</b>
@@ -2055,7 +2060,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
   }
 
   kb
-    .text('✏️ Редактировать', `a:brand_profile_edit${suf}`)
+    .text(filled < 4 ? '✍️ Заполнить 4 поля' : '✏️ Изменить 4 поля', `a:brand_profile_edit${suf}`)
     .text('✨ Расширенный', `a:brand_profile_more${suf}`)
     .row()
     .text('🧹 Сбросить профиль', `a:brand_prof_reset${suf}`)
@@ -2279,8 +2284,13 @@ async function renderBrandProfileMore(ctx, ownerUserId, params = {}) {
   const goalsTags = Array.isArray(meta.goals_tags) ? meta.goals_tags.map(String).filter((k) => BRAND_GOALS_KEYS.has(k)) : [];
   const reqTags = Array.isArray(meta.req_tags) ? meta.req_tags.map(String).filter((k) => BRAND_REQ_KEYS.has(k)) : [];
 
+  const flash = String(params.flash || '').trim();
+  const flashBlock = flash ? `<i>${escapeHtml(flash)}</i>
+
+` : '';
+
   const txt =
-    `➕ <b>Расширенный профиль бренда</b>
+    flashBlock + `➕ <b>Расширенный профиль бренда</b>
 
 ` +
     `Заполни детали — это повышает доверие (и помогает в Brand-верификации).
@@ -10830,7 +10840,6 @@ ${msgText}
       }
 
       await clearExpectText(ctx.from.id);
-      await ctx.reply('✅ Профиль обновлён.');
 
       const wsId = Number(exp.wsId || 0);
       const ret = String(exp.ret || 'brand');
@@ -10841,9 +10850,9 @@ ${msgText}
       const from = String(exp.from || '');
       const EXT_FIELDS = new Set(['geo', 'collab_types', 'budget', 'goals', 'requirements']);
       if (from === 'more' || EXT_FIELDS.has(field)) {
-        await renderBrandProfileMore(ctx, u.id, { wsId, ret, backOfferId, backPage, edit: false });
+        await renderBrandProfileMore(ctx, u.id, { wsId, ret, backOfferId, backPage, edit: true, flash: (value === null ? '✅ Очищено' : '✅ Сохранено') });
       } else {
-        await renderBrandProfileHome(ctx, u.id, { wsId, ret, backOfferId, backPage, edit: false });
+        await renderBrandProfileHome(ctx, u.id, { wsId, ret, backOfferId, backPage, edit: true, flash: (value === null ? '✅ Очищено' : '✅ Сохранено') });
       }
       return;
     }
