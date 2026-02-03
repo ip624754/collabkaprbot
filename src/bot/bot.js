@@ -10374,7 +10374,8 @@ ${card}`;
         windowSec: CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC
       });
       if (!rl1.allowed) {
-        return ctx.reply(`⏳ Слишком часто. Повтори через ~${Math.max(1, Math.ceil(rl1.retryAfterSec / 60))} мин.`);
+        const waitMin = Math.max(1, Math.ceil((Number(rl1.resetSec) || CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC || 600) / 60));
+        return ctx.reply(`⏳ Слишком часто. Повтори через ~${waitMin} мин.`);
       }
 
       const rl2 = await rateLimit(rlDayKey, {
@@ -10386,9 +10387,6 @@ ${card}`;
       }
 
       await safeDeleteIncomingUserMessage(ctx);
-
-      await safeDeleteIncomingUserMessage(ctx);
-
       const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
       const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
@@ -10463,6 +10461,7 @@ ${card}`;
       }
 
       let delivered = 0;
+      let firstSendErr = null;
       for (const tgId of recipients) {
         try {
           await bot.api.sendMessage(tgId, notifyText, {
@@ -10471,7 +10470,10 @@ ${card}`;
             disable_web_page_preview: true
           });
           delivered++;
-        } catch {}
+        } catch (e) {
+          if (!firstSendErr) firstSendErr = e;
+          try { console.warn('[brand_apply] notify failed', { tgId, err: e?.description || e?.message || String(e) }); } catch {}
+        }
       }
 
       await clearExpectText(ctx.from.id);
@@ -10487,7 +10489,7 @@ ${card}`;
         : '✅ Заявка отправлена бренду. (Inbox временно недоступен — нужен апдейт бота.)';
 
       const deliveryHint = (recipients.size > 0 && delivered === 0)
-        ? '\n\n⚠️ Уведомление бренду не доставлено. Частая причина: бренд ещё не открыл бота (/start) или блокировал бота.\nНо заявка сохранена и появится в Inbox, когда бренд зайдёт.'
+        ? '\n\n⚠️ Уведомление бренду не доставлено (ошибка отправки). Частая причина: бренд ещё не открыл бота (/start) или блокировал бота.\nЗаявка сохранена и доступна в Inbox бренда.'
         : '';
 
       const doneText = baseDoneText + deliveryHint;
