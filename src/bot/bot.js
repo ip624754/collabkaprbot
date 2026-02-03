@@ -10692,14 +10692,23 @@ ${escapeHtml(reply)}`;
         .row()
         .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
 
-      try {
-        await bot.api.sendMessage(creatorTgId, outText, {
-          parse_mode: 'HTML',
-          reply_markup: outKb,
-          disable_web_page_preview: true
-        });
-      } catch {
-        // ignore send errors (user may not have started bot)
+      const sendRes = await sendMessageWithFallback(bot.api, creatorTgId, outText, {
+        parse_mode: 'HTML',
+        reply_markup: outKb,
+        disable_web_page_preview: true
+      });
+
+      const delivered = Boolean(sendRes && sendRes.ok);
+      const deliveryReason = delivered ? null : describeTgSendError(sendRes.err);
+      if (!delivered) {
+        try {
+          console.warn('[brand_app_reply] sendMessage failed', {
+            appId,
+            creatorTgId,
+            reason: deliveryReason,
+            raw: String(sendRes.err?.description || sendRes.err?.message || sendRes.err || '')
+          });
+        } catch {}
       }
 
       // Persist reply + append to thread + move to "in progress" if still new
@@ -10711,7 +10720,9 @@ ${escapeHtml(reply)}`;
         at: new Date().toISOString(),
         by_user_id: Number(u.id),
         by_tg_id: Number(ctx.from?.id || 0),
-        by_username: ctx.from?.username || null
+        by_username: ctx.from?.username || null,
+        delivered,
+        delivery: { ok: delivered, mode: sendRes?.mode || null, reason: delivered ? null : deliveryReason }
       }), async () => null);
       if (app && String(app.status) === 'new') {
         await safeBrandApplications(() => db.updateBrandApplicationStatus(appId, 'in_progress'), async () => null);
@@ -10724,7 +10735,37 @@ ${escapeHtml(reply)}`;
         .text('⬅️ Назад', backCb)
         .text('📋 Меню', 'a:menu');
 
-      return ctx.reply('✅ Ответ отправлен креатору.', { reply_markup: kb });
+      if (delivered) {
+        return ctx.reply('✅ Ответ доставлен креатору.', { reply_markup: kb });
+      }
+
+      const backStatus = String(exp.backStatus || 'new');
+      const backPage = Math.max(0, Number(exp.backPage || 0));
+      const creatorU = exp.creatorUsername ? String(exp.creatorUsername).replace(/^@/, '').trim() : '';
+      const failKb = new InlineKeyboard();
+      if (creatorU) {
+        failKb.url('💬 Открыть чат', `https://t.me/${creatorU}`).row();
+      }
+      failKb
+        .text('🔁 Повторить', `a:brand_app_reply|id:${appId}|s:${backStatus}|p:${backPage}`)
+        .row()
+        .text('⬅️ Назад', backCb)
+        .text('📋 Меню', 'a:menu');
+
+      const failText =
+        `⚠️ <b>Ответ сохранён</b>, но не доставлен креатору.
+
+` +
+        `Причина: <b>${escapeHtml(String(deliveryReason || 'ошибка отправки'))}</b>
+
+` +
+        `Текст (скопируй):
+<pre>${escapeHtml(reply)}</pre>
+
+` +
+        `💡 Попроси креатора нажать /start в этом боте и попробуй ещё раз.`;
+
+      return ctx.reply(failText, { parse_mode: 'HTML', reply_markup: failKb, disable_web_page_preview: true });
     }
 
 if (exp.type === 'brand_deals_search') {
