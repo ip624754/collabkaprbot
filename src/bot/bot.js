@@ -5255,6 +5255,16 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const viewer = ctx?.from ? await db.upsertUser(ctx.from.id, ctx.from.username ?? null) : null;
   const isOwner = viewer && Number(viewer.id) === Number(ws.owner_user_id);
 
+  let curatorUi = false;
+  try {
+    if (viewer && ctx?.from?.id) {
+      const flags = await getRoleFlags(viewer, ctx.from.id);
+      if (flags?.isCurator || flags?.isAdmin) curatorUi = await getCuratorMode(ctx.from.id);
+    }
+  } catch {}
+
+  const isPreview = !!isOwner || !!curatorUi;
+
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const name = ws.profile_title || channel;
   const mode = String(ws.profile_mode || 'both');
@@ -5290,7 +5300,12 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   blocks.push(`✨ <b>${escapeHtml(name)}</b>`);
   blocks.push('');
   blocks.push(`IG leads → TG deals: бренд находит в Instagram → сделка закрывается в Telegram.`);
-  blocks.push(`🪟 Витрина: кнопка ниже — там находится «📝 Оставить заявку».`);
+  if (isPreview) {
+    blocks.push(`🪟 <b>Предпросмотр</b>: это витрина креатора. Заявку оставляют бренды по этой ссылке.`);
+    if (isOwner) blocks.push(`🔗 Чтобы поделиться витриной — нажми «🔗 Поделиться» ниже.`);
+  } else {
+    blocks.push(`🪟 Витрина: кнопка ниже — там находится «📝 Оставить заявку».`);
+  }
 
   // Основное
   {
@@ -5340,7 +5355,11 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   }
 
   blocks.push('');
-  blocks.push(`Если хочешь UGC/интеграцию — нажми «📝 Оставить заявку» или «💬 Написать».`);
+  if (!isPreview) {
+    blocks.push(`Если хочешь UGC/интеграцию — нажми «📝 Оставить заявку» или «💬 Написать».`);
+  } else {
+    blocks.push(`Это предпросмотр. Чтобы вернуться — используй «⬅️ Назад» или «📋 Меню».`);
+  }
 
   if (isOwner && prog) {
     blocks.push('');
@@ -5363,9 +5382,14 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const kb = new InlineKeyboard();
 
   // CTA row
-  kb.text('📝 Оставить заявку', `a:wsp_lead_new|ws:${wsId}`);
-  if (contactUrl) kb.url('💬 Написать', contactUrl);
-  kb.row();
+  if (!isPreview) {
+    kb.text('📝 Оставить заявку', `a:wsp_lead_new|ws:${wsId}`);
+    if (contactUrl) kb.url('💬 Написать', contactUrl);
+    kb.row();
+  } else {
+    // Preview: avoid confusing “apply to yourself”. Curators may still want the contact link.
+    if (contactUrl && !isOwner) kb.url('💬 Написать', contactUrl).row();
+  }
 
   // Owner-only CTA
   if (isOwner) {
@@ -5495,7 +5519,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0 }) {
   const lead = await db.getBrandLeadById(leadId);
-  if (!lead) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
@@ -5702,14 +5726,14 @@ async function assertBrandAppsAccess(ctx, actorUserId, brandUserId) {
 
   const isManager = await safeBrandApplications(() => db.isBrandManager(brandUserId, actorUserId), async () => false);
   if (!isManager) {
-    await ctx.answerCallbackQuery({ text: 'Доступ отозван.' });
+    try { await ctx.answerCallbackQuery({ text: 'Доступ отозван.' }); } catch {}
     return { ok: false, isOwner: false, isAdmin, isManager: false };
   }
 
   // Auto-enter manager mode for better UX when opening from notifications
-  await setBrandManagerMode(ctx.from.id, true);
-  await setUiMode(ctx.from.id, 'Brand');
-  await setActiveBrand(ctx.from.id, brandUserId);
+  try { await setBrandManagerMode(ctx.from.id, true); } catch {}
+  try { await setUiMode(ctx.from.id, 'Brand'); } catch {}
+  try { await setBmActiveBrand(ctx.from.id, brandUserId); } catch {}
 
   return { ok: true, isOwner: false, isAdmin, isManager: true };
 }
@@ -5899,7 +5923,7 @@ async function renderBrandDealsList(ctx, actorUserId, brandUserId, stage = 'nego
 
 async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'negotiation', page: 0 }) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Сделка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -5967,7 +5991,7 @@ if (threadBlock) {
 
 async function renderBrandAppView(ctx, actorUserId, appId, back = { status: 'new', page: 0 }) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -6063,7 +6087,7 @@ ${threadBlock}`;
 
 async function startBrandAppReply(ctx, actorUserId, appId, back) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -6104,7 +6128,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
 
 async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'negotiation', page: 0 }) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Сделка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -6146,7 +6170,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
 
 async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage: 'negotiation', page: 0 }) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Сделка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -6190,14 +6214,14 @@ async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage:
 
 async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = { stage: 'negotiation', page: 0 }) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Сделка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
   if (!access.ok) return;
 
   const creatorTgId = Number(app.creator_tg_id || 0);
-  if (!creatorTgId) return ctx.answerCallbackQuery({ text: 'У креатора нет TG id.' });
+  if (!creatorTgId) { try { await ctx.answerCallbackQuery({ text: 'У креатора нет TG id.' }); } catch {} return; }
 
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
@@ -6274,7 +6298,7 @@ function buildBrandAppTemplateText(brandName, key) {
 
 async function renderBrandAppTemplates(ctx, actorUserId, appId, back) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -6300,7 +6324,7 @@ async function renderBrandAppTemplates(ctx, actorUserId, appId, back) {
     .row()
     .text('⏱ Сроки', `a:brand_app_tpl|id:${app.id}|k:timing|s:${back.status}|p:${back.page}`)
     .row()
-    .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`);
+    .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`).text('📋 Меню', 'a:menu');
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -6311,14 +6335,14 @@ async function renderBrandAppTemplates(ctx, actorUserId, appId, back) {
 
 async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
   if (!access.ok) return;
 
   const creatorTgId = Number(app.creator_tg_id || 0);
-  if (!creatorTgId) return ctx.answerCallbackQuery({ text: 'У креатора нет TG id.' });
+  if (!creatorTgId) { try { await ctx.answerCallbackQuery({ text: 'У креатора нет TG id.' }); } catch {} return; }
 
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
@@ -6371,7 +6395,7 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
 
 async function acceptBrandApplication(ctx, actorUserId, appId, back) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -6412,10 +6436,11 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
 
 async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   if (Number(app.creator_user_id) !== Number(actorUserId)) {
-    return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    return;
   }
 
   const brandUserId = Number(app.brand_user_id);
@@ -6451,7 +6476,7 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
 
 async function renderLeadTemplates(ctx, actorUserId, leadId, back) {
   const lead = await db.getBrandLeadById(leadId);
-  if (!lead) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
@@ -6493,7 +6518,7 @@ async function renderLeadTemplates(ctx, actorUserId, leadId, back) {
 
 async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const lead = await db.getBrandLeadById(leadId);
-  if (!lead) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
@@ -6504,7 +6529,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   if (!isOwner && !isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const brandTgId = Number(lead.brand_tg_id || 0);
-  if (!brandTgId) return ctx.answerCallbackQuery({ text: 'У бренда нет TG id.' });
+  if (!brandTgId) { try { await ctx.answerCallbackQuery({ text: 'У бренда нет TG id.' }); } catch {} return; }
 
   const replyText = buildLeadTemplateText(ws, lead, key);
   const card = formatWsContactCard(ws, Number(ws.id));
@@ -13509,6 +13534,41 @@ if (p.a === 'a:wsp_preview') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
 
+      // Prevent self-apply and curator-mode confusion (old buttons may still exist)
+      const ws = await db.getWorkspaceAny(wsId);
+      if (!ws) {
+        await ctx.answerCallbackQuery({ text: 'Профиль не найден.', show_alert: true });
+        return;
+      }
+
+      const isOwner = Number(u.id) === Number(ws.owner_user_id);
+
+      let curMode = false;
+      try {
+        const flags = await getRoleFlags(u, ctx.from.id);
+        curMode = !!(flags?.isCurator || flags?.isAdmin) && (await getCuratorMode(ctx.from.id));
+      } catch {
+        curMode = false;
+      }
+
+      if (isOwner) {
+        await ctx.answerCallbackQuery({
+          text: 'Это твоя витрина. Заявку оставляют бренды — поделись ссылкой.',
+          show_alert: true
+        });
+        await renderWsPublicProfile(ctx, wsId, { backCb: `a:ws_profile|ws:${wsId}` });
+        return;
+      }
+
+      if (curMode) {
+        await ctx.answerCallbackQuery({
+          text: 'Ты в режиме куратора. Чтобы оставить заявку как бренд — выйди в обычный режим и переключись в Brand.',
+          show_alert: true
+        });
+        await renderWsPublicProfile(ctx, wsId);
+        return;
+      }
+
       // Gate by Brand Profile (basic 3 fields) and skip Step 1 when complete
       if (CFG.BRAND_PROFILE_REQUIRED) {
         const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
@@ -18767,7 +18827,7 @@ async function renderModVerifs(ctx, page = 0) {
 
 async function renderModVerifView(ctx, userId, page = 0) {
   const v = await safeUserVerifications(() => db.getUserVerification(userId), async () => null);
-  if (!v) return ctx.answerCallbackQuery({ text: 'Заявка не найдена.' });
+  if (!v) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const who = v.tg_username ? '@' + v.tg_username : ('tg:' + v.tg_id);
   const when = v.submitted_at ? fmtTs(v.submitted_at) : '—';
