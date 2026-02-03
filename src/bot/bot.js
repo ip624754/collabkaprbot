@@ -10298,16 +10298,46 @@ ${escapeHtml(payLine)}
       const card = formatWsContactCard(ws, Number(ws.id));
 
       const out =
-        `💬 <b>Ответ по заявке #${leadId}</b>\n\n` +
-        `Канал: <b>${escapeHtml(String(ws.profile_title || channel))}</b>\n` +
-        (link ? `Витрина: <a href="${escapeHtml(link)}">${escapeHtml(shortUrl(link))}</a>\n\n` : `\n`) +
-        `${escapeHtml(replyText)}\n\n` +
-        `<b>Контакты:</b>\n${card}`;
-;
+        `💬 <b>Ответ по заявке #${leadId}</b>
+
+` +
+        `🧑‍🎨 Канал: <b>${escapeHtml(String(ws.profile_title || channel))}</b>
+
+` +
+        `${escapeHtml(replyText)}
+
+` +
+        `<b>Контакты</b>
+${card}`;
+
+      const kbToBrand = new InlineKeyboard();
+      let kbToBrandHas = false;
+
+      if (link) {
+        kbToBrand.url('🪟 Открыть витрину', link);
+        kbToBrandHas = true;
+      }
+
+      const contact = ws.profile_contact ? String(ws.profile_contact) : null;
+      const contactUrl = wsTgUrlFromContact(contact);
+      if (contactUrl) {
+        kbToBrand.url('💬 Написать', contactUrl);
+        kbToBrandHas = true;
+      }
+
+      if (ws.channel_username) {
+        kbToBrand.row().url('📣 Открыть канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
+        kbToBrandHas = true;
+      }
 
       try {
-        await ctx.api.sendMessage(Number(lead.brand_tg_id), out, { parse_mode: 'HTML', disable_web_page_preview: true });
+        await ctx.api.sendMessage(Number(lead.brand_tg_id), out, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          ...(kbToBrandHas ? { reply_markup: kbToBrand } : {})
+        });
       } catch {}
+
 
       const kb = new InlineKeyboard()
         .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}`)
