@@ -1,5 +1,6 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { CFG, assertEnv } from '../lib/config.js';
+import logger from '../lib/logger.js';
 import { redis, k, rateLimit, consumeOnce } from '../lib/redis.js';
 import * as db from '../db/queries.js';
 import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes, parseMoscowDateTime, computeThreadReplyStatus, formatBxChargeLine } from './helpers.js';
@@ -7,6 +8,7 @@ import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
+import { createLoggingMiddleware } from './middleware/logging.js';
 
 let BOT;
 
@@ -3225,10 +3227,10 @@ function bxFiltersKb(wsId, f, page = 0, opts = {}) {
 
   const kb = new InlineKeyboard();
 
-  kb.text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|p:${page}|h:${h}|r:${r}`)
-    .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|p:${page}|h:${h}|r:${r}`)
+  kb.text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|rp:${page}|pg:0|p:0|h:${h}|r:${r}`)
+    .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|rp:${page}|pg:0|p:0|h:${h}|r:${r}`)
     .row()
-    .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|p:${page}|h:${h}|r:${r}`)
+    .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|rp:${page}|pg:0|p:0|h:${h}|r:${r}`)
     .text(`🎯 Цели: ${bxTagsLabel(f.goalsTags, 'goals')}`, `a:bx_mpick|ws:${wsId}|k:goals|p:${page}|h:${h}|r:${r}`)
     .row()
     .text(`📎 Требования: ${bxTagsLabel(f.reqTags, 'req')}`, `a:bx_mpick|ws:${wsId}|k:req|p:${page}|h:${h}|r:${r}`)
@@ -3242,7 +3244,7 @@ function bxFiltersKb(wsId, f, page = 0, opts = {}) {
   return kb;
 }
 
-function bxPickKb(wsId, key, selectedValue, page = 0, opts = {}) {
+function bxPickKb(wsId, key, selectedValue, retPage = 0, pickPage = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
   const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
@@ -3257,37 +3259,38 @@ function bxPickKb(wsId, key, selectedValue, page = 0, opts = {}) {
     }));
 
   const perPage = 10;
-  const safePage = Math.max(0, Number(page || 0));
-  const start = safePage * perPage;
+  const safeRetPage = Math.max(0, Number(retPage || 0));
+  const safePickPage = Math.max(0, Number(pickPage || 0));
+  const start = safePickPage * perPage;
   const slice = list.slice(start, start + perPage);
 
   const kb = new InlineKeyboard();
 
   // 'All' option
   const isAll = !selectedValue;
-  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${safePage}|h:${h}|r:${r}`).row();
+  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|rp:${safeRetPage}|pg:${safePickPage}|p:${safePickPage}|h:${h}|r:${r}`).row();
 
   // Options
   for (const it of slice) {
     const selected = String(selectedValue || '') === it.value;
     const label = selected ? `✅ ${it.label}` : it.label;
-    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|p:${safePage}|h:${h}|r:${r}`).row();
+    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|rp:${safeRetPage}|pg:${safePickPage}|p:${safePickPage}|h:${h}|r:${r}`).row();
   }
 
   // Pagination
   if (list.length > perPage) {
     kb.row();
-    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${safePage - 1}|h:${h}|r:${r}`);
-    kb.text(`${safePage + 1}/${Math.ceil(list.length / perPage)}`, 'a:nop');
-    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|p:${safePage + 1}|h:${h}|r:${r}`);
+    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|rp:${safeRetPage}|pg:${safePickPage - 1}|p:${safePickPage - 1}|h:${h}|r:${r}`);
+    kb.text(`${safePickPage + 1}/${Math.ceil(list.length / perPage)}`, 'a:nop');
+    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|rp:${safeRetPage}|pg:${safePickPage + 1}|p:${safePickPage + 1}|h:${h}|r:${r}`);
   }
 
   // Actions
   kb.row();
-  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|p:${safePage}|h:${h}|r:${r}`);
-  kb.text('✅ Готово', `a:bx_filters|ws:${wsNum}|p:0|h:${h}|r:${r}`);
+  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|rp:${safeRetPage}|pg:${safePickPage}|p:${safePickPage}|h:${h}|r:${r}`);
+  kb.text('✅ Готово', `a:bx_filters|ws:${wsNum}|p:${safeRetPage}|h:${h}|r:${r}`);
 
-  kbNavRow(kb, `a:bx_filters|ws:${wsNum}|p:0|h:${h}|r:${r}`);
+  kbNavRow(kb, `a:bx_filters|ws:${wsNum}|p:${safeRetPage}|h:${h}|r:${r}`);
   return kb;
 }
 
@@ -3302,8 +3305,11 @@ function bxMultiPickKb(wsId, key, selected, page = 0, opts = {}) {
   const selSet = new Set((selected || []).map(String));
 
   const kb = new InlineKeyboard();
+  // NOTE: kbAddPairs expects items shaped as { text, cb }.
+  // If we pass { label, cb }, the button text becomes undefined and Telegram can reject the markup,
+  // making the "🎯 Цели" / "📎 Требования" screens look like the buttons are "silent".
   const pairs = items.map((it) => ({
-    label: selSet.has(String(it.value)) ? `✅ ${it.label}` : it.label,
+    text: selSet.has(String(it.value)) ? `✅ ${it.label}` : it.label,
     cb: `a:bx_mt|ws:${wsId}|k:${key}|v:${it.value}|p:${page}|h:${h}|r:${r}`
   }));
   kbAddPairs(kb, pairs, 2);
@@ -7138,7 +7144,7 @@ ${escapeHtml(bxFilterSummary(f))}
   }
 }
 
-async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = {}) {
+async function renderBxFilterPick(ctx, ownerUserId, wsId, key, retPage = 0, pickPage = 0, opts = {}) {
   try {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
@@ -7171,7 +7177,7 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = 
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
-    reply_markup: bxPickKb(wsNum, key, selectedValue, page, opts),
+    reply_markup: bxPickKb(wsNum, key, selectedValue, retPage, pickPage, opts),
     disable_web_page_preview: true
   });
   } catch (e) {
@@ -8985,16 +8991,25 @@ export function getBot() {
   assertEnv();
   const bot = new Bot(CFG.BOT_TOKEN);
 
+  // P0 Observability: correlation id + structured logs (zero UI/behavior change).
+  // IMPORTANT: this middleware never logs secrets and never logs arbitrary user text.
+  bot.use(createLoggingMiddleware({ logger }));
+
   // Never log ctx/api/token. Log only safe identifiers.
   bot.catch((err) => {
     const ctx = err?.ctx;
-    console.error('[BOT] error', {
+    const cid = ctx?.state?.cid || `${ctx?.update?.update_id ?? 0}-${ctx?.from?.id ?? 0}`;
+    logger.error({
+      cid,
       update_id: ctx?.update?.update_id ?? null,
       chat_id: ctx?.chat?.id ?? null,
       from_id: ctx?.from?.id ?? null,
-      message: String(err?.error?.message || err?.message || err?.error || err),
-      name: err?.error?.name || err?.name || 'Error',
-    });
+      username: ctx?.from?.username ?? null,
+      err: {
+        name: String(err?.error?.name || err?.name || 'Error'),
+        message: String(err?.error?.message || err?.message || err?.error || err),
+      },
+    }, 'bot.error');
   });
 
   // --- TEXT INPUT router (expectText) ---
@@ -9020,9 +9035,33 @@ export function getBot() {
 
     await clearExpectText(ctx.from.id);
 
-    const f = ctx.message.forward_from_chat || ctx.message.sender_chat;
+    const msg = ctx.message || {};
+    const fo = msg.forward_origin || msg.forwardOrigin || null;
+
+    let f = msg.forward_from_chat || msg.sender_chat || null;
+
+    // Telegram Bot API (newer forwards): channel source may be present only in forward_origin.
+    if ((!f || !f.id) && fo && typeof fo === 'object') {
+      const chat = fo.chat || null;
+      if (chat && chat.id) f = chat;
+    }
+
     if (!f || !f.id) {
-      await ctx.reply('Не вижу пересланный пост из канала. Перешли сюда пост именно из канала 🙏');
+      await ctx.reply(
+        `Не вижу форвард из канала.
+
+Важно: нажми именно «Переслать / Forward» (со стрелкой), а не «Скопировать / Copy».
+1) Добавь бота админом в канал
+2) Перешли сюда любой пост из канала (чтобы было видно источник)
+
+Если канал приватный — это тоже ок, главное именно форвард.`
+      );
+      await setExpectText(ctx.from.id, exp);
+      return;
+    }
+
+    if (f.type && String(f.type) !== 'channel') {
+      await ctx.reply('Нужно переслать пост именно из <b>канала</b> (не из чата/группы).', { parse_mode: 'HTML' });
       await setExpectText(ctx.from.id, exp);
       return;
     }
@@ -12482,7 +12521,7 @@ if (p.a === 'a:brand_apply') {
 
       const ret = String(p.ret || 'menu');
       const wsId = Number(p.ws || 0);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
@@ -12498,7 +12537,7 @@ if (p.a === 'a:brand_apply') {
 
       const ret = String(p.ret || 'menu');
       const wsId = Number(p.ws || 0);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
@@ -13602,7 +13641,7 @@ if (p.a === 'a:ws_prof_mode') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const offerId = (p.o !== undefined && p.o !== null && p.o !== '') ? Number(p.o) : null;
       const packId = String(p.pack || 'S');
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const pack = getBrandPack(packId);
       if (!pack) return ctx.answerCallbackQuery({ text: 'Пакет не найден.' });
 
@@ -14441,7 +14480,7 @@ ${link}`;
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const target = Number(p.id || 0);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       if (!target) return;
       await renderWsPublicProfile(ctx, target, { backCb: `a:pm_run|ws:${wsId}|p:${page}` });
       return;
@@ -14863,7 +14902,7 @@ if (p.a === 'a:match_home') {
         return;
       }
       const wsId = Number(p.ws);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
@@ -14883,15 +14922,17 @@ if (p.a === 'a:match_home') {
         return;
       }
       const wsId = Number(p.ws);
-      const page = Number(p.p || 0);
+
+      // Return-to page (feed page). Support rp (new) and p (legacy).
+      const retPage = Number(p.rp ?? p.p ?? 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
       if (!bmRes) return;
 
-      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
+      await renderBxFilters(ctx, bmRes.userId, wsId, retPage, { h, r });
       return;
     }
 
@@ -14904,7 +14945,7 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0);
+	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 	      const key = normBxTagFilterKey(p.k);
       if (!key) {
         const kb = navKb('a:menu');
@@ -14931,7 +14972,7 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0);
+	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 	      const key = normBxTagFilterKey(p.k);
       const v = String(p.v || '');
       if (!key) {
@@ -14972,7 +15013,7 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0);
+	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 	      const key = normBxTagFilterKey(p.k);
       if (!key) {
         const kb = navKb('a:menu');
@@ -15001,7 +15042,7 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0);
+	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
@@ -15022,17 +15063,20 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0);
+	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 	      const key = String(p.k || '');
+
+	      const retPage = Number(p.rp ?? p.p ?? 0);
+	      const pickPage = Number(p.pg ?? p.p ?? 0);
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
 	      if (!bmRes) return;
 
 	      // Open picker (do NOT change the filter here)
-	      await renderBxFilterPick(ctx, bmRes.userId, wsId, key, page, { h, r });
+	      await renderBxFilterPick(ctx, bmRes.userId, wsId, key, retPage, pickPage, { h, r });
 	      return;
 	    }
 
@@ -15045,9 +15089,12 @@ if (p.a === 'a:match_home') {
         return;
       }
       const wsId = Number(p.ws);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const keyRaw = String(p.k || '');
       const vRaw = p.v ? String(p.v) : null;
+
+      const retPage = Number(p.rp ?? p.p ?? 0);
+      const pickPage = Number(p.pg ?? p.p ?? 0);
 
       // UI uses short keys (cat/type/comp). Storage uses canonical keys.
       const key = keyRaw === 'cat'
@@ -15058,35 +15105,40 @@ if (p.a === 'a:match_home') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
       if (!bmRes) return;
 
       await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { [key]: v });
-      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
+
+      // UX: single-pick stays in picker; user exits via ✅ Готово / ⬅️ Назад / 📋 Меню
+      const pickKey = keyRaw === 'category' ? 'cat' : (keyRaw === 'offerType' ? 'type' : (keyRaw === 'compensationType' ? 'comp' : keyRaw));
+      await renderBxFilterPick(ctx, bmRes.userId, wsId, pickKey, retPage, pickPage, { h, r });
       return;
     }
-
     if (p.a === 'a:bx_freset') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
-      const page = Number(p.p || 0);
+
+      // Legacy: older messages used p as the only page param (we treat it as return-to page).
+      const retPage = Number(p.rp ?? p.p ?? 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
       if (!bmRes) return;
 
       await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
-      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
+      await renderBxFilters(ctx, bmRes.userId, wsId, retPage, { h, r });
       return;
     }
+
 
     if (p.a === 'a:bx_pub') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
       const offerId = Number(p.o);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       await renderBxPublicView(ctx, u.id, wsId, offerId, page, { h });
       return;
@@ -15097,7 +15149,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
       const offerId = Number(p.id || 0);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       if (!offerId) {
         await ctx.answerCallbackQuery({ text: 'Оффер не найден.', show_alert: true });
         return;
@@ -15427,7 +15479,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       await safeEditOrReply(ctx, '🚩 Опиши проблему одним сообщением (почему жалоба).', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`)
@@ -15440,7 +15492,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       await safeEditOrReply(ctx, '🚩 Опиши проблему одним сообщением (почему жалоба).', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|h:${h}`)
@@ -15451,7 +15503,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:bx_msg') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
       // Brand Manager in Brand Mode (ws:0): act as selected brand (brandUserId)
       let actorUserId = u.id;
@@ -15460,7 +15512,7 @@ if (p.a === 'a:match_home') {
         const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
         if (!bmRes) return;
         actorUserId = bmRes.userId;
         bm = bmRes.bm || { enabled: false };
@@ -15579,7 +15631,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:bx_inbox') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
@@ -15593,7 +15645,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
@@ -15623,7 +15675,7 @@ if (p.a === 'a:bx_retry_help') {
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
@@ -15639,7 +15691,7 @@ if (p.a === 'a:bx_retry_help') {
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
@@ -15658,7 +15710,7 @@ if (p.a === 'a:bx_retry_help') {
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
@@ -15677,7 +15729,7 @@ if (p.a === 'a:bx_retry_help') {
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
@@ -15707,7 +15759,7 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
@@ -15726,7 +15778,7 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
@@ -15743,7 +15795,7 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
