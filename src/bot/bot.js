@@ -1038,6 +1038,15 @@ function normBxRet(r, fallback = BX_HOME.BX_OPEN) {
   return fallback;
 }
 
+
+function normBxTagFilterKey(raw) {
+  const v = String(raw || '').trim().toLowerCase();
+  if (!v) return '';
+  if (v in {'goals':1,'goal':1,'goalstags':1,'goals_tags':1,'goals-tags':1}) return 'goals';
+  if (v in {'req':1,'reqs':1,'requirement':1,'requirements':1,'reqtags':1,'req_tags':1,'req-tags':1}) return 'req';
+  return '';
+}
+
 function bxHomeCb(wsId, h) {
   const home = normBxHome(h, BX_HOME.MENU);
   if (home === BX_HOME.MAIN_MENU) return 'a:main_menu';
@@ -6974,33 +6983,43 @@ async function renderBxMediaStep(ctx, ownerUserId, wsId, offerId, back = 'my', o
 
 async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my', page = 0) {
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
-  if (!o) return ctx.reply('Оффер не найден или нет доступа.');
+  if (!o) {
+    const kb = navKb('a:menu');
+    await safeEditOrReply(ctx, '⚠️ <b>Оффер не найден</b>\n\nНажми «📋 Меню» и открой «🤝 Мои офферы» заново.', { parse_mode: 'HTML', reply_markup: kb });
+    return;
+  }
 
   const { text } = await buildOfficialOfferPost(o, { forCaption: true });
   const bPage = Math.max(0, Number(page || 0));
   const backCb = `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${bPage}`;
   const kb = navKb(backCb);
 
-  const note = `\n\n<i>Это превью (пересылать не нужно).</i>\n<i>Кнопки официального канала появятся при публикации.</i>\n<i>Медиа попадёт в официальный канал только при PAID-размещении.</i>`;
-  const caption = `${text}${note}`;
+  const note = `
 
-  try {
-    if (o.media_file_id && String(o.media_type) === 'photo') {
-      await ctx.replyWithPhoto(o.media_file_id, { caption, parse_mode: 'HTML', reply_markup: kb });
-    } else if (o.media_file_id && String(o.media_type) === 'animation') {
-      await ctx.replyWithAnimation(o.media_file_id, { caption, parse_mode: 'HTML', reply_markup: kb });
-    } else if (o.media_file_id && String(o.media_type) === 'video') {
-      await ctx.replyWithVideo(o.media_file_id, { caption, parse_mode: 'HTML', reply_markup: kb });
-    } else {
-      await ctx.reply(`${text}${note}`, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
+<i>Это превью (пересылать не нужно).</i>
+<i>Кнопки официального канала появятся при публикации.</i>
+<i>Медиа попадёт в официальный канал только при PAID-размещении.</i>`;
+  const previewText = `${text}${note}`;
+
+  // UX: превью — это экран (не «мертвое» сообщение). Всегда держим Back/Menu.
+  await safeEditOrReply(ctx, previewText, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
+
+  // Если у оффера есть медиа — отправляем отдельным сообщением, но навигацию оставляем в текущем экране.
+  if (o.media_file_id) {
+    try {
+      if (String(o.media_type) === 'photo') {
+        await ctx.replyWithPhoto(o.media_file_id, { caption: previewText, parse_mode: 'HTML', reply_markup: kb });
+      } else if (String(o.media_type) === 'animation') {
+        await ctx.replyWithAnimation(o.media_file_id, { caption: previewText, parse_mode: 'HTML', reply_markup: kb });
+      } else if (String(o.media_type) === 'video') {
+        await ctx.replyWithVideo(o.media_file_id, { caption: previewText, parse_mode: 'HTML', reply_markup: kb });
+      }
+    } catch (_) {
+      // ignore: основной экран превью уже показан
     }
-  } catch (_) {
-    await ctx.reply('Не удалось отправить превью. Попробуй ещё раз или убери медиа.', { reply_markup: kb });
   }
-
-  // Return user to offer view
-  await renderBxView(ctx, ownerUserId, wsId, offerId, back, page);
 }
+
 
 async function renderBxView(ctx, ownerUserId, wsId, offerId, back = 'feed', page = 0) {
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
@@ -14886,8 +14905,12 @@ if (p.a === 'a:match_home') {
 	      }
 	      const wsId = Number(p.ws);
 	      const page = Number(p.p || 0);
-	      const key = String(p.k || '');
-	      if (!['goals', 'req'].includes(key)) return;
+	      const key = normBxTagFilterKey(p.k);
+      if (!key) {
+        const kb = navKb('a:menu');
+        await safeEditOrReply(ctx, '⚠️ <b>Эта кнопка устарела</b>\n\nОткрой «📋 Меню» → 📰 Лента креаторов → 🎛 Фильтры.', { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+        return;
+      }
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
@@ -14909,9 +14932,13 @@ if (p.a === 'a:match_home') {
 	      }
 	      const wsId = Number(p.ws);
 	      const page = Number(p.p || 0);
-	      const key = String(p.k || '');
-	      const v = String(p.v || '');
-	      if (!['goals', 'req'].includes(key)) return;
+	      const key = normBxTagFilterKey(p.k);
+      const v = String(p.v || '');
+      if (!key) {
+        const kb = navKb('a:menu');
+        await safeEditOrReply(ctx, '⚠️ <b>Эта кнопка устарела</b>\n\nОткрой «📋 Меню» → 📰 Лента креаторов → 🎛 Фильтры.', { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+        return;
+      }
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
@@ -14946,8 +14973,12 @@ if (p.a === 'a:match_home') {
 	      }
 	      const wsId = Number(p.ws);
 	      const page = Number(p.p || 0);
-	      const key = String(p.k || '');
-	      if (!['goals', 'req'].includes(key)) return;
+	      const key = normBxTagFilterKey(p.k);
+      if (!key) {
+        const kb = navKb('a:menu');
+        await safeEditOrReply(ctx, '⚠️ <b>Эта кнопка устарела</b>\n\nОткрой «📋 Меню» → 📰 Лента креаторов → 🎛 Фильтры.', { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+        return;
+      }
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
