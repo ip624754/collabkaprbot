@@ -3306,8 +3306,10 @@ function bxMultiPickKb(wsId, key, selected, page = 0, opts = {}) {
   const selSet = new Set((selected || []).map(String));
 
   const kb = new InlineKeyboard();
+  // NOTE: kbAddPairs expects items shaped as { text, cb }.
+  // If we pass { label, cb }, Telegram markup may render as "silent" buttons (no updates).
   const pairs = items.map((it) => ({
-    label: selSet.has(String(it.value)) ? `✅ ${it.label}` : it.label,
+    text: selSet.has(String(it.value)) ? `✅ ${it.label}` : it.label,
     cb: `a:bx_mt|ws:${wsId}|k:${key}|v:${it.value}|p:${page}|h:${h}|r:${r}`
   }));
   kbAddPairs(kb, pairs, 2);
