@@ -354,6 +354,51 @@ async function safeUserVerifications(primaryFn, fallbackFn) {
 }
 
 
+function stripHtmlTags(text) {
+  return String(text || "").replace(/<\/?[^>]+>/g, "");
+}
+
+function describeTgSendError(e) {
+  const raw = String((e && (e.description || e.message)) || e || "");
+  const msg = raw.toLowerCase();
+  if (msg.includes("bot was blocked")) return "креатор заблокировал бота";
+  if (msg.includes("chat not found")) return "креатор ещё не нажал /start в этом боте";
+  if (msg.includes("user is deactivated")) return "аккаунт пользователя деактивирован";
+  if (msg.includes("too many requests")) return "лимит Telegram (слишком часто)";
+  if (msg.includes("can't parse entities")) return "ошибка форматирования сообщения (HTML)";
+  if (msg.includes("button_data_invalid")) return "ошибка кнопок (callback_data)";
+  if (msg.includes("message is too long")) return "сообщение слишком длинное";
+  if (msg.includes("forbidden")) return "Telegram запретил отправку (403)";
+  return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
+}
+
+async function sendMessageWithFallback(api, chatId, text, options = {}) {
+  const base = { disable_web_page_preview: true, ...options };
+  try {
+    await api.sendMessage(chatId, text, base);
+    return { ok: true, mode: "full" };
+  } catch (e1) {
+    const o2 = { ...base };
+    delete o2.reply_markup;
+    try {
+      await api.sendMessage(chatId, text, o2);
+      return { ok: true, mode: "no_kb", warn: e1 };
+    } catch (e2) {
+      const o3 = { ...o2 };
+      delete o3.parse_mode;
+      const plain = stripHtmlTags(text);
+      try {
+        await api.sendMessage(chatId, plain, o3);
+        return { ok: true, mode: "plain", warn: e2 };
+      } catch (e3) {
+        return { ok: false, err: e3, first: e1, second: e2 };
+      }
+    }
+  }
+}
+
+
+
 
 async function safeBrandProfiles(primaryFn, fallbackFn) {
   try {
@@ -959,6 +1004,11 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
     throw e;
   }
 }
+
+
+
+
+
 
 
 
@@ -6366,13 +6416,34 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
     .row()
     .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
 
-  try {
-    await bot.api.sendMessage(creatorTgId, outText, { parse_mode: 'HTML', reply_markup: outKb, disable_web_page_preview: true });
-  } catch (e) {
-    await ctx.reply('❌ Не удалось отправить сообщение креатору. Возможно, он ещё не нажимал /start.', {
-      reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
-    });
-    return;
+  const sendRes = await sendMessageWithFallback(bot.api, creatorTgId, outText, {
+    parse_mode: 'HTML',
+    reply_markup: outKb,
+    disable_web_page_preview: true,
+  });
+
+  if (!sendRes.ok) {
+    const reason = describeTgSendError(sendRes.err);
+    console.warn('[brand_app_tpl] sendMessage failed', { appId: Number(appId), creatorTgId, reason, raw: String(sendRes.err?.description || sendRes.err?.message || sendRes.err || '') });
+
+    const botLink = CFG.BOT_USERNAME ? `https://t.me/${CFG.BOT_USERNAME}` : null;
+    const kb = new InlineKeyboard()
+      .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
+      .text('📋 Меню', 'a:menu');
+    if (botLink) kb.row().url('🔗 Ссылка креатору (/start)', botLink);
+
+    await safeEditOrReply(ctx,
+      `❌ <b>Не удалось доставить сообщение креатору</b>
+
+` +
+      `Причина: <i>${escapeHtml(reason)}</i>
+
+` +
+      `<b>Текст ответа (можно скопировать):</b>
+${escapeHtml(replyText)}`,
+      { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+    );
+    // we still persist the reply in the thread (brand pressed a template)
   }
 
   // Persist
@@ -6388,6 +6459,8 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
   if (normLeadStatus(app.status) === 'new') {
     await safeBrandApplications(() => db.updateBrandApplicationStatus(appId, 'in_progress'), async () => null);
   }
+
+  if (!sendRes.ok) return;
 
   try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
   await renderBrandAppView(ctx, actorUserId, appId, back);
@@ -6418,9 +6491,16 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
       .text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`)
       .row()
       .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
-    try {
-      await bot.api.sendMessage(creatorTgId, outText, { parse_mode: 'HTML', reply_markup: outKb, disable_web_page_preview: true });
-    } catch {}
+
+    const sendRes = await sendMessageWithFallback(bot.api, creatorTgId, outText, {
+      parse_mode: 'HTML',
+      reply_markup: outKb,
+      disable_web_page_preview: true,
+    });
+    if (!sendRes.ok) {
+      const reason = describeTgSendError(sendRes.err);
+      console.warn('[brand_app_accept] notify creator failed', { appId: Number(appId), creatorTgId, reason, raw: String(sendRes.err?.description || sendRes.err?.message || sendRes.err || '') });
+    }
   }
 
   await safeBrandApplications(() => db.appendBrandApplicationThreadMessage(appId, {
