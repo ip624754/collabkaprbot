@@ -5775,7 +5775,7 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
   if (hasPrev) kb.text('⬅️', `a:brand_apps|ws:0|s:${st}|p:${p - 1}`);
   if (hasNext) kb.text('➡️', `a:brand_apps|ws:0|s:${st}|p:${p + 1}`);
 
-  kb.row().text('⬅️ Назад', 'a:bx_open|ws:0');
+  kbNavRow(kb, 'a:bx_open|ws:0');
 
   const text = header + body;
 
@@ -5887,7 +5887,7 @@ async function renderBrandDealsList(ctx, actorUserId, brandUserId, stage = 'nego
   if (hasPrev) kb.text('⬅️', `a:brand_deals|ws:0|st:${st}|p:${p - 1}`);
   if (hasNext) kb.text('➡️', `a:brand_deals|ws:0|st:${st}|p:${p + 1}`);
 
-  kb.row().text('⬅️ Назад', 'a:bx_open|ws:0');
+  kbNavRow(kb, 'a:bx_open|ws:0');
 
   const text = header + body;
   try {
@@ -6050,9 +6050,9 @@ ${threadBlock}`;
     .text('💬 В работу', `a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`)
     .text('✅ Закрыть', `a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`)
     .row()
-    .text('🗑 Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('⬅️ Назад', `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`);
+    .text('🗑 Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`);
+
+  kbNavRow(kb, `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`);
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -7641,7 +7641,7 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
   kb.row().text('🚩 Жалоба', `a:bx_report_offer|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
   // Back: for non-owners this wsId feed is inaccessible; send them to Brand Mode feed
   const backCb = isOwner ? `a:bx_feed|ws:${wsId}|p:${page}|h:${h}` : `a:bx_feed|ws:0|p:0|h:${h}`;
-  kb.row().text('⬅️ Назад', backCb);
+  kbNavRow(kb, backCb);
 
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -8037,7 +8037,7 @@ async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0) {
   for (const d of OFFICIAL_DURATIONS) {
     kb.text(`⭐ ${d.label} · ${d.price} XTR`, `a:off_buy|ws:${wsId}|o:${offerId}|dur:${d.id}|p:${page}`).row();
   }
-  kb.text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`);
+  kbNavRow(kb, `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -8134,7 +8134,7 @@ ${trialLine}${limitLine}${verifyHintLine}
     kb.text(`⭐ ${p.title} · ${contacts} контактов`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
   }
   kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching', `a:match_home|ws:${wsId}`).row();
-  kb.text('⬅️ Назад', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
+  kbNavRow(kb, `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
