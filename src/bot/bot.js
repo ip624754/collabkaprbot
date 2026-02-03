@@ -10374,7 +10374,10 @@ ${card}`;
         windowSec: CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC
       });
       if (!rl1.allowed) {
-        const waitMin = Math.max(1, Math.ceil((Number(rl1.resetSec) || CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC || 600) / 60));
+        const resetSec = Number(rl1.resetSec);
+        const windowSec = Number(CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC || 600);
+        const sec = (Number.isFinite(resetSec) && resetSec > 0) ? resetSec : (Number.isFinite(windowSec) && windowSec > 0 ? windowSec : 600);
+        const waitMin = Math.max(1, Math.ceil(sec / 60));
         return ctx.reply(`⏳ Слишком часто. Повтори через ~${waitMin} мин.`);
       }
 
@@ -10384,6 +10387,19 @@ ${card}`;
       });
       if (!rl2.allowed) {
         return ctx.reply('⏳ Лимит заявок на сегодня исчерпан. Попробуй позже.');
+      }
+
+            // Safety: require connected channel (workspace) for applications.
+      let wss0 = [];
+      try { wss0 = await db.listWorkspaces(u.id); } catch { wss0 = []; }
+      if (!wss0.length) {
+        await clearExpectText(ctx.from.id);
+        const kbGate = new InlineKeyboard()
+          .text('🚀 Подключить канал', 'a:setup')
+          .row()
+          .text('⬅️ Назад', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
+          .text('📋 Меню', 'a:menu');
+        return ctx.reply('⚠️ Заявка не отправлена: сначала подключи канал (бот должен быть админом).', { reply_markup: kbGate });
       }
 
       await safeDeleteIncomingUserMessage(ctx);
@@ -10425,8 +10441,30 @@ ${card}`;
       const creatorLink = `<a href="tg://user?id=${ctx.from.id}">${creatorDisplay}</a>`;
       const creatorUname = ctx.from.username ? '@' + String(ctx.from.username).replace(/^@/, '') : `id:${ctx.from.id}`;
       const showLine = creatorShowcase
-        ? `\n🪟 Витрина креатора: <a href="${wsBrandLink(creatorShowcase.id)}">открыть</a>`
+        ? `
+🪟 Витрина креатора: <a href="${wsBrandLink(creatorShowcase.id)}">открыть</a>`
         : '';
+
+      const channelLine = creatorShowcase
+        ? (() => {
+            const uname = String(creatorShowcase.channel_username || '').replace(/^@/, '').trim();
+            const title = String(creatorShowcase.title || '').trim();
+            if (uname) return `
+📣 Канал: @${escapeHtml(uname)}`;
+            if (title) return `
+📣 Канал: ${escapeHtml(title)}`;
+            return '';
+          })()
+        : '';
+
+      const contactLine = (() => {
+        const c = creatorShowcase ? String(creatorShowcase.profile_contact || '').trim() : '';
+        if (c) return `
+✍️ Контакт: ${escapeHtml(c)}`;
+        const uName = ctx.from.username ? '@' + String(ctx.from.username).replace(/^@/, '') : '';
+        return uName ? `
+✍️ Контакт: ${escapeHtml(uName)}` : '';
+      })();
 
       const inboxLine = stored && app
         ? `\n📥 Inbox: #${app.id}`
@@ -10436,6 +10474,8 @@ ${card}`;
         `📝 <b>Новая заявка от креатора</b>\n\n` +
         `Бренд: <b>${escapeHtml(brandName)}</b>\n` +
         `От: ${creatorLink} · <b>${escapeHtml(creatorUname)}</b>` +
+        channelLine +
+        contactLine +
         showLine +
         inboxLine +
         `\n\n<b>Сообщение:</b>\n${escapeHtml(msg)}`;
@@ -10451,20 +10491,23 @@ ${card}`;
 
       // Recipients: owner + managers
       const recipients = new Set();
-      const ownerTgId = await db.getUserTgIdByUserId(brandUserId);
-      if (ownerTgId) recipients.add(Number(ownerTgId));
+      const ownerRow = await db.getUserTgIdByUserId(brandUserId);
+      const ownerTgId = Number(ownerRow?.tg_id || 0);
+      if (ownerTgId) recipients.add(ownerTgId);
       let managers = [];
       try { managers = await db.listBrandManagers(brandUserId); } catch { managers = []; }
       for (const m of managers || []) {
-        const t = Number(m.manager_tg_id || 0);
+        const t = Number(m.tg_id || 0);
         if (t) recipients.add(t);
       }
 
       let delivered = 0;
       let firstSendErr = null;
       for (const tgId of recipients) {
+        const to = Number(tgId || 0);
+        if (!Number.isFinite(to) || to <= 0) continue;
         try {
-          await bot.api.sendMessage(tgId, notifyText, {
+          await bot.api.sendMessage(to, notifyText, {
             parse_mode: 'HTML',
             reply_markup: notifyKb.inline_keyboard?.length ? notifyKb : undefined,
             disable_web_page_preview: true
@@ -10472,7 +10515,7 @@ ${card}`;
           delivered++;
         } catch (e) {
           if (!firstSendErr) firstSendErr = e;
-          try { console.warn('[brand_apply] notify failed', { tgId, err: e?.description || e?.message || String(e) }); } catch {}
+          try { console.warn('[brand_apply] notify failed', { tgId: to, err: e?.description || e?.message || String(e) }); } catch {}
         }
       }
 
@@ -10485,11 +10528,13 @@ ${card}`;
         .text('📋 Меню', 'a:menu');
 
       const baseDoneText = stored
-        ? '✅ Заявка отправлена. Бренд увидит её в Inbox.'
+        ? '✅ Заявка сохранена и добавлена в Inbox бренда.'
         : '✅ Заявка отправлена бренду. (Inbox временно недоступен — нужен апдейт бота.)';
 
       const deliveryHint = (recipients.size > 0 && delivered === 0)
-        ? '\n\n⚠️ Уведомление бренду не доставлено (ошибка отправки). Частая причина: бренд ещё не открыл бота (/start) или блокировал бота.\nЗаявка сохранена и доступна в Inbox бренда.'
+        ? '
+
+🔕 Уведомление бренду не доставлено. Но заявка уже в Inbox — бренд увидит её, когда зайдёт в бот.'
         : '';
 
       const doneText = baseDoneText + deliveryHint;
@@ -12810,6 +12855,25 @@ if (p.a === 'a:brand_apply') {
 
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
+
+  // Gate: only creators with a connected channel (workspace) can apply to brands.
+  // This prevents anonymous spam and allows brands to open creator showcase.
+  let wss = [];
+  try { wss = await db.listWorkspaces(u.id); } catch { wss = []; }
+  if (!wss.length) {
+    const kbGate = new InlineKeyboard()
+      .text('🚀 Подключить канал', 'a:setup')
+      .row()
+      .text('⬅️ Назад', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
+      .text('📋 Меню', 'a:menu');
+    const gateText =
+      `⚠️ Чтобы отправить заявку бренду, сначала подключи канал.
+
+` +
+      `Бот должен быть админом в канале — тогда я прикреплю твою витрину к заявке, и бренду будет проще принять решение.`;
+    await safeEditOrReply(ctx, gateText, { reply_markup: kbGate, disable_web_page_preview: true });
+    return;
+  }
 
   await setExpectText(ctx.from.id, {
     type: 'brand_apply',
