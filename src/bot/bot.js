@@ -1920,6 +1920,142 @@ function brandTagsPreview(keys, defs, max = 6) {
   return take.join(' · ') + more;
 }
 
+
+function brandTagsPreviewPretty(keys, defs, max = 6) {
+  const arr = Array.isArray(keys) ? keys.map(String) : [];
+  const allowed = new Set(defs.map((x) => x.key));
+  const clean = [];
+  const seen = new Set();
+  for (const k of arr) {
+    if (!allowed.has(k)) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    clean.push(k);
+  }
+  if (!clean.length) return '—';
+  const nameOf = (k) => defs.find((x) => x.key === k)?.title || k;
+  const take = clean.slice(0, max).map((k) => nameOf(k));
+  const moreN = clean.length > max ? (clean.length - max) : 0;
+  return take.join(', ') + (moreN ? ` + ещё ${moreN}` : '');
+}
+
+function joinPreviewWithTotal(keys, totalCount, labelFn, max = 6) {
+  const arr = Array.isArray(keys) ? keys.map(String) : [];
+  const clean = [];
+  const seen = new Set();
+  for (const k of arr) {
+    if (!k) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    clean.push(k);
+  }
+  if (!clean.length) return '—';
+  const take = clean.slice(0, max).map((k) => labelFn(k));
+  const takeCount = take.length;
+  const total = Number.isFinite(Number(totalCount)) ? Number(totalCount) : clean.length;
+  const moreN = Math.max(0, total - takeCount);
+  return take.join(', ') + (moreN ? ` + ещё ${moreN}` : '');
+}
+
+function formatBrandDetailsBlock(prof, opts = {}) {
+  const p = prof || {};
+  const variant = String(opts.variant || 'full');
+  const meta = opts.meta || parseBrandMeta(p.meta);
+
+  const geo = String(p.geo || '').trim();
+  const budget = String(p.budget || '').trim();
+  const goals = String(p.goals || '').trim();
+  const req = String(p.requirements || '').trim();
+
+  const budgetKey = BRAND_BUDGET_KEYS.has(String(meta.budget_bucket || '')) ? String(meta.budget_bucket) : '';
+  const budgetBucketTitle = budgetKey ? brandBudgetBucketTitle(budgetKey) : '';
+
+  const goalsTags = Array.isArray(meta.goals_tags) ? meta.goals_tags.map(String).filter((k) => BRAND_GOALS_KEYS.has(k)) : [];
+  const reqTags = Array.isArray(meta.req_tags) ? meta.req_tags.map(String).filter((k) => BRAND_REQ_KEYS.has(k)) : [];
+
+  const collabKeysAll = parseBrandCollabTypes(String(p.collab_types || '').trim());
+  const payKeySet = new Set(['barter', 'cert', 'paid', 'mixed']);
+  const allFormatsKeys = collabKeysAll.filter((k) => !payKeySet.has(k));
+  const allPayKeys = collabKeysAll.filter((k) => payKeySet.has(k));
+
+  const totals = (opts.totals && typeof opts.totals === 'object') ? opts.totals : {};
+  const totalFormats = Number.isFinite(Number(totals.formats)) ? Number(totals.formats) : allFormatsKeys.length;
+  const totalPay = Number.isFinite(Number(totals.pay)) ? Number(totals.pay) : allPayKeys.length;
+
+  const splitTags = opts.splitTags || null;
+  const shownFormats = Array.isArray(splitTags?.formatsArr) ? splitTags.formatsArr : allFormatsKeys;
+  const shownPay = Array.isArray(splitTags?.payArr) ? splitTags.payArr : allPayKeys;
+
+  if (variant === 'compact') {
+    const lines = [];
+
+    if (geo) lines.push(`📍 Гео: <b>${escapeHtml(geo)}</b>`);
+
+    const fPrev = joinPreviewWithTotal(shownFormats, totalFormats, (k) => brandCollabTagLabel(k, 'long'), 6);
+    if (fPrev !== '—') lines.push(`🎬 Форматы: <b>${escapeHtml(fPrev)}</b>`);
+
+    const pPrev = joinPreviewWithTotal(shownPay, totalPay, (k) => brandCollabTagLabel(k, 'long'), 4);
+    if (pPrev !== '—') lines.push(`💳 Оплата: <b>${escapeHtml(pPrev)}</b>`);
+
+    if (budgetBucketTitle || budget) {
+      const parts = [];
+      if (budgetBucketTitle) parts.push(escapeHtml(budgetBucketTitle));
+      if (budget) parts.push(escapeHtml(clipText(budget, 80)));
+      lines.push(`💸 Бюджет: <b>${parts.join(' · ')}</b>`);
+    }
+
+    if (goalsTags.length || goals) {
+      const gTag = goalsTags.length ? brandTagsPreviewPretty(goalsTags, BRAND_GOALS_TAGS, 6) : '—';
+      const parts = [];
+      if (gTag !== '—') parts.push(`<b>${escapeHtml(gTag)}</b>`);
+      if (goals) parts.push(`<i>${escapeHtml(clipText(goals, 80))}</i>`);
+      lines.push(`🎯 Цели: ${parts.length ? parts.join(' · ') : '<b>—</b>'}`);
+    }
+
+    if (reqTags.length || req) {
+      const rTag = reqTags.length ? brandTagsPreviewPretty(reqTags, BRAND_REQ_TAGS, 6) : '—';
+      const parts = [];
+      if (rTag !== '—') parts.push(`<b>${escapeHtml(rTag)}</b>`);
+      if (req) parts.push(`<i>${escapeHtml(clipText(req, 80))}</i>`);
+      lines.push(`🧩 Требования: ${parts.length ? parts.join(' · ') : '<b>—</b>'}`);
+    }
+
+    return lines.length ? lines.join('\n') : '';
+  }
+
+  // full
+  const sections = [];
+
+  sections.push(`📍 <b>Гео</b>\n• <b>${escapeHtml(geo || '—')}</b>`);
+
+  const fAll = allFormatsKeys.length
+    ? allFormatsKeys.map((k) => brandCollabTagLabel(k, 'long')).join(' · ')
+    : '—';
+  const pAll = allPayKeys.length
+    ? allPayKeys.map((k) => brandCollabTagLabel(k, 'long')).join(' · ')
+    : '—';
+
+  let fmt = `🎬 <b>Форматы</b>\n• Теги: <b>${escapeHtml(fAll)}</b>`;
+  if (pAll !== '—') fmt += `\n• Оплата: <b>${escapeHtml(pAll)}</b>`;
+  sections.push(fmt);
+
+  let bud = `💸 <b>Бюджет</b>\n• Категория: <b>${escapeHtml(budgetBucketTitle || '—')}</b>`;
+  if (budget) bud += `\n• Детали: ${escapeHtml(clipText(budget, 240))}`;
+  sections.push(bud);
+
+  const gTagFull = goalsTags.length ? brandTagsPreviewPretty(goalsTags, BRAND_GOALS_TAGS, 10) : '—';
+  let g = `🎯 <b>Цели</b>\n• Теги: <b>${escapeHtml(gTagFull)}</b>`;
+  if (goals) g += `\n• Детали: ${escapeHtml(clipText(goals, 240))}`;
+  sections.push(g);
+
+  const rTagFull = reqTags.length ? brandTagsPreviewPretty(reqTags, BRAND_REQ_TAGS, 10) : '—';
+  let r = `🧩 <b>Требования</b>\n• Теги: <b>${escapeHtml(rTagFull)}</b>`;
+  if (req) r += `\n• Детали: ${escapeHtml(clipText(req, 240))}`;
+  sections.push(r);
+
+  return sections.join('\n\n');
+}
+
 async function updateBrandMeta(ownerUserId, patch = {}) {
   const prof = await safeBrandProfiles(() => db.getBrandProfile(ownerUserId), async () => null);
   const cur = parseBrandMeta(prof?.meta);
@@ -2289,6 +2425,8 @@ async function renderBrandProfileMore(ctx, ownerUserId, params = {}) {
 
 ` : '';
 
+  const details = formatBrandDetailsBlock(p, { variant: 'full', meta });
+
   const txt =
     flashBlock + `➕ <b>Расширенный профиль бренда</b>
 
@@ -2301,15 +2439,7 @@ async function renderBrandProfileMore(ctx, ownerUserId, params = {}) {
     `<i>Чтобы попадать в выдачу по формату/оплате — заполни «🧩 Форматы».</i>
 
 ` +
-    `• Гео: <b>${escapeHtml(p.geo || '—')}</b>
-` +
-    `• Форматы: <b>${escapeHtml(brandCollabTypesDisplay(p.collab_types))}</b>
-` +
-    `• 💰 Бюджет: <b>${escapeHtml(brandBudgetBucketTitle(budgetKey))}</b> · <b>${escapeHtml(p.budget || '—')}</b>
-` +
-    `• 🎯 Цели: <b>${escapeHtml(brandTagsPreview(goalsTags, BRAND_GOALS_TAGS, 6))}</b> · <b>${escapeHtml(p.goals || '—')}</b>
-` +
-    `• 📎 Требования: <b>${escapeHtml(brandTagsPreview(reqTags, BRAND_REQ_TAGS, 6))}</b> · <b>${escapeHtml(p.requirements || '—')}</b>`;
+    details;
 
   const suf = brandCbSuffix(params);
   const kb = new InlineKeyboard()
@@ -2952,35 +3082,22 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   const link = String(prof.brand_link || '').trim();
   const contact = String(prof.contact || '').trim();
 
+  const collabKeysAll = parseBrandCollabTypes(String(prof.collab_types || '').trim());
+  const payKeySet = new Set(['barter', 'cert', 'paid', 'mixed']);
+  const totalFormats = collabKeysAll.filter((k) => !payKeySet.has(k)).length;
+  const totalPay = collabKeysAll.filter((k) => payKeySet.has(k)).length;
+
   let text = `🏷 <b>${escapeHtml(name)}</b>
 
 `;
   if (niche) text += `🎯 Ниша: <b>${escapeHtml(niche)}</b>
-`;
-  if (geo) text += `🌍 Гео: <b>${escapeHtml(geo)}</b>
-`;
-  if (formats && formats !== '—') text += `🧩 Форматы/условия: <b>${escapeHtml(formats)}</b>
-`;
-  if (splitTags.formats) text += `🎬 Форматы: <code>${escapeHtml(splitTags.formats)}</code>
-`;
-  if (splitTags.pay) text += `💳 Оплата: <code>${escapeHtml(splitTags.pay)}</code>
+
 `;
 
-  if (budgetBucketTitle) text += `💠 Бюджет (кат.): <b>${escapeHtml(budgetBucketTitle)}</b>
-`;
-  if (goalsTagsTitle) text += `🎯 Цели (теги): <code>${escapeHtml(goalsTagsTitle)}</code>
-`;
-  if (reqTagsTitle) text += `📌 Требования (теги): <code>${escapeHtml(reqTagsTitle)}</code>
-`;
 
-  if (budget) text += `💰 Бюджет: ${escapeHtml(clipText(budget, 240))}
-`;
-  if (goals) text += `🎬 Цели: ${escapeHtml(clipText(goals, 240))}
-`;
-  if (req) text += `📎 Требования: ${escapeHtml(clipText(req, 240))}
-`;
+  const compact = formatBrandDetailsBlock(prof, { variant: 'compact', meta, splitTags, totals: { formats: totalFormats, pay: totalPay } });
+  if (compact) text += compact + `
 
-  text += `
 `;
 
   const kb = new InlineKeyboard();
