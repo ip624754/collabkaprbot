@@ -966,44 +966,63 @@ async function safeDeleteIncomingUserMessage(ctx) {
   // Best-effort: remove the incoming user message after we consumed it
   // to keep the chat clean in text-input flows.
   //
-  // Notes:
-  // - In normal private chats, bots are allowed to delete incoming messages.
-  // - Some Telegram "business" message variants require deleteBusinessMessages.
+  // Telegram allows bots to delete incoming messages in private chats
+  // (see deleteMessage limitations in Bot API docs). We still treat this
+  // as "best effort" and never fail the UX if deletion is not possible.
   try {
-    const msg = ctx?.message || ctx?.msg || ctx?.update?.message || null;
+    const msg =
+      ctx?.message ||
+      ctx?.msg ||
+      ctx?.update?.message ||
+      ctx?.update?.edited_message ||
+      null;
+
     const chat = msg?.chat || ctx?.chat || null;
+    const chatId = chat?.id || null;
+    const mid = msg?.message_id || null;
 
-    if (!chat || !chat.id) return false;
+    if (!chatId || !mid) return false;
 
-    // Only attempt cleanup in private chats. Some update variants omit chat.type,
-    // so "missing" is treated as private-safe.
-    const ctype = String(chat.type || '').toLowerCase();
+    // Only attempt cleanup in private chats (or when chat.type is missing).
+    const ctype = String(chat?.type || '').toLowerCase();
     if (ctype && ctype !== 'private') return false;
 
-    const mid = msg?.message_id;
-    if (!mid) return false;
-
-    await ctx.api.deleteMessage(chat.id, mid);
-    return true;
-  } catch (e) {
-    // Fallback: business connection messages
+    // Prefer grammY helper when available (targets the update message).
     try {
-      const msg = ctx?.message || ctx?.msg || ctx?.update?.message || null;
-      const chat = msg?.chat || ctx?.chat || null;
-      const ctype = String((chat && chat.type) || '').toLowerCase();
-      if (ctype && ctype !== 'private') return false;
+      if (typeof ctx.deleteMessage === 'function') {
+        await ctx.deleteMessage();
+        return true;
+      }
+    } catch (_) {}
 
-      const mid = msg?.message_id;
-      const bcid = msg?.business_connection_id || msg?.businessConnectionId || null;
-      if (!bcid || !mid) return false;
-
-      await ctx.api.deleteBusinessMessages(bcid, [mid]);
+    // Raw Bot API fallbacks
+    try {
+      await ctx.api.deleteMessage(chatId, mid);
       return true;
-    } catch (_) {
-      return false;
-    }
+    } catch (_) {}
+
+    try {
+      if (typeof ctx.api.deleteMessages === 'function') {
+        await ctx.api.deleteMessages(chatId, [mid]);
+        return true;
+      }
+    } catch (_) {}
+
+    // Business connection fallback (if present)
+    try {
+      const bcid = msg?.business_connection_id || msg?.businessConnectionId || null;
+      if (bcid && typeof ctx.api.deleteBusinessMessages === 'function') {
+        await ctx.api.deleteBusinessMessages(bcid, [mid]);
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
+  } catch (_) {
+    return false;
   }
 }
+
 
 
 
