@@ -6480,63 +6480,95 @@ function bxLegacyFilterKey(tgId, wsNum) {
   return k(['bx_filter', id, Number(wsNum || 0)]);
 }
 
+function safeJsonParse(str) {
+  if (typeof str !== 'string') return null;
+  try { return JSON.parse(str); } catch { return null; }
+}
+
 async function getBxFilterScoped(tgId, ownerUserId, wsId) {
   const wsNum = Number(wsId || 0);
   const key = bxFilterKeyScoped(tgId, ownerUserId, wsNum);
+  if (!key) {
+    return {
+      category: null,
+      offerType: null,
+      compensation: null,
+      goalsTags: [],
+      reqTags: [],
+      updatedAt: null
+    };
+  }
+
+  const v = await redis.get(key);
+  const vWasString = typeof v === 'string';
+
+  let base = {};
+  if (v && typeof v === 'object') base = v;
+  else if (vWasString) {
+    const parsed = safeJsonParse(v);
+    base = parsed && typeof parsed === 'object' ? parsed : {};
+  }
+
+  // Legacy fallback: pre-scoped filter key (per tgId+ws)
   const legacyKey = bxLegacyFilterKey(tgId, wsNum);
-
-  let v = null;
-  let migrated = false;
-
-  if (key) {
-    try { v = await redis.get(key); } catch { v = null; }
+  let legacy = null;
+  if ((!base || Object.keys(base).length === 0) && legacyKey && legacyKey !== key) {
+    const lv = await redis.get(legacyKey);
+    if (lv && typeof lv === 'object') legacy = lv;
+    else if (typeof lv === 'string') {
+      const parsed = safeJsonParse(lv);
+      legacy = parsed && typeof parsed === 'object' ? parsed : null;
+    }
   }
 
-  // Legacy migration:
-  // - previously used: bx_filter:<tgId>:<wsNum>
-  // - now:
-  //   wsNum==0 -> bx_filter_brand:<ownerUserId>
-  //   wsNum>0  -> bx_filter_ws:<ownerUserId>:<wsNum>
-  if (!v && key && legacyKey) {
-    try {
-      const old = await redis.get(legacyKey);
-      if (old) {
-        v = old;
-        migrated = true;
-      }
-    } catch {}
-  }
+  const src = legacy || base || {};
 
-  const base = v || {};
-  const f = {
-    category: base.category ?? base.cat ?? null,
-    offerType: base.offerType ?? base.type ?? null,
-    compensationType: base.compensationType ?? base.comp ?? null,
-    goalsTags: Array.isArray(base.goalsTags ?? base.goals) ? (base.goalsTags ?? base.goals) : [],
-    reqTags: Array.isArray(base.reqTags ?? base.req) ? (base.reqTags ?? base.req) : [],
+  const coerceArr = (x) => {
+    if (Array.isArray(x)) return x;
+    if (typeof x === 'string') {
+      const parsed = safeJsonParse(x);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return [];
   };
 
-  // Normalize values
-  if (f.category === 'all') f.category = null;
-  if (f.offerType === 'all') f.offerType = null;
-  if (f.compensationType === 'all') f.compensationType = null;
-  if (!Array.isArray(f.goalsTags)) f.goalsTags = [];
-  if (!Array.isArray(f.reqTags)) f.reqTags = [];
+  const goalsRaw = src.goalsTags ?? src.goals ?? src.goals_tags;
+  const reqRaw = src.reqTags ?? src.req ?? src.req_tags;
 
-  const needsPersist =
-    migrated ||
-    ('cat' in base) || ('type' in base) || ('comp' in base) || ('goals' in base) || ('req' in base) ||
-    (base.category === 'all') || (base.offerType === 'all') || (base.compensationType === 'all') ||
-    !Array.isArray(base.goalsTags) || !Array.isArray(base.reqTags);
+  const f = {
+    category: src.category || src.cat || null,
+    offerType: src.offerType || src.type || null,
+    compensation: src.compensation || src.pay || null,
+    goalsTags: coerceArr(goalsRaw),
+    reqTags: coerceArr(reqRaw),
+    updatedAt: src.updatedAt || src.ts || null
+  };
 
-  if (needsPersist && key) {
-    try {
-      await redis.set(key, f, { ex: BX_FILTER_TTL_SEC });
-    } catch {}
+  const baseGoals = coerceArr(base.goalsTags ?? base.goals ?? base.goals_tags);
+  const baseReq = coerceArr(base.reqTags ?? base.req ?? base.req_tags);
+
+  const migrated =
+    f.category !== (base.category || base.cat || null) ||
+    f.offerType !== (base.offerType || base.type || null) ||
+    f.compensation !== (base.compensation || base.pay || null) ||
+    JSON.stringify(f.goalsTags || []) !== JSON.stringify(baseGoals || []) ||
+    JSON.stringify(f.reqTags || []) !== JSON.stringify(baseReq || []);
+
+  const needsPersist = migrated || vWasString || !!legacy;
+
+  if (needsPersist) {
+    await redis.set(key, { ...f, updatedAt: Date.now() }, { ex: BX_FILTER_TTL_SEC });
+    if (legacyKey && legacyKey !== key) {
+      // best-effort cleanup
+      try {
+        await redis.del(legacyKey);
+      } catch {}
+    }
   }
 
   return f;
 }
+
 
 async function setBxFilterScoped(tgId, ownerUserId, wsId, patch) {
   const wsNum = Number(wsId || 0);
