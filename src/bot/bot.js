@@ -5138,46 +5138,94 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
   const verticalsTxt = fmtMatrix(ws.profile_verticals, PROFILE_VERTICALS);
   const formatsTxt = fmtMatrix(ws.profile_formats, PROFILE_FORMATS);
-  const geo = ws.profile_geo || '—';
-  const contact = ws.profile_contact || '—';
-  const about = ws.profile_about || '—';
+  const geoRaw = ws.profile_geo ? String(ws.profile_geo).trim() : '';
+  const contactRawTxt = ws.profile_contact ? String(ws.profile_contact).trim() : '';
+  const aboutRaw = ws.profile_about ? String(ws.profile_about).trim() : '';
 
-  let igLine = '—';
+  let igLine = '';
   if (ig) {
     igLine =
       `<a href="https://instagram.com/${escapeHtml(ig)}">instagram.com/${escapeHtml(ig)}</a>\n` +
       `<code>@${escapeHtml(ig)}</code>`;
   }
 
-  let portLine = '—';
+  let portLine = '';
   const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
   if (ports.length) {
     portLine = ports
       .slice(0, 3)
       .map(u => `• <a href="${escapeHtml(String(u))}">${escapeHtml(shortUrl(u))}</a>`)
       .join('\n');
+    if (ports.length > 3) portLine += `\n• <i>+ ещё ${ports.length - 3}</i>`;
   }
 
   const modeLine = PROFILE_MODE_LABELS[mode] || PROFILE_MODE_LABELS.both;
   const prog = isOwner ? calcWsProfileProgress(ws) : null;
 
-  const text =
-    `✨ <b>${escapeHtml(name)}</b>\n\n` +
-    `IG leads → TG deals: бренд находит в Instagram → сделка закрывается в Telegram.\n\n` +
-    `🪟 Витрина: открой кнопку ниже — там находится «📝 Оставить заявку».\n\n` +
-    `Канал: <b>${escapeHtml(channel)}</b>\n` +
-    `🧩 Режим: <b>${escapeHtml(modeLine)}</b>\n` +
-    `📸 Instagram:\n${igLine}\n` +
-    `🏷 Ниши: <b>${escapeHtml(verticalsTxt)}</b>\n` +
-    `🎬 Форматы: <b>${escapeHtml(formatsTxt)}</b>\n` +
-    `🔗 Портфолио:\n${portLine}\n` +
-    `📝 Описание: <b>${escapeHtml(about)}</b>\n` +
-    `✉️ Контакт: <b>${escapeHtml(contact)}</b>\n` +
-    `📍 Гео: <b>${escapeHtml(geo)}</b>\n\n` +
-    `Если хочешь UGC/интеграцию — нажми «📝 Оставить заявку» или «💬 Написать».` +
-    (isOwner && prog ? `\n\n📈 <b>Твой профиль</b>: <b>${prog.percent}%</b>. ${prog.nextHint}` : '');
+  const blocks = [];
+  blocks.push(`✨ <b>${escapeHtml(name)}</b>`);
+  blocks.push('');
+  blocks.push(`IG leads → TG deals: бренд находит в Instagram → сделка закрывается в Telegram.`);
+  blocks.push(`🪟 Витрина: кнопка ниже — там находится «📝 Оставить заявку».`);
 
-  const contactRaw = ws.profile_contact ? String(ws.profile_contact).trim() : '';
+  // Основное
+  {
+    const lines = [];
+    lines.push(`<b>Основное</b>`);
+    lines.push(`• Канал: <b>${escapeHtml(channel)}</b>`);
+    lines.push(`• Режим: <b>${escapeHtml(modeLine)}</b>`);
+    if (geoRaw) lines.push(`• Гео: <b>${escapeHtml(geoRaw)}</b>`);
+    if (verticalsTxt && verticalsTxt !== '—') lines.push(`• Ниши: <code>${escapeHtml(clipText(verticalsTxt, 180))}</code>`);
+    blocks.push('');
+    blocks.push(lines.join('\n'));
+  }
+
+  // Контент
+  {
+    const lines = [];
+    if ((formatsTxt && formatsTxt !== '—') || aboutRaw) {
+      lines.push(`<b>Контент</b>`);
+      if (formatsTxt && formatsTxt !== '—') lines.push(`• Форматы: <code>${escapeHtml(clipText(formatsTxt, 220))}</code>`);
+      if (aboutRaw) lines.push(`• Описание: ${escapeHtml(clipText(aboutRaw, 320))}`);
+      blocks.push('');
+      blocks.push(lines.join('\n'));
+    }
+  }
+
+  // Портфолио
+  {
+    const lines = [];
+    if (igLine || portLine) {
+      lines.push(`<b>Портфолио</b>`);
+      if (igLine) lines.push(`• Instagram:\n${igLine}`);
+      if (portLine) lines.push(`• Ссылки/кейсы:\n${portLine}`);
+      blocks.push('');
+      blocks.push(lines.join('\n'));
+    }
+  }
+
+  // Контакты
+  {
+    const lines = [];
+    if (contactRawTxt) {
+      lines.push(`<b>Контакты</b>`);
+      lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt)}</b>`);
+      blocks.push('');
+      blocks.push(lines.join('\n'));
+    }
+  }
+
+  blocks.push('');
+  blocks.push(`Если хочешь UGC/интеграцию — нажми «📝 Оставить заявку» или «💬 Написать».`);
+
+  if (isOwner && prog) {
+    blocks.push('');
+    blocks.push(`📈 <b>Твой профиль</b>: <b>${prog.percent}%</b>. ${prog.nextHint}`);
+  }
+
+  const text = blocks.filter((x) => x !== null && x !== undefined).join('\n');
+
+  const contactRaw = contactRawTxt;
   const contactUrl = (() => {
     if (!contactRaw) return null;
     const tg = wsTgUrlFromContact(contactRaw);
