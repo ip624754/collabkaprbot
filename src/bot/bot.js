@@ -9,6 +9,7 @@ import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clea
 import { renderGwAccess } from './gwAccess.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
+import { dispatchCallback } from './routes/callbacks.js';
 
 let BOT;
 
@@ -3305,11 +3306,8 @@ function bxMultiPickKb(wsId, key, selected, page = 0, opts = {}) {
   const selSet = new Set((selected || []).map(String));
 
   const kb = new InlineKeyboard();
-  // NOTE: kbAddPairs expects items shaped as { text, cb }.
-  // If we pass { label, cb }, the button text becomes undefined and Telegram can reject the markup,
-  // making the "🎯 Цели" / "📎 Требования" screens look like the buttons are "silent".
   const pairs = items.map((it) => ({
-    text: selSet.has(String(it.value)) ? `✅ ${it.label}` : it.label,
+    label: selSet.has(String(it.value)) ? `✅ ${it.label}` : it.label,
     cb: `a:bx_mt|ws:${wsId}|k:${key}|v:${it.value}|p:${page}|h:${h}|r:${r}`
   }));
   kbAddPairs(kb, pairs, 2);
@@ -12118,6 +12116,9 @@ bot.on('message:successful_payment', async (ctx) => {
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     // Cancel any pending text input step when user clicks an inline button
     try { await clearExpectText(ctx.from.id); } catch {}
+
+
+    const legacy = async () => {
 if (p.a === 'a:ui_mode_set') {
   await ctx.answerCallbackQuery();
   const mode = normalizeUiMode(p.m);
@@ -17727,8 +17728,12 @@ ${actionHint}`;
       return;
     }
 
-    // Fallback
-    await ctx.answerCallbackQuery({ text: 'Неизвестное действие.' });
+    // Fallback for unknown/legacy callbacks: let dispatcher handle it
+    return false;
+  };
+
+    await dispatchCallback(ctx, p, u, { legacy, logger, safeEditOrReply });
+    return;
   });
 
   BOT = bot;
