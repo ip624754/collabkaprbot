@@ -4584,9 +4584,9 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   const verticalsTxt = fmtMatrix(ws.profile_verticals, PROFILE_VERTICALS);
   const formatsTxt = fmtMatrix(ws.profile_formats, PROFILE_FORMATS);
 
-  const geo = ws.profile_geo || '—';
-  const contact = ws.profile_contact || '—';
-  const about = ws.profile_about || '—';
+  const geoRaw = ws.profile_geo ? String(ws.profile_geo).trim() : '';
+  const contactRawTxt = ws.profile_contact ? String(ws.profile_contact).trim() : '';
+  const aboutRaw = ws.profile_about ? String(ws.profile_about).trim() : '';
 
   const link = wsBrandLink(wsId);
 
@@ -4604,6 +4604,7 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
       .slice(0, 3)
       .map(u => `• <a href="${escapeHtml(String(u))}">${escapeHtml(shortUrl(u))}</a>`)
       .join('\n');
+    if (ports.length > 3) portLine += `\n• <i>+ ещё ${ports.length - 3}</i>`;
   }
 
   const proLine = isPro ? '⭐️ PRO: <b>активен</b>' : '⭐️ PRO: <b>free</b>';
@@ -4611,29 +4612,84 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
 
   const prog = calcWsProfileProgress(ws);
   const progressLine = `📈 Заполнено: <b>${prog.percent}%</b> (${prog.done}/${prog.total})`;
-  const improveBlock = prog.missing.length
-    ? (`\n\n⚡️ <b>Что добавить, чтобы заявки шли чаще</b>\n` + prog.missing.map(x => `• ${x}`).join('\n'))
-    : `\n\n✅ Профиль выглядит 🔥 — можно лить трафик из IG.`;
 
-  const text =
-    `👤 <b>Профиль (витрина)</b>\n\n` +
-    `<b>IG leads → TG deals</b>\n` +
-    `Бренды находят тебя в Instagram → по ссылке открывают этот профиль → дальше всё в Telegram.\n\n` +
-    `🪟 Витрина: открой кнопку ниже — там находится «📝 Оставить заявку».\n\n` +
-    `Канал: <b>${escapeHtml(channel)}</b>\n` +
-    `${proLine}\n${progressLine}${improveBlock}\n\n` +
-    `Название/витрина: <b>${escapeHtml(name)}</b>\n` +
-    `🧩 Режим: <b>${escapeHtml(modeLine)}</b>\n` +
-    `📸 Instagram:\n${igLine}\n` +
-    `🏷 Ниши: <b>${escapeHtml(verticalsTxt)}</b>\n` +
-    `🎬 Форматы: <b>${escapeHtml(formatsTxt)}</b>\n` +
-    `🔗 Портфолио:\n${portLine}\n` +
-    `📝 Описание: <b>${escapeHtml(about)}</b>\n` +
-    `✉️ Контакт: <b>${escapeHtml(contact)}</b>\n` +
-    `📍 Гео: <b>${escapeHtml(geo)}</b>\n\n` +
-    (link
+  const statusLines = [];
+  statusLines.push(`<b>Статус</b>`);
+  statusLines.push(`• Канал: <b>${escapeHtml(channel)}</b>`);
+  statusLines.push(`• ${proLine}`);
+  statusLines.push(`• ${progressLine}`);
+  if (prog?.nextHint) statusLines.push(`• <i>${escapeHtml(String(prog.nextHint))}</i>`);
+
+  if (prog?.missing?.length) {
+    const missing = prog.missing.slice(0, 5);
+    statusLines.push('');
+    statusLines.push(`⚡️ <b>Что добавить, чтобы заявки шли чаще</b>`);
+    statusLines.push(...missing.map(x => `• ${x}`));
+    if (prog.missing.length > 5) statusLines.push(`• <i>+ ещё ${prog.missing.length - 5}</i>`);
+  } else {
+    statusLines.push('');
+    statusLines.push(`✅ Профиль выглядит 🔥 — можно лить трафик из IG.`);
+  }
+
+  const blocks = [];
+  blocks.push(`👤 <b>Профиль (витрина)</b>`);
+  blocks.push('');
+  blocks.push(`<b>IG leads → TG deals</b>`);
+  blocks.push(`Бренды находят тебя в Instagram → по ссылке открывают этот профиль → дальше всё в Telegram.`);
+  blocks.push('');
+  blocks.push(`🪟 Витрина: открой кнопку ниже — там находится «📝 Оставить заявку».`);
+  blocks.push('');
+  blocks.push(statusLines.join('\n'));
+
+  // Основное
+  {
+    const lines = [];
+    lines.push(`<b>Основное</b>`);
+    lines.push(`• Название/витрина: <b>${escapeHtml(String(name || '—'))}</b>`);
+    lines.push(`• Режим: <b>${escapeHtml(String(modeLine || '—'))}</b>`);
+    lines.push(`• Ниши: <code>${escapeHtml(String(verticalsTxt || '—'))}</code>`);
+    lines.push(`• Гео: <b>${escapeHtml(geoRaw || '—')}</b>`);
+    blocks.push('');
+    blocks.push(lines.join('\n'));
+  }
+
+  // Контент
+  {
+    const lines = [];
+    lines.push(`<b>Контент</b>`);
+    lines.push(`• Форматы: <code>${escapeHtml(String(formatsTxt || '—'))}</code>`);
+    lines.push(`• Описание: ${escapeHtml(aboutRaw ? clipText(aboutRaw, 320) : '—')}`);
+    blocks.push('');
+    blocks.push(lines.join('\n'));
+  }
+
+  // Портфолио
+  {
+    const lines = [];
+    lines.push(`<b>Портфолио</b>`);
+    lines.push(`• Instagram:\n${igLine}`);
+    lines.push(`• Ссылки/кейсы:\n${portLine}`);
+    blocks.push('');
+    blocks.push(lines.join('\n'));
+  }
+
+  // Контакты
+  {
+    const lines = [];
+    lines.push(`<b>Контакты</b>`);
+    lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt || '—')}</b>`);
+    blocks.push('');
+    blocks.push(lines.join('\n'));
+  }
+
+  blocks.push('');
+  blocks.push(
+    link
       ? `🔗 <b>Ссылка для брендов</b> (вставь в IG bio / сторис):\n<code>${escapeHtml(link)}</code>`
-      : `⚠️ Не задан BOT_USERNAME — ссылка для брендов недоступна.`);
+      : `⚠️ Не задан BOT_USERNAME — ссылка для брендов недоступна.`
+  );
+
+  const text = blocks.join('\n');
 
   const extra = { parse_mode: 'HTML', reply_markup: wsProfileKb(wsId, ws), disable_web_page_preview: true };
 
@@ -4651,6 +4707,8 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
     await ctx.reply(text, extra);
   }
 }
+
+
 
 
 async function renderWsShareMenu(ctx, ownerUserId, wsId) {
