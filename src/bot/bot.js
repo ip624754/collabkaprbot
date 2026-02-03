@@ -6432,7 +6432,7 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
       .text('📋 Меню', 'a:menu');
     if (botLink) kb.row().url('🔗 Ссылка креатору (/start)', botLink);
 
-    await safeEditOrReply(ctx,
+    const errMsg =
       `❌ <b>Не удалось доставить сообщение креатору</b>
 
 ` +
@@ -6440,9 +6440,19 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
 
 ` +
       `<b>Текст ответа (можно скопировать):</b>
-${escapeHtml(replyText)}`,
-      { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
-    );
+${escapeHtml(replyText)}`;
+
+    // Even error UI must be anti-silent.
+    try {
+      await safeEditOrReply(ctx, errMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    } catch {
+      try {
+        await ctx.reply(errMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+      } catch {
+        // last resort: plain text without HTML
+        await ctx.reply(stripHtmlTags(errMsg), { reply_markup: kb, disable_web_page_preview: true }).catch(() => {});
+      }
+    }
     // we still persist the reply in the thread (brand pressed a template)
   }
 
@@ -13798,7 +13808,7 @@ if (p.a === 'a:brand_deal_reply') {
 }
 
 if (p.a === 'a:brand_deal_tpls') {
-  await ctx.answerCallbackQuery();
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   const back = { stage: String(p.b || p.st || 'negotiation'), page: Math.max(0, Number(p.p || 0)) };
   if (!appId) return;
@@ -13807,7 +13817,7 @@ if (p.a === 'a:brand_deal_tpls') {
 }
 
 if (p.a === 'a:brand_deal_tpl') {
-  await ctx.answerCallbackQuery();
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   const key = String(p.k || 'discuss');
   const back = { stage: String(p.b || 'negotiation'), page: Math.max(0, Number(p.p || 0)) };
@@ -13818,7 +13828,7 @@ if (p.a === 'a:brand_deal_tpl') {
 
 
 if (p.a === 'a:brand_app_view') {
-  await ctx.answerCallbackQuery();
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
   await renderBrandAppView(ctx, u.id, appId, back);
@@ -13826,7 +13836,7 @@ if (p.a === 'a:brand_app_view') {
 }
 
 if (p.a === 'a:brand_app_set') {
-  await ctx.answerCallbackQuery();
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   const st = normLeadStatus(String(p.st || 'new'));
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
@@ -13839,7 +13849,7 @@ if (p.a === 'a:brand_app_set') {
 }
 
 if (p.a === 'a:brand_app_reply') {
-  await ctx.answerCallbackQuery();
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
   await startBrandAppReply(ctx, u.id, appId, back);
@@ -13847,7 +13857,9 @@ if (p.a === 'a:brand_app_reply') {
 }
 
 if (p.a === 'a:brand_app_tpls') {
-  await ctx.answerCallbackQuery();
+  // Never fail the whole callback due to Telegram callback ack issues
+  // (query too old / already answered / etc.).
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   if (!appId) return;
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
@@ -13856,7 +13868,9 @@ if (p.a === 'a:brand_app_tpls') {
 }
 
 if (p.a === 'a:brand_app_tpl') {
-  await ctx.answerCallbackQuery();
+  // Never fail the whole callback due to Telegram callback ack issues
+  // (query too old / already answered / etc.).
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   if (!appId) return;
   const key = String(p.k || 'discuss');
@@ -13866,7 +13880,7 @@ if (p.a === 'a:brand_app_tpl') {
 }
 
 if (p.a === 'a:brand_app_accept') {
-  await ctx.answerCallbackQuery();
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   if (!appId) return;
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
@@ -13875,7 +13889,7 @@ if (p.a === 'a:brand_app_accept') {
 }
 
 if (p.a === 'a:brand_app_chat') {
-  await ctx.answerCallbackQuery();
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   if (!appId) return;
   await startBrandAppChatForCreator(ctx, u.id, appId);
@@ -13883,7 +13897,7 @@ if (p.a === 'a:brand_app_chat') {
 }
 
 if (p.a === 'a:ws_leads') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const wsId = Number(p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
@@ -13893,7 +13907,7 @@ if (p.a === 'a:ws_leads') {
     }
 
     if (p.a === 'a:lead_view') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) return;
       await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
@@ -13902,7 +13916,7 @@ if (p.a === 'a:ws_leads') {
 
     
     if (p.a === 'a:lead_tpls') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) return;
       await renderLeadTemplates(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
@@ -13910,7 +13924,7 @@ if (p.a === 'a:ws_leads') {
     }
 
     if (p.a === 'a:lead_tpl') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) return;
       const key = String(p.k || 'thanks');
