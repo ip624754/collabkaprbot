@@ -1,6 +1,5 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { CFG, assertEnv } from '../lib/config.js';
-import logger from '../lib/logger.js';
 import { redis, k, rateLimit, consumeOnce } from '../lib/redis.js';
 import * as db from '../db/queries.js';
 import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes, parseMoscowDateTime, computeThreadReplyStatus, formatBxChargeLine } from './helpers.js';
@@ -8,8 +7,6 @@ import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
-import { createLoggingMiddleware } from './middleware/logging.js';
-import { dispatchCallback } from './routes/callbacks.js';
 
 let BOT;
 
@@ -3306,10 +3303,8 @@ function bxMultiPickKb(wsId, key, selected, page = 0, opts = {}) {
   const selSet = new Set((selected || []).map(String));
 
   const kb = new InlineKeyboard();
-  // NOTE: kbAddPairs expects items shaped as { text, cb }.
-  // If we pass { label, cb }, Telegram markup may render as "silent" buttons (no updates).
   const pairs = items.map((it) => ({
-    text: selSet.has(String(it.value)) ? `✅ ${it.label}` : it.label,
+    label: selSet.has(String(it.value)) ? `✅ ${it.label}` : it.label,
     cb: `a:bx_mt|ws:${wsId}|k:${key}|v:${it.value}|p:${page}|h:${h}|r:${r}`
   }));
   kbAddPairs(kb, pairs, 2);
@@ -8991,25 +8986,16 @@ export function getBot() {
   assertEnv();
   const bot = new Bot(CFG.BOT_TOKEN);
 
-  // P0 Observability: correlation id + structured logs (zero UI/behavior change).
-  // IMPORTANT: this middleware never logs secrets and never logs arbitrary user text.
-  bot.use(createLoggingMiddleware({ logger }));
-
   // Never log ctx/api/token. Log only safe identifiers.
   bot.catch((err) => {
     const ctx = err?.ctx;
-    const cid = ctx?.state?.cid || `${ctx?.update?.update_id ?? 0}-${ctx?.from?.id ?? 0}`;
-    logger.error({
-      cid,
+    console.error('[BOT] error', {
       update_id: ctx?.update?.update_id ?? null,
       chat_id: ctx?.chat?.id ?? null,
       from_id: ctx?.from?.id ?? null,
-      username: ctx?.from?.username ?? null,
-      err: {
-        name: String(err?.error?.name || err?.name || 'Error'),
-        message: String(err?.error?.message || err?.message || err?.error || err),
-      },
-    }, 'bot.error');
+      message: String(err?.error?.message || err?.message || err?.error || err),
+      name: err?.error?.name || err?.name || 'Error',
+    });
   });
 
   // --- TEXT INPUT router (expectText) ---
@@ -9035,33 +9021,9 @@ export function getBot() {
 
     await clearExpectText(ctx.from.id);
 
-    const msg = ctx.message || {};
-    const fo = msg.forward_origin || msg.forwardOrigin || null;
-
-    let f = msg.forward_from_chat || msg.sender_chat || null;
-
-    // Telegram Bot API (newer forwards): channel source may be present only in forward_origin.
-    if ((!f || !f.id) && fo && typeof fo === 'object') {
-      const chat = fo.chat || null;
-      if (chat && chat.id) f = chat;
-    }
-
+    const f = ctx.message.forward_from_chat || ctx.message.sender_chat;
     if (!f || !f.id) {
-      await ctx.reply(
-        `Не вижу форвард из канала.
-
-Важно: нажми именно «Переслать / Forward» (со стрелкой), а не «Скопировать / Copy».
-1) Добавь бота админом в канал
-2) Перешли сюда любой пост из канала (чтобы было видно источник)
-
-Если канал приватный — это тоже ок, главное именно форвард.`
-      );
-      await setExpectText(ctx.from.id, exp);
-      return;
-    }
-
-    if (f.type && String(f.type) !== 'channel') {
-      await ctx.reply('Нужно переслать пост именно из <b>канала</b> (не из чата/группы).', { parse_mode: 'HTML' });
+      await ctx.reply('Не вижу пересланный пост из канала. Перешли сюда пост именно из канала 🙏');
       await setExpectText(ctx.from.id, exp);
       return;
     }
@@ -12118,9 +12080,6 @@ bot.on('message:successful_payment', async (ctx) => {
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     // Cancel any pending text input step when user clicks an inline button
     try { await clearExpectText(ctx.from.id); } catch {}
-
-
-    const legacy = async () => {
 if (p.a === 'a:ui_mode_set') {
   await ctx.answerCallbackQuery();
   const mode = normalizeUiMode(p.m);
@@ -14925,9 +14884,7 @@ if (p.a === 'a:match_home') {
         return;
       }
       const wsId = Number(p.ws);
-
-      // Return-to page (feed page). Support rp (new) and p (legacy).
-      const retPage = Number(p.rp ?? p.p ?? 0);
+      const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
@@ -14935,7 +14892,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
       if (!bmRes) return;
 
-      await renderBxFilters(ctx, bmRes.userId, wsId, retPage, { h, r });
+      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
 
@@ -14959,7 +14916,7 @@ if (p.a === 'a:match_home') {
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
 	      if (!bmRes) return;
 
 	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
@@ -14987,7 +14944,7 @@ if (p.a === 'a:match_home') {
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
 	      if (!bmRes) return;
 
 	      const cur = await getBxFilterScoped(ctx.from.id, bmRes.userId, wsId);
@@ -15027,7 +14984,7 @@ if (p.a === 'a:match_home') {
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
 	      if (!bmRes) return;
 
 	      const field = key === 'goals' ? 'goalsTags' : 'reqTags';
@@ -15050,7 +15007,7 @@ if (p.a === 'a:match_home') {
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
 	      if (!bmRes) return;
 
 	      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
@@ -17730,12 +17687,8 @@ ${actionHint}`;
       return;
     }
 
-    // Fallback for unknown/legacy callbacks: let dispatcher handle it
-    return false;
-  };
-
-    await dispatchCallback(ctx, p, u, { legacy, logger, safeEditOrReply });
-    return;
+    // Fallback
+    await ctx.answerCallbackQuery({ text: 'Неизвестное действие.' });
   });
 
   BOT = bot;
