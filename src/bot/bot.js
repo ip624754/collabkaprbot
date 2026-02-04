@@ -424,20 +424,22 @@ async function safeBrandApplications(primaryFn, fallbackFn) {
 
 
 // Non-fatal write wrappers: keep UX responsive even if DB write fails (we still log).
+function errInfo(e) {
+  const x = (e && e.error) ? e.error : e;
+  return {
+    name: String(x && x.name ? x.name : "Error"),
+    message: String((x && (x.message || x.description)) ? (x.message || x.description) : (x || "")),
+    code: (x && Object.prototype.hasOwnProperty.call(x, "code")) ? x.code : null,
+    detail: (x && Object.prototype.hasOwnProperty.call(x, "detail")) ? x.detail : null
+  };
+}
+
 async function safeBrandAppsWrite(primaryFn, meta = {}) {
   try {
     return await primaryFn();
   } catch (e) {
     try {
-      console.warn('[brand_apps_write] failed', {
-        ...meta,
-        err: {
-          name: String(getattr(e, 'name', 'Error')),
-          message: String(getattr(e, 'message', e)),
-          code: getattr(e, 'code', None),
-          detail: getattr(e, 'detail', None)
-        }
-      });
+      console.warn("[brand_apps_write] failed", { ...meta, err: errInfo(e) });
     } catch {}
     return null;
   }
@@ -448,15 +450,7 @@ async function safeLeadWrite(primaryFn, meta = {}) {
     return await primaryFn();
   } catch (e) {
     try {
-      console.warn('[lead_write] failed', {
-        ...meta,
-        err: {
-          name: String(getattr(e, 'name', 'Error')),
-          message: String(getattr(e, 'message', e)),
-          code: getattr(e, 'code', None),
-          detail: getattr(e, 'detail', None)
-        }
-      });
+      console.warn("[lead_write] failed", { ...meta, err: errInfo(e) });
     } catch {}
     return null;
   }
@@ -13938,7 +13932,16 @@ if (p.a === 'a:brand_app_set') {
   // Update in DB if available
   await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, st), { op: 'brand_app_status', appId, st });
 
-  await renderBrandAppView(ctx, u.id, appId, back);
+  try {
+    await renderBrandAppView(ctx, u.id, appId, back);
+  } catch (e) {
+    try { console.warn('[brand_app_set] unhandled', { appId, st, back, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    const text = '✅ Статус обновлён. (Экран не удалось перерисовать — попробуй открыть заявку заново.)';
+    const kb = new InlineKeyboard()
+      .text('⬅️ Назад', 'a:brand_apps|ws:0|s:' + back.status + '|p:' + back.page)
+      .text('📋 Меню', 'a:menu');
+    try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
+  }
   return;
 }
 
@@ -13957,7 +13960,16 @@ if (p.a === 'a:brand_app_tpls') {
   const appId = Number(p.id || 0);
   if (!appId) return;
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
-  await renderBrandAppTemplates(ctx, u.id, appId, back);
+  try {
+    await renderBrandAppTemplates(ctx, u.id, appId, back);
+  } catch (e) {
+    try { console.warn('[brand_app_tpls] unhandled', { appId, back, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    const text = '⚠️ Не удалось открыть шаблоны. Попробуй ещё раз или открой заявку заново.';
+    const kb = new InlineKeyboard()
+      .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
+      .text('📋 Меню', 'a:menu');
+    try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
+  }
   return;
 }
 
@@ -13969,7 +13981,18 @@ if (p.a === 'a:brand_app_tpl') {
   if (!appId) return;
   const key = String(p.k || 'discuss');
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
-  await sendBrandAppTemplateReply(ctx, u.id, appId, key, back);
+  try {
+    await sendBrandAppTemplateReply(ctx, u.id, appId, key, back);
+  } catch (e) {
+    try { console.warn('[brand_app_tpl] unhandled', { appId, key, back, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    const text = '⚠️ Не удалось отправить шаблон. Попробуй ещё раз или нажми «✍️ Ответить» и отправь вручную.';
+    const kb = new InlineKeyboard()
+      .text('✍️ Ответить', 'a:brand_app_reply|id:' + appId + '|s:' + back.status + '|p:' + back.page)
+      .row()
+      .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
+      .text('📋 Меню', 'a:menu');
+    try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
+  }
   return;
 }
 
@@ -13978,7 +14001,16 @@ if (p.a === 'a:brand_app_accept') {
   const appId = Number(p.id || 0);
   if (!appId) return;
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
-  await acceptBrandApplication(ctx, u.id, appId, back);
+  try {
+    await acceptBrandApplication(ctx, u.id, appId, back);
+  } catch (e) {
+    try { console.warn('[brand_app_accept] unhandled', { appId, back, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    const text = '⚠️ Не удалось выполнить действие. Попробуй ещё раз или открой заявку заново.';
+    const kb = new InlineKeyboard()
+      .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
+      .text('📋 Меню', 'a:menu');
+    try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
+  }
   return;
 }
 
@@ -14022,7 +14054,16 @@ if (p.a === 'a:ws_leads') {
       const leadId = Number(p.id || 0);
       if (!leadId) return;
       const key = String(p.k || 'thanks');
-      await sendLeadTemplateReply(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
+      try {
+        await sendLeadTemplateReply(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
+      } catch (e) {
+        try { console.warn('[lead_tpl] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+        const text = '⚠️ Не удалось отправить шаблон. Попробуй ещё раз или используй «✍️ Ответить». ';
+        const kb = new InlineKeyboard()
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
+          .text('📋 Меню', 'a:menu');
+        try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
+      }
       return;
     }
 
