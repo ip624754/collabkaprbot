@@ -5660,8 +5660,6 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
     if (p > 0) kb.text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}${retPart}`);
     else kb.row().text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}${retPart}`);
   }
-
-  const retKey = String(ret || '').trim();
   const backCb = retKey === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`;
   kbNavRow(kb, backCb);
 
