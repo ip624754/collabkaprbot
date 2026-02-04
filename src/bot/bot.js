@@ -14730,7 +14730,7 @@ if (p.a === 'a:lead_set') {
 
     // SETUP
     if (p.a === 'a:setup') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       db.trackEvent('setup_open', { userId: u.id });
       await renderSetupInstructions(ctx);
       await setExpectText(ctx.from.id, { type: 'setup_forward' });
@@ -14739,22 +14739,22 @@ if (p.a === 'a:lead_set') {
 
     // WORKSPACES
     if (p.a === 'a:ws_list') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       await renderWsList(ctx, u.id);
       return;
     }
     if (p.a === 'a:ws_open') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       await renderWsOpen(ctx, u.id, Number(p.ws));
       return;
     }
     if (p.a === 'a:ws_settings') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       await renderWsSettings(ctx, u.id, Number(p.ws));
       return;
     }
     if (p.a === 'a:ws_history') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       await renderWsHistory(ctx, u.id, Number(p.ws));
       return;
     }
@@ -16139,7 +16139,7 @@ if (p.a === 'a:match_home') {
 
     // Barters
     if (p.a === 'a:bx_home') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const ws = await ensureWorkspaceForOwner(ctx, u.id);
       if (!ws) return;
       await renderBxOpen(ctx, u.id, ws.id);
@@ -16148,7 +16148,7 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:bx_open') {
       const wsId = Number(p.ws);
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       if (wsId === 0) await setUiMode(ctx.from.id, UI_MODES.BRAND);
       if (wsId === 0) await maybeSendBanner(ctx, 'brand', CFG.BRAND_BANNER_FILE_ID);
 
