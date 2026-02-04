@@ -4136,8 +4136,8 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
 async function renderWsSettings(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   await db.ensureWorkspaceSettings(wsId);
   const s = await db.getWorkspace(ownerUserId, wsId);
   const settings = {
@@ -4155,7 +4155,7 @@ async function renderWsSettings(ctx, ownerUserId, wsId) {
 async function renderWsHistory(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
   if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
   const items = await db.listWorkspaceAudit(wsId, 20);
   const lines = items.map(i => `• <b>${escapeHtml(i.action)}</b> — ${fmtTs(i.created_at)}`);
@@ -5003,7 +5003,8 @@ async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
     .text('💬 DM бренду', `a:ws_ig_templates_send|ws:${wsId}|t:dm`)
     .text('🔖 Bio', `a:ws_ig_templates_send|ws:${wsId}|t:bio`)
     .row();
-  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
+    const backCb = retKey === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`;
+  kbNavRow(kb, backCb);
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -5576,7 +5577,7 @@ function leadListTabsKb(wsId, counts, active, ret) {
   const retPart = ret ? `|ret:${ret}` : '';
 
   const kb = new InlineKeyboard()
-    .text(`🆕 Новые ${counts.new ?? 0}`, `a:ws_leads|ws:${wsId}|s:new|p:0`)
+    .text(`🆕 Новые ${counts.new ?? 0}`, `a:ws_leads|ws:${wsId}|s:new|p:0${retPart}`)
     .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:ws_leads|ws:${wsId}|s:in_progress|p:0${retPart}`)
     .row()
     .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:ws_leads|ws:${wsId}|s:closed|p:0${retPart}`)
@@ -13386,7 +13387,7 @@ if (p.a === 'a:support_write') {
 
 // Brand Directory (Creator)
 if (p.a === 'a:brands_home') {
-  await ctx.answerCallbackQuery();
+  try { await ctx.answerCallbackQuery(); } catch {}
   const page = Math.max(0, Number(p.p || 0));
   await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id });
   return;
@@ -14759,7 +14760,7 @@ if (p.a === 'a:lead_set') {
     }
 
     if (p.a === 'a:ws_profile') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       await renderWsProfile(ctx, u.id, Number(p.ws));
       return;
     }
