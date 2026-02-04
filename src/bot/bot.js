@@ -5878,7 +5878,8 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
     `Статус: <b>${escapeHtml(LEAD_STATUSES[st]?.label || st)}</b>
 ` +
     `
-<i>Фильтры: 🆕 Новые / 💬 В работе / ✅ Закрыты / 🗑 Спам. Открыть заявку — кнопка ✉️ #id ниже.</i>`;
+<i>Фильтры: 🆕 Новые / 💬 В работе / ✅ Закрыты / 🗑 Спам.</i>
+<i>Подсказка: открой ✉️ → выбери статус → ответь (✍️ или ⚡).</i>`;
 
   let body = '';
   if (!apps.length) {
@@ -6437,45 +6438,55 @@ function buildBrandAppTemplateText(brandName, key) {
   return `Спасибо за заявку! ✅ Напиши, пожалуйста, чуть подробнее про формат и условия — и продолжим.`;
 }
 
-async function renderBrandAppTemplates(ctx, actorUserId, appId, back) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
-  const brandUserId = Number(app.brand_user_id);
-  const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
-  if (!access.ok) return;
+// --- TEMPLATE PREVIEW FLOW HELPER (apps/leads; bx-ready) ---
+// Unifies: template list + preview UI so we don't maintain separate implementations.
+// Payloads are NOT renamed. Only internal UI reuse.
 
-  const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
-  const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
-  const who = app.creator_username ? '@' + String(app.creator_username).replace(/^@/, '') : (app.creator_tg_id ? `id:${app.creator_tg_id}` : 'creator');
+const BRAND_APP_TPLS = [
+  { key: 'next', label: '✅ Приняли — дальше', icon: '✅' },
+  { key: 'price', label: '📎 Прайс / медиа‑кит', icon: '📎' },
+  { key: 'brief', label: '🧾 Уточнить детали', icon: '🧾' },
+  { key: 'barter', label: '🤝 Бартер', icon: '🤝' },
+  { key: 'timing', label: '⏱ Сроки', icon: '⏱' },
+];
 
-  const text =
-    `⚡ <b>Быстрые ответы</b>\n\n` +
-    `Заявка #${app.id} от <b>${escapeHtml(String(who))}</b>\n\n` +
-    `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”. После отправки у креатора появится кнопка “💬 Написать бренду”.`;
+const LEAD_TPLS = [
+  { key: 'discuss', label: '✅ Спасибо, обсудим', icon: '✅' },
+  { key: 'price', label: '💰 Прайс / бюджет', icon: '💰' },
+  { key: 'brief', label: '🧾 Пришли бриф', icon: '🧾' },
+  { key: 'timing', label: '⏱ Сроки / дедлайн', icon: '⏱' },
+  { key: 'format', label: '🧩 UGC или интеграция?', icon: '🧩' },
+];
 
-  const kb = new InlineKeyboard()
-    .text('✅ Приняли — дальше', `a:brand_app_tpl|id:${app.id}|k:next|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('📎 Прайс / медиа‑кит', `a:brand_app_tpl|id:${app.id}|k:price|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('🧾 Уточнить детали', `a:brand_app_tpl|id:${app.id}|k:brief|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('🤝 Бартер', `a:brand_app_tpl|id:${app.id}|k:barter|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('⏱ Сроки', `a:brand_app_tpl|id:${app.id}|k:timing|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`).text('📋 Меню', 'a:menu');
-
-  try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-  } catch {
-    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-  }
+function kbTplList(kb, templates, mkCb) {
+  for (const t of templates) kb.text(String(t.label), mkCb(String(t.key))).row();
+  return kb;
 }
 
+function kbTplIconPicker(kb, templates, mkCb, perRow = 3) {
+  let n = 0;
+  for (const t of templates) {
+    kb.text(String(t.icon || '•'), mkCb(String(t.key)));
+    n += 1;
+    if (n % perRow === 0 && n < templates.length) kb.row();
+  }
+  kb.row();
+  return kb;
+}
 
-async function renderBrandAppTemplatePreview(ctx, actorUserId, appId, key, back) {
+async function renderTemplatePreviewFlow(ctx, actorUserId, kind, id, key, backCb) {
+  const k = String(kind || '').toLowerCase().trim();
+  if (k === 'brand_app' || k === 'app' || k === 'apps') {
+    return _renderTplFlowBrandApp(ctx, actorUserId, Number(id), key, backCb);
+  }
+  if (k === 'lead' || k === 'leads') {
+    return _renderTplFlowLead(ctx, actorUserId, Number(id), key, backCb);
+  }
+  try { await ctx.answerCallbackQuery({ text: 'Unsupported template flow.' }); } catch {}
+}
+
+async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
@@ -6483,11 +6494,34 @@ async function renderBrandAppTemplatePreview(ctx, actorUserId, appId, key, back)
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
   if (!access.ok) return;
 
-  const creatorTgId = Number(app.creator_tg_id || 0);
-  if (!creatorTgId) { try { await ctx.answerCallbackQuery({ text: 'У креатора нет TG id.' }); } catch {} return; }
-
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
+
+  // --- LIST ---
+  if (!key) {
+    const who = app.creator_username ? '@' + String(app.creator_username).replace(/^@/, '') : (app.creator_tg_id ? `id:${app.creator_tg_id}` : 'creator');
+
+    const text =
+      `⚡ <b>Быстрые ответы</b>\n\n` +
+      `Заявка #${app.id} от <b>${escapeHtml(String(who))}</b>\n\n` +
+      `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”. После отправки у креатора появится кнопка “💬 Написать бренду”.`;
+
+    const kb = new InlineKeyboard();
+    kbTplList(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`);
+    kb.text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
+      .text('📋 Меню', 'a:menu');
+
+    try {
+      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    } catch {
+      await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    }
+    return;
+  }
+
+  // --- PREVIEW ---
+  const creatorTgId = Number(app.creator_tg_id || 0);
+  if (!creatorTgId) { try { await ctx.answerCallbackQuery({ text: 'У креатора нет TG id.' }); } catch {} return; }
 
   const replyText = buildBrandAppTemplateText(brandName, key);
 
@@ -6519,16 +6553,9 @@ async function renderBrandAppTemplatePreview(ctx, actorUserId, appId, key, back)
 
   if (text.length > 3900) text = outText;
 
-  const kb = new InlineKeyboard()
-    // quick pick row (same payload, opens preview)
-    .text('✅', `a:brand_app_tpl|id:${app.id}|k:next|s:${back.status}|p:${back.page}`)
-    .text('📎', `a:brand_app_tpl|id:${app.id}|k:price|s:${back.status}|p:${back.page}`)
-    .text('🧾', `a:brand_app_tpl|id:${app.id}|k:brief|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('🤝', `a:brand_app_tpl|id:${app.id}|k:barter|s:${back.status}|p:${back.page}`)
-    .text('⏱', `a:brand_app_tpl|id:${app.id}|k:timing|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('📨 Отправить', `a:brand_app_tpl_send|id:${app.id}|k:${String(key || 'discuss')}|s:${back.status}|p:${back.page}`)
+  const kb = new InlineKeyboard();
+  kbTplIconPicker(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`, 3);
+  kb.text('📨 Отправить', `a:brand_app_tpl_send|id:${app.id}|k:${String(key || 'discuss')}|s:${back.status}|p:${back.page}`)
     .row()
     .text('🔄 Выбрать другой', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
     .text('✍️ Ответить', `a:brand_app_reply|id:${app.id}|s:${back.status}|p:${back.page}`);
@@ -6541,6 +6568,98 @@ async function renderBrandAppTemplatePreview(ctx, actorUserId, appId, key, back)
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
 }
+
+async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
+  const lead = await db.getBrandLeadById(leadId);
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+
+  const wsId = Number(lead.workspace_id);
+  const ws = await db.getWorkspaceAny(wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+
+  const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+
+  // --- LIST ---
+  if (!key) {
+    const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
+
+    const text =
+      `⚡ <b>Быстрые ответы</b>\n\n` +
+      `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n\n` +
+      `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”.`;
+
+    const kb = new InlineKeyboard();
+    kbTplList(kb, LEAD_TPLS, (tplKey) => `a:lead_tpl|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}`);
+    kb.text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+      .row()
+      .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+      .text('📋 Меню', 'a:menu');
+
+    try {
+      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    } catch {
+      await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    }
+    return;
+  }
+
+  // --- PREVIEW ---
+  const tplKey = normLeadTplKey(key);
+  const replyText = buildLeadTemplateText(ws, lead, tplKey);
+  const card = formatWsContactCard(ws, Number(ws.id));
+
+  const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
+
+  // Exact message that will be sent to the brand (preview).
+  let outText =
+    `🧾 <b>Предпросмотр ответа</b>\n\n` +
+    `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n` +
+    `Шаблон: <b>${escapeHtml(leadTplLabel(tplKey))}</b>\n\n` +
+    `— — —\n` +
+    `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>\n\n` +
+    `${escapeHtml(String(replyText))}\n\n` +
+    `<b>Контакты:</b>\n${card}`;
+
+  // Safety: keep the preview readable and avoid Telegram 4096 hard-limit.
+  if (outText.length > 3900) {
+    outText =
+      `🧾 <b>Предпросмотр ответа</b>\n\n` +
+      `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n` +
+      `Шаблон: <b>${escapeHtml(leadTplLabel(tplKey))}</b>\n\n` +
+      `💬 <b>Ответ</b>\n\n` +
+      `${escapeHtml(String(replyText))}\n\n` +
+      `⚠️ Контакты/витрина будут добавлены при отправке.`;
+  }
+
+  const kb = new InlineKeyboard();
+  kbTplIconPicker(kb, LEAD_TPLS, (k2) => `a:lead_tpl|id:${lead.id}|k:${k2}|ws:${wsId}|s:${back.status}|p:${back.page}`, 3);
+  kb.text('📨 Отправить', `a:lead_tpl_send|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .row()
+    .text('🗂 Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .row()
+    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('📋 Меню', 'a:menu');
+
+  try {
+    await safeEditOrReply(ctx, outText, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  } catch {
+    await ctx.reply(outText, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  }
+}
+
+async function renderBrandAppTemplates(ctx, actorUserId, appId, back) {
+  return renderTemplatePreviewFlow(ctx, actorUserId, 'brand_app', appId, null, back);
+}
+
+
+
+async function renderBrandAppTemplatePreview(ctx, actorUserId, appId, key, back) {
+  return renderTemplatePreviewFlow(ctx, actorUserId, 'brand_app', appId, key, back);
+}
+
 
 async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
@@ -6846,47 +6965,9 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
 
 
 async function renderLeadTemplates(ctx, actorUserId, leadId, back) {
-  const lead = await db.getBrandLeadById(leadId);
-  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
-
-  const wsId = Number(lead.workspace_id);
-  const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-
-  const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
-  const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
-
-  const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
-
-  const text =
-    `⚡ <b>Быстрые ответы</b>\n\n` +
-    `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n\n` +
-    `Выбери шаблон — откроется <b>предпросмотр</b>.\n` +
-    `Потом нажми «📨 Отправить», и я доставлю сообщение бренду + добавлю твою контакт‑карточку (IG / TG / витрина).`;
-
-  const kb = new InlineKeyboard()
-    .text('✅ Спасибо, обсудим', `a:lead_tpl|id:${lead.id}|k:discuss|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('💰 Прайс / бюджет', `a:lead_tpl|id:${lead.id}|k:price|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('🧾 Пришли бриф', `a:lead_tpl|id:${lead.id}|k:brief|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('⏱ Сроки / дедлайн', `a:lead_tpl|id:${lead.id}|k:timing|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('🧩 UGC или интеграция?', `a:lead_tpl|id:${lead.id}|k:format|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('📋 Меню', 'a:menu');
-
-  try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-  } catch {
-    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-  }
+  return renderTemplatePreviewFlow(ctx, actorUserId, 'lead', leadId, null, back);
 }
+
 
 const LEAD_TPL_LABELS = {
   discuss: '✅ Спасибо, обсудим',
@@ -6907,67 +6988,9 @@ function leadTplLabel(k) {
 }
 
 async function renderLeadTemplatePreview(ctx, actorUserId, leadId, key, back) {
-  const lead = await db.getBrandLeadById(leadId);
-  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
-
-  const wsId = Number(lead.workspace_id);
-  const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-
-  const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
-  const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
-
-  const tplKey = normLeadTplKey(key);
-  const replyText = buildLeadTemplateText(ws, lead, tplKey);
-  const card = formatWsContactCard(ws, Number(ws.id));
-
-  const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
-
-  // Exact message that will be sent to the brand (preview).
-  let outText =
-    `🧾 <b>Предпросмотр ответа</b>\n\n` +
-    `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n` +
-    `Шаблон: <b>${escapeHtml(leadTplLabel(tplKey))}</b>\n\n` +
-    `— — —\n` +
-    `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>\n\n` +
-    `${escapeHtml(String(replyText))}\n\n` +
-    `<b>Контакты:</b>\n${card}`;
-
-  // Safety: keep the preview readable and avoid Telegram 4096 hard-limit.
-  if (outText.length > 3900) {
-    outText =
-      `🧾 <b>Предпросмотр ответа</b>\n\n` +
-      `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n` +
-      `Шаблон: <b>${escapeHtml(leadTplLabel(tplKey))}</b>\n\n` +
-      `💬 <b>Ответ</b>\n\n` +
-      `${escapeHtml(String(replyText))}\n\n` +
-      `⚠️ Контакты/витрина будут добавлены при отправке.`;
-  }
-
-  const kb = new InlineKeyboard()
-    // selector row (switch preview without leaving screen)
-    .text('✅', `a:lead_tpl|id:${lead.id}|k:discuss|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('💰', `a:lead_tpl|id:${lead.id}|k:price|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('🧾', `a:lead_tpl|id:${lead.id}|k:brief|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('⏱', `a:lead_tpl|id:${lead.id}|k:timing|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('🧩', `a:lead_tpl|id:${lead.id}|k:format|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('📨 Отправить', `a:lead_tpl_send|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('🗂 Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('📋 Меню', 'a:menu');
-
-  try {
-    await safeEditOrReply(ctx, outText, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-  } catch {
-    await ctx.reply(outText, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-  }
+  return renderTemplatePreviewFlow(ctx, actorUserId, 'lead', leadId, key, back);
 }
+
 
 async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const lead = await db.getBrandLeadById(leadId);
