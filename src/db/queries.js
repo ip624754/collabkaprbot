@@ -1193,7 +1193,7 @@ export async function listBarterOffersForOwnerWorkspace(ownerUserId, workspaceId
      from barter_offers
      where workspace_id=$1
        and coalesce(status,'ACTIVE') <> 'CLOSED'
-     order by created_at desc
+     order by coalesce(bump_at, created_at) desc
      limit $2 offset $3`,
     [workspaceId, limit, offset]
   );
