@@ -1762,7 +1762,7 @@ function netConfirmKb(wsId, enabled, ret) {
 
 async function renderNetConfirm(ctx, ownerUserId, wsId, ret = 'ws') {
   const ws = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const enabled = !!ws.network_enabled;
   const state = enabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
@@ -4156,7 +4156,7 @@ async function renderWsHistory(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
   if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   const items = await db.listWorkspaceAudit(wsId, 20);
   const lines = items.map(i => `• <b>${escapeHtml(i.action)}</b> — ${fmtTs(i.created_at)}`);
   const text = `🧾 <b>История действий</b>
@@ -4751,7 +4751,7 @@ function calcWsProfileProgress(ws) {
 
 async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   const ws0 = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws0) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!ws0) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
   await db.ensureWorkspaceSettings(wsId);
   const ws = await db.getWorkspace(ownerUserId, wsId);
   const isPro = await db.isWorkspacePro(wsId);
@@ -4894,8 +4894,8 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
 async function renderWsShareMenu(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const link = wsBrandLink(wsId);
 
@@ -4922,8 +4922,8 @@ async function renderWsShareMenu(ctx, ownerUserId, wsId) {
 async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short') {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const text = buildWsShareText(ws, wsId, variant);
 
@@ -4980,8 +4980,8 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
 async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const link = wsBrandLink(wsId);
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
@@ -5206,8 +5206,8 @@ function buildWsIgDmMessage(ws, wsId, tone = 'soft', variantIndex = 0) {
 async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', variantIndex = 0) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const t = String(tone || 'soft').toLowerCase();
   const toneNorm = (t === 'hard' ? 'hard' : 'soft');
@@ -5235,8 +5235,8 @@ async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', varia
 async function sendWsIgTemplateMessage(ctx, ownerUserId, wsId, type = 'story') {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const t = String(type || 'story');
   const allowed = ['story', 'post', 'dm', 'bio'];
@@ -5267,8 +5267,8 @@ async function sendWsIgTemplateMessage(ctx, ownerUserId, wsId, type = 'story') {
 async function renderWsProfileMode(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   const cur = String(ws.profile_mode || 'both');
 
   const kb = new InlineKeyboard()
@@ -5297,8 +5297,8 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
 async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const selected = Array.isArray(ws.profile_verticals) ? ws.profile_verticals.map(String) : [];
   const kb = new InlineKeyboard();
@@ -5332,8 +5332,8 @@ async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
 async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const selected = Array.isArray(ws.profile_formats) ? ws.profile_formats.map(String) : [];
   const kb = new InlineKeyboard();
@@ -5527,7 +5527,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
 async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
   const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Профиль не найден.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Профиль не найден.' }); } catch {} return; }
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const link = wsBrandLink(wsId);
@@ -5596,8 +5596,8 @@ function leadListTabsKb(wsId, counts, active, ret) {
 async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 0, ret = null) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const st = normLeadStatus(status);
   const p = Math.max(0, Number(page) || 0);
@@ -5661,7 +5661,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -6611,7 +6611,7 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -6977,7 +6977,7 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
   // allow chat if accepted OR already in progress (brand replied / accepted)
   const st = normLeadStatus(app.status);
   if (st === 'new') {
-    return ctx.answerCallbackQuery({ text: 'Бренд ещё не принял заявку.' });
+    { try { await ctx.answerCallbackQuery({ text: 'Бренд ещё не принял заявку.' }); } catch {} return; }
   }
 
   await setExpectText(ctx.from.id, { type: 'brand_app_chat_send', appId: Number(app.id) });
@@ -7037,7 +7037,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -7105,8 +7105,8 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 async function renderWsPro(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   await db.ensureWorkspaceSettings(wsId);
   const s = await db.getWorkspace(ownerUserId, wsId);
   const isPro = await db.isWorkspacePro(wsId);
@@ -7145,10 +7145,10 @@ ${escapeHtml(pro)}
 async function renderWsProPinPick(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Канал не найден.' }); } catch {} return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   const isPro = await db.isWorkspacePro(wsId);
-  if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно в PRO.' });
+  if (!isPro) { try { await ctx.answerCallbackQuery({ text: 'Доступно в PRO.' }); } catch {} return; }
 
   const rows = await db.listBarterOffersForWorkspace(ownerUserId, wsId, 30, 0);
   const active = rows.filter(r => String(r.status).toUpperCase() === 'ACTIVE');
@@ -7221,7 +7221,7 @@ async function renderFoldersMy(ctx, userId) {
 
 async function renderFoldersHome(ctx, userId, wsId) {
   const access = await getFolderAccess(userId, wsId);
-  if (!access) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!access) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const folders = await db.listChannelFolders(Number(wsId));
   const isPro = await db.isWorkspacePro(Number(wsId));
@@ -7261,11 +7261,11 @@ function folderViewKb(access, wsId, folderId) {
 
 async function renderFolderView(ctx, userId, wsId, folderId) {
   const access = await getFolderAccess(userId, wsId);
-  if (!access) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!access) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const folder = await db.getChannelFolder(Number(folderId));
   if (!folder || Number(folder.workspace_id) !== Number(wsId)) {
-    return ctx.answerCallbackQuery({ text: 'Папка не найдена.' });
+    { try { await ctx.answerCallbackQuery({ text: 'Папка не найдена.' }); } catch {} return; }
   }
 
   const items = await db.listChannelFolderItems(Number(folderId));
@@ -7288,7 +7288,7 @@ async function renderFolderView(ctx, userId, wsId, folderId) {
 
 async function renderWsEditors(ctx, ownerUserId, wsId) {
   const ws = await db.getWorkspace(ownerUserId, Number(wsId));
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const editors = await db.listWorkspaceEditors(Number(wsId));
 
@@ -7581,7 +7581,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
   }
 
   const ws = await db.getWorkspace(ownerUserId, wsNum);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   if (!ws.network_enabled) {
     await safeEditOrReply(ctx, 
@@ -7612,7 +7612,7 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
-    if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
@@ -7727,7 +7727,7 @@ ${featLines.join('\n\n')}
 
 async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
   const ws = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsId);
 
   const limit = 8;
@@ -7756,7 +7756,7 @@ async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
 
 async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
   const ws = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsId);
 
   const limit = 8;
@@ -7906,7 +7906,7 @@ async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my', page 
 
 async function renderBxView(ctx, ownerUserId, wsId, offerId, back = 'feed', page = 0) {
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
-  if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const st = String(o.status || 'ACTIVE').toUpperCase();
   const contact = String(o.contact || '').trim();
@@ -8024,7 +8024,7 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
-    if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
@@ -8058,7 +8058,7 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, retPage = 0, pick
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
-    if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
@@ -8106,7 +8106,7 @@ async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, op
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
-    if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
@@ -8849,7 +8849,7 @@ ${body}`;
 
 async function renderBxThread(ctx, userId, wsId, threadId, opts = {}) {
   const built = await buildBxThreadView(userId, threadId);
-  if (!built) return ctx.answerCallbackQuery({ text: 'Диалог не найден.' });
+  if (!built) { try { await ctx.answerCallbackQuery({ text: 'Диалог не найден.' }); } catch {} return; }
   const { thread, text, proofsCount } = built;
 
   let canStage = false;
@@ -8895,7 +8895,7 @@ function bxProofsKb(wsId, threadId, opts = {}) {
 
 async function renderBxProofs(ctx, userId, wsId, threadId, opts = {}) {
   const built = await buildBxThreadView(userId, threadId);
-  if (!built) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!built) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   const offerId = built.thread.offer_id ? Number(built.thread.offer_id) : null;
 
   let proofs = [];
@@ -9031,7 +9031,7 @@ async function renderFeaturedHome(ctx, userId, wsId) {
 
 async function renderFeaturedView(ctx, userId, wsId, id, page = 0, h = BX_HOME.MENU) {
   const f = await db.getFeaturedPlacement(id);
-  if (!f || String(f.status) !== 'ACTIVE') return ctx.answerCallbackQuery({ text: 'Featured не найден.' });
+  if (!f || String(f.status) !== 'ACTIVE') { try { await ctx.answerCallbackQuery({ text: 'Featured не найден.' }); } catch {} return; }
 
   const ends = f.ends_at ? fmtTs(f.ends_at) : '—';
   const title = f.title || 'Featured';
@@ -9121,7 +9121,7 @@ async function renderGwList(ctx, ownerUserId, wsId = null) {
 
 async function renderGwOpen(ctx, ownerUserId, gwId) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   const sponsors = await db.listGiveawaySponsors(gwId);
   const sponsorLines = sponsors.map(s => `• ${escapeHtml(s.sponsor_text)}`).join('\n') || '—';
 
@@ -9153,7 +9153,7 @@ ${notesBlock}
 
 async function renderGwStats(ctx, ownerUserId, gwId) {
   const st = await db.getGiveawayStats(gwId, ownerUserId);
-  if (!st) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!st) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   const total = Number(st.entries_total || 0);
   const elig = Number(st.eligible_count || 0);
   const notElig = Number(st.not_eligible_count || 0);
@@ -9207,7 +9207,7 @@ ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
 
 async function renderGwOpenPublic(ctx, gwId, userId) {
   const g = await db.getGiveawayInfoForUser(gwId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Конкурс не найден.' });
+  if (!g) { try { await ctx.answerCallbackQuery({ text: 'Конкурс не найден.' }); } catch {} return; }
   const entry = await db.getEntryStatus(gwId, userId);
 
   const sponsorRows = await db.listGiveawaySponsors(gwId);
@@ -9346,7 +9346,7 @@ function curatorGwKb(wsId, gwId) {
 async function renderCuratorGiveawayOpen(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
   if (!g || Number(g.workspace_id) !== Number(wsId)) {
-    return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   }
 
   const checked = await getCurGwChecked(g.id);
@@ -9374,7 +9374,7 @@ ${notesBlock}
 
 async function renderCuratorGiveawayStats(ctx, userId, wsId, gwId) {
   const st = await db.getGiveawayStatsForCurator(Number(gwId), userId);
-  if (!st) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!st) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const text = `📊 <b>Статистика конкурса #${gwId}</b>
 
@@ -9394,7 +9394,7 @@ async function renderCuratorGiveawayStats(ctx, userId, wsId, gwId) {
 
 async function renderCuratorGiveawayLog(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   const rows = await db.listGiveawayAudit(Number(gwId), 30);
   const lines = rows.map(r => `• <b>${escapeHtml(r.action)}</b> — ${fmtTs(r.created_at)}`);
   const text = `🧾 <b>Лог конкурса #${gwId}</b>
@@ -9406,7 +9406,7 @@ ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
 
 async function renderCuratorGiveawayRemindQ(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const text = `📣 <b>Напомнить проверить</b>
 
@@ -9421,7 +9421,7 @@ async function renderCuratorGiveawayRemindQ(ctx, userId, wsId, gwId) {
 
 async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const chatId = g.published_chat_id ?? g.published_chat ?? g.channel_id ?? null;
   if (!chatId) {
@@ -9461,7 +9461,7 @@ await renderCuratorGiveawayOpen(ctx, userId, wsId, gwId);
 
 async function renderCuratorGiveawayOwnerNotifyQ(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const checked = await getCurGwChecked(g.id);
   const notes = await getCurGwNotes(g.id, 3);
@@ -9492,7 +9492,7 @@ ${curatorNotesBlock(notes)}
 
 async function renderCuratorGiveawayOwnerNotifySend(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   // rate-limit: 1 notify per 10 minutes per giveaway (protect owner from spam)
   const rlKey = k(['rl', 'cur_owner_notify', String(g.id), String(userId)]);
@@ -14135,7 +14135,7 @@ if (p.a === 'a:wsp_preview') {
       const wsId = Number(p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return ctx.answerCallbackQuery({ text: 'Workspace не найден.' });
+      if (!wsId) { try { await ctx.answerCallbackQuery({ text: 'Workspace не найден.' }); } catch {} return; }
 
       try { await ctx.answerCallbackQuery({ text: 'Открываю витрину…' }); } catch {}
 
@@ -14529,7 +14529,10 @@ if (p.a === 'a:ws_leads') {
     if (p.a === 'a:lead_view') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
-      if (!leadId) return;
+      if (!leadId) {
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📋 Меню → 📨 Запросы брендов и выбери заявку заново.', { reply_markup: navKb('a:menu') });
+        return;
+      }
       await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
       return;
     }
@@ -14699,7 +14702,7 @@ if (p.a === 'a:lead_set') {
     }
     if (p.a === 'a:verify_kind') {
       await ctx.answerCallbackQuery();
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Верификация отключена.' });
+      if (!CFG.VERIFICATION_ENABLED) { try { await ctx.answerCallbackQuery({ text: 'Верификация отключена.' }); } catch {} return; }
       const kind = String(p.k || 'creator');
 
 
@@ -14760,7 +14763,12 @@ if (p.a === 'a:lead_set') {
     }
     if (p.a === 'a:ws_open') {
       try { await ctx.answerCallbackQuery(); } catch {}
-      await renderWsOpen(ctx, u.id, Number(p.ws));
+      const wsId = Number(p.ws || 0);
+      if (!wsId) {
+        await safeEditOrReply(ctx, '⚠️ Канал не выбран. Открой 📋 Меню → выбери канал и повтори шаг.', { reply_markup: navKb('a:ws_list') });
+        return;
+      }
+      await renderWsOpen(ctx, u.id, wsId);
       return;
     }
     if (p.a === 'a:ws_settings') {
@@ -14847,9 +14855,9 @@ if (p.a === 'a:ws_prof_mode') {
       const wsId = Number(p.ws);
       const mode = String(p.m || 'both');
       const allowed = ['channel', 'ugc', 'both'];
-      if (!allowed.includes(mode)) return ctx.answerCallbackQuery({ text: 'Неверный режим.' });
+      if (!allowed.includes(mode)) { try { await ctx.answerCallbackQuery({ text: 'Неверный режим.' }); } catch {} return; }
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.setWorkspaceSetting(wsId, { profile_mode: mode });
       await db.auditWorkspace(wsId, u.id, 'ws.profile_mode_updated', { mode });
       await renderWsProfileMode(ctx, u.id, wsId);
@@ -14866,7 +14874,7 @@ if (p.a === 'a:ws_prof_mode') {
       const wsId = Number(p.ws);
       const key = String(p.v || '');
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const cur = Array.isArray(ws.profile_verticals) ? ws.profile_verticals.map(String) : [];
       const has = cur.includes(key);
@@ -14887,7 +14895,7 @@ if (p.a === 'a:ws_prof_mode') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.setWorkspaceSetting(wsId, { profile_verticals: [] });
       await db.auditWorkspace(wsId, u.id, 'ws.profile_verticals_cleared', {});
       await renderWsProfileVerticals(ctx, u.id, wsId);
@@ -14904,7 +14912,7 @@ if (p.a === 'a:ws_prof_mode') {
       const wsId = Number(p.ws);
       const key = String(p.f || '');
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const cur = Array.isArray(ws.profile_formats) ? ws.profile_formats.map(String) : [];
       const has = cur.includes(key);
@@ -14925,7 +14933,7 @@ if (p.a === 'a:ws_prof_mode') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.setWorkspaceSetting(wsId, { profile_formats: [] });
       await db.auditWorkspace(wsId, u.id, 'ws.profile_formats_cleared', {});
       await renderWsProfileFormats(ctx, u.id, wsId);
@@ -14965,7 +14973,7 @@ if (p.a === 'a:ws_prof_mode') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const token = randomToken(10);
       await redis.set(k(['pay_pro', token]), { wsId, ownerUserId: u.id, tgId: ctx.from.id }, { ex: 15 * 60 });
       const payload = `pro_${wsId}_${u.id}_${token}`;
@@ -14993,7 +15001,7 @@ if (p.a === 'a:ws_prof_mode') {
       const packId = String(p.pack || 'S');
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const pack = getBrandPack(packId);
-      if (!pack) return ctx.answerCallbackQuery({ text: 'Пакет не найден.' });
+      if (!pack) { try { await ctx.answerCallbackQuery({ text: 'Пакет не найден.' }); } catch {} return; }
 
       const token = randomToken(10);
       await redis.set(
@@ -15736,7 +15744,7 @@ ${link}`;
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const plan = String(p.plan || 'basic').toLowerCase();
       if (plan !== 'basic' && plan !== 'max') {
-        return ctx.answerCallbackQuery({ text: 'План не найден.' });
+        { try { await ctx.answerCallbackQuery({ text: 'План не найден.' }); } catch {} return; }
       }
       const stars = plan === 'max' ? Number(CFG.BRAND_PLAN_MAX_PRICE) : Number(CFG.BRAND_PLAN_BASIC_PRICE);
       const token = randomToken(10);
@@ -15854,7 +15862,7 @@ if (p.a === 'a:match_home') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const tierId = String(p.tier || 'S').toUpperCase();
       const tier = MATCH_TIERS.find(t => t.id === tierId);
-      if (!tier) return ctx.answerCallbackQuery({ text: 'Тариф не найден.' });
+      if (!tier) { try { await ctx.answerCallbackQuery({ text: 'Тариф не найден.' }); } catch {} return; }
 
       const token = randomToken(10);
       await redis.set(
@@ -15890,7 +15898,7 @@ if (p.a === 'a:match_home') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const durId = String(p.dur || '1d');
       const d = FEATURED_DURATIONS.find(x => x.id === durId);
-      if (!d) return ctx.answerCallbackQuery({ text: 'Тариф не найден.' });
+      if (!d) { try { await ctx.answerCallbackQuery({ text: 'Тариф не найден.' }); } catch {} return; }
 
       const token = randomToken(10);
       await redis.set(
@@ -15924,7 +15932,7 @@ if (p.a === 'a:match_home') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const id = Number(p.id);
       const ok = await db.stopFeaturedPlacement(id, u.id);
-      if (!ok) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ok) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery({ text: 'Остановлено.' });
       await renderBxFeed(ctx, u.id, wsId, Number(p.p || 0), { h });
       return;
@@ -15933,9 +15941,9 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const isPro = await db.isWorkspacePro(wsId);
-      if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно только в PRO.' });
+      if (!isPro) { try { await ctx.answerCallbackQuery({ text: 'Доступно только в PRO.' }); } catch {} return; }
       const offers = await db.listMyBarterOffers(wsId);
       const kb = new InlineKeyboard();
       for (const o of offers.filter(x => x.status !== 'DELETED')) {
@@ -15951,9 +15959,9 @@ if (p.a === 'a:match_home') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const isPro = await db.isWorkspacePro(wsId);
-      if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно только в PRO.' });
+      if (!isPro) { try { await ctx.answerCallbackQuery({ text: 'Доступно только в PRO.' }); } catch {} return; }
       await db.setWorkspacePinnedOffer(wsId, offerId);
       await db.auditWorkspace(wsId, u.id, 'ws.pro_pinned_offer', { offerId });
       await renderWsPro(ctx, u.id, wsId);
@@ -15963,7 +15971,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.setWorkspacePinnedOffer(wsId, null);
       await db.auditWorkspace(wsId, u.id, 'ws.pro_pinned_offer', { offerId: null });
       await renderWsPro(ctx, u.id, wsId);
@@ -15979,7 +15987,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:admin_home') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await renderAdminHome(ctx);
       return;
@@ -15988,7 +15996,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:admin_metrics') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const days = Math.max(1, Math.min(90, Number(p.d) || 14));
       await renderAdminMetrics(ctx, days);
       return;
@@ -15996,14 +16004,14 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:admin_mod_list') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await renderAdminModerators(ctx);
       return;
     }
 
     if (p.a === 'a:admin_mod_add') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➕ Введи @username модератора (он должен иметь username).', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home') });
       await setExpectText(ctx.from.id, { type: 'admin_add_mod_username' });
@@ -16011,7 +16019,7 @@ if (p.a === 'a:match_home') {
     }
     if (p.a === 'a:admin_mod_rm') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery({ text: 'Удалено.' });
       await db.removeNetworkModerator(Number(p.uid));
       await renderAdminModerators(ctx);
@@ -16021,7 +16029,7 @@ if (p.a === 'a:match_home') {
     // Admin: Payments toggles / ledger
     if (p.a === 'a:admin_pay_accept_toggle') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       const cur = await getSysBool(SYS_KEYS.pay_accept, CFG.PAYMENTS_ACCEPT_DEFAULT);
       await setSysBool(SYS_KEYS.pay_accept, !cur);
@@ -16030,7 +16038,7 @@ if (p.a === 'a:match_home') {
     }
     if (p.a === 'a:admin_pay_auto_toggle') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       const cur = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
       await setSysBool(SYS_KEYS.pay_auto_apply, !cur);
@@ -16039,21 +16047,21 @@ if (p.a === 'a:match_home') {
     }
     if (p.a === 'a:admin_payments') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await renderAdminPayments(ctx, String(p.st || 'ORPHANED'), Number(p.p || 0));
       return;
     }
     if (p.a === 'a:admin_pay_view') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await renderAdminPaymentView(ctx, Number(p.id), String(p.st || 'ORPHANED'), Number(p.p || 0));
       return;
     }
     if (p.a === 'a:admin_pay_apply') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await adminApplyPayment(ctx, u, Number(p.id), String(p.st || 'ORPHANED'), Number(p.p || 0));
       return;
@@ -16062,28 +16070,28 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:mod_home') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await renderModHome(ctx);
       return;
     }
     if (p.a === 'a:mod_reports') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await renderModReports(ctx, Number(p.p || 0));
       return;
     }
     if (p.a === 'a:mod_report') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await renderModReportView(ctx, Number(p.r));
       return;
     }
     if (p.a === 'a:mod_r_freeze') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const rid = Number(p.r);
       const rep = await db.getBarterReport(rid);
       if (rep && rep.offer_id) {
@@ -16096,7 +16104,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:mod_r_close') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const rid = Number(p.r);
       const rep = await db.getBarterReport(rid);
       if (rep && rep.thread_id) {
@@ -16109,7 +16117,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:mod_r_resolve') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const rid = Number(p.r);
       await db.resolveBarterReport(rid, u.id);
       await renderModReportView(ctx, rid);
@@ -16119,24 +16127,24 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:mod_verifs') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+      if (!CFG.VERIFICATION_ENABLED) { try { await ctx.answerCallbackQuery({ text: 'Функция отключена.' }); } catch {} return; }
       await renderModVerifs(ctx, Number(p.p || 0));
       return;
     }
     if (p.a === 'a:mod_verif_view') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+      if (!CFG.VERIFICATION_ENABLED) { try { await ctx.answerCallbackQuery({ text: 'Функция отключена.' }); } catch {} return; }
       await renderModVerifView(ctx, Number(p.uid), Number(p.p || 0));
       return;
     }
     if (p.a === 'a:mod_verif_approve') {
       await ctx.answerCallbackQuery({ text: '✅ Approved' });
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+      if (!CFG.VERIFICATION_ENABLED) { try { await ctx.answerCallbackQuery({ text: 'Функция отключена.' }); } catch {} return; }
       const targetUserId = Number(p.uid);
       await safeUserVerifications(() => db.setVerificationStatus(targetUserId, 'APPROVED', u.id, null), async () => null);
       try {
@@ -16148,8 +16156,8 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:mod_verif_reject') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
+      if (!isMod) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+      if (!CFG.VERIFICATION_ENABLED) { try { await ctx.answerCallbackQuery({ text: 'Функция отключена.' }); } catch {} return; }
       const targetUserId = Number(p.uid);
       await setExpectText(ctx.from.id, { type: 'mod_verif_reject_reason', targetUserId, page: Number(p.p || 0) });
       await safeEditOrReply(ctx, '❌ Напиши причиной отказа одним сообщением (текст), и я отправлю пользователю.', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:mod_verif_view|uid:${targetUserId}|p:${Number(p.p || 0)}`) });
@@ -16167,8 +16175,13 @@ if (p.a === 'a:match_home') {
     }
 
     if (p.a === 'a:bx_open') {
-      const wsId = Number(p.ws);
+      const wsId = Number(p.ws || 0);
       try { await ctx.answerCallbackQuery(); } catch {}
+      // If ws param is missing entirely, do not auto-switch modes; ask user to pick a channel.
+      if (typeof p.ws === 'undefined') {
+        await safeEditOrReply(ctx, '⚠️ Канал не выбран. Открой 📋 Меню → выбери канал и повтори шаг.', { reply_markup: navKb('a:ws_list') });
+        return;
+      }
       if (wsId === 0) await setUiMode(ctx.from.id, UI_MODES.BRAND);
       if (wsId === 0) await maybeSendBanner(ctx, 'brand', CFG.BRAND_BANNER_FILE_ID);
 
@@ -16941,7 +16954,7 @@ if (p.a === 'a:match_home') {
       );
 
       if (!res) {
-        return ctx.answerCallbackQuery({ text: 'Не получилось открыть диалог. Возможно оффер закрыт.' });
+        { try { await ctx.answerCallbackQuery({ text: 'Не получилось открыть диалог. Возможно оффер закрыт.' }); } catch {} return; }
       }
 
       if (res.limitReached) {
@@ -16959,7 +16972,7 @@ if (p.a === 'a:match_home') {
       }
 
       if (!res.ok || !res.thread) {
-        return ctx.answerCallbackQuery({ text: 'Не получилось открыть диалог. Возможно оффер закрыт.' });
+        { try { await ctx.answerCallbackQuery({ text: 'Не получилось открыть диалог. Возможно оффер закрыт.' }); } catch {} return; }
       }
 
       db.trackEvent('thread_opened', { userId: actorUserId, wsId: wsId || null, meta: { offerId, threadId: res.thread.id, charged: !!res.charged, chargedAmount: Number(res.chargedAmount || cost || 1) } });
@@ -17197,9 +17210,9 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const isPro = await db.isWorkspacePro(wsId);
-      if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно в PRO.' });
+      if (!isPro) { try { await ctx.answerCallbackQuery({ text: 'Доступно в PRO.' }); } catch {} return; }
       await db.setWorkspacePinnedOffer(wsId, offerId);
       await db.auditWorkspace(wsId, u.id, 'ws.pro.pin_offer', { offerId });
       await ctx.answerCallbackQuery({ text: 'Закреплено.' });
@@ -17211,9 +17224,9 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const isPro = await db.isWorkspacePro(wsId);
-      if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно в PRO.' });
+      if (!isPro) { try { await ctx.answerCallbackQuery({ text: 'Доступно в PRO.' }); } catch {} return; }
       await db.setWorkspacePinnedOffer(wsId, null);
       await db.auditWorkspace(wsId, u.id, 'ws.pro.unpin_offer', { offerId });
       await ctx.answerCallbackQuery({ text: 'Пин снят.' });
@@ -17224,7 +17237,7 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const isPro = await db.isWorkspacePro(wsId);
       const cooldownHours = isPro ? CFG.BARTER_BUMP_COOLDOWN_HOURS_PRO : CFG.BARTER_BUMP_COOLDOWN_HOURS_FREE;
       const cooldownMs = cooldownHours * 3600 * 1000;
@@ -17260,7 +17273,7 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws);
       db.trackEvent('bx_offer_new_open', { userId: u.id, wsId, meta: {} });
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       if (!ws.network_enabled) {
         await ctx.answerCallbackQuery();
         await renderBxOpen(ctx, u.id, wsId);
@@ -17294,7 +17307,7 @@ if (p.a === 'a:bx_retry_help') {
     if (p.a === 'a:bx_preset_home') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, 
         '🧩 <b>Шаблоны оффера</b>\n\nВыбери вариант — мы подготовим категорию/формат/оплату и перейдём к тегам (опционально), затем к тексту оффера.',
@@ -17307,11 +17320,11 @@ if (p.a === 'a:bx_retry_help') {
     if (p.a === 'a:bx_preset_apply') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const presetId = String(p.id || '');
       const preset = BX_PRESETS.find((x) => x.id === presetId);
-      if (!preset) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
+      if (!preset) { try { await ctx.answerCallbackQuery({ text: 'Шаблон не найден.' }); } catch {} return; }
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
@@ -17333,7 +17346,7 @@ if (p.a === 'a:bx_retry_help') {
     if (p.a === 'a:bx_params') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
       await safeEditOrReply(ctx, 'Шаг 1/4: выбери категорию:', {
@@ -17405,7 +17418,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_comp_pick') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
@@ -17419,7 +17432,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_ottags') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
       await renderBxOfferTagsStep(ctx, wsId);
@@ -17429,10 +17442,10 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_otpick') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const key = String(p.k || '');
-      if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
+      if (key !== 'goals' && key !== 'req') { try { await ctx.answerCallbackQuery({ text: 'Неверный ключ.' }); } catch {} return; }
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
@@ -17443,14 +17456,14 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_ott') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const key = String(p.k || '');
       const val = String(p.v || '');
-      if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
+      if (key !== 'goals' && key !== 'req') { try { await ctx.answerCallbackQuery({ text: 'Неверный ключ.' }); } catch {} return; }
 
       const allow = key === 'goals' ? BRAND_GOALS_KEYS : BRAND_REQ_KEYS;
-      if (!allow.has(val)) return ctx.answerCallbackQuery({ text: 'Неверный тег.' });
+      if (!allow.has(val)) { try { await ctx.answerCallbackQuery({ text: 'Неверный тег.' }); } catch {} return; }
 
       await ctx.answerCallbackQuery();
 
@@ -17474,10 +17487,10 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_otclr') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const key = String(p.k || '');
-      if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
+      if (key !== 'goals' && key !== 'req') { try { await ctx.answerCallbackQuery({ text: 'Неверный ключ.' }); } catch {} return; }
 
       await ctx.answerCallbackQuery();
 
@@ -17496,7 +17509,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_otdone') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
@@ -17507,7 +17520,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_otnext') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
@@ -17518,7 +17531,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_otskip') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await ctx.answerCallbackQuery();
 
@@ -17559,7 +17572,7 @@ if (p.a === 'a:bx_cat') {
       await clearExpectText(ctx.from.id);
 
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await db.updateBarterOffer(offerId, { media_type: null, media_file_id: null });
       await ctx.answerCallbackQuery({ text: 'Убрано' });
@@ -17621,7 +17634,7 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.updateBarterOfferStatus(offerId, 'PAUSED');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_paused', {});
       await ctx.answerCallbackQuery();
@@ -17633,7 +17646,7 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.updateBarterOfferStatus(offerId, 'ACTIVE');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_resumed', {});
       await ctx.answerCallbackQuery();
@@ -17647,7 +17660,7 @@ if (p.a === 'a:bx_cat') {
       const offerId = Number(p.o);
       const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.updateBarterOfferStatus(offerId, 'CLOSED');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_archived', {});
       await ctx.answerCallbackQuery({ text: 'Архивировано.' });
@@ -17677,7 +17690,7 @@ if (p.a === 'a:bx_cat') {
       const offerId = Number(p.o);
       const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const kb = new InlineKeyboard()
         .text('✅ Архивировать', `a:bx_del_do|ws:${wsId}|o:${offerId}|p:${page}`)
         .text('❌ Отмена', `a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:${page}`);
@@ -17693,7 +17706,7 @@ if (p.a === 'a:bx_cat') {
       const offerId = Number(p.o);
       const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.updateBarterOfferStatus(offerId, 'CLOSED');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_archived', {});
       await ctx.answerCallbackQuery({ text: 'Архивировано.' });
@@ -17713,7 +17726,7 @@ if (p.a === 'a:bx_cat') {
       const enabled = String(p.v) === '1';
       const ret = String(p.ret || 'ws') === 'bx' ? 'bx' : 'ws';
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await db.setWorkspaceSetting(wsId, { network_enabled: enabled });
       await db.auditWorkspace(wsId, u.id, 'ws.network_toggled', { enabled, source: ret });
@@ -17736,7 +17749,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:ws_toggle_cur') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.setWorkspaceSetting(wsId, { curator_enabled: !ws.curator_enabled });
       await db.auditWorkspace(wsId, u.id, 'ws.curator_toggled', { enabled: !ws.curator_enabled });
       const ret = String(p.ret || 'ws');
@@ -17759,7 +17772,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:cur_invite') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const token = randomToken(8);
       const key = k(['cur_invite', wsId, token]);
@@ -17785,7 +17798,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:cur_add_username') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➕ Введи @username куратора (он должен уже запускать бота /start).', {
         reply_markup: new InlineKeyboard()
@@ -17799,7 +17812,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:cur_list') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const curators = await db.listCurators(wsId);
       const lines = curators.map(c => `• ${c.tg_username ? '@' + escapeHtml(c.tg_username) : 'id:' + c.tg_id}`);
       await ctx.answerCallbackQuery();
@@ -17817,7 +17830,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:cur_rm_q') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const curatorUserId = Number(p.u);
       const info = await db.getUserTgIdByUserId(curatorUserId);
       const label = info?.tg_username ? '@' + info.tg_username : 'id:' + (info?.tg_id || curatorUserId);
@@ -17832,7 +17845,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:cur_rm_do') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const curatorUserId = Number(p.u);
       await db.removeCurator(wsId, curatorUserId);
       await db.auditWorkspace(wsId, u.id, 'ws.curator_removed', { curatorUserId });
@@ -17893,7 +17906,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:folder_new') {
       const wsId = Number(p.ws);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➕ <b>Новая папка</b>\n\nВведи название папки:', {
         parse_mode: 'HTML',
@@ -17907,7 +17920,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const isPro = await db.isWorkspacePro(wsId);
       const max = isPro ? CFG.WORKSPACE_FOLDER_MAX_ITEMS_PRO : CFG.WORKSPACE_FOLDER_MAX_ITEMS_FREE;
       const folder = await db.getChannelFolder(folderId);
@@ -17927,7 +17940,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➖ Укажи @каналы (или ссылки t.me) списком — удалю их из папки:', {
         reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
@@ -17940,7 +17953,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '✏️ Введи новое название папки:', {
         reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
@@ -17953,7 +17966,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const kb = new InlineKeyboard()
         .text('✅ Очистить', `a:folder_clear_do|ws:${wsId}|f:${folderId}`)
         .text('❌ Отмена', `a:folder_open|ws:${wsId}|f:${folderId}`);
@@ -17966,7 +17979,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.clearChannelFolder(folderId);
       await db.auditWorkspace(wsId, u.id, 'folders.cleared', { folderId });
       await ctx.answerCallbackQuery({ text: 'Очищено.' });
@@ -17978,7 +17991,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.isOwner) return ctx.answerCallbackQuery({ text: 'Только owner.' });
+      if (!access || !access.isOwner) { try { await ctx.answerCallbackQuery({ text: 'Только owner.' }); } catch {} return; }
       const kb = new InlineKeyboard()
         .text('🗑 Удалить', `a:folder_delete_do|ws:${wsId}|f:${folderId}`)
         .text('❌ Отмена', `a:folder_open|ws:${wsId}|f:${folderId}`);
@@ -17991,7 +18004,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.isOwner) return ctx.answerCallbackQuery({ text: 'Только owner.' });
+      if (!access || !access.isOwner) { try { await ctx.answerCallbackQuery({ text: 'Только owner.' }); } catch {} return; }
       await db.deleteChannelFolder(folderId);
       await db.auditWorkspace(wsId, u.id, 'folders.deleted', { folderId });
       await ctx.answerCallbackQuery({ text: 'Удалено.' });
@@ -18003,9 +18016,9 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const folder = await db.getChannelFolder(folderId);
-      if (!folder || Number(folder.workspace_id) !== Number(wsId)) return ctx.answerCallbackQuery({ text: 'Папка не найдена.' });
+      if (!folder || Number(folder.workspace_id) !== Number(wsId)) { try { await ctx.answerCallbackQuery({ text: 'Папка не найдена.' }); } catch {} return; }
       const items = await db.listChannelFolderItems(folderId);
       const lines = items.map(i => i.channel_username);
       const head = `📁 ${folder.title}\n`;
@@ -18036,7 +18049,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:ws_editor_invite') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const token = randomToken(8);
       const key = k(['ws_editor_invite', wsId, token]);
       await redis.set(key, { ownerUserId: u.id }, { ex: Number(CFG.WORKSPACE_EDITOR_INVITE_TTL_MIN || 10) * 60 });
@@ -18054,7 +18067,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:ws_editor_add_username') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➕ Введи @username редактора (он должен уже запускать бота /start).', {
         reply_markup: navKb(`a:ws_editors|ws:${wsId}`)
@@ -18067,7 +18080,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const targetUserId = Number(p.u);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const kb = new InlineKeyboard()
         .text('✅ Удалить', `a:ws_editor_rm_do|ws:${wsId}|u:${targetUserId}`)
@@ -18081,7 +18094,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const targetUserId = Number(p.u);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.removeWorkspaceEditor(wsId, targetUserId);
       await db.auditWorkspace(wsId, u.id, 'ws.editor_removed', { userId: targetUserId });
       await ctx.answerCallbackQuery({ text: 'Удалено.' });
@@ -18094,7 +18107,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const folders = await db.listChannelFolders(wsId);
       const kb = new InlineKeyboard();
@@ -18114,10 +18127,10 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const offerId = Number(p.o);
       const folderId = Number(p.f);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const folder = await db.getChannelFolder(folderId);
-      if (!folder || Number(folder.workspace_id) !== Number(wsId)) return ctx.answerCallbackQuery({ text: 'Папка не найдена.' });
+      if (!folder || Number(folder.workspace_id) !== Number(wsId)) { try { await ctx.answerCallbackQuery({ text: 'Папка не найдена.' }); } catch {} return; }
 
       await db.updateBarterOffer(offerId, { partner_folder_id: folderId });
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.partner_folder_set', { folderId });
@@ -18130,7 +18143,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await db.updateBarterOffer(offerId, { partner_folder_id: null });
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.partner_folder_cleared', {});
@@ -18144,7 +18157,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:gw_sponsors_skip') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const draft = (await getDraft(ctx.from.id)) || {};
       draft.wsId = wsId;
@@ -18161,7 +18174,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:gw_sponsors_enter') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await clearExpectText(ctx.from.id);
       await setExpectText(ctx.from.id, { type: 'gw_sponsors_text', wsId });
@@ -18185,7 +18198,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:gw_sponsors_edit') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await clearExpectText(ctx.from.id);
       await setExpectText(ctx.from.id, { type: 'gw_sponsors_text', wsId });
@@ -18204,7 +18217,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:gw_sponsors_clear') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const draft = (await getDraft(ctx.from.id)) || {};
       draft.wsId = wsId;
@@ -18220,7 +18233,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:gw_sponsors_next') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const draft = (await getDraft(ctx.from.id)) || {};
       draft.wsId = wsId;
@@ -18242,7 +18255,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:gw_sponsors_help') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const b = String(p.b || '').toLowerCase();
       let backCb = `a:gw_step_sponsors|ws:${wsId}`;
@@ -18269,7 +18282,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
     if (p.a === 'a:gw_sponsors_from_folder') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const folders = await db.listChannelFolders(wsId);
       const kb = new InlineKeyboard();
@@ -18291,10 +18304,10 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       const folder = await db.getChannelFolder(folderId);
-      if (!folder || Number(folder.workspace_id) !== Number(wsId)) return ctx.answerCallbackQuery({ text: 'Папка не найдена.' });
+      if (!folder || Number(folder.workspace_id) !== Number(wsId)) { try { await ctx.answerCallbackQuery({ text: 'Папка не найдена.' }); } catch {} return; }
 
       const items = await db.listChannelFolderItems(folderId);
       const isPro = await db.isWorkspacePro(wsId);
@@ -18410,7 +18423,7 @@ ${list}
     if (p.a === 'a:gw_publish_results') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       if (g.results_message_id && Number(g.results_message_id) !== -1) {
         await ctx.answerCallbackQuery({ text: 'Итоги уже опубликованы.' });
@@ -18580,7 +18593,7 @@ ${winnersList}
       const wsId = Number(p.ws);
       db.trackEvent('gw_new_open', { userId: u.id, wsId, meta: {} });
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await clearDraft(ctx.from.id);
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '🎁 <b>Новый конкурс</b>\n\nВыбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
@@ -18591,7 +18604,7 @@ ${winnersList}
     if (p.a === 'a:gw_preset_home') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, 
         '🧩 <b>Пресеты конкурса</b>\n\nВыбери вариант — мы подготовим тип приза и текст. Потом выберешь количество мест, спонсоров и дедлайн.',
@@ -18603,10 +18616,10 @@ ${winnersList}
     if (p.a === 'a:gw_preset_apply') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const presetId = String(p.id || '');
       const preset = GW_PRESETS.find((x) => x.id === presetId);
-      if (!preset) return ctx.answerCallbackQuery({ text: 'Пресет не найден.' });
+      if (!preset) { try { await ctx.answerCallbackQuery({ text: 'Пресет не найден.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await clearDraft(ctx.from.id);
       await setDraft(ctx.from.id, { wsId, prize_type: preset.prize_type, prize_value_text: preset.prize_value_text });
@@ -18620,7 +18633,7 @@ ${winnersList}
 if (p.a === 'a:gw_prize') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const type = p.t;
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, gwPrizePrompt(type), {
@@ -18635,7 +18648,7 @@ if (p.a === 'a:gw_prize') {
     if (p.a === 'a:gw_winners') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const n = Number(p.n);
       const draft = (await getDraft(ctx.from.id)) || { wsId };
       draft.winners_count = n;
@@ -18666,7 +18679,7 @@ if (p.a === 'a:gw_prize') {
     if (p.a === 'a:gw_winners_custom') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, 'Введи число призовых мест (1..50):', {
         reply_markup: navKb(`a:gw_new|ws:${wsId}`)
@@ -18866,7 +18879,7 @@ ${sponsorsLine}
     if (p.a === 'a:gw_publish') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const draft = (await getDraft(ctx.from.id)) || {};
       if (!draft.prize_value_text || !draft.winners_count || !draft.sponsors || !draft.ends_at) {
         await ctx.answerCallbackQuery({ text: 'Черновик не полный.' });
@@ -18970,7 +18983,7 @@ ${actionHint}`;
       const gwId = Number(p.i);
       const pub = String(p.pub || '') === '1';
       const g = await db.getGiveawayInfoForUser(gwId);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Конкурс не найден.' });
+      if (!g) { try { await ctx.answerCallbackQuery({ text: 'Конкурс не найден.' }); } catch {} return; }
 
       // Ensure entry exists
       await db.upsertGiveawayEntry(gwId, u.id);
@@ -18996,7 +19009,7 @@ ${actionHint}`;
       const gwId = Number(p.i);
       const isPub = String(p.pub || '') === '1';
       const g = await db.getGiveawayInfoForUser(gwId);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Конкурс не найден.' });
+      if (!g) { try { await ctx.answerCallbackQuery({ text: 'Конкурс не найден.' }); } catch {} return; }
 
       // Ensure entry exists
       await db.upsertGiveawayEntry(gwId, u.id);
@@ -19031,8 +19044,8 @@ ${actionHint}`;
     if (p.a === 'a:gw_remind_q') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (String(g.status).toUpperCase() === 'ENDED') return ctx.answerCallbackQuery({ text: 'Уже завершен.' });
+      if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+      if (String(g.status).toUpperCase() === 'ENDED') { try { await ctx.answerCallbackQuery({ text: 'Уже завершен.' }); } catch {} return; }
 
       const kb = new InlineKeyboard()
         .text('✅ Да, отправить', `a:gw_remind_send|i:${gwId}`)
@@ -19046,12 +19059,12 @@ ${actionHint}`;
     if (p.a === 'a:gw_remind_send') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (!g.published_chat_id) return ctx.answerCallbackQuery({ text: 'Конкурс не опубликован?' });
+      if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+      if (!g.published_chat_id) { try { await ctx.answerCallbackQuery({ text: 'Конкурс не опубликован?' }); } catch {} return; }
 
       const rlKey = k(['rl', 'gw_remind', gwId]);
       const ok = await redis.set(rlKey, '1', { nx: true, ex: 30 * 60 });
-      if (!ok) return ctx.answerCallbackQuery({ text: 'Уже отправляли недавно.' });
+      if (!ok) { try { await ctx.answerCallbackQuery({ text: 'Уже отправляли недавно.' }); } catch {} return; }
 
       const sponsors = await db.listGiveawaySponsors(gwId);
       const hasSponsors = Array.isArray(sponsors) && sponsors.length > 0;
@@ -19088,7 +19101,7 @@ ${actionHint}`;
     if (p.a === 'a:gw_end_now') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       const kb = new InlineKeyboard()
         .text('✅ Завершить', `a:gw_end_do|i:${gwId}`)
         .text('❌ Отмена', `a:gw_open|i:${gwId}`);
@@ -19100,7 +19113,7 @@ ${actionHint}`;
     if (p.a === 'a:gw_end_do') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
       await db.updateGiveaway(gwId, { status: 'ENDED' });
       await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.ended', { manual: true });
       await ctx.answerCallbackQuery({ text: 'Завершен' });
