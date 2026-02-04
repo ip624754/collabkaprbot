@@ -5567,12 +5567,23 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
   }
 }
 function leadListTabsKb(wsId, counts, active) {
+  // Tabs for Creator Inbox (brand leads). Make them self-explanatory, like Brand Inbox.
+  const a = normLeadStatus(active);
+
   const kb = new InlineKeyboard()
-    .text(`${LEAD_STATUSES.new.icon} ${counts.new ?? 0}`, `a:ws_leads|ws:${wsId}|s:new|p:0`)
-    .text(`${LEAD_STATUSES.in_progress.icon} ${counts.in_progress ?? 0}`, `a:ws_leads|ws:${wsId}|s:in_progress|p:0`)
+    .text(`🆕 Новые ${counts.new ?? 0}`, `a:ws_leads|ws:${wsId}|s:new|p:0`)
+    .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:ws_leads|ws:${wsId}|s:in_progress|p:0`)
     .row()
-    .text(`${LEAD_STATUSES.closed.icon} ${counts.closed ?? 0}`, `a:ws_leads|ws:${wsId}|s:closed|p:0`)
-    .text(`${LEAD_STATUSES.spam.icon} ${counts.spam ?? 0}`, `a:ws_leads|ws:${wsId}|s:spam|p:0`);
+    .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:ws_leads|ws:${wsId}|s:closed|p:0`)
+    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:ws_leads|ws:${wsId}|s:spam|p:0`);
+
+  // Mark active with a dot
+  for (const row of kb.inline_keyboard) {
+    for (const btn of row) {
+      const d = String(btn.callback_data || '');
+      if (d.includes(`|s:${a}|`)) btn.text = '• ' + btn.text;
+    }
+  }
   return kb;
 }
 
@@ -5608,7 +5619,12 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
   // quick open buttons (max 8 to avoid huge kb)
   for (const l of leads.slice(0, 8)) {
-    kb.row().text(`${leadStatusIcon(l.status)} #${l.id}`, `a:lead_view|id:${l.id}|ws:${wsId}|s:${st}|p:${p}`);
+    const whoBtn = l.brand_username
+      ? '@' + String(l.brand_username).replace(/^@/, '')
+      : (String(l.brand_name || '').trim() || 'brand');
+    const whoShort = String(whoBtn).length > 16 ? String(whoBtn).slice(0, 16) + '…' : String(whoBtn);
+
+    kb.row().text(`${leadStatusIcon(l.status)} #${l.id} ${whoShort}`, `a:lead_view|id:${l.id}|ws:${wsId}|s:${st}|p:${p}`);
   }
 
   // pagination
@@ -5875,7 +5891,7 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
 ` +
     `Бренд: <b>${escapeHtml(brandName)}</b>
 ` +
-    `Статус: <b>${escapeHtml(LEAD_STATUSES[st]?.label || st)}</b>
+    `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>
 ` +
     `
 <i>Фильтры: 🆕 Новые / 💬 В работе / ✅ Закрыты / 🗑 Спам.</i>
@@ -5892,7 +5908,7 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
       const when = a.created_at ? fmtTs(a.created_at) : '—';
       const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
       const short = msg.length > 60 ? msg.slice(0, 60) + '…' : (msg || '—');
-      return `${offset + i + 1}. <b>${escapeHtml(who)}</b> · ${escapeHtml(when)}\n<code>${escapeHtml(short)}</code>`;
+      return `${leadStatusIcon(a.status)} <b>#${a.id}</b> — <b>${escapeHtml(who)}</b> · <code>${escapeHtml(when)}</code>\n<code>${escapeHtml(short)}</code>`;
     });
     body = '\n\n' + lines.join('\n\n');
   }
@@ -5904,12 +5920,19 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
   }
 
   if (apps.length) {
-    kb.row();
+    // Quick-open: one per row, with status + #id + who/id/snippet (readable & match list)
     for (const a of apps) {
-      const uName = a.creator_username ? '@' + String(a.creator_username).replace(/^@/, '') : '';
-      const uShort = uName ? (' ' + uName.slice(0, 16)) : '';
-      const label = `✉️ #${a.id}${uShort}`;
-      kb.text(label, `a:brand_app_view|id:${a.id}|s:${st}|p:${p}`);
+      const username = a.creator_username ? '@' + String(a.creator_username).replace(/^@/, '') : '';
+      const tgId = (!username && a.creator_tg_id) ? `id:${a.creator_tg_id}` : '';
+
+      const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
+      const snippet = msg.length > 18 ? msg.slice(0, 18) + '…' : (msg || '');
+
+      const tailRaw = username || tgId || snippet || 'creator';
+      const tail = String(tailRaw).length > 18 ? String(tailRaw).slice(0, 18) + '…' : String(tailRaw);
+
+      const label = `${leadStatusIcon(a.status)} #${a.id}${tail ? (' ' + tail) : ''}`;
+      kb.row().text(label, `a:brand_app_view|id:${a.id}|s:${st}|p:${p}`);
     }
   }
 
@@ -10907,29 +10930,6 @@ ${card}`;
         return ctx.reply('⚠️ Не найден бренд для заявки. Открой бренд в каталоге и нажми “Оставить заявку” ещё раз.');
       }
 
-      // HARD GATE: без Telegram @username запрещаем отправку заявки
-      const creatorUsername = String(ctx.from?.username || '').trim();
-      if (!creatorUsername) {
-        await safeDeleteIncomingUserMessage(ctx);
-        await clearExpectText(ctx.from.id);
-
-        const backCb = String(exp.backCb || `a:brand_dir_open|u:${brandUserId}|p:${backPage}`);
-        const kbGate = new InlineKeyboard()
-          .text('✅ Проверить', `a:brand_apply|u:${brandUserId}|p:${backPage}`)
-          .row()
-          .text('⬅️ Назад', backCb)
-          .text('📋 Меню', 'a:menu');
-
-        const gateText =
-          '⚠️ <b>Нужен Telegram @username</b>\n\n' +
-          'Без @username бренды не смогут написать тебе напрямую.\n\n' +
-          'Telegram → <b>Settings</b> → <b>Username</b> → задай @username,\n' +
-          'потом вернись и нажми «✅ Проверить».\n\n' +
-          '<i>Требование перед отправкой заявок брендам.</i>';
-
-        return ctx.reply(gateText, { parse_mode: 'HTML', reply_markup: kbGate, disable_web_page_preview: true });
-      }
-
       if (msg.length < 10) {
         return ctx.reply('⚠️ Сделай сообщение чуть подробнее (минимум 10 символов).');
       }
@@ -13536,30 +13536,6 @@ if (p.a === 'a:brand_apply') {
       .text('📋 Меню', 'a:menu');
 
     await safeEditOrReply(ctx, '⚠️ Выбери активный канал (витрину) в «📣 Мои каналы» и повтори.', { reply_markup: kbGate });
-    return;
-  }
-
-  // HARD GATE: без Telegram @username бренды не смогут написать напрямую
-  // (user can still message via bot, but для сделки нужен публичный @username)
-  const creatorUsername = String(ctx.from?.username || '').trim();
-  if (!creatorUsername) {
-    const backCb = `a:brand_dir_open|u:${brandUserId}|p:${backPage}`;
-    const kbGate = new InlineKeyboard()
-      .text('✅ Проверить', `a:brand_apply|u:${brandUserId}|p:${backPage}`)
-      .row()
-      .text('⬅️ Назад', backCb)
-      .text('📋 Меню', 'a:menu');
-
-    const gateText =
-      '⚠️ <b>Нужен Telegram @username</b>\n\n' +
-      'Без @username бренды не смогут написать тебе напрямую.\n\n' +
-      'Сделай так:\n' +
-      '1) Telegram → <b>Settings</b> → <b>Username</b>\n' +
-      '2) Задай @username\n' +
-      '3) Вернись сюда и нажми «✅ Проверить».\n\n' +
-      '<i>Это обязательное требование перед отправкой заявок брендам.</i>';
-
-    await safeEditOrReply(ctx, gateText, { parse_mode: 'HTML', reply_markup: kbGate, disable_web_page_preview: true });
     return;
   }
 
