@@ -6667,7 +6667,8 @@ async function renderLeadTemplates(ctx, actorUserId, leadId, back) {
   const text =
     `⚡ <b>Быстрые ответы</b>\n\n` +
     `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n\n` +
-    `Нажми кнопку — я отправлю бренду готовый ответ + добавлю твою контакт‑карточку (IG / TG / витрина).`;
+    `Выбери шаблон — откроется <b>предпросмотр</b>.\n` +
+    `Потом нажми «📨 Отправить», и я доставлю сообщение бренду + добавлю твою контакт‑карточку (IG / TG / витрина).`;
 
   const kb = new InlineKeyboard()
     .text('✅ Спасибо, обсудим', `a:lead_tpl|id:${lead.id}|k:discuss|ws:${wsId}|s:${back.status}|p:${back.page}`)
@@ -6692,6 +6693,87 @@ async function renderLeadTemplates(ctx, actorUserId, leadId, back) {
   }
 }
 
+const LEAD_TPL_LABELS = {
+  discuss: '✅ Спасибо, обсудим',
+  price: '💰 Прайс / бюджет',
+  brief: '🧾 Пришли бриф',
+  timing: '⏱ Сроки / дедлайн',
+  format: '🧩 UGC или интеграция?',
+};
+
+function normLeadTplKey(k) {
+  const v = String(k || 'discuss').toLowerCase().trim();
+  return LEAD_TPL_LABELS[v] ? v : 'discuss';
+}
+
+function leadTplLabel(k) {
+  const kk = normLeadTplKey(k);
+  return LEAD_TPL_LABELS[kk] || LEAD_TPL_LABELS.discuss;
+}
+
+async function renderLeadTemplatePreview(ctx, actorUserId, leadId, key, back) {
+  const lead = await db.getBrandLeadById(leadId);
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+
+  const wsId = Number(lead.workspace_id);
+  const ws = await db.getWorkspaceAny(wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+
+  const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+
+  const tplKey = normLeadTplKey(key);
+  const replyText = buildLeadTemplateText(ws, lead, tplKey);
+  const card = formatWsContactCard(ws, Number(ws.id));
+
+  const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
+
+  // Exact message that will be sent to the brand (preview).
+  let outText =
+    `🧾 <b>Предпросмотр ответа</b>\n\n` +
+    `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n` +
+    `Шаблон: <b>${escapeHtml(leadTplLabel(tplKey))}</b>\n\n` +
+    `— — —\n` +
+    `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>\n\n` +
+    `${escapeHtml(String(replyText))}\n\n` +
+    `<b>Контакты:</b>\n${card}`;
+
+  // Safety: keep the preview readable and avoid Telegram 4096 hard-limit.
+  if (outText.length > 3900) {
+    outText =
+      `🧾 <b>Предпросмотр ответа</b>\n\n` +
+      `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n` +
+      `Шаблон: <b>${escapeHtml(leadTplLabel(tplKey))}</b>\n\n` +
+      `💬 <b>Ответ</b>\n\n` +
+      `${escapeHtml(String(replyText))}\n\n` +
+      `⚠️ Контакты/витрина будут добавлены при отправке.`;
+  }
+
+  const kb = new InlineKeyboard()
+    // selector row (switch preview without leaving screen)
+    .text('✅', `a:lead_tpl|id:${lead.id}|k:discuss|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('💰', `a:lead_tpl|id:${lead.id}|k:price|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('🧾', `a:lead_tpl|id:${lead.id}|k:brief|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .row()
+    .text('⏱', `a:lead_tpl|id:${lead.id}|k:timing|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('🧩', `a:lead_tpl|id:${lead.id}|k:format|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .row()
+    .text('📨 Отправить', `a:lead_tpl_send|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .row()
+    .text('🗂 Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .row()
+    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('📋 Меню', 'a:menu');
+
+  try {
+    await safeEditOrReply(ctx, outText, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  } catch {
+    await ctx.reply(outText, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  }
+}
+
 async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const lead = await db.getBrandLeadById(leadId);
   if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
@@ -6707,13 +6789,28 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const brandTgId = Number(lead.brand_tg_id || 0);
   if (!brandTgId) { try { await ctx.answerCallbackQuery({ text: 'У бренда нет TG id.' }); } catch {} return; }
 
-  const replyText = buildLeadTemplateText(ws, lead, key);
-  const card = formatWsContactCard(ws, Number(ws.id));
+  const tplKey = normLeadTplKey(key);
+  const replyText = buildLeadTemplateText(ws, lead, tplKey);
+  let card = formatWsContactCard(ws, Number(ws.id));
 
-  const out =
-    `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>\n\n` +
-    `${escapeHtml(String(replyText))}\n\n` +
-    `<b>Контакты:</b>\n${card}`;
+  const header = `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>`;
+  let out = `${header}\n\n${escapeHtml(String(replyText))}\n\n<b>Контакты:</b>\n${card}`;
+
+  // Safety: keep under Telegram 4096 hard-limit.
+  if (out.length > 3900) {
+    // Try: drop portfolio links first.
+    try {
+      const wsSlim = { ...ws, profile_portfolio_urls: [] };
+      card = formatWsContactCard(wsSlim, Number(ws.id));
+      out = `${header}\n\n${escapeHtml(String(replyText))}\n\n<b>Контакты:</b>\n${card}`;
+    } catch {}
+  }
+  if (out.length > 3900) {
+    // Minimal fallback: only vitrina link (or dash).
+    const link = wsBrandLink(wsId);
+    const linkLine = link ? `🔗 Витрина: <a href="${escapeHtml(link)}">${escapeHtml(shortUrl(link))}</a>` : '';
+    out = `${header}\n\n${escapeHtml(String(replyText))}\n\n<b>Контакты:</b>\n${linkLine || '—'}`;
+  }
   const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
   if (!sendRes.ok) {
     const reason = describeTgSendError(sendRes.err);
@@ -13982,11 +14079,20 @@ if (p.a === 'a:brand_app_view') {
 if (p.a === 'a:brand_app_set') {
   try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
+  if (!appId) return;
   const st = normLeadStatus(String(p.st || 'new'));
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
 
   // Update in DB if available
-  await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, st), { op: 'brand_app_status', appId, st });
+  const updated = await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, st), { op: 'brand_app_status', appId, st });
+  if (!updated) {
+    const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
+    const kb = new InlineKeyboard()
+      .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
+      .text('📋 Меню', 'a:menu');
+    try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
+    return;
+  }
 
   try {
     await renderBrandAppView(ctx, u.id, appId, back);
@@ -14109,11 +14215,29 @@ if (p.a === 'a:ws_leads') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) return;
-      const key = String(p.k || 'thanks');
+      const key = String(p.k || 'discuss');
+      try {
+        await renderLeadTemplatePreview(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
+      } catch (e) {
+        try { console.warn('[lead_tpl_preview] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+        const text = '⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз или используй «✍️ Ответить». ';
+        const kb = new InlineKeyboard()
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
+          .text('📋 Меню', 'a:menu');
+        try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
+      }
+      return;
+    }
+
+    if (p.a === 'a:lead_tpl_send') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      const leadId = Number(p.id || 0);
+      if (!leadId) return;
+      const key = String(p.k || 'discuss');
       try {
         await sendLeadTemplateReply(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
       } catch (e) {
-        try { console.warn('[lead_tpl] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+        try { console.warn('[lead_tpl_send] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '⚠️ Не удалось отправить шаблон. Попробуй ещё раз или используй «✍️ Ответить». ';
         const kb = new InlineKeyboard()
           .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
@@ -14128,8 +14252,25 @@ if (p.a === 'a:lead_set') {
       const leadId = Number(p.id || 0);
       if (!leadId) return;
       const st = normLeadStatus(p.st);
-      await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, st), { op: 'lead_status', leadId, st });
-      await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || st), page: Number(p.p || 0) });
+      const updated = await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, st), { op: 'lead_status', leadId, st });
+      if (!updated) {
+        const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
+        const kb = new InlineKeyboard()
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
+          .text('📋 Меню', 'a:menu');
+        try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
+        return;
+      }
+      try {
+        await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || st), page: Number(p.p || 0) });
+      } catch (e) {
+        try { console.warn('[lead_set] unhandled', { leadId, st, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+        const text = '✅ Статус обновлён. (Экран не удалось перерисовать — открой заявку заново.)';
+        const kb = new InlineKeyboard()
+          .text('⬅️ Назад', 'a:ws_leads|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || st) + '|p:' + Number(p.p || 0))
+          .text('📋 Меню', 'a:menu');
+        try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
+      }
       return;
     }
 
