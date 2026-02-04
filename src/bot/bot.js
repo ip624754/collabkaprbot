@@ -13389,9 +13389,15 @@ if (p.a === 'a:support_write') {
 if (p.a === 'a:brands_home') {
   try { await ctx.answerCallbackQuery(); } catch {}
   const page = Math.max(0, Number(p.p || 0));
-  await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id });
+  try {
+    await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id });
+  } catch (e) {
+    try { console.warn('[brands_home] unhandled', { cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    await safeEditOrReply(ctx, '⚠️ Не удалось открыть каталог брендов. Открой 📋 Меню и повтори шаг.', { reply_markup: navKb('a:menu') });
+  }
   return;
 }
+
 
     if (p.a === 'a:brands_filters') {
       await ctx.answerCallbackQuery();
@@ -14506,7 +14512,10 @@ if (p.a === 'a:ws_leads') {
       const wsId = Number(p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return;
+      if (!wsId) {
+        await safeEditOrReply(ctx, '⚠️ Канал не выбран. Открой 📋 Меню → выбери канал и повтори шаг.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
+        return;
+      }
       await renderWsLeadsList(ctx, u.id, wsId, String(p.s || 'new'), Number(p.p || 0), String(p.ret || '') || null);
       return;
     }
@@ -19092,7 +19101,7 @@ ${actionHint}`;
     return false;
   };
 
-    await dispatchCallback(ctx, p, u, { legacy, logger, safeEditOrReply });
+    await dispatchCallback(ctx, p, u, { legacy, logger, safeEditOrReply, isAdmin: (c) => isSuperAdminTg(c?.from?.id) });
     return;
   });
 
