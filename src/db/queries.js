@@ -1923,6 +1923,29 @@ export async function setBarterThreadBuyerStage(threadId, buyerUserId, stage) {
   return r.rowCount ? (r.rows[0]?.buyer_stage ?? null) : null;
 }
 
+// Lightweight triage for buyer-side thread management (open / in_progress / spam).
+// Rolling upgrade safe: if the column is not deployed yet, returns null.
+export async function setBarterThreadTriageStatus(threadId, buyerUserId, triageStatus) {
+  const s = String(triageStatus || 'open').toLowerCase();
+  if (!['open', 'in_progress', 'spam'].includes(s)) return null;
+
+  try {
+    const r = await pool.query(
+      `update barter_threads
+          set triage_status = $3,
+              updated_at = now()
+        where id = $1 and buyer_user_id = $2
+        returning triage_status`,
+      [Number(threadId), Number(buyerUserId), s]
+    );
+    return r.rowCount ? (r.rows[0]?.triage_status ?? null) : null;
+  } catch (e) {
+    // 42703 = undefined_column
+    if (e && (e.code === '42703' || String(e.message || '').includes('does not exist'))) return null;
+    throw e;
+  }
+}
+
 // -----------------------------
 // Smart Matching
 // -----------------------------
