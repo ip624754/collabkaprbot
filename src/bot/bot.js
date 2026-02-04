@@ -3629,6 +3629,8 @@ function bxThreadKb(wsId, threadId, opts = {}) {
   const offerId = opts.offerId ? Number(opts.offerId) : null;
   const canStage = !!opts.canStage;
   const curStage = opts.stage ? String(opts.stage) : null;
+  const isBuyer = !!opts.isBuyer;
+  const triage = String(opts.triage || 'open').toLowerCase();
   const proofsCount = Number.isFinite(Number(opts.proofsCount)) ? Number(opts.proofsCount) : null;
   const h = normBxHome(opts.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
@@ -3646,18 +3648,34 @@ function bxThreadKb(wsId, threadId, opts = {}) {
   }
 
   kb.text(
-      '✍️ Ответить',
-      `a:bx_thread_reply|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
-    )
+    '✍️ Ответить',
+    `a:bx_thread_reply|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+  )
     .text(
       proofsCount !== null ? `🧾 Proofs: ${proofsCount}` : '🧾 Proofs',
       `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
     )
-    .row()
-    .text(
-      '✅ Закрыть',
-      `a:bx_thread_close_q|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
-    );
+    .row();
+
+  // Buyer-side triage actions (brand lead management)
+  if (isBuyer) {
+    const inActive = triage === 'in_progress';
+    const spamActive = triage === 'spam';
+    const inNext = inActive ? 'open' : 'in_progress';
+    const spamNext = spamActive ? 'open' : 'spam';
+    kb.text(
+      inActive ? '✅ 💬 В работу' : '💬 В работу',
+      `a:bx_thread_triage|ws:${wsId}|t:${threadId}|s:${inNext}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+    ).text(
+      spamActive ? '✅ 🗑 Спам' : '🗑 Спам',
+      `a:bx_thread_triage|ws:${wsId}|t:${threadId}|s:${spamNext}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+    ).row();
+  }
+
+  kb.text(
+    '✅ Закрыть',
+    `a:bx_thread_close_q|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+  );
 
   if (opts.showRetryInfo) {
     const cbTail = `${offerId ? `|o:${offerId}` : ''}|b:${back}|p:${page}|h:${h}`;
@@ -8479,13 +8497,22 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
   for (const t of rows) {
     const other = t.other_username ? '@' + t.other_username : ('user #' + t.other_user_id);
     const v = t.other_verified ? ' ✅' : '';
+    // Buyer-side indicators
+    let triageEmoji = '';
     let stageEmoji = '';
-    if (Number(t.buyer_user_id) === Number(userId) && t.buyer_stage) {
-      const st = CRM_STAGES.find((s) => s.id === String(t.buyer_stage));
-      stageEmoji = st ? String(st.title).trim().split(' ')[0] : '';
+    if (Number(t.buyer_user_id) === Number(userId)) {
+      const triage = String(t.triage_status || 'open').toLowerCase();
+      if (triage === 'in_progress') triageEmoji = '💬';
+      else if (triage === 'spam') triageEmoji = '🗑';
+
+      if (t.buyer_stage) {
+        const st = CRM_STAGES.find((s) => s.id === String(t.buyer_stage));
+        stageEmoji = st ? String(st.title).trim().split(' ')[0] : '';
+      }
     }
 
-    const prefix = stageEmoji ? `#${t.id} ${stageEmoji}` : `#${t.id}`;
+    const emojis = [triageEmoji, stageEmoji].filter(Boolean).join(' ');
+    const prefix = emojis ? `#${t.id} ${emojis}` : `#${t.id}`;
 
     const st = computeThreadReplyStatus(t, userId, {
       retryEnabled: CFG.INTRO_RETRY_ENABLED,
@@ -8533,6 +8560,12 @@ async function buildBxThreadView(userId, threadId) {
     ? (CRM_STAGES.find((s) => s.id === String(thread.buyer_stage))?.title || String(thread.buyer_stage))
     : null;
 
+  // Buyer-side triage
+  const triage = String(thread.triage_status || 'open').toLowerCase();
+  const triageTitle = isBuyer
+    ? (triage === 'in_progress' ? '💬 В работе' : (triage === 'spam' ? '🗑 Спам' : '🆕 Открыт'))
+    : null;
+
 const replySt = computeThreadReplyStatus(thread, userId, {
   retryEnabled: CFG.INTRO_RETRY_ENABLED,
   afterHours: CFG.INTRO_RETRY_AFTER_HOURS
@@ -8550,6 +8583,7 @@ const chargeHtml = chargeLine ? `${escapeHtml(chargeLine)}` : null;
 	    offerMeta ? offerMeta : null,
     `С кем: <b>${escapeHtml(other)}${otherMark}</b>`,
     `Статус: <b>${escapeHtml(status)}</b>`,
+    triageTitle ? `Триаж: <b>${escapeHtml(triageTitle)}</b>` : null,
     stageTitle ? `CRM: <b>${escapeHtml(stageTitle)}</b>` : null,
     replyLine,
     retryLine,
@@ -8594,6 +8628,8 @@ async function renderBxThread(ctx, userId, wsId, threadId, opts = {}) {
     offerId: thread.offer_id,
     canStage,
     stage: curStage,
+    triage: String(thread.triage_status || 'open').toLowerCase(),
+    isBuyer: Number(thread.buyer_user_id) === Number(userId),
     proofsCount,
     showRetryInfo,
     retryText: replySt.retry || ''
@@ -16745,7 +16781,7 @@ if (p.a === 'a:bx_retry_help') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      const stageOk = ['new', 'in_progress', 'done'].includes(stage);
+      const stageOk = CRM_STAGES.some((s) => s.id === stage);
       const hasPlan = wsId === 0 ? await db.isBrandPlanActive(bmRes.userId) : true;
       if (!hasPlan) {
         await ctx.answerCallbackQuery({ text: '⛔ Нужен активный Brand Plan для стадий.' });
@@ -16762,6 +16798,36 @@ if (p.a === 'a:bx_retry_help') {
         return;
       }
       await ctx.answerCallbackQuery({ text: '✅ Обновлено' });
+      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h });
+      return;
+    }
+
+    if (p.a === 'a:bx_thread_triage') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      const threadId = Number(p.t);
+      const triage = String(p.s || 'open').toLowerCase();
+      const back = p.b ? String(p.b) : 'inbox';
+      const offerId = p.o ? Number(p.o) : null;
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const page = Number(p.p || 0);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
+      if (!bmRes) return;
+
+      const okVal = ['open', 'in_progress', 'spam'].includes(triage);
+      if (!okVal) {
+        await ctx.answerCallbackQuery({ text: 'Invalid status' });
+        return;
+      }
+
+      const updated = await db.setBarterThreadTriageStatus(threadId, bmRes.userId, triage);
+      if (!updated) {
+        // Likely: migration not applied yet (undefined_column)
+        await ctx.answerCallbackQuery({ text: 'Не удалось обновить. Проверь миграцию.' });
+      } else {
+        await ctx.answerCallbackQuery({ text: '✅ Обновлено' });
+      }
       await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h });
       return;
     }
