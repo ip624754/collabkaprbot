@@ -423,6 +423,46 @@ async function safeBrandApplications(primaryFn, fallbackFn) {
 }
 
 
+// Non-fatal write wrappers: keep UX responsive even if DB write fails (we still log).
+async function safeBrandAppsWrite(primaryFn, meta = {}) {
+  try {
+    return await primaryFn();
+  } catch (e) {
+    try {
+      console.warn('[brand_apps_write] failed', {
+        ...meta,
+        err: {
+          name: String(getattr(e, 'name', 'Error')),
+          message: String(getattr(e, 'message', e)),
+          code: getattr(e, 'code', None),
+          detail: getattr(e, 'detail', None)
+        }
+      });
+    } catch {}
+    return null;
+  }
+}
+
+async function safeLeadWrite(primaryFn, meta = {}) {
+  try {
+    return await primaryFn();
+  } catch (e) {
+    try {
+      console.warn('[lead_write] failed', {
+        ...meta,
+        err: {
+          name: String(getattr(e, 'name', 'Error')),
+          message: String(getattr(e, 'message', e)),
+          code: getattr(e, 'code', None),
+          detail: getattr(e, 'detail', None)
+        }
+      });
+    } catch {}
+    return null;
+  }
+}
+
+
 function mainMenuKb(flags = {}) {
   const { isModerator = false, isAdmin = false, isFolderEditor = false, isCurator = false } = flags;
 
@@ -5577,7 +5617,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
@@ -6306,17 +6346,17 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
   }
 
   // Persist
-  await safeBrandApplications(() => db.markBrandApplicationReplied(appId, replyText, actorUserId), async () => null);
-  await safeBrandApplications(() => db.appendBrandApplicationThreadMessage(appId, {
+  await safeBrandAppsWrite(() => db.markBrandApplicationReplied(appId, replyText, actorUserId), { op: 'brand_app_mark_replied', appId });
+  await safeBrandAppsWrite(() => db.appendBrandApplicationThreadMessage(appId, {
     from: 'brand',
     text: replyText,
     at: new Date().toISOString(),
     by_user_id: Number(actorUserId),
     by_tg_id: Number(ctx.from?.id || 0),
     by_username: ctx.from?.username || null
-  }), async () => null);
+  }), { op: 'brand_app_thread_append', appId });
   if (normLeadStatus(app.status) === 'new') {
-    await safeBrandApplications(() => db.updateBrandApplicationStatus(appId, 'in_progress'), async () => null);
+    await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, 'in_progress'), { op: 'brand_app_status', appId, st: 'in_progress' });
   }
 
   try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
@@ -6457,17 +6497,17 @@ ${escapeHtml(replyText)}`;
   }
 
   // Persist
-  await safeBrandApplications(() => db.markBrandApplicationReplied(appId, replyText, actorUserId), async () => null);
-  await safeBrandApplications(() => db.appendBrandApplicationThreadMessage(appId, {
+  await safeBrandAppsWrite(() => db.markBrandApplicationReplied(appId, replyText, actorUserId), { op: 'brand_app_mark_replied', appId });
+  await safeBrandAppsWrite(() => db.appendBrandApplicationThreadMessage(appId, {
     from: 'brand',
     text: replyText,
     at: new Date().toISOString(),
     by_user_id: Number(actorUserId),
     by_tg_id: Number(ctx.from?.id || 0),
     by_username: ctx.from?.username || null
-  }), async () => null);
+  }), { op: 'brand_app_thread_append', appId });
   if (normLeadStatus(app.status) === 'new') {
-    await safeBrandApplications(() => db.updateBrandApplicationStatus(appId, 'in_progress'), async () => null);
+    await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, 'in_progress'), { op: 'brand_app_status', appId, st: 'in_progress' });
   }
 
   if (!sendRes.ok) return;
@@ -6485,7 +6525,7 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
   if (!access.ok) return;
 
   // mark accepted (status=in_progress + meta.deal)
-  await safeBrandApplications(() => db.markBrandApplicationAccepted(appId, actorUserId), async () => null);
+  await safeBrandAppsWrite(() => db.markBrandApplicationAccepted(appId, actorUserId), { op: 'brand_app_accept', appId });
 
   // notify creator
   const creatorTgId = Number(app.creator_tg_id || 0);
@@ -6513,12 +6553,12 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
     }
   }
 
-  await safeBrandApplications(() => db.appendBrandApplicationThreadMessage(appId, {
+  await safeBrandAppsWrite(() => db.appendBrandApplicationThreadMessage(appId, {
     from: 'system',
     text: 'Заявка принята ✅',
     at: new Date().toISOString(),
     by_user_id: Number(actorUserId)
-  }), async () => null);
+  }), { op: 'brand_app_thread_append', appId });
 
   try { await ctx.answerCallbackQuery({ text: '✅ Принято' }); } catch {}
   await renderBrandAppView(ctx, actorUserId, appId, back);
@@ -6574,7 +6614,7 @@ async function renderLeadTemplates(ctx, actorUserId, leadId, back) {
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
 
@@ -6616,7 +6656,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const brandTgId = Number(lead.brand_tg_id || 0);
   if (!brandTgId) { try { await ctx.answerCallbackQuery({ text: 'У бренда нет TG id.' }); } catch {} return; }
@@ -6628,23 +6668,36 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>\n\n` +
     `${escapeHtml(String(replyText))}\n\n` +
     `<b>Контакты:</b>\n${card}`;
+  const sendRes = await sendMessageWithFallback(bot.api, brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
+  if (!sendRes.ok) {
+    const reason = describeTgSendError(sendRes.err);
+    const kb = navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`);
+    const msg = `❌ Не удалось отправить сообщение бренду.
 
-  try {
-    await ctx.api.sendMessage(brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
-  } catch (e) {
-    await ctx.reply('❌ Не удалось отправить сообщение бренду. Возможно, он не писал боту первым.', { reply_markup: navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`) });
+Причина: <b>${escapeHtml(reason)}</b>
+
+💡 Возможно, бренд ещё не нажимал /start.`;
+    try {
+      await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb });
+    } catch {
+      await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb });
+    }
     return;
   }
 
-  await db.markBrandLeadReplied(leadId, replyText, Number(actorUserId));
+  await safeLeadWrite(() => db.markBrandLeadReplied(leadId, replyText, Number(actorUserId)), { op: 'lead_mark_replied', leadId });
 
   // auto move status to in_progress if it was new
   if (normLeadStatus(lead.status) === 'new') {
-    await db.updateBrandLeadStatus(leadId, 'in_progress');
+    await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'in_progress'), { op: 'lead_status', leadId, st: 'in_progress' });
   }
 
   try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
-  await renderLeadView(ctx, actorUserId, leadId, back);
+  try {
+    await renderLeadView(ctx, actorUserId, leadId, back);
+  } catch {
+    await ctx.reply('✅ Отправлено.', { reply_markup: navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`) });
+  }
 }
 async function renderWsPro(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -10404,8 +10457,8 @@ ${escapeHtml(payLine)}
 
       await safeDeleteIncomingUserMessage(ctx);
 
-      await db.markBrandLeadReplied(leadId, replyText, Number(u.id));
-      if (String(lead.status) === 'new') await db.updateBrandLeadStatus(leadId, 'in_progress');
+      await safeLeadWrite(() => db.markBrandLeadReplied(leadId, replyText, Number(u.id)), { op: 'lead_mark_replied', leadId });
+      if (String(lead.status) === 'new') await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'in_progress'), { op: 'lead_status', leadId, st: 'in_progress' });
 
       const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
       const link = wsBrandLink(Number(ws.id));
@@ -10713,8 +10766,8 @@ ${escapeHtml(reply)}`;
 
       // Persist reply + append to thread + move to "in progress" if still new
       const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-      await safeBrandApplications(() => db.markBrandApplicationReplied(appId, reply, u.id), async () => null);
-      await safeBrandApplications(() => db.appendBrandApplicationThreadMessage(appId, {
+      await safeBrandAppsWrite(() => db.markBrandApplicationReplied(appId, reply, u.id), { op: 'brand_app_mark_replied', appId });
+      await safeBrandAppsWrite(() => db.appendBrandApplicationThreadMessage(appId, {
         from: 'brand',
         text: reply,
         at: new Date().toISOString(),
@@ -10723,9 +10776,9 @@ ${escapeHtml(reply)}`;
         by_username: ctx.from?.username || null,
         delivered,
         delivery: { ok: delivered, mode: sendRes?.mode || null, reason: delivered ? null : deliveryReason }
-      }), async () => null);
+      }), { op: 'brand_app_thread_append', appId });
       if (app && String(app.status) === 'new') {
-        await safeBrandApplications(() => db.updateBrandApplicationStatus(appId, 'in_progress'), async () => null);
+        await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, 'in_progress'), { op: 'brand_app_status', appId, st: 'in_progress' });
       }
 
       await clearExpectText(ctx.from.id);
@@ -10852,17 +10905,17 @@ if (exp.type === 'brand_deals_search') {
       const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
       const who = ctx.from?.username ? '@' + String(ctx.from.username).replace(/^@/, '') : `id:${ctx.from?.id}`;
 
-      await safeBrandApplications(() => db.appendBrandApplicationThreadMessage(appId, {
+      await safeBrandAppsWrite(() => db.appendBrandApplicationThreadMessage(appId, {
         from: 'creator',
         text: msg,
         at: new Date().toISOString(),
         by_user_id: Number(u.id),
         by_tg_id: Number(ctx.from?.id || 0),
         by_username: ctx.from?.username || null
-      }), async () => null);
+      }), { op: 'brand_app_thread_append', appId });
 
       if (normLeadStatus(app.status) === 'new') {
-        await safeBrandApplications(() => db.updateBrandApplicationStatus(appId, 'in_progress'), async () => null);
+        await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, 'in_progress'), { op: 'brand_app_status', appId, st: 'in_progress' });
       }
 
       // Notify brand owner + managers
@@ -13883,7 +13936,7 @@ if (p.a === 'a:brand_app_set') {
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
 
   // Update in DB if available
-  await safeBrandApplications(() => db.updateBrandApplicationStatus(appId, st), async () => null);
+  await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, st), { op: 'brand_app_status', appId, st });
 
   await renderBrandAppView(ctx, u.id, appId, back);
   return;
@@ -13974,17 +14027,18 @@ if (p.a === 'a:ws_leads') {
     }
 
 if (p.a === 'a:lead_set') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) return;
       const st = normLeadStatus(p.st);
-      await db.updateBrandLeadStatus(leadId, st);
+      await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, st), { op: 'lead_status', leadId, st });
       await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || st), page: Number(p.p || 0) });
       return;
     }
 
+
     if (p.a === 'a:lead_reply') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) return;
 
@@ -13996,7 +14050,7 @@ if (p.a === 'a:lead_set') {
 
       const isOwner = Number(ws.owner_user_id) === Number(u.id);
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isOwner && !isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
       await setExpectText(ctx.from.id, { type: 'lead_reply', leadId, wsId: Number(ws.id), backStatus: String(p.s || 'new'), backPage: Number(p.p || 0) });
 
