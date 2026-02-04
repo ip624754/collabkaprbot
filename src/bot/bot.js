@@ -14557,7 +14557,7 @@ if (p.a === 'a:ws_leads') {
         try { console.warn('[lead_tpl_preview] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз или используй «✍️ Ответить». ';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || st || 'new') + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
           .text('📋 Меню', 'a:menu');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -14597,7 +14597,7 @@ if (p.a === 'a:lead_set') {
         return;
       }
       try {
-        await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || st), page: Number(p.p || 0), ret: String(p.ret || '') });
+        await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: st, page: Number(p.p || 0), ret: String(p.ret || '') });
       } catch (e) {
         try { console.warn('[lead_set] unhandled', { leadId, st, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '✅ Статус обновлён. (Экран не удалось перерисовать — открой заявку заново.)';
@@ -16169,7 +16169,10 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:bx_home') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const ws = await ensureWorkspaceForOwner(ctx, u.id);
-      if (!ws) return;
+      if (!ws) {
+        await safeEditOrReply(ctx, '⚠️ Сначала подключи канал (витрину) в 📋 Меню, затем открой «Офферы».', { reply_markup: navKb('a:ws_list') });
+        return;
+      }
       await renderBxOpen(ctx, u.id, ws.id);
       return;
     }
@@ -16186,8 +16189,10 @@ if (p.a === 'a:match_home') {
       if (wsId === 0) await maybeSendBanner(ctx, 'brand', CFG.BRAND_BANNER_FILE_ID);
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_open', 0);
-      if (!bmRes) return;
-
+      if (!bmRes) {
+        await safeEditOrReply(ctx, '⛔ Не удалось открыть «Офферы». Проверь права доступа и активный канал.', { reply_markup: navKb('a:menu') });
+        return;
+      }
       await renderBxOpen(ctx, bmRes.userId, wsId);
       return;
     }
@@ -16864,18 +16869,19 @@ if (p.a === 'a:match_home') {
       return;
     }
     if (p.a === 'a:bx_msg') {
-      const wsId = Number(p.ws);
-      const offerId = Number(p.o);
+      const wsId = Number(p.ws || 0);
+      const offerId = Number(p.o || 0);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
+
+      // Home/return context (used by thread header/back)
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
       // Brand Manager in Brand Mode (ws:0): act as selected brand (brandUserId)
       let actorUserId = u.id;
       let bm = { enabled: false };
       if (wsId === 0) {
-        const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
-
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+        const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_msg', page, { h, r });
         if (!bmRes) return;
         actorUserId = bmRes.userId;
         bm = bmRes.bm || { enabled: false };
@@ -16886,18 +16892,22 @@ if (p.a === 'a:match_home') {
         const prof = await safeBrandProfiles(() => db.getBrandProfile(actorUserId), async () => null);
         if (!isBrandBasicComplete(prof)) {
           if (bm.enabled) {
-            await ctx.answerCallbackQuery({
-              text: '⚠️ Профиль бренда не заполнен. Попроси владельца бренда заполнить 4 базовых поля (Название, Ниша, Контакт, Ссылка).',
-              show_alert: true
-            });
+            try {
+              await ctx.answerCallbackQuery({
+                text: '⚠️ Профиль бренда не заполнен. Попроси владельца бренда заполнить 4 базовых поля (Название, Ниша, Контакт, Ссылка).',
+                show_alert: true
+              });
+            } catch {}
             await renderBxPublicView(ctx, actorUserId, wsId, offerId, page, { h });
             return;
           }
 
-          await ctx.answerCallbackQuery({
-            text: '⚠️ Заполни профиль бренда (4 шага), чтобы писать креаторам.',
-            show_alert: true
-          });
+          try {
+            await ctx.answerCallbackQuery({
+              text: '⚠️ Заполни профиль бренда (4 шага), чтобы писать креаторам.',
+              show_alert: true
+            });
+          } catch {}
           await renderBrandProfileHome(ctx, actorUserId, { wsId, ret: 'offer', backOfferId: offerId, backPage: page, edit: true });
           return;
         }
@@ -16910,16 +16920,18 @@ if (p.a === 'a:match_home') {
             { limit: CFG.INTRO_RATE_LIMIT, windowSec: CFG.INTRO_RATE_WINDOW_SEC }
           );
           if (!rl.allowed) {
-            await ctx.answerCallbackQuery({
-              text: `⏳ Слишком часто. Подожди ${fmtWait(rl.resetSec)} и попробуй снова.`,
-              show_alert: true
-            });
+            try {
+              await ctx.answerCallbackQuery({
+                text: `⏳ Слишком часто. Подожди ${fmtWait(rl.resetSec)} и попробуй снова.`,
+                show_alert: true
+              });
+            } catch {}
             return;
           }
         } catch {}
       }
 
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       db.trackEvent('intro_attempt', {
         userId: actorUserId,
         wsId: wsId || null,
@@ -16961,7 +16973,7 @@ if (p.a === 'a:match_home') {
         const lim = Number(res.dailyLimit || dailyLimit || 0);
         const used = Number(res.dailyUsed || 0);
         db.trackEvent('intro_blocked_daily_limit', { userId: actorUserId, wsId: wsId || null, meta: { offerId, lim, used } });
-        await ctx.answerCallbackQuery({ text: `Лимит интро на сегодня: ${lim} (использовано: ${used}). Попробуй завтра.`, show_alert: true });
+        try { await ctx.answerCallbackQuery({ text: `Лимит интро на сегодня: ${lim} (использовано: ${used}). Попробуй завтра.`, show_alert: true }); } catch {}
         return;
       }
 
@@ -16981,10 +16993,10 @@ if (p.a === 'a:match_home') {
         const left = Number(res.balance ?? 0);
         const amt = Number(res.chargedAmount || cost || 1);
         const bonus = res.trialGranted ? '🎁 Бонус активирован. ' : '';
-        await ctx.answerCallbackQuery({ text: `${bonus}✅ Диалог открыт. -${amt} кредит(ов). Осталось: ${left}`, show_alert: true });
+        try { await ctx.answerCallbackQuery({ text: `${bonus}✅ Диалог открыт. -${amt} кредит(ов). Осталось: ${left}`, show_alert: true }); } catch {}
       }
       else if (res.retryUsed) {
-        await ctx.answerCallbackQuery({ text: `🎟 Диалог открыт. Использован Retry credit.`, show_alert: true });
+        try { await ctx.answerCallbackQuery({ text: `🎟 Диалог открыт. Использован Retry credit.`, show_alert: true }); } catch {}
       }
 
       await renderBxThread(ctx, actorUserId, wsId, res.thread.id, { back: 'offer', offerId, page, h });
