@@ -372,7 +372,17 @@ function describeTgSendError(e) {
   return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
 }
 
+function apiFromCtx(ctx) {
+  // Prefer ctx.api; fallback to BOT.api (initialized in getBot).
+  try { if (ctx && ctx.api) return ctx.api; } catch {}
+  try { if (BOT && BOT.api) return BOT.api; } catch {}
+  return null;
+}
+
 async function sendMessageWithFallback(api, chatId, text, options = {}) {
+  if (!api || typeof api.sendMessage !== 'function') {
+    return { ok: false, err: new Error('BOT_API_NOT_READY') };
+  }
   const base = { disable_web_page_preview: true, ...options };
   try {
     await api.sendMessage(chatId, text, base);
@@ -6339,7 +6349,9 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
     .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
 
   try {
-    await bot.api.sendMessage(creatorTgId, outText, { parse_mode: 'HTML', reply_markup: outKb, disable_web_page_preview: true });
+    const api = apiFromCtx(ctx);
+    if (!api) throw new Error('BOT API not initialized');
+    await api.sendMessage(creatorTgId, outText, { parse_mode: 'HTML', reply_markup: outKb, disable_web_page_preview: true });
   } catch (e) {
     const backCb = `a:brand_deal_view|id:${app.id}|st:${normDealStage(back.stage)}|p:${Math.max(0, Number(back.page) || 0)}`;
     await ctx.reply('❌ Не удалось отправить сообщение креатору. Возможно, он ещё не нажимал /start.', {
@@ -6468,7 +6480,7 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
     .row()
     .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
 
-  const sendRes = await sendMessageWithFallback(bot.api, creatorTgId, outText, {
+  const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
     parse_mode: 'HTML',
     reply_markup: outKb,
     disable_web_page_preview: true,
@@ -6576,7 +6588,7 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
       .row()
       .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
 
-    const sendRes = await sendMessageWithFallback(bot.api, creatorTgId, outText, {
+    const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
       parse_mode: 'HTML',
       reply_markup: outKb,
       disable_web_page_preview: true,
@@ -6702,7 +6714,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>\n\n` +
     `${escapeHtml(String(replyText))}\n\n` +
     `<b>Контакты:</b>\n${card}`;
-  const sendRes = await sendMessageWithFallback(bot.api, brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
+  const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
   if (!sendRes.ok) {
     const reason = describeTgSendError(sendRes.err);
     const kb = navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`);
@@ -10682,9 +10694,11 @@ ${card}`;
       let delivered = 0;
       const deliveredTo = [];
       const failedTo = [];
+      const api = apiFromCtx(ctx);
       for (const rec of recipientsMap.values()) {
         try {
-          await bot.api.sendMessage(rec.tgId, notifyText, {
+          if (!api) throw new Error('BOT API not initialized');
+          await api.sendMessage(rec.tgId, notifyText, {
             parse_mode: 'HTML',
             reply_markup: notifyKb.inline_keyboard?.length ? notifyKb : undefined,
             disable_web_page_preview: true
@@ -10779,7 +10793,7 @@ ${escapeHtml(reply)}`;
         .row()
         .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
 
-      const sendRes = await sendMessageWithFallback(bot.api, creatorTgId, outText, {
+      const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
         parse_mode: 'HTML',
         reply_markup: outKb,
         disable_web_page_preview: true
@@ -10981,9 +10995,11 @@ if (exp.type === 'brand_deals_search') {
       let delivered = 0;
       const deliveredTo = [];
       const failedTo = [];
+      const api = apiFromCtx(ctx);
       for (const rec of targetsMap.values()) {
         try {
-          await bot.api.sendMessage(rec.tgId, notif, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+          if (!api) throw new Error('BOT API not initialized');
+          await api.sendMessage(rec.tgId, notif, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
           delivered++;
           deliveredTo.push(rec);
         } catch (e) {
