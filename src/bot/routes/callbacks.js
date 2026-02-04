@@ -1,5 +1,13 @@
 import { InlineKeyboard } from 'grammy';
 
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function getCid(ctx) {
   return ctx?.state?.cid || `${ctx?.update?.update_id ?? 0}-${ctx?.from?.id ?? 0}`;
 }
@@ -81,11 +89,27 @@ async function replyError(ctx, deps, action, err) {
   } catch {}
 
   const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
-  const msg =
+  let msg =
     `⚠️ <b>Произошла ошибка</b>
 
 ` +
     `Я уже записал детали. Открой меню и повтори шаг.`;
+  // Debug-lite (safe): always show cid + action to help triage; show error details only to SUPER_ADMIN
+  try {
+    const dbgLite =
+      `\n\n<code>cid</code>: <code>${escapeHtml(getCid(ctx))}</code>` +
+      `\n<code>act</code>: <code>${escapeHtml(action)}</code>`;
+    msg += dbgLite;
+  } catch {}
+
+  try {
+    if (typeof deps?.isAdmin === 'function' && deps.isAdmin(ctx)) {
+      const dbg =
+        `\n<code>err</code>: <code>${escapeHtml(String(err?.name || 'Error'))}</code>` +
+        `\n<code>msg</code>: <code>${escapeHtml(String(err?.message || err))}</code>`;
+      msg += dbg;
+    }
+  } catch {}
 
   if (typeof deps?.safeEditOrReply === 'function') {
     await deps.safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb });
