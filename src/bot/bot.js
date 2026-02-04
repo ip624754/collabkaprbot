@@ -13227,6 +13227,11 @@ bot.on('message:successful_payment', async (ctx) => {
       ctx.editMessageReplyMarkup = (markup) => _editMarkup(markup).catch(() => {});
     }
 
+    if (typeof ctx.answerCallbackQuery === 'function') {
+      const _acq = ctx.answerCallbackQuery.bind(ctx);
+      ctx.answerCallbackQuery = (opts) => _acq(opts).catch(() => {});
+    }
+
     // Stop Telegram "loading" spinner ASAP
     await ctx.answerCallbackQuery();
 
