@@ -1448,6 +1448,8 @@ function wsMenuKb(wsId, opts = {}) {
     .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
     .row()
     .text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)
+    .text('📨 Запросы брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
+    .row()
     .text('📁 Папки', `a:folders_home|ws:${wsId}`)
     .row()
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
@@ -4692,7 +4694,7 @@ function wsProfileKb(wsId, ws) {
     .text('✏️ Гео', `a:ws_prof_edit|ws:${wsId}|f:geo`)
     .text('📝 Описание', `a:ws_prof_edit|ws:${wsId}|f:about`)
     .row()
-    .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:new|p:0`)
+    .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:new|p:0${retPart}`)
     .text('🔗 Поделиться', `a:ws_share|ws:${wsId}`)
     .row()
     .text('🧩 Режим', `a:ws_prof_mode|ws:${wsId}`)
@@ -4907,7 +4909,8 @@ async function renderWsShareMenu(ctx, ownerUserId, wsId) {
     .text('📄 Коротко', `a:ws_share_send|ws:${wsId}|v:short`)
     .text('📄 Подробно', `a:ws_share_send|ws:${wsId}|v:long`)
     .row();
-  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
+  const backCb = retKey === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`;
+  kbNavRow(kb, backCb);
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -5566,16 +5569,18 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
 }
-function leadListTabsKb(wsId, counts, active) {
+function leadListTabsKb(wsId, counts, active, ret) {
   // Tabs for Creator Inbox (brand leads). Make them self-explanatory, like Brand Inbox.
   const a = normLeadStatus(active);
 
+  const retPart = ret ? `|ret:${ret}` : '';
+
   const kb = new InlineKeyboard()
     .text(`🆕 Новые ${counts.new ?? 0}`, `a:ws_leads|ws:${wsId}|s:new|p:0`)
-    .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:ws_leads|ws:${wsId}|s:in_progress|p:0`)
+    .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:ws_leads|ws:${wsId}|s:in_progress|p:0${retPart}`)
     .row()
-    .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:ws_leads|ws:${wsId}|s:closed|p:0`)
-    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:ws_leads|ws:${wsId}|s:spam|p:0`);
+    .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:ws_leads|ws:${wsId}|s:closed|p:0${retPart}`)
+    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:ws_leads|ws:${wsId}|s:spam|p:0${retPart}`);
 
   // Mark active with a dot
   for (const row of kb.inline_keyboard) {
@@ -5587,7 +5592,7 @@ function leadListTabsKb(wsId, counts, active) {
   return kb;
 }
 
-async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 0) {
+async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 0, ret = null) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
   if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
@@ -5615,7 +5620,10 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
   const body = lines.length ? lines.join('\n') : 'Пока пусто. Запросы появятся, когда бренд нажмёт кнопку на витрине.';
 
-  const kb = leadListTabsKb(wsId, counts, st);
+  const kb = leadListTabsKb(wsId, counts, st, ret);
+
+  const retKey = String(ret || '').trim();
+  const retPart = retKey ? `|ret:${retKey}` : '';
 
   // quick open buttons (max 8 to avoid huge kb)
   for (const l of leads.slice(0, 8)) {
@@ -5624,16 +5632,16 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
       : (String(l.brand_name || '').trim() || 'brand');
     const whoShort = String(whoBtn).length > 16 ? String(whoBtn).slice(0, 16) + '…' : String(whoBtn);
 
-    kb.row().text(`${leadStatusIcon(l.status)} #${l.id} ${whoShort}`, `a:lead_view|id:${l.id}|ws:${wsId}|s:${st}|p:${p}`);
+    kb.row().text(`${leadStatusIcon(l.status)} #${l.id} ${whoShort}`, `a:lead_view|id:${l.id}|ws:${wsId}|s:${st}|p:${p}${retPart}`);
   }
 
   // pagination
   if (p > 0) {
-    kb.row().text('⬅️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p - 1}`);
+    kb.row().text('⬅️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p - 1}${retPart}`);
   }
   if (leads.length === limit) {
-    if (p > 0) kb.text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}`);
-    else kb.row().text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}`);
+    if (p > 0) kb.text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}${retPart}`);
+    else kb.row().text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}${retPart}`);
   }
 
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
@@ -5645,7 +5653,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
   }
 }
 
-async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0 }) {
+async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
   const lead = await db.getBrandLeadById(leadId);
   if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
@@ -5677,16 +5685,19 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const st = normLeadStatus(lead.status);
 
+  const retKey = String(back?.ret || '').trim();
+  const retPart = retKey ? `|ret:${retKey}` : '';
+
   const kb = new InlineKeyboard()
-    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('⚡ Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('⚡ Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .row()
-    .text('💬 В работу', `a:lead_set|id:${lead.id}|st:in_progress|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:closed|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('💬 В работу', `a:lead_set|id:${lead.id}|st:in_progress|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:closed|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .row()
-    .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:spam|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:spam|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .row();
-  kbNavRow(kb, `a:ws_leads|ws:${wsId}|s:${back.status}|p:${back.page}`);
+  kbNavRow(kb, `a:ws_leads|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`);
 
   try {
     try {
@@ -6604,6 +6615,9 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
+  const retKey = String(back?.ret || '').trim();
+  const retPart = retKey ? `|ret:${retKey}` : '';
+
   // --- LIST ---
   if (!key) {
     const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
@@ -6614,10 +6628,10 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
       `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”.`;
 
     const kb = new InlineKeyboard();
-    kbTplList(kb, LEAD_TPLS, (tplKey) => `a:lead_tpl|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}`);
-    kb.text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    kbTplList(kb, LEAD_TPLS, (tplKey) => `a:lead_tpl|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`);
+    kb.text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
       .row()
-      .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+      .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
       .text('📋 Меню', 'a:menu');
 
     try {
@@ -6657,13 +6671,13 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
   }
 
   const kb = new InlineKeyboard();
-  kbTplIconPicker(kb, LEAD_TPLS, (k2) => `a:lead_tpl|id:${lead.id}|k:${k2}|ws:${wsId}|s:${back.status}|p:${back.page}`, 3);
-  kb.text('📨 Отправить', `a:lead_tpl_send|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+  kbTplIconPicker(kb, LEAD_TPLS, (k2) => `a:lead_tpl|id:${lead.id}|k:${k2}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`, 3);
+  kb.text('📨 Отправить', `a:lead_tpl_send|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .row()
-    .text('🗂 Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('🗂 Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .row()
-    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .text('📋 Меню', 'a:menu');
 
   try {
@@ -7055,7 +7069,9 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
   if (!sendRes.ok) {
     const reason = describeTgSendError(sendRes.err);
-    const kb = navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`);
+    const retKey = String(back?.ret || '').trim();
+    const retPart = retKey ? `|ret:${retKey}` : '';
+    const kb = navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`);
     const msg = `❌ Не удалось отправить сообщение бренду.
 
 Причина: <b>${escapeHtml(reason)}</b>
@@ -7080,7 +7096,8 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   try {
     await renderLeadView(ctx, actorUserId, leadId, back);
   } catch {
-    await ctx.reply('✅ Отправлено.', { reply_markup: navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`) });
+    const retPart = back?.ret ? `|ret:${String(back.ret)}` : '';
+    await ctx.reply('✅ Отправлено.', { reply_markup: navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`) });
   }
 }
 async function renderWsPro(ctx, ownerUserId, wsId) {
@@ -10909,9 +10926,11 @@ ${card}`;
       } catch {}
 
 
+      const retPart = exp.ret ? `|ret:${String(exp.ret)}` : '';
+
       const kb = new InlineKeyboard()
-        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}`)
-        .text('📨 Заявки', `a:ws_leads|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}`);
+        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${retPart}`)
+        .text('📨 Заявки', `a:ws_leads|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${retPart}`);
 
       await clearExpectText(ctx.from.id);
 
@@ -14487,7 +14506,7 @@ if (p.a === 'a:ws_leads') {
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
-      await renderWsLeadsList(ctx, u.id, wsId, String(p.s || 'new'), Number(p.p || 0));
+      await renderWsLeadsList(ctx, u.id, wsId, String(p.s || 'new'), Number(p.p || 0), String(p.ret || '') || null);
       return;
     }
 
@@ -14495,7 +14514,7 @@ if (p.a === 'a:ws_leads') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) return;
-      await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
+      await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
       return;
     }
 
@@ -14504,7 +14523,7 @@ if (p.a === 'a:ws_leads') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) return;
-      await renderLeadTemplates(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
+      await renderLeadTemplates(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
       return;
     }
 
@@ -14514,12 +14533,12 @@ if (p.a === 'a:ws_leads') {
       if (!leadId) return;
       const key = String(p.k || 'discuss');
       try {
-        await renderLeadTemplatePreview(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
+        await renderLeadTemplatePreview(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
       } catch (e) {
         try { console.warn('[lead_tpl_preview] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз или используй «✍️ Ответить». ';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
           .text('📋 Меню', 'a:menu');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -14532,12 +14551,12 @@ if (p.a === 'a:ws_leads') {
       if (!leadId) return;
       const key = String(p.k || 'discuss');
       try {
-        await sendLeadTemplateReply(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
+        await sendLeadTemplateReply(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
       } catch (e) {
         try { console.warn('[lead_tpl_send] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '⚠️ Не удалось отправить шаблон. Попробуй ещё раз или используй «✍️ Ответить». ';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
           .text('📋 Меню', 'a:menu');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -14553,18 +14572,18 @@ if (p.a === 'a:lead_set') {
       if (!updated) {
         const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
           .text('📋 Меню', 'a:menu');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
         return;
       }
       try {
-        await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || st), page: Number(p.p || 0) });
+        await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || st), page: Number(p.p || 0), ret: String(p.ret || '') });
       } catch (e) {
         try { console.warn('[lead_set] unhandled', { leadId, st, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '✅ Статус обновлён. (Экран не удалось перерисовать — открой заявку заново.)';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:ws_leads|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || st) + '|p:' + Number(p.p || 0))
+          .text('⬅️ Назад', 'a:ws_leads|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || st) + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
           .text('📋 Меню', 'a:menu');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -14587,10 +14606,12 @@ if (p.a === 'a:lead_set') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
-      await setExpectText(ctx.from.id, { type: 'lead_reply', leadId, wsId: Number(ws.id), backStatus: String(p.s || 'new'), backPage: Number(p.p || 0) });
+      await setExpectText(ctx.from.id, { type: 'lead_reply', leadId, wsId: Number(ws.id), backStatus: String(p.s || 'new'), backPage: Number(p.p || 0), ret: String(p.ret || '') });
+
+      const retPart = p.ret ? `|ret:${String(p.ret)}` : '';
 
       const kb = new InlineKeyboard()
-        .text('⬅️ Назад', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(p.s || 'new')}|p:${Number(p.p || 0)}`);
+        .text('⬅️ Назад', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(p.s || 'new')}|p:${Number(p.p || 0)}${retPart}`);
 
       await safeEditOrReply(ctx, 
         `✍️ <b>Ответ на заявку #${leadId}</b>
