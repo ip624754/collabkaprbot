@@ -444,11 +444,28 @@ function errInfo(e) {
   };
 }
 
-function isQueryTimeoutError(e) {
-  const msg = String(e?.message || '');
-  const code = String(e?.code || '');
-  return /query read timeout|timeout|timed out/i.test(msg) || code === '57014';
+function withTimeout(promise, ms, label = 'op') {
+  const t = Math.max(1, Number(ms) || 1);
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(() => {
+      const e = new Error(`TIMEOUT:${label}`);
+      e.code = 'TIMEOUT';
+      reject(e);
+    }, t);
+    Promise.resolve(promise)
+      .then(v => { clearTimeout(id); resolve(v); })
+      .catch(err => { clearTimeout(id); reject(err); });
+  });
 }
+
+async function redisGetSafe(key, ms = 1500) {
+  try {
+    return await withTimeout(redis.get(key), ms, `redis.get:${String(key).slice(0, 40)}`);
+  } catch {
+    return null;
+  }
+}
+
 
 
 async function safeBrandAppsWrite(primaryFn, meta = {}) {
@@ -2805,19 +2822,19 @@ async function getBrandDirFilter(tgId, legacyUserId = null) {
   // 1) Preferred: namespaced key
   const keyNew = brandDirFilterKey(id);
   let raw = null;
-  try { raw = await redis.get(keyNew); } catch { raw = null; }
+  try { raw = await redisGetSafe(keyNew); } catch { raw = null; }
 
   // 2) Legacy fallbacks (older commits stored by tgId or by db userId)
   let usedLegacy = false;
   if (!raw) {
     try {
-      raw = await redis.get(`bd_filter:${id}`);
+      raw = await redisGetSafe(`bd_filter:${id}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
   if (!raw && legacyId) {
     try {
-      raw = await redis.get(`bd_filter:${legacyId}`);
+      raw = await redisGetSafe(`bd_filter:${legacyId}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
@@ -3042,7 +3059,12 @@ function brandDirMultiPickKb(key, page, selected) {
 
 async function renderBrandDirFilters(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
-  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
+  let f = null;
+  try {
+    f = await withTimeout(getBrandDirFilter(viewerUserId, params.legacyUserId), 1800, 'brands.filter');
+  } catch {
+    f = {};
+  }
 
   // Small helper count: makes it obvious whether "0 results" is data vs filter logic
   let matchCount = null;
@@ -3145,20 +3167,14 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
 
   const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
 
-  let rows = null;
-  try {
-    rows = await safeBrandProfiles(
-      () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
-      async () => ({ __missing_relation: true })
+  const rows = await withTimeout(
+      safeBrandProfiles(
+        () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
+        async () => ({ __missing_relation: true })
+      ),
+      4500,
+      'brands.list'
     );
-  } catch (e) {
-    if (isQueryTimeoutError(e)) {
-      await safeEditOrReply(ctx, '⚠️ Каталог брендов загружается слишком долго. Попробуй ещё раз.', { reply_markup: navKb('a:brands_home') });
-      try { console.warn('[brands_dir] timeout', { err: errInfo(e), viewerUserId, page }); } catch {}
-      return;
-    }
-    throw e;
-  }
   if (rows && rows.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
     if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
@@ -5398,7 +5414,7 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
 
 
 async function renderWsPublicProfile(ctx, wsId, opts = {}) {
-  const ws = await db.getWorkspaceAny(wsId);
+  const ws = await withTimeout(db.getWorkspaceAny(wsId), 4500, 'ws.get');
   if (!ws) return ctx.reply('Профиль не найден.');
 
   const viewer = ctx?.from ? await db.upsertUser(ctx.from.id, ctx.from.username ?? null) : null;
@@ -5688,31 +5704,11 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 }
 
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
-  let lead = null;
-  try {
-    lead = await db.getBrandLeadById(leadId);
-  } catch (e) {
-    if (isQueryTimeoutError(e)) {
-      await safeEditOrReply(ctx, '⚠️ База отвечает медленно. Нажми ещё раз через пару секунд.', { reply_markup: navKb('a:menu') });
-      try { console.warn('[lead_view] getBrandLeadById timeout', { err: errInfo(e), leadId }); } catch {}
-      return;
-    }
-    throw e;
-  }
+  const lead = await withTimeout(db.getBrandLeadById(leadId), 4500, 'lead.get');
   if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
-  let ws = null;
-  try {
-    ws = await db.getWorkspaceAny(wsId);
-  } catch (e) {
-    if (isQueryTimeoutError(e)) {
-      await safeEditOrReply(ctx, '⚠️ Канал загружается слишком долго. Попробуй ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
-      try { console.warn('[lead_view] getWorkspaceAny timeout', { err: errInfo(e), wsId, leadId }); } catch {}
-      return;
-    }
-    throw e;
-  }
+  const ws = await db.getWorkspaceAny(wsId);
   if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
@@ -13443,7 +13439,11 @@ if (p.a === 'a:brands_home') {
       try { await ctx.answerCallbackQuery(); } catch {}
   const page = Math.max(0, Number(p.p || 0));
   await safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') });
-  await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id });
+  try {
+    await withTimeout(renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id }), 6000, 'brands.home');
+  } catch {
+    await safeEditOrReply(ctx, '⚠️ Каталог брендов сейчас отвечает слишком долго. Попробуй ещё раз.', { reply_markup: navKb('a:brands_home') });
+  }
   return;
 }
 
@@ -14580,7 +14580,11 @@ if (p.a === 'a:ws_leads') {
       const retPart = retKey ? `|ret:${retKey}` : '';
       const backCb = wsId ? `a:ws_leads|ws:${wsId}|s:${st}|p:${page}${retPart}` : 'a:menu';
       await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
-      await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey });
+      try {
+        await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 7000, 'lead.view');
+      } catch {
+        await safeEditOrReply(ctx, '⚠️ Карточка заявки загружается слишком долго. Попробуй ещё раз.', { reply_markup: navKb(backCb) });
+      }
       return;
     }
 
