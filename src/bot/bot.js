@@ -4907,7 +4907,7 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
 
 
 
-async function renderWsShareMenu(ctx, ownerUserId, wsId) {
+async function renderWsShareMenu(ctx, ownerUserId, wsId, ret = null) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
   if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
@@ -4925,6 +4925,7 @@ async function renderWsShareMenu(ctx, ownerUserId, wsId) {
     .text('📄 Коротко', `a:ws_share_send|ws:${wsId}|v:short`)
     .text('📄 Подробно', `a:ws_share_send|ws:${wsId}|v:long`)
     .row();
+  const retKey = String(ret || '').trim();
   const backCb = retKey === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`;
   kbNavRow(kb, backCb);
 
@@ -5592,7 +5593,7 @@ function leadListTabsKb(wsId, counts, active, ret) {
   const retPart = ret ? `|ret:${ret}` : '';
 
   const kb = new InlineKeyboard()
-    .text(`🆕 Новые ${counts.new ?? 0}`, `a:ws_leads|ws:${wsId}|s:new|p:0`)
+    .text(`🆕 Новые ${counts.new ?? 0}`, `a:ws_leads|ws:${wsId}|s:new|p:0${retPart}`)
     .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:ws_leads|ws:${wsId}|s:in_progress|p:0${retPart}`)
     .row()
     .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:ws_leads|ws:${wsId}|s:closed|p:0${retPart}`)
@@ -5660,6 +5661,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
     else kb.row().text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}${retPart}`);
   }
 
+  const retKey = String(ret || '').trim();
   const backCb = retKey === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`;
   kbNavRow(kb, backCb);
 
@@ -13405,9 +13407,11 @@ if (p.a === 'a:support_write') {
 if (p.a === 'a:brands_home') {
       try { await ctx.answerCallbackQuery(); } catch {}
   const page = Math.max(0, Number(p.p || 0));
+  await safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') });
   await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id });
   return;
 }
+
 
     if (p.a === 'a:brands_filters') {
       try { await ctx.answerCallbackQuery(); } catch {}
@@ -14534,7 +14538,14 @@ if (p.a === 'a:ws_leads') {
         await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
-      await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
+      const wsId = Number(p.ws || 0);
+      const st = String(p.s || 'new');
+      const page = Number(p.p || 0);
+      const retKey = String(p.ret || '').trim();
+      const retPart = retKey ? `|ret:${retKey}` : '';
+      const backCb = wsId ? `a:ws_leads|ws:${wsId}|s:${st}|p:${page}${retPart}` : 'a:menu';
+      await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
+      await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey });
       return;
     }
 
@@ -14803,14 +14814,14 @@ if (p.a === 'a:lead_set') {
 
     
     if (p.a === 'a:ws_share') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const wsId = Number(p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return;
-      await renderWsShareMenu(ctx, u.id, wsId);
+      if (!wsId) { await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал заново.', { reply_markup: navKb('a:ws_list') }); return; }
+      await renderWsShareMenu(ctx, u.id, wsId, String(p.ret || '') || null);
       return;
     }
+
+
 
     if (p.a === 'a:ws_share_send') {
       await ctx.answerCallbackQuery();
@@ -17258,7 +17269,10 @@ if (p.a === 'a:bx_retry_help') {
 
       // owner gate: bump allowed только владельцу канала (ws)
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+      if (!ws) {
+        await safeEditOrReply(ctx, '⚠️ Нет доступа. Поднимать оффер может только владелец канала.', { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
+        return;
+      }
 
       // Some legacy records may not match creatorUserId; allow bump if offer принадлежит этому ws.
       let o = await db.getBarterOfferForOwner(u.id, offerId);
@@ -17266,7 +17280,10 @@ if (p.a === 'a:bx_retry_help') {
         try { o = await db.getBarterOfferPublic(offerId); } catch {}
       }
       const oWs = Number(o?.workspace_id || o?.workspaceId || 0);
-      if (!o || oWs !== wsId) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+      if (!o || oWs !== wsId) {
+        await safeEditOrReply(ctx, '⚠️ Оффер не найден или нет доступа.', { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
+        return;
+      }
 
       let isPro = false;
       try { isPro = await db.isWorkspacePro(wsId); } catch {}
@@ -17280,18 +17297,23 @@ if (p.a === 'a:bx_retry_help') {
         const left = cooldownMs - (now - last);
         const h = Math.floor(left / 3600000);
         const mm = Math.floor((left % 3600000) / 60000);
-        try {
-          await ctx.answerCallbackQuery({ text: `Можно поднимать раз в ${cooldownHours}ч. Осталось ${h}ч ${mm}м`, show_alert: true });
-        } catch {}
-        await renderBxView(ctx, u.id, wsId, offerId, 'my');
+        await safeEditOrReply(
+          ctx,
+          `⏳ Поднимать можно раз в <b>${cooldownHours}ч</b>.
+Осталось: <b>${h}ч ${mm}м</b>.`,
+          { parse_mode: 'HTML', reply_markup: navKb(`a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:0`) }
+        );
         return;
       }
+
+      // give immediate visible feedback (anti-silent)
+      await safeEditOrReply(ctx, '⬆️ Поднимаю оффер…', { reply_markup: navKb(`a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:0`) });
 
       try {
         await db.bumpBarterOffer(offerId);
       } catch (e) {
         try { console.warn('[bx_bump] bump failed', { err: errInfo(e), wsId, offerId, uid: u.id }); } catch {}
-        await safeEditOrReply(ctx, '⚠️ Не удалось поднять оффер. Попробуй ещё раз через «📦 Мои офферы».', { reply_markup: navKb('a:bx_my') });
+        await safeEditOrReply(ctx, '⚠️ Не удалось поднять оффер. Попробуй ещё раз через «📦 Мои офферы».', { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
         return;
       }
 
@@ -17301,10 +17323,11 @@ if (p.a === 'a:bx_retry_help') {
         try { console.warn('[bx_bump] audit failed', { err: errInfo(e), wsId, offerId, uid: u.id }); } catch {}
       }
 
-      try { await ctx.answerCallbackQuery({ text: '⬆️ Поднято!' }); } catch {}
-      await renderBxView(ctx, u.id, wsId, offerId, 'my');
+      // Show результат так, чтобы было ВИДНО (перекидываем в список, где оффер уедет наверх)
+      await renderBxMy(ctx, u.id, wsId, 0);
       return;
     }
+
 
 
     if (p.a === 'a:bx_my') {
