@@ -287,8 +287,7 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
 `
       : 'Не удалось отправить инвойс. Проверь, что Telegram обновлён и Stars доступны.';
     try {
-      const kb = backCb ? navKb(backCb) : new InlineKeyboard().text('📋 Меню', 'a:menu');
-      await ctx.reply(text, { reply_markup: kb });
+      await ctx.reply(text, backCb ? { reply_markup: new InlineKeyboard().text('⬅️ Назад', backCb) } : undefined);
     } catch {}
     return false;
   }
@@ -299,7 +298,7 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
   const kb = new InlineKeyboard();
   if (!wss.length) {
     kb.text('📋 Меню', 'a:menu');
-    await safeEditOrReply(ctx, 'Сначала подключи канал: нажми «🚀 Подключить канал» в меню.', { reply_markup: kb });
+    await ctx.editMessageText('Сначала подключи канал: нажми «🚀 Подключить канал» в меню.', { reply_markup: kb });
     return;
   }
 
@@ -309,7 +308,7 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
   }
   kbNavRow(kb, backCb);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `Выбери канал, где создать новый конкурс:`,
     { reply_markup: kb }
   );
@@ -456,7 +455,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 }
 
 function mainMenuBrandKb(flags = {}, opts = {}) {
-  const { isModerator = false, isAdmin = false, isCurator = false } = flags;
+  const { isModerator = false, isAdmin = false } = flags;
   const { isManager = false, hasMultipleBrands = false, canManager = false, teamLocked = false } = opts;
 
   const kb = new InlineKeyboard()
@@ -496,7 +495,6 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['👤 Куратор', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -574,7 +572,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
   }
@@ -585,7 +583,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
   }
@@ -621,7 +619,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
   const text = `🧑‍💼 <b>Выбери бренд для работы</b>
 
 Я запомню выбор и открою кабинет выбранного бренда.`;
-  if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -636,7 +634,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
 
@@ -646,7 +644,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
 
@@ -798,7 +796,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (edit && ctx.callbackQuery?.message) {
-    await safeEditOrReply(ctx, text, opts);
+    await ctx.editMessageText(text, opts);
   } else {
     await ctx.reply(text, opts);
   }
@@ -811,7 +809,7 @@ async function renderRoleHub(ctx, u, flags) {
   // Role hub: Creator -> active workspace; Brand -> brand dashboard; Curator mode -> curator cabinet menu.
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
   if (curMode) {
-    await safeEditOrReply(ctx, `👤 <b>Режим куратора</b>
+    await ctx.editMessageText(`👤 <b>Режим куратора</b>
 
 Здесь показаны только действия куратора, чтобы не путаться.
 Чтобы вернуть полное меню — нажми “🔓 Обычный режим”.`, {
@@ -832,7 +830,7 @@ async function renderRoleHub(ctx, u, flags) {
         const msg = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-        await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
+        await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
         return;
       }
       if (bm.revoked) {
@@ -840,7 +838,7 @@ async function renderRoleHub(ctx, u, flags) {
         const msg = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-        await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
+        await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
         return;
       }
 
@@ -930,52 +928,6 @@ function kbNavRow(kb, backCb) {
   return kb;
 }
 
-
-async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
-  // Telegram sometimes rejects edits (old message, deleted message, not modified, etc.).
-  // We never want the UI to "do nothing": fallback to sending a new message.
-  if (preferEdit && ctx?.callbackQuery?.message) {
-    try {
-      return await ctx.editMessageText(text, extra);
-    } catch (e) {
-      const msg = String(e?.description || e?.message || e);
-      // If nothing changes — treat as success.
-      if (msg.includes('message is not modified')) return;
-      // Some messages can't be edited (invoice/service) — fallthrough to reply.
-    }
-  }
-  try {
-    return await ctx.reply(text, extra);
-  } catch (e) {
-    // Last resort: try edit again if reply is blocked (rare).
-    if (ctx?.callbackQuery?.message) {
-      try {
-        return await ctx.editMessageText(text, extra);
-      } catch (_) {}
-    }
-    throw e;
-  }
-}
-
-
-async function uiGuard(ctx, tag, fn) {
-  try {
-    return await fn();
-  } catch (e) {
-    console.error(`[UI:${tag}]`, e);
-    try {
-      await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
-
-Что-то пошло не так. Нажми «📋 Меню» и попробуй ещё раз.`, {
-        parse_mode: 'HTML',
-        reply_markup: navKb('a:menu'),
-        disable_web_page_preview: true,
-      });
-    } catch (_) {}
-  }
-}
-
-
 // -----------------------------
 // BX Navigation helpers (home/return context)
 // h: home anchor (mm=main_menu, mn=role hub, bo=bx_open)
@@ -1036,15 +988,6 @@ function normBxRet(r, fallback = BX_HOME.BX_OPEN) {
   const v = String(r || '').trim().toLowerCase();
   if (v === 'bf' || v === 'bs' || v === BX_HOME.MAIN_MENU || v === BX_HOME.MENU || v === BX_HOME.BX_OPEN) return v;
   return fallback;
-}
-
-
-function normBxTagFilterKey(raw) {
-  const v = String(raw || '').trim().toLowerCase();
-  if (!v) return '';
-  if (v in {'goals':1,'goal':1,'goalstags':1,'goals_tags':1,'goals-tags':1}) return 'goals';
-  if (v in {'req':1,'reqs':1,'requirement':1,'requirements':1,'reqtags':1,'req_tags':1,'req-tags':1}) return 'req';
-  return '';
 }
 
 function bxHomeCb(wsId, h) {
@@ -1278,9 +1221,8 @@ async function setCurGwNote(gwId, meta) {
   try { await redis.set(k(['cur_gw_note', gwId]), meta, { ex: CUR_GW_META_TTL_SEC }); } catch {}
 }
 
-function wsMenuKb(wsId, opts = {}) {
-  const { showCurator = false } = opts || {};
-  const kb = new InlineKeyboard()
+function wsMenuKb(wsId) {
+  return new InlineKeyboard()
     .text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)
     .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
     .row()
@@ -1291,14 +1233,10 @@ function wsMenuKb(wsId, opts = {}) {
     .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
     .row()
     .text('👥 Кураторы', `a:ws_settings|ws:${wsId}`)
-    .text('🧾 История', `a:ws_history|ws:${wsId}`);
-
-  if (showCurator) kb.row().text('👤 Куратор', 'a:cur_home');
-
-  kb.row().text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
-  return kb;
+    .text('🧾 История', `a:ws_history|ws:${wsId}`)
+    .row()
+    .text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
 }
-
 
 
 function wsSettingsKb(wsId, s) {
@@ -1314,123 +1252,16 @@ function wsSettingsKb(wsId, s) {
     .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
 
-function curManageKb(wsId, ws = null) {
-  const enabled = !!ws?.curator_enabled;
-  const toggleLabel = enabled ? '👤 Куратор: ✅ ВКЛ' : '👤 Куратор: ❌ ВЫКЛ';
+function curManageKb(wsId) {
   return new InlineKeyboard()
-    .text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`)
-    .row()
     .text('👤 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
     .row()
     .text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)
     .row()
     .text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
     .row()
-    .text('🧾 История', `a:ws_history|ws:${wsId}`)
-    .row()
     .text('⬅️ Назад', `a:ws_settings|ws:${wsId}`)
     .text('📋 Меню', 'a:menu');
-}
-
-async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
-  const notice = opts.notice ? String(opts.notice) : '';
-  const ws = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
-    return;
-  }
-  try { await db.ensureWorkspaceSettings(wsId); } catch {}
-
-  const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `Канал #${wsId}`);
-  const curators = await db.listCurators(wsId);
-  const count = curators?.length || 0;
-
-  // Activity summary (last 30 days) from giveaway_audit
-  let statsRows = [];
-  try {
-    statsRows = await db.getCuratorWorkspaceSummary(wsId, 30, 50);
-  } catch {
-    statsRows = [];
-  }
-  const statsById = new Map();
-  for (const r of statsRows || []) {
-    const uid = Number(r.user_id || 0);
-    if (uid) statsById.set(uid, r);
-  }
-
-  const enabled = !!ws.curator_enabled;
-  const status = enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
-
-  const fmtUname = (c) => c?.tg_username ? '@' + escapeHtml(c.tg_username) : (c?.tg_id ? 'id:' + String(c.tg_id) : '—');
-
-  const cards = (curators || []).slice(0, 12).map((c) => {
-    const s = statsById.get(Number(c.user_id || 0)) || {};
-    const actions = Number(s.actions || 0);
-    const notes = Number(s.notes || 0);
-    const reminders = Number(s.reminders || 0);
-    const notifies = Number(s.notifies || 0);
-    const last = s.last_at ? fmtTs(s.last_at) : null;
-    const lines = [
-      `👤 <b>${fmtUname(c)}</b>`,
-      `• ⚡ Действий: <b>${actions}</b>`,
-      `• 📝 Заметок: <b>${notes}</b>`,
-      `• 📌 Напоминаний: <b>${reminders}</b>`,
-      `• 📩 Уведомлений владельцу: <b>${notifies}</b>`,
-      `• 🕒 Последнее: <b>${last ? escapeHtml(last) : '—'}</b>`,
-    ];
-    return lines.join('\n');
-  }).join('\n\n');
-
-  // Totals (only for listed curators)
-  let totActions = 0, totNotes = 0, totRem = 0, totNot = 0;
-  for (const c of curators || []) {
-    const s = statsById.get(Number(c.user_id || 0));
-    if (!s) continue;
-    totActions += Number(s.actions || 0);
-    totNotes += Number(s.notes || 0);
-    totRem += Number(s.reminders || 0);
-    totNot += Number(s.notifies || 0);
-  }
-
-  let activityLines = [];
-  try {
-    const items = await db.listWorkspaceAudit(wsId, 20);
-    const curItems = (items || []).filter(i => {
-      const a = String(i?.action || '');
-      return a.includes('curator') || a.includes('ws.curator') || a.includes('gw.cur') || a.includes('gw.reminder');
-    }).slice(0, 6);
-    activityLines = curItems.map(i => `• ${fmtTs(i.created_at)} — <code>${escapeHtml(String(i.action || ''))}</code>`);
-  } catch {
-    activityLines = [];
-  }
-
-  const text = `${notice ? `✅ ${escapeHtml(notice)}
-
-` : ''}👥 <b>Куратор HQ</b>
-
-Канал: <b>${escapeHtml(title)}</b>
-Доступ кураторов: <b>${status}</b>
-Кураторов в списке: <b>${count}</b>
-
-<b>Активность (30 дней):</b>
-• ⚡ Действий: <b>${totActions}</b>
-• 📝 Заметок: <b>${totNotes}</b>
-• 📌 Напоминаний: <b>${totRem}</b>
-• 📩 Уведомлений владельцу: <b>${totNot}</b>
-
-<b>Команда (карточки):</b>
-${count ? cards : 'Пока нет.'}
-
-<b>Последние события:</b>
-${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
-
-💡 Куратор открывает кабинет через «👤 Куратор» в меню (если он назначен куратором хотя бы в одном канале).`;
-
-  await safeEditOrReply(ctx, text, {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: curManageKb(wsId, ws)
-  });
 }
 
 
@@ -1469,35 +1300,21 @@ async function getBrandTeamGateState(ownerUserId) {
       ok: false,
       missingRelation: true,
       basicDone: 0,
-      missingBasic: ['Название', 'Ниши', 'Контакт', 'Ссылка'],
+      missingBasic: ['Название', 'Ниша', 'Контакт', 'Ссылка'],
       teamPaid: false
     };
   }
 
   const p = prof || {};
-  const meta = parseBrandMeta(p.meta);
-  const hasNicheKey = !!String(meta?.niche_key || '').trim();
-  const hasNicheText = !!String(p.niche || '').trim();
-  const nicheDone = hasNicheKey || hasNicheText;
   const basic = [
     { key: 'brand_name', label: 'Название' },
-    { key: 'niche', label: 'Ниши' },
+    { key: 'niche', label: 'Ниша' },
     { key: 'contact', label: 'Контакт' },
     { key: 'brand_link', label: 'Ссылка' }
   ];
 
-  const basicDone = [
-    !!String(p.brand_name || '').trim(),
-    nicheDone,
-    !!String(p.contact || '').trim(),
-    !!String(p.brand_link || '').trim()
-  ].filter(Boolean).length;
-  const missingBasic = [
-    !String(p.brand_name || '').trim() ? 'Название' : null,
-    !nicheDone ? 'Ниши' : null,
-    !String(p.contact || '').trim() ? 'Контакт' : null,
-    !String(p.brand_link || '').trim() ? 'Ссылка' : null,
-  ].filter(Boolean);
+  const basicDone = basic.filter((x) => String(p[x.key] || '').trim()).length;
+  const missingBasic = basic.filter((x) => !String(p[x.key] || '').trim()).map((x) => x.label);
 
   let teamPaid = false;
   try {
@@ -1524,7 +1341,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   if (bm.dbMissing) {
     const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>\n\nВ Neon должна быть таблица <code>brand_managers</code>.`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -1532,7 +1349,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   if (bm.enabled && bm.brandUserId !== u.id) {
     const kb = navKb('a:menu');
     const text = `⛔ <b>Только владелец бренда</b>\n\nМенеджер не может управлять «👥 Команда бренда».`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -1542,7 +1359,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   if (st.missingRelation) {
     const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⚠️ <b>Нужна миграция 024_brand_profiles</b>\n\nВ Neon должна быть таблица <code>brand_profiles</code>.`;
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -1559,7 +1376,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
     const text = `👥 <b>Команда бренда</b>\n\nДобавь менеджеров, чтобы быстрее отвечать на заявки и закрывать сделки.\n\n<b>Условия доступа:</b>\n1) Заполнить профиль бренда (4 поля: Название, Ниша, Контакт, Ссылка)\n2) Купить <b>Brand Pass</b> или <b>Brand Plan</b>\n\n<b>Статус:</b>\n${statusProfile}\n${statusPay}\n\n<i>Зачем:</i> защита от спама и ценность брендовой покупки.`;
 
     const kb = brandTeamLockedKb();
-    if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    if (edit) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -1606,7 +1423,7 @@ async function renderNetConfirm(ctx, ownerUserId, wsId, ret = 'ws') {
     : 'Если включить, твой канал появится в сети и сможет видеть ленту и публиковать офферы.';
 
   await ctx.answerCallbackQuery();
-  await safeEditOrReply(ctx, `🌐 <b>Сеть</b>\n\nСейчас: <b>${escapeHtml(state)}</b>\n\n${escapeHtml(hint)}`, {
+  await ctx.editMessageText(`🌐 <b>Сеть</b>\n\nСейчас: <b>${escapeHtml(state)}</b>\n\n${escapeHtml(hint)}`, {
     parse_mode: 'HTML',
     reply_markup: netConfirmKb(wsId, enabled, ret)
   });
@@ -1626,8 +1443,7 @@ function curListKb(wsId, curators) {
 // Barters Marketplace (v0.9.1)
 // -----------------------------
 
-function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
-  const { showCurator = false } = opts || {};
+function bxMenuKb(wsId, networkEnabled = true) {
   const net = networkEnabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
   const kb = new InlineKeyboard()
   .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
@@ -1638,8 +1454,6 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
-  if (showCurator) kb.row().text('👤 Куратор', 'a:cur_home');
-
   kb.row().text(net, `a:net_q|ws:${wsId}|ret:bx`);
   kbNavRow(kb, `a:ws_open|ws:${wsId}`);
   return kb;
@@ -1647,9 +1461,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
 
 
 
-
-function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
-  const { showCurator = false } = opts || {};
+function bxBrandMenuKb(wsId, credits, plan, retry = 0) {
   const planLabel = plan?.active ? (plan.name === 'max' ? 'Max ✅' : 'Basic ✅') : 'OFF';
   const kb = new InlineKeyboard()
 .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
@@ -1672,23 +1484,17 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
-  if (showCurator) kb.row().text('👤 Куратор', 'a:cur_home');
-
   kbNavRow(kb, 'a:menu');
   return kb;
 }
 
 
 
-
 function isBrandBasicComplete(p) {
   if (!p) return false;
-  const meta = parseBrandMeta(p.meta);
-  const hasNicheKey = !!String(meta?.niche_key || '').trim();
-  const hasNicheText = !!String(p.niche || '').trim();
   return !!(
     String(p.brand_name || '').trim() &&
-    (hasNicheKey || hasNicheText) &&
+    String(p.niche || '').trim() &&
     String(p.contact || '').trim() &&
     String(p.brand_link || '').trim()
   );
@@ -1942,7 +1748,7 @@ function brandBackCb(params = {}) {
   const bo = params.backOfferId ? Number(params.backOfferId) : null;
   const bp = params.backPage ? Number(params.backPage) : 0;
   if (ret === 'offer' && bo) return `a:offer_open|ws:${wsId}|id:${bo}|p:${bp}`;
-  if (ret === 'lead') return `a:bx_inbox|ws:${wsId}|p:${bp}|h:bo`;
+  if (ret === 'lead') return `a:bx_inbox|ws:${wsId}|p:${bp}`;
   if (ret === 'verify') return 'a:verify_home';
   return wsId ? `a:bx_open|ws:${wsId}` : 'a:bx_open|ws:0';
 }
@@ -1950,13 +1756,13 @@ function brandBackCb(params = {}) {
 function brandFieldPrompt(field) {
   const map = {
     brand_name: 'Название бренда',
-    niche: 'Ниша (текст, legacy)',
+    niche: 'Ниша/категория',
     contact: 'Контакт для связи (TG @username или ссылка)',
     brand_link: 'Ссылка на бренд (сайт/Instagram/Telegram)',
     geo: 'Гео (город/страна)',
-    budget: 'Детали бюджета (опционально)',
-    goals: 'Детали целей (опционально)',
-    requirements: 'Детали требований (опционально)'
+    budget: 'Бюджет (текст, если нужно)',
+    goals: 'Цели (текст)',
+    requirements: 'Требования (текст)'
   };
   const title = map[field] || 'Поле профиля';
   return `✍️ <b>${escapeHtml(title)}</b>
@@ -1983,23 +1789,16 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
     async () => ({ __missing_relation: true })
   );
   if (prof && prof.__missing_relation) {
-    await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
+    await ctx.editMessageText('⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
       reply_markup: navKb('a:menu')
     });
     return;
   }
 
   const p = prof || {};
-  const meta = parseBrandMeta(p.meta);
-  const nicheKey = String(meta.niche_key || '').trim();
-  const nicheLabel = BX_CATEGORIES.find((x) => x.key === nicheKey)?.label || '';
-  const nicheText = String(p.niche || '').trim();
-  const nicheDisplay = nicheLabel || nicheText || '—';
-  const nicheOk = !!nicheLabel || !!nicheText;
-
   const filled = [
     !!String(p.brand_name || '').trim(),
-    nicheOk,
+    !!String(p.niche || '').trim(),
     !!String(p.contact || '').trim(),
     !!String(p.brand_link || '').trim()
   ].filter(Boolean).length;
@@ -2011,7 +1810,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 ` +
     `• Название: <b>${escapeHtml(p.brand_name || '—')}</b>
 ` +
-    `• Ниши: <b>${escapeHtml(nicheDisplay)}</b>
+    `• Ниша: <b>${escapeHtml(p.niche || '—')}</b>
 ` +
     `• Контакт: <b>${escapeHtml(p.contact || '—')}</b>
 ` +
@@ -2030,12 +1829,10 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 Выбери поле для редактирования:`;
     kb
       .text('✏️ Название', `a:brand_prof_set${suf}|f:bn|from:home`)
+      .text('🏷 Ниша', `a:brand_prof_set${suf}|f:ni|from:home`)
       .row()
-      .text('🏷 Ниши', `a:brand_niche_pick${suf}|from:home`)
-      .text('✍️ Ниша (текст)', `a:brand_prof_set${suf}|f:ni|from:home`)
-      .row()
-      .text('📞 Контакт', `a:brand_prof_set${suf}|f:ct|from:home`)
-      .text('🔗 Ссылка', `a:brand_prof_set${suf}|f:bl|from:home`)
+      .text('📞 Контакт', `a:brand_prof_set${suf}|f:co|from:home`)
+      .text('🔗 Ссылка', `a:brand_prof_set${suf}|f:li|from:home`)
       .row()
       .text('✨ Расширенный', `a:brand_profile_more${suf}`)
       .text('🧹 Сбросить профиль', `a:brand_prof_reset${suf}`)
@@ -2046,7 +1843,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
       .text('📋 Меню', 'a:menu');
 
     const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-    if (ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, extra);
+    if (ctx.callbackQuery?.message) await ctx.editMessageText(text, extra);
     else await ctx.reply(text, extra);
     return;
   }
@@ -2061,55 +1858,9 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
     .text('⬅️ Назад', brandBackCb({ wsId, ret, backOfferId: bo, backPage: bp }));
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-  if (params.edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, baseText, extra);
-  else if (ctx.callbackQuery?.message) await safeEditOrReply(ctx, baseText, extra);
+  if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(baseText, extra);
+  else if (ctx.callbackQuery?.message) await ctx.editMessageText(baseText, extra);
   else await ctx.reply(baseText, extra);
-}
-
-async function renderBrandNichePicker(ctx, ownerUserId, params = {}) {
-  const wsId = Number(params.wsId || 0);
-  const ret = String(params.ret || 'brand');
-  const bo = params.backOfferId ? Number(params.backOfferId) : null;
-  const bp = params.backPage ? Number(params.backPage) : 0;
-  const from = String(params.from || 'home'); // home | more
-
-  const prof = await safeBrandProfiles(() => db.getBrandProfile(ownerUserId), async () => null);
-  const p = prof || {};
-  const meta = parseBrandMeta(p.meta);
-  const curKey = String(meta.niche_key || '').trim();
-  const curLabel = BX_CATEGORIES.find((x) => x.key === curKey)?.label || '';
-  const curText = String(p.niche || '').trim();
-
-  const now = curLabel || curText || '—';
-
-  const suf = brandCbSuffix({ wsId, ret, backOfferId: bo, backPage: bp });
-  const backCb = from === 'more' ? `a:brand_profile_more${suf}` : `a:brand_profile_edit${suf}`;
-
-  const mark = (key, label) => `${key === curKey ? '✅ ' : ''}${label}`;
-
-  const kb = new InlineKeyboard();
-  // Keep it very clear: single-select.
-  for (const c of BX_CATEGORIES) {
-    kb.text(mark(c.key, c.label), `a:brand_niche_set${suf}|k:${c.key}|from:${from}`).row();
-  }
-  kb.row();
-  if (curKey) kb.text('🧹 Очистить', `a:brand_niche_clear${suf}|from:${from}`);
-  kb.text('✅ Готово', backCb);
-  kb.row();
-  kbNavRow(kb, backCb);
-
-  const text = `🏷 <b>Ниши бренда</b>
-<i>Выбери категорию (как в фильтрах каталога брендов).</i>
-
-Сейчас: <b>${escapeHtml(now)}</b>
-
-Нажимай — ✅ покажет выбранное. Потом «✅ Готово» вернёт назад.`;
-
-  await safeEditOrReply(ctx, text, {
-    parse_mode: 'HTML',
-    reply_markup: kb,
-    disable_web_page_preview: true
-  });
 }
 
 async function renderBrandBudgetBucketPicker(ctx, ownerUserId, params = {}) {
@@ -2141,7 +1892,7 @@ async function renderBrandBudgetBucketPicker(ctx, ownerUserId, params = {}) {
   kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
-  if (params.edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
+  if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, opts);
   else await ctx.reply(text, opts);
 }
 
@@ -2175,7 +1926,7 @@ async function renderBrandGoalsTagsPicker(ctx, ownerUserId, params = {}) {
   kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
-  if (params.edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
+  if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, opts);
   else await ctx.reply(text, opts);
 }
 
@@ -2209,7 +1960,7 @@ async function renderBrandReqTagsPicker(ctx, ownerUserId, params = {}) {
   kbNavRow(kb, `a:brand_prof_more${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
-  if (params.edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
+  if (params.edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, opts);
   else await ctx.reply(text, opts);
 }
 
@@ -2260,7 +2011,7 @@ async function renderBrandCollabTypesPicker(ctx, ownerUserId, params = {}) {
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (params.edit && ctx.callbackQuery?.message) {
-    await safeEditOrReply(ctx, text, opts);
+    await ctx.editMessageText(text, opts);
   } else {
     await ctx.reply(text, opts);
   }
@@ -2303,22 +2054,22 @@ async function renderBrandProfileMore(ctx, ownerUserId, params = {}) {
     .text('🌍 Гео', `a:brand_prof_set${suf}|f:ge|from:more`)
     .text('🧩 Форматы', `a:brand_prof_set${suf}|f:ty|from:more`)
     .row()
-    .text('✍️ Детали бюджета', `a:brand_prof_set${suf}|f:bu|from:more`)
+    .text('💰 Бюджет (текст)', `a:brand_prof_set${suf}|f:bu|from:more`)
     .text('💠 Категория', `a:brand_bb_pick${suf}`)
     .row()
-    .text('✍️ Детали целей', `a:brand_prof_set${suf}|f:go|from:more`)
+    .text('🎬 Цели (текст)', `a:brand_prof_set${suf}|f:go|from:more`)
     .text('🎯 Теги', `a:brand_gt_pick${suf}`)
     .row()
-    .text('✍️ Детали требований', `a:brand_prof_set${suf}|f:rq|from:more`)
+    .text('📎 Требования (текст)', `a:brand_prof_set${suf}|f:rq|from:more`)
     .text('🏷 Теги', `a:brand_rt_pick${suf}`)
     .row();
   kbNavRow(kb, `a:brand_profile${suf}`);
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (params.edit && ctx.callbackQuery?.message) {
-    await safeEditOrReply(ctx, txt, opts);
+    await ctx.editMessageText(txt, opts);
   } else if (ctx.callbackQuery?.message) {
-    await safeEditOrReply(ctx, txt, opts);
+    await ctx.editMessageText(txt, opts);
   } else {
     await ctx.reply(txt, opts);
   }
@@ -2469,48 +2220,14 @@ function brandDirectoryButtonLabel(bp, filter = null) {
 
 
 // Brand Directory filters (Creator): stored in Redis per viewer (tgId)
-// Shape: { category, offerType, compensationType, budgetBucket, goalsTags[], reqTags[] }
-const BD_FILTER_TTL_SEC = 60 * 60 * 24 * 14;
-
-function brandDirFilterKey(tgId) {
-  const id = Number(tgId || 0);
-  return k(['bd_filter', id]);
-}
-
-function parseMaybeJson(raw) {
-  if (!raw) return null;
-  if (typeof raw === 'object') return raw;
-  if (typeof raw === 'string') {
-    try { return JSON.parse(raw); } catch { return null; }
+// Shape: { category, offerType, compensationType }
+async function getBrandDirFilter(viewerUserId) {
+  const key = `bd_filter:${viewerUserId}`;
+  const raw = await redis.get(key);
+  let base = {};
+  if (raw) {
+    try { base = JSON.parse(raw); } catch { base = {}; }
   }
-  return null;
-}
-
-async function getBrandDirFilter(tgId, legacyUserId = null) {
-  const id = Number(tgId || 0);
-  const legacyId = Number(legacyUserId || 0);
-
-  // 1) Preferred: namespaced key
-  const keyNew = brandDirFilterKey(id);
-  let raw = null;
-  try { raw = await redis.get(keyNew); } catch { raw = null; }
-
-  // 2) Legacy fallbacks (older commits stored by tgId or by db userId)
-  let usedLegacy = false;
-  if (!raw) {
-    try {
-      raw = await redis.get(`bd_filter:${id}`);
-      if (raw) usedLegacy = true;
-    } catch {}
-  }
-  if (!raw && legacyId) {
-    try {
-      raw = await redis.get(`bd_filter:${legacyId}`);
-      if (raw) usedLegacy = true;
-    } catch {}
-  }
-
-  const base = parseMaybeJson(raw) || {};
 
   const f = {
     category: typeof base.category === 'string' ? base.category : null,
@@ -2536,34 +2253,17 @@ async function getBrandDirFilter(tgId, legacyUserId = null) {
   if (f.compensationType && !allowedComp.has(f.compensationType)) f.compensationType = null;
 
   if (f.budgetBucket && !BRAND_BUDGET_KEYS.has(f.budgetBucket)) f.budgetBucket = null;
-  f.goalsTags = uniqStrArr(f.goalsTags).filter((k2) => BRAND_GOALS_KEYS.has(k2));
-  f.reqTags = uniqStrArr(f.reqTags).filter((k2) => BRAND_REQ_KEYS.has(k2));
-
-  // Migrate legacy payload to namespaced key (best-effort)
-  if (usedLegacy) {
-    try { await redis.set(keyNew, f, { ex: BD_FILTER_TTL_SEC }); } catch {}
-  }
+  f.goalsTags = uniqStrArr(f.goalsTags).filter((k) => BRAND_GOALS_KEYS.has(k));
+  f.reqTags = uniqStrArr(f.reqTags).filter((k) => BRAND_REQ_KEYS.has(k));
 
   return f;
 }
 
-async function setBrandDirFilter(tgId, filter, legacyUserId = null) {
-  const id = Number(tgId || 0);
-  const legacyId = Number(legacyUserId || 0);
-  if (!id) return;
-
-  const payload = filter || {};
-  const keyNew = brandDirFilterKey(id);
-
-  // Preferred
-  await redis.set(keyNew, payload, { ex: BD_FILTER_TTL_SEC });
-
-  // Back-compat: also write legacy raw keys (stringified JSON)
-  try { await redis.set(`bd_filter:${id}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
-  if (legacyId) {
-    try { await redis.set(`bd_filter:${legacyId}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
-  }
+async function setBrandDirFilter(viewerUserId, filter) {
+  const key = `bd_filter:${viewerUserId}`;
+  await redis.set(key, JSON.stringify(filter || {}), { ex: 60 * 60 * 24 * 14 });
 }
+
 
 function kbAddPairs(kb, items, perRow = 2) {
   const n = Math.max(1, Math.min(3, Number(perRow) || 2));
@@ -2641,73 +2341,48 @@ function brandDirFiltersKb(f, page = 0) {
 }
 
 
-function brandDirPickKb(key, page = 0, currentVal = null) {
+function brandDirPickKb(key, page = 0) {
   const kb = new InlineKeyboard();
-  const cur = currentVal == null ? null : String(currentVal);
-
-  const mark = (val, label) => {
-    const v = val == null ? 'all' : String(val);
-    const on = (cur == null && v === 'all') || (cur != null && v === cur);
-    return `${on ? '✅ ' : ''}${label}`;
-  };
-
-  const cb = (k2, v2) => `a:bd_fset|k:${k2}|v:${v2}|p:${page}|s:1`;
 
   if (key === 'cat') {
-    kb.text(mark(null, 'Все'), cb('cat', 'all')).row();
-    const items = BX_CATEGORIES.map((c) => ({
-      text: mark(c.key, c.label),
-      cb: cb('cat', c.key)
-    }));
+    kb.text('Все', `a:bd_fset|k:cat|v:all|p:${page}`).row();
+    const items = BX_CATEGORIES.map((c) => ({ text: c.label, cb: `a:bd_fset|k:cat|v:${c.key}|p:${page}` }));
     kbAddPairs(kb, items, 2);
   }
 
   if (key === 'type') {
-    kb.text(mark(null, 'Все'), cb('type', 'all')).row();
+    kb.text('Все', `a:bd_fset|k:type|v:all|p:${page}`).row();
     const items = [
-      { key: 'ad', title: '📣 Реклама' },
-      { key: 'review', title: '🎥 Обзор' },
-      { key: 'ugc', title: '🎬 UGC' },
-      { key: 'giveaway', title: '🎁 Розыгрыш' },
-      { key: 'other', title: '✍️ Другое' },
-    ].map((t) => ({
-      text: mark(t.key, t.title),
-      cb: cb('type', t.key)
-    }));
+      { text: '📣 Реклама', cb: `a:bd_fset|k:type|v:ad|p:${page}` },
+      { text: '🎥 Обзор', cb: `a:bd_fset|k:type|v:review|p:${page}` },
+      { text: '🎬 UGC', cb: `a:bd_fset|k:type|v:ugc|p:${page}` },
+      { text: '🎁 Розыгрыш', cb: `a:bd_fset|k:type|v:giveaway|p:${page}` },
+      { text: '✍️ Другое', cb: `a:bd_fset|k:type|v:other|p:${page}` },
+    ];
     kbAddPairs(kb, items, 2);
   }
 
   if (key === 'comp') {
-    kb.text(mark(null, 'Все'), cb('comp', 'all')).row();
+    kb.text('Все', `a:bd_fset|k:comp|v:all|p:${page}`).row();
     const items = [
-      { key: 'barter', title: '🤝 Бартер' },
-      { key: 'cert', title: '🎟 Сертификат' },
+      { text: '🤝 Бартер', cb: `a:bd_fset|k:comp|v:barter|p:${page}` },
+      { text: '🎟 Сертификат', cb: `a:bd_fset|k:comp|v:cert|p:${page}` },
       // Canonical is paid (stored in brand_profiles.collab_types)
-      { key: 'paid', title: '💸 ₽' },
-      { key: 'mixed', title: '🔁 Смешано' },
-    ].map((t) => ({
-      text: mark(t.key, t.title),
-      cb: cb('comp', t.key)
-    }));
+      { text: '💸 ₽', cb: `a:bd_fset|k:comp|v:paid|p:${page}` },
+      { text: '🔁 Смешано', cb: `a:bd_fset|k:comp|v:mixed|p:${page}` },
+    ];
     kbAddPairs(kb, items, 2);
   }
 
   if (key === 'bud') {
-    kb.text(mark(null, 'Все'), cb('bud', 'all')).row();
-    const items = BRAND_BUDGET_BUCKETS.map((b) => ({
-      text: mark(b.key, b.title),
-      cb: cb('bud', b.key)
-    }));
+    kb.text('Все', `a:bd_fset|k:bud|v:all|p:${page}`).row();
+    const items = BRAND_BUDGET_BUCKETS.map((b) => ({ text: b.title, cb: `a:bd_fset|k:bud|v:${b.key}|p:${page}` }));
     kbAddPairs(kb, items, 2);
   }
-
-  // Explicit "done" to return to filters
-  kb.row().text('✅ Готово', `a:brands_filters|p:${page}`);
 
   kbNavRow(kb, `a:brands_filters|p:${page}`);
   return kb;
 }
-
 
 function brandDirMultiPickKb(key, page, selected) {
   const kb = new InlineKeyboard();
@@ -2730,7 +2405,7 @@ function brandDirMultiPickKb(key, page, selected) {
 
 async function renderBrandDirFilters(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
-  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
+  const f = await getBrandDirFilter(ctx.from.id);
 
   // Small helper count: makes it obvious whether "0 results" is data vs filter logic
   let matchCount = null;
@@ -2752,7 +2427,7 @@ ${matchCount !== null ? `
 
 <i>Настройки применяются к каталогу сразу. Нажми «📋 Показать бренды», чтобы увидеть выдачу.</i>`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: brandDirFiltersKb(f, page),
     disable_web_page_preview: true
@@ -2764,7 +2439,7 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
   const key = String(params.key || 'cat');
   const title = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : (key === 'comp' ? 'Оплата' : 'Бюджет'));
 
-  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
+  const f = await getBrandDirFilter(ctx.from.id);
 
   const hint =
     key === 'cat' ? 'По нише, указанной брендом (поле «Ниша»).' :
@@ -2780,13 +2455,6 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
     key === 'bud' ? (f.budgetBucket ? brandBudgetBucketTitle(f.budgetBucket) : 'Все') :
     '—';
 
-  const currentVal =
-    key === 'cat' ? (f.category || null) :
-    key === 'type' ? (f.offerType || null) :
-    key === 'comp' ? (f.compensationType || null) :
-    key === 'bud' ? (f.budgetBucket || null) :
-    null;
-
   const text = `🎛 <b>${title}</b>
 <i>${escapeHtml(hint)}</i>
 
@@ -2794,9 +2462,9 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
 
 Выбери значение:`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
-    reply_markup: brandDirPickKb(key, page, currentVal),
+    reply_markup: brandDirPickKb(key, page),
     disable_web_page_preview: true
   });
 }
@@ -2804,7 +2472,7 @@ async function renderBrandDirFilterPick(ctx, viewerUserId, params = {}) {
 async function renderBrandDirMultiPick(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
   const key = String(params.key || 'goals');
-  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
+  const f = await getBrandDirFilter(ctx.from.id);
   const selected = key === 'goals' ? f.goalsTags : f.reqTags;
   const title = key === 'goals' ? 'Цели (теги)' : 'Требования (теги)';
 
@@ -2819,7 +2487,7 @@ async function renderBrandDirMultiPick(ctx, viewerUserId, params = {}) {
 
 Выбери теги:`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: brandDirMultiPickKb(key, page, selected),
     disable_web_page_preview: true
@@ -2831,7 +2499,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   const PAGE_SIZE = 8;
   const offset = page * PAGE_SIZE;
 
-  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
+  const f = await getBrandDirFilter(ctx.from.id);
 
   const rows = await safeBrandProfiles(
     () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
@@ -2839,7 +2507,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   );
   if (rows && rows.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
-    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
+    if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(msg, { reply_markup: navKb('a:menu') });
     else await ctx.reply(msg, { reply_markup: navKb('a:menu') });
     return;
   }
@@ -2884,7 +2552,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   kb.text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb };
-  if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, extra);
+  if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, extra);
   else await ctx.reply(text, extra);
 }
 
@@ -2900,14 +2568,14 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   );
   if (prof && prof.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
-    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
+    if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(msg, { reply_markup: navKb('a:menu') });
     else await ctx.reply(msg, { reply_markup: navKb('a:menu') });
     return;
   }
   if (!prof) {
     const kb = new InlineKeyboard();
     kbNavRow(kb, `a:brands_home|p:${backPage}`);
-    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, '⚠️ Бренд не найден.', { reply_markup: kb });
+    if (edit && ctx.callbackQuery?.message) await ctx.editMessageText('⚠️ Бренд не найден.', { reply_markup: kb });
     else await ctx.reply('⚠️ Бренд не найден.', { reply_markup: kb });
     return;
   }
@@ -2919,7 +2587,7 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
 
   let viewerFilter = null;
   try {
-    viewerFilter = await getBrandDirFilter(viewerUserId, params.legacyUserId);
+    viewerFilter = await getBrandDirFilter(ctx.from.id);
   } catch (_) {
     viewerFilter = null;
   }
@@ -2983,7 +2651,7 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   kb.text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-  if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, extra);
+  if (edit && ctx.callbackQuery?.message) await ctx.editMessageText(text, extra);
   else await ctx.reply(text, extra);
 }
 
@@ -3156,7 +2824,7 @@ async function renderBxOfferTagsStep(ctx, wsId, opts = {}) {
 💡 Теги помогут брендам быстро фильтровать офферы.${presetNote}`;
 
   const kb = bxOfferTagsKb(wsId, meta, { showParams: Boolean(opts.showParams) });
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
@@ -3179,7 +2847,7 @@ async function renderBxOfferTagsPicker(ctx, wsId, key) {
 
 Выбери теги:`;
 
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
@@ -3205,7 +2873,7 @@ async function renderBxOfferTextStep(ctx, wsId) {
     .row()
     .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
   await setExpectText(ctx.from.id, { type: 'bx_offer_text', wsId });
 }
@@ -3225,70 +2893,46 @@ function bxFiltersKb(wsId, f, page = 0, opts = {}) {
 
   const kb = new InlineKeyboard();
 
-  kb.text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|rp:${page}|pg:0|p:0|h:${h}|r:${r}`)
-    .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|rp:${page}|pg:0|p:0|h:${h}|r:${r}`)
+  kb.text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|p:${page}|h:${h}|r:${r}`)
+    .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|p:${page}|h:${h}|r:${r}`)
     .row()
-    .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|rp:${page}|pg:0|p:0|h:${h}|r:${r}`)
+    .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|p:${page}|h:${h}|r:${r}`)
     .text(`🎯 Цели: ${bxTagsLabel(f.goalsTags, 'goals')}`, `a:bx_mpick|ws:${wsId}|k:goals|p:${page}|h:${h}|r:${r}`)
     .row()
     .text(`📎 Требования: ${bxTagsLabel(f.reqTags, 'req')}`, `a:bx_mpick|ws:${wsId}|k:req|p:${page}|h:${h}|r:${r}`)
     .row();
 
   kb.text('♻️ Сбросить', `a:bx_freset|ws:${wsId}|p:${page}|h:${h}|r:${r}`)
-    .text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0|h:${h}`)
+    .text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo|h:${h}`)
     .row();
 
   kbNavRow(kb, bxReturnCb(wsNum, page, h, r));
   return kb;
 }
 
-function bxPickKb(wsId, key, selectedValue, retPage = 0, pickPage = 0, opts = {}) {
+function bxPickKb(wsId, key, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
   const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
 
-  // Canonical keys (cat/type/comp). "All" is represented by null.
-  const keys = key === 'cat' ? BX_CATS : (key === 'type' ? BX_TYPES : BX_COMPS);
-  const list = (Array.isArray(keys) ? keys : [])
-    .filter((v) => v) // remove null ("All"), it is rendered as separate button
-    .map((v) => ({
-      value: String(v),
-      label: bxAnyLabel(String(v), key)
-    }));
-
-  const perPage = 10;
-  const safeRetPage = Math.max(0, Number(retPage || 0));
-  const safePickPage = Math.max(0, Number(pickPage || 0));
-  const start = safePickPage * perPage;
-  const slice = list.slice(start, start + perPage);
-
   const kb = new InlineKeyboard();
+  const pickTitle = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : 'Оплата');
 
-  // 'All' option
-  const isAll = !selectedValue;
-  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|rp:${safeRetPage}|pg:${safePickPage}|p:${safePickPage}|h:${h}|r:${r}`).row();
+  const items =
+    key === 'cat' ? BX_CATEGORIES :
+    key === 'type' ? BX_OFFER_TYPES :
+    BX_COMPENSATION_TYPES;
 
-  // Options
-  for (const it of slice) {
-    const selected = String(selectedValue || '') === it.value;
-    const label = selected ? `✅ ${it.label}` : it.label;
-    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|rp:${safeRetPage}|pg:${safePickPage}|p:${safePickPage}|h:${h}|r:${r}`).row();
-  }
+  kb.text('Все', `a:bx_fset|ws:${wsId}|k:${key}|v:all|p:${page}|h:${h}|r:${r}`).row();
 
-  // Pagination
-  if (list.length > perPage) {
-    kb.row();
-    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|rp:${safeRetPage}|pg:${safePickPage - 1}|p:${safePickPage - 1}|h:${h}|r:${r}`);
-    kb.text(`${safePickPage + 1}/${Math.ceil(list.length / perPage)}`, 'a:nop');
-    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|rp:${safeRetPage}|pg:${safePickPage + 1}|p:${safePickPage + 1}|h:${h}|r:${r}`);
-  }
+  const pairs = items.map((it) => ({
+    label: it.label,
+    cb: `a:bx_fset|ws:${wsId}|k:${key}|v:${it.value}|p:${page}|h:${h}|r:${r}`
+  }));
+  kbAddPairs(kb, pairs, 2);
 
-  // Actions
-  kb.row();
-  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|rp:${safeRetPage}|pg:${safePickPage}|p:${safePickPage}|h:${h}|r:${r}`);
-  kb.text('✅ Готово', `a:bx_filters|ws:${wsNum}|p:${safeRetPage}|h:${h}|r:${r}`);
-
-  kbNavRow(kb, `a:bx_filters|ws:${wsNum}|p:${safeRetPage}|h:${h}|r:${r}`);
+  kbNavRow(kb, `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:${r}`);
+  kb.__title = pickTitle;
   return kb;
 }
 
@@ -3298,8 +2942,7 @@ function bxMultiPickKb(wsId, key, selected, page = 0, opts = {}) {
   const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
 
   const pickTitle = key === 'goals' ? '🎯 Цели' : '📎 Требования';
-  const raw = key === 'goals' ? BRAND_GOALS_TAGS : BRAND_REQ_TAGS;
-  const items = raw.map((t) => ({ value: String(t.key), label: String(t.title) }));
+  const items = key === 'goals' ? BX_GOALS_TAGS : BX_REQUIREMENTS_TAGS;
   const selSet = new Set((selected || []).map(String));
 
   const kb = new InlineKeyboard();
@@ -3397,7 +3040,7 @@ function bxFeedNavKb(wsId, page, hasPrev, hasNext, opts = {}) {
 
   kb.row()
     .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:bf`)
-    .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`);
+    .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo|h:bo|h:${h}`);
 
   kbNavRow(kb, bxHomeCb(wsNum, h));
   return kb;
@@ -3588,7 +3231,7 @@ ${sponsorLines}
 Если всё ок — жми “📣 Опубликовать”.`;
 
   const extra = { parse_mode: 'HTML', reply_markup: gwConfirmKb(wsId) };
-  if (edit) return safeEditOrReply(ctx, text, extra);
+  if (edit) return ctx.editMessageText(text, extra);
   return ctx.reply(text, extra);
 }
 
@@ -3610,7 +3253,7 @@ async function renderGwMediaStep(ctx, wsId, opts = {}) {
 Выбери действие:`;
 
   const extra = { parse_mode: 'HTML', reply_markup: gwMediaKb(wsId, hasMedia) };
-  if (edit) return safeEditOrReply(ctx, text, extra);
+  if (edit) return ctx.editMessageText(text, extra);
   return ctx.reply(text, extra);
 }
 
@@ -3783,7 +3426,7 @@ async function ensureWorkspaceForOwner(ctx, ownerUserId) {
 async function renderWsList(ctx, ownerUserId) {
   const items = await db.listWorkspaces(ownerUserId);
   if (!items.length) {
-    await safeEditOrReply(ctx, `У тебя пока нет подключенных каналов.
+    await ctx.editMessageText(`У тебя пока нет подключенных каналов.
 
 Нажми “🚀 Подключить канал”.`, { reply_markup: mainMenuKb(await getRoleFlags(await db.upsertUser(ctx.from.id, ctx.from.username ?? null), ctx.from.id)) });
     return;
@@ -3794,7 +3437,7 @@ async function renderWsList(ctx, ownerUserId) {
     kb.text(label, `a:ws_open|ws:${w.id}`).row();
   }
   kb.text('🚀 Подключить ещё', 'a:setup').text('⬅️ В меню', 'a:menu');
-  await safeEditOrReply(ctx, `📣 <b>Мои каналы</b>
+  await ctx.editMessageText(`📣 <b>Мои каналы</b>
 
 Это каналы, которые ты подключил к боту (workspace).
 
@@ -3815,10 +3458,9 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
   }
   await setActiveWorkspace(ctx.from.id, wsId);
   const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
-  const isCurator = await db.hasAnyCuratorRole(ownerUserId);
-  await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
+  await ctx.editMessageText(`📣 <b>${escapeHtml(title)}</b>
 
-Выбери действие:`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
+Выбери действие:`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId) });
 }
 
 async function renderWsSettings(ctx, ownerUserId, wsId) {
@@ -3832,7 +3474,7 @@ async function renderWsSettings(ctx, ownerUserId, wsId) {
     network_enabled: s.network_enabled,
     curator_enabled: s.curator_enabled
   };
-  await safeEditOrReply(ctx, `👥 <b>Кураторы и сеть</b>
+  await ctx.editMessageText(`👥 <b>Кураторы и сеть</b>
 
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>`, {
     parse_mode: 'HTML',
@@ -3850,7 +3492,7 @@ async function renderWsHistory(ctx, ownerUserId, wsId) {
   const text = `🧾 <b>История действий</b>
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb(`a:ws_open|ws:${wsId}`) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) });
 }
 
 
@@ -3980,7 +3622,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     .row()
     .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
 async function renderProfileMatchingPick(ctx, ownerUserId, wsId, type) {
@@ -4005,7 +3647,7 @@ async function renderProfileMatchingPick(ctx, ownerUserId, wsId, type) {
     `Выбрано: <b>${sel.length}/${max}</b>\n` +
     `Нажимай по пунктам, чтобы включать/выключать ✅.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
 async function renderProfileMatchingResults(ctx, ownerUserId, wsId, page = 0) {
@@ -4034,7 +3676,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
       .text('⚙️ Изменить фильтры', `a:pm_home|ws:${wsId}`)
       .row()
       .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
-    return safeEditOrReply(ctx, 
+    return ctx.editMessageText(
       head + '😶 Ничего не нашёл по фильтрам.\n\nПопробуй упростить фильтр (меньше ниш/форматов).',
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
     );
@@ -4072,7 +3714,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
 
   kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
 
@@ -4437,7 +4079,7 @@ function calcWsProfileProgress(ws) {
 }
 
 
-async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
+async function renderWsProfile(ctx, ownerUserId, wsId) {
   const ws0 = await db.getWorkspace(ownerUserId, wsId);
   if (!ws0) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
   await db.ensureWorkspaceSettings(wsId);
@@ -4503,21 +4145,7 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
       ? `🔗 <b>Ссылка для брендов</b> (вставь в IG bio / сторис):\n<code>${escapeHtml(link)}</code>`
       : `⚠️ Не задан BOT_USERNAME — ссылка для брендов недоступна.`);
 
-  const extra = { parse_mode: 'HTML', reply_markup: wsProfileKb(wsId, ws), disable_web_page_preview: true };
-
-  const et = opts && opts.editTarget ? opts.editTarget : null;
-  if (et && et.chatId && et.messageId) {
-    try {
-      await ctx.api.editMessageText(Number(et.chatId), Number(et.messageId), text, extra);
-      return;
-    } catch {}
-  }
-
-  try {
-    await safeEditOrReply(ctx, text, extra);
-  } catch {
-    await ctx.reply(text, extra);
-  }
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: wsProfileKb(wsId, ws), disable_web_page_preview: true });
 }
 
 
@@ -4542,7 +4170,7 @@ async function renderWsShareMenu(ctx, ownerUserId, wsId) {
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4597,7 +4225,7 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
   kbNavRow(kb, `a:ws_share|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4635,7 +4263,7 @@ async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4852,7 +4480,7 @@ async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', varia
     .text('⬅️ Назад', `a:ws_ig_templates|ws:${wsId}`).text('📋 Меню', 'a:menu');
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4885,7 +4513,7 @@ async function sendWsIgTemplateMessage(ctx, ownerUserId, wsId, type = 'story') {
   kbNavRow(kb, `a:ws_ig_templates|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -4903,8 +4531,9 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
     .text(`${cur === 'channel' ? '✅ ' : ''}Канал`, `a:ws_prof_mode_set|ws:${wsId}|m:channel`)
     .text(`${cur === 'ugc' ? '✅ ' : ''}UGC`, `a:ws_prof_mode_set|ws:${wsId}|m:ugc`)
     .row()
-    .text(`${cur === 'both' ? '✅ ' : ''}Оба`, `a:ws_prof_mode_set|ws:${wsId}|m:both`);
-  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
+    .text(`${cur === 'both' ? '✅ ' : ''}Оба`, `a:ws_prof_mode_set|ws:${wsId}|m:both`)
+    .row()
+    .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`);
 
   const text =
     `🧩 <b>Режим профиля</b>\n\n` +
@@ -4913,14 +4542,8 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
     `• <b>Оба</b> — лучше по РФ-рынку\n\n` +
     `Сейчас: <b>${escapeHtml(PROFILE_MODE_LABELS[cur] || PROFILE_MODE_LABELS.both)}</b>`;
 
-  const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-  try {
-    await safeEditOrReply(ctx, text, extra);
-  } catch {
-    await ctx.reply(text, extra);
-  }
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
-
 
 async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -4933,14 +4556,11 @@ async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
 
   PROFILE_VERTICALS.forEach((it, i) => {
     const on = selected.includes(it.key);
-    kb.text(`${on ? '✅ ' : ''}${it.title}`, `a:ws_prof_vert_t|ws:${wsId}|v:${it.key}`);
+    kb.text(`${on ? '✅' : '▫️'} ${it.title}`, `a:ws_prof_vert_t|ws:${wsId}|v:${it.key}`);
     if (i % 2 === 1) kb.row();
   });
 
-  kb.row()
-    .text('🧹 Очистить', `a:ws_prof_vert_clear|ws:${wsId}`)
-    .text('✅ Готово', `a:ws_profile|ws:${wsId}`);
-
+  kb.row().text('🧹 Сброс', `a:ws_prof_vert_clear|ws:${wsId}`);
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   const text =
@@ -4948,14 +4568,8 @@ async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
     `Выбери до 3 ниш — так брендам проще понять, ты про что.\n\n` +
     `Сейчас: <b>${escapeHtml(fmtMatrix(selected, PROFILE_VERTICALS))}</b>`;
 
-  const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-  try {
-    await safeEditOrReply(ctx, text, extra);
-  } catch {
-    await ctx.reply(text, extra);
-  }
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
-
 
 async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -4968,14 +4582,11 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
 
   PROFILE_FORMATS.forEach((it, i) => {
     const on = selected.includes(it.key);
-    kb.text(`${on ? '✅ ' : ''}${it.title}`, `a:ws_prof_fmt_t|ws:${wsId}|f:${it.key}`);
+    kb.text(`${on ? '✅' : '▫️'} ${it.title}`, `a:ws_prof_fmt_t|ws:${wsId}|f:${it.key}`);
     if (i % 2 === 1) kb.row();
   });
 
-  kb.row()
-    .text('🧹 Очистить', `a:ws_prof_fmt_clear|ws:${wsId}`)
-    .text('✅ Готово', `a:ws_profile|ws:${wsId}`);
-
+  kb.row().text('🧹 Сброс', `a:ws_prof_fmt_clear|ws:${wsId}`);
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   const text =
@@ -4983,14 +4594,8 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
     `Выбери форматы — так брендам проще сделать быстрый заказ.\n\n` +
     `Сейчас: <b>${escapeHtml(fmtMatrix(selected, PROFILE_FORMATS))}</b>`;
 
-  const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-  try {
-    await safeEditOrReply(ctx, text, extra);
-  } catch {
-    await ctx.reply(text, extra);
-  }
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
-
 
 async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const ws = await db.getWorkspaceAny(wsId);
@@ -5076,7 +4681,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   kb.row().text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
-  if (ctx.callbackQuery) await safeEditOrReply(ctx, text, extra);
+  if (ctx.callbackQuery) await ctx.editMessageText(text, extra);
   else await ctx.reply(text, extra);
 
 }
@@ -5121,7 +4726,7 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
     .text('📋 Меню', 'a:menu');
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5183,7 +4788,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
-    await safeEditOrReply(ctx, textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5234,7 +4839,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   try {
     try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5476,7 +5081,7 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
   const text = header + body;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5587,7 +5192,7 @@ async function renderBrandDealsList(ctx, actorUserId, brandUserId, stage = 'nego
 
   const text = header + body;
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5652,10 +5257,10 @@ if (threadBlock) {
 
   const bStage = normDealStage(back.stage);
   const bPage = Math.max(0, Number(back.page) || 0);
-  kbNavRow(kb, `a:brand_deals|ws:0|st:${bStage}|p:${bPage}`);
+  kb.text('⬅️ Назад', `a:brand_deals|ws:0|st:${bStage}|p:${bPage}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5740,7 +5345,7 @@ ${threadBlock}`;
     .text('⬅️ Назад', `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5781,7 +5386,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
     `Напиши ответ одним сообщением — я отправлю его креатору.`;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5811,7 +5416,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
     backCb
   });
 
-  const kb = navKb(backCb);
+  const kb = new InlineKeyboard().text('⬅️ Назад', backCb);
 
   const text =
     `✍️ <b>Ответ креатору</b>
@@ -5823,7 +5428,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
     `Напиши ответ одним сообщением — я отправлю его креатору.`;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5863,11 +5468,10 @@ async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage:
     .row()
     .text('⏱ Сроки', `a:brand_deal_tpl|id:${app.id}|k:timing|b:${back.stage}|p:${back.page}`)
     .row()
-    .text('⬅️ Назад', backCb)
-    .text('📋 Меню', 'a:menu');
+    .text('⬅️ Назад', backCb);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -5911,7 +5515,7 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
   } catch (e) {
     const backCb = `a:brand_deal_view|id:${app.id}|st:${normDealStage(back.stage)}|p:${Math.max(0, Number(back.page) || 0)}`;
     await ctx.reply('❌ Не удалось отправить сообщение креатору. Возможно, он ещё не нажимал /start.', {
-      reply_markup: navKb(backCb)
+      reply_markup: new InlineKeyboard().text('⬅️ Назад', backCb)
     });
     return;
   }
@@ -5988,7 +5592,7 @@ async function renderBrandAppTemplates(ctx, actorUserId, appId, back) {
     .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -6126,7 +5730,7 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
     `Напиши сообщение одним текстом — я доставлю его в Inbox бренда.`;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -6166,11 +5770,10 @@ async function renderLeadTemplates(ctx, actorUserId, leadId, back) {
     .row()
     .text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
     .row()
-    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
-    .text('📋 Меню', 'a:menu');
+    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`);
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -6202,7 +5805,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   try {
     await ctx.api.sendMessage(brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
   } catch (e) {
-    await ctx.reply('❌ Не удалось отправить сообщение бренду. Возможно, он не писал боту первым.', { reply_markup: navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`) });
+    await ctx.reply('❌ Не удалось отправить сообщение бренду. Возможно, он не писал боту первым.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`) });
     return;
   }
 
@@ -6253,7 +5856,7 @@ ${escapeHtml(pro)}
   }
   kb.text('⬅️ Назад', `a:ws_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderWsProPinPick(ctx, ownerUserId, wsId) {
@@ -6277,7 +5880,7 @@ async function renderWsProPinPick(ctx, ownerUserId, wsId) {
   kb.text('❌ Снять пин', `a:ws_pro_pin_clear|ws:${wsId}`).row();
   kb.text('⬅️ Назад', `a:ws_pro|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, `📌 <b>Пин в ленте</b>
+  await ctx.editMessageText(`📌 <b>Пин в ленте</b>
 
 Выбери оффер, который будет закреплен в ленте (только для PRO).`, {
     parse_mode: 'HTML',
@@ -6330,7 +5933,7 @@ async function renderFoldersMy(ctx, userId) {
     ? `📁 <b>Папки</b>\n\nВыбери канал, где ты редактор:`
     : `📁 <b>Папки</b>\n\nПока тебя не назначили редактором папок ни в одном Workspace.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderFoldersHome(ctx, userId, wsId) {
@@ -6344,7 +5947,7 @@ async function renderFoldersHome(ctx, userId, wsId) {
   const title = access.ws.channel_username ? '@' + access.ws.channel_username : (access.ws.title || `ws:${wsId}`);
   const text = `📁 <b>Папки</b>\n\nКанал: <b>${escapeHtml(String(title))}</b>\nЛимит каналов в папке: <b>${max}</b>\n\nСоздай папку и добавь @каналы для совместных конкурсов/офферов.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: foldersHomeKb(access, folders) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: foldersHomeKb(access, folders) });
 }
 
 function folderViewKb(access, wsId, folderId) {
@@ -6397,7 +6000,7 @@ async function renderFolderView(ctx, userId, wsId, folderId) {
     (shown.length ? shown.join('\n') : 'Пока пусто.') +
     more;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: folderViewKb(access, Number(wsId), Number(folderId)) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: folderViewKb(access, Number(wsId), Number(folderId)) });
 }
 
 async function renderWsEditors(ctx, ownerUserId, wsId) {
@@ -6428,7 +6031,7 @@ async function renderWsEditors(ctx, ownerUserId, wsId) {
     `По умолчанию папки редактирует только owner.\n\n` +
     (lines.length ? lines.join('\n') : 'Пока нет редакторов.');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
@@ -6461,96 +6064,73 @@ function bxAnyLabel(v, kind) {
   return bxCompLabel(v);
 }
 
-
-const BX_FILTER_TTL_SEC = 30 * 24 * 3600;
-
-function bxFilterKeyScoped(tgId, ownerUserId, wsNum) {
-  const scopeId = Number(ownerUserId || 0) || Number(tgId || 0);
-  if (!scopeId) return null;
-  const w = Number(wsNum || 0);
-  if (w === 0) return k(['bx_filter_brand', scopeId]);
-  return k(['bx_filter_ws', scopeId, w]);
-}
-
-function bxLegacyFilterKey(tgId, wsNum) {
-  const id = Number(tgId || 0);
-  if (!id) return null;
-  return k(['bx_filter', id, Number(wsNum || 0)]);
-}
-
-async function getBxFilterScoped(tgId, ownerUserId, wsId) {
-  const wsNum = Number(wsId || 0);
-  const key = bxFilterKeyScoped(tgId, ownerUserId, wsNum);
-  const legacyKey = bxLegacyFilterKey(tgId, wsNum);
-
-  let v = null;
-  let migrated = false;
-
-  if (key) {
-    try { v = await redis.get(key); } catch { v = null; }
-  }
-
-  // Legacy migration:
-  // - previously used: bx_filter:<tgId>:<wsNum>
-  // - now:
-  //   wsNum==0 -> bx_filter_brand:<ownerUserId>
-  //   wsNum>0  -> bx_filter_ws:<ownerUserId>:<wsNum>
-  if (!v && key && legacyKey) {
-    try {
-      const old = await redis.get(legacyKey);
-      if (old) {
-        v = old;
-        migrated = true;
-      }
-    } catch {}
-  }
-
+async function getBxFilter(tgId, wsId) {
+  const key = k(['bx_filter', tgId, wsId]);
+  const v = await redis.get(key);
   const base = v || {};
+
+  // Canonical shape
   const f = {
-    category: base.category ?? base.cat ?? null,
-    offerType: base.offerType ?? base.type ?? null,
-    compensationType: base.compensationType ?? base.comp ?? null,
-    goalsTags: Array.isArray(base.goalsTags ?? base.goals) ? (base.goalsTags ?? base.goals) : [],
-    reqTags: Array.isArray(base.reqTags ?? base.req) ? (base.reqTags ?? base.req) : [],
+    category: base.category ?? null,
+    offerType: base.offerType ?? null,
+    compensationType: base.compensationType ?? null,
+    goalsTags: Array.isArray(base.goalsTags) ? base.goalsTags : [],
+    reqTags: Array.isArray(base.reqTags) ? base.reqTags : [],
   };
 
-  // Normalize values
-  if (f.category === 'all') f.category = null;
-  if (f.offerType === 'all') f.offerType = null;
-  if (f.compensationType === 'all') f.compensationType = null;
-  if (!Array.isArray(f.goalsTags)) f.goalsTags = [];
-  if (!Array.isArray(f.reqTags)) f.reqTags = [];
+  // Back-compat: older UI stored short keys (cat/type/comp)
+  const norm = (x) => {
+    if (x == null) return null;
+    const s = String(x);
+    if (!s || s === 'all' || s === 'undefined' || s === 'null') return null;
+    return s;
+  };
+  if (f.category == null && base.cat != null) f.category = norm(base.cat);
+  if (f.offerType == null && base.type != null) f.offerType = norm(base.type);
+  if (f.compensationType == null && base.comp != null) f.compensationType = norm(base.comp);
 
-  const needsPersist =
-    migrated ||
-    ('cat' in base) || ('type' in base) || ('comp' in base) || ('goals' in base) || ('req' in base) ||
-    (base.category === 'all') || (base.offerType === 'all') || (base.compensationType === 'all') ||
-    !Array.isArray(base.goalsTags) || !Array.isArray(base.reqTags);
+  // Back-compat: older versions could store these under shorter keys
+  if (!f.goalsTags.length && Array.isArray(base.goals)) f.goalsTags = base.goals;
+  if (!f.reqTags.length && Array.isArray(base.req)) f.reqTags = base.req;
 
-  if (needsPersist && key) {
+  // Hard-normalize tag values
+  f.goalsTags = Array.from(new Set(f.goalsTags.map(String))).filter((k2) => BRAND_GOALS_KEYS.has(k2));
+  f.reqTags = Array.from(new Set(f.reqTags.map(String))).filter((k2) => BRAND_REQ_KEYS.has(k2));
+
+  // If we had to normalize anything, persist back in canonical shape
+  const needsPersist = (!base.category && !base.offerType && !base.compensationType && (base.cat || base.type || base.comp)) ||
+    (Array.isArray(base.goals) || Array.isArray(base.req));
+  if (needsPersist) {
     try {
-      await redis.set(key, f, { ex: BX_FILTER_TTL_SEC });
+      await redis.set(key, f, { ex: 30 * 24 * 3600 });
     } catch {}
   }
 
   return f;
 }
 
-async function setBxFilterScoped(tgId, ownerUserId, wsId, patch) {
-  const wsNum = Number(wsId || 0);
-  const key = bxFilterKeyScoped(tgId, ownerUserId, wsNum);
-  const cur = await getBxFilterScoped(tgId, ownerUserId, wsNum);
-  const next = { ...cur, ...(patch || {}) };
+async function setBxFilter(tgId, wsId, patch) {
+  const key = k(['bx_filter', tgId, wsId]);
+  const cur = await getBxFilter(tgId, wsId);
+  const next = { ...cur, ...patch };
 
-  // Normalize
-  if (next.category === 'all') next.category = null;
-  if (next.offerType === 'all') next.offerType = null;
-  if (next.compensationType === 'all') next.compensationType = null;
+  // Normalize tag arrays (dedupe + whitelist)
   if (!Array.isArray(next.goalsTags)) next.goalsTags = [];
   if (!Array.isArray(next.reqTags)) next.reqTags = [];
+  next.goalsTags = Array.from(new Set(next.goalsTags.map(String))).filter((k2) => BRAND_GOALS_KEYS.has(k2));
+  next.reqTags = Array.from(new Set(next.reqTags.map(String))).filter((k2) => BRAND_REQ_KEYS.has(k2));
 
-  if (!key) return next;
-  await redis.set(key, next, { ex: BX_FILTER_TTL_SEC });
+  // Normalize scalar values
+  const norm = (x) => {
+    if (x == null) return null;
+    const s = String(x);
+    if (!s || s === 'all' || s === 'undefined' || s === 'null') return null;
+    return s;
+  };
+  next.category = norm(next.category);
+  next.offerType = norm(next.offerType);
+  next.compensationType = norm(next.compensationType);
+  await redis.set(key, next, { ex: 30 * 24 * 3600 });
   return next;
 }
 
@@ -6580,7 +6160,7 @@ async function renderBxBrandOnlyNotice(ctx) {
 Этот раздел доступен только в режиме <b>Brand</b>.
 
 В режиме <b>Creator</b> вместо ленты — 🏷 Каталог брендов.`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: bxBrandOnlyNoticeKb() });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: bxBrandOnlyNoticeKb() });
 }
 
 function deriveBxSmartPrefillFromBrandProfile(prof) {
@@ -6666,7 +6246,6 @@ function bxSmartKb(wsId, opts = {}) {
 async function renderBxOpen(ctx, ownerUserId, wsId) {
   // BX cabinet is a navigation home for Back in BX flows
   if (ownerUserId) await setUiHome(ownerUserId, BX_HOME.BX_OPEN);
-  const isCurator = ownerUserId ? await db.hasAnyCuratorRole(ownerUserId) : false;
   const wsNum = Number(wsId || 0);
   if (wsNum === 0) {
     const credits = await db.getBrandCredits(ownerUserId);
@@ -6679,7 +6258,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
     const untilTxt = (active && planRow?.brand_plan_until) ? `
 До: <b>${escapeHtml(fmtTs(planRow.brand_plan_until))}</b>` : '';
 
-    await safeEditOrReply(ctx, 
+    await ctx.editMessageText(
       `🏷 <b>Для брендов</b>
 
 Здесь бренд может работать с UGC/офферами без подключения канала.
@@ -6689,7 +6268,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 ⭐️ Brand Plan: <b>${active ? (planName === 'max' ? 'Max' : 'Basic') : 'OFF'}</b>${untilTxt}
 
 Выбери действие:`,
-      { parse_mode: 'HTML', reply_markup: bxBrandMenuKb(0, credits, plan, retry, { showCurator: isCurator }) }
+      { parse_mode: 'HTML', reply_markup: bxBrandMenuKb(0, credits, plan, retry) }
     );
     return;
   }
@@ -6698,7 +6277,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
   if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   if (!ws.network_enabled) {
-    await safeEditOrReply(ctx, 
+    await ctx.editMessageText(
       `🎬 <b>UGC / Офферы</b>
 
 Это лента UGC/Collab офферов: контент, интеграции, бартер/бюджет.
@@ -6709,7 +6288,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
     return;
   }
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🎬 <b>UGC / Офферы</b>
 
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
@@ -6717,12 +6296,11 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 • Разместить — твой UGC/оффер увидят бренды в «📰 Лента креаторов»
 • Inbox — сообщения и заявки от брендов
 • Мои офферы — пауза/удаление`,
-    { parse_mode: 'HTML', reply_markup: bxMenuKb(wsNum, ws.network_enabled, { showCurator: isCurator }) }
+    { parse_mode: 'HTML', reply_markup: bxMenuKb(wsNum, ws.network_enabled) }
   );
 }
 
 async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
-  try {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -6730,9 +6308,7 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
-  const filter = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
-  const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-
+  const filter = await getBxFilter(ctx.from.id, wsNum);
 
   const limit = CFG.BARTER_FEED_PAGE_SIZE;
   const offset = page * limit;
@@ -6815,7 +6391,7 @@ ${featLines.join('\n\n')}
   const kb = new InlineKeyboard();
 
   for (const f of featured) {
-    kb.text(`🔥 #F${f.id}`, `a:feat_view|ws:${wsNum}|id:${f.id}|p:${page}|h:${h}`).row();
+    kb.text(`🔥 #F${f.id}`, `a:feat_view|ws:${wsNum}|id:${f.id}|p:${page}`).row();
   }
   for (const o of rows) {
     kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsNum}|o:${o.id}|p:${page}|h:${h}`).row();
@@ -6823,20 +6399,10 @@ ${featLines.join('\n\n')}
 
   const hasPrev = page > 0;
   const hasNext = offset + rows.length < total;
-  const nav = bxFeedNavKb(wsNum, page, hasPrev, hasNext, { h });
+  const nav = bxFeedNavKb(wsNum, page, hasPrev, hasNext);
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
-  } catch (e) {
-    console.error('[bx_feed]', e);
-    await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
-
-Не удалось загрузить экран. Нажми «📋 Меню» и попробуй ещё раз.`, {
-      parse_mode: 'HTML',
-      reply_markup: navKb('a:menu'),
-      disable_web_page_preview: true,
-    });
-  }
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
@@ -6854,13 +6420,13 @@ async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
     const st = String(o.status || 'ACTIVE').toUpperCase();
     const stEmoji = st === 'ACTIVE' ? '✅' : (st === 'PAUSED' ? '⏸' : '⛔');
     kb
-      .text(`${stEmoji} #${o.id} · ${o.title}`, `a:bx_view|ws:${wsId}|o:${o.id}|back:my|p:${page}`)
+      .text(`${stEmoji} #${o.id} · ${o.title}`, `a:bx_view|ws:${wsId}|o:${o.id}|back:my`)
       .text('🗑', `a:bx_archive|ws:${wsId}|o:${o.id}|p:${page}`)
       .row();
   }
-  kbNavRow(kb, `a:bx_open|ws:${wsId}`);
+  kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `📦 <b>Мои офферы</b>
 
 Нажми оффер, чтобы открыть. Кнопка 🗑 — архивирует и сразу убирает из списка.`,
@@ -6881,7 +6447,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
 
   if (!rows.length) {
     kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
-    await safeEditOrReply(ctx, 
+    await ctx.editMessageText(
       `📁 <b>Архив офферов</b>
 
 Пока пусто. Нажми 🗑 в «Мои офферы», чтобы архивировать оффер (он останется в истории).`,
@@ -6892,7 +6458,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
 
   for (const o of rows) {
     kb
-      .text(`⛔ #${o.id} · ${o.title}`, `a:bx_view|ws:${wsId}|o:${o.id}|back:arch|p:${page}`)
+      .text(`⛔ #${o.id} · ${o.title}`, `a:bx_view|ws:${wsId}|o:${o.id}|back:arch`)
       .text('↩️', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`)
       .row();
   }
@@ -6908,7 +6474,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
 
   kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `📁 <b>Архив офферов</b>
 
 Открой оффер, чтобы посмотреть. ↩️ — вернуть в активные.`,
@@ -6925,36 +6491,23 @@ function bxMediaLabel(mt) {
   return '—';
 }
 
-function bxMediaKb(wsId, offerId, back = 'my', pageOrHasMedia = 0, maybeHasMedia = false) {
-  // Backward compatible:
-  // - old signature: (wsId, offerId, back, hasMedia)
-  // - new signature: (wsId, offerId, back, page, hasMedia)
-  let page = 0;
-  let hasMedia = false;
-  if (typeof pageOrHasMedia === 'boolean') {
-    hasMedia = pageOrHasMedia;
-  } else {
-    page = Math.max(0, Number(pageOrHasMedia || 0));
-    hasMedia = Boolean(maybeHasMedia);
-  }
-
+function bxMediaKb(wsId, offerId, back = 'my', hasMedia = false) {
   const kb = new InlineKeyboard()
-    .text('🖼 Фото', `a:bx_media_photo|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
-    .text('🎞 GIF', `a:bx_media_gif|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
+    .text('🖼 Фото', `a:bx_media_photo|ws:${wsId}|o:${offerId}|back:${back}`)
+    .text('🎞 GIF', `a:bx_media_gif|ws:${wsId}|o:${offerId}|back:${back}`)
     .row()
-    .text('🎥 Видео', `a:bx_media_video|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
-    .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
+    .text('🎥 Видео', `a:bx_media_video|ws:${wsId}|o:${offerId}|back:${back}`)
+    .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${offerId}|back:${back}`)
     .row();
 
   if (hasMedia) {
-    kb
-      .text('🗑 Убрать', `a:bx_media_clear|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
-      .text('✅ Готово', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
+    kb.text('🗑 Убрать', `a:bx_media_clear|ws:${wsId}|o:${offerId}|back:${back}`)
+      .text('✅ Готово', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}`);
   } else {
-    kb.text('✅ Готово', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
+    kb.text('✅ Готово', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}`);
   }
 
-  kbNavRow(kb, `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
+  kb.row().text('⬅️ Назад', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}`);
   return kb;
 }
 
@@ -6977,52 +6530,38 @@ async function renderBxMediaStep(ctx, ownerUserId, wsId, offerId, back = 'my', o
 
 Выбери тип и пришли файл одним сообщением.`;
 
-  const kb = bxMediaKb(wsId, offerId, back, Number(opts.page || 0), hasMedia);
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, Boolean(edit));
+  const kb = bxMediaKb(wsId, offerId, back, hasMedia);
+  const send = (edit && ctx.callbackQuery) ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
-async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my', page = 0) {
+async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my') {
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
-  if (!o) {
-    const kb = navKb('a:menu');
-    await safeEditOrReply(ctx, '⚠️ <b>Оффер не найден</b>\n\nНажми «📋 Меню» и открой «🤝 Мои офферы» заново.', { parse_mode: 'HTML', reply_markup: kb });
-    return;
-  }
+  if (!o) return ctx.reply('Оффер не найден или нет доступа.');
 
   const { text } = await buildOfficialOfferPost(o, { forCaption: true });
-  const bPage = Math.max(0, Number(page || 0));
-  const backCb = `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${bPage}`;
-  const kb = navKb(backCb);
+  const note = `\n\n<i>Это превью (пересылать не нужно).</i>\n<i>Кнопки появятся при публикации.</i>\n<i>Медиа попадёт в официальный канал только при PAID-размещении.</i>`;
+  const caption = `${text}${note}`;
 
-  const note = `
-
-<i>Это превью (пересылать не нужно).</i>
-<i>Кнопки официального канала появятся при публикации.</i>
-<i>Медиа попадёт в официальный канал только при PAID-размещении.</i>`;
-  const previewText = `${text}${note}`;
-
-  // UX: превью — это экран (не «мертвое» сообщение). Всегда держим Back/Menu.
-  await safeEditOrReply(ctx, previewText, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
-
-  // Если у оффера есть медиа — отправляем отдельным сообщением, но навигацию оставляем в текущем экране.
-  if (o.media_file_id) {
-    try {
-      if (String(o.media_type) === 'photo') {
-        await ctx.replyWithPhoto(o.media_file_id, { caption: previewText, parse_mode: 'HTML', reply_markup: kb });
-      } else if (String(o.media_type) === 'animation') {
-        await ctx.replyWithAnimation(o.media_file_id, { caption: previewText, parse_mode: 'HTML', reply_markup: kb });
-      } else if (String(o.media_type) === 'video') {
-        await ctx.replyWithVideo(o.media_file_id, { caption: previewText, parse_mode: 'HTML', reply_markup: kb });
-      }
-    } catch (_) {
-      // ignore: основной экран превью уже показан
+  try {
+    if (o.media_file_id && String(o.media_type) === 'photo') {
+      await ctx.replyWithPhoto(o.media_file_id, { caption, parse_mode: 'HTML' });
+    } else if (o.media_file_id && String(o.media_type) === 'animation') {
+      await ctx.replyWithAnimation(o.media_file_id, { caption, parse_mode: 'HTML' });
+    } else if (o.media_file_id && String(o.media_type) === 'video') {
+      await ctx.replyWithVideo(o.media_file_id, { caption, parse_mode: 'HTML' });
+    } else {
+      await ctx.reply(`${text}${note}`, { parse_mode: 'HTML', disable_web_page_preview: true });
     }
+  } catch (_) {
+    await ctx.reply('Не удалось отправить превью. Попробуй ещё раз или убери медиа.');
   }
+
+  // Return user to offer view
+  await renderBxView(ctx, ownerUserId, wsId, offerId, back);
 }
 
-
-async function renderBxView(ctx, ownerUserId, wsId, offerId, back = 'feed', page = 0) {
+async function renderBxView(ctx, ownerUserId, wsId, offerId, back = 'feed') {
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
   if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
@@ -7071,9 +6610,7 @@ ${contact ? `Контакт: <b>${escapeHtml(contact)}</b>` : ''}`;
     kb.text('⬆️ Поднять', `a:bx_bump|ws:${wsId}|o:${o.id}`).row();
 
     kb.text(partnerBtnLabel, `a:bx_partner_folder_pick|ws:${wsId}|o:${o.id}`).row();
-    kb.text('📎 Медиа', `a:bx_media_step|ws:${wsId}|o:${o.id}|back:${back}|p:${page}`)
-      .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${o.id}|back:${back}|p:${page}`)
-      .row();
+    kb.text('📎 Медиа', `a:bx_media_step|ws:${wsId}|o:${o.id}|back:${back}`).text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${o.id}|back:${back}`).row();
 
     const wsInfo = await db.getWorkspace(ownerUserId, wsId);
     const isPro = await db.isWorkspacePro(wsId);
@@ -7090,23 +6627,21 @@ ${contact ? `Контакт: <b>${escapeHtml(contact)}</b>` : ''}`;
   if (st === 'PAUSED') kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`).row();
 
   if (st === 'CLOSED') {
-    kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`).row();
+    kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:0`).row();
   } else {
-    kb.text('🗑 Архивировать', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
+    kb.text('🗑 Архивировать', `a:bx_del_q|ws:${wsId}|o:${o.id}`).row();
   }
 
-  const bPage = Math.max(0, Number(page) || 0);
   const backCb = back === 'my'
-    ? `a:bx_my|ws:${wsId}|p:${bPage}`
-    : (back === 'arch' ? `a:bx_my_arch|ws:${wsId}|p:${bPage}` : `a:bx_feed|ws:${wsId}|p:${bPage}|h:bo`);
-  kbNavRow(kb, backCb);
+    ? `a:bx_my|ws:${wsId}|p:0`
+    : (back === 'arch' ? `a:bx_my_arch|ws:${wsId}|p:0` : `a:bx_feed|ws:${wsId}|p:0|h:bo`);
+  kb.text('⬅️ Назад', backCb);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
 async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
-  try {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -7114,7 +6649,7 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
-  const f = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
+  const f = await getBxFilter(ctx.from.id, wsNum);
   const text = `🎛 <b>Фильтры креаторов</b>
 <i>Режим: 🏷 Бренд · Ты ищешь: 🎬 креаторов</i>
 <i>Фильтруем креаторов по тому, что они указали в оффере.</i>
@@ -7123,24 +6658,13 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
 ${escapeHtml(bxFilterSummary(f))}
 
 <i>Настройки применяются к ленте сразу. Нажми «📋 Показать креаторов», чтобы увидеть выдачу.</i>`;
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: bxFiltersKb(wsNum, f, page, opts)
   });
-  } catch (e) {
-    console.error('[bx_filters]', e);
-    await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
-
-Не удалось загрузить экран. Нажми «📋 Меню» и попробуй ещё раз.`, {
-      parse_mode: 'HTML',
-      reply_markup: navKb('a:menu'),
-      disable_web_page_preview: true,
-    });
-  }
 }
 
-async function renderBxFilterPick(ctx, ownerUserId, wsId, key, retPage = 0, pickPage = 0, opts = {}) {
-  try {
+async function renderBxFilterPick(ctx, ownerUserId, wsId, key, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -7149,9 +6673,7 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, retPage = 0, pick
   }
 
   const title = key === 'cat' ? 'Категория' : (key === 'type' ? 'Формат' : 'Оплата');
-  const f = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
-
-  const selectedValue = key === 'cat' ? f.category : (key === 'type' ? f.offerType : f.compensationType);
+  const f = await getBxFilter(ctx.from.id, wsNum);
 
   const hint =
     key === 'cat' ? 'По категории оффера креатора.' :
@@ -7170,25 +6692,14 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, retPage = 0, pick
 
 Выбери значение:`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
-    reply_markup: bxPickKb(wsNum, key, selectedValue, retPage, pickPage, opts),
+    reply_markup: bxPickKb(wsNum, key, page, opts),
     disable_web_page_preview: true
   });
-  } catch (e) {
-    console.error('[bx_filter_pick]', e);
-    await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
-
-Не удалось загрузить экран. Нажми «📋 Меню» и попробуй ещё раз.`, {
-      parse_mode: 'HTML',
-      reply_markup: navKb('a:menu'),
-      disable_web_page_preview: true,
-    });
-  }
 }
 
 async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, opts = {}) {
-  try {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
@@ -7196,7 +6707,7 @@ async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, op
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
-  const f = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
+  const f = await getBxFilter(ctx.from.id, wsNum);
   const title = key === 'goals' ? '🎯 Цели' : '📎 Требования';
   const hint = key === 'goals'
     ? 'Фильтруем креаторов по целям в их оффере.'
@@ -7215,21 +6726,11 @@ async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, op
 Выбери теги (можно несколько):`;
 
   const sel = key === 'goals' ? f.goalsTags : f.reqTags;
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: bxMultiPickKb(wsNum, key, sel, page, opts),
     disable_web_page_preview: true
   });
-  } catch (e) {
-    console.error('[bx_filter_mpick]', e);
-    await safeEditOrReply(ctx, `⚠️ <b>Ошибка</b>
-
-Не удалось загрузить экран. Нажми «📋 Меню» и попробуй ещё раз.`, {
-      parse_mode: 'HTML',
-      reply_markup: navKb('a:menu'),
-      disable_web_page_preview: true,
-    });
-  }
 }
 
 async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {}) {
@@ -7300,7 +6801,7 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
   const backCb = isOwner ? `a:bx_feed|ws:${wsId}|p:${page}|h:${h}` : `a:bx_feed|ws:0|p:0|h:${h}`;
   kb.row().text('⬅️ Назад', backCb);
 
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -7604,9 +7105,9 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
     kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}`).row();
   }
 
-  kb.text('⬅️ Назад к офферу', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
+  kb.text('⬅️ Назад к офферу', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}`);
 
-  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  const send = ctx.callbackQuery ? ctx.editMessageText.bind(ctx) : ctx.reply.bind(ctx);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -7660,7 +7161,7 @@ async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
     .text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`)
     .text('📋 Меню', 'a:menu');
 
-  if (ctx.callbackQuery) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  if (ctx.callbackQuery) await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -7696,7 +7197,7 @@ async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0) {
   }
   kb.text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderOfficialQueue(ctx, userId, page = 0) {
@@ -7725,7 +7226,7 @@ Pending: <b>${rows.length}</b>${rows.length ? '' : '\n\nПока пусто.'}`;
   if (hasPrev || hasNext) kb.row();
   kb.text('⬅️ В админку', 'a:admin');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
   const cost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
@@ -7791,9 +7292,9 @@ ${trialLine}${limitLine}${verifyHintLine}
     kb.text(`⭐ ${p.title} · ${contacts} контактов`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
   }
   kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching', `a:match_home|ws:${wsId}`).row();
-  kb.text('⬅️ Назад', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
+  kb.text('⬅️ Назад', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
@@ -7840,15 +7341,15 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
     const stLine = st.retry ? `${st.base} · ${st.retry}` : st.base;
 
     const line = `${prefix} · ${stLine} · ${escapeHtml(t.offer_title || 'оффер')} · ${escapeHtml(other)}${v}`;
-    kb.text(line.slice(0, 60), `a:bx_thread|ws:${wsId}|t:${t.id}|p:${page}|b:inbox|h:${h}`).row();
+    kb.text(line.slice(0, 60), `a:bx_thread|ws:${wsId}|t:${t.id}|p:${page}`).row();
   }
 
   const hasPrev = page > 0;
   const hasNext = rows.length >= limit; // heuristic
-  const nav = bxInboxNavKb(wsId, page, hasPrev, hasNext, { h });
+  const nav = bxInboxNavKb(wsId, page, hasPrev, hasNext);
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
-  await safeEditOrReply(ctx, header + (rows.length ? '' : '\n\nПока нет диалогов.'), { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(header + (rows.length ? '' : '\n\nПока нет диалогов.'), { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function buildBxThreadView(userId, threadId) {
@@ -7944,7 +7445,7 @@ async function renderBxThread(ctx, userId, wsId, threadId, opts = {}) {
     showRetryInfo,
     retryText: replySt.retry || ''
   });
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 function bxProofsKb(wsId, threadId, opts = {}) {
@@ -7993,7 +7494,7 @@ async function renderBxProofs(ctx, userId, wsId, threadId, opts = {}) {
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
 
-  await safeEditOrReply(ctx, text, {
+  await ctx.editMessageText(text, {
     parse_mode: 'HTML',
     reply_markup: bxProofsKb(wsId, threadId, { ...opts, offerId })
   });
@@ -8020,7 +7521,7 @@ async function renderBrandPassTopup(ctx, userId, wsId) {
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🎫 <b>Brand Pass</b>
 
 Баланс контактов: <b>${credits}</b>
@@ -8051,7 +7552,7 @@ async function renderBrandPlan(ctx, userId, wsId) {
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `⭐️ <b>Brand Plan</b>
 
 Статус: <b>${escapeHtml(status)}</b>
@@ -8070,7 +7571,7 @@ async function renderMatchingHome(ctx, wsId) {
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🎯 <b>Smart Matching</b>
 
 Платишь Stars за экономию времени: бот подберёт релевантные микро-каналы под твой бриф.
@@ -8087,7 +7588,7 @@ async function renderFeaturedHome(ctx, userId, wsId) {
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🔥 <b>Featured</b>
 
 Подними внимание: твой блок появится сверху в ленте у всех (бренд + блогеры).
@@ -8097,7 +7598,7 @@ async function renderFeaturedHome(ctx, userId, wsId) {
   );
 }
 
-async function renderFeaturedView(ctx, userId, wsId, id, page = 0, h = BX_HOME.MENU) {
+async function renderFeaturedView(ctx, userId, wsId, id, page = 0) {
   const f = await db.getFeaturedPlacement(id);
   if (!f || String(f.status) !== 'ACTIVE') return ctx.answerCallbackQuery({ text: 'Featured не найден.' });
 
@@ -8108,11 +7609,11 @@ async function renderFeaturedView(ctx, userId, wsId, id, page = 0, h = BX_HOME.M
 
   const kb = new InlineKeyboard();
   if (Number(f.user_id) === Number(userId)) {
-    kb.text('⛔ Остановить', `a:feat_stop|ws:${wsId}|id:${id}|p:${page}|h:${h}`).row();
+    kb.text('⛔ Остановить', `a:feat_stop|ws:${wsId}|id:${id}|p:${page}`).row();
   }
-  kbNavRow(kb, `a:bx_feed|ws:${wsId}|p:${page}|h:${h}`);
+  kb.text('⬅️ Назад', `a:bx_feed|ws:${wsId}|p:${page}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🔥 <b>${escapeHtml(String(title))}</b>
 
 ${escapeHtml(String(body))}
@@ -8164,7 +7665,7 @@ async function renderGwList(ctx, ownerUserId, wsId = null) {
 
   if (!filtered.length) {
     kb.text('⬅️ Назад', wsId ? `a:ws_open|ws:${wsId}` : 'a:menu');
-    await safeEditOrReply(ctx, `🎁 Розыгрышей пока нет.
+    await ctx.editMessageText(`🎁 Розыгрышей пока нет.
 
 Жми «➕ Новый розыгрыш», чтобы создать первый.`, { reply_markup: kb });
     return;
@@ -8179,7 +7680,7 @@ async function renderGwList(ctx, ownerUserId, wsId = null) {
   }
 
   kb.text('⬅️ Назад', wsId ? `a:ws_open|ws:${wsId}` : 'a:menu');
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `🎁 <b>${wsId ? 'Розыгрыши канала' : 'Розыгрыши'}</b>
 
 Выбери розыгрыш (или создай новый):`,
@@ -8216,7 +7717,7 @@ ${checkedLine}
 ${notesBlock}
 
 Если ведёшь конкурс не один — пригласи помощника (👥 Кураторы канала → 👤 Пригласить куратора).`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: gwOpenKb(g, { isAdmin: isSuperAdminTg(ctx.from?.id) }) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: gwOpenKb(g, { isAdmin: isSuperAdminTg(ctx.from?.id) }) });
 }
 
 async function renderGwStats(ctx, ownerUserId, gwId) {
@@ -8259,7 +7760,7 @@ async function renderGwStats(ctx, ownerUserId, gwId) {
     .row()
     .text('⬅️ Назад', `a:gw_open|i:${gwId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderGwLog(ctx, ownerUserIdOrNull, gwId) {
@@ -8270,7 +7771,7 @@ async function renderGwLog(ctx, ownerUserIdOrNull, gwId) {
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
   const back = ownerUserIdOrNull ? `a:gw_open|i:${gwId}` : `a:gw_open_public|i:${gwId}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb(back) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', back) });
 }
 
 async function renderGwOpenPublic(ctx, gwId, userId) {
@@ -8282,7 +7783,7 @@ async function renderGwOpenPublic(ctx, gwId, userId) {
   const sponsors = (sponsorRows || []).map(r => r.sponsor_text).filter(Boolean);
 
   const text = renderParticipantScreen(g, entry, { hint: true, sponsors });
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: true }) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: true }) });
 }
 
 // ----------------------
@@ -8329,7 +7830,7 @@ async function renderCuratorHome(ctx, userId) {
 🧹 <b>Режим куратора</b> — прячет лишнее меню (оставляет только кураторское).
 
 ${items.length ? 'Выбери канал:' : 'Пока тебя не назначили куратором ни в одном канале.'}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled) });
 }
 
 // Same as renderCuratorHome, but for /start (new message instead of edit)
@@ -8381,7 +7882,7 @@ async function renderCuratorWorkspace(ctx, userId, wsId) {
 Режим куратора в этом канале выключен владельцем.
 
 Если хочешь — выйди из канала (удалишь свою роль куратора).`;
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
   }
 
@@ -8393,7 +7894,7 @@ async function renderCuratorWorkspace(ctx, userId, wsId) {
 ${giveaways.length ? 'Конкурсы:' : 'Пока нет конкурсов.'}
 
 Если тебя назначили по ошибке или помощь больше не нужна — нажми “❌ Выйти из канала”.`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorWsKb(wsIdNum, giveaways) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: curatorWsKb(wsIdNum, giveaways) });
 }
 
 function curatorGwKb(wsId, gwId) {
@@ -8437,7 +7938,7 @@ ${checkedLine}
 ${notesBlock}
 
 Режим: <b>Куратор</b> (безопасные права)`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorGwKb(Number(wsId), Number(gwId)) });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: curatorGwKb(Number(wsId), Number(gwId)) });
 }
 
 async function renderCuratorGiveawayStats(ctx, userId, wsId, gwId) {
@@ -8457,7 +7958,7 @@ async function renderCuratorGiveawayStats(ctx, userId, wsId, gwId) {
     .row()
     .text('⬅️ Назад', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderCuratorGiveawayLog(ctx, userId, wsId, gwId) {
@@ -8468,8 +7969,8 @@ async function renderCuratorGiveawayLog(ctx, userId, wsId, gwId) {
   const text = `🧾 <b>Лог конкурса #${gwId}</b>
 
 ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
-  const kb = navKb(`a:cur_gw_open|ws:${wsId}|i:${gwId}`);
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  const kb = new InlineKeyboard().text('⬅️ Назад', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderCuratorGiveawayRemindQ(ctx, userId, wsId, gwId) {
@@ -8484,7 +7985,7 @@ async function renderCuratorGiveawayRemindQ(ctx, userId, wsId, gwId) {
   const kb = new InlineKeyboard()
     .text('✅ Отправить', `a:cur_gw_remind_send|ws:${wsId}|i:${gwId}`)
     .text('⬅️ Отмена', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
@@ -8515,8 +8016,7 @@ async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
   const kb = { inline_keyboard: [[{ text: '🤖 Открыть бота', url: link }]] };
 
   try {
-    const replyParams = g.published_message_id ? { reply_parameters: { message_id: Number(g.published_message_id), allow_sending_without_reply: true } } : {};
-    await ctx.api.sendMessage(chatId, msg, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb, ...replyParams });
+    await ctx.api.sendMessage(chatId, msg, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
     await db.auditGiveaway(g.id, g.workspace_id, userId, 'gw.reminder_posted', { actor_role: 'curator' });
     await ctx.answerCallbackQuery({ text: '✅ Отправлено' });
   } catch (e) {
@@ -8555,7 +8055,7 @@ ${curatorNotesBlock(notes)}
     .row()
     .text('❌ Отмена', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
 
-  await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
+  await ctx.editMessageText(msg, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
 }
 
 async function renderCuratorGiveawayOwnerNotifySend(ctx, userId, wsId, gwId) {
@@ -8658,7 +8158,7 @@ function accessLine(chat, a) {
 export async function renderGwPreflight(ctx, ownerUserId, gwId, { forceRecheck = false } = {}) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeEditOrReply(ctx, 'Нет доступа.');
+    await ctx.editMessageText('Нет доступа.');
     return;
   }
 
@@ -8725,7 +8225,7 @@ ${lines.join('\n')}
     .row()
     .text('⬅️ Назад', `a:gw_stats|i:${gwId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 
   try {
     await db.auditGiveaway(gwId, g.workspace_id, ownerUserId, 'gw.preflight_checked', {
@@ -8739,7 +8239,7 @@ ${lines.join('\n')}
 export async function renderGwWhyMenu(ctx, ownerUserId, gwId) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeEditOrReply(ctx, 'Нет доступа.');
+    await ctx.editMessageText('Нет доступа.');
     return;
   }
 
@@ -8750,7 +8250,7 @@ export async function renderGwWhyMenu(ctx, ownerUserId, gwId) {
     .row()
     .text('⬅️ Назад', `a:gw_stats|i:${gwId}`);
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `ℹ️ <b>Почему участник не прошёл</b>\n\nВыбери режим:\n• <b>Ввести ID</b> — быстро и надёжно.\n• <b>Переслать сообщение</b> — сработает только если у участника выключена “Forward privacy”.`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
@@ -8801,7 +8301,7 @@ ${lines.length ? lines.join('\n') : 'Нет каналов для проверк
 export async function renderGwWhyResult(ctx, ownerUserId, gwId, targetUserId, { forceRecheck = false } = {}) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeEditOrReply(ctx, 'Нет доступа.');
+    await ctx.editMessageText('Нет доступа.');
     return;
   }
 
@@ -8817,7 +8317,7 @@ export async function renderGwWhyResult(ctx, ownerUserId, gwId, targetUserId, { 
     .row()
     .text('⬅️ Назад', `a:gw_stats|i:${gwId}`);
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 export async function sendGwWhyResult(ctx, ownerUserId, gwId, targetUserId, { forceRecheck = false } = {}) {
@@ -8978,7 +8478,7 @@ async function renderSetupInstructions(ctx) {
 2) Перешли сюда любой пост из канала (forward).
 
 Бот создаст workspace и ты сможешь запускать конкурсы.`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ В меню', 'a:menu') });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ В меню', 'a:menu') });
 }
 
 export function getBot() {
@@ -9041,11 +8541,9 @@ export function getBot() {
 
     await setActiveWorkspace(ctx.from.id, ws.id);
 
-    const isCurator = await db.hasAnyCuratorRole(u.id);
-
     await ctx.reply(`✅ Канал подключен: <b>${escapeHtml(channelUsername ? '@' + channelUsername : title)}</b>`, {
       parse_mode: 'HTML',
-      reply_markup: wsMenuKb(ws.id, { showCurator: isCurator }),
+      reply_markup: wsMenuKb(ws.id),
     });
   });
 
@@ -9361,7 +8859,9 @@ ${escapeHtml(safe)}`;
       await db.addCurator(exp.wsId, curator.id, u.id);
       const ws = await db.getWorkspaceAny(Number(exp.wsId));
       const wsTitle = ws ? wsLabelNice(ws) : `Канал #${exp.wsId}`;
-      await renderCuratorManage(ctx, u.id, exp.wsId, { notice: `Куратор @${username} добавлен` });
+      await ctx.reply(`✅ Куратор @${username} добавлен.
+
+Включи 👤 Куратор: ВКЛ, если хочешь чтобы он мог помогать с конкурсами (статы/лог/напоминания).`);
 
       // best-effort notify curator in DM
       try {
@@ -10351,9 +9851,7 @@ if (exp.type === 'brand_deals_search') {
       await db.setWorkspaceSetting(wsId, patch);
       await db.auditWorkspace(wsId, u.id, 'ws.profile_updated', { field });
 
-      await clearExpectText(ctx.from.id);
-      const editTarget = (exp && exp.chatId && exp.messageId) ? { chatId: exp.chatId, messageId: exp.messageId } : null;
-      await renderWsProfile(ctx, u.id, wsId, { editTarget });
+      await ctx.reply('✅ Сохранено.', { reply_markup: wsMenuKb(wsId) });
       return;
     }
 
@@ -10454,7 +9952,7 @@ if (exp.type === 'brand_deals_search') {
       const kb = new InlineKeyboard();
       const btnN = Math.min(showN, 12);
       for (const o of rows.slice(0, btnN)) {
-        kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsId}|o:${o.id}|p:0|h:bo`).row();
+        kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsId}|o:${o.id}|p:0`).row();
       }
       kb.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
         .text('🎯 Matching', `a:match_home|ws:${wsId}`)
@@ -10667,14 +10165,9 @@ ${escapeHtml(bxTypeLabel(offer.offer_type))} · ${escapeHtml(bxCompLabel(offer.c
         const otherTgId = otherInfo?.tg_id ? Number(otherInfo.tg_id) : null;
         if (otherTgId) {
           const link = `https://t.me/${CFG.BOT_USERNAME}?start=bxth_${threadId}`;
-          const msgText = body.length > 400 ? `${body.slice(0, 397)}...` : body;
-          const notifyKb = new InlineKeyboard()
-            .text('💬 Открыть диалог', `a:bx_thread|ws:${Number(thread.workspace_id || 0)}|t:${threadId}|p:0|b:inbox|h:${BX_HOME.MENU}`);
           await ctx.api.sendMessage(otherTgId, `📨 Новое сообщение по офферу #${thread.offer_id}
 
-${msgText}
-
-Открыть: ${link}`, { disable_web_page_preview: true, reply_markup: notifyKb });
+Открыть: ${link}`);
         }
       } catch {}
 
@@ -10684,12 +10177,11 @@ ${msgText}
       const back = exp.back ? String(exp.back) : 'inbox';
       const offerId = exp.offerId ? Number(exp.offerId) : null;
       const page = Number(exp.page || 0);
-      const h = normBxHome(exp.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       const kb = new InlineKeyboard()
-        .text('💬 Открыть диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`)
+        .text('💬 Открыть диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}`)
         .row()
-        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:${page}|h:${h}`);
+        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:${page}`);
       await ctx.reply(again ? again.text : '✅ Отправлено.', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -10703,15 +10195,13 @@ ${msgText}
       const page = Number(exp.page || 0);
       const asUserId = Number(exp.asUserId || u.id);
 
-      const h = normBxHome(exp.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-
 
       const raw = String(ctx.message.text || '').trim();
       // allow bare t.me, https links, or @channel/... patterns
       const ok = raw.length >= 8 && raw.length <= 500 && (/^https?:\/\//i.test(raw) || /t\.me\//i.test(raw) || /^@?[a-zA-Z0-9_]{5,}/.test(raw));
       if (!ok) {
         await ctx.reply('Нужна ссылка на пост (пример: https://t.me/...)');
-        await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, asUserId, h });
+        await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, asUserId });
         return;
       }
 
@@ -10726,9 +10216,9 @@ ${msgText}
       }
 
       const kb = new InlineKeyboard()
-        .text('🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
+        .text('🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`)
         .row()
-        .text('💬 Диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`);
+        .text('💬 Диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`);
       await ctx.reply('✅ Proof добавлен.', { reply_markup: kb });
       return;
     }
@@ -10771,15 +10261,6 @@ ${msgText}
       }
 
       const patch = { [field]: value };
-
-      // If user edits niche as free-text, treat it as legacy override and reset picker state.
-      if (field === 'niche') {
-        const prof0 = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
-        const meta0 = parseBrandMeta(prof0?.meta);
-        const nextMeta = { ...meta0 };
-        delete nextMeta.niche_key;
-        patch.meta = nextMeta;
-      }
       const saved = await safeBrandProfiles(
         () => db.upsertBrandProfile(u.id, patch),
         async () => ({ __missing_relation: true })
@@ -10799,10 +10280,9 @@ ${msgText}
       const backOfferId = exp.backOfferId ? Number(exp.backOfferId) : null;
       const backPage = Number(exp.backPage || 0);
 
-      // Keep UX consistent: return to the screen where the edit started.
-      const from = String(exp.from || '');
-      const EXT_FIELDS = new Set(['geo', 'collab_types', 'budget', 'goals', 'requirements']);
-      if (from === 'more' || EXT_FIELDS.has(field)) {
+      // Keep UX consistent: if user edits an "extended" field, stay on the extended screen.
+      const EXT_FIELDS = new Set(['niche', 'geo', 'collab_types', 'budget', 'goals', 'requirements']);
+      if (EXT_FIELDS.has(field)) {
         await renderBrandProfileMore(ctx, u.id, { wsId, ret, backOfferId, backPage, edit: false });
       } else {
         await renderBrandProfileHome(ctx, u.id, { wsId, ret, backOfferId, backPage, edit: false });
@@ -11008,15 +10488,13 @@ ${list}
       const page = Number(exp.page || 0);
       const asUserId = Number(exp.asUserId || u.id);
 
-      const h = normBxHome(exp.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-
 
       const photos = ctx.message.photo || [];
       const last = photos.length ? photos[photos.length - 1] : null;
       const fileId = last?.file_id;
       if (!fileId) {
         await ctx.reply('Не вижу фото. Пришли скрин как картинку (не файл).');
-        await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, asUserId, h });
+        await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, asUserId });
         return;
       }
 
@@ -11031,9 +10509,9 @@ ${list}
       }
 
       const kb = new InlineKeyboard()
-        .text('🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
+        .text('🧾 Proofs', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`)
         .row()
-        .text('💬 Диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`);
+        .text('💬 Диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}`);
       await ctx.reply('✅ Скрин добавлен.', { reply_markup: kb });
       return;
     }
@@ -11067,7 +10545,6 @@ ${list}
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
-      const page = Math.max(0, Number(exp.page || 0));
 
       const photos = ctx.message.photo || [];
       const last = photos.length ? photos[photos.length - 1] : null;
@@ -11088,7 +10565,7 @@ ${list}
       await clearExpectText(ctx.from.id);
 
       await ctx.reply('✅ Картинка прикреплена. Продолжаем:', {
-        reply_markup: bxMediaKb(wsId, offerId, back, page, true)
+        reply_markup: bxMediaKb(wsId, offerId, back, true)
       });
       return;
     }
@@ -11125,7 +10602,6 @@ ${list}
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
-      const page = Math.max(0, Number(exp.page || 0));
 
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
@@ -11137,7 +10613,7 @@ ${list}
       await db.updateBarterOffer(offerId, { media_type: 'animation', media_file_id: fileId });
       await clearExpectText(ctx.from.id);
 
-      await ctx.reply('✅ GIF прикреплён. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, page, true) });
+      await ctx.reply('✅ GIF прикреплён. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, true) });
       return;
     }
 
@@ -11172,7 +10648,6 @@ ${list}
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
-      const page = Math.max(0, Number(exp.page || 0));
 
       const fileId = ctx.message.video?.file_id;
       if (!fileId) {
@@ -11191,7 +10666,7 @@ ${list}
       await clearExpectText(ctx.from.id);
 
       await ctx.reply('✅ Видео прикреплено. Продолжаем:', {
-        reply_markup: bxMediaKb(wsId, offerId, back, page, true)
+        reply_markup: bxMediaKb(wsId, offerId, back, true)
       });
       return;
     }
@@ -11696,7 +11171,7 @@ UGC vs Интеграция
     // Show BX filters for active workspace (if any)
     try {
       if (activeWs) {
-        const bx = await getBxFilterScoped(ctx.from.id, u.id, activeWs);
+        const bx = await getBxFilter(ctx.from.id, activeWs);
         lines.push('');
         lines.push('<b>BX filters</b> (active workspace)');
         lines.push(`• ws: <code>${activeWs}</code>`);
@@ -11998,11 +11473,11 @@ bot.on('message:successful_payment', async (ctx) => {
 
       const kb = new InlineKeyboard();
       if (data.offerId) {
-        kb.text('↩️ Вернуться к офферу', `a:bx_pub|ws:${data.wsId}|o:${data.offerId}|p:${Number(data.page || 0)}|h:bo`)
+        kb.text('↩️ Вернуться к офферу', `a:bx_pub|ws:${data.wsId}|o:${data.offerId}|p:${Number(data.page || 0)}`)
           .row();
       }
       kb.text('🎫 Brand Pass', `a:brand_pass|ws:${data.wsId}`)
-        .text('📨 Inbox', `a:bx_inbox|ws:${data.wsId}|p:0|h:bo`);
+        .text('📨 Inbox', `a:bx_inbox|ws:${data.wsId}|p:0`);
 
       await markApplied('auto_apply_brand_pass');
       await ctx.reply(
@@ -12088,7 +11563,7 @@ if (p.a === 'a:ui_mode_set') {
   const flags = await getRoleFlags(u, ctx.from.id);
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
   if (curMode) {
-    await safeEditOrReply(ctx, 
+    await ctx.editMessageText(
       `🧹 <b>Режим куратора</b> включен.\n\nДля простоты я скрываю лишнее меню.\n\nТы сейчас в режиме: <b>Curator</b>`,
       { parse_mode: 'HTML', reply_markup: curatorModeMenuKb(flags) }
     );
@@ -12178,7 +11653,7 @@ if (p.a === 'a:guide') {
 
   kb.row().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
   await maybeSendBanner(ctx, 'guide', CFG.GUIDE_BANNER_FILE_ID);
   return;
 }
@@ -12209,7 +11684,7 @@ if (p.a === 'a:support') {
     .text('🧭 Быстрый старт', 'a:guide')
     .text('📋 Меню', 'a:menu');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   return;
 }
 
@@ -12223,7 +11698,7 @@ if (p.a === 'a:support_write') {
 
 Я отправлю это в поддержку.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:support') });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:support') });
   return;
 }
 
@@ -12232,20 +11707,19 @@ if (p.a === 'a:support_write') {
 if (p.a === 'a:brands_home') {
   await ctx.answerCallbackQuery();
   const page = Math.max(0, Number(p.p || 0));
-  await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id });
+  await renderBrandsDirectory(ctx, u.id, { page, edit: true });
   return;
 }
 
     if (p.a === 'a:brands_filters') {
       await ctx.answerCallbackQuery();
-      await renderBrandDirFilters(ctx, ctx.from.id, { page: num(p.p || 0, 0), legacyUserId: u.id });
+      await renderBrandDirFilters(ctx, u.id, { page: num(p.p || 0, 0) });
       return;
     }
 
     if (p.a === 'a:bd_fpick') {
       await ctx.answerCallbackQuery();
-      await renderBrandDirFilterPick(ctx, ctx.from.id, {
-        legacyUserId: u.id,
+      await renderBrandDirFilterPick(ctx, u.id, {
         key: String(p.k || ''),
         page: num(p.p || 0, 0),
       });
@@ -12254,7 +11728,7 @@ if (p.a === 'a:brands_home') {
 
     if (p.a === 'a:bd_fset') {
       await ctx.answerCallbackQuery();
-      const base = await getBrandDirFilter(ctx.from.id, u.id);
+      const base = await getBrandDirFilter(u.id);
       const key = String(p.k || '');
       const val = String(p.v || 'all');
       const page = num(p.p || 0, 0);
@@ -12269,25 +11743,14 @@ if (p.a === 'a:brands_home') {
       }
       if (key === 'bud') next.budgetBucket = val === 'all' ? null : val;
 
-      await setBrandDirFilter(ctx.from.id, next, u.id);
-
-      const stay = String(p.s || '') === '1';
-      if (stay) {
-        await renderBrandDirFilterPick(ctx, ctx.from.id, {
-          legacyUserId: u.id,
-          key,
-          page,
-        });
-      } else {
-        await renderBrandDirFilters(ctx, ctx.from.id, { page, legacyUserId: u.id });
-      }
+      await setBrandDirFilter(u.id, next);
+      await renderBrandDirFilters(ctx, u.id, { page });
       return;
     }
 
     if (p.a === 'a:bd_mpick') {
       await ctx.answerCallbackQuery();
-      await renderBrandDirMultiPick(ctx, ctx.from.id, {
-        legacyUserId: u.id,
+      await renderBrandDirMultiPick(ctx, u.id, {
         key: String(p.k || ''),
         page: num(p.p || 0, 0),
       });
@@ -12296,7 +11759,7 @@ if (p.a === 'a:brands_home') {
 
     if (p.a === 'a:bd_mt') {
       await ctx.answerCallbackQuery();
-      const base = await getBrandDirFilter(ctx.from.id, u.id);
+      const base = await getBrandDirFilter(u.id);
       const key = String(p.k || '');
       const tag = String(p.v || '');
       const page = num(p.p || 0, 0);
@@ -12310,42 +11773,42 @@ if (p.a === 'a:brands_home') {
         base.reqTags = cur.includes(tag) ? cur.filter((x) => x !== tag) : [...cur, tag];
       }
 
-      await setBrandDirFilter(ctx.from.id, base, u.id);
-      await renderBrandDirMultiPick(ctx, ctx.from.id, { legacyUserId: u.id, key, page });
+      await setBrandDirFilter(u.id, base);
+      await renderBrandDirMultiPick(ctx, u.id, { key, page });
       return;
     }
 
     if (p.a === 'a:bd_mclear') {
       await ctx.answerCallbackQuery();
-      const base = await getBrandDirFilter(ctx.from.id, u.id);
+      const base = await getBrandDirFilter(u.id);
       const key = String(p.k || '');
       const page = num(p.p || 0, 0);
 
       if (key === 'goals') base.goalsTags = [];
       if (key === 'req') base.reqTags = [];
 
-      await setBrandDirFilter(ctx.from.id, base, u.id);
-      await renderBrandDirMultiPick(ctx, ctx.from.id, { legacyUserId: u.id, key, page });
+      await setBrandDirFilter(u.id, base);
+      await renderBrandDirMultiPick(ctx, u.id, { key, page });
       return;
     }
 
     if (p.a === 'a:bd_mdone') {
       await ctx.answerCallbackQuery();
-      await renderBrandDirFilters(ctx, ctx.from.id, { page: num(p.p || 0, 0), legacyUserId: u.id });
+      await renderBrandDirFilters(ctx, u.id, { page: num(p.p || 0, 0) });
       return;
     }
 
     if (p.a === 'a:bd_freset') {
       await ctx.answerCallbackQuery();
-      await setBrandDirFilter(ctx.from.id, {
+      await setBrandDirFilter(u.id, {
         category: null,
         offerType: null,
         compensationType: null,
         budgetBucket: null,
         goalsTags: [],
         reqTags: [],
-      }, u.id);
-      await renderBrandDirFilters(ctx, ctx.from.id, { page: num(p.p || 0, 0), legacyUserId: u.id });
+      });
+      await renderBrandDirFilters(ctx, u.id, { page: num(p.p || 0, 0) });
       return;
     }
 
@@ -12353,7 +11816,7 @@ if (p.a === 'a:brand_dir_open') {
   await ctx.answerCallbackQuery();
   const brandUserId = Number(p.u || 0);
   const backPage = Math.max(0, Number(p.p || 0));
-  await renderBrandDirectoryCard(ctx, ctx.from.id, { brandUserId, backPage, edit: true, legacyUserId: u.id });
+  await renderBrandDirectoryCard(ctx, u.id, { brandUserId, backPage, edit: true });
   return;
 }
 
@@ -12392,7 +11855,7 @@ if (p.a === 'a:brand_apply') {
 Я отправлю это бренду и добавлю в их Inbox.`;
 
   try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -12419,7 +11882,7 @@ if (p.a === 'a:brand_apply') {
         const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-        await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+        await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
 
@@ -12428,7 +11891,7 @@ if (p.a === 'a:brand_apply') {
         const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-        await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+        await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
 
@@ -12460,7 +11923,7 @@ if (p.a === 'a:brand_apply') {
 
 Если у тебя несколько брендов — используй «🔁 Сменить бренд» в меню.`;
 
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
       return;
     }
 
@@ -12473,7 +11936,7 @@ if (p.a === 'a:brand_apply') {
       if (ret === 'menu') {
         await renderMainMenu(ctx, flags, { edit: true, user: u });
       } else {
-        await safeEditOrReply(ctx, 'Готово.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+        await ctx.editMessageText('Готово.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
       }
       return;
     }
@@ -12483,7 +11946,7 @@ if (p.a === 'a:brand_apply') {
 
       const ret = String(p.ret || 'menu');
       const wsId = Number(p.ws || 0);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
@@ -12499,7 +11962,7 @@ if (p.a === 'a:brand_apply') {
 
       const ret = String(p.ret || 'menu');
       const wsId = Number(p.ws || 0);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
@@ -12512,7 +11975,7 @@ if (p.a === 'a:brand_apply') {
           const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-          await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+          await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
           return;
         }
         brands = [];
@@ -12523,7 +11986,7 @@ if (p.a === 'a:brand_apply') {
         const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Попроси владельца бренда добавить тебя в «👥 Команда бренда».`;
-        await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+        await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
 
@@ -12586,7 +12049,7 @@ if (p.a === 'a:menu') {
       const flags = await getRoleFlags(u, ctx.from.id);
       const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
       if (curMode) {
-        await safeEditOrReply(ctx, `👤 <b>Режим куратора</b>
+        await ctx.editMessageText(`👤 <b>Режим куратора</b>
 
 Здесь показаны только действия куратора, чтобы не путаться.
 Чтобы вернуть полное меню — нажми “🔓 Обычный режим”.`, {
@@ -12691,7 +12154,7 @@ if (p.a === 'a:menu') {
       const kb = new InlineKeyboard()
         .text('✅ Выйти', `a:cur_leave_do|ws:${wsId}`)
         .text('❌ Отмена', `a:cur_ws|ws:${wsId}`);
-      await safeEditOrReply(ctx, `❌ <b>Выйти из канала</b>
+      await ctx.editMessageText(`❌ <b>Выйти из канала</b>
 
 Ты больше не будешь куратором: <b>${escapeHtml(wsTitle)}</b>
 
@@ -12826,7 +12289,7 @@ if (p.a === 'a:menu') {
         .text('✅ Подтвердить', `a:cur_gw_check_do|ws:${wsId}|i:${gwId}`)
         .text('❌ Отмена', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
 
-      await safeEditOrReply(ctx, `✅ <b>Отметить как проверено?</b>
+      await ctx.editMessageText(`✅ <b>Отметить как проверено?</b>
 
 Это внутренняя отметка для владельца и других кураторов.
 Ничего не меняет в конкурсе — только фиксирует “я проверил”.
@@ -12894,7 +12357,7 @@ if (p.a === 'a:menu') {
         .row()
         .text('⬅️ Назад', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
 
-      await safeEditOrReply(ctx, `📝 <b>Заметки к конкурсу #${gwId}</b>
+      await ctx.editMessageText(`📝 <b>Заметки к конкурсу #${gwId}</b>
 
 Это внутренние пометки для владельца и кураторов — участникам не показывается.
 Примеры: «согласовали приз», «ждём фото», «уточнить условия», «риск/сомнительно».
@@ -13009,9 +12472,9 @@ if (p.a === 'a:wsp_preview') {
   if (!bmRes) return;
   const backCb = `a:brand_deals|ws:0|st:${stage}|p:${page}`;
   await setExpectText(ctx.from.id, { type: 'brand_deals_search', brandUserId: bmRes.userId, stage, page, backCb });
-  const kb = navKb(backCb);
+  const kb = new InlineKeyboard().text('⬅️ Назад', backCb);
   const t = '🔎 <b>Поиск по сделкам</b>\n\nВарианты:\n• <code>@username</code> — пример: <code>@zarinka</code>\n• <code>TG id</code> (цифры) — пример: <code>123456789</code>\n\nПодсказки:\n• если начинаешь с <code>@</code>, добавь минимум 2 символа после @\n• если вводишь цифры — обычно 6–12 цифр\n\nЧтобы сбросить: <code>сброс</code>';
-  try { await safeEditOrReply(ctx, t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
+  try { await ctx.editMessageText(t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
   catch { await ctx.reply(t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
   return;
 }
@@ -13232,10 +12695,10 @@ if (p.a === 'a:lead_set') {
       if (!leadId) return;
 
       const lead = await db.getBrandLeadById(leadId);
-      if (!lead) return safeEditOrReply(ctx, 'Заявка не найдена.');
+      if (!lead) return ctx.editMessageText('Заявка не найдена.');
 
       const ws = await db.getWorkspaceAny(Number(lead.workspace_id));
-      if (!ws) return safeEditOrReply(ctx, 'Канал не найден.');
+      if (!ws) return ctx.editMessageText('Канал не найден.');
 
       const isOwner = Number(ws.owner_user_id) === Number(u.id);
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -13246,7 +12709,7 @@ if (p.a === 'a:lead_set') {
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(p.s || 'new')}|p:${Number(p.p || 0)}`);
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✍️ <b>Ответ на заявку #${leadId}</b>
 
 Напиши ответ одним сообщением.`,
@@ -13275,7 +12738,7 @@ if (p.a === 'a:lead_set') {
         .text('🎬 UGC / Офферы', 'a:bx_home')
         .row()
         .text('📋 Меню', 'a:menu');
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -13295,7 +12758,7 @@ if (p.a === 'a:lead_set') {
         .text('🎫 Brand Pass', 'a:brand_pass|ws:0')
         .row()
         .text('📋 Меню', 'a:menu');
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -13303,7 +12766,7 @@ if (p.a === 'a:lead_set') {
     if (p.a === 'a:verify_home') {
       await ctx.answerCallbackQuery();
       if (!CFG.VERIFICATION_ENABLED) {
-        await safeEditOrReply(ctx, '✅ Верификация сейчас отключена.', { reply_markup: mainMenuKb(await getRoleFlags(u, ctx.from.id)) });
+        await ctx.editMessageText('✅ Верификация сейчас отключена.', { reply_markup: mainMenuKb(await getRoleFlags(u, ctx.from.id)) });
         return;
       }
       await renderVerifyHome(ctx, u);
@@ -13323,7 +12786,7 @@ if (p.a === 'a:lead_set') {
       if (kind === 'brand' && CFG.BRAND_VERIFY_REQUIRES_EXTENDED) {
         const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
         if (!isBrandExtendedComplete(prof)) {
-          await safeEditOrReply(ctx, 
+          await ctx.editMessageText(
             `🏷 <b>Верификация Brand</b>
 
 Чтобы подать заявку как бренд, заполни расширенный профиль:
@@ -13345,7 +12808,7 @@ if (p.a === 'a:lead_set') {
       }
 
       await setExpectText(ctx.from.id, { type: 'verify_submit', kind });
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✅ <b>Заявка на верификацию</b>
 
 Отправь одним сообщением:
@@ -13355,7 +12818,7 @@ if (p.a === 'a:lead_set') {
 4) коротко: что предлагаешь / что ищешь
 
 <i>Важно:</i> только текст (1 сообщение).`,
-        { parse_mode: 'HTML', reply_markup: navKb('a:verify_home') }
+        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:verify_home') }
       );
       return;
     }
@@ -13557,10 +13020,10 @@ if (p.a === 'a:ws_prof_mode') {
         contact: '✍️ Введи контакт (например: @username / ссылка / почта).',
         geo: '✍️ Введи город/гео.'
       };
-      await safeEditOrReply(ctx, prompts[field] || prompts.title, {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu')
+      await ctx.editMessageText(prompts[field] || prompts.title, {
+        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`)
       });
-      await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
+      await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field });
       return;
     }
 
@@ -13603,7 +13066,7 @@ if (p.a === 'a:ws_prof_mode') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const offerId = (p.o !== undefined && p.o !== null && p.o !== '') ? Number(p.o) : null;
       const packId = String(p.pack || 'S');
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const pack = getBrandPack(packId);
       if (!pack) return ctx.answerCallbackQuery({ text: 'Пакет не найден.' });
 
@@ -13615,7 +13078,7 @@ if (p.a === 'a:ws_prof_mode') {
       );
 
       const payload = `brand_${u.id}_${pack.id}_${token}`;
-      const back = offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}` : `a:brand_pass|ws:${wsId}`;
+      const back = offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}` : `a:brand_pass|ws:${wsId}`;
       await sendStarsInvoice(ctx, {
         title: `Brand Pass · ${pack.credits} контактов`,
         description: 'Кредиты нужны только для открытия НОВОГО диалога. Переписка внутри диалога — бесплатна.',
@@ -13648,7 +13111,7 @@ if (p.a === 'a:ws_prof_mode') {
 
 Сейчас менеджеров: <b>${count}</b>`;
 
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: brandTeamKb() });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: brandTeamKb() });
       return;
     }
 
@@ -13671,7 +13134,7 @@ if (p.a === 'a:ws_prof_mode') {
 
 ${link}`;
 
-      await safeEditOrReply(ctx, text, {
+      await ctx.editMessageText(text, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
         reply_markup: navKb('a:brand_team|ws:0'),
@@ -13684,7 +13147,7 @@ ${link}`;
       const gate = await ensureBrandTeamUnlocked(ctx, u);
       if (!gate) return;
       await setExpectText(ctx.from.id, { type: 'bm_username' });
-      await safeEditOrReply(ctx, 'Введи @username менеджера одним сообщением (пример: @manager).', {
+      await ctx.editMessageText('Введи @username менеджера одним сообщением (пример: @manager).', {
         reply_markup: navKb('a:brand_team|ws:0'),
       });
       return;
@@ -13696,7 +13159,7 @@ ${link}`;
       if (!gate) return;
       const managers = await db.listBrandManagers(u.id);
       if (!managers.length) {
-        await safeEditOrReply(ctx, 'Пока менеджеров нет. Добавь менеджера через приглашение или по @username.', {
+        await ctx.editMessageText('Пока менеджеров нет. Добавь менеджера через приглашение или по @username.', {
           reply_markup: navKb('a:brand_team|ws:0'),
         });
         return;
@@ -13707,7 +13170,7 @@ ${link}`;
         return `• ${escapeHtml(label)}`;
       }).join('\n');
 
-      await safeEditOrReply(ctx, `👥 <b>Менеджеры бренда</b>\n\n${lines}\n\nНажми на кнопку, чтобы удалить менеджера.`, {
+      await ctx.editMessageText(`👥 <b>Менеджеры бренда</b>\n\n${lines}\n\nНажми на кнопку, чтобы удалить менеджера.`, {
         parse_mode: 'HTML',
         reply_markup: brandManagersListKb(managers),
       });
@@ -13724,7 +13187,7 @@ ${link}`;
       const info = await db.getUserTgIdByUserId(managerUserId);
       const label = info?.tg_username ? `@${info.tg_username}` : (info?.tg_id ? `id:${info.tg_id}` : `user #${managerUserId}`);
 
-      await safeEditOrReply(ctx, `Удалить менеджера <b>${escapeHtml(label)}</b> из команды бренда?`, {
+      await ctx.editMessageText(`Удалить менеджера <b>${escapeHtml(label)}</b> из команды бренда?`, {
         parse_mode: 'HTML',
         reply_markup: brandManagerRemoveConfirmKb(managerUserId),
       });
@@ -13771,7 +13234,7 @@ ${link}`;
       // refresh list
       const managers = await db.listBrandManagers(u.id);
       if (!managers.length) {
-        await safeEditOrReply(ctx, '✅ Менеджер удалён. Сейчас менеджеров нет.', {
+        await ctx.editMessageText('✅ Менеджер удалён. Сейчас менеджеров нет.', {
           reply_markup: navKb('a:brand_team|ws:0'),
         });
         return;
@@ -13782,7 +13245,7 @@ ${link}`;
       }).join('\n');
 
       const note = notifyOk ? '\n\n📩 Менеджеру отправлено уведомление.' : '';
-      await safeEditOrReply(ctx, `✅ Менеджер удалён.${note}\n\n👥 <b>Менеджеры бренда</b>\n\n${lines}`, {
+      await ctx.editMessageText(`✅ Менеджер удалён.${note}\n\n👥 <b>Менеджеры бренда</b>\n\n${lines}`, {
         parse_mode: 'HTML',
         reply_markup: brandManagersListKb(managers),
       });
@@ -13800,7 +13263,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -13824,7 +13287,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -13832,80 +13295,6 @@ ${link}`;
       }
 
       await renderBrandProfileHome(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, edit: true });
-      return;
-    }
-
-    // Brand profile niche picker (single select, checkmark UX)
-    if (p.a === 'a:brand_niche_pick') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
-      const ret = String(p.ret || 'brand');
-      const bo = p.bo ? Number(p.bo) : null;
-      const bp = p.bp ? Number(p.bp) : 0;
-      const from = String(p.from || 'home');
-
-      const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
-      if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx,
-          '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
-          { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
-        );
-        return;
-      }
-
-      await renderBrandNichePicker(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, from });
-      return;
-    }
-
-    if (p.a === 'a:brand_niche_set') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
-      const ret = String(p.ret || 'brand');
-      const bo = p.bo ? Number(p.bo) : null;
-      const bp = p.bp ? Number(p.bp) : 0;
-      const from = String(p.from || 'home');
-      const k = String(p.k || '').trim();
-      const found = BX_CATEGORIES.find((x) => x.key === k);
-
-      if (!found) {
-        await renderBrandNichePicker(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, from });
-        return;
-      }
-
-      const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
-      const meta = parseBrandMeta(prof?.meta);
-      const nextMeta = { ...meta, niche_key: found.key };
-
-      await safeBrandProfiles(
-        () => db.upsertBrandProfile(u.id, { niche: found.label, meta: nextMeta }),
-        async () => null
-      );
-
-      await renderBrandNichePicker(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, from });
-      return;
-    }
-
-    if (p.a === 'a:brand_niche_clear') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
-      const ret = String(p.ret || 'brand');
-      const bo = p.bo ? Number(p.bo) : null;
-      const bp = p.bp ? Number(p.bp) : 0;
-      const from = String(p.from || 'home');
-
-      const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
-      const p0 = prof || {};
-      const meta0 = parseBrandMeta(p0.meta);
-      const curText = String(p0.niche || '').trim();
-      const isCategoryLabel = BX_CATEGORIES.some((x) => String(x.label || '').trim() === curText);
-      const nextMeta = { ...meta0 };
-      delete nextMeta.niche_key;
-
-      const patch = { meta: nextMeta };
-      if (isCategoryLabel) patch.niche = null;
-
-      await safeBrandProfiles(() => db.upsertBrandProfile(u.id, patch), async () => null);
-      await renderBrandNichePicker(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, from });
       return;
     }
 
@@ -13926,7 +13315,7 @@ ${link}`;
 
       const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
       if (!isBrandBasicComplete(prof)) {
-        await ctx.answerCallbackQuery({ text: 'Заполни 4 поля профиля (Название, Ниши, Контакт, Ссылка).', show_alert: true });
+        await ctx.answerCallbackQuery({ text: 'Заполни 4 поля профиля (Название, Ниша, Контакт, Ссылка).', show_alert: true });
         await renderBrandProfileHome(ctx, u.id, { wsId, ret: 'lead', edit: true });
         return;
       }
@@ -13980,12 +13369,8 @@ ${link}`;
         return;
       }
 
-      await setExpectText(ctx.from.id, { type: 'brand_prof_field', field: realField, wsId, ret, backOfferId: bo, backPage: bp, from: String(p.from || 'home') });
-      const promptTxt =
-        realField === 'niche'
-          ? `${brandFieldPrompt(realField)}\n\n<i>Подсказка: для удобной категории используй кнопку “🏷 Ниши” в редактировании профиля.</i>`
-          : brandFieldPrompt(realField);
-      await safeEditOrReply(ctx, promptTxt, {
+      await setExpectText(ctx.from.id, { type: 'brand_prof_field', field: realField, wsId, ret, backOfferId: bo, backPage: bp });
+      await ctx.editMessageText(brandFieldPrompt(realField), {
         parse_mode: 'HTML',
         reply_markup: brandFieldPromptKb({ wsId, ret, backOfferId: bo, backPage: bp, from: String(p.from || "") })
       });
@@ -14013,7 +13398,7 @@ ${link}`;
         async () => ({ __missing_relation: true })
       );
       if (prof && prof.__missing_relation) {
-        await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
+        await ctx.editMessageText('⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
           reply_markup: navKb('a:menu')
         });
         return;
@@ -14030,7 +13415,7 @@ ${link}`;
         async () => ({ __missing_relation: true })
       );
       if (saved && saved.__missing_relation) {
-        await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
+        await ctx.editMessageText('⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
           reply_markup: navKb('a:menu')
         });
         return;
@@ -14054,7 +13439,7 @@ ${link}`;
         async () => ({ __missing_relation: true })
       );
       if (saved && saved.__missing_relation) {
-        await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
+        await ctx.editMessageText('⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
           reply_markup: navKb('a:menu')
         });
         return;
@@ -14270,7 +13655,7 @@ ${link}`;
       const txt = `🧹 <b>Сбросить профиль бренда?</b>
 
 Это удалит базовые и расширенные поля профиля. Действие необратимо.`;
-      await safeEditOrReply(ctx, txt, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText(txt, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -14307,7 +13692,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -14326,7 +13711,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -14442,7 +13827,7 @@ ${link}`;
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const target = Number(p.id || 0);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       if (!target) return;
       await renderWsPublicProfile(ctx, target, { backCb: `a:pm_run|ws:${wsId}|p:${page}` });
       return;
@@ -14523,9 +13908,7 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:feat_view') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      await renderFeaturedView(ctx, u.id, wsId, Number(p.id), Number(p.p || 0), h);
+      await renderFeaturedView(ctx, u.id, Number(p.ws || 0), Number(p.id), Number(p.p || 0));
       return;
     }
 
@@ -14538,7 +13921,7 @@ if (p.a === 'a:match_home') {
       const ok = await db.stopFeaturedPlacement(id, u.id);
       if (!ok) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery({ text: 'Остановлено.' });
-      await renderBxFeed(ctx, u.id, wsId, Number(p.p || 0), { h });
+      await renderBxFeed(ctx, u.id, wsId, Number(p.p || 0));
       return;
     }
     if (p.a === 'a:ws_pro_pin') {
@@ -14555,7 +13938,7 @@ if (p.a === 'a:match_home') {
       }
       kb.text('❌ Снять пин', `a:ws_pro_pin_clear|ws:${wsId}`).row();
       kb.text('⬅️ Назад', `a:ws_pro|ws:${wsId}`);
-      await safeEditOrReply(ctx, '📌 Выбери оффер для пина в ленте (PRO):', { reply_markup: kb });
+      await ctx.editMessageText('📌 Выбери оффер для пина в ленте (PRO):', { reply_markup: kb });
       return;
     }
     if (p.a === 'a:ws_pro_pin_set') {
@@ -14617,7 +14000,7 @@ if (p.a === 'a:match_home') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➕ Введи @username модератора (он должен иметь username).', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home') });
+      await ctx.editMessageText('➕ Введи @username модератора (он должен иметь username).', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home') });
       await setExpectText(ctx.from.id, { type: 'admin_add_mod_username' });
       return;
     }
@@ -14764,7 +14147,7 @@ if (p.a === 'a:match_home') {
       if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
       const targetUserId = Number(p.uid);
       await setExpectText(ctx.from.id, { type: 'mod_verif_reject_reason', targetUserId, page: Number(p.p || 0) });
-      await safeEditOrReply(ctx, '❌ Напиши причиной отказа одним сообщением (текст), и я отправлю пользователю.', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:mod_verif_view|uid:${targetUserId}|p:${Number(p.p || 0)}`) });
+      await ctx.editMessageText('❌ Напиши причиной отказа одним сообщением (текст), и я отправлю пользователю.', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:mod_verif_view|uid:${targetUserId}|p:${Number(p.p || 0)}`) });
       return;
     }
 
@@ -14815,7 +14198,7 @@ if (p.a === 'a:match_home') {
       const prof = await safeBrandProfiles(() => db.getBrandProfile(bmRes.userId), async () => null);
       const info = deriveBxSmartPrefillFromBrandProfile(prof);
 
-      const next = await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, {
+      const next = await setBxFilter(ctx.from.id, wsId, {
         category: null,
         offerType: info.offerType,
         compensationType: info.compensationType,
@@ -14828,7 +14211,7 @@ if (p.a === 'a:match_home') {
         compensationType: next.compensationType,
       });
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         bxSmartPrefillText(next, info, totalAll, totalFiltered),
         { parse_mode: 'HTML', reply_markup: bxSmartKb(wsId, { h }) }
       );
@@ -14850,7 +14233,7 @@ if (p.a === 'a:match_home') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', 0);
       if (!bmRes) return;
 
-	      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
+	      await setBxFilter(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
       await renderBxFeed(ctx, bmRes.userId, wsId, 0, { h });
       return;
     }
@@ -14864,7 +14247,7 @@ if (p.a === 'a:match_home') {
         return;
       }
       const wsId = Number(p.ws);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
@@ -14884,12 +14267,12 @@ if (p.a === 'a:match_home') {
         return;
       }
       const wsId = Number(p.ws);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
       await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
@@ -14905,18 +14288,14 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
-	      const key = normBxTagFilterKey(p.k);
-      if (!key) {
-        const kb = navKb('a:menu');
-        await safeEditOrReply(ctx, '⚠️ <b>Эта кнопка устарела</b>\n\nОткрой «📋 Меню» → 📰 Лента креаторов → 🎛 Фильтры.', { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-        return;
-      }
+	      const page = Number(p.p || 0);
+	      const key = String(p.k || '');
+	      if (!['goals', 'req'].includes(key)) return;
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
 	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
@@ -14932,22 +14311,18 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
-	      const key = normBxTagFilterKey(p.k);
-      const v = String(p.v || '');
-      if (!key) {
-        const kb = navKb('a:menu');
-        await safeEditOrReply(ctx, '⚠️ <b>Эта кнопка устарела</b>\n\nОткрой «📋 Меню» → 📰 Лента креаторов → 🎛 Фильтры.', { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-        return;
-      }
+	      const page = Number(p.p || 0);
+	      const key = String(p.k || '');
+	      const v = String(p.v || '');
+	      if (!['goals', 'req'].includes(key)) return;
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
-	      const cur = await getBxFilterScoped(ctx.from.id, bmRes.userId, wsId);
+	      const cur = await getBxFilter(ctx.from.id, wsId);
 	      const field = key === 'goals' ? 'goalsTags' : 'reqTags';
 	      const allowed = key === 'goals' ? BRAND_GOALS_KEYS : BRAND_REQ_KEYS;
 	      if (!allowed.has(v)) {
@@ -14959,7 +14334,7 @@ if (p.a === 'a:match_home') {
 	      if (set.has(v)) set.delete(v);
 	      else set.add(v);
 
-	      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { [field]: Array.from(set) });
+	      await setBxFilter(ctx.from.id, wsId, { [field]: Array.from(set) });
 	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
@@ -14973,22 +14348,18 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
-	      const key = normBxTagFilterKey(p.k);
-      if (!key) {
-        const kb = navKb('a:menu');
-        await safeEditOrReply(ctx, '⚠️ <b>Эта кнопка устарела</b>\n\nОткрой «📋 Меню» → 📰 Лента креаторов → 🎛 Фильтры.', { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-        return;
-      }
+	      const page = Number(p.p || 0);
+	      const key = String(p.k || '');
+	      if (!['goals', 'req'].includes(key)) return;
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
 	      const field = key === 'goals' ? 'goalsTags' : 'reqTags';
-	      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { [field]: [] });
+	      await setBxFilter(ctx.from.id, wsId, { [field]: [] });
 	      await renderBxFilterMultiPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
@@ -15002,12 +14373,12 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+	      const page = Number(p.p || 0);
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
 	      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
@@ -15023,20 +14394,17 @@ if (p.a === 'a:match_home') {
 	        return;
 	      }
 	      const wsId = Number(p.ws);
-	      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+	      const page = Number(p.p || 0);
 	      const key = String(p.k || '');
-
-	      const retPage = Number(p.rp ?? p.p ?? 0);
-	      const pickPage = Number(p.pg ?? p.p ?? 0);
 
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
 	      if (!bmRes) return;
 
 	      // Open picker (do NOT change the filter here)
-	      await renderBxFilterPick(ctx, bmRes.userId, wsId, key, retPage, pickPage, { h, r });
+	      await renderBxFilterPick(ctx, bmRes.userId, wsId, key, page, { h, r });
 	      return;
 	    }
 
@@ -15049,12 +14417,9 @@ if (p.a === 'a:match_home') {
         return;
       }
       const wsId = Number(p.ws);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const keyRaw = String(p.k || '');
       const vRaw = p.v ? String(p.v) : null;
-
-      const retPage = Number(p.rp ?? p.p ?? 0);
-      const pickPage = Number(p.pg ?? p.p ?? 0);
 
       // UI uses short keys (cat/type/comp). Storage uses canonical keys.
       const key = keyRaw === 'cat'
@@ -15065,40 +14430,35 @@ if (p.a === 'a:match_home') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
-      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { [key]: v });
-
-      // UX: single-pick stays in picker; user exits via ✅ Готово / ⬅️ Назад / 📋 Меню
-      const pickKey = keyRaw === 'category' ? 'cat' : (keyRaw === 'offerType' ? 'type' : (keyRaw === 'compensationType' ? 'comp' : keyRaw));
-      await renderBxFilterPick(ctx, bmRes.userId, wsId, pickKey, retPage, pickPage, { h, r });
+      await setBxFilter(ctx.from.id, wsId, { [key]: v });
+      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
+
     if (p.a === 'a:bx_freset') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
-
-      // Legacy: older messages used p as the only page param (we treat it as return-to page).
-      const retPage = Number(p.rp ?? p.p ?? 0);
+      const page = Number(p.p || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
       if (!bmRes) return;
 
-      await setBxFilterScoped(ctx.from.id, bmRes.userId, wsId, { category: null, offerType: null, compensationType: null, goalsTags: [], reqTags: [] });
-      await renderBxFilters(ctx, bmRes.userId, wsId, retPage, { h, r });
+      await setBxFilter(ctx.from.id, wsId, { category: null, offerType: null, compensationType: null });
+      await renderBxFilters(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
-
 
     if (p.a === 'a:bx_pub') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
       const offerId = Number(p.o);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       await renderBxPublicView(ctx, u.id, wsId, offerId, page, { h });
       return;
@@ -15109,7 +14469,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
       const offerId = Number(p.id || 0);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       if (!offerId) {
         await ctx.answerCallbackQuery({ text: 'Оффер не найден.', show_alert: true });
         return;
@@ -15292,7 +14652,7 @@ if (p.a === 'a:match_home') {
       });
       if (!okInv) return;
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `💳 Счёт выставлен на **${d.price}⭐️**.
 
 Оплати Stars — и оффер попадёт в очередь на публикацию в офиц.канале.\n\nПосле оплаты модератор нажмёт Apply и поставит пост в канал.`,
@@ -15424,7 +14784,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:off_queue') {
       await ctx.answerCallbackQuery();
       if (!CFG.OFFICIAL_PUBLISH_ENABLED) {
-        await safeEditOrReply(ctx, 'Фича отключена.');
+        await ctx.editMessageText('Фича отключена.');
         return;
       }
       const can = await isModerator(u, ctx.from.id);
@@ -15439,9 +14799,9 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      await safeEditOrReply(ctx, '🚩 Опиши проблему одним сообщением (почему жалоба).', {
+      await ctx.editMessageText('🚩 Опиши проблему одним сообщением (почему жалоба).', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_report', kind: 'offer', wsId, offerId, page, h });
@@ -15452,9 +14812,9 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      await safeEditOrReply(ctx, '🚩 Опиши проблему одним сообщением (почему жалоба).', {
+      await ctx.editMessageText('🚩 Опиши проблему одним сообщением (почему жалоба).', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_report', kind: 'thread', wsId, threadId, page, h });
@@ -15463,7 +14823,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:bx_msg') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
 
       // Brand Manager in Brand Mode (ws:0): act as selected brand (brandUserId)
       let actorUserId = u.id;
@@ -15472,7 +14832,7 @@ if (p.a === 'a:match_home') {
         const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', page, { h, r });
         if (!bmRes) return;
         actorUserId = bmRes.userId;
         bm = bmRes.bm || { enabled: false };
@@ -15591,7 +14951,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:bx_inbox') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
@@ -15605,7 +14965,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
@@ -15635,7 +14995,7 @@ if (p.a === 'a:bx_retry_help') {
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
@@ -15651,15 +15011,15 @@ if (p.a === 'a:bx_retry_help') {
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      await safeEditOrReply(ctx, '🔗 Пришли ссылку на пост (пример: https://t.me/... )', {
+      await ctx.editMessageText('🔗 Пришли ссылку на пост (пример: https://t.me/... )', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
-      await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, h, asUserId: bmRes.userId });
+      await setExpectText(ctx.from.id, { type: 'bx_proof_link', wsId, threadId, back, offerId, page, asUserId: bmRes.userId });
       return;
     }
 
@@ -15670,15 +15030,15 @@ if (p.a === 'a:bx_retry_help') {
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      await safeEditOrReply(ctx, '🖼️ Пришли скриншот (как фото)', {
+      await ctx.editMessageText('🖼️ Пришли скриншот (как фото)', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
-      await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, h, asUserId: bmRes.userId });
+      await setExpectText(ctx.from.id, { type: 'bx_proof_photo', wsId, threadId, back, offerId, page, asUserId: bmRes.userId });
       return;
     }
 
@@ -15689,7 +15049,7 @@ if (p.a === 'a:bx_retry_help') {
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
@@ -15719,7 +15079,7 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
@@ -15727,7 +15087,7 @@ if (p.a === 'a:bx_retry_help') {
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
       if (!bmRes) return;
 
-      await safeEditOrReply(ctx, '✍️ Напиши сообщение покупателю:', {
+      await ctx.editMessageText('✍️ Напиши сообщение покупателю:', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}${offerId ? `|o:${offerId}` : ''}|b:${back}|h:${h}`)
       });
       await setExpectText(ctx.from.id, { type: 'bx_thread_msg', wsId, threadId, back, offerId, page, h, asUserId: bmRes.userId });
@@ -15738,7 +15098,7 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const back = p.b ? String(p.b) : 'inbox';
       const offerId = p.o ? Number(p.o) : null;
@@ -15747,7 +15107,7 @@ if (p.a === 'a:bx_retry_help') {
       const kb = new InlineKeyboard()
         .text('✅ Закрыть', `a:bx_thread_close_do|ws:${wsId}|t:${threadId}${cbTail}`)
         .text('❌ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}${cbTail}`);
-      await safeEditOrReply(ctx, 'Закрыть диалог? После закрытия писать нельзя.', { reply_markup: kb });
+      await ctx.editMessageText('Закрыть диалог? После закрытия писать нельзя.', { reply_markup: kb });
       return;
     }
 
@@ -15755,7 +15115,7 @@ if (p.a === 'a:bx_retry_help') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const threadId = Number(p.t);
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
+      const page = Number(p.p || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
@@ -15851,7 +15211,7 @@ if (p.a === 'a:bx_retry_help') {
       const maxOffers = isPro ? CFG.BARTER_MAX_ACTIVE_OFFERS_PRO : CFG.BARTER_MAX_ACTIVE_OFFERS_FREE;
       const cntOffers = await db.countActiveBarterOffers(wsId);
       if (cntOffers >= maxOffers) {
-        await safeEditOrReply(ctx, `⚠️ Достигнут лимит активных офферов: <b>${cntOffers}/${maxOffers}</b>.
+        await ctx.editMessageText(`⚠️ Достигнут лимит активных офферов: <b>${cntOffers}/${maxOffers}</b>.
 
 Хочешь больше — включи ⭐️ PRO.`, {
           parse_mode: 'HTML',
@@ -15862,7 +15222,7 @@ if (p.a === 'a:bx_retry_help') {
 
       await ctx.answerCallbackQuery();
       await clearDraft(ctx.from.id);
-      await safeEditOrReply(ctx, '➕ <b>Новый оффер</b>\n\nШаг 1/6: выбери тип:\n\n🎬 <b>UGC</b> — контент без аудитории (главное: вкус и качество)\n📣 <b>Интеграция</b> — публикация в TG/IG (нужна аудитория)', {
+      await ctx.editMessageText('➕ <b>Новый оффер</b>\n\nШаг 1/6: выбери тип:\n\n🎬 <b>UGC</b> — контент без аудитории (главное: вкус и качество)\n📣 <b>Интеграция</b> — публикация в TG/IG (нужна аудитория)', {
         parse_mode: 'HTML',
         reply_markup: bxKindKb(wsId)
       });
@@ -15876,7 +15236,7 @@ if (p.a === 'a:bx_retry_help') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         '🧩 <b>Шаблоны оффера</b>\n\nВыбери вариант — мы подготовим категорию/формат/оплату и перейдём к тегам (опционально), затем к тексту оффера.',
         { parse_mode: 'HTML', reply_markup: bxPresetKb(wsId) }
       );
@@ -15916,7 +15276,7 @@ if (p.a === 'a:bx_retry_help') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      await safeEditOrReply(ctx, 'Шаг 1/4: выбери категорию:', {
+      await ctx.editMessageText('Шаг 1/4: выбери категорию:', {
         parse_mode: 'HTML',
         reply_markup: bxCategoryKb(wsId)
       });
@@ -15931,7 +15291,7 @@ if (p.a === 'a:bx_retry_help') {
       draft.wsId = wsId;
       draft.kind = String(p.k || 'ugc');
       await setDraft(ctx.from.id, draft);
-      await safeEditOrReply(ctx, 'Шаг 2/6: выбери категорию:', {
+      await ctx.editMessageText('Шаг 2/6: выбери категорию:', {
         parse_mode: 'HTML',
         reply_markup: bxCategoryKb(wsId)
       });
@@ -15945,7 +15305,7 @@ if (p.a === 'a:bx_cat') {
       draft.wsId = wsId;
       draft.category = p.c;
       await setDraft(ctx.from.id, draft);
-      await safeEditOrReply(ctx, 'Шаг 3/6: выбери формат сотрудничества:', {
+      await ctx.editMessageText('Шаг 3/6: выбери формат сотрудничества:', {
         parse_mode: 'HTML',
         reply_markup: bxTypeKb(wsId)
       });
@@ -15959,7 +15319,7 @@ if (p.a === 'a:bx_cat') {
       draft.wsId = wsId;
       draft.offer_type = p.t;
       await setDraft(ctx.from.id, draft);
-      await safeEditOrReply(ctx, 'Шаг 4/6: выбери тип оплаты:', {
+      await ctx.editMessageText('Шаг 4/6: выбери тип оплаты:', {
         parse_mode: 'HTML',
         reply_markup: bxCompKb(wsId)
       });
@@ -15989,7 +15349,7 @@ if (p.a === 'a:bx_cat') {
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      await safeEditOrReply(ctx, 'Шаг 4/6: выбери тип оплаты:', {
+      await ctx.editMessageText('Шаг 4/6: выбери тип оплаты:', {
         parse_mode: 'HTML',
         reply_markup: bxCompKb(wsId)
       });
@@ -16114,7 +15474,7 @@ if (p.a === 'a:bx_cat') {
 
     if (p.a === 'a:bx_view') {
       await ctx.answerCallbackQuery();
-      await renderBxView(ctx, u.id, Number(p.ws), Number(p.o), p.back || 'feed', Number(p.p || 0));
+      await renderBxView(ctx, u.id, Number(p.ws), Number(p.o), p.back || 'feed');
       return;
     }
 
@@ -16123,10 +15483,9 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
-      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      await renderBxMediaStep(ctx, u.id, wsId, offerId, back, { edit: true, page });
+      await renderBxMediaStep(ctx, u.id, wsId, offerId, back, { edit: true });
       return;
     }
 
@@ -16134,7 +15493,6 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
-      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
 
@@ -16143,7 +15501,7 @@ if (p.a === 'a:bx_cat') {
 
       await db.updateBarterOffer(offerId, { media_type: null, media_file_id: null });
       await ctx.answerCallbackQuery({ text: 'Убрано' });
-      await renderBxMediaStep(ctx, u.id, wsId, offerId, back, { edit: true, page });
+      await renderBxMediaStep(ctx, u.id, wsId, offerId, back, { edit: true });
       return;
     }
 
@@ -16151,12 +15509,11 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
-      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
-      await setExpectText(ctx.from.id, { type: 'bx_media_photo', wsId, offerId, back, page });
+      await setExpectText(ctx.from.id, { type: 'bx_media_photo', wsId, offerId, back });
 
-      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
-      await safeEditOrReply(ctx, '🖼 Пришли <b>картинку</b> одним сообщением.', { parse_mode: 'HTML', reply_markup: kb });
+      const kb = new InlineKeyboard().text('⬅️ Назад', `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
+      await ctx.editMessageText('🖼 Пришли <b>картинку</b> одним сообщением.', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -16164,12 +15521,11 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
-      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
-      await setExpectText(ctx.from.id, { type: 'bx_media_gif', wsId, offerId, back, page });
+      await setExpectText(ctx.from.id, { type: 'bx_media_gif', wsId, offerId, back });
 
-      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
-      await safeEditOrReply(ctx, '🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно отправить как анимацию или как файл .gif)', { parse_mode: 'HTML', reply_markup: kb });
+      const kb = new InlineKeyboard().text('⬅️ Назад', `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
+      await ctx.editMessageText('🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно отправить как анимацию или как файл .gif)', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -16177,12 +15533,11 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
-      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
-      await setExpectText(ctx.from.id, { type: 'bx_media_video', wsId, offerId, back, page });
+      await setExpectText(ctx.from.id, { type: 'bx_media_video', wsId, offerId, back });
 
-      const kb = navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`);
-      await safeEditOrReply(ctx, '🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)', { parse_mode: 'HTML', reply_markup: kb });
+      const kb = new InlineKeyboard().text('⬅️ Назад', `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}`);
+      await ctx.editMessageText('🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -16190,10 +15545,9 @@ if (p.a === 'a:bx_cat') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const back = p.back || 'my';
-      const page = Math.max(0, Number(p.p || 0));
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      await sendBxPreview(ctx, u.id, wsId, offerId, back, page);
+      await sendBxPreview(ctx, u.id, wsId, offerId, back);
       return;
     }
 
@@ -16255,14 +15609,13 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_del_q') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
-      const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
       if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       const kb = new InlineKeyboard()
-        .text('✅ Архивировать', `a:bx_del_do|ws:${wsId}|o:${offerId}|p:${page}`)
-        .text('❌ Отмена', `a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:${page}`);
+        .text('✅ Архивировать', `a:bx_del_do|ws:${wsId}|o:${offerId}`)
+        .text('❌ Отмена', `a:bx_view|ws:${wsId}|o:${offerId}|back:my`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `Архивировать оффер <b>#${offerId}</b>?
+      await ctx.editMessageText(`Архивировать оффер <b>#${offerId}</b>?
 
 Он исчезнет из списка, но останется в базе для истории.`, { parse_mode: 'HTML', reply_markup: kb });
       return;
@@ -16271,13 +15624,12 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_del_do') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
-      const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
       if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await db.updateBarterOfferStatus(offerId, 'CLOSED');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_archived', {});
       await ctx.answerCallbackQuery({ text: 'Архивировано.' });
-      await renderBxMy(ctx, u.id, wsId, page);
+      await renderBxMy(ctx, u.id, wsId, 0);
       return;
     }
 
@@ -16319,22 +15671,26 @@ if (p.a === 'a:bx_cat') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await db.setWorkspaceSetting(wsId, { curator_enabled: !ws.curator_enabled });
       await db.auditWorkspace(wsId, u.id, 'ws.curator_toggled', { enabled: !ws.curator_enabled });
-      const ret = String(p.ret || 'ws');
-      if (ret === 'cur_manage') {
-        await renderCuratorManage(ctx, u.id, wsId);
-      } else {
-        await renderWsSettings(ctx, u.id, wsId);
-      }
+      await renderWsSettings(ctx, u.id, wsId);
       return;
     }
 
-	// Curators
-	if (p.a === 'a:cur_manage') {
-	  const wsId = Number(p.ws);
-	  await ctx.answerCallbackQuery();
-	  await renderCuratorManage(ctx, u.id, wsId);
-	  return;
-	}
+    // Curators
+if (p.a === 'a:cur_manage') {
+  const wsId = Number(p.ws);
+  const ws = await db.getWorkspace(u.id, wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  const curators = await db.listCurators(wsId);
+  const count = curators?.length || 0;
+
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText(
+    `👥 <b>Кураторы</b>\n\nКураторы помогают проверять конкурсы и заявки.\n\nСейчас в списке: <b>${count}</b>`,
+    { parse_mode: 'HTML', reply_markup: curManageKb(wsId) }
+  );
+  return;
+}
 
     if (p.a === 'a:cur_invite') {
       const wsId = Number(p.ws);
@@ -16351,7 +15707,7 @@ if (p.a === 'a:bx_cat') {
       const shareText = `Приглашение куратора (одноразовая, 10 минут).\nОткрой ссылку: ${link}`;
       const shareUrl = `https://t.me/share/url?url=&text=${encodeURIComponent(shareText)}`;
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, text, {
+      await ctx.editMessageText(text, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
         reply_markup: new InlineKeyboard()
@@ -16367,7 +15723,7 @@ if (p.a === 'a:bx_cat') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➕ Введи @username куратора (он должен уже запускать бота /start).', {
+      await ctx.editMessageText('➕ Введи @username куратора (он должен уже запускать бота /start).', {
         reply_markup: new InlineKeyboard()
           .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
           .text('📋 Меню', 'a:menu')
@@ -16383,7 +15739,7 @@ if (p.a === 'a:bx_cat') {
       const curators = await db.listCurators(wsId);
       const lines = curators.map(c => `• ${c.tg_username ? '@' + escapeHtml(c.tg_username) : 'id:' + c.tg_id}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `👥 <b>Кураторы</b>
+      await ctx.editMessageText(`👥 <b>Кураторы</b>
 
 Нажми на 🗑 рядом с именем, чтобы удалить.
 
@@ -16405,7 +15761,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
         .text('✅ Удалить', `a:cur_rm_do|ws:${wsId}|u:${curatorUserId}`)
         .text('❌ Отмена', `a:cur_list|ws:${wsId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `Удалить куратора <b>${escapeHtml(label)}</b>?`, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.editMessageText(`Удалить куратора <b>${escapeHtml(label)}</b>?`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -16438,7 +15794,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       // refresh list
       const curators = await db.listCurators(wsId);
       const lines = curators.map(c => `• ${c.tg_username ? '@' + escapeHtml(c.tg_username) : 'id:' + c.tg_id}`);
-      await safeEditOrReply(ctx, `👥 <b>Кураторы</b>
+      await ctx.editMessageText(`👥 <b>Кураторы</b>
 
 Нажми на 🗑 рядом с именем, чтобы удалить.
 
@@ -16475,9 +15831,9 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➕ <b>Новая папка</b>\n\nВведи название папки:', {
+      await ctx.editMessageText('➕ <b>Новая папка</b>\n\nВведи название папки:', {
         parse_mode: 'HTML',
-        reply_markup: navKb(`a:folders_home|ws:${wsId}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folders_home|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_create_title', wsId });
       return;
@@ -16495,9 +15851,9 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const left = Math.max(0, max - cnt);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `➕ Добавь @каналы (или ссылки t.me) списком — каждый с новой строки.\n\nСвободно мест: <b>${left}</b> из <b>${max}</b>.`, {
+      await ctx.editMessageText(`➕ Добавь @каналы (или ссылки t.me) списком — каждый с новой строки.\n\nСвободно мест: <b>${left}</b> из <b>${max}</b>.`, {
         parse_mode: 'HTML',
-        reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folder_open|ws:${wsId}|f:${folderId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_add_items', wsId, folderId });
       return;
@@ -16509,8 +15865,8 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➖ Укажи @каналы (или ссылки t.me) списком — удалю их из папки:', {
-        reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
+      await ctx.editMessageText('➖ Укажи @каналы (или ссылки t.me) списком — удалю их из папки:', {
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folder_open|ws:${wsId}|f:${folderId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_remove_items', wsId, folderId });
       return;
@@ -16522,8 +15878,8 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '✏️ Введи новое название папки:', {
-        reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
+      await ctx.editMessageText('✏️ Введи новое название папки:', {
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:folder_open|ws:${wsId}|f:${folderId}`)
       });
       await setExpectText(ctx.from.id, { type: 'folder_rename_title', wsId, folderId });
       return;
@@ -16538,7 +15894,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
         .text('✅ Очистить', `a:folder_clear_do|ws:${wsId}|f:${folderId}`)
         .text('❌ Отмена', `a:folder_open|ws:${wsId}|f:${folderId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Очистить папку (удалить все каналы)?', { reply_markup: kb });
+      await ctx.editMessageText('Очистить папку (удалить все каналы)?', { reply_markup: kb });
       return;
     }
 
@@ -16563,7 +15919,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
         .text('🗑 Удалить', `a:folder_delete_do|ws:${wsId}|f:${folderId}`)
         .text('❌ Отмена', `a:folder_open|ws:${wsId}|f:${folderId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Удалить папку полностью?', { reply_markup: kb });
+      await ctx.editMessageText('Удалить папку полностью?', { reply_markup: kb });
       return;
     }
 
@@ -16623,10 +15979,10 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
 
       const link = `https://t.me/${CFG.BOT_USERNAME}?start=fed_${wsId}_${token}`;
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `👥 <b>Invite editor</b>\n\nСсылка на ${CFG.WORKSPACE_EDITOR_INVITE_TTL_MIN || 10} минут:\n${escapeHtml(link)}\n\nРедактор сможет управлять папками этого Workspace.`, {
+      await ctx.editMessageText(`👥 <b>Invite editor</b>\n\nСсылка на ${CFG.WORKSPACE_EDITOR_INVITE_TTL_MIN || 10} минут:\n${escapeHtml(link)}\n\nРедактор сможет управлять папками этого Workspace.`, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
-        reply_markup: navKb(`a:ws_editors|ws:${wsId}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_editors|ws:${wsId}`)
       });
       return;
     }
@@ -16636,8 +15992,8 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➕ Введи @username редактора (он должен уже запускать бота /start).', {
-        reply_markup: navKb(`a:ws_editors|ws:${wsId}`)
+      await ctx.editMessageText('➕ Введи @username редактора (он должен уже запускать бота /start).', {
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_editors|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'ws_editor_username', wsId });
       return;
@@ -16653,7 +16009,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
         .text('✅ Удалить', `a:ws_editor_rm_do|ws:${wsId}|u:${targetUserId}`)
         .text('❌ Отмена', `a:ws_editors|ws:${wsId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Удалить редактора?', { reply_markup: kb });
+      await ctx.editMessageText('Удалить редактора?', { reply_markup: kb });
       return;
     }
 
@@ -16685,7 +16041,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       kb.text('⬅️ Назад', `a:bx_view|ws:${wsId}|o:${offerId}|back:my`);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '📁 Выбери папку совместных каналов (она будет показываться в оффере):', { reply_markup: kb });
+      await ctx.editMessageText('📁 Выбери папку совместных каналов (она будет показываться в оффере):', { reply_markup: kb });
       return;
     }
 
@@ -16733,7 +16089,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       await clearExpectText(ctx.from.id);
 
       await ctx.answerCallbackQuery({ text: 'Соло: без спонсоров ✅' });
-      await safeEditOrReply(ctx, 'Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
+      await ctx.editMessageText('Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
       return;
     }
 
@@ -16750,7 +16106,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const isPro = await db.isWorkspacePro(wsId);
       const max = isPro ? CFG.GIVEAWAY_SPONSORS_MAX_PRO : CFG.GIVEAWAY_SPONSORS_MAX_FREE;
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✍️ Пришли список спонсоров (до ${max}) — @каналы или ссылки t.me (через пробел/перенос строки).
 
 ` +
@@ -16774,7 +16130,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const max = isPro ? CFG.GIVEAWAY_SPONSORS_MAX_PRO : CFG.GIVEAWAY_SPONSORS_MAX_FREE;
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✍️ Пришли список спонсоров (до ${max}) — @каналы или ссылки t.me (через пробел/перенос строки).\n\nЕсли это соло — нажми «✅ Без спонсоров (соло)».`,
         { reply_markup: gwSponsorsOptionalKb(wsId) }
       );
@@ -16793,7 +16149,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       await clearExpectText(ctx.from.id);
 
       await ctx.answerCallbackQuery({ text: 'Соло: без спонсоров ✅' });
-      await safeEditOrReply(ctx, 'Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
+      await ctx.editMessageText('Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
       return;
     }
 
@@ -16809,7 +16165,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       await clearExpectText(ctx.from.id);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
+      await ctx.editMessageText('Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
       return;
     }
 
@@ -16830,7 +16186,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       if (b === 'step') backCb = `a:gw_step_sponsors|ws:${wsId}`;
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `🧭 Каналы-спонсоры (подписки)
 
 Это список каналов, на которые участник должен подписаться.
@@ -16860,7 +16216,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       kb.text('⬅️ Назад', `a:gw_step_sponsors|ws:${wsId}`);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `📁 Спонсоры из папки
+      await ctx.editMessageText(`📁 Спонсоры из папки
 
 Выбери папку — каналы из неё станут спонсорами (подписки) для конкурса.
 Если папок нет — создай папку в «Мои каналы» → «Папки».`, { reply_markup: kb });
@@ -16881,7 +16237,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const max = isPro ? CFG.GIVEAWAY_SPONSORS_MAX_PRO : CFG.GIVEAWAY_SPONSORS_MAX_FREE;
       if (items.length > max) {
         await ctx.answerCallbackQuery();
-        await safeEditOrReply(ctx, `⚠️ В этой папке <b>${items.length}</b> каналов, а лимит спонсоров — <b>${max}</b>.\n\nУменьши папку или включи ⭐️ PRO.`, {
+        await ctx.editMessageText(`⚠️ В этой папке <b>${items.length}</b> каналов, а лимит спонсоров — <b>${max}</b>.\n\nУменьши папку или включи ⭐️ PRO.`, {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard().text('⭐️ PRO', `a:ws_pro|ws:${wsId}`).row().text('⬅️ Назад', `a:gw_sponsors_from_folder|ws:${wsId}`)
         });
@@ -16896,7 +16252,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
 
       const list = sponsors.map(x => `• ${escapeHtml(String(x))}`).join('\n');
       await ctx.answerCallbackQuery({ text: 'Готово.' });
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✅ Спонсоры: <b>${sponsors.length}</b>
 ${list}
 
@@ -16960,7 +16316,7 @@ ${list}
         .row()
         .text('📋 Меню', 'a:menu');
 
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `🗑 <b>Удалить конкурс #${gwId}?</b>
 
 Это действие необратимо (удалятся спонсоры/участники/победители).
@@ -17131,9 +16487,9 @@ ${winnersList}
     if (p.a === 'a:gw_why_enter') {
       const gwId = Number(p.i);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         'ℹ️ <b>Почему не прошёл</b>\n\nПришли <b>user_id</b> участника (цифрами).\n\nПодсказка: участник может узнать свой id командой /whoami.',
-        { parse_mode: 'HTML', reply_markup: navKb(`a:gw_stats|i:${gwId}`) }
+        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_stats|i:${gwId}`) }
       );
       await setExpectText(ctx.from.id, { type: 'gw_why_userid', gwId });
       return;
@@ -17141,9 +16497,9 @@ ${winnersList}
     if (p.a === 'a:gw_why_forward') {
       const gwId = Number(p.i);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         'ℹ️ <b>Почему не прошёл</b>\n\nПерешли сюда сообщение участника (forward).\n\nВажно: если у участника включена “Forward privacy”, бот не увидит user_id — тогда используй “Ввести ID”.',
-        { parse_mode: 'HTML', reply_markup: navKb(`a:gw_why|i:${gwId}`) }
+        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_why|i:${gwId}`) }
       );
       await setExpectText(ctx.from.id, { type: 'gw_why_forward', gwId });
       return;
@@ -17163,7 +16519,7 @@ ${winnersList}
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await clearDraft(ctx.from.id);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '🎁 <b>Новый конкурс</b>\n\nВыбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
+      await ctx.editMessageText('🎁 <b>Новый конкурс</b>\n\nВыбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
       return;
     }
 
@@ -17173,7 +16529,7 @@ ${winnersList}
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         '🧩 <b>Пресеты конкурса</b>\n\nВыбери вариант — мы подготовим тип приза и текст. Потом выберешь количество мест, спонсоров и дедлайн.',
         { parse_mode: 'HTML', reply_markup: gwPresetKb(wsId) }
       );
@@ -17190,7 +16546,7 @@ ${winnersList}
       await ctx.answerCallbackQuery();
       await clearDraft(ctx.from.id);
       await setDraft(ctx.from.id, { wsId, prize_type: preset.prize_type, prize_value_text: preset.prize_value_text });
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `✅ Пресет применён.\n\n<b>Приз:</b> <code>${escapeHtml(preset.prize_value_text)}</code>\n\nТеперь выбери количество призовых мест:`,
         { parse_mode: 'HTML', reply_markup: gwNewStepWinnersKb(wsId) }
       );
@@ -17203,9 +16559,9 @@ if (p.a === 'a:gw_prize') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       const type = p.t;
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, gwPrizePrompt(type), {
+      await ctx.editMessageText(gwPrizePrompt(type), {
         parse_mode: 'HTML',
-        reply_markup: navKb(`a:gw_new|ws:${wsId}`)
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_new|ws:${wsId}`)
       });
       await setDraft(ctx.from.id, { wsId, prize_type: type });
       await setExpectText(ctx.from.id, { type: 'gw_prize_text', wsId });
@@ -17233,7 +16589,7 @@ if (p.a === 'a:gw_prize') {
         .text('🧭 Что такое спонсоры?', `a:gw_sponsors_help|ws:${wsId}`)
         .row()
         .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `Спонсоры (необязательно, до ${max}).\n\n` +
         `Если это соло — нажми «✅ Без спонсоров (соло)».\n` +
         `Если есть партнёры — нажми «✍️ Ввести списком» и пришли список @каналов или t.me ссылками (можно просто прислать).`,
@@ -17248,8 +16604,8 @@ if (p.a === 'a:gw_prize') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Введи число призовых мест (1..50):', {
-        reply_markup: navKb(`a:gw_new|ws:${wsId}`)
+      await ctx.editMessageText('Введи число призовых мест (1..50):', {
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_new|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'gw_winners_custom', wsId });
       return;
@@ -17270,7 +16626,7 @@ if (p.a === 'a:gw_prize') {
         .text('🧭 Что такое спонсоры?', `a:gw_sponsors_help|ws:${wsId}`)
         .row()
         .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
-      await safeEditOrReply(ctx, 
+      await ctx.editMessageText(
         `Спонсоры (необязательно, до ${max}).\n\n` +
         `Если соло — нажми «✅ Без спонсоров (соло)».\n` +
         `Если есть партнёры — нажми «✍️ Ввести списком» и пришли список @каналов или t.me ссылками (можно просто прислать).`,
@@ -17283,7 +16639,7 @@ if (p.a === 'a:gw_prize') {
     if (p.a === 'a:gw_step_deadline') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
+      await ctx.editMessageText('Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
       return;
     }
 
@@ -17307,8 +16663,8 @@ if (p.a === 'a:gw_prize') {
     if (p.a === 'a:gw_deadline_custom') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 'Введи дедлайн в формате DD.MM HH:MM (МСК). Пример: 20.01 18:00', {
-        reply_markup: navKb(`a:gw_step_deadline|ws:${wsId}`)
+      await ctx.editMessageText('Введи дедлайн в формате DD.MM HH:MM (МСК). Пример: 20.01 18:00', {
+        reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_step_deadline|ws:${wsId}`)
       });
       await setExpectText(ctx.from.id, { type: 'gw_deadline_custom', wsId });
       return;
@@ -17347,8 +16703,8 @@ if (p.a === 'a:gw_prize') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'gw_media_photo', wsId });
-      const kb = navKb(`a:gw_media_step|ws:${wsId}`);
-      await safeEditOrReply(ctx, '🖼 Пришли <b>картинку</b> одним сообщением.\n\n(Можно пропустить этот шаг)', {
+      const kb = new InlineKeyboard().text('⬅️ Назад', `a:gw_media_step|ws:${wsId}`);
+      await ctx.editMessageText('🖼 Пришли <b>картинку</b> одним сообщением.\n\n(Можно пропустить этот шаг)', {
         parse_mode: 'HTML',
         reply_markup: kb
       });
@@ -17359,8 +16715,8 @@ if (p.a === 'a:gw_prize') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'gw_media_gif', wsId });
-      const kb = navKb(`a:gw_media_step|ws:${wsId}`);
-      await safeEditOrReply(ctx, '🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно пропустить этот шаг)', {
+      const kb = new InlineKeyboard().text('⬅️ Назад', `a:gw_media_step|ws:${wsId}`);
+      await ctx.editMessageText('🎞 Пришли <b>GIF</b> (анимацию) одним сообщением.\n\n(Можно пропустить этот шаг)', {
         parse_mode: 'HTML',
         reply_markup: kb
       });
@@ -17370,8 +16726,8 @@ if (p.a === 'a:gw_prize') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
       await setExpectText(ctx.from.id, { type: 'gw_media_video', wsId });
-      const kb = navKb(`a:gw_media_step|ws:${wsId}`);
-      await safeEditOrReply(ctx, `🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)`, {
+      const kb = new InlineKeyboard().text('⬅️ Назад', `a:gw_media_step|ws:${wsId}`);
+      await ctx.editMessageText(`🎥 Пришли <b>видео</b> одним сообщением.\n\n(Поддержка: mp4. Можно отправить как видео или как файл.)`, {
         parse_mode: 'HTML',
         reply_markup: kb
       });
@@ -17536,7 +16892,7 @@ ${actionHint}`;
         await renderGwOpen(ctx, u.id, created.id);
       } catch (e) {
         await ctx.answerCallbackQuery({ text: 'Не удалось опубликовать.' });
-        await safeEditOrReply(ctx, 
+        await ctx.editMessageText(
           `⚠️ Не удалось отправить пост в канал.\n\nПроверь: бот админ в канале, есть право писать.\n\nОшибка: ${escapeHtml(String(e?.message || e))}`,
           { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) }
         );
@@ -17564,7 +16920,7 @@ ${actionHint}`;
       const kb = participantKb(gwId, entryNow, { pub });
 
       try {
-        await safeEditOrReply(ctx, screen, { parse_mode: 'HTML', reply_markup: kb });
+        await ctx.editMessageText(screen, { parse_mode: 'HTML', reply_markup: kb });
       } catch {
         await ctx.reply(screen, { parse_mode: 'HTML', reply_markup: kb });
       }
@@ -17586,7 +16942,7 @@ ${actionHint}`;
       await ctx.answerCallbackQuery({ text: '⏳ Проверяю…' });
       try {
         const text0 = renderParticipantScreen(g, entry0, { checking: true, sponsors });
-        await safeEditOrReply(ctx, text0, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry0, { pub: isPub }) });
+        await ctx.editMessageText(text0, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry0, { pub: isPub }) });
       } catch {
         // ignore edit errors
       }
@@ -17598,7 +16954,7 @@ ${actionHint}`;
       try {
         const entry = await db.getEntryStatus(gwId, u.id);
         const text1 = renderParticipantScreen(g, entry, { hint: true, sponsors, elig: check });
-        await safeEditOrReply(ctx, text1, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: isPub, blocker: check.firstBlocker, firstBlockerHandle: check.firstBlockerHandle }) });
+        await ctx.editMessageText(text1, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: isPub, blocker: check.firstBlocker, firstBlockerHandle: check.firstBlockerHandle }) });
       } catch {
         const msg = check.isEligible ? '✅ Участие подтверждено!' : '⚠️ Пока не подтверждено.';
         await ctx.reply(msg + (check.unknown ? '\n\n💡 Если бот не может проверить — попроси админа добавить бота в канал-спонсор.' : ''));
@@ -17618,7 +16974,7 @@ ${actionHint}`;
         .text('❌ Отмена', `a:gw_open|i:${gwId}`);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '📣 Отправить напоминание в канал конкурса?\n\nЭто поднимет Eligible %.', { reply_markup: kb });
+      await ctx.editMessageText('📣 Отправить напоминание в канал конкурса?\n\nЭто поднимет Eligible %.', { reply_markup: kb });
       return;
     }
 
@@ -17644,12 +17000,10 @@ ${actionHint}`;
 `📣 <b>Напоминание участникам</b>\n\nЧтобы участие засчиталось ✅\n${line1}\n2) Открой бота и нажми <b>«Проверить»</b>\n\n🤖 Бот: ${escapeHtml(link)}`;
 
       try {
-        const replyParams = g.published_message_id ? { reply_parameters: { message_id: Number(g.published_message_id), allow_sending_without_reply: true } } : {};
         const sent = await ctx.api.sendMessage(Number(g.published_chat_id), text, {
           parse_mode: 'HTML',
           disable_web_page_preview: true,
-          reply_markup: { inline_keyboard: [[{ text: '🤖 Открыть бота', url: link }]] },
-          ...replyParams
+          reply_markup: { inline_keyboard: [[{ text: '🤖 Открыть бота', url: link }]] }
         });
         await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.reminder_posted', { chat_id: g.published_chat_id, message_id: sent.message_id });
         await ctx.answerCallbackQuery({ text: 'Отправлено ✅' });
@@ -17658,7 +17012,7 @@ ${actionHint}`;
       } catch (e) {
         await redis.del(rlKey);
         await ctx.answerCallbackQuery({ text: 'Не удалось.' });
-        await safeEditOrReply(ctx, `⚠️ Ошибка отправки: ${escapeHtml(String(e?.message || e))}`, { parse_mode: 'HTML', reply_markup: navKb(`a:gw_open|i:${gwId}`) });
+        await ctx.editMessageText(`⚠️ Ошибка отправки: ${escapeHtml(String(e?.message || e))}`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:gw_open|i:${gwId}`) });
       }
       return;
     }
@@ -17672,7 +17026,7 @@ ${actionHint}`;
         .text('✅ Завершить', `a:gw_end_do|i:${gwId}`)
         .text('❌ Отмена', `a:gw_open|i:${gwId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '🏁 Завершить конкурс сейчас?', { reply_markup: kb });
+      await ctx.editMessageText('🏁 Завершить конкурс сейчас?', { reply_markup: kb });
       return;
     }
 
@@ -17717,7 +17071,7 @@ async function renderVerifyInfo(ctx) {
 2) Модератор проверит
 3) Получишь ответ в этом чате`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderVerifyHome(ctx, userRow) {
@@ -17776,7 +17130,7 @@ ${escapeHtml(v.rejection_reason)}` : '';
 ${benefits}
 Чтобы отправить заявку — выбери роль и пришли 1 сообщение с пруфами.`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 // -----------------------------
@@ -17807,7 +17161,7 @@ async function renderAdminHome(ctx) {
     .row()
     .text('⬅️ Назад', 'a:menu');
 
-  await safeEditOrReply(ctx, text, { reply_markup: kb });
+  await ctx.editMessageText(text, { reply_markup: kb });
 }
 
 
@@ -17896,7 +17250,7 @@ async function renderAdminMetrics(ctx, days = 14) {
     .row()
     .text('⬅️ Админка', 'a:admin_home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderAdminModerators(ctx) {
@@ -17928,7 +17282,7 @@ async function renderAdminModerators(ctx) {
 
   kb.text('⬅️ Админка', 'a:admin_home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
@@ -17953,7 +17307,7 @@ async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
   if (rows.length === limit) kb.text('➡️ Далее', `a:admin_payments|st:${status}|p:${Number(page) + 1}`);
     kb.row().text('⬅️ Админка', 'a:admin_home');
 
-  await safeEditOrReply(ctx, 
+  await ctx.editMessageText(
     `💳 <b>Payments</b> • <b>${escapeHtml(status)}</b>
 
 ${escapeHtml(lines)}`,
@@ -17964,7 +17318,7 @@ ${escapeHtml(lines)}`,
 async function renderAdminPaymentView(ctx, paymentId, backStatus = 'ORPHANED', page = 0) {
   const p = await db.getPaymentById(Number(paymentId));
   if (!p) {
-    await safeEditOrReply(ctx, '⚠️ Платеж не найден.', { reply_markup: navKb(`a:admin_payments|st:${backStatus}|p:${page}`) });
+    await ctx.editMessageText('⚠️ Платеж не найден.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_payments|st:${backStatus}|p:${page}`) });
     return;
   }
 
@@ -17996,7 +17350,7 @@ Payload:
 Note:
 <tg-spoiler>${escapeHtml(String(p.note || '—'))}</tg-spoiler>`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORPHANED', page = 0) {
@@ -18108,7 +17462,7 @@ async function renderModHome(ctx) {
   }
 
   kb.row().text('📋 Меню', 'a:menu');
-  await safeEditOrReply(ctx, '🛡 <b>Модерация</b>\n\nВыбери действие:', { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText('🛡 <b>Модерация</b>\n\nВыбери действие:', { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderModReports(ctx, page = 0) {
@@ -18131,13 +17485,13 @@ async function renderModReports(ctx, page = 0) {
   if (rows.length === limit) kb.text('➡️ Далее', `a:mod_reports|p:${page + 1}`);
     kb.row().text('⬅️ Модерация', 'a:mod_home');
 
-  await safeEditOrReply(ctx, `🚩 <b>Очередь жалоб</b>\n\n${escapeHtml(lines)}`, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(`🚩 <b>Очередь жалоб</b>\n\n${escapeHtml(lines)}`, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderModReportView(ctx, reportId) {
   const r = await db.getBarterReport(reportId);
   if (!r) {
-    await safeEditOrReply(ctx, 'Жалоба не найдена.', { reply_markup: navKb('a:mod_reports') });
+    await ctx.editMessageText('Жалоба не найдена.', { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:mod_reports') });
     return;
   }
   const who = r.reporter_username ? '@' + r.reporter_username : 'id ' + r.reporter_tg_id;
@@ -18157,7 +17511,7 @@ async function renderModReportView(ctx, reportId) {
     (r.thread_id ? `Тред: #${r.thread_id}\n` : '') +
     `\nПричина:\n${escapeHtml(r.reason || '—')}`;
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
@@ -18193,7 +17547,7 @@ async function renderModVerifs(ctx, page = 0) {
     }).join('\n')
     : 'Пока нет заявок.');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderModVerifView(ctx, userId, page = 0) {
@@ -18223,5 +17577,5 @@ ${escapeHtml(v.submitted_text || '—')}`;
     .text('⬅️ К очереди', `a:mod_verifs|p:${page}`)
     .text('⬅️ Модерация', 'a:mod_home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
 }
