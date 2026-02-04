@@ -6317,12 +6317,21 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
   const linkLine = link ? `\n🔗 Сайт/ссылка: ${escapeHtml(link)}` : '';
   const contactLine = cUrl ? `\n✍️ Контакт: ${escapeHtml(String(prof.contact))}` : '';
 
-  const outText =
+  let outText =
     `📩 <b>Ответ бренда</b>\n\n` +
     `Бренд: <b>${escapeHtml(brandName)}</b>` +
     linkLine +
     contactLine +
     `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
+
+  // Guard: Telegram max message length is 4096
+  // If too long, drop contact/link and keep message only
+  if (outText.length > 3900) {
+    outText =
+      `📩 <b>Ответ бренда</b>\n\n` +
+      `Бренд: <b>${escapeHtml(brandName)}</b>` +
+      `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
+  }
 
   const outKb = new InlineKeyboard()
     .text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`)
@@ -6438,12 +6447,21 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
   const linkLine = link ? `\n🔗 Сайт/ссылка: ${escapeHtml(link)}` : '';
   const contactLine = cUrl ? `\n✍️ Контакт: ${escapeHtml(String(prof.contact))}` : '';
 
-  const outText =
+  // Guard: Telegram max message length is 4096
+  // If too long, drop contact/link and keep message only
+  let outText =
     `📩 <b>Ответ бренда</b>\n\n` +
     `Бренд: <b>${escapeHtml(brandName)}</b>` +
     linkLine +
     contactLine +
     `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
+
+  if (outText.length > 3900) {
+    outText =
+      `📩 <b>Ответ бренда</b>\n\n` +
+      `Бренд: <b>${escapeHtml(brandName)}</b>` +
+      `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
+  }
 
   const outKb = new InlineKeyboard()
     .text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`)
@@ -6507,7 +6525,29 @@ ${escapeHtml(replyText)}`;
   if (!sendRes.ok) return;
 
   try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
-  await renderBrandAppView(ctx, actorUserId, appId, back);
+
+  // Guard: renderBrandAppView can fail (rare, but must be handled)
+  try {
+    await renderBrandAppView(ctx, actorUserId, appId, back);
+  } catch (e) {
+    try {
+      console.warn('[brand_app_tpl] renderView failed', {
+        appId,
+        actorUserId,
+        back,
+        cid: ctx.state?.cid || null,
+        err: errInfo(e)
+      });
+    } catch {}
+    // Fallback: send confirmation message with navigation (no render)
+    try {
+      await ctx.reply('✅ Отправлено.', {
+        reply_markup: new InlineKeyboard()
+          .text('⬅️ Назад', `a:brand_app_view|id:${appId}|s:${back.status}|p:${back.page}`)
+          .text('📋 Меню', 'a:menu')
+      });
+    } catch {}
+  }
 }
 
 async function acceptBrandApplication(ctx, actorUserId, appId, back) {
