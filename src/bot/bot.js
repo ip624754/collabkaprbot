@@ -444,6 +444,13 @@ function errInfo(e) {
   };
 }
 
+function isQueryTimeoutError(e) {
+  const msg = String(e?.message || '');
+  const code = String(e?.code || '');
+  return /query read timeout|timeout|timed out/i.test(msg) || code === '57014';
+}
+
+
 async function safeBrandAppsWrite(primaryFn, meta = {}) {
   try {
     return await primaryFn();
@@ -2795,34 +2802,22 @@ async function getBrandDirFilter(tgId, legacyUserId = null) {
   const id = Number(tgId || 0);
   const legacyId = Number(legacyUserId || 0);
 
-  // Redis can occasionally stall in serverless; keep UI responsive with a short timeout.
-  const redisGetSafe = async (key) => {
-    try {
-      return await Promise.race([
-        redis.get(key),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('redis_timeout')), 1500)),
-      ]);
-    } catch {
-      return null;
-    }
-  };
-
   // 1) Preferred: namespaced key
   const keyNew = brandDirFilterKey(id);
   let raw = null;
-  try { raw = await redisGetSafe(keyNew); } catch { raw = null; }
+  try { raw = await redis.get(keyNew); } catch { raw = null; }
 
   // 2) Legacy fallbacks (older commits stored by tgId or by db userId)
   let usedLegacy = false;
   if (!raw) {
     try {
-      raw = await redisGetSafe(`bd_filter:${id}`);
+      raw = await redis.get(`bd_filter:${id}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
   if (!raw && legacyId) {
     try {
-      raw = await redisGetSafe(`bd_filter:${legacyId}`);
+      raw = await redis.get(`bd_filter:${legacyId}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
@@ -3150,10 +3145,20 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
 
   const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
 
-  const rows = await safeBrandProfiles(
-    () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
-    async () => ({ __missing_relation: true })
-  );
+  let rows = null;
+  try {
+    rows = await safeBrandProfiles(
+      () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
+      async () => ({ __missing_relation: true })
+    );
+  } catch (e) {
+    if (isQueryTimeoutError(e)) {
+      await safeEditOrReply(ctx, '⚠️ Каталог брендов загружается слишком долго. Попробуй ещё раз.', { reply_markup: navKb('a:brands_home') });
+      try { console.warn('[brands_dir] timeout', { err: errInfo(e), viewerUserId, page }); } catch {}
+      return;
+    }
+    throw e;
+  }
   if (rows && rows.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
     if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
@@ -5683,11 +5688,31 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 }
 
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
-  const lead = await db.getBrandLeadById(leadId);
+  let lead = null;
+  try {
+    lead = await db.getBrandLeadById(leadId);
+  } catch (e) {
+    if (isQueryTimeoutError(e)) {
+      await safeEditOrReply(ctx, '⚠️ База отвечает медленно. Нажми ещё раз через пару секунд.', { reply_markup: navKb('a:menu') });
+      try { console.warn('[lead_view] getBrandLeadById timeout', { err: errInfo(e), leadId }); } catch {}
+      return;
+    }
+    throw e;
+  }
   if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
-  const ws = await db.getWorkspaceAny(wsId);
+  let ws = null;
+  try {
+    ws = await db.getWorkspaceAny(wsId);
+  } catch (e) {
+    if (isQueryTimeoutError(e)) {
+      await safeEditOrReply(ctx, '⚠️ Канал загружается слишком долго. Попробуй ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
+      try { console.warn('[lead_view] getWorkspaceAny timeout', { err: errInfo(e), wsId, leadId }); } catch {}
+      return;
+    }
+    throw e;
+  }
   if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
