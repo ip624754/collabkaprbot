@@ -2795,22 +2795,34 @@ async function getBrandDirFilter(tgId, legacyUserId = null) {
   const id = Number(tgId || 0);
   const legacyId = Number(legacyUserId || 0);
 
+  // Redis can occasionally stall in serverless; keep UI responsive with a short timeout.
+  const redisGetSafe = async (key) => {
+    try {
+      return await Promise.race([
+        redis.get(key),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('redis_timeout')), 1500)),
+      ]);
+    } catch {
+      return null;
+    }
+  };
+
   // 1) Preferred: namespaced key
   const keyNew = brandDirFilterKey(id);
   let raw = null;
-  try { raw = await redis.get(keyNew); } catch { raw = null; }
+  try { raw = await redisGetSafe(keyNew); } catch { raw = null; }
 
   // 2) Legacy fallbacks (older commits stored by tgId or by db userId)
   let usedLegacy = false;
   if (!raw) {
     try {
-      raw = await redis.get(`bd_filter:${id}`);
+      raw = await redisGetSafe(`bd_filter:${id}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
   if (!raw && legacyId) {
     try {
-      raw = await redis.get(`bd_filter:${legacyId}`);
+      raw = await redisGetSafe(`bd_filter:${legacyId}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
