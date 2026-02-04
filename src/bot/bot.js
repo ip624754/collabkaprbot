@@ -5645,7 +5645,8 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
     else kb.row().text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}${retPart}`);
   }
 
-  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
+  const backCb = retKey === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`;
+  kbNavRow(kb, backCb);
 
   try {
     await safeEditOrReply(ctx, textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -14775,7 +14776,12 @@ if (p.a === 'a:lead_set') {
 
     if (p.a === 'a:ws_profile') {
       try { await ctx.answerCallbackQuery(); } catch {}
-      await renderWsProfile(ctx, u.id, Number(p.ws));
+      const wsId = Number(p.ws || 0);
+      if (!wsId) {
+        await safeEditOrReply(ctx, '⚠️ Канал не выбран. Открой 📋 Меню → выбери канал и повтори шаг.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
+        return;
+      }
+      await renderWsProfile(ctx, u.id, wsId);
       return;
     }
 
