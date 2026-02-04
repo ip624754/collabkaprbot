@@ -89,7 +89,8 @@ async function replyError(ctx, deps, action, err) {
 
 <code>cid: ${escHtml(cid)}
 act: ${escHtml(String(action || ''))}</code>`;
-  const errLine = deps?.isAdmin ? `
+  const isAdmin = (typeof deps?.isAdmin === 'function') ? !!deps.isAdmin(ctx) : !!deps?.isAdmin;
+  const errLine = isAdmin ? `
 <code>err: ${escHtml(String(err?.name || 'Error'))}: ${escHtml(String(err?.message || err))}</code>` : '';
   const msg =
     `⚠️ <b>Произошла ошибка</b>
