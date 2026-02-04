@@ -3527,7 +3527,7 @@ function bxFiltersKb(wsId, f, page = 0, opts = {}) {
     .row();
 
   kb.text('♻️ Сбросить', `a:bx_freset|ws:${wsId}|p:${page}|h:${h}|r:${r}`)
-    .text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0|h:${h}`)
+    .text('📋 Показать креаторов', `a:bx_feed|ws:${wsId}|p:0|h:${h}|r:bf`)
     .row();
 
   kbNavRow(kb, bxReturnCb(wsNum, page, h, r));
@@ -3702,16 +3702,21 @@ function bxThreadKb(wsId, threadId, opts = {}) {
 function bxFeedNavKb(wsId, page, hasPrev, hasNext, opts = {}) {
   const wsNum = Number(wsId || 0);
   const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+  const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
 
   const kb = new InlineKeyboard();
-  if (hasPrev) kb.text('⬅️', `a:bx_feed|ws:${wsId}|p:${page - 1}|h:${h}`);
-  if (hasNext) kb.text('➡️', `a:bx_feed|ws:${wsId}|p:${page + 1}|h:${h}`);
+  if (hasPrev) kb.text('⬅️', `a:bx_feed|ws:${wsId}|p:${page - 1}|h:${h}|r:${r}`);
+  if (hasNext) kb.text('➡️', `a:bx_feed|ws:${wsId}|p:${page + 1}|h:${h}|r:${r}`);
 
   kb.row()
     .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:bf`)
     .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`);
 
-  kbNavRow(kb, bxHomeCb(wsNum, h));
+  const backCb = (r === 'bf')
+    ? `a:bx_filters|ws:${wsId}|p:0|h:${h}|r:bf`
+    : bxHomeCb(wsNum, h);
+
+  kbNavRow(kb, backCb);
   return kb;
 }
 
@@ -7618,7 +7623,7 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
 
   const filter = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
   const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-
+  const r = normBxRet(opts.r, wsNum ? BX_HOME.BX_OPEN : h);
 
   const limit = CFG.BARTER_FEED_PAGE_SIZE;
   const offset = page * limit;
@@ -7701,15 +7706,15 @@ ${featLines.join('\n\n')}
   const kb = new InlineKeyboard();
 
   for (const f of featured) {
-    kb.text(`🔥 #F${f.id}`, `a:feat_view|ws:${wsNum}|id:${f.id}|p:${page}|h:${h}`).row();
+    kb.text(`🔥 #F${f.id}`, `a:feat_view|ws:${wsNum}|id:${f.id}|p:${page}|h:${h}|r:${r}`).row();
   }
   for (const o of rows) {
-    kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsNum}|o:${o.id}|p:${page}|h:${h}`).row();
+    kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsNum}|o:${o.id}|p:${page}|h:${h}|r:${r}`).row();
   }
 
   const hasPrev = page > 0;
   const hasNext = offset + rows.length < total;
-  const nav = bxFeedNavKb(wsNum, page, hasPrev, hasNext, { h });
+  const nav = bxFeedNavKb(wsNum, page, hasPrev, hasNext, { h, r });
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -16262,22 +16267,23 @@ if (p.a === 'a:match_home') {
     }
 
     if (p.a === 'a:bx_feed') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
 
       const mode = await resolveUiMode(ctx.from.id);
       if (mode !== UI_MODES.BRAND) {
         await renderBxBrandOnlyNotice(ctx);
         return;
       }
-      const wsId = Number(p.ws);
+      const wsId = Number(p.ws || 0);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
-      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page);
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_feed', page, { h, r });
       if (!bmRes) return;
 
-      await renderBxFeed(ctx, bmRes.userId, wsId, page, { h });
+      await renderBxFeed(ctx, bmRes.userId, wsId, page, { h, r });
       return;
     }
 
@@ -18940,8 +18946,8 @@ ${actionHint}`;
         ]
       };
 
+      let sent;
       try {
-        let sent;
         if (draft.media_file_id && String(draft.media_type) === 'photo') {
           sent = await ctx.api.sendPhoto(ws.channel_id, draft.media_file_id, {
             caption: text,
@@ -18966,27 +18972,43 @@ ${actionHint}`;
             reply_markup: kb,
             disable_web_page_preview: true
           });
-          delivered++;
         }
-
-        await db.updateGiveaway(created.id, {
-          status: 'ACTIVE',
-          published_chat_id: ws.channel_id,
-          published_message_id: sent.message_id
-        });
-        await db.auditGiveaway(created.id, wsId, u.id, 'gw.published', { chat_id: ws.channel_id, message_id: sent.message_id });
-        db.trackEvent('gw_published', { userId: u.id, wsId, meta: { giveawayId: created.id, chatId: ws.channel_id, messageId: sent.message_id } });
-
-        await clearDraft(ctx.from.id);
-        await ctx.answerCallbackQuery({ text: 'Опубликовано ✅' });
-        await renderGwOpen(ctx, u.id, created.id);
+        if (!sent || !sent.message_id) throw new Error('sendMessage returned empty result');
       } catch (e) {
         await ctx.answerCallbackQuery({ text: 'Не удалось опубликовать.' });
         await safeEditOrReply(ctx, 
           `⚠️ Не удалось отправить пост в канал.\n\nПроверь: бот админ в канале, есть право писать.\n\nОшибка: ${escapeHtml(String(e?.message || e))}`,
           { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) }
         );
+        return;
       }
+
+      // DB side-effects should not flip UX to error if post already sent
+      try {
+        await db.updateGiveaway(created.id, {
+          status: 'ACTIVE',
+          published_chat_id: ws.channel_id,
+          published_message_id: sent.message_id
+        });
+      } catch (e) {
+        logger.error('[gw_publish] updateGiveaway failed:', e);
+      }
+
+      try {
+        await db.auditGiveaway(created.id, wsId, u.id, 'gw.published', { chat_id: ws.channel_id, message_id: sent.message_id });
+      } catch (e) {
+        logger.error('[gw_publish] audit failed:', e);
+      }
+
+      try {
+        db.trackEvent('gw_published', { userId: u.id, wsId, meta: { giveawayId: created.id, chatId: ws.channel_id, messageId: sent.message_id } });
+      } catch (e) {
+        logger.error('[gw_publish] trackEvent failed:', e);
+      }
+
+      await clearDraft(ctx.from.id);
+      try { await ctx.answerCallbackQuery({ text: 'Опубликовано ✅' }); } catch {}
+      await renderGwOpen(ctx, u.id, created.id);
       return;
     }
 
