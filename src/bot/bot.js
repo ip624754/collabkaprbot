@@ -10907,6 +10907,29 @@ ${card}`;
         return ctx.reply('⚠️ Не найден бренд для заявки. Открой бренд в каталоге и нажми “Оставить заявку” ещё раз.');
       }
 
+      // HARD GATE: без Telegram @username запрещаем отправку заявки
+      const creatorUsername = String(ctx.from?.username || '').trim();
+      if (!creatorUsername) {
+        await safeDeleteIncomingUserMessage(ctx);
+        await clearExpectText(ctx.from.id);
+
+        const backCb = String(exp.backCb || `a:brand_dir_open|u:${brandUserId}|p:${backPage}`);
+        const kbGate = new InlineKeyboard()
+          .text('✅ Проверить', `a:brand_apply|u:${brandUserId}|p:${backPage}`)
+          .row()
+          .text('⬅️ Назад', backCb)
+          .text('📋 Меню', 'a:menu');
+
+        const gateText =
+          '⚠️ <b>Нужен Telegram @username</b>\n\n' +
+          'Без @username бренды не смогут написать тебе напрямую.\n\n' +
+          'Telegram → <b>Settings</b> → <b>Username</b> → задай @username,\n' +
+          'потом вернись и нажми «✅ Проверить».\n\n' +
+          '<i>Требование перед отправкой заявок брендам.</i>';
+
+        return ctx.reply(gateText, { parse_mode: 'HTML', reply_markup: kbGate, disable_web_page_preview: true });
+      }
+
       if (msg.length < 10) {
         return ctx.reply('⚠️ Сделай сообщение чуть подробнее (минимум 10 символов).');
       }
@@ -13513,6 +13536,30 @@ if (p.a === 'a:brand_apply') {
       .text('📋 Меню', 'a:menu');
 
     await safeEditOrReply(ctx, '⚠️ Выбери активный канал (витрину) в «📣 Мои каналы» и повтори.', { reply_markup: kbGate });
+    return;
+  }
+
+  // HARD GATE: без Telegram @username бренды не смогут написать напрямую
+  // (user can still message via bot, but для сделки нужен публичный @username)
+  const creatorUsername = String(ctx.from?.username || '').trim();
+  if (!creatorUsername) {
+    const backCb = `a:brand_dir_open|u:${brandUserId}|p:${backPage}`;
+    const kbGate = new InlineKeyboard()
+      .text('✅ Проверить', `a:brand_apply|u:${brandUserId}|p:${backPage}`)
+      .row()
+      .text('⬅️ Назад', backCb)
+      .text('📋 Меню', 'a:menu');
+
+    const gateText =
+      '⚠️ <b>Нужен Telegram @username</b>\n\n' +
+      'Без @username бренды не смогут написать тебе напрямую.\n\n' +
+      'Сделай так:\n' +
+      '1) Telegram → <b>Settings</b> → <b>Username</b>\n' +
+      '2) Задай @username\n' +
+      '3) Вернись сюда и нажми «✅ Проверить».\n\n' +
+      '<i>Это обязательное требование перед отправкой заявок брендам.</i>';
+
+    await safeEditOrReply(ctx, gateText, { parse_mode: 'HTML', reply_markup: kbGate, disable_web_page_preview: true });
     return;
   }
 
