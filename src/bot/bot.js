@@ -13289,46 +13289,75 @@ bot.on('message:successful_payment', async (ctx) => {
 });
 // --- Callback router ---
   bot.on('callback_query:data', async (ctx) => {
-      // Make callback UX resilient: ack immediately, and never crash on edit/ack edge-cases
-    const _acq = ctx.answerCallbackQuery.bind(ctx);
-    ctx.answerCallbackQuery = (opts) => _acq(opts).catch(() => {});
-        const _api = ctx.api;
+      // Make callback UX resilient: ack immediately, and keep a stable UI target for edits.
+    const _acq = ctx.answerCallbackQuery?.bind(ctx);
+    if (_acq) ctx.answerCallbackQuery = (opts) => _acq(opts).catch(() => {});
 
-    // Stable render target: all edits in this callback should go to the same message.
-    // If we must fall back to ctx.reply (uneditable message), we pin future edits to that new message
-    // to avoid leaving an orphaned "⏳" message that looks like "silence".
-    ctx.__rt = ctx.__rt || {
-      chat_id: ctx.chat?.id,
-      message_id: ctx.callbackQuery?.message?.message_id
-    };
+    // Stable UI target: if edit is impossible and we fall back to reply,
+    // subsequent edits must target the new message (no orphan "⏳").
+    try {
+      const cbMsg = ctx?.callbackQuery?.message;
+      ctx.state = ctx.state || {};
+      ctx.state.ui = ctx.state.ui || {};
+      ctx.state.ui.chatId = cbMsg?.chat?.id ?? ctx?.chat?.id ?? null;
+      ctx.state.ui.messageId = cbMsg?.message_id ?? null;
+    } catch {}
 
+    const _errStr = (e) => String(e?.description || e?.message || e || '');
+    const _isNotModified = (m) => m.includes('message is not modified') || m.includes('MESSAGE_NOT_MODIFIED');
+    const _isEditImpossible = (m) =>
+      m.includes('message to edit not found') ||
+      m.includes("message can't be edited") ||
+      m.includes('MESSAGE_ID_INVALID') ||
+      m.includes('message is too old') ||
+      m.includes('CHAT_WRITE_FORBIDDEN');
+
+
+    const _origEditText = ctx.editMessageText?.bind(ctx);
     ctx.editMessageText = async (text, extra) => {
-      const chatId = ctx.__rt?.chat_id ?? ctx.chat?.id;
-      const msgId = ctx.__rt?.message_id ?? ctx.callbackQuery?.message?.message_id;
-      if (!chatId || !msgId) return ctx.reply(text, extra).catch(() => {});
+      const ui = ctx?.state?.ui || {};
+      const chatId = ui.chatId;
+      const messageId = ui.messageId;
+
       try {
-        return await _api.editMessageText(chatId, msgId, text, extra);
+        if (chatId && messageId && ctx?.api?.editMessageText) {
+          return await ctx.api.editMessageText(chatId, messageId, text, extra);
+        }
+        if (_origEditText) return await _origEditText(text, extra);
+        throw new Error('editMessageText unavailable');
       } catch (e) {
-        const msg = String(e?.description || e?.message || e);
-        if (msg.includes('message is not modified')) return;
-        const sent = await ctx.reply(text, extra).catch(() => null);
-        if (sent?.message_id) ctx.__rt = { chat_id: chatId, message_id: sent.message_id };
-        return sent;
+        const m = _errStr(e);
+        if (_isNotModified(m)) return;
+        if (_isEditImpossible(m)) {
+          const sent = await ctx.reply(text, extra).catch(() => null);
+          if (sent?.message_id && sent?.chat?.id) {
+            try { ctx.state.ui.chatId = sent.chat.id; ctx.state.ui.messageId = sent.message_id; } catch {}
+          }
+          return sent;
+        }
+        throw e;
       }
     };
 
     if (typeof ctx.editMessageReplyMarkup === 'function') {
+      const _origEditMarkup = ctx.editMessageReplyMarkup.bind(ctx);
       ctx.editMessageReplyMarkup = async (markup) => {
-        const chatId = ctx.__rt?.chat_id ?? ctx.chat?.id;
-        const msgId = ctx.__rt?.message_id ?? ctx.callbackQuery?.message?.message_id;
-        if (!chatId || !msgId) return;
+        const ui = ctx?.state?.ui || {};
+        const chatId = ui.chatId;
+        const messageId = ui.messageId;
         try {
-          return await _api.editMessageReplyMarkup(chatId, msgId, markup);
-        } catch (_) {}
+          if (chatId && messageId && ctx?.api?.editMessageReplyMarkup) {
+            return await ctx.api.editMessageReplyMarkup(chatId, messageId, { reply_markup: markup });
+          }
+          return await _origEditMarkup(markup);
+        } catch (e) {
+          const m = _errStr(e);
+          if (_isNotModified(m)) return;
+          return;
+        }
       };
     }
 
-    
 // Stop Telegram "loading" spinner ASAP
     await ctx.answerCallbackQuery();
 
