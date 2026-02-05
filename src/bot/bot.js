@@ -547,7 +547,7 @@ function mainMenuKb(flags = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['👤 Куратор блогера', 'a:cur_home']);
+  if (isCurator) extra.push(['🧹 Кураторы блогера', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -558,6 +558,8 @@ function mainMenuKb(flags = {}) {
     if (b) kb.text(b[0], b[1]);
     kb.row();
   }
+
+  kb.row().text('🏠 Home', 'a:home');
 
   return kb;
 }
@@ -584,7 +586,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['👤 Куратор блогера', 'a:cur_home']);
+  if (isCurator) extra.push(['🧹 Кураторы блогера', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -596,6 +598,8 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
   }
 
   if (isFolderEditor) kb.row().text('📁 Папки', 'a:folders_my');
+
+  kb.row().text('🏠 Home', 'a:home');
 
   return kb;
 }
@@ -622,7 +626,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
       .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand')
       .text('⭐️ Подписка', 'a:brand_plan|ws:0')
       .row()
-      .text(teamLocked ? '👥 Менеджеры бренда 🔒' : '👥 Менеджеры бренда', 'a:brand_team|ws:0');
+      .text(teamLocked ? '👔 Менеджеры бренда 🔒' : '👔 Менеджеры бренда', 'a:brand_team|ws:0');
   } else {
     kb.text('ℹ️ Права менеджера', 'a:bm_help')
       .row();
@@ -641,7 +645,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['👤 Куратор блогера', 'a:cur_home']);
+  if (isCurator) extra.push(['🧹 Кураторы блогера', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -656,7 +660,10 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   if (!isManager && canManager) {
     kb.row().text('🧑‍💼 Режим менеджера', 'a:bm_mode_set|v:1|ret:menu');
   }
-return kb;
+
+  kb.row().text('🏠 Home', 'a:home');
+
+  return kb;
 }
 
 function bmModeKey(tgId) {
@@ -729,7 +736,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
     const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
@@ -790,7 +797,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
     const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -870,7 +877,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
       modeHuman = 'Brand Manager';
       text = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
       kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     } else if (bm.enabled && bm.needsPick) {
       await renderBmPickBrand(ctx, u, { ret: 'menu', wsId: 0, page: 0, edit });
@@ -950,6 +957,80 @@ async function renderMainMenu(ctx, flags, params = {}) {
 }
 
 
+
+async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
+  const edit = opts.edit !== false;
+  const tgId = Number(ctx?.from?.id || 0);
+
+  const mode = await resolveUiMode(tgId);
+  const bmMode = await getBrandManagerMode(tgId);
+  const curMode = (flags?.isCurator ? await getCuratorMode(tgId) : false);
+
+  // Can this user act as a brand manager (even if the mode is currently OFF)?
+  let managerBrands = [];
+  let canManager = false;
+  try {
+    managerBrands = await db.listBrandsForManager(u.id);
+    canManager = Array.isArray(managerBrands) && managerBrands.length > 0;
+  } catch (e) {
+    // If migration is missing — don't crash the Home Hub; manager button simply won't show.
+    canManager = false;
+  }
+
+  const modeLabel = bmMode ? 'Brand Manager' : uiModeHuman(mode);
+
+  let hint = '';
+  if (bmMode && canManager) {
+    const active = await getBmActiveBrand(tgId);
+    const row = managerBrands.find((b) => Number(b.user_id) == Number(active)) || managerBrands[0];
+    const label = row ? bmBrandLabelFromRow(row) : '';
+    if (label) hint = `
+• Активный бренд: <b>${escapeHtml(label)}</b>`;
+  }
+  if (curMode) hint += `
+• UI: <b>Curator Mode</b>`;
+
+  const textMsg =
+    `🏠 <b>HOME HUB</b>
+
+` +
+    `Выбери режим работы.
+
+` +
+    `Текущий режим: <b>${escapeHtml(modeLabel)}</b>` +
+    hint;
+
+  const kb = new InlineKeyboard()
+    .text('✨ Creator / канал', 'a:home_mode|m:creator')
+    .row()
+    .text('🏷 Бренд', 'a:home_mode|m:brand');
+
+  if (canManager) {
+    kb.row().text('👔 Менеджеры бренда', 'a:home_mode|m:brand_manager');
+  }
+
+  if (flags?.isCurator) {
+    kb.row().text('🧹 Кураторы блогера', 'a:home_mode|m:curator');
+  }
+
+  // Staff shortcuts
+  if (flags?.isModerator) kb.row().text('🛡 Модерация', 'a:mod_home');
+  if (flags?.isAdmin) kb.row().text('👑 Админка', 'a:admin_home');
+
+  kb
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🧭 Быстрый старт', 'a:guide')
+    .row()
+    .text('💬 Поддержка', 'a:support');
+
+  if (edit) {
+    await safeEditOrReply(ctx, textMsg, { parse_mode: 'HTML', reply_markup: kb });
+  } else {
+    await ctx.reply(textMsg, { parse_mode: 'HTML', reply_markup: kb });
+  }
+}
+
 async function renderRoleHub(ctx, u, flags) {
   // Role hub is a navigation home for Back in BX flows
   if (ctx.from?.id) await setUiHome(ctx.from.id, BX_HOME.MENU);
@@ -984,7 +1065,7 @@ async function renderRoleHub(ctx, u, flags) {
         await disableBrandManagerState(ctx.from.id);
         const msg = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
         await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
         return;
       }
@@ -1041,6 +1122,9 @@ function curatorModeMenuKb(flags = {}) {
     kb.row().text(a[0], a[1]);
     if (b) kb.text(b[0], b[1]);
   }
+
+  kb.row().text('🏠 Home', 'a:home');
+
   return kb;
 }
 
@@ -1052,7 +1136,7 @@ function onboardingKb(flags = {}) {
     .row()
     .text('🏷 Я бренд', 'a:onb_brand')
     .row()
-    .text('📋 Открыть меню', 'a:main_menu');
+    .text('🏠 Home', 'a:home');
   // keep quick access for staff even in onboarding
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
   if (isModerator) kb.row().text('🛡 Модерация', 'a:mod_home');
@@ -1538,7 +1622,7 @@ function wsMenuKb(wsId, opts = {}) {
     .text('👥 Кураторы', `a:ws_settings|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`);
 
-  if (showCurator) kb.row().text('👤 Куратор блогера', 'a:cur_home');
+  if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
 
   kb.row().text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
   return kb;
@@ -1669,7 +1753,7 @@ ${count ? cards : 'Пока нет.'}
 <b>Последние события:</b>
 ${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
 
-💡 Куратор открывает кабинет через «👤 Куратор блогера» в меню (если он назначен куратором хотя бы в одном канале).`;
+💡 Куратор открывает кабинет через «🧹 Кураторы блогера» в меню (если он назначен куратором хотя бы в одном канале).`;
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
@@ -1776,7 +1860,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
 
   if (bm.enabled && bm.brandUserId !== u.id) {
     const kb = navKb('a:menu');
-    const text = `⛔ <b>Только владелец бренда</b>\n\nМенеджер не может управлять «👥 Менеджеры бренда».`;
+    const text = `⛔ <b>Только владелец бренда</b>\n\nМенеджер не может управлять «👔 Менеджеры бренда».`;
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
@@ -1883,7 +1967,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
-  if (showCurator) kb.row().text('👤 Куратор блогера', 'a:cur_home');
+  if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
 
   kb.row().text(net, `a:net_q|ws:${wsId}|ret:bx`);
   kbNavRow(kb, `a:ws_open|ws:${wsId}`);
@@ -1917,7 +2001,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
-  if (showCurator) kb.row().text('👤 Куратор блогера', 'a:cur_home');
+  if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
 
   kbNavRow(kb, 'a:menu');
   return kb;
@@ -5507,7 +5591,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   try {
     if (viewer && ctx?.from?.id) {
       const flags = await getRoleFlags(viewer, ctx.from.id);
-      if (flags?.isCurator || flags?.isAdmin) curatorUi = await getCuratorMode(ctx.from.id);
+      if (flags?.isCurator) curatorUi = await getCuratorMode(ctx.from.id);
     }
   } catch {}
 
@@ -10599,7 +10683,7 @@ ${escapeHtml(payLine)}
       const kb = new InlineKeyboard()
         .text('⬅️ Назад к конкурсу', `a:cur_gw_open|ws:${wsId}|i:${gwId}`)
         .row()
-        .text('👤 Куратор блогера', 'a:cur_home');
+        .text('🧹 Кураторы блогера', 'a:cur_home');
 
       await ctx.reply('✅ Заметка сохранена.', { reply_markup: kb });
       return;
@@ -12783,22 +12867,10 @@ if (payload?.type === 'bxo') {
     }
 
     const flags = await getRoleFlags(u, ctx.from.id);
-    const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
-    // If curator mode is enabled — go straight to curator cabinet (more direct than showing the mode menu).
-    if (curMode) {
-      await replyCuratorHome(ctx, u.id);
-      return;
-    }
-    if (CFG.ONBOARDING_V2_ENABLED) {
-  const existingMode = await redis.get(k(['ui_mode', ctx.from.id]));
-  if (!existingMode) {
-    await ctx.reply('Привет! 👋\n\nЭто <b>UGC/Collab CRM</b> в Telegram.\nIG → лиды. TG → сделки.\n\nВыбери роль — и я покажу быстрый старт:', { parse_mode: 'HTML', reply_markup: onboardingKb(flags) });
-    return;
-  }
-}
 
-await renderMainMenu(ctx, flags, { edit: false });
-await maybeSendBanner(ctx, 'menu', CFG.MENU_BANNER_FILE_ID);
+    // HOME HUB (Commit87): unified start screen for role switching.
+    await renderHomeHub(ctx, u, flags, { edit: false });
+    await maybeSendBanner(ctx, 'menu', CFG.MENU_BANNER_FILE_ID);
 
     } catch (e) {
       console.error('[START] error', {
@@ -13829,7 +13901,7 @@ if (p.a === 'a:brand_apply') {
         await disableBrandManagerState(ctx.from.id);
         const text = `⛔ <b>Доступ менеджера отозван</b>
 
-Если это ошибка — попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
+Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
         await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
@@ -13924,7 +13996,7 @@ if (p.a === 'a:brand_apply') {
         await disableBrandManagerState(ctx.from.id);
         const text = `⛔ <b>Доступ менеджера отозван</b>
 
-Попроси владельца бренда добавить тебя в «👥 Менеджеры бренда».`;
+Попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
         await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
@@ -13983,6 +14055,77 @@ if (p.a === 'a:menu') {
       return;
     }
 
+
+
+    // HOME HUB (Commit87)
+    if (p.a === 'a:home') {
+      await ctx.answerCallbackQuery();
+      const flags2 = await getRoleFlags(u, ctx.from.id);
+      await renderHomeHub(ctx, u, flags2, { edit: true });
+      return;
+    }
+
+    if (p.a === 'a:home_mode') {
+      await ctx.answerCallbackQuery();
+      const m = String(p.m || '');
+
+      // Determine whether user can manage any brands
+      let managerBrands = [];
+      try {
+        managerBrands = await db.listBrandsForManager(u.id);
+      } catch {}
+      const canManager = Array.isArray(managerBrands) && managerBrands.length > 0;
+
+      if (m === 'creator') {
+        await setUiMode(ctx.from.id, UI_MODES.CREATOR);
+        await disableBrandManagerState(ctx.from.id);
+        const flags2 = await getRoleFlags(u, ctx.from.id);
+        await renderRoleHub(ctx, u, flags2);
+        return;
+      }
+
+      if (m === 'brand') {
+        await setUiMode(ctx.from.id, UI_MODES.BRAND);
+        await disableBrandManagerState(ctx.from.id);
+        const flags2 = await getRoleFlags(u, ctx.from.id);
+        await renderRoleHub(ctx, u, flags2);
+        return;
+      }
+
+      if (m === 'brand_manager') {
+        if (!canManager) {
+          await safeEditOrReply(ctx, '⛔ Тебя ещё не добавили в «Менеджеры бренда».', { reply_markup: navKb('a:home') });
+          return;
+        }
+        await setUiMode(ctx.from.id, UI_MODES.BRAND);
+        await setBrandManagerMode(ctx.from.id, true);
+        // If there is exactly one brand, set it as active to reduce clicks
+        try {
+          const active = await getBmActiveBrand(ctx.from.id);
+          if (!active && managerBrands.length === 1) {
+            await setBmActiveBrand(ctx.from.id, Number(managerBrands[0].brand_user_id || managerBrands[0].brandUserId || 0));
+          }
+        } catch {}
+        const flags2 = await getRoleFlags(u, ctx.from.id);
+        await renderRoleHub(ctx, u, flags2);
+        return;
+      }
+
+      if (m === 'curator') {
+        const flags2 = await getRoleFlags(u, ctx.from.id);
+        if (!flags2.isCurator) {
+          await safeEditOrReply(ctx, '⛔ Доступ к «Кураторы блогера» не найден.', { reply_markup: navKb('a:home') });
+          return;
+        }
+        await renderCuratorHome(ctx, u.id);
+        return;
+      }
+
+      // Unknown mode — just refresh the hub
+      const flags2 = await getRoleFlags(u, ctx.from.id);
+      await renderHomeHub(ctx, u, flags2, { edit: true });
+      return;
+    }
     if (p.a === 'a:main_menu') {
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
