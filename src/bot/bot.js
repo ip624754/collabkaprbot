@@ -444,59 +444,6 @@ function errInfo(e) {
   };
 }
 
-function withTimeout(promise, ms, label = 'op') {
-  const t = Math.max(1, Number(ms) || 1);
-  return new Promise((resolve, reject) => {
-    const id = setTimeout(() => {
-      const e = new Error(`TIMEOUT:${label}`);
-      e.code = 'TIMEOUT';
-      reject(e);
-    }, t);
-    Promise.resolve(promise)
-      .then(v => { clearTimeout(id); resolve(v); })
-      .catch(err => { clearTimeout(id); reject(err); });
-  });
-}
-
-async function redisGetSafe(key, ms = 1500) {
-  try {
-    return await withTimeout(redis.get(key), ms, `redis.get:${String(key).slice(0, 40)}`);
-  } catch {
-    return null;
-  }
-}
-
-// --- P0 HANG diagnostics (Woz): step logging + per-await timeouts ---
-const P0_AWAIT_TIMEOUT_MS = Number(process.env.P0_AWAIT_TIMEOUT_MS || 8000);
-
-function p0StepLog(ctx, stepId, phase, meta = {}) {
-  try {
-    const cid = ctx?.state?.cid || null;
-    const payload = { phase, stepId: String(stepId || ''), cid, ...meta };
-    console.warn('[P0]', payload);
-  } catch {}
-}
-
-async function p0Await(ctx, stepId, label, fnOrPromise, ms = P0_AWAIT_TIMEOUT_MS) {
-  const timeoutMs = Math.max(1, Number(ms) || P0_AWAIT_TIMEOUT_MS);
-  const lbl = String(label || 'op');
-  p0StepLog(ctx, stepId, 'BEFORE', { label: lbl, timeoutMs });
-  try {
-    const p = (typeof fnOrPromise === 'function') ? fnOrPromise() : fnOrPromise;
-    const v = await withTimeout(p, timeoutMs, lbl);
-    p0StepLog(ctx, stepId, 'AFTER', { label: lbl });
-    return v;
-  } catch (e) {
-    const info = errInfo(e);
-    const isTimeout = String(info.code || '') === 'TIMEOUT' || String(info.message || '').startsWith('TIMEOUT:');
-    p0StepLog(ctx, stepId, isTimeout ? 'TIMEOUT' : 'ERROR', { label: lbl, timeoutMs, err: info });
-    try { e.stepId = stepId; e.label = lbl; } catch {}
-    throw e;
-  }
-}
-
-
-
 async function safeBrandAppsWrite(primaryFn, meta = {}) {
   try {
     return await primaryFn();
@@ -1501,8 +1448,6 @@ function wsMenuKb(wsId, opts = {}) {
     .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
     .row()
     .text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)
-    .text('📨 Запросы брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
-    .row()
     .text('📁 Папки', `a:folders_home|ws:${wsId}`)
     .row()
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
@@ -2851,19 +2796,19 @@ async function getBrandDirFilter(tgId, legacyUserId = null) {
   // 1) Preferred: namespaced key
   const keyNew = brandDirFilterKey(id);
   let raw = null;
-  try { raw = await redisGetSafe(keyNew); } catch { raw = null; }
+  try { raw = await redis.get(keyNew); } catch { raw = null; }
 
   // 2) Legacy fallbacks (older commits stored by tgId or by db userId)
   let usedLegacy = false;
   if (!raw) {
     try {
-      raw = await redisGetSafe(`bd_filter:${id}`);
+      raw = await redis.get(`bd_filter:${id}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
   if (!raw && legacyId) {
     try {
-      raw = await redisGetSafe(`bd_filter:${legacyId}`);
+      raw = await redis.get(`bd_filter:${legacyId}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
@@ -3088,12 +3033,7 @@ function brandDirMultiPickKb(key, page, selected) {
 
 async function renderBrandDirFilters(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
-  let f = null;
-  try {
-    f = await withTimeout(getBrandDirFilter(viewerUserId, params.legacyUserId), 1800, 'brands.filter');
-  } catch {
-    f = {};
-  }
+  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
 
   // Small helper count: makes it obvious whether "0 results" is data vs filter logic
   let matchCount = null;
@@ -3194,15 +3134,12 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   const PAGE_SIZE = 8;
   const offset = page * PAGE_SIZE;
 
-  const stepId = `brands_home:p${page}`;
+  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
 
-  const f = await p0Await(ctx, stepId, `${stepId}:getFilter`, () => getBrandDirFilter(viewerUserId, params.legacyUserId), 2500);
-
-  const rows = await p0Await(ctx, stepId, `${stepId}:list`, () => withTimeout(
-      safeBrandProfiles(
-        () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
-        async () => ({ __missing_relation: true })
-      ), 4500, 'brands.list'), 4500);
+  const rows = await safeBrandProfiles(
+    () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
+    async () => ({ __missing_relation: true })
+  );
   if (rows && rows.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
     if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
@@ -3453,7 +3390,7 @@ function bxOfferTagsKb(wsId, meta, opts = {}) {
     .text(`🎯 Цели: ${goalsLabel}`, `a:bx_otpick|ws:${wsId}|k:goals`)
     .text(`📎 Требования: ${reqLabel}`, `a:bx_otpick|ws:${wsId}|k:req`)
     .row()
-    .text('➡️ Далее', `a:bx_otnext|ws:${wsId}`)
+    .text('➡️ К тексту', `a:bx_otnext|ws:${wsId}`)
     .text('⏭ Пропустить', `a:bx_otskip|ws:${wsId}`)
     .row();
 
@@ -3550,16 +3487,10 @@ async function renderBxOfferTextStep(ctx, wsId) {
 1-я строка — <b>заголовок</b>
 со 2-й строки — <b>детали</b> (что нужно / сроки / условия).
 
-⚠️ Важно: <b>контакт обязателен</b>.
-• Лучше всего — включи @username в Telegram.
-• Либо добавь @username прямо в тексте (например: <code>Контакт: @myname</code>).
-
 Пример:
 <code>${escapeHtml(example)}</code>`;
 
   const kb = new InlineKeyboard()
-    .text('✅ Опубликовать', `a:bx_publish_hint|ws:${wsId}`)
-    .row()
     .text('⬅️ Назад', `a:bx_ottags|ws:${wsId}`)
     .row()
     .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
@@ -4203,8 +4134,8 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
 async function renderWsSettings(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
   await db.ensureWorkspaceSettings(wsId);
   const s = await db.getWorkspace(ownerUserId, wsId);
   const settings = {
@@ -4222,8 +4153,8 @@ async function renderWsSettings(ctx, ownerUserId, wsId) {
 async function renderWsHistory(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
   const items = await db.listWorkspaceAudit(wsId, 20);
   const lines = items.map(i => `• <b>${escapeHtml(i.action)}</b> — ${fmtTs(i.created_at)}`);
   const text = `🧾 <b>История действий</b>
@@ -4761,7 +4692,7 @@ function wsProfileKb(wsId, ws) {
     .text('✏️ Гео', `a:ws_prof_edit|ws:${wsId}|f:geo`)
     .text('📝 Описание', `a:ws_prof_edit|ws:${wsId}|f:about`)
     .row()
-    .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
+    .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:new|p:0`)
     .text('🔗 Поделиться', `a:ws_share|ws:${wsId}`)
     .row()
     .text('🧩 Режим', `a:ws_prof_mode|ws:${wsId}`)
@@ -4817,23 +4748,11 @@ function calcWsProfileProgress(ws) {
 
 
 async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
-  const isAdmin = isSuperAdminTg(ctx.from?.id);
-
-  let ws0 = null;
-  try {
-    ws0 = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  } catch (_) {
-    ws0 = null;
-  }
-  if (!ws0) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-
-  try { await db.ensureWorkspaceSettings(wsId); } catch {}
-
-  const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-
-  let isPro = false;
-  try { isPro = await db.isWorkspacePro(wsId); } catch {}
+  const ws0 = await db.getWorkspace(ownerUserId, wsId);
+  if (!ws0) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  await db.ensureWorkspaceSettings(wsId);
+  const ws = await db.getWorkspace(ownerUserId, wsId);
+  const isPro = await db.isWorkspacePro(wsId);
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const name = ws.profile_title || channel;
@@ -4970,11 +4889,11 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
 
 
 
-async function renderWsShareMenu(ctx, ownerUserId, wsId, ret = null) {
+async function renderWsShareMenu(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const link = wsBrandLink(wsId);
 
@@ -4988,9 +4907,7 @@ async function renderWsShareMenu(ctx, ownerUserId, wsId, ret = null) {
     .text('📄 Коротко', `a:ws_share_send|ws:${wsId}|v:short`)
     .text('📄 Подробно', `a:ws_share_send|ws:${wsId}|v:long`)
     .row();
-  const retKey = String(ret || '').trim();
-  const backCb = retKey === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`;
-  kbNavRow(kb, backCb);
+  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -5002,8 +4919,8 @@ async function renderWsShareMenu(ctx, ownerUserId, wsId, ret = null) {
 async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short') {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const text = buildWsShareText(ws, wsId, variant);
 
@@ -5060,8 +4977,8 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
 async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const link = wsBrandLink(wsId);
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
@@ -5285,8 +5202,8 @@ function buildWsIgDmMessage(ws, wsId, tone = 'soft', variantIndex = 0) {
 async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', variantIndex = 0) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const t = String(tone || 'soft').toLowerCase();
   const toneNorm = (t === 'hard' ? 'hard' : 'soft');
@@ -5314,8 +5231,8 @@ async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', varia
 async function sendWsIgTemplateMessage(ctx, ownerUserId, wsId, type = 'story') {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const t = String(type || 'story');
   const allowed = ['story', 'post', 'dm', 'bio'];
@@ -5346,8 +5263,8 @@ async function sendWsIgTemplateMessage(ctx, ownerUserId, wsId, type = 'story') {
 async function renderWsProfileMode(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
   const cur = String(ws.profile_mode || 'both');
 
   const kb = new InlineKeyboard()
@@ -5376,8 +5293,8 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
 async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const selected = Array.isArray(ws.profile_verticals) ? ws.profile_verticals.map(String) : [];
   const kb = new InlineKeyboard();
@@ -5411,8 +5328,8 @@ async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
 async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const selected = Array.isArray(ws.profile_formats) ? ws.profile_formats.map(String) : [];
   const kb = new InlineKeyboard();
@@ -5444,7 +5361,7 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
 
 
 async function renderWsPublicProfile(ctx, wsId, opts = {}) {
-  const ws = await withTimeout(db.getWorkspaceAny(wsId), 4500, 'ws.get');
+  const ws = await db.getWorkspaceAny(wsId);
   if (!ws) return ctx.reply('Профиль не найден.');
 
   const viewer = ctx?.from ? await db.upsertUser(ctx.from.id, ctx.from.username ?? null) : null;
@@ -5649,34 +5566,21 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
 }
-function leadListTabsKb(wsId, counts, active, ret) {
-  // Tabs for Creator Inbox (brand leads). Make them self-explanatory, like Brand Inbox.
-  const a = normLeadStatus(active);
-
-  const retPart = ret ? `|ret:${ret}` : '';
-
+function leadListTabsKb(wsId, counts, active) {
   const kb = new InlineKeyboard()
-    .text(`🆕 Новые ${counts.new ?? 0}`, `a:ws_leads|ws:${wsId}|s:new|p:0${retPart}`)
-    .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:ws_leads|ws:${wsId}|s:in_progress|p:0${retPart}`)
+    .text(`${LEAD_STATUSES.new.icon} ${counts.new ?? 0}`, `a:ws_leads|ws:${wsId}|s:new|p:0`)
+    .text(`${LEAD_STATUSES.in_progress.icon} ${counts.in_progress ?? 0}`, `a:ws_leads|ws:${wsId}|s:in_progress|p:0`)
     .row()
-    .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:ws_leads|ws:${wsId}|s:closed|p:0${retPart}`)
-    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:ws_leads|ws:${wsId}|s:spam|p:0${retPart}`);
-
-  // Mark active with a dot
-  for (const row of kb.inline_keyboard) {
-    for (const btn of row) {
-      const d = String(btn.callback_data || '');
-      if (d.includes(`|s:${a}|`)) btn.text = '• ' + btn.text;
-    }
-  }
+    .text(`${LEAD_STATUSES.closed.icon} ${counts.closed ?? 0}`, `a:ws_leads|ws:${wsId}|s:closed|p:0`)
+    .text(`${LEAD_STATUSES.spam.icon} ${counts.spam ?? 0}`, `a:ws_leads|ws:${wsId}|s:spam|p:0`);
   return kb;
 }
 
-async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 0, ret = null) {
+async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 0) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
   const st = normLeadStatus(status);
   const p = Math.max(0, Number(page) || 0);
@@ -5700,31 +5604,23 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
   const body = lines.length ? lines.join('\n') : 'Пока пусто. Запросы появятся, когда бренд нажмёт кнопку на витрине.';
 
-  const kb = leadListTabsKb(wsId, counts, st, ret);
-
-  const retKey = String(ret || '').trim();
-  const retPart = retKey ? `|ret:${retKey}` : '';
+  const kb = leadListTabsKb(wsId, counts, st);
 
   // quick open buttons (max 8 to avoid huge kb)
   for (const l of leads.slice(0, 8)) {
-    const whoBtn = l.brand_username
-      ? '@' + String(l.brand_username).replace(/^@/, '')
-      : (String(l.brand_name || '').trim() || 'brand');
-    const whoShort = String(whoBtn).length > 16 ? String(whoBtn).slice(0, 16) + '…' : String(whoBtn);
-
-    kb.row().text(`${leadStatusIcon(l.status)} #${l.id} ${whoShort}`, `a:lead_view|id:${l.id}|ws:${wsId}|s:${st}|p:${p}${retPart}`);
+    kb.row().text(`${leadStatusIcon(l.status)} #${l.id}`, `a:lead_view|id:${l.id}|ws:${wsId}|s:${st}|p:${p}`);
   }
 
   // pagination
   if (p > 0) {
-    kb.row().text('⬅️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p - 1}${retPart}`);
+    kb.row().text('⬅️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p - 1}`);
   }
   if (leads.length === limit) {
-    if (p > 0) kb.text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}${retPart}`);
-    else kb.row().text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}${retPart}`);
+    if (p > 0) kb.text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}`);
+    else kb.row().text('➡️', `a:ws_leads|ws:${wsId}|s:${st}|p:${p + 1}`);
   }
-  const backCb = retKey === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`;
-  kbNavRow(kb, backCb);
+
+  kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   try {
     await safeEditOrReply(ctx, textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -5733,18 +5629,17 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
   }
 }
 
-async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
-  const stepId = `lead_view:${Number(leadId || 0)}`;
-  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(leadId), 4500);
-  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
+async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0 }) {
+  const lead = await db.getBrandLeadById(leadId);
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const wsId = Number(lead.workspace_id);
-  const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 4500);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  const ws = await db.getWorkspaceAny(wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
@@ -5766,26 +5661,25 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const st = normLeadStatus(lead.status);
 
-  const retKey = String(back?.ret || '').trim();
-  const retPart = retKey ? `|ret:${retKey}` : '';
-
   const kb = new InlineKeyboard()
-    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
-    .text('⚡ Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('⚡ Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
     .row()
-    .text('💬 В работу', `a:lead_set|id:${lead.id}|st:in_progress|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
-    .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:closed|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('💬 В работу', `a:lead_set|id:${lead.id}|st:in_progress|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:closed|ws:${wsId}|s:${back.status}|p:${back.page}`)
     .row()
-    .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:spam|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:spam|ws:${wsId}|s:${back.status}|p:${back.page}`)
     .row();
-  kbNavRow(kb, `a:ws_leads|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`);
+  kbNavRow(kb, `a:ws_leads|ws:${wsId}|s:${back.status}|p:${back.page}`);
 
-
-  const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
-    await p0Await(ctx, stepId, `${stepId}:sendEdit`, () => safeEditOrReply(ctx, text, extra), 4500);
+    try {
+    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
-    await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 4500);
+    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  }
+  } catch {
+    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
 }
 
@@ -5981,7 +5875,7 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
 ` +
     `Бренд: <b>${escapeHtml(brandName)}</b>
 ` +
-    `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>
+    `Статус: <b>${escapeHtml(LEAD_STATUSES[st]?.label || st)}</b>
 ` +
     `
 <i>Фильтры: 🆕 Новые / 💬 В работе / ✅ Закрыты / 🗑 Спам.</i>
@@ -5998,7 +5892,7 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
       const when = a.created_at ? fmtTs(a.created_at) : '—';
       const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
       const short = msg.length > 60 ? msg.slice(0, 60) + '…' : (msg || '—');
-      return `${leadStatusIcon(a.status)} <b>#${a.id}</b> — <b>${escapeHtml(who)}</b> · <code>${escapeHtml(when)}</code>\n<code>${escapeHtml(short)}</code>`;
+      return `${offset + i + 1}. <b>${escapeHtml(who)}</b> · ${escapeHtml(when)}\n<code>${escapeHtml(short)}</code>`;
     });
     body = '\n\n' + lines.join('\n\n');
   }
@@ -6010,19 +5904,12 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
   }
 
   if (apps.length) {
-    // Quick-open: one per row, with status + #id + who/id/snippet (readable & match list)
+    kb.row();
     for (const a of apps) {
-      const username = a.creator_username ? '@' + String(a.creator_username).replace(/^@/, '') : '';
-      const tgId = (!username && a.creator_tg_id) ? `id:${a.creator_tg_id}` : '';
-
-      const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
-      const snippet = msg.length > 18 ? msg.slice(0, 18) + '…' : (msg || '');
-
-      const tailRaw = username || tgId || snippet || 'creator';
-      const tail = String(tailRaw).length > 18 ? String(tailRaw).slice(0, 18) + '…' : String(tailRaw);
-
-      const label = `${leadStatusIcon(a.status)} #${a.id}${tail ? (' ' + tail) : ''}`;
-      kb.row().text(label, `a:brand_app_view|id:${a.id}|s:${st}|p:${p}`);
+      const uName = a.creator_username ? '@' + String(a.creator_username).replace(/^@/, '') : '';
+      const uShort = uName ? (' ' + uName.slice(0, 16)) : '';
+      const label = `✉️ #${a.id}${uShort}`;
+      kb.text(label, `a:brand_app_view|id:${a.id}|s:${st}|p:${p}`);
     }
   }
 
@@ -6684,18 +6571,15 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
 
 async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
   const lead = await db.getBrandLeadById(leadId);
-  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-
-  const retKey = String(back?.ret || '').trim();
-  const retPart = retKey ? `|ret:${retKey}` : '';
+  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   // --- LIST ---
   if (!key) {
@@ -6707,10 +6591,10 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
       `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”.`;
 
     const kb = new InlineKeyboard();
-    kbTplList(kb, LEAD_TPLS, (tplKey) => `a:lead_tpl|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`);
-    kb.text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    kbTplList(kb, LEAD_TPLS, (tplKey) => `a:lead_tpl|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}`);
+    kb.text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
       .row()
-      .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+      .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
       .text('📋 Меню', 'a:menu');
 
     try {
@@ -6750,13 +6634,13 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
   }
 
   const kb = new InlineKeyboard();
-  kbTplIconPicker(kb, LEAD_TPLS, (k2) => `a:lead_tpl|id:${lead.id}|k:${k2}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`, 3);
-  kb.text('📨 Отправить', `a:lead_tpl_send|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+  kbTplIconPicker(kb, LEAD_TPLS, (k2) => `a:lead_tpl|id:${lead.id}|k:${k2}|ws:${wsId}|s:${back.status}|p:${back.page}`, 3);
+  kb.text('📨 Отправить', `a:lead_tpl_send|id:${lead.id}|k:${tplKey}|ws:${wsId}|s:${back.status}|p:${back.page}`)
     .row()
-    .text('🗂 Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
-    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('🗂 Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
+    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
     .row()
-    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}`)
     .text('📋 Меню', 'a:menu');
 
   try {
@@ -7110,15 +6994,15 @@ async function renderLeadTemplatePreview(ctx, actorUserId, leadId, key, back) {
 
 async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const lead = await db.getBrandLeadById(leadId);
-  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
   const brandTgId = Number(lead.brand_tg_id || 0);
   if (!brandTgId) { try { await ctx.answerCallbackQuery({ text: 'У бренда нет TG id.' }); } catch {} return; }
@@ -7148,9 +7032,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
   if (!sendRes.ok) {
     const reason = describeTgSendError(sendRes.err);
-    const retKey = String(back?.ret || '').trim();
-    const retPart = retKey ? `|ret:${retKey}` : '';
-    const kb = navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`);
+    const kb = navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`);
     const msg = `❌ Не удалось отправить сообщение бренду.
 
 Причина: <b>${escapeHtml(reason)}</b>
@@ -7175,15 +7057,14 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   try {
     await renderLeadView(ctx, actorUserId, leadId, back);
   } catch {
-    const retPart = back?.ret ? `|ret:${String(back.ret)}` : '';
-    await ctx.reply('✅ Отправлено.', { reply_markup: navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`) });
+    await ctx.reply('✅ Отправлено.', { reply_markup: navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}`) });
   }
 }
 async function renderWsPro(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
   await db.ensureWorkspaceSettings(wsId);
   const s = await db.getWorkspace(ownerUserId, wsId);
   const isPro = await db.isWorkspacePro(wsId);
@@ -7222,8 +7103,8 @@ ${escapeHtml(pro)}
 async function renderWsProPinPick(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
   const isPro = await db.isWorkspacePro(wsId);
   if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно в PRO.' });
 
@@ -11005,11 +10886,9 @@ ${card}`;
       } catch {}
 
 
-      const retPart = exp.ret ? `|ret:${String(exp.ret)}` : '';
-
       const kb = new InlineKeyboard()
-        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${retPart}`)
-        .text('📨 Заявки', `a:ws_leads|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${retPart}`);
+        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}`)
+        .text('📨 Заявки', `a:ws_leads|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}`);
 
       await clearExpectText(ctx.from.id);
 
@@ -11026,6 +10905,29 @@ ${card}`;
       if (!brandUserId) {
         await clearExpectText(ctx.from.id);
         return ctx.reply('⚠️ Не найден бренд для заявки. Открой бренд в каталоге и нажми “Оставить заявку” ещё раз.');
+      }
+
+      // HARD GATE: без Telegram @username запрещаем отправку заявки
+      const creatorUsername = String(ctx.from?.username || '').trim();
+      if (!creatorUsername) {
+        await safeDeleteIncomingUserMessage(ctx);
+        await clearExpectText(ctx.from.id);
+
+        const backCb = String(exp.backCb || `a:brand_dir_open|u:${brandUserId}|p:${backPage}`);
+        const kbGate = new InlineKeyboard()
+          .text('✅ Проверить', `a:brand_apply|u:${brandUserId}|p:${backPage}`)
+          .row()
+          .text('⬅️ Назад', backCb)
+          .text('📋 Меню', 'a:menu');
+
+        const gateText =
+          '⚠️ <b>Нужен Telegram @username</b>\n\n' +
+          'Без @username бренды не смогут написать тебе напрямую.\n\n' +
+          'Telegram → <b>Settings</b> → <b>Username</b> → задай @username,\n' +
+          'потом вернись и нажми «✅ Проверить».\n\n' +
+          '<i>Требование перед отправкой заявок брендам.</i>';
+
+        return ctx.reply(gateText, { parse_mode: 'HTML', reply_markup: kbGate, disable_web_page_preview: true });
       }
 
       if (msg.length < 10) {
@@ -13465,33 +13367,20 @@ if (p.a === 'a:support_write') {
 
 // Brand Directory (Creator)
 if (p.a === 'a:brands_home') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+  await ctx.answerCallbackQuery();
   const page = Math.max(0, Number(p.p || 0));
-  await safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') });
-  try {
-    await withTimeout(renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id }), 12000, 'brands.home');
-  } catch (e) {
-    const cid = ctx.state?.cid || null;
-    const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
-    try { console.warn('[brands_home] timeout/error', { cid, page, label, err: errInfo(e) }); } catch {}
-    await safeEditOrReply(ctx, `⚠️ Каталог брендов отвечает слишком долго.
-
-step: ${label}
-
-cid: ${cid || '—'}`, { reply_markup: navKb(`a:brands_home|p:${page}`) });
-  }
+  await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id });
   return;
 }
 
-
     if (p.a === 'a:brands_filters') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+      await ctx.answerCallbackQuery();
       await renderBrandDirFilters(ctx, ctx.from.id, { page: num(p.p || 0, 0), legacyUserId: u.id });
       return;
     }
 
     if (p.a === 'a:bd_fpick') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+      await ctx.answerCallbackQuery();
       await renderBrandDirFilterPick(ctx, ctx.from.id, {
         legacyUserId: u.id,
         key: String(p.k || ''),
@@ -13501,7 +13390,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(`a:brands_home|p:${page}`) });
     }
 
     if (p.a === 'a:bd_fset') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+      await ctx.answerCallbackQuery();
       const base = await getBrandDirFilter(ctx.from.id, u.id);
       const key = String(p.k || '');
       const val = String(p.v || 'all');
@@ -13533,7 +13422,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(`a:brands_home|p:${page}`) });
     }
 
     if (p.a === 'a:bd_mpick') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+      await ctx.answerCallbackQuery();
       await renderBrandDirMultiPick(ctx, ctx.from.id, {
         legacyUserId: u.id,
         key: String(p.k || ''),
@@ -13543,7 +13432,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(`a:brands_home|p:${page}`) });
     }
 
     if (p.a === 'a:bd_mt') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+      await ctx.answerCallbackQuery();
       const base = await getBrandDirFilter(ctx.from.id, u.id);
       const key = String(p.k || '');
       const tag = String(p.v || '');
@@ -13578,13 +13467,13 @@ cid: ${cid || '—'}`, { reply_markup: navKb(`a:brands_home|p:${page}`) });
     }
 
     if (p.a === 'a:bd_mdone') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+      await ctx.answerCallbackQuery();
       await renderBrandDirFilters(ctx, ctx.from.id, { page: num(p.p || 0, 0), legacyUserId: u.id });
       return;
     }
 
     if (p.a === 'a:bd_freset') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+      await ctx.answerCallbackQuery();
       await setBrandDirFilter(ctx.from.id, {
         category: null,
         offerType: null,
@@ -13598,7 +13487,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(`a:brands_home|p:${page}`) });
     }
 
 if (p.a === 'a:brand_dir_open') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+  await ctx.answerCallbackQuery();
   const brandUserId = Number(p.u || 0);
   const backPage = Math.max(0, Number(p.p || 0));
   await renderBrandDirectoryCard(ctx, ctx.from.id, { brandUserId, backPage, edit: true, legacyUserId: u.id });
@@ -13647,6 +13536,30 @@ if (p.a === 'a:brand_apply') {
       .text('📋 Меню', 'a:menu');
 
     await safeEditOrReply(ctx, '⚠️ Выбери активный канал (витрину) в «📣 Мои каналы» и повтори.', { reply_markup: kbGate });
+    return;
+  }
+
+  // HARD GATE: без Telegram @username бренды не смогут написать напрямую
+  // (user can still message via bot, but для сделки нужен публичный @username)
+  const creatorUsername = String(ctx.from?.username || '').trim();
+  if (!creatorUsername) {
+    const backCb = `a:brand_dir_open|u:${brandUserId}|p:${backPage}`;
+    const kbGate = new InlineKeyboard()
+      .text('✅ Проверить', `a:brand_apply|u:${brandUserId}|p:${backPage}`)
+      .row()
+      .text('⬅️ Назад', backCb)
+      .text('📋 Меню', 'a:menu');
+
+    const gateText =
+      '⚠️ <b>Нужен Telegram @username</b>\n\n' +
+      'Без @username бренды не смогут написать тебе напрямую.\n\n' +
+      'Сделай так:\n' +
+      '1) Telegram → <b>Settings</b> → <b>Username</b>\n' +
+      '2) Задай @username\n' +
+      '3) Вернись сюда и нажми «✅ Проверить».\n\n' +
+      '<i>Это обязательное требование перед отправкой заявок брендам.</i>';
+
+    await safeEditOrReply(ctx, gateText, { parse_mode: 'HTML', reply_markup: kbGate, disable_web_page_preview: true });
     return;
   }
 
@@ -14233,19 +14146,7 @@ if (p.a === 'a:wsp_preview') {
       return;
     }
 
-    
-// Alias for legacy payloads: "send request to creator" from old vitrina buttons
-if (p.a === 'a:send_request_to_creator') {
-  const wsId = Number(p.ws || p.w || p.wsId || 0);
-  if (!wsId) {
-    try { await ctx.answerCallbackQuery({ text: 'Кнопка устарела. Открой витрину заново.', show_alert: true }); } catch {}
-    return;
-  }
-  // fall-through: reuse a:wsp_lead_new logic
-  try { p.a = 'a:wsp_lead_new'; p.ws = wsId; } catch {}
-}
-
-if (p.a === 'a:wsp_lead_new') {
+    if (p.a === 'a:wsp_lead_new') {
       const wsId = Number(p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
@@ -14610,36 +14511,15 @@ if (p.a === 'a:ws_leads') {
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
-      await renderWsLeadsList(ctx, u.id, wsId, String(p.s || 'new'), Number(p.p || 0), String(p.ret || '') || null);
+      await renderWsLeadsList(ctx, u.id, wsId, String(p.s || 'new'), Number(p.p || 0));
       return;
     }
 
     if (p.a === 'a:lead_view') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
-      if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
-        return;
-      }
-      const wsId = Number(p.ws || 0);
-      const st = String(p.s || 'new');
-      const page = Number(p.p || 0);
-      const retKey = String(p.ret || '').trim();
-      const retPart = retKey ? `|ret:${retKey}` : '';
-      const backCb = wsId ? `a:ws_leads|ws:${wsId}|s:${st}|p:${page}${retPart}` : 'a:menu';
-      await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
-      try {
-        await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 15000, 'lead.view');
-      } catch (e) {
-        const cid = ctx.state?.cid || null;
-        const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
-        try { console.warn('[lead_view] timeout/error', { cid, leadId, wsId, label, err: errInfo(e) }); } catch {}
-        await safeEditOrReply(ctx, `⚠️ Карточка заявки загружается слишком долго.
-
-step: ${label}
-
-cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
-      }
+      if (!leadId) return;
+      await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
       return;
     }
 
@@ -14647,29 +14527,23 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
     if (p.a === 'a:lead_tpls') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
-      if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
-        return;
-      }
-      await renderLeadTemplates(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
+      if (!leadId) return;
+      await renderLeadTemplates(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
       return;
     }
 
     if (p.a === 'a:lead_tpl') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
-      if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
-        return;
-      }
+      if (!leadId) return;
       const key = String(p.k || 'discuss');
       try {
-        await renderLeadTemplatePreview(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
+        await renderLeadTemplatePreview(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
       } catch (e) {
         try { console.warn('[lead_tpl_preview] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз или используй «✍️ Ответить». ';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
           .text('📋 Меню', 'a:menu');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -14679,18 +14553,15 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
     if (p.a === 'a:lead_tpl_send') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
-      if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
-        return;
-      }
+      if (!leadId) return;
       const key = String(p.k || 'discuss');
       try {
-        await sendLeadTemplateReply(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
+        await sendLeadTemplateReply(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0) });
       } catch (e) {
         try { console.warn('[lead_tpl_send] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '⚠️ Не удалось отправить шаблон. Попробуй ещё раз или используй «✍️ Ответить». ';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
           .text('📋 Меню', 'a:menu');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -14700,27 +14571,24 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
 if (p.a === 'a:lead_set') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
-      if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
-        return;
-      }
+      if (!leadId) return;
       const st = normLeadStatus(p.st);
       const updated = await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, st), { op: 'lead_status', leadId, st });
       if (!updated) {
         const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
+          .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0))
           .text('📋 Меню', 'a:menu');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
         return;
       }
       try {
-        await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || st), page: Number(p.p || 0), ret: String(p.ret || '') });
+        await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || st), page: Number(p.p || 0) });
       } catch (e) {
         try { console.warn('[lead_set] unhandled', { leadId, st, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '✅ Статус обновлён. (Экран не удалось перерисовать — открой заявку заново.)';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:ws_leads|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || st) + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
+          .text('⬅️ Назад', 'a:ws_leads|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || st) + '|p:' + Number(p.p || 0))
           .text('📋 Меню', 'a:menu');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -14741,14 +14609,12 @@ if (p.a === 'a:lead_set') {
 
       const isOwner = Number(ws.owner_user_id) === Number(u.id);
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+      if (!isOwner && !isAdmin) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
 
-      await setExpectText(ctx.from.id, { type: 'lead_reply', leadId, wsId: Number(ws.id), backStatus: String(p.s || 'new'), backPage: Number(p.p || 0), ret: String(p.ret || '') });
-
-      const retPart = p.ret ? `|ret:${String(p.ret)}` : '';
+      await setExpectText(ctx.from.id, { type: 'lead_reply', leadId, wsId: Number(ws.id), backStatus: String(p.s || 'new'), backPage: Number(p.p || 0) });
 
       const kb = new InlineKeyboard()
-        .text('⬅️ Назад', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(p.s || 'new')}|p:${Number(p.p || 0)}${retPart}`);
+        .text('⬅️ Назад', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(p.s || 'new')}|p:${Number(p.p || 0)}`);
 
       await safeEditOrReply(ctx, 
         `✍️ <b>Ответ на заявку #${leadId}</b>
@@ -14896,26 +14762,21 @@ if (p.a === 'a:lead_set') {
     }
 
     if (p.a === 'a:ws_profile') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      const wsId = Number(p.ws || 0);
-      if (!wsId) {
-        await safeEditOrReply(ctx, '⚠️ Канал не выбран. Открой 📋 Меню → выбери канал и повтори шаг.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
-        return;
-      }
-      await renderWsProfile(ctx, u.id, wsId);
+      await ctx.answerCallbackQuery();
+      await renderWsProfile(ctx, u.id, Number(p.ws));
       return;
     }
 
     
     if (p.a === 'a:ws_share') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+      await ctx.answerCallbackQuery();
       const wsId = Number(p.ws || 0);
-      if (!wsId) { await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал заново.', { reply_markup: navKb('a:ws_list') }); return; }
-      await renderWsShareMenu(ctx, u.id, wsId, String(p.ret || '') || null);
+
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      if (!wsId) return;
+      await renderWsShareMenu(ctx, u.id, wsId);
       return;
     }
-
-
 
     if (p.a === 'a:ws_share_send') {
       await ctx.answerCallbackQuery();
@@ -16972,19 +16833,18 @@ if (p.a === 'a:match_home') {
       return;
     }
     if (p.a === 'a:bx_msg') {
-      const wsId = Number(p.ws || 0);
-      const offerId = Number(p.o || 0);
+      const wsId = Number(p.ws);
+      const offerId = Number(p.o);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
-
-      // Home/return context (used by thread header/back)
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
 
       // Brand Manager in Brand Mode (ws:0): act as selected brand (brandUserId)
       let actorUserId = u.id;
       let bm = { enabled: false };
       if (wsId === 0) {
-        const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_msg', page, { h, r });
+        const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_filters', retPage, { h, r });
         if (!bmRes) return;
         actorUserId = bmRes.userId;
         bm = bmRes.bm || { enabled: false };
@@ -16995,22 +16855,18 @@ if (p.a === 'a:match_home') {
         const prof = await safeBrandProfiles(() => db.getBrandProfile(actorUserId), async () => null);
         if (!isBrandBasicComplete(prof)) {
           if (bm.enabled) {
-            try {
-              await ctx.answerCallbackQuery({
-                text: '⚠️ Профиль бренда не заполнен. Попроси владельца бренда заполнить 4 базовых поля (Название, Ниша, Контакт, Ссылка).',
-                show_alert: true
-              });
-            } catch {}
+            await ctx.answerCallbackQuery({
+              text: '⚠️ Профиль бренда не заполнен. Попроси владельца бренда заполнить 4 базовых поля (Название, Ниша, Контакт, Ссылка).',
+              show_alert: true
+            });
             await renderBxPublicView(ctx, actorUserId, wsId, offerId, page, { h });
             return;
           }
 
-          try {
-            await ctx.answerCallbackQuery({
-              text: '⚠️ Заполни профиль бренда (4 шага), чтобы писать креаторам.',
-              show_alert: true
-            });
-          } catch {}
+          await ctx.answerCallbackQuery({
+            text: '⚠️ Заполни профиль бренда (4 шага), чтобы писать креаторам.',
+            show_alert: true
+          });
           await renderBrandProfileHome(ctx, actorUserId, { wsId, ret: 'offer', backOfferId: offerId, backPage: page, edit: true });
           return;
         }
@@ -17023,18 +16879,16 @@ if (p.a === 'a:match_home') {
             { limit: CFG.INTRO_RATE_LIMIT, windowSec: CFG.INTRO_RATE_WINDOW_SEC }
           );
           if (!rl.allowed) {
-            try {
-              await ctx.answerCallbackQuery({
-                text: `⏳ Слишком часто. Подожди ${fmtWait(rl.resetSec)} и попробуй снова.`,
-                show_alert: true
-              });
-            } catch {}
+            await ctx.answerCallbackQuery({
+              text: `⏳ Слишком часто. Подожди ${fmtWait(rl.resetSec)} и попробуй снова.`,
+              show_alert: true
+            });
             return;
           }
         } catch {}
       }
 
-      try { await ctx.answerCallbackQuery(); } catch {}
+      await ctx.answerCallbackQuery();
       db.trackEvent('intro_attempt', {
         userId: actorUserId,
         wsId: wsId || null,
@@ -17076,7 +16930,7 @@ if (p.a === 'a:match_home') {
         const lim = Number(res.dailyLimit || dailyLimit || 0);
         const used = Number(res.dailyUsed || 0);
         db.trackEvent('intro_blocked_daily_limit', { userId: actorUserId, wsId: wsId || null, meta: { offerId, lim, used } });
-        try { await ctx.answerCallbackQuery({ text: `Лимит интро на сегодня: ${lim} (использовано: ${used}). Попробуй завтра.`, show_alert: true }); } catch {}
+        await ctx.answerCallbackQuery({ text: `Лимит интро на сегодня: ${lim} (использовано: ${used}). Попробуй завтра.`, show_alert: true });
         return;
       }
 
@@ -17096,10 +16950,10 @@ if (p.a === 'a:match_home') {
         const left = Number(res.balance ?? 0);
         const amt = Number(res.chargedAmount || cost || 1);
         const bonus = res.trialGranted ? '🎁 Бонус активирован. ' : '';
-        try { await ctx.answerCallbackQuery({ text: `${bonus}✅ Диалог открыт. -${amt} кредит(ов). Осталось: ${left}`, show_alert: true }); } catch {}
+        await ctx.answerCallbackQuery({ text: `${bonus}✅ Диалог открыт. -${amt} кредит(ов). Осталось: ${left}`, show_alert: true });
       }
       else if (res.retryUsed) {
-        try { await ctx.answerCallbackQuery({ text: `🎟 Диалог открыт. Использован Retry credit.`, show_alert: true }); } catch {}
+        await ctx.answerCallbackQuery({ text: `🎟 Диалог открыт. Использован Retry credit.`, show_alert: true });
       }
 
       await renderBxThread(ctx, actorUserId, wsId, res.thread.id, { back: 'offer', offerId, page, h });
@@ -17349,79 +17203,27 @@ if (p.a === 'a:bx_retry_help') {
       return;
     }
     if (p.a === 'a:bx_bump') {
-      const wsId = Number(p.ws || 0);
-      const offerId = Number(p.o || p.id || 0);
-
-      if (!wsId || !offerId) {
-        await safeEditOrReply(
-          ctx,
-          '⚠️ Кнопка устарела. Открой «📦 Мои офферы» и попробуй ещё раз.',
-          { reply_markup: navKb('a:bx_my') }
-        );
-        return;
-      }
-
-      // owner gate: bump allowed только владельцу канала (ws)
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) {
-        await safeEditOrReply(ctx, '⚠️ Нет доступа. Поднимать оффер может только владелец канала.', { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
-        return;
-      }
-
-      // Some legacy records may not match creatorUserId; allow bump if offer принадлежит этому ws.
-      let o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) {
-        try { o = await db.getBarterOfferPublic(offerId); } catch {}
-      }
-      const oWs = Number(o?.workspace_id || o?.workspaceId || 0);
-      if (!o || oWs !== wsId) {
-        await safeEditOrReply(ctx, '⚠️ Оффер не найден или нет доступа.', { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
-        return;
-      }
-
-      let isPro = false;
-      try { isPro = await db.isWorkspacePro(wsId); } catch {}
-
+      const wsId = Number(p.ws);
+      const offerId = Number(p.o);
+      const o = await db.getBarterOfferForOwner(u.id, offerId);
+      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const isPro = await db.isWorkspacePro(wsId);
       const cooldownHours = isPro ? CFG.BARTER_BUMP_COOLDOWN_HOURS_PRO : CFG.BARTER_BUMP_COOLDOWN_HOURS_FREE;
       const cooldownMs = cooldownHours * 3600 * 1000;
       const last = o.bump_at ? new Date(o.bump_at).getTime() : 0;
       const now = Date.now();
-
       if (last && (now - last) < cooldownMs) {
         const left = cooldownMs - (now - last);
         const h = Math.floor(left / 3600000);
-        const mm = Math.floor((left % 3600000) / 60000);
-        await safeEditOrReply(
-          ctx,
-          `⏳ Поднимать можно раз в <b>${cooldownHours}ч</b>.
-Осталось: <b>${h}ч ${mm}м</b>.`,
-          { parse_mode: 'HTML', reply_markup: navKb(`a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:0`) }
-        );
-        return;
+        const m = Math.floor((left % 3600000) / 60000);
+        return ctx.answerCallbackQuery({ text: `Можно поднимать раз в ${cooldownHours}ч. Осталось ${h}ч ${m}м`, show_alert: true });
       }
-
-      // give immediate visible feedback (anti-silent)
-      await safeEditOrReply(ctx, '⬆️ Поднимаю оффер…', { reply_markup: navKb(`a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:0`) });
-
-      try {
-        await db.bumpBarterOffer(offerId);
-      } catch (e) {
-        try { console.warn('[bx_bump] bump failed', { err: errInfo(e), wsId, offerId, uid: u.id }); } catch {}
-        await safeEditOrReply(ctx, '⚠️ Не удалось поднять оффер. Попробуй ещё раз через «📦 Мои офферы».', { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
-        return;
-      }
-
-      try {
-        await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_bumped', { cooldownHours, isPro });
-      } catch (e) {
-        try { console.warn('[bx_bump] audit failed', { err: errInfo(e), wsId, offerId, uid: u.id }); } catch {}
-      }
-
-      // Show результат так, чтобы было ВИДНО (перекидываем в список, где оффер уедет наверх)
-      await renderBxMy(ctx, u.id, wsId, 0);
+      await db.bumpBarterOffer(offerId);
+      await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_bumped', { cooldownHours, isPro });
+      await ctx.answerCallbackQuery({ text: '⬆️ Поднято!' });
+      await renderBxView(ctx, u.id, wsId, offerId, 'my');
       return;
     }
-
 
 
     if (p.a === 'a:bx_my') {
@@ -17694,18 +17496,6 @@ if (p.a === 'a:bx_cat') {
       await renderBxOfferTextStep(ctx, wsId);
       return;
     }
-
-
-if (p.a === 'a:bx_publish_hint') {
-  const wsId = Number(p.ws);
-  const ws = await db.getWorkspace(u.id, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-
-  try { await ctx.answerCallbackQuery({ text: 'Отправь текст оффера сообщением — я опубликую автоматически.', show_alert: true }); } catch {}
-
-  await renderBxOfferTextStep(ctx, wsId);
-  return;
-}
 
     if (p.a === 'a:bx_otskip') {
       const wsId = Number(p.ws);
@@ -19304,7 +19094,7 @@ ${actionHint}`;
     return false;
   };
 
-    await dispatchCallback(ctx, p, u, { legacy, logger, safeEditOrReply, isAdmin: (c) => isSuperAdminTg(c?.from?.id) });
+    await dispatchCallback(ctx, p, u, { legacy, logger, safeEditOrReply });
     return;
   });
 
