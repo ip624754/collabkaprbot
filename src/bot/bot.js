@@ -962,7 +962,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   const edit = opts.edit !== false;
   const tgId = Number(ctx?.from?.id || 0);
 
-  const mode = await resolveUiMode(tgId);
+  const uiMode = await resolveUiMode(tgId);
   const bmMode = await getBrandManagerMode(tgId);
   const curMode = (flags?.isCurator ? await getCuratorMode(tgId) : false);
 
@@ -973,22 +973,38 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     managerBrands = await db.listBrandsForManager(u.id);
     canManager = Array.isArray(managerBrands) && managerBrands.length > 0;
   } catch (e) {
-    // If migration is missing — don't crash the Home Hub; manager button simply won't show.
     canManager = false;
   }
 
-  const modeLabel = bmMode ? 'Brand Manager' : uiModeHuman(mode);
+  // Effective mode: curator overlay > brand manager > brand/creator UI mode
+  const effective =
+    curMode
+      ? 'curator'
+      : bmMode
+        ? 'brand_manager'
+        : normalizeUiMode(uiMode) === UI_MODES.BRAND
+          ? 'brand'
+          : 'creator';
+
+  const modeLabel =
+    effective === 'curator'
+      ? 'Curator'
+      : effective === 'brand_manager'
+        ? 'Brand Manager'
+        : uiModeHuman(uiMode);
 
   let hint = '';
   if (bmMode && canManager) {
-    const active = await getBmActiveBrand(tgId);
-    const row = managerBrands.find((b) => Number(b.user_id) == Number(active)) || managerBrands[0];
-    const label = row ? bmBrandLabelFromRow(row) : '';
-    if (label) hint = `
+    try {
+      const active = await getBmActiveBrand(tgId);
+      const row = managerBrands.find((b) => Number(b.user_id) == Number(active)) || managerBrands[0];
+      const label = row ? bmBrandLabelFromRow(row) : '';
+      if (label) hint += `
 • Активный бренд: <b>${escapeHtml(label)}</b>`;
+    } catch {}
   }
   if (curMode) hint += `
-• UI: <b>Curator Mode</b>`;
+• Curator Mode: <b>ON</b>`;
 
   const textMsg =
     `🏠 <b>HOME HUB</b>
@@ -1000,18 +1016,20 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     `Текущий режим: <b>${escapeHtml(modeLabel)}</b>` +
     hint;
 
+  const bCreator = `${effective === 'creator' ? '✅ ' : ''}✨ Creator / канал`;
+  const bBrand = `${effective === 'brand' ? '✅ ' : ''}🏷 Бренд`;
+  const bBm = `${effective === 'brand_manager' ? '✅ ' : ''}👔 Менеджеры бренда`;
+  const bCur = `${effective === 'curator' ? '✅ ' : ''}🧹 Кураторы блогера`;
+
   const kb = new InlineKeyboard()
-    .text('✨ Creator / канал', 'a:home_mode|m:creator')
+    .text(`▶️ Продолжить: ${modeLabel}`, 'a:menu')
     .row()
-    .text('🏷 Бренд', 'a:home_mode|m:brand');
+    .text(bCreator, 'a:home_mode|m:creator')
+    .row()
+    .text(bBrand, 'a:home_mode|m:brand');
 
-  if (canManager) {
-    kb.row().text('👔 Менеджеры бренда', 'a:home_mode|m:brand_manager');
-  }
-
-  if (flags?.isCurator) {
-    kb.row().text('🧹 Кураторы блогера', 'a:home_mode|m:curator');
-  }
+  if (canManager) kb.row().text(bBm, 'a:home_mode|m:brand_manager');
+  if (flags?.isCurator) kb.row().text(bCur, 'a:home_mode|m:curator');
 
   // Staff shortcuts
   if (flags?.isModerator) kb.row().text('🛡 Модерация', 'a:mod_home');
@@ -14066,7 +14084,7 @@ if (p.a === 'a:menu') {
     }
 
     if (p.a === 'a:home_mode') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const m = String(p.m || '');
 
       // Determine whether user can manage any brands
@@ -14076,9 +14094,12 @@ if (p.a === 'a:menu') {
       } catch {}
       const canManager = Array.isArray(managerBrands) && managerBrands.length > 0;
 
+      // Mode switch is a strong intent: keep the UI consistent
+      // Curator overlay should not leak into Brand/Manager modes, and vice versa.
       if (m === 'creator') {
         await setUiMode(ctx.from.id, UI_MODES.CREATOR);
         await disableBrandManagerState(ctx.from.id);
+        try { await setCuratorMode(ctx.from.id, false); } catch {}
         const flags2 = await getRoleFlags(u, ctx.from.id);
         await renderRoleHub(ctx, u, flags2);
         return;
@@ -14087,6 +14108,7 @@ if (p.a === 'a:menu') {
       if (m === 'brand') {
         await setUiMode(ctx.from.id, UI_MODES.BRAND);
         await disableBrandManagerState(ctx.from.id);
+        try { await setCuratorMode(ctx.from.id, false); } catch {}
         const flags2 = await getRoleFlags(u, ctx.from.id);
         await renderRoleHub(ctx, u, flags2);
         return;
@@ -14099,6 +14121,7 @@ if (p.a === 'a:menu') {
         }
         await setUiMode(ctx.from.id, UI_MODES.BRAND);
         await setBrandManagerMode(ctx.from.id, true);
+        try { await setCuratorMode(ctx.from.id, false); } catch {}
         // If there is exactly one brand, set it as active to reduce clicks
         try {
           const active = await getBmActiveBrand(ctx.from.id);
@@ -14117,7 +14140,11 @@ if (p.a === 'a:menu') {
           await safeEditOrReply(ctx, '⛔ Доступ к «Кураторы блогера» не найден.', { reply_markup: navKb('a:home') });
           return;
         }
-        await renderCuratorHome(ctx, u.id);
+        // Curator is a creator-side overlay: persist it explicitly
+        await setUiMode(ctx.from.id, UI_MODES.CREATOR);
+        await disableBrandManagerState(ctx.from.id);
+        try { await setCuratorMode(ctx.from.id, true); } catch {}
+        await renderRoleHub(ctx, u, flags2);
         return;
       }
 
@@ -14126,46 +14153,40 @@ if (p.a === 'a:menu') {
       await renderHomeHub(ctx, u, flags2, { edit: true });
       return;
     }
-    if (p.a === 'a:main_menu') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
-      if (curMode) {
-        await safeEditOrReply(ctx, `👤 <b>Режим куратора</b>
 
-Здесь показаны только действия куратора, чтобы не путаться.
-Чтобы вернуть полное меню — нажми “🔓 Обычный режим”.`, {
-          parse_mode: 'HTML',
-          reply_markup: curatorModeMenuKb(flags)
-        });
-        return;
-      }
-      await renderMainMenu(ctx, flags, { edit: true });
-      await maybeSendBanner(ctx, 'menu', CFG.MENU_BANNER_FILE_ID);
+    if (p.a === 'a:main_menu') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      const flags = await getRoleFlags(u, ctx.from.id);
+      await renderRoleHub(ctx, u, flags);
       return;
     }
 
-    // Toggle Curator UI mode (stored in Redis). Missing handler used to create "dead" buttons.
+    // Toggle Curator UI mode (stored in Redis).
     if (p.a === 'a:cur_mode_set') {
-      await ctx.answerCallbackQuery();
+      try { await ctx.answerCallbackQuery(); } catch {}
       const enabled = String(p.v || '0') === '1';
       await setCuratorMode(ctx.from.id, enabled);
+
+      // Curator mode is a creator-side overlay. When enabling it, force creator UI and disable brand-manager state to avoid mixed menus.
+      if (enabled) {
+        try { await setUiMode(ctx.from.id, UI_MODES.CREATOR); } catch {}
+        try { await disableBrandManagerState(ctx.from.id); } catch {}
+      }
 
       const ret = String(p.ret || 'menu');
       const flags = await getRoleFlags(u, ctx.from.id);
 
-      // If user wants to stay in curator cabinet — render it. Otherwise refresh menu.
+      // If user wants to stay in curator cabinet — render it. Otherwise go to role hub.
       if (ret === 'cur') {
         if (!flags.isCurator && !flags.isAdmin) {
-          await renderMainMenu(ctx, flags, { edit: true });
+          await renderRoleHub(ctx, u, flags);
           return;
         }
         await renderCuratorHome(ctx, u.id);
         return;
       }
 
-      await renderMainMenu(ctx, flags, { edit: true });
-      await maybeSendBanner(ctx, 'menu', CFG.MENU_BANNER_FILE_ID);
+      await renderRoleHub(ctx, u, flags);
       return;
     }
 
