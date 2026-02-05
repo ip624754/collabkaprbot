@@ -23,6 +23,7 @@ Copy `.env.example` and set these in Vercel:
 - `APP_ENV` = `prod` or `dev`
 - `BOT_TOKEN`, `BOT_USERNAME`
 - `DATABASE_URL`
+- Postgres pool hardening (optional): `PG_POOL_MAX`, `PG_CONN_TIMEOUT_MS`, `PG_IDLE_TIMEOUT_MS`, `PG_STATEMENT_TIMEOUT_MS`
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
 - required for prod hardening: `WEBHOOK_SECRET_TOKEN`, `CRON_SECRET`, `SUPER_ADMIN_TG_IDS`
 - payments support: `PAY_SUPPORT_TEXT` (shown on `/paysupport`)
