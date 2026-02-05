@@ -384,29 +384,62 @@ async function sendMessageWithFallback(api, chatId, text, options = {}) {
   if (!api || typeof api.sendMessage !== 'function') {
     return { ok: false, err: new Error('BOT_API_NOT_READY') };
   }
+
   const base = { disable_web_page_preview: true, ...options };
+
+  // Goal: keep reply_markup whenever possible.
+  // Telegram errors are often either: HTML parse issues OR keyboard/callback issues.
+  // We first try "full" (HTML + KB). If it fails, we retry with plain text but KEEP KB.
+  // Only if that also fails we drop KB.
+  const plain = stripHtmlTags(text);
+
   try {
     await api.sendMessage(chatId, text, base);
-    return { ok: true, mode: "full" };
+    return { ok: true, mode: 'full' };
   } catch (e1) {
+    // 2nd try: plain text, keep KB (reply_markup)
     const o2 = { ...base };
-    delete o2.reply_markup;
+    delete o2.parse_mode;
     try {
-      await api.sendMessage(chatId, text, o2);
-      return { ok: true, mode: "no_kb", warn: e1 };
+      await api.sendMessage(chatId, plain, o2);
+      return { ok: true, mode: 'plain_kb', warn: e1 };
     } catch (e2) {
-      const o3 = { ...o2 };
-      delete o3.parse_mode;
-      const plain = stripHtmlTags(text);
+      // 3rd try: drop KB, keep HTML
+      const o3 = { ...base };
+      delete o3.reply_markup;
       try {
-        await api.sendMessage(chatId, plain, o3);
-        return { ok: true, mode: "plain", warn: e2 };
+        await api.sendMessage(chatId, text, o3);
+        return { ok: true, mode: 'no_kb', warn: e2 };
       } catch (e3) {
-        return { ok: false, err: e3, first: e1, second: e2 };
+        // 4th try: plain text, no KB
+        const o4 = { ...o3 };
+        delete o4.parse_mode;
+        try {
+          await api.sendMessage(chatId, plain, o4);
+          return { ok: true, mode: 'plain', warn: e3 };
+        } catch (e4) {
+          return { ok: false, err: e4, first: e1, second: e2, third: e3 };
+        }
       }
     }
   }
 }
+
+function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }) {
+  const kb = new InlineKeyboard();
+  if (openCb && replyCb) {
+    kb.text('📨 Открыть заявку', openCb).text(replyLabel, replyCb).row();
+  } else if (openCb) {
+    kb.text('📨 Открыть заявку', openCb).row();
+  } else if (replyCb) {
+    kb.text(replyLabel, replyCb).row();
+  }
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  return kb;
+}
+
+
+
 
 
 
@@ -6706,12 +6739,11 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
   }
 
   const outKb = new InlineKeyboard()
-    .text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`)
-    .text('✉️ Диалог', `a:brand_app_card|id:${app.id}`)
-    .row()
-    .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
-    .row()
-    .text('📋 Меню', 'a:menu');
+      .text('📨 Открыть заявку', `a:brand_app_card|id:${appId}`)
+      .text('💬 Ответить', `a:brand_app_chat|id:${appId}`)
+      .row()
+      .text('📋 Меню', 'a:menu')
+      .text('🏠 Home', 'a:home');
 
   try {
     const api = apiFromCtx(ctx);
@@ -7030,12 +7062,11 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
   }
 
   const outKb = new InlineKeyboard()
-    .text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`)
-    .text('✉️ Диалог', `a:brand_app_card|id:${app.id}`)
+    .text('📨 Открыть заявку', `a:brand_app_card|id:${app.id}`)
+    .text('💬 Ответить', `a:brand_app_chat|id:${app.id}`)
     .row()
-    .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
-    .row()
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 
   const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
     parse_mode: 'HTML',
@@ -7142,11 +7173,12 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
 
     const outKb = new InlineKeyboard()
     .text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`)
-    .text('✉️ Диалог', `a:brand_app_card|id:${app.id}`)
+    .text('📨 Открыть заявку', `a:brand_app_card|id:${app.id}`)
     .row()
     .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
     .row()
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 
     const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
       parse_mode: 'HTML',
@@ -11457,10 +11489,10 @@ ${card}`;
 <b>Сообщение:</b>
 ${escapeHtml(reply)}`;
 
-      const outKb = new InlineKeyboard()
-        .text('💬 Написать бренду', `a:brand_app_chat|id:${appId}`)
-        .row()
-        .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
+      const outKb = notifyReplyKb({
+        openCb: `a:brand_app_card|id:${appId}` ,
+        replyCb: `a:brand_app_chat|id:${appId}`
+      });
 
       const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
         parse_mode: 'HTML',
