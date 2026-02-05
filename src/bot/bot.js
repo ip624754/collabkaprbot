@@ -444,57 +444,58 @@ function errInfo(e) {
   };
 }
 
-// --- HANG DIAG HELPERS (Commit86z) ---
-// Jobs: UX never "silent". Vitalik: logs are truth. Woz: isolate the exact await.
-function mkStepId(prefix = 'step') {
-  const t = Date.now().toString(36).slice(-6);
-  const r = Math.random().toString(36).slice(2, 7);
-  return `${String(prefix || 'step')}.${t}.${r}`;
-}
-
-function stepLog(stepId, phase, label, data = null) {
-  try {
-    if (data) console.log(`[STEP] ${stepId} ${phase} ${label}`, data);
-    else console.log(`[STEP] ${stepId} ${phase} ${label}`);
-  } catch {}
-}
-
-function withTimeout(promiseOrFn, ms, label = 'op') {
+function withTimeout(promise, ms, label = 'op') {
   const t = Math.max(1, Number(ms) || 1);
-  const p = (typeof promiseOrFn === 'function') ? promiseOrFn() : promiseOrFn;
   return new Promise((resolve, reject) => {
     const id = setTimeout(() => {
       const e = new Error(`TIMEOUT:${label}`);
       e.code = 'TIMEOUT';
       reject(e);
     }, t);
-    Promise.resolve(p)
+    Promise.resolve(promise)
       .then(v => { clearTimeout(id); resolve(v); })
       .catch(err => { clearTimeout(id); reject(err); });
   });
 }
 
-function isTimeoutError(e) {
-  const code = String(e?.code || '');
-  const msg = String(e?.message || '');
-  return code === 'TIMEOUT' || /TIMEOUT:/i.test(msg);
+async function redisGetSafe(key, ms = 1500) {
+  try {
+    return await withTimeout(redis.get(key), ms, `redis.get:${String(key).slice(0, 40)}`);
+  } catch {
+    return null;
+  }
 }
 
-async function stepAwait(stepId, label, ms, fn, meta = {}) {
-  const sid = String(stepId || '').trim() || mkStepId('step');
-  const t0 = Date.now();
-  stepLog(sid, 'BEFORE', label, meta);
+// --- P0 HANG diagnostics (Woz): step logging + per-await timeouts ---
+const P0_AWAIT_TIMEOUT_MS = Number(process.env.P0_AWAIT_TIMEOUT_MS || 8000);
+
+function p0StepLog(ctx, stepId, phase, meta = {}) {
   try {
-    const v = await withTimeout(fn, ms, `${sid}:${label}`);
-    stepLog(sid, 'AFTER', label, { dt_ms: Date.now() - t0 });
+    const cid = ctx?.state?.cid || null;
+    const payload = { phase, stepId: String(stepId || ''), cid, ...meta };
+    console.warn('[P0]', payload);
+  } catch {}
+}
+
+async function p0Await(ctx, stepId, label, fnOrPromise, ms = P0_AWAIT_TIMEOUT_MS) {
+  const timeoutMs = Math.max(1, Number(ms) || P0_AWAIT_TIMEOUT_MS);
+  const lbl = String(label || 'op');
+  p0StepLog(ctx, stepId, 'BEFORE', { label: lbl, timeoutMs });
+  try {
+    const p = (typeof fnOrPromise === 'function') ? fnOrPromise() : fnOrPromise;
+    const v = await withTimeout(p, timeoutMs, lbl);
+    p0StepLog(ctx, stepId, 'AFTER', { label: lbl });
     return v;
   } catch (e) {
-    if (isTimeoutError(e)) stepLog(sid, 'TIMEOUT', label, { dt_ms: Date.now() - t0 });
-    else stepLog(sid, 'ERROR', label, { dt_ms: Date.now() - t0, err: errInfo(e) });
+    const info = errInfo(e);
+    const isTimeout = String(info.code || '') === 'TIMEOUT' || String(info.message || '').startsWith('TIMEOUT:');
+    p0StepLog(ctx, stepId, isTimeout ? 'TIMEOUT' : 'ERROR', { label: lbl, timeoutMs, err: info });
+    try { e.stepId = stepId; e.label = lbl; } catch {}
     throw e;
   }
 }
-// --- /HANG DIAG HELPERS ---
+
+
 
 async function safeBrandAppsWrite(primaryFn, meta = {}) {
   try {
@@ -2843,38 +2844,26 @@ function parseMaybeJson(raw) {
   return null;
 }
 
-async function getBrandDirFilter(tgId, legacyUserId = null, dbg = null) {
+async function getBrandDirFilter(tgId, legacyUserId = null) {
   const id = Number(tgId || 0);
   const legacyId = Number(legacyUserId || 0);
-
-  const sid = (typeof dbg === 'string' ? dbg : (dbg && (dbg.stepId || dbg.sid || dbg.step || null))) || null;
-
-  const rget = async (key, label) => {
-    try {
-      if (sid) return await stepAwait(sid, label, 1800, () => redis.get(key), { key: String(key).slice(0, 80) });
-      return await redis.get(key);
-    } catch (e) {
-      if (sid) { try { stepLog(sid, 'WARN', `${label}.fallback`, { err: errInfo(e) }); } catch {} }
-      return null;
-    }
-  };
 
   // 1) Preferred: namespaced key
   const keyNew = brandDirFilterKey(id);
   let raw = null;
-  try { raw = await rget(keyNew, 'redis.get.bd_filter.keyNew'); } catch { raw = null; }
+  try { raw = await redisGetSafe(keyNew); } catch { raw = null; }
 
   // 2) Legacy fallbacks (older commits stored by tgId or by db userId)
   let usedLegacy = false;
   if (!raw) {
     try {
-      raw = await rget(`bd_filter:${id}`, 'redis.get.bd_filter.legacy_tg');
+      raw = await redisGetSafe(`bd_filter:${id}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
   if (!raw && legacyId) {
     try {
-      raw = await rget(`bd_filter:${legacyId}`, 'redis.get.bd_filter.legacy_user');
+      raw = await redisGetSafe(`bd_filter:${legacyId}`);
       if (raw) usedLegacy = true;
     } catch {}
   }
@@ -3099,18 +3088,11 @@ function brandDirMultiPickKb(key, page, selected) {
 
 async function renderBrandDirFilters(ctx, viewerUserId, params = {}) {
   const page = Math.max(0, Number(params.page || 0));
-  const sid = String(params.stepId || '').trim() || mkStepId(`brands_dir.u${viewerUserId}.p${page}`);
-
-  let f = {};
+  let f = null;
   try {
-    f = await stepAwait(sid, 'getBrandDirFilter', 2600, () => getBrandDirFilter(viewerUserId, params.legacyUserId, { sid }));
-  } catch (e) {
-    // Filter is optional; if redis hangs we still try to show directory with default filters.
-    if (isTimeoutError(e)) {
-      f = {};
-    } else {
-      throw e;
-    }
+    f = await withTimeout(getBrandDirFilter(viewerUserId, params.legacyUserId), 1800, 'brands.filter');
+  } catch {
+    f = {};
   }
 
   // Small helper count: makes it obvious whether "0 results" is data vs filter logic
@@ -3212,42 +3194,19 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   const PAGE_SIZE = 8;
   const offset = page * PAGE_SIZE;
 
-  // Step-logging / hang diagnostics (Woz)
-  const sid = String(params.stepId || params.sid || '').trim()
-    || mkStepId(`brands_dir.u${Number(viewerUserId) || 0}.p${page}`);
+  const stepId = `brands_home:p${page}`;
 
-  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId, sid);
+  const f = await p0Await(ctx, stepId, `${stepId}:getFilter`, () => getBrandDirFilter(viewerUserId, params.legacyUserId), 2500);
 
-  let rows = null;
-  try {
-    rows = await stepAwait(
-      sid,
-      'db.listBrandsDirectoryFiltered',
-      6500,
-      () => safeBrandProfiles(
+  const rows = await p0Await(ctx, stepId, `${stepId}:list`, () => withTimeout(
+      safeBrandProfiles(
         () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
         async () => ({ __missing_relation: true })
-      ),
-      { page, offset }
-    );
-  } catch (e) {
-    if (isTimeoutError(e)) {
-      const msg = '⚠️ Каталог брендов отвечает слишком долго. Попробуй ещё раз.';
-      try {
-        await stepAwait(sid, 'tg.timeout_fallback', 5000, () => safeEditOrReply(ctx, msg, { reply_markup: navKb(`a:brands_home|p:${page}`) }));
-      } catch {}
-      return;
-    }
-    throw e;
-  }
+      ), 4500, 'brands.list'), 4500);
   if (rows && rows.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
-    try {
-      if (edit && ctx.callbackQuery?.message) await stepAwait(sid, 'tg.missing_relation.edit', 6000, () => safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') }));
-      else await stepAwait(sid, 'tg.missing_relation.reply', 6000, () => ctx.reply(msg, { reply_markup: navKb('a:menu') }));
-    } catch {
-      try { await ctx.reply(msg, { reply_markup: navKb('a:menu') }); } catch {}
-    }
+    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
+    else await ctx.reply(msg, { reply_markup: navKb('a:menu') });
     return;
   }
 
@@ -3291,17 +3250,8 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   kb.text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb };
-  try {
-    if (edit && ctx.callbackQuery?.message) await stepAwait(sid, 'tg.render.edit', 8000, () => safeEditOrReply(ctx, text, extra));
-    else await stepAwait(sid, 'tg.render.reply', 8000, () => ctx.reply(text, extra));
-  } catch (e) {
-    if (isTimeoutError(e)) {
-      // Telegram sometimes spikes; avoid infinite spinner.
-      try { await ctx.reply(text, extra); } catch {}
-      return;
-    }
-    throw e;
-  }
+  if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, extra);
+  else await ctx.reply(text, extra);
 }
 
 async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
@@ -3503,7 +3453,7 @@ function bxOfferTagsKb(wsId, meta, opts = {}) {
     .text(`🎯 Цели: ${goalsLabel}`, `a:bx_otpick|ws:${wsId}|k:goals`)
     .text(`📎 Требования: ${reqLabel}`, `a:bx_otpick|ws:${wsId}|k:req`)
     .row()
-    .text('➡️ Дальше', `a:bx_otnext|ws:${wsId}`)
+    .text('➡️ Далее', `a:bx_otnext|ws:${wsId}`)
     .text('⏭ Пропустить', `a:bx_otskip|ws:${wsId}`)
     .row();
 
@@ -3605,12 +3555,11 @@ async function renderBxOfferTextStep(ctx, wsId) {
 • Либо добавь @username прямо в тексте (например: <code>Контакт: @myname</code>).
 
 Пример:
-<code>${escapeHtml(example)}</code>
-
-👇 Теперь просто отправь сообщение в чат.
-После отправки я опубликую оффер и покажу кнопки дальше.`;
+<code>${escapeHtml(example)}</code>`;
 
   const kb = new InlineKeyboard()
+    .text('✅ Опубликовать', `a:bx_publish_hint|ws:${wsId}`)
+    .row()
     .text('⬅️ Назад', `a:bx_ottags|ws:${wsId}`)
     .row()
     .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
@@ -4812,7 +4761,7 @@ function wsProfileKb(wsId, ws) {
     .text('✏️ Гео', `a:ws_prof_edit|ws:${wsId}|f:geo`)
     .text('📝 Описание', `a:ws_prof_edit|ws:${wsId}|f:about`)
     .row()
-    .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:new|p:0`)
+    .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
     .text('🔗 Поделиться', `a:ws_share|ws:${wsId}`)
     .row()
     .text('🧩 Режим', `a:ws_prof_mode|ws:${wsId}`)
@@ -5495,7 +5444,7 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
 
 
 async function renderWsPublicProfile(ctx, wsId, opts = {}) {
-  const ws = await db.getWorkspaceAny(wsId);
+  const ws = await withTimeout(db.getWorkspaceAny(wsId), 4500, 'ws.get');
   if (!ws) return ctx.reply('Профиль не найден.');
 
   const viewer = ctx?.from ? await db.upsertUser(ctx.from.id, ctx.from.username ?? null) : null;
@@ -5785,71 +5734,17 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 }
 
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
-  const sid = String(back?.stepId || back?.sid || '').trim() || mkStepId(`lead_view.id${Number(leadId) || 0}`);
-
-  const wsBackId = Number(back?.wsId || 0);
-  const stBack = String(back?.status || 'new');
-  const pageBack = Number(back?.page || 0);
-  const retKeyBack = String(back?.ret || '').trim();
-  const retPartBack = retKeyBack ? `|ret:${retKeyBack}` : '';
-  const backCb0 = wsBackId ? `a:ws_leads|ws:${wsBackId}|s:${stBack}|p:${pageBack}${retPartBack}` : 'a:menu';
-
-  let lead = null;
-  try {
-    lead = await stepAwait(sid, 'db.getBrandLeadById', 4500, () => db.getBrandLeadById(leadId), { leadId: Number(leadId) || 0 });
-  } catch (e) {
-    if (isTimeoutError(e)) {
-      try {
-        await stepAwait(sid, 'tg.timeout.lead', 6000, () => safeEditOrReply(ctx, '⚠️ Карточка заявки загружается слишком долго. Попробуй ещё раз.', { reply_markup: navKb(backCb0) }));
-      } catch {}
-      return;
-    }
-    throw e;
-  }
-
-  if (!lead) {
-    try {
-      await stepAwait(sid, 'tg.lead.not_found', 6000, () => safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }));
-    } catch {
-      try { await ctx.reply('⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') }); } catch {}
-    }
-    return;
-  }
+  const stepId = `lead_view:${Number(leadId || 0)}`;
+  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(leadId), 4500);
+  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
-
-  let ws = null;
-  try {
-    ws = await stepAwait(sid, 'db.getWorkspaceAny', 4500, () => db.getWorkspaceAny(wsId), { wsId });
-  } catch (e) {
-    if (isTimeoutError(e)) {
-      try {
-        await stepAwait(sid, 'tg.timeout.ws', 6000, () => safeEditOrReply(ctx, '⚠️ Канал загружается слишком долго. Попробуй ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }));
-      } catch {}
-      return;
-    }
-    throw e;
-  }
-
-  if (!ws) {
-    try {
-      await stepAwait(sid, 'tg.ws.not_found', 6000, () => safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }));
-    } catch {
-      try { await ctx.reply('⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { reply_markup: navKb('a:ws_list') }); } catch {}
-    }
-    return;
-  }
+  const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 4500);
+  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) {
-    try {
-      await stepAwait(sid, 'tg.no_access', 6000, () => safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }));
-    } catch {
-      try { await ctx.reply('⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { reply_markup: navKb('a:ws_list') }); } catch {}
-    }
-    return;
-  }
+  if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
@@ -5869,6 +5764,8 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     text += `\n\n<b>Ответ:</b>\n${escapeHtml(String(lead.reply_text))}`;
   }
 
+  const st = normLeadStatus(lead.status);
+
   const retKey = String(back?.ret || '').trim();
   const retPart = retKey ? `|ret:${retKey}` : '';
 
@@ -5883,16 +5780,12 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     .row();
   kbNavRow(kb, `a:ws_leads|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`);
 
+
+  const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
-    await stepAwait(sid, 'tg.render.lead_view', 9000, () => safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }));
-  } catch (e) {
-    if (isTimeoutError(e)) {
-      try { await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); } catch {}
-      return;
-    }
-    try {
-      await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-    } catch {}
+    await p0Await(ctx, stepId, `${stepId}:sendEdit`, () => safeEditOrReply(ctx, text, extra), 4500);
+  } catch {
+    await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 4500);
   }
 }
 
@@ -11924,7 +11817,7 @@ if (exp.type === 'brand_deals_search') {
       const kb = new InlineKeyboard()
         .text('📁 Прикрепить папку каналов', `a:bx_partner_folder_pick|ws:${wsId}|o:${offer.id}`)
         .row()
-        .text('👀 Посмотреть', `a:bx_view|ws:${wsId}|o:${offer.id}|back:my`)
+        .text('⏭ Пропустить', `a:bx_view|ws:${wsId}|o:${offer.id}|back:my`)
         .row()
         .text('📋 Меню бартер-биржи', `a:bx_open|ws:${wsId}`);
 
@@ -13572,15 +13465,21 @@ if (p.a === 'a:support_write') {
 
 // Brand Directory (Creator)
 if (p.a === 'a:brands_home') {
-  try { await ctx.answerCallbackQuery(); } catch {}
+      try { await ctx.answerCallbackQuery(); } catch {}
   const page = Math.max(0, Number(p.p || 0));
-  const sid = mkStepId(`brands_home.u${ctx.from?.id || 0}.p${page}`);
-
+  await safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') });
   try {
-    await stepAwait(sid, 'tg.open.loading', 5000, () => safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') }), { page });
-  } catch {}
+    await withTimeout(renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id }), 12000, 'brands.home');
+  } catch (e) {
+    const cid = ctx.state?.cid || null;
+    const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
+    try { console.warn('[brands_home] timeout/error', { cid, page, label, err: errInfo(e) }); } catch {}
+    await safeEditOrReply(ctx, `⚠️ Каталог брендов отвечает слишком долго.
 
-  await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: (u && u.id) ? u.id : null, stepId: sid });
+step: ${label}
+
+cid: ${cid || '—'}`, { reply_markup: navKb(`a:brands_home|p:${page}`) });
+  }
   return;
 }
 
@@ -14334,7 +14233,19 @@ if (p.a === 'a:wsp_preview') {
       return;
     }
 
-    if (p.a === 'a:wsp_lead_new') {
+    
+// Alias for legacy payloads: "send request to creator" from old vitrina buttons
+if (p.a === 'a:send_request_to_creator') {
+  const wsId = Number(p.ws || p.w || p.wsId || 0);
+  if (!wsId) {
+    try { await ctx.answerCallbackQuery({ text: 'Кнопка устарела. Открой витрину заново.', show_alert: true }); } catch {}
+    return;
+  }
+  // fall-through: reuse a:wsp_lead_new logic
+  try { p.a = 'a:wsp_lead_new'; p.ws = wsId; } catch {}
+}
+
+if (p.a === 'a:wsp_lead_new') {
       const wsId = Number(p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
@@ -14716,13 +14627,19 @@ if (p.a === 'a:ws_leads') {
       const retKey = String(p.ret || '').trim();
       const retPart = retKey ? `|ret:${retKey}` : '';
       const backCb = wsId ? `a:ws_leads|ws:${wsId}|s:${st}|p:${page}${retPart}` : 'a:menu';
-      const sid = mkStepId(`lead_view.id${leadId}.ws${wsId || 0}`);
-
+      await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
       try {
-        await stepAwait(sid, 'tg.open.loading', 5000, () => safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) }), { leadId, wsId, st, page });
-      } catch {}
+        await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 15000, 'lead.view');
+      } catch (e) {
+        const cid = ctx.state?.cid || null;
+        const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
+        try { console.warn('[lead_view] timeout/error', { cid, leadId, wsId, label, err: errInfo(e) }); } catch {}
+        await safeEditOrReply(ctx, `⚠️ Карточка заявки загружается слишком долго.
 
-      await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey, stepId: sid });
+step: ${label}
+
+cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
+      }
       return;
     }
 
@@ -17777,6 +17694,18 @@ if (p.a === 'a:bx_cat') {
       await renderBxOfferTextStep(ctx, wsId);
       return;
     }
+
+
+if (p.a === 'a:bx_publish_hint') {
+  const wsId = Number(p.ws);
+  const ws = await db.getWorkspace(u.id, wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  try { await ctx.answerCallbackQuery({ text: 'Отправь текст оффера сообщением — я опубликую автоматически.', show_alert: true }); } catch {}
+
+  await renderBxOfferTextStep(ctx, wsId);
+  return;
+}
 
     if (p.a === 'a:bx_otskip') {
       const wsId = Number(p.ws);
