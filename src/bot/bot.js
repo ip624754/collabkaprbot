@@ -246,8 +246,9 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
     //   row1: Pay
     //   row2: Back/Menu (regular callback buttons)
     const navRow = [];
-    if (backCb) navRow.push({ text: '⬅️ Назад', callback_data: backCb });
+    if (backCb && backCb !== 'a:menu' && backCb !== 'a:home') navRow.push({ text: '⬅️ Назад', callback_data: backCb });
     navRow.push({ text: '📋 Меню', callback_data: 'a:menu' });
+    navRow.push({ text: '🏠 Home', callback_data: 'a:home' });
 
     const invoiceMarkup = {
       inline_keyboard: [
@@ -1163,17 +1164,20 @@ function onboardingKb(flags = {}) {
 }
 
 function navKb(backCb) {
+  // Unified HUB footer: Back (return-to) + Menu (role hub) + Home (home hub)
   const kb = new InlineKeyboard();
-  if (backCb && backCb !== 'a:menu') kb.text('⬅️ Назад', backCb);
+  if (backCb && backCb !== 'a:menu' && backCb !== 'a:home') kb.text('⬅️ Назад', backCb);
   kb.text('📋 Меню', 'a:menu');
+  kb.text('🏠 Home', 'a:home');
   return kb;
 }
 
 function kbNavRow(kb, backCb) {
-  // Adds a unified navigation row to an existing keyboard (Back -> context, Menu -> role hub)
+  // Adds a unified HUB footer row to an existing keyboard (Back -> return-to, Menu -> role hub, Home -> home hub)
   kb.row();
-  if (backCb && backCb !== 'a:menu') kb.text('⬅️ Назад', backCb);
+  if (backCb && backCb !== 'a:menu' && backCb !== 'a:home') kb.text('⬅️ Назад', backCb);
   kb.text('📋 Меню', 'a:menu');
+  kb.text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -1642,7 +1646,7 @@ function wsMenuKb(wsId, opts = {}) {
 
   if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
 
-  kb.row().text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
+  kb.row().text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -1658,7 +1662,7 @@ function wsSettingsKb(wsId, s) {
     .row()
     .text('👥 Управление кураторами', `a:cur_manage|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
+    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 }
 
 function curManageKb(wsId, ws = null) {
@@ -1676,7 +1680,7 @@ function curManageKb(wsId, ws = null) {
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row()
     .text('⬅️ Назад', `a:ws_settings|ws:${wsId}`)
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 }
 
 async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
@@ -1920,7 +1924,7 @@ function brandManagersListKb(managers) {
     const label = m.tg_username ? `@${m.tg_username}` : `id:${m.tg_id}`;
     kb.text(`🗑 ${label}`, `a:bm_rm_q|ws:0|u:${m.user_id}`).row();
   }
-  kb.text('⬅️ Назад', 'a:brand_team|ws:0').text('📋 Меню', 'a:menu');
+  kb.text('⬅️ Назад', 'a:brand_team|ws:0').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -1965,7 +1969,7 @@ function curListKb(wsId, curators) {
     const label = c.tg_username ? `@${c.tg_username}` : `id:${c.tg_id}`;
     kb.text(`🗑 ${label}`, `a:cur_rm_q|ws:${wsId}|u:${c.user_id}`).row();
   }
-  kb.text('⬅️ Назад', `a:cur_manage|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.text('⬅️ Назад', `a:cur_manage|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -2450,9 +2454,9 @@ function brandFieldPrompt(field) {
 function brandFieldPromptKb(params = {}) {
   const suf = brandCbSuffix(params);
   const from = String(params.from || '');
-  if (from === 'more') return new InlineKeyboard().text('⬅️ Назад', `a:brand_profile_more${suf}`).text('📋 Меню', 'a:menu');
+  if (from === 'more') return new InlineKeyboard().text('⬅️ Назад', `a:brand_profile_more${suf}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   // default: back to edit view of base profile
-  return new InlineKeyboard().text('⬅️ Назад', `a:brand_profile_edit${suf}`).text('📋 Меню', 'a:menu');
+  return new InlineKeyboard().text('⬅️ Назад', `a:brand_profile_edit${suf}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 }
 
 async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
@@ -2531,7 +2535,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
       .text('✅ Готово', `a:brand_profile${suf}`)
       .row()
       .text('⬅️ Назад', brandBackCb({ wsId, ret, backOfferId: bo, backPage: bp }))
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
     const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
     if (ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, extra);
@@ -3474,7 +3478,7 @@ function bxNeedNetworkKb(wsId) {
   return new InlineKeyboard()
     .text('🌐 Сеть: ❌ ВЫКЛ', `a:net_q|ws:${wsId}|ret:bx`)
     .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
+    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 }
 
 
@@ -3544,7 +3548,7 @@ function bxPresetKb(wsId) {
     .row()
     .text(BX_PRESETS[2].title, `a:bx_preset_apply|ws:${wsId}|id:${BX_PRESETS[2].id}`)
     .row()
-    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`).text('📋 Меню', 'a:menu');
+    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   }
 
 function bxTypeKb(wsId) {
@@ -3557,7 +3561,7 @@ function bxTypeKb(wsId) {
     .row()
     .text('✍️ Другое', `a:bx_type|ws:${wsId}|t:other`)
     .row()
-    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`).text('📋 Меню', 'a:menu');
+    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 }
 
 function bxCompKb(wsId) {
@@ -3570,7 +3574,7 @@ function bxCompKb(wsId) {
     .row()
     .text('🔁 Смешано', `a:bx_comp|ws:${wsId}|p:mixed`)
     .row()
-    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`).text('📋 Меню', 'a:menu');
+    .text('⬅️ Назад', `a:bx_new|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 }
 
 function bxOfferTagsKb(wsId, meta, opts = {}) {
@@ -3691,7 +3695,7 @@ async function renderBxOfferTextStep(ctx, wsId) {
     .row()
     .text('⬅️ Назад', `a:bx_ottags|ws:${wsId}`)
     .row()
-    .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
+    .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -4922,7 +4926,7 @@ function wsProfileKb(wsId, ws) {
     .text('🧩 Режим', `a:ws_prof_mode|ws:${wsId}`)
     .text('📌 IG шаблоны', `a:ws_ig_templates|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
+    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   return kb;
 }
@@ -5455,7 +5459,7 @@ async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', varia
     .row()
     .text('📤 Ещё вариант', `a:ws_ig_dm|ws:${wsId}|tone:${toneNorm}|i:${i + 1}`)
     .row()
-    .text('⬅️ Назад', `a:ws_ig_templates|ws:${wsId}`).text('📋 Меню', 'a:menu');
+    .text('⬅️ Назад', `a:ws_ig_templates|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -5796,7 +5800,7 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
 
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', `a:wsp_open|ws:${wsId}`)
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -6506,7 +6510,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
 
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   const text =
     `✍️ <b>Ответ креатору</b>
@@ -6601,7 +6605,7 @@ async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage:
     .text('⏱ Сроки', `a:brand_deal_tpl|id:${app.id}|k:timing|b:${back.stage}|p:${back.page}`)
     .row()
     .text('⬅️ Назад', backCb)
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -6779,7 +6783,7 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
     const kb = new InlineKeyboard();
     kbTplList(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`);
     kb.text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
     try {
       await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -6868,7 +6872,7 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
     kb.text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .row()
       .text('⬅️ Назад', `a:lead_view|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
     try {
       await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -6914,7 +6918,7 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
     .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
     .row()
     .text('⬅️ Назад', `a:lead_view|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   try {
     await safeEditOrReply(ctx, outText, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -6992,7 +6996,7 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
     const botLink = CFG.BOT_USERNAME ? `https://t.me/${CFG.BOT_USERNAME}` : null;
     const kb = new InlineKeyboard()
       .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     if (botLink) kb.row().url('🔗 Ссылка креатору (/start)', botLink);
 
     const errMsg =
@@ -7055,7 +7059,7 @@ ${escapeHtml(replyText)}`;
       await ctx.reply('✅ Отправлено.', {
         reply_markup: new InlineKeyboard()
           .text('⬅️ Назад', `a:brand_app_view|id:${appId}|s:${back.status}|p:${back.page}`)
-          .text('📋 Меню', 'a:menu')
+          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
       });
     } catch {}
   }
@@ -8806,7 +8810,7 @@ async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
     .text(`⚙️ По умолчанию (${defaultDays}д)`, `a:off_req|ws:${wsId}|o:${offerId}|days:${defaultDays}|p:${page}`)
     .row()
     .text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`)
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   if (ctx.callbackQuery) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -11445,7 +11449,7 @@ ${escapeHtml(reply)}`;
       const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:new|p:0`);
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', backCb)
-        .text('📋 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
       if (delivered) {
         return ctx.reply('✅ Ответ доставлен креатору.', { reply_markup: kb });
@@ -11462,7 +11466,7 @@ ${escapeHtml(reply)}`;
         .text('🔁 Повторить', `a:brand_app_reply|id:${appId}|s:${backStatus}|p:${backPage}`)
         .row()
         .text('⬅️ Назад', backCb)
-        .text('📋 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
       const failText =
         `⚠️ <b>Ответ сохранён</b>, но не доставлен креатору.
@@ -11696,7 +11700,7 @@ if (exp.type === 'brand_deals_search') {
             {
             const kb = new InlineKeyboard()
               .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`)
-              .text('📋 Меню', 'a:menu');
+              .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
             await ctx.reply('⚠️ Пришли @handle или ссылку на профиль вида instagram.com/handle.\n\nЧтобы очистить поле — отправь “-”.', { reply_markup: kb });
           }
             await setExpectText(ctx.from.id, exp);
@@ -11723,7 +11727,7 @@ if (exp.type === 'brand_deals_search') {
             {
             const kb = new InlineKeyboard()
               .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`)
-              .text('📋 Меню', 'a:menu');
+              .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
             await ctx.reply('⚠️ Пришли 1–3 ссылки (https://...). Можно в одном сообщении или по строкам.\n\nЧтобы очистить поле — отправь “-”.', { reply_markup: kb });
           }
             await setExpectText(ctx.from.id, exp);
@@ -13831,7 +13835,7 @@ if (p.a === 'a:brand_apply') {
 
     const kbGate = new InlineKeyboard()
       .text('⬅️ Назад', backCb)
-      .text('📋 Меню', 'a:menu')
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
       .row();
 
     if (hasAnyWs) kbGate.text('📣 Мои каналы', 'a:ws_list');
@@ -13854,7 +13858,7 @@ if (p.a === 'a:brand_apply') {
       .text('⬅️ Назад', backCb)
       .text('📣 Мои каналы', 'a:ws_list')
       .row()
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
     await safeEditOrReply(ctx, '⚠️ Выбери активный канал (витрину) в «📣 Мои каналы» и повтори.', { reply_markup: kbGate });
     return;
@@ -13873,7 +13877,7 @@ if (p.a === 'a:brand_apply') {
 
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   // Быстрый вход в контакт (если не заполнен) — повышает шанс ответа
   const missingContact = !String(activeWs?.profile_contact || '').trim() && !String(ctx.from.username || '').trim();
@@ -14761,7 +14765,7 @@ if (p.a === 'a:brand_app_set') {
     const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
     const kb = new InlineKeyboard()
       .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
     return;
   }
@@ -14779,7 +14783,7 @@ if (p.a === 'a:brand_app_set') {
     const text = '✅ Статус обновлён. (Экран не удалось перерисовать — попробуй открыть заявку заново.)';
     const kb = new InlineKeyboard()
       .text('⬅️ Назад', 'a:brand_apps|ws:0|s:' + back.status + '|p:' + back.page)
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
   }
   return;
@@ -14807,7 +14811,7 @@ if (p.a === 'a:brand_app_tpls') {
     const text = '⚠️ Не удалось открыть шаблоны. Попробуй ещё раз или открой заявку заново.';
     const kb = new InlineKeyboard()
       .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
   }
   return;
@@ -14829,7 +14833,7 @@ if (p.a === 'a:brand_app_tpl') {
       .text('✍️ Ответить', 'a:brand_app_reply|id:' + appId + '|s:' + back.status + '|p:' + back.page)
       .row()
       .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
   }
   return;
@@ -14850,7 +14854,7 @@ if (p.a === 'a:brand_app_tpl_send') {
       .text('✍️ Ответить', 'a:brand_app_reply|id:' + appId + '|s:' + back.status + '|p:' + back.page)
       .row()
       .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
   }
   return;
@@ -14868,7 +14872,7 @@ if (p.a === 'a:brand_app_accept') {
     const text = '⚠️ Не удалось выполнить действие. Попробуй ещё раз или открой заявку заново.';
     const kb = new InlineKeyboard()
       .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
-      .text('📋 Меню', 'a:menu');
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
   }
   return;
@@ -14956,7 +14960,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
         const text = '⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз или используй «✍️ Ответить». ';
         const kb = new InlineKeyboard()
           .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${(Number(p.ws || 0) || 0)}|s:${leadStatusToCb(String(p.s || 'new'))}|p:${Number(p.p || 0)}${(String(p.ret || '').trim() ? retPartShort(String(p.ret || '').trim()) : '')}`)
-          .text('📋 Меню', 'a:menu');
+          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
       return;
@@ -14977,7 +14981,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
         const text = '⚠️ Не удалось отправить шаблон. Попробуй ещё раз или используй «✍️ Ответить». ';
         const kb = new InlineKeyboard()
           .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${(Number(p.ws || 0) || 0)}|s:${leadStatusToCb(String(p.s || 'new'))}|p:${Number(p.p || 0)}${(String(p.ret || '').trim() ? retPartShort(String(p.ret || '').trim()) : '')}`)
-          .text('📋 Меню', 'a:menu');
+          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
       return;
@@ -14996,7 +15000,7 @@ if (p.a === 'a:lead_set') {
         const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
         const kb = new InlineKeyboard()
           .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${(Number(p.ws || 0) || 0)}|s:${leadStatusToCb(String(p.s || 'new'))}|p:${Number(p.p || 0)}${(String(p.ret || '').trim() ? retPartShort(String(p.ret || '').trim()) : '')}`)
-          .text('📋 Меню', 'a:menu');
+          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
         return;
       }
@@ -15007,7 +15011,7 @@ if (p.a === 'a:lead_set') {
         const text = '✅ Статус обновлён. (Экран не удалось перерисовать — открой заявку заново.)';
         const kb = new InlineKeyboard()
           .text('⬅️ Назад', `a:ws_leads|w:${(Number(p.ws || 0) || 0)}|s:${leadStatusToCb(String(p.s || st))}|p:${Number(p.p || 0)}${(String(p.ret || '').trim() ? retPartShort(String(p.ret || '').trim()) : '')}`)
-          .text('📋 Меню', 'a:menu');
+          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
       return;
@@ -17098,7 +17102,7 @@ if (p.a === 'a:match_home') {
           reply_markup: new InlineKeyboard()
             .text('⬅️ Назад', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${Number(p.p || 0)}`)
             .row()
-            .text('📋 Меню', 'a:menu')
+            .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         }
       );
       return;
@@ -18268,7 +18272,7 @@ if (p.a === 'a:bx_publish_hint') {
       await safeEditOrReply(ctx, '➕ Введи @username куратора (он должен уже запускать бота /start).', {
         reply_markup: new InlineKeyboard()
           .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
-          .text('📋 Меню', 'a:menu')
+          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
       });
       await setExpectText(ctx.from.id, { type: 'curator_username', wsId });
       return;
@@ -18856,7 +18860,7 @@ ${list}
         .row()
         .text('⬅️ Назад', `a:gw_open|i:${gwId}`)
         .row()
-        .text('📋 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
       await safeEditOrReply(ctx, 
         `🗑 <b>Удалить конкурс #${gwId}?</b>
@@ -19606,7 +19610,7 @@ ${actionHint}`;
 async function renderVerifyInfo(ctx) {
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', 'a:verify_home')
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   const text = `✅ <b>Верификация</b>
 
