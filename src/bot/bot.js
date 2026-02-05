@@ -467,6 +467,38 @@ async function redisGetSafe(key, ms = 1500) {
   }
 }
 
+async function redisSetSafe(key, value, opts = undefined, ms = 1500) {
+  try {
+    const p = (opts === undefined) ? redis.set(key, value) : redis.set(key, value, opts);
+    return await withTimeout(p, ms, `redis.set:${String(key).slice(0, 40)}`);
+  } catch {
+    return null;
+  }
+}
+
+// HOME HUB onboarding hint (text banner): show no more than once per N hours per user.
+function homeHubHintKey(uid) {
+  return k(['ui_hint', 'home_hub', Number(uid || 0)]);
+}
+
+function homeHubHintTtlSec() {
+  const hours = Number(process.env.HOME_HUB_HINT_HOURS || 24);
+  const h = (Number.isFinite(hours) && hours > 0) ? hours : 24;
+  return Math.trunc(h * 3600);
+}
+
+async function shouldShowHomeHubHint(uid) {
+  const key = homeHubHintKey(uid);
+  const seen = await redisGetSafe(key, 1500);
+  return !seen;
+}
+
+async function markHomeHubHintSeen(uid) {
+  const key = homeHubHintKey(uid);
+  const ttlSec = homeHubHintTtlSec();
+  await redisSetSafe(key, '1', { ex: ttlSec }, 1500);
+}
+
 // --- P0 HANG diagnostics (Woz): step logging + per-await timeouts ---
 const P0_AWAIT_TIMEOUT_MS = Number(process.env.P0_AWAIT_TIMEOUT_MS || 8000);
 
@@ -963,6 +995,14 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   const edit = opts.edit !== false;
   const tgId = Number(ctx?.from?.id || 0);
 
+  const noHint = opts?.noHint === true;
+  let showHint = false;
+  try {
+    if (!noHint && tgId) showHint = await shouldShowHomeHubHint(tgId);
+  } catch {
+    showHint = false;
+  }
+
   const uiMode = await resolveUiMode(tgId);
   const bmMode = await getBrandManagerMode(tgId);
   const curMode = (flags?.isCurator ? await getCuratorMode(tgId) : false);
@@ -1007,10 +1047,20 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   if (curMode) hint += `
 • Curator Mode: <b>ON</b>`;
 
+  const bannerText = showHint
+    ? `
+<b>Быстрый старт</b>
+• ✨ Creator: подключи канал → витрина → заявки
+• 🏷 Brand: каталог → выбери креатора → «Оставить заявку» → напиши сообщение ниже
+• Навигация: ⬅️ Назад / 📋 Меню / 🏠 Home
+`
+    : '';
+
   const textMsg =
     `🏠 <b>HOME HUB</b>
 
 ` +
+    bannerText +
     `Выбери режим работы.
 
 ` +
@@ -1039,14 +1089,18 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   kb
     .row()
     .text('📋 Меню', 'a:menu')
-    .text('🧭 Быстрый старт', 'a:guide')
-    .row()
-    .text('💬 Поддержка', 'a:support');
+    .text('🧭 Быстрый старт', 'a:guide');
 
-  if (edit) {
-    await safeEditOrReply(ctx, textMsg, { parse_mode: 'HTML', reply_markup: kb });
-  } else {
-    await ctx.reply(textMsg, { parse_mode: 'HTML', reply_markup: kb });
+  if (showHint) kb.row().text('✅ Понятно', 'a:home_hint_ack');
+
+  kb.row().text('💬 Поддержка', 'a:support');
+
+  if (edit) await safeEditOrReply(ctx, textMsg, { parse_mode: 'HTML', reply_markup: kb });
+  else await ctx.reply(textMsg, { parse_mode: 'HTML', reply_markup: kb });
+
+  // Mark hint as shown (cooldown-based) after successful render.
+  if (showHint && tgId) {
+    try { await markHomeHubHintSeen(tgId); } catch {}
   }
 }
 
@@ -14096,6 +14150,14 @@ if (p.a === 'a:menu') {
       await ctx.answerCallbackQuery();
       const flags2 = await getRoleFlags(u, ctx.from.id);
       await renderHomeHub(ctx, u, flags2, { edit: true });
+      return;
+    }
+
+    if (p.a === 'a:home_hint_ack') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      try { await markHomeHubHintSeen(ctx.from.id); } catch {}
+      const flags2 = await getRoleFlags(u, ctx.from.id);
+      await renderHomeHub(ctx, u, flags2, { edit: true, noHint: true });
       return;
     }
 
