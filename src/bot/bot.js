@@ -466,14 +466,6 @@ async function redisGetSafe(key, ms = 1500) {
   }
 }
 
-async function redisSetSafe(key, value, opts = {}, ms = 1500) {
-  try {
-    return await withTimeout(redis.set(key, value, opts), ms, `redis.set:${String(key).slice(0, 40)}`);
-  } catch {
-    return null;
-  }
-}
-
 // --- P0 HANG diagnostics (Woz): step logging + per-await timeouts ---
 const P0_AWAIT_TIMEOUT_MS = Number(process.env.P0_AWAIT_TIMEOUT_MS || 8000);
 
@@ -1116,23 +1108,6 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
 
 
 
-
-
-async function safeEditOrReplyTimed(ctx, text, extra = {}, preferEdit = true, ms = 5000, label = 'tg.safeEditOrReply') {
-  try {
-    return await withTimeout(safeEditOrReply(ctx, text, extra, preferEdit), ms, label);
-  } catch (e) {
-    try {
-      console.warn('[tg_safeEditOrReplyTimed] failed', { label, err: errInfo(e) });
-    } catch {}
-    try {
-      return await withTimeout(ctx.reply(text, extra), ms, label + ':reply');
-    } catch (_) {
-      // Best-effort: avoid silent UX failures in P0 screens
-      return null;
-    }
-  }
-}
 
 async function safeDeleteIncomingUserMessage(ctx) {
   // Best-effort: remove the incoming user message after we consumed it
@@ -2924,7 +2899,7 @@ async function getBrandDirFilter(tgId, legacyUserId = null) {
 
   // Migrate legacy payload to namespaced key (best-effort)
   if (usedLegacy) {
-    try { await redisSetSafe(keyNew, f, { ex: BD_FILTER_TTL_SEC }); } catch {}
+    try { await redis.set(keyNew, f, { ex: BD_FILTER_TTL_SEC }); } catch {}
   }
 
   return f;
@@ -2939,12 +2914,12 @@ async function setBrandDirFilter(tgId, filter, legacyUserId = null) {
   const keyNew = brandDirFilterKey(id);
 
   // Preferred
-  await redisSetSafe(keyNew, payload, { ex: BD_FILTER_TTL_SEC });
+  await redis.set(keyNew, payload, { ex: BD_FILTER_TTL_SEC });
 
   // Back-compat: also write legacy raw keys (stringified JSON)
-  try { await redisSetSafe(`bd_filter:${id}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
+  try { await redis.set(`bd_filter:${id}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
   if (legacyId) {
-    try { await redisSetSafe(`bd_filter:${legacyId}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
+    try { await redis.set(`bd_filter:${legacyId}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
   }
 }
 
@@ -3221,60 +3196,13 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
 
   const stepId = `brands_home:p${page}`;
 
-  const defaultFilter = {
-    category: null,
-    offerType: null,
-    compensationType: null,
-    budgetBucket: null,
-    goalsTags: [],
-    reqTags: [],
-  };
+  const f = await p0Await(ctx, stepId, `${stepId}:getFilter`, () => getBrandDirFilter(viewerUserId, params.legacyUserId), 2500);
 
-  let f = defaultFilter;
-  try {
-    // getBrandDirFilter used to hang on redis.set migration; now writes are safe + timed.
-    f = await p0Await(ctx, stepId, `${stepId}:getFilter`, () => getBrandDirFilter(viewerUserId, params.legacyUserId), 1200);
-    if (!f) f = defaultFilter;
-  } catch (e) {
-    try { console.warn('[brands_dir] getFilter failed, using defaults', { cid: ctx.state?.cid || null, stepId, err: errInfo(e) }); } catch {}
-    f = defaultFilter;
-  }
-
-  let rows = null;
-  try {
-    rows = await p0Await(
-      ctx,
-      stepId,
-      `${stepId}:list`,
-      () => withTimeout(
-        safeBrandProfiles(
-          () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
-          async () => ({ __missing_relation: true })
-        ),
-        3500,
-        'brands.list'
-      ),
-      3500
-    );
-  } catch (e) {
-    const cid = ctx.state?.cid || null;
-    const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
-    try { console.warn('[brands_dir] list failed', { cid, stepId, label, err: errInfo(e) }); } catch {}
-    await safeEditOrReplyTimed(
-      ctx,
-      `⚠️ Каталог брендов временно недоступен.
-
-step: ${label}
-
-cid: ${cid || '—'}`,
-      { reply_markup: navKb('a:menu') },
-      true,
-      4500,
-      'brands_dir.list_fallback'
-    );
-    return;
-  }
-
+  const rows = await p0Await(ctx, stepId, `${stepId}:list`, () => withTimeout(
+      safeBrandProfiles(
+        () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
+        async () => ({ __missing_relation: true })
+      ), 4500, 'brands.list'), 4500);
   if (rows && rows.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
     if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
@@ -5516,7 +5444,7 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
 
 
 async function renderWsPublicProfile(ctx, wsId, opts = {}) {
-  const ws = await withTimeout(db.getWorkspaceAny(wsId), 2500, 'ws.get');
+  const ws = await withTimeout(db.getWorkspaceAny(wsId), 4500, 'ws.get');
   if (!ws) return ctx.reply('Профиль не найден.');
 
   const viewer = ctx?.from ? await db.upsertUser(ctx.from.id, ctx.from.username ?? null) : null;
@@ -5807,11 +5735,11 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
   const stepId = `lead_view:${Number(leadId || 0)}`;
-  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(leadId), 2500);
+  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(leadId), 4500);
   if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
-  const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 2500);
+  const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 4500);
   if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
@@ -5823,23 +5751,20 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
   const when = lead.created_at ? fmtTs(lead.created_at) : '—';
 
   const link = wsBrandLink(wsId);
-  const st = normLeadStatus(lead.status);
-  const stTitle = (LEAD_STATUSES[st] || LEAD_STATUSES.new).title;
-  const isSelfTest = Number(lead.brand_tg_id || 0) === Number(ctx.from?.id || 0);
 
   let text =
     `✉️ <b>Заявка #${lead.id}</b> ${leadStatusIcon(lead.status)}\n\n` +
     `Канал: <b>${escapeHtml(channel)}</b>\n` +
     (link ? `Витрина: <a href="${escapeHtml(link)}">${escapeHtml(link)}</a>\n` : '') +
-    `Статус: <b>${escapeHtml(stTitle)}</b>${isSelfTest ? ' <i>(self-test)</i>' : ''}\n` +
     `От: <b>${escapeHtml(who)}</b>\n` +
-    `Когда: <b>${escapeHtml(when)}</b>\n` +
-    (isSelfTest ? `\n⚠️ <i>Self-test: заявка отправлена с этого же аккаунта (сам себе). Поведение может отличаться от реального бренда.</i>\n` : '\n') +
+    `Когда: <b>${escapeHtml(when)}</b>\n\n` +
     `<b>Текст:</b>\n${escapeHtml(String(lead.message || '—'))}`;
 
   if (lead.reply_text) {
     text += `\n\n<b>Ответ:</b>\n${escapeHtml(String(lead.reply_text))}`;
   }
+
+  const st = normLeadStatus(lead.status);
 
   const retKey = String(back?.ret || '').trim();
   const retPart = retKey ? `|ret:${retKey}` : '';
@@ -5848,19 +5773,19 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .text('⚡ Шаблоны', `a:lead_tpls|id:${lead.id}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .row()
-    .text(st === 'in_progress' ? '✅ В работе' : '💬 В работу', `a:lead_set|id:${lead.id}|st:in_progress|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
-    .text(st === 'closed' ? '✅ Закрыто' : '✅ Закрыть', `a:lead_set|id:${lead.id}|st:closed|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('💬 В работу', `a:lead_set|id:${lead.id}|st:in_progress|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:closed|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .row()
-    .text(st === 'spam' ? '✅ Спам' : '🗑 Спам', `a:lead_set|id:${lead.id}|st:spam|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
+    .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:spam|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`)
     .row();
   kbNavRow(kb, `a:ws_leads|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`);
 
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
-    await p0Await(ctx, stepId, `${stepId}:sendEdit`, () => safeEditOrReply(ctx, text, extra), 2500);
+    await p0Await(ctx, stepId, `${stepId}:sendEdit`, () => safeEditOrReply(ctx, text, extra), 4500);
   } catch {
-    await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 2500);
+    await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 4500);
   }
 }
 
@@ -7178,27 +7103,6 @@ function leadTplLabel(k) {
   return LEAD_TPL_LABELS[kk] || LEAD_TPL_LABELS.discuss;
 }
 
-// Outbound message keyboard for lead replies (brand gets a clean navigation + hide button)
-function leadReplyNotifyKb(ws, wsId) {
-  const kb = new InlineKeyboard();
-  const link = wsBrandLink(wsId);
-  if (link) kb.url('🪟 Витрина', link);
-
-  const contact = ws?.profile_contact ? String(ws.profile_contact) : null;
-  const contactUrl = wsTgUrlFromContact(contact);
-  if (contactUrl) kb.url('💬 Написать', contactUrl);
-
-  if (ws?.channel_username) {
-    const uname = String(ws.channel_username).replace(/^@/, '').trim();
-    if (uname) kb.row().url('📣 TG канал', `https://t.me/${uname}`);
-  }
-
-  // Always provide navigation + optional self-cleanup (keeps inbox tidy)
-  kb.row().text('📋 Меню', 'a:menu').text('🗑 Убрать', 'a:msg_del');
-  return kb;
-}
-
-
 async function renderLeadTemplatePreview(ctx, actorUserId, leadId, key, back) {
   return renderTemplatePreviewFlow(ctx, actorUserId, 'lead', leadId, key, back);
 }
@@ -7241,7 +7145,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     const linkLine = link ? `🔗 Витрина: <a href="${escapeHtml(link)}">${escapeHtml(shortUrl(link))}</a>` : '';
     out = `${header}\n\n${escapeHtml(String(replyText))}\n\n<b>Контакты:</b>\n${linkLine || '—'}`;
   }
-  const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: leadReplyNotifyKb(ws, wsId) });
+  const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
   if (!sendRes.ok) {
     const reason = describeTgSendError(sendRes.err);
     const retKey = String(back?.ret || '').trim();
@@ -11071,13 +10975,32 @@ ${escapeHtml(payLine)}
 ` +
         `<b>Контакты</b>
 ${card}`;
-      const kbToBrand = leadReplyNotifyKb(ws, Number(ws.id));
+
+      const kbToBrand = new InlineKeyboard();
+      let kbToBrandHas = false;
+
+      if (link) {
+        kbToBrand.url('🪟 Открыть витрину', link);
+        kbToBrandHas = true;
+      }
+
+      const contact = ws.profile_contact ? String(ws.profile_contact) : null;
+      const contactUrl = wsTgUrlFromContact(contact);
+      if (contactUrl) {
+        kbToBrand.url('💬 Написать', contactUrl);
+        kbToBrandHas = true;
+      }
+
+      if (ws.channel_username) {
+        kbToBrand.row().url('📣 Открыть канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
+        kbToBrandHas = true;
+      }
 
       try {
         await ctx.api.sendMessage(Number(lead.brand_tg_id), out, {
           parse_mode: 'HTML',
           disable_web_page_preview: true,
-          reply_markup: kbToBrand
+          ...(kbToBrandHas ? { reply_markup: kbToBrand } : {})
         });
       } catch {}
 
@@ -13369,59 +13292,53 @@ bot.on('message:successful_payment', async (ctx) => {
       // Make callback UX resilient: ack immediately, and never crash on edit/ack edge-cases
     const _acq = ctx.answerCallbackQuery.bind(ctx);
     ctx.answerCallbackQuery = (opts) => _acq(opts).catch(() => {});
-    const _editText = ctx.editMessageText.bind(ctx);
-    ctx.editMessageText = (text, extra) =>
-      _editText(text, extra).catch(async (e) => {
+        const _api = ctx.api;
+
+    // Stable render target: all edits in this callback should go to the same message.
+    // If we must fall back to ctx.reply (uneditable message), we pin future edits to that new message
+    // to avoid leaving an orphaned "⏳" message that looks like "silence".
+    ctx.__rt = ctx.__rt || {
+      chat_id: ctx.chat?.id,
+      message_id: ctx.callbackQuery?.message?.message_id
+    };
+
+    ctx.editMessageText = async (text, extra) => {
+      const chatId = ctx.__rt?.chat_id ?? ctx.chat?.id;
+      const msgId = ctx.__rt?.message_id ?? ctx.callbackQuery?.message?.message_id;
+      if (!chatId || !msgId) return ctx.reply(text, extra).catch(() => {});
+      try {
+        return await _api.editMessageText(chatId, msgId, text, extra);
+      } catch (e) {
         const msg = String(e?.description || e?.message || e);
         if (msg.includes('message is not modified')) return;
-        // Invoices and some system messages can't be edited — fallback to a new message
-        return ctx.reply(text, extra).catch(() => {});
-      });
+        const sent = await ctx.reply(text, extra).catch(() => null);
+        if (sent?.message_id) ctx.__rt = { chat_id: chatId, message_id: sent.message_id };
+        return sent;
+      }
+    };
+
     if (typeof ctx.editMessageReplyMarkup === 'function') {
-      const _editMarkup = ctx.editMessageReplyMarkup.bind(ctx);
-      ctx.editMessageReplyMarkup = (markup) => _editMarkup(markup).catch(() => {});
+      ctx.editMessageReplyMarkup = async (markup) => {
+        const chatId = ctx.__rt?.chat_id ?? ctx.chat?.id;
+        const msgId = ctx.__rt?.message_id ?? ctx.callbackQuery?.message?.message_id;
+        if (!chatId || !msgId) return;
+        try {
+          return await _api.editMessageReplyMarkup(chatId, msgId, markup);
+        } catch (_) {}
+      };
     }
 
-    // Stop Telegram "loading" spinner ASAP
+    
+// Stop Telegram "loading" spinner ASAP
     await ctx.answerCallbackQuery();
 
   const p = parseCb(ctx.callbackQuery.data);
-
-    // P0/HANG hardening: never let the whole callback hang silently on the prelude awaits.
-    // If DB/Redis is slow, we must still respond with a fallback screen (no-silent invariant).
-    const preStepId = `cb_pre:${String(p?.a || 'unknown')}:${String(ctx.from.id).slice(-4)}:${Date.now().toString(36)}`;
-
-    let u;
-    try {
-      u = await p0Await(ctx, preStepId, 'db.upsertUser', () => db.upsertUser(ctx.from.id, ctx.from.username ?? null), 6000);
-    } catch (e) {
-      const cid = ctx.state?.cid || null;
-      const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
-      try { console.warn('[cb_pre] upsertUser timeout/error', { cid, act: p?.a || 'unknown', label, err: errInfo(e) }); } catch {}
-      await safeEditOrReply(ctx, `⚠️ Сервис отвечает слишком долго.
-
-act: ${String(p?.a || 'unknown')}
-step: prelude.upsertUser
-cid: ${cid || '—'}`, { reply_markup: navKb('a:menu') });
-      return;
-    }
-
-    // Cancel any pending text input step when user clicks an inline button (best-effort)
-    try { await p0Await(ctx, preStepId, 'redis.clearExpectText', () => clearExpectText(ctx.from.id), 1500); } catch {}
+    const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
+    // Cancel any pending text input step when user clicks an inline button
+    try { await clearExpectText(ctx.from.id); } catch {}
 
 
     const legacy = async () => {
-if (p.a === 'a:msg_del') {
-  // Delete the current bot message (keeps chat tidy). Works in private chats and wherever bot has rights.
-  try { await ctx.answerCallbackQuery({ text: '🗑 Убрано' }); } catch {}
-  const chatId = ctx.chat?.id;
-  const mid = ctx.callbackQuery?.message?.message_id;
-  if (chatId && mid) {
-    try { await ctx.api.deleteMessage(chatId, mid); } catch {}
-  }
-  return;
-}
-
 if (p.a === 'a:ui_mode_set') {
   await ctx.answerCallbackQuery();
   const mode = normalizeUiMode(p.m);
@@ -13572,56 +13489,20 @@ if (p.a === 'a:support_write') {
 
 // Brand Directory (Creator)
 if (p.a === 'a:brands_home') {
-  try { await ctx.answerCallbackQuery(); } catch {}
+      try { await ctx.answerCallbackQuery(); } catch {}
   const page = Math.max(0, Number(p.p || 0));
-  const cid = ctx.state?.cid || null;
-
-  // WATCHDOG: если что-то зависло так, что таймеры внутри await не сработали — мы всё равно покажем fallback.
-  let done = false;
-  const wd = setTimeout(async () => {
-    if (done) return;
-    done = true;
-    try { console.warn('[brands_home] watchdog', { cid, page }); } catch {}
-    await safeEditOrReplyTimed(
-      ctx,
-      `⚠️ Каталог брендов отвечает слишком долго.
-
-step: watchdog
-
-cid: ${cid || '—'}`,
-      { reply_markup: navKb(`a:brands_home|p:${page}`) },
-      true,
-      4500,
-      'brands_home.watchdog'
-    );
-  }, 6500);
-
-  await safeEditOrReplyTimed(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') }, true, 4500, 'brands_home.loading');
+  await safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') });
   try {
-    await withTimeout(
-      renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id }),
-      6500,
-      'brands.home'
-    );
-    done = true;
-    clearTimeout(wd);
+    await withTimeout(renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id }), 12000, 'brands.home');
   } catch (e) {
-    done = true;
-    clearTimeout(wd);
+    const cid = ctx.state?.cid || null;
     const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
     try { console.warn('[brands_home] timeout/error', { cid, page, label, err: errInfo(e) }); } catch {}
-    await safeEditOrReplyTimed(
-      ctx,
-      `⚠️ Каталог брендов отвечает слишком долго.
+    await safeEditOrReply(ctx, `⚠️ Каталог брендов отвечает слишком долго.
 
 step: ${label}
 
-cid: ${cid || '—'}`,
-      { reply_markup: navKb(`a:brands_home|p:${page}`) },
-      true,
-      4500,
-      'brands_home.fallback'
-    );
+cid: ${cid || '—'}`, { reply_markup: navKb(`a:brands_home|p:${page}`) });
   }
   return;
 }
@@ -14614,7 +14495,7 @@ if (p.a === 'a:brand_app_set') {
 
   // Update in DB if available
   const updated = await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, st), { op: 'brand_app_status', appId, st });
-  if (updated === null) {
+  if (!updated) {
     const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
     const kb = new InlineKeyboard()
       .text('⬅️ Назад', 'a:brand_app_view|id:' + appId + '|s:' + back.status + '|p:' + back.page)
@@ -14772,7 +14653,7 @@ if (p.a === 'a:ws_leads') {
       const backCb = wsId ? `a:ws_leads|ws:${wsId}|s:${st}|p:${page}${retPart}` : 'a:menu';
       await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
       try {
-        await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 7000, 'lead.view');
+        await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 15000, 'lead.view');
       } catch (e) {
         const cid = ctx.state?.cid || null;
         const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
@@ -14841,16 +14722,15 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
     }
 
 if (p.a === 'a:lead_set') {
+      try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
         await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const st = normLeadStatus(p.st);
-      const toast = st === 'in_progress' ? '✅ В работе' : (st === 'closed' ? '✅ Закрыто' : (st === 'spam' ? '✅ Спам' : '✅ Готово'));
-      try { await ctx.answerCallbackQuery({ text: toast }); } catch {}
       const updated = await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, st), { op: 'lead_status', leadId, st });
-      if (updated === null) {
+      if (!updated) {
         const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
         const kb = new InlineKeyboard()
           .text('⬅️ Назад', 'a:lead_view|id:' + leadId + '|ws:' + (Number(p.ws || 0) || 0) + '|s:' + String(p.s || 'new') + '|p:' + Number(p.p || 0) + (p.ret ? ('|ret:' + String(p.ret)) : ''))
@@ -17368,7 +17248,7 @@ if (p.a === 'a:bx_retry_help') {
       }
 
       const updated = await db.setBarterThreadBuyerStage(threadId, bmRes.userId, stage);
-      if (updated === null) {
+      if (!updated) {
         await ctx.answerCallbackQuery({ text: 'Не удалось обновить стадию.' });
         return;
       }
@@ -17397,7 +17277,7 @@ if (p.a === 'a:bx_retry_help') {
       }
 
       const updated = await db.setBarterThreadTriageStatus(threadId, bmRes.userId, triage);
-      if (updated === null) {
+      if (!updated) {
         // Likely: migration not applied yet (undefined_column)
         await ctx.answerCallbackQuery({ text: 'Не удалось обновить. Проверь миграцию.' });
       } else {
