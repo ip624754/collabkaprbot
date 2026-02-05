@@ -466,6 +466,14 @@ async function redisGetSafe(key, ms = 1500) {
   }
 }
 
+async function redisSetSafe(key, value, opts = {}, ms = 1500) {
+  try {
+    return await withTimeout(redis.set(key, value, opts), ms, `redis.set:${String(key).slice(0, 40)}`);
+  } catch {
+    return null;
+  }
+}
+
 // --- P0 HANG diagnostics (Woz): step logging + per-await timeouts ---
 const P0_AWAIT_TIMEOUT_MS = Number(process.env.P0_AWAIT_TIMEOUT_MS || 8000);
 
@@ -1108,6 +1116,23 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
 
 
 
+
+
+async function safeEditOrReplyTimed(ctx, text, extra = {}, preferEdit = true, ms = 5000, label = 'tg.safeEditOrReply') {
+  try {
+    return await withTimeout(safeEditOrReply(ctx, text, extra, preferEdit), ms, label);
+  } catch (e) {
+    try {
+      console.warn('[tg_safeEditOrReplyTimed] failed', { label, err: errInfo(e) });
+    } catch {}
+    try {
+      return await withTimeout(ctx.reply(text, extra), ms, label + ':reply');
+    } catch (_) {
+      // Best-effort: avoid silent UX failures in P0 screens
+      return null;
+    }
+  }
+}
 
 async function safeDeleteIncomingUserMessage(ctx) {
   // Best-effort: remove the incoming user message after we consumed it
@@ -2899,7 +2924,7 @@ async function getBrandDirFilter(tgId, legacyUserId = null) {
 
   // Migrate legacy payload to namespaced key (best-effort)
   if (usedLegacy) {
-    try { await redis.set(keyNew, f, { ex: BD_FILTER_TTL_SEC }); } catch {}
+    try { await redisSetSafe(keyNew, f, { ex: BD_FILTER_TTL_SEC }); } catch {}
   }
 
   return f;
@@ -2914,12 +2939,12 @@ async function setBrandDirFilter(tgId, filter, legacyUserId = null) {
   const keyNew = brandDirFilterKey(id);
 
   // Preferred
-  await redis.set(keyNew, payload, { ex: BD_FILTER_TTL_SEC });
+  await redisSetSafe(keyNew, payload, { ex: BD_FILTER_TTL_SEC });
 
   // Back-compat: also write legacy raw keys (stringified JSON)
-  try { await redis.set(`bd_filter:${id}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
+  try { await redisSetSafe(`bd_filter:${id}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
   if (legacyId) {
-    try { await redis.set(`bd_filter:${legacyId}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
+    try { await redisSetSafe(`bd_filter:${legacyId}`, JSON.stringify(payload), { ex: BD_FILTER_TTL_SEC }); } catch {}
   }
 }
 
@@ -3196,13 +3221,60 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
 
   const stepId = `brands_home:p${page}`;
 
-  const f = await p0Await(ctx, stepId, `${stepId}:getFilter`, () => getBrandDirFilter(viewerUserId, params.legacyUserId), 2500);
+  const defaultFilter = {
+    category: null,
+    offerType: null,
+    compensationType: null,
+    budgetBucket: null,
+    goalsTags: [],
+    reqTags: [],
+  };
 
-  const rows = await p0Await(ctx, stepId, `${stepId}:list`, () => withTimeout(
-      safeBrandProfiles(
-        () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
-        async () => ({ __missing_relation: true })
-      ), 4500, 'brands.list'), 4500);
+  let f = defaultFilter;
+  try {
+    // getBrandDirFilter used to hang on redis.set migration; now writes are safe + timed.
+    f = await p0Await(ctx, stepId, `${stepId}:getFilter`, () => getBrandDirFilter(viewerUserId, params.legacyUserId), 3500);
+    if (!f) f = defaultFilter;
+  } catch (e) {
+    try { console.warn('[brands_dir] getFilter failed, using defaults', { cid: ctx.state?.cid || null, stepId, err: errInfo(e) }); } catch {}
+    f = defaultFilter;
+  }
+
+  let rows = null;
+  try {
+    rows = await p0Await(
+      ctx,
+      stepId,
+      `${stepId}:list`,
+      () => withTimeout(
+        safeBrandProfiles(
+          () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
+          async () => ({ __missing_relation: true })
+        ),
+        6500,
+        'brands.list'
+      ),
+      6500
+    );
+  } catch (e) {
+    const cid = ctx.state?.cid || null;
+    const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
+    try { console.warn('[brands_dir] list failed', { cid, stepId, label, err: errInfo(e) }); } catch {}
+    await safeEditOrReplyTimed(
+      ctx,
+      `⚠️ Каталог брендов временно недоступен.
+
+step: ${label}
+
+cid: ${cid || '—'}`,
+      { reply_markup: navKb('a:menu') },
+      true,
+      4500,
+      'brands_dir.list_fallback'
+    );
+    return;
+  }
+
   if (rows && rows.__missing_relation) {
     const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
     if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
@@ -13484,20 +13556,56 @@ if (p.a === 'a:support_write') {
 
 // Brand Directory (Creator)
 if (p.a === 'a:brands_home') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+  try { await ctx.answerCallbackQuery(); } catch {}
   const page = Math.max(0, Number(p.p || 0));
-  await safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') });
+  const cid = ctx.state?.cid || null;
+
+  // WATCHDOG: если что-то зависло так, что таймеры внутри await не сработали — мы всё равно покажем fallback.
+  let done = false;
+  const wd = setTimeout(async () => {
+    if (done) return;
+    done = true;
+    try { console.warn('[brands_home] watchdog', { cid, page }); } catch {}
+    await safeEditOrReplyTimed(
+      ctx,
+      `⚠️ Каталог брендов отвечает слишком долго.
+
+step: watchdog
+
+cid: ${cid || '—'}`,
+      { reply_markup: navKb(`a:brands_home|p:${page}`) },
+      true,
+      4500,
+      'brands_home.watchdog'
+    );
+  }, 9500);
+
+  await safeEditOrReplyTimed(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') }, true, 4500, 'brands_home.loading');
   try {
-    await withTimeout(renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id }), 12000, 'brands.home');
+    await withTimeout(
+      renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id }),
+      12000,
+      'brands.home'
+    );
+    done = true;
+    clearTimeout(wd);
   } catch (e) {
-    const cid = ctx.state?.cid || null;
+    done = true;
+    clearTimeout(wd);
     const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
     try { console.warn('[brands_home] timeout/error', { cid, page, label, err: errInfo(e) }); } catch {}
-    await safeEditOrReply(ctx, `⚠️ Каталог брендов отвечает слишком долго.
+    await safeEditOrReplyTimed(
+      ctx,
+      `⚠️ Каталог брендов отвечает слишком долго.
 
 step: ${label}
 
-cid: ${cid || '—'}`, { reply_markup: navKb(`a:brands_home|p:${page}`) });
+cid: ${cid || '—'}`,
+      { reply_markup: navKb(`a:brands_home|p:${page}`) },
+      true,
+      4500,
+      'brands_home.fallback'
+    );
   }
   return;
 }
