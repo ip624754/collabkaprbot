@@ -3233,7 +3233,7 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   let f = defaultFilter;
   try {
     // getBrandDirFilter used to hang on redis.set migration; now writes are safe + timed.
-    f = await p0Await(ctx, stepId, `${stepId}:getFilter`, () => getBrandDirFilter(viewerUserId, params.legacyUserId), 3500);
+    f = await p0Await(ctx, stepId, `${stepId}:getFilter`, () => getBrandDirFilter(viewerUserId, params.legacyUserId), 1200);
     if (!f) f = defaultFilter;
   } catch (e) {
     try { console.warn('[brands_dir] getFilter failed, using defaults', { cid: ctx.state?.cid || null, stepId, err: errInfo(e) }); } catch {}
@@ -3251,10 +3251,10 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
           () => db.listBrandsDirectoryFiltered(PAGE_SIZE + 1, offset, f),
           async () => ({ __missing_relation: true })
         ),
-        6500,
+        3500,
         'brands.list'
       ),
-      6500
+      3500
     );
   } catch (e) {
     const cid = ctx.state?.cid || null;
@@ -5516,7 +5516,7 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
 
 
 async function renderWsPublicProfile(ctx, wsId, opts = {}) {
-  const ws = await withTimeout(db.getWorkspaceAny(wsId), 4500, 'ws.get');
+  const ws = await withTimeout(db.getWorkspaceAny(wsId), 2500, 'ws.get');
   if (!ws) return ctx.reply('Профиль не найден.');
 
   const viewer = ctx?.from ? await db.upsertUser(ctx.from.id, ctx.from.username ?? null) : null;
@@ -5807,11 +5807,11 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
   const stepId = `lead_view:${Number(leadId || 0)}`;
-  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(leadId), 4500);
+  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(leadId), 2500);
   if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
-  const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 4500);
+  const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 2500);
   if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
@@ -5855,9 +5855,9 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
-    await p0Await(ctx, stepId, `${stepId}:sendEdit`, () => safeEditOrReply(ctx, text, extra), 4500);
+    await p0Await(ctx, stepId, `${stepId}:sendEdit`, () => safeEditOrReply(ctx, text, extra), 2500);
   } catch {
-    await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 4500);
+    await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 2500);
   }
 }
 
@@ -13578,13 +13578,13 @@ cid: ${cid || '—'}`,
       4500,
       'brands_home.watchdog'
     );
-  }, 9500);
+  }, 6500);
 
   await safeEditOrReplyTimed(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') }, true, 4500, 'brands_home.loading');
   try {
     await withTimeout(
       renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id }),
-      12000,
+      6500,
       'brands.home'
     );
     done = true;
@@ -14756,7 +14756,7 @@ if (p.a === 'a:ws_leads') {
       const backCb = wsId ? `a:ws_leads|ws:${wsId}|s:${st}|p:${page}${retPart}` : 'a:menu';
       await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
       try {
-        await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 15000, 'lead.view');
+        await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 7000, 'lead.view');
       } catch (e) {
         const cid = ctx.state?.cid || null;
         const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
