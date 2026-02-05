@@ -3212,7 +3212,11 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   const PAGE_SIZE = 8;
   const offset = page * PAGE_SIZE;
 
-  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId);
+  // Step-logging / hang diagnostics (Woz)
+  const sid = String(params.stepId || params.sid || '').trim()
+    || mkStepId(`brands_dir.u${Number(viewerUserId) || 0}.p${page}`);
+
+  const f = await getBrandDirFilter(viewerUserId, params.legacyUserId, sid);
 
   let rows = null;
   try {
@@ -3499,7 +3503,7 @@ function bxOfferTagsKb(wsId, meta, opts = {}) {
     .text(`🎯 Цели: ${goalsLabel}`, `a:bx_otpick|ws:${wsId}|k:goals`)
     .text(`📎 Требования: ${reqLabel}`, `a:bx_otpick|ws:${wsId}|k:req`)
     .row()
-    .text('➡️ К тексту', `a:bx_otnext|ws:${wsId}`)
+    .text('➡️ Дальше', `a:bx_otnext|ws:${wsId}`)
     .text('⏭ Пропустить', `a:bx_otskip|ws:${wsId}`)
     .row();
 
@@ -3601,7 +3605,10 @@ async function renderBxOfferTextStep(ctx, wsId) {
 • Либо добавь @username прямо в тексте (например: <code>Контакт: @myname</code>).
 
 Пример:
-<code>${escapeHtml(example)}</code>`;
+<code>${escapeHtml(example)}</code>
+
+👇 Теперь просто отправь сообщение в чат.
+После отправки я опубликую оффер и покажу кнопки дальше.`;
 
   const kb = new InlineKeyboard()
     .text('⬅️ Назад', `a:bx_ottags|ws:${wsId}`)
@@ -11917,7 +11924,7 @@ if (exp.type === 'brand_deals_search') {
       const kb = new InlineKeyboard()
         .text('📁 Прикрепить папку каналов', `a:bx_partner_folder_pick|ws:${wsId}|o:${offer.id}`)
         .row()
-        .text('⏭ Пропустить', `a:bx_view|ws:${wsId}|o:${offer.id}|back:my`)
+        .text('👀 Посмотреть', `a:bx_view|ws:${wsId}|o:${offer.id}|back:my`)
         .row()
         .text('📋 Меню бартер-биржи', `a:bx_open|ws:${wsId}`);
 
@@ -13573,7 +13580,7 @@ if (p.a === 'a:brands_home') {
     await stepAwait(sid, 'tg.open.loading', 5000, () => safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') }), { page });
   } catch {}
 
-  await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id, stepId: sid });
+  await renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: (u && u.id) ? u.id : null, stepId: sid });
   return;
 }
 
