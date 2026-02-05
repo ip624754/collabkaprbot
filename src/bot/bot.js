@@ -1637,7 +1637,7 @@ function wsMenuKb(wsId, opts = {}) {
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
     .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
     .row()
-    .text('👥 Кураторы', `a:ws_settings|ws:${wsId}`)
+    .text('👥 Кураторы канала', `a:ws_settings|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`);
 
   if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
@@ -1903,7 +1903,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
       ? '• Покупка: ✅ найдена'
       : '• Покупка: ❌ нет (нужен Brand Pass / Brand Plan)';
 
-    const text = `👥 <b>Менеджеры бренда</b>\n\nДобавь менеджеров, чтобы быстрее отвечать на заявки и закрывать сделки.\n\n<b>Условия доступа:</b>\n1) Заполнить профиль бренда (4 поля: Название, Ниша, Контакт, Ссылка)\n2) Купить <b>Brand Pass</b> или <b>Brand Plan</b>\n\n<b>Статус:</b>\n${statusProfile}\n${statusPay}\n\n<i>Зачем:</i> защита от спама и ценность брендовой покупки.`;
+    const text = `👔 <b>Менеджеры бренда</b>\n\nДобавь менеджеров, чтобы быстрее отвечать на заявки и закрывать сделки.\n\n<b>Условия доступа:</b>\n1) Заполнить профиль бренда (4 поля: Название, Ниша, Контакт, Ссылка)\n2) Купить <b>Brand Pass</b> или <b>Brand Plan</b>\n\n<b>Статус:</b>\n${statusProfile}\n${statusPay}\n\n<i>Зачем:</i> защита от спама и ценность брендовой покупки.`;
 
     const kb = brandTeamLockedKb();
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -4133,7 +4133,7 @@ function gwOpenKb(g, flags = {}) {
   if (isAdmin) kb.text('🧩 Проверка доступа', `a:gw_access|i:${gwId}`).row();
   kb.text('📣 Напомнить проверить', `a:gw_remind_q|i:${gwId}`)
     .row()
-    .text('👤 Кураторы', `a:ws_settings|ws:${g.workspace_id}`)
+    .text('👥 Кураторы канала', `a:ws_settings|ws:${g.workspace_id}`)
     .row();
 
   if (String(g.status || '').toUpperCase() === 'WINNERS_DRAWN' && !g.results_message_id && g.published_chat_id) {
@@ -13507,6 +13507,18 @@ bot.on('message:successful_payment', async (ctx) => {
     await ctx.answerCallbackQuery();
 
   const p = parseCb(ctx.callbackQuery.data);
+    // MENU ALIASES (no-break): support legacy action names from older messages
+    const _aliasA = {
+      'a:brand_managers': 'a:brand_team',
+      'a:brand_team_home': 'a:brand_team',
+      'a:team': 'a:brand_team',
+      'a:curators': 'a:cur_home',
+      'a:curators_home': 'a:cur_home',
+      'a:curator_home': 'a:cur_home',
+      'a:home_hub': 'a:home',
+    };
+    if (_aliasA[p.a]) p.a = _aliasA[p.a];
+
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     // Cancel any pending text input step when user clicks an inline button
     try { await clearExpectText(ctx.from.id); } catch {}
@@ -15424,7 +15436,7 @@ if (p.a === 'a:ws_prof_mode') {
       const managers = await db.listBrandManagers(u.id);
       const count = managers.length;
 
-      const text = `👥 <b>Менеджеры бренда</b>
+      const text = `👔 <b>Менеджеры бренда</b>
 
 Добавь менеджеров — они смогут быстрее отвечать на заявки и закрывать сделки.
 У менеджера нет доступа к оплатам, профилю бренда и управлению командой.
@@ -18269,7 +18281,7 @@ if (p.a === 'a:bx_publish_hint') {
       const curators = await db.listCurators(wsId);
       const lines = curators.map(c => `• ${c.tg_username ? '@' + escapeHtml(c.tg_username) : 'id:' + c.tg_id}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `👥 <b>Кураторы</b>
+      await safeEditOrReply(ctx, `👥 <b>Кураторы канала</b>
 
 Нажми на 🗑 рядом с именем, чтобы удалить.
 
@@ -18324,7 +18336,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       // refresh list
       const curators = await db.listCurators(wsId);
       const lines = curators.map(c => `• ${c.tg_username ? '@' + escapeHtml(c.tg_username) : 'id:' + c.tg_id}`);
-      await safeEditOrReply(ctx, `👥 <b>Кураторы</b>
+      await safeEditOrReply(ctx, `👥 <b>Кураторы канала</b>
 
 Нажми на 🗑 рядом с именем, чтобы удалить.
 
