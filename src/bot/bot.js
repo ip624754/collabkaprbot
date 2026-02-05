@@ -13309,9 +13309,28 @@ bot.on('message:successful_payment', async (ctx) => {
     await ctx.answerCallbackQuery();
 
   const p = parseCb(ctx.callbackQuery.data);
-    const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
-    // Cancel any pending text input step when user clicks an inline button
-    try { await clearExpectText(ctx.from.id); } catch {}
+
+    // P0/HANG hardening: never let the whole callback hang silently on the prelude awaits.
+    // If DB/Redis is slow, we must still respond with a fallback screen (no-silent invariant).
+    const preStepId = `cb_pre:${String(p?.a || 'unknown')}:${String(ctx.from.id).slice(-4)}:${Date.now().toString(36)}`;
+
+    let u;
+    try {
+      u = await p0Await(ctx, preStepId, 'db.upsertUser', () => db.upsertUser(ctx.from.id, ctx.from.username ?? null), 6000);
+    } catch (e) {
+      const cid = ctx.state?.cid || null;
+      const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
+      try { console.warn('[cb_pre] upsertUser timeout/error', { cid, act: p?.a || 'unknown', label, err: errInfo(e) }); } catch {}
+      await safeEditOrReply(ctx, `⚠️ Сервис отвечает слишком долго.
+
+act: ${String(p?.a || 'unknown')}
+step: prelude.upsertUser
+cid: ${cid || '—'}`, { reply_markup: navKb('a:menu') });
+      return;
+    }
+
+    // Cancel any pending text input step when user clicks an inline button (best-effort)
+    try { await p0Await(ctx, preStepId, 'redis.clearExpectText', () => clearExpectText(ctx.from.id), 1500); } catch {}
 
 
     const legacy = async () => {
