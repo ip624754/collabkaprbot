@@ -1359,11 +1359,38 @@ function uiModeHuman(mode) {
 // Curator meta for a giveaway (safe helpers): "checked" mark + notes history (last 3)
 const CUR_GW_META_TTL_SEC = 180 * 24 * 3600; // ~180 days
 
+// Telegram is strict about UTF-8 validity for inline keyboard button text.
+// If we truncate in the middle of a surrogate pair (emoji), Telegram may reject the request.
+function stripBrokenSurrogates(input) {
+  const s = String(input ?? '');
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    // High surrogate
+    if (c >= 0xD800 && c <= 0xDBFF) {
+      const n = s.charCodeAt(i + 1);
+      // Valid pair
+      if (n >= 0xDC00 && n <= 0xDFFF) {
+        out += s[i] + s[i + 1];
+        i++;
+      }
+      // Broken surrogate => drop
+      continue;
+    }
+    // Low surrogate without a preceding high surrogate => drop
+    if (c >= 0xDC00 && c <= 0xDFFF) continue;
+    out += s[i];
+  }
+  return out;
+}
+
 function clipText(s, maxLen = 140) {
-  const t = String(s ?? '').trim();
+  const t = stripBrokenSurrogates(String(s ?? '')).trim();
   const n = Number(maxLen) || 0;
-  if (!n || t.length <= n) return t;
-  return t.slice(0, Math.max(1, n - 1)) + '…';
+  if (!n) return t;
+  const arr = [...t]; // iterate by code points (no broken emoji)
+  if (arr.length <= n) return t;
+  return arr.slice(0, Math.max(1, n - 1)).join('') + '…';
 }
 
 function curatorLabelFromTg(from) {
@@ -5710,9 +5737,10 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
     const whoBtn = l.brand_username
       ? '@' + String(l.brand_username).replace(/^@/, '')
       : (String(l.brand_name || '').trim() || 'brand');
-    const whoShort = String(whoBtn).length > 16 ? String(whoBtn).slice(0, 16) + '…' : String(whoBtn);
+    const whoShort = clipText(whoBtn, 16);
+    const btnLabel = clipText(`${leadStatusIcon(l.status)} #${l.id} ${whoShort}`, 56);
 
-    kb.row().text(`${leadStatusIcon(l.status)} #${l.id} ${whoShort}`, `a:lead_view|id:${l.id}|ws:${wsId}|s:${st}|p:${p}${retPart}`);
+    kb.row().text(btnLabel, `a:lead_view|id:${l.id}|ws:${wsId}|s:${st}|p:${p}${retPart}`);
   }
 
   // pagination
@@ -5758,10 +5786,10 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     (link ? `Витрина: <a href="${escapeHtml(link)}">${escapeHtml(link)}</a>\n` : '') +
     `От: <b>${escapeHtml(who)}</b>\n` +
     `Когда: <b>${escapeHtml(when)}</b>\n\n` +
-    `<b>Текст:</b>\n${escapeHtml(String(lead.message || '—'))}`;
+    `<b>Текст:</b>\n${escapeHtml(stripBrokenSurrogates(String(lead.message || '—')))}`;
 
   if (lead.reply_text) {
-    text += `\n\n<b>Ответ:</b>\n${escapeHtml(String(lead.reply_text))}`;
+    text += `\n\n<b>Ответ:</b>\n${escapeHtml(stripBrokenSurrogates(String(lead.reply_text)))}`;
   }
 
   const st = normLeadStatus(lead.status);
@@ -5783,9 +5811,9 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
-    await p0Await(ctx, stepId, `${stepId}:sendEdit`, () => safeEditOrReply(ctx, text, extra), 4500);
+    await p0Await(ctx, stepId, `${stepId}:sendEdit`, () => safeEditOrReply(ctx, text, extra), 8000);
   } catch {
-    await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 4500);
+    await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 8000);
   }
 }
 
