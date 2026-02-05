@@ -24,13 +24,44 @@ export function randomToken(nBytes = 12) {
 
 export function parseCb(data) {
   // example: a:gw_export|i:12|t:all
+  // supports compact aliases (backward compatible):
+  //  - w -> ws, r -> ret
+  //  - s/st: n|ip|cl|sp -> new|in_progress|closed|spam
+  //  - ret: wo|wp|wl|m|h -> ws_open|ws_profile|ws_list|menu|home
   const out = { raw: data };
   const parts = String(data || '').split('|');
   out.a = parts[0] || '';
   for (let i = 1; i < parts.length; i++) {
-    const [k, v] = parts[i].split(':');
-    if (k) out[k] = v;
+    let [k, v] = parts[i].split(':');
+    if (!k) continue;
+    if (k === 'w') k = 'ws';
+    if (k === 'r') k = 'ret';
+    out[k] = v;
   }
+
+  const mapLeadStatus = (x) => {
+    const v = String(x || '').toLowerCase().trim();
+    if (v === 'n') return 'new';
+    if (v === 'ip') return 'in_progress';
+    if (v === 'cl') return 'closed';
+    if (v === 'sp') return 'spam';
+    return v;
+  };
+
+  const mapRet = (x) => {
+    const v = String(x || '').toLowerCase().trim();
+    if (v === 'wo') return 'ws_open';
+    if (v === 'wp') return 'ws_profile';
+    if (v === 'wl') return 'ws_list';
+    if (v === 'm') return 'menu';
+    if (v === 'h') return 'home';
+    return v;
+  };
+
+  if (out.s) out.s = mapLeadStatus(out.s);
+  if (out.st) out.st = mapLeadStatus(out.st);
+  if (out.ret) out.ret = mapRet(out.ret);
+
   return out;
 }
 
