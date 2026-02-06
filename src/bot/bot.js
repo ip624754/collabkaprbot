@@ -2071,7 +2071,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
   .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
   .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`)
   .row()
-  .text('➕ Разместить оффер', `a:bx_new|ws:${wsId}`)
+  .text('➕ Создать офер', `a:bx_new|ws:${wsId}`)
   .text('🏷 Каталог брендов', 'a:brands_home|p:0');
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
@@ -3756,37 +3756,200 @@ async function renderBxOfferTagsPicker(ctx, wsId, key) {
   await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
-async function renderBxOfferTextStep(ctx, wsId) {
+// ===== Barter Offer Wizard (Creator) — clearer text/publish flow =====
+
+function bxWizTagsSummary(meta) {
+  const parsed = parseOfferMeta(meta || {});
+  return {
+    goals: bxTagsLabel(parsed.goals_tags, 'goals', 'Не выбрано'),
+    req: bxTagsLabel(parsed.req_tags, 'req', 'Не выбрано'),
+  };
+}
+
+async function renderBxOfferDraftStep(ctx, wsId) {
+  const draft = (await getDraft(ctx.from.id)) || {};
+  const meta = draft.offer_meta || {};
+
+  const kind = String(draft.kind || 'ugc');
+  const kindLabel = kind === 'integration' ? '📣 Интеграция' : '🎬 UGC';
+
+  const cat = draft.category ? bxCategoryLabel(draft.category) : '—';
+  const type = draft.offer_type ? bxTypeLabel(draft.offer_type) : '—';
+  const comp = draft.compensation_type ? bxCompLabel(draft.compensation_type) : '—';
+
+  const tags = bxWizTagsSummary(meta);
+
+  const tTitle = String(draft.offer_title || '').trim();
+  const tContact = String(draft.offer_contact || '').trim();
+  const hasText = Boolean(tTitle && String(draft.offer_desc || '').trim());
+
+  const textStatus = hasText
+    ? `✅ <b>${escapeHtml(tTitle)}</b>\nКонтакт: <b>${escapeHtml(tContact || '—')}</b>`
+    : '❌ Текст ещё не задан';
+
+  const text =
+`Шаг 5/6: <b>текст оффера</b>\n<i>Тут же можно выбрать теги (опционально).</i>\n\n` +
+`Параметры: ${escapeHtml(kindLabel)} · ${escapeHtml(cat)}\n` +
+`${escapeHtml(type)} · ${escapeHtml(comp)}\n\n` +
+`🎯 Цели: <b>${escapeHtml(tags.goals)}</b>\n` +
+`📎 Требования: <b>${escapeHtml(tags.req)}</b>\n\n` +
+`Текст: ${textStatus}\n\n` +
+`Нажми <b>✍️ Ввести текст</b>, отправь 1 сообщение (заголовок + детали), затем на шаге 6 нажми <b>✅ Опубликовать</b>.`;
+
+  const kb = new InlineKeyboard()
+    .text(hasText ? '✍️ Изменить текст' : '✍️ Ввести текст', `a:bx_wtext|ws:${wsId}`)
+    .row()
+    .text('🎯 Теги (опц.)', `a:bx_wtags|ws:${wsId}`)
+    .row()
+    .text('➡️ Далее', `a:bx_w6|ws:${wsId}`);
+  kbNavRow(kb, `a:bx_comp_pick|ws:${wsId}`);
+
+  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderBxOfferTextInputStep(ctx, wsId, opts = {}) {
   const draft = (await getDraft(ctx.from.id)) || {};
   const kind = String(draft.kind || 'ugc');
   const example =
     kind === 'integration'
-      ? 'Заголовок: Возьму интеграцию в канале/IG\n\nФормат: пост/сторис/репост. Аудитория/охваты: ... Гео: ... Дедлайн: ... Бюджет/условия: ... Контакт: @myname'
-      : 'Заголовок: Сниму UGC для бренда (без публикации)\n\nЧто сделаю: 1–3 вертикальных видео. Сроки: ... Референсы: ... Условия/бюджет: ... Контакт: @myname';
+      ? 'Заголовок: Возьму интеграцию\n\nФормат: пост/сторис/репост. Охваты: ... Гео: ... Дедлайн: ... Условия: ...\nКонтакт: @myname'
+      : 'Заголовок: Сниму UGC для бренда\n\nЧто сделаю: 1–3 вертикальных видео. Сроки: ... Референсы: ... Условия: ...\nКонтакт: @myname';
 
   const text =
-`Шаг 6/6: отправь одним сообщением
+`✍️ <b>Текст оффера</b>\n\n` +
+`Отправь <b>одним сообщением</b>:\n` +
+`• 1-я строка — заголовок\n` +
+`• со 2-й строки — детали (что нужно / сроки / условия)\n\n` +
+`⚠️ Контакт обязателен: @username или ссылка.\n\n` +
+`Пример:\n<code>${escapeHtml(example)}</code>`;
 
-1-я строка — <b>заголовок</b>
-со 2-й строки — <b>детали</b> (что нужно / сроки / условия).
-
-⚠️ Важно: <b>контакт обязателен</b>.
-• Лучше всего — включи @username в Telegram.
-• Либо добавь @username прямо в тексте (например: <code>Контакт: @myname</code>).
-
-Пример:
-<code>${escapeHtml(example)}</code>`;
-
-  const kb = new InlineKeyboard()
-    .text('✅ Опубликовать', `a:bx_publish_hint|ws:${wsId}`)
-    .row()
-    .text('⬅️ Назад', `a:bx_ottags|ws:${wsId}`)
-    .row()
-    .text('⬅️ Отмена', `a:bx_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-
+  const backCb = String(opts.backCb || `a:bx_w5|ws:${wsId}`);
+  const kb = navKb(backCb);
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
-  await setExpectText(ctx.from.id, { type: 'bx_offer_text', wsId });
+  await setExpectText(ctx.from.id, { type: 'bx_offer_text', wsId, backCb });
+}
+
+function bxOfferWizTagsHomeKb(wsId, meta) {
+  const parsed = parseOfferMeta(meta || {});
+  const goalsLabel = bxTagsLabel(parsed.goals_tags, 'goals', 'Не выбрано');
+  const reqLabel = bxTagsLabel(parsed.req_tags, 'req', 'Не выбрано');
+
+  const kb = new InlineKeyboard()
+    .text(`🎯 Цели: ${goalsLabel}`, `a:bx_wtagpick|ws:${wsId}|k:goals`)
+    .row()
+    .text(`📎 Требования: ${reqLabel}`, `a:bx_wtagpick|ws:${wsId}|k:req`)
+    .row()
+    .text('✅ Готово', `a:bx_w5|ws:${wsId}`);
+  kbNavRow(kb, `a:bx_w5|ws:${wsId}`);
+  return kb;
+}
+
+function bxOfferWizTagsPickerKb(wsId, key, meta) {
+  const m = parseOfferMeta(meta || {});
+  const sel = key === 'goals' ? m.goals_tags : m.req_tags;
+  const defs = key === 'goals' ? BRAND_GOALS_TAGS : BRAND_REQ_TAGS;
+
+  const set = new Set(Array.isArray(sel) ? sel : []);
+  const kb = new InlineKeyboard();
+  const items = defs.map((t) => ({
+    text: `${set.has(t.key) ? '✅ ' : ''}${t.title}`,
+    cb: `a:bx_wtagt|ws:${wsId}|k:${key}|v:${t.key}`,
+  }));
+  kbAddPairs(kb, items, 2);
+  kb.row();
+  kb.text('🧹 Очистить', `a:bx_wtagclr|ws:${wsId}|k:${key}`)
+    .text('✅ Готово', `a:bx_wtagdone|ws:${wsId}`);
+  kbNavRow(kb, `a:bx_wtags|ws:${wsId}`);
+  kb.__title = key === 'goals' ? '🎯 Цели' : '📎 Требования';
+  return kb;
+}
+
+async function renderBxOfferWizTagsHome(ctx, wsId) {
+  const draft = (await getDraft(ctx.from.id)) || {};
+  const meta = draft.offer_meta || {};
+  const tags = bxWizTagsSummary(meta);
+
+  const text =
+`🎛 <b>Теги оффера</b>\n<i>Опционально — можно оставить пустым.</i>\n\n` +
+`🎯 Цели: <b>${escapeHtml(tags.goals)}</b>\n` +
+`📎 Требования: <b>${escapeHtml(tags.req)}</b>`;
+
+  const kb = bxOfferWizTagsHomeKb(wsId, meta);
+  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderBxOfferWizTagsPicker(ctx, wsId, key) {
+  const draft = (await getDraft(ctx.from.id)) || {};
+  const meta = draft.offer_meta || {};
+  const kb = bxOfferWizTagsPickerKb(wsId, key, meta);
+  const title = kb.__title || (key === 'goals' ? '🎯 Цели' : '📎 Требования');
+
+  const parsed = parseOfferMeta(meta);
+  const cur = key === 'goals'
+    ? bxTagsLabel(parsed.goals_tags, 'goals', 'Не выбрано')
+    : bxTagsLabel(parsed.req_tags, 'req', 'Не выбрано');
+
+  const hint = key === 'goals'
+    ? 'Выбери цели оффера (можно несколько).'
+    : 'Выбери требования/условия для бренда (можно несколько).';
+
+  const text =
+`🎛 <b>${escapeHtml(title)}</b>\n<i>${escapeHtml(hint)}</i>\n\n` +
+`Текущее: <b>${escapeHtml(cur)}</b>\n\nВыбери теги:`;
+
+  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderBxOfferPreviewStep(ctx, wsId) {
+  const draft = (await getDraft(ctx.from.id)) || {};
+  const meta = draft.offer_meta || {};
+
+  const kind = String(draft.kind || 'ugc');
+  const kindLabel = kind === 'integration' ? '📣 Интеграция' : '🎬 UGC';
+  const cat = draft.category ? bxCategoryLabel(draft.category) : '—';
+  const type = draft.offer_type ? bxTypeLabel(draft.offer_type) : '—';
+  const comp = draft.compensation_type ? bxCompLabel(draft.compensation_type) : '—';
+
+  const tags = bxWizTagsSummary(meta);
+  const tTitle = String(draft.offer_title || '').trim();
+  const tDesc = String(draft.offer_desc || '').trim();
+  const tContact = String(draft.offer_contact || '').trim();
+  const hasText = Boolean(tTitle && tDesc);
+
+  const textBody = hasText
+    ? `<b>${escapeHtml(tTitle)}</b>\n${escapeHtml(tDesc)}\n\nКонтакт: <b>${escapeHtml(tContact || '—')}</b>`
+    : '<i>Текст ещё не задан.</i>';
+
+  const text =
+`Шаг 6/6: <b>проверка и публикация</b>\n\n` +
+`Параметры: ${escapeHtml(kindLabel)} · ${escapeHtml(cat)}\n` +
+`${escapeHtml(type)} · ${escapeHtml(comp)}\n\n` +
+`🎯 Цели: <b>${escapeHtml(tags.goals)}</b>\n` +
+`📎 Требования: <b>${escapeHtml(tags.req)}</b>\n\n` +
+`🧾 <b>Оффер</b>\n${textBody}`;
+
+  const kb = new InlineKeyboard();
+  if (hasText) {
+    kb.text('✅ Опубликовать', `a:bx_publish|ws:${wsId}`).row();
+  } else {
+    kb.text('✍️ Ввести текст', `a:bx_wtext|ws:${wsId}`).row();
+  }
+  kb.text('✍️ Изменить текст', `a:bx_wtext|ws:${wsId}`)
+    .text('🎯 Теги', `a:bx_wtags|ws:${wsId}`);
+  kbNavRow(kb, `a:bx_w5|ws:${wsId}`);
+
+  const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
+  await send(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderBxOfferTextStep(ctx, wsId) {
+  // Legacy wrapper: old flows may still call this function.
+  // We keep it but route to the clearer input step (text -> preview/publish).
+  await renderBxOfferTextInputStep(ctx, wsId, { backCb: `a:bx_w5|ws:${wsId}` });
 }
 
 function bxTagsLabel(keys, kind, emptyLabel = 'Все') {
@@ -4985,6 +5148,17 @@ function parseUrlsFromText(input, max = 3) {
     if (out.length >= max) break;
   }
   return out;
+}
+
+function extractFirstContact(input) {
+  const text = String(input || '');
+  const m = text.match(/@([a-zA-Z0-9_]{5,})/);
+  if (m) return '@' + m[1];
+  const tm = text.match(/(?:https?:\/\/)?t\.me\/([a-zA-Z0-9_]{5,})/i);
+  if (tm) return '@' + tm[1];
+  const urls = parseUrlsFromText(text, 1);
+  if (urls.length) return urls[0];
+  return null;
 }
 
 function wsProfileKb(wsId, ws) {
@@ -7924,7 +8098,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
 
-• Разместить — твой UGC/оффер увидят бренды в «📰 Лента креаторов»
+• Создать офер — твой UGC/оффер увидят бренды в «📰 Лента креаторов»
 • Inbox — сообщения и заявки от брендов
 • Мои офферы — пауза/удаление`,
     { parse_mode: 'HTML', reply_markup: bxMenuKb(wsNum, ws.network_enabled, { showCurator: isCurator }) }
@@ -11988,19 +12162,18 @@ if (exp.type === 'brand_deals_search') {
       await ctx.reply(`✅ Featured активирован до <b>${escapeHtml(String(ends))}</b>.`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
-    // Barter offer create (one-message input)
+    // Barter offer wizard: text input (save to draft) — actual publish happens from step 6.
     if (exp.type === 'bx_offer_text') {
       const draft = (await getDraft(ctx.from.id)) || {};
       const wsId = Number(exp.wsId || draft.wsId);
-      const lines = String(ctx.message.text || '').trim().split(/\n+/);
-      const baseTitle = (lines[0] || '').trim().slice(0, 80);
-      const kind = String(draft.kind || '');
-      const kindPrefix = kind === 'integration' ? 'Интеграция: ' : (kind === 'ugc' ? 'UGC: ' : '');
-      const title = (kindPrefix + baseTitle).slice(0, 80);
+
+      const raw = String(ctx.message.text || '').trim();
+      const lines = raw.split(/\n+/);
+      const title = (lines[0] || '').trim().slice(0, 80);
       const description = (lines.slice(1).join('\n') || '').trim().slice(0, 2000);
 
       if (!wsId || !draft.category || !draft.offer_type || !draft.compensation_type) {
-        await ctx.reply('Черновик оффера потерян. Начни заново: 🎬 UGC / Офферы → ➕ Разместить оффер');
+        await ctx.reply('Черновик оффера потерян. Начни заново: 🎬 UGC / Офферы → ➕ Создать офер');
         return;
       }
       if (!title || title.length < 3) {
@@ -12014,71 +12187,24 @@ if (exp.type === 'brand_deals_search') {
         return;
       }
 
-      // Contact: prefer @username; if отсутствует — просим указать в тексте.
+      // Contact: prefer @username; fallback to first mention/link.
       const contactFromProfile = ctx.from.username ? '@' + ctx.from.username : null;
-      const contactInText = String(ctx.message.text || '').match(/@([a-zA-Z0-9_]{5,})/);
-      const contact = contactFromProfile || (contactInText ? '@' + contactInText[1] : null);
+      let contact = contactFromProfile || extractFirstContact(raw) || '';
       if (!contact) {
         await ctx.reply('Не вижу контакта. Либо включи @username в Telegram, либо добавь его в текст (например: Контакт: @myname) и отправь ещё раз.');
         await setExpectText(ctx.from.id, exp);
         return;
       }
 
-      // Structured meta tags (optional)
-      const parsedOfferMeta = parseOfferMeta(draft.offer_meta || {});
-      const offerMeta = {};
-      if (Array.isArray(parsedOfferMeta.goals_tags) && parsedOfferMeta.goals_tags.length) offerMeta.goals_tags = parsedOfferMeta.goals_tags;
-      if (Array.isArray(parsedOfferMeta.req_tags) && parsedOfferMeta.req_tags.length) offerMeta.req_tags = parsedOfferMeta.req_tags;
+      // Save into draft (don’t publish automatically)
+      draft.wsId = wsId;
+      draft.offer_title = title;
+      draft.offer_desc = description;
+      draft.offer_contact = contact;
+      await setDraft(ctx.from.id, draft);
 
-
-      // owner gate
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) {
-        await ctx.reply('Нет доступа к этому каналу.');
-        return;
-      }
-      if (!ws.network_enabled) {
-        await ctx.reply('Сначала включи “🌐 Сеть” в настройках канала, чтобы оффер попал в ленту.');
-        return;
-      }
-
-      const offer = await db.createBarterOffer({
-        workspaceId: wsId,
-        creatorUserId: u.id,
-        category: draft.category,
-        offerType: draft.offer_type,
-        compensationType: draft.compensation_type,
-        meta: offerMeta,
-        title,
-        description,
-        contact,
-      });
-      await db.auditBarterOffer(offer.id, wsId, u.id, 'bx.offer_created', { category: draft.category, offerType: draft.offer_type, compensationType: draft.compensation_type, kind: draft.kind || null });
-      db.trackEvent('bx_offer_published', { userId: u.id, wsId, meta: { offerId: offer.id, category: draft.category, offerType: draft.offer_type, compensationType: draft.compensation_type } });
-      await clearDraft(ctx.from.id);
-
-      const metaWarn = offer && offer.__meta_missing
-        ? "\n\n⚠️ <b>Теги оффера временно не сохранены</b> (база не обновлена). Примени migrations/028_barter_offers_meta.sql и попробуй отредактировать оффер ещё раз."
-        : '';
-
-      const kb = new InlineKeyboard()
-        .text('📁 Прикрепить папку каналов', `a:bx_partner_folder_pick|ws:${wsId}|o:${offer.id}`)
-        .row()
-        .text('⏭ Пропустить', `a:bx_view|ws:${wsId}|o:${offer.id}|back:my`)
-        .row()
-        .text('📋 Меню бартер-биржи', `a:bx_open|ws:${wsId}`);
-
-      await ctx.reply(
-        `✅ Оффер опубликован в ленте сети.
-
-#${offer.id} · ${bxCategoryLabel(offer.category)}
-<b>${escapeHtml(offer.title)}</b>
-${escapeHtml(bxTypeLabel(offer.offer_type))} · ${escapeHtml(bxCompLabel(offer.compensation_type))}
-Контакт: <b>${escapeHtml(contact)}</b>${metaWarn}
-
-📁 Хочешь добавить папку совместных каналов (партнёры/спонсоры)?`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
+      // Show preview/publish step.
+      await renderBxOfferPreviewStep(ctx, wsId);
       return;
     }
 
@@ -17962,7 +18088,129 @@ if (p.a === 'a:bx_cat') {
       await setDraft(ctx.from.id, draft);
 
       await clearExpectText(ctx.from.id);
-      await renderBxOfferTagsStep(ctx, wsId);
+      await renderBxOfferDraftStep(ctx, wsId);
+      return;
+    }
+
+    // Wizard: step 5 (text + optional tags)
+    if (p.a === 'a:bx_w5') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferDraftStep(ctx, wsId);
+      return;
+    }
+
+    // Wizard: step 6 (preview/publish)
+    if (p.a === 'a:bx_w6') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+
+      const draft = (await getDraft(ctx.from.id)) || {};
+      const hasText = Boolean(String(draft.offer_title || '').trim() && String(draft.offer_desc || '').trim());
+      if (!hasText) {
+        try { await ctx.answerCallbackQuery({ text: 'Сначала введи текст оффера.', show_alert: true }); } catch {}
+        await renderBxOfferDraftStep(ctx, wsId);
+        return;
+      }
+      await renderBxOfferPreviewStep(ctx, wsId);
+      return;
+    }
+
+    // Wizard: enter/edit offer text (expects a single text message)
+    if (p.a === 'a:bx_wtext') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferTextInputStep(ctx, wsId, { backCb: `a:bx_w5|ws:${wsId}` });
+      return;
+    }
+
+    // Wizard tags (optional)
+    if (p.a === 'a:bx_wtags') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferWizTagsHome(ctx, wsId);
+      return;
+    }
+
+    if (p.a === 'a:bx_wtagpick') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const key = String(p.k || '');
+      if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferWizTagsPicker(ctx, wsId, key);
+      return;
+    }
+
+    if (p.a === 'a:bx_wtagt') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const key = String(p.k || '');
+      const val = String(p.v || '');
+      if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
+
+      const allow = key === 'goals' ? BRAND_GOALS_KEYS : BRAND_REQ_KEYS;
+      if (!allow.has(val)) return ctx.answerCallbackQuery({ text: 'Неверный тег.' });
+
+      await ctx.answerCallbackQuery();
+
+      const draft = (await getDraft(ctx.from.id)) || {};
+      draft.wsId = wsId;
+      const meta = parseOfferMeta(draft.offer_meta || {});
+      const cur = key === 'goals' ? meta.goals_tags : meta.req_tags;
+      const set = new Set(cur);
+      if (set.has(val)) set.delete(val); else set.add(val);
+      if (key === 'goals') meta.goals_tags = Array.from(set);
+      else meta.req_tags = Array.from(set);
+      draft.offer_meta = meta;
+      await setDraft(ctx.from.id, draft);
+
+      await renderBxOfferWizTagsPicker(ctx, wsId, key);
+      return;
+    }
+
+    if (p.a === 'a:bx_wtagclr') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const key = String(p.k || '');
+      if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
+      await ctx.answerCallbackQuery();
+
+      const draft = (await getDraft(ctx.from.id)) || {};
+      draft.wsId = wsId;
+      const meta = parseOfferMeta(draft.offer_meta || {});
+      if (key === 'goals') meta.goals_tags = [];
+      else meta.req_tags = [];
+      draft.offer_meta = meta;
+      await setDraft(ctx.from.id, draft);
+
+      await renderBxOfferWizTagsPicker(ctx, wsId, key);
+      return;
+    }
+
+    if (p.a === 'a:bx_wtagdone') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      await renderBxOfferWizTagsHome(ctx, wsId);
       return;
     }
 
@@ -18075,7 +18323,7 @@ if (p.a === 'a:bx_cat') {
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      await renderBxOfferTextStep(ctx, wsId);
+      await renderBxOfferTextInputStep(ctx, wsId, { backCb: `a:bx_ottags|ws:${wsId}` });
       return;
     }
 
@@ -18085,9 +18333,10 @@ if (p.a === 'a:bx_publish_hint') {
   const ws = await db.getWorkspace(u.id, wsId);
   if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
-  try { await ctx.answerCallbackQuery({ text: 'Отправь текст оффера сообщением — я опубликую автоматически.', show_alert: true }); } catch {}
+  try { await ctx.answerCallbackQuery({ text: 'Сначала введи текст оффера (✍️), затем нажми ✅ Опубликовать.', show_alert: true }); } catch {}
 
-  await renderBxOfferTextStep(ctx, wsId);
+  await clearExpectText(ctx.from.id);
+  await renderBxOfferDraftStep(ctx, wsId);
   return;
 }
 
@@ -18104,8 +18353,106 @@ if (p.a === 'a:bx_publish_hint') {
       await setDraft(ctx.from.id, draft);
 
       await clearExpectText(ctx.from.id);
-      await renderBxOfferTextStep(ctx, wsId);
+      await renderBxOfferTextInputStep(ctx, wsId, { backCb: `a:bx_ottags|ws:${wsId}` });
       return;
+    }
+
+    // Publish offer from the current draft (used by the wizard preview step)
+    if (p.a === 'a:bx_publish') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+
+      const draft = (await getDraft(ctx.from.id)) || {};
+      draft.wsId = wsId;
+
+      const kind = String(draft.kind || 'ugc');
+      const category = String(draft.category || '').trim();
+      const offerType = String(draft.offer_type || '').trim();
+      const comp = String(draft.compensation_type || '').trim();
+      const title = String(draft.offer_title || '').trim();
+      const description = String(draft.offer_desc || '').trim();
+      let contact = String(draft.offer_contact || '').trim();
+
+      if (!category || !offerType || !comp) {
+        try { await ctx.answerCallbackQuery({ text: 'Черновик неполный — вернись назад и заверши шаги.', show_alert: true }); } catch {}
+        await renderBxOfferDraftStep(ctx, wsId);
+        return;
+      }
+
+      if (!title || title.length < 3 || !description || description.length < 10) {
+        try { await ctx.answerCallbackQuery({ text: 'Нужно заполнить текст оффера (заголовок + детали).', show_alert: true }); } catch {}
+        await renderBxOfferDraftStep(ctx, wsId);
+        return;
+      }
+
+      if (!contact) {
+        contact = extractFirstContact(`${title}\n${description}`) || '';
+      }
+      if (!contact) {
+        try { await ctx.answerCallbackQuery({ text: 'Контакт обязателен (добавь @username).', show_alert: true }); } catch {}
+        await renderBxOfferDraftStep(ctx, wsId);
+        return;
+      }
+
+      const prefix = kind === 'integration' ? '📣 ' : '🎬 ';
+      const realTitle = title.startsWith(prefix) ? title : `${prefix}${title}`;
+      const fullDescription = /\bКонтакт\b/i.test(description) ? description : `${description}\n\nКонтакт: ${contact}`;
+
+      // Structured meta tags (optional)
+      const parsedOfferMeta = parseOfferMeta(draft.offer_meta || {});
+      const offerMeta = {};
+      if (Array.isArray(parsedOfferMeta.goals_tags) && parsedOfferMeta.goals_tags.length) offerMeta.goals_tags = parsedOfferMeta.goals_tags;
+      if (Array.isArray(parsedOfferMeta.req_tags) && parsedOfferMeta.req_tags.length) offerMeta.req_tags = parsedOfferMeta.req_tags;
+
+      try {
+        const offer = await db.createBarterOffer({
+          workspaceId: wsId,
+          creatorUserId: u.id,
+          category,
+          offerType,
+          compensationType: comp,
+          meta: offerMeta,
+          title: realTitle,
+          description: fullDescription,
+          contact,
+        });
+
+        try {
+          await db.auditBarterOffer(offer.id, wsId, u.id, 'bx.offer_created', {
+            category,
+            offerType,
+            compensationType: comp,
+            kind: draft.kind || null,
+          });
+        } catch {}
+        try { db.trackEvent('bx_offer_published', { userId: u.id, wsId, meta: { offerId: offer.id, category, offerType, compensationType: comp } }); } catch {}
+
+        await clearDraft(ctx.from.id);
+
+        const link = offerDeepLink(offer.id);
+        const kb = new InlineKeyboard();
+        kb.text('⬆️ Поднять', `a:bx_bump|ws:${wsId}|o:${offer.id}|p:0|back:my`).row();
+        kb.text('🔎 Открыть', `a:bx_view|ws:${wsId}|o:${offer.id}|back:my|p:0`)
+          .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`).row();
+        if (link) kb.url('🔗 Поделиться', link).row();
+        kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
+
+        await safeEditOrReply(ctx,
+          `✅ <b>Оффер опубликован</b>\n\n<b>${escapeHtml(realTitle)}</b>\n\n${escapeHtml(truncateText(fullDescription, 550))}`,
+          { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true },
+          true
+        );
+        return;
+      } catch (err) {
+        console.error('[bx_publish] error', { wsId, err: { name: err?.name, message: err?.message } });
+        try { await ctx.answerCallbackQuery({ text: 'Ошибка публикации. Попробуй ещё раз.', show_alert: true }); } catch {}
+        await renderBxOfferPreviewStep(ctx, wsId);
+        return;
+      }
     }
 
     if (p.a === 'a:bx_view') {
