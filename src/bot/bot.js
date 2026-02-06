@@ -3982,8 +3982,9 @@ function bxOfferTagsKb(wsId, meta, opts = {}) {
     .text(`🎯 Цели: ${goalsLabel}`, `a:bx_otpick|ws:${wsId}|k:goals`)
     .text(`📎 Требования: ${reqLabel}`, `a:bx_otpick|ws:${wsId}|k:req`)
     .row()
-    .text('➡️ Далее', `a:bx_otnext|ws:${wsId}`)
+    // Step buttons: “Пропустить” слева, “Далее” справа (как ожидает UX)
     .text('⏭ Пропустить', `a:bx_otskip|ws:${wsId}`)
+    .text('➡️ Далее', `a:bx_otnext|ws:${wsId}`)
     .row();
 
   if (opts.showParams) {
@@ -8807,14 +8808,20 @@ ${partnerSection}` : ''}${contact ? `
         kb.text('📌 Закрепить в ленте', `a:bx_pin_set|ws:${wsId}|o:${o.id}`).row();
       }
     }
-    kb.text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`).row();
+    // Primary controls: “Пауза” + “В архив” в одной строке (как ожидает UX)
+    kb.text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`)
+      .text('🗑 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
+      .row();
   }
-  if (st === 'PAUSED') kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`).row();
+  if (st === 'PAUSED') {
+    // Primary controls: “Возобновить” + “В архив” в одной строке
+    kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`)
+      .text('🗑 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
+      .row();
+  }
 
   if (st === 'CLOSED') {
     kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`).row();
-  } else {
-    kb.text('🗑 Архивировать', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
   }
 
   const shareUrl = offerShareUrl(o.id, title, desc);
