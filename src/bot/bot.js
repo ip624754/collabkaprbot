@@ -681,7 +681,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   .text('🎯 Smart-подбор', 'a:bx_smart|ws:0|h:mm')
   .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
   .row()
-  .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
+  .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
   .text('📝 Заявки', 'a:brand_apps|ws:0|s:new|p:0')
   .row()
   .text('📌 Сделки', 'a:brand_deals|ws:0|st:negotiation|p:0');
@@ -1085,13 +1085,13 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
       ? `
 <b>Карта</b>
 • 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
-• 💬 Диалоги и 📨 заявки → 📥 Inbox
+• 📥 Inbox — диалоги и заявки
 • 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
 `
       : `
 <b>Карта</b>
 • 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы
-• 💬 Диалоги → 📣 Мои каналы → выбери канал → 💬 Диалоги
+• 📥 Inbox → 📣 Мои каналы → выбери канал → 📥 Inbox
 • 📨 Заявки → 📣 Мои каналы → выбери канал → 📨 Заявки брендов
 • 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
 `;
@@ -1754,7 +1754,7 @@ function wsMenuKb(wsId, opts = {}) {
     .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
     .row()
     .text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)
-    .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
     .row()
     .text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
     .row()
@@ -2103,7 +2103,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
   const { showCurator = false } = opts || {};
   const net = networkEnabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
   const kb = new InlineKeyboard()
-  .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+  .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
   .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
   .row()
   .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`)
@@ -2133,7 +2133,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('🎯 Smart-подбор', `a:bx_smart|ws:${wsId}|h:bo`)
 .text('🔎 Поиск креаторов', `a:pm_home|ws:${wsId}`)
 .row()
-.text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+.text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
 .text('📝 Заявки', `a:brand_apps|ws:${wsId}|s:new|p:0`)
 .row()
 .text(`🎫 Brand Pass: ${credits}${retry ? ' · 🎟' + retry : ''}`, `a:brand_pass|ws:${wsId}`)
@@ -4468,7 +4468,7 @@ function bxFeedNavKb(wsId, page, hasPrev, hasNext, opts = {}) {
 
   kb.row()
     .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:bf`)
-    .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`);
+    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`);
 
   kbNavRow(kb, bxHomeCb(wsNum, h));
   return kb;
@@ -4890,7 +4890,7 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
   await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
 
 Выбери действие:
-<i>Подсказка: 🎬 офферы → 💬 диалоги/лента. 📨 заявки брендов → входящие.</i>`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
+<i>Подсказка: 🎬 офферы → 📥 Inbox / 📰 лента. 📨 заявки брендов → входящие.</i>`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
 }
 
 async function renderWsSettings(ctx, ownerUserId, wsId) {
@@ -8409,7 +8409,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
 
 • Создать офер — твой UGC/оффер увидят бренды в «📰 Лента креаторов»
-• 💬 Диалоги — переписка по офферам (бренд ↔ блогер)
+• 📥 Inbox — переписка по офферам (бренд ↔ блогер)
 • 📰 Лента креаторов — посмотреть выдачу глазами бренда
 • Мои офферы — пауза/удаление`,
     { parse_mode: 'HTML', reply_markup: bxMenuKb(wsNum, ws.network_enabled, { showCurator: isCurator }) }
@@ -9530,14 +9530,14 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
     ? await safeUserVerifications(() => db.listBarterThreadsForUserWithVerified(userId, limit, offset), () => db.listBarterThreadsForUser(userId, limit, offset))
     : await db.listBarterThreadsForUser(userId, limit, offset);
 
-  let header = `📨 <b>Inbox</b>`;
+  let header = `📥 <b>Inbox</b>`;
 
   // Brand Manager: show current brand + quick switch прямо в Inbox
   if (opts?.bm?.enabled) {
     header += `\n\n<b>Бренд:</b> <b>${escapeHtml(opts.bm.brandLabel || '—')}</b>`;
   }
 
-  header += `\n\nДиалоги по офферам (бренд ↔ блогер).`;
+  header += `\n\nПереписка по офферам (бренд ↔ блогер).`;
 
   const kb = new InlineKeyboard();
 
@@ -9580,7 +9580,7 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
   const nav = bxInboxNavKb(wsId, page, hasPrev, hasNext, { h });
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
-  await safeEditOrReply(ctx, header + (rows.length ? '' : '\n\nПока нет диалогов.'), { parse_mode: 'HTML', reply_markup: kb });
+  await safeEditOrReply(ctx, header + (rows.length ? '' : '\n\nПока нет переписок.'), { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function buildBxThreadView(userId, threadId) {
@@ -12017,7 +12017,7 @@ if (exp.type === 'brand_deals_search') {
         `От: <b>${escapeHtml(String(who))}</b>\n\n` +
         `${escapeHtml(preview)}${msg.length > preview.length ? '…' : ''}`;
 
-      const kb = new InlineKeyboard().text('📨 Открыть в Inbox', `a:brand_app_view|id:${appId}|s:in_progress|p:0`);
+      const kb = new InlineKeyboard().text('📥 Открыть в Inbox', `a:brand_app_view|id:${appId}|s:in_progress|p:0`);
 
       let delivered = 0;
       const deliveredTo = [];
@@ -12443,7 +12443,7 @@ ${msgText}
       const kb = new InlineKeyboard()
         .text('💬 Открыть диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`)
         .row()
-        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:${page}|h:${h}`);
+        .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:${page}|h:${h}`);
       await ctx.reply(again ? again.text : '✅ Отправлено.', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -13181,7 +13181,7 @@ ${list}
       const kb = new InlineKeyboard()
         .text('🧑‍💼 Кабинет менеджера', 'a:bm_home')
         .row()
-        .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
+        .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
         .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
         .row()
         .text('📋 Меню', 'a:menu');
@@ -13747,7 +13747,7 @@ bot.on('message:successful_payment', async (ctx) => {
           .row();
       }
       kb.text('🎫 Brand Pass', `a:brand_pass|ws:${data.wsId}`)
-        .text('📨 Inbox', `a:bx_inbox|ws:${data.wsId}|p:0|h:bo`);
+        .text('📥 Inbox', `a:bx_inbox|ws:${data.wsId}|p:0|h:bo`);
 
       await markApplied('auto_apply_brand_pass');
       await ctx.reply(
@@ -13783,7 +13783,7 @@ bot.on('message:successful_payment', async (ctx) => {
       const wsId = Number(data.wsId || 0);
       const kb = new InlineKeyboard()
         .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`)
-        .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+        .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
         .row()
         .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
@@ -13927,7 +13927,7 @@ if (p.a === 'a:guide') {
     text +=
       `• 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
 ` +
-      `• 💬 Диалоги и 📨 заявки → 📥 Inbox
+      `• 📥 Inbox — диалоги и заявки
 ` +
       `• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
 
@@ -13936,7 +13936,7 @@ if (p.a === 'a:guide') {
     text +=
       `• 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы
 ` +
-      `• 💬 Диалоги → 📣 Мои каналы → выбери канал → 💬 Диалоги
+      `• 📥 Inbox → 📣 Мои каналы → выбери канал → 📥 Inbox
 ` +
       `• 📨 Заявки → 📣 Мои каналы → выбери канал → 📨 Заявки брендов
 ` +
@@ -13978,7 +13978,7 @@ if (p.a === 'a:guide') {
   }
 
   if (!isBrandish) {
-    kb.text('💬 Диалоги', 'a:go_dialogs').text('📨 Заявки', 'a:go_requests').row();
+    kb.text('📥 Inbox', 'a:go_dialogs').text('📨 Заявки', 'a:go_requests').row();
   }
 
   if (!isBrandish) {
