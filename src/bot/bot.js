@@ -425,16 +425,44 @@ async function sendMessageWithFallback(api, chatId, text, options = {}) {
   }
 }
 
+function kbHasButtons(kb) {
+  try {
+    const a = kb?.inline_keyboard || kb?.inlineKeyboard || null;
+    if (Array.isArray(a)) return a.some(r => Array.isArray(r) && r.length > 0);
+  } catch {}
+  // If structure is unknown, assume there are buttons to keep layout stable.
+  return true;
+}
+
+function notifyDeleteRow(kb) {
+  // Optional: allow users to clean up DM notifications.
+  // Note: delete is scoped to the message that contains the button.
+  try {
+    if (kbHasButtons(kb)) kb.row();
+    kb.text('🗑 Убрать уведомление', 'a:notify_del');
+  } catch {}
+  return kb;
+}
+
+function notifyFooterRow(kb) {
+  try {
+    if (kbHasButtons(kb)) kb.row();
+    kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  } catch {}
+  return kb;
+}
+
 function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }) {
   const kb = new InlineKeyboard();
   if (openCb && replyCb) {
-    kb.text('📨 Открыть заявку', openCb).text(replyLabel, replyCb).row();
+    kb.text('📨 Открыть заявку', openCb).text(replyLabel, replyCb);
   } else if (openCb) {
-    kb.text('📨 Открыть заявку', openCb).row();
+    kb.text('📨 Открыть заявку', openCb);
   } else if (replyCb) {
-    kb.text(replyLabel, replyCb).row();
+    kb.text(replyLabel, replyCb);
   }
-  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  notifyDeleteRow(kb);
+  notifyFooterRow(kb);
   return kb;
 }
 
@@ -3818,10 +3846,9 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
 
   const notifText = `📝 <b>Новая заявка от креатора</b>\n\nБренд: <b>${escapeHtml(brandName)}</b>\nОт: ${creatorLabel}\n\n<b>Текст:</b>\n${escapeHtml(msg)}`;
 
-  const kbNotif = new InlineKeyboard()
-    .text('📥 Открыть в Inbox', `a:brand_app_view|id:${res.id}|s:new|p:0`)
-    .row()
-    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  const kbNotif = new InlineKeyboard().text('📥 Открыть в Inbox', `a:brand_app_view|id:${res.id}|s:new|p:0`);
+  notifyDeleteRow(kbNotif);
+  notifyFooterRow(kbNotif);
 
   // Recipients: owner + managers + super admins
   const recipients = new Set();
@@ -12019,6 +12046,9 @@ if (exp.type === 'brand_deals_search') {
 
       const kb = new InlineKeyboard().text('📥 Открыть в Inbox', `a:brand_app_view|id:${appId}|s:in_progress|p:0`);
 
+      notifyDeleteRow(kb);
+      notifyFooterRow(kb);
+
       let delivered = 0;
       const deliveredTo = [];
       const failedTo = [];
@@ -12424,6 +12454,8 @@ if (exp.type === 'brand_deals_search') {
           const msgText = body.length > 400 ? `${body.slice(0, 397)}...` : body;
           const notifyKb = new InlineKeyboard()
             .text('💬 Открыть диалог', `a:bx_thread|ws:${Number(thread.workspace_id || 0)}|t:${threadId}|p:0|b:inbox|h:${BX_HOME.MENU}`);
+          notifyDeleteRow(notifyKb);
+          notifyFooterRow(notifyKb);
           await ctx.api.sendMessage(otherTgId, `📨 Новое сообщение по офферу #${thread.offer_id}
 
 ${msgText}
@@ -13893,6 +13925,61 @@ bot.on('message:successful_payment', async (ctx) => {
 
 
     const legacy = async () => {
+// --- NOTIFY-DELETE1 (optional) ---
+// Allows user to clean up DM notifications sent by the bot.
+// Flow: tap 🗑 on a notification -> confirm message -> delete target message.
+if (p.a === 'a:notify_del') {
+  const targetMid = Number(ctx?.callbackQuery?.message?.message_id || 0);
+  if (!targetMid) {
+    await safeEditOrReply(ctx, '⚠️ Не удалось определить уведомление для удаления.', { reply_markup: navKb('a:menu') }, false);
+    return;
+  }
+
+  const kb = new InlineKeyboard()
+    .text('✅ Удалить', `a:notify_del_ok|mid:${targetMid}`)
+    .text('❌ Отмена', `a:notify_del_no|mid:${targetMid}`);
+  notifyFooterRow(kb);
+
+  await safeEditOrReply(
+    ctx,
+    `🗑 <b>Удалить это уведомление?</b>
+
+Это уберёт именно то сообщение, на котором нажата кнопка.`,
+    { parse_mode: 'HTML', reply_markup: kb },
+    false
+  );
+  return;
+}
+
+if (p.a === 'a:notify_del_ok') {
+  const targetMid = num(p.mid, 0);
+  const chatId = ctx?.chat?.id || ctx?.callbackQuery?.message?.chat?.id || null;
+
+  let ok = false;
+  if (chatId && targetMid) {
+    try {
+      await ctx.api.deleteMessage(chatId, targetMid);
+      ok = true;
+    } catch {
+      ok = false;
+    }
+  }
+
+  const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  const text = ok
+    ? '🗑 Уведомление удалено ✅'
+    : '⚠️ Не удалось удалить (возможно, уже удалено).';
+
+  await safeEditOrReply(ctx, text, { reply_markup: kb }, true);
+  return;
+}
+
+if (p.a === 'a:notify_del_no') {
+  const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  await safeEditOrReply(ctx, 'Ок, не удаляю.', { reply_markup: kb }, true);
+  return;
+}
+
 if (p.a === 'a:ui_mode_set') {
   await ctx.answerCallbackQuery();
   const mode = normalizeUiMode(p.m);
