@@ -226,6 +226,12 @@ async function getPaymentsRuntimeFlags() {
   const autoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
   return { accept, autoApply };
 }
+
+// Backward-compatible alias (some flows call getPaymentMode)
+async function getPaymentMode() {
+  return getPaymentsRuntimeFlags();
+}
+
 async function sendStarsInvoice(ctx, { title, description, payload, amount, backCb }) {
   // Stars payments: currency XTR, prices must contain exactly one item.
   const chatId = ctx?.chat?.id;
