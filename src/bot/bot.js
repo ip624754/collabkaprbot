@@ -8797,6 +8797,10 @@ ${partnerSection}` : ''}${contact ? `
       .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${o.id}|back:${back}|p:${page}`)
       .row();
 
+    if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+      kb.text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${o.id}|p:${page}|back:${back}`).row();
+    }
+
     const wsInfo = await db.getWorkspace(ownerUserId, wsId);
     const isPro = await db.isWorkspacePro(wsId);
     if (isPro) {
@@ -9258,7 +9262,7 @@ async function removeOfficialOfferPost(api, offerId, reason = 'REMOVED') {
   return { removed: true };
 }
 
-async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
+async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, back = '') {
   if (!CFG.OFFICIAL_PUBLISH_ENABLED) {
     if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Официальный канал выключен.', show_alert: true });
     return;
@@ -9302,7 +9306,7 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
 Статус: <b>${escapeHtml(statusLabel)}</b>${expiresLine}
 
 Режим: <b>${escapeHtml(mode)}</b>
-Канал: <b>${escapeHtml(String(CFG.OFFICIAL_CHANNEL_USERNAME || CFG.OFFICIAL_CHANNEL_ID || ''))}</b>`;
+Канал: <b>${escapeHtml((() => { const ch = String(CFG.OFFICIAL_CHANNEL_USERNAME || CFG.OFFICIAL_CHANNEL_ID || '').trim(); if (!ch) return ''; if (ch.startsWith('-') || ch.startsWith('@')) return ch; return '@' + ch; })())}</b>`;
 
   const kb = new InlineKeyboard();
 
@@ -9333,7 +9337,10 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
     kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}`).row();
   }
 
-  kb.text('⬅️ Назад к офферу', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
+  const backBtn = (back === 'my' || back === 'arch')
+    ? `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
+    : `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`;
+  kb.text('⬅️ Назад к офферу', backBtn);
 
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -17304,7 +17311,7 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:off_manage') {
       await ctx.answerCallbackQuery();
-      await renderOfficialManageView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0), String(p.back || ''));
       return;
     }
 
