@@ -434,6 +434,7 @@ function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }
   } else if (replyCb) {
     kb.text(replyLabel, replyCb).row();
   }
+  kb.text('🗑 Убрать уведомление', 'a:n_del').row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
@@ -3982,8 +3983,8 @@ function bxOfferTagsKb(wsId, meta, opts = {}) {
     .text(`🎯 Цели: ${goalsLabel}`, `a:bx_otpick|ws:${wsId}|k:goals`)
     .text(`📎 Требования: ${reqLabel}`, `a:bx_otpick|ws:${wsId}|k:req`)
     .row()
-    .text('⏭ Пропустить', `a:bx_otskip|ws:${wsId}`)
     .text('➡️ Далее', `a:bx_otnext|ws:${wsId}`)
+    .text('⏭ Пропустить', `a:bx_otskip|ws:${wsId}`)
     .row();
 
   if (opts.showParams) {
@@ -8638,7 +8639,7 @@ function bxMediaKb(wsId, offerId, back = 'my', pageOrHasMedia = 0, maybeHasMedia
     .text('🎞 GIF', `a:bx_media_gif|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
     .row()
     .text('🎥 Видео', `a:bx_media_video|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
-    .text('👁 Превью текста', `a:bx_media_preview|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
+    .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
     .row();
 
   if (hasMedia) {
@@ -8670,10 +8671,7 @@ async function renderBxMediaStep(ctx, ownerUserId, wsId, offerId, back = 'my', o
 ℹ️ Медиа появится в официальном канале только при <b>PAID-размещении</b>.
 (Внутри “Мои офферы” медиа не показываем — только в официальной публикации.)
 
-Выбери тип и пришли медиа одним сообщением:
-• Фото — как <b>Фото</b>
-• GIF — как <b>Анимацию</b> (или файл .gif)
-• Видео — как <b>Видео</b> (или mp4 файлом)`;
+Выбери тип и пришли файл одним сообщением.`;
 
   const kb = bxMediaKb(wsId, offerId, back, Number(opts.page || 0), hasMedia);
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, Boolean(edit));
@@ -8800,6 +8798,10 @@ ${partnerSection}` : ''}${contact ? `
       .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${o.id}|back:${back}|p:${page}`)
       .row();
 
+    if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+      kb.text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${o.id}|p:${page}|back:${back}`).row();
+    }
+
     const wsInfo = await db.getWorkspace(ownerUserId, wsId);
     const isPro = await db.isWorkspacePro(wsId);
     if (isPro) {
@@ -8810,23 +8812,14 @@ ${partnerSection}` : ''}${contact ? `
         kb.text('📌 Закрепить в ленте', `a:bx_pin_set|ws:${wsId}|o:${o.id}`).row();
       }
     }
-    kb
-      .text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`)
-      .text('🗑 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
-      .row();
+    kb.text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`).row();
   }
-
-  if (st === 'PAUSED') {
-    kb
-      .text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`)
-      .text('🗑 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
-      .row();
-  }
+  if (st === 'PAUSED') kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`).row();
 
   if (st === 'CLOSED') {
     kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`).row();
-  } else if (st !== 'ACTIVE' && st !== 'PAUSED') {
-    kb.text('🗑 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
+  } else {
+    kb.text('🗑 Архивировать', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
   }
 
   const shareUrl = offerShareUrl(o.id, title, desc);
@@ -9281,7 +9274,7 @@ async function removeOfficialOfferPost(api, offerId, reason = 'REMOVED') {
   return { removed: true };
 }
 
-async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
+async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, back = '') {
   if (!CFG.OFFICIAL_PUBLISH_ENABLED) {
     if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Официальный канал выключен.', show_alert: true });
     return;
@@ -9328,42 +9321,44 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
 Канал: <b>${escapeHtml(String(CFG.OFFICIAL_CHANNEL_USERNAME || CFG.OFFICIAL_CHANNEL_ID || ''))}</b>`;
 
   const kb = new InlineKeyboard();
+  const cbBack = back ? `|back:${back}` : '';
 
   const canRequest = isOwner && (mode === 'manual' || mode === 'mixed');
   if (canRequest) {
     if (st === 'PENDING') {
-      kb.text('⏳ В очереди (отменить)', `a:off_req_cancel|ws:${wsId}|o:${offerId}|p:${page}`).row();
+      kb.text('⏳ В очереди (отменить)', `a:off_req_cancel|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`).row();
     } else if (st !== 'ACTIVE') {
-      kb.text('📝 В очередь публикаций', `a:off_req_home|ws:${wsId}|o:${offerId}|p:${page}`).row();
+      kb.text('📝 В очередь публикаций', `a:off_req_home|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`).row();
     }
   }
 
   if (isOwner && (mode === 'paid' || mode === 'mixed')) {
-    kb.text('💳 Купить размещение', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${page}`).row();
+    kb.text('💳 Купить размещение', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`).row();
   }
   const canPublishManual = isMod && (mode === 'manual' || mode === 'mixed');
   // Commit F: in paid mode allow publish only if there is a paid PENDING record
   const canPublishPaid = isMod && (mode === 'paid' || mode === 'mixed') && st === 'PENDING' && post?.payment_id;
   if (canPublishManual || canPublishPaid) {
-    kb.text('✅ Опубликовать сейчас', `a:off_pub|ws:${wsId}|o:${offerId}|p:${page}`).row();
+    kb.text('✅ Опубликовать сейчас', `a:off_pub|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`).row();
   }
 
   if (isMod && st === 'ACTIVE') {
-    kb.text('♻️ Обновить пост', `a:off_upd|ws:${wsId}|o:${offerId}|p:${page}`).row();
+    kb.text('♻️ Обновить пост', `a:off_upd|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`).row();
   }
 
   if (isMod && (st === 'ACTIVE' || st === 'PENDING')) {
-    kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}`).row();
+    kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`).row();
   }
 
-  kb.text('⬅️ Назад к офферу', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
+  const backCb = back ? `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}` : `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`;
+  kb.text('⬅️ Назад к офферу', backCb);
 
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
-async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
+async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0, back = '') {
   if (!CFG.OFFICIAL_PUBLISH_ENABLED) {
     if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Официальный канал выключен.', show_alert: true });
     return;
@@ -9401,15 +9396,17 @@ async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
 • 7 дней — нормальный слот
 • 30 дней — “топ‑слот”`;
 
+  const cbBack = back ? `|back:${back}` : '';
+
   const kb = new InlineKeyboard()
-    .text(`🕒 1 день`, `a:off_req|ws:${wsId}|o:${offerId}|days:1|p:${page}`)
-    .text(`📅 7 дней`, `a:off_req|ws:${wsId}|o:${offerId}|days:7|p:${page}`)
+    .text(`🕒 1 день`, `a:off_req|ws:${wsId}|o:${offerId}|days:1|p:${page}${cbBack}`)
+    .text(`📅 7 дней`, `a:off_req|ws:${wsId}|o:${offerId}|days:7|p:${page}${cbBack}`)
     .row()
-    .text(`🏆 30 дней`, `a:off_req|ws:${wsId}|o:${offerId}|days:30|p:${page}`)
+    .text(`🏆 30 дней`, `a:off_req|ws:${wsId}|o:${offerId}|days:30|p:${page}${cbBack}`)
     .row()
-    .text(`⚙️ По умолчанию (${defaultDays}д)`, `a:off_req|ws:${wsId}|o:${offerId}|days:${defaultDays}|p:${page}`)
+    .text(`⚙️ По умолчанию (${defaultDays}д)`, `a:off_req|ws:${wsId}|o:${offerId}|days:${defaultDays}|p:${page}${cbBack}`)
     .row()
-    .text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`)
+    .text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`)
     .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   if (ctx.callbackQuery) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -9418,7 +9415,7 @@ async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
 
 
 
-async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0) {
+async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0, back = '') {
   const mode = String(CFG.OFFICIAL_PUBLISH_MODE || 'manual').toLowerCase();
   if (!(mode === 'paid' || mode === 'mixed')) {
     if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Покупка размещения выключена.', show_alert: true });
@@ -9442,11 +9439,13 @@ async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0) {
 
 Выбери срок слота:`;
 
+  const cbBack = back ? `|back:${back}` : '';
+
   const kb = new InlineKeyboard();
   for (const d of OFFICIAL_DURATIONS) {
-    kb.text(`⭐ ${d.label} · ${d.price} XTR`, `a:off_buy|ws:${wsId}|o:${offerId}|dur:${d.id}|p:${page}`).row();
+    kb.text(`⭐ ${d.label} · ${d.price} XTR`, `a:off_buy|ws:${wsId}|o:${offerId}|dur:${d.id}|p:${page}${cbBack}`).row();
   }
-  kbNavRow(kb, `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`);
+  kbNavRow(kb, `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -12864,10 +12863,7 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        const backCb = (Number.isFinite(offerId) && offerId > 0)
-          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
-          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
-        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
+        await ctx.reply('Оффер не найден или нет доступа.');
         return;
       }
 
@@ -12917,10 +12913,7 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        const backCb = (Number.isFinite(offerId) && offerId > 0)
-          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
-          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
-        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
+        await ctx.reply('Оффер не найден или нет доступа.');
         return;
       }
 
@@ -12973,10 +12966,7 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        const backCb = (Number.isFinite(offerId) && offerId > 0)
-          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
-          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
-        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
+        await ctx.reply('Оффер не найден или нет доступа.');
         return;
       }
 
@@ -13037,27 +13027,11 @@ ${list}
       return;
     }
 
-    // Barter offer: photo as document (we require sending as Photo for channel-friendly media)
-    if (String(exp.type) === 'bx_media_photo') {
-      const wsId = Number(exp.wsId);
-      const offerId = Number(exp.offerId);
-      const back = exp.back ? String(exp.back) : 'my';
-      const page = Math.max(0, Number(exp.page || 0));
-
-      // For best UX we need Telegram "photo" file_id (not document)
-      await ctx.reply('Для <b>Фото</b> пришли картинку как <b>Фото</b> (не файлом), чтобы она корректно показалась в официальном канале.', {
-        parse_mode: 'HTML',
-        reply_markup: navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
-      });
-      return;
-    }
-
     // Barter offer: GIF as document
     if (String(exp.type) === 'bx_media_gif') {
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
-      const page = Math.max(0, Number(exp.page || 0));
 
       if (!doc?.file_id || (mime && mime !== 'image/gif')) {
         await ctx.reply('Похоже, это не GIF. Пришли GIF как “анимацию” (или файл .gif).');
@@ -13067,17 +13041,14 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        const backCb = (Number.isFinite(offerId) && offerId > 0)
-          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
-          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
-        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
+        await ctx.reply('Оффер не найден или нет доступа.');
         return;
       }
 
       await db.updateBarterOffer(offerId, { media_type: 'animation', media_file_id: doc.file_id });
       await clearExpectText(ctx.from.id);
 
-      await ctx.reply('✅ GIF прикреплён. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, page, true) });
+      await ctx.reply('✅ GIF прикреплён. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, true) });
       return;
     }
 
@@ -13086,7 +13057,6 @@ ${list}
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
-      const page = Math.max(0, Number(exp.page || 0));
 
       if (!doc?.file_id || (mime && !String(mime).startsWith('video/'))) {
         await ctx.reply('Похоже, это не видео. Пришли mp4 как “видео” или как файл.');
@@ -13096,17 +13066,14 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        const backCb = (Number.isFinite(offerId) && offerId > 0)
-          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
-          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
-        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
+        await ctx.reply('Оффер не найден или нет доступа.');
         return;
       }
 
       await db.updateBarterOffer(offerId, { media_type: 'video', media_file_id: doc.file_id });
       await clearExpectText(ctx.from.id);
 
-      await ctx.reply('✅ Видео прикреплено. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, page, true) });
+      await ctx.reply('✅ Видео прикреплено. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, true) });
       return;
     }
 
@@ -14513,6 +14480,36 @@ if (p.a === 'a:brand_dir_open') {
 
       const flags = await getRoleFlags(u, ctx.from.id);
       await renderMainMenu(ctx, flags, { edit: true, user: u });
+      return;
+    }
+
+
+    // NOTIFY delete (P2): double-tap within 10s to remove bot notification message
+    if (p.a === 'a:n_del') {
+      const chatId = ctx.callbackQuery?.message?.chat?.id;
+      const msgId = ctx.callbackQuery?.message?.message_id;
+      if (!chatId || !msgId) {
+        await ctx.answerCallbackQuery({ text: 'Не могу убрать это уведомление.', show_alert: true });
+        return;
+      }
+
+      const key = k(['ndel', String(chatId), String(msgId), String(ctx.from.id)]);
+      const armed = await redis.get(key);
+
+      if (!armed) {
+        await redis.setEx(key, 10, '1');
+        await ctx.answerCallbackQuery({ text: 'Нажми ещё раз (10с), чтобы убрать уведомление', show_alert: false });
+        return;
+      }
+
+      await redis.del(key);
+      await ctx.answerCallbackQuery({ text: 'Убрано', show_alert: false });
+
+      try {
+        await ctx.api.deleteMessage(chatId, msgId);
+      } catch (e) {
+        try { await ctx.deleteMessage(); } catch (_) {}
+      }
       return;
     }
 
@@ -17366,13 +17363,13 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:off_manage') {
       await ctx.answerCallbackQuery();
-      await renderOfficialManageView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0), p.back || '');
       return;
     }
 
     if (p.a === 'a:off_req_home') {
       await ctx.answerCallbackQuery();
-      await renderOfficialRequestHome(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
+      await renderOfficialRequestHome(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17430,7 +17427,7 @@ if (p.a === 'a:match_home') {
       }
 
       await ctx.answerCallbackQuery({ text: '✅ Заявка добавлена в очередь.', show_alert: false });
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17464,13 +17461,13 @@ if (p.a === 'a:match_home') {
       }
 
       await ctx.answerCallbackQuery({ text: '🗑 Заявка отменена.', show_alert: false });
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
     if (p.a === 'a:off_buy_home') {
       await ctx.answerCallbackQuery();
-      await renderOfficialBuyHome(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
+      await renderOfficialBuyHome(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17493,6 +17490,8 @@ if (p.a === 'a:match_home') {
 
       const offerId = Number(p.o);
       const wsId = Number(p.ws);
+      const page = Number(p.p || 0);
+      const cbBack = p.back ? `|back:${p.back}` : '';
       const durId = String(p.dur || '').trim();
       const d = OFFICIAL_DURATIONS.find((x) => x.id === durId);
       if (!d) {
@@ -17531,7 +17530,7 @@ if (p.a === 'a:match_home') {
         description,
         payload: `offpub_${u.id}_${offerId}_${d.days}_${token}`,
         amount: d.price,
-        backCb: `a:off_manage|ws:${wsId}|o:${offerId}`,
+        backCb: `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`,
       });
       if (!okInv) return;
 
@@ -17542,7 +17541,7 @@ if (p.a === 'a:match_home') {
         {
           parse_mode: 'Markdown',
           reply_markup: new InlineKeyboard()
-            .text('⬅️ Назад', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${Number(p.p || 0)}`)
+            .text('⬅️ Назад', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${page}${cbBack}`)
             .row()
             .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         }
@@ -17578,7 +17577,7 @@ if (p.a === 'a:match_home') {
       if (mode === 'paid') {
         if (!isPaidPending) {
           await ctx.answerCallbackQuery({ text: 'Нет оплаченной заявки в очереди (PENDING).', show_alert: true });
-          await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+          await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
           return;
         }
         placementType = 'PAID';
@@ -17610,7 +17609,7 @@ if (p.a === 'a:match_home') {
         } catch (_) {}
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
       }
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17637,7 +17636,7 @@ if (p.a === 'a:match_home') {
         try { await db.setOfficialPostStatus(offerId, 'ERROR', { lastError: String(e?.message || e) }); } catch (_) {}
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
       }
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17660,7 +17659,7 @@ if (p.a === 'a:match_home') {
         try { await db.setOfficialPostStatus(offerId, 'ERROR', { lastError: String(e?.message || e) }); } catch (_) {}
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
       }
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
