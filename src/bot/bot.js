@@ -8817,6 +8817,9 @@ ${partnerSection}` : ''}${contact ? `
     kb.text('🗑 Архивировать', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
   }
 
+  const shareUrl = offerShareUrl(o.id, title, desc);
+  if (shareUrl) kb.url('📤 Поделиться', shareUrl).row();
+
   const bPage = Math.max(0, Number(page) || 0);
   const backCb = back === 'my'
     ? `a:bx_my|ws:${wsId}|p:${bPage}`
@@ -9002,53 +9005,26 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
 
   const h = normBxHome(opts.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
+  const kb = new InlineKeyboard().text('💬 Написать', `a:bx_msg|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
+
   const isOwner = Number(o.owner_user_id) === Number(userId);
-
-  // If the owner opens their own deep-link (/start bxo_...), show an owner-friendly keyboard
-  // (no "Написать"/"Жалоба", and Back should not throw them into Brand-only feed).
-  const kb = new InlineKeyboard();
-
-  if (isOwner) {
-    kb.text('⬆️ Поднять', `a:bx_bump|ws:${wsId}|o:${offerId}|p:0|back:my`).row();
-    kb.text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`).row();
-    kb.text('🔎 Открыть', `a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:0`).row();
-
-    let canOfficial = false;
-    if (CFG.OFFICIAL_PUBLISH_ENABLED) {
-      try {
-        canOfficial = true; // owner always
-        // keep moderator check for future-proofing (doesn't change owner truth)
-        if (await isModerator({ id: userId }, ctx.from?.id)) canOfficial = true;
-      } catch {
-        canOfficial = true;
-      }
+  let canOfficial = false;
+  if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+    try {
+      canOfficial = isOwner || (await isModerator({ id: userId }, ctx.from?.id));
+    } catch {
+      canOfficial = isOwner;
     }
-    if (canOfficial) {
-      kb.text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${offerId}|p:0|h:${h}`).row();
-    }
-
-    // Back -> My offers (creator-safe)
-    kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
-  } else {
-    kb.text('💬 Написать', `a:bx_msg|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`).row();
-
-    // Moderators can open official placement actions from public view too.
-    if (CFG.OFFICIAL_PUBLISH_ENABLED) {
-      try {
-        const isMod = await isModerator({ id: userId }, ctx.from?.id);
-        if (isMod) kb.text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`).row();
-      } catch (_) {}
-    }
-
-    kb.text('🚩 Жалоба', `a:bx_report_offer|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`).row();
-
-    // Back: for non-owners wsId feed may be inaccessible; if viewer is in Brand mode — send to Brand feed,
-    // otherwise fall back to Menu (avoid Brand-only notice confusion).
-    let viewerMode = UI_MODES.CREATOR;
-    try { viewerMode = await resolveUiMode(userId); } catch {}
-    const backCb = viewerMode === UI_MODES.BRAND ? `a:bx_feed|ws:0|p:0|h:${h}` : 'a:menu';
-    kbNavRow(kb, backCb);
   }
+
+  if (canOfficial) {
+    kb.row().text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
+  }
+
+  kb.row().text('🚩 Жалоба', `a:bx_report_offer|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
+  // Back: for non-owners this wsId feed is inaccessible; send them to Brand Mode feed
+  const backCb = isOwner ? `a:bx_feed|ws:${wsId}|p:${page}|h:${h}` : `a:bx_feed|ws:0|p:0|h:${h}`;
+  kbNavRow(kb, backCb);
 
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -9064,10 +9040,24 @@ function offerDeepLink(offerId) {
   return `https://t.me/${u}?start=bxo_${offerId}`;
 }
 
+
+function offerShareUrl(offerId, title = '', description = '') {
+  const link = offerDeepLink(offerId);
+  if (!link) return '';
+  const t = String(title || '').trim();
+  const d = String(description || '').trim();
+  let text = t || 'Оффер';
+  if (d) text += `\n\n${truncateText(d, 280)}`;
+  // Opens Telegram share sheet (pick chat/contact) with prefilled text+link
+  return `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
+}
+
 function truncateText(s, maxLen = 800) {
   const txt = String(s || '').trim();
-  if (txt.length <= maxLen) return txt;
-  return txt.slice(0, maxLen - 1) + '…';
+  const cps = Array.from(txt);
+  if (cps.length <= maxLen) return txt;
+  const keep = Math.max(0, Number(maxLen) - 1);
+  return cps.slice(0, keep).join('') + '…';
 }
 
 async function safeOfficialPosts(primaryFn, fallbackFn) {
@@ -13267,6 +13257,13 @@ if (payload?.type === 'bxo') {
       const offer = await db.getBarterOfferPublic(payload.id);
       if (!offer) return ctx.reply('Оффер не найден.');
       const wsId = Number(offer.workspace_id);
+
+      // If owner opens their own public offer deep-link: show owner view (no “Написать/Жалоба” confusion)
+      if (Number(offer.owner_user_id) === Number(u.id)) {
+        await renderBxView(ctx, u.id, wsId, payload.id, 'my', 0);
+        return;
+      }
+
       return renderBxPublicView(ctx, u.id, wsId, payload.id, 0);
     }
 
@@ -18615,11 +18612,13 @@ if (p.a === 'a:bx_publish_hint') {
         await clearDraft(ctx.from.id);
 
         const link = offerDeepLink(offer.id);
+        const shareUrl = offerShareUrl(offer.id, realTitle, fullDescription);
         const kb = new InlineKeyboard();
         kb.text('⬆️ Поднять', `a:bx_bump|ws:${wsId}|o:${offer.id}|p:0|back:my`).row();
         kb.text('🔎 Открыть', `a:bx_view|ws:${wsId}|o:${offer.id}|back:my|p:0`)
           .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`).row();
-        if (link) kb.url('🔗 Поделиться', link).row();
+        if (shareUrl) kb.url('📤 Поделиться', shareUrl).row();
+        else if (link) kb.url('🔗 Ссылка', link).row();
         kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
 
         await safeEditOrReply(ctx,
