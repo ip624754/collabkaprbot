@@ -3982,7 +3982,6 @@ function bxOfferTagsKb(wsId, meta, opts = {}) {
     .text(`🎯 Цели: ${goalsLabel}`, `a:bx_otpick|ws:${wsId}|k:goals`)
     .text(`📎 Требования: ${reqLabel}`, `a:bx_otpick|ws:${wsId}|k:req`)
     .row()
-    // Step buttons: “Пропустить” слева, “Далее” справа (как ожидает UX)
     .text('⏭ Пропустить', `a:bx_otskip|ws:${wsId}`)
     .text('➡️ Далее', `a:bx_otnext|ws:${wsId}`)
     .row();
@@ -8639,7 +8638,7 @@ function bxMediaKb(wsId, offerId, back = 'my', pageOrHasMedia = 0, maybeHasMedia
     .text('🎞 GIF', `a:bx_media_gif|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
     .row()
     .text('🎥 Видео', `a:bx_media_video|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
-    .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
+    .text('👁 Превью текста', `a:bx_media_preview|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
     .row();
 
   if (hasMedia) {
@@ -8671,7 +8670,10 @@ async function renderBxMediaStep(ctx, ownerUserId, wsId, offerId, back = 'my', o
 ℹ️ Медиа появится в официальном канале только при <b>PAID-размещении</b>.
 (Внутри “Мои офферы” медиа не показываем — только в официальной публикации.)
 
-Выбери тип и пришли файл одним сообщением.`;
+Выбери тип и пришли медиа одним сообщением:
+• Фото — как <b>Фото</b>
+• GIF — как <b>Анимацию</b> (или файл .gif)
+• Видео — как <b>Видео</b> (или mp4 файлом)`;
 
   const kb = bxMediaKb(wsId, offerId, back, Number(opts.page || 0), hasMedia);
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, Boolean(edit));
@@ -8808,20 +8810,23 @@ ${partnerSection}` : ''}${contact ? `
         kb.text('📌 Закрепить в ленте', `a:bx_pin_set|ws:${wsId}|o:${o.id}`).row();
       }
     }
-    // Primary controls: “Пауза” + “В архив” в одной строке (как ожидает UX)
-    kb.text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`)
+    kb
+      .text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`)
       .text('🗑 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
       .row();
   }
+
   if (st === 'PAUSED') {
-    // Primary controls: “Возобновить” + “В архив” в одной строке
-    kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`)
+    kb
+      .text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`)
       .text('🗑 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
       .row();
   }
 
   if (st === 'CLOSED') {
     kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`).row();
+  } else if (st !== 'ACTIVE' && st !== 'PAUSED') {
+    kb.text('🗑 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
   }
 
   const shareUrl = offerShareUrl(o.id, title, desc);
@@ -12859,7 +12864,10 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        const backCb = (Number.isFinite(offerId) && offerId > 0)
+          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
+          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
+        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
         return;
       }
 
@@ -12909,7 +12917,10 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        const backCb = (Number.isFinite(offerId) && offerId > 0)
+          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
+          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
+        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
         return;
       }
 
@@ -12962,7 +12973,10 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        const backCb = (Number.isFinite(offerId) && offerId > 0)
+          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
+          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
+        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
         return;
       }
 
@@ -13023,11 +13037,27 @@ ${list}
       return;
     }
 
+    // Barter offer: photo as document (we require sending as Photo for channel-friendly media)
+    if (String(exp.type) === 'bx_media_photo') {
+      const wsId = Number(exp.wsId);
+      const offerId = Number(exp.offerId);
+      const back = exp.back ? String(exp.back) : 'my';
+      const page = Math.max(0, Number(exp.page || 0));
+
+      // For best UX we need Telegram "photo" file_id (not document)
+      await ctx.reply('Для <b>Фото</b> пришли картинку как <b>Фото</b> (не файлом), чтобы она корректно показалась в официальном канале.', {
+        parse_mode: 'HTML',
+        reply_markup: navKb(`a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
+      });
+      return;
+    }
+
     // Barter offer: GIF as document
     if (String(exp.type) === 'bx_media_gif') {
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
+      const page = Math.max(0, Number(exp.page || 0));
 
       if (!doc?.file_id || (mime && mime !== 'image/gif')) {
         await ctx.reply('Похоже, это не GIF. Пришли GIF как “анимацию” (или файл .gif).');
@@ -13037,14 +13067,17 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        const backCb = (Number.isFinite(offerId) && offerId > 0)
+          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
+          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
+        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
         return;
       }
 
       await db.updateBarterOffer(offerId, { media_type: 'animation', media_file_id: doc.file_id });
       await clearExpectText(ctx.from.id);
 
-      await ctx.reply('✅ GIF прикреплён. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, true) });
+      await ctx.reply('✅ GIF прикреплён. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, page, true) });
       return;
     }
 
@@ -13053,6 +13086,7 @@ ${list}
       const wsId = Number(exp.wsId);
       const offerId = Number(exp.offerId);
       const back = exp.back ? String(exp.back) : 'my';
+      const page = Math.max(0, Number(exp.page || 0));
 
       if (!doc?.file_id || (mime && !String(mime).startsWith('video/'))) {
         await ctx.reply('Похоже, это не видео. Пришли mp4 как “видео” или как файл.');
@@ -13062,14 +13096,17 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        const backCb = (Number.isFinite(offerId) && offerId > 0)
+          ? `a:bx_media_step|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
+          : (wsId ? `a:bx_my|ws:${wsId}|p:${page}` : 'a:menu');
+        await ctx.reply('Оффер не найден или нет доступа.', { reply_markup: navKb(backCb) });
         return;
       }
 
       await db.updateBarterOffer(offerId, { media_type: 'video', media_file_id: doc.file_id });
       await clearExpectText(ctx.from.id);
 
-      await ctx.reply('✅ Видео прикреплено. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, true) });
+      await ctx.reply('✅ Видео прикреплено. Продолжаем:', { reply_markup: bxMediaKb(wsId, offerId, back, page, true) });
       return;
     }
 
