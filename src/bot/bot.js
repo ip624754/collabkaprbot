@@ -8797,10 +8797,6 @@ ${partnerSection}` : ''}${contact ? `
       .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${o.id}|back:${back}|p:${page}`)
       .row();
 
-    if (CFG.OFFICIAL_PUBLISH_ENABLED) {
-      kb.text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${o.id}|p:${page}|back:${back}`).row();
-    }
-
     const wsInfo = await db.getWorkspace(ownerUserId, wsId);
     const isPro = await db.isWorkspacePro(wsId);
     if (isPro) {
@@ -8811,10 +8807,12 @@ ${partnerSection}` : ''}${contact ? `
         kb.text('📌 Закрепить в ленте', `a:bx_pin_set|ws:${wsId}|o:${o.id}`).row();
       }
     }
+    // Actions: Pause + Archive (same row)
     kb.text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`)
       .text('📦 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
       .row();
   }
+
   if (st === 'PAUSED') {
     kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`)
       .text('📦 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
@@ -8823,8 +8821,14 @@ ${partnerSection}` : ''}${contact ? `
 
   if (st === 'CLOSED') {
     kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`).row();
-  } else if (st !== 'ACTIVE' && st !== 'PAUSED') {
-    kb.text('📦 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
+  }
+
+  // Share (Telegram share sheet) for ACTIVE/PAUSED
+  const link = offerDeepLink(o.id);
+  if ((st === 'ACTIVE' || st === 'PAUSED') && link) {
+    const plain = `🤝 Collabka · оффер #${o.id}\n\n${title || 'Оффер'}\n\n${desc || ''}\n\nОткрыть в боте: ${link}`;
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('⁠')}&text=${encodeURIComponent(plain)}`;
+    kb.url('📤 Поделиться', shareUrl).row();
   }
 
   const bPage = Math.max(0, Number(page) || 0);
@@ -9262,7 +9266,7 @@ async function removeOfficialOfferPost(api, offerId, reason = 'REMOVED') {
   return { removed: true };
 }
 
-async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, back = '') {
+async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
   if (!CFG.OFFICIAL_PUBLISH_ENABLED) {
     if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Официальный канал выключен.', show_alert: true });
     return;
@@ -9299,6 +9303,8 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
   const expiresLine = post?.slot_expires_at ? `
 Слот до: <b>${escapeHtml(new Date(post.slot_expires_at).toLocaleString('ru-RU'))}</b>` : '';
   const mode = String(CFG.OFFICIAL_PUBLISH_MODE || 'manual').toLowerCase();
+  const chRaw = String(CFG.OFFICIAL_CHANNEL_USERNAME || CFG.OFFICIAL_CHANNEL_ID || '').trim();
+  const chLabel = chRaw && !chRaw.startsWith('@') && !chRaw.startsWith('-100') ? `@${chRaw}` : chRaw;
 
   const text = `📣 <b>Официальный канал</b>
 
@@ -9306,7 +9312,7 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
 Статус: <b>${escapeHtml(statusLabel)}</b>${expiresLine}
 
 Режим: <b>${escapeHtml(mode)}</b>
-Канал: <b>${escapeHtml((() => { const ch = String(CFG.OFFICIAL_CHANNEL_USERNAME || CFG.OFFICIAL_CHANNEL_ID || '').trim(); if (!ch) return ''; if (ch.startsWith('-') || ch.startsWith('@')) return ch; return '@' + ch; })())}</b>`;
+Канал: <b>${escapeHtml(String(chLabel || ''))}</b>`;
 
   const kb = new InlineKeyboard();
 
@@ -9337,10 +9343,7 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
     kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}`).row();
   }
 
-  const backBtn = (back === 'my' || back === 'arch')
-    ? `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`
-    : `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`;
-  kb.text('⬅️ Назад к офферу', backBtn);
+  kb.text('⬅️ Назад к офферу', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
 
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -17311,7 +17314,7 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:off_manage') {
       await ctx.answerCallbackQuery();
-      await renderOfficialManageView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0), String(p.back || ''));
+      await renderOfficialManageView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
       return;
     }
 
@@ -17425,7 +17428,7 @@ if (p.a === 'a:match_home') {
         await ctx.answerCallbackQuery({ text: 'Фича отключена.', show_alert: true });
         return;
       }
-      if (!['paid', 'mixed'].includes(CFG.OFFICIAL_PUBLISH_MODE)) {
+      if (!['paid', 'mixed'].includes(String(CFG.OFFICIAL_PUBLISH_MODE || '').toLowerCase())) {
         await ctx.answerCallbackQuery({ text: 'Покупка размещения выключена.', show_alert: true });
         return;
       }
@@ -17464,7 +17467,7 @@ if (p.a === 'a:match_home') {
           offerId,
           days: d.days,
           stars: d.price,
-          createdAt: Date.now()
+          createdAt: Date.now(),
         }),
         { ex: 60 * 60 }
       );
