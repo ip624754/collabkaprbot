@@ -425,44 +425,16 @@ async function sendMessageWithFallback(api, chatId, text, options = {}) {
   }
 }
 
-function kbHasButtons(kb) {
-  try {
-    const a = kb?.inline_keyboard || kb?.inlineKeyboard || null;
-    if (Array.isArray(a)) return a.some(r => Array.isArray(r) && r.length > 0);
-  } catch {}
-  // If structure is unknown, assume there are buttons to keep layout stable.
-  return true;
-}
-
-function notifyDeleteRow(kb) {
-  // Optional: allow users to clean up DM notifications.
-  // Note: delete is scoped to the message that contains the button.
-  try {
-    if (kbHasButtons(kb)) kb.row();
-    kb.text('🗑 Убрать уведомление', 'a:notify_del');
-  } catch {}
-  return kb;
-}
-
-function notifyFooterRow(kb) {
-  try {
-    if (kbHasButtons(kb)) kb.row();
-    kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-  } catch {}
-  return kb;
-}
-
 function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }) {
   const kb = new InlineKeyboard();
   if (openCb && replyCb) {
-    kb.text('📨 Открыть заявку', openCb).text(replyLabel, replyCb);
+    kb.text('📨 Открыть заявку', openCb).text(replyLabel, replyCb).row();
   } else if (openCb) {
-    kb.text('📨 Открыть заявку', openCb);
+    kb.text('📨 Открыть заявку', openCb).row();
   } else if (replyCb) {
-    kb.text(replyLabel, replyCb);
+    kb.text(replyLabel, replyCb).row();
   }
-  notifyDeleteRow(kb);
-  notifyFooterRow(kb);
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -1112,8 +1084,9 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     (effective === 'brand' || effective === 'brand_manager')
       ? `
 <b>Карта</b>
-• 📰 Лента креаторов → лента / 🔎 Поиск креаторов / 🎛 Фильтры
+• 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
 • 📥 Inbox — диалоги и заявки
+• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
 `
       : `
 <b>Карта</b>
@@ -1164,11 +1137,11 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     kb
       .row()
       .text('📥 Inbox', 'a:go_dialogs')
-      .text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm');
+      .text('🎬 Офферы (лента)', 'a:bx_feed|ws:0|p:0|h:mm');
     kb
       .row()
-      .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
-      .text('🎛 Фильтры', 'a:bx_filters|ws:0');
+      .text('🔎 Поиск', 'a:pm_home|ws:0')
+      .text('🏷 Каталог брендов', 'a:brands_home');
   } else {
     kb.row().text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home');
   }
@@ -3845,9 +3818,10 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
 
   const notifText = `📝 <b>Новая заявка от креатора</b>\n\nБренд: <b>${escapeHtml(brandName)}</b>\nОт: ${creatorLabel}\n\n<b>Текст:</b>\n${escapeHtml(msg)}`;
 
-  const kbNotif = new InlineKeyboard().text('📥 Открыть в Inbox', `a:brand_app_view|id:${res.id}|s:new|p:0`);
-  notifyDeleteRow(kbNotif);
-  notifyFooterRow(kbNotif);
+  const kbNotif = new InlineKeyboard()
+    .text('📥 Открыть в Inbox', `a:brand_app_view|id:${res.id}|s:new|p:0`)
+    .row()
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   // Recipients: owner + managers + super admins
   const recipients = new Set();
@@ -9028,26 +9002,53 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
 
   const h = normBxHome(opts.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
-  const kb = new InlineKeyboard().text('💬 Написать', `a:bx_msg|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
-
   const isOwner = Number(o.owner_user_id) === Number(userId);
-  let canOfficial = false;
-  if (CFG.OFFICIAL_PUBLISH_ENABLED) {
-    try {
-      canOfficial = isOwner || (await isModerator({ id: userId }, ctx.from?.id));
-    } catch {
-      canOfficial = isOwner;
+
+  // If the owner opens their own deep-link (/start bxo_...), show an owner-friendly keyboard
+  // (no "Написать"/"Жалоба", and Back should not throw them into Brand-only feed).
+  const kb = new InlineKeyboard();
+
+  if (isOwner) {
+    kb.text('⬆️ Поднять', `a:bx_bump|ws:${wsId}|o:${offerId}|p:0|back:my`).row();
+    kb.text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`).row();
+    kb.text('🔎 Открыть', `a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:0`).row();
+
+    let canOfficial = false;
+    if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+      try {
+        canOfficial = true; // owner always
+        // keep moderator check for future-proofing (doesn't change owner truth)
+        if (await isModerator({ id: userId }, ctx.from?.id)) canOfficial = true;
+      } catch {
+        canOfficial = true;
+      }
     }
-  }
+    if (canOfficial) {
+      kb.text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${offerId}|p:0|h:${h}`).row();
+    }
 
-  if (canOfficial) {
-    kb.row().text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
-  }
+    // Back -> My offers (creator-safe)
+    kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
+  } else {
+    kb.text('💬 Написать', `a:bx_msg|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`).row();
 
-  kb.row().text('🚩 Жалоба', `a:bx_report_offer|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
-  // Back: for non-owners this wsId feed is inaccessible; send them to Brand Mode feed
-  const backCb = isOwner ? `a:bx_feed|ws:${wsId}|p:${page}|h:${h}` : `a:bx_feed|ws:0|p:0|h:${h}`;
-  kbNavRow(kb, backCb);
+    // Moderators can open official placement actions from public view too.
+    if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+      try {
+        const isMod = await isModerator({ id: userId }, ctx.from?.id);
+        if (isMod) kb.text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`).row();
+      } catch (_) {}
+    }
+
+    kb.text('🚩 Жалоба', `a:bx_report_offer|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`).row();
+
+    // Back: for non-owners wsId feed may be inaccessible; if viewer is in Brand mode — send to Brand feed,
+    // otherwise fall back to Menu (avoid Brand-only notice confusion).
+    let viewerMode = UI_MODES.CREATOR;
+    try { viewerMode = await resolveUiMode(userId); } catch {}
+    const backCb = viewerMode === UI_MODES.BRAND ? `a:bx_feed|ws:0|p:0|h:${h}` : 'a:menu';
+    kbNavRow(kb, backCb);
+  }
 
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -9064,8 +9065,9 @@ function offerDeepLink(offerId) {
 }
 
 function truncateText(s, maxLen = 800) {
-  // UTF-8 / emoji-safe truncation (code points).
-  return clipText(String(s ?? ''), Number(maxLen) || 0);
+  const txt = String(s || '').trim();
+  if (txt.length <= maxLen) return txt;
+  return txt.slice(0, maxLen - 1) + '…';
 }
 
 async function safeOfficialPosts(primaryFn, fallbackFn) {
@@ -12044,9 +12046,6 @@ if (exp.type === 'brand_deals_search') {
 
       const kb = new InlineKeyboard().text('📥 Открыть в Inbox', `a:brand_app_view|id:${appId}|s:in_progress|p:0`);
 
-      notifyDeleteRow(kb);
-      notifyFooterRow(kb);
-
       let delivered = 0;
       const deliveredTo = [];
       const failedTo = [];
@@ -12452,8 +12451,6 @@ if (exp.type === 'brand_deals_search') {
           const msgText = body.length > 400 ? `${body.slice(0, 397)}...` : body;
           const notifyKb = new InlineKeyboard()
             .text('💬 Открыть диалог', `a:bx_thread|ws:${Number(thread.workspace_id || 0)}|t:${threadId}|p:0|b:inbox|h:${BX_HOME.MENU}`);
-          notifyDeleteRow(notifyKb);
-          notifyFooterRow(notifyKb);
           await ctx.api.sendMessage(otherTgId, `📨 Новое сообщение по офферу #${thread.offer_id}
 
 ${msgText}
@@ -13923,61 +13920,6 @@ bot.on('message:successful_payment', async (ctx) => {
 
 
     const legacy = async () => {
-// --- NOTIFY-DELETE1 (optional) ---
-// Allows user to clean up DM notifications sent by the bot.
-// Flow: tap 🗑 on a notification -> confirm message -> delete target message.
-if (p.a === 'a:notify_del') {
-  const targetMid = Number(ctx?.callbackQuery?.message?.message_id || 0);
-  if (!targetMid) {
-    await safeEditOrReply(ctx, '⚠️ Не удалось определить уведомление для удаления.', { reply_markup: navKb('a:menu') }, false);
-    return;
-  }
-
-  const kb = new InlineKeyboard()
-    .text('✅ Удалить', `a:notify_del_ok|mid:${targetMid}`)
-    .text('❌ Отмена', `a:notify_del_no|mid:${targetMid}`);
-  notifyFooterRow(kb);
-
-  await safeEditOrReply(
-    ctx,
-    `🗑 <b>Удалить это уведомление?</b>
-
-Это уберёт именно то сообщение, на котором нажата кнопка.`,
-    { parse_mode: 'HTML', reply_markup: kb },
-    false
-  );
-  return;
-}
-
-if (p.a === 'a:notify_del_ok') {
-  const targetMid = num(p.mid, 0);
-  const chatId = ctx?.chat?.id || ctx?.callbackQuery?.message?.chat?.id || null;
-
-  let ok = false;
-  if (chatId && targetMid) {
-    try {
-      await ctx.api.deleteMessage(chatId, targetMid);
-      ok = true;
-    } catch {
-      ok = false;
-    }
-  }
-
-  const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-  const text = ok
-    ? '🗑 Уведомление удалено ✅'
-    : '⚠️ Не удалось удалить (возможно, уже удалено).';
-
-  await safeEditOrReply(ctx, text, { reply_markup: kb }, true);
-  return;
-}
-
-if (p.a === 'a:notify_del_no') {
-  const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-  await safeEditOrReply(ctx, 'Ок, не удаляю.', { reply_markup: kb }, true);
-  return;
-}
-
 if (p.a === 'a:ui_mode_set') {
   await ctx.answerCallbackQuery();
   const mode = normalizeUiMode(p.m);
@@ -14010,9 +13952,11 @@ if (p.a === 'a:guide') {
 
   if (isBrandish) {
     text +=
-      `• 📰 Лента креаторов → лента / 🔎 Поиск креаторов / 🎛 Фильтры
+      `• 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
 ` +
       `• 📥 Inbox — диалоги и заявки
+` +
+      `• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
 
 `;
   } else {
@@ -14031,7 +13975,7 @@ if (p.a === 'a:guide') {
   if (isBrandish) {
     text +=
       `🏷 <b>Режим Бренд</b>\n` +
-      `• Лента креаторов: лента / поиск / фильтры\n` +
+      `• Офферы: смотри ленту креаторов / поиск\n` +
       `• Диалоги и заявки: всё в Inbox\n\n`;
   } else {
     text +=
@@ -14045,14 +13989,14 @@ if (p.a === 'a:guide') {
 
   // Map shortcuts (same as HOME HUB, mode-aware)
   if (isBrandish) {
-    kb.text('📥 Inbox', 'a:go_dialogs').text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm').row();
+    kb.text('📥 Inbox', 'a:go_dialogs').text('🏷 Каталог брендов', 'a:brands_home').row();
   } else {
     kb.text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home').row();
   }
 
   if (isBrandish) {
-    kb.text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
-      .text('🎛 Фильтры', 'a:bx_filters|ws:0')
+    kb.text('🎬 Офферы (лента)', 'a:bx_feed|ws:0|p:0|h:mm')
+      .text('🔎 Поиск', 'a:pm_home|ws:0')
       .row();
   } else {
     kb.text('🎬 Офферы', 'a:bx_home')
@@ -18678,14 +18622,8 @@ if (p.a === 'a:bx_publish_hint') {
         if (link) kb.url('🔗 Поделиться', link).row();
         kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
 
-        const full = String(fullDescription || '').trim();
-        const preview = truncateText(full, 550);
-        const fullLen = [...stripBrokenSurrogates(full)].length;
-        const prevLen = [...stripBrokenSurrogates(preview)].length;
-        const clipNote = fullLen > prevLen ? '\n\n<i>(Обрезано для превью — жми «🔎 Открыть»)</i>' : '';
-
         await safeEditOrReply(ctx,
-          `✅ <b>Оффер опубликован</b>\n\n<b>${escapeHtml(realTitle)}</b>\n\n${escapeHtml(preview)}${clipNote}`,
+          `✅ <b>Оффер опубликован</b>\n\n<b>${escapeHtml(realTitle)}</b>\n\n${escapeHtml(truncateText(fullDescription, 550))}`,
           { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true },
           true
         );
