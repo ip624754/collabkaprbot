@@ -1080,12 +1080,19 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   if (curMode) hint += `
 • Curator Mode: <b>ON</b>`;
 
+  const mapText = `
+<b>Карта</b>
+• 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы
+• 💬 Диалоги → 📣 Мои каналы → выбери канал → 💬 Диалоги
+• 📨 Заявки → 📣 Мои каналы → выбери канал → 📨 Заявки брендов
+• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
+`;
+
   const bannerText = showHint
     ? `
 <b>Быстрый старт</b>
-• ✨ Creator: подключи канал → витрина → заявки
-• 🏷 Brand: каталог → выбери креатора → «Оставить заявку» → напиши сообщение ниже
-• Навигация: ⬅️ Назад / 📋 Меню / 🏠 Home
+• Выбери режим ниже → откроется хаб роли (📋 Меню)
+• Дальше следуй по “Карте” (офферы / диалоги / заявки / каталог)
 `
     : '';
 
@@ -1094,6 +1101,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 
 ` +
     bannerText +
+    mapText +
     `Выбери режим работы.
 
 ` +
@@ -1114,6 +1122,10 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 
   if (canManager) kb.row().text(bBm, 'a:home_mode|m:brand_manager');
   if (flags?.isCurator) kb.row().text(bCur, 'a:home_mode|m:curator');
+
+
+  // Quick map shortcuts
+  kb.row().text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home');
 
   // Staff shortcuts
   if (flags?.isModerator) kb.row().text('🛡 Модерация', 'a:mod_home');
