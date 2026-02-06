@@ -1112,9 +1112,8 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     (effective === 'brand' || effective === 'brand_manager')
       ? `
 <b>Карта</b>
-• 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
+• 📰 Лента креаторов → лента / 🔎 Поиск креаторов / 🎛 Фильтры
 • 📥 Inbox — диалоги и заявки
-• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
 `
       : `
 <b>Карта</b>
@@ -1165,11 +1164,11 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     kb
       .row()
       .text('📥 Inbox', 'a:go_dialogs')
-      .text('🎬 Офферы (лента)', 'a:bx_feed|ws:0|p:0|h:mm');
+      .text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm');
     kb
       .row()
-      .text('🔎 Поиск', 'a:pm_home|ws:0')
-      .text('🏷 Каталог брендов', 'a:brands_home');
+      .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
+      .text('🎛 Фильтры', 'a:bx_filters|ws:0');
   } else {
     kb.row().text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home');
   }
@@ -14012,11 +14011,9 @@ if (p.a === 'a:guide') {
 
   if (isBrandish) {
     text +=
-      `• 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
+      `• 📰 Лента креаторов → лента / 🔎 Поиск креаторов / 🎛 Фильтры
 ` +
       `• 📥 Inbox — диалоги и заявки
-` +
-      `• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
 
 `;
   } else {
@@ -14035,7 +14032,7 @@ if (p.a === 'a:guide') {
   if (isBrandish) {
     text +=
       `🏷 <b>Режим Бренд</b>\n` +
-      `• Офферы: смотри ленту креаторов / поиск\n` +
+      `• Лента креаторов: лента / поиск / фильтры\n` +
       `• Диалоги и заявки: всё в Inbox\n\n`;
   } else {
     text +=
@@ -14049,14 +14046,14 @@ if (p.a === 'a:guide') {
 
   // Map shortcuts (same as HOME HUB, mode-aware)
   if (isBrandish) {
-    kb.text('📥 Inbox', 'a:go_dialogs').text('🏷 Каталог брендов', 'a:brands_home').row();
+    kb.text('📥 Inbox', 'a:go_dialogs').text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm').row();
   } else {
     kb.text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home').row();
   }
 
   if (isBrandish) {
-    kb.text('🎬 Офферы (лента)', 'a:bx_feed|ws:0|p:0|h:mm')
-      .text('🔎 Поиск', 'a:pm_home|ws:0')
+    kb.text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
+      .text('🎛 Фильтры', 'a:bx_filters|ws:0')
       .row();
   } else {
     kb.text('🎬 Офферы', 'a:bx_home')
