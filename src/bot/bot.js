@@ -3560,6 +3560,278 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   else await ctx.reply(text, extra);
 }
 
+// --- Brand Directory: creator -> brand application draft (confirm before send) ---
+function brandApplyDraftKey(tgId, brandUserId) {
+  return k(['draft', 'brand_apply', String(tgId), String(brandUserId)]);
+}
+
+async function setBrandApplyDraft(tgId, brandUserId, draft, ttlSec = 20 * 60) {
+  try {
+    await redis.set(brandApplyDraftKey(tgId, brandUserId), draft, { ex: ttlSec });
+  } catch (e) {
+    try { console.warn('[REDIS] setBrandApplyDraft failed', { tgId, brandUserId, err: errInfo(e) }); } catch {}
+  }
+}
+
+async function getBrandApplyDraft(tgId, brandUserId) {
+  try {
+    return await redis.get(brandApplyDraftKey(tgId, brandUserId));
+  } catch (e) {
+    try { console.warn('[REDIS] getBrandApplyDraft failed', { tgId, brandUserId, err: errInfo(e) }); } catch {}
+    return null;
+  }
+}
+
+async function clearBrandApplyDraft(tgId, brandUserId) {
+  try {
+    await redis.del(brandApplyDraftKey(tgId, brandUserId));
+  } catch (e) {
+    try { console.warn('[REDIS] clearBrandApplyDraft failed', { tgId, brandUserId, err: errInfo(e) }); } catch {}
+  }
+}
+
+async function renderBrandApply(ctx, u, brandUserId, backPage, opts = {}) {
+  const edit = !!opts.edit;
+  const startWrite = !!opts.startWrite;
+  if (!brandUserId) return;
+
+  // Gate: заявки брендам отправляются только от подключённой витрины (активный канал)
+  const activeWsId = await getActiveWorkspace(ctx.from.id);
+  if (!activeWsId) {
+    const backCb = `a:brand_dir_open|u:${brandUserId}|p:${backPage}`;
+    let hasAnyWs = false;
+    try { hasAnyWs = await db.userHasWorkspace(u.id); } catch {}
+
+    const kbGate = new InlineKeyboard()
+      .text('⬅️ Назад', backCb)
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+      .row();
+
+    if (hasAnyWs) kbGate.text('📣 Мои каналы', 'a:ws_list');
+    else kbGate.text('🚀 Подключить канал', 'a:setup');
+
+    const gateText = hasAnyWs
+      ? '⚠️ Чтобы отправить заявку бренду, сначала выбери активный канал (витрину).\n\nОткрой «📣 Мои каналы», выбери канал и повтори.'
+      : '⚠️ Чтобы отправить заявку бренду, сначала подключи канал (витрину).\n\nНажми «🚀 Подключить канал», добавь бота админом в свой канал и повтори.';
+
+    await safeEditOrReply(ctx, gateText, { reply_markup: kbGate }, edit);
+    return;
+  }
+
+  // Validate active workspace belongs to this user (protect against stale/foreign active_ws)
+  let activeWs = null;
+  try { activeWs = await db.getWorkspaceAny(activeWsId); } catch {}
+  if (!activeWs || Number(activeWs.owner_user_id || 0) !== Number(u.id || 0)) {
+    const backCb = `a:brand_dir_open|u:${brandUserId}|p:${backPage}`;
+    const kbGate = new InlineKeyboard()
+      .text('⬅️ Назад', backCb)
+      .text('📣 Мои каналы', 'a:ws_list')
+      .row()
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+    await safeEditOrReply(ctx, '⚠️ Выбери активный канал (витрину) в «📣 Мои каналы» и повтори.', { reply_markup: kbGate }, edit);
+    return;
+  }
+
+  const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
+  const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
+
+  if (startWrite) {
+    await setExpectText(ctx.from.id, {
+      type: 'brand_apply',
+      brandUserId,
+      backPage,
+      wsId: activeWsId,
+      backCb: `a:brand_dir_open|u:${brandUserId}|p:${backPage}`
+    });
+  }
+
+  // show draft controls if exists
+  const draft = await getBrandApplyDraft(ctx.from.id, brandUserId);
+  const hasDraft = !!(draft && typeof draft === 'object' && String(draft.msg || '').trim());
+
+  const kb = new InlineKeyboard();
+  kb.text('✍️ Написать заявку', `a:brand_apply_write|u:${brandUserId}|p:${backPage}`);
+  if (hasDraft) kb.text('👀 Предпросмотр', `a:brand_apply_preview|u:${brandUserId}|p:${backPage}`);
+  kb.row();
+  if (hasDraft) kb.text('🗑 Сбросить черновик', `a:brand_apply_clear|u:${brandUserId}|p:${backPage}`);
+
+  // Quick contact improvement (if not filled) — increases chance of response
+  const missingContact = !String(activeWs?.profile_contact || '').trim() && !String(ctx.from.username || '').trim();
+  if (missingContact) kb.row().text('✍️ Добавить контакт', `a:ws_prof_edit|ws:${activeWsId}|f:contact`);
+
+  kbNavRow(kb, `a:brand_dir_open|u:${brandUserId}|p:${backPage}`);
+
+  const hint = startWrite
+    ? '\n\n✅ Режим ввода включен — напиши сообщение внизу и отправь одним сообщением.\nПотом я покажу предпросмотр и кнопку «Отправить».'
+    : '';
+
+  const text = `📝 <b>Заявка бренду</b>\n\nБренд: <b>${escapeHtml(brandName)}</b>\n\n1) Нажми «✍️ Написать заявку»\n2) Напиши одним сообщением:\n• кто ты / канал\n• аудитория / охваты\n• что предлагаешь (формат)\n• условия (бартер/сертификат/оплата)\n• контакт\n\nЯ покажу предпросмотр и попрошу подтвердить отправку.${hint}`;
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }, edit);
+}
+
+async function renderBrandApplyPreview(ctx, u, brandUserId, backPage, opts = {}) {
+  const edit = !!opts.edit;
+  const draft = await getBrandApplyDraft(ctx.from.id, brandUserId);
+  const msg = String(draft?.msg || '').trim();
+  if (!msg) {
+    const kb = new InlineKeyboard();
+    kb.text('✍️ Написать заявку', `a:brand_apply_write|u:${brandUserId}|p:${backPage}`);
+    kbNavRow(kb, `a:brand_apply|u:${brandUserId}|p:${backPage}`);
+    await safeEditOrReply(ctx, '⚠️ Черновик пуст. Нажми «✍️ Написать заявку».', { reply_markup: kb }, edit);
+    return;
+  }
+
+  const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
+  const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
+
+  const text = `👀 <b>Предпросмотр заявки</b>\n\nБренд: <b>${escapeHtml(brandName)}</b>\n\n<b>Текст:</b>\n<tg-spoiler>${escapeHtml(msg)}</tg-spoiler>\n\nОтправить?`;
+
+  const kb = new InlineKeyboard()
+    .text('✅ Отправить', `a:brand_apply_send|u:${brandUserId}|p:${backPage}`)
+    .row()
+    .text('✍️ Изменить', `a:brand_apply_write|u:${brandUserId}|p:${backPage}`)
+    .text('🗑 Сбросить', `a:brand_apply_clear|u:${brandUserId}|p:${backPage}`);
+
+  kbNavRow(kb, `a:brand_apply|u:${brandUserId}|p:${backPage}`);
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }, edit);
+}
+
+async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
+  const edit = !!opts.edit;
+  const draft = await getBrandApplyDraft(ctx.from.id, brandUserId);
+  const msg = String(draft?.msg || '').trim();
+  const wsId = Number(draft?.wsId || 0);
+
+  if (!msg || !wsId) {
+    const kb = new InlineKeyboard().text('✍️ Написать заявку', `a:brand_apply_write|u:${brandUserId}|p:${backPage}`);
+    kbNavRow(kb, `a:brand_apply|u:${brandUserId}|p:${backPage}`);
+    await safeEditOrReply(ctx, '⚠️ Черновик не найден. Нажми «✍️ Написать заявку».', { reply_markup: kb }, edit);
+    return;
+  }
+
+  if (msg.length < 5) {
+    const kb = new InlineKeyboard().text('✍️ Изменить', `a:brand_apply_write|u:${brandUserId}|p:${backPage}`);
+    kbNavRow(kb, `a:brand_apply|u:${brandUserId}|p:${backPage}`);
+    await safeEditOrReply(ctx, '⚠️ Сообщение слишком короткое. Напиши подробнее.', { reply_markup: kb }, edit);
+    return;
+  }
+  if (msg.length > 3000) {
+    const kb = new InlineKeyboard().text('✍️ Изменить', `a:brand_apply_write|u:${brandUserId}|p:${backPage}`);
+    kbNavRow(kb, `a:brand_apply|u:${brandUserId}|p:${backPage}`);
+    await safeEditOrReply(ctx, '⚠️ Сообщение слишком длинное. Укороти до ~3000 символов.', { reply_markup: kb }, edit);
+    return;
+  }
+
+  // Rate limit (consume only on confirmed send)
+  const rlPairKey = `brand_apply:${u.id}:${brandUserId}`;
+  const okPair = await rateLimit(rlPairKey, 3, 6 * 60 * 60);
+  if (!okPair) {
+    const kb = new InlineKeyboard();
+    kbNavRow(kb, `a:brand_apply|u:${brandUserId}|p:${backPage}`);
+    await safeEditOrReply(ctx, '⏳ Слишком часто. Попробуй позже (лимит: 3 заявки этому бренду за 6 часов).', { reply_markup: kb }, edit);
+    return;
+  }
+
+  const rlWsKey = `brand_apply_ws:${wsId}:${brandUserId}`;
+  const okWs = await rateLimit(rlWsKey, 5, 6 * 60 * 60);
+  if (!okWs) {
+    const kb = new InlineKeyboard();
+    kbNavRow(kb, `a:brand_apply|u:${brandUserId}|p:${backPage}`);
+    await safeEditOrReply(ctx, '⏳ Этот канал уже отправлял слишком много заявок этому бренду (лимит: 5 / 6 часов). Попробуй позже.', { reply_markup: kb }, edit);
+    return;
+  }
+
+  // Send + write to DB
+  const api = apiFromCtx(ctx);
+
+  // Best-effort: show immediate progress state
+  try {
+    const kb = navKb(`a:brand_apply|u:${brandUserId}|p:${backPage}`);
+    await safeEditOrReply(ctx, '⏳ Отправляю заявку…', { reply_markup: kb }, edit);
+  } catch {}
+
+  const res = await safeBrandApplications(() => db.createBrandApplication({
+    brandUserId,
+    creatorUserId: u.id,
+    wsId,
+    message: msg,
+    status: 'new'
+  }), async () => null);
+
+  if (!res) {
+    const kb = navKb(`a:brand_apply|u:${brandUserId}|p:${backPage}`);
+    await safeEditOrReply(ctx, '⚠️ Не удалось отправить заявку. Попробуй позже.', { reply_markup: kb }, edit);
+    return;
+  }
+
+  // Notify brand owner + managers
+  const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
+  const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
+
+  const ws = await safeWsProfiles(() => db.getWorkspaceAny(wsId), async () => null);
+  const wsName = String(ws?.title || ws?.username || 'Канал').trim();
+  const wsUrl = ws?.username ? `https://t.me/${String(ws.username).replace(/^@/, '')}` : null;
+
+  let creatorLabel = '';
+  if (wsUrl) creatorLabel = `<a href="${wsUrl}">${escapeHtml(wsName)}</a>`;
+  else creatorLabel = `<b>${escapeHtml(wsName)}</b>`;
+
+  const notifText = `📝 <b>Новая заявка от креатора</b>\n\nБренд: <b>${escapeHtml(brandName)}</b>\nОт: ${creatorLabel}\n\n<b>Текст:</b>\n${escapeHtml(msg)}`;
+
+  const kbNotif = new InlineKeyboard()
+    .text('📥 Открыть в Inbox', `a:brand_app_view|id:${res.id}|s:new|p:0`)
+    .row()
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  // Recipients: owner + managers + super admins
+  const recipients = new Set();
+  try {
+    const ownerTgId = await db.getUserTgIdByUserId(brandUserId);
+    if (ownerTgId) recipients.add(Number(ownerTgId));
+  } catch {}
+  try {
+    const mgrs = await db.listBrandManagers(brandUserId);
+    for (const m of mgrs || []) {
+      const tid = Number(m.tg_id || 0);
+      if (tid) recipients.add(tid);
+    }
+  } catch {}
+  for (const tid of (CFG.SUPER_ADMIN_TG_IDS || [])) recipients.add(Number(tid));
+
+  for (const chatId of recipients) {
+    try {
+      await api.sendMessage(chatId, notifText, { parse_mode: 'HTML', reply_markup: kbNotif, disable_web_page_preview: true });
+    } catch (e) {
+      try { console.warn('[brand_apply_notify] failed', { chatId, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    }
+  }
+
+  // cleanup draft
+  await clearBrandApplyDraft(ctx.from.id, brandUserId);
+  try { await clearExpectText(ctx.from.id); } catch {}
+
+  // Done screen
+  let canOpenInbox = Number(u.id) === Number(brandUserId) || isSuperAdminTg(ctx.from.id);
+  if (!canOpenInbox) {
+    try { canOpenInbox = await db.isBrandManager(brandUserId, u.id); } catch { canOpenInbox = false; }
+  }
+
+  const doneText = `✅ <b>Заявка отправлена</b>\n\nБренд увидит её в Inbox.\n\nХочешь продолжить?`;
+  const kbDone = new InlineKeyboard()
+    .text('🏷 Каталог брендов', `a:brands_home|p:${backPage}`)
+    .row()
+    .text('🔎 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
+    .text('✍️ Ещё заявку', `a:brand_apply|u:${brandUserId}|p:${backPage}`);
+
+  if (canOpenInbox) kbDone.row().text('📥 Inbox бренда', 'a:brand_apps|ws:0|s:new|p:0');
+  kbDone.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, doneText, { parse_mode: 'HTML', reply_markup: kbDone, disable_web_page_preview: true }, edit);
+}
+
 
 function bxNeedNetworkKb(wsId) {
   return new InlineKeyboard()
@@ -11449,182 +11721,23 @@ ${card}`;
         return ctx.reply('⚠️ Не найден бренд для заявки. Открой бренд в каталоге и нажми “Оставить заявку” ещё раз.');
       }
 
-      if (msg.length < 10) {
-        return ctx.reply('⚠️ Сделай сообщение чуть подробнее (минимум 10 символов).');
-      }
-      if (msg.length > 2000) {
-        return ctx.reply('⚠️ Слишком длинно. Укороти до 2000 символов.');
-      }
-
-      const rlPairKey = k(['rl', 'creator_brand_apply', String(ctx.from.id), String(brandUserId)]);
-      const rlDayKey = k(['rl', 'creator_brand_apply_day', String(ctx.from.id)]);
-
-      const rl1 = await rateLimit(rlPairKey, {
-        limit: CFG.CREATOR_BRAND_APPLY_RATE_LIMIT,
-        windowSec: CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC
-      });
-      if (!rl1.allowed) {
-        const waitMin = Math.max(1, Math.ceil((Number(rl1.resetSec) || CFG.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC || 600) / 60));
-        return ctx.reply(`⏳ Слишком часто. Повтори через ~${waitMin} мин.`);
-      }
-
-      const rl2 = await rateLimit(rlDayKey, {
-        limit: CFG.CREATOR_BRAND_APPLY_DAILY_LIMIT,
-        windowSec: CFG.CREATOR_BRAND_APPLY_DAILY_WINDOW_SEC
-      });
-      if (!rl2.allowed) {
-        return ctx.reply('⏳ Лимит заявок на сегодня исчерпан. Попробуй позже.');
-      }
+      if (msg.length < 10) return ctx.reply('⚠️ Сделай сообщение чуть подробнее (минимум 10 символов).');
+      if (msg.length > 2000) return ctx.reply('⚠️ Слишком длинно. Укороти до 2000 символов.');
 
       await safeDeleteIncomingUserMessage(ctx);
-      const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
-      const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
-      // Try store in DB (for brand inbox). If DB isn't migrated yet, still deliver to brand as fallback.
-      let app = null;
-      let stored = true;
-      try {
-        app = await db.createBrandApplication({
-          brandUserId,
-          creatorUserId: u.id,
-          creatorTgId: ctx.from.id,
-          creatorUsername: ctx.from.username || null,
-          message: msg,
-          meta: {
-            from_first_name: ctx.from.first_name || null,
-            from_last_name: ctx.from.last_name || null,
-            ws_id: wsId || null
-          }
-        });
-      } catch (e) {
-        if (isMissingRelationError(e, 'brand_applications')) {
-          stored = false;
-        } else {
-          console.error('[brand_apply] createBrandApplication failed', e);
-          stored = false;
-        }
-      }
-
-      // Optional: include creator showcase (workspace) — prefer active wsId
-      let creatorShowcase = null;
-      try {
-        if (wsId) {
-          const ws = await db.getWorkspaceAny(wsId);
-          if (ws && Number(ws.owner_user_id || 0) === Number(u.id || 0)) creatorShowcase = ws;
-        }
-      } catch {}
-      if (!creatorShowcase) {
-        try {
-          const wss = await db.listWorkspacesByOwner(u.id, { limit: 1, offset: 0 });
-          if (wss?.length) creatorShowcase = wss[0];
-        } catch {}
-      }
-
-      const creatorDisplay = escapeHtml([ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ').trim() || (ctx.from.username ? '@' + String(ctx.from.username).replace(/^@/, '') : String(ctx.from.id)));
-      const creatorLink = `<a href="tg://user?id=${ctx.from.id}">${creatorDisplay}</a>`;
-      const creatorUname = ctx.from.username ? '@' + String(ctx.from.username).replace(/^@/, '') : `id:${ctx.from.id}`;
-      const showLine = creatorShowcase
-        ? `\n🪟 Витрина креатора: <a href="${wsBrandLink(creatorShowcase.id)}">открыть</a>`
-        : '';
-
-      const inboxLine = stored && app
-        ? `\n📥 Inbox: #${app.id}`
-        : `\n⚠️ Inbox: выключен (нужна миграция 027_brand_applications.sql)`;
-
-      const notifyText =
-        `📝 <b>Новая заявка от креатора</b>\n\n` +
-        `Бренд: <b>${escapeHtml(brandName)}</b>\n` +
-        `От: ${creatorLink} · <b>${escapeHtml(creatorUname)}</b>` +
-        showLine +
-        inboxLine +
-        `\n\n<b>Сообщение:</b>\n${escapeHtml(msg)}`;
-
-
-      const notifyKb = new InlineKeyboard();
-      if (stored && app) {
-        notifyKb
-          .text('✅ Принять', `a:brand_app_accept|id:${app.id}|s:new|p:0`)
-          .row()
-          .text('📨 Открыть в Inbox', `a:brand_app_view|id:${app.id}|s:new|p:0`);
-      }
-
-      // Recipients: owner + managers
-      const recipientsMap = new Map(); // tgId -> { tgId, role, tg_username }
-
-      const ownerRow = await db.getUserTgIdByUserId(brandUserId);
-      const ownerTgId = Number(ownerRow?.tg_id || 0);
-      if (ownerTgId) {
-        recipientsMap.set(ownerTgId, { tgId: ownerTgId, role: 'owner', tg_username: ownerRow?.tg_username || null });
-      }
-
-      let managers = [];
-      try { managers = await db.listBrandManagers(brandUserId); } catch { managers = []; }
-      for (const m of managers || []) {
-        const t = Number(m?.tg_id || 0);
-        if (t && !recipientsMap.has(t)) {
-          recipientsMap.set(t, { tgId: t, role: 'manager', tg_username: m?.tg_username || null });
-        }
-      }
-
-      let delivered = 0;
-      const deliveredTo = [];
-      const failedTo = [];
-      const api = apiFromCtx(ctx);
-      for (const rec of recipientsMap.values()) {
-        try {
-          if (!api) throw new Error('BOT API not initialized');
-          await api.sendMessage(rec.tgId, notifyText, {
-            parse_mode: 'HTML',
-            reply_markup: notifyKb.inline_keyboard?.length ? notifyKb : undefined,
-            disable_web_page_preview: true
-          });
-          delivered++;
-          deliveredTo.push(rec);
-        } catch (e) {
-          failedTo.push({ ...rec, err: e?.description || e?.message || String(e) });
-          try { console.warn('[brand_apply] notify failed', { tgId: rec.tgId, role: rec.role, err: e?.description || e?.message || String(e) }); } catch {}
-        }
-      }
-
-      try {
-        console.info('[brand_apply] notify summary', {
-          brandUserId,
-          appId: app?.id || null,
-          recipients: recipientsMap.size,
-          delivered,
-          deliveredTo: deliveredTo.map(x => ({ tgId: x.tgId, role: x.role, username: x.tg_username || null }))
-        });
-      } catch {}
+      await setBrandApplyDraft(ctx.from.id, brandUserId, {
+        msg,
+        wsId: wsId || 0,
+        backPage,
+        at: new Date().toISOString()
+      });
 
       await clearExpectText(ctx.from.id);
 
-      const doneKb = new InlineKeyboard()
-        .text('🔎 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
-        .row()
-        .text('⬅️ Назад к списку', `a:brands_home|p:${backPage}`)
-        .text('📋 Меню', 'a:menu');
-
-      const baseDoneText = stored
-        ? '✅ Заявка отправлена. Бренд увидит её в Inbox.'
-        : '✅ Заявка отправлена бренду. (Inbox временно недоступен — нужен апдейт бота.)';
-
-      const hasManagers = Array.from(recipientsMap.values()).some(r => r.role === 'manager');
-      const whoNotified = hasManagers ? 'владелец + менеджеры' : 'владелец';
-
-      let deliveryLine = '';
-      if (recipientsMap.size === 0) {
-        deliveryLine = `\n\n🔕 Уведомление: не отправлено (у бренда не найден tg_id).`;
-      } else if (delivered > 0) {
-        deliveryLine = `
-
-🔔 Уведомление (${whoNotified}): ${delivered}/${recipientsMap.size}`;
-      } else {
-        deliveryLine = `\n\n🔕 Уведомление: не доставлено (ошибка отправки). Заявка уже в Inbox.`;
-      }
-
-      const doneText = baseDoneText + deliveryLine;
-
-      return ctx.reply(doneText, { reply_markup: doneKb });
+      // Show preview + explicit "Send" button
+      await renderBrandApplyPreview(ctx, u, brandUserId, backPage, { edit: false });
+      return;
     }
 
     if (exp.type === 'brand_app_reply') {
@@ -14033,91 +14146,46 @@ if (p.a === 'a:brand_dir_open') {
 
 
 
-if (p.a === 'a:brand_apply') {
-  await ctx.answerCallbackQuery();
-  const brandUserId = Number(p.u || 0);
-  const backPage = Math.max(0, Number(p.p || 0));
+    if (p.a === 'a:brand_apply') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      const brandUserId = Number(p.u || 0);
+      const backPage = Math.max(0, Number(p.p || 0));
+      await renderBrandApply(ctx, u, brandUserId, backPage, { edit: true, startWrite: false });
+      return;
+    }
 
-  // Gate: заявки брендам отправляются только от подключённой витрины (активный канал)
-  const activeWsId = await getActiveWorkspace(ctx.from.id);
-  if (!activeWsId) {
-    const backCb = `a:brand_dir_open|u:${brandUserId}|p:${backPage}`;
-    let hasAnyWs = false;
-    try { hasAnyWs = await db.userHasWorkspace(u.id); } catch {}
+    if (p.a === 'a:brand_apply_write') {
+      try { await ctx.answerCallbackQuery({ text: '✍️ Напиши сообщение внизу и отправь одним сообщением. Потом покажу предпросмотр.' }); } catch {}
+      const brandUserId = Number(p.u || 0);
+      const backPage = Math.max(0, Number(p.p || 0));
+      await renderBrandApply(ctx, u, brandUserId, backPage, { edit: true, startWrite: true });
+      return;
+    }
 
-    const kbGate = new InlineKeyboard()
-      .text('⬅️ Назад', backCb)
-      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
-      .row();
+    if (p.a === 'a:brand_apply_preview') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      const brandUserId = Number(p.u || 0);
+      const backPage = Math.max(0, Number(p.p || 0));
+      await renderBrandApplyPreview(ctx, u, brandUserId, backPage, { edit: true });
+      return;
+    }
 
-    if (hasAnyWs) kbGate.text('📣 Мои каналы', 'a:ws_list');
-    else kbGate.text('🚀 Подключить канал', 'a:setup');
+    if (p.a === 'a:brand_apply_clear') {
+      try { await ctx.answerCallbackQuery({ text: '🗑 Черновик очищен.' }); } catch {}
+      const brandUserId = Number(p.u || 0);
+      const backPage = Math.max(0, Number(p.p || 0));
+      await clearBrandApplyDraft(ctx.from.id, brandUserId);
+      await renderBrandApply(ctx, u, brandUserId, backPage, { edit: true, startWrite: false });
+      return;
+    }
 
-    const gateText = hasAnyWs
-      ? '⚠️ Чтобы отправить заявку бренду, сначала выбери активный канал (витрину).\n\nОткрой «📣 Мои каналы», выбери канал и повтори.'
-      : '⚠️ Чтобы отправить заявку бренду, сначала подключи канал (витрину).\n\nНажми «🚀 Подключить канал», добавь бота админом в свой канал и повтори.';
-
-    await safeEditOrReply(ctx, gateText, { reply_markup: kbGate });
-    return;
-  }
-
-  // Validate active workspace belongs to this user (protect against stale/foreign active_ws)
-  let activeWs = null;
-  try { activeWs = await db.getWorkspaceAny(activeWsId); } catch {}
-  if (!activeWs || Number(activeWs.owner_user_id || 0) !== Number(u.id || 0)) {
-    const backCb = `a:brand_dir_open|u:${brandUserId}|p:${backPage}`;
-    const kbGate = new InlineKeyboard()
-      .text('⬅️ Назад', backCb)
-      .text('📣 Мои каналы', 'a:ws_list')
-      .row()
-      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-
-    await safeEditOrReply(ctx, '⚠️ Выбери активный канал (витрину) в «📣 Мои каналы» и повтори.', { reply_markup: kbGate });
-    return;
-  }
-
-  const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
-  const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
-
-  await setExpectText(ctx.from.id, {
-    type: 'brand_apply',
-    brandUserId,
-    backPage,
-    wsId: activeWsId,
-    backCb: `a:brand_dir_open|u:${brandUserId}|p:${backPage}`
-  });
-
-  const kb = new InlineKeyboard()
-    .text('⬅️ Назад', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
-    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-
-  // Быстрый вход в контакт (если не заполнен) — повышает шанс ответа
-  const missingContact = !String(activeWs?.profile_contact || '').trim() && !String(ctx.from.username || '').trim();
-  if (missingContact) kb.row().text('✍️ Добавить контакт', `a:ws_prof_edit|ws:${activeWsId}|f:contact`);
-
-
-  const text = `📝 <b>Заявка бренду</b>
-
-Бренд: <b>${escapeHtml(brandName)}</b>
-
-Напиши одним сообщением:
-• кто ты / канал
-• аудитория / охваты
-• что предлагаешь (формат)
-• условия (бартер/сертификат/оплата)
-• контакт
-
-👇 Напиши сообщение в поле ввода (внизу) и отправь одним сообщением.
-
-Я отправлю это бренду и добавлю в их Inbox.`;
-
-  try {
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-  } catch {
-    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-  }
-  return;
-}
+    if (p.a === 'a:brand_apply_send') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      const brandUserId = Number(p.u || 0);
+      const backPage = Math.max(0, Number(p.p || 0));
+      await sendBrandApplyDraft(ctx, u, brandUserId, backPage, { edit: true });
+      return;
+    }
 
 
 
