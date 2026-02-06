@@ -9064,9 +9064,8 @@ function offerDeepLink(offerId) {
 }
 
 function truncateText(s, maxLen = 800) {
-  const txt = String(s || '').trim();
-  if (txt.length <= maxLen) return txt;
-  return txt.slice(0, maxLen - 1) + '…';
+  // UTF-8 / emoji-safe truncation (code points).
+  return clipText(String(s ?? ''), Number(maxLen) || 0);
 }
 
 async function safeOfficialPosts(primaryFn, fallbackFn) {
@@ -18679,8 +18678,14 @@ if (p.a === 'a:bx_publish_hint') {
         if (link) kb.url('🔗 Поделиться', link).row();
         kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
 
+        const full = String(fullDescription || '').trim();
+        const preview = truncateText(full, 550);
+        const fullLen = [...stripBrokenSurrogates(full)].length;
+        const prevLen = [...stripBrokenSurrogates(preview)].length;
+        const clipNote = fullLen > prevLen ? '\n\n<i>(Обрезано для превью — жми «🔎 Открыть»)</i>' : '';
+
         await safeEditOrReply(ctx,
-          `✅ <b>Оффер опубликован</b>\n\n<b>${escapeHtml(realTitle)}</b>\n\n${escapeHtml(truncateText(fullDescription, 550))}`,
+          `✅ <b>Оффер опубликован</b>\n\n<b>${escapeHtml(realTitle)}</b>\n\n${escapeHtml(preview)}${clipNote}`,
           { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true },
           true
         );
