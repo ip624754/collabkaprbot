@@ -226,26 +226,18 @@ async function getPaymentsRuntimeFlags() {
   const autoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
   return { accept, autoApply };
 }
-
-// Backward-compatible alias (some flows call getPaymentMode)
-async function getPaymentMode() {
-  return getPaymentsRuntimeFlags();
-}
-
 async function sendStarsInvoice(ctx, { title, description, payload, amount, backCb }) {
   // Stars payments: currency XTR, prices must contain exactly one item.
   const chatId = ctx?.chat?.id;
   const userId = ctx?.from?.id;
 
   // Put the "cancel/help" hint into the invoice description to avoid sending a second message.
-  // Keep it on a new paragraph to make Telegram UI readable.
   const fullDescription = `${description}
 
 Если передумал — жми «📋 Меню».`;
 
   // Prices must contain exactly one item for Stars.
-  // Telegram invoice UI shows it as: ⭐ <amount> <label>
-  // Use a clean label to avoid "debug" look.
+  // Keep label in Latin to avoid UI noise; Telegram shows this next to the Stars amount.
   const prices = [{ label: 'Stars', amount: Number(amount) }];
 
   try {
@@ -261,7 +253,7 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
 
     const invoiceMarkup = {
       inline_keyboard: [
-        [{ text: `⭐️ Оплатить ${Number(amount)}`, pay: true }],
+        [{ text: `⭐️ Оплатить (${Number(amount)} Stars)`, pay: true }],
         navRow,
       ],
     };
@@ -9308,13 +9300,37 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
 Слот до: <b>${escapeHtml(new Date(post.slot_expires_at).toLocaleString('ru-RU'))}</b>` : '';
   const mode = String(CFG.OFFICIAL_PUBLISH_MODE || 'manual').toLowerCase();
 
+  const unameRaw = String(CFG.OFFICIAL_CHANNEL_USERNAME || '').trim();
+  const uname = unameRaw.replace(/^@/, '');
+  const channelLabel = uname ? `@${uname}` : String(CFG.OFFICIAL_CHANNEL_ID || '');
+  const channelUrl = uname ? `https://t.me/${uname}` : '';
+
+  const paidHint = (mode === 'paid')
+    ? 'paid — покупка слота за Stars (после оплаты оффер попадает в очередь на публикацию).'
+    : (mode === 'manual')
+      ? 'manual — заявка в очередь без оплаты (если включено админом).'
+      : 'mixed — можно и заявкой (manual), и покупкой слота (paid).';
+
+  const p1 = Number(CFG.OFFICIAL_1D_PRICE || 0) || 0;
+  const p7 = Number(CFG.OFFICIAL_7D_PRICE || 0) || 0;
+  const p30 = Number(CFG.OFFICIAL_30D_PRICE || 0) || 0;
+  const pricesLine = (mode === 'paid' || mode === 'mixed') && (p1 || p7 || p30)
+    ? `
+
+Тарифы: <b>24ч — ${p1} Stars</b> • <b>7д — ${p7} Stars</b> • <b>30д — ${p30} Stars</b>`
+    : '';
+
+  const channelLinkLine = channelUrl ? ` (<a href="${channelUrl}">открыть</a>)` : '';
+
   const text = `📣 <b>Официальный канал</b>
 
 Оффер: <b>#${offerId}</b>
 Статус: <b>${escapeHtml(statusLabel)}</b>${expiresLine}
 
 Режим: <b>${escapeHtml(mode)}</b>
-Канал: <b>${escapeHtml(String(CFG.OFFICIAL_CHANNEL_USERNAME || CFG.OFFICIAL_CHANNEL_ID || ''))}</b>`;
+<i>${escapeHtml(paidHint)}</i>
+
+Канал: <b>${escapeHtml(channelLabel)}</b>${channelLinkLine}${pricesLine}`;
 
   const kb = new InlineKeyboard();
 
@@ -9345,6 +9361,8 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
     kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
 
+
+  if (channelUrl) kb.url('📢 Открыть канал', channelUrl).row();
   const backSafe = String(back || '').trim();
   const backToOfferCb = (backSafe === 'my' || backSafe === 'arch' || backSafe === 'feed')
     ? `a:bx_view|ws:${wsId}|o:${offerId}|back:${backSafe}|p:${page}`
