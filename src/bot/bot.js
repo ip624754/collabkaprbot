@@ -238,12 +238,15 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
   const userId = ctx?.from?.id;
 
   // Put the "cancel/help" hint into the invoice description to avoid sending a second message.
+  // Keep it on a new paragraph to make Telegram UI readable.
   const fullDescription = `${description}
 
 Если передумал — жми «📋 Меню».`;
 
   // Prices must contain exactly one item for Stars.
-  const prices = [{ label: 'СЧЁТ', amount: Number(amount) }];
+  // Telegram invoice UI shows it as: ⭐ <amount> <label>
+  // Use a clean label to avoid "debug" look.
+  const prices = [{ label: 'Stars', amount: Number(amount) }];
 
   try {
     // IMPORTANT: For sendInvoice, if reply_markup is present and non-empty,
@@ -258,7 +261,7 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
 
     const invoiceMarkup = {
       inline_keyboard: [
-        [{ text: `⭐️ Оплатить (${Number(amount)} Stars)`, pay: true }],
+        [{ text: `⭐️ Оплатить ${Number(amount)}`, pay: true }],
         navRow,
       ],
     };
