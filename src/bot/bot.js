@@ -434,7 +434,6 @@ function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }
   } else if (replyCb) {
     kb.text(replyLabel, replyCb).row();
   }
-  kb.text('🗑 Убрать уведомление', 'a:n_del').row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
@@ -8812,14 +8811,22 @@ ${partnerSection}` : ''}${contact ? `
         kb.text('📌 Закрепить в ленте', `a:bx_pin_set|ws:${wsId}|o:${o.id}`).row();
       }
     }
-    kb.text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`).row();
+    // Jobs-style: main actions in one row
+    kb.text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`)
+      .text('📦 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
+      .row();
   }
-  if (st === 'PAUSED') kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`).row();
+  if (st === 'PAUSED') {
+    kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`)
+      .text('📦 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`)
+      .row();
+  }
 
   if (st === 'CLOSED') {
     kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`).row();
-  } else {
-    kb.text('🗑 Архивировать', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
+  } else if (st !== 'ACTIVE' && st !== 'PAUSED') {
+    // For any other non-closed status keep archive available
+    kb.text('📦 В архив', `a:bx_del_q|ws:${wsId}|o:${o.id}|p:${page}`).row();
   }
 
   const shareUrl = offerShareUrl(o.id, title, desc);
@@ -14483,36 +14490,6 @@ if (p.a === 'a:brand_dir_open') {
       return;
     }
 
-
-    // NOTIFY delete (P2): double-tap within 10s to remove bot notification message
-    if (p.a === 'a:n_del') {
-      const chatId = ctx.callbackQuery?.message?.chat?.id;
-      const msgId = ctx.callbackQuery?.message?.message_id;
-      if (!chatId || !msgId) {
-        await ctx.answerCallbackQuery({ text: 'Не могу убрать это уведомление.', show_alert: true });
-        return;
-      }
-
-      const key = k(['ndel', String(chatId), String(msgId), String(ctx.from.id)]);
-      const armed = await redis.get(key);
-
-      if (!armed) {
-        await redis.setEx(key, 10, '1');
-        await ctx.answerCallbackQuery({ text: 'Нажми ещё раз (10с), чтобы убрать уведомление', show_alert: false });
-        return;
-      }
-
-      await redis.del(key);
-      await ctx.answerCallbackQuery({ text: 'Убрано', show_alert: false });
-
-      try {
-        await ctx.api.deleteMessage(chatId, msgId);
-      } catch (e) {
-        try { await ctx.deleteMessage(); } catch (_) {}
-      }
-      return;
-    }
-
 if (p.a === 'a:menu') {
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
@@ -17510,17 +17487,18 @@ if (p.a === 'a:match_home') {
       }
 
       const token = randomToken(16);
-      await redis.setEx(
+      // Upstash Redis SDK: use redis.set(..., { ex }) (there is no setEx helper)
+      await redis.set(
         k(['pay', 'offpub', token]),
-        60 * 60,
-        JSON.stringify({
+        {
           tgId: ctx.from.id,
           userId: u.id,
           offerId,
           days: d.days,
           stars: d.price,
-          createdAt: Date.now()
-        })
+          createdAt: Date.now(),
+        },
+        { ex: 60 * 60 }
       );
 
       const title = 'Размещение в официальном канале';
