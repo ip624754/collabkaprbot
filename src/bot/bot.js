@@ -13895,83 +13895,103 @@ if (p.a === 'a:guide') {
   const flags = await getRoleFlags(u, ctx.from.id);
   const mode = await resolveUiMode(ctx.from.id);
 
-  let text = `🧭 <b>Быстрый старт</b>
-
-`;
-  const kb = new InlineKeyboard();
+  let text =
+    `🧭 <b>Быстрый старт</b>\n\n` +
+    `<b>Карта</b>\n` +
+    `• 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы\n` +
+    `• 💬 Диалоги → 📣 Мои каналы → выбери канал → 💬 Диалоги\n` +
+    `• 📨 Заявки → 📣 Мои каналы → выбери канал → 📨 Заявки брендов\n` +
+    `• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже\n\n`;
 
   if (mode === UI_MODES.BRAND) {
-    const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: false });
-
-    text += `🏷 <b>Для бренда</b>
-` +
-      `1) Заполни <b>Профиль бренда</b> (Название, Ниша, Контакт, Ссылка).
-` +
-      `2) Ищи креаторов в <b>Ленте</b> или <b>Поиске</b>.
-` +
-      `3) Все заявки и ответы — в <b>Inbox</b>.
-` +
-      `4) <b>Менеджеры бренда</b> открывается после покупки <b>Brand Pass</b> или <b>Brand Plan</b>.
-
-`;
-
-    if (bm.enabled) {
-      text += `🧑‍💼 <b>Если ты менеджер бренда</b>
-` +
-        `• Открой кабинет менеджера и работай в Inbox
-` +
-        `• Для оплат/профиля — попроси владельца бренда
-
-`;
-    }
-
-    kb.text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm')
-      .text('🔎 Поиск', 'a:pm_home|ws:0')
-      .row()
-      .text('📨 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm');
-
-    if (!bm.enabled) {
-      kb.text('🏷 Профиль', 'a:brand_profile|ws:0|ret:brand')
-        .row()
-        .text('🎫 Brand Pass', 'a:brand_pass|ws:0')
-        .text('⭐️ Подписка', 'a:brand_plan|ws:0');
-    } else {
-      // Manager shortcuts
-      if ((bm.brands || []).length > 1) kb.row().text('🔁 Сменить бренд', 'a:bm_pick_brand|ret:menu');
-      kb.row().text('🧑‍💼 Кабинет менеджера', 'a:bm_home');
-    }
+    text +=
+      `🏷 <b>Режим Бренд</b>\n` +
+      `• Офферы: смотри ленту креаторов / поиск\n` +
+      `• Диалоги и заявки: всё в Inbox\n\n`;
   } else {
-    text += `✨ <b>Для Creator / канала</b>
-` +
-      `1) Нажми <b>«🚀 Подключить канал»</b> — добавь бота админом и перешли любой пост.
-` +
-      `2) Открой <b>«📣 Мои каналы»</b> → заполни витрину (контакты/ниши/форматы).
-` +
-      `3) Делись витриной — бренды будут писать тебе в <b>Inbox</b>.
-
-` +
-      `4) Хочешь найти активные бренды — открой <b>«🏷 Бренды»</b>.
-
-` +
-      `Если ты бренд — переключись в режим <b>«🏷 Я бренд»</b>.
-
-`;
-
-    kb.text('🚀 Подключить канал', 'a:setup')
-      .text('📣 Мои каналы', 'a:ws_list')
-      .row()
-      .text('🎬 UGC / Офферы', 'a:bx_home')
-      .text('🏷 Бренды', 'a:brands_home|p:0')
-      .row()
-      .text('🎁 Розыгрыши', 'a:gw_list')
-      .row()
-      .text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu');
+    text +=
+      `✨ <b>Режим Creator / канал</b>\n` +
+      `• Подключи канал → заполни витрину → публикуй офферы\n\n`;
   }
 
-  kb.row().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+  text += `Навигация: ⬅️ Назад / 📋 Меню / 🏠 Home`;
+
+  const kb = new InlineKeyboard();
+
+  // Map shortcuts (same as HOME HUB)
+  kb.text('📣 Мои каналы', 'a:ws_list')
+    .text('🏷 Каталог брендов', 'a:brands_home')
+    .row();
+
+  if (mode === UI_MODES.BRAND) {
+    kb.text('🎬 Офферы (лента)', 'a:bx_feed|ws:0|p:0|h:mm')
+      .text('🔎 Поиск', 'a:pm_home|ws:0')
+      .row();
+  } else {
+    kb.text('🎬 Офферы', 'a:bx_home')
+      .text('🚀 Подключить канал', 'a:setup')
+      .row();
+  }
+
+  kb.text('💬 Диалоги', 'a:go_dialogs')
+    .text('📨 Заявки', 'a:go_requests')
+    .row();
+
+  if (mode !== UI_MODES.BRAND) {
+    kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu').row();
+  }
+
+  kb.row().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
   await maybeSendBanner(ctx, 'guide', CFG.GUIDE_BANNER_FILE_ID);
+  return;
+}
+
+if (p.a === 'a:go_dialogs') {
+  await ctx.answerCallbackQuery();
+  const mode = await resolveUiMode(ctx.from.id);
+
+  if (mode === UI_MODES.BRAND) {
+    const wsId = 0;
+    const page = 0;
+    const h = BX_HOME.MENU;
+
+    const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
+    if (!bmRes) return;
+
+    await renderBxInbox(ctx, bmRes.userId, wsId, page, { bm: bmRes.bm, h });
+    return;
+  }
+
+  const ws = await ensureWorkspaceForOwner(ctx, u.id);
+  if (!ws) return;
+
+  await renderBxInbox(ctx, u.id, ws.id, 0, { h: BX_HOME.BX_OPEN });
+  return;
+}
+
+if (p.a === 'a:go_requests') {
+  await ctx.answerCallbackQuery();
+  const mode = await resolveUiMode(ctx.from.id);
+
+  // For Brand: requests/responses live in Inbox.
+  if (mode === UI_MODES.BRAND) {
+    const wsId = 0;
+    const page = 0;
+    const h = BX_HOME.MENU;
+
+    const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
+    if (!bmRes) return;
+
+    await renderBxInbox(ctx, bmRes.userId, wsId, page, { bm: bmRes.bm, h });
+    return;
+  }
+
+  const ws = await ensureWorkspaceForOwner(ctx, u.id);
+  if (!ws) return;
+
+  await renderWsLeadsList(ctx, u.id, ws.id, 'new', 0, 'ws_open');
   return;
 }
 
