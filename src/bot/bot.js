@@ -226,26 +226,18 @@ async function getPaymentsRuntimeFlags() {
   const autoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
   return { accept, autoApply };
 }
-
-// Backward-compatible alias (some flows call getPaymentMode)
-async function getPaymentMode() {
-  return getPaymentsRuntimeFlags();
-}
-
 async function sendStarsInvoice(ctx, { title, description, payload, amount, backCb }) {
   // Stars payments: currency XTR, prices must contain exactly one item.
   const chatId = ctx?.chat?.id;
   const userId = ctx?.from?.id;
 
   // Put the "cancel/help" hint into the invoice description to avoid sending a second message.
-  // Keep it on a new paragraph to make Telegram UI readable.
   const fullDescription = `${description}
 
 Если передумал — жми «📋 Меню».`;
 
   // Prices must contain exactly one item for Stars.
-  // Telegram invoice UI shows it as: ⭐ <amount> <label>
-  // Use a clean label to avoid "debug" look.
+  // Keep label in Latin to avoid UI noise; Telegram shows this next to the Stars amount.
   const prices = [{ label: 'Stars', amount: Number(amount) }];
 
   try {
@@ -261,7 +253,7 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
 
     const invoiceMarkup = {
       inline_keyboard: [
-        [{ text: `⭐️ Оплатить ${Number(amount)}`, pay: true }],
+        [{ text: `⭐️ Оплатить (${Number(amount)} Stars)`, pay: true }],
         navRow,
       ],
     };
