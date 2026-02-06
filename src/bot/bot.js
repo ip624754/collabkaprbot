@@ -237,6 +237,7 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
 Если передумал — жми «📋 Меню».`;
 
   // Prices must contain exactly one item for Stars.
+  // Keep label in Latin to avoid UI noise; Telegram shows this next to the Stars amount.
   const prices = [{ label: 'Stars', amount: Number(amount) }];
 
   try {
@@ -252,7 +253,7 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
 
     const invoiceMarkup = {
       inline_keyboard: [
-        [{ text: `⭐ Оплатить ${Number(amount)}`, pay: true }],
+        [{ text: `⭐️ Оплатить (${Number(amount)} Stars)`, pay: true }],
         navRow,
       ],
     };
@@ -301,8 +302,6 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
 async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list') {
   const wss = await db.listWorkspaces(ownerUserId);
   const kb = new InlineKeyboard();
-
-  if (chLink) kb.url('📢 Открыть канал', chLink).row();
   if (!wss.length) {
     kb.text('📋 Меню', 'a:menu');
     await safeEditOrReply(ctx, 'Сначала подключи канал: нажми «🚀 Подключить канал» в меню.', { reply_markup: kb });
@@ -8799,6 +8798,10 @@ ${partnerSection}` : ''}${contact ? `
       .text('👁 Превью', `a:bx_media_preview|ws:${wsId}|o:${o.id}|back:${back}|p:${page}`)
       .row();
 
+    if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+      kb.text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${o.id}|p:${page}|back:${back}`).row();
+    }
+
     const wsInfo = await db.getWorkspace(ownerUserId, wsId);
     const isPro = await db.isWorkspacePro(wsId);
     if (isPro) {
@@ -8811,7 +8814,12 @@ ${partnerSection}` : ''}${contact ? `
     }
     kb.text('⏸ Пауза', `a:bx_pause|ws:${wsId}|o:${o.id}`).row();
   }
-  if (st === 'PAUSED') kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`).row();
+  if (st === 'PAUSED') {
+    kb.text('✅ Возобновить', `a:bx_resume|ws:${wsId}|o:${o.id}`).row();
+    if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+      kb.text('📣 Офиц.канал', `a:off_manage|ws:${wsId}|o:${o.id}|p:${page}|back:${back}`).row();
+    }
+  }
 
   if (st === 'CLOSED') {
     kb.text('↩️ Восстановить', `a:bx_restore|ws:${wsId}|o:${o.id}|p:${page}`).row();
@@ -9254,7 +9262,7 @@ async function removeOfficialOfferPost(api, offerId, reason = 'REMOVED') {
   return { removed: true };
 }
 
-async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
+async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, back = '') {
   if (!CFG.OFFICIAL_PUBLISH_ENABLED) {
     if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Официальный канал выключен.', show_alert: true });
     return;
@@ -9292,64 +9300,55 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0) {
 Слот до: <b>${escapeHtml(new Date(post.slot_expires_at).toLocaleString('ru-RU'))}</b>` : '';
   const mode = String(CFG.OFFICIAL_PUBLISH_MODE || 'manual').toLowerCase();
 
-  const chUser = String(CFG.OFFICIAL_CHANNEL_USERNAME || '').replace(/^@/, '');
-  const chLabel = chUser ? `@${chUser}` : String(CFG.OFFICIAL_CHANNEL_ID || '');
-  const chLink = chUser ? `https://t.me/${chUser}` : '';
-  const channelLine = chLink
-    ? `Канал: <a href="${escapeHtml(chLink)}"><b>${escapeHtml(chLabel)}</b></a>`
-    : `Канал: <b>${escapeHtml(chLabel)}</b>`;
+  const text = `📣 <b>Официальный канал</b>
 
-  const modeHelp =
-    mode === 'paid'
-      ? 'paid — размещение после оплаты Stars (слот).'
-      : mode === 'mixed'
-        ? 'mixed — можно в очередь (manual) или купить слот (paid).'
-        : 'manual — публикация через очередь модератора.';
+Оффер: <b>#${offerId}</b>
+Статус: <b>${escapeHtml(statusLabel)}</b>${expiresLine}
 
-  const tariffsLine =
-    (mode === 'paid' || mode === 'mixed') && Array.isArray(OFFICIAL_DURATIONS) && OFFICIAL_DURATIONS.length
-      ? `\n\nТарифы: ${OFFICIAL_DURATIONS.map((d) => `${d.label} — ${d.price} Stars`).join(' • ')}`
-      : '';
-
-  const text = `📣 <b>Официальный канал</b>\n\nОффер: <b>#${offerId}</b>\nСтатус: <b>${escapeHtml(statusLabel)}</b>${expiresLine}\n\nРежим: <b>${escapeHtml(mode)}</b>\n${channelLine}\n\nℹ️ ${escapeHtml(modeHelp)}${tariffsLine}`;
+Режим: <b>${escapeHtml(mode)}</b>
+Канал: <b>${escapeHtml(String(CFG.OFFICIAL_CHANNEL_USERNAME || CFG.OFFICIAL_CHANNEL_ID || ''))}</b>`;
 
   const kb = new InlineKeyboard();
 
   const canRequest = isOwner && (mode === 'manual' || mode === 'mixed');
   if (canRequest) {
     if (st === 'PENDING') {
-      kb.text('⏳ В очереди (отменить)', `a:off_req_cancel|ws:${wsId}|o:${offerId}|p:${page}`).row();
+      kb.text('⏳ В очереди (отменить)', `a:off_req_cancel|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
     } else if (st !== 'ACTIVE') {
-      kb.text('📝 В очередь публикаций', `a:off_req_home|ws:${wsId}|o:${offerId}|p:${page}`).row();
+      kb.text('📝 В очередь публикаций', `a:off_req_home|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
     }
   }
 
   if (isOwner && (mode === 'paid' || mode === 'mixed')) {
-    kb.text('💳 Купить размещение', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${page}`).row();
+    kb.text('💳 Купить размещение', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
   const canPublishManual = isMod && (mode === 'manual' || mode === 'mixed');
   // Commit F: in paid mode allow publish only if there is a paid PENDING record
   const canPublishPaid = isMod && (mode === 'paid' || mode === 'mixed') && st === 'PENDING' && post?.payment_id;
   if (canPublishManual || canPublishPaid) {
-    kb.text('✅ Опубликовать сейчас', `a:off_pub|ws:${wsId}|o:${offerId}|p:${page}`).row();
+    kb.text('✅ Опубликовать сейчас', `a:off_pub|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
 
   if (isMod && st === 'ACTIVE') {
-    kb.text('♻️ Обновить пост', `a:off_upd|ws:${wsId}|o:${offerId}|p:${page}`).row();
+    kb.text('♻️ Обновить пост', `a:off_upd|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
 
   if (isMod && (st === 'ACTIVE' || st === 'PENDING')) {
-    kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}`).row();
+    kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
 
-  kb.text('⬅️ Назад к офферу', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
+  const backSafe = String(back || '').trim();
+  const backToOfferCb = (backSafe === 'my' || backSafe === 'arch' || backSafe === 'feed')
+    ? `a:bx_view|ws:${wsId}|o:${offerId}|back:${backSafe}|p:${page}`
+    : `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`;
+  kb.text('⬅️ Назад к офферу', backToOfferCb);
 
   const send = (text, extra) => safeEditOrReply(ctx, text, extra, true);
   await send(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
-async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
+async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0, back = '') {
   if (!CFG.OFFICIAL_PUBLISH_ENABLED) {
     if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Официальный канал выключен.', show_alert: true });
     return;
@@ -9388,14 +9387,14 @@ async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
 • 30 дней — “топ‑слот”`;
 
   const kb = new InlineKeyboard()
-    .text(`🕒 1 день`, `a:off_req|ws:${wsId}|o:${offerId}|days:1|p:${page}`)
-    .text(`📅 7 дней`, `a:off_req|ws:${wsId}|o:${offerId}|days:7|p:${page}`)
+    .text(`🕒 1 день`, `a:off_req|ws:${wsId}|o:${offerId}|days:1|p:${page}|back:${back}`)
+    .text(`📅 7 дней`, `a:off_req|ws:${wsId}|o:${offerId}|days:7|p:${page}|back:${back}`)
     .row()
-    .text(`🏆 30 дней`, `a:off_req|ws:${wsId}|o:${offerId}|days:30|p:${page}`)
+    .text(`🏆 30 дней`, `a:off_req|ws:${wsId}|o:${offerId}|days:30|p:${page}|back:${back}`)
     .row()
     .text(`⚙️ По умолчанию (${defaultDays}д)`, `a:off_req|ws:${wsId}|o:${offerId}|days:${defaultDays}|p:${page}`)
     .row()
-    .text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`)
+    .text('⬅️ Назад', `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`)
     .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   if (ctx.callbackQuery) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -9404,7 +9403,7 @@ async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0) {
 
 
 
-async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0) {
+async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0, back = '') {
   const mode = String(CFG.OFFICIAL_PUBLISH_MODE || 'manual').toLowerCase();
   if (!(mode === 'paid' || mode === 'mixed')) {
     if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Покупка размещения выключена.', show_alert: true });
@@ -9430,9 +9429,9 @@ async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0) {
 
   const kb = new InlineKeyboard();
   for (const d of OFFICIAL_DURATIONS) {
-    kb.text(`⭐ ${d.label} · ${d.price} Stars`, `a:off_buy|ws:${wsId}|o:${offerId}|dur:${d.id}|p:${page}`).row();
+    kb.text(`⭐ ${d.label} · ${d.price} XTR`, `a:off_buy|ws:${wsId}|o:${offerId}|dur:${d.id}|p:${page}|back:${back}`).row();
   }
-  kbNavRow(kb, `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}`);
+  kbNavRow(kb, `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -17313,13 +17312,13 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:off_manage') {
       await ctx.answerCallbackQuery();
-      await renderOfficialManageView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0), p.back || '');
       return;
     }
 
     if (p.a === 'a:off_req_home') {
       await ctx.answerCallbackQuery();
-      await renderOfficialRequestHome(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
+      await renderOfficialRequestHome(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17377,7 +17376,7 @@ if (p.a === 'a:match_home') {
       }
 
       await ctx.answerCallbackQuery({ text: '✅ Заявка добавлена в очередь.', show_alert: false });
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17411,13 +17410,13 @@ if (p.a === 'a:match_home') {
       }
 
       await ctx.answerCallbackQuery({ text: '🗑 Заявка отменена.', show_alert: false });
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
     if (p.a === 'a:off_buy_home') {
       await ctx.answerCallbackQuery();
-      await renderOfficialBuyHome(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0));
+      await renderOfficialBuyHome(ctx, u.id, Number(p.ws), Number(p.o), Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17432,7 +17431,7 @@ if (p.a === 'a:match_home') {
         return;
       }
 
-      const pay = await getPaymentsRuntimeFlags();
+      const pay = await getPaymentMode();
       if (!pay.accept) {
         await ctx.answerCallbackQuery({ text: 'Платежи временно отключены.', show_alert: true });
         return;
@@ -17440,6 +17439,7 @@ if (p.a === 'a:match_home') {
 
       const offerId = Number(p.o);
       const wsId = Number(p.ws);
+      const back = String(p.back || '').trim();
       const durId = String(p.dur || '').trim();
       const d = OFFICIAL_DURATIONS.find((x) => x.id === durId);
       if (!d) {
@@ -17458,7 +17458,7 @@ if (p.a === 'a:match_home') {
       }
 
       const token = randomToken(16);
-      await redis.set(
+            await redis.set(
         k(['pay', 'offpub', token]),
         JSON.stringify({
           tgId: ctx.from.id,
@@ -17478,7 +17478,7 @@ if (p.a === 'a:match_home') {
         description,
         payload: `offpub_${u.id}_${offerId}_${d.days}_${token}`,
         amount: d.price,
-        backCb: `a:off_manage|ws:${wsId}|o:${offerId}`,
+        backCb: `a:off_manage|ws:${wsId}|o:${offerId}|back:${back}`,
       });
       if (!okInv) return;
 
@@ -17489,7 +17489,7 @@ if (p.a === 'a:match_home') {
         {
           parse_mode: 'Markdown',
           reply_markup: new InlineKeyboard()
-            .text('⬅️ Назад', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${Number(p.p || 0)}`)
+            .text('⬅️ Назад', `a:off_buy_home|ws:${wsId}|o:${offerId}|p:${Number(p.p || 0)}|back:${back}`)
             .row()
             .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         }
@@ -17525,7 +17525,7 @@ if (p.a === 'a:match_home') {
       if (mode === 'paid') {
         if (!isPaidPending) {
           await ctx.answerCallbackQuery({ text: 'Нет оплаченной заявки в очереди (PENDING).', show_alert: true });
-          await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+          await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
           return;
         }
         placementType = 'PAID';
@@ -17557,7 +17557,7 @@ if (p.a === 'a:match_home') {
         } catch (_) {}
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
       }
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17584,7 +17584,7 @@ if (p.a === 'a:match_home') {
         try { await db.setOfficialPostStatus(offerId, 'ERROR', { lastError: String(e?.message || e) }); } catch (_) {}
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
       }
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
@@ -17607,7 +17607,7 @@ if (p.a === 'a:match_home') {
         try { await db.setOfficialPostStatus(offerId, 'ERROR', { lastError: String(e?.message || e) }); } catch (_) {}
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
       }
-      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0));
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
       return;
     }
 
