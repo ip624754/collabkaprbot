@@ -1080,7 +1080,15 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   if (curMode) hint += `
 • Curator Mode: <b>ON</b>`;
 
-  const mapText = `
+  const mapText =
+    (effective === 'brand' || effective === 'brand_manager')
+      ? `
+<b>Карта</b>
+• 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
+• 💬 Диалоги и 📨 заявки → 📥 Inbox
+• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
+`
+      : `
 <b>Карта</b>
 • 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы
 • 💬 Диалоги → 📣 Мои каналы → выбери канал → 💬 Диалоги
@@ -1124,8 +1132,19 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   if (flags?.isCurator) kb.row().text(bCur, 'a:home_mode|m:curator');
 
 
-  // Quick map shortcuts
-  kb.row().text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home');
+  // Quick map shortcuts (mode-aware)
+  if (effective === 'brand' || effective === 'brand_manager') {
+    kb
+      .row()
+      .text('📥 Inbox', 'a:go_dialogs')
+      .text('🎬 Офферы (лента)', 'a:bx_feed|ws:0|p:0|h:mm');
+    kb
+      .row()
+      .text('🔎 Поиск', 'a:pm_home|ws:0')
+      .text('🏷 Каталог брендов', 'a:brands_home');
+  } else {
+    kb.row().text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home');
+  }
 
   // Staff shortcuts
   if (flags?.isModerator) kb.row().text('🛡 Модерация', 'a:mod_home');
@@ -1166,6 +1185,8 @@ async function renderRoleHub(ctx, u, flags) {
   }
 
   const mode = await resolveUiMode(ctx.from.id);
+  const bmMode = await getBrandManagerMode(ctx.from.id);
+  const isBrandish = normalizeUiMode(mode) === UI_MODES.BRAND || bmMode;
 
   if (mode === UI_MODES.BRAND) {
     const isManagerMode = await getBrandManagerMode(ctx.from.id);
@@ -13894,16 +13915,37 @@ if (p.a === 'a:ui_mode_set') {
 if (p.a === 'a:guide') {
   const flags = await getRoleFlags(u, ctx.from.id);
   const mode = await resolveUiMode(ctx.from.id);
+  const bmMode = await getBrandManagerMode(ctx.from.id);
+  const isBrandish = normalizeUiMode(mode) === UI_MODES.BRAND || bmMode;
 
-  let text =
-    `🧭 <b>Быстрый старт</b>\n\n` +
-    `<b>Карта</b>\n` +
-    `• 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы\n` +
-    `• 💬 Диалоги → 📣 Мои каналы → выбери канал → 💬 Диалоги\n` +
-    `• 📨 Заявки → 📣 Мои каналы → выбери канал → 📨 Заявки брендов\n` +
-    `• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже\n\n`;
+  let text = `🧭 <b>Быстрый старт</b>
 
-  if (mode === UI_MODES.BRAND) {
+<b>Карта</b>
+`;
+
+  if (isBrandish) {
+    text +=
+      `• 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
+` +
+      `• 💬 Диалоги и 📨 заявки → 📥 Inbox
+` +
+      `• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
+
+`;
+  } else {
+    text +=
+      `• 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы
+` +
+      `• 💬 Диалоги → 📣 Мои каналы → выбери канал → 💬 Диалоги
+` +
+      `• 📨 Заявки → 📣 Мои каналы → выбери канал → 📨 Заявки брендов
+` +
+      `• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
+
+`;
+  }
+
+  if (isBrandish) {
     text +=
       `🏷 <b>Режим Бренд</b>\n` +
       `• Офферы: смотри ленту креаторов / поиск\n` +
@@ -13918,12 +13960,14 @@ if (p.a === 'a:guide') {
 
   const kb = new InlineKeyboard();
 
-  // Map shortcuts (same as HOME HUB)
-  kb.text('📣 Мои каналы', 'a:ws_list')
-    .text('🏷 Каталог брендов', 'a:brands_home')
-    .row();
+  // Map shortcuts (same as HOME HUB, mode-aware)
+  if (isBrandish) {
+    kb.text('📥 Inbox', 'a:go_dialogs').text('🏷 Каталог брендов', 'a:brands_home').row();
+  } else {
+    kb.text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home').row();
+  }
 
-  if (mode === UI_MODES.BRAND) {
+  if (isBrandish) {
     kb.text('🎬 Офферы (лента)', 'a:bx_feed|ws:0|p:0|h:mm')
       .text('🔎 Поиск', 'a:pm_home|ws:0')
       .row();
@@ -13933,11 +13977,11 @@ if (p.a === 'a:guide') {
       .row();
   }
 
-  kb.text('💬 Диалоги', 'a:go_dialogs')
-    .text('📨 Заявки', 'a:go_requests')
-    .row();
+  if (!isBrandish) {
+    kb.text('💬 Диалоги', 'a:go_dialogs').text('📨 Заявки', 'a:go_requests').row();
+  }
 
-  if (mode !== UI_MODES.BRAND) {
+  if (!isBrandish) {
     kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu').row();
   }
 
@@ -13951,8 +13995,10 @@ if (p.a === 'a:guide') {
 if (p.a === 'a:go_dialogs') {
   await ctx.answerCallbackQuery();
   const mode = await resolveUiMode(ctx.from.id);
+  const bmMode = await getBrandManagerMode(ctx.from.id);
+  const isBrandish = normalizeUiMode(mode) === UI_MODES.BRAND || bmMode;
 
-  if (mode === UI_MODES.BRAND) {
+  if (isBrandish) {
     const wsId = 0;
     const page = 0;
     const h = BX_HOME.MENU;
@@ -13974,9 +14020,11 @@ if (p.a === 'a:go_dialogs') {
 if (p.a === 'a:go_requests') {
   await ctx.answerCallbackQuery();
   const mode = await resolveUiMode(ctx.from.id);
+  const bmMode = await getBrandManagerMode(ctx.from.id);
+  const isBrandish = normalizeUiMode(mode) === UI_MODES.BRAND || bmMode;
 
   // For Brand: requests/responses live in Inbox.
-  if (mode === UI_MODES.BRAND) {
+  if (isBrandish) {
     const wsId = 0;
     const page = 0;
     const h = BX_HOME.MENU;
