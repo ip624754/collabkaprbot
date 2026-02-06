@@ -1721,7 +1721,9 @@ function wsMenuKb(wsId, opts = {}) {
     .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
     .row()
     .text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)
-    .text('📨 Запросы брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
+    .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+    .row()
+    .text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
     .row()
     .text('📁 Папки', `a:folders_home|ws:${wsId}`)
     .row()
@@ -2068,10 +2070,12 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
   const { showCurator = false } = opts || {};
   const net = networkEnabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
   const kb = new InlineKeyboard()
-  .text('📨 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
-  .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`)
+  .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+  .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
   .row()
+  .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`)
   .text('➕ Создать офер', `a:bx_new|ws:${wsId}`)
+  .row()
   .text('🏷 Каталог брендов', 'a:brands_home|p:0');
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
@@ -4852,7 +4856,8 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
   const isCurator = await db.hasAnyCuratorRole(ownerUserId);
   await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
 
-Выбери действие:`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
+Выбери действие:
+<i>Подсказка: 🎬 офферы → 💬 диалоги/лента. 📨 заявки брендов → входящие.</i>`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
 }
 
 async function renderWsSettings(ctx, ownerUserId, wsId) {
@@ -6381,7 +6386,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const textHeader =
-    `📨 <b>Запросы брендов</b>\n\n` +
+    `📨 <b>Заявки брендов</b>\n\n` +
     `Канал: <b>${escapeHtml(channel)}</b>\n` +
     `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>\n\n`;
 
@@ -6391,7 +6396,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
     return `${leadStatusIcon(l.status)} <b>#${l.id}</b> — ${escapeHtml(who)} — <i>${escapeHtml(snippet)}${String(l.message || '').length > 60 ? '…' : ''}</i>`;
   });
 
-  const body = lines.length ? lines.join('\n') : 'Пока пусто. Запросы появятся, когда бренд нажмёт кнопку на витрине.';
+  const body = lines.length ? lines.join('\n') : 'Пока пусто. Заявки появятся, когда бренд нажмёт кнопку на витрине.';
 
   const kb = leadListTabsKb(wsId, counts, st, ret);
 
@@ -6430,7 +6435,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
   const stepId = `lead_view:${Number(leadId || 0)}`;
   const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(leadId), 4500);
-  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
+  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 4500);
@@ -7377,7 +7382,7 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
 
 async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
   const lead = await db.getBrandLeadById(leadId);
-  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
+  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
@@ -7803,7 +7808,7 @@ async function renderLeadTemplatePreview(ctx, actorUserId, leadId, key, back) {
 
 async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const lead = await db.getBrandLeadById(leadId);
-  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
+  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
@@ -8371,7 +8376,8 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
 
 • Создать офер — твой UGC/оффер увидят бренды в «📰 Лента креаторов»
-• Inbox — сообщения и заявки от брендов
+• 💬 Диалоги — переписка по офферам (бренд ↔ блогер)
+• 📰 Лента креаторов — посмотреть выдачу глазами бренда
 • Мои офферы — пауза/удаление`,
     { parse_mode: 'HTML', reply_markup: bxMenuKb(wsNum, ws.network_enabled, { showCurator: isCurator }) }
   );
@@ -13251,7 +13257,7 @@ if (payload?.type === 'bxo') {
 • 🚀 Подключи канал (бот админ) и перешли любой пост
 • 🪟 Заполни витрину: IG, портфолио, ниши/форматы, гео, контакт
 • 🔗 Поставь ссылку витрины в Instagram (bio / stories)
-• 📨 Запросы брендов → Inbox, статусы, история
+• 📨 Заявки брендов → Inbox, статусы, история
 
 Для брендов
 • 🔎 Поиск креаторов → фильтры → кампании (сохранённые поиски)
@@ -15196,7 +15202,7 @@ if (p.a === 'a:ws_leads') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const wsId = Number(p.ws || 0);
@@ -15226,7 +15232,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       await renderLeadTemplates(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
@@ -15237,7 +15243,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const key = String(p.k || 'discuss');
@@ -15258,7 +15264,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const key = String(p.k || 'discuss');
@@ -15279,7 +15285,7 @@ if (p.a === 'a:lead_set') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Запросы брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const st = normLeadStatus(p.st);
