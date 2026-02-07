@@ -4,6 +4,7 @@ import { getBot } from './bot.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
+import { notifyGiveawayEnded, notifyGiveawayWinnersReady } from './gwNotify.js';
 
 // Production-safe fixed cron parameters.
 // Keep them deterministic and boring (Jobs), transparent (Vitalik), and reliable (Woz).
@@ -31,6 +32,13 @@ async function endDueGiveaways(now = new Date()) {
   for (const g of due) {
     await db.updateGiveaway(g.id, { status: 'ENDED' });
     await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.ended', { manual: false, now: now.toISOString() });
+    // Optional: notify owner (DM) / channel (opt-in) that contest ended.
+    try {
+      const api = getBot().api;
+      await notifyGiveawayEnded({ api, db, g, reason: 'time' });
+    } catch {
+      // ignore
+    }
     ended.push(g.id);
   }
   return ended;
@@ -80,30 +88,9 @@ async function autoDrawEnded() {
 
     drawn.push(g.id);
 
-    // Preview to owner (safe) with 1-tap publish button
+    // Notify owner (and optionally channel) that winners are ready.
     try {
-      const owner = await db.getUserTgIdByUserId(g.owner_user_id);
-      if (owner?.tg_id) {
-        const winners = await db.exportGiveawayWinnersForPublish(g.id, g.owner_user_id);
-        const lines = (winners || [])
-          .map((w) => {
-            const name = w.username ? '@' + String(w.username) : `id:${Number(w.tg_id)}`;
-            return `${Number(w.place)}. ${name}`;
-          })
-          .join('\n');
-
-        const note = fallback ? '\n\n⚠️ Eligible участников мало — выбрал из всех участников (см. лог).' : '';
-        const kb = new InlineKeyboard()
-          .text('📣 Опубликовать итоги', `a:gw_publish_results|i:${g.id}`)
-          .row()
-          .text('🧾 Лог', `a:gw_log|i:${g.id}`)
-          .text('🧩 Доступ', `a:gw_access|i:${g.id}`);
-
-        await bot.api.sendMessage(owner.tg_id, `🎲 <b>Авто-розыгрыш готов</b> для конкурса #${g.id}\n\n🏆 Победители:\n${lines || '—'}${note}`, {
-          parse_mode: 'HTML',
-          reply_markup: kb,
-        });
-      }
+      await notifyGiveawayWinnersReady({ api: bot.api, db, g, reason: 'auto_draw' });
     } catch {
       // ignore
     }
