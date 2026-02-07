@@ -4485,15 +4485,14 @@ function bxFeedNavKb(wsId, page, hasPrev, hasNext, opts = {}) {
 
 function gwNewStepPrizeKb(wsId) {
   return new InlineKeyboard()
-    .text('Бартер', `a:gw_prize|ws:${wsId}|t:barter`)
-    .text('Сертификат', `a:gw_prize|ws:${wsId}|t:cert`)
+    .text('🤝 Бартер', `a:gw_prize|ws:${wsId}|t:barter`)
+    .text('🎟 Сертификат', `a:gw_prize|ws:${wsId}|t:cert`)
     .row()
-    .text('Деньги ₽', `a:gw_prize|ws:${wsId}|t:rub`)
-    .text('Stars', `a:gw_prize|ws:${wsId}|t:stars`)
+    .text('💰 Деньги ₽', `a:gw_prize|ws:${wsId}|t:rub`)
+    .text('⭐ Stars', `a:gw_prize|ws:${wsId}|t:stars`)
     .row()
-    .text('Другое', `a:gw_prize|ws:${wsId}|t:other`)
-    .row()
-    .text('Пресеты', `a:gw_preset_home|ws:${wsId}`)
+    .text('✨ Другое', `a:gw_prize|ws:${wsId}|t:other`)
+    .text('🧩 Пресеты', `a:gw_preset_home|ws:${wsId}`)
     .row()
     .text('⬅️ Отмена', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
 }
@@ -19736,7 +19735,7 @@ ${winnersList}
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await clearDraft(ctx.from.id);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '🎁 <b>Новый конкурс</b>\n\nВыбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
+      await safeEditOrReply(ctx, '🎁 <b>Новый конкурс</b>\n\nКонкурс — инструмент PR и роста аудитории.\nИспользуй его, чтобы собрать участников, вовлечённость и заявки брендов.\n\n<b>Шаг 1/6:</b> выбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
       return;
     }
 
