@@ -4702,9 +4702,16 @@ function gwOpenKb(g, flags = {}) {
     .text('🧾 Лог', `a:gw_log|i:${gwId}`)
     .row();
   if (isAdmin) kb.text('🧩 Проверка доступа', `a:gw_access|i:${gwId}`).row();
-  kb.text('📣 Напомнить проверить', `a:gw_remind_q|i:${gwId}`)
-    .row()
-    .text('👥 Кураторы канала', `a:ws_settings|ws:${g.workspace_id}`)
+  const effSt = gwEffectiveStatusValue(g);
+
+  if (effSt !== 'ENDED' && effSt !== 'WINNERS_DRAWN' && effSt !== 'RESULTS_PUBLISHED' && effSt !== 'CANCELLED') {
+    kb.text('📣 Напомнить проверить', `a:gw_remind_q|i:${gwId}`)
+      .row();
+    kb.text('🏁 Завершить сейчас', `a:gw_end_now|i:${gwId}`)
+      .row();
+  }
+
+  kb.text('👥 Кураторы канала', `a:ws_settings|ws:${g.workspace_id}`)
     .row();
 
   if (String(g.status || '').toUpperCase() === 'WINNERS_DRAWN' && !g.results_message_id && g.published_chat_id) {
@@ -4712,8 +4719,6 @@ function gwOpenKb(g, flags = {}) {
   }
 
   kb
-    .text('🏁 Завершить сейчас', `a:gw_end_now|i:${gwId}`)
-    .row()
     .text('🗑 Удалить', `a:gw_del_q|i:${gwId}|ws:${g.workspace_id}`)
     .row()
     .text('⬅️ Назад', backCb || (g.workspace_id ? ('a:gw_list_ws|ws:' + g.workspace_id) : 'a:gw_list'));
@@ -4722,19 +4727,18 @@ function gwOpenKb(g, flags = {}) {
 
 function participantKb(gwId, entry, opts = {}) {
   const pub = opts.pub ? '|pub:1' : '';
-  const kb = new InlineKeyboard();
+  const kb = new InlineKeyboard()
+    .text('🧾 Лог конкурса', `a:gw_log|i:${gwId}${pub}`).row();
 
-  // Optional: direct user to the missing sponsor channel
-  const blocker = opts.blocker;
-  const blockerHandle =
-    opts.firstBlockerHandle ||
-    (blocker && typeof blocker.chat === 'string' && blocker.chat.startsWith('@') ? blocker.chat : null);
-  if (blockerHandle) {
-    const url = sponsorUrlFromHandle(blockerHandle);
-    if (url) kb.url(`🔗 Открыть ${blockerHandle}`, url).row();
+  // If contest ended — do not allow joining/checking anymore (avoid confusion)
+  if (opts.ended) {
+    kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home').row();
+    if (opts.backTo?.text && opts.backTo?.cb) {
+      kb.row().text(opts.backTo.text, opts.backTo.cb);
+    }
+    return kb;
   }
 
-  // Primary actions
   if (!entry) {
     kb.text('🎟 Участвовать', `a:gw_join|i:${gwId}${pub}`).row();
   }
@@ -4747,10 +4751,14 @@ function participantKb(gwId, entry, opts = {}) {
   }
   return kb;
 }
-
 function renderParticipantScreen(g, entry, opts = {}) {
   const statusEligible = Boolean(entry?.is_eligible);
-  const isEnded = g.status === 'ended';
+  const nowMs = Date.now();
+  const endMs = gwEndsAtMs(g?.ends_at);
+  const st = String(g?.status || '').toUpperCase();
+  const isEnded = (endMs !== null && nowMs >= endMs) || ['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(st);
+  const endsTs = g?.ends_at ? escapeHtml(fmtTs(g.ends_at)) : '—';
+  const endsLabel = isEnded ? '✅ Итоги' : '⏳ Итоги';
   // Status block (Jobs-style: one screen, no extra messages)
   let stLine;
   if (opts.checking) {
@@ -4760,7 +4768,9 @@ function renderParticipantScreen(g, entry, opts = {}) {
   } else if (entry) {
     stLine = '✅ <b>участие записано</b> · нужно подтвердить подписки';
   } else {
-    stLine = '🕒 <b>нажми “🎟 Участвовать”</b> чтобы записаться';
+    stLine = isEnded
+      ? '🔴 <b>конкурс завершён</b>'
+      : '🕒 <b>нажми “🎟 Участвовать”</b> чтобы записаться';
   }
 
   // Explain the blocker (first missing / unknown), if we know it
@@ -4812,23 +4822,31 @@ function renderParticipantScreen(g, entry, opts = {}) {
     }
   }
   // Action hint (super short)
-  const actionHint = opts.checking
+  const actionHint = (opts.checking || isEnded)
     ? ''
     : !entry
-      ? `\n\nНажми “🎟 Участвовать”, чтобы записаться.`
+      ? `
+
+Нажми “🎟 Участвовать”, чтобы записаться.`
       : !statusEligible
-        ? `\n\nНажми “🔄 Проверить”, чтобы подтвердить подписки.`
+        ? `
+
+Нажми “🔄 Проверить”, чтобы подтвердить подписки.`
         : '';
 
-  const waitHint = opts.checking ? `\n\n⏳ Это может занять 2–5 сек. Подожди…` : '';
+  const waitHint = opts.checking ? `
 
-  const tipLine = opts.hint ? `\n\n💡 1) Участвовать  2) Проверить` : '';
+⏳ Это может занять 2–5 сек. Подожди…` : '';
+
+  const tipLine = (opts.hint && !isEnded) ? `
+
+💡 1) Участвовать  2) Проверить` : '';
 
   return (
     `🎁 <b>Конкурс #${g.id}</b>\n\n` +
     `🎁 Приз: ${escapeHtml(g.prize_value_text || '—')}\n` +
     `🏆 Мест: ${g.winners_count || 1}\n` +
-    `⏰ Итоги: ${escapeHtml(fmtTs(g.ends_at))}\n\n` +
+    `${endsLabel}: ${endsTs}\n\n` +
     `Статус: ${stLine}\n` +
     `Статус конкурса: ${isEnded ? '🔴 Завершён' : '🟢 Идёт'}` +
     blockerLine +
@@ -9944,6 +9962,8 @@ function gwStatusLabel(status) {
   switch (st) {
     case 'ACTIVE':
       return '🟢 Идёт';
+    case 'RUNNING':
+      return '🟢 Идёт';
     case 'ENDED':
       return '🏁 Завершён';
     case 'DRAFT':
@@ -9962,6 +9982,36 @@ function gwStatusLabel(status) {
       return st ? `ℹ️ ${st}` : '—';
   }
 }
+
+// Effective giveaway status (fixes "ИДЁТ" when дедлайн уже прошёл)
+function gwEndsAtMs(endsAt) {
+  if (!endsAt) return null;
+  const t = new Date(endsAt).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+function gwIsEndedByTime(g, nowMs = Date.now()) {
+  const endMs = gwEndsAtMs(g?.ends_at);
+  return endMs !== null && nowMs >= endMs;
+}
+
+function gwEffectiveStatusValue(g, nowMs = Date.now()) {
+  const st = String(g?.status || '').toUpperCase();
+  // Terminal states keep as-is
+  if (['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(st)) return st;
+  // If deadline passed — treat as ENDED (even if DB still says ACTIVE/PAUSED/PUBLISHED/RUNNING)
+  if (gwIsEndedByTime(g, nowMs) && ['ACTIVE','PAUSED','PUBLISHED','RUNNING'].includes(st)) return 'ENDED';
+  return st || '';
+}
+
+function gwEndsLine(g, nowMs = Date.now()) {
+  const endMs = gwEndsAtMs(g?.ends_at);
+  if (endMs === null) return 'Дедлайн: <b>—</b>';
+  const ended = nowMs >= endMs;
+  const ts = escapeHtml(fmtTs(g.ends_at));
+  return ended ? `✅ Закончился: <b>${ts}</b>` : `⏳ Закончится: <b>${ts}</b>`;
+}
+
 
 async function renderGwList(ctx, ownerUserId, wsId = null) {
   const items = await db.listGiveaways(ownerUserId, 25);
@@ -9985,8 +10035,10 @@ async function renderGwList(ctx, ownerUserId, wsId = null) {
     return;
   }
 
+  const nowMs = Date.now();
+
   for (const g of filtered) {
-    const st = gwStatusLabel(g.status);
+    const st = gwStatusLabel(gwEffectiveStatusValue(g, nowMs));
     const wsLabel = !wsId ? ` · ${String(g.workspace_title || '').slice(0, 18)}` : '';
     kb.text(`#${g.id} · ${st}${wsLabel}`, `a:gw_open|i:${g.id}`)
       .text('🗑', `a:gw_del_q|i:${g.id}|ws:${g.workspace_id}`)
@@ -10005,6 +10057,18 @@ async function renderGwList(ctx, ownerUserId, wsId = null) {
 async function renderGwOpen(ctx, ownerUserId, gwId) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  // Lazy auto-end: if дедлайн прошёл, чтобы статус не "врал" даже без cron
+  const nowMs = Date.now();
+  const effSt = gwEffectiveStatusValue(g, nowMs);
+  const rawSt = String(g.status || '').toUpperCase();
+  if (effSt === 'ENDED' && rawSt !== 'ENDED' && gwIsEndedByTime(g, nowMs)) {
+    try {
+      await db.updateGiveaway(gwId, { status: 'ENDED' });
+      await db.auditGiveaway(gwId, g.workspace_id, ownerUserId, 'gw.ended_lazy', { by_time: true });
+      g.status = 'ENDED';
+    } catch {}
+  }
   const sponsors = await db.listGiveawaySponsors(gwId);
   const sponsorLines = sponsors.map(s => `• ${escapeHtml(s.sponsor_text)}`).join('\n') || '—';
 
@@ -10019,10 +10083,10 @@ async function renderGwOpen(ctx, ownerUserId, gwId) {
 
   const text = `🎁 <b>Конкурс #${g.id}</b>
 
-Статус: <b>${escapeHtml(gwStatusLabel(g.status))}</b>
+Статус: <b>${escapeHtml(gwStatusLabel(gwEffectiveStatusValue(g)))}</b>
 Приз: <b>${escapeHtml(g.prize_value_text || '—')}</b>
 Мест: <b>${g.winners_count}</b>
-Дедлайн: <b>${g.ends_at ? escapeHtml(fmtTs(g.ends_at)) : '—'}</b>
+${gwEndsLine(g)}
 
 Спонсоры:\n${sponsorLines}
 
@@ -10097,7 +10161,9 @@ async function renderGwOpenPublic(ctx, gwId, userId) {
   const sponsors = (sponsorRows || []).map(r => r.sponsor_text).filter(Boolean);
 
   const text = renderParticipantScreen(g, entry, { hint: true, sponsors });
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: true }) });
+  const st = gwEffectiveStatusValue(g);
+  const ended = ['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(st);
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: participantKb(gwId, entry, { pub: true, ended }) });
 }
 
 // ----------------------
@@ -10172,7 +10238,7 @@ ${items.length ? 'Выбери канал:' : 'Пока тебя не назна
 function curatorWsKb(wsId, giveaways) {
   const kb = new InlineKeyboard();
   for (const g of giveaways) {
-    kb.text(`🎁 #${g.id} · ${gwStatusLabel(g.status)}`, `a:cur_gw_open|ws:${wsId}|i:${g.id}`).row();
+    kb.text(`🎁 #${g.id} · ${gwStatusLabel(gwEffectiveStatusValue(g))}`, `a:cur_gw_open|ws:${wsId}|i:${g.id}`).row();
   }
   kb.text('❌ Выйти из канала', `a:cur_leave_q|ws:${wsId}`).row();
   kb.text('⬅️ Назад', 'a:cur_home').row();
@@ -10243,10 +10309,10 @@ async function renderCuratorGiveawayOpen(ctx, userId, wsId, gwId) {
 
   const text = `🎁 <b>Конкурс #${g.id}</b>
 
-Статус: <b>${escapeHtml(gwStatusLabel(g.status))}</b>
+Статус: <b>${escapeHtml(gwStatusLabel(gwEffectiveStatusValue(g)))}</b>
 Приз: <b>${escapeHtml(g.prize_value_text || '—')}</b>
 Мест: <b>${g.winners_count}</b>
-Дедлайн: <b>${g.ends_at ? escapeHtml(fmtTs(g.ends_at)) : '—'}</b>
+${gwEndsLine(g)}
 
 ${checkedLine}
 ${notesBlock}
@@ -13148,10 +13214,12 @@ ${list}
       const sponsors = await db.listGiveawaySponsors(payload.id);
       const entry = await db.getEntryStatus(payload.id, u.id);
       const text = renderParticipantScreen(g, entry, { hint: true, sponsors });
+      const st = gwEffectiveStatusValue(g);
+      const ended = ['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(st);
       try {
-        return await ctx.api.editMessageText(ctx.chat.id, loading.message_id, text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true }) });
+        return await ctx.api.editMessageText(ctx.chat.id, loading.message_id, text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true, ended }) });
       } catch {
-        return ctx.reply(text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true }) });
+        return ctx.reply(text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true, ended }) });
       }
     }
     if (payload?.type === 'gwc') {
@@ -13162,10 +13230,12 @@ ${list}
       const sponsors = await db.listGiveawaySponsors(payload.id);
       const entry = await db.getEntryStatus(payload.id, u.id);
       const text = renderParticipantScreen(g, entry, { hint: true, sponsors });
+      const st = gwEffectiveStatusValue(g);
+      const ended = ['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(st);
       try {
-        return await ctx.api.editMessageText(ctx.chat.id, loading.message_id, text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true }) });
+        return await ctx.api.editMessageText(ctx.chat.id, loading.message_id, text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true, ended }) });
       } catch {
-        return ctx.reply(text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true }) });
+        return ctx.reply(text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true, ended }) });
       }
     }
     if (payload?.type === 'gw') {
@@ -13175,10 +13245,12 @@ ${list}
       const sponsors = await db.listGiveawaySponsors(payload.id);
       const entry = await db.getEntryStatus(payload.id, u.id);
       const text = renderParticipantScreen(g, entry, { hint: true, sponsors });
+      const st = gwEffectiveStatusValue(g);
+      const ended = ['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(st);
       try {
-        return await ctx.api.editMessageText(ctx.chat.id, loading.message_id, text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true }) });
+        return await ctx.api.editMessageText(ctx.chat.id, loading.message_id, text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true, ended }) });
       } catch {
-        return ctx.reply(text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true }) });
+        return ctx.reply(text, { parse_mode: 'HTML', reply_markup: participantKb(payload.id, entry, { pub: true, ended }) });
       }
     }
     if (payload?.type === 'gwo') {
@@ -13186,7 +13258,8 @@ ${list}
       if (!g) return ctx.reply('Нет доступа к этому конкурсу.');
       const sponsors = await db.listGiveawaySponsors(payload.id);
       const sponsorLines = sponsors.map(s => `• ${escapeHtml(s.sponsor_text)}`).join('\n') || '—';
-      const text = `🎁 <b>Конкурс #${g.id}</b>\n\nСтатус: <b>${escapeHtml(gwStatusLabel(g.status))}</b>\nПриз: <b>${escapeHtml(g.prize_value_text || '—')}</b>\nМест: <b>${g.winners_count}</b>\nДедлайн: <b>${g.ends_at ? escapeHtml(fmtTs(g.ends_at)) : '—'}</b>\n\nСпонсоры:\n${sponsorLines}`;
+      const text = `🎁 <b>Конкурс #${g.id}</b>\n\nСтатус: <b>${escapeHtml(gwStatusLabel(gwEffectiveStatusValue(g)))}</b>
+Приз: <b>${escapeHtml(g.prize_value_text || '—')}</b>\nМест: <b>${g.winners_count}</b>\n${gwEndsLine(g)}\n\nСпонсоры:\n${sponsorLines}`;
       return ctx.reply(text, { parse_mode: 'HTML', reply_markup: gwOpenKb(g, { isAdmin: isSuperAdminTg(ctx.from?.id) }) });
     }
     if (payload?.type === 'cur') {
@@ -20124,6 +20197,22 @@ ${actionHint}`;
       const g = await db.getGiveawayInfoForUser(gwId);
       if (!g) return ctx.answerCallbackQuery({ text: 'Конкурс не найден.' });
 
+      const st = gwEffectiveStatusValue(g);
+      const ended = ['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(st);
+      if (ended) {
+        const sponsors = await db.listGiveawaySponsors(gwId);
+        const entry = await db.getEntryStatus(gwId, u.id);
+        await ctx.answerCallbackQuery({ text: 'Конкурс уже завершён.' });
+        const screen = renderParticipantScreen(g, entry, { hint: true, sponsors });
+        const kb = participantKb(gwId, entry, { pub, ended: true });
+        try {
+          await safeEditOrReply(ctx, screen, { parse_mode: 'HTML', reply_markup: kb });
+        } catch {
+          await ctx.reply(screen, { parse_mode: 'HTML', reply_markup: kb });
+        }
+        return;
+      }
+
       // Ensure entry exists
       await db.upsertGiveawayEntry(gwId, u.id);
       await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.joined', { from: 'button' });
@@ -20149,6 +20238,22 @@ ${actionHint}`;
       const isPub = String(p.pub || '') === '1';
       const g = await db.getGiveawayInfoForUser(gwId);
       if (!g) return ctx.answerCallbackQuery({ text: 'Конкурс не найден.' });
+
+      const st = gwEffectiveStatusValue(g);
+      const ended = ['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(st);
+      if (ended) {
+        const sponsors = await db.listGiveawaySponsors(gwId);
+        const entry = await db.getEntryStatus(gwId, u.id);
+        await ctx.answerCallbackQuery({ text: 'Конкурс уже завершён.' });
+        const screen = renderParticipantScreen(g, entry, { hint: true, sponsors });
+        const kb = participantKb(gwId, entry, { pub: isPub, ended: true });
+        try {
+          await safeEditOrReply(ctx, screen, { parse_mode: 'HTML', reply_markup: kb });
+        } catch {
+          await ctx.reply(screen, { parse_mode: 'HTML', reply_markup: kb });
+        }
+        return;
+      }
 
       // Ensure entry exists
       await db.upsertGiveawayEntry(gwId, u.id);
@@ -20184,7 +20289,7 @@ ${actionHint}`;
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
       if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (String(g.status).toUpperCase() === 'ENDED') return ctx.answerCallbackQuery({ text: 'Уже завершен.' });
+      if (['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(gwEffectiveStatusValue(g))) return ctx.answerCallbackQuery({ text: 'Уже завершен.' });
 
       const kb = new InlineKeyboard()
         .text('✅ Да, отправить', `a:gw_remind_send|i:${gwId}`)
@@ -20200,6 +20305,7 @@ ${actionHint}`;
       const g = await db.getGiveawayForOwner(gwId, u.id);
       if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       if (!g.published_chat_id) return ctx.answerCallbackQuery({ text: 'Конкурс не опубликован?' });
+      if (['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(gwEffectiveStatusValue(g))) return ctx.answerCallbackQuery({ text: 'Уже завершен.' });
 
       const rlKey = k(['rl', 'gw_remind', gwId]);
       const ok = await redis.set(rlKey, '1', { nx: true, ex: 30 * 60 });
