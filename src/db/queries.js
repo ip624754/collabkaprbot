@@ -964,12 +964,24 @@ export async function listGiveawayCuratorNotesAudit(giveawayId, limit = 3) {
 // Worker queries
 export async function listGiveawaysToEnd(limit = 50) {
   const r = await pool.query(
-    `select id, workspace_id, ends_at, status, auto_draw, auto_publish, published_chat_id
-     from giveaways
-     where status in ('ACTIVE','PAUSED','PUBLISHED','RUNNING')
-       and ends_at is not null
-       and ends_at <= now()
-     order by ends_at asc
+    `select g.id,
+            g.workspace_id,
+            g.ends_at,
+            g.status,
+            g.auto_draw,
+            g.auto_publish,
+            g.published_chat_id,
+            g.published_message_id,
+            w.owner_user_id,
+            w.title as ws_title,
+            w.channel_id as ws_channel_id,
+            w.channel_username as ws_username
+     from giveaways g
+     join workspaces w on w.id = g.workspace_id
+     where g.status in ('ACTIVE','PAUSED','PUBLISHED','RUNNING')
+       and g.ends_at is not null
+       and g.ends_at <= now()
+     order by g.ends_at asc
      limit $1`,
     [limit]
   );
