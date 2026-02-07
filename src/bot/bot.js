@@ -4704,17 +4704,26 @@ function gwOpenKb(g, flags = {}) {
   if (isAdmin) kb.text('🧩 Проверка доступа', `a:gw_access|i:${gwId}`).row();
   const effSt = gwEffectiveStatusValue(g);
 
+  const rawSt = String(g?.status || '').toUpperCase();
+  const winnersDrawn = rawSt === 'WINNERS_DRAWN' || rawSt === 'RESULTS_PUBLISHED' || !!g?.winners_drawn_at;
+  const resultsPublished = rawSt === 'RESULTS_PUBLISHED' || (g?.results_message_id && Number(g.results_message_id) > 0);
+
   if (effSt !== 'ENDED' && effSt !== 'WINNERS_DRAWN' && effSt !== 'RESULTS_PUBLISHED' && effSt !== 'CANCELLED') {
     kb.text('📣 Напомнить проверить', `a:gw_remind_q|i:${gwId}`)
       .row();
-    kb.text('🏁 Завершить сейчас', `a:gw_end_now|i:${gwId}`)
+    kb.text('🏁 Завершить', `a:gw_end_now|i:${gwId}`)
       .row();
+  }
+
+  // Manual draw (Jobs-style): after ENDED -> pick winners -> publish results
+  if (effSt === 'ENDED' && !winnersDrawn) {
+    kb.text('🏆 Выбрать победителей', `a:gw_draw_now|i:${gwId}`).row();
   }
 
   kb.text('👥 Кураторы канала', `a:ws_settings|ws:${g.workspace_id}`)
     .row();
 
-  if (String(g.status || '').toUpperCase() === 'WINNERS_DRAWN' && !g.results_message_id && g.published_chat_id) {
+  if ((rawSt === 'WINNERS_DRAWN' || winnersDrawn) && !resultsPublished && !g.results_message_id && g.published_chat_id) {
     kb.text('📣 Опубликовать итоги', `a:gw_publish_results|i:${gwId}`).row();
   }
 
@@ -20363,6 +20372,183 @@ ${actionHint}`;
       await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.ended', { manual: true });
       await ctx.answerCallbackQuery({ text: 'Завершен' });
       await renderGwOpen(ctx, u.id, gwId);
+      return;
+    }
+
+    // Draw winners (manual, deterministic)
+    if (p.a === 'a:gw_draw_now') {
+      const gwId = Number(p.i);
+      const g = await db.getGiveawayForOwner(gwId, u.id);
+      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const effSt = gwEffectiveStatusValue(g);
+      const rawSt = String(g.status || '').toUpperCase();
+      const already = rawSt === 'WINNERS_DRAWN' || rawSt === 'RESULTS_PUBLISHED' || !!g.winners_drawn_at;
+
+      await ctx.answerCallbackQuery();
+
+      if (already) {
+        await safeEditOrReply(ctx, '🏆 Победители уже выбраны.', { reply_markup: navKb(`a:gw_open|i:${gwId}`) });
+        return;
+      }
+
+      if (effSt !== 'ENDED') {
+        const kb = new InlineKeyboard()
+          .text('🏁 Завершить', `a:gw_end_now|i:${gwId}`)
+          .row()
+          .text('⬅️ Назад', `a:gw_open|i:${gwId}`)
+          .row()
+          .text('📋 Меню', 'a:menu')
+          .text('🏠 Home', 'a:home');
+        await safeEditOrReply(
+          ctx,
+          `⛔️ Сначала нужно <b>завершить</b> конкурс (🏁) или дождаться дедлайна.
+
+После завершения появится кнопка <b>«🏆 Выбрать победителей»</b>.`,
+          { parse_mode: 'HTML', reply_markup: kb }
+        );
+        return;
+      }
+
+      const kb = new InlineKeyboard()
+        .text('🏆 Выбрать', `a:gw_draw_do|i:${gwId}`)
+        .text('❌ Отмена', `a:gw_open|i:${gwId}`)
+        .row()
+        .text('🧾 Лог', `a:gw_log|i:${gwId}`)
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
+
+      await safeEditOrReply(
+        ctx,
+        `🏆 <b>Выбрать победителей?</b>
+
+Как выбираем:
+• сначала из <b>eligible</b> (кто прошёл проверку)
+• если eligible мало — добираем из всех участников
+• выбор <b>детерминирован</b> (seed от конкурса + дедлайна), чтобы было честно и повторяемо
+
+Дальше можно будет нажать <b>«📣 Опубликовать итоги»</b>.`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      return;
+    }
+
+    if (p.a === 'a:gw_draw_do') {
+      const gwId = Number(p.i);
+      const g0 = await db.getGiveawayForOwner(gwId, u.id);
+      if (!g0) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      // Idempotency lock per giveaway
+      const lockKey = k(['lock', 'gw_draw', gwId]);
+      const locked = await redis.set(lockKey, { by: u.id }, { nx: true, ex: 30 });
+      if (!locked) {
+        await ctx.answerCallbackQuery({ text: 'Секунду… уже выбираю.' });
+        return;
+      }
+
+      try {
+        // Re-fetch (fresh)
+        const g = await db.getGiveawayForOwner(gwId, u.id);
+        if (!g) {
+          await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+          return;
+        }
+
+        const rawSt = String(g.status || '').toUpperCase();
+        const effSt = gwEffectiveStatusValue(g);
+        const already = rawSt === 'WINNERS_DRAWN' || rawSt === 'RESULTS_PUBLISHED' || !!g.winners_drawn_at;
+        if (already) {
+          await ctx.answerCallbackQuery({ text: 'Уже выбраны.' });
+          await renderGwOpen(ctx, u.id, gwId);
+          return;
+        }
+
+        // Ensure ENDED (Jobs-style: avoid surprises)
+        if (effSt !== 'ENDED') {
+          await ctx.answerCallbackQuery({ text: 'Сначала заверши конкурс.' });
+          await renderGwOpen(ctx, u.id, gwId);
+          return;
+        }
+        if (String(g.status || '').toUpperCase() !== 'ENDED') {
+          try {
+            await db.updateGiveaway(gwId, { status: 'ENDED' });
+            await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.ended_lazy', { by_time: true, manual_draw: true });
+          } catch {}
+        }
+
+        // Prefer eligible participants. If not enough, fall back to all entries (transparent).
+        const eligibleIds = await db.listEligibleUserIdsForGiveaway(gwId);
+        let poolIds = eligibleIds;
+        let fallback = false;
+        if (!poolIds || poolIds.length === 0) {
+          poolIds = await db.listAllUserIdsForGiveaway(gwId);
+          fallback = true;
+        }
+
+        if (!poolIds || poolIds.length === 0) {
+          await ctx.answerCallbackQuery({ text: 'Нет участников.' });
+          await safeEditOrReply(ctx, '⛔️ У конкурса пока нет участников. Победителей выбрать нельзя.', { reply_markup: navKb(`a:gw_open|i:${gwId}`) });
+          return;
+        }
+
+        const seedMode = g.ends_at ? 'ends_at' : 'now';
+        const endsAtIso = g.ends_at ? new Date(g.ends_at).toISOString() : new Date().toISOString();
+        const seedObj = makeSeed({ giveawayId: gwId, endsAtIso, eligibleUserIds: eligibleIds || [] });
+        const { seedHash, eligibleHash } = seedObj;
+        const rnd = makeXorShift32(seedObj.seed);
+
+        const requested = Number(g.winners_count || 1) || 1;
+        const count = Math.min(requested, poolIds.length);
+        const winnersUserIds = sampleWithoutReplacement(poolIds, count, rnd);
+
+        await db.setWinners(gwId, winnersUserIds.map((uid, idx) => ({ userId: uid, place: idx + 1 })));
+        await db.updateGiveaway(gwId, { status: 'WINNERS_DRAWN', winners_drawn_at: new Date().toISOString() });
+        await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.winners_drawn', {
+          manual: true,
+          seedHash,
+          eligibleHash,
+          seed_mode: seedMode,
+          winners: winnersUserIds.length,
+          used_pool: fallback ? 'all_entries' : 'eligible',
+          eligible_count: eligibleIds?.length || 0,
+          entries_pool_count: poolIds.length,
+          requested_winners: requested,
+        });
+
+        const winners = await db.exportGiveawayWinnersForPublish(gwId, u.id);
+        const winnersList = (winners || [])
+          .map(w => {
+            const name = w.username ? '@' + escapeHtml(String(w.username)) : `<a href="tg://user?id=${Number(w.tg_id)}">участник</a>`;
+            return `${Number(w.place)}. ${name}`;
+          })
+          .join('\n');
+
+        const note = fallback ? '\n\n⚠️ Eligible участников не хватило — добрал из всех участников.' : '';
+        const pubHint = g.published_chat_id
+          ? '\n\nДальше нажми <b>«📣 Опубликовать итоги»</b>.'
+          : '\n\nℹ️ Конкурс ещё не опубликован в канале — итоги можно сохранить, а публикацию сделать после публикации конкурса.';
+
+        const kb = new InlineKeyboard();
+        if (g.published_chat_id) kb.text('📣 Опубликовать итоги', `a:gw_publish_results|i:${gwId}`).row();
+        kb.text('⬅️ Назад к конкурсу', `a:gw_open|i:${gwId}`).row();
+        kb.text('🧾 Лог', `a:gw_log|i:${gwId}`).row();
+        kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+        await ctx.answerCallbackQuery({ text: 'Победители выбраны ✅' });
+        await safeEditOrReply(
+          ctx,
+          `🎲 <b>Победители выбраны</b> для конкурса #${gwId}
+
+🏆 Победители:
+${winnersList || '—'}${note}${pubHint}`,
+          { parse_mode: 'HTML', reply_markup: kb }
+        );
+      } catch (e) {
+        await ctx.answerCallbackQuery({ text: 'Ошибка выбора.' });
+      } finally {
+        try { await redis.del(lockKey); } catch {}
+      }
       return;
     }
 
