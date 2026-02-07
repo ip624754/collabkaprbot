@@ -108,6 +108,13 @@ export const CFG = {
   GIVEAWAY_SPONSORS_MAX_FREE: parseIntSafe(process.env.GIVEAWAY_SPONSORS_MAX_FREE, 10),
   GIVEAWAY_SPONSORS_MAX_PRO: parseIntSafe(process.env.GIVEAWAY_SPONSORS_MAX_PRO, 30),
 
+  // Giveaways: optional auto-notifications
+  // Jobs-style defaults: notify owner in DM; channel notify is opt-in.
+  GIVEAWAY_NOTIFY_OWNER_ON_END: parseBoolSafe(process.env.GIVEAWAY_NOTIFY_OWNER_ON_END, true),
+  GIVEAWAY_NOTIFY_OWNER_ON_WINNERS: parseBoolSafe(process.env.GIVEAWAY_NOTIFY_OWNER_ON_WINNERS, true),
+  GIVEAWAY_NOTIFY_CHANNEL_ON_END: parseBoolSafe(process.env.GIVEAWAY_NOTIFY_CHANNEL_ON_END, false),
+  GIVEAWAY_NOTIFY_CHANNEL_ON_WINNERS: parseBoolSafe(process.env.GIVEAWAY_NOTIFY_CHANNEL_ON_WINNERS, false),
+
   // Workspace channel folders
   WORKSPACE_FOLDER_MAX_ITEMS_FREE: parseIntSafe(process.env.WORKSPACE_FOLDER_MAX_ITEMS_FREE, 10),
   WORKSPACE_FOLDER_MAX_ITEMS_PRO: parseIntSafe(process.env.WORKSPACE_FOLDER_MAX_ITEMS_PRO, 30),
