@@ -542,6 +542,34 @@ async function markHomeHubHintSeen(uid) {
   await redisSetSafe(key, '1', { ex: ttlSec }, 1500);
 }
 
+
+// GIVEAWAYS: results refresh lock (optional).
+// If GIVEAWAY_RESULTS_EDIT_LOCK_HOURS > 0, we hide ✏️ Обновить итоги
+// and reject refresh after N hours since results_published_at.
+function giveawayResultsEditLockHours() {
+  const v = Number(process.env.GIVEAWAY_RESULTS_EDIT_LOCK_HOURS || 0);
+  return (Number.isFinite(v) && v > 0) ? Math.trunc(v) : 0;
+}
+
+function giveawayIsResultsEditLocked(g, nowMs = Date.now()) {
+  const h = giveawayResultsEditLockHours();
+  if (!h) return false;
+  const tsRaw = g && g.results_published_at ? g.results_published_at : null;
+  if (!tsRaw) return false;
+  try {
+    const ts = (tsRaw instanceof Date) ? tsRaw.getTime() : (new Date(tsRaw)).getTime();
+    if (!Number.isFinite(ts) || ts <= 0) return false;
+    return (nowMs - ts) > (h * 3600 * 1000);
+  } catch {
+    return false;
+  }
+}
+
+function giveawayResultsEditLockNote() {
+  const h = giveawayResultsEditLockHours();
+  return h ? `🔒 Обновление итогов: ${h}h` : '';
+}
+
 // --- P0 HANG diagnostics (Woz): step logging + per-await timeouts ---
 const P0_AWAIT_TIMEOUT_MS = Number(process.env.P0_AWAIT_TIMEOUT_MS || 8000);
 
@@ -4659,7 +4687,7 @@ async function renderGwConfirm(ctx, wsId, opts = {}) {
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
 🏆 Мест: <b>${winners}</b>
-⏳ Итоги: <b>${escapeHtml(String(ends))}</b>
+⏳ Завершение: <b>${escapeHtml(String(ends))}</b>
 🖼 Медиа: <b>${escapeHtml(mediaLabel)}</b>
 
 Спонсоры:
@@ -4709,6 +4737,7 @@ function gwOpenKb(g, flags = {}) {
   const winnersDrawn = rawSt === 'WINNERS_DRAWN' || rawSt === 'RESULTS_PUBLISHED' || !!g?.winners_drawn_at;
   if (winnersDrawn) kb.text('🏆 Победители', `a:gw_wv|i:${gwId}`).row();
   const resultsPublished = rawSt === 'RESULTS_PUBLISHED' || (g?.results_message_id && Number(g.results_message_id) > 0);
+  const resultsLocked = resultsPublished && giveawayIsResultsEditLocked(g);
 
   if (effSt !== 'ENDED' && effSt !== 'WINNERS_DRAWN' && effSt !== 'RESULTS_PUBLISHED' && effSt !== 'CANCELLED') {
     kb.text('📣 Напомнить проверить', `a:gw_remind_q|i:${gwId}`)
@@ -4729,7 +4758,7 @@ function gwOpenKb(g, flags = {}) {
     kb.text('📣 Опубликовать итоги', `a:gw_publish_results|i:${gwId}`).row();
   }
 
-  if (resultsPublished && g?.results_message_id && Number(g.results_message_id) > 0 && g.published_chat_id) {
+  if (resultsPublished && !resultsLocked && g?.results_message_id && Number(g.results_message_id) > 0 && g.published_chat_id) {
     kb.text('✏️ Обновить итоги', `a:gw_results_refresh|i:${gwId}`).row();
   }
 
@@ -10110,11 +10139,14 @@ async function renderGwOpen(ctx, ownerUserId, gwId) {
         return `${Number(w.place)}. ${name}`;
       })
       .join('\n') || '—';
-    const pubLabel = resultsPublished ? '✅ опубликовано' : '🏁 готовы';
+    const lockH = giveawayResultsEditLockHours();
+    const locked = resultsPublished && giveawayIsResultsEditLocked(g, nowMs);
+    const pubLabel = resultsPublished ? (locked ? '✅ опубликовано · 🔒 фиксировано' : '✅ опубликовано') : '🏁 готовы';
+    const lockHint = (resultsPublished && locked && lockH) ? `\n🔒 Обновление итогов закрыто (${lockH}ч).` : '';
     winnersSection = `
 
 🏆 <b>Победители</b> (${pubLabel})
-${winnersLines}`;
+${winnersLines}${lockHint}`;
   }
 
   const text = `🎁 <b>Конкурс #${g.id}</b>
@@ -10153,7 +10185,9 @@ async function renderGwWinnersView(ctx, ownerUserId, gwId) {
     })
     .join('\n') || '—';
 
-  const pubLabel = resultsPublished ? '✅ Итоги опубликованы' : '🏁 Итоги готовы';
+  const lockH = giveawayResultsEditLockHours();
+  const locked = resultsPublished && giveawayIsResultsEditLocked(g);
+  const pubLabel = resultsPublished ? (locked ? '✅ Итоги опубликованы · 🔒 фиксировано' : '✅ Итоги опубликованы') : '🏁 Итоги готовы';
   const text = `🏆 <b>Победители конкурса #${g.id}</b>
 
 ${pubLabel}
@@ -11533,6 +11567,12 @@ ${escapeHtml(payLine)}
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) {
         await ctx.reply('Нет доступа.');
+        return;
+      }
+
+      if (!g.published_chat_id) {
+        await ctx.answerCallbackQuery({ text: 'Не вижу канал для обновления.' });
+        await renderGwOpen(ctx, u.id, gwId);
         return;
       }
 
@@ -19781,12 +19821,10 @@ ${sponsorsBulletText(sponsorsArr, 5)}`
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
 🏆 Мест: <b>${Number(g.winners_count || winners.length || 1)}</b>
-⏳ Итоги: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
+⏳ Завершение: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
 
         const resultsBlock =
 `🏁 <b>Итоги</b>
-🏆 Победители:
-
 ${winnersList}`;
 
         const fullText = `${baseText}
@@ -19877,6 +19915,13 @@ ${winnersList}`;
         await renderGwOpen(ctx, u.id, gwId);
         return;
       }
+      const lockH = giveawayResultsEditLockHours();
+      if (lockH && giveawayIsResultsEditLocked(g)) {
+        await ctx.answerCallbackQuery({ text: '🔒 Обновление итогов закрыто.' });
+        await renderGwOpen(ctx, u.id, gwId);
+        return;
+      }
+
       if (!g.published_chat_id) {
         await ctx.answerCallbackQuery({ text: 'Не вижу канал для обновления.' });
         await renderGwOpen(ctx, u.id, gwId);
@@ -19910,12 +19955,10 @@ ${winnersList}`;
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
 🏆 Мест: <b>${Number(g.winners_count || winners.length || 1)}</b>
-⏳ Итоги: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
+⏳ Завершение: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
 
         const resultsBlock =
 `🏁 <b>Итоги</b>
-🏆 Победители:
-
 ${winnersList}`;
 
         const fullText = `${baseText}
@@ -20296,7 +20339,7 @@ ${sponsorsBulletText(draft.sponsors, 5)}
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
 🏆 Мест: <b>${winners}</b>
-⏳ Итоги: <b>${escapeHtml(String(ends))}</b>
+⏳ Завершение: <b>${escapeHtml(String(ends))}</b>
 
 ${sponsorsLine}
 
@@ -20383,7 +20426,7 @@ ${sponsorsBulletText(draft.sponsors, 5)}`
 
 🎁 Приз: <b>${escapeHtml(draft.prize_value_text)}</b>
 🏆 Мест: <b>${Number(draft.winners_count)}</b>
-⏳ Итоги: <b>${escapeHtml(fmtTs(draft.ends_at))}</b>${sponsorsLine}
+⏳ Завершение: <b>${escapeHtml(fmtTs(draft.ends_at))}</b>${sponsorsLine}
 
 ${actionHint}`;
 
