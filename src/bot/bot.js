@@ -9241,6 +9241,70 @@ async function safeOfficialPosts(primaryFn, fallbackFn) {
   }
 }
 
+async function notifyOfficialQueueAdmins(api, input = {}) {
+  try {
+    const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
+    if (!admins.length) return { sent: 0, skipped: 'no_admins' };
+
+    const offerId = Number(input.offerId || 0);
+    const wsId = Number(input.wsId || 0);
+    if (!offerId) return { sent: 0, skipped: 'no_offer' };
+
+    const kind = String(input.kind || 'queue').toLowerCase(); // paid | manual | queue
+    const rl = await rateLimit(k(['notify', 'offq', offerId, kind]), { limit: 1, windowSec: 10 * 60 });
+    if (!rl.allowed) return { sent: 0, skipped: 'rate_limited' };
+
+    const offerTitle = String(input.offerTitle || '').trim();
+    const wsTitle = String(input.wsTitle || '').trim();
+    const channelUsername = String(input.channelUsername || '').trim();
+
+    const fromTag = String(input.fromTag || '').trim();
+    const days = input.days ? Number(input.days) : null;
+    const paymentId = input.paymentId ? Number(input.paymentId) : null;
+
+    const head = kind === 'paid'
+      ? '💳 <b>OFFICIAL: оплата за слот</b>'
+      : '📝 <b>OFFICIAL: заявка в очередь</b>';
+
+    const offerLine = offerTitle ? `#${offerId} · ${escapeHtml(offerTitle.slice(0, 64))}` : `#${offerId}`;
+    const wsLine = channelUsername
+      ? `Канал: <b>@${escapeHtml(channelUsername.replace(/^@/, ''))}</b>`
+      : (wsTitle ? `Канал: <b>${escapeHtml(wsTitle.slice(0, 80))}</b>` : '');
+
+    const meta = [];
+    if (days) meta.push(`Слот: <b>${days}д</b>`);
+    if (paymentId) meta.push(`PaymentId: <code>${paymentId}</code>`);
+    if (fromTag) meta.push(`От: <b>${escapeHtml(fromTag)}</b>`);
+
+    const lines = [];
+    lines.push(head, '');
+    lines.push(`Оффер: <b>${offerLine}</b>`);
+    if (wsLine) lines.push(wsLine);
+    if (meta.length) {
+      lines.push('');
+      for (const x of meta) lines.push(x);
+    }
+    lines.push('', '<i>Действия: открыть карточку или опубликовать.</i>');
+    const text = lines.join('\\n');
+
+    const kb = new InlineKeyboard();
+    if (wsId) kb.text('✅ Опубликовать', `a:off_pub|ws:${wsId}|o:${offerId}|p:0`).row();
+    if (wsId) kb.text('📣 Карточка', `a:off_manage|ws:${wsId}|o:${offerId}|p:0`);
+    kb.text('📋 Очередь', 'a:off_queue|p:0');
+
+    let sent = 0;
+    for (const a of admins) {
+      const res = await sendMessageWithFallback(api, a, text, { parse_mode: 'HTML', reply_markup: kb });
+      if (res && res.ok) sent += 1;
+    }
+    return { sent };
+  } catch (e) {
+    return { sent: 0, error: String(e?.message || e) };
+  }
+}
+
+
+
 async function buildOfficialOfferPost(offerRow, opts = {}) {
   const forCaption = Boolean(opts.forCaption);
 
@@ -9400,9 +9464,9 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
   );
 
   // If this was a paid placement, mark payment as "applied" (best-effort).
-  if (placementType === 'PAID' && paymentId) {
+  if (placementType === 'PAID' && paymentId && publishedByUserId) {
     try {
-      await db.setPaymentApplied(paymentId, { offerId, meta: { official: true } });
+      await db.markPaymentApplied(paymentId, publishedByUserId, `official_publish:${offerId}`);
     } catch {
       // ignore
     }
@@ -9646,16 +9710,23 @@ async function renderOfficialQueue(ctx, userId, page = 0) {
 
   const limit = 8;
   const offset = page * limit;
+
+  const total = await safeOfficialPosts(() => db.countOfficialPending(), async () => 0);
   const rows = await safeOfficialPosts(() => db.listOfficialPending(limit, offset), async () => []);
 
   const text = `📣 <b>Офиц.канал: очередь</b>
 
-Pending: <b>${rows.length}</b>${rows.length ? '' : '\n\nПока пусто.'}`;
+Pending: <b>${total}</b>${total ? '' : '\n\nПока пусто.'}`;
   const kb = new InlineKeyboard();
+
   for (const r of rows) {
-    const line = `#${r.offer_id} · ${escapeHtml(String(r.offer_title || '').slice(0, 35))}`;
+    const icon = String(r.placement_type || '').toUpperCase() === 'PAID' ? '💳' : '📝';
+    const days = r.slot_days ? ` · ${r.slot_days}д` : '';
+    const title = escapeHtml(String(r.offer_title || '').slice(0, 35));
+    const line = `${icon} #${r.offer_id}${days} · ${title}`;
     kb.text(line, `a:off_manage|ws:${r.workspace_id}|o:${r.offer_id}|p:0`).row();
   }
+
   const hasPrev = page > 0;
   const hasNext = rows.length >= limit;
   if (hasPrev) kb.text('⬅️', `a:off_queue|p:${page - 1}`);
@@ -13972,11 +14043,15 @@ bot.on('message:successful_payment', async (ctx) => {
     await markStatus('ORPHANED', 'postpay_orphaned');
     db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'postpay_orphaned' } });
     if (invoicePayload.startsWith('offpub_')) {
+      let offerId = 0;
+      let days = 0;
+      let offer = null;
       try {
         const parts = String(invoicePayload).split('_');
-        const offerId = Number(parts[2]);
-        const days = Number(parts[3] || CFG.OFFICIAL_MANUAL_DEFAULT_DAYS);
+        offerId = Number(parts[2]);
+        days = Number(parts[3] || CFG.OFFICIAL_MANUAL_DEFAULT_DAYS);
         const channelChatId = Number(CFG.OFFICIAL_CHANNEL_ID || 0);
+
         if (offerId && channelChatId) {
           await db.upsertOfficialPostDraft({
             offerId,
@@ -13986,35 +14061,65 @@ bot.on('message:successful_payment', async (ctx) => {
             slotDays: days
           });
         }
+        offer = offerId ? await db.getBarterOfferPublic(offerId) : null;
       } catch (_) { /* ignore */ }
-      await ctx.reply('✅ Оплата получена! Оффер поставлен в очередь на публикацию в официальном канале. Модератор опубликует его вручную.');
+
+      // Notify super admins with direct actions (queue + publish + card).
+      try {
+        const wsId = offer?.workspace_id ? Number(offer.workspace_id) : 0;
+        const fromTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
+        await notifyOfficialQueueAdmins(ctx.api, {
+          kind: 'paid',
+          offerId,
+          wsId,
+          offerTitle: offer?.title || '',
+          wsTitle: offer?.ws_title || '',
+          channelUsername: offer?.channel_username || '',
+          days,
+          paymentId,
+          fromTag
+        });
+      } catch (_) { /* ignore */ }
+
+      // User confirmation + quick access to status screen.
+      try {
+        const wsId = offer?.workspace_id ? Number(offer.workspace_id) : 0;
+        const kb = new InlineKeyboard();
+        if (wsId && offerId) kb.text('📣 Статус офиц.канала', `a:off_manage|ws:${wsId}|o:${offerId}|p:0|back:my`).row();
+        kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+        await ctx.reply('✅ Оплата получена! Оффер поставлен в очередь на публикацию в официальном канале. Модератор опубликует его вручную.', {
+          reply_markup: kb
+        });
+      } catch {
+        await ctx.reply('✅ Оплата получена! Оффер поставлен в очередь на публикацию в официальном канале. Модератор опубликует его вручную.');
+      }
     } else {
       await ctx.reply('✅ Платеж получен. Сейчас эта услуга обрабатывается вручную — я свяжусь с тобой в ближайшее время.');
-    }
-
-    // Notify super admins so the service request is not lost.
-    try {
-      const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
-      if (admins.length) {
-        const userTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
-        const amount = sp.total_amount;
-        const currency = sp.currency || 'XTR';
-        const msg = [
-          '🧾 ORPHANED service payment',
-          `Kind: ${kind}`,
-          `Payload: ${invoicePayload}`,
-          `From: ${userTag} (userId=${u.id})`,
-          `Amount: ${amount} ${currency}`,
-          `TG charge: ${sp.telegram_payment_charge_id || '-'}`,
-          `PaymentId: ${paymentId || '-'}`,
-          '',
-          'Next: open Admin → Payments → filter ORPHANED and process it.'
-        ].join('\n');
-        for (const a of admins) {
-          await ctx.api.sendMessage(a, msg);
+      // Notify super admins so the service request is not lost.
+      try {
+        const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
+        if (admins.length) {
+          const userTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
+          const amount = sp.total_amount;
+          const currency = sp.currency || 'XTR';
+          const msg = [
+            '🧾 ORPHANED service payment',
+            `Kind: ${kind}`,
+            `Payload: ${invoicePayload}`,
+            `From: ${userTag} (userId=${u.id})`,
+            `Amount: ${amount} ${currency}`,
+            `TG charge: ${sp.telegram_payment_charge_id || '-'}`,
+            `PaymentId: ${paymentId || '-'}`,
+            '',
+            'Next: open Admin → Payments → filter ORPHANED and process it.'
+          ].join('\n');
+          for (const a of admins) {
+            await ctx.api.sendMessage(a, msg);
+          }
         }
-      }
-    } catch (_) { /* ignore */ }
+      } catch (_) { /* ignore */ }
+    }
 
     return;
   }
@@ -17749,19 +17854,31 @@ if (p.a === 'a:match_home') {
         return;
       }
 
-      const slotExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-
       try {
         await safeOfficialPosts(
           () => db.upsertOfficialPostDraft({
             offerId,
             channelChatId: channelId,
             placementType: 'MANUAL',
-            slotDays: days,
-            slotExpiresAt
+            slotDays: days
           }),
           async () => null
         );
+
+        // Notify super admins (deduped) so queue doesn't get lost.
+        try {
+          const fromTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
+          await notifyOfficialQueueAdmins(ctx.api, {
+            kind: 'manual',
+            offerId,
+            wsId,
+            offerTitle: offer?.title || '',
+            wsTitle: offer?.ws_title || '',
+            channelUsername: offer?.channel_username || '',
+            days,
+            fromTag
+          });
+        } catch (_) { /* ignore */ }
       } catch (e) {
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
         return;
@@ -21062,10 +21179,19 @@ ${benefits}
 async function renderAdminHome(ctx) {
   // Access is checked in the callback handler via isSuperAdminTg().
 
+  let pending = 0;
+  if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+    try {
+      pending = await safeOfficialPosts(() => db.countOfficialPending(), async () => 0);
+    } catch {
+      pending = 0;
+    }
+  }
+
   let text = '👑 Админ-панель\n\n';
   text += '• Платежи: manual/apply\n';
   text += '• Метрики: DAU/MAU, конверсии, воронки\n';
-  if (CFG.OFFICIAL_PUBLISH_ENABLED) text += '• Офиц.канал: очередь публикаций\n';
+  if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• Офиц.канал: очередь публикаций (${pending})\n`;
 
   const kb = new InlineKeyboard()
     .text('💰 Платежи', 'a:admin_payments')
@@ -21074,7 +21200,7 @@ async function renderAdminHome(ctx) {
     .row();
 
   if (CFG.OFFICIAL_PUBLISH_ENABLED) {
-    kb.text('📣 Офиц.канал', 'a:off_queue|p:0').row();
+    kb.text(`📣 Офиц.канал (${pending})`, 'a:off_queue|p:0').row();
   }
 
   kb.text('➕ Добавить модератора', 'a:admin_mod_add')
