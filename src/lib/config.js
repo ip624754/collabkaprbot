@@ -8,7 +8,6 @@ import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
-import { notifyGiveawayEnded, notifyGiveawayWinnersReady } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
 
@@ -20433,19 +20432,8 @@ ${actionHint}`;
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
       if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const prevStatus = String(g.status || '').toUpperCase();
       await db.updateGiveaway(gwId, { status: 'ENDED' });
       await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.ended', { manual: true });
-
-      // Optional: post a compact “contest ended” notice into the published channel (reply to original post).
-      // Owner DM is skipped (owner already in bot flow).
-      try {
-        if (prevStatus !== 'ENDED' && prevStatus !== 'WINNERS_DRAWN' && prevStatus !== 'RESULTS_PUBLISHED') {
-          await notifyGiveawayEnded({ api: ctx.api, db, g, reason: 'manual_end', skipOwner: true });
-        }
-      } catch {
-        // ignore
-      }
       await ctx.answerCallbackQuery({ text: 'Завершен' });
       await renderGwOpen(ctx, u.id, gwId);
       return;
