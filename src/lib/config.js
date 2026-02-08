@@ -170,57 +170,6 @@ function sponsorStateIcon(state) {
   return '⚪';
 }
 
-// Giveaway winners formatting (Jobs-style: compact for small, truncated for big)
-const GW_WINNERS_ONE_LINE_MAX = 3;
-const GW_WINNERS_MAX_LINES = 10;
-
-function fmtGwWinnerName(w) {
-  const uname = w && w.username ? '@' + escapeHtml(String(w.username)) : null;
-  if (uname) return uname;
-  const id = w && (w.tg_id ?? w.tgId ?? w.user_id ?? w.userId);
-  return `id:${Number(id || 0)}`;
-}
-
-/**
- * Formats winners list for channel text.
- * - If total winners <= oneLineMax: returns a single line "1) @a · 2) @b"
- * - Else returns multiline "1. @a\n2. @b" (truncated to maxLines) + "... +N ещё (см. в боте)"
- */
-function formatGwWinners(winners, { oneLineMax = GW_WINNERS_ONE_LINE_MAX, maxLines = GW_WINNERS_MAX_LINES } = {}) {
-  const items = (Array.isArray(winners) ? winners : []).map(w => ({
-    place: Number(w.place || 0) || 0,
-    name: fmtGwWinnerName(w),
-  }));
-
-  const total = items.length;
-  if (!total) return { mode: 'none', text: '', total: 0, truncated: false, shown: 0 };
-
-  // Ensure stable order by place if present
-  items.sort((a, b) => (a.place || 0) - (b.place || 0));
-
-  if (total <= oneLineMax) {
-    const line = items.map(i => `${i.place || ''}`.trim()
-      ? `${i.place}) ${i.name}`
-      : i.name
-    ).join(' · ');
-    return { mode: 'one', text: line, total, truncated: false, shown: total };
-  }
-
-  const cap = Number.isFinite(maxLines) && maxLines > 0 ? Math.trunc(maxLines) : GW_WINNERS_MAX_LINES;
-  const shownItems = items.slice(0, cap);
-  const rest = total - shownItems.length;
-
-  let body = shownItems.map(i => `${i.place || ''}`.trim()
-    ? `${i.place}. ${i.name}`
-    : i.name
-  ).join('\n');
-
-  if (rest > 0) {
-    body += `\n… +${rest} ещё (см. в боте)`;
-  }
-  return { mode: 'lines', text: body, total, truncated: rest > 0, shown: shownItems.length };
-}
-
 
 // Runtime toggles (stored in Redis, editable from Admin)
 const SYS_KEYS = {
@@ -4778,10 +4727,6 @@ function gwOpenKb(g, flags = {}) {
 
   if ((rawSt === 'WINNERS_DRAWN' || winnersDrawn) && !resultsPublished && !g.results_message_id && g.published_chat_id) {
     kb.text('📣 Опубликовать итоги', `a:gw_publish_results|i:${gwId}`).row();
-  }
-
-  if (resultsPublished && g?.results_message_id && Number(g.results_message_id) > 0 && g.published_chat_id) {
-    kb.text('✏️ Обновить итоги', `a:gw_results_refresh|i:${gwId}`).row();
   }
 
   kb
@@ -19809,94 +19754,34 @@ ${list}
           await ctx.answerCallbackQuery({ text: 'Нет победителей.' });
           return;
         }
-        const wf = formatGwWinners(winners);
-        const winnersHeader = wf.mode === 'one'
-          ? `🏆 Победители: ${wf.text}`
-          : `🏆 Победители:\n\n${wf.text}`;
+
+        const winnersList = winners
+          .map(w => {
+            const name = w.username ? '@' + escapeHtml(String(w.username)) : `<a href="tg://user?id=${Number(w.tg_id)}">участник</a>`;
+            return `${Number(w.place)}. ${name}`;
+          })
+          .join('\n');
 
         const prize = (g.prize_value_text || '').trim() || '—';
-        const ends = g.ends_at ? fmtTs(g.ends_at) : '—';
-        const sponsorsRows = await db.listGiveawaySponsors(gwId);
-        const sponsorsArr = (sponsorsRows || []).map(x => x.sponsor_text).filter(Boolean);
-        const sponsorsCount = normalizeSponsorsList(sponsorsArr).map(fmtSponsorHandle).filter(Boolean).length;
-        const sponsorsLine = sponsorsCount
-          ? `
-👥 Условие: ${sponsorsCountText(sponsorsArr)}
-${sponsorsBulletText(sponsorsArr, 5)}`
-          : '';
-
-        const baseText =
-`🎀 <b>РОЗЫГРЫШ</b>
+        const body =
+`🎉 <b>Итоги конкурса #${g.id}</b>
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
-🏆 Мест: <b>${Number(g.winners_count || winners.length || 1)}</b>
-⏳ Итоги: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
+🏆 Победители:
 
-        const resultsBlock =
-`🏁 <b>Итоги</b>
-${winnersHeader}`;
+${winnersList}
 
-        const fullText = `${baseText}
-
-${resultsBlock}`;
+🧾 Проверить лог: открой бота → /start gw_${g.id} → “🧾 Лог конкурса”`;
 
         const url = `https://t.me/${CFG.BOT_USERNAME}?start=gw_${g.id}`;
-        const ikb = new InlineKeyboard()
-          .url('🤖 Открыть бота', url)
-          .url('🧾 Лог', url);
+        const sent = await ctx.api.sendMessage(g.published_chat_id, body, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          reply_markup: new InlineKeyboard().url('🧾 Проверить в боте', url)
+        });
 
-        const chatId = Number(g.published_chat_id);
-        const origMsgId = g.published_message_id ? Number(g.published_message_id) : null;
-
-        let publishedId = null;
-        let via = null;
-
-        // Jobs-style: try to EDIT the original channel post (0 spam).
-        // If edit is impossible (media/caption limit/permissions), fallback to a REPLY strictly to the original post.
-        if (origMsgId) {
-          try {
-            if (fullText.length <= 4096) {
-              await ctx.api.editMessageText(chatId, origMsgId, fullText, { parse_mode: 'HTML', reply_markup: ikb });
-              publishedId = origMsgId;
-              via = 'edit_text';
-            }
-          } catch (_) {}
-
-          if (!publishedId) {
-            try {
-              if (fullText.length <= 1024) {
-                await ctx.api.editMessageCaption(chatId, origMsgId, { caption: fullText, parse_mode: 'HTML', reply_markup: ikb });
-                publishedId = origMsgId;
-                via = 'edit_caption';
-              }
-            } catch (_) {}
-          }
-        }
-
-        if (!publishedId) {
-          const body =
-`🏁 <b>Итоги конкурса #${g.id}</b>
-
-${winnersHeader}`;
-
-          const replyParams = origMsgId
-            ? { reply_parameters: { message_id: origMsgId, allow_sending_without_reply: true } }
-            : {};
-
-          const sent = await ctx.api.sendMessage(chatId, body, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: true,
-            reply_markup: ikb,
-            ...replyParams
-          });
-
-          publishedId = sent.message_id;
-          via = origMsgId ? 'reply' : 'message';
-        }
-
-        await db.finalizeGiveawayPublish(gwId, u.id, publishedId);
-        await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.results_published', { message_id: publishedId, via });
-
+        await db.finalizeGiveawayPublish(gwId, u.id, sent.message_id);
+        await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.results_published', { message_id: sent.message_id });
 
         await ctx.answerCallbackQuery({ text: 'Опубликовано.' });
         await renderGwOpen(ctx, u.id, gwId);
@@ -19906,109 +19791,6 @@ ${winnersHeader}`;
       } finally {
         // best-effort unlock
         try { await redis.del(lockKey); } catch {}
-      }
-      return;
-    }
-
-
-    if (p.a === 'a:gw_results_refresh') {
-      const gwId = Number(p.i);
-      const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-
-      const msgId = Number(g.results_message_id || 0);
-      if (!msgId || msgId <= 0) {
-        await ctx.answerCallbackQuery({ text: 'Пока нечего обновлять.' });
-        await renderGwOpen(ctx, u.id, gwId);
-        return;
-      }
-      if (!g.published_chat_id) {
-        await ctx.answerCallbackQuery({ text: 'Не вижу канал для обновления.' });
-        await renderGwOpen(ctx, u.id, gwId);
-        return;
-      }
-
-      try {
-        const winners = await db.exportGiveawayWinnersForPublish(gwId, u.id);
-        if (!winners || !winners.length) {
-          await ctx.answerCallbackQuery({ text: 'Победителей пока нет.' });
-          return;
-        }
-        const wf = formatGwWinners(winners);
-        const winnersHeader = wf.mode === 'one'
-          ? `🏆 Победители: ${wf.text}`
-          : `🏆 Победители:\n\n${wf.text}`;
-
-        const prize = (g.prize_value_text || '').trim() || '—';
-        const ends = g.ends_at ? fmtTs(g.ends_at) : '—';
-        const sponsorsRows = await db.listGiveawaySponsors(gwId);
-        const sponsorsArr = (sponsorsRows || []).map(x => x.sponsor_text).filter(Boolean);
-        const sponsorsCount = normalizeSponsorsList(sponsorsArr).map(fmtSponsorHandle).filter(Boolean).length;
-        const sponsorsLine = sponsorsCount
-          ? `\n\n👥 Условие: ${sponsorsCountText(sponsorsArr)}\n${sponsorsBulletText(sponsorsArr, 5)}`
-          : '';
-
-        const baseText =
-`🎀 <b>РОЗЫГРЫШ</b>
-
-🎁 Приз: <b>${escapeHtml(prize)}</b>
-🏆 Мест: <b>${Number(g.winners_count || winners.length || 1)}</b>
-⏳ Итоги: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
-
-        const resultsBlock =
-`🏁 <b>Итоги</b>
-${winnersHeader}`;
-
-        const fullText = `${baseText}
-
-${resultsBlock}`;
-
-        // Reply-mode must be максимально коротко: только победители.
-        const replyText =
-`🏁 <b>Итоги конкурса #${g.id}</b>
-
-${winnersHeader}`;
-
-        const url = `https://t.me/${CFG.BOT_USERNAME}?start=gw_${g.id}`;
-        const ikb = new InlineKeyboard().url('🤖 Открыть бота', url).url('🧾 Лог', url);
-
-        const chatId = Number(g.published_chat_id);
-        const origMsgId = g.published_message_id ? Number(g.published_message_id) : null;
-
-        // No spam: only EDIT existing message (original or reply).
-        if (origMsgId && msgId === origMsgId) {
-          let ok = false;
-          try {
-            if (fullText.length <= 4096) {
-              await ctx.api.editMessageText(chatId, origMsgId, fullText, { parse_mode: 'HTML', reply_markup: ikb });
-              ok = true;
-            }
-          } catch (_) {}
-          if (!ok) {
-            try {
-              if (fullText.length <= 1024) {
-                await ctx.api.editMessageCaption(chatId, origMsgId, { caption: fullText, parse_mode: 'HTML', reply_markup: ikb });
-                ok = true;
-              }
-            } catch (_) {}
-          }
-          if (!ok) {
-            await ctx.answerCallbackQuery({ text: 'Не удалось обновить (нет прав/слишком старое сообщение).' });
-            return;
-          }
-        } else {
-          try {
-            await ctx.api.editMessageText(chatId, msgId, replyText, { parse_mode: 'HTML', reply_markup: ikb, disable_web_page_preview: true });
-          } catch (e) {
-            await ctx.answerCallbackQuery({ text: 'Не удалось обновить (нет прав/слишком старое сообщение).' });
-            return;
-          }
-        }
-
-        await ctx.answerCallbackQuery({ text: 'Обновлено.' });
-        await renderGwOpen(ctx, u.id, gwId);
-      } catch (e) {
-        await ctx.answerCallbackQuery({ text: 'Ошибка обновления.' });
       }
       return;
     }
