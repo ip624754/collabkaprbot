@@ -541,7 +541,8 @@ function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }
   } else if (replyCb) {
     kb.text(replyLabel, replyCb).row();
   }
-  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  kb.row().text('🗑 Убрать', 'a:nd');
+  kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -10646,7 +10647,12 @@ ${curatorNotesBlock(notes)}
   const kb = new InlineKeyboard()
     .text('🎁 Открыть конкурс', `a:gw_open|i:${g.id}`)
     .row()
-    .url('🤖 Открыть бота', link);
+    .url('🤖 Открыть бота', link)
+    .row()
+    .text('🗑 Убрать', 'a:nd')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 
   try {
     await ctx.api.sendMessage(ownerTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
@@ -11449,6 +11455,8 @@ ${escapeHtml(safe)}`;
           .row()
           .text('🧹 Включить режим куратора', `a:cur_mode_set|v:1|ret:cur`)
           .row()
+          .text('🗑 Убрать', 'a:nd')
+          .row()
           .text('🏠 Главное меню', 'a:menu');
 
         await ctx.api.sendMessage(
@@ -11523,6 +11531,8 @@ ${escapeHtml(payLine)}
       try {
         const kb = new InlineKeyboard()
           .text('🧑‍💼 Открыть кабинет менеджера', 'a:bm_home')
+          .row()
+          .text('🗑 Убрать', 'a:nd')
           .row()
           .text('🏠 Главное меню', 'a:menu');
         await ctx.api.sendMessage(
@@ -12322,7 +12332,13 @@ if (exp.type === 'brand_deals_search') {
         `От: <b>${escapeHtml(String(who))}</b>\n\n` +
         `${escapeHtml(preview)}${msg.length > preview.length ? '…' : ''}`;
 
-      const kb = new InlineKeyboard().text('📥 Открыть в Inbox', `a:brand_app_view|id:${appId}|s:in_progress|p:0`);
+      const kb = new InlineKeyboard()
+        .text('📥 Открыть в Inbox', `a:brand_app_view|id:${appId}|s:in_progress|p:0`)
+        .row()
+        .text('🗑 Убрать', 'a:nd')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
       let delivered = 0;
       const deliveredTo = [];
@@ -12728,7 +12744,12 @@ if (exp.type === 'brand_deals_search') {
           const link = `https://t.me/${CFG.BOT_USERNAME}?start=bxth_${threadId}`;
           const msgText = body.length > 400 ? `${body.slice(0, 397)}...` : body;
           const notifyKb = new InlineKeyboard()
-            .text('💬 Открыть диалог', `a:bx_thread|ws:${Number(thread.workspace_id || 0)}|t:${threadId}|p:0|b:inbox|h:${BX_HOME.MENU}`);
+            .text('💬 Открыть диалог', `a:bx_thread|ws:${Number(thread.workspace_id || 0)}|t:${threadId}|p:0|b:inbox|h:${BX_HOME.MENU}`)
+            .row()
+            .text('🗑 Убрать', 'a:nd')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home');
           await ctx.api.sendMessage(otherTgId, `📨 Новое сообщение по офферу #${thread.offer_id}
 
 ${msgText}
@@ -12905,7 +12926,12 @@ ${escapeHtml(trimmed)}`;
         .text('👀 View', `a:mod_verif_view|uid:${u.id}|p:0`)
         .row()
         .text('✅ Approve', `a:mod_verif_approve|uid:${u.id}|p:0`)
-        .text('❌ Reject', `a:mod_verif_reject|uid:${u.id}|p:0`);
+        .text('❌ Reject', `a:mod_verif_reject|uid:${u.id}|p:0`)
+        .row()
+        .text('🗑 Убрать', 'a:nd')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
       for (const tgId of modIds) {
         try { await ctx.api.sendMessage(tgId, msg, { parse_mode: 'HTML', reply_markup: kb }); } catch {}
@@ -14205,6 +14231,55 @@ bot.on('message:successful_payment', async (ctx) => {
 
 
     const legacy = async () => {
+
+// NOTIFY: dismiss system notification (double-tap confirm)
+if (p.a === 'a:nd') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+
+  const m = ctx.callbackQuery?.message;
+  if (!m) return;
+  const chatId = Number(m.chat?.id || 0);
+  const msgId = Number(m.message_id || 0);
+  const uid = Number(ctx.from?.id || 0);
+  if (!chatId || !msgId || !uid) return;
+
+  const key = k(['notify_dismiss', chatId, msgId, uid]);
+  let armed = false;
+  try {
+    const v = await redis.get(key);
+    if (v) armed = true;
+  } catch {}
+
+  if (!armed) {
+    try {
+      // arm for 25 seconds
+      await redis.set(key, '1', { ex: 25 });
+    } catch {}
+    try {
+      await ctx.answerCallbackQuery({ text: 'Нажми ещё раз, чтобы убрать уведомление.' });
+    } catch {}
+    return;
+  }
+
+  try { await redis.del(key); } catch {}
+
+  try {
+    await ctx.api.deleteMessage(chatId, msgId);
+    try { await ctx.answerCallbackQuery({ text: '✅ Убрано' }); } catch {}
+    return;
+  } catch (e) {
+    // If deletion not allowed, at least remove buttons
+    try {
+      await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined });
+      try { await ctx.answerCallbackQuery({ text: 'Кнопки убрал — сообщение удали вручную.' }); } catch {}
+      return;
+    } catch {}
+  }
+
+  try { await ctx.answerCallbackQuery({ text: 'Не смог удалить. Удали вручную.' }); } catch {}
+  return;
+}
+
 if (p.a === 'a:ui_mode_set') {
   await ctx.answerCallbackQuery();
   const mode = normalizeUiMode(p.m);
@@ -16247,7 +16322,13 @@ ${link}`;
             : (prof?.tg_username ? `@${String(prof.tg_username).trim()}` : `Бренд #${u.id}`);
 
           const msg = `⛔️ <b>Доступ отозван</b>\n\nТебя удалили из команды бренда <b>${escapeHtml(brandLabel)}</b>.\n\nЕсли у тебя есть другие бренды — открой кабинет менеджера и выбери бренд.`;
-          const kb = new InlineKeyboard().text('🧑‍💼 Кабинет менеджера', 'a:bm_home');
+          const kb = new InlineKeyboard()
+            .text('🧑‍💼 Кабинет менеджера', 'a:bm_home')
+            .row()
+            .text('🗑 Убрать', 'a:nd')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home');
           await ctx.api.sendMessage(managerTgId, msg, { parse_mode: 'HTML', reply_markup: kb });
           notifyOk = true;
         }
