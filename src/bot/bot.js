@@ -1292,13 +1292,8 @@ async function renderRoleHub(ctx, u, flags) {
   // Role hub: Creator -> active workspace; Brand -> brand dashboard; Curator mode -> curator cabinet menu.
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
   if (curMode) {
-    await safeEditOrReply(ctx, `👤 <b>Режим куратора</b>
-
-Здесь показаны только действия куратора, чтобы не путаться.
-Чтобы вернуть полное меню — нажми “🔓 Обычный режим”.`, {
-      parse_mode: 'HTML',
-      reply_markup: curatorModeMenuKb(flags)
-    });
+    // In Curator Mode, Menu should open the Curator Hub directly (no extra intermediate screen).
+    await renderCuratorHome(ctx, u.id);
     return;
   }
 
@@ -10429,8 +10424,13 @@ function wsLabelNice(w) {
 
 function curatorHomeKb(items, modeEnabled = false) {
   const kb = new InlineKeyboard();
+
+  // Mode toggle (persisted in Redis). Keep the curator inside the cabinet when toggling.
   const label = modeEnabled ? '🧹 Режим куратора: ✅ ВКЛ' : '🧹 Режим куратора: ❌ ВЫКЛ';
   kb.text(label, `a:cur_mode_set|v:${modeEnabled ? 0 : 1}|ret:cur`).row();
+
+  // Quick exit to the normal (full) menu.
+  if (modeEnabled) kb.text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:menu').row();
 
   for (const w of items) {
     const on = !!w.curator_enabled;
@@ -10438,12 +10438,8 @@ function curatorHomeKb(items, modeEnabled = false) {
     kb.text(label, `a:cur_ws|ws:${w.id}`).row();
   }
 
-  // Fast exit from Curator Mode (explicit, to avoid confusion)
-  if (modeEnabled) kb.text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:cur').row();
-
-  // Footer (invariants): Back → Home Hub, Menu → role hub, Home → Home Hub
-  kb.text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu').row();
-  kb.text('🏠 Home', 'a:home').row();
+  // Unified hub footer (Back -> Home Hub, Menu -> Role Hub, Home -> Home Hub).
+  kb.row().text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -10489,15 +10485,39 @@ ${items.length ? 'Выбери канал:' : 'Пока тебя не назна
   await ctx.reply(text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled) });
 }
 
-function curatorWsKb(wsId, giveaways) {
+function curatorWsKb(wsId, giveaways, checkedSet = new Set()) {
   const kb = new InlineKeyboard();
+  const nowMs = Date.now();
+
   for (const g of giveaways) {
-    kb.text(`🎁 #${g.id} · ${gwStatusLabel(gwEffectiveStatusValue(g))}`, `a:cur_gw_open|ws:${wsId}|i:${g.id}`).row();
+    const gwId = Number(g?.id || 0);
+    if (!gwId) continue;
+
+    const eff = gwEffectiveStatusValue(g, nowMs);
+    const st = gwStatusLabel(eff);
+
+    kb.text(`🎁 #${gwId} · ${st}`, `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
+
+    // Quick actions:
+    // - ✅ / ☑️ mark as "checked" (internal)
+    // - 📣 remind participants to open bot and press "Проверить" (only for non-terminal contests)
+    const isChecked = checkedSet && typeof checkedSet.has === 'function' ? checkedSet.has(gwId) : false;
+    kb.text(isChecked ? '☑️' : '✅', `a:cur_gw_check_q|ws:${wsId}|i:${gwId}`);
+
+    if (!['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(String(eff || ''))) {
+      kb.text('📣', `a:cur_gw_remind_q|ws:${wsId}|i:${gwId}`);
+    }
+
+    kb.row();
   }
+
   kb.text('❌ Выйти из канала', `a:cur_leave_q|ws:${wsId}`).row();
-  kb.text('⬅️ Назад', 'a:cur_home').row();
+
+  // Footer per invariants
+  kb.row().text('⬅️ Назад', 'a:cur_home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
+
 
 async function renderCuratorWorkspace(ctx, userId, wsId) {
   const wsIdNum = Number(wsId);
@@ -10527,8 +10547,21 @@ async function renderCuratorWorkspace(ctx, userId, wsId) {
 
 ${giveaways.length ? 'Конкурсы:' : 'Пока нет конкурсов.'}
 
+Подсказка: ✅/☑️ — отметить «проверено», 📣 — напомнить участникам нажать «Проверить».
+
 Если тебя назначили по ошибке или помощь больше не нужна — нажми “❌ Выйти из канала”.`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorWsKb(wsIdNum, giveaways) });
+    // Preload "checked" meta for quick status icons (best-effort; Redis).
+  const checkedSet = new Set();
+  for (const gg of giveaways) {
+    const gid = Number(gg?.id || 0);
+    if (!gid) continue;
+    try {
+      const meta = await getCurGwChecked(gid);
+      if (meta) checkedSet.add(gid);
+    } catch {}
+  }
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorWsKb(wsIdNum, giveaways, checkedSet) });
 }
 
 function curatorGwKb(wsId, gwId) {
@@ -14963,13 +14996,7 @@ if (p.a === 'a:brand_dir_open') {
 if (p.a === 'a:menu') {
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
-      // Curator Mode: Menu should open curator hub as the current role hub
-      const curMode = flags.isCurator ? await getCuratorMode(ctx.from.id) : false;
-      if (curMode) {
-        await renderCuratorHome(ctx, u.id);
-      } else {
-        await renderRoleHub(ctx, u, flags);
-      }
+      await renderRoleHub(ctx, u, flags);
       return;
     }
 
