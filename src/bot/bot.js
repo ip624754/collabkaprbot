@@ -1188,13 +1188,13 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   if (curMode) hint += `
 • Curator Mode: <b>ON</b>`;
 
-  const mapText =
+  let mapText =
     (effective === 'brand' || effective === 'brand_manager')
       ? `
 <b>Карта</b>
 • 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
 • 📥 Inbox — диалоги и заявки
-• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
+• 🎛 Фильтры — уточни подбор креаторов
 `
       : `
 <b>Карта</b>
@@ -1203,6 +1203,14 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 • 📨 Заявки → 📣 Мои каналы → выбери канал → 📨 Заявки брендов
 • 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
 `;
+
+  if (effective === 'curator') {
+    mapText = `
+<b>Карта</b>
+• 🧹 Кабинет куратора — рабочий хаб
+• 🔓 Обычный режим — вернуться в Creator/Brand
+`;
+  }
 
   const bannerText = showHint
     ? `
@@ -1241,7 +1249,9 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 
 
   // Quick map shortcuts (mode-aware)
-  if (effective === 'brand' || effective === 'brand_manager') {
+  if (effective === 'curator') {
+    kb.row().text('🧹 Кабинет куратора', 'a:cur_home');
+  } else if (effective === 'brand' || effective === 'brand_manager') {
     kb
       .row()
       .text('📥 Inbox', 'a:go_dialogs')
@@ -1249,7 +1259,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     kb
       .row()
       .text('🔎 Поиск', 'a:pm_home|ws:0')
-      .text('🏷 Каталог брендов', 'a:brands_home');
+      .text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm');
   } else {
     kb.row().text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home');
   }
@@ -14316,7 +14326,7 @@ if (p.a === 'a:guide') {
 ` +
       `• 📥 Inbox — диалоги и заявки
 ` +
-      `• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
+      `• 🎛 Фильтры — кнопка «🎛 Фильтры» ниже
 
 `;
   } else {
@@ -14349,7 +14359,10 @@ if (p.a === 'a:guide') {
 
   // Map shortcuts (same as HOME HUB, mode-aware)
   if (isBrandish) {
-    kb.text('📥 Inbox', 'a:go_dialogs').text('🏷 Каталог брендов', 'a:brands_home').row();
+    kb
+      .text('📥 Inbox', 'a:go_dialogs')
+      .text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm')
+      .row();
   } else {
     kb.text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home').row();
   }
