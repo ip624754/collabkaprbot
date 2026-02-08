@@ -170,6 +170,57 @@ function sponsorStateIcon(state) {
   return '⚪';
 }
 
+// Giveaway winners formatting (Jobs-style: compact for small, truncated for big)
+const GW_WINNERS_ONE_LINE_MAX = 3;
+const GW_WINNERS_MAX_LINES = 10;
+
+function fmtGwWinnerName(w) {
+  const uname = w && w.username ? '@' + escapeHtml(String(w.username)) : null;
+  if (uname) return uname;
+  const id = w && (w.tg_id ?? w.tgId ?? w.user_id ?? w.userId);
+  return `id:${Number(id || 0)}`;
+}
+
+/**
+ * Formats winners list for channel text.
+ * - If total winners <= oneLineMax: returns a single line "1) @a · 2) @b"
+ * - Else returns multiline "1. @a\n2. @b" (truncated to maxLines) + "... +N ещё (см. в боте)"
+ */
+function formatGwWinners(winners, { oneLineMax = GW_WINNERS_ONE_LINE_MAX, maxLines = GW_WINNERS_MAX_LINES } = {}) {
+  const items = (Array.isArray(winners) ? winners : []).map(w => ({
+    place: Number(w.place || 0) || 0,
+    name: fmtGwWinnerName(w),
+  }));
+
+  const total = items.length;
+  if (!total) return { mode: 'none', text: '', total: 0, truncated: false, shown: 0 };
+
+  // Ensure stable order by place if present
+  items.sort((a, b) => (a.place || 0) - (b.place || 0));
+
+  if (total <= oneLineMax) {
+    const line = items.map(i => `${i.place || ''}`.trim()
+      ? `${i.place}) ${i.name}`
+      : i.name
+    ).join(' · ');
+    return { mode: 'one', text: line, total, truncated: false, shown: total };
+  }
+
+  const cap = Number.isFinite(maxLines) && maxLines > 0 ? Math.trunc(maxLines) : GW_WINNERS_MAX_LINES;
+  const shownItems = items.slice(0, cap);
+  const rest = total - shownItems.length;
+
+  let body = shownItems.map(i => `${i.place || ''}`.trim()
+    ? `${i.place}. ${i.name}`
+    : i.name
+  ).join('\n');
+
+  if (rest > 0) {
+    body += `\n… +${rest} ещё (см. в боте)`;
+  }
+  return { mode: 'lines', text: body, total, truncated: rest > 0, shown: shownItems.length };
+}
+
 
 // Runtime toggles (stored in Redis, editable from Admin)
 const SYS_KEYS = {
@@ -540,34 +591,6 @@ async function markHomeHubHintSeen(uid) {
   const key = homeHubHintKey(uid);
   const ttlSec = homeHubHintTtlSec();
   await redisSetSafe(key, '1', { ex: ttlSec }, 1500);
-}
-
-
-// GIVEAWAYS: results refresh lock (optional).
-// If GIVEAWAY_RESULTS_EDIT_LOCK_HOURS > 0, we hide ✏️ Обновить итоги
-// and reject refresh after N hours since results_published_at.
-function giveawayResultsEditLockHours() {
-  const v = Number(process.env.GIVEAWAY_RESULTS_EDIT_LOCK_HOURS || 0);
-  return (Number.isFinite(v) && v > 0) ? Math.trunc(v) : 0;
-}
-
-function giveawayIsResultsEditLocked(g, nowMs = Date.now()) {
-  const h = giveawayResultsEditLockHours();
-  if (!h) return false;
-  const tsRaw = g && g.results_published_at ? g.results_published_at : null;
-  if (!tsRaw) return false;
-  try {
-    const ts = (tsRaw instanceof Date) ? tsRaw.getTime() : (new Date(tsRaw)).getTime();
-    if (!Number.isFinite(ts) || ts <= 0) return false;
-    return (nowMs - ts) > (h * 3600 * 1000);
-  } catch {
-    return false;
-  }
-}
-
-function giveawayResultsEditLockNote() {
-  const h = giveawayResultsEditLockHours();
-  return h ? `🔒 Обновление итогов: ${h}h` : '';
 }
 
 // --- P0 HANG diagnostics (Woz): step logging + per-await timeouts ---
@@ -4687,7 +4710,7 @@ async function renderGwConfirm(ctx, wsId, opts = {}) {
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
 🏆 Мест: <b>${winners}</b>
-⏳ Завершение: <b>${escapeHtml(String(ends))}</b>
+⏳ Итоги: <b>${escapeHtml(String(ends))}</b>
 🖼 Медиа: <b>${escapeHtml(mediaLabel)}</b>
 
 Спонсоры:
@@ -4737,7 +4760,6 @@ function gwOpenKb(g, flags = {}) {
   const winnersDrawn = rawSt === 'WINNERS_DRAWN' || rawSt === 'RESULTS_PUBLISHED' || !!g?.winners_drawn_at;
   if (winnersDrawn) kb.text('🏆 Победители', `a:gw_wv|i:${gwId}`).row();
   const resultsPublished = rawSt === 'RESULTS_PUBLISHED' || (g?.results_message_id && Number(g.results_message_id) > 0);
-  const resultsLocked = resultsPublished && giveawayIsResultsEditLocked(g);
 
   if (effSt !== 'ENDED' && effSt !== 'WINNERS_DRAWN' && effSt !== 'RESULTS_PUBLISHED' && effSt !== 'CANCELLED') {
     kb.text('📣 Напомнить проверить', `a:gw_remind_q|i:${gwId}`)
@@ -4758,7 +4780,7 @@ function gwOpenKb(g, flags = {}) {
     kb.text('📣 Опубликовать итоги', `a:gw_publish_results|i:${gwId}`).row();
   }
 
-  if (resultsPublished && !resultsLocked && g?.results_message_id && Number(g.results_message_id) > 0 && g.published_chat_id) {
+  if (resultsPublished && g?.results_message_id && Number(g.results_message_id) > 0 && g.published_chat_id) {
     kb.text('✏️ Обновить итоги', `a:gw_results_refresh|i:${gwId}`).row();
   }
 
@@ -10139,14 +10161,11 @@ async function renderGwOpen(ctx, ownerUserId, gwId) {
         return `${Number(w.place)}. ${name}`;
       })
       .join('\n') || '—';
-    const lockH = giveawayResultsEditLockHours();
-    const locked = resultsPublished && giveawayIsResultsEditLocked(g, nowMs);
-    const pubLabel = resultsPublished ? (locked ? '✅ опубликовано · 🔒 фиксировано' : '✅ опубликовано') : '🏁 готовы';
-    const lockHint = (resultsPublished && locked && lockH) ? `\n🔒 Обновление итогов закрыто (${lockH}ч).` : '';
+    const pubLabel = resultsPublished ? '✅ опубликовано' : '🏁 готовы';
     winnersSection = `
 
 🏆 <b>Победители</b> (${pubLabel})
-${winnersLines}${lockHint}`;
+${winnersLines}`;
   }
 
   const text = `🎁 <b>Конкурс #${g.id}</b>
@@ -10185,9 +10204,7 @@ async function renderGwWinnersView(ctx, ownerUserId, gwId) {
     })
     .join('\n') || '—';
 
-  const lockH = giveawayResultsEditLockHours();
-  const locked = resultsPublished && giveawayIsResultsEditLocked(g);
-  const pubLabel = resultsPublished ? (locked ? '✅ Итоги опубликованы · 🔒 фиксировано' : '✅ Итоги опубликованы') : '🏁 Итоги готовы';
+  const pubLabel = resultsPublished ? '✅ Итоги опубликованы' : '🏁 Итоги готовы';
   const text = `🏆 <b>Победители конкурса #${g.id}</b>
 
 ${pubLabel}
@@ -11567,12 +11584,6 @@ ${escapeHtml(payLine)}
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) {
         await ctx.reply('Нет доступа.');
-        return;
-      }
-
-      if (!g.published_chat_id) {
-        await ctx.answerCallbackQuery({ text: 'Не вижу канал для обновления.' });
-        await renderGwOpen(ctx, u.id, gwId);
         return;
       }
 
@@ -19798,12 +19809,10 @@ ${list}
           await ctx.answerCallbackQuery({ text: 'Нет победителей.' });
           return;
         }
-        const winnersList = winners
-          .map(w => {
-            const name = w.username ? '@' + escapeHtml(String(w.username)) : `id:${Number(w.tg_id)}`;
-            return `${Number(w.place)}. ${name}`;
-          })
-          .join('\n');
+        const wf = formatGwWinners(winners);
+        const winnersHeader = wf.mode === 'one'
+          ? `🏆 Победители: ${wf.text}`
+          : `🏆 Победители:\n\n${wf.text}`;
 
         const prize = (g.prize_value_text || '').trim() || '—';
         const ends = g.ends_at ? fmtTs(g.ends_at) : '—';
@@ -19821,11 +19830,11 @@ ${sponsorsBulletText(sponsorsArr, 5)}`
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
 🏆 Мест: <b>${Number(g.winners_count || winners.length || 1)}</b>
-⏳ Завершение: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
+⏳ Итоги: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
 
         const resultsBlock =
 `🏁 <b>Итоги</b>
-${winnersList}`;
+${winnersHeader}`;
 
         const fullText = `${baseText}
 
@@ -19868,9 +19877,7 @@ ${resultsBlock}`;
           const body =
 `🏁 <b>Итоги конкурса #${g.id}</b>
 
-🏆 Победители:
-
-${winnersList}`;
+${winnersHeader}`;
 
           const replyParams = origMsgId
             ? { reply_parameters: { message_id: origMsgId, allow_sending_without_reply: true } }
@@ -19915,13 +19922,6 @@ ${winnersList}`;
         await renderGwOpen(ctx, u.id, gwId);
         return;
       }
-      const lockH = giveawayResultsEditLockHours();
-      if (lockH && giveawayIsResultsEditLocked(g)) {
-        await ctx.answerCallbackQuery({ text: '🔒 Обновление итогов закрыто.' });
-        await renderGwOpen(ctx, u.id, gwId);
-        return;
-      }
-
       if (!g.published_chat_id) {
         await ctx.answerCallbackQuery({ text: 'Не вижу канал для обновления.' });
         await renderGwOpen(ctx, u.id, gwId);
@@ -19934,12 +19934,10 @@ ${winnersList}`;
           await ctx.answerCallbackQuery({ text: 'Победителей пока нет.' });
           return;
         }
-        const winnersList = winners
-          .map(w => {
-            const name = w.username ? '@' + escapeHtml(String(w.username)) : `id:${Number(w.tg_id)}`;
-            return `${Number(w.place)}. ${name}`;
-          })
-          .join('\n');
+        const wf = formatGwWinners(winners);
+        const winnersHeader = wf.mode === 'one'
+          ? `🏆 Победители: ${wf.text}`
+          : `🏆 Победители:\n\n${wf.text}`;
 
         const prize = (g.prize_value_text || '').trim() || '—';
         const ends = g.ends_at ? fmtTs(g.ends_at) : '—';
@@ -19955,11 +19953,11 @@ ${winnersList}`;
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
 🏆 Мест: <b>${Number(g.winners_count || winners.length || 1)}</b>
-⏳ Завершение: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
+⏳ Итоги: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
 
         const resultsBlock =
 `🏁 <b>Итоги</b>
-${winnersList}`;
+${winnersHeader}`;
 
         const fullText = `${baseText}
 
@@ -19969,9 +19967,7 @@ ${resultsBlock}`;
         const replyText =
 `🏁 <b>Итоги конкурса #${g.id}</b>
 
-🏆 Победители:
-
-${winnersList}`;
+${winnersHeader}`;
 
         const url = `https://t.me/${CFG.BOT_USERNAME}?start=gw_${g.id}`;
         const ikb = new InlineKeyboard().url('🤖 Открыть бота', url).url('🧾 Лог', url);
@@ -20339,7 +20335,7 @@ ${sponsorsBulletText(draft.sponsors, 5)}
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
 🏆 Мест: <b>${winners}</b>
-⏳ Завершение: <b>${escapeHtml(String(ends))}</b>
+⏳ Итоги: <b>${escapeHtml(String(ends))}</b>
 
 ${sponsorsLine}
 
@@ -20426,7 +20422,7 @@ ${sponsorsBulletText(draft.sponsors, 5)}`
 
 🎁 Приз: <b>${escapeHtml(draft.prize_value_text)}</b>
 🏆 Мест: <b>${Number(draft.winners_count)}</b>
-⏳ Завершение: <b>${escapeHtml(fmtTs(draft.ends_at))}</b>${sponsorsLine}
+⏳ Итоги: <b>${escapeHtml(fmtTs(draft.ends_at))}</b>${sponsorsLine}
 
 ${actionHint}`;
 
