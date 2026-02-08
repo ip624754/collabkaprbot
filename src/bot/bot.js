@@ -1292,13 +1292,8 @@ async function renderRoleHub(ctx, u, flags) {
   // Role hub: Creator -> active workspace; Brand -> brand dashboard; Curator mode -> curator cabinet menu.
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
   if (curMode) {
-    await safeEditOrReply(ctx, `👤 <b>Режим куратора</b>
-
-Здесь показаны только действия куратора, чтобы не путаться.
-Чтобы вернуть полное меню — нажми “🔓 Обычный режим”.`, {
-      parse_mode: 'HTML',
-      reply_markup: curatorModeMenuKb(flags)
-    });
+    // In Curator Mode, Menu should open the Curator Hub directly (no extra intermediate screen).
+    await renderCuratorHome(ctx, u.id);
     return;
   }
 
@@ -10429,14 +10424,22 @@ function wsLabelNice(w) {
 
 function curatorHomeKb(items, modeEnabled = false) {
   const kb = new InlineKeyboard();
+
+  // Mode toggle (persisted in Redis). Keep the curator inside the cabinet when toggling.
   const label = modeEnabled ? '🧹 Режим куратора: ✅ ВКЛ' : '🧹 Режим куратора: ❌ ВЫКЛ';
   kb.text(label, `a:cur_mode_set|v:${modeEnabled ? 0 : 1}|ret:cur`).row();
+
+  // Quick exit to the normal (full) menu.
+  if (modeEnabled) kb.text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:menu').row();
+
   for (const w of items) {
     const on = !!w.curator_enabled;
     const label = `${on ? '✅' : '❌'} ${wsLabelNice(w)}`;
     kb.text(label, `a:cur_ws|ws:${w.id}`).row();
   }
-  kb.text('⬅️ Назад', 'a:menu').row();
+
+  // Unified hub footer (Back -> Home Hub, Menu -> Role Hub, Home -> Home Hub).
+  kb.row().text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
