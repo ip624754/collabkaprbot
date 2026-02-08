@@ -221,52 +221,6 @@ function formatGwWinners(winners, { oneLineMax = GW_WINNERS_ONE_LINE_MAX, maxLin
   return { mode: 'lines', text: body, total, truncated: rest > 0, shown: shownItems.length };
 }
 
-// Giveaway winners formatting for owner-card (same pin-format + truncation, but with user links when no @username)
-function fmtGwWinnerNameOwner(w) {
-  const uname = w && w.username ? '@' + escapeHtml(String(w.username)) : null;
-  if (uname) return uname;
-  const id = w && (w.tg_id ?? w.tgId ?? w.user_id ?? w.userId);
-  const uid = Number(id || 0);
-  if (uid > 0) return `<a href="tg://user?id=${uid}">участник</a>`;
-  return 'участник';
-}
-
-function formatGwWinnersOwner(winners, { oneLineMax = GW_WINNERS_ONE_LINE_MAX, maxLines = GW_WINNERS_MAX_LINES } = {}) {
-  const items = (Array.isArray(winners) ? winners : []).map(w => ({
-    place: Number(w.place || 0) || 0,
-    name: fmtGwWinnerNameOwner(w),
-  }));
-
-  const total = items.length;
-  if (!total) return { mode: 'none', text: '', total: 0, truncated: false, shown: 0 };
-
-  // Ensure stable order by place if present
-  items.sort((a, b) => (a.place || 0) - (b.place || 0));
-
-  if (total <= oneLineMax) {
-    const line = items.map(i => `${i.place || ''}`.trim()
-      ? `${i.place}) ${i.name}`
-      : i.name
-    ).join(' · ');
-    return { mode: 'one', text: line, total, truncated: false, shown: total };
-  }
-
-  const cap = Number.isFinite(maxLines) && maxLines > 0 ? Math.trunc(maxLines) : GW_WINNERS_MAX_LINES;
-  const shownItems = items.slice(0, cap);
-  const rest = total - shownItems.length;
-
-  let body = shownItems.map(i => `${i.place || ''}`.trim()
-    ? `${i.place}. ${i.name}`
-    : i.name
-  ).join('\n');
-
-  if (rest > 0) {
-    body += `\n… +${rest} ещё (см. в боте)`;
-  }
-  return { mode: 'lines', text: body, total, truncated: rest > 0, shown: shownItems.length };
-}
-
-
 
 // Runtime toggles (stored in Redis, editable from Admin)
 const SYS_KEYS = {
@@ -10199,8 +10153,14 @@ async function renderGwOpen(ctx, ownerUserId, gwId) {
   let winnersSection = '';
   if (winnersDrawn) {
     const winners = await db.exportGiveawayWinnersForPublish(gwId, ownerUserId);
-    const wf = formatGwWinnersOwner(winners);
-    const winnersLines = wf.text || '—';
+    const winnersLines = (winners || [])
+      .map(w => {
+        const name = w.username
+          ? '@' + escapeHtml(String(w.username))
+          : `<a href="tg://user?id=${Number(w.tg_id)}">участник</a>`;
+        return `${Number(w.place)}. ${name}`;
+      })
+      .join('\n') || '—';
     const pubLabel = resultsPublished ? '✅ опубликовано' : '🏁 готовы';
     winnersSection = `
 
@@ -10235,11 +10195,14 @@ async function renderGwWinnersView(ctx, ownerUserId, gwId) {
   const resultsPublished = rawSt === 'RESULTS_PUBLISHED' || (g.results_message_id && Number(g.results_message_id) > 0);
 
   const winners = winnersDrawn ? await db.exportGiveawayWinnersForPublish(gwId, ownerUserId) : [];
-  const wf = formatGwWinnersOwner(winners);
-  const winnersLines = wf.text || '—';
-  const winnersBlock = wf.mode === 'one'
-    ? `🏆 Победители: ${wf.text}`
-    : `${winnersBlock}`;
+  const winnersLines = (winners || [])
+    .map(w => {
+      const name = w.username
+        ? '@' + escapeHtml(String(w.username))
+        : `<a href="tg://user?id=${Number(w.tg_id)}">участник</a>`;
+      return `${Number(w.place)}. ${name}`;
+    })
+    .join('\n') || '—';
 
   const pubLabel = resultsPublished ? '✅ Итоги опубликованы' : '🏁 Итоги готовы';
   const text = `🏆 <b>Победители конкурса #${g.id}</b>
@@ -10247,7 +10210,8 @@ async function renderGwWinnersView(ctx, ownerUserId, gwId) {
 ${pubLabel}
 ${gwEndsLine(g)}
 
-${winnersBlock}
+🏆 Победители:
+${winnersLines}
 
 ℹ️ Это read-only экран. Публикация итогов — из карточки конкурса.`;
 
