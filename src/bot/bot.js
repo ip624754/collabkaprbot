@@ -4729,6 +4729,10 @@ function gwOpenKb(g, flags = {}) {
     kb.text('📣 Опубликовать итоги', `a:gw_publish_results|i:${gwId}`).row();
   }
 
+  if (resultsPublished && g?.results_message_id && Number(g.results_message_id) > 0 && g.published_chat_id) {
+    kb.text('✏️ Обновить итоги', `a:gw_results_refresh|i:${gwId}`).row();
+  }
+
   kb
     .text('🗑 Удалить', `a:gw_del_q|i:${gwId}|ws:${g.workspace_id}`)
     .row()
@@ -19824,14 +19828,11 @@ ${resultsBlock}`;
 
         if (!publishedId) {
           const body =
-`🎉 <b>Итоги конкурса #${g.id}</b>
+`🏁 <b>Итоги конкурса #${g.id}</b>
 
-🎁 Приз: <b>${escapeHtml(prize)}</b>
 🏆 Победители:
 
-${winnersList}
-
-<i>Итоги публикуются ответом на пост конкурса.</i>`;
+${winnersList}`;
 
           const replyParams = origMsgId
             ? { reply_parameters: { message_id: origMsgId, allow_sending_without_reply: true } }
@@ -19860,6 +19861,115 @@ ${winnersList}
       } finally {
         // best-effort unlock
         try { await redis.del(lockKey); } catch {}
+      }
+      return;
+    }
+
+
+    if (p.a === 'a:gw_results_refresh') {
+      const gwId = Number(p.i);
+      const g = await db.getGiveawayForOwner(gwId, u.id);
+      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const msgId = Number(g.results_message_id || 0);
+      if (!msgId || msgId <= 0) {
+        await ctx.answerCallbackQuery({ text: 'Пока нечего обновлять.' });
+        await renderGwOpen(ctx, u.id, gwId);
+        return;
+      }
+      if (!g.published_chat_id) {
+        await ctx.answerCallbackQuery({ text: 'Не вижу канал для обновления.' });
+        await renderGwOpen(ctx, u.id, gwId);
+        return;
+      }
+
+      try {
+        const winners = await db.exportGiveawayWinnersForPublish(gwId, u.id);
+        if (!winners || !winners.length) {
+          await ctx.answerCallbackQuery({ text: 'Победителей пока нет.' });
+          return;
+        }
+        const winnersList = winners
+          .map(w => {
+            const name = w.username ? '@' + escapeHtml(String(w.username)) : `id:${Number(w.tg_id)}`;
+            return `${Number(w.place)}. ${name}`;
+          })
+          .join('\n');
+
+        const prize = (g.prize_value_text || '').trim() || '—';
+        const ends = g.ends_at ? fmtTs(g.ends_at) : '—';
+        const sponsorsRows = await db.listGiveawaySponsors(gwId);
+        const sponsorsArr = (sponsorsRows || []).map(x => x.sponsor_text).filter(Boolean);
+        const sponsorsCount = normalizeSponsorsList(sponsorsArr).map(fmtSponsorHandle).filter(Boolean).length;
+        const sponsorsLine = sponsorsCount
+          ? `\n\n👥 Условие: ${sponsorsCountText(sponsorsArr)}\n${sponsorsBulletText(sponsorsArr, 5)}`
+          : '';
+
+        const baseText =
+`🎀 <b>РОЗЫГРЫШ</b>
+
+🎁 Приз: <b>${escapeHtml(prize)}</b>
+🏆 Мест: <b>${Number(g.winners_count || winners.length || 1)}</b>
+⏳ Итоги: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
+
+        const resultsBlock =
+`🏁 <b>Итоги</b>
+🏆 Победители:
+
+${winnersList}`;
+
+        const fullText = `${baseText}
+
+${resultsBlock}`;
+
+        // Reply-mode must be максимально коротко: только победители.
+        const replyText =
+`🏁 <b>Итоги конкурса #${g.id}</b>
+
+🏆 Победители:
+
+${winnersList}`;
+
+        const url = `https://t.me/${CFG.BOT_USERNAME}?start=gw_${g.id}`;
+        const ikb = new InlineKeyboard().url('🤖 Открыть бота', url).url('🧾 Лог', url);
+
+        const chatId = Number(g.published_chat_id);
+        const origMsgId = g.published_message_id ? Number(g.published_message_id) : null;
+
+        // No spam: only EDIT existing message (original or reply).
+        if (origMsgId && msgId === origMsgId) {
+          let ok = false;
+          try {
+            if (fullText.length <= 4096) {
+              await ctx.api.editMessageText(chatId, origMsgId, fullText, { parse_mode: 'HTML', reply_markup: ikb });
+              ok = true;
+            }
+          } catch (_) {}
+          if (!ok) {
+            try {
+              if (fullText.length <= 1024) {
+                await ctx.api.editMessageCaption(chatId, origMsgId, { caption: fullText, parse_mode: 'HTML', reply_markup: ikb });
+                ok = true;
+              }
+            } catch (_) {}
+          }
+          if (!ok) {
+            await ctx.answerCallbackQuery({ text: 'Не удалось обновить (нет прав/слишком старое сообщение).' });
+            return;
+          }
+        } else {
+          try {
+            await ctx.api.editMessageText(chatId, msgId, replyText, { parse_mode: 'HTML', reply_markup: ikb, disable_web_page_preview: true });
+          } catch (e) {
+            await ctx.answerCallbackQuery({ text: 'Не удалось обновить (нет прав/слишком старое сообщение).' });
+            return;
+          }
+        }
+
+        await ctx.answerCallbackQuery({ text: 'Обновлено.' });
+        await renderGwOpen(ctx, u.id, gwId);
+      } catch (e) {
+        await ctx.answerCallbackQuery({ text: 'Ошибка обновления.' });
       }
       return;
     }
