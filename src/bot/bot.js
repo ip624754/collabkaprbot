@@ -19754,16 +19754,76 @@ ${list}
           await ctx.answerCallbackQuery({ text: 'Нет победителей.' });
           return;
         }
-
         const winnersList = winners
           .map(w => {
-            const name = w.username ? '@' + escapeHtml(String(w.username)) : `<a href="tg://user?id=${Number(w.tg_id)}">участник</a>`;
+            const name = w.username ? '@' + escapeHtml(String(w.username)) : `id:${Number(w.tg_id)}`;
             return `${Number(w.place)}. ${name}`;
           })
           .join('\n');
 
         const prize = (g.prize_value_text || '').trim() || '—';
-        const body =
+        const ends = g.ends_at ? fmtTs(g.ends_at) : '—';
+        const sponsorsRows = await db.listGiveawaySponsors(gwId);
+        const sponsorsArr = (sponsorsRows || []).map(x => x.sponsor_text).filter(Boolean);
+        const sponsorsCount = normalizeSponsorsList(sponsorsArr).map(fmtSponsorHandle).filter(Boolean).length;
+        const sponsorsLine = sponsorsCount
+          ? `
+👥 Условие: ${sponsorsCountText(sponsorsArr)}
+${sponsorsBulletText(sponsorsArr, 5)}`
+          : '';
+
+        const baseText =
+`🎀 <b>РОЗЫГРЫШ</b>
+
+🎁 Приз: <b>${escapeHtml(prize)}</b>
+🏆 Мест: <b>${Number(g.winners_count || winners.length || 1)}</b>
+⏳ Итоги: <b>${escapeHtml(String(ends))}</b>${sponsorsLine}`;
+
+        const resultsBlock =
+`🏁 <b>Итоги</b>
+🏆 Победители:
+
+${winnersList}`;
+
+        const fullText = `${baseText}
+
+${resultsBlock}`;
+
+        const url = `https://t.me/${CFG.BOT_USERNAME}?start=gw_${g.id}`;
+        const ikb = new InlineKeyboard()
+          .url('🤖 Открыть бота', url)
+          .url('🧾 Лог', url);
+
+        const chatId = Number(g.published_chat_id);
+        const origMsgId = g.published_message_id ? Number(g.published_message_id) : null;
+
+        let publishedId = null;
+        let via = null;
+
+        // Jobs-style: try to EDIT the original channel post (0 spam).
+        // If edit is impossible (media/caption limit/permissions), fallback to a REPLY strictly to the original post.
+        if (origMsgId) {
+          try {
+            if (fullText.length <= 4096) {
+              await ctx.api.editMessageText(chatId, origMsgId, fullText, { parse_mode: 'HTML', reply_markup: ikb });
+              publishedId = origMsgId;
+              via = 'edit_text';
+            }
+          } catch (_) {}
+
+          if (!publishedId) {
+            try {
+              if (fullText.length <= 1024) {
+                await ctx.api.editMessageCaption(chatId, origMsgId, { caption: fullText, parse_mode: 'HTML', reply_markup: ikb });
+                publishedId = origMsgId;
+                via = 'edit_caption';
+              }
+            } catch (_) {}
+          }
+        }
+
+        if (!publishedId) {
+          const body =
 `🎉 <b>Итоги конкурса #${g.id}</b>
 
 🎁 Приз: <b>${escapeHtml(prize)}</b>
@@ -19771,17 +19831,26 @@ ${list}
 
 ${winnersList}
 
-🧾 Проверить лог: открой бота → /start gw_${g.id} → “🧾 Лог конкурса”`;
+<i>Итоги публикуются ответом на пост конкурса.</i>`;
 
-        const url = `https://t.me/${CFG.BOT_USERNAME}?start=gw_${g.id}`;
-        const sent = await ctx.api.sendMessage(g.published_chat_id, body, {
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-          reply_markup: new InlineKeyboard().url('🧾 Проверить в боте', url)
-        });
+          const replyParams = origMsgId
+            ? { reply_parameters: { message_id: origMsgId, allow_sending_without_reply: true } }
+            : {};
 
-        await db.finalizeGiveawayPublish(gwId, u.id, sent.message_id);
-        await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.results_published', { message_id: sent.message_id });
+          const sent = await ctx.api.sendMessage(chatId, body, {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+            reply_markup: ikb,
+            ...replyParams
+          });
+
+          publishedId = sent.message_id;
+          via = origMsgId ? 'reply' : 'message';
+        }
+
+        await db.finalizeGiveawayPublish(gwId, u.id, publishedId);
+        await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.results_published', { message_id: publishedId, via });
+
 
         await ctx.answerCallbackQuery({ text: 'Опубликовано.' });
         await renderGwOpen(ctx, u.id, gwId);
