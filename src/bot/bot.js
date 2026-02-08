@@ -1292,8 +1292,13 @@ async function renderRoleHub(ctx, u, flags) {
   // Role hub: Creator -> active workspace; Brand -> brand dashboard; Curator mode -> curator cabinet menu.
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
   if (curMode) {
-    // In Curator Mode, Menu should open the Curator Hub directly (no extra intermediate screen).
-    await renderCuratorHome(ctx, u.id);
+    await safeEditOrReply(ctx, `👤 <b>Режим куратора</b>
+
+Здесь показаны только действия куратора, чтобы не путаться.
+Чтобы вернуть полное меню — нажми “🔓 Обычный режим”.`, {
+      parse_mode: 'HTML',
+      reply_markup: curatorModeMenuKb(flags)
+    });
     return;
   }
 
@@ -10424,13 +10429,8 @@ function wsLabelNice(w) {
 
 function curatorHomeKb(items, modeEnabled = false) {
   const kb = new InlineKeyboard();
-
-  // Mode toggle (persisted in Redis). Keep the curator inside the cabinet when toggling.
   const label = modeEnabled ? '🧹 Режим куратора: ✅ ВКЛ' : '🧹 Режим куратора: ❌ ВЫКЛ';
   kb.text(label, `a:cur_mode_set|v:${modeEnabled ? 0 : 1}|ret:cur`).row();
-
-  // Quick exit to the normal (full) menu.
-  if (modeEnabled) kb.text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:menu').row();
 
   for (const w of items) {
     const on = !!w.curator_enabled;
@@ -10438,8 +10438,12 @@ function curatorHomeKb(items, modeEnabled = false) {
     kb.text(label, `a:cur_ws|ws:${w.id}`).row();
   }
 
-  // Unified hub footer (Back -> Home Hub, Menu -> Role Hub, Home -> Home Hub).
-  kb.row().text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  // Fast exit from Curator Mode (explicit, to avoid confusion)
+  if (modeEnabled) kb.text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:cur').row();
+
+  // Footer (invariants): Back → Home Hub, Menu → role hub, Home → Home Hub
+  kb.text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu').row();
+  kb.text('🏠 Home', 'a:home').row();
   return kb;
 }
 
@@ -14959,7 +14963,13 @@ if (p.a === 'a:brand_dir_open') {
 if (p.a === 'a:menu') {
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
-      await renderRoleHub(ctx, u, flags);
+      // Curator Mode: Menu should open curator hub as the current role hub
+      const curMode = flags.isCurator ? await getCuratorMode(ctx.from.id) : false;
+      if (curMode) {
+        await renderCuratorHome(ctx, u.id);
+      } else {
+        await renderRoleHub(ctx, u, flags);
+      }
       return;
     }
 
