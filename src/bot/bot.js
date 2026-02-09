@@ -8357,7 +8357,7 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
     `Заявка #${lead.id} от <b>${escapeHtml(String(who))}</b>\n` +
     `Шаблон: <b>${escapeHtml(leadTplLabel(tplKey))}</b>\n\n` +
     `— — —\n` +
-    `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>\n\n` +
+    `💬 <b>Ответ от ${escapeHtml(safeCreatorDisplayName({ title: ws.profile_title || ws.title, channel_username: ws.channel_username }))}</b>\n\n` +
     `${escapeHtml(String(replyText))}\n\n` +
     `<b>Контакты:</b>\n${card}`;
 
@@ -9404,7 +9404,7 @@ ${escapeHtml(blurb)}${body.length > 90 ? '…' : ''}` : ''}${c}`;
   });
 
   const offerLines = rows.map((o) => {
-    const ch = o.channel_username ? `@${o.channel_username}` : (o.ws_title || 'канал');
+    const ch = safeCreatorDisplayName({ title: o.ws_title, channel_username: o.channel_username });
     const metaCounts = offerMetaCountsInline(o.meta);
     const metaSuffix = metaCounts ? ` · ${metaCounts}` : '';
     return `#${o.id} · ${escapeHtml(bxCategoryLabel(o.category))}
@@ -9902,8 +9902,11 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
   if (String(o.status || '').toUpperCase() !== 'ACTIVE') return fail('Оффер закрыт.');
   if (!o.network_enabled) return fail('Оффер вне сети.');
 
-  const ch = o.channel_username ? `@${o.channel_username}` : (o.ws_title || 'канал');
-  const contact = (o.contact || '').trim();
+  const isOwner = Number(o.owner_user_id) === Number(userId);
+  const ch = safeCreatorDisplayName({ title: o.ws_title, channel_username: o.channel_username });
+  const contactRaw = (o.contact || '').trim();
+  const contact = isOwner ? contactRaw : '';
+  const hasContact = Boolean(contactRaw);
 
   let partnerBlock = '';
   if (o.partner_folder_id) {
@@ -9911,10 +9914,14 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
       const folder = await db.getChannelFolder(Number(o.partner_folder_id));
       if (folder && Number(folder.workspace_id) === Number(wsId)) {
         const items = await db.listChannelFolderItems(folder.id);
-        const shown = items.slice(0, 10).map((i) => i.channel_username);
-        const more = items.length > shown.length ? `\n… и ещё ${items.length - shown.length}` : '';
         const safeTitle = escapeHtml(String(folder.title || '').slice(0, 40));
-        partnerBlock = `\n\nПартнёры (папка “${safeTitle}”, ${items.length}):\n${shown.map((x) => escapeHtml(x)).join('\n')}${more}`;
+        if (isOwner) {
+          const shown = items.slice(0, 10).map((i) => i.channel_username);
+          const more = items.length > shown.length ? `\n… и ещё ${items.length - shown.length}` : '';
+          partnerBlock = `\n\nПартнёры (папка “${safeTitle}”, ${items.length}):\n${shown.map((x) => escapeHtml(x)).join('\n')}${more}`;
+        } else {
+          partnerBlock = `\n\nПартнёры (папка “${safeTitle}”, ${items.length}).`;
+        }
       }
     } catch (_) {}
   }
@@ -9930,14 +9937,13 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
     `<b>${escapeHtml(o.title)}</b>\n\n` +
     `${escapeHtml(o.description)}${partnerBlock}\n\n` +
     `Канал: <b>${escapeHtml(ch)}${o.creator_verified ? ' ✅' : ''}</b>\n` +
-    `${contact ? `Контакт: <b>${escapeHtml(contact)}</b>\n` : ''}` +
+    `${isOwner ? (contact ? `Контакт: <b>${escapeHtml(contact)}</b>\n` : '') : (hasContact ? `Контакты: <b>🔒 скрыты</b>\n` : '')}` +
     `\nЕсли бот не может проверить каналы — попроси админа добавить бота в канал-спонсор.`;
 
   const h = normBxHome(opts.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
   const kb = new InlineKeyboard().text('💬 Написать', `a:bx_msg|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
 
-  const isOwner = Number(o.owner_user_id) === Number(userId);
   let canOfficial = false;
   if (CFG.OFFICIAL_PUBLISH_ENABLED) {
     try {
@@ -13600,7 +13606,7 @@ if (exp.type === 'brand_deals_search') {
 
       const showN = Math.min(rows.length, 15);
       const lines = rows.slice(0, showN).map((o) => {
-        const ch = o.channel_username ? `@${o.channel_username}` : (o.ws_title || 'канал');
+        const ch = safeCreatorDisplayName({ title: o.ws_title, channel_username: o.channel_username });
         return `#${o.id} · ${bxCategoryLabel(o.category)}\n<b>${escapeHtml(String(o.title || '').slice(0, 70))}</b>\n${escapeHtml(bxTypeLabel(o.offer_type))} · ${escapeHtml(bxCompLabel(o.compensation_type))}\nКанал: ${escapeHtml(String(ch).slice(0, 60))}`;
       });
 
