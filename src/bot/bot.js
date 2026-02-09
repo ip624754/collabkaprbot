@@ -46,6 +46,19 @@ function fmtDays(n) {
   return `${x} ${ruPlural(x, 'день', 'дня', 'дней')}`;
 }
 
+function brandPassBalanceLineHtml(credits) {
+  const x = Number(credits || 0);
+  return `🎫 Brand Pass: <b>${escapeHtml(fmtCredits(x))}</b>`;
+}
+
+function brandPassContactsNeedLineHtml(credits) {
+  const have = Number(credits || 0);
+  const need = Number(CONTACT_UNLOCK_COST || 0);
+  if (!Number.isFinite(need) || need <= 0) return '';
+  if (have >= need) return '';
+  return `⚠️ Для ${contactUnlockBtnLabel()} нужно <b>${need}</b> ${ruPlural(need,'кредит','кредита','кредитов')}, у тебя <b>${have}</b>.`;
+}
+
 function contactUnlockBtnLabel() {
   const c = Number(CONTACT_UNLOCK_COST || 0);
   if (!Number.isFinite(c) || c <= 0) return '🔓 Контакты';
@@ -6674,6 +6687,18 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
   const isCuratorPreview = !!curatorUi && !isOwner;
 
+  // Brand Pass: show current balance прямо в витрине/диалоге (brand-facing UX).
+  // If credits fetch fails — keep null to avoid неправильные подсказки.
+  let brandCredits = null;
+  if (!isPreview && viewer) {
+    try {
+      brandCredits = Number(await withTimeout(db.getBrandCredits(viewer.id), 2500, 'brand.credits'));
+      if (!Number.isFinite(brandCredits)) brandCredits = 0;
+    } catch {
+      brandCredits = null;
+    }
+  }
+
   const hideApply = !!opts?.hideApply;
   const contactCbExtra = String(opts?.contactCbExtra || '');
 
@@ -6747,6 +6772,14 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   } else {
     if (hideApply) blocks.push(`🪟 Витрина (read-only): продолжай через «💬 Диалог». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
     else blocks.push(`🪟 Витрина: нажми «📝 Оставить заявку». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
+
+    if (brandCredits !== null) {
+      blocks.push(brandPassBalanceLineHtml(brandCredits));
+      if (canUnlockContacts && !revealContacts) {
+        const needLine = brandPassContactsNeedLineHtml(brandCredits);
+        if (needLine) blocks.push(needLine);
+      }
+    }
   }
 
   // Основное
@@ -6850,7 +6883,23 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         kb.row();
       }
     } else if (hasHidden) {
-      kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
+      // Brand-facing UX: если кредитов нет — сразу ведём на покупку.
+      // Если кредитов мало — оставляем и «Контакты», и «Купить», чтобы путь был очевиден.
+      const balNum = (brandCredits === null || brandCredits === undefined) ? null : Number(brandCredits || 0);
+      if (CONTACT_UNLOCK_COST <= 0) {
+        kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
+      } else if (balNum !== null) {
+        if (balNum <= 0) {
+          kb.text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+        } else if (balNum < CONTACT_UNLOCK_COST) {
+          kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`)
+            .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+        } else {
+          kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
+        }
+      } else {
+        kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
+      }
       kb.row();
     }
   } else {
@@ -7169,6 +7218,7 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
 
   const needContacts = Number(CONTACT_UNLOCK_COST || 0);
   const needsContactsTopup = needContacts > 0 && Number(credits || 0) < needContacts;
+  const needLine = brandPassContactsNeedLineHtml(credits);
 
   const who = ws ? safeCreatorDisplayName(ws) : 'Креатор';
   const when = lead.created_at ? fmtTs(lead.created_at) : '—';
@@ -7191,9 +7241,9 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
 ` +
     `Создано: <code>${escapeHtml(String(when))}</code>
 ` +
-    `🎫 Brand Pass: <b>${credits}</b> ${ruPlural(credits,'кредит','кредита','кредитов')}
+    `${brandPassBalanceLineHtml(credits)}
 ` +
-    (needsContactsTopup ? `⚠️ Для ${contactUnlockBtnLabel()} нужно <b>${needContacts}</b> ${ruPlural(needContacts,'кредит','кредита','кредитов')}.
+    (needLine ? `${needLine}
 ` : ``) +
     ``;
 
@@ -10505,7 +10555,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')} (на одну витрину).
 👥 Раздел «Менеджеры бренда» открывается после покупки Brand Pass или Brand Plan.
 ${trialLine}${limitLine}${verifyHintLine}
-<b>Баланс:</b> <b>${credits}</b> ${ruPlural(credits,'кредит','кредита','кредитов')}
+${brandPassBalanceLineHtml(credits)}
 🎟 Retry credits: <b>${retry}</b>
 
 Выбери пакет:`;
@@ -10760,6 +10810,7 @@ function brandPlanStatusText(planRow, active) {
 async function renderBrandPassTopup(ctx, userId, wsId) {
   const credits = await db.getBrandCredits(userId);
   const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(userId) : 0;
+  const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
   const kb = new InlineKeyboard();
   for (const p of BRAND_PACKS) {
     kb.text(`💳 ${p.title} · ${p.credits} ${ruPlural(p.credits,'кредит','кредита','кредитов')} · ${p.stars}⭐️`, `a:brand_buy|ws:${wsId}|pack:${p.id}`).row();
@@ -10769,7 +10820,7 @@ async function renderBrandPassTopup(ctx, userId, wsId) {
   await safeEditOrReply(ctx, 
     `🎫 <b>Brand Pass</b> = кредиты (Stars)
 
-<b>Баланс:</b> <b>${credits}</b> ${ruPlural(credits,'кредит','кредита','кредитов')}
+${brandPassBalanceLineHtml(credits)}
 🎟 Retry credits: <b>${retry}</b>
 
 <b>Как работает:</b>
@@ -15105,7 +15156,7 @@ bot.on('message:successful_payment', async (ctx) => {
         `✅ Brand Pass активирован!
 
 Начислено: +${creditsToAdd}
-Баланс: ${newBalance}
+🎫 Brand Pass: ${fmtCredits(newBalance)}
 
 Как тратить кредиты:
 • 💬 Новый диалог (интро): ${introCost} кредит(ов)
@@ -16409,7 +16460,7 @@ if (p.a === 'a:wsp_preview') {
 
 Переписка внутри открытого диалога — бесплатна.
 
-<b>Баланс:</b> <b>${balNum}</b> ${ruPlural(balNum, 'кредит', 'кредита', 'кредитов')}
+${brandPassBalanceLineHtml(balNum)}
 
 ${tail}`;
 
