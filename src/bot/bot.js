@@ -7062,11 +7062,12 @@ ${threadBlock}`;
   const kb = new InlineKeyboard();
   kb.text('✍️ Ответить', `a:blead_reply|id:${id}|w:${realWsId}`)
     .text('🪟 Витрина', `a:wsp_open|ws:${realWsId}|m:ro|r:bl|l:${id}`)
-    .row()
-    .text('🔓 Контакты', `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
+    .row();
 
-  if (credits <= 0) {
-    kb.row().text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+  if (Number(credits || 0) > 0) {
+    kb.text('🔓 Контакты', `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
+  } else {
+    kb.text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
   }
 
   kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
@@ -16205,9 +16206,11 @@ if (p.a === 'a:wsp_preview') {
       } catch {}
 
       const bal = await db.getBrandCredits(u.id);
-      const kb = new InlineKeyboard()
-        .text('🔓 Показать контакты (-1)', `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`)
-        .row()
+      const kb = new InlineKeyboard();
+      if (Number(bal || 0) > 0) {
+        kb.text('🔓 Показать контакты (-1)', `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`).row();
+      }
+      kb
         .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0')
         .row()
         .text('⬅️ Назад', backCb);
