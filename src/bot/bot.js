@@ -5343,6 +5343,27 @@ function wsBrandLink(wsId) {
   return `https://t.me/${un}?start=wsp_${wsId}`;
 }
 
+function brandReplyKb(ws, wsId) {
+  const kb = new InlineKeyboard();
+
+  const link = wsBrandLink(wsId);
+  if (link) kb.url('🪟 Открыть витрину', link);
+
+  const contact = ws && ws.profile_contact ? String(ws.profile_contact) : null;
+  const contactUrl = wsTgUrlFromContact(contact);
+  if (contactUrl) kb.url('💬 Написать', contactUrl);
+
+  if (ws && ws.channel_username) {
+    const un = String(ws.channel_username).replace(/^@/, '');
+    kb.row().url('📣 Открыть канал', `https://t.me/${un}`);
+  }
+
+  // Always include navigation buttons so brand isn't stuck with a "text-only" message.
+  kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  return kb;
+}
+
+
 function shortUrl(u) {
   const s = String(u || '').replace(/^https?:\/\//i, '');
   return s.length > 48 ? s.slice(0, 45) + '…' : s;
@@ -8103,7 +8124,8 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     const linkLine = link ? `🔗 Витрина: <a href="${escapeHtml(link)}">${escapeHtml(shortUrl(link))}</a>` : '';
     out = `${header}\n\n${escapeHtml(String(replyText))}\n\n<b>Контакты:</b>\n${linkLine || '—'}`;
   }
-  const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true });
+  const kbToBrand = brandReplyKb(ws, wsId);
+  const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kbToBrand });
   if (!sendRes.ok) {
     const reason = describeTgSendError(sendRes.err);
     const retKey = String(back?.ret || '').trim();
@@ -12253,31 +12275,13 @@ ${escapeHtml(payLine)}
         `<b>Контакты</b>
 ${card}`;
 
-      const kbToBrand = new InlineKeyboard();
-      let kbToBrandHas = false;
-
-      if (link) {
-        kbToBrand.url('🪟 Открыть витрину', link);
-        kbToBrandHas = true;
-      }
-
-      const contact = ws.profile_contact ? String(ws.profile_contact) : null;
-      const contactUrl = wsTgUrlFromContact(contact);
-      if (contactUrl) {
-        kbToBrand.url('💬 Написать', contactUrl);
-        kbToBrandHas = true;
-      }
-
-      if (ws.channel_username) {
-        kbToBrand.row().url('📣 Открыть канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
-        kbToBrandHas = true;
-      }
+      const kbToBrand = brandReplyKb(ws, Number(ws.id));
 
       try {
         await ctx.api.sendMessage(Number(lead.brand_tg_id), out, {
           parse_mode: 'HTML',
           disable_web_page_preview: true,
-          ...(kbToBrandHas ? { reply_markup: kbToBrand } : {})
+          reply_markup: kbToBrand,
         });
       } catch {}
 
