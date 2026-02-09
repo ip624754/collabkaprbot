@@ -90,6 +90,21 @@ function uniqStrArr(arr) {
   return out;
 }
 
+// Brand-facing: sanitize creator display name (no @, no t.me links) to prevent contact leaks
+function safeCreatorDisplayName(ws) {
+  const title = String(ws?.title || '').trim();
+  const unameRaw = String(ws?.username || ws?.channel_username || '').trim();
+  const uname = unameRaw.replace(/^@/, '');
+  // prefer title, fallback to username, then generic
+  let base = (title || uname || 'Креатор');
+  // strip t.me links and @ mentions
+  base = base.replace(/https?:\/\/t\.me\/[A-Za-z0-9_]+/gi, '');
+  base = base.replace(/@/g, '');
+  base = base.replace(/\s+/g, ' ').trim();
+  if (base.length > 80) base = base.slice(0, 80).trim();
+  return base || 'Креатор';
+}
+
 // Sponsors helpers (Jobs-style clarity)
 function normalizeSponsorsList(raw) {
   if (!Array.isArray(raw)) return [];
@@ -3879,8 +3894,9 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
 
   // Rate limit (consume only on confirmed send)
   const rlPairKey = `brand_apply:${u.id}:${brandUserId}`;
-  const okPair = await rateLimit(rlPairKey, 3, 6 * 60 * 60);
-  if (!okPair) {
+  let okPair = { allowed: true, resetSec: 0 };
+  try { okPair = await rateLimit(rlPairKey, { limit: 3, windowSec: 6 * 60 * 60 }); } catch {}
+  if (!okPair.allowed) {
     const kb = new InlineKeyboard();
     kbNavRow(kb, `a:brand_apply|u:${brandUserId}|p:${backPage}`);
     await safeEditOrReply(ctx, '⏳ Слишком часто. Попробуй позже (лимит: 3 заявки этому бренду за 6 часов).', { reply_markup: kb }, edit);
@@ -3888,8 +3904,9 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
   }
 
   const rlWsKey = `brand_apply_ws:${wsId}:${brandUserId}`;
-  const okWs = await rateLimit(rlWsKey, 5, 6 * 60 * 60);
-  if (!okWs) {
+  let okWs = { allowed: true, resetSec: 0 };
+  try { okWs = await rateLimit(rlWsKey, { limit: 5, windowSec: 6 * 60 * 60 }); } catch {}
+  if (!okWs.allowed) {
     const kb = new InlineKeyboard();
     kbNavRow(kb, `a:brand_apply|u:${brandUserId}|p:${backPage}`);
     await safeEditOrReply(ctx, '⏳ Этот канал уже отправлял слишком много заявок этому бренду (лимит: 5 / 6 часов). Попробуй позже.', { reply_markup: kb }, edit);
@@ -3905,13 +3922,20 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
     await safeEditOrReply(ctx, '⏳ Отправляю заявку…', { reply_markup: kb }, edit);
   } catch {}
 
-  const res = await safeBrandApplications(() => db.createBrandApplication({
-    brandUserId,
-    creatorUserId: u.id,
-    wsId,
-    message: msg,
-    status: 'new'
-  }), async () => null);
+  let res = null;
+  try {
+    res = await safeBrandApplications(() => db.createBrandApplication({
+      brandUserId,
+      creatorUserId: u.id,
+      creatorTgId: ctx.from.id,
+      creatorUsername: ctx.from.username || null,
+      message: msg,
+      meta: { wsId }
+    }), async () => null);
+  } catch (e) {
+    try { console.warn('[brand_apply_send] db.createBrandApplication failed', { cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    res = null;
+  }
 
   if (!res) {
     const kb = navKb(`a:brand_apply|u:${brandUserId}|p:${backPage}`);
@@ -3924,12 +3948,8 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
   const ws = await safeWsProfiles(() => db.getWorkspaceAny(wsId), async () => null);
-  const wsName = String(ws?.title || ws?.username || 'Канал').trim();
-  const wsUrl = ws?.username ? `https://t.me/${String(ws.username).replace(/^@/, '')}` : null;
-
-  let creatorLabel = '';
-  if (wsUrl) creatorLabel = `<a href="${wsUrl}">${escapeHtml(wsName)}</a>`;
-  else creatorLabel = `<b>${escapeHtml(wsName)}</b>`;
+  const creatorName = ws ? safeCreatorDisplayName(ws) : 'Креатор';
+  const creatorLabel = `<b>${escapeHtml(creatorName)}</b>`;
 
   const notifText = `📝 <b>Новая заявка от креатора</b>\n\nБренд: <b>${escapeHtml(brandName)}</b>\nОт: ${creatorLabel}\n\n<b>Текст:</b>\n${escapeHtml(msg)}`;
 
@@ -3941,8 +3961,9 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
   // Recipients: owner + managers + super admins
   const recipients = new Set();
   try {
-    const ownerTgId = await db.getUserTgIdByUserId(brandUserId);
-    if (ownerTgId) recipients.add(Number(ownerTgId));
+    const ownerRow = await db.getUserTgIdByUserId(brandUserId);
+    const ownerTid = Number(ownerRow?.tg_id || 0);
+    if (ownerTid) recipients.add(ownerTid);
   } catch {}
   try {
     const mgrs = await db.listBrandManagers(brandUserId);
