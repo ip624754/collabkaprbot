@@ -5336,6 +5336,82 @@ function leadStatusIcon(s) {
   return (LEAD_STATUSES[normLeadStatus(s)] || LEAD_STATUSES.new).icon;
 }
 
+// -----------------------------
+// Brand Leads: internal notes (meta)
+// -----------------------------
+
+const LEAD_NOTE_TEMPLATES = {
+  wb: { key: 'wb', label: '⏳ Бриф', text: '⏳ Ждём бриф #brief', tags: ['brief'] },
+  bd: { key: 'bd', label: '💰 Бюджет', text: '💰 Уточнить бюджет #price', tags: ['price'] },
+  fm: { key: 'fm', label: '📌 Формат', text: '📌 Уточнить формат/площадку #format', tags: ['format'] },
+  fu: { key: 'fu', label: '🔁 Follow-up', text: '🔁 Сделать follow-up #followup', tags: ['followup'] },
+  sp: { key: 'sp', label: '🚫 Спам', text: '🚫 Похоже на спам #spam', tags: ['spam'] },
+  ur: { key: 'ur', label: '⚡ Срочно', text: '⚡ Срочно проверить #urgent', tags: ['urgent'] },
+};
+
+function normLeadNoteTplKey(k) {
+  const v = String(k || '').toLowerCase().trim();
+  return LEAD_NOTE_TEMPLATES[v] ? v : 'wb';
+}
+
+function extractLeadNoteTags(text) {
+  const s = String(text || '');
+  const re = /#([a-zA-Z0-9_А-Яа-я]{2,24})/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(s))) {
+    const tag = String(m[1] || '').trim().toLowerCase();
+    if (!tag) continue;
+    if (!out.includes(tag)) out.push(tag);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function normalizeLeadNotes(raw) {
+  const arr = Array.isArray(raw) ? raw : [];
+  const out = [];
+  for (const n of arr) {
+    if (typeof n === 'string') {
+      const t = n.trim();
+      if (!t) continue;
+      out.push({ by: 0, at: null, text: t, role: null, tags: extractLeadNoteTags(t) });
+      continue;
+    }
+    if (!n || typeof n !== 'object') continue;
+
+    const t = String(n.text || '').trim();
+    if (!t) continue;
+
+    const by = Number(n.by || 0) || 0;
+    const at = n.at ? String(n.at) : null;
+    const role = n.role ? String(n.role).trim().toLowerCase() : null;
+
+    let tags = [];
+    try {
+      if (Array.isArray(n.tags)) {
+        tags = n.tags.map((x) => String(x || '').trim().replace(/^#/, '').toLowerCase()).filter(Boolean);
+      } else {
+        tags = extractLeadNoteTags(t);
+      }
+      tags = Array.from(new Set(tags)).slice(0, 8);
+    } catch {
+      tags = extractLeadNoteTags(t);
+    }
+
+    out.push({ by, at, text: t, role, tags });
+  }
+  return out;
+}
+
+function fmtLeadNoteTags(tags) {
+  const arr = Array.isArray(tags) ? tags : [];
+  const uniq = Array.from(new Set(arr.map((x) => String(x || '').trim().replace(/^#/, '').toLowerCase()).filter(Boolean))).slice(0, 6);
+  if (!uniq.length) return '';
+  return ' ' + uniq.map((t) => `<code>#${escapeHtml(t)}</code>`).join(' ');
+}
+
+
 
 function wsBrandLink(wsId) {
   const un = String(CFG.BOT_USERNAME || '').replace(/^@/, '');
@@ -6693,7 +6769,8 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     text += `\n\n<b>Ответ:</b>\n${escapeHtml(stripBrokenSurrogates(String(lead.reply_text)))}`;
   }
 
-  const notes = (lead.meta && Array.isArray(lead.meta.curator_notes)) ? lead.meta.curator_notes : [];
+  const notesRaw = (lead.meta && Array.isArray(lead.meta.curator_notes)) ? lead.meta.curator_notes : [];
+  const notes = normalizeLeadNotes(notesRaw);
   if (notes.length) {
     const last = notes.slice(-3).reverse();
     const lines = last.map((n) => {
@@ -6701,7 +6778,8 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
       const at = n?.at ? fmtTs(n.at) : '';
       const t = String(n?.text || '').trim();
       const clipped = clipText(t.replace(/\s+/g, ' '), 220);
-      return `• <code>${escapeHtml(by)}</code>${at ? ` • <i>${escapeHtml(at)}</i>` : ''}: ${escapeHtml(clipped)}`;
+      const tagsHtml = fmtLeadNoteTags(n?.tags || extractLeadNoteTags(t));
+      return `• <code>${escapeHtml(by)}</code>${at ? ` • <i>${escapeHtml(at)}</i>` : ''}: ${escapeHtml(clipped)}${tagsHtml}`;
     }).join('\n');
     text += `\n\n📝 <b>Заметки</b>\n${lines}`;
   }
@@ -6788,7 +6866,8 @@ async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: nu
   }
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
-  const notes = (lead.meta && Array.isArray(lead.meta.curator_notes)) ? lead.meta.curator_notes : [];
+  const notesRaw = (lead.meta && Array.isArray(lead.meta.curator_notes)) ? lead.meta.curator_notes : [];
+  const notes = normalizeLeadNotes(notesRaw);
   const total = notes.length;
 
   const pageSize = 6;
@@ -6815,11 +6894,12 @@ async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: nu
     return 'curator';
   };
 
-  const whoLabel = (byId) => {
+  const whoLabel = (byId, roleHint = '') => {
+    const role = String(roleHint || '').trim() || (byId ? roleLabel(byId) : '—');
     const row = usersMap.get(Number(byId)) || null;
     const uname = row?.tg_username ? '@' + String(row.tg_username).replace(/^@/, '') : null;
-    if (uname) return `${escapeHtml(uname)} <code>id:${escapeHtml(String(byId))}</code> • <i>${escapeHtml(roleLabel(byId))}</i>`;
-    return `<code>id:${escapeHtml(String(byId || '?'))}</code> • <i>${escapeHtml(roleLabel(byId))}</i>`;
+    if (uname) return `${escapeHtml(uname)} <code>id:${escapeHtml(String(byId))}</code>${role ? ` • <i>${escapeHtml(role)}</i>` : ''}`;
+    return `<code>id:${escapeHtml(String(byId || '?'))}</code>${role ? ` • <i>${escapeHtml(role)}</i>` : ''}`;
   };
 
   let text =
@@ -6836,8 +6916,10 @@ async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: nu
       const at = n?.at ? fmtTs(n.at) : '';
       const t = String(n?.text || '').trim();
       const clipped = clipText(stripBrokenSurrogates(t).replace(/\s+/g, ' '), 420);
-      const head = `• <b>${i + 1 + (pg * pageSize)}</b> • ${whoLabel(by)}${at ? ` • <i>${escapeHtml(at)}</i>` : ''}`;
-      return `${head}\n${escapeHtml(clipped)}`;
+      const roleHint = String(n?.role || '').trim().toLowerCase();
+      const tagsHtml = fmtLeadNoteTags(n?.tags || extractLeadNoteTags(t));
+      const head = `• <b>${i + 1 + (pg * pageSize)}</b> • ${whoLabel(by, roleHint)}${at ? ` • <i>${escapeHtml(at)}</i>` : ''}`;
+      return `${head}\n${escapeHtml(clipped)}${tagsHtml}`;
     }).join('\n\n');
 
     text += lines;
@@ -6849,7 +6931,7 @@ async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: nu
   const rPart = retKey ? retPartShort(retKey) : '';
 
   const leadViewCb = `a:lead_view|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
-  const addCb = `a:lead_note|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
+  const addCb = `a:lead_note|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}|nb:${pg}${rPart}`;
 
   const kb = new InlineKeyboard();
 
@@ -8267,7 +8349,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   if (isCurator && !isOwner && !isAdmin) {
     const k = normLeadTplKey(tplKey);
     const lbl = LEAD_TPL_LABELS[k] || k;
-    try { await safeLeadWrite(() => db.appendBrandLeadCuratorNote(leadId, Number(actorUserId), `Отправлен шаблон: ${lbl}`), { op: 'lead_note_auto', leadId }); } catch {}
+    try { await safeLeadWrite(() => db.appendBrandLeadCuratorNote(leadId, Number(actorUserId), `Отправлен шаблон: ${lbl}`, { tags: ['template'] }), { op: 'lead_note_auto', leadId }); } catch {}
   }
 
   // status transitions
@@ -12403,11 +12485,11 @@ ${card}`;
       } catch {}
 
 
-      const retPart = exp.ret ? `|ret:${String(exp.ret)}` : '';
+      const rPart = exp.ret ? retPartShort(String(exp.ret)) : '';
 
       const kb = new InlineKeyboard()
-        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${retPart}`)
-        .text('📨 Заявки', `a:ws_leads|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${retPart}`);
+        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${rPart}`)
+        .text('📨 Заявки', `a:ws_leads|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${rPart}`);
 
       await clearExpectText(ctx.from.id);
 
@@ -12421,6 +12503,9 @@ ${card}`;
       const leadId = Number(exp.leadId || 0);
       const wsId = Number(exp.wsId || 0);
       const noteText = String(ctx.message.text || '').trim();
+
+      const role = String(exp.role || '').trim().toLowerCase() || null;
+      const tags = extractLeadNoteTags(noteText);
 
       if (!leadId || !wsId) {
         await clearExpectText(ctx.from.id);
@@ -12438,7 +12523,7 @@ ${card}`;
 
       try {
         await safeLeadWrite(
-          () => db.appendBrandLeadCuratorNote(leadId, u.id, noteText),
+          () => db.appendBrandLeadCuratorNote(leadId, u.id, noteText, { role: role || null, tags }),
           { op: 'lead_note', leadId },
         );
       } catch {}
@@ -12448,11 +12533,17 @@ ${card}`;
       const backStatus = String(exp.backStatus || 'new');
       const backPage = Number(exp.backPage || 0);
       const retKey = String(exp.ret || '').trim();
-      const retPart = retKey ? `|ret:${retKey}` : '';
+      const rPart = retKey ? retPartShort(retKey) : '';
+      const notesCb = `a:lead_notes|id:${leadId}|w:${wsId}|n:0|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
 
       const kb = new InlineKeyboard()
-        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${wsId}|s:${backStatus}|p:${backPage}${retPart}`)
-        .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:${backStatus}|p:${backPage}${retPart}`);
+        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
+        .text('📝 Заметки', notesCb)
+        .row()
+        .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:${backStatus}|p:${backPage}${rPart}`)
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
       return ctx.reply('✅ Заметка сохранена.', { reply_markup: kb });
     }
@@ -16257,13 +16348,94 @@ if (p.a === 'a:lead_set') {
       const wsId = Number(p.ws || 0);
       const backStatus = normLeadStatus(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
-      const retKey = String(p.ret || '').trim() || null;
+      const retKey = String(p.ret || p.r || '').trim() || null;
+      const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
+
+      if (notesPage !== null) {
+        await renderLeadNotesViewer(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus, page: backPage, ret: retKey }, notesPage);
+        return;
+      }
 
       await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus, page: backPage, ret: retKey });
       return;
     }
 
+
     if (p.a === 'a:lead_note') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      const tgId = ctx.from?.id;
+      if (!tgId) return;
+
+      const leadId = Number(p.id || 0);
+      if (!leadId) return;
+
+      const lead = await db.getBrandLeadById(leadId);
+      if (!lead) {
+        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const wsId = Number(lead.workspace_id);
+      const ws = await db.getWorkspaceAny(wsId);
+      if (!ws) {
+        await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню и выбери канал заново.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const isOwner = Number(ws.owner_user_id) === Number(u.id);
+      const isAdmin = isSuperAdminTg(ctx.from?.id);
+      let isCurator = false;
+      if (!isOwner && !isAdmin) {
+        try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
+      }
+      if (!isOwner && !isAdmin && !isCurator) {
+        await safeEditOrReply(ctx, '⚠️ Нет доступа к заметкам этой заявки.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const actorRole = isOwner ? 'owner' : (isAdmin ? 'admin' : 'curator');
+
+      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const backPage = Number(p.p || 0);
+      const retKey = String(p.ret || p.r || '').trim() || null;
+      const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
+      const rPart = retKey ? retPartShort(retKey) : '';
+      const nbPart = (notesPage !== null) ? `|nb:${notesPage}` : '';
+
+      const backCb = (notesPage !== null)
+        ? `a:lead_notes|id:${leadId}|w:${wsId}|n:${notesPage}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`
+        : `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
+
+      const kb = new InlineKeyboard()
+        .text(LEAD_NOTE_TEMPLATES.wb.label, `a:lead_note_tpl|id:${leadId}|w:${wsId}|k:wb|s:${leadStatusToCb(backStatus)}|p:${backPage}${nbPart}${rPart}`)
+        .text(LEAD_NOTE_TEMPLATES.bd.label, `a:lead_note_tpl|id:${leadId}|w:${wsId}|k:bd|s:${leadStatusToCb(backStatus)}|p:${backPage}${nbPart}${rPart}`)
+        .row()
+        .text(LEAD_NOTE_TEMPLATES.fm.label, `a:lead_note_tpl|id:${leadId}|w:${wsId}|k:fm|s:${leadStatusToCb(backStatus)}|p:${backPage}${nbPart}${rPart}`)
+        .text(LEAD_NOTE_TEMPLATES.fu.label, `a:lead_note_tpl|id:${leadId}|w:${wsId}|k:fu|s:${leadStatusToCb(backStatus)}|p:${backPage}${nbPart}${rPart}`)
+        .row()
+        .text(LEAD_NOTE_TEMPLATES.ur.label, `a:lead_note_tpl|id:${leadId}|w:${wsId}|k:ur|s:${leadStatusToCb(backStatus)}|p:${backPage}${nbPart}${rPart}`)
+        .text(LEAD_NOTE_TEMPLATES.sp.label, `a:lead_note_tpl|id:${leadId}|w:${wsId}|k:sp|s:${leadStatusToCb(backStatus)}|p:${backPage}${nbPart}${rPart}`)
+        .row()
+        .text('✍️ Ввести вручную', `a:lead_note_text|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${nbPart}${rPart}`)
+        .row()
+        .text('⬅️ Назад', backCb)
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
+
+      const prompt = `📝 <b>Новая заметка</b> • заявка #${leadId}
+` +
+        `Роль: <b>${escapeHtml(actorRole)}</b>
+
+` +
+        `Выбери быстрый шаблон или введи текст вручную.
+` +
+        `Теги можно добавлять прямо в тексте: <code>#brief</code> <code>#price</code> <code>#urgent</code>.`;
+
+      await safeEditOrReply(ctx, prompt, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:lead_note_text') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const tgId = ctx.from?.id;
       if (!tgId) return;
@@ -16294,9 +16466,12 @@ if (p.a === 'a:lead_set') {
         return;
       }
 
+      const actorRole = isOwner ? 'owner' : (isAdmin ? 'admin' : 'curator');
+
       const backStatus = normLeadStatus(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
-      const retKey = String(p.ret || '').trim() || null;
+      const retKey = String(p.ret || p.r || '').trim() || null;
+      const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
       const rPart = retKey ? retPartShort(retKey) : '';
 
       await setExpectText(tgId, {
@@ -16306,20 +16481,81 @@ if (p.a === 'a:lead_set') {
         backStatus,
         backPage,
         ret: retKey,
+        nb: notesPage,
+        role: actorRole,
         backCb: `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`,
       });
 
+      const nbPart = (notesPage !== null) ? `|nb:${notesPage}` : '';
       const kb = new InlineKeyboard()
-        .text('⬅️ Назад', `a:lead_note_cancel|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
+        .text('⬅️ Назад', `a:lead_note_cancel|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${nbPart}${rPart}`)
         .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
       const prompt = `📝 <b>Заметка</b> к заявке #${leadId}
 
 Пришли одним сообщением (до 800 символов).
+
+Теги: добавь в тексте, например <code>#brief</code> <code>#price</code> <code>#urgent</code>.
 Заметка видна только внутри команды.`;
       await safeEditOrReply(ctx, prompt, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
+
+    if (p.a === 'a:lead_note_tpl') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      const leadId = Number(p.id || 0);
+      if (!leadId) return;
+
+      const lead = await db.getBrandLeadById(leadId);
+      if (!lead) {
+        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const wsId = Number(lead.workspace_id);
+      const ws = await db.getWorkspaceAny(wsId);
+      if (!ws) {
+        await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню и выбери канал заново.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const isOwner = Number(ws.owner_user_id) === Number(u.id);
+      const isAdmin = isSuperAdminTg(ctx.from?.id);
+      let isCurator = false;
+      if (!isOwner && !isAdmin) {
+        try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
+      }
+      if (!isOwner && !isAdmin && !isCurator) {
+        await safeEditOrReply(ctx, '⚠️ Нет доступа к заметкам этой заявки.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const actorRole = isOwner ? 'owner' : (isAdmin ? 'admin' : 'curator');
+
+      const tplKey = normLeadNoteTplKey(p.k);
+      const tpl = LEAD_NOTE_TEMPLATES[tplKey] || LEAD_NOTE_TEMPLATES.wb;
+
+      try {
+        await db.appendBrandLeadCuratorNote(leadId, u.id, tpl.text, { role: actorRole, tags: tpl.tags || [] });
+      } catch (e) {
+        await safeEditOrReply(ctx, '⚠️ Не смог сохранить заметку. Попробуй ещё раз.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const backPage = Number(p.p || 0);
+      const retKey = String(p.ret || p.r || '').trim() || null;
+      const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
+
+      if (notesPage !== null) {
+        await renderLeadNotesViewer(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus, page: backPage, ret: retKey }, 0);
+        return;
+      }
+
+      await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus, page: backPage, ret: retKey });
+      return;
+    }
+
 
     if (p.a === 'a:lead_reply') {
       try { await ctx.answerCallbackQuery(); } catch {}
