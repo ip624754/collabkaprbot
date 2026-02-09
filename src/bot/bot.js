@@ -16112,7 +16112,7 @@ if (p.a === 'a:lead_set') {
 
     if (p.a === 'a:lead_note_cancel') {
       try { await ctx.answerCallbackQuery(); } catch {}
-      try { await clearExpectText(userTgId); } catch {}
+      try { if (ctx.from?.id) await clearExpectText(ctx.from.id); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) return;
 
@@ -16127,6 +16127,8 @@ if (p.a === 'a:lead_set') {
 
     if (p.a === 'a:lead_note') {
       try { await ctx.answerCallbackQuery(); } catch {}
+      const tgId = ctx.from?.id;
+      if (!tgId) return;
       const leadId = Number(p.id || 0);
       if (!leadId) return;
 
@@ -16159,7 +16161,7 @@ if (p.a === 'a:lead_set') {
       const retKey = String(p.ret || '').trim() || null;
       const rPart = retKey ? retPartShort(retKey) : '';
 
-      await setExpectText(userTgId, {
+      await setExpectText(tgId, {
         type: 'lead_note',
         leadId,
         wsId,
