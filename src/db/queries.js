@@ -3483,18 +3483,6 @@ export async function appendBrandLeadCuratorNote(leadId, byUserId, text, opts = 
 
   const roleRaw = opts && typeof opts === 'object' ? String(opts.role || '').trim() : '';
   const role = roleRaw ? roleRaw.toLowerCase() : null;
-
-  let tags = [];
-  try {
-    if (opts && typeof opts === 'object' && Array.isArray(opts.tags)) {
-      tags = opts.tags
-        .map((x) => String(x || '').trim().replace(/^#/, '').toLowerCase())
-        .filter(Boolean);
-      tags = Array.from(new Set(tags)).slice(0, 8);
-    }
-  } catch {}
-  const tagsArr = tags.length ? tags : null;
-
   const r = await pool.query(
     `update brand_leads
      set meta = jsonb_set(
@@ -3506,8 +3494,7 @@ export async function appendBrandLeadCuratorNote(leadId, byUserId, text, opts = 
             'by', $2,
             'at', now(),
             'text', $3,
-            'role', $4,
-            'tags', coalesce(to_jsonb($5::text[]), '[]'::jsonb)
+            'role', $4
           )
         )
        ),
@@ -3516,7 +3503,7 @@ export async function appendBrandLeadCuratorNote(leadId, byUserId, text, opts = 
      updated_at = now()
      where id = $1
      returning meta`,
-    [id, by, safeText, role, tagsArr]
+    [id, by, safeText, role]
   );
   return r.rows[0] || null;
 }
