@@ -10526,13 +10526,13 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 
   const trialLine = !meta.brand_trial_granted && trialCredits > 0
     ? `
-🎁 Стартовый бонус: <b>${trialCredits}</b> кредит(ов) (1 раз, при первом интро).
+🎁 Стартовый бонус: <b>${trialCredits}</b> кредит(ов) (1 раз, при первом интро — новом диалоге).
 `
     : '';
 
   const limitLine = dailyLimit > 0
     ? `
-📆 Лимит интро в день: <b>${dailyLimit}</b> (сегодня использовано: <b>${usedToday}</b>).
+📆 Лимит интро (новых диалогов) в день: <b>${dailyLimit}</b> (сегодня использовано: <b>${usedToday}</b>).
 `
     : '';
 
@@ -10541,7 +10541,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
   const verifyHintLine = (CFG.VERIFICATION_ENABLED && !isVerified && verifiedLimit > unverifiedLimit)
     ? `
 
-✅ Пройди <b>верификацию</b>, чтобы увеличить лимит до <b>${verifiedLimit}</b> интро/день.
+✅ Пройди <b>верификацию</b>, чтобы увеличить лимит до <b>${verifiedLimit}</b> интро (новых диалогов)/день.
 `
     : '';
 
@@ -10549,8 +10549,9 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 
 <b>Brand Pass</b> = кредиты (Stars).
 
-Чтобы открыть новый диалог с креатором — нужно <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}.
-Переписка внутри открытого диалога — бесплатна.
+<b>Как работает:</b>
+• 💬 Интро = новый диалог: <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}
+• Переписка внутри открытого диалога — бесплатна
 
 ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')} (на одну витрину).
 👥 Раздел «Менеджеры бренда» открывается после покупки Brand Pass или Brand Plan.
@@ -10565,8 +10566,8 @@ ${brandPassBalanceLineHtml(credits)}
     kb.text('✅ Увеличить лимит (верификация)', 'a:verify_home').row();
   }
   for (const p of BRAND_PACKS) {
-    const contacts = Math.max(1, Math.floor(Number(p.credits || 0) / Math.max(1, cost)));
-    kb.text(`⭐ ${p.title} · ${contacts} контактов`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
+    const intros = Math.max(1, Math.floor(Number(p.credits || 0) / Math.max(1, cost)));
+    kb.text(`⭐ ${p.title} · ≈ ${intros} ${ruPlural(intros,'интро-диалог','интро-диалога','интро-диалогов')}`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
   }
   kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching', `a:match_home|ws:${wsId}`).row();
   kbNavRow(kb, `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
@@ -10824,7 +10825,7 @@ ${brandPassBalanceLineHtml(credits)}
 🎟 Retry credits: <b>${retry}</b>
 
 <b>Как работает:</b>
-• 💬 Новый диалог (интро): <b>${introCost}</b> ${ruPlural(introCost,'кредит','кредита','кредитов')}
+• 💬 Интро = новый диалог: <b>${introCost}</b> ${ruPlural(introCost,'кредит','кредита','кредитов')}
 • Переписка внутри открытого диалога — бесплатна
 • ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}
 
@@ -15159,7 +15160,7 @@ bot.on('message:successful_payment', async (ctx) => {
 🎫 Brand Pass: ${fmtCredits(newBalance)}
 
 Как тратить кредиты:
-• 💬 Новый диалог (интро): ${introCost} кредит(ов)
+• 💬 Интро = новый диалог: ${introCost} кредит(ов)
 • 🔓 Контакты на витрине: ${CONTACT_UNLOCK_COST <= 0 ? 'бесплатно' : (CONTACT_UNLOCK_COST + ' кредит(ов)')} → ${CONTACT_UNLOCK_TTL_DAYS} дней
 • Переписка внутри диалога — бесплатно
 
@@ -16455,7 +16456,7 @@ if (p.a === 'a:wsp_preview') {
 <b>Brand Pass</b> = кредиты (Stars).
 
 Кредиты тратятся на:
-• 💬 Новый диалог с креатором: <b>${introCost}</b> ${ruPlural(introCost, 'кредит', 'кредита', 'кредитов')}
+• 💬 Интро = новый диалог: <b>${introCost}</b> ${ruPlural(introCost, 'кредит', 'кредита', 'кредитов')}
 • ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST, 'кредит', 'кредита', 'кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS, 'день', 'дня', 'дней')}
 
 Переписка внутри открытого диалога — бесплатна.
@@ -16504,7 +16505,7 @@ ${tail}`;
 
       const left = await db.spendBrandCredits(u.id, CONTACT_UNLOCK_COST);
       if (left === null) {
-        try { await ctx.answerCallbackQuery({ text: 'Нужен Brand Pass (кредиты).', show_alert: true }); } catch {}
+        try { await ctx.answerCallbackQuery({ text: 'Нужен Brand Pass (кредиты Stars).', show_alert: true }); } catch {}
         await renderBrandPass(ctx, u.id, 0);
         return;
       }
@@ -19778,7 +19779,7 @@ if (p.a === 'a:match_home') {
         const lim = Number(res.dailyLimit || dailyLimit || 0);
         const used = Number(res.dailyUsed || 0);
         db.trackEvent('intro_blocked_daily_limit', { userId: actorUserId, wsId: wsId || null, meta: { offerId, lim, used } });
-        try { await ctx.answerCallbackQuery({ text: `Лимит интро на сегодня: ${lim} (использовано: ${used}). Попробуй завтра.`, show_alert: true }); } catch {}
+        try { await ctx.answerCallbackQuery({ text: `Лимит интро (новых диалогов) на сегодня: ${lim} (использовано: ${used}). Попробуй завтра.`, show_alert: true }); } catch {}
         return;
       }
 
