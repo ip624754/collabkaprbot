@@ -5661,9 +5661,26 @@ function wsTgUrlFromContact(contact) {
   return un ? `https://t.me/${un}` : null;
 }
 
-function formatWsContactCard(ws, wsId) {
-  const channel = ws.channel_username ? '@' + String(ws.channel_username).replace(/^@/, '') : (ws.title || 'канал');
-  const channelUrl = ws.channel_username ? `https://t.me/${String(ws.channel_username).replace(/^@/, '')}` : null;
+function deLinkifyText(input) {
+  let s = String(input || '').trim();
+  if (!s) return '';
+
+  // Remove scheme to keep the text short and to avoid Telegram treating it as a clickable link.
+  s = s.replace(/^https?:\/\//i, '');
+
+  // Break @mentions and domains (no clickable @ / URL).
+  s = s.replace(/@/g, '＠');
+  s = s.replace(/\./g, '․');
+
+  return s;
+}
+
+function formatWsContactCard(ws, wsId, opts = {}) {
+  const plain = !!opts.plain;
+
+  const channelUser = ws.channel_username ? String(ws.channel_username).replace(/^@/, '') : '';
+  const channelLabel = channelUser ? ('@' + channelUser) : (ws.title || 'канал');
+  const channelUrl = channelUser ? `https://t.me/${channelUser}` : null;
 
   const ig = wsIgHandleFromWs(ws);
   const igUrl = wsIgUrlFromWs(ws);
@@ -5674,12 +5691,42 @@ function formatWsContactCard(ws, wsId) {
   const link = wsBrandLink(wsId);
 
   const lines = [];
-  lines.push(`👤 <b>${escapeHtml(String(ws.profile_title || channel))}</b>`);
+  const title = String(ws.profile_title || channelLabel);
+  lines.push(`👤 <b>${escapeHtml(title)}</b>`);
+
+  if (plain) {
+    if (channelLabel) lines.push(`📣 TG канал: <code>${escapeHtml(deLinkifyText(channelLabel))}</code>`);
+
+    if (ig) {
+      // Show both handle and URL (de-linkified), but never as <a href>.
+      const igLine = igUrl ? `${igUrl} • @${ig}` : `@${ig}`;
+      lines.push(`📸 IG: <code>${escapeHtml(deLinkifyText(igLine))}</code>`);
+    }
+
+    if (contact) lines.push(`✉️ Контакт: <code>${escapeHtml(deLinkifyText(contact))}</code>`);
+    if (link) lines.push(`🔗 Витрина: <code>${escapeHtml(deLinkifyText(link))}</code>`);
+
+    const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls.filter(Boolean).slice(0, 3) : [];
+    if (ports.length) {
+      lines.push(`🗂 Портфолио:`);
+      for (const u of ports) {
+        lines.push(`• <code>${escapeHtml(deLinkifyText(String(u)))}</code>`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  // Default: linked / clickable card.
+  const channel = channelUser ? ('@' + channelUser) : (ws.title || 'канал');
   if (channelUrl) lines.push(`📣 TG канал: <a href="${escapeHtml(channelUrl)}">${escapeHtml(channel)}</a>`);
   else lines.push(`📣 TG канал: <b>${escapeHtml(channel)}</b>`);
+
   if (igUrl) lines.push(`📸 IG: <a href="${escapeHtml(igUrl)}">${escapeHtml(shortUrl(igUrl))}</a> <code>@${escapeHtml(ig)}</code>`);
+
   if (contactTgUrl) lines.push(`✉️ Контакт: <a href="${escapeHtml(contactTgUrl)}">${escapeHtml(contact)}</a>`);
   else if (contact) lines.push(`✉️ Контакт: <b>${escapeHtml(contact)}</b>`);
+
   if (link) lines.push(`🔗 Витрина: <a href="${escapeHtml(link)}">${escapeHtml(shortUrl(link))}</a>`);
 
   const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls.filter(Boolean).slice(0, 3) : [];
@@ -6909,6 +6956,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     return;
   }
   const canManualReply = isOwner || isAdmin;
+  const plainUi = !canManualReply; // curator view: no clickable URLs / @mentions
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
@@ -6916,11 +6964,21 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const link = wsBrandLink(wsId);
 
+  const channelShown = plainUi ? deLinkifyText(channel) : channel;
+  const whoShown = plainUi ? deLinkifyText(who) : who;
+  const vitrinaLine = link
+    ? (plainUi
+        ? `Витрина: <code>${escapeHtml(deLinkifyText(link))}</code>
+`
+        : `Витрина: <a href="${escapeHtml(link)}">${escapeHtml(link)}</a>
+`)
+    : '';
+
   let text =
     `✉️ <b>Заявка #${lead.id}</b> ${leadStatusIcon(lead.status)}\n\n` +
-    `Канал: <b>${escapeHtml(channel)}</b>\n` +
-    (link ? `Витрина: <a href="${escapeHtml(link)}">${escapeHtml(link)}</a>\n` : '') +
-    `От: <b>${escapeHtml(who)}</b>\n` +
+    `Канал: <b>${escapeHtml(channelShown)}</b>\n` +
+    vitrinaLine +
+    `От: <b>${escapeHtml(whoShown)}</b>\n` +
     `Когда: <b>${escapeHtml(when)}</b>\n\n` +
     `<b>Текст:</b>\n${escapeHtml(stripBrokenSurrogates(String(lead.message || '—')))}`;
 
@@ -8136,7 +8194,8 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
   // --- PREVIEW ---
   const tplKey = normLeadTplKey(key);
   const replyText = buildLeadTemplateText(ws, lead, tplKey);
-  const card = formatWsContactCard(ws, Number(ws.id));
+  const plainContacts = isCurator && !isOwner && !isAdmin;
+  const card = formatWsContactCard(ws, Number(ws.id), { plain: plainContacts });
 
   const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
 
