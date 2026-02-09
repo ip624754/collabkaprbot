@@ -6609,6 +6609,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
   const isPreview = !!isOwner || !!curatorUi;
 
+  const isCuratorPreview = !!curatorUi && !isOwner;
+
   const hideApply = !!opts?.hideApply;
   const contactCbExtra = String(opts?.contactCbExtra || '');
 
@@ -6624,6 +6626,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     }
   }
   const revealContacts = !!isPreview || !!unlocked || !!opts?.revealContacts;
+
+  const linksEnabled = !!revealContacts && !isCuratorPreview;
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const publicName = ws.profile_title || ws.title || 'UGC Creator';
@@ -6641,18 +6645,30 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
   let igLine = '';
   if (ig) {
-    igLine =
-      `<a href="https://instagram.com/${escapeHtml(ig)}">instagram.com/${escapeHtml(ig)}</a>\n` +
-      `<code>@${escapeHtml(ig)}</code>`;
+    if (linksEnabled) {
+      igLine =
+        `<a href="https://instagram.com/${escapeHtml(ig)}">instagram.com/${escapeHtml(ig)}</a>\n` +
+        `<code>@${escapeHtml(ig)}</code>`;
+    } else {
+      const igPlain = deLinkifyText(`instagram.com/${ig} • @${ig}`);
+      igLine = `<code>${escapeHtml(igPlain)}</code>`;
+    }
   }
 
   let portLine = '';
   const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
   if (ports.length) {
-    portLine = ports
-      .slice(0, 3)
-      .map(u => `• <a href="${escapeHtml(String(u))}">${escapeHtml(shortUrl(u))}</a>`)
-      .join('\n');
+    if (linksEnabled) {
+      portLine = ports
+        .slice(0, 3)
+        .map(u => `• <a href="${escapeHtml(String(u))}">${escapeHtml(shortUrl(u))}</a>`)
+        .join('\n');
+    } else {
+      portLine = ports
+        .slice(0, 3)
+        .map(u => `• <code>${escapeHtml(deLinkifyText(String(u)))}</code>`)
+        .join('\n');
+    }
     if (ports.length > 3) portLine += `\n• <i>+ ещё ${ports.length - 3}</i>`;
   }
 
@@ -6755,15 +6771,14 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   if (!isPreview) {
     if (!hideApply) kb.text('📝 Оставить заявку', `a:wsp_lead_new|ws:${wsId}`);
     const hasHidden = !!contactRawTxt || !!ws.channel_username || !!contactUrl;
-    if (revealContacts) {
+    if (linksEnabled) {
       if (contactUrl) kb.url('💬 Написать', contactUrl);
     } else if (hasHidden) {
       kb.text('🔓 Контакты', `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
     }
     kb.row();
   } else {
-    // Preview: avoid confusing “apply to yourself”. Curators may still want the contact link.
-    if (contactUrl && !isOwner) kb.url('💬 Написать', contactUrl).row();
+    // Preview: keep buttons minimal (no direct contact links).
   }
 
   // Owner-only CTA
@@ -6772,8 +6787,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   }
 
   // Links
-  if (ws.channel_username && revealContacts) kb.url('📣 Telegram канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
-  if (ig) kb.url('📸 Instagram', `https://instagram.com/${ig}`);
+  if (ws.channel_username && linksEnabled) kb.url('📣 Telegram канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
+  if (ig && linksEnabled) kb.url('📸 Instagram', `https://instagram.com/${ig}`);
   const backCb = opts?.backCb || (isOwner ? `a:ws_profile|ws:${wsId}` : null);
   if (backCb) kb.row().text('⬅️ Назад', backCb);
   kb.row().text('📋 Меню', 'a:menu');
@@ -13060,9 +13075,6 @@ ${escapeHtml(reply)}`;
       const backPage = Math.max(0, Number(exp.backPage || 0));
       const creatorU = exp.creatorUsername ? String(exp.creatorUsername).replace(/^@/, '').trim() : '';
       const failKb = new InlineKeyboard();
-      if (creatorU) {
-        failKb.url('💬 Открыть чат', `https://t.me/${creatorU}`).row();
-      }
       failKb
         .text('🔁 Повторить', `a:brand_app_reply|id:${appId}|s:${backStatus}|p:${backPage}`)
         .row()
