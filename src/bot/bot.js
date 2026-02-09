@@ -5259,8 +5259,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
 
   const lines = items
     .map((r, i) => {
-      const channel = r.channel_username ? '@' + String(r.channel_username).replace(/^@/, '') : (r.profile_title || r.ws_title || 'канал');
-      const name = r.profile_title || channel;
+      const name = String(r.profile_title || r.ws_title || '').trim() || `Креатор #${r.id}`;
       const mode = PROFILE_MODE_LABELS[String(r.profile_mode || 'both')] || PROFILE_MODE_LABELS.both;
       const geo = r.profile_geo || '—';
       return `${offset + i + 1}) <b>${escapeHtml(String(name))}</b> · ${escapeHtml(String(mode))} · ${escapeHtml(String(geo))}`;
@@ -5270,14 +5269,11 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
   const text = head + lines + `\n\nНажми «👤 …», чтобы открыть витрину.`;
 
   const kb = new InlineKeyboard();
-  for (const r of items) {
-    const channel = r.channel_username ? '@' + String(r.channel_username).replace(/^@/, '') : (r.profile_title || r.ws_title || 'канал');
-    const name = r.profile_title || channel;
-    const short = String(name).slice(0, 28);
-    const contactUrl = contactUrlFromRaw(r.profile_contact);
 
+  for (const r of items) {
+    const name = String(r.profile_title || r.ws_title || '').trim() || `Креатор #${r.id}`;
+    const short = String(name).slice(0, 28);
     kb.text(`👤 ${short}`, `a:pm_view|ws:${wsId}|id:${r.id}|p:${p}`);
-    if (contactUrl) kb.url('💬', contactUrl);
     kb.row();
   }
 
@@ -6636,15 +6632,17 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
   const ws = await db.getWorkspaceAny(wsId);
   if (!ws) return ctx.answerCallbackQuery({ text: 'Профиль не найден.' });
 
-  const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
+  const channelTitle = ws.title || 'канал';
   const link = wsBrandLink(wsId);
 
-  const to = String(ws.profile_title || channel);
+  const to = String(ws.profile_title || channelTitle);
 
   let text =
     `📩 <b>Запрос бренда</b>\n\n` +
-    `Кому: <b>${escapeHtml(to)}</b>\n` +
-    `Канал: <b>${escapeHtml(channel)}</b>\n` +
+    `Кому: <b>${escapeHtml(to)}</b>
+` +
+    `Канал: <b>${escapeHtml(channelTitle)}</b>
+` +
     (link ? `Витрина: <a href="${escapeHtml(link)}">${escapeHtml(link)}</a>\n\n` : `\n`);
 
   if (Number(step) === 2) {
@@ -8363,7 +8361,8 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     else if (brandTgId) brandCredits = await db.getBrandCreditsByTgId(brandTgId);
   } catch {}
 
-  const header = `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>`;
+  const fromName = String(ws.profile_title || ws.title || 'Креатор');
+  const header = `💬 <b>Ответ от ${escapeHtml(fromName)}</b>`;
   const lockHint = Number(brandCredits || 0) > 0
     ? `🔒 <b>Контакты скрыты</b>\nОткрой через кнопку «🔓 Контакты» (Brand Pass).`
     : `🔒 <b>Контакты скрыты</b>\nНужен Brand Pass, чтобы открыть контакты. Нажми «🎫 Купить Brand Pass».`;
@@ -12506,7 +12505,7 @@ ${escapeHtml(payLine)}
       await safeLeadWrite(() => db.markBrandLeadReplied(leadId, replyText, Number(u.id)), { op: 'lead_mark_replied', leadId });
       if (String(lead.status) === 'new') await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'in_progress'), { op: 'lead_status', leadId, st: 'in_progress' });
 
-      const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
+      const fromName = String(ws.profile_title || ws.title || 'Креатор');
 
       // Gate contacts in replies to prevent free bypass.
       let brandCredits = 0;
@@ -12522,7 +12521,7 @@ ${escapeHtml(payLine)}
 
       const out =
         `💬 <b>Ответ по заявке #${leadId}</b>\n\n` +
-        `🧑‍🎨 Канал: <b>${escapeHtml(String(ws.profile_title || channel))}</b>\n\n` +
+        `🧑‍🎨 Креатор: <b>${escapeHtml(String(fromName))}</b>\n\n` +
         `${escapeHtml(clipText(replyText, 2800))}\n\n` +
         `${lockHint}`;
 
