@@ -12504,8 +12504,13 @@ ${card}`;
       const wsId = Number(exp.wsId || 0);
       const noteText = String(ctx.message.text || '').trim();
 
+      const backStatus = String(exp.backStatus || 'new');
+      const backPage = Number(exp.backPage || 0);
+      const nb = Number(exp.nb || 0);
+      const retKey = String(exp.ret || '').trim();
+      const rPart = retKey ? retPartShort(retKey) : '';
+
       const role = String(exp.role || '').trim().toLowerCase() || null;
-      const tags = extractLeadNoteTags(noteText);
 
       if (!leadId || !wsId) {
         await clearExpectText(ctx.from.id);
@@ -12530,8 +12535,8 @@ ${card}`;
 
       if (!saved) {
         const kb = new InlineKeyboard()
-          .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(String(exp.backStatus || 'new'))}|p:${Number(exp.backPage || 0)}${rPart}`)
-          .text('📝 Заметки', `a:lead_notes|id:${leadId}|w:${wsId}|n:${Number(exp.nb || 0)}|s:${leadStatusToCb(String(exp.backStatus || 'new'))}|p:${Number(exp.backPage || 0)}${rPart}`)
+          .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
+          .text('📝 Заметки', `a:lead_notes|id:${leadId}|w:${wsId}|n:${nb}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
           .row()
           .text('📋 Меню', 'a:menu')
           .text('🏠 Home', 'a:home');
@@ -12539,17 +12544,13 @@ ${card}`;
         return;
       }
 
-      const backStatus = String(exp.backStatus || 'new');
-      const backPage = Number(exp.backPage || 0);
-      const retKey = String(exp.ret || '').trim();
-      const rPart = retKey ? retPartShort(retKey) : '';
       const notesCb = `a:lead_notes|id:${leadId}|w:${wsId}|n:0|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
 
       const kb = new InlineKeyboard()
         .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
         .text('📝 Заметки', notesCb)
         .row()
-        .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:${backStatus}|p:${backPage}${rPart}`)
+        .text('📨 Заявки', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
         .row()
         .text('📋 Меню', 'a:menu')
         .text('🏠 Home', 'a:home');
