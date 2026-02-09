@@ -234,6 +234,22 @@ export async function addBrandCredits(userId, credits) {
   return Number(r.rows[0]?.brand_credits ?? 0);
 }
 
+// Spend Brand Pass credits (atomic, no negatives). Returns new balance or null if insufficient.
+export async function spendBrandCredits(userId, cost = 1) {
+  const c = Math.max(1, Math.floor(Number(cost) || 1));
+  const r = await pool.query(
+    `update users
+     set brand_credits = brand_credits - $2,
+         brand_credits_spent = brand_credits_spent + $2,
+         updated_at=now()
+     where id=$1 and brand_credits >= $2
+     returning brand_credits`,
+    [Number(userId), c]
+  );
+  if (!r.rows.length) return null;
+  return Number(r.rows[0]?.brand_credits ?? 0);
+}
+
 // -----------------------------
 // Intro retry credits (fairness)
 // -----------------------------
