@@ -547,6 +547,28 @@ export async function listCuratorWorkspaces(userId) {
   return r.rows;
 }
 
+export async function isCuratorForWorkspace(workspaceId, userId) {
+  const wsId = Number(workspaceId || 0);
+  const uId = Number(userId || 0);
+  if (!wsId || !uId) return false;
+
+  const r = await pool.query(
+    `select
+        (ws.owner_user_id = $2) as is_owner,
+        coalesce(s.curator_enabled, false) as curator_enabled,
+        exists(select 1 from workspace_curators c where c.workspace_id = ws.id and c.user_id = $2) as is_curator
+     from workspaces ws
+     left join workspace_settings s on s.workspace_id = ws.id
+     where ws.id = $1
+     limit 1`,
+    [wsId, uId]
+  );
+  const row = r.rows[0];
+  if (!row) return false;
+  if (row.is_owner) return true;
+  return !!row.curator_enabled && !!row.is_curator;
+}
+
 export async function listGiveawaysForCurator(workspaceId, userId, limit = 25) {
   const lim = Math.max(1, Math.min(50, Number(limit || 25)));
   const r = await pool.query(
@@ -3435,6 +3457,32 @@ export async function listBrandLeads(workspaceId, status, limit = 10, offset = 0
     [Number(workspaceId), String(status), Number(limit), Number(offset)]
   );
   return r.rows || [];
+}
+
+export async function appendBrandLeadCuratorNote(leadId, byUserId, text) {
+  const id = Number(leadId || 0);
+  const by = Number(byUserId || 0);
+  const t = String(text || '').trim();
+  if (!id || !by || !t) return null;
+
+  const safeText = t.length > 1200 ? (t.slice(0, 1200) + '…') : t;
+
+  const r = await pool.query(
+    `update brand_leads
+     set meta = jsonb_set(
+       coalesce(meta, '{}'::jsonb),
+       '{curator_notes}',
+       (coalesce(coalesce(meta, '{}'::jsonb)->'curator_notes', '[]'::jsonb) ||
+        jsonb_build_array(jsonb_build_object('by', $2, 'at', now(), 'text', $3))
+       ),
+       true
+     ),
+     updated_at = now()
+     where id = $1
+     returning meta`,
+    [id, by, safeText]
+  );
+  return r.rows[0] || null;
 }
 
 export async function updateBrandLeadStatus(leadId, status) {
