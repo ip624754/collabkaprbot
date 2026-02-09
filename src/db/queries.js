@@ -197,6 +197,12 @@ export async function getBrandCredits(userId) {
   return Number(r.rows[0]?.brand_credits ?? 0);
 }
 
+// Fallback: resolve Brand Pass credits by Telegram ID (used when a row references only tg_id).
+export async function getBrandCreditsByTgId(tgId) {
+  const r = await pool.query(`select brand_credits from users where tg_id=$1`, [tgId]);
+  return Number(r.rows[0]?.brand_credits ?? 0);
+}
+
 export async function getBrandIntroMeta(userId) {
   const r = await pool.query(
     `select brand_credits, brand_trial_granted, brand_trial_granted_at
