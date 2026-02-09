@@ -5445,19 +5445,17 @@ function wsBrandLink(wsId) {
   return `https://t.me/${un}?start=wsp_${wsId}`;
 }
 
-function brandReplyKb(ws, wsId) {
+function brandReplyKb(ws, wsId, brandCredits = 0) {
   const kb = new InlineKeyboard();
 
-  const link = wsBrandLink(wsId);
-  if (link) kb.url('🪟 Открыть витрину', link);
+  // Keep brands inside the bot (no direct contact links in replies).
+  kb.text('🪟 Витрина', `a:wsp_open|ws:${wsId}`);
 
-  const contact = ws && ws.profile_contact ? String(ws.profile_contact) : null;
-  const contactUrl = wsTgUrlFromContact(contact);
-  if (contactUrl) kb.url('💬 Написать', contactUrl);
-
-  if (ws && ws.channel_username) {
-    const un = String(ws.channel_username).replace(/^@/, '');
-    kb.row().url('📣 Открыть канал', `https://t.me/${un}`);
+  if (Number(brandCredits || 0) > 0) {
+    // Contacts are revealed via the vitrina flow (Brand Pass credits) to prevent free bypass.
+    kb.text('🔓 Контакты', `a:wsp_contact_req|ws:${wsId}`);
+  } else {
+    kb.text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
   }
 
   // Always include navigation buttons so brand isn't stuck with a "text-only" message.
@@ -5848,6 +5846,7 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   const geoRaw = ws.profile_geo ? String(ws.profile_geo).trim() : '';
   const contactRawTxt = ws.profile_contact ? String(ws.profile_contact).trim() : '';
   const aboutRaw = ws.profile_about ? String(ws.profile_about).trim() : '';
+
   const canUnlockContacts = !!contactRawTxt || !!ws.channel_username;
 
   const link = wsBrandLink(wsId);
@@ -6487,6 +6486,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const geoRaw = ws.profile_geo ? String(ws.profile_geo).trim() : '';
   const contactRawTxt = ws.profile_contact ? String(ws.profile_contact).trim() : '';
   const aboutRaw = ws.profile_about ? String(ws.profile_about).trim() : '';
+
+  const canUnlockContacts = !!contactRawTxt || !!ws.channel_username;
 
   let igLine = '';
   if (ig) {
@@ -8354,27 +8355,25 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   const tplKey = normLeadTplKey(key);
   const replyText = buildLeadTemplateText(ws, lead, tplKey);
-  let card = formatWsContactCard(ws, Number(ws.id));
+  // Gate contacts in replies to prevent free bypass.
+  let brandCredits = 0;
+  try {
+    const uid = Number(lead.brand_user_id || 0);
+    if (uid) brandCredits = await db.getBrandCredits(uid);
+    else if (brandTgId) brandCredits = await db.getBrandCreditsByTgId(brandTgId);
+  } catch {}
 
   const header = `💬 <b>Ответ от ${escapeHtml(String(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title)))}</b>`;
-  let out = `${header}\n\n${escapeHtml(String(replyText))}\n\n<b>Контакты:</b>\n${card}`;
+  const lockHint = Number(brandCredits || 0) > 0
+    ? `🔒 <b>Контакты скрыты</b>\nОткрой через кнопку «🔓 Контакты» (Brand Pass).`
+    : `🔒 <b>Контакты скрыты</b>\nНужен Brand Pass, чтобы открыть контакты. Нажми «🎫 Купить Brand Pass».`;
 
-  // Safety: keep under Telegram 4096 hard-limit.
+  let out = `${header}\n\n${escapeHtml(String(replyText))}\n\n${lockHint}`;
   if (out.length > 3900) {
-    // Try: drop portfolio links first.
-    try {
-      const wsSlim = { ...ws, profile_portfolio_urls: [] };
-      card = formatWsContactCard(wsSlim, Number(ws.id));
-      out = `${header}\n\n${escapeHtml(String(replyText))}\n\n<b>Контакты:</b>\n${card}`;
-    } catch {}
+    out = `${header}\n\n${escapeHtml(clipText(String(replyText), 2800))}\n\n${lockHint}`;
   }
-  if (out.length > 3900) {
-    // Minimal fallback: only vitrina link (or dash).
-    const link = wsBrandLink(wsId);
-    const linkLine = link ? `🔗 Витрина: <a href="${escapeHtml(link)}">${escapeHtml(shortUrl(link))}</a>` : '';
-    out = `${header}\n\n${escapeHtml(String(replyText))}\n\n<b>Контакты:</b>\n${linkLine || '—'}`;
-  }
-  const kbToBrand = brandReplyKb(ws, wsId);
+
+  const kbToBrand = brandReplyKb(ws, wsId, brandCredits);
   const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, out, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kbToBrand });
   if (!sendRes.ok) {
     const reason = describeTgSendError(sendRes.err);
@@ -12508,24 +12507,26 @@ ${escapeHtml(payLine)}
       if (String(lead.status) === 'new') await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'in_progress'), { op: 'lead_status', leadId, st: 'in_progress' });
 
       const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
-      const link = wsBrandLink(Number(ws.id));
 
-      const card = formatWsContactCard(ws, Number(ws.id));
+      // Gate contacts in replies to prevent free bypass.
+      let brandCredits = 0;
+      try {
+        const uid = Number(lead.brand_user_id || 0);
+        if (uid) brandCredits = await db.getBrandCredits(uid);
+        else if (lead.brand_tg_id) brandCredits = await db.getBrandCreditsByTgId(Number(lead.brand_tg_id));
+      } catch {}
+
+      const lockHint = Number(brandCredits || 0) > 0
+        ? `🔒 <b>Контакты скрыты</b>\nОткрой через кнопку «🔓 Контакты» (Brand Pass).`
+        : `🔒 <b>Контакты скрыты</b>\nНужен Brand Pass, чтобы открыть контакты. Нажми «🎫 Купить Brand Pass».`;
 
       const out =
-        `💬 <b>Ответ по заявке #${leadId}</b>
+        `💬 <b>Ответ по заявке #${leadId}</b>\n\n` +
+        `🧑‍🎨 Канал: <b>${escapeHtml(String(ws.profile_title || channel))}</b>\n\n` +
+        `${escapeHtml(clipText(replyText, 2800))}\n\n` +
+        `${lockHint}`;
 
-` +
-        `🧑‍🎨 Канал: <b>${escapeHtml(String(ws.profile_title || channel))}</b>
-
-` +
-        `${escapeHtml(replyText)}
-
-` +
-        `<b>Контакты</b>
-${card}`;
-
-      const kbToBrand = brandReplyKb(ws, Number(ws.id));
+      const kbToBrand = brandReplyKb(ws, Number(ws.id), brandCredits);
 
       try {
         await ctx.api.sendMessage(Number(lead.brand_tg_id), out, {
