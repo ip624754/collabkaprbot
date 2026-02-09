@@ -17,19 +17,64 @@ let BOT;
 
 // Brand Pass: brands pay credits for first contact (opening a new inbox thread)
 // Contacts reveal on public vitrina is also gated by Brand Pass credits.
-// Semantics: spend 1 credit to reveal contacts for a workspace; cached for 30 days (per brand user).
-const CONTACT_UNLOCK_COST = 1;
-const CONTACT_UNLOCK_TTL_DAYS = 30;
+// Semantics: spend CONTACT_UNLOCK_COST credits to reveal contacts for a workspace; cached for CONTACT_UNLOCK_TTL_DAYS days (per brand user).
+// Optional env overrides (Vercel → Project Settings → Environment Variables):
+// - CONTACT_UNLOCK_COST (default: 1)
+// - CONTACT_UNLOCK_TTL_DAYS (default: 30)
+function envInt(name, def, opts = {}) {
+  const raw = process?.env?.[name];
+  if (raw === undefined || raw === null || raw === '') return def;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return def;
+  let v = Math.trunc(n);
+  if (opts.min !== undefined && v < opts.min) v = opts.min;
+  if (opts.max !== undefined && v > opts.max) v = opts.max;
+  return v;
+}
+
+const CONTACT_UNLOCK_COST = envInt('CONTACT_UNLOCK_COST', 1, { min: 0, max: 10 });
+const CONTACT_UNLOCK_TTL_DAYS = envInt('CONTACT_UNLOCK_TTL_DAYS', 30, { min: 1, max: 365 });
 const CONTACT_UNLOCK_TTL_SEC = CONTACT_UNLOCK_TTL_DAYS * 24 * 60 * 60;
 
-function contactsLockedHintHtml(hasCredits) {
-  const cost = CONTACT_UNLOCK_COST;
-  const days = CONTACT_UNLOCK_TTL_DAYS;
-  const ttl = `(-${cost} кредит, действует ${days} дней)`;
-  if (hasCredits) return `🔒 <b>Контакты скрыты</b>
-Открой через кнопку «🔓 Контакты» ${ttl}.`;
+function fmtCredits(n) {
+  const x = Number(n || 0);
+  return `${x} ${ruPlural(x, 'кредит', 'кредита', 'кредитов')}`;
+}
+
+function fmtDays(n) {
+  const x = Number(n || 0);
+  return `${x} ${ruPlural(x, 'день', 'дня', 'дней')}`;
+}
+
+function contactUnlockBtnLabel() {
+  const c = Number(CONTACT_UNLOCK_COST || 0);
+  if (!Number.isFinite(c) || c <= 0) return '🔓 Контакты';
+  return `🔓 Контакты (-${c})`;
+}
+
+function contactUnlockActionLabel() {
+  const c = Number(CONTACT_UNLOCK_COST || 0);
+  if (!Number.isFinite(c) || c <= 0) return '🔓 Показать контакты';
+  return `🔓 Показать контакты (-${c})`;
+}
+
+function contactUnlockExplainLine() {
+  const c = Number(CONTACT_UNLOCK_COST || 0);
+  const costPart = (!Number.isFinite(c) || c <= 0)
+    ? '0 кредитов (бесплатно)'
+    : `${c} ${ruPlural(c, 'кредит', 'кредита', 'кредитов')}`;
+  return `${costPart} → доступ на ${fmtDays(CONTACT_UNLOCK_TTL_DAYS)}`;
+}
+
+function contactsLockedHintHtml(hasCredits, bal = null) {
+  const balLine = (bal === null || bal === undefined) ? '' : `
+Баланс: <b>${escapeHtml(String(bal))}</b>`;
+  if (hasCredits) {
+    return `🔒 <b>Контакты скрыты</b>
+Открой через «${contactUnlockBtnLabel()}» (${contactUnlockExplainLine()}).${balLine}`;
+  }
   return `🔒 <b>Контакты скрыты</b>
-Нужен Brand Pass: купи и открой через «🔓 Контакты» ${ttl}.`;
+Нужен <b>Brand Pass</b> (кредиты). Купи и открой через «${contactUnlockBtnLabel()}» (${contactUnlockExplainLine()}).${balLine}`;
 }
 
 const BRAND_PACKS = [
@@ -5488,11 +5533,17 @@ function brandReplyKb(ws, wsId, brandCredits = 0, leadId = 0) {
   kb.text('🪟 Витрина', `a:wsp_open|ws:${wsId}|m:ro${ctxPart}`);
 
   kb.row();
-  if (Number(brandCredits || 0) > 0) {
-    // Contacts are revealed via paid unlock (Brand Pass credits) to prevent free bypass.
-    kb.text('🔓 Контакты', `a:wsp_contact_req|ws:${wsId}${ctxPart}`);
-  } else {
+
+  // Contacts are revealed via paid unlock (Brand Pass credits) to prevent free bypass.
+  // UX: if balance is low — показываем и «Контакты», и быстрый путь купить Brand Pass.
+  const bal = Number(brandCredits || 0);
+  if (bal <= 0) {
     kb.text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+  } else if (CONTACT_UNLOCK_COST > 0 && bal < CONTACT_UNLOCK_COST) {
+    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`)
+      .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+  } else {
+    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`);
   }
 
   // Always include navigation buttons so brand isn't stuck with a text-only message.
@@ -6699,7 +6750,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     blocks.push(`🪟 <b>Предпросмотр</b>: это витрина креатора. Заявку оставляют бренды по этой ссылке.`);
     if (isOwner) blocks.push(`🔗 Чтобы поделиться витриной — нажми «🔗 Поделиться» ниже.`);
   } else {
-    if (hideApply) blocks.push(`🪟 Витрина (read-only): контакты открываются через «🔓 Контакты». Диалог — через «💬 Диалог».`);
+    if (hideApply) blocks.push(`🪟 Витрина (read-only): продолжай сделку через «💬 Диалог». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
     else blocks.push(`🪟 Витрина: кнопка ниже — там находится «📝 Оставить заявку».`);
   }
 
@@ -6748,7 +6799,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         if (contactRawTxt) lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt)}</b>`);
         else lines.push(`• Контакт: —`);
       } else {
-        lines.push(`• Контакты: <b>🔒 скрыто</b> (открой через бот)`);
+        lines.push(`• Контакты: <b>🔒 скрыто</b> (через Brand Pass)`);
       }
       blocks.push('');
       blocks.push(lines.join('\n'));
@@ -6757,8 +6808,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
   blocks.push('');
   if (!isPreview) {
-    if (hideApply) blocks.push(`Чтобы продолжить — вернись и нажми «💬 Диалог». Контакты доступны через «🔓 Контакты».`);
-    else blocks.push(`Если хочешь UGC/интеграцию — нажми «📝 Оставить заявку». Контакты доступны через «🔓 Контакты».`);
+    if (hideApply) blocks.push(`Чтобы продолжить — вернись и нажми «💬 Диалог». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
+    else blocks.push(`Если хочешь UGC/интеграцию — нажми «📝 Оставить заявку». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
   } else {
     blocks.push(`Это предпросмотр. Чтобы вернуться — используй «⬅️ Назад» или «📋 Меню».`);
   }
@@ -6807,7 +6858,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         kb.row();
       }
     } else if (hasHidden) {
-      kb.text('🔓 Контакты', `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
+      kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
       kb.row();
     }
   } else {
@@ -7124,6 +7175,9 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
   let credits = 0;
   try { credits = Number(await db.getBrandCredits(brandUserId)); } catch {}
 
+  const needContacts = Number(CONTACT_UNLOCK_COST || 0);
+  const needsContactsTopup = needContacts > 0 && Number(credits || 0) < needContacts;
+
   const who = ws ? safeCreatorDisplayName(ws) : 'Креатор';
   const when = lead.created_at ? fmtTs(lead.created_at) : '—';
   const st = normLeadStatus(lead.status);
@@ -7144,7 +7198,12 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
     `Статус: <b>${escapeHtml(statusTitle)}</b>
 ` +
     `Создано: <code>${escapeHtml(String(when))}</code>
-`;
+` +
+    `🎫 Brand Pass: <b>${credits}</b> ${ruPlural(credits,'кредит','кредита','кредитов')}
+` +
+    (needsContactsTopup ? `⚠️ Для ${contactUnlockBtnLabel()} нужно <b>${needContacts}</b> ${ruPlural(needContacts,'кредит','кредита','кредитов')}.
+` : ``) +
+    ``;
 
   text += `
 <b>Заявка:</b>
@@ -7170,10 +7229,13 @@ ${threadBlock}`;
     .text('🪟 Витрина', `a:wsp_open|ws:${realWsId}|m:ro|r:bl|l:${id}`)
     .row();
 
-  if (Number(credits || 0) > 0) {
-    kb.text('🔓 Контакты', `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
-  } else {
+  if (Number(credits || 0) <= 0) {
     kb.text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+  } else if (needsContactsTopup) {
+    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
+      .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+  } else {
+    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
   }
 
   kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
@@ -10441,15 +10503,17 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 `
     : '';
 
-  const text = `🔒 <b>Brand Pass</b>
+  const text = `🔒 <b>Нужен Brand Pass</b>
 
-Чтобы <b>написать блогеру</b> и открыть новый диалог, нужен <b>${cost}</b> кредит(ов).
+<b>Brand Pass</b> = кредиты (Stars).
+
+Чтобы открыть новый диалог с креатором — нужно <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}.
 Переписка внутри открытого диалога — бесплатна.
 
-🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> кредит → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> дней (на одну витрину).
+${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')} (на одну витрину).
 👥 Раздел «Менеджеры бренда» открывается после покупки Brand Pass или Brand Plan.
 ${trialLine}${limitLine}${verifyHintLine}
-Твой баланс: <b>${credits}</b> кредит(ов)
+<b>Баланс:</b> <b>${credits}</b> ${ruPlural(credits,'кредит','кредита','кредитов')}
 🎟 Retry credits: <b>${retry}</b>
 
 Выбери пакет:`;
@@ -10706,23 +10770,26 @@ async function renderBrandPassTopup(ctx, userId, wsId) {
   const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(userId) : 0;
   const kb = new InlineKeyboard();
   for (const p of BRAND_PACKS) {
-    kb.text(`💳 ${p.title} · ${p.credits} контакт(ов) · ${p.stars}⭐️`, `a:brand_buy|ws:${wsId}|pack:${p.id}`).row();
+    kb.text(`💳 ${p.title} · ${p.credits} ${ruPlural(p.credits,'кредит','кредита','кредитов')} · ${p.stars}⭐️`, `a:brand_buy|ws:${wsId}|pack:${p.id}`).row();
   }
   kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
   await safeEditOrReply(ctx, 
-    `🎫 <b>Brand Pass</b>
+    `🎫 <b>Brand Pass</b> = кредиты (Stars)
 
-Баланс контактов: <b>${credits}</b>
+<b>Баланс:</b> <b>${credits}</b> ${ruPlural(credits,'кредит','кредита','кредитов')}
 🎟 Retry credits: <b>${retry}</b>
+
+<b>Как работает:</b>
+• 💬 Новый диалог (интро): <b>${introCost}</b> ${ruPlural(introCost,'кредит','кредита','кредитов')}
+• Переписка внутри открытого диалога — бесплатна
+• ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}
 
 Retry начисляется, если блогер не отвечает за 24ч (действует 7 дней).
 
-👥 Раздел «Менеджеры бренда» открывается после покупки Brand Pass или Brand Plan.
+👥 «Менеджеры бренда» открываются после покупки Brand Pass или Brand Plan.
 
-Пополняй, чтобы:
-• 💬 открывать новые диалоги (интро)
-• 🔓 открывать контакты на витрине (на ${CONTACT_UNLOCK_TTL_DAYS} дней)`,
+Выбери пакет пополнения ниже:`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
@@ -15030,6 +15097,7 @@ bot.on('message:successful_payment', async (ctx) => {
 
       const creditsToAdd = Number(data.credits || 0);
       const newBalance = await db.addBrandCredits(payUserId, creditsToAdd);
+      const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
       await redis.del(k(['pay_brand', token]));
 
       const kb = new InlineKeyboard();
@@ -15042,7 +15110,17 @@ bot.on('message:successful_payment', async (ctx) => {
 
       await markApplied('auto_apply_brand_pass');
       await ctx.reply(
-        `✅ Brand Pass активирован!\n\nНачислено: +${creditsToAdd}\nБаланс: ${newBalance}\n\nТеперь можешь писать блогерам — нажми “💬 Написать”.`,
+        `✅ Brand Pass активирован!
+
+Начислено: +${creditsToAdd}
+Баланс: ${newBalance}
+
+Как тратить кредиты:
+• 💬 Новый диалог (интро): ${introCost} кредит(ов)
+• 🔓 Контакты на витрине: ${CONTACT_UNLOCK_COST <= 0 ? 'бесплатно' : (CONTACT_UNLOCK_COST + ' кредит(ов)')} → ${CONTACT_UNLOCK_TTL_DAYS} дней
+• Переписка внутри диалога — бесплатно
+
+Дальше: открой 📥 Inbox и нажми «💬 Диалог».`,
         { reply_markup: kb }
       );
       return;
@@ -16312,27 +16390,36 @@ if (p.a === 'a:wsp_preview') {
 
       const bal = await db.getBrandCredits(u.id);
       const kb = new InlineKeyboard();
-      if (Number(bal || 0) > 0) {
-        kb.text(`🔓 Показать контакты (-${CONTACT_UNLOCK_COST})`, `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`).row();
+      const balNum = Number(bal || 0);
+      if (CONTACT_UNLOCK_COST <= 0 || balNum >= CONTACT_UNLOCK_COST) {
+        kb.text(contactUnlockActionLabel(), `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`).row();
       }
       kb
         .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0')
         .row()
         .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb);
 
+      const canUnlock = (CONTACT_UNLOCK_COST <= 0) || (balNum >= CONTACT_UNLOCK_COST);
+      const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
+
+      const tail = canUnlock
+        ? `Нажми «${contactUnlockActionLabel()}» или купи Brand Pass.`
+        : `Недостаточно кредитов для ${contactUnlockBtnLabel()}: нужно <b>${CONTACT_UNLOCK_COST}</b>, у тебя <b>${balNum}</b>. Купи Brand Pass и повтори.`;
+
       const text =
         `🔒 <b>Контакты скрыты</b>
 
-` +
-        `Чтобы получить контакты креатора (и ссылку на Telegram-канал), открой доступ через <b>Brand Pass</b>.
+<b>Brand Pass</b> = кредиты (Stars).
 
-` +
-        `• Списание: <b>${CONTACT_UNLOCK_COST} кредит</b> (разово, действует ${CONTACT_UNLOCK_TTL_DAYS} дней)
-` +
-        `• Баланс: <b>${Number(bal || 0)}</b>
+Кредиты тратятся на:
+• 💬 Новый диалог с креатором: <b>${introCost}</b> ${ruPlural(introCost, 'кредит', 'кредита', 'кредитов')}
+• ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST, 'кредит', 'кредита', 'кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS, 'день', 'дня', 'дней')}
 
-` +
-        `Продолжить?`;
+Переписка внутри открытого диалога — бесплатна.
+
+<b>Баланс:</b> <b>${balNum}</b> ${ruPlural(balNum, 'кредит', 'кредита', 'кредитов')}
+
+${tail}`;
 
       await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
       return;
@@ -16384,7 +16471,7 @@ if (p.a === 'a:wsp_preview') {
         await redis.set(key, 1, { ex: CONTACT_UNLOCK_TTL_SEC });
       } catch {}
 
-      try { await ctx.answerCallbackQuery({ text: `✅ Контакты открыты на ${CONTACT_UNLOCK_TTL_DAYS} дней. Осталось: ${left}`, show_alert: true }); } catch {}
+      try { await ctx.answerCallbackQuery({ text: `✅ Контакты открыты на ${CONTACT_UNLOCK_TTL_DAYS} ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}. Баланс: ${left}`, show_alert: true }); } catch {}
       await renderWsPublicProfile(ctx, wsId, { revealContacts: true, ...roOpts });
       return;
     }
