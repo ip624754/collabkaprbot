@@ -3787,13 +3787,14 @@ async function renderBrandApply(ctx, u, brandUserId, backPage, opts = {}) {
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
   if (startWrite) {
+    // Short TTL: input mode should not hijack unrelated messages.
     await setExpectText(ctx.from.id, {
       type: 'brand_apply',
       brandUserId,
       backPage,
       wsId: activeWsId,
       backCb: `a:brand_dir_open|u:${brandUserId}|p:${backPage}`
-    });
+    }, 5 * 60);
   }
 
   // show draft controls if exists
@@ -15175,11 +15176,27 @@ if (p.a === 'a:brand_dir_open') {
 
 
     if (p.a === 'a:brand_apply') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      const brandUserId = Number(p.u || 0);
-      const backPage = Math.max(0, Number(p.p || 0));
-      await renderBrandApply(ctx, u, brandUserId, backPage, { edit: true, startWrite: false });
-      return;
+	      const brandUserId = Number(p.u || 0);
+	      const backPage = Math.max(0, Number(p.p || 0));
+
+	      // UX: users often type immediately after pressing "📝 Оставить заявку".
+	      // If there is no draft yet, start input mode right away (short-lived expectText via renderBrandApply).
+	      let hasDraft = false;
+	      try {
+	        const d = await getBrandApplyDraft(ctx.from.id, brandUserId);
+	        hasDraft = !!(d && typeof d === 'object' && String(d.msg || '').trim());
+	      } catch {}
+
+	      try {
+	        if (!hasDraft) {
+	          await ctx.answerCallbackQuery({ text: '✍️ Напиши сообщение внизу и отправь одним сообщением. Потом покажу предпросмотр.' });
+	        } else {
+	          await ctx.answerCallbackQuery();
+	        }
+	      } catch {}
+
+	      await renderBrandApply(ctx, u, brandUserId, backPage, { edit: true, startWrite: !hasDraft });
+	      return;
     }
 
     if (p.a === 'a:brand_apply_write') {
