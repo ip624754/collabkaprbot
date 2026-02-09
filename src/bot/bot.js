@@ -5848,6 +5848,7 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   const geoRaw = ws.profile_geo ? String(ws.profile_geo).trim() : '';
   const contactRawTxt = ws.profile_contact ? String(ws.profile_contact).trim() : '';
   const aboutRaw = ws.profile_about ? String(ws.profile_about).trim() : '';
+  const canUnlockContacts = !!contactRawTxt || !!ws.channel_username;
 
   const link = wsBrandLink(wsId);
 
@@ -6462,8 +6463,22 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
   const isPreview = !!isOwner || !!curatorUi;
 
+  // Public view: hide direct contacts/channel by default to prevent bypassing the bot.
+  // Contacts can be revealed via paid unlock (Brand Pass credits) and cached in Redis.
+  let unlocked = false;
+  if (!isPreview && viewer) {
+    try {
+      const key = k(['wsp_contact', wsId, viewer.id]);
+      unlocked = !!(await redis.get(key));
+    } catch {
+      unlocked = false;
+    }
+  }
+  const revealContacts = !!isPreview || !!unlocked || !!opts?.revealContacts;
+
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
-  const name = ws.profile_title || channel;
+  const publicName = ws.profile_title || ws.title || 'UGC Creator';
+  const name = revealContacts ? (ws.profile_title || channel) : publicName;
   const mode = String(ws.profile_mode || 'both');
   const ig = ws.profile_ig ? String(ws.profile_ig) : null;
 
@@ -6508,7 +6523,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   {
     const lines = [];
     lines.push(`<b>Основное</b>`);
-    lines.push(`• Канал: <b>${escapeHtml(channel)}</b>`);
+    lines.push(`• Канал: <b>${escapeHtml(revealContacts ? channel : '🔒 скрыто')}</b>`);
     lines.push(`• Режим: <b>${escapeHtml(modeLine)}</b>`);
     if (geoRaw) lines.push(`• Гео: <b>${escapeHtml(geoRaw)}</b>`);
     if (verticalsTxt && verticalsTxt !== '—') lines.push(`• Ниши: <code>${escapeHtml(clipText(verticalsTxt, 180))}</code>`);
@@ -6543,9 +6558,14 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   // Контакты
   {
     const lines = [];
-    if (contactRawTxt) {
+    if (canUnlockContacts) {
       lines.push(`<b>Контакты</b>`);
-      lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt)}</b>`);
+      if (revealContacts) {
+        if (contactRawTxt) lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt)}</b>`);
+        else lines.push(`• Контакт: —`);
+      } else {
+        lines.push(`• Контакты: <b>🔒 скрыто</b> (открой через бот)`);
+      }
       blocks.push('');
       blocks.push(lines.join('\n'));
     }
@@ -6553,7 +6573,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
   blocks.push('');
   if (!isPreview) {
-    blocks.push(`Если хочешь UGC/интеграцию — нажми «📝 Оставить заявку» или «💬 Написать».`);
+    blocks.push(`Если хочешь UGC/интеграцию — нажми «📝 Оставить заявку». Контакты доступны через «🔓 Контакты».`);
   } else {
     blocks.push(`Это предпросмотр. Чтобы вернуться — используй «⬅️ Назад» или «📋 Меню».`);
   }
@@ -6581,7 +6601,12 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   // CTA row
   if (!isPreview) {
     kb.text('📝 Оставить заявку', `a:wsp_lead_new|ws:${wsId}`);
-    if (contactUrl) kb.url('💬 Написать', contactUrl);
+    const hasHidden = !!contactRawTxt || !!ws.channel_username || !!contactUrl;
+    if (revealContacts) {
+      if (contactUrl) kb.url('💬 Написать', contactUrl);
+    } else if (hasHidden) {
+      kb.text('🔓 Контакты', `a:wsp_contact_req|ws:${wsId}`);
+    }
     kb.row();
   } else {
     // Preview: avoid confusing “apply to yourself”. Curators may still want the contact link.
@@ -6594,7 +6619,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   }
 
   // Links
-  if (ws.channel_username) kb.url('📣 Telegram канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
+  if (ws.channel_username && revealContacts) kb.url('📣 Telegram канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
   if (ig) kb.url('📸 Instagram', `https://instagram.com/${ig}`);
   const backCb = opts?.backCb || (isOwner ? `a:ws_profile|ws:${wsId}` : null);
   if (backCb) kb.row().text('⬅️ Назад', backCb);
@@ -15853,6 +15878,88 @@ if (p.a === 'a:wsp_preview') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
       await renderWsPublicProfile(ctx, wsId);
+      return;
+    }
+
+    // Public vitrina: contact unlock (Brand Pass credits) to prevent bypassing the bot.
+    if (p.a === 'a:wsp_contact_req') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.w || p.ws || 0);
+      if (!wsId) return;
+
+      // already unlocked?
+      try {
+        const key = k(['wsp_contact', wsId, u.id]);
+        if (await redis.get(key)) {
+          try { await ctx.answerCallbackQuery({ text: 'Уже открыто ✅' }); } catch {}
+          await renderWsPublicProfile(ctx, wsId, { revealContacts: true });
+          return;
+        }
+      } catch {}
+
+      const bal = await db.getBrandCredits(u.id);
+      const kb = new InlineKeyboard()
+        .text('🔓 Показать контакты (-1)', `a:wsp_contact_unlock|ws:${wsId}`)
+        .row()
+        .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0')
+        .row()
+        .text('⬅️ Назад', `a:wsp_open|ws:${wsId}`);
+
+      const text =
+        `🔒 <b>Контакты скрыты</b>
+
+Чтобы получить контакты креатора (и ссылку на Telegram-канал), открой доступ через <b>Brand Pass</b>.
+
+• Списание: <b>1 кредит</b> (разово на 30 дней)
+• Баланс: <b>${Number(bal || 0)}</b>
+
+Продолжить?`;
+
+      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+      return;
+    }
+
+    if (p.a === 'a:wsp_contact_unlock') {
+      const wsId = Number(p.w || p.ws || 0);
+      if (!wsId) {
+        try { await ctx.answerCallbackQuery({ text: 'Workspace не найден.', show_alert: true }); } catch {}
+        return;
+      }
+
+      // owner/curator should never pay
+      try {
+        const ws = await db.getWorkspaceAny(wsId);
+        if (ws && Number(ws.owner_user_id) === Number(u.id)) {
+          try { await ctx.answerCallbackQuery({ text: 'Это твоя витрина ✅' }); } catch {}
+          await renderWsPublicProfile(ctx, wsId, { revealContacts: true });
+          return;
+        }
+      } catch {}
+
+      // idempotency (cached in Redis)
+      try {
+        const key = k(['wsp_contact', wsId, u.id]);
+        if (await redis.get(key)) {
+          try { await ctx.answerCallbackQuery({ text: 'Уже открыто ✅' }); } catch {}
+          await renderWsPublicProfile(ctx, wsId, { revealContacts: true });
+          return;
+        }
+      } catch {}
+
+      const left = await db.spendBrandCredits(u.id, 1);
+      if (left === null) {
+        try { await ctx.answerCallbackQuery({ text: 'Нужен Brand Pass (кредиты).', show_alert: true }); } catch {}
+        await renderBrandPass(ctx, u.id, 0);
+        return;
+      }
+
+      try {
+        const key = k(['wsp_contact', wsId, u.id]);
+        await redis.set(key, 1, { ex: 30 * 24 * 60 * 60 });
+      } catch {}
+
+      try { await ctx.answerCallbackQuery({ text: `✅ Контакты открыты. Осталось: ${left}`, show_alert: true }); } catch {}
+      await renderWsPublicProfile(ctx, wsId, { revealContacts: true });
       return;
     }
 
