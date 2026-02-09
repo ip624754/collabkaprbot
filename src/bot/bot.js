@@ -5975,8 +5975,7 @@ function wsProfileKb(wsId, ws) {
     .text('✏️ Гео', `a:ws_prof_edit|ws:${wsId}|f:geo`)
     .text('📝 Описание', `a:ws_prof_edit|ws:${wsId}|f:about`)
     .row()
-    .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
-    .text('🔗 Поделиться', `a:ws_share|ws:${wsId}`)
+    .text('🧹 Сбросить витрину', `a:ws_prof_reset|ws:${wsId}`)
     .row()
     .text('🧩 Режим', `a:ws_prof_mode|ws:${wsId}`)
     .text('📌 IG шаблоны', `a:ws_ig_templates|ws:${wsId}`)
@@ -17652,6 +17651,64 @@ if (p.a === 'a:ws_prof_mode') {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu')
       });
       await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
+      return;
+    }
+
+
+    // Creator profile: reset vitrina (wipe public fields only, keep dialogs/payments intact)
+    if (p.a === 'a:ws_prof_reset') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const text =
+        `🧹 <b>Сбросить витрину?</b>
+
+Это очистит публичные поля витрины:
+• Название
+• Ниши и форматы
+• Гео и описание
+• Instagram и ссылки портфолио
+• Контакт
+
+<b>Не трогаем</b>: диалоги/заявки, оплаты, PRO и подключение канала.
+
+После сброса профиль станет “как новый” — можно заполнить заново.`;
+
+      const kb = new InlineKeyboard()
+        .text('🧹 Да, сбросить', `a:ws_prof_reset_ok|ws:${wsId}`)
+        .row()
+        .text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`)
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
+
+      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+      return;
+    }
+
+    if (p.a === 'a:ws_prof_reset_ok') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      await db.setWorkspaceSetting(wsId, {
+        profile_title: null,
+        profile_niche: null,
+        profile_ig: null,
+        profile_verticals: [],
+        profile_formats: [],
+        profile_geo: null,
+        profile_contact: null,
+        profile_portfolio_urls: [],
+        profile_about: null,
+        profile_mode: 'both',
+      });
+
+      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_reset', { scope: 'public_fields' }); } catch { }
+
+      try { await ctx.answerCallbackQuery({ text: '✅ Витрина сброшена', show_alert: true }); } catch { }
+      await renderWsProfile(ctx, u.id, wsId);
       return;
     }
 
