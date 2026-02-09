@@ -5959,9 +5959,9 @@ function wsProfileKb(wsId, ws) {
   const vCount = Array.isArray(ws.profile_verticals) ? ws.profile_verticals.length : 0;
   const fCount = Array.isArray(ws.profile_formats) ? ws.profile_formats.length : 0;
 
-  // UX: "Витрина" — главный CTA, дальше парные кнопки по смыслу.
+  // UX: "Предпросмотр" — главный CTA, дальше парные кнопки по смыслу.
   const kb = new InlineKeyboard()
-    .text('🪟 Витрина', `a:wsp_preview|ws:${wsId}`)
+    .text('👁 Предпросмотр', `a:wsp_preview|ws:${wsId}`)
     .row()
     .text(`🏷 Ниши (${vCount}/3)`, `a:ws_prof_verticals|ws:${wsId}`)
     .text(`🎬 Форматы (${fCount}/5)`, `a:ws_prof_formats|ws:${wsId}`)
@@ -6106,12 +6106,9 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   }
 
   const blocks = [];
-  blocks.push(`👤 <b>Профиль (витрина)</b>`);
+  blocks.push(`👤 <b>Профиль</b>`);
   blocks.push('');
-  blocks.push(`<b>IG leads → TG deals</b>`);
-  blocks.push(`Бренды находят тебя в Instagram → по ссылке открывают этот профиль → дальше всё в Telegram.`);
-  blocks.push('');
-  blocks.push(`🪟 Витрина: открой кнопку ниже — там находится «📝 Оставить заявку».`);
+  blocks.push(`Это твоя <b>витрина для брендов</b>. Заполни поля ниже и открой <b>предпросмотр</b>, чтобы увидеть, как она выглядит.`);
   blocks.push('');
   blocks.push(statusLines.join('\n'));
 
@@ -6744,13 +6741,12 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const blocks = [];
   blocks.push(`✨ <b>${escapeHtml(name)}</b>`);
   blocks.push('');
-  blocks.push(`IG leads → TG deals: бренд находит в Instagram → сделка закрывается в Telegram.`);
   if (isPreview) {
-    blocks.push(`🪟 <b>Предпросмотр</b>: это витрина креатора. Заявку оставляют бренды по этой ссылке.`);
+    blocks.push(`👁 <b>Предпросмотр</b>: так бренды видят твою витрину.`);
     if (isOwner) blocks.push(`🔗 Чтобы поделиться витриной — нажми «🔗 Поделиться» ниже.`);
   } else {
-    if (hideApply) blocks.push(`🪟 Витрина (read-only): продолжай сделку через «💬 Диалог». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
-    else blocks.push(`🪟 Витрина: кнопка ниже — там находится «📝 Оставить заявку».`);
+    if (hideApply) blocks.push(`🪟 Витрина (read-only): продолжай через «💬 Диалог». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
+    else blocks.push(`🪟 Витрина: нажми «📝 Оставить заявку». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
   }
 
   // Основное
@@ -6805,11 +6801,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     }
   }
 
-  blocks.push('');
-  if (!isPreview) {
-    if (hideApply) blocks.push(`Чтобы продолжить — вернись и нажми «💬 Диалог». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
-    else blocks.push(`Если хочешь UGC/интеграцию — нажми «📝 Оставить заявку». Контакты — через «${contactUnlockBtnLabel()}» (Brand Pass).`);
-  } else {
+  if (isPreview) {
+    blocks.push('');
     blocks.push(`Это предпросмотр. Чтобы вернуться — используй «⬅️ Назад» или «📋 Меню».`);
   }
 
