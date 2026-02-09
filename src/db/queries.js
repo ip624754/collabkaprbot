@@ -3491,10 +3491,10 @@ export async function appendBrandLeadCuratorNote(leadId, byUserId, text, opts = 
        (coalesce(coalesce(meta, '{}'::jsonb)->'curator_notes', '[]'::jsonb) ||
         jsonb_build_array(
           jsonb_build_object(
-            'by', $2,
+            'by', $2::int,
             'at', now(),
-            'text', $3,
-            'role', $4
+            'text', $3::text,
+            'role', $4::text
           )
         )
        ),
