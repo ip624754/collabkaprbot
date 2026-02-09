@@ -6724,6 +6724,8 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
       .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:sp|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .text('📝 Заметка', `a:lead_note|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .row();
+    kb.text(`📝 Заметки (${notes.length})`, `a:lead_notes|id:${lead.id}|w:${wsId}|n:0|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .row();
   } else {
     // Curator mode: only templates + status + internal notes (no manual replies)
     kb.text('✅ Принять', `a:lead_tpl_send|id:${lead.id}|k:discuss|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
@@ -6731,6 +6733,8 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
       .row()
       .text('❌ Отказ', `a:lead_tpl_send|id:${lead.id}|k:decline|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .text('📝 Заметка', `a:lead_note|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .row()
+      .text(`📝 Заметки (${notes.length})`, `a:lead_notes|id:${lead.id}|w:${wsId}|n:0|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .row()
       .text('⚡ Шаблоны', `a:lead_tpls|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .text('💬 В работу', `a:lead_set|id:${lead.id}|st:ip|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
@@ -6749,6 +6753,119 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 8000);
   }
 }
+
+
+async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }, notesPage = 0) {
+  const stepId = 'lead_notes_view';
+  const id = Number(leadId || 0);
+  if (!id) {
+    await safeEditOrReply(ctx, '⚠️ Не найдена заявка. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+    return;
+  }
+
+  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(id), 4500);
+  if (!lead) {
+    await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+    return;
+  }
+
+  const wsId = Number(lead.workspace_id);
+  const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 4500);
+  if (!ws) {
+    await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал заново.', { reply_markup: navKb('a:ws_list') });
+    return;
+  }
+
+  const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+  let isCurator = false;
+  if (!isOwner && !isAdmin) {
+    try { isCurator = await db.isCuratorForWorkspace(wsId, actorUserId); } catch {}
+  }
+  if (!isOwner && !isAdmin && !isCurator) {
+    await safeEditOrReply(ctx, '⚠️ Нет доступа к заметкам этой заявки.', { reply_markup: navKb('a:menu') });
+    return;
+  }
+
+  const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
+  const notes = (lead.meta && Array.isArray(lead.meta.curator_notes)) ? lead.meta.curator_notes : [];
+  const total = notes.length;
+
+  const pageSize = 6;
+  const ordered = notes.slice().reverse(); // newest first
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pg = Math.max(0, Math.min(totalPages - 1, Number(notesPage || 0)));
+
+  const slice = ordered.slice(pg * pageSize, (pg + 1) * pageSize);
+
+  // Resolve authors (best-effort)
+  const byIds = Array.from(new Set(slice.map(n => Number(n?.by || 0)).filter(Boolean)));
+  const usersMap = new Map();
+  if (byIds.length) {
+    try {
+      const rows = await db.listUsersByIds(byIds);
+      for (const r of (rows || [])) usersMap.set(Number(r.id), r);
+    } catch {}
+  }
+
+  const roleLabel = (byId) => {
+    const row = usersMap.get(Number(byId)) || null;
+    if (Number(byId) === Number(ws.owner_user_id)) return 'owner';
+    if (row?.tg_id && isSuperAdminTg(Number(row.tg_id))) return 'admin';
+    return 'curator';
+  };
+
+  const whoLabel = (byId) => {
+    const row = usersMap.get(Number(byId)) || null;
+    const uname = row?.tg_username ? '@' + String(row.tg_username).replace(/^@/, '') : null;
+    if (uname) return `${escapeHtml(uname)} <code>id:${escapeHtml(String(byId))}</code> • <i>${escapeHtml(roleLabel(byId))}</i>`;
+    return `<code>id:${escapeHtml(String(byId || '?'))}</code> • <i>${escapeHtml(roleLabel(byId))}</i>`;
+  };
+
+  let text =
+    `📝 <b>Заметки</b> • заявка #${lead.id}\n` +
+    `Канал: <b>${escapeHtml(channel)}</b>\n` +
+    `Всего: <b>${total}</b>\n` +
+    `Стр: <b>${pg + 1}/${totalPages}</b>\n\n`;
+
+  if (!total) {
+    text += 'Пока нет заметок.\nНажми “📝 Добавить заметку”, чтобы оставить внутренний комментарий.';
+  } else {
+    const lines = slice.map((n, i) => {
+      const by = Number(n?.by || 0);
+      const at = n?.at ? fmtTs(n.at) : '';
+      const t = String(n?.text || '').trim();
+      const clipped = clipText(stripBrokenSurrogates(t).replace(/\s+/g, ' '), 420);
+      const head = `• <b>${i + 1 + (pg * pageSize)}</b> • ${whoLabel(by)}${at ? ` • <i>${escapeHtml(at)}</i>` : ''}`;
+      return `${head}\n${escapeHtml(clipped)}`;
+    }).join('\n\n');
+
+    text += lines;
+  }
+
+  const backStatus = normLeadStatus(String(back?.status || 'new'));
+  const backPage = Number(back?.page || 0);
+  const retKey = String(back?.ret || '').trim();
+  const rPart = retKey ? retPartShort(retKey) : '';
+
+  const leadViewCb = `a:lead_view|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
+  const addCb = `a:lead_note|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
+
+  const kb = new InlineKeyboard();
+
+  if (totalPages > 1) {
+    if (pg > 0) kb.text('⬅️', `a:lead_notes|id:${lead.id}|w:${wsId}|n:${pg - 1}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`);
+    if (pg < totalPages - 1) kb.text('➡️', `a:lead_notes|id:${lead.id}|w:${wsId}|n:${pg + 1}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`);
+    kb.row();
+  }
+
+  kb.text('📝 Добавить заметку', addCb).row();
+
+  kbNavRow(kb, leadViewCb);
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
 
 
 
@@ -16111,6 +16228,23 @@ if (p.a === 'a:lead_set') {
       }
       return;
     }
+
+    if (p.a === 'a:lead_notes') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      const leadId = Number(p.id || 0);
+      if (!leadId) return;
+
+      const wsId = Number(p.ws || p.w || 0);
+      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const backPage = Number(p.p || 0);
+      const retKey = String(p.ret || p.r || '').trim() || null;
+      const notesPage = Math.max(0, Number(p.n || 0));
+
+      await renderLeadNotesViewer(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus, page: backPage, ret: retKey }, notesPage);
+      return;
+    }
+
+
 
 
 
