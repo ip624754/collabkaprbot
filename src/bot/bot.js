@@ -3689,7 +3689,6 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   const goals = String(prof.goals || '').trim();
   const req = String(prof.requirements || '').trim();
   const link = String(prof.brand_link || '').trim();
-  const contact = String(prof.contact || '').trim();
 
   const collabKeysAll = parseBrandCollabTypes(String(prof.collab_types || '').trim());
   const payKeySet = new Set(['barter', 'cert', 'paid', 'mixed']);
@@ -3712,9 +3711,6 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   const kb = new InlineKeyboard();
   const brandUrl = link && (/^https?:\/\//i.test(link) ? link : null);
   if (brandUrl) kb.url('🔗 Ссылка бренда', brandUrl).row();
-
-  const cUrl = brandContactUrl(contact);
-  if (cUrl) kb.url('✍️ Контакт', cUrl).row();
 
   kb.text('📝 Оставить заявку', `a:brand_apply|u:${brandUserId}|p:${backPage}`).row();
 
@@ -3947,7 +3943,9 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
-  const ws = await safeWsProfiles(() => db.getWorkspaceAny(wsId), async () => null);
+  // Workspace is optional here (used only for safe display name). Do not fail send flow if DB hiccups.
+  let ws = null;
+  try { ws = await db.getWorkspaceAny(wsId); } catch {}
   const creatorName = ws ? safeCreatorDisplayName(ws) : 'Креатор';
   const creatorLabel = `<b>${escapeHtml(creatorName)}</b>`;
 
@@ -15525,7 +15523,23 @@ if (p.a === 'a:brand_dir_open') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const brandUserId = Number(p.u || 0);
       const backPage = Math.max(0, Number(p.p || 0));
-      await sendBrandApplyDraft(ctx, u, brandUserId, backPage, { edit: true });
+      try {
+        await sendBrandApplyDraft(ctx, u, brandUserId, backPage, { edit: true });
+      } catch (e) {
+        try {
+          console.warn('[brand_apply_send] unhandled', { cid: ctx.state?.cid || null, brandUserId, err: errInfo(e) });
+        } catch {}
+        const kb = new InlineKeyboard()
+          .text('👀 Предпросмотр', `a:brand_apply_preview|u:${brandUserId}|p:${backPage}`)
+          .row()
+          .text('✍️ Изменить', `a:brand_apply_write|u:${brandUserId}|p:${backPage}`)
+          .text('🗑 Сбросить', `a:brand_apply_clear|u:${brandUserId}|p:${backPage}`)
+          .row()
+          .text('⬅️ Назад', `a:brand_apply|u:${brandUserId}|p:${backPage}`)
+          .text('📋 Меню', 'a:menu')
+          .text('🏠 Home', 'a:home');
+        await safeEditOrReply(ctx, '⚠️ Не удалось отправить заявку. Попробуй ещё раз.', { reply_markup: kb }, true);
+      }
       return;
     }
 
