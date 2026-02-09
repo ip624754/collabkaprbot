@@ -3381,6 +3381,20 @@ export async function getUserById(userId) {
 }
 
 
+export async function listUsersByIds(userIds = []) {
+  const ids = Array.from(new Set((userIds || []).map((x) => Number(x)).filter(Boolean)));
+  if (!ids.length) return [];
+  const r = await pool.query(
+    `select id, tg_id, tg_username
+     from users
+     where id = any($1::int[])`,
+    [ids]
+  );
+  return r.rows || [];
+}
+
+
+
 export async function auditBarterThread(threadId, actorUserId, action, payload = {}) {
   // We don't have a dedicated thread_audit table; log into workspace_audit for traceability.
   const r = await pool.query(`select workspace_id from barter_threads where id=$1`, [Number(threadId)]);
