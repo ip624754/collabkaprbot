@@ -5314,6 +5314,17 @@ function leadStatusToCb(s) {
   return 'n';
 }
 
+// Backward/compact compat: allow passing compact status codes from callback_data
+// (ip/cl/sp/n) as well as full enum values (in_progress/closed/spam/new).
+function leadStatusFromCb(s) {
+  const v = String(s || '').toLowerCase().trim();
+  if (v === 'ip') return 'in_progress';
+  if (v === 'cl') return 'closed';
+  if (v === 'sp') return 'spam';
+  if (v === 'n') return 'new';
+  return normLeadStatus(v);
+}
+
 function retToCb(ret) {
   const k = String(ret || '').trim();
   if (!k) return '';
@@ -5324,6 +5335,20 @@ function retToCb(ret) {
   if (k === 'home') return 'h';
   // keep unknown values as-is (backward compat)
   return k;
+}
+
+// Inverse mapping for compact return-to codes.
+// Accepts either a compact code (wo/wp/wl/m/h) or a full key.
+function retFromCb(code) {
+  const c = String(code || '').trim();
+  if (!c) return '';
+  if (c === 'wo') return 'ws_open';
+  if (c === 'wp') return 'ws_profile';
+  if (c === 'wl') return 'ws_list';
+  if (c === 'm') return 'menu';
+  if (c === 'h') return 'home';
+  // already full (or unknown) value
+  return c;
 }
 
 function retPartShort(ret) {
@@ -16191,7 +16216,9 @@ if (p.a === 'a:ws_leads') {
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
-      await renderWsLeadsList(ctx, u.id, wsId, String(p.s || 'new'), Number(p.p || 0), String(p.ret || '') || null);
+      const st = leadStatusFromCb(String(p.s || 'new'));
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim();
+      await renderWsLeadsList(ctx, u.id, wsId, st, Number(p.p || 0), retKey || null);
       return;
     }
 
@@ -16203,11 +16230,11 @@ if (p.a === 'a:ws_leads') {
         return;
       }
       const wsId = Number(p.w || p.ws || 0);
-      const st = String(p.s || 'new');
+      const st = leadStatusFromCb(String(p.s || 'new'));
       const page = Number(p.p || 0);
-      const retKey = String(p.ret || p.r || '').trim();
-      const retPart = retKey ? `|ret:${retKey}` : '';
-      const backCb = wsId ? `a:ws_leads|ws:${wsId}|s:${st}|p:${page}${retPart}` : 'a:menu';
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim();
+      const rPart = retKey ? retPartShort(retKey) : '';
+      const backCb = wsId ? `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${page}${rPart}` : 'a:menu';
       await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
       try {
         await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 15000, 'lead.view');
@@ -16232,7 +16259,10 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
         await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
-      await renderLeadTemplates(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
+      const wsId = Number(p.w || p.ws || 0);
+      const st = leadStatusFromCb(String(p.s || 'new'));
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim();
+      await renderLeadTemplates(ctx, u.id, leadId, { wsId: wsId || null, status: st, page: Number(p.p || 0), ret: retKey });
       return;
     }
 
@@ -16244,13 +16274,18 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
         return;
       }
       const key = String(p.k || 'discuss');
+      const wsId = Number(p.w || p.ws || 0);
+      const st = leadStatusFromCb(String(p.s || 'new'));
+      const page = Number(p.p || 0);
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim();
       try {
-        await renderLeadTemplatePreview(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
+        await renderLeadTemplatePreview(ctx, u.id, leadId, key, { wsId: wsId || null, status: st, page, ret: retKey });
       } catch (e) {
         try { console.warn('[lead_tpl_preview] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз или используй «✍️ Ответить». ';
+        const rPart = retKey ? retPartShort(retKey) : '';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${(Number(p.ws || 0) || 0)}|s:${leadStatusToCb(String(p.s || 'new'))}|p:${Number(p.p || 0)}${(String(p.ret || '').trim() ? retPartShort(String(p.ret || '').trim()) : '')}`)
+          .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${wsId || 0}|s:${leadStatusToCb(st)}|p:${page}${rPart}`)
           .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -16265,13 +16300,18 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
         return;
       }
       const key = String(p.k || 'discuss');
+      const wsId = Number(p.w || p.ws || 0);
+      const st = leadStatusFromCb(String(p.s || 'new'));
+      const page = Number(p.p || 0);
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim();
       try {
-        await sendLeadTemplateReply(ctx, u.id, leadId, key, { wsId: Number(p.ws || 0) || null, status: String(p.s || 'new'), page: Number(p.p || 0), ret: String(p.ret || '') });
+        await sendLeadTemplateReply(ctx, u.id, leadId, key, { wsId: wsId || null, status: st, page, ret: retKey });
       } catch (e) {
         try { console.warn('[lead_tpl_send] unhandled', { leadId, key, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '⚠️ Не удалось отправить шаблон. Попробуй ещё раз или используй «✍️ Ответить». ';
+        const rPart = retKey ? retPartShort(retKey) : '';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${(Number(p.ws || 0) || 0)}|s:${leadStatusToCb(String(p.s || 'new'))}|p:${Number(p.p || 0)}${(String(p.ret || '').trim() ? retPartShort(String(p.ret || '').trim()) : '')}`)
+          .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${wsId || 0}|s:${leadStatusToCb(st)}|p:${page}${rPart}`)
           .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -16307,23 +16347,29 @@ if (p.a === 'a:lead_set') {
         return;
       }
 
-      const st = normLeadStatus(p.st);
+      const st = leadStatusFromCb(String(p.st || 'new'));
+      const backWsId = Number(p.w || p.ws || 0);
+      const backStatus = leadStatusFromCb(String(p.s || 'new'));
+      const backPage = Number(p.p || 0);
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim();
       const updated = await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, st), { op: 'lead_status', leadId, st });
       if (!updated) {
         const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
+        const rPart = retKey ? retPartShort(retKey) : '';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${(Number(p.ws || 0) || 0)}|s:${leadStatusToCb(String(p.s || 'new'))}|p:${Number(p.p || 0)}${(String(p.ret || '').trim() ? retPartShort(String(p.ret || '').trim()) : '')}`)
+          .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${backWsId || wsId || 0}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
           .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
         return;
       }
       try {
-        await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: String(p.s || st), page: Number(p.p || 0), ret: String(p.ret || '') });
+        await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus || st, page: backPage, ret: retKey });
       } catch (e) {
         try { console.warn('[lead_set] unhandled', { leadId, st, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '✅ Статус обновлён. (Экран не удалось перерисовать — открой заявку заново.)';
+        const rPart = retKey ? retPartShort(retKey) : '';
         const kb = new InlineKeyboard()
-          .text('⬅️ Назад', `a:ws_leads|w:${(Number(p.ws || 0) || 0)}|s:${leadStatusToCb(String(p.s || st))}|p:${Number(p.p || 0)}${(String(p.ret || '').trim() ? retPartShort(String(p.ret || '').trim()) : '')}`)
+          .text('⬅️ Назад', `a:ws_leads|w:${backWsId || wsId || 0}|s:${leadStatusToCb(backStatus || st)}|p:${backPage}${rPart}`)
           .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
       }
@@ -16335,10 +16381,10 @@ if (p.a === 'a:lead_set') {
       const leadId = Number(p.id || 0);
       if (!leadId) return;
 
-      const wsId = Number(p.ws || p.w || 0);
-      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const wsId = Number(p.w || p.ws || 0);
+      const backStatus = leadStatusFromCb(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
-      const retKey = String(p.ret || p.r || '').trim() || null;
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim() || null;
       const notesPage = Math.max(0, Number(p.n || 0));
 
       await renderLeadNotesViewer(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus, page: backPage, ret: retKey }, notesPage);
@@ -16356,9 +16402,9 @@ if (p.a === 'a:lead_set') {
       if (!leadId) return;
 
       const wsId = Number(p.w || p.ws || 0);
-      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const backStatus = leadStatusFromCb(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
-      const retKey = String(p.ret || p.r || '').trim() || null;
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim() || null;
       const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
 
       if (notesPage !== null) {
@@ -16405,9 +16451,9 @@ if (p.a === 'a:lead_set') {
 
       const actorRole = isOwner ? 'owner' : (isAdmin ? 'admin' : 'curator');
 
-      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const backStatus = leadStatusFromCb(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
-      const retKey = String(p.ret || p.r || '').trim() || null;
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim() || null;
       const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
       const rPart = retKey ? retPartShort(retKey) : '';
       const nbPart = (notesPage !== null) ? `|nb:${notesPage}` : '';
@@ -16478,9 +16524,9 @@ if (p.a === 'a:lead_set') {
 
       const actorRole = isOwner ? 'owner' : (isAdmin ? 'admin' : 'curator');
 
-      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const backStatus = leadStatusFromCb(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
-      const retKey = String(p.ret || p.r || '').trim() || null;
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim() || null;
       const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
       const rPart = retKey ? retPartShort(retKey) : '';
 
@@ -16550,9 +16596,9 @@ if (p.a === 'a:lead_set') {
         { op: 'lead_note_tpl', leadId },
       );
       if (!saved) {
-        const backStatus = normLeadStatus(String(p.s || 'new'));
+        const backStatus = leadStatusFromCb(String(p.s || 'new'));
         const backPage = Number(p.p || 0);
-        const retKey = String(p.ret || p.r || '').trim() || null;
+        const retKey = String(p.ret || retFromCb(p.r) || '').trim() || null;
         const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
         const rPart = retKey ? retPartShort(retKey) : '';
         const nbPart = (notesPage !== null) ? `|nb:${notesPage}` : '';
@@ -16567,9 +16613,9 @@ if (p.a === 'a:lead_set') {
         return;
       }
 
-      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const backStatus = leadStatusFromCb(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
-      const retKey = String(p.ret || p.r || '').trim() || null;
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim() || null;
       const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
 
       if (notesPage !== null) {
@@ -16597,12 +16643,13 @@ if (p.a === 'a:lead_set') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
 
-      await setExpectText(ctx.from.id, { type: 'lead_reply', leadId, wsId: Number(ws.id), backStatus: String(p.s || 'new'), backPage: Number(p.p || 0), ret: String(p.ret || '') });
+      const backStatus = leadStatusFromCb(String(p.s || 'new'));
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim();
+      await setExpectText(ctx.from.id, { type: 'lead_reply', leadId, wsId: Number(ws.id), backStatus, backPage: Number(p.p || 0), ret: retKey });
 
-            const retKey = String(p.ret || p.r || '').trim();
       const rPart = retKey ? retPartShort(retKey) : '';
       const kb = new InlineKeyboard()
-        .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:${leadStatusToCb(String(p.s || 'new'))}|p:${Number(p.p || 0)}${rPart}`);
+        .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:${leadStatusToCb(backStatus)}|p:${Number(p.p || 0)}${rPart}`);
 
       await safeEditOrReply(ctx, 
         `✍️ <b>Ответ на заявку #${leadId}</b>
