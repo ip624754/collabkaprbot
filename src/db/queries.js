@@ -3473,7 +3473,7 @@ export async function listBrandLeads(workspaceId, status, limit = 10, offset = 0
   return r.rows || [];
 }
 
-export async function appendBrandLeadCuratorNote(leadId, byUserId, text) {
+export async function appendBrandLeadCuratorNote(leadId, byUserId, text, opts = {}) {
   const id = Number(leadId || 0);
   const by = Number(byUserId || 0);
   const t = String(text || '').trim();
@@ -3481,20 +3481,42 @@ export async function appendBrandLeadCuratorNote(leadId, byUserId, text) {
 
   const safeText = t.length > 1200 ? (t.slice(0, 1200) + '…') : t;
 
+  const roleRaw = opts && typeof opts === 'object' ? String(opts.role || '').trim() : '';
+  const role = roleRaw ? roleRaw.toLowerCase() : null;
+
+  let tags = [];
+  try {
+    if (opts && typeof opts === 'object' && Array.isArray(opts.tags)) {
+      tags = opts.tags
+        .map((x) => String(x || '').trim().replace(/^#/, '').toLowerCase())
+        .filter(Boolean);
+      tags = Array.from(new Set(tags)).slice(0, 8);
+    }
+  } catch {}
+  const tagsArr = tags.length ? tags : null;
+
   const r = await pool.query(
     `update brand_leads
      set meta = jsonb_set(
        coalesce(meta, '{}'::jsonb),
        '{curator_notes}',
        (coalesce(coalesce(meta, '{}'::jsonb)->'curator_notes', '[]'::jsonb) ||
-        jsonb_build_array(jsonb_build_object('by', $2, 'at', now(), 'text', $3))
+        jsonb_build_array(
+          jsonb_build_object(
+            'by', $2,
+            'at', now(),
+            'text', $3,
+            'role', $4,
+            'tags', coalesce(to_jsonb($5::text[]), '[]'::jsonb)
+          )
+        )
        ),
        true
      ),
      updated_at = now()
      where id = $1
      returning meta`,
-    [id, by, safeText]
+    [id, by, safeText, role, tagsArr]
   );
   return r.rows[0] || null;
 }
