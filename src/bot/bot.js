@@ -12521,14 +12521,23 @@ ${card}`;
 
       await safeDeleteIncomingUserMessage(ctx);
 
-      try {
-        await safeLeadWrite(
-          () => db.appendBrandLeadCuratorNote(leadId, u.id, noteText, { role: role || null, tags }),
-          { op: 'lead_note', leadId },
-        );
-      } catch {}
+      const saved = await safeLeadWrite(
+        () => db.appendBrandLeadCuratorNote(leadId, u.id, noteText, { role: role || null }),
+        { op: 'lead_note', leadId },
+      );
 
       await clearExpectText(ctx.from.id);
+
+      if (!saved) {
+        const kb = new InlineKeyboard()
+          .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(String(exp.backStatus || 'new'))}|p:${Number(exp.backPage || 0)}${rPart}`)
+          .text('📝 Заметки', `a:lead_notes|id:${leadId}|w:${wsId}|n:${Number(exp.nb || 0)}|s:${leadStatusToCb(String(exp.backStatus || 'new'))}|p:${Number(exp.backPage || 0)}${rPart}`)
+          .row()
+          .text('📋 Меню', 'a:menu')
+          .text('🏠 Home', 'a:home');
+        await ctx.reply('⚠️ Не смог сохранить заметку. Попробуй ещё раз.', { reply_markup: kb });
+        return;
+      }
 
       const backStatus = String(exp.backStatus || 'new');
       const backPage = Number(exp.backPage || 0);
@@ -15263,7 +15272,7 @@ if (p.a === 'a:brand_dir_open') {
       await ctx.answerCallbackQuery();
 
       const ret = String(p.ret || 'menu');
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
@@ -15279,7 +15288,7 @@ if (p.a === 'a:brand_dir_open') {
       if (!brandUserId) return;
 
       const ret = String(p.ret || 'menu');
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const r = normBxRet(p.r, wsId ? BX_HOME.BX_OPEN : h);
@@ -15504,7 +15513,7 @@ if (p.a === 'a:menu') {
     if (p.a === 'a:cur_ws_off') {
       // Backward-compat: old buttons for disabled workspaces
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
@@ -15521,7 +15530,7 @@ if (p.a === 'a:menu') {
         await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
         return;
       }
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
@@ -15536,7 +15545,7 @@ if (p.a === 'a:menu') {
         await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
         return;
       }
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
@@ -15572,7 +15581,7 @@ if (p.a === 'a:menu') {
         await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
         return;
       }
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
@@ -15679,7 +15688,7 @@ if (p.a === 'a:menu') {
         await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
         return;
       }
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const gwId = Number(p.i || 0);
@@ -15705,7 +15714,7 @@ if (p.a === 'a:menu') {
         await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
         return;
       }
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const gwId = Number(p.i || 0);
@@ -15738,7 +15747,7 @@ if (p.a === 'a:menu') {
         await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
         return;
       }
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const gwId = Number(p.i || 0);
@@ -15772,7 +15781,7 @@ if (p.a === 'a:menu') {
     if (p.a === 'a:cur_note_cancel') {
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const gwId = Number(p.i || 0);
@@ -15782,7 +15791,7 @@ if (p.a === 'a:menu') {
     }
 
 if (p.a === 'a:wsp_preview') {
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return ctx.answerCallbackQuery({ text: 'Workspace не найден.' });
@@ -15796,7 +15805,7 @@ if (p.a === 'a:wsp_preview') {
     // Public profile (vitrina)
     if (p.a === 'a:wsp_open') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
@@ -15817,7 +15826,7 @@ if (p.a === 'a:send_request_to_creator') {
 }
 
 if (p.a === 'a:wsp_lead_new') {
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
@@ -16177,7 +16186,7 @@ if (p.a === 'a:brand_app_card') {
 
 if (p.a === 'a:ws_leads') {
       try { await ctx.answerCallbackQuery(); } catch {}
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
@@ -16192,10 +16201,10 @@ if (p.a === 'a:ws_leads') {
         await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const st = String(p.s || 'new');
       const page = Number(p.p || 0);
-      const retKey = String(p.ret || '').trim();
+      const retKey = String(p.ret || p.r || '').trim();
       const retPart = retKey ? `|ret:${retKey}` : '';
       const backCb = wsId ? `a:ws_leads|ws:${wsId}|s:${st}|p:${page}${retPart}` : 'a:menu';
       await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
@@ -16345,7 +16354,7 @@ if (p.a === 'a:lead_set') {
       const leadId = Number(p.id || 0);
       if (!leadId) return;
 
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const backStatus = normLeadStatus(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
       const retKey = String(p.ret || p.r || '').trim() || null;
@@ -16535,10 +16544,25 @@ if (p.a === 'a:lead_set') {
       const tplKey = normLeadNoteTplKey(p.k);
       const tpl = LEAD_NOTE_TEMPLATES[tplKey] || LEAD_NOTE_TEMPLATES.wb;
 
-      try {
-        await db.appendBrandLeadCuratorNote(leadId, u.id, tpl.text, { role: actorRole, tags: tpl.tags || [] });
-      } catch (e) {
-        await safeEditOrReply(ctx, '⚠️ Не смог сохранить заметку. Попробуй ещё раз.', { reply_markup: navKb('a:menu') });
+      const saved = await safeLeadWrite(
+        () => db.appendBrandLeadCuratorNote(leadId, u.id, tpl.text, { role: actorRole }),
+        { op: 'lead_note_tpl', leadId },
+      );
+      if (!saved) {
+        const backStatus = normLeadStatus(String(p.s || 'new'));
+        const backPage = Number(p.p || 0);
+        const retKey = String(p.ret || p.r || '').trim() || null;
+        const notesPage = (p.nb !== undefined && p.nb !== null) ? Math.max(0, Number(p.nb || 0)) : null;
+        const rPart = retKey ? retPartShort(retKey) : '';
+        const nbPart = (notesPage !== null) ? `|nb:${notesPage}` : '';
+        const backCb = (notesPage !== null)
+          ? `a:lead_notes|id:${leadId}|w:${wsId}|n:${notesPage}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`
+          : `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
+        const kb = new InlineKeyboard()
+          .text('⬅️ Назад', backCb)
+          .text('📋 Меню', 'a:menu')
+          .text('🏠 Home', 'a:home');
+        await safeEditOrReply(ctx, '⚠️ Не смог сохранить заметку. Попробуй ещё раз.', { reply_markup: kb });
         return;
       }
 
@@ -16574,7 +16598,7 @@ if (p.a === 'a:lead_set') {
 
       await setExpectText(ctx.from.id, { type: 'lead_reply', leadId, wsId: Number(ws.id), backStatus: String(p.s || 'new'), backPage: Number(p.p || 0), ret: String(p.ret || '') });
 
-            const retKey = String(p.ret || '').trim();
+            const retKey = String(p.ret || p.r || '').trim();
       const rPart = retKey ? retPartShort(retKey) : '';
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:${leadStatusToCb(String(p.s || 'new'))}|p:${Number(p.p || 0)}${rPart}`);
@@ -16726,7 +16750,7 @@ if (p.a === 'a:lead_set') {
 
     if (p.a === 'a:ws_profile') {
       try { await ctx.answerCallbackQuery(); } catch {}
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       if (!wsId) {
         await safeEditOrReply(ctx, '⚠️ Канал не выбран. Открой 📋 Меню → выбери канал и повтори шаг.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
         return;
@@ -16738,7 +16762,7 @@ if (p.a === 'a:lead_set') {
     
     if (p.a === 'a:ws_share') {
       try { await ctx.answerCallbackQuery(); } catch {}
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       if (!wsId) { await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал заново.', { reply_markup: navKb('a:ws_list') }); return; }
       await renderWsShareMenu(ctx, u.id, wsId, String(p.ret || '') || null);
       return;
@@ -16748,7 +16772,7 @@ if (p.a === 'a:lead_set') {
 
     if (p.a === 'a:ws_share_send') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (!wsId) return;
@@ -16760,7 +16784,7 @@ if (p.a === 'a:lead_set') {
 
 if (p.a === 'a:ws_ig_templates') {
   await ctx.answerCallbackQuery();
-  const wsId = Number(p.ws || 0);
+  const wsId = Number(p.w || p.ws || 0);
   if (!wsId) return;
   await renderWsIgTemplatesMenu(ctx, u.id, wsId);
   return;
@@ -16768,7 +16792,7 @@ if (p.a === 'a:ws_ig_templates') {
 
 if (p.a === 'a:ws_ig_templates_send') {
   await ctx.answerCallbackQuery();
-  const wsId = Number(p.ws || 0);
+  const wsId = Number(p.w || p.ws || 0);
   if (!wsId) return;
   const t = String(p.t || 'story');
   await sendWsIgTemplateMessage(ctx, u.id, wsId, t);
@@ -16778,7 +16802,7 @@ if (p.a === 'a:ws_ig_templates_send') {
 
 if (p.a === 'a:ws_ig_dm') {
   await ctx.answerCallbackQuery();
-  const wsId = Number(p.ws || 0);
+  const wsId = Number(p.w || p.ws || 0);
   if (!wsId) return;
   const tone = String(p.tone || 'soft');
   const i = Number(p.i || 0);
@@ -16936,7 +16960,7 @@ if (p.a === 'a:ws_prof_mode') {
         return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
       }
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const offerId = (p.o !== undefined && p.o !== null && p.o !== '') ? Number(p.o) : null;
@@ -17135,7 +17159,7 @@ ${link}`;
 
     if (p.a === 'a:brand_profile') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand'); // brand | offer | lead | verify
@@ -17159,7 +17183,7 @@ ${link}`;
     // Brand profile edit (base 4/4 fields)
     if (p.a === 'a:brand_profile_edit') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17182,7 +17206,7 @@ ${link}`;
     // Brand profile niche picker (single select, checkmark UX)
     if (p.a === 'a:brand_niche_pick') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -17203,7 +17227,7 @@ ${link}`;
 
     if (p.a === 'a:brand_niche_set') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -17231,7 +17255,7 @@ ${link}`;
 
     if (p.a === 'a:brand_niche_clear') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const ret = String(p.ret || 'brand');
       const bo = p.bo ? Number(p.bo) : null;
       const bp = p.bp ? Number(p.bp) : 0;
@@ -17259,7 +17283,7 @@ ${link}`;
     }
 
     if (p.a === 'a:brand_continue') {
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       if (String(p.ret || '') !== 'lead' || !wsId) {
@@ -17285,7 +17309,7 @@ ${link}`;
 
     if (p.a === 'a:brand_prof_more') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17297,7 +17321,7 @@ ${link}`;
 
     if (p.a === 'a:brand_prof_set') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17338,7 +17362,7 @@ ${link}`;
 
     // Brand profile: structured collab types multi-select
     if (p.a === 'a:brand_ty_t') {
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17386,7 +17410,7 @@ ${link}`;
 
     if (p.a === 'a:brand_ty_clear') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17410,7 +17434,7 @@ ${link}`;
 
     if (p.a === 'a:brand_ty_done') {
       await ctx.answerCallbackQuery({ text: '✅ Сохранено' });
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17424,7 +17448,7 @@ ${link}`;
     // Brand profile: advanced structured meta (budget bucket / goals tags / requirements tags)
     if (p.a === 'a:brand_bb_pick') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17436,7 +17460,7 @@ ${link}`;
 
     if (p.a === 'a:brand_bb_set') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17454,7 +17478,7 @@ ${link}`;
 
     if (p.a === 'a:brand_bb_clear') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17467,7 +17491,7 @@ ${link}`;
 
     if (p.a === 'a:brand_bb_done') {
       await ctx.answerCallbackQuery({ text: '✅ Сохранено' });
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17479,7 +17503,7 @@ ${link}`;
 
     if (p.a === 'a:brand_gt_pick') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17491,7 +17515,7 @@ ${link}`;
 
     if (p.a === 'a:brand_gt_t') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17513,7 +17537,7 @@ ${link}`;
 
     if (p.a === 'a:brand_gt_clear') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17526,7 +17550,7 @@ ${link}`;
 
     if (p.a === 'a:brand_gt_done') {
       await ctx.answerCallbackQuery({ text: '✅ Сохранено' });
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17538,7 +17562,7 @@ ${link}`;
 
     if (p.a === 'a:brand_rt_pick') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17550,7 +17574,7 @@ ${link}`;
 
     if (p.a === 'a:brand_rt_t') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17572,7 +17596,7 @@ ${link}`;
 
     if (p.a === 'a:brand_rt_clear') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17585,7 +17609,7 @@ ${link}`;
 
     if (p.a === 'a:brand_rt_done') {
       await ctx.answerCallbackQuery({ text: '✅ Сохранено' });
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17598,7 +17622,7 @@ ${link}`;
 
     if (p.a === 'a:brand_prof_reset') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17619,7 +17643,7 @@ ${link}`;
     }
 
     if (p.a === 'a:brand_prof_reset_ok') {
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const ret = String(p.ret || 'brand');
@@ -17645,7 +17669,7 @@ ${link}`;
 
     if (p.a === 'a:brand_pass') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
@@ -17664,7 +17688,7 @@ ${link}`;
 
     if (p.a === 'a:brand_plan') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
@@ -17687,7 +17711,7 @@ ${link}`;
         return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
       }
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const plan = String(p.plan || 'basic').toLowerCase();
@@ -17717,7 +17741,7 @@ ${link}`;
     // Profile Matching (pm_*)
     if (p.a === 'a:pm_home') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
@@ -17730,7 +17754,7 @@ ${link}`;
 
     if (p.a === 'a:pm_reset') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       await pmResetState(ctx.from.id, wsId);
@@ -17746,7 +17770,7 @@ ${link}`;
 
     if (p.a === 'a:pm_tog') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const type = String(p.t || 'v');
@@ -17782,7 +17806,7 @@ ${link}`;
 
     if (p.a === 'a:pm_view') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const target = Number(p.id || 0);
@@ -17805,7 +17829,7 @@ if (p.a === 'a:match_home') {
         return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
       }
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const tierId = String(p.tier || 'S').toUpperCase();
@@ -17841,7 +17865,7 @@ if (p.a === 'a:match_home') {
         return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
       }
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const durId = String(p.dur || '1d');
@@ -17867,7 +17891,7 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:feat_view') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       await renderFeaturedView(ctx, u.id, wsId, Number(p.id), Number(p.p || 0), h);
       return;
@@ -17875,7 +17899,7 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:feat_stop') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const id = Number(p.id);
@@ -18144,7 +18168,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:bx_smart') {
       await ctx.answerCallbackQuery();
 
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const mode = await resolveUiMode(ctx.from.id);
@@ -18182,7 +18206,7 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:bx_smart_reset') {
       await ctx.answerCallbackQuery();
 
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const mode = await resolveUiMode(ctx.from.id);
@@ -18442,7 +18466,7 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:bx_pub') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const offerId = Number(p.o);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
@@ -18453,7 +18477,7 @@ if (p.a === 'a:match_home') {
     // Back-link helper: return to offer view (used by Brand Profile flow)
     if (p.a === 'a:offer_open') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const offerId = Number(p.id || 0);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
       if (!offerId) {
@@ -18820,7 +18844,7 @@ if (p.a === 'a:match_home') {
       return;
     }
     if (p.a === 'a:bx_msg') {
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const offerId = Number(p.o || 0);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
 
@@ -18956,7 +18980,7 @@ if (p.a === 'a:match_home') {
 
     if (p.a === 'a:bx_inbox') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
@@ -19113,7 +19137,7 @@ if (p.a === 'a:bx_retry_help') {
 
     if (p.a === 'a:bx_thread_reply') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const threadId = Number(p.t);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
@@ -19197,7 +19221,7 @@ if (p.a === 'a:bx_retry_help') {
       return;
     }
     if (p.a === 'a:bx_bump') {
-      const wsId = Number(p.ws || 0);
+      const wsId = Number(p.w || p.ws || 0);
       const offerId = Number(p.o || p.id || 0);
 
       if (!wsId || !offerId) {
