@@ -5555,6 +5555,11 @@ function buildLeadTemplateText(ws, lead, key = 'thanks') {
       return `Привет! Подскажи город/доставка и что за продукт — это влияет на сроки.`;
     case 'format':
       return `Привет! Уточни, пожалуйста, что нужно: 🎬 UGC или 📣 интеграция? По форматам у меня: ${formatsShort}.`;
+    case 'decline':
+      return `Спасибо за обращение! Сейчас не сможем взять эту интеграцию.
+
+Если появится релевантный формат/бюджет — будем рады вернуться к диалогу.`;
+
     case 'discuss':
     case 'thanks':
     default:
@@ -6548,10 +6553,23 @@ function leadListTabsKb(wsId, counts, active, ret) {
 }
 
 async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 0, ret = null) {
+  const actorUserId = ownerUserId;
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  const ws = await db.getWorkspaceAny(wsId);
+  if (!ws) {
+    await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
+    return;
+  }
+
+  const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
+  let isCurator = false;
+  if (!isAdmin && !isOwner) {
+    try { isCurator = await db.isCuratorForWorkspace(Number(wsId), Number(actorUserId)); } catch {}
+  }
+  if (!isAdmin && !isOwner && !isCurator) {
+    await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
+    return;
+  }
 
   const st = normLeadStatus(status);
   const p = Math.max(0, Number(page) || 0);
@@ -6599,7 +6617,13 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
     if (p > 0) kb.text('➡️', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p + 1}${rPart}`);
     else kb.row().text('➡️', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p + 1}${rPart}`);
   }
-  const backCb = retKey === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`;
+  let backCb = `a:ws_profile|ws:${wsId}`;
+  if (retKey === 'ws_open') backCb = `a:ws_open|ws:${wsId}`;
+  else if (retKey === 'cw') backCb = `a:cur_ws|ws:${wsId}`;
+  else if (retKey === 'ws_list') backCb = 'a:ws_list';
+  else if (retKey === 'menu') backCb = 'a:menu';
+  else if (retKey === 'home') backCb = 'a:home';
+  else if (!retKey && isCurator && !isOwner && !isAdmin) backCb = `a:cur_ws|ws:${wsId}`;
   kbNavRow(kb, backCb);
 
   try {
@@ -6620,7 +6644,15 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  let isCurator = false;
+  if (!isOwner && !isAdmin) {
+    try { isCurator = await db.isCuratorForWorkspace(wsId, actorUserId); } catch {}
+  }
+  if (!isOwner && !isAdmin && !isCurator) {
+    await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
+    return;
+  }
+  const canManualReply = isOwner || isAdmin;
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
@@ -6640,21 +6672,53 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     text += `\n\n<b>Ответ:</b>\n${escapeHtml(stripBrokenSurrogates(String(lead.reply_text)))}`;
   }
 
+  const notes = (lead.meta && Array.isArray(lead.meta.curator_notes)) ? lead.meta.curator_notes : [];
+  if (notes.length) {
+    const last = notes.slice(-3).reverse();
+    const lines = last.map((n) => {
+      const by = n?.by ? `id:${n.by}` : 'id:?';
+      const at = n?.at ? fmtTs(n.at) : '';
+      const t = String(n?.text || '').trim();
+      const clipped = clipText(t.replace(/\s+/g, ' '), 220);
+      return `• <code>${escapeHtml(by)}</code>${at ? ` • <i>${escapeHtml(at)}</i>` : ''}: ${escapeHtml(clipped)}`;
+    }).join('\n');
+    text += `\n\n📝 <b>Заметки</b>\n${lines}`;
+  }
+
   const st = normLeadStatus(lead.status);
 
   const retKey = String(back?.ret || '').trim();
   const rPart = retKey ? retPartShort(retKey) : '';
+  const listCb = `a:ws_leads|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`;
 
-  const kb = new InlineKeyboard()
-    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-    .text('⚡ Шаблоны', `a:lead_tpls|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-    .row()
-    .text('💬 В работу', `a:lead_set|id:${lead.id}|st:ip|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-    .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:cl|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-    .row()
-    .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:sp|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-    .row();
-  kbNavRow(kb, `a:ws_leads|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`);
+  const kb = new InlineKeyboard();
+
+  if (canManualReply) {
+    kb.text('✍️ Ответить', `a:lead_reply|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .text('⚡ Шаблоны', `a:lead_tpls|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .row()
+      .text('💬 В работу', `a:lead_set|id:${lead.id}|st:ip|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:cl|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .row()
+      .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:sp|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .text('📝 Заметка', `a:lead_note|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .row();
+  } else {
+    // Curator mode: only templates + status + internal notes (no manual replies)
+    kb.text('✅ Принять', `a:lead_tpl_send|id:${lead.id}|k:discuss|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .text('🧾 Детали', `a:lead_tpl_send|id:${lead.id}|k:brief|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .row()
+      .text('❌ Отказ', `a:lead_tpl_send|id:${lead.id}|k:decline|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .text('📝 Заметка', `a:lead_note|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .row()
+      .text('⚡ Шаблоны', `a:lead_tpls|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .text('💬 В работу', `a:lead_set|id:${lead.id}|st:ip|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .row()
+      .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:cl|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .row();
+  }
+
+  kbNavRow(kb, listCb);
 
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
@@ -7445,6 +7509,7 @@ const LEAD_TPLS = [
   { key: 'brief', label: '🧾 Пришли бриф', icon: '🧾' },
   { key: 'timing', label: '⏱ Сроки / дедлайн', icon: '⏱' },
   { key: 'format', label: '🧩 UGC или интеграция?', icon: '🧩' },
+  { key: 'decline', label: '❌ Отказ', icon: '❌' },
 ];
 
 function kbTplList(kb, templates, mkCb) {
@@ -7567,7 +7632,15 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  let isCurator = false;
+  if (!isOwner && !isAdmin) {
+    try { isCurator = await db.isCuratorForWorkspace(wsId, actorUserId); } catch {}
+  }
+  if (!isOwner && !isAdmin && !isCurator) {
+    await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
+    return;
+  }
+  const canManualReply = isOwner || isAdmin;
 
   const retKey = String(back?.ret || '').trim();
   const rPart = retKey ? retPartShort(retKey) : '';
@@ -7583,9 +7656,10 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
 
     const kb = new InlineKeyboard();
     kbTplList(kb, LEAD_TPLS, (tplKey) => `a:lead_tpl|id:${lead.id}|k:${tplKey}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`);
-    kb.text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-      .row()
-      .text('⬅️ Назад', `a:lead_view|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+    if (canManualReply) {
+      kb.text('✍️ Ответить вручную', `a:lead_reply|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`).row();
+    }
+    kb.text('⬅️ Назад', `a:lead_view|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
     try {
@@ -7627,11 +7701,11 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
   const kb = new InlineKeyboard();
   kbTplIconPicker(kb, LEAD_TPLS, (k2) => `a:lead_tpl|id:${lead.id}|k:${k2}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`, 3);
   kb.text('📨 Отправить', `a:lead_tpl_send|id:${lead.id}|k:${tplKey}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-    .row()
-    .text('🗂 Шаблоны', `a:lead_tpls|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-    .text('✍️ Ответить', `a:lead_reply|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
-    .row()
-    .text('⬅️ Назад', `a:lead_view|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+    .row();
+  kb.text('🗂 Шаблоны', `a:lead_tpls|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`);
+  if (canManualReply) kb.text('✍️ Ответить', `a:lead_reply|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`);
+  kb.row();
+  kb.text('⬅️ Назад', `a:lead_view|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
     .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   try {
@@ -7966,6 +8040,7 @@ const LEAD_TPL_LABELS = {
   brief: '🧾 Пришли бриф',
   timing: '⏱ Сроки / дедлайн',
   format: '🧩 UGC или интеграция?',
+  decline: '❌ Отказ',
 };
 
 function normLeadTplKey(k) {
@@ -7993,7 +8068,15 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  let isCurator = false;
+  if (!isOwner && !isAdmin) {
+    try { isCurator = await db.isCuratorForWorkspace(wsId, actorUserId); } catch {}
+  }
+  if (!isOwner && !isAdmin && !isCurator) {
+    await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
+    return;
+  }
+  const canManualReply = isOwner || isAdmin;
 
   const brandTgId = Number(lead.brand_tg_id || 0);
   if (!brandTgId) { try { await ctx.answerCallbackQuery({ text: 'У бренда нет TG id.' }); } catch {} return; }
@@ -8041,8 +8124,20 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   await safeLeadWrite(() => db.markBrandLeadReplied(leadId, replyText, Number(actorUserId)), { op: 'lead_mark_replied', leadId });
 
-  // auto move status to in_progress if it was new
-  if (normLeadStatus(lead.status) === 'new') {
+  // curator auto-note (internal)
+  if (isCurator && !isOwner && !isAdmin) {
+    const k = normLeadTplKey(tplKey);
+    const lbl = LEAD_TPL_LABELS[k] || k;
+    try { await safeLeadWrite(() => db.appendBrandLeadCuratorNote(leadId, Number(actorUserId), `Отправлен шаблон: ${lbl}`), { op: 'lead_note_auto', leadId }); } catch {}
+  }
+
+  // status transitions
+  const curSt = normLeadStatus(lead.status);
+  if (normLeadTplKey(tplKey) === 'decline') {
+    if (curSt !== 'closed') {
+      await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'closed'), { op: 'lead_status', leadId, st: 'closed' });
+    }
+  } else if (curSt === 'new') {
     await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'in_progress'), { op: 'lead_status', leadId, st: 'in_progress' });
   }
 
@@ -10485,7 +10580,7 @@ ${items.length ? 'Выбери канал:' : 'Пока тебя не назна
   await ctx.reply(text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled) });
 }
 
-function curatorWsKb(wsId, giveaways, checkedSet = new Set()) {
+function curatorWsKb(wsId, giveaways, checkedSet = new Set(), leadCounts = null) {
   const kb = new InlineKeyboard();
   const nowMs = Date.now();
 
@@ -10510,6 +10605,10 @@ function curatorWsKb(wsId, giveaways, checkedSet = new Set()) {
 
     kb.row();
   }
+
+  const newLeads = leadCounts ? Number(leadCounts.new || 0) : 0;
+  const leadBadge = newLeads ? ` (${newLeads})` : '';
+  kb.text(`📨 Inbox брендов${leadBadge}`, `a:ws_leads|w:${wsId}|s:n|p:0${retPartShort('cw')}`).row();
 
   kb.text('❌ Выйти из канала', `a:cur_leave_q|ws:${wsId}`).row();
 
@@ -10542,8 +10641,18 @@ async function renderCuratorWorkspace(ctx, userId, wsId) {
 
   const giveaways = await db.listGiveawaysForCurator(wsIdNum, userId, 30);
 
+    let leadCounts = null;
+  try { leadCounts = await db.countBrandLeadsByStatus(wsIdNum); } catch {}
+
   
-  const text = `👤 <b>Куратор</b> • ${escapeHtml(wsTitle)}
+  const leadsLine = leadCounts
+    ? `
+
+📨 Заявки брендов: <b>${Number(leadCounts.new || 0)}</b> новых · <b>${Number(leadCounts.in_progress || 0)}</b> в работе`
+    : '';
+
+  
+  const text = `👤 <b>Куратор</b> • ${escapeHtml(wsTitle)}${leadsLine}
 
 ${giveaways.length ? 'Конкурсы:' : 'Пока нет конкурсов.'}
 
@@ -10561,7 +10670,7 @@ ${giveaways.length ? 'Конкурсы:' : 'Пока нет конкурсов.'
     } catch {}
   }
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorWsKb(wsIdNum, giveaways, checkedSet) });
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorWsKb(wsIdNum, giveaways, checkedSet, leadCounts) });
 }
 
 function curatorGwKb(wsId, gwId) {
@@ -12185,7 +12294,48 @@ ${card}`;
       return;
     }
 
-    if (exp.type === 'brand_apply') {
+    
+
+    if (exp.type === 'lead_note') {
+      const leadId = Number(exp.leadId || 0);
+      const wsId = Number(exp.wsId || 0);
+      const noteText = String(ctx.message.text || '').trim();
+
+      if (!leadId || !wsId) {
+        await clearExpectText(ctx.from.id);
+        return ctx.reply('⚠️ Не удалось сохранить заметку.');
+      }
+
+      if (noteText.length < 2) {
+        return ctx.reply('⚠️ Заметка слишком короткая.');
+      }
+      if (noteText.length > 1000) {
+        return ctx.reply('⚠️ Слишком длинно. Укороти до 1000 символов.');
+      }
+
+      await safeDeleteIncomingUserMessage(ctx);
+
+      try {
+        await safeLeadWrite(
+          () => db.appendBrandLeadCuratorNote(leadId, u.id, noteText),
+          { op: 'lead_note', leadId },
+        );
+      } catch {}
+
+      await clearExpectText(ctx.from.id);
+
+      const backStatus = String(exp.backStatus || 'new');
+      const backPage = Number(exp.backPage || 0);
+      const retKey = String(exp.ret || '').trim();
+      const retPart = retKey ? `|ret:${retKey}` : '';
+
+      const kb = new InlineKeyboard()
+        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${wsId}|s:${backStatus}|p:${backPage}${retPart}`)
+        .text('📨 Заявки', `a:ws_leads|ws:${wsId}|s:${backStatus}|p:${backPage}${retPart}`);
+
+      return ctx.reply('✅ Заметка сохранена.', { reply_markup: kb });
+    }
+if (exp.type === 'brand_apply') {
       const brandUserId = Number(exp.brandUserId || 0);
       const backPage = Math.max(0, Number(exp.backPage || 0));
       const msg = String(((ctx.message && ctx.message.text) || (ctx.msg && ctx.msg.text) || '')).trim();
@@ -15913,6 +16063,28 @@ if (p.a === 'a:lead_set') {
         await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
+      const lead = await db.getBrandLeadById(leadId);
+      if (!lead) {
+        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+      const wsId = Number(lead.workspace_id);
+      const ws = await db.getWorkspaceAny(wsId);
+      if (!ws) {
+        await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню и выбери канал заново.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+      const isOwner = Number(ws.owner_user_id) === Number(u.id);
+      const isAdmin = isSuperAdminTg(ctx.from?.id);
+      let isCurator = false;
+      if (!isOwner && !isAdmin) {
+        try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
+      }
+      if (!isOwner && !isAdmin && !isCurator) {
+        await safeEditOrReply(ctx, '⚠️ Нет доступа к изменению статуса этой заявки.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
       const st = normLeadStatus(p.st);
       const updated = await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, st), { op: 'lead_status', leadId, st });
       if (!updated) {
@@ -15924,7 +16096,7 @@ if (p.a === 'a:lead_set') {
         return;
       }
       try {
-        await renderLeadView(ctx, u.id, leadId, { wsId: Number(p.ws || 0) || null, status: String(p.s || st), page: Number(p.p || 0), ret: String(p.ret || '') });
+        await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: String(p.s || st), page: Number(p.p || 0), ret: String(p.ret || '') });
       } catch (e) {
         try { console.warn('[lead_set] unhandled', { leadId, st, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '✅ Статус обновлён. (Экран не удалось перерисовать — открой заявку заново.)';
@@ -15936,6 +16108,78 @@ if (p.a === 'a:lead_set') {
       return;
     }
 
+
+
+    if (p.a === 'a:lead_note_cancel') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      try { await clearExpectText(userTgId); } catch {}
+      const leadId = Number(p.id || 0);
+      if (!leadId) return;
+
+      const wsId = Number(p.ws || 0);
+      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const backPage = Number(p.p || 0);
+      const retKey = String(p.ret || '').trim() || null;
+
+      await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus, page: backPage, ret: retKey });
+      return;
+    }
+
+    if (p.a === 'a:lead_note') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      const leadId = Number(p.id || 0);
+      if (!leadId) return;
+
+      const lead = await db.getBrandLeadById(leadId);
+      if (!lead) {
+        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const wsId = Number(lead.workspace_id);
+      const ws = await db.getWorkspaceAny(wsId);
+      if (!ws) {
+        await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню и выбери канал заново.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const isOwner = Number(ws.owner_user_id) === Number(u.id);
+      const isAdmin = isSuperAdminTg(ctx.from?.id);
+      let isCurator = false;
+      if (!isOwner && !isAdmin) {
+        try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
+      }
+      if (!isOwner && !isAdmin && !isCurator) {
+        await safeEditOrReply(ctx, '⚠️ Нет доступа к заметкам этой заявки.', { reply_markup: navKb('a:menu') });
+        return;
+      }
+
+      const backStatus = normLeadStatus(String(p.s || 'new'));
+      const backPage = Number(p.p || 0);
+      const retKey = String(p.ret || '').trim() || null;
+      const rPart = retKey ? retPartShort(retKey) : '';
+
+      await setExpectText(userTgId, {
+        type: 'lead_note',
+        leadId,
+        wsId,
+        backStatus,
+        backPage,
+        ret: retKey,
+        backCb: `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`,
+      });
+
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', `a:lead_note_cancel|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
+        .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+      const prompt = `📝 <b>Заметка</b> к заявке #${leadId}
+
+Пришли одним сообщением (до 800 символов).
+Заметка видна только внутри команды.`;
+      await safeEditOrReply(ctx, prompt, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
 
     if (p.a === 'a:lead_reply') {
       try { await ctx.answerCallbackQuery(); } catch {}
