@@ -1991,7 +1991,7 @@ function wsMenuKb(wsId, opts = {}) {
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
     .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
     .row()
-    .text('👥 Кураторы канала', `a:ws_settings|ws:${wsId}`)
+    .text('👥 Кураторы канала', `a:cur_manage|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row();
 
@@ -2011,7 +2011,7 @@ function wsSettingsKb(wsId, s) {
     .text(net, `a:net_q|ws:${wsId}|ret:ws`)
     .text(cur, `a:ws_toggle_cur|ws:${wsId}`)
     .row()
-    .text('👥 Управление кураторами', `a:cur_manage|ws:${wsId}`)
+    .text('🧹 Кураторы', `a:cur_manage|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row();
 
@@ -2044,6 +2044,117 @@ function curManageKb(wsId, ws = null) {
   return kb;
 }
 
+async function wsCuratorLimitInfo(wsId) {
+  let isPro = false;
+  try { isPro = await db.isWorkspacePro(Number(wsId)); } catch { isPro = false; }
+  const maxFree = Number(CFG.WORKSPACE_CURATORS_MAX_FREE || 1);
+  const maxPro = Number(CFG.WORKSPACE_CURATORS_MAX_PRO || 5);
+  return { isPro, max: isPro ? maxPro : maxFree };
+}
+
+function curatorLabelShort(c) {
+  return c.tg_username ? ('@' + String(c.tg_username)) : ('id:' + String(c.tg_id || c.user_id));
+}
+
+async function renderCuratorList(ctx, ownerUserId, wsId, opts = {}) {
+  const notice = opts.notice ? String(opts.notice) : '';
+  const ws = await db.getWorkspace(ownerUserId, wsId);
+  if (!ws) {
+    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    return;
+  }
+
+  const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `Канал #${wsId}`);
+
+  const lim = await wsCuratorLimitInfo(wsId);
+  const curatorsRaw = await db.listCurators(wsId);
+  const curators = [...(curatorsRaw || [])].sort((a, b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return ta - tb;
+  });
+  const count = curators.length;
+
+  // Activity summary (last 30 days)
+  let statsRows = [];
+  try {
+    statsRows = await db.getCuratorWorkspaceSummary(wsId, 30, 200);
+  } catch {
+    statsRows = [];
+  }
+  const statsByUser = new Map((statsRows || []).map(r => [Number(r.user_id), r]));
+
+  // Lead performance (last 30 days): taken in work / closed
+  let leadRows = [];
+  try {
+    leadRows = await db.getCuratorLeadStats(wsId, 30);
+  } catch {
+    leadRows = [];
+  }
+  const leadByUser = new Map((leadRows || []).map(r => [Number(r.user_id), r]));
+
+  const limitLine = lim.isPro
+    ? `Лимит кураторов: <b>${lim.max}</b> (PRO ✅)`
+    : `Лимит кураторов: <b>${lim.max}</b> (FREE)`;
+
+  const hint = count
+    ? 'Нажми «⛔ Отозвать», чтобы убрать доступ. Куратор сразу потеряет доступ к этому каналу.'
+    : 'Пока нет кураторов. Добавь по @username или пригласи ссылкой.';
+
+  const lines = curators.map((c, idx) => {
+    const n = idx + 1;
+    const s = statsByUser.get(Number(c.user_id)) || {};
+    const aLast = s.last_at ? new Date(s.last_at) : null;
+    const act = Number(s.actions || 0);
+    const who = escapeHtml(curatorLabelShort(c));
+    const ls = leadByUser.get(Number(c.user_id)) || {};
+    const taken = Number(ls.taken_cnt || 0);
+    const closed = Number(ls.closed_cnt || 0);
+    const lLast = ls.last_at ? new Date(ls.last_at) : null;
+    const lastAt = (() => {
+      const arr = [aLast, lLast].filter(Boolean);
+      if (!arr.length) return null;
+      arr.sort((x, y) => y.getTime() - x.getTime());
+      return arr[0];
+    })();
+    const lastShown = lastAt ? fmtTs(lastAt) : '—';
+    const perf = (taken || closed) ? ` · в работу: <b>${taken}</b> · закрыто: <b>${closed}</b>` : '';
+    return `• <b>#${n}</b> ${who} · last: <code>${escapeHtml(lastShown || '—')}</code> · actions(30d): <b>${act}</b>${perf}`;
+  });
+
+  const text = `🧹 <b>Кураторы</b>
+
+Канал: <b>${escapeHtml(title)}</b>
+${limitLine}
+Сейчас: <b>${count}</b>
+
+${escapeHtml(hint)}
+
+${lines.length ? lines.join('\n') : ''}${notice ? `\n\n✅ ${escapeHtml(notice)}` : ''}`;
+
+  const kb = new InlineKeyboard();
+  kb.text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)
+    .text('👤 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
+    .row();
+
+  for (let i = 0; i < curators.length; i++) {
+    const c = curators[i];
+    const n = i + 1;
+    const label = curatorLabelShort(c);
+    kb.text(`⛔ #${n} ${label}`, `a:cur_rm_q|ws:${wsId}|u:${c.user_id}|ret:list`).row();
+  }
+
+  if (!lim.isPro && count >= lim.max) {
+    kb.row().text('⭐️ Увеличить лимит (PRO)', `a:ws_pro|ws:${wsId}`);
+  }
+
+  kb.row().text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
 
 async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
   const notice = opts.notice ? String(opts.notice) : '';
@@ -2057,6 +2168,7 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
   const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `Канал #${wsId}`);
   const curators = await db.listCurators(wsId);
   const count = curators?.length || 0;
+  const lim = await wsCuratorLimitInfo(wsId);
 
   // Activity summary (last 30 days) from giveaway_audit
   let statsRows = [];
@@ -2071,6 +2183,19 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
     if (uid) statsById.set(uid, r);
   }
 
+  // Lead performance (last 30 days): taken in work / closed
+  let leadRows = [];
+  try {
+    leadRows = await db.getCuratorLeadStats(wsId, 30);
+  } catch {
+    leadRows = [];
+  }
+  const leadById = new Map();
+  for (const r of leadRows || []) {
+    const uid = Number(r.user_id || 0);
+    if (uid) leadById.set(uid, r);
+  }
+
   const enabled = !!ws.curator_enabled;
   const status = enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
 
@@ -2082,20 +2207,34 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
     const notes = Number(s.notes || 0);
     const reminders = Number(s.reminders || 0);
     const notifies = Number(s.notifies || 0);
-    const last = s.last_at ? fmtTs(s.last_at) : null;
+
+    const ls = leadById.get(Number(c.user_id || 0)) || {};
+    const taken = Number(ls.taken_cnt || 0);
+    const closed = Number(ls.closed_cnt || 0);
+    const lastAt = (() => {
+      const a = s.last_at ? new Date(s.last_at) : null;
+      const b = ls.last_at ? new Date(ls.last_at) : null;
+      const arr = [a, b].filter(Boolean);
+      if (!arr.length) return null;
+      arr.sort((x, y) => y.getTime() - x.getTime());
+      return arr[0];
+    })();
+    const last = lastAt ? fmtTs(lastAt) : null;
+
     const lines = [
       `👤 <b>${fmtUname(c)}</b>`,
       `• ⚡ Действий: <b>${actions}</b>`,
       `• 📝 Заметок: <b>${notes}</b>`,
       `• 📌 Напоминаний: <b>${reminders}</b>`,
       `• 📩 Уведомлений владельцу: <b>${notifies}</b>`,
+      `• 📮 В работу: <b>${taken}</b> · ✅ Закрыто: <b>${closed}</b>`,
       `• 🕒 Последнее: <b>${last ? escapeHtml(last) : '—'}</b>`,
     ];
     return lines.join('\n');
   }).join('\n\n');
 
   // Totals (only for listed curators)
-  let totActions = 0, totNotes = 0, totRem = 0, totNot = 0;
+  let totActions = 0, totNotes = 0, totRem = 0, totNot = 0, totTaken = 0, totClosed = 0;
   for (const c of curators || []) {
     const s = statsById.get(Number(c.user_id || 0));
     if (!s) continue;
@@ -2103,6 +2242,12 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
     totNotes += Number(s.notes || 0);
     totRem += Number(s.reminders || 0);
     totNot += Number(s.notifies || 0);
+
+    const ls = leadById.get(Number(c.user_id || 0));
+    if (ls) {
+      totTaken += Number(ls.taken_cnt || 0);
+      totClosed += Number(ls.closed_cnt || 0);
+    }
   }
 
   let activityLines = [];
@@ -2117,6 +2262,10 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
     activityLines = [];
   }
 
+  const limitLine = lim.isPro
+    ? `Лимит кураторов: <b>${lim.max}</b> (PRO ✅)`
+    : `Лимит кураторов: <b>${lim.max}</b> (FREE)`;
+
   const text = `${notice ? `✅ ${escapeHtml(notice)}
 
 ` : ''}👥 <b>Куратор HQ</b>
@@ -2124,12 +2273,15 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
 Канал: <b>${escapeHtml(title)}</b>
 Доступ кураторов: <b>${status}</b>
 Кураторов в списке: <b>${count}</b>
+${limitLine}
 
 <b>Активность (30 дней):</b>
 • ⚡ Действий: <b>${totActions}</b>
 • 📝 Заметок: <b>${totNotes}</b>
 • 📌 Напоминаний: <b>${totRem}</b>
 • 📩 Уведомлений владельцу: <b>${totNot}</b>
+• 📮 В работу: <b>${totTaken}</b>
+• ✅ Закрыто: <b>${totClosed}</b>
 
 <b>Команда (карточки):</b>
 ${count ? cards : 'Пока нет.'}
@@ -8938,14 +9090,24 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     try { await safeLeadWrite(() => db.appendBrandLeadCuratorNote(leadId, Number(actorUserId), `Отправлен шаблон: ${lbl}`, { tags: ['template'] }), { op: 'lead_note_auto', leadId }); } catch {}
   }
 
+
   // status transitions
   const curSt = normLeadStatus(lead.status);
+  const actorIsCurator = (isCurator && !isOwner && !isAdmin);
   if (normLeadTplKey(tplKey) === 'decline') {
     if (curSt !== 'closed') {
-      await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'closed'), { op: 'lead_status', leadId, st: 'closed' });
+      if (actorIsCurator) {
+        await safeLeadWrite(() => db.markBrandLeadClosedBy(leadId, Number(actorUserId)), { op: 'lead_status', leadId, st: 'closed' });
+      } else {
+        await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'closed'), { op: 'lead_status', leadId, st: 'closed' });
+      }
     }
   } else if (curSt === 'new') {
-    await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'in_progress'), { op: 'lead_status', leadId, st: 'in_progress' });
+    if (actorIsCurator) {
+      await safeLeadWrite(() => db.markBrandLeadTakenInWork(leadId, Number(actorUserId)), { op: 'lead_status', leadId, st: 'in_progress' });
+    } else {
+      await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'in_progress'), { op: 'lead_status', leadId, st: 'in_progress' });
+    }
   }
 
   try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
@@ -12555,6 +12717,23 @@ ${escapeHtml(safe)}`;
 Попроси его открыть бота и нажать /start, потом повтори добавление.`);
         return;
       }
+      // Curator limit (FREE/PRO)
+      const wsId = Number(exp.wsId);
+      const limInfo = await wsCuratorLimitInfo(wsId);
+      const curatorsNow = await db.listCurators(wsId);
+      const already = (curatorsNow || []).some(c => Number(c.user_id) === Number(curator.id));
+      if (!already && (curatorsNow || []).length >= limInfo.max) {
+        const msg = limInfo.isPro
+          ? `⛔ Достигнут лимит кураторов: ${limInfo.max}.`
+          : `⛔ Достигнут лимит FREE: ${limInfo.max} куратор.
+
+Включи ⭐️ PRO, чтобы добавить больше кураторов.`;
+        const kb = new InlineKeyboard();
+        if (!limInfo.isPro) kb.text('⭐️ PRO', `a:ws_pro|ws:${wsId}`).row();
+        kb.text('⬅️ Назад', `a:cur_manage|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+        await ctx.reply(msg, { reply_markup: kb });
+        return;
+      }
       await db.addCurator(exp.wsId, curator.id, u.id);
       const ws = await db.getWorkspaceAny(Number(exp.wsId));
       const wsTitle = ws ? wsLabelNice(ws) : `Канал #${exp.wsId}`;
@@ -14681,15 +14860,40 @@ ${list}
     }
     if (payload?.type === 'cur') {
       // curator invite flow
-      const key = k(['cur_invite', payload.wsId, payload.token]);
+      const wsId = Number(payload.wsId || 0);
+      const token = String(payload.token || '');
+      if (!wsId || !token) return ctx.reply('Ссылка недействительна.');
+
+      const key = k(['cur_invite', wsId, token]);
+      const peek = await redis.get(key);
+      if (!peek) return ctx.reply('Ссылка устарела, недействительна или уже была использована.');
+
+      // Limit gate: do NOT burn the invite token if the channel is already at max curators.
+      const lim = await wsCuratorLimitInfo(wsId);
+      let curatorsNow = [];
+      try { curatorsNow = await db.listCurators(wsId); } catch { curatorsNow = []; }
+      const alreadyCurator = (curatorsNow || []).some(c => Number(c.user_id || 0) === Number(u.id));
+      if (!alreadyCurator && (curatorsNow || []).length >= (lim.max || 1)) {
+        const ws = await db.getWorkspaceAny(wsId);
+        const wsTitle = ws ? wsLabelNice(ws) : `Канал #${wsId}`;
+        const msg = `⛔ В этом канале уже достигнут лимит кураторов: <b>${lim.max}</b>.
+
+Канал: <b>${escapeHtml(wsTitle)}</b>
+
+Попроси владельца увеличить лимит (PRO) или отозвать кого-то из списка.`;
+        const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+        return ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb });
+      }
+
       // single-use: consume value atomically when possible
       const val = await consumeOnce(key);
       if (!val) return ctx.reply('Ссылка устарела, недействительна или уже была использована.');
-      const ownerUserId = Number(val.ownerUserId || val.owner_user_id || val.owner || 0);
-      await db.addCurator(payload.wsId, u.id, ownerUserId || u.id);
 
-      const ws = await db.getWorkspaceAny(Number(payload.wsId));
-      const wsTitle = ws ? wsLabelNice(ws) : `Канал #${payload.wsId}`;
+      const ownerUserId = Number(val.ownerUserId || val.owner_user_id || val.owner || 0);
+      await db.addCurator(wsId, u.id, ownerUserId || u.id);
+
+      const ws = await db.getWorkspaceAny(wsId);
+      const wsTitle = ws ? wsLabelNice(ws) : `Канал #${wsId}`;
       const already = await getCuratorMode(ctx.from.id);
       const kb = new InlineKeyboard()
         .text('👤 Открыть кабинет куратора', 'a:cur_home')
@@ -17295,7 +17499,17 @@ if (p.a === 'a:lead_set') {
       const backStatus = leadStatusFromCb(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
       const retKey = String(p.ret || retFromCb(p.r) || '').trim();
-      const updated = await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, st), { op: 'lead_status', leadId, st });
+      let updated = null;
+
+      // If curator (not owner/admin), record meta so owner can see performance.
+      const isCuratorActor = isCurator && !isOwner && !isAdmin;
+      if (isCuratorActor && st === 'in_progress') {
+        updated = await safeLeadWrite(() => db.markBrandLeadTakenInWork(leadId, Number(u.id)), { op: 'lead_taken', leadId });
+      } else if (isCuratorActor && st === 'closed') {
+        updated = await safeLeadWrite(() => db.markBrandLeadClosedBy(leadId, Number(u.id)), { op: 'lead_closed', leadId });
+      } else {
+        updated = await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, st), { op: 'lead_status', leadId, st });
+      }
       if (!updated) {
         const text = '⚠️ Не удалось обновить статус заявки. Попробуй ещё раз.';
         const rPart = retKey ? retPartShort(retKey) : '';
@@ -21143,17 +21357,8 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const curators = await db.listCurators(wsId);
-      const lines = curators.map(c => `• ${c.tg_username ? '@' + escapeHtml(c.tg_username) : 'id:' + c.tg_id}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `👥 <b>Кураторы канала</b>
-
-Нажми на 🗑 рядом с именем, чтобы удалить.
-
-${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
-        parse_mode: 'HTML',
-        reply_markup: curListKb(wsId, curators)
-      });
+      await renderCuratorList(ctx, u.id, wsId);
       return;
     }
 
@@ -21162,13 +21367,14 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       const curatorUserId = Number(p.u);
+      const ret = String(p.ret || 'list');
       const info = await db.getUserTgIdByUserId(curatorUserId);
       const label = info?.tg_username ? '@' + info.tg_username : 'id:' + (info?.tg_id || curatorUserId);
       const kb = new InlineKeyboard()
-        .text('✅ Удалить', `a:cur_rm_do|ws:${wsId}|u:${curatorUserId}`)
-        .text('❌ Отмена', `a:cur_list|ws:${wsId}`);
+        .text('✅ Отозвать', `a:cur_rm_do|ws:${wsId}|u:${curatorUserId}|ret:${ret}`)
+        .text('❌ Отмена', ret === 'manage' ? `a:cur_manage|ws:${wsId}` : `a:cur_list|ws:${wsId}`);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `Удалить куратора <b>${escapeHtml(label)}</b>?`, { parse_mode: 'HTML', reply_markup: kb });
+      await safeEditOrReply(ctx, `Отозвать доступ куратора <b>${escapeHtml(label)}</b>?`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -21177,6 +21383,7 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       const curatorUserId = Number(p.u);
+      const ret = String(p.ret || 'list');
       await db.removeCurator(wsId, curatorUserId);
       await db.auditWorkspace(wsId, u.id, 'ws.curator_removed', { curatorUserId });
 
@@ -21197,18 +21404,12 @@ ${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
         }
       } catch {}
 
-      await ctx.answerCallbackQuery({ text: 'Удалено' });
-      // refresh list
-      const curators = await db.listCurators(wsId);
-      const lines = curators.map(c => `• ${c.tg_username ? '@' + escapeHtml(c.tg_username) : 'id:' + c.tg_id}`);
-      await safeEditOrReply(ctx, `👥 <b>Кураторы канала</b>
-
-Нажми на 🗑 рядом с именем, чтобы удалить.
-
-${lines.length ? lines.join('\n') : 'Пока нет.'}`, {
-        parse_mode: 'HTML',
-        reply_markup: curListKb(wsId, curators)
-      });
+      await ctx.answerCallbackQuery({ text: 'Готово' });
+      if (ret === 'manage') {
+        await renderCuratorManage(ctx, u.id, wsId, { notice: 'Доступ куратора отозван' });
+      } else {
+        await renderCuratorList(ctx, u.id, wsId, { notice: 'Куратор отозван' });
+      }
       return;
     }
 
