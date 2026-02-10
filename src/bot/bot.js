@@ -1464,10 +1464,10 @@ async function renderRoleHub(ctx, u, flags) {
 function curatorModeMenuKb(flags = {}) {
   const { isModerator = false, isAdmin = false } = flags;
 
-  // Curator Mode: максимально коротко и по делу. PRO здесь не нужен (PRO = про Workspace владельца).
+  // Curator Mode: максимально коротко и по делу. Здесь только кураторские действия.
+  // Доступ к своим каналам (как creator/owner) — через «🔓 Обычный режим».
   const kb = new InlineKeyboard()
     .text('👤 Кабинет куратора', 'a:cur_home')
-    .text('📣 Мои каналы', 'a:ws_list')
     .row()
     .text('🧭 Быстрый старт', 'a:guide')
     .text('💬 Поддержка', 'a:support')
@@ -11292,7 +11292,8 @@ function curatorHomeKb(items, modeEnabled = false) {
   // Quick exit to the normal (full) menu.
   if (modeEnabled) kb.text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:menu').row();
 
-  kb.text('📣 Мои каналы', 'a:ws_list').text('💬 Поддержка', 'a:support').row();
+  // Help / support (в curator mode тут нет “Мои каналы”, чтобы не путать: свои каналы доступны через обычный режим).
+  kb.text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
 
   for (const w of items) {
     const on = !!w.curator_enabled;
@@ -11309,6 +11310,8 @@ function curatorHomeKb(items, modeEnabled = false) {
 async function renderCuratorHome(ctx, userId) {
   const items = await db.listCuratorWorkspaces(userId);
   const modeEnabled = await getCuratorMode(ctx.from.id);
+  const enabledCnt = items.filter((x) => !!x.curator_enabled).length;
+  const disabledCnt = Math.max(0, items.length - enabledCnt);
   const text = `👤 <b>Куратор</b>
 
 Тут ты смотришь конкурсы чужих каналов, где тебя назначили куратором.
@@ -11321,6 +11324,8 @@ async function renderCuratorHome(ctx, userId) {
 <b>Что тебе доступно:</b> 📊 Статистика • 🧾 Лог • 📣 Напомнить проверить • ✅ Проверено • 📝 Заметки
 
 🧹 <b>Режим куратора</b> — прячет лишнее меню (оставляет только кураторское).
+
+Каналов: <b>${items.length}</b> (✅ ${enabledCnt} · ❌ ${disabledCnt})
 
 ${items.length ? 'Выбери канал:' : 'Пока тебя не назначили куратором ни в одном канале.'}`;
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled) });
@@ -11330,6 +11335,8 @@ ${items.length ? 'Выбери канал:' : 'Пока тебя не назна
 async function replyCuratorHome(ctx, userId) {
   const items = await db.listCuratorWorkspaces(userId);
   const modeEnabled = await getCuratorMode(ctx.from.id);
+  const enabledCnt = items.filter((x) => !!x.curator_enabled).length;
+  const disabledCnt = Math.max(0, items.length - enabledCnt);
   const text = `👤 <b>Куратор</b>
 
 Тут ты смотришь конкурсы чужих каналов, где тебя назначили куратором.
@@ -11342,6 +11349,8 @@ async function replyCuratorHome(ctx, userId) {
 <b>Что тебе доступно:</b> 📊 Статистика • 🧾 Лог • 📣 Напомнить проверить • ✅ Проверено • 📝 Заметки
 
 🧹 <b>Режим куратора</b> — прячет лишнее меню (оставляет только кураторское).
+
+Каналов: <b>${items.length}</b> (✅ ${enabledCnt} · ❌ ${disabledCnt})
 
 ${items.length ? 'Выбери канал:' : 'Пока тебя не назначили куратором ни в одном канале.'}`;
 
