@@ -7119,6 +7119,90 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
   }
 }
 
+// -----------------------------
+// Curator Inbox (aggregate leads across all workspaces)
+// -----------------------------
+
+function curatorInboxTabsKb(counts, active, page = 0) {
+  const a = normLeadStatus(active);
+  const kb = new InlineKeyboard()
+    .text(`🆕 Новые ${counts.new ?? 0}`, `a:cur_inbox|s:n|p:0`)
+    .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:cur_inbox|s:ip|p:0`)
+    .row()
+    .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:cur_inbox|s:cl|p:0`)
+    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:cur_inbox|s:sp|p:0`);
+
+  // Mark active with a dot
+  for (const row of kb.inline_keyboard) {
+    for (const btn of row) {
+      const d = String(btn.callback_data || '');
+      const aCb = leadStatusToCb(a);
+      if (d.includes(`|s:${aCb}|`) || d.includes(`|s:${a}|`)) btn.text = '• ' + btn.text;
+    }
+  }
+
+  return kb;
+}
+
+async function renderCuratorInbox(ctx, userId, status = 'new', page = 0) {
+  const st = normLeadStatus(status);
+  const p = Math.max(0, Number(page) || 0);
+  const limit = 10;
+  const offset = p * limit;
+
+  const counts = await db.countBrandLeadsForCuratorByStatus(userId);
+  const leads = await db.listBrandLeadsForCurator(userId, st, limit, offset);
+
+  const textHeader =
+    `📨 <b>Очередь заявок</b>\n\n` +
+    `Заявки брендов по всем каналам, где ты куратор.\n` +
+    `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>\n\n`;
+
+  const lines = leads.map((l) => {
+    const wsUser = String(l.workspace_username || '').trim();
+    const wsTitle = wsUser
+      ? ('@' + wsUser.replace(/^@/, ''))
+      : String(l.workspace_title || '').trim();
+    const wsShortRaw = wsTitle ? clipText(wsTitle, 18) : `#${l.workspace_id}`;
+    const wsShort = deLinkifyText(wsShortRaw);
+    const whoRaw = l.brand_username ? '@' + String(l.brand_username).replace(/^@/, '') : (l.brand_name || 'brand');
+    const who = deLinkifyText(String(whoRaw));
+    const snippet = String(l.message || '').replace(/\s+/g, ' ').slice(0, 52);
+    return `${leadStatusIcon(l.status)} <b>#${l.id}</b> — ${escapeHtml(wsShort)} — ${escapeHtml(who)} — <i>${escapeHtml(snippet)}${String(l.message || '').length > 52 ? '…' : ''}</i>`;
+  });
+
+  const body = lines.length ? lines.join('\n') : 'Пока пусто. Заявки появятся, когда бренд нажмёт кнопку на витрине.';
+
+  const kb = curatorInboxTabsKb(counts, st, p);
+
+  // quick open buttons (max 8)
+  for (const l of leads.slice(0, 8)) {
+    const wsTitle = String(l.workspace_username || l.workspace_title || '').trim();
+    const wsShort = wsTitle ? clipText(wsTitle.startsWith('@') ? wsTitle : ('@' + wsTitle.replace(/^@/, '')), 16) : `#${l.workspace_id}`;
+    const whoBtn = l.brand_username
+      ? '@' + String(l.brand_username).replace(/^@/, '')
+      : (String(l.brand_name || '').trim() || 'brand');
+    const whoShort = clipText(whoBtn, 14);
+    const btnLabel = clipText(`${leadStatusIcon(l.status)} #${l.id} ${wsShort} ${whoShort}`, 56);
+    kb.row().text(btnLabel, `a:lead_view|id:${l.id}|w:${l.workspace_id}|s:${leadStatusToCb(st)}|p:${p}|r:ci`);
+  }
+
+  // pagination
+  if (p > 0) kb.row().text('⬅️', `a:cur_inbox|s:${leadStatusToCb(st)}|p:${p - 1}`);
+  if (leads.length === limit) {
+    if (p > 0) kb.text('➡️', `a:cur_inbox|s:${leadStatusToCb(st)}|p:${p + 1}`);
+    else kb.row().text('➡️', `a:cur_inbox|s:${leadStatusToCb(st)}|p:${p + 1}`);
+  }
+
+  kbNavRow(kb, 'a:cur_home');
+
+  try {
+    await safeEditOrReply(ctx, textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  } catch {
+    await ctx.reply(textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  }
+}
+
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
   const stepId = `lead_view:${Number(leadId || 0)}`;
   const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(leadId), 4500);
@@ -7188,7 +7272,9 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const retKey = String(back?.ret || '').trim();
   const rPart = retKey ? retPartShort(retKey) : '';
-  const listCb = `a:ws_leads|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`;
+  const listCb = (retKey === 'ci')
+    ? `a:cur_inbox|s:${leadStatusToCb(back.status)}|p:${back.page}`
+    : `a:ws_leads|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`;
 
   const kb = new InlineKeyboard();
 
@@ -7297,7 +7383,7 @@ ${escapeHtml(stripBrokenSurrogates(String(lead.message || '—')))}
 
   if (lead.reply_text) {
     text += `
-<b>Последний ответ креатора:</b>
+<b>Последний ответ:</b>
 ${escapeHtml(stripBrokenSurrogates(String(lead.reply_text || '')))}
 `;
   }
@@ -8810,11 +8896,14 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   const fromName = String(ws.profile_title || ws.title || 'Креатор');
   const header = `💬 <b>Ответ от ${escapeHtml(fromName)}</b>`;
+  const curatorBadge = (isCurator && !isOwner && !isAdmin)
+    ? `<i>🧹 Ответил куратор канала.</i>`
+    : '';
   const lockHint = contactsLockedHintHtml(Number(brandCredits || 0) > 0);
 
-  let out = `${header}\n\n${escapeHtml(String(replyText))}\n\n${lockHint}`;
+  let out = `${header}\n\n${curatorBadge ? curatorBadge + '\n\n' : ''}${escapeHtml(String(replyText))}\n\n${lockHint}`;
   if (out.length > 3900) {
-    out = `${header}\n\n${escapeHtml(clipText(String(replyText), 2800))}\n\n${lockHint}`;
+    out = `${header}\n\n${curatorBadge ? curatorBadge + '\n\n' : ''}${escapeHtml(clipText(String(replyText), 2800))}\n\n${lockHint}`;
   }
 
   const kbToBrand = brandReplyKb(ws, wsId, brandCredits, leadId);
@@ -8838,7 +8927,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   }
 
   // Persist in-brand thread for the brand-side dialog
-  await appendBrandLeadThread(leadId, 'creator', String(replyText));
+  await appendBrandLeadThread(leadId, (isCurator && !isOwner && !isAdmin) ? 'curator' : 'creator', String(replyText));
 
   await safeLeadWrite(() => db.markBrandLeadReplied(leadId, replyText, Number(actorUserId)), { op: 'lead_mark_replied', leadId });
 
@@ -11284,7 +11373,7 @@ function wsLabelNice(w) {
   return `Канал #${w?.id}`;
 }
 
-function curatorHomeKb(items, modeEnabled = false) {
+function curatorHomeKb(items, modeEnabled = false, queueCounts = null) {
   const kb = new InlineKeyboard();
 
   // Mode toggle (persisted in Redis). Keep the curator inside the cabinet when toggling.
@@ -11296,6 +11385,14 @@ function curatorHomeKb(items, modeEnabled = false) {
 
   // Help / support (в curator mode тут нет “Мои каналы”, чтобы не путать: свои каналы доступны через обычный режим).
   kb.text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
+
+  // Aggregated queue across all channels where the user is curator/owner.
+  try {
+    const qc = queueCounts && typeof queueCounts === 'object' ? queueCounts : null;
+    const n = qc ? Number(qc.new || 0) : 0;
+    const badge = n > 0 ? ` (${n})` : '';
+    kb.text(`📨 Очередь заявок${badge}`, `a:cur_inbox|s:n|p:0`).row();
+  } catch {}
 
   for (const w of items) {
     const on = !!w.curator_enabled;
@@ -11311,6 +11408,8 @@ function curatorHomeKb(items, modeEnabled = false) {
 
 async function renderCuratorHome(ctx, userId) {
   const items = await db.listCuratorWorkspaces(userId);
+  let qCounts = { new: 0, in_progress: 0, closed: 0, spam: 0 };
+  try { qCounts = await db.countBrandLeadsForCuratorByStatus(userId); } catch {}
   const modeEnabled = await getCuratorMode(ctx.from.id);
   const enabledCnt = items.filter((x) => !!x.curator_enabled).length;
   const disabledCnt = Math.max(0, items.length - enabledCnt);
@@ -11327,15 +11426,18 @@ async function renderCuratorHome(ctx, userId) {
 
 🧹 <b>Режим куратора</b> — прячет лишнее меню (оставляет только кураторское).
 
+Заявки: 🆕 <b>${Number(qCounts.new || 0)}</b> · 💬 <b>${Number(qCounts.in_progress || 0)}</b>
 Каналов: <b>${items.length}</b> (✅ ${enabledCnt} · ❌ ${disabledCnt})
 
 ${items.length ? 'Выбери канал:' : 'Пока тебя не назначили куратором ни в одном канале.'}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled) });
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled, qCounts) });
 }
 
 // Same as renderCuratorHome, but for /start (new message instead of edit)
 async function replyCuratorHome(ctx, userId) {
   const items = await db.listCuratorWorkspaces(userId);
+  let qCounts = { new: 0, in_progress: 0, closed: 0, spam: 0 };
+  try { qCounts = await db.countBrandLeadsForCuratorByStatus(userId); } catch {}
   const modeEnabled = await getCuratorMode(ctx.from.id);
   const enabledCnt = items.filter((x) => !!x.curator_enabled).length;
   const disabledCnt = Math.max(0, items.length - enabledCnt);
@@ -11352,11 +11454,12 @@ async function replyCuratorHome(ctx, userId) {
 
 🧹 <b>Режим куратора</b> — прячет лишнее меню (оставляет только кураторское).
 
+Заявки: 🆕 <b>${Number(qCounts.new || 0)}</b> · 💬 <b>${Number(qCounts.in_progress || 0)}</b>
 Каналов: <b>${items.length}</b> (✅ ${enabledCnt} · ❌ ${disabledCnt})
 
 ${items.length ? 'Выбери канал:' : 'Пока тебя не назначили куратором ни в одном канале.'}`;
 
-  await ctx.reply(text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled) });
+  await ctx.reply(text, { parse_mode: 'HTML', reply_markup: curatorHomeKb(items, modeEnabled, qCounts) });
 }
 
 function curatorWsKb(wsId, giveaways, checkedSet = new Set(), leadCounts = null) {
@@ -16190,6 +16293,20 @@ if (p.a === 'a:menu') {
       return;
     }
 
+    if (p.a === 'a:cur_inbox') {
+      await ctx.answerCallbackQuery();
+      await clearExpectText(ctx.from.id);
+      const flags = await getRoleFlags(u, ctx.from.id);
+      if (!flags.isCurator && !flags.isAdmin) {
+        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        return;
+      }
+      const st = leadStatusFromCb(String(p.s || 'n'));
+      const page = Number(p.p || 0);
+      await renderCuratorInbox(ctx, u.id, st, page);
+      return;
+    }
+
     if (p.a === 'a:cur_ws_off') {
       // Backward-compat: old buttons for disabled workspaces
       await ctx.answerCallbackQuery();
@@ -17058,7 +17175,9 @@ if (p.a === 'a:ws_leads') {
       const page = Number(p.p || 0);
       const retKey = String(p.ret || retFromCb(p.r) || '').trim();
       const rPart = retKey ? retPartShort(retKey) : '';
-      const backCb = wsId ? `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${page}${rPart}` : 'a:menu';
+      const backCb = (retKey === 'ci')
+        ? `a:cur_inbox|s:${leadStatusToCb(st)}|p:${page}`
+        : (wsId ? `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${page}${rPart}` : 'a:menu');
       await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
       try {
         await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 15000, 'lead.view');
