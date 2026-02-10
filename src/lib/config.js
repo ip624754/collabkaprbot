@@ -120,6 +120,10 @@ export const CFG = {
   WORKSPACE_FOLDER_MAX_ITEMS_PRO: parseIntSafe(process.env.WORKSPACE_FOLDER_MAX_ITEMS_PRO, 30),
   WORKSPACE_EDITOR_INVITE_TTL_MIN: parseIntSafe(process.env.WORKSPACE_EDITOR_INVITE_TTL_MIN, 10),
 
+  // Workspace curators (team)
+  WORKSPACE_CURATORS_MAX_FREE: parseIntSafe(process.env.WORKSPACE_CURATORS_MAX_FREE, 1),
+  WORKSPACE_CURATORS_MAX_PRO: parseIntSafe(process.env.WORKSPACE_CURATORS_MAX_PRO, 5),
+
   // Payments toggles (runtime override via admin → stored in Redis)
   PAYMENTS_ACCEPT_DEFAULT: parseBoolSafe(process.env.PAYMENTS_ACCEPT_DEFAULT, true),
   PAYMENTS_AUTO_APPLY_DEFAULT: parseBoolSafe(process.env.PAYMENTS_AUTO_APPLY_DEFAULT, true),
