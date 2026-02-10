@@ -2036,8 +2036,11 @@ function curManageKb(wsId, ws = null) {
     .row();
 
   kb.text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
-    .text('🧾 История', `a:ws_history|ws:${wsId}`)
+    .text('📜 Журнал', `a:cur_audit|ws:${wsId}|u:0|l:0|p:0|all:0|b:cm`)
     .row();
+
+  // Редко, но полезно (техническая история воркспейса).
+  kb.text('🧾 История', `a:ws_history|ws:${wsId}`).row();
 
   kb.row().text('⬅️ Назад', `a:ws_settings|ws:${wsId}`).text('📋 Меню', 'a:menu');
   kb.row().text('🏠 Home', 'a:home');
@@ -2155,6 +2158,197 @@ ${lines.length ? lines.join('\n') : ''}${notice ? `\n\n✅ ${escapeHtml(notice)}
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
+function leadAuditActionLabel(action, payload = {}) {
+  const p = payload || {};
+  if (action === 'lead.template_reply_sent') {
+    const k = String(p.tpl_label || p.tpl_key || '').trim();
+    return k ? `📨 Шаблон: ${k}` : '📨 Шаблон отправлен';
+  }
+  if (action === 'lead.status_changed') {
+    const from = normLeadStatus(p.from);
+    const to = normLeadStatus(p.to);
+    const f = from ? `${leadStatusIcon(from)} ${from}` : '—';
+    const t = to ? `${leadStatusIcon(to)} ${to}` : '—';
+    return `🔁 Статус: ${f} → ${t}`;
+  }
+  if (action === 'lead.note_added') {
+    const prev = String(p.preview || '').trim();
+    const short = prev ? clipText(prev, 60) : '';
+    return short ? `📝 Заметка: ${short}` : '📝 Заметка добавлена';
+  }
+  return String(action || '');
+}
+
+function buildCuratorIndexMap(curators = []) {
+  const arr = Array.isArray(curators) ? [...curators] : [];
+  // Stable numbering: oldest curator = #1 (same as in curator list UI)
+  arr.sort((a, b) => {
+    const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+    return ta - tb;
+  });
+  const m = new Map();
+  for (let i = 0; i < arr.length; i++) {
+    const c = arr[i] || {};
+    const uid = Number(c.user_id || 0);
+    if (!uid) continue;
+    m.set(uid, { n: i + 1, tg_username: c.tg_username || null, tg_id: c.tg_id || null });
+  }
+  return m;
+}
+
+function auditActorLabel(row, curatorIndex = null) {
+  const role = String(row?.payload?.actor_role || '').trim().toLowerCase();
+  const uid = Number(row?.actor_user_id || 0);
+
+  if (role === 'curator' && curatorIndex && uid && curatorIndex.has(uid)) {
+    const info = curatorIndex.get(uid) || {};
+    const handle = info.tg_username ? '@' + String(info.tg_username).replace(/^@/, '') : (info.tg_id ? 'id:' + String(info.tg_id) : 'u:' + String(uid));
+    return `🧹 #${info.n} ${handle}`;
+  }
+
+  if (row?.tg_username) return '@' + String(row.tg_username).replace(/^@/, '');
+  if (row?.tg_id) return 'id:' + String(row.tg_id);
+  if (row?.actor_user_id) return 'u:' + String(row.actor_user_id);
+  return '—';
+}
+
+async function renderCuratorAudit(ctx, viewerUserId, wsId, opts = {}) {
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+  const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(viewerUserId, wsId);
+  if (!ws) {
+    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    return;
+  }
+
+  const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `Канал #${wsId}`);
+  const curators = await db.listCurators(wsId);
+  const curatorIndex = buildCuratorIndexMap(curators || []);
+
+  const actorUserId = Math.max(0, Number(opts.actorUserId || 0));
+  const leadId = Math.max(0, Number(opts.leadId || 0));
+  const page = Math.max(0, Number(opts.page || 0));
+  const allRoles = !!opts.allRoles;
+  const back = opts.back || { type: 'cm', status: 'new', page: 0, ret: '' };
+
+  const limit = 12;
+  const offset = page * limit;
+  const onlyRole = allRoles ? '' : 'curator';
+
+  let total = 0;
+  let rows = [];
+  try {
+    total = await db.countWorkspaceAuditDetailed(wsId, {
+      actionPrefix: 'lead.',
+      actorUserId: actorUserId || 0,
+      leadId: leadId || 0,
+      onlyRole
+    });
+    rows = await db.listWorkspaceAuditDetailed(wsId, {
+      actionPrefix: 'lead.',
+      actorUserId: actorUserId || 0,
+      leadId: leadId || 0,
+      limit,
+      offset,
+      onlyRole
+    });
+  } catch {
+    total = 0;
+    rows = [];
+  }
+
+  const who = actorUserId
+    ? (curatorIndex.has(actorUserId)
+        ? (`#${curatorIndex.get(actorUserId).n} ` + (curatorIndex.get(actorUserId).tg_username ? ('@' + String(curatorIndex.get(actorUserId).tg_username).replace(/^@/, '')) : (curatorIndex.get(actorUserId).tg_id ? ('id:' + String(curatorIndex.get(actorUserId).tg_id)) : ('u:' + String(actorUserId)))))
+        : ('u:' + String(actorUserId)))
+    : 'все';
+  const leadLine = leadId ? `#${leadId}` : 'все';
+  const roleLine = allRoles ? 'все роли' : 'только кураторы';
+
+  const list = (rows || []).map(r => {
+    const p = r.payload || {};
+    const lid = Number(p.lead_id || 0) || null;
+    const a = auditActorLabel(r, curatorIndex);
+    const label = leadAuditActionLabel(String(r.action || ''), p);
+    const lidPart = lid ? ` · <code>#${lid}</code>` : '';
+    return `• ${escapeHtml(fmtTs(r.created_at))} — <b>${escapeHtml(a)}</b> — ${escapeHtml(label)}${lidPart}`;
+  });
+
+  const text = `📜 <b>Журнал действий</b>
+
+Канал: <b>${escapeHtml(title)}</b>
+Куратор: <b>${escapeHtml(String(who))}</b>
+Заявка: <b>${escapeHtml(String(leadLine))}</b>
+Роли: <b>${escapeHtml(String(roleLine))}</b>
+
+${list.length ? list.join('\n') : 'Пока пусто.'}`;
+
+  const mkCb = (patch = {}) => {
+    const u = (patch.u !== undefined) ? patch.u : actorUserId;
+    const l = (patch.l !== undefined) ? patch.l : leadId;
+    const p = (patch.p !== undefined) ? patch.p : page;
+    const all = (patch.all !== undefined) ? patch.all : (allRoles ? 1 : 0);
+    const b = (patch.b !== undefined) ? patch.b : String(back.type || 'cm');
+    const s = (patch.s !== undefined) ? patch.s : leadStatusToCb(back.status || 'new');
+    const pg = (patch.pg !== undefined) ? patch.pg : Number(back.page || 0);
+    const rPart = back.ret ? retPartShort(back.ret) : '';
+    return `a:cur_audit|ws:${wsId}|u:${u}|l:${l}|p:${p}|all:${all}|b:${b}|s:${s}|pg:${pg}${rPart}`;
+  };
+
+  const kb = new InlineKeyboard();
+
+  // Roles toggle
+  kb.text(allRoles ? '🧹 Только кураторы' : '👥 Все роли', mkCb({ all: allRoles ? 0 : 1, p: 0 })).row();
+
+  // Lead filter clear
+  if (leadId) {
+    kb.text('🧾 Все заявки', mkCb({ l: 0, p: 0 })).row();
+  }
+
+  // Curator filter buttons (stable numbering: oldest = #1)
+  kb.text('👥 Все', mkCb({ u: 0, p: 0 }));
+  let perRow = 1;
+  const curSorted = Array.isArray(curators) ? [...curators] : [];
+  curSorted.sort((a, b) => {
+    const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+    return ta - tb;
+  });
+  for (let i = 0; i < curSorted.slice(0, 8).length; i++) {
+    const c = curSorted[i] || {};
+    const uid = Number(c.user_id || 0);
+    if (!uid) continue;
+    const n = i + 1;
+    const label = c.tg_username ? ('@' + String(c.tg_username).replace(/^@/, '')) : ('id:' + String(c.tg_id || uid));
+    kb.text(`🧹 #${n} ${clipText(label, 10)}`, mkCb({ u: uid, p: 0 }));
+    perRow += 1;
+    if (perRow >= 2) {
+      kb.row();
+      perRow = 0;
+    }
+  }
+  if (perRow !== 0) kb.row();
+
+  // Pagination
+  const hasPrev = page > 0;
+  const hasNext = (offset + limit) < total;
+  if (hasPrev || hasNext) {
+    if (hasPrev) kb.text('⬅️', mkCb({ p: page - 1 }));
+    if (hasNext) kb.text('➡️', mkCb({ p: page + 1 }));
+    kb.row();
+  }
+
+  // Back
+  let backCb = `a:cur_manage|ws:${wsId}`;
+  if (String(back.type || '') === 'lv' && leadId) {
+    const rPart = back.ret ? retPartShort(back.ret) : '';
+    backCb = `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(back.status || 'new')}|p:${Number(back.page || 0)}${rPart}`;
+  }
+  kb.row().text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
 
 async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
   const notice = opts.notice ? String(opts.notice) : '';
@@ -2167,6 +2361,7 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
 
   const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `Канал #${wsId}`);
   const curators = await db.listCurators(wsId);
+  const curatorIndex = buildCuratorIndexMap(curators || []);
   const count = curators?.length || 0;
   const lim = await wsCuratorLimitInfo(wsId);
 
@@ -2255,9 +2450,17 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
     const items = await db.listWorkspaceAudit(wsId, 20);
     const curItems = (items || []).filter(i => {
       const a = String(i?.action || '');
+      if (a.startsWith('lead.')) {
+        return String(i?.payload?.actor_role || '') === 'curator';
+      }
       return a.includes('curator') || a.includes('ws.curator') || a.includes('gw.cur') || a.includes('gw.reminder');
     }).slice(0, 6);
-    activityLines = curItems.map(i => `• ${fmtTs(i.created_at)} — <code>${escapeHtml(String(i.action || ''))}</code>`);
+    activityLines = curItems.map(i => {
+      const a = String(i?.action || '');
+      const lid = Number(i?.payload?.lead_id || 0) || null;
+      const lidPart = lid ? ` · #${lid}` : '';
+      return `• ${escapeHtml(fmtTs(i.created_at))} — <code>${escapeHtml(a)}</code>${escapeHtml(lidPart)}`;
+    });
   } catch {
     activityLines = [];
   }
@@ -7375,6 +7578,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     return;
   }
   const canManualReply = isOwner || isAdmin;
+  const actorRole = (isCurator && !isOwner && !isAdmin) ? 'curator' : (isAdmin ? 'admin' : 'owner');
   const plainUi = !canManualReply; // curator view: no clickable URLs / @mentions
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
@@ -7420,6 +7624,31 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     text += `\n\n📝 <b>Заметки</b>\n${lines}`;
   }
 
+  // Owner-only: show last curator actions for this lead
+  if (canManualReply) {
+    try {
+      const curatorsForWs = await db.listCurators(wsId);
+      const curatorIndex = buildCuratorIndexMap(curatorsForWs || []);
+      const auditRows = await db.listWorkspaceAuditDetailed(wsId, {
+        actionPrefix: 'lead.',
+        actorUserId: 0,
+        leadId: Number(lead.id),
+        limit: 5,
+        offset: 0,
+        onlyRole: 'curator'
+      });
+      if (Array.isArray(auditRows) && auditRows.length) {
+        const lines = auditRows.map((r) => {
+          const p = r.payload || {};
+          const a = auditActorLabel(r, curatorIndex);
+          const label = leadAuditActionLabel(String(r.action || ''), p);
+          return `• ${escapeHtml(fmtTs(r.created_at))} — <b>${escapeHtml(a)}</b> — ${escapeHtml(label)}`;
+        });
+        text += `\n\n📜 <b>Последние действия</b>\n${lines.join('\n')}`;
+      }
+    } catch {}
+  }
+
   const st = normLeadStatus(lead.status);
 
   const retKey = String(back?.ret || '').trim();
@@ -7427,6 +7656,8 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
   const listCb = (retKey === 'ci')
     ? `a:cur_inbox|s:${leadStatusToCb(back.status)}|p:${back.page}`
     : `a:ws_leads|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`;
+
+  const auditCb = `a:cur_audit|ws:${wsId}|u:0|l:${lead.id}|p:0|all:0|b:lv|s:${leadStatusToCb(back.status)}|pg:${back.page}${rPart}`;
 
   const kb = new InlineKeyboard();
 
@@ -7441,6 +7672,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
       .text('📝 Заметка', `a:lead_note|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .row();
     kb.text(`📝 Заметки (${notes.length})`, `a:lead_notes|id:${lead.id}|w:${wsId}|n:0|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .text('📜 Журнал', auditCb)
       .row();
   } else {
     // Curator mode: only templates + status + internal notes (no manual replies)
@@ -9032,6 +9264,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     return;
   }
   const canManualReply = isOwner || isAdmin;
+  const actorRole = (isCurator && !isOwner && !isAdmin) ? 'curator' : (isAdmin ? 'admin' : 'owner');
 
   const brandTgId = Number(lead.brand_tg_id || 0);
   if (!brandTgId) { try { await ctx.answerCallbackQuery({ text: 'У бренда нет TG id.' }); } catch {} return; }
@@ -9083,6 +9316,17 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   await safeLeadWrite(() => db.markBrandLeadReplied(leadId, replyText, Number(actorUserId)), { op: 'lead_mark_replied', leadId });
 
+  // Owner-only audit (workspace_audit)
+  try {
+    const k = normLeadTplKey(tplKey);
+    await db.auditWorkspace(wsId, Number(actorUserId), 'lead.template_reply_sent', {
+      lead_id: Number(leadId),
+      tpl_key: k,
+      tpl_label: LEAD_TPL_LABELS[k] || k,
+      actor_role: actorRole
+    });
+  } catch {}
+
   // curator auto-note (internal)
   if (isCurator && !isOwner && !isAdmin) {
     const k = normLeadTplKey(tplKey);
@@ -9093,9 +9337,12 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   // status transitions
   const curSt = normLeadStatus(lead.status);
+  const stBefore = curSt;
   const actorIsCurator = (isCurator && !isOwner && !isAdmin);
+  let stAfter = stBefore;
   if (normLeadTplKey(tplKey) === 'decline') {
     if (curSt !== 'closed') {
+      stAfter = 'closed';
       if (actorIsCurator) {
         await safeLeadWrite(() => db.markBrandLeadClosedBy(leadId, Number(actorUserId)), { op: 'lead_status', leadId, st: 'closed' });
       } else {
@@ -9103,11 +9350,25 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
       }
     }
   } else if (curSt === 'new') {
+    stAfter = 'in_progress';
     if (actorIsCurator) {
       await safeLeadWrite(() => db.markBrandLeadTakenInWork(leadId, Number(actorUserId)), { op: 'lead_status', leadId, st: 'in_progress' });
     } else {
       await safeLeadWrite(() => db.updateBrandLeadStatus(leadId, 'in_progress'), { op: 'lead_status', leadId, st: 'in_progress' });
     }
+  }
+
+  if (stAfter && stBefore && stAfter !== stBefore) {
+    try {
+      await db.auditWorkspace(wsId, Number(actorUserId), 'lead.status_changed', {
+        lead_id: Number(leadId),
+        from: String(stBefore),
+        to: String(stAfter),
+        reason: 'auto_tpl',
+        tpl_key: String(tplKey),
+        actor_role: actorRole
+      });
+    } catch {}
   }
 
   try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
@@ -13459,6 +13720,19 @@ ${escapeHtml(payLine)}
         return;
       }
 
+
+
+      // Audit (owner-only журнал): заметка добавлена
+      try {
+        const tags = extractLeadNoteTags(noteText);
+        const preview = clipText(noteText.replace(/\s+/g, ' '), 160);
+        await db.auditWorkspace(wsId, u.id, 'lead.note_added', {
+          lead_id: leadId,
+          actor_role: role || null,
+          preview,
+          tags
+        });
+      } catch {}
       const notesCb = `a:lead_notes|id:${leadId}|w:${wsId}|n:0|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
 
       const kb = new InlineKeyboard()
@@ -17519,6 +17793,26 @@ if (p.a === 'a:lead_set') {
         try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
         return;
       }
+
+      // Owner-only audit (workspace_audit): status change
+      try {
+        const actorRole = isAdmin ? 'admin' : (isCuratorActor ? 'curator' : 'owner');
+        const stBefore = normLeadStatus(lead.status);
+        let stAfter = normLeadStatus(st);
+        // Curator meta-updates only change from NEW -> IN_PROGRESS, and set CLOSED if not already closed
+        if (isCuratorActor && stAfter === 'in_progress' && stBefore !== 'new') stAfter = stBefore;
+        if (isCuratorActor && stAfter === 'closed' && stBefore === 'closed') stAfter = stBefore;
+        if (stAfter && stBefore && stAfter !== stBefore) {
+          await db.auditWorkspace(wsId, u.id, 'lead.status_changed', {
+            lead_id: Number(leadId),
+            from: String(stBefore),
+            to: String(stAfter),
+            reason: 'manual',
+            actor_role: actorRole
+          });
+        }
+      } catch {}
+
       try {
         await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus || st, page: backPage, ret: retKey });
       } catch (e) {
@@ -17769,6 +18063,20 @@ if (p.a === 'a:lead_set') {
         await safeEditOrReply(ctx, '⚠️ Не смог сохранить заметку. Попробуй ещё раз.', { reply_markup: kb });
         return;
       }
+
+      // Audit (owner-only журнал): заметка добавлена (шаблон)
+      try {
+        const tags = extractLeadNoteTags(tpl.text);
+        const preview = clipText(tpl.text.replace(/\s+/g, ' '), 160);
+        await db.auditWorkspace(wsId, u.id, 'lead.note_added', {
+          lead_id: leadId,
+          actor_role: actorRole,
+          preview,
+          tags,
+          tpl_key: tplKey,
+          tpl_label: tpl.label
+        });
+      } catch {}
 
       const backStatus = leadStatusFromCb(String(p.s || 'new'));
       const backPage = Number(p.p || 0);
@@ -21359,6 +21667,28 @@ if (p.a === 'a:bx_publish_hint') {
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
       await renderCuratorList(ctx, u.id, wsId);
+      return;
+    }
+
+    if (p.a === 'a:cur_audit') {
+      const wsId = Number(p.ws);
+      const actorUserId = Math.max(0, Number(p.u || 0));
+      const leadId = Math.max(0, Number(p.l || 0));
+      const page = Math.max(0, Number(p.p || 0));
+      const allRoles = Number(p.all || 0) === 1;
+      const backType = String(p.b || 'cm');
+      const backStatus = leadStatusFromCb(String(p.s || 'new'));
+      const backPage = Math.max(0, Number(p.pg || 0));
+      const retKey = String(p.ret || retFromCb(p.r) || '').trim();
+
+      await ctx.answerCallbackQuery();
+      await renderCuratorAudit(ctx, u.id, wsId, {
+        actorUserId,
+        leadId,
+        page,
+        allRoles,
+        back: { type: backType, status: backStatus, page: backPage, ret: retKey }
+      });
       return;
     }
 
