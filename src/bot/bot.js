@@ -834,38 +834,52 @@ function mainMenuKb(flags = {}) {
 function mainMenuCreatorKb(flags = {}, opts = {}) {
   const { isModerator = false, isAdmin = false, isFolderEditor = false, isCurator = false } = flags;
 
+  // Layout: пары там, где чаще жмут подряд; одиночные — для режимов/ролей.
   const kb = new InlineKeyboard()
     .text('🚀 Подключить канал', 'a:setup')
     .text('📣 Мои каналы', 'a:ws_list')
-    .row()
-    .text('⭐️ PRO', 'a:pro_home')
-    .row()
+    .row();
+
+  // Role shortcuts (single-row)
+  if (isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
+  if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home').row();
+
+  kb
     .text('🎬 UGC / Офферы', 'a:bx_home')
     .text('🏷 Бренды', 'a:brands_home|p:0')
     .row()
+    .text('⭐️ PRO', 'a:pro_home')
     .text('🎁 Розыгрыши', 'a:gw_list')
+    .row();
+
+  if (isFolderEditor) kb.text('📁 Папки', 'a:folders_my').row();
+
+  kb
     .text('🧭 Быстрый старт', 'a:guide')
-    .row()
     .text('💬 Поддержка', 'a:support')
     .row();
 
-  if (opts.canManager) kb.text('🧑‍💼 Кабинет менеджера', 'a:bm_home');
-  kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu');
+  if (opts.canManager) {
+    kb
+      .text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
+      .text('🧑‍💼 Кабинет менеджера', 'a:bm_home')
+      .row();
+  } else {
+    kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu').row();
+  }
 
+  // Staff shortcuts
   const extra = [];
-  if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['🧹 Кураторы блогера', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
   for (let i = 0; i < extra.length; i += 2) {
     const a = extra[i];
     const b = extra[i + 1];
-    kb.row().text(a[0], a[1]);
+    kb.text(a[0], a[1]);
     if (b) kb.text(b[0], b[1]);
+    kb.row();
   }
-
-  if (isFolderEditor) kb.row().text('📁 Папки', 'a:folders_my');
 
   kb.row().text('🏠 Home', 'a:home');
 
@@ -1449,6 +1463,8 @@ async function renderRoleHub(ctx, u, flags) {
 
 function curatorModeMenuKb(flags = {}) {
   const { isModerator = false, isAdmin = false } = flags;
+
+  // Layout: как у Creator — ключевое сверху, помощь снизу, режим отдельной строкой.
   const kb = new InlineKeyboard()
     .text('👤 Кабинет куратора', 'a:cur_home')
     .text('📣 Мои каналы', 'a:ws_list')
@@ -1457,10 +1473,10 @@ function curatorModeMenuKb(flags = {}) {
     .text('🧭 Быстрый старт', 'a:guide')
     .row()
     .text('💬 Поддержка', 'a:support')
+    .text('🔄 Обновить', 'a:cur_home')
     .row()
     .text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:menu')
-    .row()
-    .text('🔄 Обновить', 'a:cur_home');
+    .row();
 
   const extra = [];
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
@@ -1476,6 +1492,7 @@ function curatorModeMenuKb(flags = {}) {
 
   return kb;
 }
+
 
 
 
