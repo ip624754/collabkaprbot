@@ -1464,15 +1464,14 @@ async function renderRoleHub(ctx, u, flags) {
 function curatorModeMenuKb(flags = {}) {
   const { isModerator = false, isAdmin = false } = flags;
 
-  // Layout: как у Creator — ключевое сверху, помощь снизу, режим отдельной строкой.
+  // Curator Mode: максимально коротко и по делу. PRO здесь не нужен (PRO = про Workspace владельца).
   const kb = new InlineKeyboard()
     .text('👤 Кабинет куратора', 'a:cur_home')
     .text('📣 Мои каналы', 'a:ws_list')
     .row()
-    .text('⭐️ PRO', 'a:pro_home')
     .text('🧭 Быстрый старт', 'a:guide')
-    .row()
     .text('💬 Поддержка', 'a:support')
+    .row()
     .text('🔄 Обновить', 'a:cur_home')
     .row()
     .text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:menu')
@@ -1492,7 +1491,6 @@ function curatorModeMenuKb(flags = {}) {
 
   return kb;
 }
-
 
 
 
@@ -1978,6 +1976,8 @@ async function setCurGwNote(gwId, meta) {
 
 function wsMenuKb(wsId, opts = {}) {
   const { showCurator = false } = opts || {};
+
+  // Пары = часто жмут подряд. Одиночные = режимы/редкие.
   const kb = new InlineKeyboard()
     .text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)
     .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
@@ -1986,53 +1986,64 @@ function wsMenuKb(wsId, opts = {}) {
     .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
     .row()
     .text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
-    .row()
     .text('📁 Папки', `a:folders_home|ws:${wsId}`)
     .row()
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
     .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
     .row()
     .text('👥 Кураторы канала', `a:ws_settings|ws:${wsId}`)
-    .text('🧾 История', `a:ws_history|ws:${wsId}`);
+    .text('🧾 История', `a:ws_history|ws:${wsId}`)
+    .row();
 
-  if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
+  if (showCurator) kb.text('🧹 Кураторы блогера', 'a:cur_home').row();
 
-  kb.row().text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  kb.row().text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
 
 
-
 function wsSettingsKb(wsId, s) {
   const net = s.network_enabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
-  const cur = s.curator_enabled ? '👤 Куратор: ВКЛ' : '👤 Куратор: ВЫКЛ';
-  return new InlineKeyboard()
+  const cur = s.curator_enabled ? '👤 Куратор: ✅ ВКЛ' : '👤 Куратор: ❌ ВЫКЛ';
+
+  const kb = new InlineKeyboard()
     .text(net, `a:net_q|ws:${wsId}|ret:ws`)
-    .row()
     .text(cur, `a:ws_toggle_cur|ws:${wsId}`)
     .row()
     .text('👥 Управление кураторами', `a:cur_manage|ws:${wsId}`)
-    .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    .text('🧾 История', `a:ws_history|ws:${wsId}`)
+    .row();
+
+  kb.row().text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
+  return kb;
 }
+
 
 function curManageKb(wsId, ws = null) {
   const enabled = !!ws?.curator_enabled;
   const toggleLabel = enabled ? '👤 Куратор: ✅ ВКЛ' : '👤 Куратор: ❌ ВЫКЛ';
-  return new InlineKeyboard()
-    .text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`)
-    .row()
-    .text('👤 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
-    .row()
+
+  const kb = new InlineKeyboard();
+
+  // Toggle — одиночная кнопка (режим).
+  kb.text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`).row();
+
+  // Частые действия в паре.
+  kb.text('👤 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
     .text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)
-    .row()
-    .text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
-    .row()
+    .row();
+
+  kb.text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
-    .row()
-    .text('⬅️ Назад', `a:ws_settings|ws:${wsId}`)
-    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    .row();
+
+  kb.row().text('⬅️ Назад', `a:ws_settings|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
+  return kb;
 }
+
 
 async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
   const notice = opts.notice ? String(opts.notice) : '';
@@ -4108,7 +4119,9 @@ function bxNeedNetworkKb(wsId) {
   return new InlineKeyboard()
     .text('🌐 Сеть: ❌ ВЫКЛ', `a:net_q|ws:${wsId}|ret:bx`)
     .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
 }
 
 
@@ -6019,7 +6032,9 @@ function wsProfileKb(wsId, ws) {
     .text('🧩 Режим', `a:ws_prof_mode|ws:${wsId}`)
     .text('📌 IG шаблоны', `a:ws_ig_templates|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
 
   return kb;
 }
@@ -8921,6 +8936,26 @@ async function renderWsProPinPick(ctx, ownerUserId, wsId) {
 
 
 // --- Workspace channel folders (shared lists of @channels) ---
+async function renderFoldersMy(ctx, userId) {
+  const rows = await db.listWorkspaceEditorWorkspaces(userId);
+  const kb = new InlineKeyboard();
+
+  if (rows.length) {
+    for (const w of rows.slice(0, 20)) {
+      const name = w.channel_username ? '@' + w.channel_username : (w.title || `ws:${w.id}`);
+      kb.text(`📁 ${String(name).slice(0, 48)}`, `a:folders_home|ws:${w.id}`).row();
+    }
+  }
+
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  const text = rows.length
+    ? `📁 <b>Папки</b>\n\nВыбери канал, где ты редактор:`
+    : `📁 <b>Папки</b>\n\nПока тебя не назначили редактором папок ни в одном Workspace.`;
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
 async function getFolderAccess(userId, wsId) {
   const wsOwned = await db.getWorkspace(userId, Number(wsId));
   if (wsOwned) return { ws: wsOwned, isOwner: true, canEdit: true };
@@ -8934,8 +8969,17 @@ async function getFolderAccess(userId, wsId) {
 function foldersHomeKb(access, folders) {
   const wsId = Number(access.ws.id);
   const kb = new InlineKeyboard();
-  if (access.canEdit) kb.text('➕ Новая папка', `a:folder_new|ws:${wsId}`).row();
-  if (access.isOwner) kb.text('👥 Editors', `a:ws_editors|ws:${wsId}`).row();
+
+  // Top actions (в пару, когда можно)
+  if (access.canEdit && access.isOwner) {
+    kb.text('➕ Новая папка', `a:folder_new|ws:${wsId}`)
+      .text('👥 Editors', `a:ws_editors|ws:${wsId}`)
+      .row();
+  } else if (access.canEdit) {
+    kb.text('➕ Новая папка', `a:folder_new|ws:${wsId}`).row();
+  } else if (access.isOwner) {
+    kb.text('👥 Editors', `a:ws_editors|ws:${wsId}`).row();
+  }
 
   for (const f of folders) {
     const cnt = Number(f.items_count || 0);
@@ -8943,29 +8987,12 @@ function foldersHomeKb(access, folders) {
     kb.text(`📁 ${title} (${cnt})`, `a:folder_open|ws:${wsId}|f:${f.id}`).row();
   }
 
-  if (access.isOwner) kb.text('⬅️ Назад', `a:ws_open|ws:${wsId}`);
-  else kb.text('⬅️ Назад', 'a:folders_my');
+  const backCb = access.isOwner ? `a:ws_open|ws:${wsId}` : 'a:folders_my';
+  kb.row().text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
 
-async function renderFoldersMy(ctx, userId) {
-  const rows = await db.listWorkspaceEditorWorkspaces(userId);
-  const kb = new InlineKeyboard();
-  if (rows.length) {
-    for (const w of rows.slice(0, 20)) {
-      const name = w.channel_username ? '@' + w.channel_username : (w.title || `ws:${w.id}`);
-      kb.text(`📁 ${String(name).slice(0, 48)}`, `a:folders_home|ws:${w.id}`)
-        .row();
-    }
-  }
-  kb.text('📋 Меню', 'a:menu');
-
-  const text = rows.length
-    ? `📁 <b>Папки</b>\n\nВыбери канал, где ты редактор:`
-    : `📁 <b>Папки</b>\n\nПока тебя не назначили редактором папок ни в одном Workspace.`;
-
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
-}
 
 async function renderFoldersHome(ctx, userId, wsId) {
   const access = await getFolderAccess(userId, wsId);
@@ -8984,28 +9011,33 @@ async function renderFoldersHome(ctx, userId, wsId) {
 function folderViewKb(access, wsId, folderId) {
   const kb = new InlineKeyboard();
 
+  // Управление каналами: часто жмут подряд → в пары.
   if (access.canEdit) {
     kb.text('➕ Добавить каналы', `a:folder_add|ws:${wsId}|f:${folderId}`)
-      .row()
       .text('➖ Удалить каналы', `a:folder_remove|ws:${wsId}|f:${folderId}`)
       .row()
       .text('✏️ Переименовать', `a:folder_rename|ws:${wsId}|f:${folderId}`)
-      .row()
-      .text('🧹 Очистить', `a:folder_clear_q|ws:${wsId}|f:${folderId}`)
+      .text('📤 Выгрузить списком', `a:folder_export|ws:${wsId}|f:${folderId}`)
       .row();
+
+    // Деструктивные действия — ниже.
+    if (access.isOwner) {
+      kb.text('🧹 Очистить', `a:folder_clear_q|ws:${wsId}|f:${folderId}`)
+        .text('🗑 Удалить папку', `a:folder_delete_q|ws:${wsId}|f:${folderId}`)
+        .row();
+    } else {
+      kb.text('🧹 Очистить', `a:folder_clear_q|ws:${wsId}|f:${folderId}`).row();
+    }
+  } else {
+    // Read-only
+    kb.text('📤 Выгрузить списком', `a:folder_export|ws:${wsId}|f:${folderId}`).row();
   }
 
-  kb.text('📤 Выгрузить списком', `a:folder_export|ws:${wsId}|f:${folderId}`)
-    .row();
-
-  if (access.isOwner) {
-    kb.text('🗑 Удалить папку', `a:folder_delete_q|ws:${wsId}|f:${folderId}`)
-      .row();
-  }
-
-  kb.text('⬅️ Назад', `a:folders_home|ws:${wsId}`);
+  kb.row().text('⬅️ Назад', `a:folders_home|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
+
 
 async function renderFolderView(ctx, userId, wsId, folderId) {
   const access = await getFolderAccess(userId, wsId);
@@ -11260,7 +11292,7 @@ function curatorHomeKb(items, modeEnabled = false) {
   // Quick exit to the normal (full) menu.
   if (modeEnabled) kb.text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:menu').row();
 
-  kb.text('📣 Мои каналы', 'a:ws_list').text('⭐️ PRO', 'a:pro_home').row();
+  kb.text('📣 Мои каналы', 'a:ws_list').text('💬 Поддержка', 'a:support').row();
 
   for (const w of items) {
     const on = !!w.curator_enabled;
@@ -11269,7 +11301,8 @@ function curatorHomeKb(items, modeEnabled = false) {
   }
 
   // Unified hub footer (Back -> Home Hub, Menu -> Role Hub, Home -> Home Hub).
-  kb.row().text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  kb.row().text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -16111,6 +16144,12 @@ if (p.a === 'a:menu') {
 
       const ret = String(p.ret || 'menu');
       const flags = await getRoleFlags(u, ctx.from.id);
+
+      // When turning Curator Mode OFF from curator UI — go to Creator main menu (не в старый ws-hub).
+      if (!enabled && ret === 'menu') {
+        await renderMainMenu(ctx, flags, { edit: true, user: u });
+        return;
+      }
 
       // If user wants to stay in curator cabinet — render it. Otherwise go to role hub.
       if (ret === 'cur') {
