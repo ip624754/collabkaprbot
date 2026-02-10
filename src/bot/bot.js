@@ -1997,7 +1997,7 @@ function wsMenuKb(wsId, opts = {}) {
 
   if (showCurator) kb.text('🧹 Кураторы блогера', 'a:cur_home').row();
 
-  kb.row().text('⬅️ Назад', 'a:ws_list').text('📋 Меню', 'a:menu');
+  kb.row().text('⬅️ 📣 Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu');
   kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
@@ -5142,7 +5142,8 @@ async function renderWsList(ctx, ownerUserId) {
     const label = w.channel_username ? `@${w.channel_username}` : w.title;
     kb.text(label, `a:ws_open|ws:${w.id}`).row();
   }
-  kb.text('🚀 Подключить ещё', 'a:setup').text('⬅️ В меню', 'a:menu');
+  kb.text('🚀 Подключить ещё', 'a:setup').text('📋 Меню', 'a:menu').row();
+  kb.text('🏠 Home', 'a:home');
   await safeEditOrReply(ctx, `📣 <b>Мои каналы</b>
 
 Это каналы, которые ты подключил к боту (workspace).
@@ -5168,7 +5169,8 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
   await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
 
 Выбери действие:
-<i>Подсказка: 🎬 офферы → 📥 Inbox / 📰 лента. 📨 заявки брендов → входящие.</i>`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
+<i>Подсказка: 🎬 офферы → 📥 Inbox / 📰 лента. 📨 заявки брендов → входящие.</i>
+<i>Сменить канал: ⬅️ 📣 Мои каналы</i>`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
 }
 
 async function renderWsSettings(ctx, ownerUserId, wsId) {
@@ -9074,7 +9076,6 @@ async function renderWsEditors(ctx, ownerUserId, wsId) {
 
   const kb = new InlineKeyboard()
     .text('➕ Invite link', `a:ws_editor_invite|ws:${wsId}`)
-    .row()
     .text('➕ Добавить по @username', `a:ws_editor_add_username|ws:${wsId}`)
     .row();
 
@@ -9085,7 +9086,8 @@ async function renderWsEditors(ctx, ownerUserId, wsId) {
     }
   }
 
-  kb.text('⬅️ Назад', `a:folders_home|ws:${wsId}`);
+  kb.row().text('⬅️ Назад', `a:folders_home|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
 
   const lines = editors.map(e => `• ${e.tg_username ? '@' + escapeHtml(e.tg_username) : 'id:' + escapeHtml(String(e.tg_id))}`);
 
