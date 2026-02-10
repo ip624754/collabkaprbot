@@ -383,7 +383,7 @@ export async function listWorkspaces(ownerUserId) {
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
             s.profile_mode, s.profile_ig, s.profile_verticals, s.profile_formats, s.profile_portfolio_urls, s.profile_about
      from workspaces ws
-     join workspace_settings s on s.workspace_id = ws.id
+     left join workspace_settings s on s.workspace_id = ws.id
      where ws.owner_user_id=$1
      order by ws.created_at desc`,
     [ownerUserId]
@@ -398,7 +398,7 @@ export async function getWorkspace(ownerUserId, workspaceId) {
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
             s.profile_mode, s.profile_ig, s.profile_verticals, s.profile_formats, s.profile_portfolio_urls, s.profile_about
      from workspaces ws
-     join workspace_settings s on s.workspace_id = ws.id
+     left join workspace_settings s on s.workspace_id = ws.id
      where ws.owner_user_id=$1 and ws.id=$2`,
     [ownerUserId, workspaceId]
   );
@@ -415,7 +415,7 @@ export async function getWorkspaceAny(workspaceId) {
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
             s.profile_mode, s.profile_ig, s.profile_verticals, s.profile_formats, s.profile_portfolio_urls, s.profile_about
      from workspaces ws
-     join workspace_settings s on s.workspace_id = ws.id
+     left join workspace_settings s on s.workspace_id = ws.id
      where ws.id=$1`,
     [workspaceId]
   );
@@ -430,7 +430,7 @@ export async function findWorkspaceByChannelUsername(channelUsername) {
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
             s.profile_mode, s.profile_ig, s.profile_verticals, s.profile_formats, s.profile_portfolio_urls, s.profile_about
      from workspaces ws
-     join workspace_settings s on s.workspace_id = ws.id
+     left join workspace_settings s on s.workspace_id = ws.id
      where lower(ws.channel_username)= $1
      limit 1`,
     [u]
@@ -561,7 +561,7 @@ export async function listCuratorWorkspaces(userId) {
     `select ws.id, ws.title, ws.channel_id, ws.channel_username, ws.owner_user_id, ss.curator_enabled
      from workspace_curators c
      join workspaces ws on ws.id = c.workspace_id
-     join workspace_settings ss on ss.workspace_id = ws.id
+     left join workspace_settings ss on ss.workspace_id = ws.id
      where c.user_id=$1
      order by ws.created_at desc`,
     [userId]
@@ -597,7 +597,7 @@ export async function listGiveawaysForCurator(workspaceId, userId, limit = 25) {
     `select g.*
      from giveaways g
      join workspaces ws on ws.id = g.workspace_id
-     join workspace_settings ss on ss.workspace_id = ws.id
+     left join workspace_settings ss on ss.workspace_id = ws.id
      where g.workspace_id=$1
        and (
          ws.owner_user_id=$2
@@ -617,7 +617,7 @@ export async function getGiveawayForCurator(giveawayId, userId) {
     `select g.*, ws.owner_user_id, ws.channel_id, ws.channel_username, ws.title as workspace_title, ss.curator_enabled
      from giveaways g
      join workspaces ws on ws.id = g.workspace_id
-     join workspace_settings ss on ss.workspace_id = ws.id
+     left join workspace_settings ss on ss.workspace_id = ws.id
      where g.id=$1
        and (
          ws.owner_user_id=$2
@@ -813,7 +813,7 @@ export async function getGiveawayStatsForCurator(giveawayId, userId) {
         max(e.joined_at) as last_joined_at
      from giveaways g
      join workspaces ws on ws.id = g.workspace_id
-     join workspace_settings ss on ss.workspace_id = ws.id
+     left join workspace_settings ss on ss.workspace_id = ws.id
      left join giveaway_entries e on e.giveaway_id = g.id
      where g.id=$1
        and (
@@ -3491,6 +3491,60 @@ export async function listBrandLeads(workspaceId, status, limit = 10, offset = 0
      order by created_at desc, id desc
      limit $3 offset $4`,
     [Number(workspaceId), String(status), Number(limit), Number(offset)]
+  );
+  return r.rows || [];
+}
+
+// Curator Inbox (aggregate across all workspaces where user has access as curator/owner)
+export async function countBrandLeadsForCuratorByStatus(userId) {
+  const uId = Number(userId || 0);
+  if (!uId) return { new: 0, in_progress: 0, closed: 0, spam: 0 };
+
+  const r = await pool.query(
+    `select l.status, count(*)::int as cnt
+       from brand_leads l
+       join workspaces ws on ws.id = l.workspace_id
+       left join workspace_settings ss on ss.workspace_id = ws.id
+      where (
+        ws.owner_user_id = $1
+        or (coalesce(ss.curator_enabled, false) = true and exists(
+          select 1 from workspace_curators c where c.workspace_id = ws.id and c.user_id = $1
+        ))
+      )
+      group by l.status`,
+    [uId]
+  );
+  const out = { new: 0, in_progress: 0, closed: 0, spam: 0 };
+  for (const row of r.rows || []) {
+    const k = String(row.status || '').toLowerCase();
+    if (out[k] !== undefined) out[k] = Number(row.cnt || 0);
+  }
+  return out;
+}
+
+export async function listBrandLeadsForCurator(userId, status, limit = 10, offset = 0) {
+  const uId = Number(userId || 0);
+  if (!uId) return [];
+
+  const r = await pool.query(
+    `select
+        l.*,
+        ws.title as workspace_title,
+        ws.channel_username as workspace_username,
+        ws.owner_user_id as workspace_owner_user_id
+     from brand_leads l
+     join workspaces ws on ws.id = l.workspace_id
+     left join workspace_settings ss on ss.workspace_id = ws.id
+     where l.status = $2
+       and (
+         ws.owner_user_id = $1
+         or (coalesce(ss.curator_enabled, false) = true and exists(
+           select 1 from workspace_curators c where c.workspace_id = ws.id and c.user_id = $1
+         ))
+       )
+     order by l.created_at desc, l.id desc
+     limit $3 offset $4`,
+    [uId, String(status), Number(limit), Number(offset)]
   );
   return r.rows || [];
 }
