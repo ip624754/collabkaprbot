@@ -693,6 +693,108 @@ export async function listWorkspaceAudit(workspaceId, limit = 30) {
   return r.rows;
 }
 
+// Detailed audit list with optional filters.
+// Used for Curator Manager / owner-only audit log.
+// Notes:
+// - actionPrefix may be an empty string to disable action filtering.
+// - leadId is matched against payload.lead_id (int) when present.
+export async function listWorkspaceAuditDetailed(workspaceId, opts = {}) {
+  const {
+    actionPrefix = '',
+    actorUserId = 0,
+    leadId = 0,
+    limit = 20,
+    offset = 0,
+    onlyRole = '',
+  } = (opts || {});
+
+  const wh = ['a.workspace_id = $1'];
+  const args = [Number(workspaceId)];
+  let idx = 2;
+
+  if (actionPrefix) {
+    wh.push(`a.action like $${idx} || '%'`);
+    args.push(String(actionPrefix));
+    idx += 1;
+  }
+
+  if (Number(actorUserId) > 0) {
+    wh.push(`a.actor_user_id = $${idx}`);
+    args.push(Number(actorUserId));
+    idx += 1;
+  }
+
+  if (Number(leadId) > 0) {
+    // payload may store lead_id as number or string; cast defensively
+    wh.push(`(a.payload->>'lead_id')::int = $${idx}`);
+    args.push(Number(leadId));
+    idx += 1;
+  }
+
+  if (onlyRole) {
+    wh.push(`coalesce(a.payload->>'actor_role','') = $${idx}`);
+    args.push(String(onlyRole));
+    idx += 1;
+  }
+
+  args.push(Math.max(1, Math.min(50, Number(limit) || 20)));
+  args.push(Math.max(0, Number(offset) || 0));
+
+  const r = await pool.query(
+    `select a.action, a.payload, a.created_at, a.actor_user_id,
+            u.tg_username, u.tg_id
+     from workspace_audit a
+     left join users u on u.id = a.actor_user_id
+     where ${wh.join(' and ')}
+     order by a.created_at desc
+     limit $${idx} offset $${idx + 1}`,
+    args
+  );
+  return r.rows;
+}
+
+export async function countWorkspaceAuditDetailed(workspaceId, opts = {}) {
+  const {
+    actionPrefix = '',
+    actorUserId = 0,
+    leadId = 0,
+    onlyRole = '',
+  } = (opts || {});
+
+  const wh = ['workspace_id = $1'];
+  const args = [Number(workspaceId)];
+  let idx = 2;
+
+  if (actionPrefix) {
+    wh.push(`action like $${idx} || '%'`);
+    args.push(String(actionPrefix));
+    idx += 1;
+  }
+  if (Number(actorUserId) > 0) {
+    wh.push(`actor_user_id = $${idx}`);
+    args.push(Number(actorUserId));
+    idx += 1;
+  }
+  if (Number(leadId) > 0) {
+    wh.push(`(payload->>'lead_id')::int = $${idx}`);
+    args.push(Number(leadId));
+    idx += 1;
+  }
+  if (onlyRole) {
+    wh.push(`coalesce(payload->>'actor_role','') = $${idx}`);
+    args.push(String(onlyRole));
+    idx += 1;
+  }
+
+  const r = await pool.query(
+    `select count(*)::int as cnt
+     from workspace_audit
+     where ${wh.join(' and ')}`,
+    args
+  );
+  return Number(r.rows?.[0]?.cnt || 0);
+}
+
 // Giveaways
 export async function createGiveaway({ workspaceId, prizeValueText, winnersCount, endsAt, autoDraw, autoPublish }) {
   const r = await pool.query(
