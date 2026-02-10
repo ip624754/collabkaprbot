@@ -541,6 +541,48 @@ export async function getCuratorWorkspaceSummary(workspaceId, windowDays = 30, l
   return r.rows;
 }
 
+
+export async function getCuratorLeadStats(workspaceId, windowDays = 30) {
+  const wsId = Number(workspaceId || 0);
+  const days = Math.max(1, Math.min(365, Number(windowDays || 30)));
+  if (!wsId) return [];
+
+  const r = await pool.query(
+    `with take_events as (
+        select
+          nullif(l.meta->>'in_progress_by','')::int as user_id,
+          count(*)::int as taken_cnt,
+          max(coalesce(nullif(l.meta->>'in_progress_at','')::timestamptz, l.updated_at)) as last_at
+        from brand_leads l
+        where l.workspace_id=$1
+          and coalesce(nullif(l.meta->>'in_progress_by',''), '') <> ''
+          and coalesce(nullif(l.meta->>'in_progress_at','')::timestamptz, l.updated_at) >= (now() - ($2::int * interval '1 day'))
+        group by 1
+    ),
+    close_events as (
+        select
+          nullif(l.meta->>'closed_by','')::int as user_id,
+          count(*)::int as closed_cnt,
+          max(coalesce(nullif(l.meta->>'closed_at','')::timestamptz, l.updated_at)) as last_at
+        from brand_leads l
+        where l.workspace_id=$1
+          and coalesce(nullif(l.meta->>'closed_by',''), '') <> ''
+          and coalesce(nullif(l.meta->>'closed_at','')::timestamptz, l.updated_at) >= (now() - ($2::int * interval '1 day'))
+        group by 1
+    )
+    select
+      coalesce(t.user_id, c.user_id) as user_id,
+      coalesce(t.taken_cnt,0)::int as taken_cnt,
+      coalesce(c.closed_cnt,0)::int as closed_cnt,
+      greatest(coalesce(t.last_at, 'epoch'::timestamptz), coalesce(c.last_at, 'epoch'::timestamptz)) as last_at
+    from take_events t
+    full join close_events c on c.user_id = t.user_id
+    where coalesce(t.user_id, c.user_id) is not null`,
+    [wsId, days]
+  );
+  return r.rows || [];
+}
+
 export async function removeCurator(workspaceId, curatorUserId) {
   await pool.query(
     `delete from workspace_curators where workspace_id=$1 and user_id=$2`,
@@ -3605,6 +3647,61 @@ export async function markBrandLeadReplied(leadId, replyText, repliedByUserId) {
      where id=$1
      returning *`,
     [Number(leadId), String(replyText || ''), repliedByUserId ? Number(repliedByUserId) : null]
+  );
+  return r.rows[0] || null;
+}
+
+
+export async function markBrandLeadTakenInWork(leadId, byUserId) {
+  const id = Number(leadId || 0);
+  const by = Number(byUserId || 0);
+  if (!id || !by) return null;
+
+  const r = await pool.query(
+    `update brand_leads
+       set status = case when status='new' then 'in_progress' else status end,
+           meta = jsonb_set(
+             jsonb_set(
+               coalesce(meta,'{}'::jsonb),
+               '{in_progress_by}',
+               coalesce(coalesce(meta,'{}'::jsonb)->'in_progress_by', to_jsonb($2::int)),
+               true
+             ),
+             '{in_progress_at}',
+             coalesce(coalesce(meta,'{}'::jsonb)->'in_progress_at', to_jsonb(now())),
+             true
+           ),
+           updated_at=now()
+     where id=$1
+     returning *`,
+    [id, by]
+  );
+  return r.rows[0] || null;
+}
+
+export async function markBrandLeadClosedBy(leadId, byUserId) {
+  const id = Number(leadId || 0);
+  const by = Number(byUserId || 0);
+  if (!id || !by) return null;
+
+  const r = await pool.query(
+    `update brand_leads
+       set status='closed',
+           meta = jsonb_set(
+             jsonb_set(
+               coalesce(meta,'{}'::jsonb),
+               '{closed_by}',
+               coalesce(coalesce(meta,'{}'::jsonb)->'closed_by', to_jsonb($2::int)),
+               true
+             ),
+             '{closed_at}',
+             coalesce(coalesce(meta,'{}'::jsonb)->'closed_at', to_jsonb(now())),
+             true
+           ),
+           updated_at=now()
+     where id=$1
+     returning *`,
+    [id, by]
   );
   return r.rows[0] || null;
 }
