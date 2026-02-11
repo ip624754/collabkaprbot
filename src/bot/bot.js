@@ -13063,6 +13063,53 @@ ${escapeHtml(safe)}`;
       return;
     }
 
+    // Admin: Users directory search (owner-only)
+    if (exp.type === 'admin_users_search') {
+      const isAdmin = isSuperAdminTg(tgId);
+      if (!isAdmin) {
+        await ctx.reply('Нет доступа.');
+        return;
+      }
+
+      const f = String(exp.f || 'all').toLowerCase();
+      let q = String(ctx.message?.text || '').trim();
+      if (!q) {
+        await ctx.reply('Введи @username или tg_id (цифрами).');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      // Allow quick clear
+      const low = q.toLowerCase();
+      if (low === 'сброс' || low === 'clear' || low === 'reset' || low === '0' || low === '-') {
+        await clearAdminUsersQuery(tgId);
+        await renderAdminUsers(ctx, f, 0);
+        return;
+      }
+
+      // Normalize: @username or numeric
+      q = q.replace(/^@/, '').trim();
+      if (!q) {
+        await ctx.reply('Введи @username или tg_id (цифрами).');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      // Guard: keep query short
+      if (q.length > 32) q = q.slice(0, 32);
+
+      // Minimal validation
+      if (!/^\d+$/.test(q) && !/^[a-zA-Z0-9_]{3,}$/.test(q)) {
+        await ctx.reply('Формат: @username (латиница/цифры/_) или tg_id цифрами.');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      await setAdminUsersQuery(tgId, q);
+      await renderAdminUsers(ctx, f, 0);
+      return;
+    }
+
 // Add curator by username
     if (exp.type === 'curator_username') {
       const txt = String(ctx.message.text || '').trim();
@@ -19646,6 +19693,9 @@ if (p.a === 'a:match_home') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
+      // If admin navigated here while we were expecting text input — cancel it.
+      try { await clearExpectText(ctx.from.id); } catch {}
+
       await renderAdminHome(ctx);
       return;
     }
@@ -19654,8 +19704,39 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      // Cancel any pending expectText (e.g., users search input) when returning to list.
+      try { await clearExpectText(ctx.from.id); } catch {}
       const f = String(p.f || 'all').toLowerCase();
       const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminUsers(ctx, f, page);
+      return;
+    }
+
+    if (p.a === 'a:admin_users_search') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const f = String(p.f || 'all').toLowerCase();
+      const kb = new InlineKeyboard()
+        .text('⬅️ Отмена', `a:admin_users|f:${f}|p:0`)
+        .row()
+        .text('🧹 Сбросить поиск', `a:admin_users_reset|f:${f}|p:0`)
+        .row()
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(ctx, '🔎 Введи @username или tg_id (цифрами).', { reply_markup: kb });
+      await setExpectText(ctx.from.id, { type: 'admin_users_search', f });
+      return;
+    }
+
+    if (p.a === 'a:admin_users_reset') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      await clearAdminUsersQuery(Number(ctx.from.id));
       await renderAdminUsers(ctx, f, page);
       return;
     }
@@ -23724,6 +23805,39 @@ async function renderAdminModerators(ctx) {
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
+// Admin: Users directory state (search query stored in Redis per admin)
+function adminUsersQueryKey(tgId) {
+  return k(['admin', 'users', 'q', String(tgId)]);
+}
+
+async function getAdminUsersQuery(tgId) {
+  try {
+    const v = await redis.get(adminUsersQueryKey(tgId));
+    return String(v || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+async function setAdminUsersQuery(tgId, q) {
+  const val = String(q || '').trim();
+  if (!val) return clearAdminUsersQuery(tgId);
+  try {
+    // Keep for 7 days (so admin can continue work).
+    await redis.set(adminUsersQueryKey(tgId), val, { ex: 7 * 24 * 60 * 60 });
+  } catch {
+    // ignore
+  }
+}
+
+async function clearAdminUsersQuery(tgId) {
+  try {
+    await redis.del(adminUsersQueryKey(tgId));
+  } catch {
+    // ignore
+  }
+}
+
 
 
 async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
@@ -23732,8 +23846,11 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
   const p = Math.max(0, Number(page) || 0);
   const offset = p * limit;
 
+  const tgId = Number(ctx.from?.id || 0);
+  const q = tgId ? await getAdminUsersQuery(tgId) : '';
+
   // Fetch one extra row to detect next page.
-  const rowsAll = await db.listUsersDirectory(filter, limit + 1, offset);
+  const rowsAll = await db.listUsersDirectory(filter, limit + 1, offset, q);
   const hasNext = rowsAll.length > limit;
   const rows = rowsAll.slice(0, limit);
 
@@ -23758,7 +23875,9 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
     return badges.join('');
   }
 
-  let text = `👥 <b>Пользователи</b> · <b>${escapeHtml(label)}</b> · стр <b>${p + 1}</b>
+  const qLine = q ? `\n🔎 Поиск: <tg-spoiler>${escapeHtml(q)}</tg-spoiler>\n` : '';
+
+  let text = `👥 <b>Пользователи</b> · <b>${escapeHtml(label)}</b> · стр <b>${p + 1}</b>${qLine}
 
 `;
   if (!rows.length) {
@@ -23792,6 +23911,10 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
     .row()
     .text(btn('managers', 'Менеджеры'), 'a:admin_users|f:managers|p:0')
     .row();
+
+  kb.text('🔎 Поиск', `a:admin_users_search|f:${filter}`);
+  if (q) kb.text('🧹 Сброс', `a:admin_users_reset|f:${filter}|p:0`);
+  kb.row();
 
   if (p > 0) kb.text('⬅️ Назад', `a:admin_users|f:${filter}|p:${p - 1}`);
   if (hasNext) kb.text('➡️ Далее', `a:admin_users|f:${filter}|p:${p + 1}`);
