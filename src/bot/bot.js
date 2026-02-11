@@ -23708,8 +23708,18 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
     if (payload.startsWith('brand_')) {
       const parts = payload.split('_');
       const userId = Number(parts[1]);
-      const packId = Number(parts[2]);
-      const pack = getBrandPack(packId);
+      const rawPackId = String(parts[2] || '').trim();
+      let pack = getBrandPack(rawPackId);
+
+      // Legacy fallback: older payloads could contain numeric ids or credit amounts.
+      // Current payload format: brand_<userId>_<S|M|L>_<token>
+      if (!pack && /^\d+$/.test(rawPackId)) {
+        const n = Number(rawPackId);
+        const map = { 1: 'S', 2: 'M', 3: 'L', 10: 'S', 30: 'M', 100: 'L' };
+        const mapped = map[n];
+        if (mapped) pack = getBrandPack(mapped);
+      }
+
       if (!userId || !pack) throw new Error('Bad userId/pack');
       await db.addBrandCredits(userId, Number(pack.credits));
       await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_brand_pass:+${pack.credits}`);
