@@ -19650,6 +19650,16 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    if (p.a === 'a:admin_users') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminUsers(ctx, f, page);
+      return;
+    }
+
     if (p.a === 'a:admin_metrics') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -23567,11 +23577,14 @@ async function renderAdminHome(ctx) {
   }
 
   let text = '👑 Админ-панель\n\n';
+  text += '• Пользователи: каталог (фильтры, пагинация)\n';
   text += '• Платежи: manual/apply\n';
   text += '• Метрики: DAU/MAU, конверсии, воронки\n';
   if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• Офиц.канал: очередь публикаций (${pending})\n`;
 
   const kb = new InlineKeyboard()
+    .text('👥 Пользователи', 'a:admin_users|f:all|p:0')
+    .row()
     .text('💰 Платежи', 'a:admin_payments')
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
@@ -23705,6 +23718,84 @@ async function renderAdminModerators(ctx) {
     const who = r.tg_username ? '@' + r.tg_username : 'id ' + r.tg_id;
     kb.text(`🗑 ${who}`, `a:admin_mod_rm|uid:${r.user_id}`).row();
   }
+
+  kb.text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+
+
+async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
+  const filter = String(filterRaw || 'all').toLowerCase();
+  const limit = 12;
+  const p = Math.max(0, Number(page) || 0);
+  const offset = p * limit;
+
+  // Fetch one extra row to detect next page.
+  const rowsAll = await db.listUsersDirectory(filter, limit + 1, offset);
+  const hasNext = rowsAll.length > limit;
+  const rows = rowsAll.slice(0, limit);
+
+  const labelMap = {
+    all: 'Все',
+    brands: 'Бренды',
+    creators: 'Креаторы',
+    curators: 'Кураторы',
+    managers: 'Менеджеры',
+  };
+  const label = labelMap[filter] || labelMap.all;
+
+  function roleBadges(r) {
+    const badges = [];
+    if (isSuperAdminTg(Number(r.tg_id))) badges.push('👑');
+    if (r.is_manager) badges.push('🧑‍💼');
+    if (r.is_moderator || r.is_curator) badges.push('🧩');
+    if (r.is_creator) badges.push('🧑‍🎤');
+    const isBrand = !!r.has_brand_profile || !!r.brand_plan || Number(r.brand_credits || 0) > 0;
+    if (isBrand) badges.push('🏢');
+    if (!badges.length) badges.push('👤');
+    return badges.join('');
+  }
+
+  let text = `👥 <b>Пользователи</b> · <b>${escapeHtml(label)}</b> · стр <b>${p + 1}</b>
+
+`;
+  if (!rows.length) {
+    text += 'Пользователей нет по этому фильтру.';
+  } else {
+    for (const r of rows) {
+      const who = r.tg_username ? '@' + r.tg_username : 'id ' + r.tg_id;
+      const when = r.created_at ? new Date(r.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
+      text += `• ${roleBadges(r)} <b>${escapeHtml(who)}</b> · ${escapeHtml(when)}
+`;
+    }
+  }
+
+  const kb = new InlineKeyboard();
+
+  const filters = [
+    { id: 'all', title: 'Все' },
+    { id: 'brands', title: 'Бренды' },
+    { id: 'creators', title: 'Креаторы' },
+    { id: 'curators', title: 'Кураторы' },
+    { id: 'managers', title: 'Менеджеры' },
+  ];
+
+  const btn = (id, title) => (filter === id ? `✅ ${title}` : title);
+
+  kb.text(btn('all', 'Все'), 'a:admin_users|f:all|p:0')
+    .text(btn('brands', 'Бренды'), 'a:admin_users|f:brands|p:0')
+    .row()
+    .text(btn('creators', 'Креаторы'), 'a:admin_users|f:creators|p:0')
+    .text(btn('curators', 'Кураторы'), 'a:admin_users|f:curators|p:0')
+    .row()
+    .text(btn('managers', 'Менеджеры'), 'a:admin_users|f:managers|p:0')
+    .row();
+
+  if (p > 0) kb.text('⬅️ Назад', `a:admin_users|f:${filter}|p:${p - 1}`);
+  if (hasNext) kb.text('➡️ Далее', `a:admin_users|f:${filter}|p:${p + 1}`);
+  if (p > 0 || hasNext) kb.row();
 
   kb.text('⬅️ Админка', 'a:admin_home');
 
