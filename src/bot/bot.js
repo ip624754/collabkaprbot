@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import { CFG, assertEnv } from '../lib/config.js';
 import logger from '../lib/logger.js';
 import { redis, k, rateLimit, consumeOnce } from '../lib/redis.js';
@@ -5552,12 +5552,112 @@ async function renderWsHistory(ctx, ownerUserId, wsId) {
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
   if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
   if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  const items = await db.listWorkspaceAudit(wsId, 20);
-  const lines = items.map(i => `• <b>${escapeHtml(i.action)}</b> — ${fmtTs(i.created_at)}`);
-  const text = `🧾 <b>История действий</b>
+  const ACTION_LABELS = {
+    'ws.profile_updated': 'Профиль обновлён',
+    'ws.profile_reset': 'Профиль сброшен',
+    'ws.network_toggled': 'Сеть переключена',
+    'ws.curator_toggled': 'Куратор переключен',
+    'gw.deleted': 'Розыгрыш удалён',
+    'gw.created': 'Розыгрыш создан',
+    'gw.updated': 'Розыгрыш обновлён',
+    'pro.activated': 'PRO активирован',
+    'pro.activated.manual': 'PRO активирован (manual)',
+  };
 
-${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb(`a:ws_open|ws:${wsId}`) });
+  const items = await db.listWorkspaceAudit(wsId, 15);
+  const lines = items.map(i => {
+    const code = String(i.action || '').trim();
+    const label = ACTION_LABELS[code] || code;
+    const codePart = (label !== code) ? ` <tg-spoiler>(${escapeHtml(code)})</tg-spoiler>` : '';
+    return `• <b>${escapeHtml(label)}</b>${codePart} — ${escapeHtml(fmtTs(i.created_at))}`;
+  });
+
+  const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `Канал #${wsId}`);
+  const hint = `Это технический лог для поддержки.\nВремя: МСК.\nЕсли нужно отправить в поддержку — нажми «📥 Скачать полный лог».`;
+
+  const text = `🧾 <b>История действий</b>\n\n` +
+    `Канал: <b>${escapeHtml(title)}</b>\n` +
+    `<i>${escapeHtml(hint)}</i>\n\n` +
+    `${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
+
+  const kb = new InlineKeyboard()
+    .text('📥 Скачать полный лог', `a:ws_history_export|ws:${wsId}`)
+    .row()
+    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`)
+    .text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function exportWsHistory(ctx, ownerUserId, wsId) {
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+  const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
+  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+
+  const items = await db.listWorkspaceAudit(wsId, 500);
+
+  const fmtMskLong = (ts) => {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    if (!Number.isFinite(d.getTime())) return '—';
+    try {
+      const fmt = new Intl.DateTimeFormat('ru-RU', {
+        timeZone: 'Europe/Moscow',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+      const p = fmt.formatToParts(d);
+      const get = (t) => p.find(x => x.type === t)?.value || '';
+      const yyyy = get('year');
+      const mm = get('month');
+      const dd = get('day');
+      const hh = get('hour');
+      const mi = get('minute');
+      const ss = get('second');
+      if (yyyy && mm && dd && hh && mi && ss) return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss} MSK`;
+    } catch {}
+    return d.toISOString();
+  };
+
+  const title = ws.channel_username ? ('@' + ws.channel_username) : (ws.title || `workspace_${wsId}`);
+  const header = [
+    `Collabka PR — Workspace audit export`,
+    `Workspace: ${title} (id=${wsId})`,
+    `Exported: ${fmtMskLong(Date.now())}`,
+    `---`,
+  ].join('\n');
+
+  const body = items.map((i) => {
+    const action = String(i.action || '').trim();
+    const when = fmtMskLong(i.created_at);
+    let payload = '';
+    try {
+      payload = i.payload ? JSON.stringify(i.payload) : '';
+    } catch {
+      payload = '';
+    }
+    if (payload && payload.length > 800) payload = payload.slice(0, 800) + '…';
+    return `${when} | ${action}${payload ? ` | ${payload}` : ''}`;
+  }).join('\n');
+
+  const txt = `${header}\n${body || 'EMPTY'}`;
+  const filename = `workspace_${wsId}_audit_msk.txt`;
+
+  await ctx.replyWithDocument(
+    new InputFile(Buffer.from(txt, 'utf-8'), filename),
+    {
+      caption: '📥 Полный лог (MSK). Если нужно — перешли это в поддержку.',
+      reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_history|ws:${wsId}`).text('📋 Меню', 'a:menu')
+    }
+  );
 }
 
 
@@ -18269,6 +18369,11 @@ if (p.a === 'a:ws_open') {
       await renderWsHistory(ctx, u.id, Number(p.ws));
       return;
     }
+    if (p.a === 'a:ws_history_export') {
+      await ctx.answerCallbackQuery();
+      await exportWsHistory(ctx, u.id, Number(p.ws));
+      return;
+    }
 
     if (p.a === 'a:ws_profile') {
       try { await ctx.answerCallbackQuery(); } catch {}
@@ -19637,14 +19742,14 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
       if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await renderModReportView(ctx, Number(p.r));
+      await renderModReportView(ctx, Number(p.rid || 0));
       return;
     }
     if (p.a === 'a:mod_r_freeze') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
       if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const rid = Number(p.r);
+      const rid = Number(p.rid || 0);
       const rep = await db.getBarterReport(rid);
       if (rep && rep.offer_id) {
         await db.moderatorFreezeBarterOffer(rep.offer_id);
@@ -19657,7 +19762,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
       if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const rid = Number(p.r);
+      const rid = Number(p.rid || 0);
       const rep = await db.getBarterReport(rid);
       if (rep && rep.thread_id) {
         await db.moderatorCloseBarterThread(rep.thread_id);
@@ -19670,7 +19775,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
       if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const rid = Number(p.r);
+      const rid = Number(p.rid || 0);
       await db.resolveBarterReport(rid, u.id);
       await renderModReportView(ctx, rid);
       return;
@@ -23708,16 +23813,14 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
     if (payload.startsWith('brand_')) {
       const parts = payload.split('_');
       const userId = Number(parts[1]);
-      const rawPackId = String(parts[2] || '').trim();
-      let pack = getBrandPack(rawPackId);
+      const packToken = String(parts[2] || '').trim();
 
-      // Legacy fallback: older payloads could contain numeric ids or credit amounts.
-      // Current payload format: brand_<userId>_<S|M|L>_<token>
-      if (!pack && /^\d+$/.test(rawPackId)) {
-        const n = Number(rawPackId);
-        const map = { 1: 'S', 2: 'M', 3: 'L', 10: 'S', 30: 'M', 100: 'L' };
-        const mapped = map[n];
-        if (mapped) pack = getBrandPack(mapped);
+      // New format: brand_<userId>_<S|M|L>_<token>
+      // Legacy safety: if somehow a numeric token is present, try resolve by credits.
+      let pack = getBrandPack(packToken);
+      if (!pack && /^\d+$/.test(packToken)) {
+        const n = Number(packToken);
+        pack = BRAND_PACKS.find(p => Number(p.credits) === n) || null;
       }
 
       if (!userId || !pack) throw new Error('Bad userId/pack');
@@ -23810,7 +23913,7 @@ async function renderModReports(ctx, page = 0) {
 
   const kb = new InlineKeyboard();
   for (const r of rows) {
-    kb.text(`#${r.id}`, `a:mod_report|r:${r.id}`).row();
+    kb.text(`#${r.id}`, `a:mod_report|rid:${r.id}`).row();
   }
   if (page > 0) kb.text('⬅️ Назад', `a:mod_reports|p:${page - 1}`);
   if (rows.length === limit) kb.text('➡️ Далее', `a:mod_reports|p:${page + 1}`);
@@ -23829,9 +23932,9 @@ async function renderModReportView(ctx, reportId) {
   const created = new Date(r.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
 
   const kb = new InlineKeyboard();
-  if (r.offer_id) kb.text('⛔️ Заморозить оффер', `a:mod_r_freeze|r:${r.id}`).row();
-  if (r.thread_id) kb.text('🔒 Закрыть тред', `a:mod_r_close|r:${r.id}`).row();
-  kb.text('✅ Закрыть жалобу', `a:mod_r_resolve|r:${r.id}`).row();
+  if (r.offer_id) kb.text('⛔️ Заморозить оффер', `a:mod_r_freeze|rid:${r.id}`).row();
+  if (r.thread_id) kb.text('🔒 Закрыть тред', `a:mod_r_close|rid:${r.id}`).row();
+  kb.text('✅ Закрыть жалобу', `a:mod_r_resolve|rid:${r.id}`).row();
   kb.text('⬅️ К очереди', 'a:mod_reports').row();
 
   const text = `🚩 <b>Жалоба #${r.id}</b>\n\n` +
