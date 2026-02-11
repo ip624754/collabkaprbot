@@ -11,6 +11,29 @@ export function escapeHtml(s) {
 export function fmtTs(ts) {
   if (!ts) return '—';
   const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return '—';
+
+  // UX-default: Moscow time for all users (matches CRON_TZ=Europe/Moscow in QStash)
+  try {
+    const fmt = new Intl.DateTimeFormat('ru-RU', {
+      timeZone: 'Europe/Moscow',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const parts = fmt.formatToParts(d);
+    const get = (t) => parts.find(p => p.type === t)?.value || '';
+    const dd = get('day');
+    const mm = get('month');
+    const hh = get('hour');
+    const mi = get('minute');
+    if (dd && mm && hh && mi) return `${dd}.${mm} ${hh}:${mi} (МСК)`;
+  } catch {
+    // fall back to UTC below
+  }
+
   const dd = String(d.getUTCDate()).padStart(2, '0');
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
   const hh = String(d.getUTCHours()).padStart(2, '0');
