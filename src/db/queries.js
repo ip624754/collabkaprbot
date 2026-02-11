@@ -188,6 +188,58 @@ export async function getUserTgIdByUserId(userId) {
   return r.rows[0] || null;
 }
 
+// Users directory (admin)
+// Filters: all | brands | creators | curators | managers
+export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offsetRaw = 0) {
+  const filter = String(filterRaw || 'all').toLowerCase();
+  const limit = Math.max(1, Math.min(50, Number(limitRaw) || 20));
+  const offset = Math.max(0, Number(offsetRaw) || 0);
+
+  const where = [];
+  if (filter === 'brands') {
+    where.push(`(
+      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
+      or u.brand_plan is not null
+      or coalesce(u.brand_credits,0) > 0
+    )`);
+  } else if (filter === 'creators') {
+    where.push(`exists (select 1 from workspaces w where w.owner_user_id = u.id)`);
+  } else if (filter === 'curators') {
+    where.push(`(
+      exists (select 1 from workspace_curators wc where wc.user_id = u.id)
+      or exists (select 1 from network_moderators nm where nm.user_id = u.id)
+    )`);
+  } else if (filter === 'managers') {
+    where.push(`exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`);
+  }
+
+  const whereSql = where.length ? `where ${where.join(' and ')}` : '';
+
+  const r = await pool.query(
+    `select
+       u.id as user_id,
+       u.tg_id,
+       u.tg_username,
+       u.created_at,
+       u.brand_plan,
+       u.brand_plan_until,
+       coalesce(u.brand_credits,0)::int as brand_credits,
+
+       exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
+       exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
+       exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
+       exists (select 1 from brand_managers bm where bm.manager_user_id = u.id) as is_manager,
+       exists (select 1 from brand_profiles bp where bp.user_id = u.id) as has_brand_profile
+     from users u
+     ${whereSql}
+     order by u.created_at desc
+     limit $1 offset $2`,
+    [limit, offset]
+  );
+  return r.rows || [];
+}
+
+
 // -----------------------------
 // Brand Pass credits (brands pay for first contact)
 // -----------------------------
