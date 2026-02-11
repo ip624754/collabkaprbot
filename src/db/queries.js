@@ -190,10 +190,13 @@ export async function getUserTgIdByUserId(userId) {
 
 // Users directory (admin)
 // Filters: all | brands | creators | curators | managers
-export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offsetRaw = 0) {
+export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offsetRaw = 0, qRaw = '') {
   const filter = String(filterRaw || 'all').toLowerCase();
   const limit = Math.max(1, Math.min(50, Number(limitRaw) || 20));
   const offset = Math.max(0, Number(offsetRaw) || 0);
+
+  const q0 = String(qRaw || '').trim();
+  const q = q0.replace(/^@/, '').toLowerCase();
 
   const where = [];
   if (filter === 'brands') {
@@ -211,6 +214,24 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
     )`);
   } else if (filter === 'managers') {
     where.push(`exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`);
+  }
+
+  // Search (optional):
+  // - numeric: match tg_id OR user id
+  // - string: match username (case-insensitive, partial)
+  const params = [limit, offset];
+  if (q) {
+    if (/^\d+$/.test(q)) {
+      const n = Number(q);
+      params.push(n);
+      params.push(n);
+      const i = params.length - 1; // points to first of the two just pushed (tg_id)
+      where.push(`(u.tg_id = $${i} or u.id = $${i + 1})`);
+    } else {
+      params.push(`%${q}%`);
+      const i = params.length;
+      where.push(`lower(coalesce(u.tg_username,'')) like $${i}`);
+    }
   }
 
   const whereSql = where.length ? `where ${where.join(' and ')}` : '';
@@ -234,7 +255,7 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
      ${whereSql}
      order by u.created_at desc
      limit $1 offset $2`,
-    [limit, offset]
+    params
   );
   return r.rows || [];
 }
