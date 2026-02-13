@@ -19764,6 +19764,25 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    // Admin: Export Users CSV
+    if (p.a === 'a:adm_ucsv') {
+      await ctx.answerCallbackQuery({ text: '⏳ Генерирую CSV…' });
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const f = String(p.f || 'all').toLowerCase();
+      const tgId = Number(ctx.from?.id || 0);
+      const q = tgId ? await getAdminUsersQuery(tgId) : '';
+      try {
+        await sendAdminUsersCsv(ctx, f, q);
+      } catch (err) {
+        log('admin_users_csv_error', err);
+        await safeEditOrReply(ctx, '⚠️ Ошибка при генерации CSV.', {
+          reply_markup: new InlineKeyboard().text('⬅️ К списку', `a:admin_users|f:${f}|p:0`)
+        });
+      }
+      return;
+    }
+
     if (p.a === 'a:admin_metrics') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -23939,6 +23958,7 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
   kb.text('🔎 Поиск', `a:admin_users_search|f:${filter}`);
   if (q) kb.text('🧹 Сброс', `a:admin_users_reset|f:${filter}|p:0`);
   kb.row();
+  kb.text('📤 Export CSV', `a:adm_ucsv|f:${filter}`).row();
 
   if (p > 0) kb.text('⬅️ Назад', `a:admin_users|f:${filter}|p:${p - 1}`);
   if (hasNext) kb.text('➡️ Далее', `a:admin_users|f:${filter}|p:${p + 1}`);
@@ -24022,6 +24042,73 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function sendAdminUsersCsv(ctx, filter = 'all', q = '') {
+  const { rows, truncated } = await db.exportUsersDirectory(filter, q);
+
+  const msk = (d) => d ? new Date(d).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '';
+
+  function userRoles(r) {
+    const roles = [];
+    if (isSuperAdminTg(Number(r.tg_id))) roles.push('super_admin');
+    if (r.is_manager) roles.push('manager');
+    if (r.is_moderator || r.is_curator) roles.push('curator');
+    if (r.is_creator) roles.push('creator');
+    const isBrand = !!r.has_brand_profile || !!r.brand_plan || Number(r.brand_credits || 0) > 0;
+    if (isBrand) roles.push('brand');
+    if (!roles.length) roles.push('user');
+    return roles.join(';');
+  }
+
+  // BOM for Excel UTF-8
+  const BOM = '\uFEFF';
+  const header = 'user_id,tg_id,username,roles,created_at_msk,updated_at_msk,brand_plan,brand_plan_until_msk,brand_credits,brand_credits_spent';
+
+  const csvRows = rows.map((r) => {
+    const fields = [
+      r.user_id,
+      r.tg_id,
+      csvEsc(r.tg_username || ''),
+      csvEsc(userRoles(r)),
+      csvEsc(msk(r.created_at)),
+      csvEsc(msk(r.updated_at)),
+      csvEsc(r.brand_plan || ''),
+      csvEsc(msk(r.brand_plan_until)),
+      Number(r.brand_credits || 0),
+      Number(r.brand_credits_spent || 0),
+    ];
+    return fields.join(',');
+  });
+
+  const csv = BOM + header + '\n' + csvRows.join('\n');
+
+  const labelMap = { all: 'all', brands: 'brands', creators: 'creators', curators: 'curators', managers: 'managers' };
+  const tag = labelMap[filter] || 'all';
+  const ts = new Date().toISOString().slice(0, 10);
+  const filename = `users_${tag}${q ? '_search' : ''}_${ts}.csv`;
+
+  let caption = `📤 Export: ${rows.length} записей · фильтр: ${tag}`;
+  if (q) caption += ` · поиск: "${q}"`;
+  if (truncated) caption += `\n⚠️ Лимит 10 000 — сузьте фильтр для полной выгрузки.`;
+
+  await ctx.replyWithDocument(
+    new InputFile(Buffer.from(csv, 'utf-8'), filename),
+    {
+      caption,
+      reply_markup: new InlineKeyboard()
+        .text('⬅️ К списку', `a:admin_users|f:${filter}|p:0`)
+        .text('⬅️ Админка', 'a:admin_home')
+    }
+  );
+}
+
+function csvEsc(val) {
+  const s = String(val ?? '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes(';')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
 }
 
 async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
