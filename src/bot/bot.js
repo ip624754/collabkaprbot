@@ -20043,6 +20043,69 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    // Broadcast: list active/recent broadcasts
+    if (p.a === 'a:bc_list') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await renderBroadcastList(ctx, Number(p.p || 0));
+      return;
+    }
+
+    // Broadcast: view progress of specific broadcast
+    if (p.a === 'a:bc_view') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await renderBroadcastView(ctx, Number(p.id || 0));
+      return;
+    }
+
+    // Broadcast: pause
+    if (p.a === 'a:bc_pause') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const bc = await db.getBroadcast(Number(p.id || 0));
+      if (bc && (bc.status === 'RUNNING' || bc.status === 'PENDING')) {
+        await db.updateBroadcast(bc.id, { status: 'PAUSED' });
+        await ctx.answerCallbackQuery({ text: '⏸ Рассылка приостановлена.' });
+      } else {
+        await ctx.answerCallbackQuery({ text: 'Нельзя приостановить.' });
+      }
+      await renderBroadcastView(ctx, Number(p.id || 0));
+      return;
+    }
+
+    // Broadcast: resume
+    if (p.a === 'a:bc_resume') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const bc = await db.getBroadcast(Number(p.id || 0));
+      if (bc && bc.status === 'PAUSED') {
+        await db.updateBroadcast(bc.id, { status: 'RUNNING' });
+        await ctx.answerCallbackQuery({ text: '▶️ Рассылка возобновлена.' });
+      } else {
+        await ctx.answerCallbackQuery({ text: 'Нельзя возобновить.' });
+      }
+      await renderBroadcastView(ctx, Number(p.id || 0));
+      return;
+    }
+
+    // Broadcast: stop
+    if (p.a === 'a:bc_stop') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const bc = await db.getBroadcast(Number(p.id || 0));
+      if (bc && (bc.status === 'RUNNING' || bc.status === 'PAUSED' || bc.status === 'PENDING')) {
+        await db.updateBroadcast(bc.id, { status: 'STOPPED', finished_at: new Date().toISOString() });
+        await ctx.answerCallbackQuery({ text: '🛑 Рассылка остановлена.' });
+      } else {
+        await ctx.answerCallbackQuery({ text: 'Нельзя остановить.' });
+      }
+      await renderBroadcastView(ctx, Number(p.id || 0));
+      return;
+    }
+
     if (p.a === 'a:admin_metrics') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -24032,6 +24095,94 @@ async function renderBroadcastPreview(ctx, draft) {
   await safeEditOrReply(ctx, previewMsg, { parse_mode: 'HTML', reply_markup: confirmKb });
 }
 
+async function renderBroadcastList(ctx, page = 0) {
+  const limit = 8;
+  const offset = Math.max(0, page) * limit;
+  const rows = await db.listBroadcasts(limit + 1, offset);
+  const hasNext = rows.length > limit;
+  const items = rows.slice(0, limit);
+
+  const msk = (d) => d ? new Date(d).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
+
+  const statusIcon = { DRAFT: '📝', PENDING: '⏳', RUNNING: '🚀', PAUSED: '⏸', DONE: '✅', STOPPED: '🛑', ERROR: '❌' };
+
+  let text = `📣 <b>Рассылки</b> · стр ${page + 1}\n\n`;
+  if (!items.length) {
+    text += 'Рассылок пока нет.';
+  } else {
+    for (const r of items) {
+      const icon = statusIcon[r.status] || '❓';
+      text += `${icon} <b>#${r.id}</b> · ${escapeHtml(audienceLabel(r.audience))} · ${r.sent_count}/${r.total_count} · ${msk(r.created_at)}\n`;
+    }
+  }
+
+  const kb = new InlineKeyboard();
+  for (const r of items) {
+    const icon = statusIcon[r.status] || '❓';
+    kb.text(`${icon} #${r.id} ${r.status}`, `a:bc_view|id:${r.id}`).row();
+  }
+  if (page > 0) kb.text('⬅️', `a:bc_list|p:${page - 1}`);
+  if (hasNext) kb.text('➡️', `a:bc_list|p:${page + 1}`);
+  if (page > 0 || hasNext) kb.row();
+  kb.text('📣 Новая рассылка', 'a:bc_start').row();
+  kb.text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function renderBroadcastView(ctx, broadcastId) {
+  const bc = await db.getBroadcast(Number(broadcastId));
+  if (!bc) {
+    await safeEditOrReply(ctx, '⚠️ Рассылка не найдена.', {
+      reply_markup: new InlineKeyboard().text('⬅️ К списку', 'a:bc_list|p:0')
+    });
+    return;
+  }
+
+  const msk = (d) => d ? new Date(d).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
+  const statusIcon = { DRAFT: '📝', PENDING: '⏳', RUNNING: '🚀', PAUSED: '⏸', DONE: '✅', STOPPED: '🛑', ERROR: '❌' };
+  const icon = statusIcon[bc.status] || '❓';
+
+  const total = Number(bc.total_count || 0);
+  const sent = Number(bc.sent_count || 0);
+  const failed = Number(bc.failed_count || 0);
+  const pct = total > 0 ? Math.round((sent + failed) / total * 100) : 0;
+
+  // Progress bar (10 segments)
+  const filled = Math.round(pct / 10);
+  const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+
+  let text = `${icon} <b>Рассылка #${bc.id}</b>\n\n`;
+  text += `<b>Статус:</b> ${bc.status}\n`;
+  text += `<b>Аудитория:</b> ${audienceLabel(bc.audience)}\n`;
+  text += `<b>Тип:</b> ${bc.draft_type || '—'}\n`;
+  text += `<b>Создана:</b> ${msk(bc.created_at)}\n`;
+  if (bc.started_at) text += `<b>Запущена:</b> ${msk(bc.started_at)}\n`;
+  if (bc.finished_at) text += `<b>Завершена:</b> ${msk(bc.finished_at)}\n`;
+  text += `\n<b>Прогресс:</b> [${bar}] ${pct}%\n`;
+  text += `✅ Отправлено: <b>${sent}</b> / ${total}\n`;
+  text += `❌ Ошибок: <b>${failed}</b>\n`;
+
+  const kb = new InlineKeyboard();
+
+  if (bc.status === 'RUNNING' || bc.status === 'PENDING') {
+    kb.text('⏸ Пауза', `a:bc_pause|id:${bc.id}`)
+      .text('🛑 Стоп', `a:bc_stop|id:${bc.id}`)
+      .row();
+    kb.text('🔄 Обновить', `a:bc_view|id:${bc.id}`).row();
+  } else if (bc.status === 'PAUSED') {
+    kb.text('▶️ Продолжить', `a:bc_resume|id:${bc.id}`)
+      .text('🛑 Стоп', `a:bc_stop|id:${bc.id}`)
+      .row();
+    kb.text('🔄 Обновить', `a:bc_view|id:${bc.id}`).row();
+  }
+
+  kb.text('⬅️ К списку', 'a:bc_list|p:0').row();
+  kb.text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
 async function renderAdminHome(ctx) {
   // Access is checked in the callback handler via isSuperAdminTg().
 
@@ -24056,7 +24207,7 @@ async function renderAdminHome(ctx) {
     .row()
     .text('💰 Платежи', 'a:admin_payments')
     .row()
-    .text('📣 Рассылка', 'a:bc_start')
+    .text('📣 Рассылка', 'a:bc_list|p:0')
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
     .row();
