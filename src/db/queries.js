@@ -261,6 +261,60 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
 }
 
 
+/**
+ * Admin: full user card by internal user id.
+ * Returns user row + computed role flags + workspaces + brand profile info.
+ */
+export async function getUserCardById(userId) {
+  const uid = Number(userId);
+  if (!uid) return null;
+  const r = await pool.query(
+    `select
+       u.*,
+       exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
+       exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
+       exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
+       exists (select 1 from brand_managers bm where bm.manager_user_id = u.id) as is_manager,
+       exists (select 1 from brand_profiles bp where bp.user_id = u.id) as has_brand_profile
+     from users u
+     where u.id = $1`,
+    [uid]
+  );
+  const user = r.rows[0] || null;
+  if (!user) return null;
+
+  // Workspaces owned by user
+  const wsR = await pool.query(
+    `select id, title, channel_id, channel_username, created_at
+     from workspaces where owner_user_id = $1
+     order by created_at`,
+    [uid]
+  );
+  user._workspaces = wsR.rows || [];
+
+  // Workspaces where user is curator
+  const curR = await pool.query(
+    `select w.id, w.title, w.channel_username, wc.created_at as joined_at
+     from workspace_curators wc
+     join workspaces w on w.id = wc.workspace_id
+     where wc.user_id = $1
+     order by wc.created_at`,
+    [uid]
+  );
+  user._curator_in = curR.rows || [];
+
+  // Brand profile (if exists)
+  const bpR = await pool.query(
+    `select id, company_name, niche, created_at, updated_at
+     from brand_profiles where user_id = $1
+     order by created_at limit 1`,
+    [uid]
+  );
+  user._brand_profile = bpR.rows[0] || null;
+
+  return user;
+}
+
 // -----------------------------
 // Brand Pass credits (brands pay for first contact)
 // -----------------------------
