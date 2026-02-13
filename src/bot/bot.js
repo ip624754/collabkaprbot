@@ -19741,6 +19741,29 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    // Admin: User Card
+    if (p.a === 'a:adm_ucard') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminUserCard(ctx, uid, f, page);
+      return;
+    }
+
+    // Admin: Copy user TG ID (shows alert with ID for easy copy)
+    if (p.a === 'a:adm_ucopy') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const card = await db.getUserCardById(Number(p.id || 0));
+      if (!card) return ctx.answerCallbackQuery({ text: 'Не найден.', show_alert: true });
+      await ctx.answerCallbackQuery({ text: `TG ID: ${card.tg_id}`, show_alert: true });
+      return;
+    }
+
     if (p.a === 'a:admin_metrics') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -23880,18 +23903,19 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
   let text = `👥 <b>Пользователи</b> · <b>${escapeHtml(label)}</b> · стр <b>${p + 1}</b>${qLine}
 
 `;
+  const kb = new InlineKeyboard();
+
   if (!rows.length) {
     text += 'Пользователей нет по этому фильтру.';
   } else {
     for (const r of rows) {
       const who = r.tg_username ? '@' + r.tg_username : 'id ' + r.tg_id;
       const when = r.created_at ? new Date(r.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
-      text += `• ${roleBadges(r)} <b>${escapeHtml(who)}</b> · ${escapeHtml(when)}
-`;
+      text += `• ${roleBadges(r)} <b>${escapeHtml(who)}</b> · ${escapeHtml(when)}\n`;
+      // Clickable button to open user card
+      kb.text(`${roleBadges(r)} ${who}`, `a:adm_ucard|id:${r.user_id}|f:${filter}|p:${p}`).row();
     }
   }
-
-  const kb = new InlineKeyboard();
 
   const filters = [
     { id: 'all', title: 'Все' },
@@ -23920,6 +23944,81 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
   if (hasNext) kb.text('➡️ Далее', `a:admin_users|f:${filter}|p:${p + 1}`);
   if (p > 0 || hasNext) kb.row();
 
+  kb.text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0) {
+  const card = await db.getUserCardById(Number(userId));
+  if (!card) {
+    await safeEditOrReply(ctx, '⚠️ Пользователь не найден.', {
+      reply_markup: new InlineKeyboard().text('⬅️ К списку', `a:admin_users|f:${backFilter}|p:${backPage}`)
+    });
+    return;
+  }
+
+  const msk = (d) => d ? new Date(d).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
+
+  // Role badges
+  const roles = [];
+  if (isSuperAdminTg(Number(card.tg_id))) roles.push('👑 Super Admin');
+  if (card.is_manager) roles.push('🧑‍💼 Менеджер');
+  if (card.is_moderator || card.is_curator) roles.push('🧩 Куратор/Модератор');
+  if (card.is_creator) roles.push('🧑‍🎤 Креатор');
+  const isBrand = !!card.has_brand_profile || !!card.brand_plan || Number(card.brand_credits || 0) > 0;
+  if (isBrand) roles.push('🏢 Бренд');
+  if (!roles.length) roles.push('👤 Пользователь');
+
+  let text = `👤 <b>Карточка пользователя</b>\n\n`;
+  text += `<b>ID:</b> <code>${card.id}</code>\n`;
+  text += `<b>TG ID:</b> <code>${card.tg_id}</code>\n`;
+  text += `<b>Username:</b> ${card.tg_username ? '@' + escapeHtml(card.tg_username) : '—'}\n`;
+  text += `<b>Роли:</b> ${roles.join(', ')}\n`;
+  text += `<b>Регистрация:</b> ${msk(card.created_at)}\n`;
+  text += `<b>Обновлён:</b> ${msk(card.updated_at)}\n`;
+
+  // Brand info
+  if (isBrand) {
+    text += `\n<b>— Бренд —</b>\n`;
+    text += `<b>Brand Plan:</b> ${card.brand_plan ? escapeHtml(String(card.brand_plan)) : '—'}`;
+    if (card.brand_plan_until) text += ` (до ${msk(card.brand_plan_until)})`;
+    text += `\n`;
+    text += `<b>Credits:</b> ${Number(card.brand_credits || 0)} (потрачено: ${Number(card.brand_credits_spent || 0)})\n`;
+    if (card.brand_trial_granted) text += `<b>Trial:</b> ✅ выдан ${msk(card.brand_trial_granted_at)}\n`;
+    if (card._brand_profile) {
+      const bp = card._brand_profile;
+      text += `<b>Профиль:</b> ${escapeHtml(bp.company_name || '—')}`;
+      if (bp.niche) text += ` · ${escapeHtml(bp.niche)}`;
+      text += `\n`;
+    }
+  }
+
+  // Workspaces
+  if (card._workspaces && card._workspaces.length) {
+    text += `\n<b>— Воркспейсы (${card._workspaces.length}) —</b>\n`;
+    for (const ws of card._workspaces.slice(0, 5)) {
+      text += `• <b>${escapeHtml(ws.title || 'ws#' + ws.id)}</b>`;
+      if (ws.channel_username) text += ` @${escapeHtml(ws.channel_username)}`;
+      text += ` · ${msk(ws.created_at)}\n`;
+    }
+    if (card._workspaces.length > 5) text += `<i>... и ещё ${card._workspaces.length - 5}</i>\n`;
+  }
+
+  // Curator in
+  if (card._curator_in && card._curator_in.length) {
+    text += `\n<b>— Куратор в (${card._curator_in.length}) —</b>\n`;
+    for (const c of card._curator_in.slice(0, 5)) {
+      text += `• <b>${escapeHtml(c.title || 'ws#' + c.id)}</b>`;
+      if (c.channel_username) text += ` @${escapeHtml(c.channel_username)}`;
+      text += ` · с ${msk(c.joined_at)}\n`;
+    }
+    if (card._curator_in.length > 5) text += `<i>... и ещё ${card._curator_in.length - 5}</i>\n`;
+  }
+
+  const kb = new InlineKeyboard();
+  kb.text(`📋 Скопировать ID: ${card.tg_id}`, `a:adm_ucopy|id:${card.id}`).row();
+  kb.text('⬅️ К списку', `a:admin_users|f:${backFilter}|p:${backPage}`).row();
   kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
