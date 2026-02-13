@@ -212,3 +212,142 @@ export async function giveawaysTick() {
     };
   });
 }
+
+// =====================================================
+// Broadcast tick: send one batch per invocation
+// =====================================================
+const BROADCAST_BATCH_SIZE = 25;
+const BROADCAST_SEND_DELAY_MS = 50; // ~20 msg/sec
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function sendBroadcastMessage(api, tgId, bc) {
+  const type = String(bc.draft_type || 'text');
+  const btns = bc.buttons_json ? JSON.parse(bc.buttons_json) : [];
+
+  // Build inline keyboard from URL buttons
+  let replyMarkup;
+  if (btns.length) {
+    const rows = btns.map((b) => [{ text: b.text, url: b.url }]);
+    replyMarkup = { inline_keyboard: rows };
+  }
+
+  const opts = {};
+  if (replyMarkup) opts.reply_markup = replyMarkup;
+
+  if (type === 'text') {
+    opts.parse_mode = 'HTML';
+    await api.sendMessage(Number(tgId), bc.draft_text || '', opts);
+  } else if (type === 'photo') {
+    if (bc.draft_caption) { opts.caption = bc.draft_caption; opts.parse_mode = 'HTML'; }
+    await api.sendPhoto(Number(tgId), bc.draft_file_id, opts);
+  } else if (type === 'video') {
+    if (bc.draft_caption) { opts.caption = bc.draft_caption; opts.parse_mode = 'HTML'; }
+    await api.sendVideo(Number(tgId), bc.draft_file_id, opts);
+  } else if (type === 'animation') {
+    if (bc.draft_caption) { opts.caption = bc.draft_caption; opts.parse_mode = 'HTML'; }
+    await api.sendAnimation(Number(tgId), bc.draft_file_id, opts);
+  } else if (type === 'document') {
+    if (bc.draft_caption) { opts.caption = bc.draft_caption; opts.parse_mode = 'HTML'; }
+    await api.sendDocument(Number(tgId), bc.draft_file_id, opts);
+  } else {
+    // Fallback: text
+    opts.parse_mode = 'HTML';
+    await api.sendMessage(Number(tgId), bc.draft_text || bc.draft_caption || '(empty)', opts);
+  }
+}
+
+export async function broadcastTick() {
+  const lockKey = k(['lock', 'broadcast_tick']);
+
+  return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
+    const bc = await db.getActiveBroadcast();
+    if (!bc) return { status: 'idle', reason: 'no_active_broadcast' };
+
+    // Transition PENDING → RUNNING
+    if (bc.status === 'PENDING') {
+      await db.updateBroadcast(bc.id, { status: 'RUNNING', started_at: new Date().toISOString() });
+    }
+
+    const lastUserId = Number(bc.last_sent_user_id || 0);
+    const recipients = await db.listBroadcastUnsentRecipients(
+      bc.id, bc.audience || 'all', BROADCAST_BATCH_SIZE, lastUserId
+    );
+
+    if (!recipients.length) {
+      // No more recipients → DONE
+      await db.updateBroadcast(bc.id, { status: 'DONE', finished_at: new Date().toISOString() });
+      // Notify admin
+      try {
+        const bot = getBot();
+        const creator = await db.getUserById(bc.created_by_user_id);
+        if (creator?.tg_id) {
+          await bot.api.sendMessage(
+            Number(creator.tg_id),
+            `✅ <b>Рассылка #${bc.id} завершена</b>\n\n📊 Отправлено: ${bc.sent_count} / ${bc.total_count}\n❌ Ошибок: ${bc.failed_count}`,
+            { parse_mode: 'HTML' }
+          );
+        }
+      } catch { /* ignore notification failure */ }
+      return { status: 'done', broadcast_id: bc.id, sent: bc.sent_count, failed: bc.failed_count };
+    }
+
+    const bot = getBot();
+    let sent = 0;
+    let failed = 0;
+    let lastId = lastUserId;
+
+    for (const recipient of recipients) {
+      const uid = Number(recipient.user_id);
+      const tgId = Number(recipient.tg_id);
+      lastId = uid;
+
+      try {
+        await sendBroadcastMessage(bot.api, tgId, bc);
+        await db.logBroadcastSent(bc.id, uid, 'sent');
+        sent++;
+      } catch (err) {
+        const code = err?.error_code || err?.statusCode || 0;
+        const desc = String(err?.description || err?.message || '');
+
+        // 403 = blocked by user, 400 = chat not found → permanent failure
+        if (code === 403 || code === 400 || desc.includes('bot was blocked') || desc.includes('chat not found') || desc.includes('user is deactivated')) {
+          await db.logBroadcastSent(bc.id, uid, 'blocked');
+          failed++;
+        }
+        // 429 = rate limit → stop batch early, retry next tick
+        else if (code === 429) {
+          const retryAfter = Number(err?.parameters?.retry_after || 5);
+          console.error(`[BROADCAST] 429 rate limit, retry_after=${retryAfter}`);
+          // Don't log as sent — will retry next tick
+          break;
+        }
+        // Other errors → log as failed, continue
+        else {
+          console.error(`[BROADCAST] send error uid=${uid}`, desc);
+          await db.logBroadcastSent(bc.id, uid, 'failed');
+          failed++;
+        }
+      }
+
+      // Throttle between messages
+      if (BROADCAST_SEND_DELAY_MS > 0) await sleep(BROADCAST_SEND_DELAY_MS);
+    }
+
+    // Update counters
+    await db.updateBroadcast(bc.id, {
+      sent_count: Number(bc.sent_count || 0) + sent,
+      failed_count: Number(bc.failed_count || 0) + failed,
+      last_sent_user_id: lastId,
+    });
+
+    return {
+      status: 'running',
+      broadcast_id: bc.id,
+      batch_sent: sent,
+      batch_failed: failed,
+      total_sent: Number(bc.sent_count || 0) + sent,
+      total_count: bc.total_count,
+    };
+  });
+}
