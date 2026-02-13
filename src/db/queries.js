@@ -4516,3 +4516,51 @@ export async function listBroadcasts(limit = 10, offset = 0) {
   return r.rows || [];
 }
 
+/**
+ * Get next active broadcast to process (PENDING first, then RUNNING).
+ */
+export async function getActiveBroadcast() {
+  const r = await pool.query(
+    `select * from broadcasts
+     where status in ('PENDING','RUNNING')
+     order by
+       case status when 'RUNNING' then 0 when 'PENDING' then 1 end,
+       created_at
+     limit 1`
+  );
+  return r.rows[0] || null;
+}
+
+/**
+ * List recipients that have NOT yet been sent this broadcast (idempotent cursor).
+ * Uses broadcast_sent_log to skip already-processed users.
+ */
+export async function listBroadcastUnsentRecipients(broadcastId, audience = 'all', batchSize = 25, lastUserId = 0) {
+  const filter = String(audience || 'all').toLowerCase();
+  const where = ['u.id > $1', 'not exists (select 1 from broadcast_sent_log sl where sl.broadcast_id = $3 and sl.user_id = u.id)'];
+  if (filter === 'brands') {
+    where.push(`(
+      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
+      or u.brand_plan is not null
+      or coalesce(u.brand_credits,0) > 0
+    )`);
+  } else if (filter === 'creators') {
+    where.push(`exists (select 1 from workspaces w where w.owner_user_id = u.id)`);
+  } else if (filter === 'curators') {
+    where.push(`(
+      exists (select 1 from workspace_curators wc where wc.user_id = u.id)
+      or exists (select 1 from network_moderators nm where nm.user_id = u.id)
+    )`);
+  } else if (filter === 'managers') {
+    where.push(`exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`);
+  }
+  const r = await pool.query(
+    `select u.id as user_id, u.tg_id
+     from users u
+     where ${where.join(' and ')}
+     order by u.id
+     limit $2`,
+    [Number(lastUserId), Number(batchSize), Number(broadcastId)]
+  );
+  return r.rows || [];
+}
