@@ -260,6 +260,77 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
   return r.rows || [];
 }
 
+/**
+ * Admin: export users for CSV (same filters as listUsersDirectory, but up to 10 000 rows).
+ * Returns flat rows with all fields needed for CSV.
+ */
+export async function exportUsersDirectory(filterRaw = 'all', qRaw = '') {
+  const filter = String(filterRaw || 'all').toLowerCase();
+  const MAX_EXPORT = 10000;
+
+  const q0 = String(qRaw || '').trim();
+  const q = q0.replace(/^@/, '').toLowerCase();
+
+  const where = [];
+  if (filter === 'brands') {
+    where.push(`(
+      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
+      or u.brand_plan is not null
+      or coalesce(u.brand_credits,0) > 0
+    )`);
+  } else if (filter === 'creators') {
+    where.push(`exists (select 1 from workspaces w where w.owner_user_id = u.id)`);
+  } else if (filter === 'curators') {
+    where.push(`(
+      exists (select 1 from workspace_curators wc where wc.user_id = u.id)
+      or exists (select 1 from network_moderators nm where nm.user_id = u.id)
+    )`);
+  } else if (filter === 'managers') {
+    where.push(`exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`);
+  }
+
+  const params = [MAX_EXPORT];
+  if (q) {
+    if (/^\d+$/.test(q)) {
+      const n = Number(q);
+      params.push(n);
+      params.push(n);
+      const i = params.length - 1;
+      where.push(`(u.tg_id = $${i} or u.id = $${i + 1})`);
+    } else {
+      params.push(`%${q}%`);
+      const i = params.length;
+      where.push(`lower(coalesce(u.tg_username,'')) like $${i}`);
+    }
+  }
+
+  const whereSql = where.length ? `where ${where.join(' and ')}` : '';
+
+  const r = await pool.query(
+    `select
+       u.id as user_id,
+       u.tg_id,
+       u.tg_username,
+       u.created_at,
+       u.updated_at,
+       u.brand_plan,
+       u.brand_plan_until,
+       coalesce(u.brand_credits,0)::int as brand_credits,
+       coalesce(u.brand_credits_spent,0)::int as brand_credits_spent,
+       exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
+       exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
+       exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
+       exists (select 1 from brand_managers bm where bm.manager_user_id = u.id) as is_manager,
+       exists (select 1 from brand_profiles bp where bp.user_id = u.id) as has_brand_profile
+     from users u
+     ${whereSql}
+     order by u.created_at desc
+     limit $1`,
+    params
+  );
+  return { rows: r.rows || [], truncated: (r.rows || []).length >= MAX_EXPORT };
+}
+
 
 /**
  * Admin: full user card by internal user id.
