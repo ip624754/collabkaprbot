@@ -376,7 +376,7 @@ export async function getUserCardById(userId) {
 
   // Brand profile (if exists)
   const bpR = await pool.query(
-    `select id, company_name, niche, created_at, updated_at
+    `select user_id, brand_name, niche, created_at, updated_at
      from brand_profiles where user_id = $1
      order by created_at limit 1`,
     [uid]
