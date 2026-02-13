@@ -4387,4 +4387,132 @@ export async function searchWorkspaceProfilesByMatrix(verticals = [], formats = 
 
   return r.rows;
 }
- 
+
+
+// -----------------------------
+// Broadcasts (admin mass-messaging)
+// -----------------------------
+
+export async function createBroadcast({ createdByUserId, audience, draftType, draftText, draftFileId, draftCaption, buttonsJson }) {
+  const r = await pool.query(
+    `insert into broadcasts (created_by_user_id, status, audience, draft_type, draft_text, draft_file_id, draft_caption, buttons_json)
+     values ($1, 'PENDING', $2, $3, $4, $5, $6, $7)
+     returning *`,
+    [
+      Number(createdByUserId),
+      String(audience || 'all'),
+      draftType || null,
+      draftText || null,
+      draftFileId || null,
+      draftCaption || null,
+      buttonsJson || null,
+    ]
+  );
+  return r.rows[0] || null;
+}
+
+export async function getBroadcast(id) {
+  const r = await pool.query(`select * from broadcasts where id = $1`, [Number(id)]);
+  return r.rows[0] || null;
+}
+
+export async function updateBroadcast(id, fields = {}) {
+  const sets = [];
+  const params = [Number(id)];
+  let idx = 2;
+  for (const [key, val] of Object.entries(fields)) {
+    sets.push(`${key} = $${idx}`);
+    params.push(val);
+    idx++;
+  }
+  if (!sets.length) return;
+  sets.push(`updated_at = now()`);
+  await pool.query(`update broadcasts set ${sets.join(', ')} where id = $1`, params);
+}
+
+/**
+ * Count audience for a broadcast filter.
+ * Mirrors listUsersDirectory filter logic.
+ */
+export async function countBroadcastAudience(audience = 'all') {
+  const filter = String(audience || 'all').toLowerCase();
+  let where = '';
+  if (filter === 'brands') {
+    where = `where (
+      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
+      or u.brand_plan is not null
+      or coalesce(u.brand_credits,0) > 0
+    )`;
+  } else if (filter === 'creators') {
+    where = `where exists (select 1 from workspaces w where w.owner_user_id = u.id)`;
+  } else if (filter === 'curators') {
+    where = `where (
+      exists (select 1 from workspace_curators wc where wc.user_id = u.id)
+      or exists (select 1 from network_moderators nm where nm.user_id = u.id)
+    )`;
+  } else if (filter === 'managers') {
+    where = `where exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`;
+  }
+  const r = await pool.query(`select count(*)::int as cnt from users u ${where}`);
+  return Number(r.rows[0]?.cnt || 0);
+}
+
+/**
+ * List user TG IDs for broadcast delivery (batched, cursor-based).
+ * Returns users whose tg_id > lastTgId, ordered by tg_id, limited by batchSize.
+ */
+export async function listBroadcastRecipients(audience = 'all', batchSize = 30, lastUserId = 0) {
+  const filter = String(audience || 'all').toLowerCase();
+  const where = ['u.id > $1'];
+  if (filter === 'brands') {
+    where.push(`(
+      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
+      or u.brand_plan is not null
+      or coalesce(u.brand_credits,0) > 0
+    )`);
+  } else if (filter === 'creators') {
+    where.push(`exists (select 1 from workspaces w where w.owner_user_id = u.id)`);
+  } else if (filter === 'curators') {
+    where.push(`(
+      exists (select 1 from workspace_curators wc where wc.user_id = u.id)
+      or exists (select 1 from network_moderators nm where nm.user_id = u.id)
+    )`);
+  } else if (filter === 'managers') {
+    where.push(`exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`);
+  }
+  const r = await pool.query(
+    `select u.id as user_id, u.tg_id
+     from users u
+     where ${where.join(' and ')}
+     order by u.id
+     limit $2`,
+    [Number(lastUserId), Number(batchSize)]
+  );
+  return r.rows || [];
+}
+
+export async function logBroadcastSent(broadcastId, userId, status = 'sent') {
+  await pool.query(
+    `insert into broadcast_sent_log (broadcast_id, user_id, status)
+     values ($1, $2, $3)
+     on conflict (broadcast_id, user_id) do nothing`,
+    [Number(broadcastId), Number(userId), String(status)]
+  );
+}
+
+export async function isBroadcastSentToUser(broadcastId, userId) {
+  const r = await pool.query(
+    `select 1 from broadcast_sent_log where broadcast_id = $1 and user_id = $2 limit 1`,
+    [Number(broadcastId), Number(userId)]
+  );
+  return (r.rows || []).length > 0;
+}
+
+export async function listBroadcasts(limit = 10, offset = 0) {
+  const r = await pool.query(
+    `select * from broadcasts order by created_at desc limit $1 offset $2`,
+    [Math.min(50, Number(limit) || 10), Math.max(0, Number(offset) || 0)]
+  );
+  return r.rows || [];
+}
+
