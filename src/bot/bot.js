@@ -12929,6 +12929,69 @@ ${escapeHtml(safeCap)}
     return;
   });
 
+  // --- Broadcast content handler (accepts text, photo, video, animation) ---
+  bot.on('message', async (ctx, next) => {
+    if (!ctx.from) return next();
+    const exp = await getExpectText(ctx.from.id);
+    if (!exp || String(exp.type) !== 'bc_content') return next();
+
+    const isAdmin = isSuperAdminTg(ctx.from.id);
+    if (!isAdmin) { await clearExpectText(ctx.from.id); return next(); }
+
+    const msg = ctx.message || {};
+    const draft = {};
+
+    if (msg.photo && msg.photo.length) {
+      // Take highest resolution
+      const photo = msg.photo[msg.photo.length - 1];
+      draft.type = 'photo';
+      draft.fileId = photo.file_id;
+      draft.caption = msg.caption || '';
+    } else if (msg.video) {
+      draft.type = 'video';
+      draft.fileId = msg.video.file_id;
+      draft.caption = msg.caption || '';
+    } else if (msg.animation) {
+      draft.type = 'animation';
+      draft.fileId = msg.animation.file_id;
+      draft.caption = msg.caption || '';
+    } else if (msg.document) {
+      draft.type = 'document';
+      draft.fileId = msg.document.file_id;
+      draft.caption = msg.caption || '';
+    } else if (msg.text) {
+      draft.type = 'text';
+      draft.text = msg.text;
+    } else {
+      await ctx.reply('❌ Неподдерживаемый формат. Отправь текст, фото, видео или GIF.', {
+        reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home')
+      });
+      await setExpectText(ctx.from.id, exp, 30 * 60);
+      return;
+    }
+
+    draft.buttons = [];
+    draft.audience = 'all';
+    await clearExpectText(ctx.from.id);
+    await setDraft(ctx.from.id, draft, 30 * 60);
+
+    // Go to buttons step
+    const typeLabel = { text: '📝 Текст', photo: '🖼 Фото', video: '🎬 Видео', animation: '🎞 GIF', document: '📎 Документ' };
+    await ctx.reply(
+      `✅ Контент сохранён: <b>${typeLabel[draft.type] || draft.type}</b>\n\nДобавить URL-кнопки к посту?`,
+      {
+        parse_mode: 'HTML',
+        reply_markup: new InlineKeyboard()
+          .text('🔗 Добавить кнопки', 'a:bc_buttons')
+          .row()
+          .text('➡️ Без кнопок → аудитория', 'a:bc_btn_done')
+          .row()
+          .text('⬅️ Отмена', 'a:bc_cancel')
+      }
+    );
+    return;
+  });
+
 // Generic non-text guard for expectText steps
   // If we are waiting for a text input and user sends sticker/photo/voice/etc,
   // respond with a helpful hint + navigation buttons (Back/Menu), instead of a dead-end text.
@@ -12941,7 +13004,7 @@ ${escapeHtml(safeCap)}
     if (ctx.message?.text) return next();
     const t = String(exp.type || '');
     // Some expectText steps actually expect media/forwarded messages — do not intercept those.
-    if (t === 'setup_forward' || t === 'gw_why_forward') return next();
+    if (t === 'setup_forward' || t === 'gw_why_forward' || t === 'bc_content') return next();
     if (t.endsWith('_photo') || t.endsWith('_gif') || t.endsWith('_video')) return next();
 
     const backCb = expectBackCb(exp);
@@ -13107,6 +13170,79 @@ ${escapeHtml(safe)}`;
 
       await setAdminUsersQuery(tgId, q);
       await renderAdminUsers(ctx, f, 0);
+      return;
+    }
+
+    // Broadcast: URL button input
+    if (exp.type === 'bc_button_input') {
+      const isAdmin = isSuperAdminTg(tgId);
+      if (!isAdmin) { await ctx.reply('Нет доступа.'); return; }
+
+      const raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Отправь кнопку: <code>Текст | https://url</code>', { parse_mode: 'HTML' });
+        try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
+        return;
+      }
+
+      // "готово" / "done" shortcuts
+      const low = raw.toLowerCase();
+      if (low === 'готово' || low === 'done' || low === 'ok') {
+        await clearExpectText(ctx.from.id);
+        await renderBroadcastAudiencePicker(ctx);
+        return;
+      }
+
+      const parts = raw.split('|').map((s) => s.trim());
+      if (parts.length < 2 || !parts[0] || !parts[1]) {
+        await ctx.reply('Формат: <code>Текст кнопки | https://example.com</code>', { parse_mode: 'HTML' });
+        try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
+        return;
+      }
+
+      const btnText = parts[0].slice(0, 40);
+      const btnUrl = parts[1];
+
+      // Basic URL validation
+      if (!/^https?:\/\/.+/.test(btnUrl)) {
+        await ctx.reply('URL должен начинаться с http:// или https://');
+        try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
+        return;
+      }
+
+      const draft = await getDraft(ctx.from.id);
+      if (!draft || !draft.type) {
+        await ctx.reply('⚠️ Черновик не найден. Начни заново.', {
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start')
+        });
+        return;
+      }
+
+      if (!draft.buttons) draft.buttons = [];
+      if (draft.buttons.length >= 3) {
+        await ctx.reply('Максимум 3 кнопки. Нажми «✅ Готово» чтобы продолжить.', {
+          reply_markup: new InlineKeyboard()
+            .text('✅ Готово', 'a:bc_btn_done')
+            .row()
+            .text('⬅️ Отмена', 'a:bc_cancel')
+        });
+        return;
+      }
+
+      draft.buttons.push({ text: btnText, url: btnUrl });
+      await setDraft(ctx.from.id, draft, 30 * 60);
+
+      const list = draft.buttons.map((b, i) => `${i + 1}. ${b.text} → ${b.url}`).join('\n');
+      await ctx.reply(
+        `✅ Кнопка добавлена (${draft.buttons.length}/3):\n${list}\n\nЕщё кнопку — отправь текст. Или нажми «✅ Готово».`,
+        {
+          reply_markup: new InlineKeyboard()
+            .text('✅ Готово', 'a:bc_btn_done')
+            .row()
+            .text('⬅️ Отмена', 'a:bc_cancel')
+        }
+      );
+      try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
       return;
     }
 
@@ -19775,11 +19911,135 @@ if (p.a === 'a:match_home') {
       try {
         await sendAdminUsersCsv(ctx, f, q);
       } catch (err) {
-        log('admin_users_csv_error', err);
+        console.error('[ADMIN] users csv error', err);
         await safeEditOrReply(ctx, '⚠️ Ошибка при генерации CSV.', {
           reply_markup: new InlineKeyboard().text('⬅️ К списку', `a:admin_users|f:${f}|p:0`)
         });
       }
+      return;
+    }
+
+    // =====================================================
+    // 📣 Broadcast flow: start → content → buttons → audience → preview → confirm
+    // =====================================================
+
+    if (p.a === 'a:bc_start') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      // Clear any previous broadcast draft
+      try { await clearDraft(ctx.from.id); } catch {}
+      await safeEditOrReply(ctx,
+        `📣 <b>Новая рассылка</b>\n\nОтправь мне пост для рассылки:\n• текст\n• фото с подписью\n• видео с подписью\n• GIF с подписью\n\nОдно сообщение = один пост.`,
+        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home') }
+      );
+      await setExpectText(ctx.from.id, { type: 'bc_content' }, 30 * 60);
+      return;
+    }
+
+    // Broadcast: pick audience
+    if (p.a === 'a:bc_audience') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const aud = String(p.aud || 'all').toLowerCase();
+      const draft = await getDraft(ctx.from.id);
+      if (!draft || !draft.type) {
+        await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+        });
+        return;
+      }
+      draft.audience = aud;
+      await setDraft(ctx.from.id, draft, 30 * 60);
+      await renderBroadcastPreview(ctx, draft);
+      return;
+    }
+
+    // Broadcast: add URL buttons step
+    if (p.a === 'a:bc_buttons') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const draft = await getDraft(ctx.from.id);
+      if (!draft || !draft.type) {
+        await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+        });
+        return;
+      }
+      await safeEditOrReply(ctx,
+        `🔗 <b>URL-кнопки</b>\n\nОтправь кнопку в формате:\n<code>Текст кнопки | https://example.com</code>\n\nМожно до 3 кнопок, каждая — отдельным сообщением.\nКогда готово — нажми «✅ Готово».`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard()
+            .text('✅ Готово (без кнопок)', 'a:bc_btn_done')
+            .row()
+            .text('⬅️ Отмена', 'a:bc_start')
+        }
+      );
+      await setExpectText(ctx.from.id, { type: 'bc_button_input' }, 30 * 60);
+      return;
+    }
+
+    // Broadcast: done adding buttons → go to audience
+    if (p.a === 'a:bc_btn_done') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderBroadcastAudiencePicker(ctx);
+      return;
+    }
+
+    // Broadcast: confirm → create job
+    if (p.a === 'a:bc_confirm') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const u2 = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
+      const draft = await getDraft(ctx.from.id);
+      if (!draft || !draft.type) {
+        await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+        });
+        return;
+      }
+      try {
+        const total = await db.countBroadcastAudience(draft.audience || 'all');
+        const bc = await db.createBroadcast({
+          createdByUserId: u2.id,
+          audience: draft.audience || 'all',
+          draftType: draft.type || 'text',
+          draftText: draft.text || null,
+          draftFileId: draft.fileId || null,
+          draftCaption: draft.caption || null,
+          buttonsJson: draft.buttons && draft.buttons.length ? JSON.stringify(draft.buttons) : null,
+        });
+        await db.updateBroadcast(bc.id, { total_count: total });
+        try { await clearDraft(ctx.from.id); } catch {}
+        await safeEditOrReply(ctx,
+          `✅ <b>Рассылка #${bc.id} создана</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n⏳ Рассылка будет запущена при следующем тике cron.\nПрогресс можно отслеживать в Админке.`,
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home') }
+        );
+      } catch (err) {
+        console.error('[ADMIN] broadcast confirm error', err);
+        await safeEditOrReply(ctx, '⚠️ Ошибка при создании рассылки.', {
+          reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
+        });
+      }
+      return;
+    }
+
+    // Broadcast: cancel
+    if (p.a === 'a:bc_cancel') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      try { await clearDraft(ctx.from.id); } catch {}
+      await renderAdminHome(ctx);
       return;
     }
 
@@ -23687,6 +23947,91 @@ ${benefits}
 // Admin helpers (payments + moderators)
 // -----------------------------
 
+// Broadcast: audience labels
+function audienceLabel(aud) {
+  const map = { all: 'Все', creators: 'Креаторы', brands: 'Бренды', curators: 'Кураторы', managers: 'Менеджеры' };
+  return map[String(aud || 'all').toLowerCase()] || 'Все';
+}
+
+async function renderBroadcastAudiencePicker(ctx) {
+  const draft = await getDraft(ctx.from.id);
+  if (!draft || !draft.type) {
+    await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
+      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+    });
+    return;
+  }
+
+  const btnsInfo = draft.buttons && draft.buttons.length ? `\n🔗 Кнопок: ${draft.buttons.length}` : '\n🔗 Кнопок: 0';
+  let text = `📣 <b>Выбери аудиторию</b>\n\n📝 Тип: <b>${escapeHtml(draft.type)}</b>${btnsInfo}\n`;
+
+  // Show counts for each audience
+  try {
+    const counts = {};
+    for (const a of ['all', 'creators', 'brands', 'curators', 'managers']) {
+      counts[a] = await db.countBroadcastAudience(a);
+    }
+    text += `\n👥 Все: ${counts.all} · Креаторы: ${counts.creators} · Бренды: ${counts.brands} · Кураторы: ${counts.curators} · Менеджеры: ${counts.managers}`;
+  } catch {}
+
+  const kb = new InlineKeyboard()
+    .text('📨 Все', 'a:bc_audience|aud:all')
+    .text('🧑‍🎤 Креаторы', 'a:bc_audience|aud:creators')
+    .row()
+    .text('🏢 Бренды', 'a:bc_audience|aud:brands')
+    .text('🧩 Кураторы', 'a:bc_audience|aud:curators')
+    .row()
+    .text('🧑‍💼 Менеджеры', 'a:bc_audience|aud:managers')
+    .row()
+    .text('⬅️ Отмена', 'a:bc_cancel');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function renderBroadcastPreview(ctx, draft) {
+  if (!draft || !draft.type) {
+    await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
+      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+    });
+    return;
+  }
+
+  let count = 0;
+  try { count = await db.countBroadcastAudience(draft.audience || 'all'); } catch {}
+
+  // Build preview keyboard (URL buttons)
+  const previewKb = new InlineKeyboard();
+  if (draft.buttons && draft.buttons.length) {
+    for (const b of draft.buttons) {
+      if (b.text && b.url) previewKb.url(b.text, b.url).row();
+    }
+  }
+
+  // Show the preview message first
+  const contentText = draft.type === 'text'
+    ? (draft.text || '(пусто)')
+    : (draft.caption || '(без подписи)');
+
+  let previewMsg = `👁 <b>PREVIEW</b>\n\n${contentText}`;
+  if (draft.buttons && draft.buttons.length) {
+    previewMsg += `\n\n🔗 Кнопки:\n`;
+    for (const b of draft.buttons) {
+      previewMsg += `• <a href="${escapeHtml(b.url)}">${escapeHtml(b.text)}</a>\n`;
+    }
+  }
+
+  // Show confirmation info
+  previewMsg += `\n\n———\n📣 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>~${count}</b>\n\n⚠️ Подтверди отправку:`;
+
+  const confirmKb = new InlineKeyboard()
+    .text('✅ Отправить', 'a:bc_confirm')
+    .text('❌ Отмена', 'a:bc_cancel')
+    .row()
+    .text('🔄 Сменить аудиторию', 'a:bc_btn_done');
+
+  await safeEditOrReply(ctx, previewMsg, { parse_mode: 'HTML', reply_markup: confirmKb });
+}
+
 async function renderAdminHome(ctx) {
   // Access is checked in the callback handler via isSuperAdminTg().
 
@@ -23702,6 +24047,7 @@ async function renderAdminHome(ctx) {
   let text = '👑 Админ-панель\n\n';
   text += '• Пользователи: каталог (фильтры, пагинация)\n';
   text += '• Платежи: manual/apply\n';
+  text += '• Рассылка: broadcast по аудитории\n';
   text += '• Метрики: DAU/MAU, конверсии, воронки\n';
   if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• Офиц.канал: очередь публикаций (${pending})\n`;
 
@@ -23709,6 +24055,8 @@ async function renderAdminHome(ctx) {
     .text('👥 Пользователи', 'a:admin_users|f:all|p:0')
     .row()
     .text('💰 Платежи', 'a:admin_payments')
+    .row()
+    .text('📣 Рассылка', 'a:bc_start')
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
     .row();
