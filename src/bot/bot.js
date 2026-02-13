@@ -24679,8 +24679,14 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
       const who = r.tg_username ? '@' + r.tg_username : 'id ' + r.tg_id;
       const when = r.created_at ? new Date(r.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
       text += `• ${roleBadges(r)} <b>${escapeHtml(who)}</b> · ${escapeHtml(when)}\n`;
-      // Clickable button to open user card
-      kb.text(`${roleBadges(r)} ${who}`, `a:adm_ucard|id:${r.user_id}|f:${filter}|p:${p}`).row();
+    }
+  }
+
+  // If small result set (search or filtered) — show direct card buttons
+  if (rows.length >= 1 && rows.length <= 5) {
+    for (const r of rows) {
+      const who = r.tg_username ? '@' + r.tg_username : 'id ' + r.tg_id;
+      kb.text(`👤 ${who}`, `a:adm_ucard|id:${r.user_id}|f:${filter}|p:${p}`).row();
     }
   }
 
@@ -24756,7 +24762,7 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
     if (card.brand_trial_granted) text += `<b>Trial:</b> ✅ выдан ${msk(card.brand_trial_granted_at)}\n`;
     if (card._brand_profile) {
       const bp = card._brand_profile;
-      text += `<b>Профиль:</b> ${escapeHtml(bp.company_name || '—')}`;
+      text += `<b>Профиль:</b> ${escapeHtml(bp.brand_name || '—')}`;
       if (bp.niche) text += ` · ${escapeHtml(bp.niche)}`;
       text += `\n`;
     }
