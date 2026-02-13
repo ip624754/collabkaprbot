@@ -13246,6 +13246,35 @@ ${escapeHtml(safe)}`;
       return;
     }
 
+    // Admin Audit: search input
+    if (exp.type === 'aud_search') {
+      const isAdmin = isSuperAdminTg(tgId);
+      if (!isAdmin) { await ctx.reply('Нет доступа.'); return; }
+      const h = Number(exp.h || 24);
+
+      let raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Введи запрос (action / ws:ID / user:ID).');
+        try { await setExpectText(ctx.from.id, exp, 15 * 60); } catch {}
+        return;
+      }
+
+      // Parse input
+      const q = { action: '', wsId: 0, userId: 0 };
+      if (/^ws:\d+$/i.test(raw)) {
+        q.wsId = Number(raw.replace(/^ws:/i, ''));
+      } else if (/^user:\d+$/i.test(raw)) {
+        q.userId = Number(raw.replace(/^user:/i, ''));
+      } else {
+        // Treat as action prefix search
+        q.action = raw.slice(0, 50);
+      }
+
+      await setAdminAuditQuery(tgId, q);
+      await renderAdminAudit(ctx, { afterHours: h, page: 0 });
+      return;
+    }
+
 // Add curator by username
     if (exp.type === 'curator_username') {
       const txt = String(ctx.message.text || '').trim();
@@ -20106,6 +20135,70 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    // =====================================================
+    // 📜 Admin Audit Log: search + filters + export
+    // =====================================================
+
+    if (p.a === 'a:aud') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      const h = Number(p.h || 24);
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminAudit(ctx, { afterHours: h, page });
+      return;
+    }
+
+    // Audit: search input mode
+    if (p.a === 'a:aud_search') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const h = Number(p.h || 24);
+      await safeEditOrReply(ctx,
+        `🔎 <b>Поиск по Audit Log</b>\n\nВведи одно из:\n• <code>action:</code> — поиск по типу действия (напр. <code>lead.status_changed</code>)\n• <code>ws:ID</code> — по workspace\n• <code>user:ID</code> — по actor user id\n\nПример: <code>lead.status</code>`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ Отмена', `a:aud|h:${h}|p:0`)
+            .row()
+            .text('⬅️ Админка', 'a:admin_home')
+        }
+      );
+      await setExpectText(ctx.from.id, { type: 'aud_search', h }, 15 * 60);
+      return;
+    }
+
+    // Audit: reset search
+    if (p.a === 'a:aud_reset') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await clearAdminAuditQuery(ctx.from.id);
+      const h = Number(p.h || 24);
+      await renderAdminAudit(ctx, { afterHours: h, page: 0 });
+      return;
+    }
+
+    // Audit: export TXT
+    if (p.a === 'a:aud_export') {
+      await ctx.answerCallbackQuery({ text: '⏳ Генерирую…' });
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const h = Number(p.h || 24);
+      try {
+        await sendAdminAuditExport(ctx, h);
+      } catch (err) {
+        console.error('[ADMIN] audit export error', err);
+        await safeEditOrReply(ctx, '⚠️ Ошибка при генерации экспорта.', {
+          reply_markup: new InlineKeyboard().text('⬅️ Аудит', `a:aud|h:${h}|p:0`)
+        });
+      }
+      return;
+    }
+
     if (p.a === 'a:admin_metrics') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -24199,6 +24292,7 @@ async function renderAdminHome(ctx) {
   text += '• Пользователи: каталог (фильтры, пагинация)\n';
   text += '• Платежи: manual/apply\n';
   text += '• Рассылка: broadcast по аудитории\n';
+  text += '• Аудит: глобальный поиск/экспорт событий\n';
   text += '• Метрики: DAU/MAU, конверсии, воронки\n';
   if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• Офиц.канал: очередь публикаций (${pending})\n`;
 
@@ -24208,6 +24302,7 @@ async function renderAdminHome(ctx) {
     .text('💰 Платежи', 'a:admin_payments')
     .row()
     .text('📣 Рассылка', 'a:bc_list|p:0')
+    .text('📜 Аудит', 'a:aud|h:24|p:0')
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
     .row();
@@ -24377,6 +24472,160 @@ async function clearAdminUsersQuery(tgId) {
   } catch {
     // ignore
   }
+}
+
+// --- Admin Audit Redis helpers ---
+function adminAuditQueryKey(tgId) { return k(['admin', 'aud', 'q', String(tgId)]); }
+
+async function getAdminAuditQuery(tgId) {
+  try {
+    const v = await redis.get(adminAuditQueryKey(tgId));
+    if (!v) return null;
+    return typeof v === 'object' ? v : null;
+  } catch { return null; }
+}
+
+async function setAdminAuditQuery(tgId, q) {
+  try {
+    await redis.set(adminAuditQueryKey(tgId), q, { ex: 7 * 24 * 60 * 60 });
+  } catch {}
+}
+
+async function clearAdminAuditQuery(tgId) {
+  try { await redis.del(adminAuditQueryKey(tgId)); } catch {}
+}
+
+async function renderAdminAudit(ctx, { afterHours = 24, page = 0 } = {}) {
+  const h = Number(afterHours) || 24;
+  const limit = 15;
+  const p = Math.max(0, Number(page) || 0);
+  const offset = p * limit;
+
+  const tgId = Number(ctx.from?.id || 0);
+  const sq = tgId ? await getAdminAuditQuery(tgId) : null;
+  const action = sq?.action || '';
+  const wsId = Number(sq?.wsId || 0);
+  const userId = Number(sq?.userId || 0);
+
+  const opts = { action, wsId, userId, afterHours: h, limit: limit + 1, offset };
+  const rowsAll = await db.searchGlobalAudit(opts);
+  const hasNext = rowsAll.length > limit;
+  const rows = rowsAll.slice(0, limit);
+
+  const msk = (d) => d ? new Date(d).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
+
+  const timeLabels = { 24: '24ч', 168: '7д', 720: '30д', 0: 'Всё' };
+  const timeLabel = timeLabels[h] || `${h}ч`;
+
+  // Search info
+  let searchLine = '';
+  if (action) searchLine = `\n🔎 Action: <code>${escapeHtml(action)}</code>`;
+  else if (wsId) searchLine = `\n🔎 Workspace: <code>${wsId}</code>`;
+  else if (userId) searchLine = `\n🔎 User: <code>${userId}</code>`;
+
+  let text = `📜 <b>Audit Log</b> · ${timeLabel} · стр ${p + 1}${searchLine}\n\n`;
+
+  if (!rows.length) {
+    text += 'Событий нет.';
+  } else {
+    for (const r of rows) {
+      const who = r.tg_username ? '@' + r.tg_username : (r.tg_id ? 'tg:' + r.tg_id : '?');
+      const ws = r.ws_channel ? '@' + r.ws_channel : (r.ws_title || 'ws:' + r.workspace_id);
+      text += `• <code>${escapeHtml(r.action)}</code>\n  ${escapeHtml(who)} · ${escapeHtml(ws)} · ${msk(r.created_at)}\n`;
+    }
+  }
+
+  const kb = new InlineKeyboard();
+
+  // Time filters
+  const tb = (label, hours) => (h === hours ? `✅ ${label}` : label);
+  kb.text(tb('24ч', 24), `a:aud|h:24|p:0`)
+    .text(tb('7д', 168), `a:aud|h:168|p:0`)
+    .text(tb('30д', 720), `a:aud|h:720|p:0`)
+    .text(tb('Всё', 0), `a:aud|h:0|p:0`)
+    .row();
+
+  // Search / Reset
+  kb.text('🔎 Поиск', `a:aud_search|h:${h}`);
+  if (sq) kb.text('🧹 Сброс', `a:aud_reset|h:${h}`);
+  kb.row();
+
+  // Export
+  kb.text('📤 Export TXT', `a:aud_export|h:${h}`).row();
+
+  // Pagination
+  if (p > 0) kb.text('⬅️', `a:aud|h:${h}|p:${p - 1}`);
+  if (hasNext) kb.text('➡️', `a:aud|h:${h}|p:${p + 1}`);
+  if (p > 0 || hasNext) kb.row();
+
+  kb.text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function sendAdminAuditExport(ctx, afterHours = 24) {
+  const tgId = Number(ctx.from?.id || 0);
+  const sq = tgId ? await getAdminAuditQuery(tgId) : null;
+
+  const opts = {
+    action: sq?.action || '',
+    wsId: Number(sq?.wsId || 0),
+    userId: Number(sq?.userId || 0),
+    afterHours: Number(afterHours) || 0,
+  };
+
+  const { rows, truncated } = await db.exportGlobalAudit(opts);
+
+  const mskLong = (d) => {
+    if (!d) return '—';
+    try {
+      return new Date(d).toLocaleString('ru-RU', {
+        timeZone: 'Europe/Moscow',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      }) + ' MSK';
+    } catch { return new Date(d).toISOString(); }
+  };
+
+  const filterDesc = [];
+  if (opts.action) filterDesc.push(`action=${opts.action}`);
+  if (opts.wsId) filterDesc.push(`ws=${opts.wsId}`);
+  if (opts.userId) filterDesc.push(`user=${opts.userId}`);
+  if (opts.afterHours) filterDesc.push(`last_${opts.afterHours}h`);
+
+  const header = [
+    'Collabka PR — Global Audit Export',
+    `Exported: ${mskLong(Date.now())}`,
+    `Filters: ${filterDesc.length ? filterDesc.join(', ') : 'none'}`,
+    `Rows: ${rows.length}${truncated ? ' (TRUNCATED — max 5000)' : ''}`,
+    '---',
+  ].join('\n');
+
+  const body = rows.map((r) => {
+    const who = r.tg_username ? '@' + r.tg_username : (r.tg_id || '?');
+    const ws = r.ws_channel ? '@' + r.ws_channel : (r.ws_title || 'ws:' + r.workspace_id);
+    let payload = '';
+    try { payload = r.payload ? JSON.stringify(r.payload) : ''; } catch {}
+    if (payload.length > 500) payload = payload.slice(0, 500) + '…';
+    return `${mskLong(r.created_at)} | ${r.action} | ${who} | ${ws}${payload ? ' | ' + payload : ''}`;
+  }).join('\n');
+
+  const txt = header + '\n' + (body || 'EMPTY');
+  const ts = new Date().toISOString().slice(0, 10);
+  const filename = `audit_${filterDesc.join('_') || 'all'}_${ts}.txt`;
+
+  let caption = `📤 Audit export: ${rows.length} событий`;
+  if (truncated) caption += '\n⚠️ Лимит 5000 — сузьте фильтр.';
+
+  await ctx.replyWithDocument(
+    new InputFile(Buffer.from(txt, 'utf-8'), filename),
+    {
+      caption,
+      reply_markup: new InlineKeyboard()
+        .text('⬅️ Аудит', `a:aud|h:${afterHours}|p:0`)
+        .text('⬅️ Админка', 'a:admin_home')
+    }
+  );
 }
 
 
