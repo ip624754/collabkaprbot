@@ -993,6 +993,89 @@ export async function countWorkspaceAuditDetailed(workspaceId, opts = {}) {
   return Number(r.rows?.[0]?.cnt || 0);
 }
 
+/**
+ * Admin: global audit search across all workspaces.
+ * Supports: action prefix, wsId, userId, time range, pagination.
+ */
+export async function searchGlobalAudit(opts = {}) {
+  const {
+    action = '',
+    wsId = 0,
+    userId = 0,
+    afterHours = 0,
+    limit = 20,
+    offset = 0,
+  } = (opts || {});
+
+  const wh = [];
+  const args = [];
+  let idx = 1;
+
+  if (action) { wh.push(`a.action like $${idx} || '%'`); args.push(String(action)); idx++; }
+  if (Number(wsId) > 0) { wh.push(`a.workspace_id = $${idx}`); args.push(Number(wsId)); idx++; }
+  if (Number(userId) > 0) { wh.push(`a.actor_user_id = $${idx}`); args.push(Number(userId)); idx++; }
+  if (Number(afterHours) > 0) { wh.push(`a.created_at >= now() - interval '1 hour' * $${idx}`); args.push(Number(afterHours)); idx++; }
+
+  const whereSql = wh.length ? `where ${wh.join(' and ')}` : '';
+  const limIdx = idx; args.push(Math.max(1, Math.min(50, Number(limit) || 20))); idx++;
+  const offIdx = idx; args.push(Math.max(0, Number(offset) || 0));
+
+  const r = await pool.query(
+    `select a.id, a.workspace_id, a.actor_user_id, a.action, a.payload, a.created_at,
+            u.tg_username, u.tg_id,
+            w.title as ws_title, w.channel_username as ws_channel
+     from workspace_audit a
+     left join users u on u.id = a.actor_user_id
+     left join workspaces w on w.id = a.workspace_id
+     ${whereSql}
+     order by a.created_at desc
+     limit $${limIdx} offset $${offIdx}`,
+    args
+  );
+  return r.rows || [];
+}
+
+export async function countGlobalAudit(opts = {}) {
+  const { action = '', wsId = 0, userId = 0, afterHours = 0 } = (opts || {});
+  const wh = [];
+  const args = [];
+  let idx = 1;
+  if (action) { wh.push(`action like $${idx} || '%'`); args.push(String(action)); idx++; }
+  if (Number(wsId) > 0) { wh.push(`workspace_id = $${idx}`); args.push(Number(wsId)); idx++; }
+  if (Number(userId) > 0) { wh.push(`actor_user_id = $${idx}`); args.push(Number(userId)); idx++; }
+  if (Number(afterHours) > 0) { wh.push(`created_at >= now() - interval '1 hour' * $${idx}`); args.push(Number(afterHours)); idx++; }
+  const whereSql = wh.length ? `where ${wh.join(' and ')}` : '';
+  const r = await pool.query(`select count(*)::int as cnt from workspace_audit ${whereSql}`, args);
+  return Number(r.rows?.[0]?.cnt || 0);
+}
+
+export async function exportGlobalAudit(opts = {}) {
+  const { action = '', wsId = 0, userId = 0, afterHours = 0 } = (opts || {});
+  const MAX = 5000;
+  const wh = [];
+  const args = [];
+  let idx = 1;
+  if (action) { wh.push(`a.action like $${idx} || '%'`); args.push(String(action)); idx++; }
+  if (Number(wsId) > 0) { wh.push(`a.workspace_id = $${idx}`); args.push(Number(wsId)); idx++; }
+  if (Number(userId) > 0) { wh.push(`a.actor_user_id = $${idx}`); args.push(Number(userId)); idx++; }
+  if (Number(afterHours) > 0) { wh.push(`a.created_at >= now() - interval '1 hour' * $${idx}`); args.push(Number(afterHours)); idx++; }
+  const whereSql = wh.length ? `where ${wh.join(' and ')}` : '';
+  args.push(MAX);
+  const r = await pool.query(
+    `select a.id, a.workspace_id, a.actor_user_id, a.action, a.payload, a.created_at,
+            u.tg_username, u.tg_id,
+            w.title as ws_title, w.channel_username as ws_channel
+     from workspace_audit a
+     left join users u on u.id = a.actor_user_id
+     left join workspaces w on w.id = a.workspace_id
+     ${whereSql}
+     order by a.created_at desc
+     limit $${idx}`,
+    args
+  );
+  return { rows: r.rows || [], truncated: (r.rows || []).length >= MAX };
+}
+
 // Giveaways
 export async function createGiveaway({ workspaceId, prizeValueText, winnersCount, endsAt, autoDraw, autoPublish }) {
   const r = await pool.query(
