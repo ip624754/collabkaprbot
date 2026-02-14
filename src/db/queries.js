@@ -3974,6 +3974,98 @@ export async function listBrandLeadsForCurator(userId, status, limit = 10, offse
   return r.rows || [];
 }
 
+// --- Assignment: distribute leads among curators ---
+
+export async function assignBrandLead(leadId, userId) {
+  const r = await pool.query(
+    `update brand_leads
+       set assigned_user_id = $2, assigned_at = now(), updated_at = now()
+     where id = $1
+     returning *`,
+    [Number(leadId), Number(userId)]
+  );
+  return r.rows[0] || null;
+}
+
+export async function unassignBrandLead(leadId) {
+  const r = await pool.query(
+    `update brand_leads
+       set assigned_user_id = null, assigned_at = null, updated_at = now()
+     where id = $1
+     returning *`,
+    [Number(leadId)]
+  );
+  return r.rows[0] || null;
+}
+
+/**
+ * List leads for curator with assignment filter.
+ * assignFilter: 'all' | 'my' | 'free'
+ */
+export async function listBrandLeadsForCuratorFiltered(userId, status, assignFilter = 'all', limit = 10, offset = 0) {
+  const uId = Number(userId || 0);
+  if (!uId) return [];
+
+  let assignClause = '';
+  if (assignFilter === 'my') {
+    assignClause = ' and l.assigned_user_id = $1';
+  } else if (assignFilter === 'free') {
+    assignClause = ' and l.assigned_user_id is null';
+  }
+
+  const r = await pool.query(
+    `select
+        l.*,
+        ws.title as workspace_title,
+        ws.channel_username as workspace_username,
+        ws.owner_user_id as workspace_owner_user_id,
+        au.tg_username as assigned_username
+     from brand_leads l
+     join workspaces ws on ws.id = l.workspace_id
+     left join workspace_settings ss on ss.workspace_id = ws.id
+     left join users au on au.id = l.assigned_user_id
+     where l.status = $2
+       and (
+         ws.owner_user_id = $1
+         or (coalesce(ss.curator_enabled, false) = true and exists(
+           select 1 from workspace_curators c where c.workspace_id = ws.id and c.user_id = $1
+         ))
+       )${assignClause}
+     order by l.created_at desc, l.id desc
+     limit $3 offset $4`,
+    [uId, String(status), Number(limit), Number(offset)]
+  );
+  return r.rows || [];
+}
+
+export async function countBrandLeadsForCuratorFiltered(userId, status, assignFilter = 'all') {
+  const uId = Number(userId || 0);
+  if (!uId) return 0;
+
+  let assignClause = '';
+  if (assignFilter === 'my') {
+    assignClause = ' and l.assigned_user_id = $1';
+  } else if (assignFilter === 'free') {
+    assignClause = ' and l.assigned_user_id is null';
+  }
+
+  const r = await pool.query(
+    `select count(*)::int as cnt
+       from brand_leads l
+       join workspaces ws on ws.id = l.workspace_id
+       left join workspace_settings ss on ss.workspace_id = ws.id
+     where l.status = $2
+       and (
+         ws.owner_user_id = $1
+         or (coalesce(ss.curator_enabled, false) = true and exists(
+           select 1 from workspace_curators c where c.workspace_id = ws.id and c.user_id = $1
+         ))
+       )${assignClause}`,
+    [uId, String(status)]
+  );
+  return Number(r.rows?.[0]?.cnt || 0);
+}
+
 export async function appendBrandLeadCuratorNote(leadId, byUserId, text, opts = {}) {
   const id = Number(leadId || 0);
   const by = Number(byUserId || 0);
