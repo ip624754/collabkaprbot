@@ -834,19 +834,15 @@ function mainMenuKb(flags = {}) {
 function mainMenuCreatorKb(flags = {}, opts = {}) {
   const { isModerator = false, isAdmin = false, isFolderEditor = false, isCurator = false } = flags;
 
-  // Layout: пары там, где чаще жмут подряд; одиночные — для режимов/ролей.
   const kb = new InlineKeyboard()
     .text('🚀 Подключить канал', 'a:setup')
     .text('📣 Мои каналы', 'a:ws_list')
-    .row();
-
-  // Role shortcuts (single-row)
-  if (isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
-  if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home').row();
-
-  kb
+    .row()
     .text('🎬 UGC / Офферы', 'a:bx_home')
-    .text('🏷 Бренды', 'a:brands_home|p:0')
+    .text('🏷 Каталог брендов', 'a:brands_home|p:0')
+    .row()
+    .text('📨 Мои заявки', 'a:my_apps|p:0')
+    .text('📥 Inbox', 'a:go_dialogs')
     .row()
     .text('⭐️ PRO', 'a:pro_home')
     .text('🎁 Розыгрыши', 'a:gw_list')
@@ -854,25 +850,31 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 
   if (isFolderEditor) kb.text('📁 Папки', 'a:folders_my').row();
 
+  // Role shortcuts (pairs where possible)
+  if (isCurator && CFG.VERIFICATION_ENABLED) {
+    kb.text('🧹 Кабинет куратора', 'a:cur_home').text('✅ Верификация', 'a:verify_home').row();
+  } else {
+    if (isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
+    if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home').row();
+  }
+
   kb
     .text('🧭 Быстрый старт', 'a:guide')
     .text('💬 Поддержка', 'a:support')
     .row();
 
   if (opts.canManager) {
-    kb
-      .text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
+    kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
       .text('🧑‍💼 Кабинет менеджера', 'a:bm_home')
       .row();
   } else {
     kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu').row();
   }
 
-  // Staff shortcuts
+  // Staff shortcuts (pairs)
   const extra = [];
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
-
   for (let i = 0; i < extra.length; i += 2) {
     const a = extra[i];
     const b = extra[i + 1];
@@ -882,7 +884,6 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
   }
 
   kb.row().text('🏠 Home', 'a:home');
-
   return kb;
 }
 
@@ -1349,42 +1350,31 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     .text(`▶️ Продолжить: ${modeLabel}`, 'a:menu')
     .row()
     .text(bCreator, 'a:home_mode|m:creator')
-    .row()
-    .text(bBrand, 'a:home_mode|m:brand');
+    .text(bBrand, 'a:home_mode|m:brand')
+    .row();
 
-  if (canManager) kb.row().text(bBm, 'a:home_mode|m:brand_manager');
-  if (flags?.isCurator) kb.row().text(bCur, 'a:home_mode|m:curator');
+  if (canManager) kb.text(bBm, 'a:home_mode|m:brand_manager').row();
+  if (flags?.isCurator) kb.text(bCur, 'a:home_mode|m:curator').row();
 
 
   // Quick map shortcuts (mode-aware)
   if (effective === 'curator') {
-    kb.row().text('🧹 Кабинет куратора', 'a:cur_home');
+    kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
   } else if (effective === 'brand' || effective === 'brand_manager') {
-    kb
-      .row()
-      .text('📥 Inbox', 'a:go_dialogs')
-      .text('🎬 Офферы (лента)', 'a:bx_feed|ws:0|p:0|h:mm');
-    kb
-      .row()
-      .text('🔎 Поиск', 'a:pm_home|ws:0')
-      .text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm');
+    kb.text('📥 Inbox', 'a:go_dialogs').text('📝 Заявки', 'a:brand_apps|ws:0|s:new|p:0').row();
+    kb.text('📰 Лента', 'a:bx_feed|ws:0|p:0|h:mm').text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm').row();
   } else {
-    kb.row().text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home');
-    kb.row().text('📨 Мои заявки', 'a:my_apps|p:0');
+    kb.text('📣 Мои каналы', 'a:ws_list').text('📨 Мои заявки', 'a:my_apps|p:0').row();
+    kb.text('🏷 Каталог брендов', 'a:brands_home').text('📥 Inbox', 'a:go_dialogs').row();
   }
 
   // Staff shortcuts
-  if (flags?.isModerator) kb.row().text('🛡 Модерация', 'a:mod_home');
-  if (flags?.isAdmin) kb.row().text('👑 Админка', 'a:admin_home');
+  if (flags?.isModerator) kb.text('🛡 Модерация', 'a:mod_home').row();
+  if (flags?.isAdmin) kb.text('👑 Админка', 'a:admin_home').row();
 
-  kb
-    .row()
-    .text('📋 Меню', 'a:menu')
-    .text('🧭 Быстрый старт', 'a:guide');
+  kb.text('📋 Меню', 'a:menu').text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
 
   if (showHint) kb.row().text('✅ Понятно', 'a:home_hint_ack');
-
-  kb.row().text('💬 Поддержка', 'a:support');
 
   if (edit) await safeEditOrReply(ctx, textMsg, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(textMsg, { parse_mode: 'HTML', reply_markup: kb });
@@ -1978,16 +1968,15 @@ async function setCurGwNote(gwId, meta) {
 function wsMenuKb(wsId, opts = {}) {
   const { showCurator = false } = opts || {};
 
-  // Пары = часто жмут подряд. Одиночные = режимы/редкие.
   const kb = new InlineKeyboard()
-    .text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)
-    .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
+    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+    .text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
     .row()
     .text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)
-    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
-    .row()
-    .text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
     .text('📁 Папки', `a:folders_home|ws:${wsId}`)
+    .row()
+    .text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)
+    .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
     .row()
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
     .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
@@ -1998,8 +1987,7 @@ function wsMenuKb(wsId, opts = {}) {
 
   if (showCurator) kb.text('🧹 Кураторы блогера', 'a:cur_home').row();
 
-  kb.row().text('⬅️ 📣 Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu');
-  kb.row().text('🏠 Home', 'a:home');
+  kb.text('⬅️ Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -2732,6 +2720,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
 .text('📝 Заявки', `a:brand_apps|ws:${wsId}|s:new|p:0`)
 .row()
+.text('📌 Сделки', `a:brand_deals|ws:${wsId}|st:negotiation|p:0`)
 .text(`🎫 Brand Pass · ${fmtCredits(credits)}${retry ? ' · 🎟' + retry : ''}`, `a:brand_pass|ws:${wsId}`)
 .row()
 .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:brand`)
@@ -5039,6 +5028,9 @@ function bxThreadKb(wsId, threadId, opts = {}) {
   kb.text(
     '✅ Закрыть',
     `a:bx_thread_close_q|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+  ).text(
+    '🚩 Жалоба',
+    `a:bx_report_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
   );
 
   if (opts.showRetryInfo) {
@@ -5047,11 +5039,6 @@ function bxThreadKb(wsId, threadId, opts = {}) {
   }
 
   if (offerId) kb.row().text('🔎 Оффер', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
-
-  kb.row().text(
-    '🚩 Жалоба',
-    `a:bx_report_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
-  );
 
   const backCb = back === 'offer' && offerId
     ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`
@@ -7579,16 +7566,17 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 // Curator Inbox (aggregate leads across all workspaces)
 // -----------------------------
 
-function curatorInboxTabsKb(counts, active, page = 0) {
+function curatorInboxTabsKb(counts, active, page = 0, assignFilter = 'all') {
   const a = normLeadStatus(active);
+  const af = String(assignFilter || 'all');
   const kb = new InlineKeyboard()
-    .text(`🆕 Новые ${counts.new ?? 0}`, `a:cur_inbox|s:n|p:0`)
-    .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:cur_inbox|s:ip|p:0`)
+    .text(`🆕 Новые ${counts.new ?? 0}`, `a:cur_inbox|s:n|p:0|af:${af}`)
+    .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:cur_inbox|s:ip|p:0|af:${af}`)
     .row()
-    .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:cur_inbox|s:cl|p:0`)
-    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:cur_inbox|s:sp|p:0`);
+    .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:cur_inbox|s:cl|p:0|af:${af}`)
+    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:cur_inbox|s:sp|p:0|af:${af}`);
 
-  // Mark active with a dot
+  // Mark active status
   for (const row of kb.inline_keyboard) {
     for (const btn of row) {
       const d = String(btn.callback_data || '');
@@ -7597,20 +7585,41 @@ function curatorInboxTabsKb(counts, active, page = 0) {
     }
   }
 
+  // Assignment filter row
+  const afAll = af === 'all' ? '• 📋 Все' : '📋 Все';
+  const afMy = af === 'my' ? '• 👤 Мои' : '👤 Мои';
+  const afFree = af === 'free' ? '• 🆓 Свободные' : '🆓 Свободные';
+  kb.row()
+    .text(afAll, `a:cur_inbox|s:${leadStatusToCb(a)}|p:0|af:all`)
+    .text(afMy, `a:cur_inbox|s:${leadStatusToCb(a)}|p:0|af:my`)
+    .text(afFree, `a:cur_inbox|s:${leadStatusToCb(a)}|p:0|af:free`);
+
   return kb;
 }
 
-async function renderCuratorInbox(ctx, userId, status = 'new', page = 0) {
+async function renderCuratorInbox(ctx, userId, status = 'new', page = 0, assignFilter = 'all') {
   const st = normLeadStatus(status);
+  const af = ['all', 'my', 'free'].includes(String(assignFilter)) ? String(assignFilter) : 'all';
   const p = Math.max(0, Number(page) || 0);
   const limit = 10;
   const offset = p * limit;
 
   const counts = await db.countBrandLeadsForCuratorByStatus(userId);
-  const leads = await db.listBrandLeadsForCurator(userId, st, limit, offset);
+
+  let leads;
+  try {
+    leads = await db.listBrandLeadsForCuratorFiltered(userId, st, af, limit, offset);
+  } catch (e) {
+    // Fallback: column may not exist yet (pre-migration)
+    if (String(e?.message || '').includes('assigned_user_id')) {
+      leads = await db.listBrandLeadsForCurator(userId, st, limit, offset);
+    } else throw e;
+  }
+
+  const afLabel = af === 'my' ? ' (👤 Мои)' : af === 'free' ? ' (🆓 Свободные)' : '';
 
   const textHeader =
-    `📨 <b>Очередь заявок</b>\n\n` +
+    `📨 <b>Очередь заявок</b>${afLabel}\n\n` +
     `Заявки брендов по всем каналам, где ты куратор.\n` +
     `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>\n\n`;
 
@@ -7624,12 +7633,15 @@ async function renderCuratorInbox(ctx, userId, status = 'new', page = 0) {
     const whoRaw = l.brand_username ? '@' + String(l.brand_username).replace(/^@/, '') : (l.brand_name || 'brand');
     const who = deLinkifyText(String(whoRaw));
     const snippet = String(l.message || '').replace(/\s+/g, ' ').slice(0, 52);
-    return `${leadStatusIcon(l.status)} <b>#${l.id}</b> — ${escapeHtml(wsShort)} — ${escapeHtml(who)} — <i>${escapeHtml(snippet)}${String(l.message || '').length > 52 ? '…' : ''}</i>`;
+    const assignTag = l.assigned_user_id
+      ? (Number(l.assigned_user_id) === Number(userId) ? ' 👤' : ` 📌${l.assigned_username ? '@' + l.assigned_username : ''}`)
+      : '';
+    return `${leadStatusIcon(l.status)} <b>#${l.id}</b>${assignTag} — ${escapeHtml(wsShort)} — ${escapeHtml(who)} — <i>${escapeHtml(snippet)}${String(l.message || '').length > 52 ? '…' : ''}</i>`;
   });
 
   const body = lines.length ? lines.join('\n') : 'Пока пусто. Заявки появятся, когда бренд нажмёт кнопку на витрине.';
 
-  const kb = curatorInboxTabsKb(counts, st, p);
+  const kb = curatorInboxTabsKb(counts, st, p, af);
 
   // quick open buttons (max 8)
   for (const l of leads.slice(0, 8)) {
@@ -7644,10 +7656,10 @@ async function renderCuratorInbox(ctx, userId, status = 'new', page = 0) {
   }
 
   // pagination
-  if (p > 0) kb.row().text('⬅️', `a:cur_inbox|s:${leadStatusToCb(st)}|p:${p - 1}`);
+  if (p > 0) kb.row().text('⬅️', `a:cur_inbox|s:${leadStatusToCb(st)}|p:${p - 1}|af:${af}`);
   if (leads.length === limit) {
-    if (p > 0) kb.text('➡️', `a:cur_inbox|s:${leadStatusToCb(st)}|p:${p + 1}`);
-    else kb.row().text('➡️', `a:cur_inbox|s:${leadStatusToCb(st)}|p:${p + 1}`);
+    if (p > 0) kb.text('➡️', `a:cur_inbox|s:${leadStatusToCb(st)}|p:${p + 1}|af:${af}`);
+    else kb.row().text('➡️', `a:cur_inbox|s:${leadStatusToCb(st)}|p:${p + 1}|af:${af}`);
   }
 
   kbNavRow(kb, 'a:cur_home');
@@ -7752,6 +7764,20 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const st = normLeadStatus(lead.status);
 
+  // Assignment info
+  const assignedId = lead.assigned_user_id ? Number(lead.assigned_user_id) : null;
+  const isAssignedToMe = assignedId === Number(actorUserId);
+  const isAssignedToOther = assignedId && !isAssignedToMe;
+  if (assignedId) {
+    let assignedWho = 'id:' + assignedId;
+    try {
+      const au = await db.getUserById(assignedId);
+      if (au?.tg_username) assignedWho = '@' + au.tg_username;
+    } catch {}
+    const assignIcon = isAssignedToMe ? '👤 Ты' : `📌 ${assignedWho}`;
+    text += `\n\n<b>Назначена:</b> ${escapeHtml(assignIcon)}`;
+  }
+
   const retKey = String(back?.ret || '').trim();
   const rPart = retKey ? retPartShort(retKey) : '';
   const listCb = (retKey === 'ci')
@@ -7790,6 +7816,16 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
       .row()
       .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:cl|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .row();
+  }
+
+  // Assignment buttons (for curators and owners)
+  const assignCbBase = `a:lead_assign|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`;
+  if (isAssignedToMe) {
+    kb.text('❌ Снять с себя', `${assignCbBase}|do:un`).row();
+  } else if (isAssignedToOther) {
+    kb.text('⚠️ Назначена другому', `${assignCbBase}|do:re`).row();
+  } else {
+    kb.text('👤 Взять себе', `${assignCbBase}|do:me`).row();
   }
 
   kbNavRow(kb, listCb);
@@ -9532,6 +9568,11 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
         actor_role: actorRole
       });
     } catch {}
+  }
+
+  // Auto-assign lead to curator who replied (if not already assigned)
+  if (!lead.assigned_user_id) {
+    try { await db.assignBrandLead(leadId, Number(actorUserId)); } catch {}
   }
 
   try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
@@ -11962,17 +12003,13 @@ function wsLabelNice(w) {
 function curatorHomeKb(items, modeEnabled = false, queueCounts = null) {
   const kb = new InlineKeyboard();
 
-  // Mode toggle (persisted in Redis). Keep the curator inside the cabinet when toggling.
-  const label = modeEnabled ? '🧹 Режим куратора: ✅ ВКЛ' : '🧹 Режим куратора: ❌ ВЫКЛ';
-  kb.text(label, `a:cur_mode_set|v:${modeEnabled ? 0 : 1}|ret:cur`).row();
+  // Mode toggle + exit in one row
+  const mLabel = modeEnabled ? '🧹 Режим: ✅ ВКЛ' : '🧹 Режим: ❌ ВЫКЛ';
+  kb.text(mLabel, `a:cur_mode_set|v=${modeEnabled ? 0 : 1}|ret:cur`);
+  if (modeEnabled) kb.text('🔓 Обычный', 'a:cur_mode_set|v:0|ret:menu');
+  kb.row();
 
-  // Quick exit to the normal (full) menu.
-  if (modeEnabled) kb.text('🔓 Обычный режим', 'a:cur_mode_set|v:0|ret:menu').row();
-
-  // Help / support (в curator mode тут нет “Мои каналы”, чтобы не путать: свои каналы доступны через обычный режим).
-  kb.text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
-
-  // Aggregated queue across all channels where the user is curator/owner.
+  // Work: queue first
   try {
     const qc = queueCounts && typeof queueCounts === 'object' ? queueCounts : null;
     const n = qc ? Number(qc.new || 0) : 0;
@@ -11980,15 +12017,16 @@ function curatorHomeKb(items, modeEnabled = false, queueCounts = null) {
     kb.text(`📨 Очередь заявок${badge}`, `a:cur_inbox|s:n|p:0`).row();
   } catch {}
 
+  // Channels
   for (const w of items) {
     const on = !!w.curator_enabled;
-    const label = `${on ? '✅' : '❌'} ${wsLabelNice(w)}`;
-    kb.text(label, `a:cur_ws|ws:${w.id}`).row();
+    const wLabel = `${on ? '✅' : '❌'} ${wsLabelNice(w)}`;
+    kb.text(wLabel, `a:cur_ws|ws:${w.id}`).row();
   }
 
-  // Unified hub footer (Back -> Home Hub, Menu -> Role Hub, Home -> Home Hub).
-  kb.row().text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu');
-  kb.row().text('🏠 Home', 'a:home');
+  // Help + footer
+  kb.text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
+  kb.text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -17157,7 +17195,8 @@ if (p.a === 'a:menu') {
       }
       const st = leadStatusFromCb(String(p.s || 'n'));
       const page = Number(p.p || 0);
-      await renderCuratorInbox(ctx, u.id, st, page);
+      const af = ['all', 'my', 'free'].includes(String(p.af)) ? String(p.af) : 'all';
+      await renderCuratorInbox(ctx, u.id, st, page, af);
       return;
     }
 
@@ -18131,6 +18170,65 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
       }
       return;
     }
+
+// --- Lead Assignment ---
+if (p.a === 'a:lead_assign') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+  const leadId = Number(p.id || 0);
+  if (!leadId) return;
+  const action = String(p.do || '');
+  const lead = await db.getBrandLeadById(leadId);
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  const wsId = Number(lead.workspace_id);
+
+  if (action === 'me') {
+    // Assign to me — but warn if already assigned to someone else
+    if (lead.assigned_user_id && Number(lead.assigned_user_id) !== Number(u.id)) {
+      let assignedWho = 'другой куратор';
+      try {
+        const au = await db.getUserById(Number(lead.assigned_user_id));
+        if (au?.tg_username) assignedWho = '@' + au.tg_username;
+      } catch {}
+      const kb = new InlineKeyboard()
+        .text('✅ Всё равно взять', `a:lead_assign|id:${leadId}|w:${wsId}|s:${p.s || 'n'}|p:${p.p || 0}${retPartShort(p.r || '')}|do:force`)
+        .text('❌ Отмена', `a:lead_view|id:${leadId}|w:${wsId}|s:${p.s || 'n'}|p:${p.p || 0}${retPartShort(p.r || '')}`);
+      await safeEditOrReply(ctx, `⚠️ Заявка #${leadId} уже назначена на <b>${escapeHtml(assignedWho)}</b>.\n\nПерензначить на себя?`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+    await db.assignBrandLead(leadId, u.id);
+    await db.auditWorkspace(wsId, u.id, 'lead.assigned', { leadId, to: u.id });
+    try { await ctx.answerCallbackQuery({ text: '👤 Взял себе' }); } catch {}
+  } else if (action === 'force') {
+    await db.assignBrandLead(leadId, u.id);
+    await db.auditWorkspace(wsId, u.id, 'lead.reassigned', { leadId, to: u.id, from: lead.assigned_user_id });
+    try { await ctx.answerCallbackQuery({ text: '👤 Переназначил на себя' }); } catch {}
+  } else if (action === 'un') {
+    await db.unassignBrandLead(leadId);
+    await db.auditWorkspace(wsId, u.id, 'lead.unassigned', { leadId });
+    try { await ctx.answerCallbackQuery({ text: '❌ Снял назначение' }); } catch {}
+  } else if (action === 're') {
+    // Same as 'me' — reassign button for "assigned to other"
+    if (lead.assigned_user_id && Number(lead.assigned_user_id) !== Number(u.id)) {
+      let assignedWho = 'другой';
+      try {
+        const au = await db.getUserById(Number(lead.assigned_user_id));
+        if (au?.tg_username) assignedWho = '@' + au.tg_username;
+      } catch {}
+      const kb = new InlineKeyboard()
+        .text('✅ Переназначить', `a:lead_assign|id:${leadId}|w:${wsId}|s:${p.s || 'n'}|p:${p.p || 0}${retPartShort(p.r || '')}|do:force`)
+        .text('❌ Отмена', `a:lead_view|id:${leadId}|w:${wsId}|s:${p.s || 'n'}|p:${p.p || 0}${retPartShort(p.r || '')}`);
+      await safeEditOrReply(ctx, `⚠️ Заявка назначена на <b>${escapeHtml(assignedWho)}</b>. Переназначить?`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+    await db.assignBrandLead(leadId, u.id);
+    await db.auditWorkspace(wsId, u.id, 'lead.assigned', { leadId, to: u.id });
+  }
+
+  // Re-render lead view
+  const retKey = String(p.ret || p.r || '').trim();
+  await renderLeadView(ctx, u.id, leadId, { wsId, status: leadStatusFromCb(p.s || 'n'), page: Number(p.p || 0), ret: retKey });
+  return;
+}
 
 if (p.a === 'a:lead_set') {
       try { await ctx.answerCallbackQuery(); } catch {}
@@ -24379,7 +24477,6 @@ async function renderAdminHome(ctx) {
 
   const kb = new InlineKeyboard()
     .text('👥 Пользователи', 'a:admin_users|f:all|p:0')
-    .row()
     .text('💰 Платежи', 'a:admin_payments')
     .row()
     .text('📣 Рассылка', 'a:bc_list|p:0')
@@ -24392,11 +24489,11 @@ async function renderAdminHome(ctx) {
     kb.text(`📣 Офиц.канал (${pending})`, 'a:off_queue|p:0').row();
   }
 
-  kb.text('➕ Добавить модератора', 'a:admin_mod_add')
-    .row()
+  kb.text('➕ Модератор', 'a:admin_mod_add')
     .text('📋 Модераторы', 'a:admin_mod_list')
     .row()
-    .text('⬅️ Назад', 'a:menu');
+    .text('⬅️ Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { reply_markup: kb });
 }
