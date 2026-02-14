@@ -1370,6 +1370,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
       .text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm');
   } else {
     kb.row().text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home');
+    kb.row().text('📨 Мои заявки', 'a:my_apps|p:0');
   }
 
   // Staff shortcuts
@@ -9191,6 +9192,67 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
   await renderBrandAppView(ctx, actorUserId, appId, back);
 }
 
+/**
+ * Creator's own applications list ("📨 Мои заявки").
+ * Shows all brand_applications where creator_user_id = me.
+ */
+async function renderCreatorApplications(ctx, creatorUserId, page = 0) {
+  const limit = 8;
+  const p = Math.max(0, Number(page) || 0);
+  const offset = p * limit;
+
+  let total = 0;
+  let apps = [];
+  try {
+    total = await db.countCreatorApplications(creatorUserId);
+    apps = await db.listCreatorApplications(creatorUserId, limit + 1, offset);
+  } catch (e) {
+    if (isMissingRelationError(e, 'brand_applications')) {
+      apps = [];
+    } else throw e;
+  }
+
+  const hasNext = apps.length > limit;
+  const items = apps.slice(0, limit);
+
+  const stIcon = { new: '🆕', in_progress: '💬', closed: '✅', spam: '🗑' };
+
+  let text = `📨 <b>Мои заявки к брендам</b> · стр ${p + 1}\n`;
+  text += `<i>Всего: ${total}</i>\n\n`;
+
+  if (!items.length) {
+    text += 'Заявок пока нет.\n\n💡 Чтобы подать заявку — открой 🏷 Каталог брендов → выбери бренд → 📝 Оставить заявку.';
+  } else {
+    for (const a of items) {
+      const brand = a.brand_name || a.brand_username ? ('@' + a.brand_username) : 'Бренд';
+      const st = normLeadStatus(a.status);
+      const icon = stIcon[st] || '❓';
+      const when = a.updated_at ? fmtTs(a.updated_at) : '—';
+      const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
+      const short = msg.length > 40 ? msg.slice(0, 40) + '…' : (msg || '—');
+      text += `${icon} <b>#${a.id}</b> · <b>${escapeHtml(brand)}</b> · ${escapeHtml(when)}\n<code>${escapeHtml(short)}</code>\n\n`;
+    }
+  }
+
+  const kb = new InlineKeyboard();
+  for (const a of items) {
+    const brand = a.brand_name || (a.brand_username ? '@' + a.brand_username : 'Бренд');
+    const st = normLeadStatus(a.status);
+    const icon = stIcon[st] || '❓';
+    const label = `${icon} #${a.id} ${brand}`.slice(0, 50);
+    kb.text(label, `a:brand_app_card|id:${a.id}`).row();
+  }
+
+  if (p > 0) kb.text('⬅️', `a:my_apps|p:${p - 1}`);
+  if (hasNext) kb.text('➡️', `a:my_apps|p:${p + 1}`);
+  if (p > 0 || hasNext) kb.row();
+
+  kb.text('🏷 Каталог брендов', 'a:brands_home').row();
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
 
 async function renderBrandAppCardForCreator(ctx, actorUserId, appId) {
   const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
@@ -9265,7 +9327,8 @@ ${tail}`;
   const kb = new InlineKeyboard();
   if (st !== 'new') kb.text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`).row();
   kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`).row();
-  kb.text('📋 Меню', 'a:menu');
+  kb.text('⬅️ Мои заявки', 'a:my_apps|p:0').text('📋 Меню', 'a:menu').row();
+  kb.text('🏠 Home', 'a:home');
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -14372,6 +14435,7 @@ if (exp.type === 'brand_deals_search') {
           .text('💬 Написать ещё', `a:brand_app_chat|id:${appId}`)
           .text('✉️ Диалог', `a:brand_app_card|id:${appId}`)
           .row()
+          .text('📨 Мои заявки', 'a:my_apps|p:0')
           .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
           .row()
           .text('📋 Меню', 'a:menu')
@@ -17933,11 +17997,28 @@ if (p.a === 'a:brand_app_chat') {
   return;
 }
 
+// Creator: list my applications to brands
+if (p.a === 'a:my_apps') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+  await renderCreatorApplications(ctx, u.id, Math.max(0, Number(p.p) || 0));
+  return;
+}
+
 if (p.a === 'a:brand_app_card') {
   try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   if (!appId) return;
-  await renderBrandAppCardForCreator(ctx, u.id, appId);
+
+  // Route by role: creator sees their card, brand/manager sees brand view
+  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+
+  if (Number(app.creator_user_id) === Number(u.id)) {
+    await renderBrandAppCardForCreator(ctx, u.id, appId);
+  } else {
+    // Brand owner or manager
+    await renderBrandAppView(ctx, u.id, appId, { status: normLeadStatus(app.status), page: 0 });
+  }
   return;
 }
 
