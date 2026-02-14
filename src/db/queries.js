@@ -4423,6 +4423,33 @@ export async function appendBrandApplicationThreadMessage(appId, messageObj) {
   return r.rows[0] || null;
 }
 
+/**
+ * List brand applications submitted BY a creator (creator-side inbox).
+ */
+export async function listCreatorApplications(creatorUserId, limit = 10, offset = 0) {
+  const r = await pool.query(
+    `select a.*,
+            bp.brand_name,
+            u.tg_username as brand_username
+     from brand_applications a
+     left join brand_profiles bp on bp.user_id = a.brand_user_id
+     left join users u on u.id = a.brand_user_id
+     where a.creator_user_id = $1
+     order by a.updated_at desc
+     limit $2 offset $3`,
+    [Number(creatorUserId), Math.min(50, Number(limit) || 10), Math.max(0, Number(offset) || 0)]
+  );
+  return r.rows || [];
+}
+
+export async function countCreatorApplications(creatorUserId) {
+  const r = await pool.query(
+    `select count(*)::int as cnt from brand_applications where creator_user_id = $1`,
+    [Number(creatorUserId)]
+  );
+  return Number(r.rows?.[0]?.cnt || 0);
+}
+
 
 
 // Profiles matching (matrix-based)
