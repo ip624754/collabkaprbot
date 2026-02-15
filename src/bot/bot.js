@@ -125,11 +125,11 @@ const OFFICIAL_DURATIONS = [
 
 
 const CRM_STAGES = [
-  { id: 'new', title: '🆕 New' },
-  { id: 'talk', title: '💬 Talk' },
-  { id: 'deal', title: '🤝 Deal' },
-  { id: 'paid', title: '💳 Paid' },
-  { id: 'done', title: '✅ Done' }
+  { id: 'new', title: '🆕 Новый' },
+  { id: 'talk', title: '💬 Обсужд.' },
+  { id: 'deal', title: '🤝 Сделка' },
+  { id: 'paid', title: '💳 Оплата' },
+  { id: 'done', title: '✅ Готово' }
 ];
 
 function isSuperAdminTg(tgId) {
@@ -5092,7 +5092,7 @@ function bxThreadKb(wsId, threadId, opts = {}) {
     `a:bx_thread_reply|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
   )
     .text(
-      proofsCount !== null ? `🧾 Proofs: ${proofsCount}` : '🧾 Proofs',
+      proofsCount !== null ? `🧾 Пруфы: ${proofsCount}` : '🧾 Пруфы',
       `a:bx_proofs|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
     )
     .row();
@@ -5122,10 +5122,10 @@ function bxThreadKb(wsId, threadId, opts = {}) {
 
   if (opts.showRetryInfo) {
     const cbTail = `${offerId ? `|o:${offerId}` : ''}|b:${back}|p:${page}|h:${h}`;
-    kb.row().text('ℹ️ Retry', `a:bx_retry_help|ws:${wsId}|t:${threadId}${cbTail}`);
+    kb.row().text('ℹ️ Повтор', `a:bx_retry_help|ws:${wsId}|t:${threadId}${cbTail}`);
   }
 
-  if (offerId) kb.row().text('🔎 Оффер', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
+  if (offerId) kb.row().text('📋 Смотреть оффер', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
 
   const backCb = back === 'offer' && offerId
     ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`
@@ -10515,6 +10515,7 @@ async function renderBxView(ctx, ownerUserId, wsId, offerId, back = 'feed', page
   const contact = String(o.contact || '').trim();
 
   const stEmoji = st === 'ACTIVE' ? '🟢' : (st === 'PAUSED' ? '⏸' : (st === 'CLOSED' ? '🗄' : 'ℹ️'));
+  const stLabel = st === 'ACTIVE' ? 'Активен' : (st === 'PAUSED' ? 'На паузе' : (st === 'CLOSED' ? 'В архиве' : st));
 
   let partnerSection = '';
   let partnerBtnLabel = '📁 Папка партнёров';
@@ -10569,7 +10570,7 @@ ${tagLines.join('\n')}
 <b>${escapeHtml(title || '—')}</b>
 
 <b>Статус</b>
-• ${stEmoji} <b>${escapeHtml(st)}</b>
+• ${stEmoji} <b>${escapeHtml(stLabel)}</b>
 
 <b>Параметры</b>
 ${paramsLines.join('\n')}
@@ -11557,7 +11558,9 @@ async function buildBxThreadView(userId, threadId) {
   const otherVerified = isBuyer ? Boolean(thread.seller_verified) : Boolean(thread.buyer_verified);
   const other = otherUsername ? '@' + otherUsername : ('user #' + otherUserId);
   const otherMark = otherVerified ? ' ✅' : '';
-  const status = String(thread.status || 'OPEN').toUpperCase();
+  const statusRaw = String(thread.status || 'OPEN').toUpperCase();
+  const statusMap = { 'OPEN': 'Открыт', 'CLOSED': 'Закрыт', 'DELETED': 'Удалён' };
+  const status = statusMap[statusRaw] || statusRaw;
   const stageTitle = thread.buyer_stage
     ? (CRM_STAGES.find((s) => s.id === String(thread.buyer_stage))?.title || String(thread.buyer_stage))
     : null;
@@ -11585,8 +11588,8 @@ const chargeHtml = chargeLine ? `${escapeHtml(chargeLine)}` : null;
 	    offerMeta ? offerMeta : null,
     `С кем: <b>${escapeHtml(other)}${otherMark}</b>`,
     `Статус: <b>${escapeHtml(status)}</b>`,
-    triageTitle ? `Триаж: <b>${escapeHtml(triageTitle)}</b>` : null,
-    stageTitle ? `CRM: <b>${escapeHtml(stageTitle)}</b>` : null,
+    triageTitle ? `Обработка: <b>${escapeHtml(triageTitle)}</b>` : null,
+    stageTitle ? `Стадия: <b>${escapeHtml(stageTitle)}</b>` : null,
     replyLine,
     retryLine,
     chargeHtml
@@ -21608,7 +21611,7 @@ if (p.a === 'a:match_home') {
         try { await ctx.answerCallbackQuery({ text: `${bonus}✅ Диалог открыт. -${amt} кредит(ов). Осталось: ${left}`, show_alert: true }); } catch {}
       }
       else if (res.retryUsed) {
-        try { await ctx.answerCallbackQuery({ text: `🎟 Диалог открыт. Использован Retry credit.`, show_alert: true }); } catch {}
+        try { await ctx.answerCallbackQuery({ text: `🎟 Диалог открыт. Использован повторный кредит.`, show_alert: true }); } catch {}
       }
 
       await renderBxThread(ctx, actorUserId, wsId, res.thread.id, { back: 'offer', offerId, page, h });
@@ -21650,7 +21653,7 @@ if (p.a === 'a:bx_retry_help') {
   const expD = Number(CFG.INTRO_RETRY_EXPIRES_DAYS || 7);
   await ctx.answerCallbackQuery({
     show_alert: true,
-    text: `Retry credit: если бренд написал, а ответа нет ${afterH}h → бот выдаёт 1 retry credit (действует ${expD}d). Следующий интро-диалог может открыться без списания Brand Pass.`
+    text: `Повторный кредит: если бренд написал, а ответа нет ${afterH}h → бот выдаёт 1 повторный кредит (действует ${expD}d). Следующий интро-диалог откроется без списания Brand Pass.`
   });
   return;
 }
