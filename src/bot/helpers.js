@@ -157,23 +157,23 @@ export function computeThreadReplyStatus(thread, viewerUserId, opts = {}) {
 
   let base = '';
   if (sellerFirstReplyAt) {
-    base = '✅ replied';
+    base = '✅ ответил';
   } else if (buyerFirstMsgAt) {
-    base = isBuyer ? '⏳ waiting reply…' : '⏳ waiting your reply…';
+    base = isBuyer ? '⏳ ждём ответ…' : '⏳ ждёт ваш ответ…';
   } else {
-    base = isBuyer ? '✍️ write first msg' : '⏳ waiting first msg…';
+    base = isBuyer ? '✍️ напишите первым' : '⏳ ждёт сообщение…';
   }
 
   // Retry status (only meaningful for buyer/brand side)
   let retry = '';
   if (retryEnabled && isBuyer && buyerFirstMsgAt && !sellerFirstReplyAt) {
     if (retryIssuedAt) {
-      retry = '🎟 retry issued';
+      retry = '🎟 повтор отправлен';
     } else if (Number.isFinite(afterHours) && afterHours > 0) {
       const elapsedH = (now.getTime() - buyerFirstMsgAt.getTime()) / 3600000;
       const left = Math.ceil(afterHours - elapsedH);
-      if (elapsedH >= afterHours) retry = '♻️ retry eligible';
-      else if (left > 0) retry = `⏳ retry ~${left}h`;
+      if (elapsedH >= afterHours) retry = '♻️ можно повторить';
+      else if (left > 0) retry = `⏳ повтор ~${left}ч`;
     }
   }
 
@@ -189,7 +189,7 @@ export function formatBxChargeLine(thread) {
   if (!cost && src !== 'RETRY') return '';
 
   let label = '';
-  if (src === 'RETRY') label = 'Retry credit';
+  if (src === 'RETRY') label = 'Повтор';
   else if (src === 'CREDITS') label = 'Brand Pass';
   else if (src) label = src;
 
