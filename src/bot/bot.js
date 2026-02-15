@@ -1227,14 +1227,14 @@ async function renderMainMenu(ctx, flags, params = {}) {
     const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
     if (bm.dbMissing) {
-      modeHuman = 'Brand Manager';
+      modeHuman = 'Менеджер бренда';
       text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
       kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
     } else if (bm.revoked) {
       await disableBrandManagerState(ctx.from.id);
-      modeHuman = 'Brand Manager';
+      modeHuman = 'Менеджер бренда';
       text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
@@ -1243,7 +1243,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
       await renderBmPickBrand(ctx, u, { ret: 'menu', wsId: 0, page: 0, edit });
       return;
     } else if (bm.enabled) {
-      modeHuman = 'Brand Manager';
+      modeHuman = 'Менеджер бренда';
       const base = `🏠 <b>Главное меню</b>
 
 <b>Ты сейчас в режиме:</b> <b>${modeHuman}</b>
@@ -1356,9 +1356,9 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 
   const modeLabel =
     effective === 'curator'
-      ? 'Curator'
+      ? 'Куратор'
       : effective === 'brand_manager'
-        ? 'Brand Manager'
+        ? 'Менеджер бренда'
         : uiModeHuman(uiMode);
 
   let hint = '';
@@ -1372,7 +1372,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     } catch {}
   }
   if (curMode) hint += `
-• Curator Mode: <b>ON</b>`;
+• Режим куратора: <b>ВКЛ</b>`;
 
   let mapText =
     (effective === 'brand' || effective === 'brand_manager')
@@ -1407,7 +1407,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     : '';
 
   const textMsg =
-    `🏠 <b>HOME HUB</b>
+    `🏠 <b>Домашняя</b>
 
 ` +
     bannerText +
@@ -1873,7 +1873,7 @@ async function resolveUiMode(tgId) {
 
 function uiModeHuman(mode) {
   const m = normalizeUiMode(mode);
-  return m === UI_MODES.BRAND ? 'Brand' : 'Creator';
+  return m === UI_MODES.BRAND ? 'Бренд' : 'Креатор';
 }
 
 
@@ -5107,7 +5107,7 @@ function bxThreadKb(wsId, threadId, opts = {}) {
       inActive ? '✅ 💬 В работу' : '💬 В работу',
       `a:bx_thread_triage|ws:${wsId}|t:${threadId}|s:${inNext}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
     ).text(
-      spamActive ? '✅ 🗑 Спам' : '🗑 Спам',
+      spamActive ? '✅ ⛔ Спам' : '⛔ Спам',
       `a:bx_thread_triage|ws:${wsId}|t:${threadId}|s:${spamNext}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
     ).row();
   }
@@ -5964,7 +5964,7 @@ const LEAD_STATUSES = {
   new: { key: 'new', title: '🆕 Новые', icon: '🆕' },
   in_progress: { key: 'in_progress', title: '💬 В работе', icon: '💬' },
   closed: { key: 'closed', title: '✅ Закрытые', icon: '✅' },
-  spam: { key: 'spam', title: '🗑 Спам', icon: '🗑' }
+  spam: { key: 'spam', title: '⛔ Спам', icon: '⛔' }
 };
 
 function normLeadStatus(s) {
@@ -7552,7 +7552,7 @@ function leadListTabsKb(wsId, counts, active, ret) {
     .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:ws_leads|w:${wsId}|s:ip|p:0${rPart}`)
     .row()
     .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:ws_leads|w:${wsId}|s:cl|p:0${rPart}`)
-    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:ws_leads|w:${wsId}|s:sp|p:0${rPart}`);
+    .text(`⛔ Спам ${counts.spam ?? 0}`, `a:ws_leads|w:${wsId}|s:sp|p:0${rPart}`);
 
   // Mark active with a dot
   for (const row of kb.inline_keyboard) {
@@ -7658,7 +7658,7 @@ function curatorInboxTabsKb(counts, active, page = 0, assignFilter = 'all') {
     .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:cur_inbox|s:ip|p:0|af:${af}`)
     .row()
     .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:cur_inbox|s:cl|p:0|af:${af}`)
-    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:cur_inbox|s:sp|p:0|af:${af}`);
+    .text(`⛔ Спам ${counts.spam ?? 0}`, `a:cur_inbox|s:sp|p:0|af:${af}`);
 
   // Mark active status
   for (const row of kb.inline_keyboard) {
@@ -7879,7 +7879,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
       .text('💬 В работу', `a:lead_set|id:${lead.id}|st:ip|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .text('✅ Закрыть', `a:lead_set|id:${lead.id}|st:cl|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .row()
-      .text('🗑 Спам', `a:lead_set|id:${lead.id}|st:sp|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
+      .text('⛔ Спам', `a:lead_set|id:${lead.id}|st:sp|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .text('📝 Заметка', `a:lead_note|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .row();
     kb.text(`📝 Заметки (${notes.length})`, `a:lead_notes|id:${lead.id}|w:${wsId}|n:0|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
@@ -8199,7 +8199,7 @@ function brandAppsTabsKb(counts = {}, active = 'new') {
     .text(`💬 В работе ${counts.in_progress ?? 0}`, `a:brand_apps|ws:0|s:in_progress|p:0`)
     .row()
     .text(`✅ Закрыты ${counts.closed ?? 0}`, `a:brand_apps|ws:0|s:closed|p:0`)
-    .text(`🗑 Спам ${counts.spam ?? 0}`, `a:brand_apps|ws:0|s:spam|p:0`);
+    .text(`⛔ Спам ${counts.spam ?? 0}`, `a:brand_apps|ws:0|s:spam|p:0`);
 
   // Mark active with a dot (cheap but readable)
   for (const row of kb.inline_keyboard) {
@@ -8333,7 +8333,7 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
     `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>
 ` +
     `
-<i>Фильтры: 🆕 Новые / 💬 В работе / ✅ Закрыты / 🗑 Спам.</i>
+<i>Фильтры: 🆕 Новые / 💬 В работе / ✅ Закрыты / ⛔ Спам.</i>
 <i>Подсказка: открой ✉️ → выбери статус → ответь (✍️ или ⚡).</i>`;
 
   let body = '';
@@ -8648,7 +8648,7 @@ ${threadBlock}`;
   // UX note: statuses are internal triage for brand inbox
   text += `
 
-ℹ️ <i>Статусы “В работу / Закрыть / Спам” — внутренний triage бренда: они только сортируют заявки по вкладкам 🆕/💬/✅/🗑. Креатор их не видит.</i>`;
+ℹ️ <i>Статусы “В работу / Закрыть / Спам” — внутренняя сортировка бренда: они только сортируют заявки по вкладкам 🆕/💬/✅/🗑. Креатор их не видит.</i>`;
 
   const kb = new InlineKeyboard();
   if (st === 'new') kb.text('✅ Принять', `a:brand_app_accept|id:${app.id}|s:${back.status}|p:${back.page}`).row();
@@ -8664,8 +8664,7 @@ ${threadBlock}`;
     .text('💬 В работу', `a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`)
     .text('✅ Закрыть', `a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`)
     .row()
-    .text('🗑 Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
-    .row()
+    .text('⛔ Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
     .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
 
   kbNavRow(kb, `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`);
@@ -10182,8 +10181,8 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 Здесь бренд может работать с UGC/офферами без подключения канала.
 
 ${brandPassBalanceLineHtml(credits)}
-🎟 Retry-кредиты: <b>${retry}</b>
-⭐️ Brand Plan: <b>${active ? (planName === 'max' ? 'Max' : 'Basic') : 'OFF'}</b>${untilTxt}
+🎟 Повторные кредиты: <b>${retry}</b>
+⭐️ Подписка: <b>${active ? (planName === 'max' ? 'Макс' : 'Базовая') : 'Нет'}</b>${untilTxt}
 
 Выбери действие:`,
       { parse_mode: 'HTML', reply_markup: bxBrandMenuKb(0, credits, plan, retry, { showCurator: isCurator }) }
@@ -11420,7 +11419,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
   const expD = Number(CFG.INTRO_RETRY_EXPIRES_DAYS || 7);
   const retryHintLine = CFG.INTRO_RETRY_ENABLED
     ? `
-ℹ️ Retry-кредит: если креатор не отвечает за <b>${afterH}ч</b> → 1 retry на <b>${expD}</b> ${ruPlural(expD,'день','дня','дней')}.`
+ℹ️ Повторный кредит: если креатор не отвечает за <b>${afterH}ч</b> → 1 повтор на <b>${expD}</b> ${ruPlural(expD,'день','дня','дней')}.`
     : '';
 
   const trialLine = !meta.brand_trial_granted && trialCredits > 0
@@ -11456,7 +11455,7 @@ ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бе
 👥 Раздел «Менеджеры бренда» открывается после покупки Brand Pass или Brand Plan.
 ${trialLine}${limitLine}${verifyHintLine}
 ${brandPassBalanceLineHtml(credits)}
-🎟 Retry-кредиты: <b>${retry}</b>${retryHintLine}
+🎟 Повторные кредиты: <b>${retry}</b>${retryHintLine}
 
 Выбери пакет:`;
 
@@ -11577,7 +11576,7 @@ async function buildBxThreadView(userId, threadId) {
   // Buyer-side triage
   const triage = String(thread.triage_status || 'open').toLowerCase();
   const triageTitle = isBuyer
-    ? (triage === 'in_progress' ? '💬 В работе' : (triage === 'spam' ? '🗑 Спам' : '🆕 Открыт'))
+    ? (triage === 'in_progress' ? '💬 В работе' : (triage === 'spam' ? '⛔ Спам' : '🆕 Открыт'))
     : null;
 
 const replySt = computeThreadReplyStatus(thread, userId, {
@@ -11731,14 +11730,14 @@ async function renderBrandPassTopup(ctx, userId, wsId) {
     `🎫 <b>Brand Pass</b> = кредиты (Stars)
 
 ${brandPassBalanceLineHtml(credits)}
-🎟 Retry-кредиты: <b>${retry}</b>
+🎟 Повторные кредиты: <b>${retry}</b>
 
 <b>Как работает:</b>
 • 💬 Интро = новый диалог: <b>${introCost}</b> ${ruPlural(introCost,'кредит','кредита','кредитов')}
 • Переписка внутри открытого диалога — бесплатна
 • ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}
 
-Retry-кредит начисляется, если креатор не отвечает за <b>${afterH}ч</b> (действует <b>${expD}</b> ${ruPlural(expD,'день','дня','дней')}).
+Повторный кредит начисляется, если креатор не отвечает за <b>${afterH}ч</b> (действует <b>${expD}</b> ${ruPlural(expD,'день','дня','дней')}).
 
 👥 «Менеджеры бренда» открываются после покупки Brand Pass или Brand Plan.
 
@@ -13097,7 +13096,7 @@ export function getBot() {
 ` +
       `User ID: <code>${u.id}</code>
 ` +
-      `Mode: <b>${escapeHtml(modeHuman)}</b>${bmEnabled ? ' · <b>Brand Manager</b>' : ''}${bmBrand ? `
+      `Режим: <b>${escapeHtml(modeHuman)}</b>${bmEnabled ? ' · <b>Менеджер бренда</b>' : ''}${bmBrand ? `
 Brand: <b>${escapeHtml(bmBrand)}</b>` : ''}
 ` +
       `Type: <code>${escapeHtml(kind)}</code>
@@ -13312,7 +13311,7 @@ ctx.reply = (text, extra) => {
 ` +
         `User ID: <code>${u.id}</code>
 ` +
-        `Mode: <b>${escapeHtml(modeHuman)}</b>${bmEnabled ? ' · <b>Brand Manager</b>' : ''}${bmBrand ? `
+        `Режим: <b>${escapeHtml(modeHuman)}</b>${bmEnabled ? ' · <b>Менеджер бренда</b>' : ''}${bmBrand ? `
 Brand: <b>${escapeHtml(bmBrand)}</b>` : ''}
 ` +
         `Time: <code>${new Date().toISOString()}</code>
@@ -15835,7 +15834,7 @@ ${list}
       await ctx.reply(
         `✅ Ты добавлен в <b>команду бренда</b>: <b>${escapeHtml(brandLabel)}</b>
 
-<b>Ты сейчас в режиме:</b> <b>Brand Manager</b>
+<b>Ты сейчас в режиме:</b> <b>Менеджер бренда</b>
 
 Доступ:
 • 📩 Inbox
@@ -17106,7 +17105,7 @@ if (p.a === 'a:brand_dir_open') {
 
     if (p.a === 'a:bm_help') {
       await ctx.answerCallbackQuery();
-      const text = `🧑‍💼 <b>Brand Manager</b>
+      const text = `🧑‍💼 <b>Менеджер бренда</b>
 
 Это роль для команды бренда.
 
