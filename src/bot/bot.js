@@ -5120,6 +5120,11 @@ function bxThreadKb(wsId, threadId, opts = {}) {
     `a:bx_report_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
   );
 
+  kb.row().text(
+    '🗑 Удалить',
+    `a:bx_thread_del_q|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`
+  );
+
   if (opts.showRetryInfo) {
     const cbTail = `${offerId ? `|o:${offerId}` : ''}|b:${back}|p:${page}|h:${h}`;
     kb.row().text('ℹ️ Повтор', `a:bx_retry_help|ws:${wsId}|t:${threadId}${cbTail}`);
@@ -7907,6 +7912,8 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     kb.text('👤 Взять себе', `${assignCbBase}|do:me`).row();
   }
 
+  kb.text('🗑 Удалить', `a:lead_del_q|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`).row();
+
   kbNavRow(kb, listCb);
 
 
@@ -8657,7 +8664,9 @@ ${threadBlock}`;
     .text('💬 В работу', `a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`)
     .text('✅ Закрыть', `a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`)
     .row()
-    .text('🗑 Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`);
+    .text('🗑 Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
+    .row()
+    .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
 
   kbNavRow(kb, `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`);
 
@@ -18095,6 +18104,30 @@ if (p.a === 'a:brand_app_view') {
   return;
 }
 
+// --- Soft delete brand application ---
+if (p.a === 'a:brand_app_del_q') {
+  await ctx.answerCallbackQuery();
+  const appId = Number(p.id || 0);
+  if (!appId) return;
+  const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
+  const kb = new InlineKeyboard()
+    .text('🗑 Удалить', `a:brand_app_del_do|id:${appId}|s:${back.status}|p:${back.page}`)
+    .text('❌ Отмена', `a:brand_app_view|id:${appId}|s:${back.status}|p:${back.page}`);
+  await safeEditOrReply(ctx, '🗑 Удалить заявку из списка?\n\nКреатор не узнает.', { reply_markup: kb });
+  return;
+}
+
+if (p.a === 'a:brand_app_del_do') {
+  await ctx.answerCallbackQuery();
+  const appId = Number(p.id || 0);
+  if (!appId) return;
+  await db.softDeleteBrandApplication(appId, u.id);
+  await ctx.answerCallbackQuery({ text: '🗑 Заявка удалена' });
+  const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
+  await renderBrandAppsList(ctx, u.id, u.id, back.status, back.page);
+  return;
+}
+
 if (p.a === 'a:brand_app_set') {
   try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
@@ -18438,6 +18471,38 @@ if (p.a === 'a:lead_assign') {
   // Re-render lead view
   const retKey = String(p.ret || p.r || '').trim();
   await renderLeadView(ctx, u.id, leadId, { wsId, status: leadStatusFromCb(p.s || 'n'), page: Number(p.p || 0), ret: retKey });
+  return;
+}
+
+// --- Soft delete lead ---
+if (p.a === 'a:lead_del_q') {
+  await ctx.answerCallbackQuery();
+  const leadId = Number(p.id || 0);
+  if (!leadId) return;
+  const st = p.s || 'n';
+  const pg = Number(p.p || 0);
+  const rPart = p.ret || p.r ? `|ret:${p.ret || p.r}` : '';
+  const wsId = Number(p.w || 0);
+  const kb = new InlineKeyboard()
+    .text('🗑 Удалить', `a:lead_del_do|id:${leadId}|w:${wsId}|s:${st}|p:${pg}${rPart}`)
+    .text('❌ Отмена', `a:ws_lead|id:${leadId}|w:${wsId}|s:${st}|p:${pg}${rPart}`);
+  await safeEditOrReply(ctx, '🗑 Удалить заявку из списка?\n\nОтправитель не узнает.', { reply_markup: kb });
+  return;
+}
+
+if (p.a === 'a:lead_del_do') {
+  await ctx.answerCallbackQuery();
+  const leadId = Number(p.id || 0);
+  if (!leadId) return;
+  await db.softDeleteBrandLead(leadId, u.id);
+  await ctx.answerCallbackQuery({ text: '🗑 Заявка удалена' });
+  const retKey = String(p.ret || p.r || '').trim();
+  const wsId = Number(p.w || 0);
+  if (retKey === 'ci') {
+    await renderCuratorInbox(ctx, u.id, leadStatusFromCb(p.s || 'n'), Number(p.p || 0));
+  } else {
+    await renderWsLeadsList(ctx, u.id, wsId, leadStatusFromCb(p.s || 'n'), Number(p.p || 0));
+  }
   return;
 }
 
@@ -21827,6 +21892,40 @@ if (p.a === 'a:bx_retry_help') {
         return;
       }
       await ctx.answerCallbackQuery({ text: '✅ Тред закрыт' });
+      await renderBxInbox(ctx, bmRes.userId, wsId, page, { bm: bmRes.bm, h });
+      return;
+    }
+
+    // --- Soft delete thread (per-user hide) ---
+    if (p.a === 'a:bx_thread_del_q') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      const threadId = Number(p.t);
+      const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+      const back = p.b ? String(p.b) : 'inbox';
+      const offerId = p.o ? Number(p.o) : null;
+      const cbTail = `|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`;
+
+      const kb = new InlineKeyboard()
+        .text('🗑 Удалить', `a:bx_thread_del_do|ws:${wsId}|t:${threadId}${cbTail}`)
+        .text('❌ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}${cbTail}`);
+      await safeEditOrReply(ctx, '🗑 Удалить диалог из своего Inbox?\n\nСобеседник по-прежнему будет видеть переписку.', { reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:bx_thread_del_do') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      const threadId = Number(p.t);
+      const page = Number(p.p || 0);
+      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
+
+      const bmRes = await bmResolveAssert(ctx, u, wsId, 'bx_inbox', page, { h });
+      if (!bmRes) return;
+
+      await db.softDeleteBarterThread(threadId, bmRes.userId);
+      await ctx.answerCallbackQuery({ text: '🗑 Диалог удалён' });
       await renderBxInbox(ctx, bmRes.userId, wsId, page, { bm: bmRes.bm, h });
       return;
     }
