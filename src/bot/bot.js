@@ -2651,6 +2651,16 @@ async function getBrandTeamGateState(ownerUserId) {
   return { ok, p, basicDone, missingBasic, teamPaid };
 }
 
+/**
+ * Manager limit: 3 for any brand with a purchase.
+ */
+async function brandManagerLimitInfo(brandUserId) {
+  const max = 3;
+  let count = 0;
+  try { count = (await db.listBrandManagers(brandUserId)).length; } catch {}
+  return { max, count, canAdd: count < max };
+}
+
 async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   // Owner-only: managers cannot manage team
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: false });
@@ -6964,19 +6974,11 @@ function buildWsIgTemplate(ws, wsId, type = 'story') {
         ? `💡 Можно поставить в bio или в link-in-bio.`
         : `💡 Скопируй и вставь, потом при желании подправь 1–2 строки под себя.`;
 
-  const extra =
-    (igLink || contact)
-      ? `\n\nКонтакты: ` +
-        [igLink ? `<a href="${escapeHtml(igLink)}">${escapeHtml(igCode || igLink)}</a>` : null,
-         contact ? escapeHtml(contact) : null]
-        .filter(Boolean).join(' • ')
-      : '';
-
+  // Anti-bypass: no contacts in template footer. Only bot link is in the template body.
   return (
     `📌 <b>Шаблон IG — ${escapeHtml(typeTitle)}</b>\n` +
     `${hint}\n\n` +
-    `<pre>${escapeHtml(raw)}</pre>` +
-    extra
+    `<pre>${escapeHtml(raw)}</pre>`
   );
 }
 
@@ -8205,13 +8207,13 @@ function brandAppsTabsKb(counts = {}, active = 'new') {
 function brandDealsTabsKb(counts = {}, active = 'negotiation') {
   const a = normDealStage(active);
   const kb = new InlineKeyboard()
-    .text(`${DEAL_STAGES.negotiation.icon} ${counts.negotiation ?? 0}`, `a:brand_deals|ws:0|st:negotiation|p:0`)
-    .text(`${DEAL_STAGES.deal.icon} ${counts.deal ?? 0}`, `a:brand_deals|ws:0|st:deal|p:0`)
-    .text(`${DEAL_STAGES.paid.icon} ${counts.paid ?? 0}`, `a:brand_deals|ws:0|st:paid|p:0`)
+    .text(`💬 Перег. ${counts.negotiation ?? 0}`, `a:brand_deals|ws:0|st:negotiation|p:0`)
+    .text(`🤝 Сделка ${counts.deal ?? 0}`, `a:brand_deals|ws:0|st:deal|p:0`)
+    .text(`💳 Оплата ${counts.paid ?? 0}`, `a:brand_deals|ws:0|st:paid|p:0`)
     .row()
-    .text(`${DEAL_STAGES.done.icon} ${counts.done ?? 0}`, `a:brand_deals|ws:0|st:done|p:0`)
-    .text(`${DEAL_STAGES.lost.icon} ${counts.lost ?? 0}`, `a:brand_deals|ws:0|st:lost|p:0`)
-    .text(`${DEAL_STAGES.all.icon} ${counts.all ?? 0}`, `a:brand_deals|ws:0|st:all|p:0`);
+    .text(`✅ Готово ${counts.done ?? 0}`, `a:brand_deals|ws:0|st:done|p:0`)
+    .text(`🗑 Потер. ${counts.lost ?? 0}`, `a:brand_deals|ws:0|st:lost|p:0`)
+    .text(`📌 Все ${counts.all ?? 0}`, `a:brand_deals|ws:0|st:all|p:0`);
 
   // Mark active with a dot
   const rows = kb.inline_keyboard;
@@ -10862,12 +10864,8 @@ function offerShareUrl(offerId, title = '', description = '') {
   const link = offerDeepLink(offerId);
   if (!link) return '';
   const t = String(title || '').trim();
-  const d = String(description || '').trim();
-  let text = t || 'Оффер';
-  if (d) text += `
-
-${truncateText(d, 280)}`;
-  // Opens Telegram share sheet (pick chat/contact) with prefilled text+link
+  // Anti-bypass: share only title + bot link. No description (may contain contacts).
+  const text = t ? `🎬 ${t}` : 'Оффер';
   return `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
 }
 
@@ -13483,7 +13481,7 @@ ${escapeHtml(safe)}`;
       const txt = String(ctx.message.text || '').trim();
       const m = txt.match(/^@?([a-zA-Z0-9_]{5,})$/);
       if (!m) {
-        await ctx.reply('Введи @username (пример: @zarinka)');
+        await ctx.reply('Введи @username (пример: @creator)');
         return;
       }
       const username = m[1];
@@ -13592,6 +13590,16 @@ ${escapeHtml(payLine)}
         await ctx.reply('Это твой аккаунт. Нельзя добавить самого себя менеджером.');
         return;
       }
+
+      // Manager limit check
+      const mLim = await brandManagerLimitInfo(brandUserId);
+      if (!mLim.canAdd) {
+        const kb = new InlineKeyboard();
+        kb.text('⬅️ Назад', 'a:brand_team|ws:0');
+        await ctx.reply(`⚠️ Достигнут лимит менеджеров: <b>${mLim.count}/${mLim.max}</b>.`, { parse_mode: 'HTML', reply_markup: kb });
+        return;
+      }
+
       await db.addBrandManager(brandUserId, manager.id, u.id);
       await ctx.reply(`✅ Менеджер @${username} добавлен в команду бренда.`);
       // best-effort notify manager
@@ -14338,6 +14346,15 @@ if (exp.type === 'brand_apply') {
       if (reply.length < 2) return ctx.reply('⚠️ Ответ слишком короткий.');
       if (reply.length > 2000) return ctx.reply('⚠️ Слишком длинно. Укороти до 2000 символов.');
 
+      // Rate-limit: 5 replies / 5 min per brand per app
+      try {
+        const rl = await rateLimit(k(['rl', 'app_reply', brandUserId, appId]), { limit: 5, windowSec: 5 * 60 });
+        if (!rl.ok && !rl.allowed) {
+          await setExpectText(ctx.from.id, exp);
+          return ctx.reply('⏳ Слишком часто. Подожди пару минут.');
+        }
+      } catch {}
+
       await safeDeleteIncomingUserMessage(ctx);
 
       const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
@@ -14457,7 +14474,7 @@ if (exp.type === 'brand_deals_search') {
 
   if (!qRaw) {
     return ctx.reply(
-      '⚠️ Введи <code>@username</code> или <code>TG id</code> (цифры).\nПример: <code>@zarinka</code> или <code>123456789</code>\n\nЧтобы сбросить: <code>сброс</code>',
+      '⚠️ Введи <code>@username</code> или <code>TG id</code> (цифры).\nПример: <code>@creator</code> или <code>123456789</code>\n\nЧтобы сбросить: <code>сброс</code>',
       { parse_mode: 'HTML', reply_markup: kb }
     );
   }
@@ -14475,7 +14492,7 @@ if (exp.type === 'brand_deals_search') {
     const uname = q.replace(/^@+/, '').trim();
     if (uname.length < 2) {
       return ctx.reply(
-        '⚠️ После <code>@</code> нужно минимум 2 символа.\nПример: <code>@zarinka</code>',
+        '⚠️ После <code>@</code> нужно минимум 2 символа.\nПример: <code>@creator</code>',
         { parse_mode: 'HTML', reply_markup: kb }
       );
     }
@@ -14509,6 +14526,15 @@ if (exp.type === 'brand_deals_search') {
 
       if (msg.length < 2) return ctx.reply('⚠️ Сообщение слишком короткое.');
       if (msg.length > 2000) return ctx.reply('⚠️ Слишком длинно. Укороти до 2000 символов.');
+
+      // Rate-limit: 5 messages / 5 min per creator per app
+      try {
+        const rl = await rateLimit(k(['rl', 'app_chat', u.id, appId]), { limit: 5, windowSec: 5 * 60 });
+        if (!rl.ok && !rl.allowed) {
+          await setExpectText(ctx.from.id, exp);
+          return ctx.reply('⏳ Слишком часто. Подожди пару минут.');
+        }
+      } catch {}
 
       await safeDeleteIncomingUserMessage(ctx);
 
@@ -14726,7 +14752,17 @@ if (exp.type === 'brand_deals_search') {
         if (t) wsId = wsId || t.workspace_id;
       }
       const r = await db.createBarterReport({ workspaceId: wsId, reporterUserId: u.id, offerId, threadId, reason });
-      await ctx.reply(`✅ Жалоба отправлена (id: ${r.id}). Модератор посмотрит.`);
+      await clearExpectText(ctx.from.id);
+
+      const kb = new InlineKeyboard();
+      if (threadId) {
+        kb.text('⬅️ К диалогу', `a:bx_thread|ws:${wsId || 0}|t:${threadId}|p:0|h:bo`);
+      } else if (offerId) {
+        kb.text('⬅️ К офферу', `a:bx_pub|ws:${wsId || 0}|o:${offerId}|p:0|h:bo`);
+      }
+      kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+      await ctx.reply(`✅ Жалоба отправлена (id: ${r.id}). Модератор посмотрит.`, { reply_markup: kb });
       return;
     }
     // Admin: add moderator by @username
@@ -15753,6 +15789,13 @@ ${list}
 
       if (!brandUserId) return ctx.reply('Ссылка недействительна.');
 
+      // Manager limit check
+      const mLim = await brandManagerLimitInfo(brandUserId);
+      if (!mLim.canAdd) {
+        await ctx.reply(`⚠️ Бренд достиг лимита менеджеров (${mLim.count}/${mLim.max}). Попроси владельца бренда освободить место или повысить план.`);
+        return;
+      }
+
       await db.addBrandManager(brandUserId, u.id, addedByUserId || u.id);
 
       let brandLabel = null;
@@ -16509,6 +16552,18 @@ bot.on('message:successful_payment', async (ctx) => {
 
 // Stop Telegram "loading" spinner ASAP
     await ctx.answerCallbackQuery();
+
+  // Global per-user rate-limit: 60 actions / minute
+  try {
+    const tgId = Number(ctx.from?.id || 0);
+    if (tgId) {
+      const rl = await rateLimit(k(['rl', 'cb_global', tgId]), { limit: 60, windowSec: 60 });
+      if (!rl.ok && !rl.allowed) {
+        try { await ctx.answerCallbackQuery({ text: '⏳ Слишком быстро. Подожди.' }); } catch {}
+        return;
+      }
+    }
+  } catch {}
 
   const p = parseCb(ctx.callbackQuery.data);
     // MENU ALIASES (no-break): support legacy action names from older messages
@@ -17924,7 +17979,7 @@ if (p.a === 'a:wsp_lead_new') {
   const backCb = `a:brand_deals|ws:0|st:${stage}|p:${page}`;
   await setExpectText(ctx.from.id, { type: 'brand_deals_search', brandUserId: bmRes.userId, stage, page, backCb });
   const kb = navKb(backCb);
-  const t = '🔎 <b>Поиск по сделкам</b>\n\nВарианты:\n• <code>@username</code> — пример: <code>@zarinka</code>\n• <code>TG id</code> (цифры) — пример: <code>123456789</code>\n\nПодсказки:\n• если начинаешь с <code>@</code>, добавь минимум 2 символа после @\n• если вводишь цифры — обычно 6–12 цифр\n\nЧтобы сбросить: <code>сброс</code>';
+  const t = '🔎 <b>Поиск по сделкам</b>\n\nВарианты:\n• <code>@username</code> — пример: <code>@creator</code>\n• <code>TG id</code> (цифры) — пример: <code>123456789</code>\n\nПодсказки:\n• если начинаешь с <code>@</code>, добавь минимум 2 символа после @\n• если вводишь цифры — обычно 6–12 цифр\n\nЧтобы сбросить: <code>сброс</code>';
   try { await safeEditOrReply(ctx, t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
   catch { await ctx.reply(t, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
   return;
@@ -19231,13 +19286,17 @@ if (p.a === 'a:ws_prof_mode') {
 
       const managers = await db.listBrandManagers(u.id);
       const count = managers.length;
+      const mLim = await brandManagerLimitInfo(u.id);
+
+      const limitLine = `Лимит: <b>${mLim.count}/${mLim.max}</b>`;
 
       const text = `👔 <b>Менеджеры бренда</b>
 
 Добавь менеджеров — они смогут быстрее отвечать на заявки и закрывать сделки.
 У менеджера нет доступа к оплатам, профилю бренда и управлению командой.
 
-Сейчас менеджеров: <b>${count}</b>`;
+Сейчас менеджеров: <b>${count}</b>
+${limitLine}`;
 
       await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: brandTeamKb() });
       return;
@@ -20359,6 +20418,18 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      // Rate-limit: 1 broadcast per 60 sec
+      try {
+        const rl = await rateLimit(k(['rl', 'bc_confirm', ctx.from.id]), { limit: 1, windowSec: 60 });
+        if (!rl.ok && !rl.allowed) {
+          await safeEditOrReply(ctx, `⏳ Подожди минуту перед следующей рассылкой.`, {
+            reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
+          });
+          return;
+        }
+      } catch {}
+
       const u2 = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
