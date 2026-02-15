@@ -636,6 +636,83 @@ function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }
   return kb;
 }
 
+/**
+ * Notify workspace team (owner + curators) about lead events.
+ * @param {object} api - bot API instance
+ * @param {number} wsId - workspace ID
+ * @param {object} opts
+ *   text      - HTML notification text
+ *   kb        - InlineKeyboard
+ *   exclude   - Set<tgId> to skip (e.g. the person who triggered the event)
+ *   onlyAssigned - userId: if set, only notify this curator (for assigned leads)
+ */
+async function notifyWorkspaceTeam(api, wsId, opts = {}) {
+  const { text, kb, exclude = new Set(), onlyAssigned = null } = opts;
+  if (!api || !text) return { sent: 0, failed: 0 };
+
+  const targets = new Map(); // tgId -> role
+
+  // Owner
+  try {
+    const ws = await db.getWorkspaceAny(wsId);
+    if (ws?.owner_user_id) {
+      const owner = await db.getUserById(ws.owner_user_id);
+      if (owner?.tg_id) targets.set(Number(owner.tg_id), 'owner');
+    }
+  } catch {}
+
+  // Curators (if not onlyAssigned mode)
+  if (!onlyAssigned) {
+    try {
+      const wsSett = await db.getWorkspaceAny(wsId);
+      const settRow = wsSett ? await db.ensureWorkspaceSettings(wsId) : null;
+      const curEnabled = settRow?.curator_enabled ?? wsSett?.curator_enabled ?? false;
+      if (curEnabled) {
+        const curators = await db.listCurators(wsId);
+        for (const c of curators || []) {
+          const tid = Number(c.tg_id || 0);
+          if (tid && !targets.has(tid)) targets.set(tid, 'curator');
+        }
+      }
+    } catch {}
+  } else {
+    // Only notify the assigned curator
+    try {
+      const au = await db.getUserById(Number(onlyAssigned));
+      if (au?.tg_id) targets.set(Number(au.tg_id), 'assigned_curator');
+    } catch {}
+  }
+
+  // Super admins
+  for (const tid of (CFG.SUPER_ADMIN_TG_IDS || [])) {
+    if (!targets.has(Number(tid))) targets.set(Number(tid), 'admin');
+  }
+
+  // Exclude sender
+  for (const tid of exclude) targets.delete(Number(tid));
+
+  // Rate-limit per curator per workspace: 1 push / 30 sec
+  let sent = 0;
+  let failed = 0;
+  for (const [tgId, role] of targets) {
+    try {
+      const rlKey = k(['ws_notify', wsId, tgId]);
+      const rl = await rateLimit(rlKey, { limit: 2, windowSec: 30 });
+      if (!rl.ok) continue; // skip, too many pushes
+      await api.sendMessage(tgId, text, {
+        parse_mode: 'HTML',
+        reply_markup: kb || undefined,
+        disable_web_page_preview: true
+      });
+      sent++;
+    } catch (e) {
+      failed++;
+      try { console.warn('[notifyWorkspaceTeam] failed', { wsId, tgId, role, err: e?.description || e?.message || String(e) }); } catch {}
+    }
+  }
+  return { sent, failed };
+}
+
 
 
 
@@ -9575,6 +9652,31 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     try { await db.assignBrandLead(leadId, Number(actorUserId)); } catch {}
   }
 
+  // N3: Notify other curators/owner about the reply
+  try {
+    const tplLabel = LEAD_TPL_LABELS[normLeadTplKey(tplKey)] || tplKey;
+    const wsForNotif = ws || await db.getWorkspaceAny(wsId);
+    const chName = wsForNotif?.channel_username ? '@' + wsForNotif.channel_username : (wsForNotif?.title || '');
+    const actorName = ctx.from?.username ? '@' + ctx.from.username : `id:${actorUserId}`;
+    const notifText =
+      `📨 <b>Ответ на заявку #${leadId}</b>\n\n` +
+      `Канал: <b>${escapeHtml(chName)}</b>\n` +
+      `Ответил: <b>${escapeHtml(actorName)}</b> (${escapeHtml(actorRole)})\n` +
+      `Шаблон: <b>${escapeHtml(tplLabel)}</b>`;
+    const notifKb = new InlineKeyboard()
+      .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
+      .row().text('🗑 Убрать', 'a:nd');
+
+    // If assigned to specific curator, only notify them; otherwise notify all
+    const assignedTo = lead.assigned_user_id && Number(lead.assigned_user_id) !== Number(actorUserId) ? Number(lead.assigned_user_id) : null;
+    await notifyWorkspaceTeam(apiFromCtx(ctx), wsId, {
+      text: notifText,
+      kb: notifKb,
+      exclude: new Set([Number(ctx.from?.id || 0)]),
+      onlyAssigned: assignedTo || null
+    });
+  } catch {}
+
   try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
   try {
     await renderLeadView(ctx, actorUserId, leadId, back);
@@ -13869,6 +13971,19 @@ ${escapeHtml(payLine)}
       const targets = new Set();
       if (owner?.tg_id) targets.add(Number(owner.tg_id));
       for (const id of (CFG.SUPER_ADMIN_TG_IDS || [])) targets.add(Number(id));
+
+      // N1: notify curators of this workspace
+      try {
+        const curEnabled = ws.curator_enabled ?? false;
+        if (curEnabled) {
+          const curators = await db.listCurators(wsId);
+          for (const c of curators || []) {
+            const tid = Number(c.tg_id || 0);
+            if (tid) targets.add(tid);
+          }
+        }
+      } catch {}
+
       targets.delete(Number(tgId));
 
       const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
@@ -14000,6 +14115,26 @@ ${escapeHtml(payLine)}
 
       // Persist in-brand thread for the brand-side dialog
       await appendBrandLeadThread(leadId, 'creator', replyText);
+
+      // N3: Notify curators that owner replied
+      try {
+        const chName = ws.channel_username ? '@' + ws.channel_username : (ws.title || '');
+        const notifText =
+          `📨 <b>Ответ на заявку #${leadId}</b>\n\n` +
+          `Канал: <b>${escapeHtml(chName)}</b>\n` +
+          `Ответил: <b>Владелец</b>\n` +
+          `Сниппет: <i>${escapeHtml(clipText(replyText, 100))}</i>`;
+        const notifKb = new InlineKeyboard()
+          .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:n|p:0`)
+          .row().text('🗑 Убрать', 'a:nd');
+        const assignedTo = lead.assigned_user_id && Number(lead.assigned_user_id) !== Number(u.id) ? Number(lead.assigned_user_id) : null;
+        await notifyWorkspaceTeam(apiFromCtx(ctx), Number(ws.id), {
+          text: notifText,
+          kb: notifKb,
+          exclude: new Set([Number(ctx.from?.id || 0)]),
+          onlyAssigned: assignedTo || null
+        });
+      } catch {}
 
       const rPart = exp.ret ? retPartShort(String(exp.ret)) : '';
 
@@ -18222,6 +18357,24 @@ if (p.a === 'a:lead_assign') {
     }
     await db.assignBrandLead(leadId, u.id);
     await db.auditWorkspace(wsId, u.id, 'lead.assigned', { leadId, to: u.id });
+  }
+
+  // N4: Notify owner that lead was assigned/reassigned
+  if (action === 'me' || action === 'force') {
+    try {
+      const actorName = ctx.from?.username ? '@' + ctx.from.username : `id:${u.id}`;
+      const notifText =
+        `👤 <b>Заявка #${leadId} взята</b>\n\n` +
+        `Куратор: <b>${escapeHtml(actorName)}</b>${action === 'force' ? ' (переназначил)' : ''}`;
+      const notifKb = new InlineKeyboard()
+        .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
+        .row().text('🗑 Убрать', 'a:nd');
+      await notifyWorkspaceTeam(apiFromCtx(ctx), wsId, {
+        text: notifText,
+        kb: notifKb,
+        exclude: new Set([Number(ctx.from?.id || 0)])
+      });
+    } catch {}
   }
 
   // Re-render lead view
