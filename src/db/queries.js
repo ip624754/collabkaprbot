@@ -2240,6 +2240,48 @@ export async function closeBarterThread(threadId, userId) {
   return r.rows[0] || null;
 }
 
+// --- Soft delete (per-user hide) ---
+
+export async function softDeleteBarterThread(threadId, userId) {
+  const r = await pool.query(
+    `update barter_threads
+       set deleted_by_user_ids = coalesce(deleted_by_user_ids, '[]'::jsonb) || to_jsonb($2::bigint),
+           updated_at = now()
+     where id = $1
+       and (buyer_user_id = $2 or seller_user_id = $2)
+       and not (coalesce(deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($2::bigint))
+     returning id`,
+    [Number(threadId), Number(userId)]
+  );
+  return !!r.rows[0];
+}
+
+export async function softDeleteBrandLead(leadId, userId) {
+  const r = await pool.query(
+    `update brand_leads
+       set deleted_by_user_ids = coalesce(deleted_by_user_ids, '[]'::jsonb) || to_jsonb($2::bigint),
+           updated_at = now()
+     where id = $1
+       and not (coalesce(deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($2::bigint))
+     returning id`,
+    [Number(leadId), Number(userId)]
+  );
+  return !!r.rows[0];
+}
+
+export async function softDeleteBrandApplication(appId, userId) {
+  const r = await pool.query(
+    `update brand_applications
+       set deleted_by_user_ids = coalesce(deleted_by_user_ids, '[]'::jsonb) || to_jsonb($2::bigint),
+           updated_at = now()
+     where id = $1
+       and not (coalesce(deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($2::bigint))
+     returning id`,
+    [Number(appId), Number(userId)]
+  );
+  return !!r.rows[0];
+}
+
 // -----------------------------
 // Moderation (v1.0.0)
 // -----------------------------
@@ -3715,6 +3757,7 @@ export async function listBarterThreadsForUserWithVerified(userId, limit = 20, o
        limit 1
      ) lm on true
      where (t.buyer_user_id=$1 or t.seller_user_id=$1)
+       and not (coalesce(t.deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($1::bigint))
      order by coalesce(t.last_message_at, t.created_at) desc
      limit $2 offset $3`,
     [userId, limit, offset]
@@ -3743,6 +3786,7 @@ export async function listBarterThreadsForUser(userId, limit = 20, offset = 0) {
        limit 1
      ) lm on true
      where (t.buyer_user_id=$1 or t.seller_user_id=$1)
+       and not (coalesce(t.deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($1::bigint))
      order by coalesce(t.last_message_at, t.created_at) desc
      limit $2 offset $3`,
     [Number(userId), Number(limit || 20), Number(offset || 0)]
@@ -3913,6 +3957,7 @@ export async function listBrandLeads(workspaceId, status, limit = 10, offset = 0
     `select *
      from brand_leads
      where workspace_id=$1 and status=$2
+       and coalesce(deleted_by_user_ids, '[]'::jsonb) = '[]'::jsonb
      order by created_at desc, id desc
      limit $3 offset $4`,
     [Number(workspaceId), String(status), Number(limit), Number(offset)]
@@ -3930,7 +3975,8 @@ export async function countBrandLeadsForCuratorByStatus(userId) {
        from brand_leads l
        join workspaces ws on ws.id = l.workspace_id
        left join workspace_settings ss on ss.workspace_id = ws.id
-      where (
+      where not (coalesce(l.deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($1::bigint))
+        and (
         ws.owner_user_id = $1
         or (coalesce(ss.curator_enabled, false) = true and exists(
           select 1 from workspace_curators c where c.workspace_id = ws.id and c.user_id = $1
@@ -3961,6 +4007,7 @@ export async function listBrandLeadsForCurator(userId, status, limit = 10, offse
      join workspaces ws on ws.id = l.workspace_id
      left join workspace_settings ss on ss.workspace_id = ws.id
      where l.status = $2
+       and not (coalesce(l.deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($1::bigint))
        and (
          ws.owner_user_id = $1
          or (coalesce(ss.curator_enabled, false) = true and exists(
@@ -4025,6 +4072,7 @@ export async function listBrandLeadsForCuratorFiltered(userId, status, assignFil
      left join workspace_settings ss on ss.workspace_id = ws.id
      left join users au on au.id = l.assigned_user_id
      where l.status = $2
+       and not (coalesce(l.deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($1::bigint))
        and (
          ws.owner_user_id = $1
          or (coalesce(ss.curator_enabled, false) = true and exists(
@@ -4055,6 +4103,7 @@ export async function countBrandLeadsForCuratorFiltered(userId, status, assignFi
        join workspaces ws on ws.id = l.workspace_id
        left join workspace_settings ss on ss.workspace_id = ws.id
      where l.status = $2
+       and not (coalesce(l.deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($1::bigint))
        and (
          ws.owner_user_id = $1
          or (coalesce(ss.curator_enabled, false) = true and exists(
@@ -4220,6 +4269,7 @@ export async function countBrandApplicationsByStatus(brandUserId) {
     `select status, count(*)::int as cnt
      from brand_applications
      where brand_user_id=$1
+       and not (coalesce(deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($1::bigint))
      group by status`,
     [Number(brandUserId)]
   );
@@ -4236,6 +4286,7 @@ export async function listBrandApplications(brandUserId, status, limit = 10, off
     `select *
      from brand_applications
      where brand_user_id=$1 and coalesce(status,'new')=$2
+       and not (coalesce(deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($1::bigint))
      order by created_at desc, id desc
      limit $3 offset $4`,
     [Number(brandUserId), String(status), Number(limit), Number(offset)]
