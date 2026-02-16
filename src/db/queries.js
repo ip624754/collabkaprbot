@@ -1147,6 +1147,29 @@ export async function getGiveawayInfoForUser(giveawayId) {
   return r.rows[0] || null;
 }
 
+export async function getGiveawayById(giveawayId) {
+  const r = await pool.query(
+    `select g.*, w.title as ws_title, w.channel_username as ws_username
+     from giveaways g
+     join workspaces w on w.id = g.workspace_id
+     where g.id=$1`,
+    [giveawayId]
+  );
+  return r.rows[0] || null;
+}
+
+export async function getWinnersWithTgId(giveawayId) {
+  const r = await pool.query(
+    `select w.place, u.tg_id, u.tg_username
+     from giveaway_winners w
+     join users u on u.id = w.user_id
+     where w.giveaway_id=$1
+     order by w.place asc`,
+    [giveawayId]
+  );
+  return r.rows.map(x => ({ place: Number(x.place), tg_id: Number(x.tg_id), username: x.tg_username || null }));
+}
+
 export async function listGiveaways(ownerUserId, limit = 20) {
   const r = await pool.query(
     `select g.*, ws.title as workspace_title
@@ -1476,7 +1499,7 @@ export async function listEndedGiveawaysToDraw(limit = 50) {
 
 export async function listDrawnGiveawaysToPublish(limit = 50) {
   const r = await pool.query(
-    `select id, workspace_id, published_chat_id, results_message_id
+    `select id, workspace_id, published_chat_id, published_message_id, results_message_id
      from giveaways
      where status='WINNERS_DRAWN'
        and auto_publish=true
