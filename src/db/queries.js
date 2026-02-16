@@ -356,9 +356,12 @@ export async function getUserCardById(userId) {
 
   // Workspaces owned by user
   const wsR = await pool.query(
-    `select id, title, channel_id, channel_username, created_at
-     from workspaces where owner_user_id = $1
-     order by created_at`,
+    `select w.id, w.title, w.channel_id, w.channel_username, w.created_at,
+            coalesce(s.plan, 'free') as plan, s.pro_until
+     from workspaces w
+     left join workspace_settings s on s.workspace_id = w.id
+     where w.owner_user_id = $1
+     order by w.created_at`,
     [uid]
   );
   user._workspaces = wsR.rows || [];
@@ -2428,6 +2431,70 @@ export async function activateBrandPlan(userId, plan, days) {
     [userId, String(plan || 'basic'), Number(days || 30)]
   );
   return r.rows[0] || null;
+}
+
+// --- Admin: revoke subscriptions ---
+
+export async function revokeBrandPlan(userId) {
+  await pool.query(
+    `update users set brand_plan = null, brand_plan_until = null, brand_plan_updated_at = now(), updated_at = now() where id = $1`,
+    [Number(userId)]
+  );
+}
+
+export async function resetBrandCredits(userId) {
+  await pool.query(
+    `update users set brand_credits = 0, updated_at = now() where id = $1`,
+    [Number(userId)]
+  );
+}
+
+export async function revokeAllWorkspacePro(userId) {
+  await pool.query(
+    `update workspace_settings set plan = 'free', pro_until = null, updated_at = now()
+     where workspace_id in (select id from workspaces where owner_user_id = $1)`,
+    [Number(userId)]
+  );
+}
+
+// --- Admin: ban/unban ---
+
+export async function banUser(userId) {
+  await pool.query(
+    `update users set banned_at = now(), updated_at = now() where id = $1`,
+    [Number(userId)]
+  );
+}
+
+export async function unbanUser(userId) {
+  await pool.query(
+    `update users set banned_at = null, updated_at = now() where id = $1`,
+    [Number(userId)]
+  );
+}
+
+export async function isUserBanned(userId) {
+  const r = await pool.query(
+    `select banned_at from users where id = $1`,
+    [Number(userId)]
+  );
+  return !!(r.rows[0]?.banned_at);
+}
+
+export async function freezeAllUserOffers(userId) {
+  await pool.query(
+    `update barter_offers set status = 'FROZEN', updated_at = now()
+     where workspace_id in (select id from workspaces where owner_user_id = $1) and status = 'ACTIVE'`,
+    [Number(userId)]
+  );
+}
+
+export async function closeAllUserThreads(userId) {
+  await pool.query(
+    `update barter_threads set status = 'CLOSED', updated_at = now()
+     where (buyer_user_id = $1 or seller_user_id = $1) and status = 'OPEN'`,
+    [Number(userId)]
+  );
 }
 
 // -----------------------------
