@@ -152,3 +152,44 @@ export async function notifyGiveawayWinnersReady({ api, db, g, reason = 'drawn',
 
   return { owner: ownerOk, channel: channelOk };
 }
+
+/**
+ * DM winners of a giveaway — notify each winner personally.
+ */
+export async function notifyGiveawayWinnersDM({ api, db, gwId, reason = 'drawn' } = {}) {
+  if (!api || !db || !gwId) return { sent: 0, failed: 0 };
+
+  const winners = await db.getWinnersWithTgId(gwId);
+  if (!winners || !winners.length) return { sent: 0, failed: 0 };
+
+  const g = await db.getGiveawayById(gwId);
+  const channelLine = g ? formatChannelLine(g) : `конкурс #${gwId}`;
+  const deepLink = botLink(`gw_${gwId}`);
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const w of winners) {
+    const tgId = w.tg_id ? Number(w.tg_id) : null;
+    if (!tgId) { failed++; continue; }
+
+    const place = Number(w.place || 0);
+    const placeText = place ? `🥇 Место: <b>#${place}</b>\n` : '';
+
+    const text = `🎉 <b>Поздравляем! Ты победил!</b>
+
+${placeText}🎁 Конкурс: <b>${escapeHtml(channelLine)}</b>
+
+Свяжись с организатором для получения приза.`;
+
+    const kb = deepLink
+      ? { inline_keyboard: [[{ text: '🎁 Открыть конкурс', url: deepLink }]] }
+      : undefined;
+
+    const ok = await safeSend(api, tgId, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    if (ok) sent++;
+    else failed++;
+  }
+
+  return { sent, failed };
+}
