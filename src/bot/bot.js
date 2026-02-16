@@ -24541,7 +24541,6 @@ ${actionHint}`;
             reply_markup: kb,
             disable_web_page_preview: true
           });
-          delivered++;
         }
 
         await db.updateGiveaway(created.id, {
