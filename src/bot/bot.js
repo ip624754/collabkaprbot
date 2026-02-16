@@ -12014,7 +12014,7 @@ async function renderGwWinnersView(ctx, ownerUserId, gwId) {
   const winnersLines = wf.text || '—';
   const winnersBlock = wf.mode === 'one'
     ? `🏆 Победители: ${wf.text}`
-    : `${winnersBlock}`;
+    : `🏆 Победители:\n\n${winnersLines}`;
 
   const pubLabel = resultsPublished ? '✅ Итоги опубликованы' : '🏁 Итоги готовы';
   const text = `🏆 <b>Победители конкурса #${g.id}</b>
