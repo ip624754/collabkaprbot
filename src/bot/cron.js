@@ -4,7 +4,7 @@ import { getBot } from './bot.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
-import { notifyGiveawayEnded, notifyGiveawayWinnersReady } from './gwNotify.js';
+import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 
 // Production-safe fixed cron parameters.
 // Keep them deterministic and boring (Jobs), transparent (Vitalik), and reliable (Woz).
@@ -94,9 +94,71 @@ async function autoDrawEnded() {
     } catch {
       // ignore
     }
+
+    // DM winners directly
+    try {
+      await notifyGiveawayWinnersDM({ api: bot.api, db, gwId: g.id, reason: 'auto_draw' });
+    } catch {
+      // ignore
+    }
   }
 
   return drawn;
+}
+
+async function autoPublishDrawn() {
+  const list = await db.listDrawnGiveawaysToPublish(20);
+  const bot = getBot();
+  const published = [];
+
+  for (const g of list) {
+    if (!g.published_chat_id) continue;
+
+    try {
+      const winners = await db.getWinnersWithTgId(g.id);
+      if (!winners.length) continue;
+
+      const winnerLines = winners.map(w => {
+        const name = w.username ? `@${w.username}` : `tg:${w.tg_id}`;
+        return `${w.place}. ${name}`;
+      }).join('\n');
+
+      const body = `🏁 <b>Итоги конкурса</b>\n\n🏆 Победители:\n${winnerLines}`;
+
+      const chatId = Number(g.published_chat_id);
+      const origMsgId = g.results_message_id ? null : (g.published_message_id || null);
+
+      // Try edit original, fallback to reply
+      let publishedId = null;
+
+      if (origMsgId) {
+        try {
+          await bot.api.editMessageText(chatId, Number(origMsgId), body, { parse_mode: 'HTML' });
+          publishedId = Number(origMsgId);
+        } catch {}
+      }
+
+      if (!publishedId) {
+        const replyParams = origMsgId
+          ? { reply_parameters: { message_id: Number(origMsgId), allow_sending_without_reply: true } }
+          : {};
+        const sent = await bot.api.sendMessage(chatId, body, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          ...replyParams,
+        });
+        publishedId = sent.message_id;
+      }
+
+      await db.updateGiveaway(g.id, { status: 'RESULTS_PUBLISHED', results_message_id: publishedId, results_published_at: new Date().toISOString() });
+      await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.results_auto_published', { message_id: publishedId });
+      published.push(g.id);
+    } catch {
+      // skip individual failures
+    }
+  }
+
+  return published;
 }
 
 async function expireOfficialPosts() {
@@ -194,12 +256,14 @@ export async function giveawaysTick() {
   return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
     const ended = await endDueGiveaways();
     const drawn = await autoDrawEnded();
+    const published = await autoPublishDrawn();
     const official = await expireOfficialPosts();
     const retry = await issueIntroRetryCredits();
     const duration_ms = Date.now() - startedAt;
     return {
       ended,
       drawn,
+      published_count: published.length,
       official,
       retry,
       ended_count: ended.length,
