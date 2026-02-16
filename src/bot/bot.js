@@ -13258,6 +13258,13 @@ if (!exp) {
 
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     const tgId = Number(ctx.from.id);
+
+    // Ban gate
+    if (u?.banned_at && !isSuperAdminTg(tgId)) {
+      await ctx.reply('⛔ Ваш аккаунт заблокирован. Обратитесь в поддержку.');
+      return;
+    }
+
     await clearExpectText(ctx.from.id);
 
 // Default navigation keyboard for any "text input" step.
@@ -15723,6 +15730,13 @@ ${list}
       else if (payload?.type === 'gwc') preMsg = await ctx.reply('⏳ Открываю конкурс…');
 
       const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
+
+      // Ban gate
+      if (u?.banned_at && !isSuperAdminTg(ctx.from.id)) {
+        await ctx.reply('⛔ Ваш аккаунт заблокирован. Обратитесь в поддержку.');
+        return;
+      }
+
       db.trackEvent('start', { userId: u.id, meta: { payloadType: payload?.type || null, hasPayload: !!payload } });
     if (payload?.type === 'gwj') {
       const loading = preMsg || await ctx.reply('⏳ Записываю участие…');
@@ -16652,6 +16666,13 @@ bot.on('message:successful_payment', async (ctx) => {
     if (_aliasA[p.a]) p.a = _aliasA[p.a];
 
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
+
+    // Ban gate: blocked users can only see admin/mod panels (so admin can unban)
+    if (u?.banned_at && !isSuperAdminTg(ctx.from.id)) {
+      try { await ctx.answerCallbackQuery({ text: '⛔ Ваш аккаунт заблокирован. Обратитесь в поддержку.', show_alert: true }); } catch {}
+      return;
+    }
+
     // Cancel any pending text input step when user clicks an inline button
     try { await clearExpectText(ctx.from.id); } catch {}
 
@@ -20577,6 +20598,148 @@ if (p.a === 'a:match_home') {
       const card = await db.getUserCardById(Number(p.id || 0));
       if (!card) return ctx.answerCallbackQuery({ text: 'Не найден.', show_alert: true });
       await ctx.answerCallbackQuery({ text: `TG ID: ${card.tg_id}`, show_alert: true });
+      return;
+    }
+
+    // --- Admin: Revoke subscription (confirm) ---
+    if (p.a === 'a:adm_urevoke_q') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const uid = Number(p.id || 0);
+      const t = String(p.t || '');
+      const f = String(p.f || 'all');
+      const pg = Number(p.p || 0);
+      const labels = { bp: 'Brand Plan', cr: 'Кредиты (→0)', pro: 'PRO (все каналы)' };
+      const label = labels[t] || t;
+      const kb = new InlineKeyboard()
+        .text(`⛔ Подтвердить: ${label}`, `a:adm_urevoke_do|id:${uid}|t:${t}|f:${f}|p:${pg}`)
+        .text('❌ Отмена', `a:adm_ucard|id:${uid}|f:${f}|p:${pg}`);
+      await safeEditOrReply(ctx, `⛔ Забрать <b>${escapeHtml(label)}</b> у пользователя #${uid}?`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_urevoke_do') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const uid = Number(p.id || 0);
+      const t = String(p.t || '');
+      const f = String(p.f || 'all');
+      const pg = Number(p.p || 0);
+      try {
+        if (t === 'bp') await db.revokeBrandPlan(uid);
+        else if (t === 'cr') await db.resetBrandCredits(uid);
+        else if (t === 'pro') await db.revokeAllWorkspacePro(uid);
+      } catch (e) {
+        await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e).slice(0, 60)}`, show_alert: true });
+        return;
+      }
+      await ctx.answerCallbackQuery({ text: '⛔ Забрано' });
+      await renderAdminUserCard(ctx, uid, f, pg);
+      return;
+    }
+
+    // --- Admin: Ban/Unban (confirm) ---
+    if (p.a === 'a:adm_uban_q') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const uid = Number(p.id || 0);
+      const ban = String(p.v) === '1';
+      const f = String(p.f || 'all');
+      const pg = Number(p.p || 0);
+      const label = ban ? '🚫 Заблокировать' : '✅ Разбанить';
+      const warn = ban ? '\n\nВсе офферы будут заморожены, все диалоги закрыты.' : '';
+      const kb = new InlineKeyboard()
+        .text(`${label} — подтвердить`, `a:adm_uban_do|id:${uid}|v:${ban ? 1 : 0}|f:${f}|p:${pg}`)
+        .text('❌ Отмена', `a:adm_ucard|id:${uid}|f:${f}|p:${pg}`);
+      await safeEditOrReply(ctx, `${label} пользователя #${uid}?${warn}`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_uban_do') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const uid = Number(p.id || 0);
+      const ban = String(p.v) === '1';
+      const f = String(p.f || 'all');
+      const pg = Number(p.p || 0);
+      try {
+        if (ban) {
+          await db.banUser(uid);
+          await db.freezeAllUserOffers(uid);
+          await db.closeAllUserThreads(uid);
+        } else {
+          await db.unbanUser(uid);
+        }
+      } catch (e) {
+        await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e).slice(0, 60)}`, show_alert: true });
+        return;
+      }
+      await ctx.answerCallbackQuery({ text: ban ? '🚫 Заблокирован' : '✅ Разбанен' });
+      await renderAdminUserCard(ctx, uid, f, pg);
+      return;
+    }
+
+    // --- Admin: Gift from user card (quick path) ---
+    if (p.a === 'a:adm_ugift') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all');
+      const pg = Number(p.p || 0);
+      const card = await db.getUserCardById(uid);
+      if (!card) return ctx.answerCallbackQuery({ text: 'Не найден.' });
+      const uname = card.tg_username ? `@${card.tg_username}` : `id:${card.tg_id}`;
+      const kb = new InlineKeyboard()
+        .text(`⭐️ Brand Plan Старт`, `a:adm_ugift_do|id:${uid}|t:bp_start|f:${f}|p:${pg}`)
+        .row()
+        .text(`🚀 Brand Plan Про`, `a:adm_ugift_do|id:${uid}|t:bp_pro|f:${f}|p:${pg}`)
+        .row()
+        .text(`✨ PRO Креатор`, `a:adm_ugift_do|id:${uid}|t:pro|f:${f}|p:${pg}`)
+        .row()
+        .text('❌ Отмена', `a:adm_ucard|id:${uid}|f:${f}|p:${pg}`);
+      await safeEditOrReply(ctx, `🎁 Подарить подписку пользователю <b>${escapeHtml(uname)}</b>`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_ugift_do') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const uid = Number(p.id || 0);
+      const giftType = String(p.t || '');
+      const f = String(p.f || 'all');
+      const pg = Number(p.p || 0);
+      let msg = '';
+      try {
+        if (giftType === 'bp_start') {
+          const planDef = BRAND_PLANS.find(pl => pl.id === 'start');
+          await db.activateBrandPlan(uid, 'start', CFG.BRAND_PLAN_DURATION_DAYS);
+          if (planDef?.credits) await db.addBrandCredits(uid, planDef.credits);
+          msg = `✅ Brand Plan Старт + ${planDef?.credits || 0} кредитов`;
+        } else if (giftType === 'bp_pro') {
+          const planDef = BRAND_PLANS.find(pl => pl.id === 'pro');
+          await db.activateBrandPlan(uid, 'pro', CFG.BRAND_PLAN_DURATION_DAYS);
+          if (planDef?.credits) await db.addBrandCredits(uid, planDef.credits);
+          msg = `✅ Brand Plan Про + ${planDef?.credits || 0} кредитов`;
+        } else if (giftType === 'pro') {
+          const wsList = await db.listWorkspaces(uid);
+          if (!wsList.length) { msg = '⚠️ Нет каналов — PRO не выдан'; } else {
+            for (const ws of wsList) await db.activateWorkspacePro(ws.id, CFG.PRO_DURATION_DAYS);
+            msg = `✅ PRO на ${wsList.length} ${ruPlural(wsList.length, 'канал', 'канала', 'каналов')}`;
+          }
+        }
+      } catch (e) {
+        msg = `❌ Ошибка: ${String(e?.message || e).slice(0, 60)}`;
+      }
+      await ctx.answerCallbackQuery({ text: msg, show_alert: true });
+      await renderAdminUserCard(ctx, uid, f, pg);
+      return;
+    }
+
+    // --- Admin: User card navigation alias ---
+    if (p.a === 'a:adm_ucard') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      await renderAdminUserCard(ctx, Number(p.id || 0), String(p.f || 'all'), Number(p.p || 0));
       return;
     }
 
@@ -25449,6 +25612,7 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   text += `<b>Роли:</b> ${roles.join(', ')}\n`;
   text += `<b>Регистрация:</b> ${msk(card.created_at)}\n`;
   text += `<b>Обновлён:</b> ${msk(card.updated_at)}\n`;
+  if (card.banned_at) text += `🚫 <b>ЗАБЛОКИРОВАН:</b> ${msk(card.banned_at)}\n`;
 
   // Brand info
   if (isBrand) {
@@ -25488,8 +25652,34 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
     if (card._curator_in.length > 5) text += `<i>... и ещё ${card._curator_in.length - 5}</i>\n`;
   }
 
+  const isBanned = !!card.banned_at;
+
   const kb = new InlineKeyboard();
   kb.text(`📋 Скопировать ID: ${card.tg_id}`, `a:adm_ucopy|id:${card.id}`).row();
+
+  // Quick gift from card
+  kb.text('🎁 Подарить подписку', `a:adm_ugift|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
+
+  // Revoke actions
+  if (card.brand_plan) {
+    kb.text('⛔ Забрать Brand Plan', `a:adm_urevoke_q|id:${card.id}|t:bp|f:${backFilter}|p:${backPage}`);
+  }
+  if (Number(card.brand_credits || 0) > 0) {
+    kb.text('⛔ Обнулить кредиты', `a:adm_urevoke_q|id:${card.id}|t:cr|f:${backFilter}|p:${backPage}`);
+  }
+  if (card.brand_plan || Number(card.brand_credits || 0) > 0) kb.row();
+
+  if (card._workspaces?.some(ws => ws.plan === 'pro')) {
+    kb.text('⛔ Забрать PRO', `a:adm_urevoke_q|id:${card.id}|t:pro|f:${backFilter}|p:${backPage}`).row();
+  }
+
+  // Ban/unban
+  if (isBanned) {
+    kb.text('✅ Разбанить', `a:adm_uban_q|id:${card.id}|v:0|f:${backFilter}|p:${backPage}`).row();
+  } else {
+    kb.text('🚫 Заблокировать', `a:adm_uban_q|id:${card.id}|v:1|f:${backFilter}|p:${backPage}`).row();
+  }
+
   kb.text('⬅️ К списку', `a:admin_users|f:${backFilter}|p:${backPage}`).row();
   kb.text('⬅️ Админка', 'a:admin_home');
 
