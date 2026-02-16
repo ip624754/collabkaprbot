@@ -9,7 +9,7 @@ import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
-import { notifyGiveawayEnded, notifyGiveawayWinnersReady } from './gwNotify.js';
+import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
 
@@ -48,7 +48,7 @@ function fmtDays(n) {
 
 function brandPassBalanceLineHtml(credits) {
   const x = Number(credits || 0);
-  return `🎫 Brand Pass (кредиты): <b>${escapeHtml(fmtCredits(x))}</b>`;
+  return `💳 Кредиты: <b>${escapeHtml(fmtCredits(x))}</b>`;
 }
 
 function brandPassContactsNeedLineHtml(credits) {
@@ -87,7 +87,7 @@ function contactsLockedHintHtml(hasCredits, bal = null) {
 Открой через «${contactUnlockBtnLabel()}» (${contactUnlockExplainLine()}).${balLine}`;
   }
   return `🔒 <b>Контакты скрыты</b>
-Нужен <b>Brand Pass</b> (кредиты Stars). Купи и открой через «${contactUnlockBtnLabel()}» (${contactUnlockExplainLine()}).${balLine}`;
+Нужен <b>Brand Plan</b> (кредиты Stars). Купи и открой через «${contactUnlockBtnLabel()}» (${contactUnlockExplainLine()}).${balLine}`;
 }
 
 const BRAND_PACKS = [
@@ -2585,7 +2585,7 @@ function brandTeamLockedKb() {
   return new InlineKeyboard()
     .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand')
     .row()
-    .text('🎫 Brand Pass', 'a:brand_pass|ws:0')
+    .text('💳 Кредиты', 'a:brand_pass|ws:0')
     .text('⭐️ Brand Plan', 'a:brand_plan|ws:0')
     .row()
     .text('⬅️ Назад', 'a:menu');
@@ -2697,9 +2697,9 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
 
     const statusPay = st.teamPaid
       ? '• Покупка: ✅ найдена'
-      : '• Покупка: ❌ нет (нужен Brand Pass / Brand Plan)';
+      : '• Покупка: ❌ нет (нужен Brand Plan)';
 
-    const text = `👔 <b>Менеджеры бренда</b>\n\nДобавь менеджеров, чтобы быстрее отвечать на заявки и закрывать сделки.\n\n<b>Условия доступа:</b>\n1) Заполнить профиль бренда (4 поля: Название, Ниша, Контакт, Ссылка)\n2) Купить <b>Brand Pass</b> или <b>Brand Plan</b>\n\n<b>Статус:</b>\n${statusProfile}\n${statusPay}\n\n<i>Зачем:</i> защита от спама и ценность брендовой покупки.`;
+    const text = `👔 <b>Менеджеры бренда</b>\n\nДобавь менеджеров, чтобы быстрее отвечать на заявки и закрывать сделки.\n\n<b>Условия доступа:</b>\n1) Заполнить профиль бренда (4 поля: Название, Ниша, Контакт, Ссылка)\n2) Купить <b>Brand Plan</b>\n\n<b>Статус:</b>\n${statusProfile}\n${statusPay}\n\n<i>Зачем:</i> защита от спама и ценность брендовой покупки.`;
 
     const kb = brandTeamLockedKb();
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -3304,7 +3304,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 ` +
     `⚠️ Заполни 4 поля, чтобы писать креаторам и попадать в каталог брендов.
 ` +
-    `ℹ️ Раздел «Менеджеры бренда» доступен после покупки <b>Brand Pass</b> или <b>Brand Plan</b>.`;
+    `ℹ️ Раздел «Менеджеры бренда» доступен после покупки <b>Brand Plan</b>.`;
 
   const kb = new InlineKeyboard();
 
@@ -6123,10 +6123,10 @@ function brandReplyKb(ws, wsId, brandCredits = 0, leadId = 0) {
   // UX: if balance is low — показываем и «Контакты», и быстрый путь купить Brand Pass.
   const bal = Number(brandCredits || 0);
   if (bal <= 0) {
-    kb.text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+    kb.text('💳 Купить кредиты', 'a:brand_pass|ws:0');
   } else if (CONTACT_UNLOCK_COST > 0 && bal < CONTACT_UNLOCK_COST) {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`)
-      .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+      .text('💳 Купить кредиты', 'a:brand_pass|ws:0');
   } else {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`);
   }
@@ -7456,10 +7456,10 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
       } else if (balNum !== null) {
         if (balNum <= 0) {
-          kb.text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+          kb.text('💳 Купить кредиты', 'a:brand_pass|ws:0');
         } else if (balNum < CONTACT_UNLOCK_COST) {
           kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`)
-            .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+            .text('💳 Купить кредиты', 'a:brand_pass|ws:0');
         } else {
           kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
         }
@@ -8004,10 +8004,10 @@ ${threadBlock}`;
     .row();
 
   if (Number(credits || 0) <= 0) {
-    kb.text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+    kb.text('💳 Купить кредиты', 'a:brand_pass|ws:0');
   } else if (needsContactsTopup) {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
-      .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0');
+      .text('💳 Купить кредиты', 'a:brand_pass|ws:0');
   } else {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
   }
@@ -11439,16 +11439,16 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 `
     : '';
 
-  const text = `🔒 <b>Нужен Brand Pass</b>
+  const text = `🔒 <b>Нужны кредиты</b>
 
-<b>Brand Pass</b> = кредиты (Stars).
+<b>Кредиты</b> = Stars для интро.
 
 <b>Как работает:</b>
 • 💬 Интро = новый диалог: <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}
 • Переписка внутри открытого диалога — бесплатна
 
 ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')} (на одну витрину).
-👥 Раздел «Менеджеры бренда» открывается после покупки Brand Pass или Brand Plan.
+👥 Раздел «Менеджеры бренда» открывается после покупки Brand Plan.
 ${trialLine}${limitLine}${verifyHintLine}
 ${brandPassBalanceLineHtml(credits)}
 🎟 Повторные кредиты: <b>${retry}</b>${retryHintLine}
@@ -11534,7 +11534,7 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
 
 Пока нет переписок.
 
-💬 Интро = новый диалог. Бренду нужен Brand Pass (кредиты), креатору — просто отвечать здесь.`;
+💬 Интро = новый диалог. Бренду нужен кредиты, креатору — просто отвечать здесь.`;
 
   await safeEditOrReply(ctx, header + emptyTail, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -13677,20 +13677,20 @@ ${escapeHtml(safe)}`;
       if (!st.ok) {
         const miss = st.missingBasic && st.missingBasic.length ? ` (не хватает: ${st.missingBasic.join(', ')})` : '';
         const profileLine = `• Профиль: ${st.basicDone || 0}/4${miss}`;
-        const payLine = `• Покупка: ${st.paidOk ? '✅' : '❌'} (Brand Pass / Brand Plan)`;
+        const payLine = `• Покупка: ${st.paidOk ? '✅' : '❌'} (Brand Plan)`;
 
         await ctx.reply(
           `👥 <b>Менеджеры бренда</b>
 
 ` +
-          `Раздел доступен после заполнения профиля бренда и покупки Brand Pass/Plan.
+          `Раздел доступен после заполнения профиля бренда и покупки Brand Plan.
 
 ` +
           `${escapeHtml(profileLine)}
 ${escapeHtml(payLine)}
 
 ` +
-          `Открой профиль, заполни базовые поля и оформи Brand Pass или Brand Plan — после этого сможешь добавлять менеджеров.`,
+          `Открой профиль, заполни базовые поля и оформи Brand Plan — после этого сможешь добавлять менеджеров.`,
           { parse_mode: 'HTML', reply_markup: brandTeamLockedKb() }
         );
         return;
@@ -16527,15 +16527,15 @@ bot.on('message:successful_payment', async (ctx) => {
         kb.text('↩️ Вернуться к офферу', `a:bx_pub|ws:${data.wsId}|o:${data.offerId}|p:${Number(data.page || 0)}|h:bo`)
           .row();
       }
-      kb.text('🎫 Brand Pass', `a:brand_pass|ws:${data.wsId}`)
+      kb.text('💳 Кредиты', `a:brand_pass|ws:${data.wsId}`)
         .text('📥 Inbox', `a:bx_inbox|ws:${data.wsId}|p:0|h:bo`);
 
       await markApplied('auto_apply_brand_pass');
       await ctx.reply(
-        `✅ Brand Pass активирован!
+        `✅ Кредиты начислены!
 
 Начислено: +${creditsToAdd}
-🎫 Brand Pass (кредиты): ${fmtCredits(newBalance)}
+🎫 кредиты: ${fmtCredits(newBalance)}
 
 Как тратить кредиты:
 • 💬 Интро = новый диалог: ${introCost} кредит(ов)
@@ -16925,7 +16925,7 @@ if (p.a === 'a:support') {
 ` +
     `Что помогает быстрее решить:
 ` +
-    `• в каком режиме ты был (Creator / Brand / Manager)
+    `• в каком режиме ты был (Креатор / Бренд / Менеджер)
 ` +
     `• что нажимал (кнопки)
 ` +
@@ -17866,7 +17866,7 @@ if (p.a === 'a:wsp_preview') {
         kb.text(contactUnlockActionLabel(), `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`).row();
       }
       kb
-        .text('🎫 Купить Brand Pass', 'a:brand_pass|ws:0')
+        .text('💳 Купить кредиты', 'a:brand_pass|ws:0')
         .row()
         .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb);
 
@@ -17874,13 +17874,13 @@ if (p.a === 'a:wsp_preview') {
       const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
 
       const tail = canUnlock
-        ? `Нажми «${contactUnlockActionLabel()}» или купи Brand Pass.`
-        : `Недостаточно кредитов для ${contactUnlockBtnLabel()}: нужно <b>${CONTACT_UNLOCK_COST}</b>, у тебя <b>${balNum}</b>. Купи Brand Pass и повтори.`;
+        ? `Нажми «${contactUnlockActionLabel()}» или купи кредиты.`
+        : `Недостаточно кредитов для ${contactUnlockBtnLabel()}: нужно <b>${CONTACT_UNLOCK_COST}</b>, у тебя <b>${balNum}</b>. Купи кредиты и повтори.`;
 
       const text =
         `🔒 <b>Контакты скрыты</b>
 
-<b>Brand Pass</b> = кредиты (Stars).
+<b>Кредиты</b> = Stars для интро.
 
 Кредиты тратятся на:
 • 💬 Интро = новый диалог: <b>${introCost}</b> ${ruPlural(introCost, 'кредит', 'кредита', 'кредитов')}
@@ -17932,7 +17932,7 @@ ${tail}`;
 
       const left = await db.spendBrandCredits(u.id, CONTACT_UNLOCK_COST);
       if (left === null) {
-        try { await ctx.answerCallbackQuery({ text: 'Нужен Brand Pass (кредиты Stars).', show_alert: true }); } catch {}
+        try { await ctx.answerCallbackQuery({ text: 'Нужны кредиты. Оформи Brand Plan.', show_alert: true }); } catch {}
         await renderBrandPass(ctx, u.id, 0);
         return;
       }
@@ -19039,13 +19039,13 @@ if (p.a === 'a:lead_set') {
         '🏷 <b>Brand / Бренд</b>\n\n' +
         'Нашли креатора в Instagram → открываете витрину → закрываете сделку в Telegram.\n\n' +
         '• 📰 Смотри ленту креаторов\n' +
-        '• 📨 Пиши в Inbox через <b>Brand Pass</b> (анти-спам)\n' +
+        '• 📨 Пиши в Inbox через <b>Brand Plan</b> (анти-спам)\n' +
         '• 🧾 Держи историю и статусы\n\n' +
         'Открыть режим бренда:';
       const kb = new InlineKeyboard()
         .text('🏷 Для брендов', 'a:bx_open|ws:0')
         .row()
-        .text('🎫 Brand Pass', 'a:brand_pass|ws:0')
+        .text('💳 Кредиты', 'a:brand_pass|ws:0')
         .row()
         .text('📋 Меню', 'a:menu');
       await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -19447,7 +19447,7 @@ if (p.a === 'a:ws_prof_mode') {
       const payload = `brand_${u.id}_${pack.id}_${token}`;
       const back = offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}` : `a:brand_pass|ws:${wsId}`;
       await sendStarsInvoice(ctx, {
-        title: `Brand Pass · ${pack.credits} кредитов`,
+        title: `Кредиты · ${pack.credits} шт`,
         description: 'Кредиты нужны только для открытия НОВОГО диалога. Переписка внутри диалога — бесплатна.',
         payload,
         amount: pack.stars,
@@ -22122,7 +22122,7 @@ if (p.a === 'a:bx_retry_help') {
   const expD = Number(CFG.INTRO_RETRY_EXPIRES_DAYS || 7);
   await ctx.answerCallbackQuery({
     show_alert: true,
-    text: `Повторный кредит: если бренд написал, а ответа нет ${afterH}h → бот выдаёт 1 повторный кредит (действует ${expD}d). Следующий интро-диалог откроется без списания Brand Pass.`
+    text: `Повторный кредит: если бренд написал, а ответа нет ${afterH}h → бот выдаёт 1 повторный кредит (действует ${expD}d). Следующий интро-диалог откроется без списания кредитов.`
   });
   return;
 }
@@ -24903,6 +24903,10 @@ ${actionHint}`;
 
         const toast = fallback ? 'Победители выбраны (есть добор) ✅' : 'Победители выбраны ✅';
         await ctx.answerCallbackQuery({ text: toast });
+
+        // DM winners
+        try { await notifyGiveawayWinnersDM({ api: ctx.api, db, gwId }); } catch {}
+
         await renderGwOpen(ctx, u.id, gwId);
       } catch (e) {
         await ctx.answerCallbackQuery({ text: 'Ошибка выбора.' });
@@ -25917,7 +25921,7 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
       if (!userId || !pack) throw new Error('Bad userId/pack');
       await db.addBrandCredits(userId, Number(pack.credits));
       await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_brand_pass:+${pack.credits}`);
-      await ctx.answerCallbackQuery({ text: 'Brand Pass применён ✅', show_alert: true });
+      await ctx.answerCallbackQuery({ text: 'Кредиты начислены ✅', show_alert: true });
       await renderAdminPaymentView(ctx, row.id, backStatus, page);
       return;
     }
