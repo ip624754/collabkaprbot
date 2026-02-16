@@ -13120,10 +13120,13 @@ ${escapeHtml(safeCap)}
     let sent = 0;
     for (const a of admins) {
       const adminId = Number(a || 0);
-      if (!adminId || adminId == ctx.from.id) continue;
+      if (!adminId) continue;
       try {
-        // Send header first
-        await ctx.api.sendMessage(adminId, header, { parse_mode: 'HTML', disable_web_page_preview: true });
+        const replyKb = new InlineKeyboard()
+          .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`);
+        // Send header with reply button
+        await ctx.api.sendMessage(adminId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
 
         // Copy original media message (preserves attachment)
         try {
@@ -13339,9 +13342,12 @@ ${escapeHtml(safe)}`;
       let sent = 0;
       for (const a of admins) {
         const adminId = Number(a || 0);
-        if (!adminId || adminId == ctx.from.id) continue;
+        if (!adminId) continue;
         try {
-          await ctx.api.sendMessage(adminId, header, { parse_mode: 'HTML', disable_web_page_preview: true });
+          const replyKb = new InlineKeyboard()
+            .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
+            .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`);
+          await ctx.api.sendMessage(adminId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
           sent += 1;
         } catch {}
       }
@@ -13396,6 +13402,46 @@ ${escapeHtml(safe)}`;
 
       const preview = unique.map(u => `@${u}`).join(', ');
       await safeEditOrReply(ctx, `🎁 <b>${escapeHtml(label)}</b>\n\nПолучатели (${unique.length}):\n${escapeHtml(preview)}\n\nПодтвердить?`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    // --- Admin: Reply to user's support message ---
+    if (exp.type === 'adm_support_reply') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const txt = String(ctx.message?.text || '').trim();
+      if (!txt) {
+        await ctx.reply('Напиши текст ответа.');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+      const targetTgId = Number(exp.targetTgId || 0);
+      if (!targetTgId) {
+        await ctx.reply('⚠️ Не найден TG ID получателя.');
+        return;
+      }
+
+      const safe = txt.length > 3500 ? (txt.slice(0, 3500) + '…') : txt;
+      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+
+      let ok = false;
+      try {
+        const kb = new InlineKeyboard()
+          .text('💬 Поддержка', 'a:support')
+          .text('📋 Меню', 'a:menu');
+        await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+        ok = true;
+      } catch (e) {
+        await ctx.reply(`❌ Не удалось отправить (юзер заблокировал бота?).\nОшибка: ${String(e?.message || e).slice(0, 100)}`);
+      }
+
+      if (ok) {
+        const kb = new InlineKeyboard()
+          .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${exp.targetUserId || 0}`)
+          .text('👤 Карточка', `a:adm_ucard|id:${exp.targetUserId || 0}|f:all|p:0`)
+          .row()
+          .text('⬅️ Админка', 'a:admin_home');
+        await ctx.reply(`✅ Ответ отправлен пользователю (tg:${targetTgId}).`, { reply_markup: kb });
+      }
       return;
     }
 
@@ -16225,28 +16271,16 @@ UGC vs Интеграция
   });
 
   bot.command('paysupport', async (ctx) => {
-    // Telegram expects bots that accept payments to provide a support contact via /paysupport.
-    const contactRaw = (CFG.PAY_SUPPORT_TEXT && String(CFG.PAY_SUPPORT_TEXT).trim())
-      ? String(CFG.PAY_SUPPORT_TEXT).trim()
-      : '@collabka_support';
-
-    const contactHtml = String(contactRaw)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    const msg = [
-      '💬 <b>Поддержка по оплате / Stars</b>',
-      `Если что-то пошло не так — напиши в поддержку: <b>${contactHtml}</b>`,
-      '',
-      '<b>Что указать:</b>',
-      '1) Что покупал (PRO / Brand Pass / Plan / Featured / Matching)',
-      '2) Примерное время оплаты',
-      '3) Скрин чека (если есть)',
-      '4) Твой @username и что случилось'
-    ].join('\n');
-
-    await ctx.reply(msg, { parse_mode: 'HTML', disable_web_page_preview: true });
+    // Telegram requires /paysupport for bots with payments.
+    // Redirect to unified support with payment context.
+    const kb = new InlineKeyboard()
+      .text('✍️ Написать в поддержку', 'a:support_write')
+      .row()
+      .text('📋 Меню', 'a:menu');
+    await ctx.reply(
+      `💬 <b>Поддержка по оплате / Stars</b>\n\nЕсли что-то пошло не так с оплатой — нажми кнопку ниже и опиши проблему.\n\n<b>Что указать:</b>\n• Что покупал (PRO / Brand Plan)\n• Примерное время оплаты\n• Скрин чека (если есть)`,
+      { parse_mode: 'HTML', reply_markup: kb }
+    );
   });
 
 
@@ -20588,6 +20622,21 @@ if (p.a === 'a:match_home') {
       const f = String(p.f || 'all').toLowerCase();
       const page = Math.max(0, Number(p.p) || 0);
       await renderAdminUserCard(ctx, uid, f, page);
+      return;
+    }
+
+    // --- Admin: Reply to support message ---
+    if (p.a === 'a:adm_support_reply') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const targetTgId = Number(p.tg || 0);
+      const targetUserId = Number(p.uid || 0);
+      if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
+
+      const kb = new InlineKeyboard()
+        .text('❌ Отмена', 'a:admin_home');
+      await safeEditOrReply(ctx, `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\nНапиши текст ответа одним сообщением — я отправлю его пользователю от имени поддержки.`, { parse_mode: 'HTML', reply_markup: kb });
+      await setExpectText(ctx.from.id, { type: 'adm_support_reply', targetTgId, targetUserId });
       return;
     }
 
