@@ -60,15 +60,31 @@ export const CFG = {
   BARTER_BUMP_COOLDOWN_HOURS_PRO: parseIntSafe(process.env.BARTER_BUMP_COOLDOWN_HOURS_PRO, 6),
 
   // Monetization (microbloggers)
-  PRO_STARS_PRICE: parseIntSafe(process.env.PRO_STARS_PRICE, 299),
+  PRO_STARS_PRICE: parseIntSafe(process.env.PRO_STARS_PRICE, 500),
   PRO_DURATION_DAYS: parseIntSafe(process.env.PRO_DURATION_DAYS, 30),
   PRO_PAYMENT_URL: process.env.PRO_PAYMENT_URL || '',
   PAY_SUPPORT_TEXT: process.env.PAY_SUPPORT_TEXT || '',
 
-  // Monetization (brands)
-  BRAND_PLAN_BASIC_PRICE: parseIntSafe(process.env.BRAND_PLAN_BASIC_PRICE, 999),
-  BRAND_PLAN_MAX_PRICE: parseIntSafe(process.env.BRAND_PLAN_MAX_PRICE, 2999),
+  // Monetization (brands) — unified Brand Plan
+  BRAND_PLAN_START_PRICE: parseIntSafe(process.env.BRAND_PLAN_START_PRICE, 250),
+  BRAND_PLAN_START_CREDITS: parseIntSafe(process.env.BRAND_PLAN_START_CREDITS, 10),
+  BRAND_PLAN_PRO_PRICE: parseIntSafe(process.env.BRAND_PLAN_PRO_PRICE, 1000),
+  BRAND_PLAN_PRO_CREDITS: parseIntSafe(process.env.BRAND_PLAN_PRO_CREDITS, 50),
+  BRAND_PLAN_PRO_MATCH: parseIntSafe(process.env.BRAND_PLAN_PRO_MATCH, 10),
+  BRAND_PLAN_PRO_FEATURED_DAYS: parseIntSafe(process.env.BRAND_PLAN_PRO_FEATURED_DAYS, 7),
   BRAND_PLAN_DURATION_DAYS: parseIntSafe(process.env.BRAND_PLAN_DURATION_DAYS, 30),
+
+  // Legacy compat (kept for existing env vars)
+  BRAND_PLAN_BASIC_PRICE: parseIntSafe(process.env.BRAND_PLAN_BASIC_PRICE, 250),
+  BRAND_PLAN_MAX_PRICE: parseIntSafe(process.env.BRAND_PLAN_MAX_PRICE, 1000),
+
+  // Credit top-up packs (aligned to TG Stars denominations)
+  BRAND_TOPUP_S_PRICE: parseIntSafe(process.env.BRAND_TOPUP_S_PRICE, 100),
+  BRAND_TOPUP_S_CREDITS: parseIntSafe(process.env.BRAND_TOPUP_S_CREDITS, 10),
+  BRAND_TOPUP_M_PRICE: parseIntSafe(process.env.BRAND_TOPUP_M_PRICE, 250),
+  BRAND_TOPUP_M_CREDITS: parseIntSafe(process.env.BRAND_TOPUP_M_CREDITS, 30),
+  BRAND_TOPUP_L_PRICE: parseIntSafe(process.env.BRAND_TOPUP_L_PRICE, 750),
+  BRAND_TOPUP_L_CREDITS: parseIntSafe(process.env.BRAND_TOPUP_L_CREDITS, 100),
 
   MATCH_S_PRICE: parseIntSafe(process.env.MATCH_S_PRICE, 699),
   MATCH_M_PRICE: parseIntSafe(process.env.MATCH_M_PRICE, 1499),
