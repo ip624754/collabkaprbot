@@ -91,19 +91,19 @@ function contactsLockedHintHtml(hasCredits, bal = null) {
 }
 
 const BRAND_PACKS = [
-  { id: 'S', credits: 10, stars: 199, title: 'Brand Pass S' },
-  { id: 'M', credits: 30, stars: 499, title: 'Brand Pass M' },
-  { id: 'L', credits: 100, stars: 1299, title: 'Brand Pass L' }
+  { id: 'S', credits: CFG.BRAND_TOPUP_S_CREDITS, stars: CFG.BRAND_TOPUP_S_PRICE, title: '+10 кредитов' },
+  { id: 'M', credits: CFG.BRAND_TOPUP_M_CREDITS, stars: CFG.BRAND_TOPUP_M_PRICE, title: '+30 кредитов' },
+  { id: 'L', credits: CFG.BRAND_TOPUP_L_CREDITS, stars: CFG.BRAND_TOPUP_L_PRICE, title: '+100 кредитов' }
 ];
 
 function getBrandPack(packId) {
   return BRAND_PACKS.find(p => p.id === String(packId)) || null;
 }
 
-// Brand tools subscriptions (Brand Plan)
+// Unified Brand Plan tiers (aligned to TG Stars denominations)
 const BRAND_PLANS = [
-  { id: 'basic', title: 'Brand Plan Basic', stars: CFG.BRAND_PLAN_BASIC_PRICE },
-  { id: 'max', title: 'Brand Plan Max', stars: CFG.BRAND_PLAN_MAX_PRICE }
+  { id: 'start', title: 'Старт', stars: CFG.BRAND_PLAN_START_PRICE, credits: CFG.BRAND_PLAN_START_CREDITS },
+  { id: 'pro', title: 'Про', stars: CFG.BRAND_PLAN_PRO_PRICE, credits: CFG.BRAND_PLAN_PRO_CREDITS }
 ];
 
 const MATCH_TIERS = [
@@ -981,12 +981,11 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   .text('📌 Сделки', 'a:brand_deals|ws:0|st:negotiation|p:0');
 
   if (!isManager) {
-    kb.text('🎫 Brand Pass', 'a:brand_pass|ws:0')
+    kb.text('⭐️ Brand Plan', 'a:brand_plan|ws:0')
       .row()
       .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand')
-      .text('⭐️ Подписка', 'a:brand_plan|ws:0')
-      .row()
-      .text(teamLocked ? '👔 Менеджеры бренда 🔒' : '👔 Менеджеры бренда', 'a:brand_team|ws:0');
+      .text(teamLocked ? '👔 Менеджеры бренда 🔒' : '👔 Менеджеры бренда', 'a:brand_team|ws:0')
+      .row();
   } else {
     kb.text('ℹ️ Права менеджера', 'a:bm_help')
       .row();
@@ -2796,7 +2795,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
 
 function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
   const { showCurator = false } = opts || {};
-  const planLabel = plan?.active ? (plan.name === 'max' ? 'Max ✅' : 'Basic ✅') : 'OFF';
+  const planLabel = plan?.active ? (plan.name === 'pro' ? 'Про ✅' : 'Старт ✅') : 'OFF';
   const kb = new InlineKeyboard()
 .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
 .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0|h:bo|r:bo`)
@@ -2808,13 +2807,10 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('📝 Заявки', `a:brand_apps|ws:${wsId}|s:new|p:0`)
 .row()
 .text('📌 Сделки', `a:brand_deals|ws:${wsId}|st:negotiation|p:0`)
-.text(`🎫 Brand Pass · ${fmtCredits(credits)}${retry ? ' · 🎟' + retry : ''}`, `a:brand_pass|ws:${wsId}`)
+.text(`⭐️ Brand Plan: ${planLabel}`, `a:brand_plan|ws:${wsId}`)
 .row()
-.text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:brand`)
-.text(`⭐️ Подписка: ${planLabel}`, `a:brand_plan|ws:${wsId}`)
-.row()
-.text('🧠 Smart Matching', `a:match_home|ws:${wsId}`)
-.text('🔥 Featured', `a:feat_home|ws:${wsId}`);
+.text(`💳 Кредиты: ${fmtCredits(credits)}${retry ? ' · 🎟' + retry : ''}`, `a:brand_pass|ws:${wsId}`)
+.text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:brand`);
 
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
@@ -9725,7 +9721,7 @@ ${escapeHtml(pro)}
 
   const kb = new InlineKeyboard();
   if (!isPro) {
-    kb.text(`⭐️ Купить PRO (${CFG.PRO_STARS_PRICE} Stars)`, `a:ws_pro_buy|ws:${wsId}`).row();
+    kb.text(`⭐️ Купить PRO · ${CFG.PRO_STARS_PRICE}⭐️/мес`, `a:ws_pro_buy|ws:${wsId}`).row();
     if (CFG.PRO_PAYMENT_URL) kb.url('🔗 Оплатить ссылкой', CFG.PRO_PAYMENT_URL).row();
   } else {
     kb.text('📌 Пин в ленте', `a:ws_pro_pin|ws:${wsId}`).row();
@@ -10169,7 +10165,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
     const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(ownerUserId) : 0;
     const planRow = await db.getBrandPlan(ownerUserId);
     const active = await db.isBrandPlanActive(ownerUserId);
-    const planName = active ? String(planRow?.brand_plan || 'basic').toLowerCase() : null;
+    const planName = active ? String(planRow?.brand_plan || 'start').toLowerCase() : null;
     const plan = { active, name: planName, until: planRow?.brand_plan_until };
 
     const untilTxt = (active && planRow?.brand_plan_until) ? `
@@ -10182,7 +10178,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 
 ${brandPassBalanceLineHtml(credits)}
 🎟 Повторные кредиты: <b>${retry}</b>
-⭐️ Подписка: <b>${active ? (planName === 'max' ? 'Макс' : 'Базовая') : 'Нет'}</b>${untilTxt}
+⭐️ Brand Plan: <b>${active ? (planName === 'pro' ? 'Про' : 'Старт') : 'Нет'}</b>${untilTxt}
 
 Выбери действие:`,
       { parse_mode: 'HTML', reply_markup: bxBrandMenuKb(0, credits, plan, retry, { showCurator: isCurator }) }
@@ -11708,9 +11704,11 @@ ${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
 
 function brandPlanStatusText(planRow, active) {
   if (!active) return 'OFF';
-  const name = String(planRow?.brand_plan || 'basic').toLowerCase();
+  const name = String(planRow?.brand_plan || 'start').toLowerCase();
   const until = planRow?.brand_plan_until ? fmtTs(planRow.brand_plan_until) : null;
-  const label = name === 'max' ? 'Max' : 'Basic';
+  // Map legacy names + new names
+  const labels = { start: 'Старт', pro: 'Про', basic: 'Старт', max: 'Про' };
+  const label = labels[name] || name;
   return until ? `${label} (до ${until})` : label;
 }
 
@@ -11718,16 +11716,14 @@ async function renderBrandPassTopup(ctx, userId, wsId) {
   const credits = await db.getBrandCredits(userId);
   const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(userId) : 0;
   const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
-  const afterH = Number(CFG.INTRO_RETRY_AFTER_HOURS || 24);
-  const expD = Number(CFG.INTRO_RETRY_EXPIRES_DAYS || 7);
   const kb = new InlineKeyboard();
   for (const p of BRAND_PACKS) {
-    kb.text(`💳 ${p.title} · ${p.credits} ${ruPlural(p.credits,'кредит','кредита','кредитов')} · ${p.stars}⭐️`, `a:brand_buy|ws:${wsId}|pack:${p.id}`).row();
+    kb.text(`💳 ${p.title} · ${p.stars}⭐️`, `a:brand_buy|ws:${wsId}|pack:${p.id}`).row();
   }
-  kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
+  kb.text('⬅️ К Brand Plan', `a:brand_plan|ws:${wsId}`);
 
   await safeEditOrReply(ctx, 
-    `🎫 <b>Brand Pass</b> = кредиты (Stars)
+    `💳 <b>Докупить кредиты</b>
 
 ${brandPassBalanceLineHtml(credits)}
 🎟 Повторные кредиты: <b>${retry}</b>
@@ -11737,11 +11733,7 @@ ${brandPassBalanceLineHtml(credits)}
 • Переписка внутри открытого диалога — бесплатна
 • ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}
 
-Повторный кредит начисляется, если креатор не отвечает за <b>${afterH}ч</b> (действует <b>${expD}</b> ${ruPlural(expD,'день','дня','дней')}).
-
-👥 «Менеджеры бренда» открываются после покупки Brand Pass или Brand Plan.
-
-Выбери пакет пополнения ниже:`,
+Выбери пакет:`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
@@ -11754,22 +11746,39 @@ async function renderBrandPass(ctx, userId, wsId) {
 async function renderBrandPlan(ctx, userId, wsId) {
   const planRow = await db.getBrandPlan(userId);
   const active = await db.isBrandPlanActive(userId);
+  const credits = await db.getBrandCredits(userId);
   const status = brandPlanStatusText(planRow, active);
 
-  const kb = new InlineKeyboard();
-  for (const pl of BRAND_PLANS) {
-    kb.text(`⭐️ ${pl.id === 'max' ? 'Max' : 'Basic'} · ${pl.stars}⭐️/30д`, `a:brand_plan_buy|ws:${wsId}|plan:${pl.id}`).row();
-  }
-  kb.text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
+  const startPl = BRAND_PLANS.find(p => p.id === 'start');
+  const proPl = BRAND_PLANS.find(p => p.id === 'pro');
+
+  const kb = new InlineKeyboard()
+    .text(`⭐️ Старт · ${startPl.stars}⭐️/мес`, `a:brand_plan_buy|ws:${wsId}|plan:start`)
+    .row()
+    .text(`🚀 Про · ${proPl.stars}⭐️/мес`, `a:brand_plan_buy|ws:${wsId}|plan:pro`)
+    .row()
+    .text('💳 Докупить кредиты', `a:brand_pass|ws:${wsId}`)
+    .row()
+    .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
   await safeEditOrReply(ctx, 
     `⭐️ <b>Brand Plan</b>
 
 Статус: <b>${escapeHtml(status)}</b>
+${brandPassBalanceLineHtml(credits)}
 
-Brand Plan даёт инструменты внутри Inbox (CRM-стадии) и быстрые действия.
-Также открывает «Менеджеры бренда» (добавление менеджеров).
-Кредиты Brand Pass покупаются отдельно.`,
+<b>Старт</b> · ${startPl.stars}⭐️/мес
+• ${startPl.credits} кредитов (интро)
+• CRM-стадии в диалогах
+• До 3 менеджеров
+
+<b>Про</b> · ${proPl.stars}⭐️/мес
+• ${proPl.credits} кредитов (интро)
+• CRM-стадии + менеджеры
+• Smart Match: ${CFG.BRAND_PLAN_PRO_MATCH} каналов/мес
+• Featured: ${CFG.BRAND_PLAN_PRO_FEATURED_DAYS} дней/мес
+
+Кредиты можно докупить отдельно.`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
@@ -16457,7 +16466,7 @@ bot.on('message:successful_payment', async (ctx) => {
     try {
       const parts = invoicePayload.split('_');
       const payUserId = Number(parts[1]);
-      const plan = String(parts[2] || 'basic').toLowerCase();
+      const plan = String(parts[2] || 'start').toLowerCase();
       const token = parts.slice(3).join('_');
 
       const data = await redis.get(k(['pay_bplan', token]));
@@ -16468,9 +16477,18 @@ bot.on('message:successful_payment', async (ctx) => {
       }
 
       await db.activateBrandPlan(payUserId, plan, CFG.BRAND_PLAN_DURATION_DAYS);
+
+      // Credit bonus included in plan
+      const bonusCredits = Number(data.credits || 0);
+      if (bonusCredits > 0) {
+        await db.addBrandCredits(payUserId, bonusCredits);
+      }
+
       await redis.del(k(['pay_bplan', token]));
 
       const wsId = Number(data.wsId || 0);
+      const planDef = BRAND_PLANS.find(pl => pl.id === plan);
+      const planLabel = planDef ? planDef.title : plan;
       const kb = new InlineKeyboard()
         .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`)
         .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
@@ -16478,7 +16496,7 @@ bot.on('message:successful_payment', async (ctx) => {
         .text('⬅️ Назад', `a:bx_open|ws:${wsId}`);
 
       await markApplied('auto_apply_brand_plan');
-      await ctx.reply('✅ Brand Plan активирован! CRM-стадии в Inbox доступны (для бренда).', { reply_markup: kb });
+      await ctx.reply(`✅ Brand Plan «${planLabel}» активирован!${bonusCredits ? `\n💳 +${bonusCredits} кредитов начислено.` : ''}\nCRM-стадии и менеджеры доступны.`, { reply_markup: kb });
       return;
     } catch (e) {
       await markStatus('ERROR', `auto_apply_error: ${String(e?.message || e).slice(0, 120)}`);
@@ -20069,22 +20087,23 @@ ${link}`;
       const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const plan = String(p.plan || 'basic').toLowerCase();
-      if (plan !== 'basic' && plan !== 'max') {
+      const plan = String(p.plan || 'start').toLowerCase();
+      const planDef = BRAND_PLANS.find(pl => pl.id === plan);
+      if (!planDef) {
         return ctx.answerCallbackQuery({ text: 'План не найден.' });
       }
-      const stars = plan === 'max' ? Number(CFG.BRAND_PLAN_MAX_PRICE) : Number(CFG.BRAND_PLAN_BASIC_PRICE);
+      const stars = planDef.stars;
       const token = randomToken(10);
       await redis.set(
         k(['pay_bplan', token]),
-        { tgId: ctx.from.id, userId: u.id, wsId, plan, stars },
+        { tgId: ctx.from.id, userId: u.id, wsId, plan, stars, credits: planDef.credits || 0 },
         { ex: 15 * 60 }
       );
       const payload = `bplan_${u.id}_${plan}_${token}`;
-      const label = plan === 'max' ? 'Max' : 'Basic';
+      const label = planDef.title;
       await sendStarsInvoice(ctx, {
         title: `Brand Plan · ${label} · ${CFG.BRAND_PLAN_DURATION_DAYS} дней`,
-        description: 'Подписка на инструменты бренда: CRM стадии, расширенная воронка, удобный менеджмент диалогов.',
+        description: `Подписка ${label}: ${planDef.credits} кредитов + CRM + менеджеры${plan === 'pro' ? ' + Smart Match + Featured' : ''}.`,
         payload,
         amount: stars,
         backCb: `a:brand_plan|ws:${wsId}`,
@@ -25491,10 +25510,13 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
     if (payload.startsWith('bplan_')) {
       const parts = payload.split('_');
       const userId = Number(parts[1]);
-      const plan = String(parts[2] || 'basic').toLowerCase();
+      const plan = String(parts[2] || 'start').toLowerCase();
       if (!userId) throw new Error('Bad userId');
       await db.activateBrandPlan(userId, plan, CFG.BRAND_PLAN_DURATION_DAYS);
-      await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_brand_plan:${plan}`);
+      // Credit bonus
+      const planDef = BRAND_PLANS.find(pl => pl.id === plan) || BRAND_PLANS.find(pl => (plan === 'basic' && pl.id === 'start') || (plan === 'max' && pl.id === 'pro'));
+      if (planDef?.credits) await db.addBrandCredits(userId, planDef.credits);
+      await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_brand_plan:${plan}${planDef?.credits ? `:+${planDef.credits}cr` : ''}`);
       await ctx.answerCallbackQuery({ text: 'Brand Plan применён ✅', show_alert: true });
       await renderAdminPaymentView(ctx, row.id, backStatus, page);
       return;
