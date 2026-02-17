@@ -9,7 +9,7 @@ const { Pool } = pg;
 // - statement_timeout: cancel long-running queries server-side (prevents pool exhaustion on app-level timeouts)
 //
 // All values can be overridden via env.
-const PG_POOL_MAX = Number(process.env.PG_POOL_MAX || 10);
+const PG_POOL_MAX = Number(process.env.PG_POOL_MAX || 2);
 const PG_CONN_TIMEOUT_MS = Number(process.env.PG_CONN_TIMEOUT_MS || 5000);
 const PG_IDLE_TIMEOUT_MS = Number(process.env.PG_IDLE_TIMEOUT_MS || 30000);
 const PG_STATEMENT_TIMEOUT_MS = Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000);
