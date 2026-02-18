@@ -1,3 +1,13 @@
 {
-  "version": 2
+  "version": 2,
+  "crons": [
+    {
+      "path": "/api/cron/giveaways-tick",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/broadcast-tick",
+      "schedule": "0 * * * *" 
+    }
+  ]
 }
