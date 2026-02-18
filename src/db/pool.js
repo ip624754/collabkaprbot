@@ -1,4 +1,4 @@
-import pg from 'pg';
+import pg from 'pg'; 
 import { CFG } from '../lib/config.js';
 
 const { Pool } = pg;
