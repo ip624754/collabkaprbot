@@ -4907,3 +4907,59 @@ export async function listBroadcastUnsentRecipients(broadcastId, audience = 'all
   );
   return r.rows || [];
 }
+
+
+
+// ==============================
+// Added: Deterministic draw helpers + advisory locks
+// ==============================
+
+/**
+ * Deterministic winners draw using md5(seed || user_id)
+ * Requires Postgres.
+ * @param {object} client - pg client
+ * @param {string|number} giveawayId
+ * @param {number} winnersCount
+ * @param {string} seed - e.g. giveawayId + endsAtIso
+ * @param {boolean} onlyEligible
+ */
+async function drawWinnersDeterministic(client, giveawayId, winnersCount, seed, onlyEligible = true) {
+  const eligibilityClause = onlyEligible ? "AND is_eligible = TRUE" : "";
+  const sql = `
+    SELECT user_id
+    FROM giveaway_entries
+    WHERE giveaway_id = $1
+    ${eligibilityClause}
+    ORDER BY md5($3 || user_id::text)
+    LIMIT $2
+  `;
+  const res = await client.query(sql, [giveawayId, winnersCount, seed]);
+  return res.rows.map(r => r.user_id);
+}
+
+/**
+ * Try to acquire advisory lock
+ * @param {object} client
+ * @param {number} key
+ */
+async function tryAdvisoryLock(client, key) {
+  const res = await client.query("SELECT pg_try_advisory_lock($1) AS locked", [key]);
+  return res.rows[0]?.locked;
+}
+
+/**
+ * Release advisory lock
+ * @param {object} client
+ * @param {number} key
+ */
+async function advisoryUnlock(client, key) {
+  await client.query("SELECT pg_advisory_unlock($1)", [key]);
+}
+
+module.exports = {
+  ...(module.exports || {}),
+  drawWinnersDeterministic,
+  tryAdvisoryLock,
+  advisoryUnlock
+};
+
