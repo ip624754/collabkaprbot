@@ -4907,3 +4907,47 @@ export async function listBroadcastUnsentRecipients(broadcastId, audience = 'all
   );
   return r.rows || [];
 }
+
+
+
+// ==============================
+// Added: Deterministic draw helpers + advisory locks
+// ==============================
+
+/**
+ * Deterministic winners draw using md5(seed || user_id)
+ * Uses the global pool explicitly.
+ */
+export async function drawWinnersDeterministic(giveawayId, winnersCount, seed, onlyEligible = true) {
+  const eligibilityClause = onlyEligible ? "AND is_eligible = TRUE" : "";
+  
+  // Используем pool.query вместо client.query, чтобы не ломать вызов из крона
+  const res = await pool.query(`
+    SELECT user_id
+    FROM giveaway_entries
+    WHERE giveaway_id = $1
+    ${eligibilityClause}
+    ORDER BY md5($3 || user_id::text)
+    LIMIT $2
+  `, [giveawayId, winnersCount, seed]);
+
+  return res.rows.map(r => r.user_id);
+}
+
+/**
+ * Try to acquire advisory lock
+ */
+export async function tryAdvisoryLock(key) {
+  const res = await pool.query("SELECT pg_try_advisory_lock($1) AS locked", [key]);
+  return res.rows[0]?.locked;
+}
+
+/**
+ * Release advisory lock
+ */
+export async function advisoryUnlock(key) {
+  await pool.query("SELECT pg_advisory_unlock($1)", [key]);
+}
+
+// УДАЛЕН module.exports, так как в файле используется ES modules (export function...)
+
