@@ -1,231 +1,525 @@
-/**
- * FINAL PRODUCTION-READY CRON (Safe Control Plane)
- * Designed for: Vercel + Neon + Upstash
- * Features:
- * 1. SQL Determinism: winner selection on DB side via sha256.
- * 2. Event Outbox: guaranteed delivery with backoff and SAVEPOINT isolation.
- * 3. Double Locking: Redis (instance-level) + PG advisory transaction lock.
- * 4. Runtime Guard: graceful stop before Vercel timeout (10s).
- */
-
-import pg from 'pg';
-import crypto from 'crypto';
-import { redis, withLock } from "../redis/lock.js"; // adjust path as needed
+import { redis, k } from '../lib/redis.js';
+import * as db from '../db/queries.js';
+import { getBot } from './bot.js';
+import { InlineKeyboard } from 'grammy';
+import { CFG } from '../lib/config.js';
 import {
-  endDueGiveaways,
-  autoDrawEnded,
-  autoPublishDrawn,
-  issueRetryCredits,
-  pingDb
-} from "../db/queries.js";
+  notifyGiveawayEnded,
+  notifyGiveawayWinnersReady,
+  notifyGiveawayWinnersDM,
+} from './gwNotify.js';
 
-const { Pool } = pg;
+// =====================================================
+// Cron Control Plane (Vercel + Neon + Upstash)
+//
+// Goals:
+// - serverless-safe (short-lived connections)
+// - no concurrent ticks (Redis lock)
+// - deterministic & atomic winners draw (single DB tx + advisory xact lock)
+// - best-effort notifications (Telegram failures must not break cron)
+// =====================================================
 
-/* =========================================================
-   CONFIGURATION (all tunable parameters)
-========================================================= */
-const CONFIG = {
-  // Redis lock key and TTL (ms) – prevents concurrent lambda executions
-  LOCK_KEY: "infra:cron:leader",
-  LOCK_TTL: 540000, // 9 minutes
+// Production-safe fixed cron parameters.
+const CRON_LOCK_TTL_SEC = 55;
+const CRON_END_BATCH = 50;
+const CRON_DRAW_BATCH = 50;
+const CRON_OFFICIAL_EXPIRE_BATCH = 50;
+const CRON_RETRY_BATCH = 50;
+const CRON_RETRY_EXPIRE_BATCH = 200;
 
-  // PostgreSQL advisory lock ID (must be unique across the system)
-  PG_LOCK_ID: 888888,
+// Per-giveaway lock to reduce races even if ticks overlap.
+const GIVEAWAY_LOCK_TTL_SEC = 120;
 
-  // Safety limits
-  MAX_RUNTIME_MS: 8000,    // stop after 8s (Vercel max is 10s)
-  STEP_TIMEOUT_MS: 3000,   // per-step timeout (optional)
-
-  // Outbox processor
-  OUTBOX_LIMIT: 20,        // max events per tick
-  MAX_RETRIES: 5,          // attempts before moving to DEAD
-  BASE_BACKOFF: 1000,      // 1 second
-};
-
-// Neon-optimized pool: max 1 connection per instance
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 1,
-  idleTimeoutMillis: 5000,
-  connectionTimeoutMillis: 10000,
-  ssl: { rejectUnauthorized: false }
-});
-
-/* =========================================================
-   UTILITIES
-========================================================= */
-
-/**
- * Throws if we are approaching the Vercel function timeout.
- */
-function runtimeGuard(startTime) {
-  if (Date.now() - startTime > CONFIG.MAX_RUNTIME_MS) {
-    throw new Error("RUNTIME_LIMIT_REACHED");
-  }
-}
-
-/**
- * Universal counter extractor: supports numbers, arrays, objects with count/issued/expired.
- */
-function extractCount(result) {
-  if (result === null || result === undefined) return 0;
-  if (typeof result === 'number') return result;
-  if (Array.isArray(result)) return result.length;
-  // Prefer 'count', then 'issued', then 'expired' (common return shapes)
-  return result.count ?? result.issued ?? result.expired ?? 0;
-}
-
-/* =========================================================
-   CORE PIPELINE (runs inside a single transaction with advisory lock)
-========================================================= */
-
-async function runCronPipeline() {
-  const startTime = Date.now();
-  const client = await pool.connect();
-  let lockAcquired = false;
-
+async function withLock(lockKey, ttlSec, fn) {
+  const ok = await redis.set(lockKey, '1', { nx: true, ex: ttlSec });
+  if (!ok) return { locked: true };
   try {
-    // Start transaction and acquire advisory lock (auto-released on commit/rollback)
-    await client.query('BEGIN');
-    const lockRes = await client.query(
-      'SELECT pg_try_advisory_xact_lock($1) as ok',
-      [CONFIG.PG_LOCK_ID]
-    );
-    if (!lockRes.rows[0].ok) {
-      await client.query('ROLLBACK');
-      console.warn('[cron] ⚠️ PG advisory lock busy, skipping tick');
-      return { status: 'skipped' };
-    }
-    lockAcquired = true;
-
-    const metrics = { steps: {} };
-
-    // Step 1-4: main giveaway operations (all using the same client)
-    const steps = [
-      { id: 'ended', fn: endDueGiveaways },
-      { id: 'drawn', fn: autoDrawEnded },
-      { id: 'published', fn: autoPublishDrawn },
-      { id: 'credits', fn: issueRetryCredits },
-    ];
-
-    for (const step of steps) {
-      runtimeGuard(startTime);
-      // Pass the transactional client to each step function
-      const res = await step.fn(client);
-      metrics.steps[step.id] = extractCount(res);
-    }
-
-    // Step 5: process outbox (within the same transaction, with SAVEPOINTs)
-    runtimeGuard(startTime);
-    await processOutbox(client, startTime);
-
-    // Commit everything atomically
-    await client.query('COMMIT');
-    console.log('[cron] ✅ Pipeline finished', metrics.steps);
-    return metrics;
-  } catch (err) {
-    if (lockAcquired) {
-      await client.query('ROLLBACK').catch(e => console.error('ROLLBACK failed', e));
-    }
-    // Rethrow only non‑timeout errors to let outer handler log them
-    if (err.message !== 'RUNTIME_LIMIT_REACHED') {
-      console.error('[cron] 💥 Pipeline error:', err);
-    }
-    throw err;
+    const r = await fn();
+    return { locked: false, result: r };
   } finally {
-    client.release();
+    await redis.del(lockKey);
   }
 }
 
-/* =========================================================
-   OUTBOX PROCESSOR (with SAVEPOINT isolation per event)
-========================================================= */
+async function withGiveawayLock(giveawayId, fn) {
+  const key = k(['lock', 'gw', String(giveawayId)]);
+  const ok = await redis.set(key, '1', { nx: true, ex: GIVEAWAY_LOCK_TTL_SEC });
+  if (!ok) return { locked: true };
+  try {
+    const r = await fn();
+    return { locked: false, result: r };
+  } finally {
+    await redis.del(key);
+  }
+}
 
-async function processOutbox(client, startTime) {
-  // Fetch pending events that are ready for processing
-  const eventsRes = await client.query(
-    `SELECT * FROM event_outbox
-     WHERE status = 'PENDING'
-       AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
-     ORDER BY id ASC
-     LIMIT $1
-     FOR UPDATE SKIP LOCKED`,
-    [CONFIG.OUTBOX_LIMIT]
-  );
+async function endDueGiveaways(now = new Date()) {
+  const due = await db.listGiveawaysToEnd(CRON_END_BATCH);
+  const ended = [];
 
-  for (const ev of eventsRes.rows) {
-    runtimeGuard(startTime);
+  for (const g of due) {
+    await db.updateGiveaway(g.id, { status: 'ENDED' });
+    await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.ended', {
+      manual: false,
+      now: now.toISOString(),
+    });
 
-    // Generate safe savepoint name (replace hyphens if ev.id is UUID)
-    const spName = `sp_${ev.id.toString().replace(/-/g, '_')}`;
+    // Optional: notify owner/channel.
+    try {
+      const api = getBot().api;
+      await notifyGiveawayEnded({ api, db, g, reason: 'time' });
+    } catch {
+      // ignore
+    }
 
-    // Create savepoint
-    await client.query(`SAVEPOINT ${spName}`);
+    ended.push(g.id);
+  }
+
+  return ended;
+}
+
+async function autoDrawEnded() {
+  const list = await db.listEndedGiveawaysToDraw(CRON_DRAW_BATCH);
+  const bot = getBot();
+  const drawn = [];
+
+  for (const g of list) {
+    if (!g.auto_draw) continue;
+    if (!g.ends_at) continue;
+
+    // Extra safety (even though we have a global tick lock).
+    await withGiveawayLock(g.id, async () => {
+      const endsAtIso = new Date(g.ends_at).toISOString();
+      const requested = Number(g.winners_count || 1);
+
+      // Atomic: lock + pick + persist + status update + audit, all in one tx.
+      const r = await db.drawAndFinalizeGiveawayWinnersAtomic(
+        g.id,
+        g.workspace_id,
+        requested,
+        endsAtIso
+      );
+
+      if (!r || r.status !== 'drawn') {
+        // locked / wrong_status / already_drawn / no_entries
+        return;
+      }
+
+      drawn.push(g.id);
+
+      // Notify owner that winners are ready.
+      try {
+        await notifyGiveawayWinnersReady({
+          api: bot.api,
+          db,
+          g,
+          reason: 'auto_draw',
+        });
+      } catch {
+        // ignore
+      }
+
+      // DM winners directly.
+      try {
+        await notifyGiveawayWinnersDM({
+          api: bot.api,
+          db,
+          gwId: g.id,
+          reason: 'auto_draw',
+        });
+      } catch {
+        // ignore
+      }
+    });
+  }
+
+  return drawn;
+}
+
+async function autoPublishDrawn() {
+  const list = await db.listDrawnGiveawaysToPublish(20);
+  const bot = getBot();
+  const published = [];
+
+  for (const g of list) {
+    if (!g.published_chat_id) continue;
 
     try {
-      // --- actual event handling logic goes here ---
-      // Example: await handleGiveawayNotification(ev, client);
-      // (must use the provided client for any DB writes)
-      await handleEvent(ev, client); // <-- implement according to your domain
+      const winners = await db.getWinnersWithTgId(g.id);
+      if (!winners.length) continue;
 
-      // Mark as done
-      await client.query(
-        'UPDATE event_outbox SET status = $1, processed_at = NOW() WHERE id = $2',
-        ['DONE', ev.id]
-      );
+      const winnerLines = winners
+        .map((w) => {
+          const name = w.username ? `@${w.username}` : `tg:${w.tg_id}`;
+          return `${w.place}. ${name}`;
+        })
+        .join('\n');
 
-      // Release savepoint
-      await client.query(`RELEASE SAVEPOINT ${spName}`);
-    } catch (err) {
-      // Rollback only the failed event's changes
-      await client.query(`ROLLBACK TO SAVEPOINT ${spName}`);
+      const body = `🏁 <b>Итоги конкурса</b>\n\n🏆 Победители:\n${winnerLines}`;
 
-      const attempts = ev.attempts + 1;
-      const isDead = attempts >= CONFIG.MAX_RETRIES;
-      const backoffMs = CONFIG.BASE_BACKOFF * Math.pow(2, ev.attempts); // exponential
+      const chatId = Number(g.published_chat_id);
 
-      await client.query(
-        `UPDATE event_outbox
-         SET status = $1,
-             attempts = $2,
-             next_attempt_at = NOW() + ($3 * interval '1 millisecond')
-         WHERE id = $4`,
-        [isDead ? 'DEAD' : 'PENDING', attempts, backoffMs, ev.id]
-      );
+      // Prefer editing the original announcement message (idempotent), fallback to sending a new one.
+      const origMsgId = g.results_message_id ? null : g.published_message_id || null;
 
-      console.warn(`[cron] ⚠️ Event ${ev.id} failed (attempt ${attempts})`, err.message);
+      let publishedId = null;
+
+      if (origMsgId) {
+        try {
+          await bot.api.editMessageText(chatId, Number(origMsgId), body, {
+            parse_mode: 'HTML',
+          });
+          publishedId = Number(origMsgId);
+        } catch {
+          // ignore edit errors
+        }
+      }
+
+      if (!publishedId) {
+        const replyParams = origMsgId
+          ? {
+              reply_parameters: {
+                message_id: Number(origMsgId),
+                allow_sending_without_reply: true,
+              },
+            }
+          : {};
+
+        const sent = await bot.api.sendMessage(chatId, body, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          ...replyParams,
+        });
+
+        publishedId = sent.message_id;
+      }
+
+      await db.updateGiveaway(g.id, {
+        status: 'RESULTS_PUBLISHED',
+        results_message_id: publishedId,
+        results_published_at: new Date().toISOString(),
+      });
+      await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.results_auto_published', {
+        message_id: publishedId,
+      });
+      published.push(g.id);
+    } catch {
+      // skip individual failures
     }
   }
+
+  return published;
 }
 
-/**
- * Placeholder for actual event handler.
- * Replace with your own implementation.
- */
-async function handleEvent(event, client) {
-  // Example: send notification via Telegram/Discord, update related tables, etc.
-  // All DB operations must use the provided client.
-  // If you need to call external APIs, do it here; on failure throw error.
-  throw new Error('handleEvent not implemented');
-}
+async function expireOfficialPosts() {
+  if (!CFG.OFFICIAL_PUBLISH_ENABLED) return { expired: 0 };
+  const bot = getBot();
+  const rows = await db.listOfficialToExpire(CRON_OFFICIAL_EXPIRE_BATCH);
+  let expired = 0;
 
-/* =========================================================
-   ENTRY POINT (Vercel Serverless Function)
-========================================================= */
+  for (const p of rows) {
+    try {
+      if (p.channel_chat_id && p.message_id) {
+        await bot.api.editMessageText(
+          Number(p.channel_chat_id),
+          Number(p.message_id),
+          '⌛️ <b>Размещение истекло</b>\n\nЭтот пост больше не находится в активном слоте.',
+          { parse_mode: 'HTML' }
+        );
+      }
+    } catch {
+      // ignore edits
+    }
 
-export default async function handler(req, res) {
-  // Simple token authentication
-  const authHeader = req.headers.authorization || '';
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    try {
+      await db.setOfficialPostStatus(p.offer_id, 'EXPIRED');
+      expired += 1;
+    } catch {
+      // ignore db
+    }
   }
 
+  return { expired };
+}
+
+async function issueIntroRetryCredits() {
+  if (!CFG.INTRO_RETRY_ENABLED) return { checked: 0, issued: 0, expired: 0 };
+
+  const bot = getBot();
+
+  let expired = 0;
   try {
-    // Outer Redis lock prevents concurrent lambda invocations
-    const result = await withLock(CONFIG.LOCK_KEY, CONFIG.LOCK_TTL, runCronPipeline);
-    return res.status(200).json({ ok: true, data: result, timestamp: new Date().toISOString() });
-  } catch (err) {
-    console.error('[cron] Handler error:', err);
-    return res.status(500).json({ ok: false, error: err.message });
+    expired = await db.expireRetryCredits(CRON_RETRY_EXPIRE_BATCH);
+  } catch (e) {
+    // missing table during rolling upgrades
+    if (!(e && (e.code === '42P01' || String(e.message || '').includes('brand_retry_credits')))) throw e;
   }
+
+  let rows = [];
+  try {
+    rows = await db.listIntroThreadsForRetry(
+      CRON_RETRY_BATCH,
+      CFG.INTRO_RETRY_AFTER_HOURS
+    );
+  } catch (e) {
+    // missing columns during rolling upgrades
+    if (e && (e.code === '42703' || e.code === '42P01'))
+      return { checked: 0, issued: 0, expired };
+    throw e;
+  }
+
+  let issued = 0;
+
+  for (const it of rows) {
+    const threadId = Number(it.thread_id);
+    const buyerUserId = Number(it.buyer_user_id);
+
+    try {
+      const r = await db.issueRetryCreditForThread(
+        threadId,
+        buyerUserId,
+        CFG.INTRO_RETRY_EXPIRES_DAYS,
+        'no_reply'
+      );
+      if (!r.issued) continue;
+
+      issued += 1;
+      db.trackEvent('retry_credit_issued', {
+        userId: buyerUserId,
+        wsId: null,
+        meta: { threadId, offerId: Number(it.offer_id || 0) },
+      });
+
+      if (CFG.INTRO_RETRY_NOTIFY) {
+        const u = await db.getUserTgIdByUserId(buyerUserId);
+        const tgId = u?.tg_id;
+        if (tgId) {
+          const kb = new InlineKeyboard().text('🎫 Brand Pass', 'a:brand_pass|ws:0');
+          await bot.api.sendMessage(
+            Number(tgId),
+            `🎟 <b>Retry credit начислен</b>\n\nПо одному из интро не было ответа ${Number(
+              CFG.INTRO_RETRY_AFTER_HOURS || 24
+            )}ч — мы вернули тебе 1 Retry credit.\nДействует ${Number(
+              CFG.INTRO_RETRY_EXPIRES_DAYS || 7
+            )} дней и списывается автоматически при следующем интро.`,
+            { parse_mode: 'HTML', reply_markup: kb }
+          );
+        }
+      }
+    } catch {
+      // ignore one-off failures
+    }
+  }
+
+  return { checked: rows.length, issued, expired };
+}
+
+export async function giveawaysTick() {
+  const lockKey = k(['lock', 'giveaways_tick']);
+  const startedAt = Date.now();
+
+  return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
+    const ended = await endDueGiveaways();
+    const drawn = await autoDrawEnded();
+    const published = await autoPublishDrawn();
+    const official = await expireOfficialPosts();
+    const retry = await issueIntroRetryCredits();
+    const duration_ms = Date.now() - startedAt;
+
+    return {
+      ended,
+      drawn,
+      published_count: published.length,
+      official,
+      retry,
+      ended_count: ended.length,
+      drawn_count: drawn.length,
+      official_expired: official.expired || 0,
+      retry_issued: retry.issued || 0,
+      retry_checked: retry.checked || 0,
+      retry_expired: retry.expired || 0,
+      duration_ms,
+    };
+  });
+}
+
+// =====================================================
+// Broadcast tick: send one batch per invocation
+// =====================================================
+const BROADCAST_BATCH_SIZE = 25;
+const BROADCAST_SEND_DELAY_MS = 50; // ~20 msg/sec
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function sendBroadcastMessage(api, tgId, bc) {
+  const type = String(bc.draft_type || 'text');
+
+  let btns = [];
+  try {
+    btns = bc.buttons_json ? JSON.parse(bc.buttons_json) : [];
+  } catch {
+    btns = [];
+  }
+
+  // Build inline keyboard from URL buttons
+  let replyMarkup;
+  if (btns.length) {
+    const rows = btns
+      .filter((b) => b && b.text && b.url)
+      .map((b) => [{ text: b.text, url: b.url }]);
+    if (rows.length) replyMarkup = { inline_keyboard: rows };
+  }
+
+  const opts = {};
+  if (replyMarkup) opts.reply_markup = replyMarkup;
+
+  if (type === 'text') {
+    opts.parse_mode = 'HTML';
+    await api.sendMessage(Number(tgId), bc.draft_text || '', opts);
+    return;
+  }
+
+  if (bc.draft_caption) {
+    opts.caption = bc.draft_caption;
+    opts.parse_mode = 'HTML';
+  }
+
+  if (type === 'photo') {
+    await api.sendPhoto(Number(tgId), bc.draft_file_id, opts);
+  } else if (type === 'video') {
+    await api.sendVideo(Number(tgId), bc.draft_file_id, opts);
+  } else if (type === 'animation') {
+    await api.sendAnimation(Number(tgId), bc.draft_file_id, opts);
+  } else if (type === 'document') {
+    await api.sendDocument(Number(tgId), bc.draft_file_id, opts);
+  } else {
+    // Fallback: text
+    opts.parse_mode = 'HTML';
+    await api.sendMessage(
+      Number(tgId),
+      bc.draft_text || bc.draft_caption || '(empty)',
+      opts
+    );
+  }
+}
+
+export async function broadcastTick() {
+  const lockKey = k(['lock', 'broadcast_tick']);
+
+  return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
+    const bc = await db.getActiveBroadcast();
+    if (!bc) return { status: 'idle', reason: 'no_active_broadcast' };
+
+    // Transition PENDING → RUNNING
+    if (bc.status === 'PENDING') {
+      await db.updateBroadcast(bc.id, {
+        status: 'RUNNING',
+        started_at: new Date().toISOString(),
+      });
+    }
+
+    const lastUserId = Number(bc.last_sent_user_id || 0);
+    const recipients = await db.listBroadcastUnsentRecipients(
+      bc.id,
+      bc.audience || 'all',
+      BROADCAST_BATCH_SIZE,
+      lastUserId
+    );
+
+    if (!recipients.length) {
+      // No more recipients → DONE
+      await db.updateBroadcast(bc.id, {
+        status: 'DONE',
+        finished_at: new Date().toISOString(),
+      });
+
+      // Notify admin
+      try {
+        const bot = getBot();
+        const creator = await db.getUserById(bc.created_by_user_id);
+        if (creator?.tg_id) {
+          await bot.api.sendMessage(
+            Number(creator.tg_id),
+            `✅ <b>Рассылка #${bc.id} завершена</b>\n\n📊 Отправлено: ${bc.sent_count} / ${bc.total_count}\n❌ Ошибок: ${bc.failed_count}`,
+            { parse_mode: 'HTML' }
+          );
+        }
+      } catch {
+        // ignore notification failure
+      }
+
+      return {
+        status: 'done',
+        broadcast_id: bc.id,
+        sent: bc.sent_count,
+        failed: bc.failed_count,
+      };
+    }
+
+    const bot = getBot();
+    let sent = 0;
+    let failed = 0;
+    let lastId = lastUserId;
+
+    for (const recipient of recipients) {
+      const uid = Number(recipient.user_id);
+      const tgId = Number(recipient.tg_id);
+      lastId = uid;
+
+      try {
+        await sendBroadcastMessage(bot.api, tgId, bc);
+        await db.logBroadcastSent(bc.id, uid, 'sent');
+        sent++;
+      } catch (err) {
+        const code = err?.error_code || err?.statusCode || 0;
+        const desc = String(err?.description || err?.message || '');
+
+        // 403 = blocked by user, 400 = chat not found → permanent failure
+        if (
+          code === 403 ||
+          code === 400 ||
+          desc.includes('bot was blocked') ||
+          desc.includes('chat not found') ||
+          desc.includes('user is deactivated')
+        ) {
+          await db.logBroadcastSent(bc.id, uid, 'blocked');
+          failed++;
+        }
+        // 429 = rate limit → stop batch early, retry next tick
+        else if (code === 429) {
+          const retryAfter = Number(err?.parameters?.retry_after || 5);
+          console.error(`[BROADCAST] 429 rate limit, retry_after=${retryAfter}`);
+          // Don't log as sent — will retry next tick
+          break;
+        }
+        // Other errors → log as failed, continue
+        else {
+          console.error(`[BROADCAST] send error uid=${uid}`, desc);
+          await db.logBroadcastSent(bc.id, uid, 'failed');
+          failed++;
+        }
+      }
+
+      // Throttle between messages
+      if (BROADCAST_SEND_DELAY_MS > 0) await sleep(BROADCAST_SEND_DELAY_MS);
+    }
+
+    // Update counters
+    await db.updateBroadcast(bc.id, {
+      sent_count: Number(bc.sent_count || 0) + sent,
+      failed_count: Number(bc.failed_count || 0) + failed,
+      last_sent_user_id: lastId,
+    });
+
+    return {
+      status: 'running',
+      broadcast_id: bc.id,
+      batch_sent: sent,
+      batch_failed: failed,
+      total_sent: Number(bc.sent_count || 0) + sent,
+      total_count: bc.total_count,
+    };
+  });
 }
