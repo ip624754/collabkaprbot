@@ -968,6 +968,9 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 function mainMenuBrandKb(flags = {}, opts = {}) {
   const { isModerator = false, isAdmin = false, isCurator = false } = flags;
   const { isManager = false, hasMultipleBrands = false, canManager = false, teamLocked = false } = opts;
+  // UX: keep the "Brand Team" entry visible even when access is locked.
+  // For delegated brand managers it's always owner-only, so we show it as locked.
+  const teamLockedUi = isManager ? true : !!teamLocked;
 
   const kb = new InlineKeyboard()
   .text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm')
@@ -985,11 +988,13 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
     kb.text('⭐️ Brand Plan', 'a:brand_plan|ws:0')
       .row()
       .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand')
-      .text(teamLocked ? '👔 Менеджеры бренда 🔒' : '👔 Менеджеры бренда', 'a:brand_team|ws:0')
+      .text(teamLockedUi ? '👔 Менеджеры бренда 🔒' : '👔 Менеджеры бренда', 'a:brand_team|ws:0')
       .row();
   } else {
     kb.text('ℹ️ Права менеджера', 'a:bm_help')
       .row();
+    // Visible even in manager mode: server-side checks will block non-owners.
+    kb.text('👔 Менеджеры бренда 🔒', 'a:brand_team|ws:0').row();
     if (hasMultipleBrands) {
       kb.text('🔁 Сменить бренд', 'a:bm_pick_brand|ret:menu')
         .row();
@@ -1274,6 +1279,10 @@ async function renderMainMenu(ctx, flags, params = {}) {
         let teamPaid = false;
         if (basicOk) {
           try { teamPaid = await db.hasBrandTeamUnlockPurchase(u.id); } catch { teamPaid = false; }
+          // When access is granted via gifted Brand Plan (users.brand_plan_*), reflect it in UI too.
+          if (!teamPaid) {
+            try { teamPaid = await db.isBrandPlanActive(u.id); } catch { teamPaid = false; }
+          }
         }
         teamLocked = !(basicOk && teamPaid);
       } catch {
@@ -1291,7 +1300,25 @@ async function renderMainMenu(ctx, flags, params = {}) {
 Для брендов — поиск креаторов, лента креаторов и Inbox.
 
 Выбери действие:`;
-    kb = mainMenuBrandKb(flags, { isManager: false });
+    // Same UX hints as "effective brand" branch: keep team button visible and show lock icon until unlocked.
+    let canManager = false;
+    try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
+    let teamLocked = false;
+    try {
+      const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
+      const basicOk = isBrandBasicComplete(prof);
+      let teamPaid = false;
+      if (basicOk) {
+        try { teamPaid = await db.hasBrandTeamUnlockPurchase(u.id); } catch { teamPaid = false; }
+        if (!teamPaid) {
+          try { teamPaid = await db.isBrandPlanActive(u.id); } catch { teamPaid = false; }
+        }
+      }
+      teamLocked = !(basicOk && teamPaid);
+    } catch {
+      teamLocked = false;
+    }
+    kb = mainMenuBrandKb(flags, { isManager: false, canManager, teamLocked });
   } else {
     const base = `🏠 <b>Главное меню</b>
 
@@ -1420,7 +1447,9 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 
   const bCreator = `${effective === 'creator' ? '✅ ' : ''}✨ Creator / канал`;
   const bBrand = `${effective === 'brand' ? '✅ ' : ''}🏷 Бренд`;
-  const bBm = `${effective === 'brand_manager' ? '✅ ' : ''}👔 Менеджеры бренда`;
+  // IMPORTANT: this is the *delegate manager mode* toggle (for invited managers), not the owner Team feature.
+  // Keep the label distinct to avoid confusion with the owner-only "👔 Менеджеры бренда" (team management).
+  const bBm = `${effective === 'brand_manager' ? '✅ ' : ''}🧑‍💼 Я менеджер бренда`;
   const bCur = `${effective === 'curator' ? '✅ ' : ''}🧹 Кураторы блогера`;
 
   const kb = new InlineKeyboard()
@@ -1440,6 +1469,8 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   } else if (effective === 'brand' || effective === 'brand_manager') {
     kb.text('📥 Inbox', 'a:go_dialogs').text('📝 Заявки', 'a:brand_apps|ws:0|s:new|p:0').row();
     kb.text('📰 Лента', 'a:bx_feed|ws:0|p:0|h:mm').text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm').row();
+    // Owner team management entrypoint (kept visible; access is checked server-side).
+    if (effective === 'brand') kb.text('👔 Менеджеры бренда', 'a:brand_team|ws:0').row();
   } else {
     kb.text('📣 Мои каналы', 'a:ws_list').text('📨 Мои заявки', 'a:my_apps|p:0').row();
     kb.text('🏷 Каталог брендов', 'a:brands_home').text('📥 Inbox', 'a:go_dialogs').row();
