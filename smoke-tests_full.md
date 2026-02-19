@@ -5,7 +5,15 @@
 ---
 
 ### 0) Подготовка
-**Миграции:** применены 014 / 015 / 016.
+**Миграции:** применены через новый мигратор: `npm run migrate`.
+
+Если база существующая и миграции применялись раньше без трекинга:
+- `psql "$DATABASE_URL" -f migration_pack/00_mark_all_applied.sql`
+- `npm run migrate -- --dry-run`
+
+Если база «под вопросом»:
+- `psql "$DATABASE_URL" -f migration_pack/01_reconcile.sql`
+- `npm run migrate`
 
 **ENV (проверь наличие):**
 - Intro: `INTRO_TRIAL_CREDITS`, `INTRO_COST_PER_INTRO`, `INTRO_DAILY_LIMIT`, `INTRO_DAILY_LIMIT_UNVERIFIED`
