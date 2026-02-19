@@ -8,8 +8,7 @@ import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes,
 import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
-// NOTE: PRNG utils are intentionally not imported here.
-// Winners drawing is SQL-only + deterministic + atomic (see db.drawAndFinalizeGiveawayWinnersAtomic).
+import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
 import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
@@ -943,7 +942,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 
   if (opts.canManager) {
     kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
-      .text('🧑‍💼 Кабинет менеджера', 'a:bm_home')
+      .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
       .row();
   } else {
     kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu').row();
@@ -968,9 +967,6 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 function mainMenuBrandKb(flags = {}, opts = {}) {
   const { isModerator = false, isAdmin = false, isCurator = false } = flags;
   const { isManager = false, hasMultipleBrands = false, canManager = false, teamLocked = false } = opts;
-  // UX: keep the "Brand Team" entry visible even when access is locked.
-  // For delegated brand managers it's always owner-only, so we show it as locked.
-  const teamLockedUi = isManager ? true : !!teamLocked;
 
   const kb = new InlineKeyboard()
   .text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm')
@@ -988,13 +984,11 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
     kb.text('⭐️ Brand Plan', 'a:brand_plan|ws:0')
       .row()
       .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand')
-      .text(teamLockedUi ? '👔 Менеджеры бренда 🔒' : '👔 Менеджеры бренда', 'a:brand_team|ws:0')
+      .text(teamLocked ? '👔 Менеджеры бренда 🔒' : '👔 Менеджеры бренда', 'a:brand_team|ws:0')
       .row();
   } else {
     kb.text('ℹ️ Права менеджера', 'a:bm_help')
       .row();
-    // Visible even in manager mode: server-side checks will block non-owners.
-    kb.text('👔 Менеджеры бренда 🔒', 'a:brand_team|ws:0').row();
     if (hasMultipleBrands) {
       kb.text('🔁 Сменить бренд', 'a:bm_pick_brand|ret:menu')
         .row();
@@ -1023,7 +1017,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
 
   
   if (!isManager && canManager) {
-    kb.row().text('🧑‍💼 Режим менеджера', 'a:bm_mode_set|v:1|ret:menu');
+    kb.row().text('🧑‍💼 Я менеджер бренда', 'a:bm_mode_set|v:1|ret:menu');
   }
 
   kb.row().text('🏠 Home', 'a:home');
@@ -1271,20 +1265,11 @@ async function renderMainMenu(ctx, flags, params = {}) {
       let canManager = false;
       try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
 
-      // UX: show lock icon on Brand Team button until profile+purchase requirements met
+      // UX: show lock icon on Brand Team button until profile+plan requirements met (purchase OR gifted Brand Plan)
       let teamLocked = false;
       try {
-        const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
-        const basicOk = isBrandBasicComplete(prof);
-        let teamPaid = false;
-        if (basicOk) {
-          try { teamPaid = await db.hasBrandTeamUnlockPurchase(u.id); } catch { teamPaid = false; }
-          // When access is granted via gifted Brand Plan (users.brand_plan_*), reflect it in UI too.
-          if (!teamPaid) {
-            try { teamPaid = await db.isBrandPlanActive(u.id); } catch { teamPaid = false; }
-          }
-        }
-        teamLocked = !(basicOk && teamPaid);
+        const st = await getBrandTeamGateState(u.id);
+        teamLocked = !st.ok;
       } catch {
         teamLocked = false;
       }
@@ -1300,25 +1285,16 @@ async function renderMainMenu(ctx, flags, params = {}) {
 Для брендов — поиск креаторов, лента креаторов и Inbox.
 
 Выбери действие:`;
-    // Same UX hints as "effective brand" branch: keep team button visible and show lock icon until unlocked.
-    let canManager = false;
-    try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
+    // UX: show lock icon on Brand Team button until profile+plan requirements met (purchase OR gifted Brand Plan)
     let teamLocked = false;
     try {
-      const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
-      const basicOk = isBrandBasicComplete(prof);
-      let teamPaid = false;
-      if (basicOk) {
-        try { teamPaid = await db.hasBrandTeamUnlockPurchase(u.id); } catch { teamPaid = false; }
-        if (!teamPaid) {
-          try { teamPaid = await db.isBrandPlanActive(u.id); } catch { teamPaid = false; }
-        }
-      }
-      teamLocked = !(basicOk && teamPaid);
+      const st = await getBrandTeamGateState(u.id);
+      teamLocked = !st.ok;
     } catch {
       teamLocked = false;
     }
-    kb = mainMenuBrandKb(flags, { isManager: false, canManager, teamLocked });
+
+    kb = mainMenuBrandKb(flags, { isManager: false, teamLocked });
   } else {
     const base = `🏠 <b>Главное меню</b>
 
@@ -1447,9 +1423,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 
   const bCreator = `${effective === 'creator' ? '✅ ' : ''}✨ Creator / канал`;
   const bBrand = `${effective === 'brand' ? '✅ ' : ''}🏷 Бренд`;
-  // IMPORTANT: this is the *delegate manager mode* toggle (for invited managers), not the owner Team feature.
-  // Keep the label distinct to avoid confusion with the owner-only "👔 Менеджеры бренда" (team management).
-  const bBm = `${effective === 'brand_manager' ? '✅ ' : ''}🧑‍💼 Я менеджер бренда`;
+  const bBm = `${effective === 'brand_manager' ? '✅ ' : ''}👔 Менеджеры бренда`;
   const bCur = `${effective === 'curator' ? '✅ ' : ''}🧹 Кураторы блогера`;
 
   const kb = new InlineKeyboard()
@@ -1469,8 +1443,6 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   } else if (effective === 'brand' || effective === 'brand_manager') {
     kb.text('📥 Inbox', 'a:go_dialogs').text('📝 Заявки', 'a:brand_apps|ws:0|s:new|p:0').row();
     kb.text('📰 Лента', 'a:bx_feed|ws:0|p:0|h:mm').text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm').row();
-    // Owner team management entrypoint (kept visible; access is checked server-side).
-    if (effective === 'brand') kb.text('👔 Менеджеры бренда', 'a:brand_team|ws:0').row();
   } else {
     kb.text('📣 Мои каналы', 'a:ws_list').text('📨 Мои заявки', 'a:my_apps|p:0').row();
     kb.text('🏷 Каталог брендов', 'a:brands_home').text('📥 Inbox', 'a:go_dialogs').row();
@@ -2613,15 +2585,26 @@ function brandTeamKb() {
 
 
 // Brand Team access: unlock after basic profile + Brand Pass / Brand Plan
-function brandTeamLockedKb() {
-  return new InlineKeyboard()
-    .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand')
-    .row()
-    .text('💳 Кредиты', 'a:brand_pass|ws:0')
-    .text('⭐️ Brand Plan', 'a:brand_plan|ws:0')
-    .row()
-    .text('⬅️ Назад', 'a:menu');
+function brandTeamLockedKb(st, backCb = 'a:menu') {
+  const kb = new InlineKeyboard();
+
+  const profileIncomplete = !!(st?.missingBasic && st.missingBasic.length);
+  const planInactive = !st?.teamPaid;
+
+  if (profileIncomplete) {
+    kb.text('🧩 Заполнить профиль бренда', 'a:brand_profile_edit|ws:0|ret:brand').row();
+  } else {
+    kb.text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand').row();
+  }
+
+  if (planInactive) {
+    kb.text('⭐️ Подключить Brand Plan', 'a:brand_plan|ws:0').row();
+  }
+
+  kb.text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
+  return kb;
 }
+
 
 async function getBrandTeamGateState(ownerUserId) {
   const prof = await safeBrandProfiles(
@@ -2723,17 +2706,30 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
   }
 
   if (!st.ok) {
-    const statusProfile = st.missingBasic && st.missingBasic.length
-      ? `• Профиль: ${st.basicDone}/4 (не хватает: <b>${escapeHtml(st.missingBasic.join(', '))}</b>)`
-      : `• Профиль: ${st.basicDone}/4`;
+    const profileOk = !(st.missingBasic && st.missingBasic.length);
+    const planOk = !!st.teamPaid;
 
-    const statusPay = st.teamPaid
-      ? '• Покупка: ✅ найдена'
-      : '• Покупка: ❌ нет (нужен Brand Plan)';
+    const profileLine = profileOk
+      ? '✅ Профиль бренда: <b>готов</b> (4/4)'
+      : `❌ Профиль бренда: <b>${st.basicDone}/4</b> — не хватает: <b>${escapeHtml(st.missingBasic.join(', '))}</b>`;
 
-    const text = `👔 <b>Менеджеры бренда</b>\n\nДобавь менеджеров, чтобы быстрее отвечать на заявки и закрывать сделки.\n\n<b>Условия доступа:</b>\n1) Заполнить профиль бренда (4 поля: Название, Ниша, Контакт, Ссылка)\n2) Купить <b>Brand Plan</b>\n\n<b>Статус:</b>\n${statusProfile}\n${statusPay}\n\n<i>Зачем:</i> защита от спама и ценность брендовой покупки.`;
+    const planLine = planOk
+      ? '✅ Brand Plan: <b>активен</b> (покупка или подаренный)'
+      : '❌ Brand Plan: <b>не активен</b>';
 
-    const kb = brandTeamLockedKb();
+    const text = `👔 <b>Менеджеры бренда</b>
+
+` +
+      `<i>Кнопка всегда видна.</i> Доступ откроется, когда выполнены условия:
+
+` +
+      `${profileLine}
+${planLine}
+
+` +
+      `Нажми кнопку ниже — я открою нужный экран.`;
+
+    const kb = brandTeamLockedKb(st, 'a:menu');
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
@@ -13695,38 +13691,8 @@ ${escapeHtml(safe)}`;
       const username = m[1];
 
       // Brand Team access guard (owner-only + unlock)
-      const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: false });
-      if (bm.dbMissing) {
-        await ctx.reply('⚠️ Не найдена таблица brand_managers. Примените миграцию 026_brand_managers.sql в Neon.');
-        return;
-      }
-      if (bm.enabled && bm.brandUserId !== u.id) {
-        await ctx.reply('⛔️ Недостаточно прав. Добавлять менеджеров может только владелец бренда.');
-        return;
-      }
-
-      const st = await getBrandTeamGateState(u.id);
-      if (!st.ok) {
-        const miss = st.missingBasic && st.missingBasic.length ? ` (не хватает: ${st.missingBasic.join(', ')})` : '';
-        const profileLine = `• Профиль: ${st.basicDone || 0}/4${miss}`;
-        const payLine = `• Покупка: ${st.paidOk ? '✅' : '❌'} (Brand Plan)`;
-
-        await ctx.reply(
-          `👥 <b>Менеджеры бренда</b>
-
-` +
-          `Раздел доступен после заполнения профиля бренда и покупки Brand Plan.
-
-` +
-          `${escapeHtml(profileLine)}
-${escapeHtml(payLine)}
-
-` +
-          `Открой профиль, заполни базовые поля и оформи Brand Plan — после этого сможешь добавлять менеджеров.`,
-          { parse_mode: 'HTML', reply_markup: brandTeamLockedKb() }
-        );
-        return;
-      }
+      const gate = await ensureBrandTeamUnlocked(ctx, u, { edit: false });
+      if (!gate) return;
 
       const manager = await db.findUserByUsername(username);
       if (!manager) {
@@ -15969,7 +15935,7 @@ ${list}
       await setUiMode(ctx.from.id, UI_MODES.BRAND);
 
       const kb = new InlineKeyboard()
-        .text('🧑‍💼 Кабинет менеджера', 'a:bm_home')
+        .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
         .row()
         .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
         .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
@@ -19629,7 +19595,7 @@ ${link}`;
 
           const msg = `⛔️ <b>Доступ отозван</b>\n\nТебя удалили из команды бренда <b>${escapeHtml(brandLabel)}</b>.\n\nЕсли у тебя есть другие бренды — открой кабинет менеджера и выбери бренд.`;
           const kb = new InlineKeyboard()
-            .text('🧑‍💼 Кабинет менеджера', 'a:bm_home')
+            .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
             .row()
             .text('🗑 Убрать', 'a:nd')
             .row()
@@ -24893,50 +24859,46 @@ ${actionHint}`;
           } catch {}
         }
 
-        const requested = Number(g.winners_count || 1) || 1;
-        const endsAtIso = g.ends_at ? new Date(g.ends_at).toISOString() : new Date().toISOString();
+        // Prefer eligible participants. If not enough, fall back to all entries (transparent).
+        const eligibleIds = await db.listEligibleUserIdsForGiveaway(gwId);
+        let poolIds = eligibleIds;
+        let fallback = false;
+        if (!poolIds || poolIds.length === 0) {
+          poolIds = await db.listAllUserIdsForGiveaway(gwId);
+          fallback = true;
+        }
 
-        // ✅ Enterprise draw (SQL-only): deterministic + atomic + PG advisory lock
-        const r = await db.drawAndFinalizeGiveawayWinnersAtomic(
-          gwId,
-          g.workspace_id,
-          requested,
-          endsAtIso
-        );
-
-        if (!r || r.status !== 'drawn') {
-          if (r?.status === 'already_drawn') {
-            await ctx.answerCallbackQuery({ text: 'Уже выбраны.' });
-            await renderGwOpen(ctx, u.id, gwId);
-            return;
-          }
-          if (r?.status === 'locked') {
-            await ctx.answerCallbackQuery({ text: 'Секунду… уже выбираю.' });
-            return;
-          }
-          if (r?.status === 'no_entries') {
-            await ctx.answerCallbackQuery({ text: 'Нет участников.' });
-            await safeEditOrReply(ctx, '⛔️ У конкурса пока нет участников. Победителей выбрать нельзя.', { reply_markup: navKb(`a:gw_open|i:${gwId}`) });
-            return;
-          }
-          await ctx.answerCallbackQuery({ text: 'Ошибка выбора.' });
+        if (!poolIds || poolIds.length === 0) {
+          await ctx.answerCallbackQuery({ text: 'Нет участников.' });
+          await safeEditOrReply(ctx, '⛔️ У конкурса пока нет участников. Победителей выбрать нельзя.', { reply_markup: navKb(`a:gw_open|i:${gwId}`) });
           return;
         }
 
-        // Optional extra audit with actor (atomic draw writes gw.winners_drawn with actor NULL)
-        try {
-          await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.winners_drawn_manual', {
-            seed: r.seed,
-            method: r.method,
-            used_pool: r.used_pool,
-            winners: r.winnersUserIds?.length || 0,
-            requested_winners: r.requested_winners,
-          });
-        } catch {}
+        const seedMode = g.ends_at ? 'ends_at' : 'now';
+        const endsAtIso = g.ends_at ? new Date(g.ends_at).toISOString() : new Date().toISOString();
+        const seedObj = makeSeed({ giveawayId: gwId, endsAtIso, eligibleUserIds: eligibleIds || [] });
+        const { seedHash, eligibleHash } = seedObj;
+        const rnd = makeXorShift32(seedObj.seed);
 
-        const toast = r.used_pool === 'eligible_topup'
-          ? 'Победители выбраны (добор из всех участников) ✅'
-          : 'Победители выбраны ✅';
+        const requested = Number(g.winners_count || 1) || 1;
+        const count = Math.min(requested, poolIds.length);
+        const winnersUserIds = sampleWithoutReplacement(poolIds, count, rnd);
+
+        await db.setWinners(gwId, winnersUserIds.map((uid, idx) => ({ userId: uid, place: idx + 1 })));
+        await db.updateGiveaway(gwId, { status: 'WINNERS_DRAWN', winners_drawn_at: new Date().toISOString() });
+        await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.winners_drawn', {
+          manual: true,
+          seedHash,
+          eligibleHash,
+          seed_mode: seedMode,
+          winners: winnersUserIds.length,
+          used_pool: fallback ? 'all_entries' : 'eligible',
+          eligible_count: eligibleIds?.length || 0,
+          entries_pool_count: poolIds.length,
+          requested_winners: requested,
+        });
+
+        const toast = fallback ? 'Победители выбраны (есть добор) ✅' : 'Победители выбраны ✅';
         await ctx.answerCallbackQuery({ text: toast });
 
         // DM winners
