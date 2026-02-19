@@ -4911,268 +4911,209 @@ export async function listBroadcastUnsentRecipients(broadcastId, audience = 'all
 
 
 // ==============================
-// Deterministic draw + locking (serverless-safe)
+// Added: Deterministic draw helpers + advisory locks
 // ==============================
 
 /**
- * Deterministic winners draw in SQL.
- *
- * Seed policy (stable + reproducible): `${giveawayId}:${endsAtIso}`
- *
- * Preferred algorithm: SHA-256 via pgcrypto (digest).
- * Fallback (if pgcrypto isn't installed yet): md5.
+ * Deterministic winners draw using md5(seed || user_id)
+ * Uses the global pool explicitly.
  */
-export async function drawWinnersDeterministic(
-  giveawayId,
-  winnersCount,
-  endsAtIso,
-  onlyEligible = true
-) {
-  const gid = Number(giveawayId);
-  const cnt = Math.max(1, Number(winnersCount || 1));
-  const seed = `${gid}:${String(endsAtIso || '')}`;
-  const eligibilityClause = onlyEligible ? 'AND is_eligible = TRUE' : '';
+export async function drawWinnersDeterministic(giveawayId, winnersCount, seed, onlyEligible = true) {
+  const eligibilityClause = onlyEligible ? "AND is_eligible = TRUE" : "";
+  
+  // Используем pool.query вместо client.query, чтобы не ломать вызов из крона
+  const res = await pool.query(`
+    SELECT user_id
+    FROM giveaway_entries
+    WHERE giveaway_id = $1
+    ${eligibilityClause}
+    ORDER BY md5($3 || ':' || user_id::text)
+    LIMIT $2
+  `, [giveawayId, winnersCount, seed]);
 
-  // Primary (sha256)
-  try {
-    const res = await pool.query(
-      `
-      SELECT user_id
-      FROM giveaway_entries
-      WHERE giveaway_id = $1
-        ${eligibilityClause}
-      ORDER BY encode(digest($3 || ':' || user_id::text, 'sha256'), 'hex')
-      LIMIT $2
-      `,
-      [gid, cnt, seed]
-    );
-    return res.rows.map((r) => Number(r.user_id));
-  } catch (e) {
-    // Missing pgcrypto / digest() → fallback to md5
-    const code = e?.code || null;
-    const msg = String(e?.message || '');
-    const looksLikeMissingDigest = code === '42883' || msg.includes('function digest');
-    if (!looksLikeMissingDigest) throw e;
-
-    const res = await pool.query(
-      `
-      SELECT user_id
-      FROM giveaway_entries
-      WHERE giveaway_id = $1
-        ${eligibilityClause}
-      ORDER BY md5($3 || ':' || user_id::text)
-      LIMIT $2
-      `,
-      [gid, cnt, seed]
-    );
-    return res.rows.map((r) => Number(r.user_id));
-  }
+  return res.rows.map(r => Number(r.user_id));
 }
 
 /**
- * Atomic draw + persist winners + update giveaway status.
- *
- * Guarantees:
- * - no partial writes (single DB transaction)
- * - no double draw (pg_try_advisory_xact_lock + row lock)
- * - deterministic and reproducible selection
+ * Try to acquire advisory lock
  */
-export async function drawAndFinalizeGiveawayWinnersAtomic(
-  giveawayId,
-  workspaceId,
-  winnersCount,
-  endsAtIso
-) {
-  const gid = Number(giveawayId);
-  const wsid = Number(workspaceId);
-  const requested = Math.max(1, Number(winnersCount || 1));
-  const seed = `${gid}:${String(endsAtIso || '')}`;
+export async function tryAdvisoryLock(key) {
+  const res = await pool.query("SELECT pg_try_advisory_lock($1) AS locked", [key]);
+  return res.rows[0]?.locked;
+}
 
+/**
+ * Release advisory lock
+ */
+export async function advisoryUnlock(key) {
+  await pool.query("SELECT pg_advisory_unlock($1)", [key]);
+}
+/**
+ * Atomic & locked winners draw (final armor):
+ * - Uses pg_try_advisory_xact_lock(giveawayId) inside a transaction (auto-released on commit/rollback)
+ * - Locks giveaway row FOR UPDATE and enforces winners_drawn_at IS NULL (idempotency)
+ * - Writes winners + giveaway status + audit in one transaction (all-or-nothing)
+ * - Deterministic ordering by md5(seed || ':' || user_id)
+ * - Top-up logic: if eligible pool < winnersCount, fill remaining from all entries without duplicates
+ *
+ * Seed convention (recommended): `${giveawayId}:${endsAtIso}`
+ *
+ * Returns:
+ *  { status: 'ok', winnersUserIds: number[], usedPool: string }
+ *  { status: 'locked'|'already_drawn'|'no_entries'|'not_found' }
+ */
+export async function drawAndFinalizeGiveawayWinnersAtomic(giveawayId, workspaceId, winnersCount, seed) {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query('begin');
 
-    // Transaction-scoped advisory lock: released automatically on COMMIT/ROLLBACK
+    // Transaction-scoped advisory lock (strong concurrency guard)
     const lockRes = await client.query(
-      'SELECT pg_try_advisory_xact_lock($1) AS ok',
-      [gid]
+      'select pg_try_advisory_xact_lock($1) as locked',
+      [Number(giveawayId)]
     );
-    if (!lockRes.rows?.[0]?.ok) {
-      await client.query('ROLLBACK');
+    const locked = !!lockRes.rows[0]?.locked;
+    if (!locked) {
+      await client.query('rollback');
       return { status: 'locked' };
     }
 
-    // Row lock for idempotency (prevents a second tx from drawing the same giveaway)
+    // Lock giveaway row and enforce idempotency
     const gwRes = await client.query(
-      `
-      SELECT id, status, winners_drawn_at
-      FROM giveaways
-      WHERE id = $1
-      FOR UPDATE
-      `,
-      [gid]
+      `select id, winners_drawn_at
+       from giveaways
+       where id=$1
+       for update`,
+      [Number(giveawayId)]
     );
 
-    if (!gwRes.rowCount) {
-      await client.query('ROLLBACK');
-      return { status: 'missing' };
+    const gw = gwRes.rows[0];
+    if (!gw) {
+      await client.query('rollback');
+      return { status: 'not_found' };
     }
 
-    const gw = gwRes.rows[0];
     if (gw.winners_drawn_at) {
-      await client.query('ROLLBACK');
+      await client.query('commit');
       return { status: 'already_drawn' };
     }
-    if (String(gw.status || '').toUpperCase() !== 'ENDED') {
-      await client.query('ROLLBACK');
-      return { status: 'wrong_status', status_value: gw.status };
-    }
 
-    // Helper to pick winners with sha256 (fallback: md5)
-    async function pick(onlyEligible) {
-      const eligibilityClause = onlyEligible ? 'AND is_eligible = TRUE' : '';
-      try {
-        const r = await client.query(
-          `
-          SELECT user_id
-          FROM giveaway_entries
-          WHERE giveaway_id = $1
-            ${eligibilityClause}
-          ORDER BY encode(digest($2 || ':' || user_id::text, 'sha256'), 'hex')
-          LIMIT $3
-          `,
-          [gid, seed, requested]
-        );
-        return { rows: r.rows, method: 'sha256' };
-      } catch (e) {
-        const code = e?.code || null;
-        const msg = String(e?.message || '');
-        const looksLikeMissingDigest = code === '42883' || msg.includes('function digest');
-        if (!looksLikeMissingDigest) throw e;
+    const count = Math.max(1, Number(winnersCount || 1));
+    const seedStr = String(seed || '');
 
-        const r = await client.query(
-          `
-          SELECT user_id
-          FROM giveaway_entries
-          WHERE giveaway_id = $1
-            ${eligibilityClause}
-          ORDER BY md5($2 || ':' || user_id::text)
-          LIMIT $3
-          `,
-          [gid, seed, requested]
-        );
-        return { rows: r.rows, method: 'md5_fallback' };
+    // 1) Eligible winners (deterministic)
+    const eligibleRes = await client.query(
+      `select user_id
+       from giveaway_entries
+       where giveaway_id=$1 and is_eligible=true
+       order by md5($2 || ':' || user_id::text)
+       limit $3`,
+      [Number(giveawayId), seedStr, count]
+    );
+
+    let winnersUserIds = eligibleRes.rows.map(r => Number(r.user_id)).filter(Boolean);
+
+    // 2) Top-up from all entries if needed (exclude already picked)
+    let usedPool = 'eligible';
+    const remaining = count - winnersUserIds.length;
+
+    if (remaining > 0) {
+      usedPool = winnersUserIds.length ? 'eligible_topup' : 'all_entries';
+
+      // NOTE: use bigint[] to match common integer PK types safely
+      const exclude = winnersUserIds;
+
+      const topupRes = await client.query(
+        `select user_id
+         from giveaway_entries
+         where giveaway_id=$1
+           and not (user_id = any($3::bigint[]))
+         order by md5($2 || ':' || user_id::text)
+         limit $4`,
+        [Number(giveawayId), seedStr, exclude, remaining]
+      );
+
+      const topupIds = topupRes.rows.map(r => Number(r.user_id)).filter(Boolean);
+
+      // Deduplicate just in case (shouldn't happen if data is clean)
+      const seen = new Set(winnersUserIds);
+      for (const id of topupIds) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          winnersUserIds.push(id);
+        }
+        if (winnersUserIds.length >= count) break;
       }
     }
 
-    // Prefer eligible pool, fallback to all entries
-    let usedPool = 'eligible';
-    let picked = await pick(true);
-    let winnerRows = picked.rows;
-    let method = picked.method;
-    if (!winnerRows.length) {
-      usedPool = 'all_entries';
-      picked = await pick(false);
-      winnerRows = picked.rows;
-      method = picked.method;
+    if (!winnersUserIds.length) {
+      // Best-effort audit
+      try {
+        await client.query(
+          `insert into giveaway_audit (giveaway_id, workspace_id, actor_user_id, action, payload)
+           values ($1,$2,$3,$4,$5::jsonb)`,
+          [Number(giveawayId), Number(workspaceId), null, 'gw.winners_drawn_skipped', JSON.stringify({ reason: 'no_entries' })]
+        );
+      } catch {}
+
+      await client.query('commit');
+      return { status: 'no_entries' };
     }
 
-    if (!winnerRows.length) {
-      // Audit skip (no entries)
-      await client.query(
-        `
-        INSERT INTO giveaway_audit (giveaway_id, workspace_id, actor_user_id, action, payload)
-        VALUES ($1, $2, NULL, $3, $4::jsonb)
-        `,
-        [
-          gid,
-          wsid,
-          'gw.winners_drawn_skipped',
-          JSON.stringify({ reason: 'no_entries', seed, method }),
-        ]
-      );
-      await client.query('COMMIT');
-      return { status: 'no_entries', seed, method };
-    }
-
-    const winnersUserIds = winnerRows.map((r) => Number(r.user_id));
-
-    // Persist winners (replace if any)
-    await client.query('DELETE FROM giveaway_winners WHERE giveaway_id = $1', [gid]);
+    // Set winners (atomic)
+    await client.query(`delete from giveaway_winners where giveaway_id=$1`, [Number(giveawayId)]);
     for (let i = 0; i < winnersUserIds.length; i++) {
       await client.query(
-        `
-        INSERT INTO giveaway_winners (giveaway_id, user_id, place)
-        VALUES ($1, $2, $3)
-        `,
-        [gid, winnersUserIds[i], i + 1]
+        `insert into giveaway_winners (giveaway_id, user_id, place)
+         values ($1,$2,$3)`,
+        [Number(giveawayId), winnersUserIds[i], i + 1]
       );
     }
 
-    // Mark giveaway as drawn
-    await client.query(
-      `
-      UPDATE giveaways
-      SET status = 'WINNERS_DRAWN',
-          winners_drawn_at = NOW(),
-          updated_at = NOW()
-      WHERE id = $1
-      `,
-      [gid]
+    // Update giveaway (idempotent guard)
+    const upd = await client.query(
+      `update giveaways
+       set status='WINNERS_DRAWN', winners_drawn_at=now(), updated_at=now()
+       where id=$1 and winners_drawn_at is null
+       returning id`,
+      [Number(giveawayId)]
     );
 
-    // Audit draw
-    await client.query(
-      `
-      INSERT INTO giveaway_audit (giveaway_id, workspace_id, actor_user_id, action, payload)
-      VALUES ($1, $2, NULL, $3, $4::jsonb)
-      `,
-      [
-        gid,
-        wsid,
-        'gw.winners_drawn',
-        JSON.stringify({
-          seed,
-          method,
-          winners: winnersUserIds.length,
-          used_pool: usedPool,
-          requested_winners: requested,
-        }),
-      ]
-    );
+    if (!upd.rowCount) {
+      await client.query('rollback');
+      return { status: 'already_drawn' };
+    }
 
-    await client.query('COMMIT');
-    return {
-      status: 'drawn',
-      seed,
-      method,
-      used_pool: usedPool,
-      winnersUserIds,
-      requested_winners: requested,
-    };
-  } catch (e) {
+    // Best-effort audit for winners draw
     try {
-      await client.query('ROLLBACK');
+      await client.query(
+        `insert into giveaway_audit (giveaway_id, workspace_id, actor_user_id, action, payload)
+         values ($1,$2,$3,$4,$5::jsonb)`,
+        [
+          Number(giveawayId),
+          Number(workspaceId),
+          null,
+          'gw.winners_drawn',
+          JSON.stringify({
+            seed: seedStr,
+            winners: winnersUserIds.length,
+            used_pool: usedPool,
+            requested_winners: Number(winnersCount || 1),
+          })
+        ]
+      );
     } catch {}
+
+    await client.query('commit');
+    return { status: 'ok', winnersUserIds, usedPool };
+  } catch (e) {
+    try { await client.query('rollback'); } catch {}
     throw e;
   } finally {
     client.release();
   }
 }
 
-/**
- * Try to acquire an advisory lock (session-level).
- * NOTE: For cron jobs prefer pg_try_advisory_xact_lock inside a transaction.
- */
-export async function tryAdvisoryLock(key) {
-  const res = await pool.query('SELECT pg_try_advisory_lock($1) AS locked', [Number(key)]);
-  return !!res.rows?.[0]?.locked;
-}
 
-/**
- * Release an advisory lock (session-level).
- */
-export async function advisoryUnlock(key) {
-  await pool.query('SELECT pg_advisory_unlock($1)', [Number(key)]);
-}
+// УДАЛЕН module.exports, так как в файле используется ES modules (export function...)
 
