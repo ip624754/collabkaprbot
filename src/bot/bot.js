@@ -1435,7 +1435,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 
   const bCreator = `${effective === 'creator' ? '✅ ' : ''}✨ Creator / канал`;
   const bBrand = `${effective === 'brand' ? '✅ ' : ''}🏷 Бренд`;
-  const bBm = `${effective === 'brand_manager' ? '✅ ' : ''}👔 Менеджеры бренда`;
+  const bBm = `${effective === 'brand_manager' ? '✅ ' : ''}🧑‍💼 Я менеджер бренда`;
   const bCur = `${effective === 'curator' ? '✅ ' : ''}🧹 Кураторы блогера`;
 
   const kb = new InlineKeyboard()
@@ -2584,38 +2584,38 @@ ${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
 
 
 
-function brandTeamKb() {
+function brandTeamKb({ wsId = 0, ret = 'menu', backCb = 'a:menu' } = {}) {
   return new InlineKeyboard()
-    .text('👤 Пригласить ссылкой', 'a:bm_invite|ws:0')
+    .text('👤 Пригласить ссылкой', `a:bm_invite|ws:${wsId}|ret:${ret}`)
     .row()
-    .text('➕ Добавить по @username', 'a:bm_add_username|ws:0')
+    .text('➕ Добавить по @username', `a:bm_add_username|ws:${wsId}|ret:${ret}`)
     .row()
-    .text('👥 Список менеджеров', 'a:bm_list|ws:0')
+    .text('👥 Список менеджеров', `a:bm_list|ws:${wsId}|ret:${ret}`)
     .row()
-    .text('⬅️ Назад', 'a:menu');
+    .text('⬅️ Назад', backCb);
 }
 
 
 // Brand Team access: unlock after basic profile + Brand Pass / Brand Plan
-function brandTeamLockedKb(st, backCb = 'a:menu') {
+function brandTeamLockedKb(st, backCb = 'a:menu', wsId = 0, ret = 'menu') {
   const kb = new InlineKeyboard();
 
   const profileIncomplete = !!(st?.missingBasic && st.missingBasic.length);
   const planInactive = !st?.teamPaid;
 
   if (profileIncomplete) {
-    kb.text('🧩 Заполнить профиль бренда', 'a:brand_profile_edit|ws:0|ret:brand_team').row();
+    kb.text('🧩 Заполнить профиль бренда', `a:brand_profile_edit|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`).row();
   } else {
     kb.text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand_team').row();
   }
 
   if (planInactive) {
-    kb.text('⭐️ Подключить Brand Plan', 'a:brand_plan|ws:0|ret:brand_team').row();
+    kb.text('⭐️ Подключить Brand Plan', `a:brand_plan|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`).row();
   }
 
   kb.row()
-    .text('🔄 Проверить снова', 'a:brand_team|ws:0')
-    .text('ℹ️ Почему так?', 'a:brand_team_help|ws:0');
+    .text('🔄 Проверить снова', `a:brand_team|ws:${wsId}|ret:${ret}`)
+    .text('ℹ️ Почему так?', `a:brand_team_help|ws:${wsId}|ret:${ret}`);
 
   kb.row().text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
   return kb;
@@ -2691,7 +2691,7 @@ async function brandManagerLimitInfo(brandUserId) {
   return { max, count, canAdd: count < max };
 }
 
-async function ensureBrandTeamUnlocked(ctx, u, { edit = true } = {}) {
+async function ensureBrandTeamUnlocked(ctx, u, { edit = true, backCb = 'a:menu', wsId = 0, ret = 'menu' } = {}) {
   // Owner-only: managers cannot manage team
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: false });
 
@@ -2747,7 +2747,7 @@ ${planLine}
 
 <i>После оплаты или заполнения профиля вернись сюда и нажми «🔄 Проверить снова» — или просто открой «👔 Менеджеры бренда» ещё раз.</i>`;
 
-    const kb = brandTeamLockedKb(st, 'a:menu');
+    const kb = brandTeamLockedKb(st, backCb, wsId, ret);
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
@@ -2862,6 +2862,8 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
   if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
+
+  kb.row().text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:bx`);
 
   kbNavRow(kb, 'a:menu');
   return kb;
@@ -3267,6 +3269,7 @@ function brandBackCb(params = {}) {
   const bo = params.backOfferId ? Number(params.backOfferId) : null;
   const bp = params.backPage ? Number(params.backPage) : 0;
   if (ret === 'offer' && bo) return `a:offer_open|ws:${wsId}|id:${bo}|p:${bp}`;
+  if (ret === 'brand_team_bx') return wsId ? `a:brand_team|ws:${wsId}|ret:bx` : 'a:brand_team|ws:0|ret:bx';
   if (ret === 'brand_team') return wsId ? `a:brand_team|ws:${wsId}` : 'a:brand_team|ws:0';
   if (ret === 'lead') return `a:bx_inbox|ws:${wsId}|p:${bp}|h:bo`;
   if (ret === 'verify') return 'a:verify_home';
@@ -19486,6 +19489,9 @@ if (p.a === 'a:ws_prof_mode') {
 
     if (p.a === 'a:brand_team_help') {
           await ctx.answerCallbackQuery();
+          const wsId = Number(p.w || p.ws || 0);
+          const ret = String(p.ret || 'menu');
+          const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
           const text = `👔 <b>Менеджеры бренда — как работает доступ</b>
 
 Кнопка «👔 Менеджеры бренда» <b>всегда видна</b>.
@@ -19501,11 +19507,11 @@ if (p.a === 'a:ws_prof_mode') {
 После выполнения условий просто открой «👔 Менеджеры бренда» ещё раз — доступ откроется.`;
 
           const kb = new InlineKeyboard()
-            .text('👔 Менеджеры бренда', 'a:brand_team|ws:0').row()
-            .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand_team')
-            .text('⭐️ Brand Plan', 'a:brand_plan|ws:0|ret:brand_team')
+            .text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:${ret}`).row()
+            .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`)
+            .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`)
             .row()
-            .text('⬅️ Назад', 'a:menu').text('🏠 Home', 'a:home');
+            .text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
 
           await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
           return;
@@ -19514,7 +19520,11 @@ if (p.a === 'a:ws_prof_mode') {
     if (p.a === 'a:brand_team') {
       await ctx.answerCallbackQuery();
 
-      const gate = await ensureBrandTeamUnlocked(ctx, u);
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || 'menu');
+      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
+
+      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
       if (!gate) return;
 
 
@@ -19532,13 +19542,16 @@ if (p.a === 'a:ws_prof_mode') {
 Сейчас менеджеров: <b>${count}</b>
 ${limitLine}`;
 
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: brandTeamKb() });
+      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: brandTeamKb({ wsId, ret, backCb }) });
       return;
     }
 
     if (p.a === 'a:bm_invite') {
       await ctx.answerCallbackQuery();
-      const gate = await ensureBrandTeamUnlocked(ctx, u);
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || 'menu');
+      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
+      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
       if (!gate) return;
       const token = randomToken(10);
       await redis.set(
@@ -19558,30 +19571,36 @@ ${link}`;
       await safeEditOrReply(ctx, text, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
-        reply_markup: navKb('a:brand_team|ws:0'),
+        reply_markup: navKb(`a:brand_team|ws:${wsId}|ret:${ret}`),
       });
       return;
     }
 
     if (p.a === 'a:bm_add_username') {
       await ctx.answerCallbackQuery();
-      const gate = await ensureBrandTeamUnlocked(ctx, u);
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || 'menu');
+      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
+      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
       if (!gate) return;
       await setExpectText(ctx.from.id, { type: 'bm_username' });
       await safeEditOrReply(ctx, 'Введи @username менеджера одним сообщением (пример: @manager).', {
-        reply_markup: navKb('a:brand_team|ws:0'),
+        reply_markup: navKb(`a:brand_team|ws:${wsId}|ret:${ret}`),
       });
       return;
     }
 
     if (p.a === 'a:bm_list') {
       await ctx.answerCallbackQuery();
-      const gate = await ensureBrandTeamUnlocked(ctx, u);
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || 'menu');
+      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
+      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
       if (!gate) return;
       const managers = await db.listBrandManagers(u.id);
       if (!managers.length) {
         await safeEditOrReply(ctx, 'Пока менеджеров нет. Добавь менеджера через приглашение или по @username.', {
-          reply_markup: navKb('a:brand_team|ws:0'),
+          reply_markup: navKb(`a:brand_team|ws:${wsId}|ret:${ret}`),
         });
         return;
       }
@@ -19662,7 +19681,7 @@ ${link}`;
       const managers = await db.listBrandManagers(u.id);
       if (!managers.length) {
         await safeEditOrReply(ctx, '✅ Менеджер удалён. Сейчас менеджеров нет.', {
-          reply_markup: navKb('a:brand_team|ws:0'),
+          reply_markup: navKb(`a:brand_team|ws:${wsId}|ret:${ret}`),
         });
         return;
       }
