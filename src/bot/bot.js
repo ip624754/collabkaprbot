@@ -1272,19 +1272,8 @@ async function renderMainMenu(ctx, flags, params = {}) {
 Выбери действие:`;
       let canManager = false;
       try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
-
-      // UX: show lock icon on Brand Team button until profile+plan requirements met (purchase OR gifted Brand Plan)
-      let teamLocked = false;
-      try {
-        const st = await getBrandTeamGateState(u.id);
-        teamLocked = !st.ok;
-        const teamBasicDone = Number(st.basicDone || 0);
-        const teamPaid = !!st.teamPaid;
-      } catch {
-        teamLocked = false;
-      }
-
-      kb = mainMenuBrandKb(flags, { isManager: false, canManager, teamLocked, teamBasicDone, teamPaid });
+      // V4: no extra Neon queries in menu render (status will be checked on click)
+      kb = mainMenuBrandKb(flags, { isManager: false, canManager, teamLocked: false, teamBasicDone: null, teamPaid: null });
     }
   } else if (mode === UI_MODES.BRAND) {
     const base = `🏠 <b>Главное меню</b>
@@ -1295,18 +1284,8 @@ async function renderMainMenu(ctx, flags, params = {}) {
 Для брендов — поиск креаторов, лента креаторов и Inbox.
 
 Выбери действие:`;
-    // UX: show lock icon on Brand Team button until profile+plan requirements met (purchase OR gifted Brand Plan)
-    let teamLocked = false;
-    try {
-      const st = await getBrandTeamGateState(u.id);
-      teamLocked = !st.ok;
-      const teamBasicDone = Number(st.basicDone || 0);
-      const teamPaid = !!st.teamPaid;
-    } catch {
-      teamLocked = false;
-    }
-
-    kb = mainMenuBrandKb(flags, { isManager: false, teamLocked, teamBasicDone, teamPaid });
+    // V4: no extra Neon queries in menu render (status will be checked on click)
+    kb = mainMenuBrandKb(flags, { isManager: false, teamLocked: false, teamBasicDone: null, teamPaid: null });
   } else {
     const base = `🏠 <b>Главное меню</b>
 
@@ -5916,7 +5895,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     .text('🔎 Найти', `a:pm_run|ws:${wsId}|p:0`)
     .text('🗑 Сброс', `a:pm_reset|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+    .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -5971,7 +5950,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     const kb = new InlineKeyboard()
       .text('⚙️ Изменить фильтры', `a:pm_home|ws:${wsId}`)
       .row()
-      .text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+      .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
     return safeEditOrReply(ctx, 
       head + '😶 Ничего не нашёл по фильтрам.\n\nПопробуй упростить фильтр (меньше ниш/форматов).',
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
@@ -6004,7 +5983,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     kb.row();
   }
 
-  kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+  kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -11814,7 +11793,7 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
     .row()
     .text('💳 Докупить кредиты', `a:brand_pass|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+    .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
   await safeEditOrReply(ctx, 
     `⭐️ <b>Brand Plan</b>
@@ -11843,7 +11822,7 @@ async function renderMatchingHome(ctx, wsId) {
   for (const t of MATCH_TIERS) {
     kb.text(`🎯 ${t.title} · ${t.count} каналов · ${t.stars}⭐️`, `a:match_buy|ws:${wsId}|tier:${t.id}`).row();
   }
-  kb.text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+  kb.text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
   await safeEditOrReply(ctx, 
     `🎯 <b>Smart Matching</b>
@@ -11860,7 +11839,7 @@ async function renderFeaturedHome(ctx, userId, wsId) {
   for (const d of FEATURED_DURATIONS) {
     kb.text(`🔥 ${d.title} · ${d.stars}⭐️`, `a:feat_buy|ws:${wsId}|dur:${d.id}`).row();
   }
-  kb.text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+  kb.text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
   await safeEditOrReply(ctx, 
     `🔥 <b>Featured</b>
@@ -14966,7 +14945,7 @@ if (exp.type === 'brand_deals_search') {
           .text('🎯 Matching', `a:match_home|ws:${wsId}`)
           .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
           .row()
-          .text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+          .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
         await ctx.reply(
           '😶 Не нашёл релевантных офферов по брифу. Попробуй упростить: ниша + гео + формат (например: "косметика, Москва, обзор").',
           { reply_markup: kb }
@@ -14988,7 +14967,7 @@ if (exp.type === 'brand_deals_search') {
       kb.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
         .text('🎯 Matching', `a:match_home|ws:${wsId}`)
         .row()
-        .text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+        .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
       await ctx.reply(
         `🎯 <b>Smart Matching</b>\n\nБриф: <tg-spoiler>${escapeHtml(brief)}</tg-spoiler>\n\nНайдено: <b>${rows.length}</b>\nПоказаны: <b>${showN}</b>\n\n${lines.join('\n\n')}`,
@@ -15036,7 +15015,7 @@ if (exp.type === 'brand_deals_search') {
         .text('🔥 Посмотреть', `a:feat_view|ws:${wsId}|id:${f.id}|p:0`)
         .row()
         .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
-        .text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+        .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
       await ctx.reply(`✅ Featured активирован до <b>${escapeHtml(String(ends))}</b>.`, { parse_mode: 'HTML', reply_markup: kb });
       return;
@@ -16611,7 +16590,7 @@ bot.on('message:successful_payment', async (ctx) => {
         .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`)
         .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
         .row()
-        .text('⬅️ Назад', (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : `a:bx_open|ws:${wsId}`);
+        .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
       await markApplied('auto_apply_brand_plan');
       await ctx.reply(`✅ Brand Plan «${planLabel}» активирован!${bonusCredits ? `\n💳 +${bonusCredits} кредитов начислено.` : ''}\nCRM-стадии и менеджеры доступны.`, { reply_markup: kb });
@@ -19724,6 +19703,7 @@ ${link}`;
     if (p.a === 'a:brand_profile_edit') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || 'brand');
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const bo = p.bo ? Number(p.bo) : null;
