@@ -8,7 +8,8 @@ import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes,
 import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
-import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
+// NOTE: PRNG utils are intentionally not imported here.
+// Winners drawing is SQL-only + deterministic + atomic (see db.drawAndFinalizeGiveawayWinnersAtomic).
 import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
@@ -24861,46 +24862,50 @@ ${actionHint}`;
           } catch {}
         }
 
-        // Prefer eligible participants. If not enough, fall back to all entries (transparent).
-        const eligibleIds = await db.listEligibleUserIdsForGiveaway(gwId);
-        let poolIds = eligibleIds;
-        let fallback = false;
-        if (!poolIds || poolIds.length === 0) {
-          poolIds = await db.listAllUserIdsForGiveaway(gwId);
-          fallback = true;
-        }
+        const requested = Number(g.winners_count || 1) || 1;
+        const endsAtIso = g.ends_at ? new Date(g.ends_at).toISOString() : new Date().toISOString();
 
-        if (!poolIds || poolIds.length === 0) {
-          await ctx.answerCallbackQuery({ text: 'Нет участников.' });
-          await safeEditOrReply(ctx, '⛔️ У конкурса пока нет участников. Победителей выбрать нельзя.', { reply_markup: navKb(`a:gw_open|i:${gwId}`) });
+        // ✅ Enterprise draw (SQL-only): deterministic + atomic + PG advisory lock
+        const r = await db.drawAndFinalizeGiveawayWinnersAtomic(
+          gwId,
+          g.workspace_id,
+          requested,
+          endsAtIso
+        );
+
+        if (!r || r.status !== 'drawn') {
+          if (r?.status === 'already_drawn') {
+            await ctx.answerCallbackQuery({ text: 'Уже выбраны.' });
+            await renderGwOpen(ctx, u.id, gwId);
+            return;
+          }
+          if (r?.status === 'locked') {
+            await ctx.answerCallbackQuery({ text: 'Секунду… уже выбираю.' });
+            return;
+          }
+          if (r?.status === 'no_entries') {
+            await ctx.answerCallbackQuery({ text: 'Нет участников.' });
+            await safeEditOrReply(ctx, '⛔️ У конкурса пока нет участников. Победителей выбрать нельзя.', { reply_markup: navKb(`a:gw_open|i:${gwId}`) });
+            return;
+          }
+          await ctx.answerCallbackQuery({ text: 'Ошибка выбора.' });
           return;
         }
 
-        const seedMode = g.ends_at ? 'ends_at' : 'now';
-        const endsAtIso = g.ends_at ? new Date(g.ends_at).toISOString() : new Date().toISOString();
-        const seedObj = makeSeed({ giveawayId: gwId, endsAtIso, eligibleUserIds: eligibleIds || [] });
-        const { seedHash, eligibleHash } = seedObj;
-        const rnd = makeXorShift32(seedObj.seed);
+        // Optional extra audit with actor (atomic draw writes gw.winners_drawn with actor NULL)
+        try {
+          await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.winners_drawn_manual', {
+            seed: r.seed,
+            method: r.method,
+            used_pool: r.used_pool,
+            winners: r.winnersUserIds?.length || 0,
+            requested_winners: r.requested_winners,
+          });
+        } catch {}
 
-        const requested = Number(g.winners_count || 1) || 1;
-        const count = Math.min(requested, poolIds.length);
-        const winnersUserIds = sampleWithoutReplacement(poolIds, count, rnd);
-
-        await db.setWinners(gwId, winnersUserIds.map((uid, idx) => ({ userId: uid, place: idx + 1 })));
-        await db.updateGiveaway(gwId, { status: 'WINNERS_DRAWN', winners_drawn_at: new Date().toISOString() });
-        await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.winners_drawn', {
-          manual: true,
-          seedHash,
-          eligibleHash,
-          seed_mode: seedMode,
-          winners: winnersUserIds.length,
-          used_pool: fallback ? 'all_entries' : 'eligible',
-          eligible_count: eligibleIds?.length || 0,
-          entries_pool_count: poolIds.length,
-          requested_winners: requested,
-        });
-
-        const toast = fallback ? 'Победители выбраны (есть добор) ✅' : 'Победители выбраны ✅';
+        const toast = r.used_pool === 'eligible_topup'
+          ? 'Победители выбраны (добор из всех участников) ✅'
+          : 'Победители выбраны ✅';
         await ctx.answerCallbackQuery({ text: toast });
 
         // DM winners
