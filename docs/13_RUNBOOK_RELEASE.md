@@ -1,0 +1,32 @@
+# 13 — Runbook: Deploy / Smoke tests / Rollback
+
+## Перед деплоем
+1) ENV:
+- `DATABASE_URL`
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+- `CRON_SECRET`
+- (рекомендовано) `PG_POOL_MAX=1`, `PG_IDLE_TIMEOUT_MS=5000`
+
+2) Миграции:
+```bash
+node migrations/run.js
+```
+
+## Smoke tests (short)
+1) `node -c` (lint-check) — если используешь.
+2) `node migrations/run.js --dry-run` → должно быть “skip all”.
+3) `/api/cron/giveaways-tick` с Bearer → 200 OK.
+4) Создать giveaway → дождаться ENDED → проверить WINNERS_DRAWN.
+5) Проверить что winners не рисуются дважды (второй вызов tick не меняет winners).
+
+## Smoke tests (full)
+- Одновременный двойной запуск tick (две вкладки) → только один draw.
+- Большой пул (10k entries) → cron работает без OOM.
+- Отрубить pgcrypto (или новая база без extension) → fallback md5 работает.
+- Broadcast: 429 от Telegram → батч останавливается и продолжает на следующем tick.
+
+## Rollback (быстрый)
+- Отключить авто-дроу: `auto_draw=false` на giveaways (или флагом если введёшь).
+- Отключить cron внешнего триггера (QStash).
+- Для проблемной миграции: *не откатываем DDL*, фикс — новой миграцией.
