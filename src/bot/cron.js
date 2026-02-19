@@ -3,6 +3,7 @@ import * as db from '../db/queries.js';
 import { getBot } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
+import crypto from 'crypto';
 import {
   notifyGiveawayEnded,
   notifyGiveawayWinnersReady,
@@ -29,27 +30,55 @@ const CRON_RETRY_EXPIRE_BATCH = 200;
 
 // Per-giveaway lock to reduce races even if ticks overlap.
 const GIVEAWAY_LOCK_TTL_SEC = 120;
+function lockToken() {
+  try {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  } catch {}
+  try {
+    return crypto.randomBytes(16).toString('hex');
+  } catch {
+    // last resort (non-crypto) — ok for lock ownership token
+    return String(Date.now()) + ':' + String(Math.random());
+  }
+}
+
+async function releaseLock(key, token) {
+  // Delete lock only if we still own it (prevents deleting a new lock after TTL expiry).
+  const script = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+  try {
+    await redis.eval(script, [key], [String(token || '')]);
+  } catch {
+    // Best-effort fallback (may delete a new lock, but only if eval is unavailable).
+    try {
+      const v = await redis.get(key);
+      if (String(v || '') == String(token || '')) await redis.del(key);
+    } catch {}
+  }
+}
+
 
 async function withLock(lockKey, ttlSec, fn) {
-  const ok = await redis.set(lockKey, '1', { nx: true, ex: ttlSec });
+  const token = lockToken();
+  const ok = await redis.set(lockKey, token, { nx: true, ex: ttlSec });
   if (!ok) return { locked: true };
   try {
     const r = await fn();
     return { locked: false, result: r };
   } finally {
-    await redis.del(lockKey);
+    await releaseLock(lockKey, token);
   }
 }
 
 async function withGiveawayLock(giveawayId, fn) {
   const key = k(['lock', 'gw', String(giveawayId)]);
-  const ok = await redis.set(key, '1', { nx: true, ex: GIVEAWAY_LOCK_TTL_SEC });
+  const token = lockToken();
+  const ok = await redis.set(key, token, { nx: true, ex: GIVEAWAY_LOCK_TTL_SEC });
   if (!ok) return { locked: true };
   try {
     const r = await fn();
     return { locked: false, result: r };
   } finally {
-    await redis.del(key);
+    await releaseLock(key, token);
   }
 }
 
