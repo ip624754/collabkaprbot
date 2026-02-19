@@ -38,7 +38,11 @@ npm i
 npm run migrate
 ```
 
-SQL is in `migrations/*.sql` (run all).
+`npm run migrate` использует `migrations/run.js` и таблицу `schema_migrations`:
+- применяет каждую миграцию **ровно один раз**
+- проверяет **checksum** (если старую миграцию кто-то отредактировал — мигратор упадёт)
+
+Если база уже существовала и миграции применялись раньше без трекинга — см. `migration_pack/README.md`.
 
 ## 3) Deploy to Vercel
 1) Push repo to GitHub
