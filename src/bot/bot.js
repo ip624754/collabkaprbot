@@ -615,6 +615,7 @@ async function sendMessageWithFallback(api, chatId, text, options = {}) {
       return { ok: true, mode: 'plain_kb', warn: e1 };
     } catch (e2) {
       // 3rd try: drop KB, keep HTML
+      logger.warn({ chatId, mode: 'no_kb', err: String(e2?.message || e2) }, '[TG_SEND] fallback: dropping reply_markup');
       const o3 = { ...base };
       delete o3.reply_markup;
       try {
@@ -2596,7 +2597,7 @@ function brandTeamLockedKb(st, backCb = 'a:menu', wsId = 0, ret = 'menu') {
   if (profileIncomplete) {
     kb.text('🧩 Заполнить профиль бренда', `a:brand_profile_edit|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`).row();
   } else {
-    kb.text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`).row();
+    kb.text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand_team').row();
   }
 
   if (planInactive) {
@@ -2746,21 +2747,21 @@ ${planLine}
   return st;
 }
 
-function brandManagersListKb(managers, { wsId = 0, ret = 'menu' } = {}) {
+function brandManagersListKb(managers) {
   const kb = new InlineKeyboard();
   for (const m of managers) {
     const label = m.tg_username ? `@${m.tg_username}` : `id:${m.tg_id}`;
-    kb.text(`🗑 ${label}`, `a:bm_rm_q|ws:${wsId}|u:${m.user_id}|ret:${ret}`).row();
+    kb.text(`🗑 ${label}`, `a:bm_rm_q|ws:0|u:${m.user_id}`).row();
   }
-  kb.text('⬅️ Назад', `a:brand_team|ws:${wsId}|ret:${ret}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  kb.text('⬅️ Назад', 'a:brand_team|ws:0').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
-function brandManagerRemoveConfirmKb(managerUserId, { wsId = 0, ret = 'menu' } = {}) {
+function brandManagerRemoveConfirmKb(managerUserId) {
   return new InlineKeyboard()
-    .text('✅ Удалить', `a:bm_rm_ok|ws:${wsId}|u:${managerUserId}|ret:${ret}`)
+    .text('✅ Удалить', `a:bm_rm_ok|ws:0|u:${managerUserId}`)
     .row()
-    .text('⬅️ Отмена', `a:bm_list|ws:${wsId}|ret:${ret}`)
+    .text('⬅️ Отмена', 'a:bm_list|ws:0')
     .text('📋 Меню', 'a:menu');
 }
 
@@ -11883,6 +11884,16 @@ function cbJoin(base, params = {}) {
     if (v === undefined || v === null || v === '') continue;
     s += `|${k}:${v}`;
   }
+
+  // Telegram callback_data limit: 64 bytes.
+  // Warn early to avoid broken buttons in production.
+  try {
+    const bytes = Buffer.byteLength(String(s), 'utf8');
+    if (bytes > 64) {
+      logger.warn({ bytes, cb: String(s).slice(0, 120) }, '[CB] callback_data exceeds 64 bytes');
+    }
+  } catch {}
+
   return s;
 }
 
@@ -16754,6 +16765,9 @@ bot.on('message:successful_payment', async (ctx) => {
       let bpr = '';
       try {
         const data = token ? await redis.get(k(['pay_match', token])) : null;
+        if (!data && token) {
+          logger.warn({ userId: u.id, kind: 'match', token: String(token).slice(0, 4) + '…' }, '[PAY] missing redis session (ttl expired?)');
+        }
         if (data) {
           wsId = Number(data.wsId || 0);
           if (Object.prototype.hasOwnProperty.call(data, 'ret')) ret = String(data.ret || '');
@@ -16806,6 +16820,9 @@ bot.on('message:successful_payment', async (ctx) => {
       let bpr = '';
       try {
         const data = token ? await redis.get(k(['pay_feat', token])) : null;
+        if (!data && token) {
+          logger.warn({ userId: u.id, kind: 'feat', token: String(token).slice(0, 4) + '…' }, '[PAY] missing redis session (ttl expired?)');
+        }
         if (data) {
           wsId = Number(data.wsId || 0);
           if (Object.prototype.hasOwnProperty.call(data, 'ret')) ret = String(data.ret || '');
@@ -20088,17 +20105,14 @@ ${link}`;
 
       await safeEditOrReply(ctx, `👥 <b>Менеджеры бренда</b>\n\n${lines}\n\nНажми на кнопку, чтобы удалить менеджера.`, {
         parse_mode: 'HTML',
-        reply_markup: brandManagersListKb(managers, { wsId, ret }),
+        reply_markup: brandManagersListKb(managers),
       });
       return;
     }
 
     if (p.a === 'a:bm_rm_q') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws || 0);
-      const ret = String(p.ret || 'menu');
-      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
-      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
+      const gate = await ensureBrandTeamUnlocked(ctx, u);
       if (!gate) return;
       const managerUserId = Number(p.u || 0);
       if (!managerUserId) return;
@@ -20108,17 +20122,14 @@ ${link}`;
 
       await safeEditOrReply(ctx, `Удалить менеджера <b>${escapeHtml(label)}</b> из команды бренда?`, {
         parse_mode: 'HTML',
-        reply_markup: brandManagerRemoveConfirmKb(managerUserId, { wsId, ret }),
+        reply_markup: brandManagerRemoveConfirmKb(managerUserId),
       });
       return;
     }
 
     if (p.a === 'a:bm_rm_ok') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws || 0);
-      const ret = String(p.ret || 'menu');
-      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
-      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
+      const gate = await ensureBrandTeamUnlocked(ctx, u);
       if (!gate) return;
       const managerUserId = Number(p.u || 0);
       if (!managerUserId) return;
@@ -20175,7 +20186,7 @@ ${link}`;
       const note = notifyOk ? '\n\n📩 Менеджеру отправлено уведомление.' : '';
       await safeEditOrReply(ctx, `✅ Менеджер удалён.${note}\n\n👥 <b>Менеджеры бренда</b>\n\n${lines}`, {
         parse_mode: 'HTML',
-        reply_markup: brandManagersListKb(managers, { wsId, ret }),
+        reply_markup: brandManagersListKb(managers),
       });
       return;
     }
@@ -20918,7 +20929,7 @@ if (p.a === 'a:match_home') {
       await redis.set(
         k(['pay_match', token]),
         { tgId: ctx.from.id, userId: u.id, wsId, tierId: tier.id, stars: tier.stars, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
-        { ex: 15 * 60 }
+        { ex: 60 * 60 }
       );
       const payload = `match_${u.id}_${tier.id}_${token}`;
       await sendStarsInvoice(ctx, {
@@ -21009,7 +21020,7 @@ if (p.a === 'a:match_home') {
       await redis.set(
         k(['pay_feat', token]),
         { tgId: ctx.from.id, userId: u.id, wsId, days: d.days, durId: d.id, stars: d.stars, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
-        { ex: 15 * 60 }
+        { ex: 60 * 60 }
       );
       const payload = `feat_${u.id}_${d.days}_${token}`;
       await sendStarsInvoice(ctx, {
