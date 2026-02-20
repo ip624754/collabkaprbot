@@ -2954,6 +2954,18 @@ export async function insertPayment(input = {}) {
   }
 }
 
+export async function getPaymentByTelegramChargeId(telegramPaymentChargeId) {
+  const chargeId = String(telegramPaymentChargeId || '').trim();
+  if (!chargeId) return null;
+  try {
+    const r = await pool.query(`select * from payments where telegram_payment_charge_id=$1 limit 1`, [chargeId]);
+    return r.rows[0] || null;
+  } catch (e) {
+    if (isMissingRelationError(e, 'payments')) return null;
+    throw e;
+  }
+}
+
 
 export async function getPaymentById(paymentId) {
   const r = await pool.query(`select * from payments where id=$1`, [Number(paymentId)]);
