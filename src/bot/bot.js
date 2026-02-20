@@ -15312,6 +15312,21 @@ ${msgText}
         return;
       }
 
+      // Strict rule: one verification record per user. Do not allow submitting in a different mode.
+      const existing = await safeUserVerifications(() => db.getUserVerification(u.id), async () => null);
+      const exKind = String(existing?.kind || '').toLowerCase();
+      if (existing && exKind && exKind !== kind) {
+        await clearExpectText(ctx.from.id);
+        const have = exKind === 'brand' ? '🏷 Brand' : '✨ Creator';
+        const want = kind === 'brand' ? '🏷 Brand' : '✨ Creator';
+        const switchCb = exKind === 'brand' ? 'a:onb_brand' : 'a:onb_creator';
+        await ctx.reply(
+          `✅ <b>Верификация</b>\n\nУ тебя уже есть заявка/статус в другом режиме: <b>${escapeHtml(have)}</b>.\n\nСейчас открыт режим: <b>${escapeHtml(want)}</b>.\n\nВ системе хранится <b>одна</b> верификация на пользователя. Переключись в нужный режим.`,
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('🔁 Переключить режим', switchCb).row().text('📋 Меню', 'a:menu') }
+        );
+        return;
+      }
+
       const submittedText = String(ctx.message.text || '').trim();
       if (submittedText.length < 20) {
         await ctx.reply('Слишком коротко. Напиши чуть подробнее (минимум 20 символов).');
@@ -19125,17 +19140,25 @@ if (p.a === 'a:lead_set') {
       const existing = await safeUserVerifications(() => db.getUserVerification(u.id), async () => null);
       const exStatus = String(existing?.status || '').toUpperCase();
       const exKind = String(existing?.kind || '').toLowerCase();
-      if (existing && exKind && exKind !== kind && exStatus && exStatus !== 'REJECTED') {
-        const want = kind === 'brand' ? '🏷 Бренд' : '✨ Креатор';
-        const have = exKind === 'brand' ? '🏷 Бренд' : '✨ Креатор';
+      if (existing && exKind && exKind !== kind) {
+        const want = kind === 'brand' ? '🏷 Brand' : '✨ Creator';
+        const have = exKind === 'brand' ? '🏷 Brand' : '✨ Creator';
         const switchCb = exKind === 'brand' ? 'a:onb_brand' : 'a:onb_creator';
+        let what = 'заявка/статус';
+        if (exStatus === 'APPROVED') what = '✅ Verified';
+        else if (exStatus === 'PENDING') what = '⏳ заявка';
+        else if (exStatus === 'REJECTED') what = '❌ отклонённая заявка';
+
         await safeEditOrReply(ctx, `✅ <b>Верификация</b>
 
-У тебя уже есть заявка/статус для режима: <b>${have}</b>.
+У тебя уже есть ${what} в другом режиме: <b>${have}</b>.
+
+В системе хранится <b>одна</b> верификация на пользователя.
+Чтобы не потерять текущий статус — переключись в нужный режим.
 
 Сейчас открыт режим: <b>${want}</b>.
 
-⚠️ Сейчас система хранит одну верификацию на пользователя. Чтобы не потерять текущий статус — переключись в нужный режим.`, {
+Если нужно поменять тип верификации — напиши администратору.`, {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard().text('🔁 Переключить режим', switchCb).row().text('⬅️ Назад', 'a:verify_home')
         });
@@ -25210,14 +25233,22 @@ ${escapeHtml(v.rejection_reason)}` : '';
   const submittedLine = v ? `
 Заявка: <tg-spoiler>${escapeHtml(submitted || '—')}</tg-spoiler>` : '';
 
+  const haveModeLabel = storedKind === 'brand' ? '🏷 Brand' : '✨ Creator';
+  const wantModeLabel = modeKind === 'brand' ? '🏷 Brand' : '✨ Creator';
+  const mismatchText = `⚠️ У тебя уже есть заявка/статус в другом режиме: <b>${escapeHtml(haveModeLabel)}</b>.
+
+В системе хранится <b>одна</b> верификация на пользователя.
+Чтобы не потерять текущий статус — <b>переключись</b> в нужный режим и открой этот экран снова.
+
+Если нужно поменять тип верификации — напиши администратору.`;
+
   const text = `✅ <b>Верификация</b>
 
 Статус: ${statusLine}
-Режим: <b>${escapeHtml(modeKind)}</b>
-Тип в базе: <b>${escapeHtml(storedKind || '—')}</b>${submittedLine}${reason}
+Режим: <b>${escapeHtml(wantModeLabel)}</b>${submittedLine}${reason}
 
 ${benefits}
-${mismatch ? '⚠️ Верификация привязана к режиму. Переключись и открой этот экран снова.' : 'Чтобы отправить заявку — нажми «✅ Подать заявку» и пришли 1 сообщение с пруфами.'}`;
+${mismatch ? mismatchText : 'Чтобы отправить заявку — нажми «✅ Подать заявку» и пришли 1 сообщение с пруфами.'}`;
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
