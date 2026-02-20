@@ -23,6 +23,15 @@ function parseCsvNums(v) {
     .filter((n) => Number.isFinite(n) && n > 0);
 }
 
+function parseCsvStr(v) {
+  if (!v) return [];
+  return String(v)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+
 const DEFAULT_SUPER_ADMINS = '';
 
 export const CFG = {
@@ -144,11 +153,17 @@ export const CFG = {
   PAYMENTS_ACCEPT_DEFAULT: parseBoolSafe(process.env.PAYMENTS_ACCEPT_DEFAULT, true),
   PAYMENTS_AUTO_APPLY_DEFAULT: parseBoolSafe(process.env.PAYMENTS_AUTO_APPLY_DEFAULT, true),
 
-  // Payments: service auto-fulfillment (off by default)
-  MATCH_FEAT_AUTO_APPLY_ENABLED: parseBoolSafe(process.env.MATCH_FEAT_AUTO_APPLY_ENABLED, false),
-
   // Feature flags
   ANALYTICS_ENABLED: parseBoolSafe(process.env.ANALYTICS_ENABLED, false),
+
+  // Audit logs (Postgres)
+  AUDIT_DB_ENABLED: parseBoolSafe(process.env.AUDIT_DB_ENABLED, true),
+  // Optional write-shedding for noisy actions (reduces Neon CU; no UX impact)
+  AUDIT_DB_THROTTLE_ENABLED: parseBoolSafe(process.env.AUDIT_DB_THROTTLE_ENABLED, false),
+  AUDIT_DB_THROTTLE_LIMIT: parseIntSafe(process.env.AUDIT_DB_THROTTLE_LIMIT, 60),
+  AUDIT_DB_THROTTLE_WINDOW_SEC: parseIntSafe(process.env.AUDIT_DB_THROTTLE_WINDOW_SEC, 60),
+  AUDIT_DB_THROTTLE_PREFIXES: parseCsvStr(process.env.AUDIT_DB_THROTTLE_PREFIXES || 'lead.,folders.,ws.profile_'),
+
 
   // Onboarding v2
   ONBOARDING_V2_ENABLED: parseBoolSafe(process.env.ONBOARDING_V2_ENABLED, false),
