@@ -8,6 +8,126 @@ export function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+// Convert Telegram message entities into HTML markup (safe for parse_mode=HTML).
+// Used for admin broadcast drafts to preserve "link in word" (text_link) and basic formatting.
+// If the input already looks like raw HTML tags, we keep it as-is (admins sometimes type HTML manually).
+export function telegramEntitiesToHtml(text, entities) {
+  const t = String(text ?? '');
+  const ents0 = Array.isArray(entities) ? entities : [];
+  if (!t || !ents0.length) return t;
+
+  // Heuristic: if user typed raw HTML tags, do not escape/convert.
+  // This keeps backward compatibility with manual "<b>..." formatting.
+  if (/<\/?[a-z][\s\S]*?>/i.test(t)) return t;
+
+  const supported = new Set([
+    'bold',
+    'italic',
+    'underline',
+    'strikethrough',
+    'spoiler',
+    'code',
+    'pre',
+    'text_link',
+  ]);
+
+  const ents = ents0
+    .filter((e) => e && supported.has(String(e.type || '')))
+    .filter((e) => Number.isInteger(e.offset) && Number.isInteger(e.length))
+    .map((e) => {
+      const start = Math.max(0, Number(e.offset));
+      const end = Math.max(start, Math.min(t.length, start + Number(e.length)));
+      return {
+        type: String(e.type || ''),
+        start,
+        end,
+        url: e.url ? String(e.url) : '',
+        language: e.language ? String(e.language) : '',
+      };
+    })
+    .filter((e) => e.end > e.start);
+
+  if (!ents.length) return t;
+
+  const openAt = new Map();
+  const closeAt = new Map();
+  const breaks = new Set([0, t.length]);
+
+  for (const e of ents) {
+    breaks.add(e.start);
+    breaks.add(e.end);
+    if (!openAt.has(e.start)) openAt.set(e.start, []);
+    openAt.get(e.start).push(e);
+    if (!closeAt.has(e.end)) closeAt.set(e.end, []);
+    closeAt.get(e.end).push(e);
+  }
+
+  const orderOpen = (a, b) => (b.end - b.start) - (a.end - a.start);
+  const orderClose = (a, b) => (a.end - a.start) - (b.end - b.start);
+
+  const tagOpen = (e) => {
+    switch (e.type) {
+      case 'bold': return '<b>';
+      case 'italic': return '<i>';
+      case 'underline': return '<u>';
+      case 'strikethrough': return '<s>';
+      case 'spoiler': return '<span class="tg-spoiler">';
+      case 'code': return '<code>';
+      case 'pre':
+        if (e.language) return `<pre><code class="language-${escapeHtml(e.language)}">`;
+        return '<pre>';
+      case 'text_link':
+        if (!e.url) return '';
+        return `<a href="${escapeHtml(e.url)}">`;
+      default:
+        return '';
+    }
+  };
+
+  const tagClose = (e) => {
+    switch (e.type) {
+      case 'bold': return '</b>';
+      case 'italic': return '</i>';
+      case 'underline': return '</u>';
+      case 'strikethrough': return '</s>';
+      case 'spoiler': return '</span>';
+      case 'code': return '</code>';
+      case 'pre':
+        if (e.language) return '</code></pre>';
+        return '</pre>';
+      case 'text_link':
+        if (!e.url) return '';
+        return '</a>';
+      default:
+        return '';
+    }
+  };
+
+  const sortedBreaks = [...breaks].sort((a, b) => a - b);
+  let out = '';
+  let cur = 0;
+
+  for (const pos of sortedBreaks) {
+    if (pos > cur) out += escapeHtml(t.slice(cur, pos));
+
+    const closers = closeAt.get(pos) || [];
+    if (closers.length) {
+      closers.sort(orderClose);
+      for (const e of closers) out += tagClose(e);
+    }
+
+    const openers = openAt.get(pos) || [];
+    if (openers.length) {
+      openers.sort(orderOpen);
+      for (const e of openers) out += tagOpen(e);
+    }
+
+    cur = pos;
+  }
+
+  return out;
+}
+
 export function fmtTs(ts) {
   if (!ts) return '—';
   const d = new Date(ts);
@@ -104,6 +224,12 @@ export function parseStartPayload(text) {
   if (m) return { type: 'fed', wsId: Number(m[1]), token: m[2] };
   m = t.match(/\/start\s+bxo_(\d+)/);
   if (m) return { type: 'bxo', id: Number(m[1]) };
+
+  m = t.match(/\/start\s+bp_(\d+)/);
+  if (m) return { type: 'bp', id: Number(m[1]) };
+
+  m = t.match(/\/start\s+offer_(\d+)/);
+  if (m) return { type: 'offer', id: Number(m[1]) };
 
   m = t.match(/\/start\s+bxth_(\d+)/);
   if (m) return { type: 'bxth', id: Number(m[1]) };
