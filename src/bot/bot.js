@@ -13739,6 +13739,80 @@ ${escapeHtml(safe)}`;
       return;
     }
 
+    // Broadcast: template ID input (gw/bp/offer)
+    if (exp.type === 'bc_btn_tpl_id') {
+      const isAdmin = isSuperAdminTg(tgId);
+      if (!isAdmin) { await ctx.reply('Нет доступа.'); return; }
+
+      const raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Введи ID (число). Можно так: <code>123 | Мой текст</code>.', { parse_mode: 'HTML' });
+        try { await setExpectText(ctx.from.id, exp, 10 * 60); } catch {}
+        return;
+      }
+
+      const draft = await getDraft(ctx.from.id);
+      if (!draft || !draft.type) {
+        await ctx.reply('⚠️ Черновик не найден. Начни заново.', {
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start')
+        });
+        return;
+      }
+
+      if (!draft.buttons) draft.buttons = [];
+      if (draft.buttons.length >= 3) {
+        await ctx.reply('Максимум 3 кнопки. Нажми «✅ Готово» чтобы продолжить.', {
+          reply_markup: new InlineKeyboard().text('✅ Готово', 'a:bc_btn_done').row().text('⬅️ Отмена', 'a:bc_cancel')
+        });
+        return;
+      }
+
+      const parts = raw.split('|').map((s) => String(s || '').trim()).filter(Boolean);
+      const idStr = String(parts[0] || '').trim();
+      const id = Number(idStr);
+      if (!/^[0-9]+$/.test(idStr) || !Number.isFinite(id) || id <= 0) {
+        await ctx.reply('❌ Нужен ID цифрами. Пример: <code>123</code> или <code>123 | Мой текст</code>.', { parse_mode: 'HTML' });
+        try { await setExpectText(ctx.from.id, exp, 10 * 60); } catch {}
+        return;
+      }
+
+      const kind = String(exp.kind || '').toLowerCase();
+      const botUn = String(CFG.BOT_USERNAME || '').replace(/^@/, '').trim();
+      if (!botUn) {
+        await ctx.reply('⚠️ BOT_USERNAME не задан — shortcuts недоступны. Добавь BOT_USERNAME в ENV и попробуй снова.');
+        try { await setExpectText(ctx.from.id, exp, 10 * 60); } catch {}
+        return;
+      }
+
+      const defText = kind === 'gw' ? '🎁 Конкурс' : (kind === 'bp' ? '🏷 Профиль бренда' : '🎬 Оффер');
+      const btnText = String(parts[1] || defText).trim().slice(0, 40) || defText;
+      const token = `${kind}_${id}`;
+      const url = `https://t.me/${botUn}?start=${token}`;
+
+      draft.buttons.push({ text: btnText, url });
+      await setDraft(ctx.from.id, draft, 30 * 60);
+
+      const list = draft.buttons.map((b, i) => `${i + 1}. ${b.text} → ${b.url}`).join('\n');
+      await ctx.reply(
+        `✅ Кнопка добавлена. Сейчас (${draft.buttons.length}/3):\n${list}\n\nЕщё кнопку — выбери шаблон или отправь строку <code>Текст | ссылка</code>.`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard()
+            .text('🎁 Конкурс', 'a:bc_tpl_gw')
+            .text('🏷 Профиль', 'a:bc_tpl_bp')
+            .row()
+            .text('🎬 Оффер', 'a:bc_tpl_offer')
+            .row()
+            .text('✅ Готово', 'a:bc_btn_done')
+            .text('⬅️ Отмена', 'a:bc_cancel')
+        }
+      );
+
+      // Back to manual input mode (templates still work via callbacks)
+      try { await setExpectText(ctx.from.id, { type: 'bc_button_input' }, 30 * 60); } catch {}
+      return;
+    }
+
     // Broadcast: URL button input
     if (exp.type === 'bc_button_input') {
       const isAdmin = isSuperAdminTg(tgId);
@@ -21577,16 +21651,54 @@ if (p.a === 'a:match_home') {
         return;
       }
       await safeEditOrReply(ctx,
-        `🔗 <b>Кнопки</b>\n\nОтправь до 3 кнопок, по одной строке:\n<code>Текст кнопки | ссылка</code>\n\nСсылка: https://... или shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>.\nКогда готово — нажми «✅ Готово».`,
+        `🔗 <b>Кнопки</b>\n\nМожно двумя способами:\n1) <b>Шаблоны</b> — выбери кнопку ниже (Конкурс/Профиль/Оффер)\n2) <b>Вручную</b> — отправь до 3 строк:\n<code>Текст кнопки | ссылка</code>\n\nСсылка: https://... или shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>.\nКогда готово — нажми «✅ Готово».`,
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
-            .text('✅ Готово (без кнопок)', 'a:bc_btn_done')
+            .text('🎁 Конкурс', 'a:bc_tpl_gw')
+            .text('🏷 Профиль', 'a:bc_tpl_bp')
             .row()
+            .text('🎬 Оффер', 'a:bc_tpl_offer')
+            .row()
+            .text('✅ Готово', 'a:bc_btn_done')
             .text('⬅️ Отмена', 'a:bc_start')
         }
       );
       await setExpectText(ctx.from.id, { type: 'bc_button_input' }, 30 * 60);
+      return;
+    }
+
+    // Broadcast: button templates (gw/bp/offer)
+    if (p.a === 'a:bc_tpl_gw' || p.a === 'a:bc_tpl_bp' || p.a === 'a:bc_tpl_offer') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      const draft = await getDraft(ctx.from.id);
+      if (!draft || !draft.type) {
+        await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+        });
+        return;
+      }
+
+      const kind = p.a === 'a:bc_tpl_gw' ? 'gw' : (p.a === 'a:bc_tpl_bp' ? 'bp' : 'offer');
+      const label = kind === 'gw' ? '🎁 Конкурс' : (kind === 'bp' ? '🏷 Профиль бренда' : '🎬 Оффер');
+      const hint = kind === 'gw'
+        ? 'ID конкурса (число), пример: <code>123</code>'
+        : (kind === 'bp' ? 'ID профиля бренда (число), пример: <code>123</code>' : 'ID оффера (число), пример: <code>123</code>');
+
+      await safeEditOrReply(ctx,
+        `🔗 <b>${escapeHtml(label)}</b>\n\nОтправь ${hint}.\n\nМожно указать свой текст кнопки так:\n<code>123 | Мой текст</code>\n\n⬅️ «Назад» вернёт к вводу кнопок.`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ Назад к кнопкам', 'a:bc_buttons')
+            .row()
+            .text('✅ Готово', 'a:bc_btn_done')
+            .text('⬅️ Отмена', 'a:bc_start')
+        }
+      );
+      await setExpectText(ctx.from.id, { type: 'bc_btn_tpl_id', kind }, 10 * 60);
       return;
     }
 
