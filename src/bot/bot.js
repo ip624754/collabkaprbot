@@ -11830,6 +11830,9 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
     .row()
     .text('💳 Докупить кредиты', `a:brand_pass|ws:${wsId}`)
     .row()
+    .text('🎯 Smart Matching', `a:match_home|ws:${wsId}`)
+    .text('🔥 Featured', `a:feat_home|ws:${wsId}`)
+    .row()
     .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
   await safeEditOrReply(ctx, 
@@ -11848,6 +11851,8 @@ ${brandPassBalanceLineHtml(credits)}
 • CRM-стадии + менеджеры
 
 <b>Включено в подписку</b>
+<i>Открывай 🎯 Smart Matching / 🔥 Featured ниже — там покажет остаток включённых запусков.</i>
+
 • 🎯 Smart Matching: <b>${BRAND_PLAN_INCLUDED_MATCH_TIER_ID}</b> (≈ ${MATCH_TIERS.find(t=>t.id===BRAND_PLAN_INCLUDED_MATCH_TIER_ID)?.count || 10} каналов) · <b>${BRAND_PLAN_INCLUDED_MATCH_PER_MONTH}</b> раз/мес
 • 🔥 Featured: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')} · <b>${BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH}</b> раз/мес
 
