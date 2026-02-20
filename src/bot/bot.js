@@ -11441,7 +11441,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
   let isVerified = false;
   if (CFG.VERIFICATION_ENABLED) {
     const v = await safeUserVerifications(() => db.getUserVerification(userId), async () => null);
-    isVerified = String(v?.status || '').toUpperCase() === 'APPROVED';
+    isVerified = String(v?.status || '').toUpperCase() === 'APPROVED' && String(v?.kind || '').toLowerCase() === 'brand';
   }
   const dailyLimit = Math.max(0, Number(isVerified ? CFG.INTRO_DAILY_LIMIT : CFG.INTRO_DAILY_LIMIT_UNVERIFIED));
 
@@ -15294,7 +15294,15 @@ ${msgText}
         await ctx.reply('Верификация сейчас отключена.');
         return;
       }
-      const kind = String(exp.kind || 'creator');
+      const uiMode = await getUiMode(ctx.from.id);
+      const modeKind = (uiMode === UI_MODES.BRAND) ? 'brand' : 'creator';
+      const kind = String(exp.kind || modeKind);
+      if (kind !== modeKind) {
+        await clearExpectText(ctx.from.id);
+        await ctx.reply('⚠️ Ты переключил(а) режим. Открой «✅ Верификация» и подай заявку заново в текущем режиме.', { reply_markup: navKb('a:verify_home') });
+        return;
+      }
+
       const submittedText = String(ctx.message.text || '').trim();
       if (submittedText.length < 20) {
         await ctx.reply('Слишком коротко. Напиши чуть подробнее (минимум 20 символов).');
@@ -19102,7 +19110,28 @@ if (p.a === 'a:lead_set') {
     if (p.a === 'a:verify_kind') {
       await ctx.answerCallbackQuery();
       if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Верификация отключена.' });
-      const kind = String(p.k || 'creator');
+      const uiMode = await getUiMode(ctx.from.id);
+      const kind = (uiMode === UI_MODES.BRAND) ? 'brand' : 'creator';
+
+      const existing = await safeUserVerifications(() => db.getUserVerification(u.id), async () => null);
+      const exStatus = String(existing?.status || '').toUpperCase();
+      const exKind = String(existing?.kind || '').toLowerCase();
+      if (existing && exKind && exKind !== kind && exStatus && exStatus !== 'REJECTED') {
+        const want = kind === 'brand' ? '🏷 Бренд' : '✨ Креатор';
+        const have = exKind === 'brand' ? '🏷 Бренд' : '✨ Креатор';
+        const switchCb = exKind === 'brand' ? 'a:onb_brand' : 'a:onb_creator';
+        await safeEditOrReply(ctx, `✅ <b>Верификация</b>
+
+У тебя уже есть заявка/статус для режима: <b>${have}</b>.
+
+Сейчас открыт режим: <b>${want}</b>.
+
+⚠️ Сейчас система хранит одну верификацию на пользователя. Чтобы не потерять текущий статус — переключись в нужный режим.`, {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard().text('🔁 Переключить режим', switchCb).row().text('⬅️ Назад', 'a:verify_home')
+        });
+        return;
+      }
 
 
       // Quality gate (anti-spam): require minimal profile completeness before accepting verification requests.
@@ -22194,7 +22223,7 @@ if (p.a === 'a:match_home') {
       let isVerified = false;
       if (CFG.VERIFICATION_ENABLED) {
         const v = await safeUserVerifications(() => db.getUserVerification(actorUserId), async () => null);
-        isVerified = String(v?.status || '').toUpperCase() === 'APPROVED';
+        isVerified = String(v?.status || '').toUpperCase() === 'APPROVED' && String(v?.kind || '').toLowerCase() === 'brand';
       }
       const dailyLimit = Math.max(0, Number(isVerified ? CFG.INTRO_DAILY_LIMIT : CFG.INTRO_DAILY_LIMIT_UNVERIFIED));
 
@@ -25116,14 +25145,17 @@ async function renderVerifyInfo(ctx) {
 async function renderVerifyHome(ctx, userRow) {
   const v = await safeUserVerifications(() => db.getUserVerification(userRow.id), async () => null);
   const status = String(v?.status || 'NONE').toUpperCase();
-  const kind = String(v?.kind || 'creator');
+  const storedKind = v ? String(v.kind || 'creator').toLowerCase() : '';
+  const uiMode = await getUiMode(ctx.from.id);
+  const modeKind = (uiMode === UI_MODES.BRAND) ? 'brand' : 'creator';
+
 
   const verifiedLimit = Math.max(0, Number(CFG.INTRO_DAILY_LIMIT || 0));
   const unverifiedLimit = Math.max(0, Number(CFG.INTRO_DAILY_LIMIT_UNVERIFIED || 0));
   const brandLimitLine = (verifiedLimit > unverifiedLimit && verifiedLimit > 0)
     ? `• Лимит интро в день: <b>${unverifiedLimit}</b> → <b>${verifiedLimit}</b>`
     : `• Более высокий лимит интро (после одобрения)`;
-  const benefits = kind === 'brand'
+  const benefits = modeKind === 'brand'
     ? `
 
 <b>Преимущества</b>:
@@ -25144,12 +25176,20 @@ ${brandLimitLine}
   else statusLine = '—';
 
   const kb = new InlineKeyboard();
+
+  const mismatch = !!(v && storedKind && storedKind !== modeKind);
+
   if (!v) {
-    kb.text('🧑‍🎨 Я Creator', 'a:verify_kind|k:creator').row();
-    kb.text('🏷 Я Brand', 'a:verify_kind|k:brand').row();
-  } else if (status === 'REJECTED') {
-    kb.text('🔁 Подать заново', `a:verify_kind|k:${kind}`).row();
+    kb.text('✅ Подать заявку', 'a:verify_kind').row();
+  } else if (status === 'REJECTED' && !mismatch) {
+    kb.text('🔁 Подать заново', 'a:verify_kind').row();
   }
+
+  if (mismatch) {
+    const switchCb = storedKind === 'brand' ? 'a:onb_brand' : 'a:onb_creator';
+    kb.text('🔁 Переключить режим', switchCb).row();
+  }
+
   kb.text('ℹ️ Как это работает', 'a:verify_info').row();
   kb.text('📋 Меню', 'a:menu');
 
@@ -25164,10 +25204,11 @@ ${escapeHtml(v.rejection_reason)}` : '';
   const text = `✅ <b>Верификация</b>
 
 Статус: ${statusLine}
-Тип: <b>${escapeHtml(kind)}</b>${submittedLine}${reason}
+Режим: <b>${escapeHtml(modeKind)}</b>
+Тип в базе: <b>${escapeHtml(storedKind || '—')}</b>${submittedLine}${reason}
 
 ${benefits}
-Чтобы отправить заявку — выбери роль и пришли 1 сообщение с пруфами.`;
+${mismatch ? '⚠️ Верификация привязана к режиму. Переключись и открой этот экран снова.' : 'Чтобы отправить заявку — нажми «✅ Подать заявку» и пришли 1 сообщение с пруфами.'}`;
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
