@@ -394,9 +394,17 @@ async function sendBroadcastMessage(api, tgId, bc) {
   // Build inline keyboard from URL buttons
   let replyMarkup;
   if (btns.length) {
-    const rows = btns
+    const flat = btns
       .filter((b) => b && b.text && b.url)
-      .map((b) => [{ text: b.text, url: b.url }]);
+      .slice(0, 3)
+      .map((b) => ({ text: String(b.text).slice(0, 64), url: String(b.url).slice(0, 2048) }));
+
+    const rows = [];
+    for (let i = 0; i < flat.length; i += 2) {
+      rows.push(flat.slice(i, i + 2));
+      if (rows.length >= 2) break;
+    }
+
     if (rows.length) replyMarkup = { inline_keyboard: rows };
   }
 
@@ -472,10 +480,17 @@ export async function broadcastTick() {
         const bot = getBot();
         const creator = await db.getUserById(bc.created_by_user_id);
         if (creator?.tg_id) {
+          const kb = new InlineKeyboard()
+            .text('📣 Рассылки', 'a:bc_list|p:0')
+            .text(`🔎 #${bc.id}`, `a:bc_view|id:${bc.id}`)
+            .row()
+            .text('➕ Новая рассылка', 'a:bc_start')
+            .text('⬅️ Админка', 'a:admin_home');
+
           await bot.api.sendMessage(
             Number(creator.tg_id),
             `✅ <b>Рассылка #${bc.id} завершена</b>\n\n📊 Отправлено: ${bc.sent_count} / ${bc.total_count}\n❌ Ошибок: ${bc.failed_count}`,
-            { parse_mode: 'HTML' }
+            { parse_mode: 'HTML', reply_markup: kb }
           );
         }
       } catch {
