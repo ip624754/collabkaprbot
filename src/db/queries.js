@@ -3771,7 +3771,7 @@ export async function getBarterOfferPublicWithVerified(offerId) {
      from barter_offers o
      join workspaces w on w.id=o.workspace_id
      join workspace_settings s on s.workspace_id=w.id
-     left join user_verifications uv on uv.user_id=o.creator_user_id and uv.status='APPROVED'
+     left join user_verifications uv on uv.user_id=o.creator_user_id and uv.kind='creator' and uv.status='APPROVED'
      where o.id=$1`,
     [offerId]
   );
@@ -3787,7 +3787,7 @@ export async function listNetworkBarterOffersWithVerified(opts = {}) {
        from barter_offers o
        join workspaces w on w.id = o.workspace_id
        join workspace_settings s on s.workspace_id = w.id
-       left join user_verifications uv on uv.user_id = o.creator_user_id
+       left join user_verifications uv on uv.user_id = o.creator_user_id and uv.kind='creator'
        where o.status='ACTIVE'
          and s.network_enabled=true
          and ($1::text is null or o.category=$1)
@@ -3809,7 +3809,7 @@ export async function listNetworkBarterOffersWithVerified(opts = {}) {
        from barter_offers o
        join workspaces w on w.id = o.workspace_id
        join workspace_settings s on s.workspace_id = w.id
-       left join user_verifications uv on uv.user_id = o.creator_user_id
+       left join user_verifications uv on uv.user_id = o.creator_user_id and uv.kind='creator'
        where o.status='ACTIVE'
          and s.network_enabled=true
          and ($1::text is null or o.category=$1)
@@ -3838,7 +3838,7 @@ export async function listBarterThreadsForUserWithVerified(userId, limit = 20, o
      join barter_offers o on o.id=t.offer_id
      join workspaces w on w.id=t.workspace_id
      left join users uo on uo.id = (case when t.buyer_user_id=$1 then t.seller_user_id else t.buyer_user_id end)
-     left join user_verifications uvo on uvo.user_id = (case when t.buyer_user_id=$1 then t.seller_user_id else t.buyer_user_id end) and uvo.status='APPROVED'
+     left join user_verifications uvo on uvo.user_id = (case when t.buyer_user_id=$1 then t.seller_user_id else t.buyer_user_id end) and uvo.status='APPROVED' and uvo.kind = (case when t.buyer_user_id=$1 then 'creator' else 'brand' end)
      left join lateral (
        select m.body, m.created_at
        from barter_messages m
@@ -3896,8 +3896,8 @@ export async function getBarterThreadForUserWithVerified(threadId, userId) {
      join workspaces w on w.id=t.workspace_id
      left join users ub on ub.id=t.buyer_user_id
      left join users us on us.id=t.seller_user_id
-     left join user_verifications uvb on uvb.user_id=t.buyer_user_id and uvb.status='APPROVED'
-     left join user_verifications uvs on uvs.user_id=t.seller_user_id and uvs.status='APPROVED'
+     left join user_verifications uvb on uvb.user_id=t.buyer_user_id and uvb.kind='brand' and uvb.status='APPROVED'
+     left join user_verifications uvs on uvs.user_id=t.seller_user_id and uvs.kind='creator' and uvs.status='APPROVED'
      where t.id=$1 and (t.buyer_user_id=$2 or t.seller_user_id=$2)`,
     [threadId, userId]
   );
