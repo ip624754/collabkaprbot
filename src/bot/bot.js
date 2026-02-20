@@ -11495,6 +11495,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
     ? `
 
 ✅ Пройди <b>верификацию</b>, чтобы увеличить лимит до <b>${verifiedLimit}</b> интро (новых диалогов)/день.
+<i>Оплата интро всё равно идёт кредитами — верификация не отменяет списания.</i>
 `
     : '';
 
@@ -11505,6 +11506,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 <b>Как работает:</b>
 • 💬 Интро = новый диалог: <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}
 • Переписка внутри открытого диалога — бесплатна
+• Лимит считается только на <b>новые</b> диалоги (ответы без ограничений)
 
 ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')} (на одну витрину).
 👥 Раздел «Менеджеры бренда» открывается после покупки Brand Plan.
@@ -25207,6 +25209,7 @@ async function renderVerifyHome(ctx, userRow) {
 <b>Преимущества</b>:
 ${brandLimitLine}
 • Больше доверия и выше шанс ответа
+• Интро = новый диалог (переписка бесплатна)
 `
     : `
 
