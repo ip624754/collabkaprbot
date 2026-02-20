@@ -4,7 +4,7 @@ import logger from '../lib/logger.js';
 import { redis, k, rateLimit, consumeOnce } from '../lib/redis.js';
 import * as db from '../db/queries.js';
 import { pool } from '../db/pool.js';
-import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes, parseMoscowDateTime, computeThreadReplyStatus, formatBxChargeLine } from './helpers.js';
+import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes, parseMoscowDateTime, computeThreadReplyStatus, formatBxChargeLine, telegramEntitiesToHtml } from './helpers.js';
 import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
@@ -888,9 +888,9 @@ function mainMenuKb(flags = {}) {
     .row();
 
   if (isFolderEditor) {
-    kb.text('📁 Папки', 'a:folders_my').text('🏷 Я бренд', 'a:bx_open|ws:0').row();
+    kb.text('📁 Папки', 'a:folders_my').text('🏷 Для брендов', 'a:bx_open|ws:0').row();
   } else {
-    kb.text('🏷 Я бренд', 'a:bx_open|ws:0').row();
+    kb.text('🏷 Для брендов', 'a:bx_open|ws:0').row();
   }
 
   if (CFG.OFFICIAL_CHANNEL_USERNAME) {
@@ -1304,9 +1304,6 @@ async function renderMainMenu(ctx, flags, params = {}) {
 `;
     text = base + `
 Для Creator/UGC — подключение канала, витрина, лента и розыгрыши.
-
-💡 Если канал ещё не подключён — начни с «🚀 Подключить канал».
-«🏷 Каталог брендов» — список брендов, «🏷 Я бренд» — режим бренда.
 
 Выбери действие:`;
     let canManager = false;
@@ -13421,22 +13418,22 @@ ${escapeHtml(safeCap)}
       const photo = msg.photo[msg.photo.length - 1];
       draft.type = 'photo';
       draft.fileId = photo.file_id;
-      draft.caption = msg.caption || '';
+      draft.caption = telegramEntitiesToHtml(msg.caption || '', msg.caption_entities || []);
     } else if (msg.video) {
       draft.type = 'video';
       draft.fileId = msg.video.file_id;
-      draft.caption = msg.caption || '';
+      draft.caption = telegramEntitiesToHtml(msg.caption || '', msg.caption_entities || []);
     } else if (msg.animation) {
       draft.type = 'animation';
       draft.fileId = msg.animation.file_id;
-      draft.caption = msg.caption || '';
+      draft.caption = telegramEntitiesToHtml(msg.caption || '', msg.caption_entities || []);
     } else if (msg.document) {
       draft.type = 'document';
       draft.fileId = msg.document.file_id;
-      draft.caption = msg.caption || '';
+      draft.caption = telegramEntitiesToHtml(msg.caption || '', msg.caption_entities || []);
     } else if (msg.text) {
       draft.type = 'text';
-      draft.text = msg.text;
+      draft.text = telegramEntitiesToHtml(msg.text, msg.entities || []);
     } else {
       await ctx.reply('❌ Неподдерживаемый формат. Отправь текст, фото, видео или GIF.', {
         reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home')
@@ -13749,7 +13746,10 @@ ${escapeHtml(safe)}`;
 
       const raw = String(ctx.message?.text || '').trim();
       if (!raw) {
-        await ctx.reply('Отправь кнопку: <code>Текст | https://url</code>', { parse_mode: 'HTML' });
+        await ctx.reply(
+          'Отправь кнопки (до 3), по одной строке:\n<code>Текст | ссылка</code>\n\nСсылка: https://... или shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>.',
+          { parse_mode: 'HTML' }
+        );
         try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
         return;
       }
@@ -13762,19 +13762,36 @@ ${escapeHtml(safe)}`;
         return;
       }
 
-      const parts = raw.split('|').map((s) => s.trim());
-      if (parts.length < 2 || !parts[0] || !parts[1]) {
-        await ctx.reply('Формат: <code>Текст кнопки | https://example.com</code>', { parse_mode: 'HTML' });
-        try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
-        return;
-      }
+      const botUn = String(CFG.BOT_USERNAME || '').replace(/^@/, '').trim();
+      const normalizeUrl = (input) => {
+        const s = String(input || '').trim();
+        if (!s) return '';
 
-      const btnText = parts[0].slice(0, 40);
-      const btnUrl = parts[1];
+        // Deep-link shortcuts (start payload)
+        // Examples: gw_12, bp_34, offer_56
+        const m = s.match(/^(gwj|gwc|gw|gwo|bp|offer|bxo|bxth|wsp)_(\d+)$/i);
+        if (m) {
+          if (!botUn) return '';
+          const token = `${String(m[1]).toLowerCase()}_${Number(m[2])}`;
+          return `https://t.me/${botUn}?start=${token}`;
+        }
 
-      // Basic URL validation
-      if (!/^https?:\/\/.+/.test(btnUrl)) {
-        await ctx.reply('URL должен начинаться с http:// или https://');
+        // Allow t.me/... without scheme
+        if (/^(t\.me|telegram\.me)\//i.test(s)) return `https://${s}`;
+
+        // Plain URL
+        if (/^https?:\/\//i.test(s)) return s;
+
+        return '';
+      };
+
+      const lines = raw
+        .split(/\r?\n+/)
+        .map((s) => String(s || '').trim())
+        .filter(Boolean);
+
+      if (!lines.length) {
+        await ctx.reply('Формат: <code>Текст кнопки | ссылка</code> (по одной строке)', { parse_mode: 'HTML' });
         try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
         return;
       }
@@ -13798,12 +13815,38 @@ ${escapeHtml(safe)}`;
         return;
       }
 
-      draft.buttons.push({ text: btnText, url: btnUrl });
+      let added = 0;
+      for (const line of lines) {
+        if (draft.buttons.length >= 3) break;
+        const parts = line.split('|').map((s) => s.trim());
+        const btnText = String(parts[0] || '').trim().slice(0, 40);
+        const btnUrlRaw = parts.slice(1).join('|').trim();
+
+        if (!btnText || !btnUrlRaw) {
+          await ctx.reply('Формат: <code>Текст кнопки | ссылка</code> (по одной строке)', { parse_mode: 'HTML' });
+          try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
+          return;
+        }
+
+        const btnUrl = normalizeUrl(btnUrlRaw);
+        if (!btnUrl) {
+          const hint = botUn
+            ? 'Ссылка должна быть https://... или shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>.'
+            : 'Ссылка должна быть https://... (BOT_USERNAME не задан → shortcuts отключены).';
+          await ctx.reply(`❌ Некорректная ссылка: <code>${escapeHtml(btnUrlRaw)}</code>\n${hint}`, { parse_mode: 'HTML' });
+          try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
+          return;
+        }
+
+        draft.buttons.push({ text: btnText, url: btnUrl });
+        added++;
+      }
+
       await setDraft(ctx.from.id, draft, 30 * 60);
 
       const list = draft.buttons.map((b, i) => `${i + 1}. ${b.text} → ${b.url}`).join('\n');
       await ctx.reply(
-        `✅ Кнопка добавлена (${draft.buttons.length}/3):\n${list}\n\nЕщё кнопку — отправь текст. Или нажми «✅ Готово».`,
+        `✅ Добавлено: ${added}. Сейчас (${draft.buttons.length}/3):\n${list}\n\nЕщё кнопку — отправь строку. Или нажми «✅ Готово».`,
         {
           reply_markup: new InlineKeyboard()
             .text('✅ Готово', 'a:bc_btn_done')
@@ -16254,6 +16297,21 @@ ${list}
       return;
     }
 
+    if (payload?.type === 'bp') {
+      const brandUserId = Number(payload.id || 0);
+      if (!brandUserId) return ctx.reply('Профиль не найден.');
+      // viewerUserId: tgId (for redis filters); legacyUserId: db user id
+      await renderBrandDirectoryCard(ctx, ctx.from.id, { brandUserId, backPage: 0, edit: false, legacyUserId: u.id });
+      return;
+    }
+
+    if (payload?.type === 'offer') {
+      const offer = await db.getBarterOfferPublic(payload.id);
+      if (!offer) return ctx.reply('Оффер не найден.');
+      const wsId = Number(offer.workspace_id);
+      return renderBxPublicView(ctx, u.id, wsId, payload.id, 0);
+    }
+
 if (payload?.type === 'bxo') {
       const offer = await db.getBarterOfferPublic(payload.id);
       if (!offer) return ctx.reply('Оффер не найден.');
@@ -16333,7 +16391,7 @@ UGC vs Интеграция
       .text('🧭 Быстрый старт', 'a:guide')
       .text('📋 Меню', 'a:menu')
       .row()
-      .text('🏷 Я бренд', 'a:bx_open|ws:0')
+      .text('🏷 Для брендов', 'a:bx_open|ws:0')
       .text('🎬 UGC / Офферы', 'a:bx_home')
       .row()
       .text('🎁 Розыгрыши', 'a:gw_list');
@@ -19425,7 +19483,7 @@ if (p.a === 'a:lead_set') {
         '• 🧾 Держи историю и статусы\n\n' +
         'Открыть режим бренда:';
       const kb = new InlineKeyboard()
-        .text('🏷 Я бренд', 'a:bx_open|ws:0')
+        .text('🏷 Для брендов', 'a:bx_open|ws:0')
         .row()
         .text('💳 Кредиты', 'a:brand_pass|ws:0')
         .row()
@@ -21519,7 +21577,7 @@ if (p.a === 'a:match_home') {
         return;
       }
       await safeEditOrReply(ctx,
-        `🔗 <b>URL-кнопки</b>\n\nОтправь кнопку в формате:\n<code>Текст кнопки | https://example.com</code>\n\nМожно до 3 кнопок, каждая — отдельным сообщением.\nКогда готово — нажми «✅ Готово».`,
+        `🔗 <b>Кнопки</b>\n\nОтправь до 3 кнопок, по одной строке:\n<code>Текст кнопки | ссылка</code>\n\nСсылка: https://... или shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>.\nКогда готово — нажми «✅ Готово».`,
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
