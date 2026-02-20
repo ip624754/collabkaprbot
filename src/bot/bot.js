@@ -1467,6 +1467,28 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   }
 }
 
+
+async function renderRoleSelection(ctx, u, opts = {}) {
+  // Gatekeeper for first-time users: choose UI mode explicitly (stored in Redis).
+  // Keep this screen максимально коротким — без карты и без лишних кнопок.
+  const edit = opts.edit === true;
+
+  const text =
+    `👋 <b>Добро пожаловать!</b>\n\n` +
+    `Настроим меню под ваши задачи — это скроет лишнее и сэкономит время.\n` +
+    `<i>Режим всегда можно переключить позже на «🏠 Home».</i>\n\n` +
+    `<b>Кто вы?</b>`;
+
+  const kb = new InlineKeyboard()
+    .text('🏢 Я Бренд / Заказчик', 'a:home_mode|m:brand')
+    .row()
+    .text('🤳 Я Креатор / Блогер', 'a:home_mode|m:creator');
+
+  if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+
 async function renderRoleHub(ctx, u, flags) {
   // Role hub is a navigation home for Back in BX flows
   if (ctx.from?.id) await setUiHome(ctx.from.id, BX_HOME.MENU);
@@ -16401,6 +16423,23 @@ if (payload?.type === 'bxo') {
       const kb = bxThreadKb(wsId, thread.id, { back: 'inbox', page: 0, offerId: thread.offer_id });
       return ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     }
+
+    // Gatekeeper: if user hasn't выбран режим (ui_mode) и это не deep-link — покажем простую развилку (2 кнопки).
+    // Важно: не используем resolveUiMode(), потому что он дефолтит в Creator; нам нужно именно "есть ключ или нет".
+    let hasUiModeKey = false;
+    try {
+      const raw = await redis.get(k(['ui_mode', ctx.from.id]));
+      hasUiModeKey = !!raw;
+    } catch {
+      hasUiModeKey = true; // fail-open: если Redis недоступен — ведём себя как раньше
+    }
+
+    if (!hasUiModeKey) {
+      await renderRoleSelection(ctx, u, { edit: false });
+      return;
+    }
+
+
 
     const flags = await getRoleFlags(u, ctx.from.id);
 
