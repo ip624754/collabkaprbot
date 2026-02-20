@@ -7,10 +7,27 @@ export default async function handler(_req, res) {
 
   const base = { ok: true, ts: new Date().toISOString(), env: CFG.APP_ENV };
 
+  const auditBase = {
+    enabled: !!CFG.AUDIT_DB_ENABLED,
+    throttle: {
+      enabled: !!CFG.AUDIT_DB_THROTTLE_ENABLED,
+      suppressed_today_total: null,
+      suppressed_today_by_prefix: null,
+    }
+  };
+
   // Redis is optional for /api/health (so it stays useful in minimal envs).
   if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
-    res.status(200).json({ ...base, cron: { enabled: false } });
+    res.status(200).json({ ...base, cron: { enabled: false }, audit: auditBase });
     return;
+  }
+
+  function sanitizePrefix(p) {
+    return String(p || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 48);
   }
 
   try {
@@ -21,6 +38,38 @@ export default async function handler(_req, res) {
       redis.get(k(['cron', 'broadcast_tick', 'last_run'])),
     ]);
 
+    // Optional audit throttle metrics (Redis-only; no DB)
+    let audit = auditBase;
+    if (CFG.AUDIT_DB_ENABLED && CFG.AUDIT_DB_THROTTLE_ENABLED) {
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
+      const prefixes = Array.isArray(CFG.AUDIT_DB_THROTTLE_PREFIXES) ? CFG.AUDIT_DB_THROTTLE_PREFIXES : [];
+
+      const totalKey = k(['audit', 'throttle', 'suppressed', day]);
+      const totalRaw = await redis.get(totalKey);
+      const total = Number(totalRaw) || 0;
+
+      const byPrefix = {};
+      await Promise.all(
+        prefixes
+          .filter(Boolean)
+          .map(async (p) => {
+            const key = k(['audit', 'throttle', 'suppressed', 'p', sanitizePrefix(p), day]);
+            const v = Number(await redis.get(key)) || 0;
+            byPrefix[p] = v;
+          })
+      );
+
+      audit = {
+        ...auditBase,
+        throttle: {
+          ...auditBase.throttle,
+          day,
+          suppressed_today_total: total,
+          suppressed_today_by_prefix: byPrefix,
+        }
+      };
+    }
+
     res.status(200).json({
       ...base,
       cron: {
@@ -28,11 +77,13 @@ export default async function handler(_req, res) {
         giveaways_tick: giveawaysTick || null,
         broadcast_tick: broadcastTick || null,
       },
+      audit,
     });
   } catch (_e) {
     res.status(200).json({
       ...base,
       cron: { enabled: true, error: 'redis_unavailable' },
+      audit: auditBase,
     });
   }
 }
