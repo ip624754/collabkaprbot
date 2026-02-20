@@ -38,3 +38,17 @@
 - 0 PRNG в Node
 - 0 вытягивания 50k user_id в память
 - воспроизводимо (audit-friendly)
+
+## Audit logs и стоимость Neon
+`workspace_audit` и `giveaway_audit` пишутся в Postgres. При активной работе (особенно lead/folders) частые `INSERT` могут заметно жечь CU на Neon.
+
+### Рекомендованный guardrail (без влияния на UX)
+Включаем write-shedding только для «шумных» действий через Redis rate-limit (остальные действия логируются как раньше).
+
+ENV:
+- `AUDIT_DB_ENABLED=true` — включить/выключить DB-аудит целиком.
+- `AUDIT_DB_THROTTLE_ENABLED=true` — включить троттлинг.
+- `AUDIT_DB_THROTTLE_LIMIT=60` + `AUDIT_DB_THROTTLE_WINDOW_SEC=60` — максимум записей на (workspace × prefix) в окно.
+- `AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_` — какие действия считаем «шумными».
+
+Стратегия: сначала включаем троттлинг на проде, смотрим логи/метрики и при необходимости поднимаем лимиты.
