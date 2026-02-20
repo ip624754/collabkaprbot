@@ -5575,13 +5575,22 @@ function renderParticipantScreen(g, entry, opts = {}) {
 }
 
 
-async function ensureWorkspaceForOwner(ctx, ownerUserId) {
+async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
   const wsList = await db.listWorkspaces(ownerUserId);
   if (!wsList.length) {
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     try { await clearExpectText(ctx.from.id); } catch {}
-    const flags = await getRoleFlags(u, ctx.from.id);
-    await ctx.reply('Сначала подключи канал: нажми “🚀 Подключить канал”.', { reply_markup: mainMenuKb(flags) });
+
+    const minimal = !!opts?.minimal;
+    const backCb = String(opts?.backCb || 'a:home');
+
+    const kb = minimal
+      ? new InlineKeyboard()
+          .text('🚀 Подключить канал', 'a:setup').row()
+          .text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu')
+      : mainMenuKb(await getRoleFlags(u, ctx.from.id));
+
+    await ctx.reply('Сначала подключи канал: нажми “🚀 Подключить канал”.', { reply_markup: kb });
     return null;
   }
   const active = await getActiveWorkspace(ctx.from.id);
@@ -21439,7 +21448,7 @@ if (p.a === 'a:match_home') {
     // Barters
     if (p.a === 'a:bx_home') {
       await ctx.answerCallbackQuery();
-      const ws = await ensureWorkspaceForOwner(ctx, u.id);
+      const ws = await ensureWorkspaceForOwner(ctx, u.id, { minimal: true });
       if (!ws) return;
       await renderBxOpen(ctx, u.id, ws.id);
       return;
