@@ -6603,6 +6603,8 @@ function wsProfileKb(wsId, ws) {
     .row()
     .text('🏠 Home', 'a:home');
 
+  if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
+
   return kb;
 }
 
@@ -7363,8 +7365,17 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const modeLine = PROFILE_MODE_LABELS[mode] || PROFILE_MODE_LABELS.both;
   const prog = isOwner ? calcWsProfileProgress(ws) : null;
 
+  const isPro = (() => {
+    const plan = String(ws.plan || 'free');
+    if (plan !== 'pro') return false;
+    const until = ws.pro_until;
+    if (!until) return true;
+    return new Date(until).getTime() > Date.now();
+  })();
+
   const blocks = [];
-  blocks.push(`✨ <b>${escapeHtml(name)}</b>`);
+  const badge = isPro ? ' ⭐️ <b>PRO</b>' : '';
+  blocks.push(`✨ <b>${escapeHtml(name)}</b>${badge}`);
   blocks.push('');
   if (isPreview) {
     blocks.push(`👁 <b>Предпросмотр</b>: так бренды видят твою витрину.`);
@@ -15279,6 +15290,7 @@ ${msgText}
 // Verification request submit
     if (exp.type === 'verify_submit') {
       if (!CFG.VERIFICATION_ENABLED) {
+        await clearExpectText(ctx.from.id);
         await ctx.reply('Верификация сейчас отключена.');
         return;
       }
@@ -15290,6 +15302,20 @@ ${msgText}
         return;
       }
       const trimmed = submittedText.length > 1800 ? submittedText.slice(0, 1800) : submittedText;
+
+      // Anti-spam: throttle submits (Redis-only, no DB). Prevents flooding mods & Neon writes.
+      const cdKey = k(['rl', 'verify_submit', u.id]);
+      let cdOk = true;
+      try {
+        cdOk = !!(await redis.set(cdKey, String(Date.now()), { nx: true, ex: 6 * 3600 }));
+      } catch {
+        cdOk = true;
+      }
+      if (!cdOk) {
+        await clearExpectText(ctx.from.id);
+        await ctx.reply('⏳ Заявка уже отправлялась недавно. Подожди несколько часов и попробуй снова.', { reply_markup: navKb('a:verify_home') });
+        return;
+      }
 
       await safeUserVerifications(() => db.upsertVerificationRequest(u.id, { kind, submittedText: trimmed }), async () => null);
 
@@ -15322,6 +15348,7 @@ ${escapeHtml(trimmed)}`;
         try { await ctx.api.sendMessage(tgId, msg, { parse_mode: 'HTML', reply_markup: kb }); } catch {}
       }
 
+      await clearExpectText(ctx.from.id);
       await ctx.reply('✅ Заявка отправлена. Обычно проверка занимает время — ты получишь ответ в этом чате.');
       return;
     }
@@ -19078,9 +19105,93 @@ if (p.a === 'a:lead_set') {
       const kind = String(p.k || 'creator');
 
 
-      if (kind === 'brand' && CFG.BRAND_VERIFY_REQUIRES_EXTENDED) {
+      // Quality gate (anti-spam): require minimal profile completeness before accepting verification requests.
+      if (kind === 'creator') {
+        let ws = null;
+        let wsId = 0;
+
+        try { wsId = Number(await getActiveWorkspaceId(ctx.from.id)) || 0; } catch { wsId = 0; }
+
+        if (wsId) {
+          try { ws = await db.getWorkspace(u.id, wsId); } catch { ws = null; }
+        }
+
+        if (!ws) {
+          try {
+            const list = await db.listWorkspaces(u.id);
+            if (list && list.length) {
+              ws = list[0];
+              wsId = Number(ws.id) || wsId;
+            }
+          } catch {
+            ws = null;
+          }
+        }
+
+        if (!ws) {
+          await safeEditOrReply(ctx,
+            `✅ <b>Верификация Creator</b>
+
+Сначала подключи канал (workspace), потом заполни витрину — так модерации проще проверить.`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: new InlineKeyboard()
+                .text('🚀 Подключить канал', 'a:setup')
+                .row()
+                .text('⬅️ Назад', 'a:verify_home')
+            }
+          );
+          return;
+        }
+
+        const prog = calcWsProfileProgress(ws);
+        const ok = !!(prog.aboutOk && (prog.portfolioOk || prog.igOk) && (prog.contactOk || !!ws.channel_username));
+        if (!ok) {
+          await safeEditOrReply(ctx,
+            `✅ <b>Верификация Creator</b>
+
+Чтобы подать заявку, заполни витрину минимум:
+• 📝 описание
+• 🔗 портфолио или 📸 Instagram
+• ✉️ контакт (или @канал)
+
+<i>Зачем:</i> меньше спама и быстрее проверка.`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: new InlineKeyboard()
+                .text('👤 Профиль канала', `a:ws_profile|ws:${wsId || ws.id}`)
+                .row()
+                .text('⬅️ Назад', 'a:verify_home')
+            }
+          );
+          return;
+        }
+      }
+
+      if (kind === 'brand') {
         const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
-        if (!isBrandExtendedComplete(prof)) {
+
+        if (!isBrandBasicComplete(prof)) {
+          await safeEditOrReply(ctx,
+            `🏷 <b>Верификация Brand</b>
+
+Чтобы подать заявку как бренд, заполни базовый профиль:
+• название
+• ниша
+• контакт
+• ссылка`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: new InlineKeyboard()
+                .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:verify')
+                .row()
+                .text('⬅️ Назад', 'a:verify_home')
+            }
+          );
+          return;
+        }
+
+        if (CFG.BRAND_VERIFY_REQUIRES_EXTENDED && !isBrandExtendedComplete(prof)) {
           await safeEditOrReply(ctx, 
             `🏷 <b>Верификация Brand</b>
 
@@ -19101,6 +19212,7 @@ if (p.a === 'a:lead_set') {
           return;
         }
       }
+
 
       await setExpectText(ctx.from.id, { type: 'verify_submit', kind });
       await safeEditOrReply(ctx, 
