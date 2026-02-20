@@ -2563,6 +2563,25 @@ export async function setBarterThreadTriageStatus(threadId, buyerUserId, triageS
 // Smart Matching
 // -----------------------------
 
+// Brand Plan monthly quota helpers (count included requests in current calendar month)
+export async function countIncludedMatchingThisMonth(userId) {
+  try {
+    const r = await pool.query(
+      `select count(*)::int as cnt
+         from matching_requests
+        where user_id = $1
+          and stars_paid = 0
+          and created_at >= date_trunc('month', now())`,
+      [Number(userId)]
+    );
+    return Number(r.rows[0]?.cnt || 0);
+  } catch (e) {
+    // 42P01 = undefined_table (migration not applied yet)
+    if (e && e.code === '42P01') return 0;
+    throw e;
+  }
+}
+
 export async function createMatchingRequest(userId, tier, starsPaid) {
   const r = await pool.query(
     `insert into matching_requests (user_id, tier, stars_paid, status)
@@ -2648,6 +2667,25 @@ export async function searchNetworkBarterOffersByBrief(brief, limit = 10) {
 // -----------------------------
 // Featured placements
 // -----------------------------
+
+// Brand Plan monthly quota helpers (count included placements in current calendar month)
+export async function countIncludedFeaturedThisMonth(userId) {
+  try {
+    const r = await pool.query(
+      `select count(*)::int as cnt
+         from featured_placements
+        where user_id = $1
+          and stars_paid = 0
+          and created_at >= date_trunc('month', now())`,
+      [Number(userId)]
+    );
+    return Number(r.rows[0]?.cnt || 0);
+  } catch (e) {
+    // 42P01 = undefined_table (migration not applied yet)
+    if (e && e.code === '42P01') return 0;
+    throw e;
+  }
+}
 
 export async function createFeaturedPlacement(userId, durationDays, starsPaid) {
   const r = await pool.query(
