@@ -1,6 +1,6 @@
 import { pool } from './pool.js';
 import { CFG } from '../lib/config.js';
-import { k as rk, rateLimit } from '../lib/redis.js';
+import { redis, k as rk, rateLimit } from '../lib/redis.js';
 
 // Users
 export async function upsertUser(tgId, username) {
@@ -875,6 +875,35 @@ export async function getGiveawayForCurator(giveawayId, userId) {
 }
 
 // Workspace audit
+function sanitizeAuditPrefix(p) {
+  return String(p || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48);
+}
+
+async function incrAuditThrottleSuppressed(prefix) {
+  // Redis-only metric (no DB). Keep cardinality low: total + per-prefix, per-day.
+  try {
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
+    const ttlSec = 35 * 86400;
+
+    const totalKey = rk(['audit', 'throttle', 'suppressed', day]);
+    const pKey = rk(['audit', 'throttle', 'suppressed', 'p', sanitizeAuditPrefix(prefix), day]);
+
+    const [t, p] = await Promise.all([
+      redis.incr(totalKey),
+      redis.incr(pKey)
+    ]);
+
+    if (t === 1) await redis.expire(totalKey, ttlSec);
+    if (p === 1) await redis.expire(pKey, ttlSec);
+  } catch {
+    // metrics must never break bot UX
+  }
+}
+
 export async function auditWorkspace(workspaceId, actorUserId, action, payload = {}) {
   if (!CFG.AUDIT_DB_ENABLED) return null;
 
@@ -894,7 +923,11 @@ export async function auditWorkspace(workspaceId, actorUserId, action, payload =
           limit: CFG.AUDIT_DB_THROTTLE_LIMIT,
           windowSec: CFG.AUDIT_DB_THROTTLE_WINDOW_SEC,
         });
-        if (!rl.allowed) return null;
+        if (!rl.allowed) {
+          // Track how many inserts we suppressed (Redis-only; no DB)
+          await incrAuditThrottleSuppressed(hit);
+          return null;
+        }
       } catch {
         // Fail open: audit must never break bot UX
       }
