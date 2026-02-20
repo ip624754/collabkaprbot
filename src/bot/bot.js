@@ -11832,8 +11832,8 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
     .row()
     .text('💳 Докупить кредиты', `a:brand_pass|ws:${wsId}`)
     .row()
-    .text('🎯 Smart Matching', `a:match_home|ws:${wsId}`)
-    .text('🔥 Featured', `a:feat_home|ws:${wsId}`)
+    .text('🎯 Smart Matching', `a:match_home|ws:${wsId}|ret:bp|bpr:${ret}`)
+    .text('🔥 Featured', `a:feat_home|ws:${wsId}|ret:bp|bpr:${ret}`)
     .row()
     .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
@@ -11868,7 +11868,82 @@ ${brandPassBalanceLineHtml(credits)}
   );
 }
 
-async function renderMatchingHome(ctx, userId, wsId) {
+
+function cbJoin(base, params = {}) {
+  let s = base;
+  for (const [k, v] of Object.entries(params || {})) {
+    if (v === undefined || v === null || v === '') continue;
+    s += `|${k}:${v}`;
+  }
+  return s;
+}
+
+function mfBackCb(wsId, ret, bpr) {
+  const r = String(ret || '');
+  if (r === 'bp') {
+    const bpRet = String(bpr || 'brand');
+    return cbJoin('a:brand_plan', { ws: wsId, ret: bpRet });
+  }
+  return wsId ? `a:bx_open|ws:${wsId}` : 'a:menu';
+}
+
+async function renderMatchingExample(ctx, wsId, ret, bpr) {
+  const kb = new InlineKeyboard()
+    .text('⬅️ Назад', cbJoin('a:match_home', { ws: wsId, ret, bpr }))
+    .row();
+
+  await safeEditOrReply(
+    ctx,
+    `👀 <b>Пример результата — Smart Matching</b>
+
+` +
+      `Ты присылаешь бриф (ниша, гео, аудитория, формат) — бот подбирает релевантные офферы/каналы из сети и даёт список с кнопками.
+
+` +
+      `<b>Как выглядит ответ:</b>
+` +
+      `#482 · UGC
+<b>Обзор косметики</b>
+Пост · Бартер
+Канал: Beauty Moscow
+
+` +
+      `#513 · UGC
+<b>Техника/гаджеты</b>
+Рилс · Оплата
+Канал: Tech Daily
+
+` +
+      `И ниже — кнопки <b>🔎 #id</b>, чтобы открыть витрину и написать.`,
+    { parse_mode: 'HTML', reply_markup: kb }
+  );
+}
+
+async function renderFeaturedExample(ctx, wsId, ret, bpr) {
+  const kb = new InlineKeyboard()
+    .text('⬅️ Назад', cbJoin('a:feat_home', { ws: wsId, ret, bpr }))
+    .row();
+
+  await safeEditOrReply(
+    ctx,
+    `👀 <b>Пример — Featured</b>
+
+` +
+      `Ты присылаешь контент, и твой блок появляется <b>сверху в ленте</b> у пользователей на время размещения.
+
+` +
+      `<b>Пример блока:</b>
+` +
+      `🔥 <b>Ищем UGC-креаторов для косметики</b>
+` +
+      `ТЗ: 15–30 сек, Москва/СПб. Бюджет/бартер, быстрое согласование.
+` +
+      `Контакт: <b>@brand_manager</b>`,
+    { parse_mode: 'HTML', reply_markup: kb }
+  );
+}
+
+async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
   const planRow = await db.getBrandPlan(userId);
   const hasPlan = isBrandPlanRowActive(planRow);
   const used = hasPlan ? await db.countIncludedMatchingThisMonth(userId) : 0;
@@ -11878,36 +11953,52 @@ async function renderMatchingHome(ctx, userId, wsId) {
   const tier = MATCH_TIERS.find(t => String(t.id) === String(BRAND_PLAN_INCLUDED_MATCH_TIER_ID)) || MATCH_TIERS[0];
 
   const kb = new InlineKeyboard();
-  if (hasPlan) {
-    kb.text(`✅ Включено: осталось ${left} в этом месяце`, `a:match_inc|ws:${wsId}`).row();
-  } else {
-    kb.text('⭐️ Brand Plan (включено 10 каналов/мес)', `a:brand_plan|ws:${wsId}`).row();
+  kb.text('👀 Пример результата', cbJoin('a:match_example', { ws: wsId, ret, bpr })).row();
+
+  if (hasPlan && left > 0) {
+    kb.text(`✅ Включено: осталось ${left} в этом месяце`, cbJoin('a:match_inc', { ws: wsId, ret, bpr })).row();
+  } else if (!hasPlan) {
+    kb.text('⭐️ Brand Plan (включено 10 каналов/мес)', cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
   }
+
   for (const t of MATCH_TIERS) {
-    kb.text(`🎯 ${t.title} · ${t.count} каналов · ${t.stars}⭐️`, `a:match_buy|ws:${wsId}|tier:${t.id}`).row();
+    kb.text(`🎯 ${t.title} · ${t.count} каналов · ${t.stars}⭐️`, cbJoin('a:match_buy', { ws: wsId, tier: t.id, ret, bpr })).row();
   }
-  kb.text('⬅️ Назад', wsId ? `a:bx_open|ws:${wsId}` : 'a:menu');
+  kb.text('⬅️ Назад', mfBackCb(wsId, ret, bpr));
 
   const includedLine = hasPlan
-    ? `✅ Включено в Brand Plan: <b>${tier.count}</b> каналов · <b>${limit}</b> раз/мес. Осталось: <b>${left}</b>.`
+    ? `✅ Включено в Brand Plan: <b>${tier.count}</b> каналов · <b>${limit}</b> раз/мес. Осталось: <b>${left}</b>${left <= 0 ? ' (лимит исчерпан)' : ''}.`
     : `⭐️ В Brand Plan включено: <b>${tier.count}</b> каналов · <b>${BRAND_PLAN_INCLUDED_MATCH_PER_MONTH}</b> раз/мес.`;
 
-  await safeEditOrReply(ctx, 
+  const cta = (hasPlan && left > 0)
+    ? 'Нажми «✅ Включено…» — затем пришли бриф одним сообщением (ниша, гео, аудитория, формат).'
+    : 'Чтобы запустить: купи Smart Matching за Stars (или включи Brand Plan) и пришли бриф одним сообщением.';
+
+  await safeEditOrReply(ctx,
     `🎯 <b>Smart Matching</b>
 
-${includedLine}
+` +
+      `<b>Что это:</b> подбор подходящих офферов/каналов по твоему брифу.
+` +
+      `<b>Что получишь:</b> список (до <b>${tier.count}</b>) с кнопками, чтобы открыть витрину и написать.
 
-<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+` +
+      `${includedLine}
 
-Сверх лимита можно докупить за Stars.
+` +
+      `<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+
+` +
+      `Сверх лимита можно докупить за Stars.
 <i>Покупки за Stars пока идут в очередь (ручная обработка).</i>
 
-Нажми «✅ Включено…» — и затем пришли бриф одним сообщением (ниша, гео, аудитория, формат).`,
+` +
+      `${cta}`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
 
-async function renderFeaturedHome(ctx, userId, wsId) {
+async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
   const planRow = await db.getBrandPlan(userId);
   const hasPlan = isBrandPlanRowActive(planRow);
   const used = hasPlan ? await db.countIncludedFeaturedThisMonth(userId) : 0;
@@ -11915,31 +12006,47 @@ async function renderFeaturedHome(ctx, userId, wsId) {
   const left = Math.max(0, limit - used);
 
   const kb = new InlineKeyboard();
-  if (hasPlan) {
-    kb.text(`✅ Включено: осталось ${left} в этом месяце`, `a:feat_inc|ws:${wsId}`).row();
-  } else {
-    kb.text('⭐️ Brand Plan (включено 7 дней/мес)', `a:brand_plan|ws:${wsId}`).row();
+  kb.text('👀 Пример', cbJoin('a:feat_example', { ws: wsId, ret, bpr })).row();
+
+  if (hasPlan && left > 0) {
+    kb.text(`✅ Включено: осталось ${left} в этом месяце`, cbJoin('a:feat_inc', { ws: wsId, ret, bpr })).row();
+  } else if (!hasPlan) {
+    kb.text('⭐️ Brand Plan (включено 7 дней/мес)', cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
   }
+
   for (const d of FEATURED_DURATIONS) {
-    kb.text(`🔥 ${d.title} · ${d.stars}⭐️`, `a:feat_buy|ws:${wsId}|dur:${d.id}`).row();
+    kb.text(`🔥 ${d.title} · ${d.stars}⭐️`, cbJoin('a:feat_buy', { ws: wsId, dur: d.id, ret, bpr })).row();
   }
-  kb.text('⬅️ Назад', wsId ? `a:bx_open|ws:${wsId}` : 'a:menu');
+  kb.text('⬅️ Назад', mfBackCb(wsId, ret, bpr));
 
   const includedLine = hasPlan
-    ? `✅ Включено в Brand Plan: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')} · <b>${limit}</b> раз/мес. Осталось: <b>${left}</b>.`
+    ? `✅ Включено в Brand Plan: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')} · <b>${limit}</b> раз/мес. Осталось: <b>${left}</b>${left <= 0 ? ' (лимит исчерпан)' : ''}.`
     : `⭐️ В Brand Plan включено: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')} · <b>${BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH}</b> раз/мес.`;
 
-  await safeEditOrReply(ctx, 
+  const cta = (hasPlan && left > 0)
+    ? 'Нажми «✅ Включено…» — затем пришли контент (заголовок/описание/контакт).'
+    : 'Чтобы запустить: купи Featured за Stars (или включи Brand Plan) и пришли контент (заголовок/описание/контакт).';
+
+  await safeEditOrReply(ctx,
     `🔥 <b>Featured</b>
 
-${includedLine}
+` +
+      `<b>Что это:</b> твой промо-блок появляется <b>сверху в ленте</b> у пользователей на время размещения.
+` +
+      `<b>Что получишь:</b> входящие отклики/контакты по твоему блоку.
 
-<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+` +
+      `${includedLine}
 
-Сверх лимита можно докупить за Stars.
+` +
+      `<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+
+` +
+      `Сверх лимита можно докупить за Stars.
 <i>Покупки за Stars пока идут в очередь (ручная обработка).</i>
 
-Нажми «✅ Включено…» — и затем пришли контент: 1 строка — заголовок, далее описание, последняя строка — контакт (@username / ссылка).`,
+` +
+      `${cta}`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
@@ -15035,10 +15142,10 @@ if (exp.type === 'brand_deals_search') {
 
       if (!rows.length) {
         const kb = new InlineKeyboard()
-          .text('🎯 Matching', `a:match_home|ws:${wsId}`)
+          .text('🎯 Matching', cbJoin('a:match_home', { ws: wsId, ret: String(exp.ret || ''), bpr: String(exp.bpr || '') }))
           .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
           .row()
-          .text('⬅️ Назад', wsId ? `a:bx_open|ws:${wsId}` : 'a:menu');
+          .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
         await ctx.reply(
           '😶 Не нашёл релевантных офферов по брифу. Попробуй упростить: ниша + гео + формат (например: "косметика, Москва, обзор").',
           { reply_markup: kb }
@@ -15058,9 +15165,9 @@ if (exp.type === 'brand_deals_search') {
         kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsId}|o:${o.id}|p:0|h:bo`).row();
       }
       kb.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
-        .text('🎯 Matching', `a:match_home|ws:${wsId}`)
+        .text('🎯 Matching', cbJoin('a:match_home', { ws: wsId, ret: String(exp.ret || ''), bpr: String(exp.bpr || '') }))
         .row()
-        .text('⬅️ Назад', wsId ? `a:bx_open|ws:${wsId}` : 'a:menu');
+        .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
 
       await ctx.reply(
         `🎯 <b>Smart Matching</b>\n\nБриф: <tg-spoiler>${escapeHtml(brief)}</tg-spoiler>\n\nНайдено: <b>${rows.length}</b>\nПоказаны: <b>${showN}</b>\n\n${lines.join('\n\n')}`,
@@ -15108,7 +15215,7 @@ if (exp.type === 'brand_deals_search') {
         .text('🔥 Посмотреть', `a:feat_view|ws:${wsId}|id:${f.id}|p:0`)
         .row()
         .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
-        .text('⬅️ Назад', wsId ? `a:bx_open|ws:${wsId}` : 'a:menu');
+        .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
 
       await ctx.reply(`✅ Featured активирован до <b>${escapeHtml(String(ends))}</b>.`, { parse_mode: 'HTML', reply_markup: kb });
       return;
@@ -20596,7 +20703,19 @@ ${link}`;
 
 if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
-      await renderMatchingHome(ctx, u.id, Number(p.ws || 0));
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || '');
+      const bpr = String(p.bpr || '');
+      await renderMatchingHome(ctx, u.id, wsId, ret, bpr);
+      return;
+    }
+
+    if (p.a === 'a:match_example') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || '');
+      const bpr = String(p.bpr || '');
+      await renderMatchingExample(ctx, wsId, ret, bpr);
       return;
     }
 
@@ -20607,7 +20726,7 @@ if (p.a === 'a:match_home') {
       const planRow = await db.getBrandPlan(u.id);
       if (!isBrandPlanRowActive(planRow)) {
         await ctx.answerCallbackQuery({ text: 'Нужен активный Brand Plan.', show_alert: true });
-        await renderMatchingHome(ctx, u.id, wsId);
+        await renderMatchingHome(ctx, u.id, wsId, String(p.ret || ''), String(p.bpr || ''));
         return;
       }
 
@@ -20616,18 +20735,18 @@ if (p.a === 'a:match_home') {
       const left = Math.max(0, limit - used);
       if (left <= 0) {
         await ctx.answerCallbackQuery({ text: 'Лимит на этот месяц исчерпан.', show_alert: true });
-        await renderMatchingHome(ctx, u.id, wsId);
+        await renderMatchingHome(ctx, u.id, wsId, String(p.ret || ''), String(p.bpr || ''));
         return;
       }
 
       const tier = MATCH_TIERS.find(t => String(t.id) === String(BRAND_PLAN_INCLUDED_MATCH_TIER_ID)) || MATCH_TIERS[0];
       const req = await db.createMatchingRequest(u.id, tier.id, 0);
-      await setExpectText(ctx.from.id, { type: 'match_brief', requestId: req.id, wsId, count: tier.count });
+      await setExpectText(ctx.from.id, { type: 'match_brief', requestId: req.id, wsId, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') });
 
       const kb = new InlineKeyboard()
-        .text('🎯 Smart Matching', `a:match_home|ws:${wsId}`)
+        .text('🎯 Smart Matching', cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
         .row()
-        .text('⬅️ Назад', wsId ? `a:bx_open|ws:${wsId}` : 'a:menu');
+        .text('⬅️ Назад', mfBackCb(wsId, String(p.ret || ''), String(p.bpr || '')));
 
       await safeEditOrReply(
         ctx,
@@ -20666,14 +20785,26 @@ if (p.a === 'a:match_home') {
         description: 'Подбор подходящих микро-каналов под твой бриф. После оплаты отправь бриф одним сообщением.',
         payload,
         amount: tier.stars,
-        backCb: `a:match_home|ws:${wsId}`,
+        backCb: cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }),
       });
       return;
     }
 
     if (p.a === 'a:feat_home') {
       await ctx.answerCallbackQuery();
-      await renderFeaturedHome(ctx, u.id, Number(p.ws || 0));
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || '');
+      const bpr = String(p.bpr || '');
+      await renderFeaturedHome(ctx, u.id, wsId, ret, bpr);
+      return;
+    }
+
+    if (p.a === 'a:feat_example') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || '');
+      const bpr = String(p.bpr || '');
+      await renderFeaturedExample(ctx, wsId, ret, bpr);
       return;
     }
 
@@ -20684,7 +20815,7 @@ if (p.a === 'a:match_home') {
       const planRow = await db.getBrandPlan(u.id);
       if (!isBrandPlanRowActive(planRow)) {
         await ctx.answerCallbackQuery({ text: 'Нужен активный Brand Plan.', show_alert: true });
-        await renderFeaturedHome(ctx, u.id, wsId);
+        await renderFeaturedHome(ctx, u.id, wsId, String(p.ret || ''), String(p.bpr || ''));
         return;
       }
 
@@ -20693,17 +20824,17 @@ if (p.a === 'a:match_home') {
       const left = Math.max(0, limit - used);
       if (left <= 0) {
         await ctx.answerCallbackQuery({ text: 'Лимит на этот месяц исчерпан.', show_alert: true });
-        await renderFeaturedHome(ctx, u.id, wsId);
+        await renderFeaturedHome(ctx, u.id, wsId, String(p.ret || ''), String(p.bpr || ''));
         return;
       }
 
       const f = await db.createFeaturedPlacement(u.id, BRAND_PLAN_INCLUDED_FEATURED_DAYS, 0);
-      await setExpectText(ctx.from.id, { type: 'feat_content', featuredId: f.id, wsId });
+      await setExpectText(ctx.from.id, { type: 'feat_content', featuredId: f.id, wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') });
 
       const kb = new InlineKeyboard()
-        .text('🔥 Featured', `a:feat_home|ws:${wsId}`)
+        .text('🔥 Featured', cbJoin('a:feat_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
         .row()
-        .text('⬅️ Назад', wsId ? `a:bx_open|ws:${wsId}` : 'a:menu');
+        .text('⬅️ Назад', mfBackCb(wsId, String(p.ret || ''), String(p.bpr || '')));
 
       await safeEditOrReply(
         ctx,
@@ -20745,7 +20876,7 @@ if (p.a === 'a:match_home') {
         description: 'Твой блок появится сверху в ленте у всех (бренд + блогеры). После оплаты отправь контент.',
         payload,
         amount: d.stars,
-        backCb: `a:feat_home|ws:${wsId}`,
+        backCb: cbJoin('a:feat_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }),
       });
       return;
     }
