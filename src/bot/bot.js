@@ -988,7 +988,6 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   kb.text(`⭐️ Brand Plan${planTag}`, 'a:brand_plan|ws:0')
     .row()
     .text(`🏷 Профиль бренда${profTag}`, 'a:brand_profile|ws:0|ret:brand')
-    .text(teamLocked ? '👔 Менеджеры бренда 🔒' : '👔 Менеджеры бренда', 'a:brand_team|ws:0')
     .row();
 
   if (canManager) {
@@ -1011,7 +1010,6 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
     .text('✨ Я Creator / канал', 'a:ui_mode_set|m:creator|ret:menu');
 
   const extra = [];
-  if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
   if (isCurator) extra.push(['🧹 Кураторы блогера', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
@@ -3372,9 +3370,10 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
     .text('📋 Меню', 'a:menu')
     .row();
 
-  if (ret === 'brand_team') {
-    kb.text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}`).row();
-  }
+  // Brand-mode shortcuts live inside Brand Profile (keep main menu clean)
+  kb.text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:profile`);
+  if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home');
+  kb.row();
 
   kb.text('⬅️ Назад', brandBackCb({ wsId, ret, backOfferId: bo, backPage: bp }));
 
@@ -5884,6 +5883,9 @@ async function renderProfileMatchingHome(ctx, ownerUserId, wsId) {
 
   const st = await pmGetState(ctx.from.id, wsId);
 
+  const wsNum = Number(wsId || 0);
+  const backCb = wsNum ? `a:bx_open|ws:${wsNum}` : 'a:menu';
+
   const text =
     `🔎 <b>Поиск креаторов</b>\n\n` +
     `Выбираешь ниши и форматы — бот показывает подходящие витрины.\n\n` +
@@ -5904,7 +5906,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     .text('🔎 Найти', `a:pm_run|ws:${wsId}|p:0`)
     .text('🗑 Сброс', `a:pm_reset|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+    .text('⬅️ Назад', backCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -5938,6 +5940,9 @@ async function renderProfileMatchingResults(ctx, ownerUserId, wsId, page = 0) {
   if (!(await pmAssertAccess(ctx, ownerUserId, wsId))) return;
 
   const st = await pmGetState(ctx.from.id, wsId);
+
+  const wsNum = Number(wsId || 0);
+  const backCb = wsNum ? `a:bx_open|ws:${wsNum}` : 'a:menu';
   const p = Math.max(0, Number(page || 0));
   const offset = p * PM_PAGE_SIZE;
 
@@ -5959,7 +5964,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     const kb = new InlineKeyboard()
       .text('⚙️ Изменить фильтры', `a:pm_home|ws:${wsId}`)
       .row()
-      .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+      .text('⬅️ Назад', backCb);
     return safeEditOrReply(ctx, 
       head + '😶 Ничего не нашёл по фильтрам.\n\nПопробуй упростить фильтр (меньше ниш/форматов).',
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
@@ -5992,7 +5997,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     kb.row();
   }
 
-  kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+    kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', backCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -19643,7 +19648,12 @@ if (p.a === 'a:ws_prof_mode') {
           await ctx.answerCallbackQuery();
           const wsId = Number(p.w || p.ws || 0);
           const ret = String(p.ret || 'menu');
-          const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
+          const backCb = (ret === 'bx')
+            ? `a:bx_open|ws:${wsId}`
+            : (ret === 'profile')
+              ? `a:brand_profile|ws:${wsId}|ret:brand`
+              : 'a:menu';
+          const linkRet = (ret === 'bx') ? 'brand_team_bx' : 'brand_team';
           const text = `👔 <b>Менеджеры бренда — как работает доступ</b>
 
 Кнопка «👔 Менеджеры бренда» <b>всегда видна</b>.
@@ -19660,8 +19670,8 @@ if (p.a === 'a:ws_prof_mode') {
 
           const kb = new InlineKeyboard()
             .text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:${ret}`).row()
-            .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`)
-            .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`)
+            .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${linkRet}`)
+            .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}|ret:${linkRet}`)
             .row()
             .text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
 
@@ -19674,7 +19684,11 @@ if (p.a === 'a:ws_prof_mode') {
 
       const wsId = Number(p.w || p.ws || 0);
       const ret = String(p.ret || 'menu');
-      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
+      const backCb = (ret === 'bx')
+        ? `a:bx_open|ws:${wsId}`
+        : (ret === 'profile')
+          ? `a:brand_profile|ws:${wsId}|ret:brand`
+          : 'a:menu';
 
       const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
       if (!gate) return;
