@@ -2596,7 +2596,7 @@ function brandTeamLockedKb(st, backCb = 'a:menu', wsId = 0, ret = 'menu') {
   if (profileIncomplete) {
     kb.text('🧩 Заполнить профиль бренда', `a:brand_profile_edit|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`).row();
   } else {
-    kb.text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand_team').row();
+    kb.text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`).row();
   }
 
   if (planInactive) {
@@ -2746,21 +2746,21 @@ ${planLine}
   return st;
 }
 
-function brandManagersListKb(managers) {
+function brandManagersListKb(managers, { wsId = 0, ret = 'menu' } = {}) {
   const kb = new InlineKeyboard();
   for (const m of managers) {
     const label = m.tg_username ? `@${m.tg_username}` : `id:${m.tg_id}`;
-    kb.text(`🗑 ${label}`, `a:bm_rm_q|ws:0|u:${m.user_id}`).row();
+    kb.text(`🗑 ${label}`, `a:bm_rm_q|ws:${wsId}|u:${m.user_id}|ret:${ret}`).row();
   }
-  kb.text('⬅️ Назад', 'a:brand_team|ws:0').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  kb.text('⬅️ Назад', `a:brand_team|ws:${wsId}|ret:${ret}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
-function brandManagerRemoveConfirmKb(managerUserId) {
+function brandManagerRemoveConfirmKb(managerUserId, { wsId = 0, ret = 'menu' } = {}) {
   return new InlineKeyboard()
-    .text('✅ Удалить', `a:bm_rm_ok|ws:0|u:${managerUserId}`)
+    .text('✅ Удалить', `a:bm_rm_ok|ws:${wsId}|u:${managerUserId}|ret:${ret}`)
     .row()
-    .text('⬅️ Отмена', 'a:bm_list|ws:0')
+    .text('⬅️ Отмена', `a:bm_list|ws:${wsId}|ret:${ret}`)
     .text('📋 Меню', 'a:menu');
 }
 
@@ -20088,14 +20088,17 @@ ${link}`;
 
       await safeEditOrReply(ctx, `👥 <b>Менеджеры бренда</b>\n\n${lines}\n\nНажми на кнопку, чтобы удалить менеджера.`, {
         parse_mode: 'HTML',
-        reply_markup: brandManagersListKb(managers),
+        reply_markup: brandManagersListKb(managers, { wsId, ret }),
       });
       return;
     }
 
     if (p.a === 'a:bm_rm_q') {
       await ctx.answerCallbackQuery();
-      const gate = await ensureBrandTeamUnlocked(ctx, u);
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || 'menu');
+      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
+      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
       if (!gate) return;
       const managerUserId = Number(p.u || 0);
       if (!managerUserId) return;
@@ -20105,14 +20108,17 @@ ${link}`;
 
       await safeEditOrReply(ctx, `Удалить менеджера <b>${escapeHtml(label)}</b> из команды бренда?`, {
         parse_mode: 'HTML',
-        reply_markup: brandManagerRemoveConfirmKb(managerUserId),
+        reply_markup: brandManagerRemoveConfirmKb(managerUserId, { wsId, ret }),
       });
       return;
     }
 
     if (p.a === 'a:bm_rm_ok') {
       await ctx.answerCallbackQuery();
-      const gate = await ensureBrandTeamUnlocked(ctx, u);
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || 'menu');
+      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
+      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
       if (!gate) return;
       const managerUserId = Number(p.u || 0);
       if (!managerUserId) return;
@@ -20169,7 +20175,7 @@ ${link}`;
       const note = notifyOk ? '\n\n📩 Менеджеру отправлено уведомление.' : '';
       await safeEditOrReply(ctx, `✅ Менеджер удалён.${note}\n\n👥 <b>Менеджеры бренда</b>\n\n${lines}`, {
         parse_mode: 'HTML',
-        reply_markup: brandManagersListKb(managers),
+        reply_markup: brandManagersListKb(managers, { wsId, ret }),
       });
       return;
     }
