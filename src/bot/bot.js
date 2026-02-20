@@ -11832,8 +11832,11 @@ ${brandPassBalanceLineHtml(credits)}
 <b>Про</b> · ${proPl.stars}⭐️/мес
 • ${proPl.credits} кредитов (интро)
 • CRM-стадии + менеджеры
-• Smart Match: ${CFG.BRAND_PLAN_PRO_MATCH} каналов/мес
-• Featured: ${CFG.BRAND_PLAN_PRO_FEATURED_DAYS} дней/мес
+
+<b>Доп. услуги (Stars)</b>
+• 🎯 Smart Matching — подбор каналов под бриф
+• 🔥 Featured — поднять блок в ленте
+<i>Сейчас после оплаты запрос попадает в очередь (ручная обработка).</i>
 
 Кредиты можно докупить отдельно.`,
     { parse_mode: 'HTML', reply_markup: kb }
@@ -20436,7 +20439,7 @@ ${link}`;
       const label = planDef.title;
       await sendStarsInvoice(ctx, {
         title: `Brand Plan · ${label} · ${CFG.BRAND_PLAN_DURATION_DAYS} дней`,
-        description: `Подписка ${label}: ${planDef.credits} кредитов + CRM + менеджеры${plan === 'pro' ? ' + Smart Match + Featured' : ''}.`,
+        description: `Подписка ${label}: ${planDef.credits} кредитов (интро) + CRM + менеджеры. Доп. услуги (Smart Matching / Featured) — отдельно.`,
         payload,
         amount: stars,
         backCb: `a:brand_plan|ws:${wsId}|ret:${ret}`,
