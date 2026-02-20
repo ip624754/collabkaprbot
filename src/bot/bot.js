@@ -2836,11 +2836,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:brand`);
 
 
-  if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
-
   if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
-
-  kb.row().text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:bx`);
 
   kbNavRow(kb, 'a:menu');
   return kb;
