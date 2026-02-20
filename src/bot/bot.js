@@ -112,6 +112,12 @@ const MATCH_TIERS = [
   { id: 'L', title: 'Match L', stars: CFG.MATCH_L_PRICE, count: CFG.MATCH_L_COUNT }
 ];
 
+// Brand Plan included quotas (calendar month)
+const BRAND_PLAN_INCLUDED_MATCH_PER_MONTH = 1;
+const BRAND_PLAN_INCLUDED_MATCH_TIER_ID = 'S';
+const BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH = 1;
+const BRAND_PLAN_INCLUDED_FEATURED_DAYS = 7;
+
 const FEATURED_DURATIONS = [
   { id: '1d', days: 1, title: '24ч', stars: CFG.FEATURED_1D_PRICE },
   { id: '7d', days: 7, title: '7 дней', stars: CFG.FEATURED_7D_PRICE },
@@ -142,14 +148,6 @@ function fmtWait(sec) {
   if (s < 60) return `${Math.ceil(s)} сек.`;
   if (s < 3600) return `${Math.ceil(s / 60)} мин.`;
   return `${Math.ceil(s / 3600)} ч.`;
-}
-
-// Brand Team / Manager: unified microcopy for restrictions (UX V5)
-function brandManagerLimitsHtml() {
-  return `🔒 <b>Менеджер не видит:</b>
-• профиль бренда
-• оплаты / подписку
-• управление командой`;
 }
 
 // Small numeric helper (used in callback parsing)
@@ -369,7 +367,8 @@ function formatGwWinnersOwner(winners, { oneLineMax = GW_WINNERS_ONE_LINE_MAX, m
 // Runtime toggles (stored in Redis, editable from Admin)
 const SYS_KEYS = {
   pay_accept: k(['sys', 'pay_accept']),
-  pay_auto_apply: k(['sys', 'pay_auto_apply'])
+  pay_auto_apply: k(['sys', 'pay_auto_apply']),
+  matchfeat_auto_apply: k(['sys', 'matchfeat_auto_apply'])
 };
 
 
@@ -422,6 +421,12 @@ async function getPaymentsRuntimeFlags() {
   const autoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
   return { accept, autoApply };
 }
+
+async function getMatchFeatAutoApplyRuntime() {
+  // Match/Feat auto-apply kill-switch (Redis). Default: ON.
+  return await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
+}
+
 
 // Backward-compatible alias (some flows call getPaymentMode)
 async function getPaymentMode() {
@@ -980,7 +985,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   .text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm')
   .text('🎛 Фильтры креаторов', 'a:bx_filters|ws:0|p:0|h:mm|r:mm')
   .row()
-  .text('🎯 Smart-подбор', 'a:bx_smart|ws:0|h:mm')
+  .text('🎯 Подбор в ленте', 'a:bx_smart|ws:0|h:mm')
   .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
   .row()
   .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
@@ -996,7 +1001,6 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   kb.text(`⭐️ Brand Plan${planTag}`, 'a:brand_plan|ws:0')
     .row()
     .text(`🏷 Профиль бренда${profTag}`, 'a:brand_profile|ws:0|ret:brand')
-    .text(teamLocked ? '👔 Менеджеры бренда 🔒' : '👔 Менеджеры бренда', 'a:brand_team|ws:0')
     .row();
 
   if (canManager) {
@@ -1019,7 +1023,6 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
     .text('✨ Я Creator / канал', 'a:ui_mode_set|m:creator|ret:menu');
 
   const extra = [];
-  if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
   if (isCurator) extra.push(['🧹 Кураторы блогера', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
@@ -2579,9 +2582,7 @@ function brandTeamKb({ wsId = 0, ret = 'menu', backCb = 'a:menu' } = {}) {
     .row()
     .text('👥 Список менеджеров', `a:bm_list|ws:${wsId}|ret:${ret}`)
     .row()
-    .text('⬅️ Назад', backCb)
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Home', 'a:home');
+    .text('⬅️ Назад', backCb);
 }
 
 
@@ -2595,7 +2596,7 @@ function brandTeamLockedKb(st, backCb = 'a:menu', wsId = 0, ret = 'menu') {
   if (profileIncomplete) {
     kb.text('🧩 Заполнить профиль бренда', `a:brand_profile_edit|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`).row();
   } else {
-    kb.text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`).row();
+    kb.text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:brand_team').row();
   }
 
   if (planInactive) {
@@ -2606,7 +2607,7 @@ function brandTeamLockedKb(st, backCb = 'a:menu', wsId = 0, ret = 'menu') {
     .text('🔄 Проверить снова', `a:brand_team|ws:${wsId}|ret:${ret}`)
     .text('ℹ️ Почему так?', `a:brand_team_help|ws:${wsId}|ret:${ret}`);
 
-  kb.row().text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  kb.row().text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -2725,10 +2726,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true, backCb = 'a:menu',
     const text = `👔 <b>Менеджеры бренда</b>
 
 ` +
-      `Кнопка видна всем — так проще найти раздел и понять, где управляется команда.
-
-` +
-      `Чтобы открыть доступ, нужно:
+      `<i>Кнопка всегда видна.</i> Доступ откроется, когда выполнены условия:
 
 ` +
       `${profileLine}
@@ -2737,7 +2735,7 @@ ${planLine}
 ` +
       `Нажми кнопку ниже — я открою нужный экран.
 
-<i>Готово? Жми «🔄 Проверить снова» или просто открой «👔 Менеджеры бренда» ещё раз.</i>`;
+<i>После оплаты или заполнения профиля вернись сюда и нажми «🔄 Проверить снова» — или просто открой «👔 Менеджеры бренда» ещё раз.</i>`;
 
     const kb = brandTeamLockedKb(st, backCb, wsId, ret);
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -2748,25 +2746,22 @@ ${planLine}
   return st;
 }
 
-function brandManagersListKb(managers, { wsId = 0, ret = 'menu' } = {}) {
+function brandManagersListKb(managers) {
   const kb = new InlineKeyboard();
   for (const m of managers) {
     const label = m.tg_username ? `@${m.tg_username}` : `id:${m.tg_id}`;
-    kb.text(`🗑 ${label}`, `a:bm_rm_q|ws:${wsId}|u:${m.user_id}|ret:${ret}`).row();
+    kb.text(`🗑 ${label}`, `a:bm_rm_q|ws:0|u:${m.user_id}`).row();
   }
-  kb.text('⬅️ Назад', `a:brand_team|ws:${wsId}|ret:${ret}`)
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Home', 'a:home');
+  kb.text('⬅️ Назад', 'a:brand_team|ws:0').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
-function brandManagerRemoveConfirmKb(managerUserId, { wsId = 0, ret = 'menu' } = {}) {
+function brandManagerRemoveConfirmKb(managerUserId) {
   return new InlineKeyboard()
-    .text('✅ Удалить', `a:bm_rm_ok|ws:${wsId}|u:${managerUserId}|ret:${ret}`)
+    .text('✅ Удалить', `a:bm_rm_ok|ws:0|u:${managerUserId}`)
     .row()
-    .text('⬅️ Отмена', `a:bm_list|ws:${wsId}|ret:${ret}`)
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Home', 'a:home');
+    .text('⬅️ Отмена', 'a:bm_list|ws:0')
+    .text('📋 Меню', 'a:menu');
 }
 
 function netConfirmKb(wsId, enabled, ret) {
@@ -2841,7 +2836,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
 .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0|h:bo|r:bo`)
 .row()
-.text('🎯 Smart-подбор', `a:bx_smart|ws:${wsId}|h:bo`)
+.text('🎯 Подбор в ленте', `a:bx_smart|ws:${wsId}|h:bo`)
 .text('🔎 Поиск креаторов', `a:pm_home|ws:${wsId}`)
 .row()
 .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
@@ -2854,11 +2849,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:brand`);
 
 
-  if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
-
   if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
-
-  kb.row().text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:bx`);
 
   kbNavRow(kb, 'a:menu');
   return kb;
@@ -3388,9 +3379,10 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
     .text('📋 Меню', 'a:menu')
     .row();
 
-  if (ret === 'brand_team') {
-    kb.text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}`).row();
-  }
+  // Brand-mode shortcuts live inside Brand Profile (keep main menu clean)
+  kb.text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:profile`);
+  if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home');
+  kb.row();
 
   kb.text('⬅️ Назад', brandBackCb({ wsId, ret, backOfferId: bo, backPage: bp }));
 
@@ -5591,13 +5583,22 @@ function renderParticipantScreen(g, entry, opts = {}) {
 }
 
 
-async function ensureWorkspaceForOwner(ctx, ownerUserId) {
+async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
   const wsList = await db.listWorkspaces(ownerUserId);
   if (!wsList.length) {
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     try { await clearExpectText(ctx.from.id); } catch {}
-    const flags = await getRoleFlags(u, ctx.from.id);
-    await ctx.reply('Сначала подключи канал: нажми “🚀 Подключить канал”.', { reply_markup: mainMenuKb(flags) });
+
+    const minimal = !!opts?.minimal;
+    const backCb = String(opts?.backCb || 'a:home');
+
+    const kb = minimal
+      ? new InlineKeyboard()
+          .text('🚀 Подключить канал', 'a:setup').row()
+          .text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu')
+      : mainMenuKb(await getRoleFlags(u, ctx.from.id));
+
+    await ctx.reply('Сначала подключи канал: нажми “🚀 Подключить канал”.', { reply_markup: kb });
     return null;
   }
   const active = await getActiveWorkspace(ctx.from.id);
@@ -5891,6 +5892,9 @@ async function renderProfileMatchingHome(ctx, ownerUserId, wsId) {
 
   const st = await pmGetState(ctx.from.id, wsId);
 
+  const wsNum = Number(wsId || 0);
+  const backCb = wsNum ? `a:bx_open|ws:${wsNum}` : 'a:menu';
+
   const text =
     `🔎 <b>Поиск креаторов</b>\n\n` +
     `Выбираешь ниши и форматы — бот показывает подходящие витрины.\n\n` +
@@ -5911,7 +5915,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     .text('🔎 Найти', `a:pm_run|ws:${wsId}|p:0`)
     .text('🗑 Сброс', `a:pm_reset|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+    .text('⬅️ Назад', backCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -5945,6 +5949,9 @@ async function renderProfileMatchingResults(ctx, ownerUserId, wsId, page = 0) {
   if (!(await pmAssertAccess(ctx, ownerUserId, wsId))) return;
 
   const st = await pmGetState(ctx.from.id, wsId);
+
+  const wsNum = Number(wsId || 0);
+  const backCb = wsNum ? `a:bx_open|ws:${wsNum}` : 'a:menu';
   const p = Math.max(0, Number(page || 0));
   const offset = p * PM_PAGE_SIZE;
 
@@ -5966,7 +5973,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     const kb = new InlineKeyboard()
       .text('⚙️ Изменить фильтры', `a:pm_home|ws:${wsId}`)
       .row()
-      .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+      .text('⬅️ Назад', backCb);
     return safeEditOrReply(ctx, 
       head + '😶 Ничего не нашёл по фильтрам.\n\nПопробуй упростить фильтр (меньше ниш/форматов).',
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
@@ -5999,7 +6006,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     kb.row();
   }
 
-  kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+    kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', backCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -6618,6 +6625,8 @@ function wsProfileKb(wsId, ws) {
     .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu')
     .row()
     .text('🏠 Home', 'a:home');
+
+  if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
   return kb;
 }
@@ -7379,8 +7388,17 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const modeLine = PROFILE_MODE_LABELS[mode] || PROFILE_MODE_LABELS.both;
   const prog = isOwner ? calcWsProfileProgress(ws) : null;
 
+  const isPro = (() => {
+    const plan = String(ws.plan || 'free');
+    if (plan !== 'pro') return false;
+    const until = ws.pro_until;
+    if (!until) return true;
+    return new Date(until).getTime() > Date.now();
+  })();
+
   const blocks = [];
-  blocks.push(`✨ <b>${escapeHtml(name)}</b>`);
+  const badge = isPro ? ' ⭐️ <b>PRO</b>' : '';
+  blocks.push(`✨ <b>${escapeHtml(name)}</b>${badge}`);
   blocks.push('');
   if (isPreview) {
     blocks.push(`👁 <b>Предпросмотр</b>: так бренды видят твою витрину.`);
@@ -10180,7 +10198,7 @@ function bxSmartPrefillText(next, info, totalAll, totalFiltered) {
 💡 Сейчас <b>0</b> результатов. Попробуй «🎛 Фильтры креаторов» или «♻️ Сбросить» (всё).`
     : '';
 
-  return `🎯 <b>Smart-подбор</b>
+  return `🎯 <b>Подбор в ленте</b>
 
 Я выставил безопасные фильтры для ленты:
 ${typeLine}
@@ -11446,7 +11464,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
   let isVerified = false;
   if (CFG.VERIFICATION_ENABLED) {
     const v = await safeUserVerifications(() => db.getUserVerification(userId), async () => null);
-    isVerified = String(v?.status || '').toUpperCase() === 'APPROVED';
+    isVerified = String(v?.status || '').toUpperCase() === 'APPROVED' && String(v?.kind || '').toLowerCase() === 'brand';
   }
   const dailyLimit = Math.max(0, Number(isVerified ? CFG.INTRO_DAILY_LIMIT : CFG.INTRO_DAILY_LIMIT_UNVERIFIED));
 
@@ -11486,6 +11504,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
     ? `
 
 ✅ Пройди <b>верификацию</b>, чтобы увеличить лимит до <b>${verifiedLimit}</b> интро (новых диалогов)/день.
+<i>Оплата интро всё равно идёт кредитами — верификация не отменяет списания.</i>
 `
     : '';
 
@@ -11496,6 +11515,9 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 <b>Как работает:</b>
 • 💬 Интро = новый диалог: <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}
 • Переписка внутри открытого диалога — бесплатна
+• Лимит считается только на <b>новые</b> диалоги (ответы без ограничений)
+
+<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')} (на одну витрину).
 👥 Раздел «Менеджеры бренда» открывается после покупки Brand Plan.
@@ -11513,7 +11535,7 @@ ${brandPassBalanceLineHtml(credits)}
     const intros = Math.max(1, Math.floor(Number(p.credits || 0) / Math.max(1, cost)));
     kb.text(`⭐ ${p.title} · ≈ ${intros} ${ruPlural(intros,'интро-диалог','интро-диалога','интро-диалогов')}`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
   }
-  kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching', `a:match_home|ws:${wsId}`).row();
+  kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching (подбор офферов)', `a:match_home|ws:${wsId}`).row();
   kbNavRow(kb, `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -11762,6 +11784,14 @@ function brandPlanStatusText(planRow, active) {
   return until ? `${label} (до ${until})` : label;
 }
 
+function isBrandPlanRowActive(planRow) {
+  const plan = String(planRow?.brand_plan || '').toLowerCase();
+  if (!plan || plan === 'none') return false;
+  const until = planRow?.brand_plan_until;
+  if (!until) return true;
+  return new Date(until).getTime() > Date.now();
+}
+
 async function renderBrandPassTopup(ctx, userId, wsId) {
   const credits = await db.getBrandCredits(userId);
   const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(userId) : 0;
@@ -11798,6 +11828,7 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
   const active = await db.isBrandPlanActive(userId);
   const credits = await db.getBrandCredits(userId);
   const status = brandPlanStatusText(planRow, active);
+  const paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
 
   const startPl = BRAND_PLANS.find(p => p.id === 'start');
   const proPl = BRAND_PLANS.find(p => p.id === 'pro');
@@ -11809,6 +11840,9 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
     .row()
     .text('💳 Докупить кредиты', `a:brand_pass|ws:${wsId}`)
     .row()
+    .text('🎯 Smart Matching (подбор офферов)', `a:match_home|ws:${wsId}|ret:bp|bpr:${ret}`)
+    .text('🔥 Featured', `a:feat_home|ws:${wsId}|ret:bp|bpr:${ret}`)
+    .row()
     .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
   await safeEditOrReply(ctx, 
@@ -11816,6 +11850,7 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
 
 Статус: <b>${escapeHtml(status)}</b>
 ${brandPassBalanceLineHtml(credits)}
+<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 <b>Старт</b> · ${startPl.stars}⭐️/мес
 • ${startPl.credits} кредитов (интро)
@@ -11825,44 +11860,207 @@ ${brandPassBalanceLineHtml(credits)}
 <b>Про</b> · ${proPl.stars}⭐️/мес
 • ${proPl.credits} кредитов (интро)
 • CRM-стадии + менеджеры
-• Smart Match: ${CFG.BRAND_PLAN_PRO_MATCH} каналов/мес
-• Featured: ${CFG.BRAND_PLAN_PRO_FEATURED_DAYS} дней/мес
+
+<b>Включено в подписку</b>
+<i>Открывай 🎯 Smart Matching (подбор офферов) / 🔥 Featured ниже — там покажет остаток включённых запусков.</i>
+
+• 🎯 Smart Matching (подбор офферов): <b>${BRAND_PLAN_INCLUDED_MATCH_TIER_ID}</b> (≈ ${MATCH_TIERS.find(t=>t.id===BRAND_PLAN_INCLUDED_MATCH_TIER_ID)?.count || 10} каналов) · <b>${BRAND_PLAN_INCLUDED_MATCH_PER_MONTH}</b> раз/мес
+• 🔥 Featured: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')} · <b>${BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH}</b> раз/мес
+
+<b>Сверх лимита</b>
+• 🎯 Smart Matching (подбор офферов) / 🔥 Featured можно докупить за Stars
+${paidAuto ? '<i>После оплаты я сразу попрошу бриф/контент.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 Кредиты можно докупить отдельно.`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
 
-async function renderMatchingHome(ctx, wsId) {
-  const kb = new InlineKeyboard();
-  for (const t of MATCH_TIERS) {
-    kb.text(`🎯 ${t.title} · ${t.count} каналов · ${t.stars}⭐️`, `a:match_buy|ws:${wsId}|tier:${t.id}`).row();
+
+function cbJoin(base, params = {}) {
+  let s = base;
+  for (const [k, v] of Object.entries(params || {})) {
+    if (v === undefined || v === null || v === '') continue;
+    s += `|${k}:${v}`;
   }
-  kb.text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+  return s;
+}
 
-  await safeEditOrReply(ctx, 
-    `🎯 <b>Smart Matching</b>
+function mfBackCb(wsId, ret, bpr) {
+  const r = String(ret || '');
+  if (r === 'bp') {
+    const bpRet = String(bpr || 'brand');
+    return cbJoin('a:brand_plan', { ws: wsId, ret: bpRet });
+  }
+  return wsId ? `a:bx_open|ws:${wsId}` : 'a:menu';
+}
 
-Платишь Stars за экономию времени: бот подберёт релевантные микро-каналы под твой бриф.
+async function renderMatchingExample(ctx, wsId, ret, bpr) {
+  const kb = new InlineKeyboard()
+    .text('⬅️ Назад', cbJoin('a:match_home', { ws: wsId, ret, bpr }))
+    .row();
 
-После оплаты отправь бриф текстом (ниша, гео, аудитория, формат).`,
+  await safeEditOrReply(
+    ctx,
+    `👀 <b>Пример результата — Smart Matching (подбор офферов)</b>
+
+` +
+      `Ты присылаешь бриф (ниша, гео, аудитория, формат) — бот подбирает релевантные офферы/каналы из сети и даёт список с кнопками.
+
+` +
+      `<b>Как выглядит ответ:</b>
+` +
+      `#482 · UGC
+<b>Обзор косметики</b>
+Пост · Бартер
+Канал: Beauty Moscow
+
+` +
+      `#513 · UGC
+<b>Техника/гаджеты</b>
+Рилс · Оплата
+Канал: Tech Daily
+
+` +
+      `И ниже — кнопки <b>🔎 #id</b>, чтобы открыть витрину и написать.`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
 
-async function renderFeaturedHome(ctx, userId, wsId) {
-  const kb = new InlineKeyboard();
-  for (const d of FEATURED_DURATIONS) {
-    kb.text(`🔥 ${d.title} · ${d.stars}⭐️`, `a:feat_buy|ws:${wsId}|dur:${d.id}`).row();
-  }
-  kb.text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+async function renderFeaturedExample(ctx, wsId, ret, bpr) {
+  const kb = new InlineKeyboard()
+    .text('⬅️ Назад', cbJoin('a:feat_home', { ws: wsId, ret, bpr }))
+    .row();
 
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(
+    ctx,
+    `👀 <b>Пример — Featured</b>
+
+` +
+      `Ты присылаешь контент, и твой блок появляется <b>сверху в ленте</b> у пользователей на время размещения.
+
+` +
+      `<b>Пример блока:</b>
+` +
+      `🔥 <b>Ищем UGC-креаторов для косметики</b>
+` +
+      `ТЗ: 15–30 сек, Москва/СПб. Бюджет/бартер, быстрое согласование.
+` +
+      `Контакт: <b>@brand_manager</b>`,
+    { parse_mode: 'HTML', reply_markup: kb }
+  );
+}
+
+async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
+  const planRow = await db.getBrandPlan(userId);
+  const hasPlan = isBrandPlanRowActive(planRow);
+  const used = hasPlan ? await db.countIncludedMatchingThisMonth(userId) : 0;
+  const limit = hasPlan ? BRAND_PLAN_INCLUDED_MATCH_PER_MONTH : 0;
+  const left = Math.max(0, limit - used);
+  const paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+
+  const tier = MATCH_TIERS.find(t => String(t.id) === String(BRAND_PLAN_INCLUDED_MATCH_TIER_ID)) || MATCH_TIERS[0];
+
+  const kb = new InlineKeyboard();
+  kb.text('👀 Пример результата', cbJoin('a:match_example', { ws: wsId, ret, bpr })).row();
+
+  if (hasPlan && left > 0) {
+    kb.text(`✅ Включено: осталось ${left} в этом месяце`, cbJoin('a:match_inc', { ws: wsId, ret, bpr })).row();
+  } else if (!hasPlan) {
+    kb.text('⭐️ Brand Plan (включено 10 каналов/мес)', cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
+  }
+
+  for (const t of MATCH_TIERS) {
+    kb.text(`🎯 ${t.title} · ${t.count} каналов · ${t.stars}⭐️`, cbJoin('a:match_buy', { ws: wsId, tier: t.id, ret, bpr })).row();
+  }
+  kb.text('⬅️ Назад', mfBackCb(wsId, ret, bpr));
+
+  const includedLine = hasPlan
+    ? `✅ Включено в Brand Plan: <b>${tier.count}</b> каналов · <b>${limit}</b> раз/мес. Осталось: <b>${left}</b>${left <= 0 ? ' (лимит исчерпан)' : ''}.`
+    : `⭐️ В Brand Plan включено: <b>${tier.count}</b> каналов · <b>${BRAND_PLAN_INCLUDED_MATCH_PER_MONTH}</b> раз/мес.`;
+
+  const cta = (hasPlan && left > 0)
+    ? 'Нажми «✅ Включено…» — затем пришли бриф одним сообщением (ниша, гео, аудитория, формат).'
+    : 'Чтобы запустить: купи Smart Matching за Stars (или включи Brand Plan) и пришли бриф одним сообщением.';
+
+  await safeEditOrReply(ctx,
+    `🎯 <b>Smart Matching (подбор офферов)</b>
+
+` +
+      `<b>Что это:</b> подбор подходящих офферов/каналов по твоему брифу.
+` +
+      `<b>Что получишь:</b> список (до <b>${tier.count}</b>) с кнопками, чтобы открыть витрину и написать.
+
+` +
+      `${includedLine}
+
+` +
+      `<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+
+<i>Не путать с «🎯 Подбор в ленте» — это отдельный фильтр.</i>
+
+` +
+      `Сверх лимита можно докупить за Stars.
+${paidAuto ? '<i>После оплаты я сразу попрошу бриф/контент.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
+
+` +
+      `${cta}`,
+    { parse_mode: 'HTML', reply_markup: kb }
+  );
+}
+
+async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
+  const planRow = await db.getBrandPlan(userId);
+  const hasPlan = isBrandPlanRowActive(planRow);
+  const used = hasPlan ? await db.countIncludedFeaturedThisMonth(userId) : 0;
+  const limit = hasPlan ? BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH : 0;
+  const left = Math.max(0, limit - used);
+  const paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+
+  const kb = new InlineKeyboard();
+  kb.text('👀 Пример', cbJoin('a:feat_example', { ws: wsId, ret, bpr })).row();
+
+  if (hasPlan && left > 0) {
+    kb.text(`✅ Включено: осталось ${left} в этом месяце`, cbJoin('a:feat_inc', { ws: wsId, ret, bpr })).row();
+  } else if (!hasPlan) {
+    kb.text('⭐️ Brand Plan (включено 7 дней/мес)', cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
+  }
+
+  for (const d of FEATURED_DURATIONS) {
+    kb.text(`🔥 ${d.title} · ${d.stars}⭐️`, cbJoin('a:feat_buy', { ws: wsId, dur: d.id, ret, bpr })).row();
+  }
+  kb.text('⬅️ Назад', mfBackCb(wsId, ret, bpr));
+
+  const includedLine = hasPlan
+    ? `✅ Включено в Brand Plan: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')} · <b>${limit}</b> раз/мес. Осталось: <b>${left}</b>${left <= 0 ? ' (лимит исчерпан)' : ''}.`
+    : `⭐️ В Brand Plan включено: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')} · <b>${BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH}</b> раз/мес.`;
+
+  const cta = (hasPlan && left > 0)
+    ? 'Нажми «✅ Включено…» — затем пришли контент (заголовок/описание/контакт).'
+    : 'Чтобы запустить: купи Featured за Stars (или включи Brand Plan) и пришли контент (заголовок/описание/контакт).';
+
+  await safeEditOrReply(ctx,
     `🔥 <b>Featured</b>
 
-Подними внимание: твой блок появится сверху в ленте у всех (бренд + блогеры).
+` +
+      `<b>Что это:</b> твой промо-блок появляется <b>сверху в ленте</b> у пользователей на время размещения.
+` +
+      `<b>Что получишь:</b> входящие отклики/контакты по твоему блоку.
 
-После оплаты отправь контент: 1 строка — заголовок, далее описание, последняя строка — контакт (@username / ссылка).`,
+` +
+      `${includedLine}
+
+` +
+      `<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+
+<i>Не путать с «🎯 Подбор в ленте» — это отдельный фильтр.</i>
+
+` +
+      `Сверх лимита можно докупить за Stars.
+${paidAuto ? '<i>После оплаты я сразу попрошу бриф/контент.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
+
+` +
+      `${cta}`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
@@ -14947,7 +15145,7 @@ if (exp.type === 'brand_deals_search') {
 
       const req = await db.getMatchingRequest(reqId, u.id);
       if (!req) {
-        await ctx.reply('Запрос matching не найден (возможно, устарел). Открой 🎯 Smart Matching и попробуй ещё раз.');
+        await ctx.reply('Запрос matching не найден (возможно, устарел). Открой 🎯 Smart Matching (подбор офферов) и попробуй ещё раз.');
         return;
       }
 
@@ -14958,10 +15156,10 @@ if (exp.type === 'brand_deals_search') {
 
       if (!rows.length) {
         const kb = new InlineKeyboard()
-          .text('🎯 Matching', `a:match_home|ws:${wsId}`)
+          .text('🎯 Matching', cbJoin('a:match_home', { ws: wsId, ret: String(exp.ret || ''), bpr: String(exp.bpr || '') }))
           .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
           .row()
-          .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+          .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
         await ctx.reply(
           '😶 Не нашёл релевантных офферов по брифу. Попробуй упростить: ниша + гео + формат (например: "косметика, Москва, обзор").',
           { reply_markup: kb }
@@ -14981,12 +15179,12 @@ if (exp.type === 'brand_deals_search') {
         kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsId}|o:${o.id}|p:0|h:bo`).row();
       }
       kb.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
-        .text('🎯 Matching', `a:match_home|ws:${wsId}`)
+        .text('🎯 Matching', cbJoin('a:match_home', { ws: wsId, ret: String(exp.ret || ''), bpr: String(exp.bpr || '') }))
         .row()
-        .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+        .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
 
       await ctx.reply(
-        `🎯 <b>Smart Matching</b>\n\nБриф: <tg-spoiler>${escapeHtml(brief)}</tg-spoiler>\n\nНайдено: <b>${rows.length}</b>\nПоказаны: <b>${showN}</b>\n\n${lines.join('\n\n')}`,
+        `🎯 <b>Smart Matching (подбор офферов)</b>\n\nБриф: <tg-spoiler>${escapeHtml(brief)}</tg-spoiler>\n\nНайдено: <b>${rows.length}</b>\nПоказаны: <b>${showN}</b>\n\n${lines.join('\n\n')}`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
       return;
@@ -15031,7 +15229,7 @@ if (exp.type === 'brand_deals_search') {
         .text('🔥 Посмотреть', `a:feat_view|ws:${wsId}|id:${f.id}|p:0`)
         .row()
         .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
-        .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
+        .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
 
       await ctx.reply(`✅ Featured активирован до <b>${escapeHtml(String(ends))}</b>.`, { parse_mode: 'HTML', reply_markup: kb });
       return;
@@ -15295,10 +15493,34 @@ ${msgText}
 // Verification request submit
     if (exp.type === 'verify_submit') {
       if (!CFG.VERIFICATION_ENABLED) {
+        await clearExpectText(ctx.from.id);
         await ctx.reply('Верификация сейчас отключена.');
         return;
       }
-      const kind = String(exp.kind || 'creator');
+      const uiMode = await getUiMode(ctx.from.id);
+      const modeKind = (uiMode === UI_MODES.BRAND) ? 'brand' : 'creator';
+      const kind = String(exp.kind || modeKind);
+      if (kind !== modeKind) {
+        await clearExpectText(ctx.from.id);
+        await ctx.reply('⚠️ Ты переключил(а) режим. Открой «✅ Верификация» и подай заявку заново в текущем режиме.', { reply_markup: navKb('a:verify_home') });
+        return;
+      }
+
+      // Strict rule: one verification record per user. Do not allow submitting in a different mode.
+      const existing = await safeUserVerifications(() => db.getUserVerification(u.id), async () => null);
+      const exKind = String(existing?.kind || '').toLowerCase();
+      if (existing && exKind && exKind !== kind) {
+        await clearExpectText(ctx.from.id);
+        const have = exKind === 'brand' ? '🏷 Brand' : '✨ Creator';
+        const want = kind === 'brand' ? '🏷 Brand' : '✨ Creator';
+        const switchCb = exKind === 'brand' ? 'a:onb_brand' : 'a:onb_creator';
+        await ctx.reply(
+          `✅ <b>Верификация</b>\n\nУ тебя уже есть заявка/статус в другом режиме: <b>${escapeHtml(have)}</b>.\n\nСейчас открыт режим: <b>${escapeHtml(want)}</b>.\n\nВ системе хранится <b>одна</b> верификация на пользователя. Переключись в нужный режим.`,
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('🔁 Переключить режим', switchCb).row().text('📋 Меню', 'a:menu') }
+        );
+        return;
+      }
+
       const submittedText = String(ctx.message.text || '').trim();
       if (submittedText.length < 20) {
         await ctx.reply('Слишком коротко. Напиши чуть подробнее (минимум 20 символов).');
@@ -15306,6 +15528,20 @@ ${msgText}
         return;
       }
       const trimmed = submittedText.length > 1800 ? submittedText.slice(0, 1800) : submittedText;
+
+      // Anti-spam: throttle submits (Redis-only, no DB). Prevents flooding mods & Neon writes.
+      const cdKey = k(['rl', 'verify_submit', u.id]);
+      let cdOk = true;
+      try {
+        cdOk = !!(await redis.set(cdKey, String(Date.now()), { nx: true, ex: 6 * 3600 }));
+      } catch {
+        cdOk = true;
+      }
+      if (!cdOk) {
+        await clearExpectText(ctx.from.id);
+        await ctx.reply('⏳ Заявка уже отправлялась недавно. Подожди несколько часов и попробуй снова.', { reply_markup: navKb('a:verify_home') });
+        return;
+      }
 
       await safeUserVerifications(() => db.upsertVerificationRequest(u.id, { kind, submittedText: trimmed }), async () => null);
 
@@ -15338,6 +15574,7 @@ ${escapeHtml(trimmed)}`;
         try { await ctx.api.sendMessage(tgId, msg, { parse_mode: 'HTML', reply_markup: kb }); } catch {}
       }
 
+      await clearExpectText(ctx.from.id);
       await ctx.reply('✅ Заявка отправлена. Обычно проверка занимает время — ты получишь ответ в этом чате.');
       return;
     }
@@ -15973,7 +16210,10 @@ ${list}
 • 📩 Inbox
 • 🔎 Поиск креаторов
 
-${brandManagerLimitsHtml()}`,
+Ограничения:
+• нельзя менять профиль бренда
+• нельзя управлять оплатами/подпиской
+• нельзя управлять командой`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
       return;
@@ -16330,8 +16570,12 @@ bot.on('message:successful_payment', async (ctx) => {
 
   db.trackEvent('payment_success', { userId: u.id, meta: { kind, payload: invoicePayload, amount: sp.total_amount, currency: sp.currency || 'XTR' } });
 
+  const tgChargeId = String(sp.telegram_payment_charge_id || '');
+
   // 1) Old ledger: protects from Telegram retries/duplicates
-  const starsLedger = await db.recordStarsPayment({
+  // NOTE: do NOT early-return on duplicates — we still want to ensure the canonical payments
+  // ledger has the record and fulfillment can be retried safely.
+  await db.recordStarsPayment({
     userId: u.id,
     kind,
     invoicePayload,
@@ -16341,10 +16585,6 @@ bot.on('message:successful_payment', async (ctx) => {
     providerPaymentChargeId: sp.provider_payment_charge_id,
     raw: sp
   });
-  if (starsLedger && starsLedger.inserted === false) {
-    await ctx.reply('✅ Платеж уже обработан.');
-    return;
-  }
 
   // 2) New payments ledger (admin apply + statuses)
   const pay = await db.insertPayment({
@@ -16358,11 +16598,20 @@ bot.on('message:successful_payment', async (ctx) => {
     raw: sp,
     status: 'RECEIVED'
   });
+  let paymentId = pay?.id || null;
   if (pay && pay.inserted === false) {
-    await ctx.reply('✅ Платеж уже обработан.');
-    return;
+    try {
+      const existing = await db.getPaymentByTelegramChargeId(tgChargeId);
+      paymentId = existing?.id || paymentId;
+      if (existing && String(existing.status || '').toUpperCase() === 'APPLIED') {
+        await ctx.reply('✅ Платеж уже обработан.');
+        return;
+      }
+    } catch {
+      await ctx.reply('✅ Платеж уже обработан.');
+      return;
+    }
   }
-  const paymentId = pay?.id || null;
 
   const markStatus = async (status, note) => {
     if (!paymentId) return null;
@@ -16381,12 +16630,20 @@ bot.on('message:successful_payment', async (ctx) => {
     }
   };
 
-  // We keep Smart Matching / Featured in UI, but post-payment they are always ORPHANED
-  // (so the team can decide later; avoids accidental auto-fulfillment).
-  if (invoicePayload.startsWith('match_') || invoicePayload.startsWith('feat_') || invoicePayload.startsWith('offpub_')) {
+  const isMatchPay = invoicePayload.startsWith('match_');
+  const isFeatPay = invoicePayload.startsWith('feat_');
+  const isOffpubPay = invoicePayload.startsWith('offpub_');
+
+  // Official channel posts are always ORPHANED post-payment.
+  // Smart Matching / Featured are ORPHANED only when auto-apply is disabled.
+  let matchFeatAutoApply = CFG.MATCH_FEAT_AUTO_APPLY_ENABLED;
+  if (matchFeatAutoApply && (isMatchPay || isFeatPay)) {
+    matchFeatAutoApply = await getMatchFeatAutoApplyRuntime();
+  }
+  if (isOffpubPay || ((isMatchPay || isFeatPay) && !matchFeatAutoApply)) {
     await markStatus('ORPHANED', 'postpay_orphaned');
     db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'postpay_orphaned' } });
-    if (invoicePayload.startsWith('offpub_')) {
+    if (isOffpubPay) {
       let offerId = 0;
       let days = 0;
       let offer = null;
@@ -16474,6 +16731,110 @@ bot.on('message:successful_payment', async (ctx) => {
     db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'auto_apply_paused' } });
     await ctx.reply('✅ Платеж получен. Автовыдача сейчас на паузе — я применю вручную.');
     return;
+  }
+
+  // Smart Matching auto-apply (paid) — gated by env + runtime flag
+  if (isMatchPay && matchFeatAutoApply) {
+    try {
+      const parts = String(invoicePayload).split('_');
+      const payUserId = Number(parts[1] || 0);
+      const tierId = String(parts[2] || 'S').toUpperCase();
+      const token = parts.slice(3).join('_');
+
+      if (!payUserId || Number(payUserId) !== Number(u.id)) {
+        await markStatus('ORPHANED', 'user_mismatch');
+        await ctx.reply('✅ Платеж получен. Не удалось связать оплату с аккаунтом — напиши /paysupport, я помогу.');
+        return;
+      }
+
+      const tier = MATCH_TIERS.find(t => String(t.id) === String(tierId)) || MATCH_TIERS[0];
+
+      let wsId = 0;
+      let ret = '';
+      let bpr = '';
+      try {
+        const data = token ? await redis.get(k(['pay_match', token])) : null;
+        if (data) {
+          wsId = Number(data.wsId || 0);
+          if (Object.prototype.hasOwnProperty.call(data, 'ret')) ret = String(data.ret || '');
+          if (Object.prototype.hasOwnProperty.call(data, 'bpr')) bpr = String(data.bpr || '');
+          await redis.del(k(['pay_match', token]));
+        }
+      } catch {}
+
+      const paid = Number(sp.total_amount || tier.stars || 0);
+      const req = await db.createMatchingRequest(u.id, tier.id, paid);
+      await setExpectText(ctx.from.id, { type: 'match_brief', requestId: req.id, wsId, count: tier.count, ret, bpr });
+      await markApplied(`auto_apply_match:req:${req.id}`);
+
+      const kb = new InlineKeyboard()
+        .text('🎯 Smart Matching (подбор офферов)', cbJoin('a:match_home', { ws: wsId, ret, bpr }))
+        .row()
+        .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
+        .text('📋 Меню', 'a:menu');
+
+      await ctx.reply(
+        `✅ <b>Оплата получена — Smart Matching активирован</b>\n\nПришли бриф одним сообщением (ниша, гео, аудитория, формат).`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      return;
+    } catch (e) {
+      await markStatus('ERROR', `auto_apply_error: ${String(e?.message || e).slice(0, 120)}`);
+      await ctx.reply('✅ Платеж получен. Возникла ошибка авто-выдачи — я применю вручную.');
+      return;
+    }
+  }
+
+  // Featured auto-apply (paid) — gated by env flag
+  if (isFeatPay && matchFeatAutoApply) {
+    try {
+      const parts = String(invoicePayload).split('_');
+      const payUserId = Number(parts[1] || 0);
+      const days = Number(parts[2] || 1);
+      const token = parts.slice(3).join('_');
+
+      if (!payUserId || Number(payUserId) !== Number(u.id)) {
+        await markStatus('ORPHANED', 'user_mismatch');
+        await ctx.reply('✅ Платеж получен. Не удалось связать оплату с аккаунтом — напиши /paysupport, я помогу.');
+        return;
+      }
+
+      const dur = FEATURED_DURATIONS.find(d => Number(d.days) === Number(days)) || FEATURED_DURATIONS.find(d => Number(d.days) === 7) || FEATURED_DURATIONS[0];
+
+      let wsId = 0;
+      let ret = '';
+      let bpr = '';
+      try {
+        const data = token ? await redis.get(k(['pay_feat', token])) : null;
+        if (data) {
+          wsId = Number(data.wsId || 0);
+          if (Object.prototype.hasOwnProperty.call(data, 'ret')) ret = String(data.ret || '');
+          if (Object.prototype.hasOwnProperty.call(data, 'bpr')) bpr = String(data.bpr || '');
+          await redis.del(k(['pay_feat', token]));
+        }
+      } catch {}
+
+      const paid = Number(sp.total_amount || dur.stars || 0);
+      const f = await db.createFeaturedPlacement(u.id, dur.days, paid);
+      await setExpectText(ctx.from.id, { type: 'feat_content', featuredId: f.id, wsId, ret, bpr });
+      await markApplied(`auto_apply_feat:id:${f.id}`);
+
+      const kb = new InlineKeyboard()
+        .text('🔥 Featured', cbJoin('a:feat_home', { ws: wsId, ret, bpr }))
+        .row()
+        .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
+        .text('📋 Меню', 'a:menu');
+
+      await ctx.reply(
+        `✅ <b>Оплата получена — Featured активирован</b>\n\nПришли контент:\n• 1 строка — заголовок\n• далее описание\n• последняя строка — контакт (@username / ссылка)`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      return;
+    } catch (e) {
+      await markStatus('ERROR', `auto_apply_error: ${String(e?.message || e).slice(0, 120)}`);
+      await ctx.reply('✅ Платеж получен. Возникла ошибка авто-выдачи — я применю вручную.');
+      return;
+    }
   }
 
   // PRO activation
@@ -17248,7 +17609,10 @@ if (p.a === 'a:brand_dir_open') {
 • 📩 Inbox (переписка по заявкам/сделкам)
 • 🔎 Поиск креаторов (подбор)
 
-${brandManagerLimitsHtml()}
+⛔️ Нельзя:
+• менять профиль бренда
+• управлять оплатами / подпиской
+• управлять командой бренда
 
 Если у тебя несколько брендов — используй «🔁 Сменить бренд» в меню.`;
 
@@ -19085,12 +19449,125 @@ if (p.a === 'a:lead_set') {
     if (p.a === 'a:verify_kind') {
       await ctx.answerCallbackQuery();
       if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Верификация отключена.' });
-      const kind = String(p.k || 'creator');
+      const uiMode = await getUiMode(ctx.from.id);
+      const kind = (uiMode === UI_MODES.BRAND) ? 'brand' : 'creator';
+
+      const existing = await safeUserVerifications(() => db.getUserVerification(u.id), async () => null);
+      const exStatus = String(existing?.status || '').toUpperCase();
+      const exKind = String(existing?.kind || '').toLowerCase();
+      if (existing && exKind && exKind !== kind) {
+        const want = kind === 'brand' ? '🏷 Brand' : '✨ Creator';
+        const have = exKind === 'brand' ? '🏷 Brand' : '✨ Creator';
+        const switchCb = exKind === 'brand' ? 'a:onb_brand' : 'a:onb_creator';
+        let what = 'заявка/статус';
+        if (exStatus === 'APPROVED') what = '✅ Verified';
+        else if (exStatus === 'PENDING') what = '⏳ заявка';
+        else if (exStatus === 'REJECTED') what = '❌ отклонённая заявка';
+
+        await safeEditOrReply(ctx, `✅ <b>Верификация</b>
+
+У тебя уже есть ${what} в другом режиме: <b>${have}</b>.
+
+В системе хранится <b>одна</b> верификация на пользователя.
+Чтобы не потерять текущий статус — переключись в нужный режим.
+
+Сейчас открыт режим: <b>${want}</b>.
+
+Если нужно поменять тип верификации — напиши администратору.`, {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard().text('🔁 Переключить режим', switchCb).row().text('⬅️ Назад', 'a:verify_home')
+        });
+        return;
+      }
 
 
-      if (kind === 'brand' && CFG.BRAND_VERIFY_REQUIRES_EXTENDED) {
+      // Quality gate (anti-spam): require minimal profile completeness before accepting verification requests.
+      if (kind === 'creator') {
+        let ws = null;
+        let wsId = 0;
+
+        try { wsId = Number(await getActiveWorkspaceId(ctx.from.id)) || 0; } catch { wsId = 0; }
+
+        if (wsId) {
+          try { ws = await db.getWorkspace(u.id, wsId); } catch { ws = null; }
+        }
+
+        if (!ws) {
+          try {
+            const list = await db.listWorkspaces(u.id);
+            if (list && list.length) {
+              ws = list[0];
+              wsId = Number(ws.id) || wsId;
+            }
+          } catch {
+            ws = null;
+          }
+        }
+
+        if (!ws) {
+          await safeEditOrReply(ctx,
+            `✅ <b>Верификация Creator</b>
+
+Сначала подключи канал (workspace), потом заполни витрину — так модерации проще проверить.`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: new InlineKeyboard()
+                .text('🚀 Подключить канал', 'a:setup')
+                .row()
+                .text('⬅️ Назад', 'a:verify_home')
+            }
+          );
+          return;
+        }
+
+        const prog = calcWsProfileProgress(ws);
+        const ok = !!(prog.aboutOk && (prog.portfolioOk || prog.igOk) && (prog.contactOk || !!ws.channel_username));
+        if (!ok) {
+          await safeEditOrReply(ctx,
+            `✅ <b>Верификация Creator</b>
+
+Чтобы подать заявку, заполни витрину минимум:
+• 📝 описание
+• 🔗 портфолио или 📸 Instagram
+• ✉️ контакт (или @канал)
+
+<i>Зачем:</i> меньше спама и быстрее проверка.`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: new InlineKeyboard()
+                .text('👤 Профиль канала', `a:ws_profile|ws:${wsId || ws.id}`)
+                .row()
+                .text('⬅️ Назад', 'a:verify_home')
+            }
+          );
+          return;
+        }
+      }
+
+      if (kind === 'brand') {
         const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
-        if (!isBrandExtendedComplete(prof)) {
+
+        if (!isBrandBasicComplete(prof)) {
+          await safeEditOrReply(ctx,
+            `🏷 <b>Верификация Brand</b>
+
+Чтобы подать заявку как бренд, заполни базовый профиль:
+• название
+• ниша
+• контакт
+• ссылка`,
+            {
+              parse_mode: 'HTML',
+              reply_markup: new InlineKeyboard()
+                .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:verify')
+                .row()
+                .text('⬅️ Назад', 'a:verify_home')
+            }
+          );
+          return;
+        }
+
+        if (CFG.BRAND_VERIFY_REQUIRES_EXTENDED && !isBrandExtendedComplete(prof)) {
           await safeEditOrReply(ctx, 
             `🏷 <b>Верификация Brand</b>
 
@@ -19111,6 +19588,7 @@ if (p.a === 'a:lead_set') {
           return;
         }
       }
+
 
       await setExpectText(ctx.from.id, { type: 'verify_submit', kind });
       await safeEditOrReply(ctx, 
@@ -19480,26 +19958,32 @@ if (p.a === 'a:ws_prof_mode') {
           await ctx.answerCallbackQuery();
           const wsId = Number(p.w || p.ws || 0);
           const ret = String(p.ret || 'menu');
-          const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
-          const text = `👔 <b>Почему доступ закрыт?</b>
+          const backCb = (ret === 'bx')
+            ? `a:bx_open|ws:${wsId}`
+            : (ret === 'profile')
+              ? `a:brand_profile|ws:${wsId}|ret:brand`
+              : 'a:menu';
+          const linkRet = (ret === 'bx') ? 'brand_team_bx' : 'brand_team';
+          const text = `👔 <b>Менеджеры бренда — как работает доступ</b>
 
-Кнопка «👔 Менеджеры бренда» <b>всегда видна</b>, но доступ открывается, когда бренд «оформлен»:
+Кнопка «👔 Менеджеры бренда» <b>всегда видна</b>.
 
-1) ✅ заполнены 4 базовых поля профиля (Название, Ниши, Контакт, Ссылка)
+Доступ открывается, когда:
+1) ✅ заполнены 4 базовых поля профиля бренда (Название, Ниши, Контакт, Ссылка)
 2) ✅ активен <b>Brand Plan</b> (покупка или подаренный)
 
-Зачем так:
-— менеджеру нужны данные бренда, чтобы быстро отвечать на заявки и не путаться
-— Brand Plan защищает CRM от спама и даёт поддержку брендам
+Это сделано, чтобы:
+— у команды бренда был единый “контур” (профиль + инструменты)
+— избежать спама и пустых аккаунтов в CRM
 
-<i>Как только условия выполнены — доступ откроется автоматически.</i>`;
+После выполнения условий просто открой «👔 Менеджеры бренда» ещё раз — доступ откроется.`;
 
           const kb = new InlineKeyboard()
             .text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:${ret}`).row()
-            .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`)
-            .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`)
+            .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${linkRet}`)
+            .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}|ret:${linkRet}`)
             .row()
-            .text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+            .text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
 
           await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
           return;
@@ -19510,7 +19994,11 @@ if (p.a === 'a:ws_prof_mode') {
 
       const wsId = Number(p.w || p.ws || 0);
       const ret = String(p.ret || 'menu');
-      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
+      const backCb = (ret === 'bx')
+        ? `a:bx_open|ws:${wsId}`
+        : (ret === 'profile')
+          ? `a:brand_profile|ws:${wsId}|ret:brand`
+          : 'a:menu';
 
       const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
       if (!gate) return;
@@ -19525,8 +20013,7 @@ if (p.a === 'a:ws_prof_mode') {
       const text = `👔 <b>Менеджеры бренда</b>
 
 Добавь менеджеров — они смогут быстрее отвечать на заявки и закрывать сделки.
-
-${brandManagerLimitsHtml()}
+У менеджера нет доступа к оплатам, профилю бренда и управлению командой.
 
 Сейчас менеджеров: <b>${count}</b>
 ${limitLine}`;
@@ -19601,17 +20088,14 @@ ${link}`;
 
       await safeEditOrReply(ctx, `👥 <b>Менеджеры бренда</b>\n\n${lines}\n\nНажми на кнопку, чтобы удалить менеджера.`, {
         parse_mode: 'HTML',
-        reply_markup: brandManagersListKb(managers, { wsId, ret }),
+        reply_markup: brandManagersListKb(managers),
       });
       return;
     }
 
     if (p.a === 'a:bm_rm_q') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws || 0);
-      const ret = String(p.ret || 'menu');
-      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
-      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
+      const gate = await ensureBrandTeamUnlocked(ctx, u);
       if (!gate) return;
       const managerUserId = Number(p.u || 0);
       if (!managerUserId) return;
@@ -19621,17 +20105,14 @@ ${link}`;
 
       await safeEditOrReply(ctx, `Удалить менеджера <b>${escapeHtml(label)}</b> из команды бренда?`, {
         parse_mode: 'HTML',
-        reply_markup: brandManagerRemoveConfirmKb(managerUserId, { wsId, ret }),
+        reply_markup: brandManagerRemoveConfirmKb(managerUserId),
       });
       return;
     }
 
     if (p.a === 'a:bm_rm_ok') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws || 0);
-      const ret = String(p.ret || 'menu');
-      const backCb = (ret === 'bx') ? `a:bx_open|ws:${wsId}` : 'a:menu';
-      const gate = await ensureBrandTeamUnlocked(ctx, u, { backCb, wsId, ret });
+      const gate = await ensureBrandTeamUnlocked(ctx, u);
       if (!gate) return;
       const managerUserId = Number(p.u || 0);
       if (!managerUserId) return;
@@ -19688,7 +20169,7 @@ ${link}`;
       const note = notifyOk ? '\n\n📩 Менеджеру отправлено уведомление.' : '';
       await safeEditOrReply(ctx, `✅ Менеджер удалён.${note}\n\n👥 <b>Менеджеры бренда</b>\n\n${lines}`, {
         parse_mode: 'HTML',
-        reply_markup: brandManagersListKb(managers, { wsId, ret }),
+        reply_markup: brandManagersListKb(managers),
       });
       return;
     }
@@ -20267,7 +20748,7 @@ ${link}`;
       const label = planDef.title;
       await sendStarsInvoice(ctx, {
         title: `Brand Plan · ${label} · ${CFG.BRAND_PLAN_DURATION_DAYS} дней`,
-        description: `Подписка ${label}: ${planDef.credits} кредитов + CRM + менеджеры${plan === 'pro' ? ' + Smart Match + Featured' : ''}.`,
+        description: `Подписка ${label}: ${planDef.credits} кредитов (интро) + CRM + менеджеры + Smart Matching (10 каналов/мес) + Featured (7 дней/мес).`,
         payload,
         amount: stars,
         backCb: `a:brand_plan|ws:${wsId}|ret:${ret}`,
@@ -20357,7 +20838,60 @@ ${link}`;
 
 if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
-      await renderMatchingHome(ctx, Number(p.ws || 0));
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || '');
+      const bpr = String(p.bpr || '');
+      await renderMatchingHome(ctx, u.id, wsId, ret, bpr);
+      return;
+    }
+
+    if (p.a === 'a:match_example') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || '');
+      const bpr = String(p.bpr || '');
+      await renderMatchingExample(ctx, wsId, ret, bpr);
+      return;
+    }
+
+    if (p.a === 'a:match_inc') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.w || p.ws || 0);
+
+      const planRow = await db.getBrandPlan(u.id);
+      if (!isBrandPlanRowActive(planRow)) {
+        await ctx.answerCallbackQuery({ text: 'Нужен активный Brand Plan.', show_alert: true });
+        await renderMatchingHome(ctx, u.id, wsId, String(p.ret || ''), String(p.bpr || ''));
+        return;
+      }
+
+      const used = await db.countIncludedMatchingThisMonth(u.id);
+      const limit = BRAND_PLAN_INCLUDED_MATCH_PER_MONTH;
+      const left = Math.max(0, limit - used);
+      if (left <= 0) {
+        await ctx.answerCallbackQuery({ text: 'Лимит на этот месяц исчерпан.', show_alert: true });
+        await renderMatchingHome(ctx, u.id, wsId, String(p.ret || ''), String(p.bpr || ''));
+        return;
+      }
+
+      const tier = MATCH_TIERS.find(t => String(t.id) === String(BRAND_PLAN_INCLUDED_MATCH_TIER_ID)) || MATCH_TIERS[0];
+      const req = await db.createMatchingRequest(u.id, tier.id, 0);
+      await setExpectText(ctx.from.id, { type: 'match_brief', requestId: req.id, wsId, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') });
+
+      const kb = new InlineKeyboard()
+        .text('🎯 Smart Matching (подбор офферов)', cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
+        .row()
+        .text('⬅️ Назад', mfBackCb(wsId, String(p.ret || ''), String(p.bpr || '')));
+
+      await safeEditOrReply(
+        ctx,
+        `✅ <b>Smart Matching включён</b>
+
+Осталось в этом месяце: <b>${Math.max(0, left - 1)}</b>
+
+Пришли бриф одним сообщением (ниша, гео, аудитория, формат).`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
       return;
     }
 
@@ -20377,7 +20911,7 @@ if (p.a === 'a:match_home') {
       const token = randomToken(10);
       await redis.set(
         k(['pay_match', token]),
-        { tgId: ctx.from.id, userId: u.id, wsId, tierId: tier.id, stars: tier.stars, count: tier.count },
+        { tgId: ctx.from.id, userId: u.id, wsId, tierId: tier.id, stars: tier.stars, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
         { ex: 15 * 60 }
       );
       const payload = `match_${u.id}_${tier.id}_${token}`;
@@ -20386,14 +20920,69 @@ if (p.a === 'a:match_home') {
         description: 'Подбор подходящих микро-каналов под твой бриф. После оплаты отправь бриф одним сообщением.',
         payload,
         amount: tier.stars,
-        backCb: `a:match_home|ws:${wsId}`,
+        backCb: cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }),
       });
       return;
     }
 
     if (p.a === 'a:feat_home') {
       await ctx.answerCallbackQuery();
-      await renderFeaturedHome(ctx, u.id, Number(p.ws || 0));
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || '');
+      const bpr = String(p.bpr || '');
+      await renderFeaturedHome(ctx, u.id, wsId, ret, bpr);
+      return;
+    }
+
+    if (p.a === 'a:feat_example') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.w || p.ws || 0);
+      const ret = String(p.ret || '');
+      const bpr = String(p.bpr || '');
+      await renderFeaturedExample(ctx, wsId, ret, bpr);
+      return;
+    }
+
+    if (p.a === 'a:feat_inc') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.w || p.ws || 0);
+
+      const planRow = await db.getBrandPlan(u.id);
+      if (!isBrandPlanRowActive(planRow)) {
+        await ctx.answerCallbackQuery({ text: 'Нужен активный Brand Plan.', show_alert: true });
+        await renderFeaturedHome(ctx, u.id, wsId, String(p.ret || ''), String(p.bpr || ''));
+        return;
+      }
+
+      const used = await db.countIncludedFeaturedThisMonth(u.id);
+      const limit = BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH;
+      const left = Math.max(0, limit - used);
+      if (left <= 0) {
+        await ctx.answerCallbackQuery({ text: 'Лимит на этот месяц исчерпан.', show_alert: true });
+        await renderFeaturedHome(ctx, u.id, wsId, String(p.ret || ''), String(p.bpr || ''));
+        return;
+      }
+
+      const f = await db.createFeaturedPlacement(u.id, BRAND_PLAN_INCLUDED_FEATURED_DAYS, 0);
+      await setExpectText(ctx.from.id, { type: 'feat_content', featuredId: f.id, wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') });
+
+      const kb = new InlineKeyboard()
+        .text('🔥 Featured', cbJoin('a:feat_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
+        .row()
+        .text('⬅️ Назад', mfBackCb(wsId, String(p.ret || ''), String(p.bpr || '')));
+
+      await safeEditOrReply(
+        ctx,
+        `✅ <b>Featured включён</b>
+
+Осталось в этом месяце: <b>${Math.max(0, left - 1)}</b>
+
+Пришли контент:
+• 1 строка — заголовок
+• далее описание
+• последняя строка — контакт (@username / ссылка)`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
       return;
     }
 
@@ -20413,7 +21002,7 @@ if (p.a === 'a:match_home') {
       const token = randomToken(10);
       await redis.set(
         k(['pay_feat', token]),
-        { tgId: ctx.from.id, userId: u.id, wsId, days: d.days, durId: d.id, stars: d.stars },
+        { tgId: ctx.from.id, userId: u.id, wsId, days: d.days, durId: d.id, stars: d.stars, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
         { ex: 15 * 60 }
       );
       const payload = `feat_${u.id}_${d.days}_${token}`;
@@ -20422,7 +21011,7 @@ if (p.a === 'a:match_home') {
         description: 'Твой блок появится сверху в ленте у всех (бренд + блогеры). После оплаты отправь контент.',
         payload,
         amount: d.stars,
-        backCb: `a:feat_home|ws:${wsId}`,
+        backCb: cbJoin('a:feat_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }),
       });
       return;
     }
@@ -21191,6 +21780,16 @@ if (p.a === 'a:match_home') {
       await renderAdminHome(ctx);
       return;
     }
+
+    if (p.a === 'a:admin_matchfeat_auto_toggle') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      const cur = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
+      await setSysBool(SYS_KEYS.matchfeat_auto_apply, !cur);
+      await renderAdminHome(ctx);
+      return;
+    }
     if (p.a === 'a:admin_payments') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
@@ -21314,7 +21913,7 @@ if (p.a === 'a:match_home') {
     // Barters
     if (p.a === 'a:bx_home') {
       await ctx.answerCallbackQuery();
-      const ws = await ensureWorkspaceForOwner(ctx, u.id);
+      const ws = await ensureWorkspaceForOwner(ctx, u.id, { minimal: true });
       if (!ws) return;
       await renderBxOpen(ctx, u.id, ws.id);
       return;
@@ -22098,7 +22697,7 @@ if (p.a === 'a:match_home') {
       let isVerified = false;
       if (CFG.VERIFICATION_ENABLED) {
         const v = await safeUserVerifications(() => db.getUserVerification(actorUserId), async () => null);
-        isVerified = String(v?.status || '').toUpperCase() === 'APPROVED';
+        isVerified = String(v?.status || '').toUpperCase() === 'APPROVED' && String(v?.kind || '').toLowerCase() === 'brand';
       }
       const dailyLimit = Math.max(0, Number(isVerified ? CFG.INTRO_DAILY_LIMIT : CFG.INTRO_DAILY_LIMIT_UNVERIFIED));
 
@@ -25020,19 +25619,23 @@ async function renderVerifyInfo(ctx) {
 async function renderVerifyHome(ctx, userRow) {
   const v = await safeUserVerifications(() => db.getUserVerification(userRow.id), async () => null);
   const status = String(v?.status || 'NONE').toUpperCase();
-  const kind = String(v?.kind || 'creator');
+  const storedKind = v ? String(v.kind || 'creator').toLowerCase() : '';
+  const uiMode = await getUiMode(ctx.from.id);
+  const modeKind = (uiMode === UI_MODES.BRAND) ? 'brand' : 'creator';
+
 
   const verifiedLimit = Math.max(0, Number(CFG.INTRO_DAILY_LIMIT || 0));
   const unverifiedLimit = Math.max(0, Number(CFG.INTRO_DAILY_LIMIT_UNVERIFIED || 0));
   const brandLimitLine = (verifiedLimit > unverifiedLimit && verifiedLimit > 0)
     ? `• Лимит интро в день: <b>${unverifiedLimit}</b> → <b>${verifiedLimit}</b>`
     : `• Более высокий лимит интро (после одобрения)`;
-  const benefits = kind === 'brand'
+  const benefits = modeKind === 'brand'
     ? `
 
 <b>Преимущества</b>:
 ${brandLimitLine}
 • Больше доверия и выше шанс ответа
+• Интро = новый диалог (переписка бесплатна)
 `
     : `
 
@@ -25048,12 +25651,20 @@ ${brandLimitLine}
   else statusLine = '—';
 
   const kb = new InlineKeyboard();
+
+  const mismatch = !!(v && storedKind && storedKind !== modeKind);
+
   if (!v) {
-    kb.text('🧑‍🎨 Я Creator', 'a:verify_kind|k:creator').row();
-    kb.text('🏷 Я Brand', 'a:verify_kind|k:brand').row();
-  } else if (status === 'REJECTED') {
-    kb.text('🔁 Подать заново', `a:verify_kind|k:${kind}`).row();
+    kb.text('✅ Подать заявку', 'a:verify_kind').row();
+  } else if (status === 'REJECTED' && !mismatch) {
+    kb.text('🔁 Подать заново', 'a:verify_kind').row();
   }
+
+  if (mismatch) {
+    const switchCb = storedKind === 'brand' ? 'a:onb_brand' : 'a:onb_creator';
+    kb.text('🔁 Переключить режим', switchCb).row();
+  }
+
   kb.text('ℹ️ Как это работает', 'a:verify_info').row();
   kb.text('📋 Меню', 'a:menu');
 
@@ -25065,13 +25676,22 @@ ${escapeHtml(v.rejection_reason)}` : '';
   const submittedLine = v ? `
 Заявка: <tg-spoiler>${escapeHtml(submitted || '—')}</tg-spoiler>` : '';
 
+  const haveModeLabel = storedKind === 'brand' ? '🏷 Brand' : '✨ Creator';
+  const wantModeLabel = modeKind === 'brand' ? '🏷 Brand' : '✨ Creator';
+  const mismatchText = `⚠️ У тебя уже есть заявка/статус в другом режиме: <b>${escapeHtml(haveModeLabel)}</b>.
+
+В системе хранится <b>одна</b> верификация на пользователя.
+Чтобы не потерять текущий статус — <b>переключись</b> в нужный режим и открой этот экран снова.
+
+Если нужно поменять тип верификации — напиши администратору.`;
+
   const text = `✅ <b>Верификация</b>
 
 Статус: ${statusLine}
-Тип: <b>${escapeHtml(kind)}</b>${submittedLine}${reason}
+Режим: <b>${escapeHtml(wantModeLabel)}</b>${submittedLine}${reason}
 
 ${benefits}
-Чтобы отправить заявку — выбери роль и пришли 1 сообщение с пруфами.`;
+${mismatch ? mismatchText : 'Чтобы отправить заявку — нажми «✅ Подать заявку» и пришли 1 сообщение с пруфами.'}`;
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -25273,6 +25893,13 @@ async function renderAdminHome(ctx) {
   text += '• Метрики: DAU/MAU, конверсии, воронки\n';
   if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• Офиц.канал: очередь публикаций (${pending})\n`;
 
+  const payAccept = await getSysBool(SYS_KEYS.pay_accept, CFG.PAYMENTS_ACCEPT_DEFAULT);
+  const payAutoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
+  const mfAutoApply = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
+
+  text += `\n⚙️ Платежи: прием ${payAccept ? 'ON' : 'OFF'} • автовыдача ${payAutoApply ? 'ON' : 'OFF'}\n`;
+  text += `⚙️ Match/Feat auto-apply: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
+
   const kb = new InlineKeyboard()
     .text('👥 Пользователи', 'a:admin_users|f:all|p:0')
     .text('💰 Платежи', 'a:admin_payments')
@@ -25281,6 +25908,12 @@ async function renderAdminHome(ctx) {
     .text('📜 Аудит', 'a:aud|h:24|p:0')
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
+    .row();
+
+  kb.text(`💳 Прием: ${payAccept ? 'ON' : 'OFF'}`, 'a:admin_pay_accept_toggle')
+    .text(`⚙️ Автовыдача: ${payAutoApply ? 'ON' : 'OFF'}`, 'a:admin_pay_auto_toggle')
+    .row()
+    .text(`🎯🔥 Match/Feat: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
     .row();
 
   if (CFG.OFFICIAL_PUBLISH_ENABLED) {
