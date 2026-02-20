@@ -11821,6 +11821,7 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
   const active = await db.isBrandPlanActive(userId);
   const credits = await db.getBrandCredits(userId);
   const status = brandPlanStatusText(planRow, active);
+  const paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
 
   const startPl = BRAND_PLANS.find(p => p.id === 'start');
   const proPl = BRAND_PLANS.find(p => p.id === 'pro');
@@ -11861,7 +11862,7 @@ ${brandPassBalanceLineHtml(credits)}
 
 <b>Сверх лимита</b>
 • 🎯 Smart Matching (подбор офферов) / 🔥 Featured можно докупить за Stars
-<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>
+${paidAuto ? '<i>После оплаты я сразу попрошу бриф/контент.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 Кредиты можно докупить отдельно.`,
     { parse_mode: 'HTML', reply_markup: kb }
@@ -11949,6 +11950,7 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
   const used = hasPlan ? await db.countIncludedMatchingThisMonth(userId) : 0;
   const limit = hasPlan ? BRAND_PLAN_INCLUDED_MATCH_PER_MONTH : 0;
   const left = Math.max(0, limit - used);
+  const paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
 
   const tier = MATCH_TIERS.find(t => String(t.id) === String(BRAND_PLAN_INCLUDED_MATCH_TIER_ID)) || MATCH_TIERS[0];
 
@@ -11992,7 +11994,7 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
 
 ` +
       `Сверх лимита можно докупить за Stars.
-<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>
+${paidAuto ? '<i>После оплаты я сразу попрошу бриф/контент.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 ` +
       `${cta}`,
@@ -12006,6 +12008,7 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
   const used = hasPlan ? await db.countIncludedFeaturedThisMonth(userId) : 0;
   const limit = hasPlan ? BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH : 0;
   const left = Math.max(0, limit - used);
+  const paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
 
   const kb = new InlineKeyboard();
   kb.text('👀 Пример', cbJoin('a:feat_example', { ws: wsId, ret, bpr })).row();
@@ -12047,7 +12050,7 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
 
 ` +
       `Сверх лимита можно докупить за Stars.
-<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>
+${paidAuto ? '<i>После оплаты я сразу попрошу бриф/контент.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 ` +
       `${cta}`,
@@ -16560,8 +16563,12 @@ bot.on('message:successful_payment', async (ctx) => {
 
   db.trackEvent('payment_success', { userId: u.id, meta: { kind, payload: invoicePayload, amount: sp.total_amount, currency: sp.currency || 'XTR' } });
 
+  const tgChargeId = String(sp.telegram_payment_charge_id || '');
+
   // 1) Old ledger: protects from Telegram retries/duplicates
-  const starsLedger = await db.recordStarsPayment({
+  // NOTE: do NOT early-return on duplicates — we still want to ensure the canonical payments
+  // ledger has the record and fulfillment can be retried safely.
+  await db.recordStarsPayment({
     userId: u.id,
     kind,
     invoicePayload,
@@ -16571,10 +16578,6 @@ bot.on('message:successful_payment', async (ctx) => {
     providerPaymentChargeId: sp.provider_payment_charge_id,
     raw: sp
   });
-  if (starsLedger && starsLedger.inserted === false) {
-    await ctx.reply('✅ Платеж уже обработан.');
-    return;
-  }
 
   // 2) New payments ledger (admin apply + statuses)
   const pay = await db.insertPayment({
@@ -16588,11 +16591,20 @@ bot.on('message:successful_payment', async (ctx) => {
     raw: sp,
     status: 'RECEIVED'
   });
+  let paymentId = pay?.id || null;
   if (pay && pay.inserted === false) {
-    await ctx.reply('✅ Платеж уже обработан.');
-    return;
+    try {
+      const existing = await db.getPaymentByTelegramChargeId(tgChargeId);
+      paymentId = existing?.id || paymentId;
+      if (existing && String(existing.status || '').toUpperCase() === 'APPLIED') {
+        await ctx.reply('✅ Платеж уже обработан.');
+        return;
+      }
+    } catch {
+      await ctx.reply('✅ Платеж уже обработан.');
+      return;
+    }
   }
-  const paymentId = pay?.id || null;
 
   const markStatus = async (status, note) => {
     if (!paymentId) return null;
@@ -16611,12 +16623,16 @@ bot.on('message:successful_payment', async (ctx) => {
     }
   };
 
-  // We keep Smart Matching / Featured in UI, but post-payment they are always ORPHANED
-  // (so the team can decide later; avoids accidental auto-fulfillment).
-  if (invoicePayload.startsWith('match_') || invoicePayload.startsWith('feat_') || invoicePayload.startsWith('offpub_')) {
+  const isMatchPay = invoicePayload.startsWith('match_');
+  const isFeatPay = invoicePayload.startsWith('feat_');
+  const isOffpubPay = invoicePayload.startsWith('offpub_');
+
+  // Official channel posts are always ORPHANED post-payment.
+  // Smart Matching / Featured are ORPHANED only when auto-apply is disabled.
+  if (isOffpubPay || ((isMatchPay || isFeatPay) && !CFG.MATCH_FEAT_AUTO_APPLY_ENABLED)) {
     await markStatus('ORPHANED', 'postpay_orphaned');
     db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'postpay_orphaned' } });
-    if (invoicePayload.startsWith('offpub_')) {
+    if (isOffpubPay) {
       let offerId = 0;
       let days = 0;
       let offer = null;
@@ -16704,6 +16720,110 @@ bot.on('message:successful_payment', async (ctx) => {
     db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'auto_apply_paused' } });
     await ctx.reply('✅ Платеж получен. Автовыдача сейчас на паузе — я применю вручную.');
     return;
+  }
+
+  // Smart Matching auto-apply (paid) — gated by env flag
+  if (isMatchPay && CFG.MATCH_FEAT_AUTO_APPLY_ENABLED) {
+    try {
+      const parts = String(invoicePayload).split('_');
+      const payUserId = Number(parts[1] || 0);
+      const tierId = String(parts[2] || 'S').toUpperCase();
+      const token = parts.slice(3).join('_');
+
+      if (!payUserId || Number(payUserId) !== Number(u.id)) {
+        await markStatus('ORPHANED', 'user_mismatch');
+        await ctx.reply('✅ Платеж получен. Не удалось связать оплату с аккаунтом — напиши /paysupport, я помогу.');
+        return;
+      }
+
+      const tier = MATCH_TIERS.find(t => String(t.id) === String(tierId)) || MATCH_TIERS[0];
+
+      let wsId = 0;
+      let ret = '';
+      let bpr = '';
+      try {
+        const data = token ? await redis.get(k(['pay_match', token])) : null;
+        if (data) {
+          wsId = Number(data.wsId || 0);
+          if (Object.prototype.hasOwnProperty.call(data, 'ret')) ret = String(data.ret || '');
+          if (Object.prototype.hasOwnProperty.call(data, 'bpr')) bpr = String(data.bpr || '');
+          await redis.del(k(['pay_match', token]));
+        }
+      } catch {}
+
+      const paid = Number(sp.total_amount || tier.stars || 0);
+      const req = await db.createMatchingRequest(u.id, tier.id, paid);
+      await setExpectText(ctx.from.id, { type: 'match_brief', requestId: req.id, wsId, count: tier.count, ret, bpr });
+      await markApplied(`auto_apply_match:req:${req.id}`);
+
+      const kb = new InlineKeyboard()
+        .text('🎯 Smart Matching (подбор офферов)', cbJoin('a:match_home', { ws: wsId, ret, bpr }))
+        .row()
+        .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
+        .text('📋 Меню', 'a:menu');
+
+      await ctx.reply(
+        `✅ <b>Оплата получена — Smart Matching активирован</b>\n\nПришли бриф одним сообщением (ниша, гео, аудитория, формат).`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      return;
+    } catch (e) {
+      await markStatus('ERROR', `auto_apply_error: ${String(e?.message || e).slice(0, 120)}`);
+      await ctx.reply('✅ Платеж получен. Возникла ошибка авто-выдачи — я применю вручную.');
+      return;
+    }
+  }
+
+  // Featured auto-apply (paid) — gated by env flag
+  if (isFeatPay && CFG.MATCH_FEAT_AUTO_APPLY_ENABLED) {
+    try {
+      const parts = String(invoicePayload).split('_');
+      const payUserId = Number(parts[1] || 0);
+      const days = Number(parts[2] || 1);
+      const token = parts.slice(3).join('_');
+
+      if (!payUserId || Number(payUserId) !== Number(u.id)) {
+        await markStatus('ORPHANED', 'user_mismatch');
+        await ctx.reply('✅ Платеж получен. Не удалось связать оплату с аккаунтом — напиши /paysupport, я помогу.');
+        return;
+      }
+
+      const dur = FEATURED_DURATIONS.find(d => Number(d.days) === Number(days)) || FEATURED_DURATIONS.find(d => Number(d.days) === 7) || FEATURED_DURATIONS[0];
+
+      let wsId = 0;
+      let ret = '';
+      let bpr = '';
+      try {
+        const data = token ? await redis.get(k(['pay_feat', token])) : null;
+        if (data) {
+          wsId = Number(data.wsId || 0);
+          if (Object.prototype.hasOwnProperty.call(data, 'ret')) ret = String(data.ret || '');
+          if (Object.prototype.hasOwnProperty.call(data, 'bpr')) bpr = String(data.bpr || '');
+          await redis.del(k(['pay_feat', token]));
+        }
+      } catch {}
+
+      const paid = Number(sp.total_amount || dur.stars || 0);
+      const f = await db.createFeaturedPlacement(u.id, dur.days, paid);
+      await setExpectText(ctx.from.id, { type: 'feat_content', featuredId: f.id, wsId, ret, bpr });
+      await markApplied(`auto_apply_feat:id:${f.id}`);
+
+      const kb = new InlineKeyboard()
+        .text('🔥 Featured', cbJoin('a:feat_home', { ws: wsId, ret, bpr }))
+        .row()
+        .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
+        .text('📋 Меню', 'a:menu');
+
+      await ctx.reply(
+        `✅ <b>Оплата получена — Featured активирован</b>\n\nПришли контент:\n• 1 строка — заголовок\n• далее описание\n• последняя строка — контакт (@username / ссылка)`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      return;
+    } catch (e) {
+      await markStatus('ERROR', `auto_apply_error: ${String(e?.message || e).slice(0, 120)}`);
+      await ctx.reply('✅ Платеж получен. Возникла ошибка авто-выдачи — я применю вручную.');
+      return;
+    }
   }
 
   // PRO activation
@@ -20780,7 +20900,7 @@ if (p.a === 'a:match_home') {
       const token = randomToken(10);
       await redis.set(
         k(['pay_match', token]),
-        { tgId: ctx.from.id, userId: u.id, wsId, tierId: tier.id, stars: tier.stars, count: tier.count },
+        { tgId: ctx.from.id, userId: u.id, wsId, tierId: tier.id, stars: tier.stars, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
         { ex: 15 * 60 }
       );
       const payload = `match_${u.id}_${tier.id}_${token}`;
@@ -20871,7 +20991,7 @@ if (p.a === 'a:match_home') {
       const token = randomToken(10);
       await redis.set(
         k(['pay_feat', token]),
-        { tgId: ctx.from.id, userId: u.id, wsId, days: d.days, durId: d.id, stars: d.stars },
+        { tgId: ctx.from.id, userId: u.id, wsId, days: d.days, durId: d.id, stars: d.stars, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
         { ex: 15 * 60 }
       );
       const payload = `feat_${u.id}_${d.days}_${token}`;
