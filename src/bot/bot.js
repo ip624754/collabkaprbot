@@ -2571,7 +2571,9 @@ function brandTeamKb({ wsId = 0, ret = 'menu', backCb = 'a:menu' } = {}) {
     .row()
     .text('👥 Список менеджеров', `a:bm_list|ws:${wsId}|ret:${ret}`)
     .row()
-    .text('⬅️ Назад', backCb);
+    .text('⬅️ Назад', backCb)
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 }
 
 
@@ -2596,7 +2598,7 @@ function brandTeamLockedKb(st, backCb = 'a:menu', wsId = 0, ret = 'menu') {
     .text('🔄 Проверить снова', `a:brand_team|ws:${wsId}|ret:${ret}`)
     .text('ℹ️ Почему так?', `a:brand_team_help|ws:${wsId}|ret:${ret}`);
 
-  kb.row().text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
+  kb.row().text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -19495,7 +19497,7 @@ if (p.a === 'a:ws_prof_mode') {
             .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`)
             .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}|ret:${ret === 'bx' ? 'brand_team_bx' : 'brand_team'}`)
             .row()
-            .text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
+            .text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
           await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
           return;
