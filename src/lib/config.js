@@ -144,6 +144,9 @@ export const CFG = {
   PAYMENTS_ACCEPT_DEFAULT: parseBoolSafe(process.env.PAYMENTS_ACCEPT_DEFAULT, true),
   PAYMENTS_AUTO_APPLY_DEFAULT: parseBoolSafe(process.env.PAYMENTS_AUTO_APPLY_DEFAULT, true),
 
+  // Payments: service auto-fulfillment (off by default)
+  MATCH_FEAT_AUTO_APPLY_ENABLED: parseBoolSafe(process.env.MATCH_FEAT_AUTO_APPLY_ENABLED, false),
+
   // Feature flags
   ANALYTICS_ENABLED: parseBoolSafe(process.env.ANALYTICS_ENABLED, false),
 
