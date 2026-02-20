@@ -1,5 +1,6 @@
 import { pool } from './pool.js';
 import { CFG } from '../lib/config.js';
+import { k as rk, rateLimit } from '../lib/redis.js';
 
 // Users
 export async function upsertUser(tgId, username) {
@@ -875,12 +876,44 @@ export async function getGiveawayForCurator(giveawayId, userId) {
 
 // Workspace audit
 export async function auditWorkspace(workspaceId, actorUserId, action, payload = {}) {
-  await pool.query(
-    `insert into workspace_audit (workspace_id, actor_user_id, action, payload)
-     values ($1,$2,$3,$4::jsonb)`,
-    [workspaceId, actorUserId, action, JSON.stringify(payload || {})]
-  );
+  if (!CFG.AUDIT_DB_ENABLED) return null;
+
+  const wsId = Number(workspaceId) || 0;
+  const act = String(action || '').trim();
+  if (!wsId || !act) return null;
+
+  // Write-shedding for noisy actions to reduce Neon CU:
+  // throttle only selected prefixes (default: lead./folders./ws.profile_)
+  if (CFG.AUDIT_DB_THROTTLE_ENABLED && (Number(CFG.AUDIT_DB_THROTTLE_LIMIT) || 0) > 0) {
+    const prefixes = Array.isArray(CFG.AUDIT_DB_THROTTLE_PREFIXES) ? CFG.AUDIT_DB_THROTTLE_PREFIXES : [];
+    const hit = prefixes.find((p) => p && act.startsWith(p));
+    if (hit) {
+      try {
+        const key = rk(['audit', 'ws', wsId, hit]);
+        const rl = await rateLimit(key, {
+          limit: CFG.AUDIT_DB_THROTTLE_LIMIT,
+          windowSec: CFG.AUDIT_DB_THROTTLE_WINDOW_SEC,
+        });
+        if (!rl.allowed) return null;
+      } catch {
+        // Fail open: audit must never break bot UX
+      }
+    }
+  }
+
+  try {
+    await pool.query(
+      `insert into workspace_audit (workspace_id, actor_user_id, action, payload)
+       values ($1,$2,$3,$4::jsonb)`,
+      [wsId, actorUserId, act, JSON.stringify(payload || {})]
+    );
+    return true;
+  } catch {
+    // Missing table/migration or any DB error should not break bot UX.
+    return null;
+  }
 }
+
 
 export async function listWorkspaceAudit(workspaceId, limit = 30) {
   const r = await pool.query(
@@ -2563,25 +2596,6 @@ export async function setBarterThreadTriageStatus(threadId, buyerUserId, triageS
 // Smart Matching
 // -----------------------------
 
-// Brand Plan monthly quota helpers (count included requests in current calendar month)
-export async function countIncludedMatchingThisMonth(userId) {
-  try {
-    const r = await pool.query(
-      `select count(*)::int as cnt
-         from matching_requests
-        where user_id = $1
-          and stars_paid = 0
-          and created_at >= date_trunc('month', now())`,
-      [Number(userId)]
-    );
-    return Number(r.rows[0]?.cnt || 0);
-  } catch (e) {
-    // 42P01 = undefined_table (migration not applied yet)
-    if (e && e.code === '42P01') return 0;
-    throw e;
-  }
-}
-
 export async function createMatchingRequest(userId, tier, starsPaid) {
   const r = await pool.query(
     `insert into matching_requests (user_id, tier, stars_paid, status)
@@ -2667,25 +2681,6 @@ export async function searchNetworkBarterOffersByBrief(brief, limit = 10) {
 // -----------------------------
 // Featured placements
 // -----------------------------
-
-// Brand Plan monthly quota helpers (count included placements in current calendar month)
-export async function countIncludedFeaturedThisMonth(userId) {
-  try {
-    const r = await pool.query(
-      `select count(*)::int as cnt
-         from featured_placements
-        where user_id = $1
-          and stars_paid = 0
-          and created_at >= date_trunc('month', now())`,
-      [Number(userId)]
-    );
-    return Number(r.rows[0]?.cnt || 0);
-  } catch (e) {
-    // 42P01 = undefined_table (migration not applied yet)
-    if (e && e.code === '42P01') return 0;
-    throw e;
-  }
-}
 
 export async function createFeaturedPlacement(userId, durationDays, starsPaid) {
   const r = await pool.query(
@@ -2950,18 +2945,6 @@ export async function insertPayment(input = {}) {
     if (isMissingRelationError(e, 'payments')) {
       return { inserted: true, ledger: 'missing_table' };
     }
-    throw e;
-  }
-}
-
-export async function getPaymentByTelegramChargeId(telegramPaymentChargeId) {
-  const chargeId = String(telegramPaymentChargeId || '').trim();
-  if (!chargeId) return null;
-  try {
-    const r = await pool.query(`select * from payments where telegram_payment_charge_id=$1 limit 1`, [chargeId]);
-    return r.rows[0] || null;
-  } catch (e) {
-    if (isMissingRelationError(e, 'payments')) return null;
     throw e;
   }
 }
@@ -3821,7 +3804,7 @@ export async function getBarterOfferPublicWithVerified(offerId) {
      from barter_offers o
      join workspaces w on w.id=o.workspace_id
      join workspace_settings s on s.workspace_id=w.id
-     left join user_verifications uv on uv.user_id=o.creator_user_id and uv.kind='creator' and uv.status='APPROVED'
+     left join user_verifications uv on uv.user_id=o.creator_user_id and uv.status='APPROVED'
      where o.id=$1`,
     [offerId]
   );
@@ -3837,7 +3820,7 @@ export async function listNetworkBarterOffersWithVerified(opts = {}) {
        from barter_offers o
        join workspaces w on w.id = o.workspace_id
        join workspace_settings s on s.workspace_id = w.id
-       left join user_verifications uv on uv.user_id = o.creator_user_id and uv.kind='creator'
+       left join user_verifications uv on uv.user_id = o.creator_user_id
        where o.status='ACTIVE'
          and s.network_enabled=true
          and ($1::text is null or o.category=$1)
@@ -3859,7 +3842,7 @@ export async function listNetworkBarterOffersWithVerified(opts = {}) {
        from barter_offers o
        join workspaces w on w.id = o.workspace_id
        join workspace_settings s on s.workspace_id = w.id
-       left join user_verifications uv on uv.user_id = o.creator_user_id and uv.kind='creator'
+       left join user_verifications uv on uv.user_id = o.creator_user_id
        where o.status='ACTIVE'
          and s.network_enabled=true
          and ($1::text is null or o.category=$1)
@@ -3888,7 +3871,7 @@ export async function listBarterThreadsForUserWithVerified(userId, limit = 20, o
      join barter_offers o on o.id=t.offer_id
      join workspaces w on w.id=t.workspace_id
      left join users uo on uo.id = (case when t.buyer_user_id=$1 then t.seller_user_id else t.buyer_user_id end)
-     left join user_verifications uvo on uvo.user_id = (case when t.buyer_user_id=$1 then t.seller_user_id else t.buyer_user_id end) and uvo.status='APPROVED' and uvo.kind = (case when t.buyer_user_id=$1 then 'creator' else 'brand' end)
+     left join user_verifications uvo on uvo.user_id = (case when t.buyer_user_id=$1 then t.seller_user_id else t.buyer_user_id end) and uvo.status='APPROVED'
      left join lateral (
        select m.body, m.created_at
        from barter_messages m
@@ -3946,8 +3929,8 @@ export async function getBarterThreadForUserWithVerified(threadId, userId) {
      join workspaces w on w.id=t.workspace_id
      left join users ub on ub.id=t.buyer_user_id
      left join users us on us.id=t.seller_user_id
-     left join user_verifications uvb on uvb.user_id=t.buyer_user_id and uvb.kind='brand' and uvb.status='APPROVED'
-     left join user_verifications uvs on uvs.user_id=t.seller_user_id and uvs.kind='creator' and uvs.status='APPROVED'
+     left join user_verifications uvb on uvb.user_id=t.buyer_user_id and uvb.status='APPROVED'
+     left join user_verifications uvs on uvs.user_id=t.seller_user_id and uvs.status='APPROVED'
      where t.id=$1 and (t.buyer_user_id=$2 or t.seller_user_id=$2)`,
     [threadId, userId]
   );
