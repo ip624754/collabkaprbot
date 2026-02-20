@@ -13794,7 +13794,7 @@ ${escapeHtml(safe)}`;
 
       const list = draft.buttons.map((b, i) => `${i + 1}. ${b.text} → ${b.url}`).join('\n');
       await ctx.reply(
-        `✅ Кнопка добавлена. Сейчас (${draft.buttons.length}/3):\n${list}\n\nЕщё кнопку — выбери шаблон или отправь строку <code>Текст | ссылка</code>.`,
+        `✅ Кнопка добавлена. Сейчас (${draft.buttons.length}/3):\n${list}\n\nЕщё кнопку — выбери шаблон или отправь строку <code>Текст | ссылка</code> (поддерживаются https://... и t.me/...).`,
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
@@ -21651,7 +21651,7 @@ if (p.a === 'a:match_home') {
         return;
       }
       await safeEditOrReply(ctx,
-        `🔗 <b>Кнопки</b>\n\nМожно двумя способами:\n1) <b>Шаблоны</b> — выбери кнопку ниже (Конкурс/Профиль/Оффер)\n2) <b>Вручную</b> — отправь до 3 строк:\n<code>Текст кнопки | ссылка</code>\n\nСсылка: https://... или shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>.\nКогда готово — нажми «✅ Готово».`,
+        `🔗 <b>Кнопки</b>\n\nМожно двумя способами:\n1) <b>Шаблоны</b> — выбери ниже (Конкурс/Профиль/Оффер)\n2) <b>Вручную</b> — отправь до 3 строк:\n<code>Текст кнопки | ссылка</code>\n\nСсылка может быть любой:\n• <code>https://...</code> (любая внешняя)\n• <code>t.me/...</code>\n• shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>\n\nПример:\n<code>Перейти в X | https://x.com/...</code>\n\nКогда готово — нажми «✅ Готово».`,
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
