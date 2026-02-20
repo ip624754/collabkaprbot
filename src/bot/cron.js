@@ -3,7 +3,6 @@ import * as db from '../db/queries.js';
 import { getBot } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
-import crypto from 'crypto';
 import {
   notifyGiveawayEnded,
   notifyGiveawayWinnersReady,
@@ -30,55 +29,40 @@ const CRON_RETRY_EXPIRE_BATCH = 200;
 
 // Per-giveaway lock to reduce races even if ticks overlap.
 const GIVEAWAY_LOCK_TTL_SEC = 120;
-function lockToken() {
+
+// Best-effort cron observability (stored in Redis; no DB).
+// TTL keeps storage bounded.
+const CRON_LAST_RUN_TTL_SEC = 14 * 24 * 60 * 60; // 14 days
+
+async function writeCronLastRun(name, payload) {
   try {
-    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  } catch {}
-  try {
-    return crypto.randomBytes(16).toString('hex');
+    const key = k(['cron', String(name || 'tick'), 'last_run']);
+    await redis.set(key, payload, { ex: CRON_LAST_RUN_TTL_SEC });
   } catch {
-    // last resort (non-crypto) — ok for lock ownership token
-    return String(Date.now()) + ':' + String(Math.random());
+    // ignore metrics failures
   }
 }
-
-async function releaseLock(key, token) {
-  // Delete lock only if we still own it (prevents deleting a new lock after TTL expiry).
-  const script = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
-  try {
-    await redis.eval(script, [key], [String(token || '')]);
-  } catch {
-    // Best-effort fallback (may delete a new lock, but only if eval is unavailable).
-    try {
-      const v = await redis.get(key);
-      if (String(v || '') == String(token || '')) await redis.del(key);
-    } catch {}
-  }
-}
-
 
 async function withLock(lockKey, ttlSec, fn) {
-  const token = lockToken();
-  const ok = await redis.set(lockKey, token, { nx: true, ex: ttlSec });
+  const ok = await redis.set(lockKey, '1', { nx: true, ex: ttlSec });
   if (!ok) return { locked: true };
   try {
     const r = await fn();
     return { locked: false, result: r };
   } finally {
-    await releaseLock(lockKey, token);
+    await redis.del(lockKey);
   }
 }
 
 async function withGiveawayLock(giveawayId, fn) {
   const key = k(['lock', 'gw', String(giveawayId)]);
-  const token = lockToken();
-  const ok = await redis.set(key, token, { nx: true, ex: GIVEAWAY_LOCK_TTL_SEC });
+  const ok = await redis.set(key, '1', { nx: true, ex: GIVEAWAY_LOCK_TTL_SEC });
   if (!ok) return { locked: true };
   try {
     const r = await fn();
     return { locked: false, result: r };
   } finally {
-    await releaseLock(key, token);
+    await redis.del(key);
   }
 }
 
@@ -355,7 +339,8 @@ export async function giveawaysTick() {
     const retry = await issueIntroRetryCredits();
     const duration_ms = Date.now() - startedAt;
 
-    return {
+    // Keep the API response stable; write only a compact summary to Redis.
+    const out = {
       ended,
       drawn,
       published_count: published.length,
@@ -369,6 +354,20 @@ export async function giveawaysTick() {
       retry_expired: retry.expired || 0,
       duration_ms,
     };
+
+    await writeCronLastRun('giveaways_tick', {
+      ts: new Date().toISOString(),
+      ended_count: out.ended_count,
+      drawn_count: out.drawn_count,
+      published_count: out.published_count,
+      official_expired: out.official_expired,
+      retry_checked: out.retry_checked,
+      retry_issued: out.retry_issued,
+      retry_expired: out.retry_expired,
+      duration_ms: out.duration_ms,
+    });
+
+    return out;
   });
 }
 
@@ -439,7 +438,11 @@ export async function broadcastTick() {
 
   return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
     const bc = await db.getActiveBroadcast();
-    if (!bc) return { status: 'idle', reason: 'no_active_broadcast' };
+    if (!bc) {
+      const out = { status: 'idle', reason: 'no_active_broadcast' };
+      await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+      return out;
+    }
 
     // Transition PENDING → RUNNING
     if (bc.status === 'PENDING') {
@@ -479,12 +482,14 @@ export async function broadcastTick() {
         // ignore notification failure
       }
 
-      return {
+      const out = {
         status: 'done',
         broadcast_id: bc.id,
         sent: bc.sent_count,
         failed: bc.failed_count,
       };
+      await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+      return out;
     }
 
     const bot = getBot();
@@ -542,7 +547,7 @@ export async function broadcastTick() {
       last_sent_user_id: lastId,
     });
 
-    return {
+    const out = {
       status: 'running',
       broadcast_id: bc.id,
       batch_sent: sent,
@@ -550,5 +555,7 @@ export async function broadcastTick() {
       total_sent: Number(bc.sent_count || 0) + sent,
       total_count: bc.total_count,
     };
+    await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+    return out;
   });
 }
