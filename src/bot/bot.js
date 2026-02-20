@@ -367,7 +367,8 @@ function formatGwWinnersOwner(winners, { oneLineMax = GW_WINNERS_ONE_LINE_MAX, m
 // Runtime toggles (stored in Redis, editable from Admin)
 const SYS_KEYS = {
   pay_accept: k(['sys', 'pay_accept']),
-  pay_auto_apply: k(['sys', 'pay_auto_apply'])
+  pay_auto_apply: k(['sys', 'pay_auto_apply']),
+  matchfeat_auto_apply: k(['sys', 'matchfeat_auto_apply'])
 };
 
 
@@ -420,6 +421,12 @@ async function getPaymentsRuntimeFlags() {
   const autoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
   return { accept, autoApply };
 }
+
+async function getMatchFeatAutoApplyRuntime() {
+  // Match/Feat auto-apply kill-switch (Redis). Default: ON.
+  return await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
+}
+
 
 // Backward-compatible alias (some flows call getPaymentMode)
 async function getPaymentMode() {
@@ -16629,7 +16636,11 @@ bot.on('message:successful_payment', async (ctx) => {
 
   // Official channel posts are always ORPHANED post-payment.
   // Smart Matching / Featured are ORPHANED only when auto-apply is disabled.
-  if (isOffpubPay || ((isMatchPay || isFeatPay) && !CFG.MATCH_FEAT_AUTO_APPLY_ENABLED)) {
+  let matchFeatAutoApply = CFG.MATCH_FEAT_AUTO_APPLY_ENABLED;
+  if (matchFeatAutoApply && (isMatchPay || isFeatPay)) {
+    matchFeatAutoApply = await getMatchFeatAutoApplyRuntime();
+  }
+  if (isOffpubPay || ((isMatchPay || isFeatPay) && !matchFeatAutoApply)) {
     await markStatus('ORPHANED', 'postpay_orphaned');
     db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'postpay_orphaned' } });
     if (isOffpubPay) {
@@ -16722,8 +16733,8 @@ bot.on('message:successful_payment', async (ctx) => {
     return;
   }
 
-  // Smart Matching auto-apply (paid) — gated by env flag
-  if (isMatchPay && CFG.MATCH_FEAT_AUTO_APPLY_ENABLED) {
+  // Smart Matching auto-apply (paid) — gated by env + runtime flag
+  if (isMatchPay && matchFeatAutoApply) {
     try {
       const parts = String(invoicePayload).split('_');
       const payUserId = Number(parts[1] || 0);
@@ -16775,7 +16786,7 @@ bot.on('message:successful_payment', async (ctx) => {
   }
 
   // Featured auto-apply (paid) — gated by env flag
-  if (isFeatPay && CFG.MATCH_FEAT_AUTO_APPLY_ENABLED) {
+  if (isFeatPay && matchFeatAutoApply) {
     try {
       const parts = String(invoicePayload).split('_');
       const payUserId = Number(parts[1] || 0);
@@ -21769,6 +21780,16 @@ if (p.a === 'a:match_home') {
       await renderAdminHome(ctx);
       return;
     }
+
+    if (p.a === 'a:admin_matchfeat_auto_toggle') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      const cur = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
+      await setSysBool(SYS_KEYS.matchfeat_auto_apply, !cur);
+      await renderAdminHome(ctx);
+      return;
+    }
     if (p.a === 'a:admin_payments') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
@@ -25872,6 +25893,13 @@ async function renderAdminHome(ctx) {
   text += '• Метрики: DAU/MAU, конверсии, воронки\n';
   if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• Офиц.канал: очередь публикаций (${pending})\n`;
 
+  const payAccept = await getSysBool(SYS_KEYS.pay_accept, CFG.PAYMENTS_ACCEPT_DEFAULT);
+  const payAutoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
+  const mfAutoApply = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
+
+  text += `\n⚙️ Платежи: прием ${payAccept ? 'ON' : 'OFF'} • автовыдача ${payAutoApply ? 'ON' : 'OFF'}\n`;
+  text += `⚙️ Match/Feat auto-apply: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
+
   const kb = new InlineKeyboard()
     .text('👥 Пользователи', 'a:admin_users|f:all|p:0')
     .text('💰 Платежи', 'a:admin_payments')
@@ -25880,6 +25908,12 @@ async function renderAdminHome(ctx) {
     .text('📜 Аудит', 'a:aud|h:24|p:0')
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
+    .row();
+
+  kb.text(`💳 Прием: ${payAccept ? 'ON' : 'OFF'}`, 'a:admin_pay_accept_toggle')
+    .text(`⚙️ Автовыдача: ${payAutoApply ? 'ON' : 'OFF'}`, 'a:admin_pay_auto_toggle')
+    .row()
+    .text(`🎯🔥 Match/Feat: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
     .row();
 
   if (CFG.OFFICIAL_PUBLISH_ENABLED) {
