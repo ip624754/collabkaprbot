@@ -11510,6 +11510,8 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 • Переписка внутри открытого диалога — бесплатна
 • Лимит считается только на <b>новые</b> диалоги (ответы без ограничений)
 
+<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+
 ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')} (на одну витрину).
 👥 Раздел «Менеджеры бренда» открывается после покупки Brand Plan.
 ${trialLine}${limitLine}${verifyHintLine}
@@ -11840,6 +11842,7 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
 
 Статус: <b>${escapeHtml(status)}</b>
 ${brandPassBalanceLineHtml(credits)}
+<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 <b>Старт</b> · ${startPl.stars}⭐️/мес
 • ${startPl.credits} кредитов (интро)
@@ -11894,6 +11897,8 @@ async function renderMatchingHome(ctx, userId, wsId) {
 
 ${includedLine}
 
+<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+
 Сверх лимита можно докупить за Stars.
 <i>Покупки за Stars пока идут в очередь (ручная обработка).</i>
 
@@ -11928,6 +11933,8 @@ async function renderFeaturedHome(ctx, userId, wsId) {
     `🔥 <b>Featured</b>
 
 ${includedLine}
+
+<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 Сверх лимита можно докупить за Stars.
 <i>Покупки за Stars пока идут в очередь (ручная обработка).</i>
