@@ -978,7 +978,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   .text('📰 Лента креаторов', 'a:bx_feed|ws:0|p:0|h:mm')
   .text('🎛 Фильтры креаторов', 'a:bx_filters|ws:0|p:0|h:mm|r:mm')
   .row()
-  .text('🎯 Smart-подбор', 'a:bx_smart|ws:0|h:mm')
+  .text('🎯 Подбор в ленте', 'a:bx_smart|ws:0|h:mm')
   .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
   .row()
   .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
@@ -2829,7 +2829,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
 .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0|h:bo|r:bo`)
 .row()
-.text('🎯 Smart-подбор', `a:bx_smart|ws:${wsId}|h:bo`)
+.text('🎯 Подбор в ленте', `a:bx_smart|ws:${wsId}|h:bo`)
 .text('🔎 Поиск креаторов', `a:pm_home|ws:${wsId}`)
 .row()
 .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
@@ -10191,7 +10191,7 @@ function bxSmartPrefillText(next, info, totalAll, totalFiltered) {
 💡 Сейчас <b>0</b> результатов. Попробуй «🎛 Фильтры креаторов» или «♻️ Сбросить» (всё).`
     : '';
 
-  return `🎯 <b>Smart-подбор</b>
+  return `🎯 <b>Подбор в ленте</b>
 
 Я выставил безопасные фильтры для ленты:
 ${typeLine}
@@ -11528,7 +11528,7 @@ ${brandPassBalanceLineHtml(credits)}
     const intros = Math.max(1, Math.floor(Number(p.credits || 0) / Math.max(1, cost)));
     kb.text(`⭐ ${p.title} · ≈ ${intros} ${ruPlural(intros,'интро-диалог','интро-диалога','интро-диалогов')}`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
   }
-  kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching', `a:match_home|ws:${wsId}`).row();
+  kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching (подбор офферов)', `a:match_home|ws:${wsId}`).row();
   kbNavRow(kb, `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -11832,7 +11832,7 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
     .row()
     .text('💳 Докупить кредиты', `a:brand_pass|ws:${wsId}`)
     .row()
-    .text('🎯 Smart Matching', `a:match_home|ws:${wsId}|ret:bp|bpr:${ret}`)
+    .text('🎯 Smart Matching (подбор офферов)', `a:match_home|ws:${wsId}|ret:bp|bpr:${ret}`)
     .text('🔥 Featured', `a:feat_home|ws:${wsId}|ret:bp|bpr:${ret}`)
     .row()
     .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
@@ -11854,13 +11854,13 @@ ${brandPassBalanceLineHtml(credits)}
 • CRM-стадии + менеджеры
 
 <b>Включено в подписку</b>
-<i>Открывай 🎯 Smart Matching / 🔥 Featured ниже — там покажет остаток включённых запусков.</i>
+<i>Открывай 🎯 Smart Matching (подбор офферов) / 🔥 Featured ниже — там покажет остаток включённых запусков.</i>
 
-• 🎯 Smart Matching: <b>${BRAND_PLAN_INCLUDED_MATCH_TIER_ID}</b> (≈ ${MATCH_TIERS.find(t=>t.id===BRAND_PLAN_INCLUDED_MATCH_TIER_ID)?.count || 10} каналов) · <b>${BRAND_PLAN_INCLUDED_MATCH_PER_MONTH}</b> раз/мес
+• 🎯 Smart Matching (подбор офферов): <b>${BRAND_PLAN_INCLUDED_MATCH_TIER_ID}</b> (≈ ${MATCH_TIERS.find(t=>t.id===BRAND_PLAN_INCLUDED_MATCH_TIER_ID)?.count || 10} каналов) · <b>${BRAND_PLAN_INCLUDED_MATCH_PER_MONTH}</b> раз/мес
 • 🔥 Featured: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')} · <b>${BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH}</b> раз/мес
 
 <b>Сверх лимита</b>
-• 🎯 Smart Matching / 🔥 Featured можно докупить за Stars
+• 🎯 Smart Matching (подбор офферов) / 🔥 Featured можно докупить за Stars
 <i>Покупки за Stars пока идут в очередь (ручная обработка).</i>
 
 Кредиты можно докупить отдельно.`,
@@ -11894,7 +11894,7 @@ async function renderMatchingExample(ctx, wsId, ret, bpr) {
 
   await safeEditOrReply(
     ctx,
-    `👀 <b>Пример результата — Smart Matching</b>
+    `👀 <b>Пример результата — Smart Matching (подбор офферов)</b>
 
 ` +
       `Ты присылаешь бриф (ниша, гео, аудитория, формат) — бот подбирает релевантные офферы/каналы из сети и даёт список с кнопками.
@@ -11975,7 +11975,7 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
     : 'Чтобы запустить: купи Smart Matching за Stars (или включи Brand Plan) и пришли бриф одним сообщением.';
 
   await safeEditOrReply(ctx,
-    `🎯 <b>Smart Matching</b>
+    `🎯 <b>Smart Matching (подбор офферов)</b>
 
 ` +
       `<b>Что это:</b> подбор подходящих офферов/каналов по твоему брифу.
@@ -11987,6 +11987,8 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
 
 ` +
       `<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+
+<i>Не путать с «🎯 Подбор в ленте» — это отдельный фильтр.</i>
 
 ` +
       `Сверх лимита можно докупить за Stars.
@@ -12040,6 +12042,8 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
 
 ` +
       `<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+
+<i>Не путать с «🎯 Подбор в ленте» — это отдельный фильтр.</i>
 
 ` +
       `Сверх лимита можно докупить за Stars.
@@ -15131,7 +15135,7 @@ if (exp.type === 'brand_deals_search') {
 
       const req = await db.getMatchingRequest(reqId, u.id);
       if (!req) {
-        await ctx.reply('Запрос matching не найден (возможно, устарел). Открой 🎯 Smart Matching и попробуй ещё раз.');
+        await ctx.reply('Запрос matching не найден (возможно, устарел). Открой 🎯 Smart Matching (подбор офферов) и попробуй ещё раз.');
         return;
       }
 
@@ -15170,7 +15174,7 @@ if (exp.type === 'brand_deals_search') {
         .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
 
       await ctx.reply(
-        `🎯 <b>Smart Matching</b>\n\nБриф: <tg-spoiler>${escapeHtml(brief)}</tg-spoiler>\n\nНайдено: <b>${rows.length}</b>\nПоказаны: <b>${showN}</b>\n\n${lines.join('\n\n')}`,
+        `🎯 <b>Smart Matching (подбор офферов)</b>\n\nБриф: <tg-spoiler>${escapeHtml(brief)}</tg-spoiler>\n\nНайдено: <b>${rows.length}</b>\nПоказаны: <b>${showN}</b>\n\n${lines.join('\n\n')}`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
       return;
@@ -20744,7 +20748,7 @@ if (p.a === 'a:match_home') {
       await setExpectText(ctx.from.id, { type: 'match_brief', requestId: req.id, wsId, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') });
 
       const kb = new InlineKeyboard()
-        .text('🎯 Smart Matching', cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
+        .text('🎯 Smart Matching (подбор офферов)', cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, String(p.ret || ''), String(p.bpr || '')));
 
