@@ -510,17 +510,17 @@ export async function broadcastTick() {
     const bot = getBot();
     let sent = 0;
     let failed = 0;
-    let lastId = lastUserId;
+    let cursorUserId = lastUserId;
 
     for (const recipient of recipients) {
       const uid = Number(recipient.user_id);
       const tgId = Number(recipient.tg_id);
-      lastId = uid;
 
       try {
         await sendBroadcastMessage(bot.api, tgId, bc);
         await db.logBroadcastSent(bc.id, uid, 'sent');
         sent++;
+        cursorUserId = uid;
       } catch (err) {
         const code = err?.error_code || err?.statusCode || 0;
         const desc = String(err?.description || err?.message || '');
@@ -535,8 +535,9 @@ export async function broadcastTick() {
         ) {
           await db.logBroadcastSent(bc.id, uid, 'blocked');
           failed++;
+          cursorUserId = uid;
         }
-        // 429 = rate limit → stop batch early, retry next tick
+        // 429 = rate limit → stop batch early, retry next tick (IMPORTANT: don't advance cursor)
         else if (code === 429) {
           const retryAfter = Number(err?.parameters?.retry_after || 5);
           console.error(`[BROADCAST] 429 rate limit, retry_after=${retryAfter}`);
@@ -548,8 +549,10 @@ export async function broadcastTick() {
           console.error(`[BROADCAST] send error uid=${uid}`, desc);
           await db.logBroadcastSent(bc.id, uid, 'failed');
           failed++;
+          cursorUserId = uid;
         }
       }
+
 
       // Throttle between messages
       if (BROADCAST_SEND_DELAY_MS > 0) await sleep(BROADCAST_SEND_DELAY_MS);
@@ -559,7 +562,7 @@ export async function broadcastTick() {
     await db.updateBroadcast(bc.id, {
       sent_count: Number(bc.sent_count || 0) + sent,
       failed_count: Number(bc.failed_count || 0) + failed,
-      last_sent_user_id: lastId,
+      last_sent_user_id: cursorUserId,
     });
 
     const out = {
