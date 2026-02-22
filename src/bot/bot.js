@@ -975,6 +975,52 @@ async function trackAcqSource(tgId, src) {
   }
 }
 
+// Track role choice attribution (source x role), Redis-only.
+// We count only the first role selection per user per day (best-effort) to avoid double clicks.
+async function trackAcqRole(tgId, role) {
+  const uid = Number(tgId || 0);
+  const r0 = String(role || "").toLowerCase().trim();
+  const r = (r0 === "brand") ? "brand" : (r0 === "creator" ? "creator" : null);
+  if (!uid || !r) return;
+
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD (UTC)
+  const lastKey = k(["ref", "user", uid, "last_src"]);
+
+  let src = "direct";
+  try {
+    const v = await redis.get(lastKey);
+    const s = String(v || "").toLowerCase().trim();
+    if (s === "ig" || s === "tg") src = s;
+  } catch {
+    // ignore
+  }
+
+  // Deduplicate per user/day (best-effort).
+  const seenKey = k(["ref", "role", "seen", day, uid]);
+  try {
+    const ok = await redis.set(seenKey, `${src}:${r}`, { nx: true, ex: 60 * 60 * 48 });
+    if (!ok) return;
+  } catch {
+    return;
+  }
+
+  const totalKey = k(["ref", "role", src, r, "total"]);
+  const dayKey = k(["ref", "role", src, r, "d", day]);
+  try {
+    const [dayN] = await Promise.all([
+      redis.incr(dayKey),
+      redis.incr(totalKey),
+    ]);
+    // keep daily buckets for ~60 days
+    if (Number(dayN) === 1) {
+      try { await redis.expire(dayKey, 60 * 60 * 24 * 60); } catch {}
+    }
+  } catch {
+    // ignore
+  }
+}
+
+
 async function redisGetSafe(key, ms = 1500) {
   try {
     return await withTimeout(redis.get(key), ms, `redis.get:${String(key).slice(0, 40)}`);
@@ -14005,11 +14051,27 @@ if (!exp) {
       const isCreator = toks.includes('креатор') || toks.includes('криэтор') || toks.includes('криэйтор') || toks.includes('creator');
       const isBrand = toks.includes('бренд') || toks.includes('brand');
       if (isBrand && !isCreator) {
+        let hadUiMode = true;
+        try {
+          const rawMode = await redis.get(k(["ui_mode", ctx.from.id]));
+          hadUiMode = !!rawMode;
+        } catch {
+          hadUiMode = true;
+        }
         await setUiMode(ctx.from.id, UI_MODES.BRAND);
-        pickedRole = 'brand';
+        if (!hadUiMode) { try { await trackAcqRole(ctx.from.id, "brand"); } catch {} }
+        pickedRole = "brand";
       } else if (isCreator && !isBrand) {
+        let hadUiMode = true;
+        try {
+          const rawMode = await redis.get(k(["ui_mode", ctx.from.id]));
+          hadUiMode = !!rawMode;
+        } catch {
+          hadUiMode = true;
+        }
         await setUiMode(ctx.from.id, UI_MODES.CREATOR);
-        pickedRole = 'creator';
+        if (!hadUiMode) { try { await trackAcqRole(ctx.from.id, "creator"); } catch {} }
+        pickedRole = "creator";
       }
     }
   } catch {}
@@ -18053,7 +18115,16 @@ if (p.a === 'a:nd') {
 if (p.a === 'a:ui_mode_set') {
   await ctx.answerCallbackQuery();
   const mode = normalizeUiMode(p.m);
+  let hadUiMode = true;
+  try {
+    const rawMode = await redis.get(k(["ui_mode", ctx.from.id]));
+    hadUiMode = !!rawMode;
+  } catch {
+    hadUiMode = true; // fail-open
+  }
+
   await setUiMode(ctx.from.id, mode);
+  if (!hadUiMode) { try { await trackAcqRole(ctx.from.id, mode); } catch {} }
 
   const flags = await getRoleFlags(u, ctx.from.id);
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
@@ -18860,6 +18931,15 @@ if (p.a === 'a:menu') {
     if (p.a === 'a:home_mode') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const m = String(p.m || '');
+      // Acquisition role breakdown: count only first explicit role pick (when ui_mode was not set yet).
+      let hadUiMode = true;
+      try {
+        const rawMode = await redis.get(k(["ui_mode", ctx.from.id]));
+        hadUiMode = !!rawMode;
+      } catch {
+        hadUiMode = true; // fail-open
+      }
+
 
       // Determine whether user can manage any brands
       let managerBrands = [];
@@ -18872,6 +18952,7 @@ if (p.a === 'a:menu') {
       // Curator overlay should not leak into Brand/Manager modes, and vice versa.
       if (m === 'creator') {
         await setUiMode(ctx.from.id, UI_MODES.CREATOR);
+        if (!hadUiMode) { try { await trackAcqRole(ctx.from.id, "creator"); } catch {} }
         await disableBrandManagerState(ctx.from.id);
         try { await setCuratorMode(ctx.from.id, false); } catch {}
         const flags2 = await getRoleFlags(u, ctx.from.id);
@@ -18882,6 +18963,7 @@ if (p.a === 'a:menu') {
       if (m === 'brand') {
         await setUiMode(ctx.from.id, UI_MODES.BRAND);
         await disableBrandManagerState(ctx.from.id);
+        if (!hadUiMode) { try { await trackAcqRole(ctx.from.id, "brand"); } catch {} }
         try { await setCuratorMode(ctx.from.id, false); } catch {}
         const flags2 = await getRoleFlags(u, ctx.from.id);
         await renderRoleHub(ctx, u, flags2);
