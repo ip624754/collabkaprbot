@@ -180,3 +180,22 @@
 
 - `MATCH_FEAT_AUTO_APPLY_ENABLED=1` — после оплаты бот автоматически запускает Smart Matching / Featured (попросит бриф/контент).
 - `MATCH_FEAT_AUTO_APPLY_ENABLED=0` — оплаты match/feat попадают в очередь как ORPHANED и требуют ручной обработки.
+
+### Payments: TTL сессии оплаты (чтобы не ловить ORPHANED)
+
+- `PAYMENT_SESSION_TTL_MIN=360` — TTL (в минутах) для Redis-сессий оплаты `pay_*` (контекст счёта: wsId/ret/packId и т.д.).
+  Если TTL слишком короткий и пользователь оплачивает поздно, возможен статус ORPHANED `missing_session`.
+  Диапазон: 10..1440 минут (10 минут .. 24 часа).
+
+### Payments: fallback apply без pay_* сессии (anti-ORPHANED)
+
+- `PAYMENTS_FALLBACK_APPLY_ENABLED=1` — если Redis-сессия оплаты `pay_*` истекла, бот всё равно применит оплату по `invoice_payload` (без ручной очереди).
+- `PAYMENTS_FALLBACK_APPLY_ENABLED=0` — строгий режим: без `pay_*` сессии оплата станет ORPHANED `missing_session`.
+
+### Payments: auto-heal ORPHANED `missing_session` (cron + админка)
+
+- `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED=1` — cron будет периодически пытаться авто-применять ORPHANED с `note=missing_session` (только безопасные типы: PRO / кредиты / Brand Plan / founder_brand_*).
+- `PAYMENTS_ORPHANED_AUTOHEAL_BATCH=20` — сколько платежей чинить за один тик (0..100).
+- В админке: **Admin → Payments (ORPHANED)** → кнопка **Auto-heal missing_session**.
+
+Примечание: оплаты `offpub_*` (публикация в офиц.канал) остаются ручными по дизайну (модерация).
