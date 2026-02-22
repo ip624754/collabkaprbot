@@ -5,7 +5,7 @@ import { CFG } from '../src/lib/config.js';
 export default async function handler(_req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
-  const base = { ok: true, ts: new Date().toISOString(), env: CFG.APP_ENV };
+  const base = { ok: true, ts: new Date().toISOString(), env: CFG.APP_ENV, payments: { accept_default: !!CFG.PAYMENTS_ACCEPT_DEFAULT, auto_apply_default: !!CFG.PAYMENTS_AUTO_APPLY_DEFAULT, match_feat_auto_apply_enabled: !!CFG.MATCH_FEAT_AUTO_APPLY_ENABLED } };
 
   const auditBase = {
     enabled: !!CFG.AUDIT_DB_ENABLED,
