@@ -110,6 +110,40 @@ export default async function handler(_req, res) {
     } catch {
       // ignore
     }
+    // Acquisition role breakdown (Redis-only): source x role (brand/creator).
+    // Counts are incremented when user selects a role for the first time (ui_mode was not set).
+    try {
+      const day3 = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const srcs = ["ig", "tg", "direct"];
+      const roles = ["brand", "creator"];
+
+      const keys = [];
+      for (const src of srcs) {
+        for (const role of roles) {
+          keys.push(k(["ref", "role", src, role, "total"]));
+          keys.push(k(["ref", "role", src, role, "d", day3]));
+        }
+      }
+
+      const vals = await Promise.all(keys.map((kk) => redis.get(kk)));
+      const byRole = { day: day3, today: {}, total: {} };
+      let i = 0;
+      for (const src of srcs) {
+        byRole.total[src] = {};
+        byRole.today[src] = {};
+        for (const role of roles) {
+          const totalV = vals[i++];
+          const dayV = vals[i++];
+          byRole.total[src][role] = Number(totalV) || 0;
+          byRole.today[src][role] = Number(dayV) || 0;
+        }
+      }
+
+      ref = { ...ref, by_role: byRole };
+    } catch {
+      // ignore
+    }
+
 
     res.status(200).json({
       ...base,
