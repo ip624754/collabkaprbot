@@ -38,6 +38,28 @@ export default async function handler(_req, res) {
       redis.get(k(['cron', 'broadcast_tick', 'last_run'])),
     ]);
 
+    // Optional: show current broadcast 429 cooldown (Redis-only; no DB).
+    // Useful even if the last tick didn't run in "cooldown" mode yet.
+    let broadcast = { cooldown_until: null, retry_after_sec: null, broadcast_id: null };
+    try {
+      const bid = Number(broadcastTick?.broadcast_id || 0);
+      if (bid > 0) {
+        const raw = await redis.get(k(['broadcast', bid, 'cooldown_until']));
+        const untilMs = Number(raw) || 0;
+        broadcast.broadcast_id = bid;
+        if (untilMs > 0) {
+          broadcast.cooldown_until = new Date(untilMs).toISOString();
+          if (untilMs > Date.now()) {
+            broadcast.retry_after_sec = Math.max(1, Math.ceil((untilMs - Date.now()) / 1000));
+          } else {
+            broadcast.retry_after_sec = 0;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     // Optional audit throttle metrics (Redis-only; no DB)
     let audit = auditBase;
     if (CFG.AUDIT_DB_ENABLED && CFG.AUDIT_DB_THROTTLE_ENABLED) {
@@ -77,12 +99,14 @@ export default async function handler(_req, res) {
         giveaways_tick: giveawaysTick || null,
         broadcast_tick: broadcastTick || null,
       },
+      broadcast,
       audit,
     });
   } catch (_e) {
     res.status(200).json({
       ...base,
       cron: { enabled: true, error: 'redis_unavailable' },
+      broadcast: { cooldown_until: null, retry_after_sec: null, broadcast_id: null },
       audit: auditBase,
     });
   }
