@@ -11,6 +11,8 @@
 - `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (source of truth)
 - `12_INFRA_CONTROL_PLANE.md` — Cron/Locks/Outbox/гарантии (Control Plane)
 - `11_MIGRATIONS_PACK.md` — как безопасно поднять БД на Neon (exactly-once runner)
+- `18_NEON_COST_SAVING_AUDIT_THROTTLE.md` — как экономить Neon: audit write-shedding + метрики в `/api/health`
+- `19_OFFICIAL_PUBLISH_IDEMPOTENCY.md` — Official publish: анти‑дубли (token‑lock + DB‑reserve) + что делать при дубле
 - `13_RUNBOOK_RELEASE.md` + `16_RELEASE_CHECKLIST.md` — релизы/проверки
 - `14_BRAND_TEAM_UX_V4.md` — UX “Менеджеры бренда” (кнопка всегда видна, гейт внутри)
 

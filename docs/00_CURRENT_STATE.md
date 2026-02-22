@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR Bot) — 2026-02-20
+# 00 — CURRENT STATE (Collabka PR Bot) — 2026-02-22
 
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
@@ -78,6 +78,17 @@
   - если payload нет и `ui_mode` не установлен → короткая развилка (Бренд/Креатор), затем редирект в HomeHub
   - Redis недоступен → fail-open, всё как раньше
 
+
+### D) Official channel publish (@collabka_offers)
+Используется для публикации офферов/анонсов в официальный канал.
+
+Защита от дублей (idempotency):
+- **Redis token-lock per offer** `lock:official:<offerId>` (TTL ~180s) — не даёт параллельным кликам/ретраям постить одно и то же.
+- **DB-reserve до отправки**: `official_posts.status='PUBLISHING'` (stale rescue ~10 минут) — гарантирует единственность даже при деградации Redis.
+- После успешной отправки сохраняем `message_id` и переводим статус в `ACTIVE`.
+
+Оперативные действия при проблемах/дублях: `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`.
+
 ---
 
 ## 5) ENV (важные флаги)
@@ -87,7 +98,9 @@
 
 ### Founder Sale (promo)
 - `FOUNDER_SALE_ENABLED=true|false`
-- `FOUNDER_SALE_DEADLINE=2026-03-01T23:59:59Z` (UTC)
+- `FOUNDER_SALE_DEADLINE=2026-03-01T23:59:59+03:00` (МСК).
+
+> Примечание: на UI дедлайн форматируется как «1 марта 23:59 (МСК)». Если задашь `...Z`, на UI покажется время в МСК (сдвинутое), что корректно, но может удивить.
 - `FOUNDER_BRAND_3M_PRICE=1999`, `FOUNDER_BRAND_12M_PRICE=4999`, `FOUNDER_CREATOR_12M_PRICE=2499`
 - `FOUNDER_BRAND_3M_CREDITS=100`, `FOUNDER_BRAND_12M_CREDITS=200`
 
@@ -105,6 +118,8 @@
 - `AUDIT_DB_THROTTLE_ENABLED=true|false`
 - `AUDIT_DB_THROTTLE_LIMIT`, `AUDIT_DB_THROTTLE_WINDOW_SEC`
 - `AUDIT_DB_THROTTLE_PREFIXES` — какие audit-события считаем шумными (можно расширять точечно после метрик).
+
+Подробный план и готовые профили: `docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`.
 
 ---
 
@@ -129,3 +144,6 @@
 - Audit write-shedding (ENV-гейт) + счётчики suppressed в health
 - Broadcast: URL-кнопки до 3, deep-link shortcuts, шаблоны кнопок, ссылки “в слово”, финальный экран с кнопками
 - Role gate на `/start` (Redis `ui_mode`, payload priority, fail-open)
+
+- Official channel publish: token-lock + DB-reserve (PUBLISHING) для защиты от дублей
+- Broadcast: Redis cooldown на 429 + отображение cooldown в `/api/health`
