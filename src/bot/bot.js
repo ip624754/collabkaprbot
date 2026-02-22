@@ -14261,6 +14261,46 @@ ${escapeHtml(safe)}`;
       return;
     }
 
+    // --- Admin: Revoke subscription/credits — parse usernames ---
+    if (exp.type === 'adm_revoke_users') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Введи @username пользователей.');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+      const parts = raw.split(/[\s,;\n]+/).map(s => s.replace(/^@/, '').trim().toLowerCase()).filter(Boolean);
+      if (!parts.length) {
+        await ctx.reply('Не удалось распознать юзернеймы. Попробуй ещё.');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+      const unique = [...new Set(parts)].slice(0, 50);
+      const revType = String(exp.revType || '');
+      const labels = { bp: 'Забрать Brand Plan', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
+      const label = labels[revType] || revType;
+
+      const joined = unique.join(',');
+      let kb;
+      if (joined.length <= 30) {
+        kb = new InlineKeyboard()
+          .text('⛔ Подтвердить', `a:adm_gift_revoke_do|t:${revType}|u:${joined}`)
+          .text('❌ Отмена', 'a:adm_gift_revoke');
+      } else {
+        const token = randomToken(8);
+        await redis.set(k(['adm_revoke', token]), { revType, usernames: unique }, { ex: 10 * 60 });
+        kb = new InlineKeyboard()
+          .text('⛔ Подтвердить', `a:adm_gift_revoke_batch|tk:${token}`)
+          .text('❌ Отмена', 'a:adm_gift_revoke');
+      }
+
+      const preview = unique.map(u => `@${u}`).join(', ');
+      const warn = revType === 'cr' ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены.' : '';
+      await safeEditOrReply(ctx, `⛔ <b>${escapeHtml(label)}</b>${warn}\n\nПользователи (${unique.length}):\n${escapeHtml(preview)}\n\nПодтвердить?`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
     // --- Admin: Reply to user's support message ---
     if (exp.type === 'adm_support_reply') {
       if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
@@ -22406,8 +22446,52 @@ if (p.a === 'a:match_home') {
         .row()
         .text(`✨ PRO Креатор (${CFG.PRO_DURATION_DAYS}д)`, 'a:adm_gift_input|t:pro')
         .row()
+        .text('⛔ Забрать / отменить подписку', 'a:adm_gift_revoke')
+        .row()
         .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx, `🎁 <b>Подарить подписку</b>\n\nВыбери тип подписки.\nПосле этого введи @username (или несколько через пробел/запятую).`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    // --- Admin: Revoke gifted subscriptions / credits ---
+    if (p.a === 'a:adm_gift_revoke') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const kb = new InlineKeyboard()
+        .text('⛔ Забрать Brand Plan', 'a:adm_gift_revoke_input|t:bp')
+        .row()
+        .text('⛔ Забрать PRO', 'a:adm_gift_revoke_input|t:pro')
+        .row()
+        .text('🧹 Обнулить кредиты (опасно)', 'a:adm_gift_revoke_input|t:cr')
+        .row()
+        .text('⬅️ Назад', 'a:adm_gift')
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(
+        ctx,
+        `⛔ <b>Забрать / отменить</b>\n\nВыбери, что забрать у пользователей.\nДальше введи @username (можно несколько).`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      return;
+    }
+
+    if (p.a === 'a:adm_gift_revoke_input') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const revType = String(p.t || '');
+      const labels = { bp: 'Забрать Brand Plan', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
+      const label = labels[revType] || revType;
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', 'a:adm_gift_revoke')
+        .text('⬅️ Админка', 'a:admin_home');
+      const warn = revType === 'cr'
+        ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены. Используй только если уверен.'
+        : '';
+      await safeEditOrReply(
+        ctx,
+        `⛔ <b>${escapeHtml(label)}</b>\n\nВведи @username получателей (через пробел, запятую или каждый с новой строки).${warn}\n\nПример:\n<code>@user1 @user2</code>`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      await setExpectText(ctx.from.id, { type: 'adm_revoke_users', revType });
       return;
     }
 
@@ -22471,6 +22555,87 @@ if (p.a === 'a:match_home') {
         .text('🎁 Ещё подарить', 'a:adm_gift')
         .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx, `🎁 <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_gift_revoke_do') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const revType = String(p.t || '');
+      const usersRaw = String(p.u || '');
+      const usernames = usersRaw.split(',').filter(Boolean);
+      if (!usernames.length) return ctx.answerCallbackQuery({ text: 'Нет юзернеймов.' });
+
+      const results = [];
+      for (const uname of usernames) {
+        const clean = uname.replace(/^@/, '').trim().toLowerCase();
+        if (!clean) { results.push(`❌ пустой`); continue; }
+
+        const found = await db.findUserByUsername(clean);
+        if (!found) { results.push(`❌ @${clean} — не найден`); continue; }
+        try {
+          if (revType === 'bp') {
+            await db.revokeBrandPlan(found.id);
+            results.push(`⛔ @${clean} — Brand Plan забран`);
+          } else if (revType === 'pro') {
+            await db.revokeAllWorkspacePro(found.id);
+            results.push(`⛔ @${clean} — PRO забран`);
+          } else if (revType === 'cr') {
+            await db.resetBrandCredits(found.id);
+            results.push(`🧹 @${clean} — кредиты обнулены`);
+          } else {
+            results.push(`❌ @${clean} — неизвестный тип`);
+          }
+        } catch (e) {
+          results.push(`❌ @${clean} — ошибка: ${String(e?.message || e).slice(0, 60)}`);
+        }
+      }
+
+      const kb = new InlineKeyboard()
+        .text('⛔ Ещё забрать', 'a:adm_gift_revoke')
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(ctx, `⛔ <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_gift_revoke_batch') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const token = String(p.tk || '');
+      const data = await redis.get(k(['adm_revoke', token]));
+      if (!data || !Array.isArray(data.usernames)) {
+        return ctx.answerCallbackQuery({ text: 'Сессия истекла. Начни заново.' });
+      }
+      await redis.del(k(['adm_revoke', token]));
+      const revType = String(data.revType || '');
+      const usernames = Array.isArray(data.usernames) ? data.usernames : [];
+      const results = [];
+      for (const uname of usernames) {
+        const clean = uname.replace(/^@/, '').trim().toLowerCase();
+        if (!clean) { results.push(`❌ пустой`); continue; }
+        const found = await db.findUserByUsername(clean);
+        if (!found) { results.push(`❌ @${clean} — не найден`); continue; }
+        try {
+          if (revType === 'bp') {
+            await db.revokeBrandPlan(found.id);
+            results.push(`⛔ @${clean} — Brand Plan забран`);
+          } else if (revType === 'pro') {
+            await db.revokeAllWorkspacePro(found.id);
+            results.push(`⛔ @${clean} — PRO забран`);
+          } else if (revType === 'cr') {
+            await db.resetBrandCredits(found.id);
+            results.push(`🧹 @${clean} — кредиты обнулены`);
+          } else {
+            results.push(`❌ @${clean} — неизвестный тип`);
+          }
+        } catch (e) {
+          results.push(`❌ @${clean} — ошибка: ${String(e?.message || e).slice(0, 60)}`);
+        }
+      }
+      const kb = new InlineKeyboard()
+        .text('⛔ Ещё забрать', 'a:adm_gift_revoke')
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(ctx, `⛔ <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
