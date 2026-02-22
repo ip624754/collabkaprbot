@@ -1,4 +1,4 @@
-import { redis, k } from '../lib/redis.js';
+import { redis, k, acquireLock, releaseLock } from '../lib/redis.js';
 import * as db from '../db/queries.js';
 import { getBot } from './bot.js';
 import { InlineKeyboard } from 'grammy';
@@ -44,25 +44,25 @@ async function writeCronLastRun(name, payload) {
 }
 
 async function withLock(lockKey, ttlSec, fn) {
-  const ok = await redis.set(lockKey, '1', { nx: true, ex: ttlSec });
-  if (!ok) return { locked: true };
+  const lock = await acquireLock(lockKey, ttlSec);
+  if (!lock) return { locked: true };
   try {
     const r = await fn();
     return { locked: false, result: r };
   } finally {
-    await redis.del(lockKey);
+    await releaseLock(lockKey, lock.token);
   }
 }
 
 async function withGiveawayLock(giveawayId, fn) {
   const key = k(['lock', 'gw', String(giveawayId)]);
-  const ok = await redis.set(key, '1', { nx: true, ex: GIVEAWAY_LOCK_TTL_SEC });
-  if (!ok) return { locked: true };
+  const lock = await acquireLock(key, GIVEAWAY_LOCK_TTL_SEC);
+  if (!lock) return { locked: true };
   try {
     const r = await fn();
     return { locked: false, result: r };
   } finally {
-    await redis.del(key);
+    await releaseLock(key, lock.token);
   }
 }
 
