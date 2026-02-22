@@ -157,3 +157,5 @@
 - Broadcast: Redis cooldown на 429 + отображение cooldown в `/api/health`
 - Cron: token-based locks (safe unlock) + SQL atomic guards на критичных статусных переходах
 - Cron: Telegram notify обёрнуты в `withTimeout(~5s)` чтобы тик не “залипал”
+
+Примечание: в корне репозитория есть `migration_pack/` — ручные SQL-скрипты для экстренного переноса/repair (не используются рантаймом).
