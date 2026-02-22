@@ -577,6 +577,26 @@ async function getMatchFeatAutoApplyRuntime() {
   return await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
 }
 
+async function sendOpsAlert(api, msg) {
+  // Prefer a dedicated support group/chat, otherwise fallback to super admins.
+  try {
+    const chatId = Number(CFG.SUPPORT_CHAT_ID || 0);
+    if (chatId) {
+      await api.sendMessage(chatId, msg);
+      return true;
+    }
+  } catch {}
+
+  try {
+    const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
+    for (const a of admins) {
+      try { await api.sendMessage(a, msg); } catch {}
+    }
+    return admins.length > 0;
+  } catch {}
+  return false;
+}
+
 
 // Backward-compatible alias (some flows call getPaymentMode)
 async function getPaymentMode() {
@@ -12355,8 +12375,12 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
   const active = await db.isBrandPlanActive(userId);
   const credits = await db.getBrandCredits(userId);
   const status = brandPlanStatusText(planRow, active);
-  let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
-  if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
+  let paidFlow = 'manual';
+  {
+    let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+    if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
+    paidFlow = paidAuto ? 'auto' : (CFG.MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF ? 'self' : 'manual');
+  }
 
   const startPl = BRAND_PLANS.find(p => p.id === 'start');
   const proPl = BRAND_PLANS.find(p => p.id === 'pro');
@@ -12397,7 +12421,7 @@ ${brandPassBalanceLineHtml(credits)}
 
 <b>Сверх лимита</b>
 • 🎯 Smart Matching (подбор офферов) / 🔥 Featured можно докупить за Stars
-${paidAuto ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
+${paidFlow !== 'manual' ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 Кредиты можно докупить отдельно.`,
     { parse_mode: 'HTML', reply_markup: kb }
@@ -12485,8 +12509,12 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
   const used = hasPlan ? await db.countIncludedMatchingThisMonth(userId) : 0;
   const limit = hasPlan ? BRAND_PLAN_INCLUDED_MATCH_PER_MONTH : 0;
   const left = Math.max(0, limit - used);
-  let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
-  if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
+  let paidFlow = 'manual';
+  {
+    let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+    if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
+    paidFlow = paidAuto ? 'auto' : (CFG.MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF ? 'self' : 'manual');
+  }
 
   const tier = MATCH_TIERS.find(t => String(t.id) === String(BRAND_PLAN_INCLUDED_MATCH_TIER_ID)) || MATCH_TIERS[0];
 
@@ -12530,7 +12558,7 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
 
 ` +
       `Сверх лимита можно докупить за Stars.
-${paidAuto ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
+${paidFlow !== 'manual' ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 ` +
       `${cta}`,
@@ -12544,8 +12572,12 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
   const used = hasPlan ? await db.countIncludedFeaturedThisMonth(userId) : 0;
   const limit = hasPlan ? BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH : 0;
   const left = Math.max(0, limit - used);
-  let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
-  if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
+  let paidFlow = 'manual';
+  {
+    let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+    if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
+    paidFlow = paidAuto ? 'auto' : (CFG.MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF ? 'self' : 'manual');
+  }
 
   const kb = new InlineKeyboard();
   kb.text('👀 Пример', cbJoin('a:feat_example', { ws: wsId, ret, bpr })).row();
@@ -12587,7 +12619,7 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
 
 ` +
       `Сверх лимита можно докупить за Stars.
-${paidAuto ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
+${paidFlow !== 'manual' ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 ` +
       `${cta}`,
@@ -17544,14 +17576,23 @@ bot.on('message:successful_payment', async (ctx) => {
   const isMatchPay = invoicePayload.startsWith('match_');
   const isFeatPay = invoicePayload.startsWith('feat_');
   const isOffpubPay = invoicePayload.startsWith('offpub_');
+  const isMatchFeatPay = isMatchPay || isFeatPay;
 
   // Official channel posts are always ORPHANED post-payment.
-  // Smart Matching / Featured are ORPHANED only when auto-apply is disabled.
-  let matchFeatAutoApply = CFG.MATCH_FEAT_AUTO_APPLY_ENABLED;
-  if (matchFeatAutoApply && (isMatchPay || isFeatPay)) {
-    matchFeatAutoApply = await getMatchFeatAutoApplyRuntime();
+  // Smart Matching / Featured:
+  //   - AUTO mode when env+runtime allow it
+  //   - SELF-SERVICE mode when AUTO is off but self-service is enabled
+  //   - MANUAL only when explicitly disabled
+  let matchFeatMode = 'manual';
+  if (isMatchFeatPay) {
+    const envAuto = !!CFG.MATCH_FEAT_AUTO_APPLY_ENABLED;
+    const runtimeAuto = envAuto ? await getMatchFeatAutoApplyRuntime() : false;
+    if (envAuto && runtimeAuto) matchFeatMode = 'auto';
+    else if (CFG.MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF) matchFeatMode = 'self';
+    else matchFeatMode = 'manual';
   }
-  if (isOffpubPay || ((isMatchPay || isFeatPay) && !matchFeatAutoApply)) {
+
+  if (isOffpubPay || (isMatchFeatPay && matchFeatMode === 'manual')) {
     await markStatus('ORPHANED', 'postpay_orphaned');
     db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'postpay_orphaned' } });
     if (isOffpubPay) {
@@ -17607,29 +17648,21 @@ bot.on('message:successful_payment', async (ctx) => {
         await ctx.reply('✅ Оплата получена! Оффер поставлен в очередь на публикацию в официальном канале. Модератор опубликует его вручную.');
       }
     } else {
-      await ctx.reply('✅ Платеж получен. Сейчас эта услуга обрабатывается вручную — я свяжусь с тобой в ближайшее время.');
-      // Notify super admins so the service request is not lost.
+      await ctx.reply('✅ Платеж получен. Эта услуга сейчас на ручной обработке — если нужно ускорить, напиши /paysupport.');
       try {
-        const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
-        if (admins.length) {
-          const userTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
-          const amount = sp.total_amount;
-          const currency = sp.currency || 'XTR';
-          const msg = [
-            '🧾 ORPHANED service payment',
-            `Kind: ${kind}`,
-            `Payload: ${invoicePayload}`,
-            `From: ${userTag} (userId=${u.id})`,
-            `Amount: ${amount} ${currency}`,
-            `TG charge: ${sp.telegram_payment_charge_id || '-'}`,
-            `PaymentId: ${paymentId || '-'}`,
-            '',
-            'Next: open Admin → Payments → filter ORPHANED and process it.'
-          ].join('\n');
-          for (const a of admins) {
-            await ctx.api.sendMessage(a, msg);
-          }
-        }
+        const userTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
+        const amount = sp.total_amount;
+        const currency = sp.currency || 'XTR';
+        const msg = [
+          '🧾 ORPHANED service payment (manual)',
+          `Kind: ${kind}`,
+          `Payload: ${invoicePayload}`,
+          `From: ${userTag} (userId=${u.id})`,
+          `Amount: ${amount} ${currency}`,
+          `TG charge: ${sp.telegram_payment_charge_id || '-'}`,
+          `PaymentId: ${paymentId || '-'}`,
+        ].join('\n');
+        await sendOpsAlert(ctx.api, msg);
       } catch (_) { /* ignore */ }
     }
 
@@ -17644,8 +17677,8 @@ bot.on('message:successful_payment', async (ctx) => {
     return;
   }
 
-  // Smart Matching auto-apply (paid) — gated by env + runtime flag
-  if (isMatchPay && matchFeatAutoApply) {
+  // Smart Matching (paid) — AUTO or SELF-SERVICE modes
+  if (isMatchPay && (matchFeatMode === 'auto' || matchFeatMode === 'self')) {
     try {
       const parts = String(invoicePayload).split('_');
       const payUserId = Number(parts[1] || 0);
@@ -17676,7 +17709,7 @@ bot.on('message:successful_payment', async (ctx) => {
       const paid = Number(sp.total_amount || tier.stars || 0);
       const req = await db.createMatchingRequest(u.id, tier.id, paid);
       await setExpectText(ctx.from.id, { type: 'match_brief', requestId: req.id, wsId, count: tier.count, ret, bpr });
-      await markApplied(`auto_apply_match:req:${req.id}`);
+      await markApplied(`${matchFeatMode === 'auto' ? 'auto_apply' : 'self_service'}_match:req:${req.id}`);
 
       const kb = new InlineKeyboard()
         .text('🎯 Smart Matching (подбор офферов)', cbJoin('a:match_home', { ws: wsId, ret, bpr }))
@@ -17690,14 +17723,25 @@ bot.on('message:successful_payment', async (ctx) => {
       );
       return;
     } catch (e) {
-      await markStatus('ERROR', `auto_apply_error: ${String(e?.message || e).slice(0, 120)}`);
-      await ctx.reply('✅ Платеж получен. Возникла ошибка авто-выдачи — я применю вручную.');
+      await markStatus('ERROR', `match_apply_error: ${String(e?.message || e).slice(0, 120)}`);
+      await ctx.reply('✅ Платеж получен. Возникла ошибка при запуске — напиши /paysupport, я помогу.');
+      try {
+        const userTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
+        const msg = [
+          '⚠️ MATCH apply error',
+          `Payload: ${invoicePayload}`,
+          `From: ${userTag} (userId=${u.id})`,
+          `PaymentId: ${paymentId || '-'}`,
+          `Err: ${String(e?.message || e).slice(0, 180)}`,
+        ].join('\n');
+        await sendOpsAlert(ctx.api, msg);
+      } catch {}
       return;
     }
   }
 
-  // Featured auto-apply (paid) — gated by env flag
-  if (isFeatPay && matchFeatAutoApply) {
+  // Featured (paid) — AUTO or SELF-SERVICE modes
+  if (isFeatPay && (matchFeatMode === 'auto' || matchFeatMode === 'self')) {
     try {
       const parts = String(invoicePayload).split('_');
       const payUserId = Number(parts[1] || 0);
@@ -17728,7 +17772,7 @@ bot.on('message:successful_payment', async (ctx) => {
       const paid = Number(sp.total_amount || dur.stars || 0);
       const f = await db.createFeaturedPlacement(u.id, dur.days, paid);
       await setExpectText(ctx.from.id, { type: 'feat_content', featuredId: f.id, wsId, ret, bpr });
-      await markApplied(`auto_apply_feat:id:${f.id}`);
+      await markApplied(`${matchFeatMode === 'auto' ? 'auto_apply' : 'self_service'}_feat:id:${f.id}`);
 
       const kb = new InlineKeyboard()
         .text('🔥 Featured', cbJoin('a:feat_home', { ws: wsId, ret, bpr }))
@@ -17742,8 +17786,19 @@ bot.on('message:successful_payment', async (ctx) => {
       );
       return;
     } catch (e) {
-      await markStatus('ERROR', `auto_apply_error: ${String(e?.message || e).slice(0, 120)}`);
-      await ctx.reply('✅ Платеж получен. Возникла ошибка авто-выдачи — я применю вручную.');
+      await markStatus('ERROR', `feat_apply_error: ${String(e?.message || e).slice(0, 120)}`);
+      await ctx.reply('✅ Платеж получен. Возникла ошибка при запуске — напиши /paysupport, я помогу.');
+      try {
+        const userTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
+        const msg = [
+          '⚠️ FEAT apply error',
+          `Payload: ${invoicePayload}`,
+          `From: ${userTag} (userId=${u.id})`,
+          `PaymentId: ${paymentId || '-'}`,
+          `Err: ${String(e?.message || e).slice(0, 180)}`,
+        ].join('\n');
+        await sendOpsAlert(ctx.api, msg);
+      } catch {}
       return;
     }
   }

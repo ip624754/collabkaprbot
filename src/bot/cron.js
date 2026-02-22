@@ -37,6 +37,22 @@ const CRON_LAST_RUN_TTL_SEC = 14 * 24 * 60 * 60; // 14 days
 
 const NOTIFY_TIMEOUT_MS = 5000; // best-effort Telegram notifications in cron
 
+async function sendOpsAlert(api, msg) {
+  try {
+    const chatId = Number(CFG.SUPPORT_CHAT_ID || 0);
+    if (chatId) {
+      await api.sendMessage(chatId, msg);
+      return;
+    }
+  } catch {}
+  try {
+    const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
+    for (const a of admins) {
+      try { await api.sendMessage(a, msg); } catch {}
+    }
+  } catch {}
+}
+
 async function writeCronLastRun(name, payload) {
   try {
     const key = k(['cron', String(name || 'tick'), 'last_run']);
@@ -431,6 +447,17 @@ async function autoHealOrphanedPayments() {
     } catch {
       failed += 1;
     }
+  }
+
+  if (failed > 0) {
+    try {
+      const msg = [
+        '⚠️ Payments auto-heal: failures detected',
+        `checked=${cand.length} applied=${applied} failed=${failed} skipped=${skipped}`,
+        'Tip: open Admin → Payments → ORPHANED to inspect.',
+      ].join('\n');
+      await sendOpsAlert(api, msg);
+    } catch {}
   }
 
   return { enabled: true, checked: cand.length, applied, failed, skipped };
