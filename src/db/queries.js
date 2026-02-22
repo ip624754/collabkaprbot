@@ -2862,6 +2862,22 @@ export async function setOfficialPostStatus(offerId, status, input = {}) {
   return r.rows[0] || null;
 }
 
+/**
+ * Atomically expire an official post only if it is still ACTIVE.
+ * Returns true if the row was updated; false means another tick already expired it.
+ */
+export async function atomicExpireOfficialPost(offerId) {
+  const r = await pool.query(
+    `update official_posts
+        set status='EXPIRED',
+            updated_at=now()
+      where offer_id=$1 and status='ACTIVE'
+      returning offer_id`,
+    [Number(offerId)]
+  );
+  return r.rowCount > 0;
+}
+
 export async function listOfficialPending(limit = 20, offset = 0) {
   const r = await pool.query(
     `select op.*, o.title as offer_title, w.title as ws_title, w.channel_username
@@ -5279,5 +5295,66 @@ export async function tryAdvisoryLock(key) {
  */
 export async function advisoryUnlock(key) {
   await pool.query('SELECT pg_advisory_unlock($1)', [Number(key)]);
+}
+
+// =====================================================
+// Atomic cron guards (prevent double-processing on lock expiry)
+// =====================================================
+
+/**
+ * Atomically transition a giveaway to ENDED only if it's still in an endable status.
+ * Returns true if the row was updated; false means another tick already ended it.
+ */
+export async function atomicEndGiveaway(giveawayId) {
+  const r = await pool.query(
+    `UPDATE giveaways
+     SET status = 'ENDED', updated_at = now()
+     WHERE id = $1 AND status IN ('ACTIVE','PAUSED','PUBLISHED','RUNNING')
+     RETURNING id`,
+    [Number(giveawayId)]
+  );
+  return r.rowCount > 0;
+}
+
+/**
+ * Atomically claim a giveaway for results publishing.
+ * Sets status + results_message_id only if still WINNERS_DRAWN with no results yet.
+ * Returns true if claimed; false means another tick already published.
+ */
+export async function atomicPublishGiveawayResults(giveawayId, messageId) {
+  const r = await pool.query(
+    `UPDATE giveaways
+     SET status = 'RESULTS_PUBLISHED',
+         results_message_id = $2,
+         results_published_at = now(),
+         updated_at = now()
+     WHERE id = $1
+       AND status = 'WINNERS_DRAWN'
+       AND results_message_id IS NULL
+     RETURNING id`,
+    [Number(giveawayId), messageId]
+  );
+  return r.rowCount > 0;
+}
+
+/**
+ * Atomically transition a broadcast status (e.g. PENDING→RUNNING, RUNNING→DONE).
+ * Returns true if the row was updated; false means status already changed.
+ */
+export async function atomicTransitionBroadcast(id, fromStatus, toStatus, extraFields = {}) {
+  const sets = ['status = $2', 'updated_at = now()'];
+  const params = [Number(id), toStatus];
+  let idx = 3;
+  for (const [key, val] of Object.entries(extraFields)) {
+    sets.push(`${key} = $${idx}`);
+    params.push(val);
+    idx++;
+  }
+  params.push(fromStatus);
+  const r = await pool.query(
+    `UPDATE broadcasts SET ${sets.join(', ')} WHERE id = $1 AND status = $${idx} RETURNING id`,
+    params
+  );
+  return r.rowCount > 0;
 }
 
