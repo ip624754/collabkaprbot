@@ -83,6 +83,15 @@ export const CFG = {
   BRAND_PLAN_PRO_FEATURED_DAYS: parseIntSafe(process.env.BRAND_PLAN_PRO_FEATURED_DAYS, 7),
   BRAND_PLAN_DURATION_DAYS: parseIntSafe(process.env.BRAND_PLAN_DURATION_DAYS, 30),
 
+  // Founder Sale (limited time promo; UI-only, no migrations)
+  FOUNDER_SALE_ENABLED: parseBoolSafe(process.env.FOUNDER_SALE_ENABLED, false),
+  FOUNDER_SALE_DEADLINE: process.env.FOUNDER_SALE_DEADLINE || '',
+  FOUNDER_BRAND_3M_PRICE: parseIntSafe(process.env.FOUNDER_BRAND_3M_PRICE, 0),
+  FOUNDER_BRAND_12M_PRICE: parseIntSafe(process.env.FOUNDER_BRAND_12M_PRICE, 0),
+  FOUNDER_CREATOR_12M_PRICE: parseIntSafe(process.env.FOUNDER_CREATOR_12M_PRICE, 0),
+  FOUNDER_BRAND_3M_CREDITS: parseIntSafe(process.env.FOUNDER_BRAND_3M_CREDITS, 0),
+  FOUNDER_BRAND_12M_CREDITS: parseIntSafe(process.env.FOUNDER_BRAND_12M_CREDITS, 0),
+
   // Legacy compat (kept for existing env vars)
   BRAND_PLAN_BASIC_PRICE: parseIntSafe(process.env.BRAND_PLAN_BASIC_PRICE, 250),
   BRAND_PLAN_MAX_PRICE: parseIntSafe(process.env.BRAND_PLAN_MAX_PRICE, 1000),
