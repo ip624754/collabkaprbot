@@ -165,6 +165,9 @@ export const CFG = {
   // Payments toggles (runtime override via admin → stored in Redis)
   PAYMENTS_ACCEPT_DEFAULT: parseBoolSafe(process.env.PAYMENTS_ACCEPT_DEFAULT, true),
   PAYMENTS_AUTO_APPLY_DEFAULT: parseBoolSafe(process.env.PAYMENTS_AUTO_APPLY_DEFAULT, true),
+  // Smart Matching / Featured paid add-ons: allow full auto-apply on successful Stars payment
+  // When disabled, paid match/feat payments are marked ORPHANED and require admin processing.
+  MATCH_FEAT_AUTO_APPLY_ENABLED: parseBoolSafe(process.env.MATCH_FEAT_AUTO_APPLY_ENABLED, false),
 
   // Feature flags
   ANALYTICS_ENABLED: parseBoolSafe(process.env.ANALYTICS_ENABLED, false),
