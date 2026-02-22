@@ -250,8 +250,9 @@ async function expireOfficialPosts() {
     }
 
     try {
-      await db.setOfficialPostStatus(p.offer_id, 'EXPIRED');
-      expired += 1;
+      // Atomic: expire only if still ACTIVE (prevents double-expire on overlapping ticks)
+      const ok = await db.atomicExpireOfficialPost(p.offer_id);
+      if (ok) expired += 1;
     } catch {
       // ignore db
     }
