@@ -2629,6 +2629,20 @@ export async function setBarterThreadTriageStatus(threadId, buyerUserId, triageS
 // Smart Matching
 // -----------------------------
 
+// Count included Smart Matching runs used in the current calendar month.
+// We treat "included" as requests created with stars_paid = 0.
+export async function countIncludedMatchingThisMonth(userId) {
+  const r = await pool.query(
+    `select count(*)::int as c
+       from matching_requests
+      where user_id = $1
+        and coalesce(stars_paid, 0) = 0
+        and created_at >= date_trunc('month', now())`,
+    [Number(userId)]
+  );
+  return Number(r.rows[0]?.c || 0);
+}
+
 export async function createMatchingRequest(userId, tier, starsPaid) {
   const r = await pool.query(
     `insert into matching_requests (user_id, tier, stars_paid, status)
@@ -2714,6 +2728,20 @@ export async function searchNetworkBarterOffersByBrief(brief, limit = 10) {
 // -----------------------------
 // Featured placements
 // -----------------------------
+
+// Count included Featured placements used in the current calendar month.
+// We treat "included" as placements created with stars_paid = 0.
+export async function countIncludedFeaturedThisMonth(userId) {
+  const r = await pool.query(
+    `select count(*)::int as c
+       from featured_placements
+      where user_id = $1
+        and coalesce(stars_paid, 0) = 0
+        and created_at >= date_trunc('month', now())`,
+    [Number(userId)]
+  );
+  return Number(r.rows[0]?.c || 0);
+}
 
 export async function createFeaturedPlacement(userId, durationDays, starsPaid) {
   const r = await pool.query(
