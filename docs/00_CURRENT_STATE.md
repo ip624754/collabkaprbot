@@ -28,6 +28,7 @@
 - `cron.giveaways_tick` и `cron.broadcast_tick`: последний run (ts + summary)
 - `audit.throttle`: метрики подавления audit-записей (если включено)
 - `broadcast.cooldown`: активная пауза после `429 Too Many Requests` (если есть)
+- `ref`: лёгкие счётчики источников входа (`/start src_tg` / `/start src_ig`) — today/total
 
 #### Audit throttle counters
 Если включён `AUDIT_DB_THROTTLE_ENABLED=true`, то `/api/health` показывает:
@@ -35,6 +36,13 @@
 - `audit.throttle.suppressed_today_by_prefix`
 
 Это **Redis-only** счётчики (Neon не трогаем).
+
+#### Acquisition (откуда пришли)
+Для трекинга входов используются лёгкие маркеры в ссылках:
+- Telegram: `https://t.me/<bot>?start=src_tg`
+- Instagram: `https://t.me/<bot>?start=src_ig`
+
+Счётчики видны в `/api/health.ref` и хранятся **только в Redis**.
 
 ---
 
