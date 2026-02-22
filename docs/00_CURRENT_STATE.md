@@ -186,7 +186,11 @@
 ### Smart Matching / Featured — авто-обработка оплат (Stars)
 
 - `MATCH_FEAT_AUTO_APPLY_ENABLED=1` — после оплаты бот автоматически запускает Smart Matching / Featured (попросит бриф/контент).
-- `MATCH_FEAT_AUTO_APPLY_ENABLED=0` — оплаты match/feat попадают в очередь как ORPHANED и требуют ручной обработки.
+- `MATCH_FEAT_AUTO_APPLY_ENABLED=0` — авто-режим выключен.
+  - если `MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF=1` (рекомендуется) → бот не требует ручной обработки: после оплаты попросит бриф/контент и создаст заявку (self-service).
+  - если `MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF=0` → оплаты match/feat попадают в очередь как ORPHANED и требуют ручной обработки.
+
+- `MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF=1|0` — поведение при выключенном авто-режиме (см. выше).
 
 ### Payments: TTL сессии оплаты (чтобы не ловить ORPHANED)
 
@@ -198,6 +202,16 @@
 
 - `PAYMENTS_FALLBACK_APPLY_ENABLED=1` — если Redis-сессия оплаты `pay_*` истекла, бот всё равно применит оплату по `invoice_payload` (без ручной очереди).
 - `PAYMENTS_FALLBACK_APPLY_ENABLED=0` — строгий режим: без `pay_*` сессии оплата станет ORPHANED `missing_session`.
+
+---
+
+## Admin: подарки и отзыв подписок
+
+- `👑 Админка → 🎁 Подарить подписку` — выдача подарков (Brand Plan Старт/Про, PRO Креатор).
+- В этом же меню есть `⛔ Забрать / отменить подписку`:
+  - забрать Brand Plan
+  - забрать PRO
+  - (опционально) обнулить кредиты (опасно)
 
 ### Payments: auto-heal ORPHANED `missing_session` (cron + админка)
 
