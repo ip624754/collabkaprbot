@@ -92,6 +92,25 @@ export default async function handler(_req, res) {
       };
     }
 
+    // Lightweight acquisition counters (Redis-only; no DB)
+    let ref = { day: null, today: { ig: 0, tg: 0 }, total: { ig: 0, tg: 0 } };
+    try {
+      const day2 = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const [igT, tgT, igD, tgD] = await Promise.all([
+        redis.get(k(['ref', 'src', 'ig', 'total'])),
+        redis.get(k(['ref', 'src', 'tg', 'total'])),
+        redis.get(k(['ref', 'src', 'ig', 'd', day2])),
+        redis.get(k(['ref', 'src', 'tg', 'd', day2])),
+      ]);
+      ref = {
+        day: day2,
+        today: { ig: Number(igD) || 0, tg: Number(tgD) || 0 },
+        total: { ig: Number(igT) || 0, tg: Number(tgT) || 0 },
+      };
+    } catch {
+      // ignore
+    }
+
     res.status(200).json({
       ...base,
       cron: {
@@ -100,6 +119,7 @@ export default async function handler(_req, res) {
         broadcast_tick: broadcastTick || null,
       },
       broadcast,
+      ref,
       audit,
     });
   } catch (_e) {
@@ -107,6 +127,7 @@ export default async function handler(_req, res) {
       ...base,
       cron: { enabled: true, error: 'redis_unavailable' },
       broadcast: { cooldown_until: null, retry_after_sec: null, broadcast_id: null },
+      ref: { day: null, today: { ig: 0, tg: 0 }, total: { ig: 0, tg: 0 } },
       audit: auditBase,
     });
   }
