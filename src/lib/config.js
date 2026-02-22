@@ -45,6 +45,10 @@ const OPS_ALERT_SUMMARY_MIN = (() => {
   return Math.max(1, Math.min(m, 60)); // 1..60 min
 })();
 
+// Ops alerts: "silent" mode — only send alerts for failures/errors (no info/warn noise).
+// Default ON: current code mostly emits only error-level alerts, so this is safe.
+const OPS_ALERT_SILENT = parseBoolSafe(process.env.OPS_ALERT_SILENT, true);
+
 export const CFG = {
   APP_ENV: process.env.APP_ENV || 'dev',
 
@@ -63,6 +67,7 @@ export const CFG = {
   OPS_ALERT_SUMMARY_MIN,
   OPS_ALERT_SUMMARY_SEC: OPS_ALERT_SUMMARY_MIN * 60,
   OPS_ALERT_BUFFER_MAX: parseIntSafe(process.env.OPS_ALERT_BUFFER_MAX, 200),
+  OPS_ALERT_SILENT,
 
   // Security
   WEBHOOK_SECRET_TOKEN: process.env.WEBHOOK_SECRET_TOKEN || '',
