@@ -60,6 +60,54 @@ export function k(parts) {
   ].join(':');
 }
 
+// =====================================================
+// Token-based locks (safe unlock after TTL expiry)
+//
+// Naive locks (SET NX EX + DEL) are unsafe: if TTL expires and another
+// process acquires the same key, the old process may still DEL() and
+// accidentally release the new owner's lock.
+//
+// We store a random token as the value and release via Lua:
+// delete only if the stored token matches.
+// =====================================================
+
+function randomToken() {
+  try {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  } catch {
+    // ignore
+  }
+  return (
+    Date.now().toString(36) +
+    '-' +
+    Math.random().toString(36).slice(2) +
+    '-' +
+    Math.random().toString(36).slice(2)
+  );
+}
+
+// Acquire a lock. Returns { token } or null.
+export async function acquireLock(lockKey, ttlSec) {
+  const token = randomToken();
+  const ok = await redis.set(lockKey, token, { nx: true, ex: Number(ttlSec) });
+  if (!ok) return null;
+  return { token };
+}
+
+// Release a lock only if it is still owned by the given token.
+// Best-effort: failures should not crash cron.
+export async function releaseLock(lockKey, token) {
+  if (!lockKey || !token) return false;
+  const script =
+    "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+  try {
+    const r = await redis.eval(script, [lockKey], [String(token)]);
+    return Number(r) === 1;
+  } catch {
+    return false;
+  }
+}
+
 // Simple rate limiter (good enough for Upstash REST Redis in our use-cases):
 // - INCR key
 // - if first hit => EXPIRE key
