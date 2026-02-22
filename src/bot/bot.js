@@ -800,44 +800,6 @@ function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }
   return kb;
 }
 
-// ------------------------------------------------------------
-// Support: быстрые шаблоны ответов (кнопки) в support-чате.
-// Цель: отвечать в 1 клик без ввода текста.
-// ------------------------------------------------------------
-const SUPPORT_QUICK_REPLIES = [
-  { k: 'ack', label: '✅ Принято', text: 'Принято. Мы посмотрим и вернёмся с ответом.' },
-  { k: 'need', label: '❓ Нужны детали', text: 'Нужны детали: что именно происходит и на каком шаге? Если можно — скрин/пример.' },
-  { k: 'done', label: '✅ Сделали', text: 'Готово — исправили. Проверь, пожалуйста.' },
-  { k: 'wait', label: '⏳ В работе', text: 'Взяли в работу. Вернёмся с обновлением.' },
-];
-
-function getSupportQuickReplyDef(key) {
-  const k0 = String(key || '').trim();
-  if (!k0) return null;
-  return SUPPORT_QUICK_REPLIES.find(x => String(x.k) === k0) || null;
-}
-
-function buildSupportTicketKb(targetTgId, targetUserId) {
-  const tg = Number(targetTgId || 0);
-  const uid = Number(targetUserId || 0);
-  const kb = new InlineKeyboard()
-    .text('✍️ Ответить', `a:adm_support_reply|tg:${tg}|uid:${uid}`)
-    .text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`);
-
-  // Quick replies (2 per row to keep it compact).
-  if (tg && SUPPORT_QUICK_REPLIES.length) {
-    kb.row();
-    for (let i = 0; i < SUPPORT_QUICK_REPLIES.length; i++) {
-      const q = SUPPORT_QUICK_REPLIES[i];
-      kb.text(String(q.label || '✅'), `a:adm_support_qr|tg:${tg}|uid:${uid}|k:${String(q.k)}`);
-      if (i % 2 === 1 && i !== SUPPORT_QUICK_REPLIES.length - 1) kb.row();
-    }
-  }
-
-  return kb;
-}
-
-
 /**
  * Notify workspace team (owner + curators) about lead events.
  * @param {object} api - bot API instance
@@ -12416,7 +12378,7 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
     `⭐️ <b>Brand Plan</b>
 
 Статус: <b>${escapeHtml(status)}</b>
-${brandPassBalanceLineHtml(credits)}${(!active && credits > 0) ? '\n<i>ℹ️ Кредиты — отдельный баланс и не выключаются вместе с подпиской.</i>' : ''}
+${brandPassBalanceLineHtml(credits)}
 <i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 <b>Старт</b> · ${startPl.stars}⭐️/мес
@@ -13952,7 +13914,9 @@ ${escapeHtml(safeCap)}
       const targetChatId = t;
       if (!targetChatId) continue;
       try {
-        const replyKb = buildSupportTicketKb(ctx.from.id, u.id);
+        const replyKb = new InlineKeyboard()
+          .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`);
         // Send header with reply button
         await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
 
@@ -14308,7 +14272,9 @@ ${escapeHtml(safe)}`;
         const targetChatId = t;
         if (!targetChatId) continue;
         try {
-          const replyKb = buildSupportTicketKb(ctx.from.id, u.id);
+          const replyKb = new InlineKeyboard()
+            .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
+            .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`);
           await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
           sent += 1;
         } catch {}
@@ -14384,7 +14350,7 @@ ${escapeHtml(safe)}`;
       }
       const unique = [...new Set(parts)].slice(0, 50);
       const revType = String(exp.revType || '');
-      const labels = { bp: 'Забрать Brand Plan (подписка)', bpcr: 'Забрать Brand Plan + кредиты', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
+      const labels = { bp: 'Забрать Brand Plan', bp_gcr: 'Забрать Brand Plan + подарочные кредиты', gcr: 'Забрать подарочные кредиты', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
       const label = labels[revType] || revType;
 
       const joined = unique.join(',');
@@ -14402,7 +14368,11 @@ ${escapeHtml(safe)}`;
       }
 
       const preview = unique.map(u => `@${u}`).join(', ');
-      const warn = (revType === 'cr' || revType === 'bpcr') ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены.' : '';
+      const warn = revType === 'cr'
+        ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены. Используй только если уверен.'
+        : (revType === 'gcr' || revType === 'bp_gcr')
+          ? '\n\n<i>Будут сняты только оставшиеся <b>подарочные</b> кредиты. Купленные/триал не трогаем.</i>'
+          : '';
       await safeEditOrReply(ctx, `⛔ <b>${escapeHtml(label)}</b>${warn}\n\nПользователи (${unique.length}):\n${escapeHtml(preview)}\n\nПодтвердить?`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -22566,7 +22536,9 @@ if (p.a === 'a:match_home') {
       const kb = new InlineKeyboard()
         .text('⛔ Забрать Brand Plan (подписка)', 'a:adm_gift_revoke_input|t:bp')
         .row()
-        .text('⛔+🧹 Забрать Plan + кредиты', 'a:adm_gift_revoke_input|t:bpcr')
+        .text('⛔+🧾 Забрать Brand Plan + подарочные кредиты', 'a:adm_gift_revoke_input|t:bp_gcr')
+        .row()
+        .text('🧾 Забрать подарочные кредиты', 'a:adm_gift_revoke_input|t:gcr')
         .row()
         .text('⛔ Забрать PRO', 'a:adm_gift_revoke_input|t:pro')
         .row()
@@ -22586,14 +22558,16 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
       const revType = String(p.t || '');
-      const labels = { bp: 'Забрать Brand Plan (подписка)', bpcr: 'Забрать Brand Plan + кредиты', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
+      const labels = { bp: 'Забрать Brand Plan', bp_gcr: 'Забрать Brand Plan + подарочные кредиты', gcr: 'Забрать подарочные кредиты', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
       const label = labels[revType] || revType;
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:adm_gift_revoke')
         .text('⬅️ Админка', 'a:admin_home');
-      const warn = (revType === 'cr' || revType === 'bpcr')
+      const warn = revType === 'cr'
         ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены. Используй только если уверен.'
-        : '';
+        : (revType === 'gcr' || revType === 'bp_gcr')
+          ? '\n\n<i>Будут сняты только оставшиеся <b>подарочные</b> кредиты. Купленные/триал не трогаем.</i>'
+          : '';
       await safeEditOrReply(
         ctx,
         `⛔ <b>${escapeHtml(label)}</b>\n\nВведи @username получателей (через пробел, запятую или каждый с новой строки).${warn}\n\nПример:\n<code>@user1 @user2</code>`,
@@ -22660,7 +22634,7 @@ if (p.a === 'a:match_home') {
           if (giftType === 'bp_start') {
             const planDef = BRAND_PLANS.find(pl => pl.id === 'start');
             await db.activateBrandPlan(found.id, 'start', CFG.BRAND_PLAN_DURATION_DAYS);
-            if (planDef?.credits) await db.addBrandCredits(found.id, planDef.credits);
+            if (planDef?.credits) await db.addGiftedBrandCredits(found.id, planDef.credits);
             results.push(`✅ @${clean} — Brand Plan Старт + ${planDef?.credits || 0} кредитов`);
 
             // Notify recipient with a clear next step (no forced mode switch)
@@ -22676,7 +22650,7 @@ if (p.a === 'a:match_home') {
           } else if (giftType === 'bp_pro') {
             const planDef = BRAND_PLANS.find(pl => pl.id === 'pro');
             await db.activateBrandPlan(found.id, 'pro', CFG.BRAND_PLAN_DURATION_DAYS);
-            if (planDef?.credits) await db.addBrandCredits(found.id, planDef.credits);
+            if (planDef?.credits) await db.addGiftedBrandCredits(found.id, planDef.credits);
             results.push(`✅ @${clean} — Brand Plan Про + ${planDef?.credits || 0} кредитов`);
 
             try {
@@ -22738,11 +22712,16 @@ if (p.a === 'a:match_home') {
         try {
           if (revType === 'bp') {
             await db.revokeBrandPlan(found.id);
-            results.push(`⛔ @${clean} — Brand Plan забран (кредиты не изменены)`);
-          } else if (revType === 'bpcr') {
+            results.push(`⛔ @${clean} — Brand Plan забран`);
+          } else if (revType === 'bp_gcr') {
             await db.revokeBrandPlan(found.id);
-            await db.resetBrandCredits(found.id);
-            results.push(`⛔+🧹 @${clean} — Brand Plan забран + кредиты обнулены`);
+            const r = await db.revokeGiftedBrandCredits(found.id);
+            results.push(`⛔+🧾 @${clean} — Brand Plan забран, снято ${Number(r?.taken || 0)} подарочных кр.`);
+          } else if (revType === 'gcr') {
+            const r = await db.revokeGiftedBrandCredits(found.id);
+            const taken = Number(r?.taken || 0);
+            const left = Number(r?.brand_credits || 0);
+            results.push(`🧾 @${clean} — снято ${taken} подарочных кр. (осталось: ${left})`);
           } else if (revType === 'pro') {
             await db.revokeAllWorkspacePro(found.id);
             results.push(`⛔ @${clean} — PRO забран`);
@@ -22784,11 +22763,7 @@ if (p.a === 'a:match_home') {
         try {
           if (revType === 'bp') {
             await db.revokeBrandPlan(found.id);
-            results.push(`⛔ @${clean} — Brand Plan забран (кредиты не изменены)`);
-          } else if (revType === 'bpcr') {
-            await db.revokeBrandPlan(found.id);
-            await db.resetBrandCredits(found.id);
-            results.push(`⛔+🧹 @${clean} — Brand Plan забран + кредиты обнулены`);
+            results.push(`⛔ @${clean} — Brand Plan забран`);
           } else if (revType === 'pro') {
             await db.revokeAllWorkspacePro(found.id);
             results.push(`⛔ @${clean} — PRO забран`);
@@ -22834,12 +22809,12 @@ if (p.a === 'a:match_home') {
           if (giftType === 'bp_start') {
             const planDef = BRAND_PLANS.find(pl => pl.id === 'start');
             await db.activateBrandPlan(found.id, 'start', CFG.BRAND_PLAN_DURATION_DAYS);
-            if (planDef?.credits) await db.addBrandCredits(found.id, planDef.credits);
+            if (planDef?.credits) await db.addGiftedBrandCredits(found.id, planDef.credits);
             results.push(`✅ @${clean} — Brand Plan Старт + ${planDef?.credits || 0} кр.`);
           } else if (giftType === 'bp_pro') {
             const planDef = BRAND_PLANS.find(pl => pl.id === 'pro');
             await db.activateBrandPlan(found.id, 'pro', CFG.BRAND_PLAN_DURATION_DAYS);
-            if (planDef?.credits) await db.addBrandCredits(found.id, planDef.credits);
+            if (planDef?.credits) await db.addGiftedBrandCredits(found.id, planDef.credits);
             results.push(`✅ @${clean} — Brand Plan Про + ${planDef?.credits || 0} кр.`);
           } else if (giftType === 'pro') {
             const wsList = await db.listWorkspaces(found.id);
@@ -22913,41 +22888,6 @@ if (p.a === 'a:match_home') {
       await renderAdminUserCard(ctx, uid, f, page);
       return;
     }
-    // --- Admin: Support quick replies (one-click templates) ---
-    if (p.a === 'a:adm_support_qr') {
-      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-
-      const targetTgId = Number(p.tg || 0);
-      const targetUserId = Number(p.uid || 0);
-      const key = String(p.k || '').trim();
-      if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
-
-      const def = getSupportQuickReplyDef(key);
-      if (!def) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
-
-      const safe = String(def.text || '').trim();
-      if (!safe) return ctx.answerCallbackQuery({ text: 'Пустой шаблон.' });
-
-      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
-
-      try {
-        const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
-        await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-      } catch (e) {
-        return ctx.answerCallbackQuery({ text: `Не удалось отправить: ${String(e?.message || e).slice(0, 60)}`, show_alert: true });
-      }
-
-      // Confirmation in support chat (keeps original ticket intact)
-      try {
-        const kb2 = buildSupportTicketKb(targetTgId, targetUserId || 0);
-        kb2.row().text('⬅️ Админка', 'a:admin_home');
-        await ctx.reply(`✅ Отправлено: <b>${escapeHtml(String(def.label || 'Шаблон'))}</b> → пользователю (tg:${targetTgId}).`, { parse_mode: 'HTML', reply_markup: kb2 });
-      } catch {}
-
-      return ctx.answerCallbackQuery({ text: '✅ Отправлено' });
-    }
-
-
 
     // --- Admin: Reply to support message ---
     if (p.a === 'a:adm_support_reply') {
@@ -23028,7 +22968,7 @@ if (p.a === 'a:match_home') {
       const t = String(p.t || '');
       const f = String(p.f || 'all');
       const pg = Number(p.p || 0);
-      const labels = { bp: 'Brand Plan', cr: 'Кредиты (→0)', pro: 'PRO (все каналы)' };
+      const labels = { bp: 'Brand Plan (подписка)', bp_gcr: 'Brand Plan + подарочные кредиты', gcr: 'Подарочные кредиты', cr: 'Кредиты (→0)', pro: 'PRO (все каналы)' };
       const label = labels[t] || t;
       const kb = new InlineKeyboard()
         .text(`⛔ Подтвердить: ${label}`, `a:adm_urevoke_do|id:${uid}|t:${t}|f:${f}|p:${pg}`)
@@ -23046,6 +22986,11 @@ if (p.a === 'a:match_home') {
       const pg = Number(p.p || 0);
       try {
         if (t === 'bp') await db.revokeBrandPlan(uid);
+        else if (t === 'bp_gcr') {
+          await db.revokeBrandPlan(uid);
+          await db.revokeGiftedBrandCredits(uid);
+        }
+        else if (t === 'gcr') await db.revokeGiftedBrandCredits(uid);
         else if (t === 'cr') await db.resetBrandCredits(uid);
         else if (t === 'pro') await db.revokeAllWorkspacePro(uid);
       } catch (e) {
@@ -23132,12 +23077,12 @@ if (p.a === 'a:match_home') {
         if (giftType === 'bp_start') {
           const planDef = BRAND_PLANS.find(pl => pl.id === 'start');
           await db.activateBrandPlan(uid, 'start', CFG.BRAND_PLAN_DURATION_DAYS);
-          if (planDef?.credits) await db.addBrandCredits(uid, planDef.credits);
+          if (planDef?.credits) await db.addGiftedBrandCredits(uid, planDef.credits);
           msg = `✅ Brand Plan Старт + ${planDef?.credits || 0} кредитов`;
         } else if (giftType === 'bp_pro') {
           const planDef = BRAND_PLANS.find(pl => pl.id === 'pro');
           await db.activateBrandPlan(uid, 'pro', CFG.BRAND_PLAN_DURATION_DAYS);
-          if (planDef?.credits) await db.addBrandCredits(uid, planDef.credits);
+          if (planDef?.credits) await db.addGiftedBrandCredits(uid, planDef.credits);
           msg = `✅ Brand Plan Про + ${planDef?.credits || 0} кредитов`;
         } else if (giftType === 'pro') {
           const wsList = await db.listWorkspaces(uid);
@@ -28478,7 +28423,12 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
     text += `<b>Brand Plan:</b> ${card.brand_plan ? escapeHtml(String(card.brand_plan)) : '—'}`;
     if (card.brand_plan_until) text += ` (до ${msk(card.brand_plan_until)})`;
     text += `\n`;
-    text += `<b>Credits:</b> ${Number(card.brand_credits || 0)} (потрачено: ${Number(card.brand_credits_spent || 0)})\n`;
+    const totalCr = Number(card.brand_credits || 0);
+    const spentCr = Number(card.brand_credits_spent || 0);
+    const giftedCr = Number(card.brand_credits_gifted || 0);
+    const giftedPart = giftedCr > 0 ? `, подарочные: ${giftedCr}` : '';
+    text += `<b>Credits:</b> ${totalCr} (потрачено: ${spentCr}${giftedPart})
+`;
     if (card.brand_trial_granted) text += `<b>Trial:</b> ✅ выдан ${msk(card.brand_trial_granted_at)}\n`;
     if (card._brand_profile) {
       const bp = card._brand_profile;
@@ -28521,11 +28471,15 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   // Revoke actions
   if (card.brand_plan) {
     kb.text('⛔ Забрать Brand Plan', `a:adm_urevoke_q|id:${card.id}|t:bp|f:${backFilter}|p:${backPage}`);
+    kb.text('⛔+🧾 Забрать Plan + подарочные', `a:adm_urevoke_q|id:${card.id}|t:bp_gcr|f:${backFilter}|p:${backPage}`);
   }
   if (Number(card.brand_credits || 0) > 0) {
     kb.text('⛔ Обнулить кредиты', `a:adm_urevoke_q|id:${card.id}|t:cr|f:${backFilter}|p:${backPage}`);
   }
-  if (card.brand_plan || Number(card.brand_credits || 0) > 0) kb.row();
+  if (Number(card.brand_credits_gifted || 0) > 0) {
+    kb.text('🧾 Забрать подарочные кредиты', `a:adm_urevoke_q|id:${card.id}|t:gcr|f:${backFilter}|p:${backPage}`);
+  }
+  if (card.brand_plan || Number(card.brand_credits || 0) > 0 || Number(card.brand_credits_gifted || 0) > 0) kb.row();
 
   if (card._workspaces?.some(ws => ws.plan === 'pro')) {
     kb.text('⛔ Забрать PRO', `a:adm_urevoke_q|id:${card.id}|t:pro|f:${backFilter}|p:${backPage}`).row();
