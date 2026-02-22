@@ -110,7 +110,7 @@
 - `ANALYTICS_ENABLED=false` — держим выключенным (меньше DB-write в `events`).
 
 ### Intro trial (для брендов)
-- `INTRO_TRIAL_CREDITS=1` — разовый бонус на **первый** интро-диалог (тест-драйв). Рекомендовано для soft-launch.
+- `INTRO_TRIAL_CREDITS=3` — разовый тест-бонус: **3** кредита на первые интро (чтобы бренду было проще попробовать). Для выключения: `INTRO_TRIAL_CREDITS=0`.
 
 
 ### Founder Sale (promo)
