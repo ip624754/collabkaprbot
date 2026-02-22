@@ -1609,9 +1609,14 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   const quickStart60 = opts?.quickStart60 ? (() => {
     const title = '⚡️ <b>Первые 60 секунд</b>';
     if (effective === 'brand' || effective === 'brand_manager') {
+      const trialCredits = Math.max(0, Number(CFG.INTRO_TRIAL_CREDITS || 0));
+      const trialLine = trialCredits > 0
+        ? `• Напиши креатору — первые <b>${trialCredits}</b> ${ruPlural(trialCredits,'диалог','диалога','диалогов')} тестовые 🎁`
+        : '• Напиши креатору — откроется диалог в боте';
+
       return `${title}
 • Открой «📰 Лента креаторов» или «🔎 Поиск креаторов»
-• Напиши креатору — если это <b>первый диалог</b>, он тестовый 🎁 (1 раз)
+${trialLine}
 
 `;
     }
@@ -2004,6 +2009,25 @@ function kbBrandApplyMore(brandUserId, backPage = 0, canOpenInbox = false) {
   if (canOpenInbox) kb.text('📥 Inbox бренда', 'a:brand_apps|ws:0|s:new|p:0').row();
 
   kb.text('⬅️ Назад', `a:brand_apply_done|u:${brandUserId}|p:${backPage}|inb:${canOpenInbox ? 1 : 0}`).row();
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  return kb;
+}
+
+
+function kbBrandAppAcceptedDone(appId, brandUserId) {
+  // STEP58: Focused done screen for "application accepted" notification (creator side)
+  const kb = new InlineKeyboard();
+  kb.text('💬 Написать бренду', `a:brand_app_chat|id:${appId}`).row();
+  kb.text('⋯ Ещё действия', `a:more|k:brand_app_accepted|id:${appId}|u:${brandUserId}`).row();
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  return kb;
+}
+
+function kbBrandAppAcceptedMore(appId, brandUserId) {
+  const kb = new InlineKeyboard();
+  kb.text('📨 Открыть заявку', `a:brand_app_card|id:${appId}`).row();
+  kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`).row();
+  kb.text('⬅️ Назад', `a:brand_app_accepted_done|id:${appId}|u:${brandUserId}`).row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
@@ -9752,14 +9776,7 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
       `Бренд <b>${escapeHtml(brandName)}</b> принял твою заявку.\n` +
       `Теперь можно продолжить диалог прямо в боте.`;
 
-    const outKb = new InlineKeyboard()
-    .text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`)
-    .text('📨 Открыть заявку', `a:brand_app_card|id:${app.id}`)
-    .row()
-    .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
-    .row()
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Home', 'a:home');
+    const outKb = kbBrandAppAcceptedDone(app.id, brandUserId);
 
     const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
       parse_mode: 'HTML',
@@ -11948,7 +11965,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 
   const trialLine = !meta.brand_trial_granted && trialCredits > 0
     ? `
-🎁 Первый диалог — <b>тестовый</b>: бонус <b>${trialCredits}</b> кредит(ов) (1 раз).
+🎁 Тест-бонус на старт: <b>${trialCredits}</b> кредит(ов) на первые интро (выдаётся 1 раз).
 `
     : '';
 
@@ -18154,6 +18171,13 @@ if (p.a === 'a:more') {
     try { await ctx.editMessageReplyMarkup(kb); } catch {}
     return;
   }
+  if (key === 'brand_app_accepted') {
+    const appId = Number(p.id || 0);
+    const brandUserId = Number(p.u || 0);
+    const kb = kbBrandAppAcceptedMore(appId, brandUserId);
+    try { await ctx.editMessageReplyMarkup(kb); } catch {}
+    return;
+  }
 
   try { await ctx.answerCallbackQuery({ text: 'Нет дополнительных действий.' }); } catch {}
   return;
@@ -18174,6 +18198,14 @@ if (p.a === 'a:brand_apply_done') {
   const backPage = Math.max(0, Number(p.p || 0));
   const canOpenInbox = String(p.inb || '') === '1';
   const kb = kbBrandApplyDone(brandUserId, backPage, canOpenInbox);
+  try { await ctx.editMessageReplyMarkup(kb); } catch {}
+  return;
+}
+
+if (p.a === 'a:brand_app_accepted_done') {
+  const appId = Number(p.id || 0);
+  const brandUserId = Number(p.u || 0);
+  const kb = kbBrandAppAcceptedDone(appId, brandUserId);
   try { await ctx.editMessageReplyMarkup(kb); } catch {}
   return;
 }
@@ -23957,7 +23989,7 @@ if (p.a === 'a:match_home') {
       if (res.charged) {
         const left = Number(res.balance ?? 0);
         const amt = Number(res.chargedAmount || cost || 1);
-        const bonus = res.trialGranted ? '🎁 Тест-диалог: бонус активирован. ' : '';
+        const bonus = res.trialGranted ? `🎁 Тест-кредиты начислены (+${trialCredits}). ` : '';
         try { await ctx.answerCallbackQuery({ text: `${bonus}✅ Диалог открыт. -${amt} кредит(ов). Осталось: ${left}`, show_alert: true }); } catch {}
       }
       else if (res.retryUsed) {
