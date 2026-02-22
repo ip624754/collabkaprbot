@@ -2818,6 +2818,36 @@ export async function upsertOfficialPostDraft(input = {}) {
   return r.rows[0] || null;
 }
 
+
+export async function atomicReserveOfficialPublish(offerId, input = {}) {
+  const channelChatId = Number(input.channelChatId);
+  const placementType = String(input.placementType || 'MANUAL');
+  const paymentId = input.paymentId ? Number(input.paymentId) : null;
+  const slotDays = input.slotDays ? Number(input.slotDays) : null;
+  const slotExpiresAt = input.slotExpiresAt || null;
+  const publishedByUserId = input.publishedByUserId ? Number(input.publishedByUserId) : null;
+
+  const r = await pool.query(
+    `insert into official_posts (offer_id, channel_chat_id, status, placement_type, payment_id, slot_days, slot_expires_at, published_by_user_id, last_error, updated_at)
+     values ($1,$2,'PUBLISHING',$3,$4,$5,$6,$7,null, now())
+     on conflict (offer_id)
+     do update set channel_chat_id=excluded.channel_chat_id,
+                   status='PUBLISHING',
+                   placement_type=excluded.placement_type,
+                   payment_id=coalesce(excluded.payment_id, official_posts.payment_id),
+                   slot_days=coalesce(excluded.slot_days, official_posts.slot_days),
+                   slot_expires_at=coalesce(excluded.slot_expires_at, official_posts.slot_expires_at),
+                   published_by_user_id=coalesce(excluded.published_by_user_id, official_posts.published_by_user_id),
+                   last_error=null,
+                   updated_at=now()
+     where official_posts.status <> 'PUBLISHING'
+        or official_posts.updated_at < now() - interval '10 minutes'
+     returning *`,
+    [Number(offerId), channelChatId, placementType, paymentId, slotDays, slotExpiresAt, publishedByUserId]
+  );
+  return r.rows[0] || null;
+}
+
 export async function setOfficialPostActive(offerId, input = {}) {
   const channelChatId = Number(input.channelChatId);
   const messageId = input.messageId ? Number(input.messageId) : null;
@@ -2884,7 +2914,7 @@ export async function listOfficialPending(limit = 20, offset = 0) {
        from official_posts op
        join barter_offers o on o.id=op.offer_id
        join workspaces w on w.id=o.workspace_id
-      where op.status='PENDING'
+      where op.status in ('PENDING','PUBLISHING')
       order by op.updated_at desc
       limit $1 offset $2`,
     [Number(limit), Number(offset)]
@@ -2893,7 +2923,7 @@ export async function listOfficialPending(limit = 20, offset = 0) {
 }
 
 export async function countOfficialPending() {
-  const r = await pool.query(`select count(*)::int as c from official_posts where status='PENDING'`);
+  const r = await pool.query(`select count(*)::int as c from official_posts where status in ('PENDING','PUBLISHING')`);
   return (r.rows[0] && Number(r.rows[0].c)) || 0;
 }
 
