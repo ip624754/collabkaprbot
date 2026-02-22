@@ -3,6 +3,7 @@ import * as db from '../db/queries.js';
 import { getBot } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
+import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import {
   notifyGiveawayEnded,
   notifyGiveawayWinnersReady,
@@ -376,6 +377,65 @@ async function issueIntroRetryCredits() {
   return { checked: rows.length, issued, expired };
 }
 
+
+async function autoHealOrphanedPayments() {
+  // Goal: eliminate manual tail for ORPHANED missing_session (late Stars payments).
+  // Safe: only applies fallbacks based on invoice_payload; skips offpub_* and any non-supported payload.
+
+  if (!CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED || !CFG.PAYMENTS_FALLBACK_APPLY_ENABLED) {
+    return { enabled: false, checked: 0, applied: 0, failed: 0, skipped: 0 };
+  }
+
+  const batch = Math.max(0, Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_BATCH || 20) || 0);
+  if (batch <= 0) return { enabled: true, checked: 0, applied: 0, failed: 0, skipped: 0 };
+
+  let applied = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  // Fetch a slightly larger window; then filter missing_session.
+  const rows = await db.listPaymentsByStatus('ORPHANED', 50, 0);
+  const cand = (rows || []).filter(r => String(r.note || '').includes('missing_session')).slice(0, batch);
+
+  const api = getBot().api;
+
+  for (const r of cand) {
+    try {
+      const fb = await applyPaymentFallbackNoSession({
+        paymentId: Number(r.id),
+        paymentUserId: Number(r.user_id),
+        invoicePayload: String(r.invoice_payload || ''),
+        appliedByUserId: Number(r.user_id),
+        totalAmount: Number(r.total_amount || 0),
+        currency: String(r.currency || 'XTR'),
+        telegramPaymentChargeId: String(r.telegram_payment_charge_id || ''),
+      });
+
+      if (fb && fb.applied) {
+        applied += 1;
+        // Best-effort notify user (avoid silent surprise).
+        try {
+          const tgId = Number(r.tg_id || 0);
+          if (tgId) {
+            let msg = '✅ Оплата применена автоматически (восстановлено после задержки).';
+            if (fb.kind === 'brand_pass') msg += `\n\n💳 Кредиты начислены: +${Number(fb.credits || 0)}.`;
+            if (fb.kind === 'brand_plan') msg += `\n\n⭐️ Brand Plan активирован (${String(fb.plan || '')}).`;
+            if (fb.kind === 'pro') msg += `\n\n⭐️ PRO активирован.`;
+            if (fb.kind === 'founder_brand') msg += `\n\n⭐️ Founder Sale применён.`;
+            await api.sendMessage(tgId, msg);
+          }
+        } catch {}
+      } else {
+        skipped += 1;
+      }
+    } catch {
+      failed += 1;
+    }
+  }
+
+  return { enabled: true, checked: cand.length, applied, failed, skipped };
+}
+
 export async function giveawaysTick() {
   const lockKey = k(['lock', 'giveaways_tick']);
   const startedAt = Date.now();
@@ -386,6 +446,7 @@ export async function giveawaysTick() {
     const published = await autoPublishDrawn();
     const official = await expireOfficialPosts();
     const retry = await issueIntroRetryCredits();
+    const payheal = await autoHealOrphanedPayments();
     const duration_ms = Date.now() - startedAt;
 
     // Keep the API response stable; write only a compact summary to Redis.
@@ -395,6 +456,7 @@ export async function giveawaysTick() {
       published_count: published.length,
       official,
       retry,
+      payheal,
       ended_count: ended.length,
       drawn_count: drawn.length,
       official_expired: official.expired || 0,
@@ -413,6 +475,9 @@ export async function giveawaysTick() {
       retry_checked: out.retry_checked,
       retry_issued: out.retry_issued,
       retry_expired: out.retry_expired,
+      payheal_checked: payheal.checked || 0,
+      payheal_applied: payheal.applied || 0,
+      payheal_failed: payheal.failed || 0,
       duration_ms: out.duration_ms,
     });
 

@@ -6,6 +6,7 @@ import * as db from '../db/queries.js';
 import { pool } from '../db/pool.js';
 import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes, parseMoscowDateTime, computeThreadReplyStatus, formatBxChargeLine, telegramEntitiesToHtml } from './helpers.js';
 import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
+import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
@@ -12354,7 +12355,8 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
   const active = await db.isBrandPlanActive(userId);
   const credits = await db.getBrandCredits(userId);
   const status = brandPlanStatusText(planRow, active);
-  const paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+  let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+  if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
 
   const startPl = BRAND_PLANS.find(p => p.id === 'start');
   const proPl = BRAND_PLANS.find(p => p.id === 'pro');
@@ -12395,7 +12397,7 @@ ${brandPassBalanceLineHtml(credits)}
 
 <b>Сверх лимита</b>
 • 🎯 Smart Matching (подбор офферов) / 🔥 Featured можно докупить за Stars
-${paidAuto ? '<i>После оплаты я сразу попрошу бриф/контент.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
+${paidAuto ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 Кредиты можно докупить отдельно.`,
     { parse_mode: 'HTML', reply_markup: kb }
@@ -12483,7 +12485,8 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
   const used = hasPlan ? await db.countIncludedMatchingThisMonth(userId) : 0;
   const limit = hasPlan ? BRAND_PLAN_INCLUDED_MATCH_PER_MONTH : 0;
   const left = Math.max(0, limit - used);
-  const paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+  let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+  if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
 
   const tier = MATCH_TIERS.find(t => String(t.id) === String(BRAND_PLAN_INCLUDED_MATCH_TIER_ID)) || MATCH_TIERS[0];
 
@@ -12527,7 +12530,7 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
 
 ` +
       `Сверх лимита можно докупить за Stars.
-${paidAuto ? '<i>После оплаты я сразу попрошу бриф/контент.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
+${paidAuto ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 ` +
       `${cta}`,
@@ -12541,7 +12544,8 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
   const used = hasPlan ? await db.countIncludedFeaturedThisMonth(userId) : 0;
   const limit = hasPlan ? BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH : 0;
   const left = Math.max(0, limit - used);
-  const paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+  let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
+  if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
 
   const kb = new InlineKeyboard();
   kb.text('👀 Пример', cbJoin('a:feat_example', { ws: wsId, ret, bpr })).row();
@@ -12583,7 +12587,7 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
 
 ` +
       `Сверх лимита можно докупить за Stars.
-${paidAuto ? '<i>После оплаты я сразу попрошу бриф/контент.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
+${paidAuto ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>Покупки за Stars пока идут в очередь (ручная обработка).</i>'}
 
 ` +
       `${cta}`,
@@ -17761,6 +17765,40 @@ bot.on('message:successful_payment', async (ctx) => {
         String(data.productId || '') === productId;
 
       if (!ok) {
+        // Fallback: apply by payload even if Redis pay_* session expired.
+        // Safe for founder_brand_* (no ws context needed). founder_creator_* still requires wsId from session.
+        if (CFG.PAYMENTS_FALLBACK_APPLY_ENABLED && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
+          try {
+            const fb = await applyPaymentFallbackNoSession({
+              paymentId,
+              paymentUserId: u.id,
+              invoicePayload: invoicePayload,
+              appliedByUserId: u.id,
+              totalAmount: sp.total_amount,
+              currency: sp.currency || 'XTR',
+              telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
+            });
+            if (fb && fb.applied) {
+              const kb = new InlineKeyboard()
+                .text('⭐️ Brand Plan', 'a:brand_plan|ws:0')
+                .text('💳 Кредиты', 'a:brand_pass|ws:0')
+                .row()
+                .text('📋 Меню', 'a:menu')
+                .text('🏠 Home', 'a:home');
+              let msg = '✅ Founder Sale применён!';
+              if (fb.kind === 'founder_brand') {
+                msg += `
+
+⭐️ Brand Plan Pro активирован на ${fb.days || 0} дней.`;
+                if (fb.credits > 0) msg += `
+💳 +${fb.credits} кредитов начислено.`;
+              }
+              await ctx.reply(msg, { reply_markup: kb });
+              return;
+            }
+          } catch { /* ignore */ }
+        }
+
         await markStatus('ORPHANED', 'missing_session');
         await ctx.reply('✅ Платеж получен. Но сессия оплаты не найдена (возможно, истекла). Напиши /start — я помогу.');
         return;
@@ -17831,6 +17869,25 @@ bot.on('message:successful_payment', async (ctx) => {
       const userOk = !payUserId || Number(data?.ownerUserId) === payUserId;
 
       if (!data || Number(data.wsId) != wsId || !tgOk || !userOk) {
+        // Fallback: apply by payload even if Redis pay_* session expired.
+        if (CFG.PAYMENTS_FALLBACK_APPLY_ENABLED && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
+          try {
+            const fb = await applyPaymentFallbackNoSession({
+              paymentId,
+              paymentUserId: u.id,
+              invoicePayload: invoicePayload,
+              appliedByUserId: u.id,
+              totalAmount: sp.total_amount,
+              currency: sp.currency || 'XTR',
+              telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
+            });
+            if (fb && fb.applied) {
+              await ctx.reply('⭐️ PRO активирован! Открой настройки канала → ⭐️ PRO, чтобы управлять пином и лимитами.');
+              return;
+            }
+          } catch { /* ignore fallback failures */ }
+        }
+
         await markStatus('ORPHANED', 'missing_session');
         await ctx.reply('✅ Платеж получен. Но сессия оплаты не найдена (возможно, истекла). Напиши /start и открой ⭐️ PRO, я помогу вручную.');
         return;
@@ -17862,6 +17919,25 @@ bot.on('message:successful_payment', async (ctx) => {
 
       const data = await redis.get(k(['pay_brand', token]));
       if (!data || Number(data.userId) !== payUserId || Number(data.tgId) !== Number(ctx.from.id)) {
+        // Fallback: apply by payload even if Redis pay_* session expired.
+        if (CFG.PAYMENTS_FALLBACK_APPLY_ENABLED && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
+          try {
+            const fb = await applyPaymentFallbackNoSession({
+              paymentId,
+              paymentUserId: u.id,
+              invoicePayload: invoicePayload,
+              appliedByUserId: u.id,
+              totalAmount: sp.total_amount,
+              currency: sp.currency || 'XTR',
+              telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
+            });
+            if (fb && fb.applied) {
+              await ctx.reply('✅ Кредиты начислены! Открой 💳 Кредиты или 📥 Inbox, чтобы начать.');
+              return;
+            }
+          } catch { /* ignore */ }
+        }
+
         await markStatus('ORPHANED', 'missing_session');
         await ctx.reply('✅ Платеж получен. Но сессия оплаты не найдена (возможно, истекла). Напиши /start — я помогу.');
         return;
@@ -17913,6 +17989,25 @@ bot.on('message:successful_payment', async (ctx) => {
 
       const data = await redis.get(k(['pay_bplan', token]));
       if (!data || Number(data.userId) !== payUserId || Number(data.tgId) !== Number(ctx.from.id)) {
+        // Fallback: apply by payload even if Redis pay_* session expired.
+        if (CFG.PAYMENTS_FALLBACK_APPLY_ENABLED && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
+          try {
+            const fb = await applyPaymentFallbackNoSession({
+              paymentId,
+              paymentUserId: u.id,
+              invoicePayload: invoicePayload,
+              appliedByUserId: u.id,
+              totalAmount: sp.total_amount,
+              currency: sp.currency || 'XTR',
+              telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
+            });
+            if (fb && fb.applied) {
+              await ctx.reply('✅ Brand Plan активирован! Открой ⭐️ Brand Plan и 📥 Inbox, чтобы начать.');
+              return;
+            }
+          } catch { /* ignore */ }
+        }
+
         await markStatus('ORPHANED', 'missing_session');
         await ctx.reply('✅ Платеж получен. Но сессия оплаты не найдена (возможно, истекла). Напиши /start — я помогу.');
         return;
@@ -18878,7 +18973,7 @@ if (p.a === 'a:menu') {
           credits: Number(prod.credits || 0),
           wsId
         },
-        { ex: 60 * 60 }
+        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
 
       const payload = `${prod.id}_${u.id}_${token}`;
@@ -21086,7 +21181,7 @@ if (p.a === 'a:ws_prof_mode') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       const token = randomToken(10);
-      await redis.set(k(['pay_pro', token]), { wsId, ownerUserId: u.id, tgId: ctx.from.id }, { ex: 15 * 60 });
+      await redis.set(k(['pay_pro', token]), { wsId, ownerUserId: u.id, tgId: ctx.from.id }, { ex: CFG.PAYMENT_SESSION_TTL_SEC });
       const payload = `pro_${wsId}_${u.id}_${token}`;
       await sendStarsInvoice(ctx, {
         title: 'MicroGiveaways PRO',
@@ -21118,7 +21213,7 @@ if (p.a === 'a:ws_prof_mode') {
       await redis.set(
         k(['pay_brand', token]),
         { tgId: ctx.from.id, userId: u.id, packId: pack.id, credits: pack.credits, wsId, offerId, page },
-        { ex: 15 * 60 }
+        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
 
       const payload = `brand_${u.id}_${pack.id}_${token}`;
@@ -21926,7 +22021,7 @@ ${link}`;
       await redis.set(
         k(['pay_bplan', token]),
         { tgId: ctx.from.id, userId: u.id, wsId, plan, stars, credits: planDef.credits || 0, ret },
-        { ex: 15 * 60 }
+        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
       const payload = `bplan_${u.id}_${plan}_${token}`;
       const label = planDef.title;
@@ -22096,7 +22191,7 @@ if (p.a === 'a:match_home') {
       await redis.set(
         k(['pay_match', token]),
         { tgId: ctx.from.id, userId: u.id, wsId, tierId: tier.id, stars: tier.stars, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
-        { ex: 15 * 60 }
+        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
       const payload = `match_${u.id}_${tier.id}_${token}`;
       await sendStarsInvoice(ctx, {
@@ -22187,7 +22282,7 @@ if (p.a === 'a:match_home') {
       await redis.set(
         k(['pay_feat', token]),
         { tgId: ctx.from.id, userId: u.id, wsId, days: d.days, durId: d.id, stars: d.stars, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
-        { ex: 15 * 60 }
+        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
       const payload = `feat_${u.id}_${d.days}_${token}`;
       await sendStarsInvoice(ctx, {
@@ -23145,6 +23240,14 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    if (p.a === 'a:admin_pay_autoheal') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await adminAutoHealPayments(ctx, u, String(p.st || 'ORPHANED'), Number(p.p || 0));
+      return;
+    }
+
     if (p.a === 'a:mod_home') {
       await ctx.answerCallbackQuery();
       const isMod = await isModerator(u, ctx.from.id);
@@ -23767,7 +23870,7 @@ if (p.a === 'a:match_home') {
           stars: d.price,
           createdAt: Date.now()
         }),
-        { ex: 60 * 60 }
+        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
 
       const title = 'Размещение в официальном канале';
@@ -28086,6 +28189,9 @@ async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
     .join('\n') || 'Платежей нет.';
 
   const kb = new InlineKeyboard();
+  if (status === 'ORPHANED' && CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED) {
+    kb.text('🔁 Auto-heal missing_session', `a:admin_pay_autoheal|st:${status}|p:${Math.max(0, Number(page) || 0)}`).row();
+  }
   for (const r of rows) {
     kb.text(`#${r.id} • ${r.kind}`, `a:admin_pay_view|id:${r.id}|st:${status}|p:${Math.max(0, Number(page) || 0)}`).row();
   }
@@ -28244,6 +28350,81 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
     await ctx.answerCallbackQuery({ text: `Ошибка apply: ${msg.slice(0, 64)}`, show_alert: true });
     await renderAdminPaymentView(ctx, row.id, backStatus, page);
   }
+}
+
+
+async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED', page = 0) {
+  if (!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED || !CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED) {
+    try { await ctx.answerCallbackQuery({ text: 'Auto-heal отключён в ENV.', show_alert: true }); } catch {}
+    await renderAdminPayments(ctx, backStatus, page);
+    return;
+  }
+
+  const batch = Math.max(0, Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_BATCH || 20) || 0);
+  if (batch <= 0) {
+    try { await ctx.answerCallbackQuery({ text: 'Auto-heal batch=0.', show_alert: true }); } catch {}
+    await renderAdminPayments(ctx, backStatus, page);
+    return;
+  }
+
+  // Only heal ORPHANED missing_session (safe, intended to be auto-applied).
+  const rows = await db.listPaymentsByStatus('ORPHANED', 50, 0);
+  const cand = (rows || []).filter(r => String(r.note || '').includes('missing_session')).slice(0, batch);
+
+  let applied = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const r of cand) {
+    try {
+      const fb = await applyPaymentFallbackNoSession({
+        paymentId: Number(r.id),
+        paymentUserId: Number(r.user_id),
+        invoicePayload: String(r.invoice_payload || ''),
+        appliedByUserId: adminUserRow?.id || Number(r.user_id),
+        totalAmount: Number(r.total_amount || 0),
+        currency: String(r.currency || 'XTR'),
+        telegramPaymentChargeId: String(r.telegram_payment_charge_id || ''),
+      });
+
+      if (fb && fb.applied) {
+        applied += 1;
+        // Best-effort notify user that payment was applied after recovery.
+        try {
+          const tgId = Number(r.tg_id || 0);
+          if (tgId) {
+            let msg = '✅ Оплата найдена и применена автоматически.';
+            if (fb.kind === 'brand_pass') msg += `
+
+💳 Кредиты начислены: +${Number(fb.credits || 0)}.`;
+            if (fb.kind === 'brand_plan') msg += `
+
+⭐️ Brand Plan активирован (${String(fb.plan || '')}).`;
+            if (fb.kind === 'pro') msg += `
+
+⭐️ PRO активирован.`;
+            if (fb.kind === 'founder_brand') msg += `
+
+⭐️ Founder Sale применён.`;
+            await ctx.api.sendMessage(tgId, msg);
+          }
+        } catch {}
+      } else {
+        skipped += 1;
+      }
+    } catch {
+      failed += 1;
+    }
+  }
+
+  try {
+    await ctx.answerCallbackQuery({
+      text: `Auto-heal: applied ${applied}, failed ${failed}, skipped ${skipped}`,
+      show_alert: true
+    });
+  } catch {}
+
+  await renderAdminPayments(ctx, backStatus, page);
 }
 
 // -----------------------------
