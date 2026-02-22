@@ -240,6 +240,9 @@ export function parseStartPayload(text) {
   m = t.match(/\/start\s+wsp_(\d+)/);
   if (m) return { type: 'wsp', wsId: Number(m[1]) };
 
+  m = t.match(/\/start\s+fs_(\w+)/);
+  if (m) return { type: 'fs', tag: m[1] };
+
   return null;
 }
 
