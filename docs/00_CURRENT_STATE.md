@@ -29,6 +29,8 @@
 - `audit.throttle`: метрики подавления audit-записей (если включено)
 - `broadcast.cooldown`: активная пауза после `429 Too Many Requests` (если есть)
 - `ref`: лёгкие счётчики источников входа (`/start src_tg` / `/start src_ig`) — today/total
+- `ref.by_role`: разрез источника × роли (tg/ig/direct × brand/creator) — today/total
+
 
 #### Audit throttle counters
 Если включён `AUDIT_DB_THROTTLE_ENABLED=true`, то `/api/health` показывает:
@@ -42,7 +44,7 @@
 - Telegram: `https://t.me/<bot>?start=src_tg`
 - Instagram: `https://t.me/<bot>?start=src_ig`
 
-Счётчики видны в `/api/health.ref` и хранятся **только в Redis**.
+Счётчики видны в `/api/health.ref` (и разрез по роли — в `ref.by_role`) и хранятся **только в Redis**.
 
 ---
 
@@ -170,3 +172,11 @@
 - Cron: Telegram notify обёрнуты в `withTimeout(~5s)` чтобы тик не “залипал”
 
 Примечание: в корне репозитория есть `migration_pack/` — ручные SQL-скрипты для экстренного переноса/repair (не используются рантаймом).
+
+
+## ENV
+
+### Smart Matching / Featured — авто-обработка оплат (Stars)
+
+- `MATCH_FEAT_AUTO_APPLY_ENABLED=1` — после оплаты бот автоматически запускает Smart Matching / Featured (попросит бриф/контент).
+- `MATCH_FEAT_AUTO_APPLY_ENABLED=0` — оплаты match/feat попадают в очередь как ORPHANED и требуют ручной обработки.
