@@ -690,12 +690,17 @@ export async function broadcastTick() {
       if (BROADCAST_SEND_DELAY_MS > 0) await sleep(BROADCAST_SEND_DELAY_MS);
     }
 
-    // Update counters
-    await db.updateBroadcast(bc.id, {
-      sent_count: Number(bc.sent_count || 0) + sent,
-      failed_count: Number(bc.failed_count || 0) + failed,
-      last_sent_user_id: lastId,
-    });
+    // Update counters only when there is progress.
+    // Important: on 429 we intentionally do NOT advance the cursor and can have sent=0/failed=0.
+    // Cooldown is Redis-only, so avoid burning Neon CU with a no-op UPDATE.
+    const hasProgress = sent > 0 || failed > 0 || lastId !== lastUserId;
+    if (hasProgress) {
+      await db.updateBroadcast(bc.id, {
+        sent_count: Number(bc.sent_count || 0) + sent,
+        failed_count: Number(bc.failed_count || 0) + failed,
+        last_sent_user_id: lastId,
+      });
+    }
 
     const out = {
       status: 'running',
