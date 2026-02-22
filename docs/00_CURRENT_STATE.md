@@ -27,6 +27,7 @@
 Что показываем:
 - `cron.giveaways_tick` и `cron.broadcast_tick`: последний run (ts + summary)
 - `audit.throttle`: метрики подавления audit-записей (если включено)
+- `broadcast.cooldown`: активная пауза после `429 Too Many Requests` (если есть)
 
 #### Audit throttle counters
 Если включён `AUDIT_DB_THROTTLE_ENABLED=true`, то `/api/health` показывает:
@@ -40,7 +41,7 @@
 ## 3) Инварианты безопасности
 
 - Serverless = только пакетная обработка, никаких “вечных” циклов.
-- Cron: **Redis lock** (между инстансами) + где критично **PG advisory lock**.
+- Cron: **Redis token-lock** (safe unlock) + где критично **PG advisory lock** + SQL guards на статусных переходах.
 - Winners draw: детерминированно/воспроизводимо, guards по статусам (`winners_drawn_at`, транзакции).
 - Миграции: только `migrations/run.js` (exactly-once + checksum).
 - Горячие UI-пути: **не добавлять DB-запросы** в рендер меню/кнопок без сильного обоснования.
@@ -65,6 +66,11 @@
   - поддержка shortcuts: `gw_123`, `bp_45`, `offer_777` → deep link `https://t.me/<bot>?start=...`
   - UI-пресеты на шаге “Кнопки”: 🎁 Конкурс / 🏷 Профиль / 🎬 Оффер
 - Финальное сообщение “✅ Рассылка завершена” теперь **с кнопками** (нет тупика UX).
+
+Надёжность / rate-limit:
+- На `429 Too Many Requests` курсор **не сдвигается** (получатель не теряется).
+- Ставим **Redis cooldown** на `retry_after`, следующие тики делают `skip` до истечения.
+- Cooldown виден в `/api/health` → `broadcast.cooldown`.
 
 Ключевые файлы:
 - `src/bot/cron.js` — отправка и финальное сообщение
@@ -109,6 +115,8 @@
 - Значения хранятся в Redis (override), при отсутствии override используются ENV.
 - «Сброс к ENV» удаляет override и возвращает поведение к переменным окружения.
 
+Рекомендация для прода: в ENV держать `FOUNDER_SALE_ENABLED=false`, а включать через админку (Redis override). Это защищает от случайного “sale ON” при деградации Redis.
+
 **Deep-link для маркетинга:**
 - `https://t.me/<BOT_USERNAME>?start=fs_<tag>` → сразу открывает экран Founder Sale (пример: `fs_offers_a`, `fs_offers_b`, `fs_gw_brand`, `fs_gw_creator`).
 - Эти ссылки сохраняются при пересылке постов, поэтому их всегда дублируем в тексте.
@@ -147,3 +155,5 @@
 
 - Official channel publish: token-lock + DB-reserve (PUBLISHING) для защиты от дублей
 - Broadcast: Redis cooldown на 429 + отображение cooldown в `/api/health`
+- Cron: token-based locks (safe unlock) + SQL atomic guards на критичных статусных переходах
+- Cron: Telegram notify обёрнуты в `withTimeout(~5s)` чтобы тик не “залипал”

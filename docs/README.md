@@ -55,8 +55,11 @@
 ## Как использовать в новом чате
 Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.
 
-## Что нового в текущем snapshot (2026-02-20)
-- `/api/health`: cron last_run + метрики подавления audit-троттлинга (Redis-only)
-- Audit write-shedding: `AUDIT_DB_THROTTLE_*` (чтобы снизить INSERT в `workspace_audit`)
-- Broadcast UX: URL-кнопки (до 3), deep-link shortcuts (`gw_/bp_/offer_`), шаблоны кнопок, ссылки “в слово” (entities → HTML)
-- Role gate на `/start`: если нет `ui_mode` в Redis и нет payload → короткая развилка (Бренд/Креатор), fail-open
+## Что нового в текущем snapshot (2026-02-22)
+- `/api/health`: cron last_run + audit throttle counters (Redis-only) + видимый **broadcast cooldown** после 429.
+- Экономия Neon: audit write-shedding (`AUDIT_DB_THROTTLE_*`) + готовые профили (`docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`).
+- Broadcast надёжность: курсор **не сдвигается** на 429, есть **Redis cooldown** и отображение его в `/api/health`.
+- Cron safety: **token-based Redis locks** (safe unlock) + SQL atomic guards на ключевых переходах (ended/publish/expire, broadcast transitions).
+- Official publish (@collabka_offers): анти‑дубли **token‑lock + DB‑reserve `PUBLISHING`** (stale rescue) + runbook (`docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`).
+- Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*` + маркетинг‑шаблоны.
+- Cron throughput: уведомления (Telegram notify) ограничены по времени (`withTimeout ~5s`), тик не “залипает” на одном сообщении.

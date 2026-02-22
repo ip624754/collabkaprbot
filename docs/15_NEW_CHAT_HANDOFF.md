@@ -1,4 +1,4 @@
-# 15 — NEW CHAT HANDOFF (copy‑paste) — 2026-02-20
+# 15 — NEW CHAT HANDOFF (copy‑paste) — 2026-02-22
 
 Цель: чтобы в новом чате ассистент **сразу** попал в контекст и работал без регрессий.
 
@@ -31,7 +31,11 @@
 - /api/health: cron last_run + метрики audit throttle
 - audit write‑shedding (ENV‑гейт) для снижения INSERT в workspace_audit
 - broadcast: URL‑кнопки до 3, deep-link shortcuts (gw/bp/offer), шаблоны кнопок, ссылки “в слово”, финальный экран рассылки с кнопками
+- broadcast: 429-safe курсор + Redis cooldown (пауза) + cooldown виден в /api/health
 - /start role gate: если нет ui_mode (Redis) и нет payload → короткая развилка (Бренд/Креатор), fail‑open
+- Official publish (@collabka_offers): анти‑дубли token-lock + DB-reserve PUBLISHING (stale rescue) + runbook doc 19
+- Founder Sale: экран акции + Stars purchase + runtime управление из админки + deep-link fs_* + маркетинг шаблоны
+- Cron safety: token-based Redis locks + SQL atomic guards на статусных переходах; notify ограничены по времени (withTimeout ~5s)
 
 Пожалуйста:
 1) прочитай docs/README.md → затем docs/00_BOOT.md → затем docs/00_CURRENT_STATE.md

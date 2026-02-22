@@ -11,18 +11,39 @@
 - двойной рассылке,
 - race conditions и лишним CU в Neon.
 
-## Решение (двойной locking)
-### 1) Redis lock (Upstash)
-Глобальный замок на tick:
+## Решение (многоуровневая защита от дублей)
+
+Цель: даже если cron вызовется параллельно, Redis TTL истечёт, или будет сетевой ретрай — система должна оставаться **идемпотентной**.
+
+### 1) Redis locks (Upstash) — token-based (safe unlock)
+Глобальные замки на tick:
 - `lock:giveaways_tick`
 - `lock:broadcast_tick`
 
-Если уже занят → быстро выходим без нагрузки на Neon.
+Реализация **token-based**: lock снимается только если token совпадает (Lua CAS). Это защищает от сценария:
+TTL истёк → новый инстанс взял лок → старый инстанс в `finally` сделал `DEL` и случайно снял **чужой** лок.
 
-### 2) Postgres advisory lock (transaction scoped)
-Для *критических* операций внутри БД (особенно draw winners):
+### 2) Redis per-entity locks (когда есть внешние сайд‑эффекты)
+Для операций, которые делают **внешний сайд‑эффект** (пост в канал, публикация результатов), добавляем per-entity lock:
+- `lock:giveaway:<id>` (публикация результатов)
+- `lock:official:<offerId>` (публикация/обновление/снятие поста в официальном канале)
+
+### 3) SQL atomic guards (WHERE ... RETURNING)
+Для статусных переходов и «одиночных» действий используем атомарные апдейты вида:
+`UPDATE ... SET ... WHERE <ожидаемое_состояние> RETURNING id`
+
+Это страховка на случай параллельного тика/ретрая, даже если Redis дал “дырку”.
+
+Примеры:
+- end giveaway: `WHERE status IN (...)`
+- publish results: `WHERE status='WINNERS_DRAWN' AND results_message_id IS NULL`
+- expire official: `WHERE status='ACTIVE'`
+- broadcast transitions: `WHERE status='PENDING'` / `WHERE status='RUNNING'`
+
+### 4) Postgres advisory lock (transaction-scoped) + row lock
+Для *самой критической* операции — draw winners — внутри транзакции:
 - `pg_try_advisory_xact_lock(giveaway_id)`
-- плюс `SELECT ... FOR UPDATE` по строке giveaway
+- `SELECT ... FOR UPDATE` по строке giveaway
 
 Гарантия:
 - один giveaway может быть “нарисован” только один раз,
@@ -38,6 +59,27 @@
 - 0 PRNG в Node
 - 0 вытягивания 50k user_id в память
 - воспроизводимо (audit-friendly)
+
+## Broadcast: 429 cooldown + курсор
+Для рассылок важно не «прожигать» Telegram rate-limit и не терять получателей.
+
+Правила:
+- На `429 Too Many Requests` **не двигаем курсор** (чтобы не пропустить user).
+- Ставим **cooldown в Redis** (`broadcast:<id>:cooldown_until`) на `retry_after` и следующие тики делают `skip` до истечения.
+- Cooldown отображается в `/api/health`.
+
+## Cron: notify не должен стопорить batch
+Уведомления в Telegram (notify в канал/DM) могут зависать. Чтобы тик не «залипал» на одном сообщении:
+- оборачиваем notify в `withTimeout(~5s)`
+- при таймауте/ошибке — продолжаем обработку остальных, без hard-fail.
+
+## Official channel publish: reserve до отправки
+Публикация/обновление поста в официальном канале — внешний сайд‑эффект. Чтобы не словить дубль при деградации Redis:
+- делаем **DB-reserve до отправки**: `official_posts.status='PUBLISHING'` (есть stale rescue)
+- потом отправляем/редактируем сообщение
+- после успеха записываем `message_id` и переводим статус в `ACTIVE`
+
+Подробный runbook: `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`.
 
 ## Audit logs и стоимость Neon
 `workspace_audit` и `giveaway_audit` пишутся в Postgres. При активной работе (особенно lead/folders) частые `INSERT` могут заметно жечь CU на Neon.
