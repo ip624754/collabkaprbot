@@ -382,9 +382,57 @@ export async function giveawaysTick() {
 // =====================================================
 const BROADCAST_BATCH_SIZE = 25;
 const BROADCAST_SEND_DELAY_MS = 50; // ~20 msg/sec
+// When Telegram returns 429, we respect retry_after and avoid hammering.
+// Stored in Redis only (no DB) to keep Neon cheap.
+const BROADCAST_COOLDOWN_PAD_SEC = 30;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function broadcastCooldownKey(broadcastId) {
+  return k(['broadcast', String(broadcastId), 'cooldown_until']);
+}
+
+async function getBroadcastCooldownUntilMs(broadcastId) {
+  try {
+    const v = await redis.get(broadcastCooldownKey(broadcastId));
+    const ms = v ? Number(v) : 0;
+    return Number.isFinite(ms) ? ms : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function setBroadcastCooldown(broadcastId, retryAfterSec) {
+  const now = Date.now();
+  const safeSec = Math.max(1, Math.min(3600, Number(retryAfterSec || 0) || 0));
+  const proposedUntil = now + safeSec * 1000;
+  const key = broadcastCooldownKey(broadcastId);
+
+  try {
+    const cur = await redis.get(key);
+    let curMs = cur ? Number(cur) : 0;
+    if (!Number.isFinite(curMs)) curMs = 0;
+    const finalUntil = Math.max(curMs, proposedUntil);
+    const ttlSec = Math.max(
+      5,
+      Math.ceil((finalUntil - now) / 1000) + BROADCAST_COOLDOWN_PAD_SEC
+    );
+    await redis.set(key, String(finalUntil), { ex: ttlSec });
+    return finalUntil;
+  } catch {
+    // Best-effort: even if Redis fails, we still break the batch on 429.
+    return proposedUntil;
+  }
+}
+
+function extractRetryAfterSec(err) {
+  const a = err?.parameters?.retry_after;
+  const b = err?.response?.parameters?.retry_after;
+  const c = err?.response?.body?.parameters?.retry_after;
+  const v = Number(a ?? b ?? c);
+  return Number.isFinite(v) && v > 0 ? v : 5;
 }
 
 async function sendBroadcastMessage(api, tgId, bc) {
@@ -458,6 +506,24 @@ export async function broadcastTick() {
       return out;
     }
 
+    // Redis-only cooldown on 429. Prevents hammering and smooths delivery.
+    const cooldownUntilMs = await getBroadcastCooldownUntilMs(bc.id);
+    if (cooldownUntilMs && cooldownUntilMs > Date.now()) {
+      const retry_after_sec = Math.max(
+        1,
+        Math.ceil((cooldownUntilMs - Date.now()) / 1000)
+      );
+      const out = {
+        status: 'skip',
+        reason: 'cooldown',
+        broadcast_id: bc.id,
+        retry_after_sec,
+        cooldown_until: new Date(cooldownUntilMs).toISOString(),
+      };
+      await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+      return out;
+    }
+
     // Atomic transition PENDING → RUNNING (prevents double-start on lock expiry)
     if (bc.status === 'PENDING') {
       const ok = await db.atomicTransitionBroadcast(bc.id, 'PENDING', 'RUNNING', {
@@ -526,6 +592,7 @@ export async function broadcastTick() {
     let sent = 0;
     let failed = 0;
     let lastId = lastUserId;
+    let cooldownSetSec = 0;
 
     for (const recipient of recipients) {
       const uid = Number(recipient.user_id);
@@ -558,7 +625,9 @@ export async function broadcastTick() {
         }
         // 429 = rate limit → stop batch early, retry next tick
         else if (code === 429) {
-          const retryAfter = Number(err?.parameters?.retry_after || 5);
+          const retryAfter = extractRetryAfterSec(err);
+          cooldownSetSec = retryAfter;
+          await setBroadcastCooldown(bc.id, retryAfter);
           console.error(`[BROADCAST] 429 rate limit, retry_after=${retryAfter}`);
           // Don't log as sent — will retry next tick
           break;
@@ -592,6 +661,7 @@ export async function broadcastTick() {
       batch_failed: failed,
       total_sent: Number(bc.sent_count || 0) + sent,
       total_count: bc.total_count,
+      ...(cooldownSetSec ? { cooldown_sec: cooldownSetSec } : {}),
     };
     await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
     return out;
