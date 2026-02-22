@@ -12416,7 +12416,7 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
     `⭐️ <b>Brand Plan</b>
 
 Статус: <b>${escapeHtml(status)}</b>
-${brandPassBalanceLineHtml(credits)}
+${brandPassBalanceLineHtml(credits)}${(!active && credits > 0) ? '\n<i>ℹ️ Кредиты — отдельный баланс и не выключаются вместе с подпиской.</i>' : ''}
 <i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 <b>Старт</b> · ${startPl.stars}⭐️/мес
@@ -14384,7 +14384,7 @@ ${escapeHtml(safe)}`;
       }
       const unique = [...new Set(parts)].slice(0, 50);
       const revType = String(exp.revType || '');
-      const labels = { bp: 'Забрать Brand Plan', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
+      const labels = { bp: 'Забрать Brand Plan (подписка)', bpcr: 'Забрать Brand Plan + кредиты', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
       const label = labels[revType] || revType;
 
       const joined = unique.join(',');
@@ -14402,7 +14402,7 @@ ${escapeHtml(safe)}`;
       }
 
       const preview = unique.map(u => `@${u}`).join(', ');
-      const warn = revType === 'cr' ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены.' : '';
+      const warn = (revType === 'cr' || revType === 'bpcr') ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены.' : '';
       await safeEditOrReply(ctx, `⛔ <b>${escapeHtml(label)}</b>${warn}\n\nПользователи (${unique.length}):\n${escapeHtml(preview)}\n\nПодтвердить?`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -22564,7 +22564,9 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
       const kb = new InlineKeyboard()
-        .text('⛔ Забрать Brand Plan', 'a:adm_gift_revoke_input|t:bp')
+        .text('⛔ Забрать Brand Plan (подписка)', 'a:adm_gift_revoke_input|t:bp')
+        .row()
+        .text('⛔+🧹 Забрать Plan + кредиты', 'a:adm_gift_revoke_input|t:bpcr')
         .row()
         .text('⛔ Забрать PRO', 'a:adm_gift_revoke_input|t:pro')
         .row()
@@ -22584,12 +22586,12 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
       const revType = String(p.t || '');
-      const labels = { bp: 'Забрать Brand Plan', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
+      const labels = { bp: 'Забрать Brand Plan (подписка)', bpcr: 'Забрать Brand Plan + кредиты', pro: 'Забрать PRO', cr: 'Обнулить кредиты' };
       const label = labels[revType] || revType;
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:adm_gift_revoke')
         .text('⬅️ Админка', 'a:admin_home');
-      const warn = revType === 'cr'
+      const warn = (revType === 'cr' || revType === 'bpcr')
         ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены. Используй только если уверен.'
         : '';
       await safeEditOrReply(
@@ -22736,7 +22738,11 @@ if (p.a === 'a:match_home') {
         try {
           if (revType === 'bp') {
             await db.revokeBrandPlan(found.id);
-            results.push(`⛔ @${clean} — Brand Plan забран`);
+            results.push(`⛔ @${clean} — Brand Plan забран (кредиты не изменены)`);
+          } else if (revType === 'bpcr') {
+            await db.revokeBrandPlan(found.id);
+            await db.resetBrandCredits(found.id);
+            results.push(`⛔+🧹 @${clean} — Brand Plan забран + кредиты обнулены`);
           } else if (revType === 'pro') {
             await db.revokeAllWorkspacePro(found.id);
             results.push(`⛔ @${clean} — PRO забран`);
@@ -22778,7 +22784,11 @@ if (p.a === 'a:match_home') {
         try {
           if (revType === 'bp') {
             await db.revokeBrandPlan(found.id);
-            results.push(`⛔ @${clean} — Brand Plan забран`);
+            results.push(`⛔ @${clean} — Brand Plan забран (кредиты не изменены)`);
+          } else if (revType === 'bpcr') {
+            await db.revokeBrandPlan(found.id);
+            await db.resetBrandCredits(found.id);
+            results.push(`⛔+🧹 @${clean} — Brand Plan забран + кредиты обнулены`);
           } else if (revType === 'pro') {
             await db.revokeAllWorkspacePro(found.id);
             results.push(`⛔ @${clean} — PRO забран`);
