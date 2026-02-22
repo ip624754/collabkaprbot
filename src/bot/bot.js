@@ -1,7 +1,7 @@
 import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import { CFG, assertEnv } from '../lib/config.js';
 import logger from '../lib/logger.js';
-import { redis, k, rateLimit, consumeOnce } from '../lib/redis.js';
+import { redis, k, rateLimit, consumeOnce, acquireLock, releaseLock } from '../lib/redis.js';
 import * as db from '../db/queries.js';
 import { pool } from '../db/pool.js';
 import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes, parseMoscowDateTime, computeThreadReplyStatus, formatBxChargeLine, telegramEntitiesToHtml } from './helpers.js';
@@ -11309,6 +11309,10 @@ async function notifyOfficialQueueAdmins(api, input = {}) {
 }
 
 
+// Official publish/remove idempotency: per-offer token lock (prevents duplicate posts on parallel actions).
+const OFFICIAL_OFFER_LOCK_TTL_SEC = 180;
+
+
 
 async function buildOfficialOfferPost(offerRow, opts = {}) {
   const forCaption = Boolean(opts.forCaption);
@@ -11363,6 +11367,11 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
   const channelId = Number(CFG.OFFICIAL_CHANNEL_ID || 0);
   if (!channelId) throw new Error('OFFICIAL_CHANNEL_ID is missing');
 
+  const lockKey = k(['lock', 'official', String(offerId)]);
+  const lock = await acquireLock(lockKey, OFFICIAL_OFFER_LOCK_TTL_SEC);
+  if (!lock) return { ok: false, locked: true, reason: 'busy' };
+  try {
+
   // Normalize placement type.
   const placementRaw = String(opts.placementType || 'MANUAL').toUpperCase();
   const keepExpiry = !!opts.keepExpiry;
@@ -11399,6 +11408,25 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
 
   const paymentId = opts.paymentId ? Number(opts.paymentId) : (existing?.payment_id ? Number(existing.payment_id) : null);
   const publishedByUserId = opts.publishedByUserId ? Number(opts.publishedByUserId) : null;
+
+  const prevStatus = existing?.status ? String(existing.status).toUpperCase() : null;
+
+  // DB-level reserve before sending to Telegram (safety if Redis degrades).
+  const reserved = await safeOfficialPosts(
+    () => db.atomicReserveOfficialPublish(offerId, {
+      channelChatId: channelId,
+      placementType,
+      paymentId,
+      slotDays: days,
+      slotExpiresAt,
+      publishedByUserId
+    }),
+    async () => null
+  );
+  if (!reserved) return { ok: false, locked: true, reason: 'publishing' };
+
+
+  try {
 
   // Build message
   const hasMedia = !!(offer.media_file_id && String(offer.media_type || '').trim());
@@ -11478,6 +11506,21 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
   }
 
   return { ok: true, messageId, placementType, days, slotExpiresAt };
+
+  } catch (e) {
+    // Best-effort revert publishing marker.
+    try {
+      await safeOfficialPosts(
+        () => db.setOfficialPostStatus(offerId, prevStatus || 'PENDING', { lastError: String(e && (e.message || e) || 'publish_failed') }),
+        async () => null
+      );
+    } catch {}
+    throw e;
+  }
+
+  } finally {
+    await releaseLock(lockKey, lock.token);
+  }
 }
 
 
@@ -11485,6 +11528,10 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
 async function removeOfficialOfferPost(api, offerId, reason = 'REMOVED') {
   const existing = await safeOfficialPosts(() => db.getOfficialPostByOfferId(offerId), async () => null);
   if (!existing) return { removed: false };
+  const lockKey = k(['lock', 'official', String(offerId)]);
+  const lock = await acquireLock(lockKey, OFFICIAL_OFFER_LOCK_TTL_SEC);
+  if (!lock) return { removed: false, locked: true, reason: 'busy' };
+  try {
   const channelId = Number(existing.channel_chat_id || 0);
   const msgId = Number(existing.message_id || 0);
   if (channelId && msgId) {
@@ -11506,6 +11553,9 @@ async function removeOfficialOfferPost(api, offerId, reason = 'REMOVED') {
   );
 
   return { removed: true };
+  } finally {
+    await releaseLock(lockKey, lock.token);
+  }
 }
 
 async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, back = '') {
@@ -11532,10 +11582,12 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
 
   const post = await safeOfficialPosts(() => db.getOfficialPostByOfferId(offerId), async () => null);
   const st = String(post?.status || 'NONE').toUpperCase();
+  const isPendingLike = (st === 'PENDING' || st === 'PUBLISHING');
 
   const statusLabel = {
     NONE: '—',
     PENDING: '⏳ Pending',
+    PUBLISHING: '⏳ Публикуется',
     ACTIVE: '✅ Active',
     REMOVED: '📴 Removed',
     EXPIRED: '⌛️ Expired',
@@ -11584,6 +11636,8 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
   if (canRequest) {
     if (st === 'PENDING') {
       kb.text('⏳ В очереди (отменить)', `a:off_req_cancel|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
+    } else if (st === 'PUBLISHING') {
+      // publishing in progress: hide queue actions
     } else if (st !== 'ACTIVE') {
       kb.text('📝 В очередь публикаций', `a:off_req_home|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
     }
@@ -11594,7 +11648,7 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
   }
   const canPublishManual = isMod && (mode === 'manual' || mode === 'mixed');
   // Commit F: in paid mode allow publish only if there is a paid PENDING record
-  const canPublishPaid = isMod && (mode === 'paid' || mode === 'mixed') && st === 'PENDING' && post?.payment_id;
+  const canPublishPaid = isMod && (mode === 'paid' || mode === 'mixed') && isPendingLike && post?.payment_id;
   if (canPublishManual || canPublishPaid) {
     kb.text('✅ Опубликовать сейчас', `a:off_pub|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
@@ -11603,7 +11657,7 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
     kb.text('♻️ Обновить пост', `a:off_upd|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
 
-  if (isMod && (st === 'ACTIVE' || st === 'PENDING')) {
+  if (isMod && (st === 'ACTIVE' || isPendingLike)) {
     kb.text('🗑 Снять', `a:off_rm|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
 
@@ -23354,13 +23408,19 @@ if (p.a === 'a:match_home') {
       }
 
       try {
-        await publishOfferToOfficialChannel(ctx.api, offerId, {
+        const pubRes = await publishOfferToOfficialChannel(ctx.api, offerId, {
           placementType,
           days,
           paymentId,
           publishedByUserId: u.id,
           keepExpiry: false,
         });
+        if (pubRes && pubRes.locked) {
+          await ctx.answerCallbackQuery({ text: '⏳ Уже публикуется. Попробуй чуть позже.', show_alert: true });
+          await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
+          return;
+        }
+
       } catch (e) {
         try {
           await db.setOfficialPostStatus(offerId, 'ERROR', { lastError: String(e?.message || e) });
@@ -23385,11 +23445,17 @@ if (p.a === 'a:match_home') {
         return;
       }
       try {
-        await publishOfferToOfficialChannel(ctx.api, offerId, {
+        const pubRes = await publishOfferToOfficialChannel(ctx.api, offerId, {
           placementType: 'UPDATE',
           keepExpiry: true,
           publishedByUserId: u.id
         });
+        if (pubRes && pubRes.locked) {
+          await ctx.answerCallbackQuery({ text: '⏳ Уже обновляется/публикуется. Попробуй чуть позже.', show_alert: true });
+          await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
+          return;
+        }
+
       } catch (e) {
         try { await db.setOfficialPostStatus(offerId, 'ERROR', { lastError: String(e?.message || e) }); } catch (_) {}
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
@@ -23412,7 +23478,13 @@ if (p.a === 'a:match_home') {
         return;
       }
       try {
-        await removeOfficialOfferPost(ctx.api, offerId, 'REMOVED');
+        const rmRes = await removeOfficialOfferPost(ctx.api, offerId, 'REMOVED');
+
+        if (rmRes && rmRes.locked) {
+          await ctx.answerCallbackQuery({ text: '⏳ Сейчас уже выполняется действие по офиц.каналу. Попробуй позже.', show_alert: true });
+          await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
+          return;
+        }
       } catch (e) {
         try { await db.setOfficialPostStatus(offerId, 'ERROR', { lastError: String(e?.message || e) }); } catch (_) {}
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
@@ -27705,13 +27777,18 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
       const days = Number(parts[3] || CFG.OFFICIAL_MANUAL_DEFAULT_DAYS);
       if (!CFG.OFFICIAL_PUBLISH_ENABLED) throw new Error('Official publishing disabled');
       if (!offerId) throw new Error('Bad offerId');
-      await publishOfferToOfficialChannel(ctx.api, offerId, {
+            const pubRes = await publishOfferToOfficialChannel(ctx.api, offerId, {
         placementType: 'PAID',
         paymentId: row.id,
         days,
         publishedByUserId: adminUserRow.id,
         keepExpiry: false
       });
+      if (pubRes && pubRes.locked) {
+        await ctx.answerCallbackQuery({ text: '⏳ Уже публикуется. Попробуй чуть позже.', show_alert: true });
+        await renderAdminPaymentView(ctx, row.id, backStatus, page);
+        return;
+      }
       await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_official_publish:${offerId}:${days}d`);
       await ctx.answerCallbackQuery({ text: 'Опубликовано ✅', show_alert: true });
       await renderAdminPaymentView(ctx, row.id, backStatus, page);
