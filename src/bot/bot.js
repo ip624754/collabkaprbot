@@ -1557,6 +1557,31 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 `;
   }
 
+
+  const quickStart60 = opts?.quickStart60 ? (() => {
+    const title = '⚡️ <b>Первые 60 секунд</b>';
+    if (effective === 'brand' || effective === 'brand_manager') {
+      return `${title}
+• Открой «📰 Лента креаторов» или «🔎 Поиск креаторов»
+• Напиши креатору → дальше всё в «📥 Inbox»
+
+`;
+    }
+    if (effective === 'curator') {
+      return `${title}
+• Открой «🧹 Кабинет куратора»
+• Выбери канал и проверь доступ
+
+`;
+    }
+    // creator
+    return `${title}
+• Нажми «📣 Мои каналы» → выбери канал
+• Затем «🎬 UGC / Офферы» → заполни витрину/профиль
+
+`;
+  })() : '';
+
   const bannerText = showHint
     ? `
 <b>Быстрый старт</b>
@@ -1581,6 +1606,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 
 ` +
     founderBanner +
+    quickStart60 +
     bannerText +
     mapText +
     `Выбери режим работы.
@@ -1883,6 +1909,53 @@ function kbNavRow(kb, backCb) {
   if (backCb && backCb !== 'a:menu' && backCb !== 'a:home') kb.text('⬅️ Назад', backCb);
   kb.text('📋 Меню', 'a:menu');
   kb.text('🏠 Home', 'a:home');
+  return kb;
+}
+
+
+// STEP57: Focused done screens (1 primary CTA + "More actions")
+function kbBxPubDone(wsId, offerId, page = 0, back = 'my') {
+  const link = offerDeepLink(offerId);
+  const kb = new InlineKeyboard();
+
+  // Primary CTA
+  if (link) kb.url('🔗 Поделиться', link).row();
+  else kb.text('🔎 Открыть', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`).row();
+
+  kb.text('⋯ Ещё действия', `a:more|k:bx_pub_done|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
+
+  // Keep unified footer (exit)
+  kbNavRow(kb, `a:bx_my|ws:${wsId}|p:${page}`);
+  return kb;
+}
+
+function kbBxPubMore(wsId, offerId, page = 0, back = 'my') {
+  const kb = new InlineKeyboard();
+  kb.text('⬆️ Поднять', `a:bx_bump|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
+  kb.text('🔎 Открыть', `a:bx_view|ws:${wsId}|o:${offerId}|back:${back}|p:${page}`)
+    .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:${page}`).row();
+
+  kb.text('⬅️ Назад', `a:bx_pub_done|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  return kb;
+}
+
+function kbBrandApplyDone(brandUserId, backPage = 0, canOpenInbox = false) {
+  const kb = new InlineKeyboard();
+  kb.text('🔎 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`).row();
+  kb.text('⋯ Ещё действия', `a:more|k:brand_apply_done|u:${brandUserId}|p:${backPage}|inb:${canOpenInbox ? 1 : 0}`).row();
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  return kb;
+}
+
+function kbBrandApplyMore(brandUserId, backPage = 0, canOpenInbox = false) {
+  const kb = new InlineKeyboard();
+  kb.text('🏷 Каталог брендов', `a:brands_home|p:${backPage}`).row();
+  kb.text('✍️ Ещё заявку', `a:brand_apply|u:${brandUserId}|p:${backPage}`).row();
+  if (canOpenInbox) kb.text('📥 Inbox бренда', 'a:brand_apps|ws:0|s:new|p:0').row();
+
+  kb.text('⬅️ Назад', `a:brand_apply_done|u:${brandUserId}|p:${backPage}|inb:${canOpenInbox ? 1 : 0}`).row();
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -4856,15 +4929,12 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
     try { canOpenInbox = await db.isBrandManager(brandUserId, u.id); } catch { canOpenInbox = false; }
   }
 
-  const doneText = `✅ <b>Заявка отправлена</b>\n\nБренд увидит её в Inbox.\n\nХочешь продолжить?`;
-  const kbDone = new InlineKeyboard()
-    .text('🏷 Каталог брендов', `a:brands_home|p:${backPage}`)
-    .row()
-    .text('🔎 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`)
-    .text('✍️ Ещё заявку', `a:brand_apply|u:${brandUserId}|p:${backPage}`);
+  const doneText = `✅ <b>Заявка отправлена</b>
 
-  if (canOpenInbox) kbDone.row().text('📥 Inbox бренда', 'a:brand_apps|ws:0|s:new|p:0');
-  kbDone.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+Бренд увидит её в Inbox.
+
+Хочешь продолжить?`;
+  const kbDone = kbBrandApplyDone(brandUserId, backPage, canOpenInbox);
 
   await safeEditOrReply(ctx, doneText, { parse_mode: 'HTML', reply_markup: kbDone, disable_web_page_preview: true }, edit);
 }
@@ -11299,7 +11369,9 @@ async function notifyOfficialQueueAdmins(api, input = {}) {
 
     let sent = 0;
     for (const a of admins) {
-      const res = await sendMessageWithFallback(api, a, text, { parse_mode: 'HTML', reply_markup: kb });
+      const adminId = Number(a || 0);
+      if (!adminId) continue;
+      const res = await sendMessageWithFallback(api, adminId, text, { parse_mode: 'HTML', reply_markup: kb });
       if (res && res.ok) sent += 1;
     }
     return { sent };
@@ -13661,10 +13733,20 @@ export function getBot() {
       return;
     }
 
+    const supportChatIdRaw = String(CFG.SUPPORT_CHAT_ID || '').trim();
     const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
-    if (!admins.length) {
+    const targets = [];
+    if (supportChatIdRaw) targets.push(supportChatIdRaw);
+    else {
+      for (const a of admins) {
+        const adminId = Number(a || 0);
+        if (adminId) targets.push(adminId);
+      }
+    }
+
+    if (!targets.length) {
       const backCb = expectBackCb(exp);
-      await ctx.reply('⚠️ Поддержка не настроена. Напиши владельцу бота.', { reply_markup: navKb(backCb) });
+      await ctx.reply('⚠️ Поддержка не настроена. Попробуй позже.', { reply_markup: navKb(backCb) });
       return;
     }
 
@@ -13708,22 +13790,22 @@ ${escapeHtml(safeCap)}
 ` : '');
 
     let sent = 0;
-    for (const a of admins) {
-      const adminId = Number(a || 0);
-      if (!adminId) continue;
+    for (const t of targets) {
+      const targetChatId = t;
+      if (!targetChatId) continue;
       try {
         const replyKb = new InlineKeyboard()
           .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
           .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`);
         // Send header with reply button
-        await ctx.api.sendMessage(adminId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
+        await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
 
         // Copy original media message (preserves attachment)
         try {
-          await ctx.api.copyMessage(adminId, ctx.chat.id, ctx.message.message_id);
+          await ctx.api.copyMessage(targetChatId, ctx.chat.id, ctx.message.message_id);
         } catch {
           // Fallback: forwardMessage if copyMessage fails
-          try { await ctx.api.forwardMessage(adminId, ctx.chat.id, ctx.message.message_id); } catch {}
+          try { await ctx.api.forwardMessage(targetChatId, ctx.chat.id, ctx.message.message_id); } catch {}
         }
 
         sent += 1;
@@ -13927,9 +14009,19 @@ ctx.reply = (text, extra) => {
         return;
       }
 
+      const supportChatIdRaw = String(CFG.SUPPORT_CHAT_ID || '').trim();
       const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
-      if (!admins.length) {
-        await ctx.reply('⚠️ Поддержка не настроена. Напиши владельцу бота.');
+      const targets = [];
+      if (supportChatIdRaw) targets.push(supportChatIdRaw);
+      else {
+        for (const a of admins) {
+          const adminId = Number(a || 0);
+          if (adminId) targets.push(adminId);
+        }
+      }
+
+      if (!targets.length) {
+        await ctx.reply('⚠️ Поддержка не настроена. Попробуй позже.');
         return;
       }
 
@@ -13968,14 +14060,14 @@ Brand: <b>${escapeHtml(bmBrand)}</b>` : ''}
 ${escapeHtml(safe)}`;
 
       let sent = 0;
-      for (const a of admins) {
-        const adminId = Number(a || 0);
-        if (!adminId) continue;
+      for (const t of targets) {
+        const targetChatId = t;
+        if (!targetChatId) continue;
         try {
           const replyKb = new InlineKeyboard()
             .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
             .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`);
-          await ctx.api.sendMessage(adminId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
+          await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
           sent += 1;
         } catch {}
       }
@@ -16912,7 +17004,7 @@ if (payload?.type === 'bxo') {
     const flags = await getRoleFlags(u, ctx.from.id);
 
     // HOME HUB (Commit87): unified start screen for role switching.
-    await renderHomeHub(ctx, u, flags, { edit: false });
+    await renderHomeHub(ctx, u, flags, { edit: false, quickStart60: true });
     await maybeSendBanner(ctx, 'menu', CFG.MENU_BANNER_FILE_ID);
 
     } catch (e) {
@@ -16984,6 +17076,31 @@ UGC vs Интеграция
   // --- QA / Debug (admin-only) ---
   // Hidden command: /qa
   // Prints current filter keys + step-by-step match counts for Brand Directory.
+
+  bot.command('support', async (ctx) => {
+    try { await clearExpectText(ctx.from.id); } catch {}
+
+    const text = `💬 <b>Поддержка</b>
+
+Если что-то не работает или есть вопрос — напиши одним сообщением.
+Я отправлю это в поддержку и вернусь с ответом здесь.
+
+Что помогает быстрее решить:
+• в каком режиме ты был (Креатор / Бренд / Менеджер)
+• что нажимал (кнопки)
+• текст ошибки из логов/скрин (опиши)
+
+⚠️ Спам/реклама — бан.`;
+
+    const kb = new InlineKeyboard()
+      .text('✍️ Написать в поддержку', 'a:support_write')
+      .row()
+      .text('🧭 Быстрый старт', 'a:guide')
+      .text('📋 Меню', 'a:menu');
+
+    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
+  });
+
   bot.command('qa', async (ctx) => {
     if (!isSuperAdminTg(ctx.from?.id)) return;
 
@@ -17947,6 +18064,52 @@ if (p.a === 'a:guide') {
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
   await maybeSendBanner(ctx, 'guide', CFG.GUIDE_BANNER_FILE_ID);
+  return;
+}
+
+if (p.a === 'a:more') {
+  // Generic "More actions" submenu (STEP57)
+  const key = String(p.k || '').trim();
+
+  if (key === 'bx_pub_done') {
+    const wsId = Number(p.ws || 0);
+    const offerId = Number(p.o || 0);
+    const page = Math.max(0, Number(p.p || 0));
+    const back = p.back || 'my';
+    const kb = kbBxPubMore(wsId, offerId, page, back);
+    try { await ctx.editMessageReplyMarkup(kb); } catch {}
+    return;
+  }
+
+  if (key === 'brand_apply_done') {
+    const brandUserId = Number(p.u || 0);
+    const backPage = Math.max(0, Number(p.p || 0));
+    const canOpenInbox = String(p.inb || '') === '1';
+    const kb = kbBrandApplyMore(brandUserId, backPage, canOpenInbox);
+    try { await ctx.editMessageReplyMarkup(kb); } catch {}
+    return;
+  }
+
+  try { await ctx.answerCallbackQuery({ text: 'Нет дополнительных действий.' }); } catch {}
+  return;
+}
+
+if (p.a === 'a:bx_pub_done') {
+  const wsId = Number(p.ws || 0);
+  const offerId = Number(p.o || 0);
+  const page = Math.max(0, Number(p.p || 0));
+  const back = p.back || 'my';
+  const kb = kbBxPubDone(wsId, offerId, page, back);
+  try { await ctx.editMessageReplyMarkup(kb); } catch {}
+  return;
+}
+
+if (p.a === 'a:brand_apply_done') {
+  const brandUserId = Number(p.u || 0);
+  const backPage = Math.max(0, Number(p.p || 0));
+  const canOpenInbox = String(p.inb || '') === '1';
+  const kb = kbBrandApplyDone(brandUserId, backPage, canOpenInbox);
+  try { await ctx.editMessageReplyMarkup(kb); } catch {}
   return;
 }
 
@@ -24559,13 +24722,7 @@ if (p.a === 'a:bx_publish_hint') {
 
         await clearDraft(ctx.from.id);
 
-        const link = offerDeepLink(offer.id);
-        const kb = new InlineKeyboard();
-        kb.text('⬆️ Поднять', `a:bx_bump|ws:${wsId}|o:${offer.id}|p:0|back:my`).row();
-        kb.text('🔎 Открыть', `a:bx_view|ws:${wsId}|o:${offer.id}|back:my|p:0`)
-          .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`).row();
-        if (link) kb.url('🔗 Поделиться', link).row();
-        kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
+        const kb = kbBxPubDone(wsId, offer.id, 0, 'my');
 
         await safeEditOrReply(ctx,
           `✅ <b>Оффер опубликован</b>\n\n<b>${escapeHtml(realTitle)}</b>\n\n${escapeHtml(truncateText(fullDescription, 550))}`,
