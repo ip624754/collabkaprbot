@@ -130,9 +130,8 @@ export const CFG = {
   OFFICIAL_30D_PRICE: parseIntSafe(process.env.OFFICIAL_30D_PRICE, 1299),
 
   // Intro credits & anti-spam
-  // 1-time bonus credits on the very first intro (new dialog) for brands.
-  // Keep default conservative to avoid accidental oversized freebies.
-  INTRO_TRIAL_CREDITS: parseIntSafe(process.env.INTRO_TRIAL_CREDITS, 1),
+  // 1-time bonus credits for brands on the first intro attempts (trial).
+  INTRO_TRIAL_CREDITS: parseIntSafe(process.env.INTRO_TRIAL_CREDITS, 3),
   INTRO_COST_PER_INTRO: parseIntSafe(process.env.INTRO_COST_PER_INTRO, 1),
   INTRO_DAILY_LIMIT: parseIntSafe(process.env.INTRO_DAILY_LIMIT, 20),
   INTRO_DAILY_LIMIT_UNVERIFIED: parseIntSafe(process.env.INTRO_DAILY_LIMIT_UNVERIFIED, 10),
