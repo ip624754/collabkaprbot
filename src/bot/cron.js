@@ -34,6 +34,8 @@ const GIVEAWAY_LOCK_TTL_SEC = 120;
 // TTL keeps storage bounded.
 const CRON_LAST_RUN_TTL_SEC = 14 * 24 * 60 * 60; // 14 days
 
+const NOTIFY_TIMEOUT_MS = 5000; // best-effort Telegram notifications in cron
+
 async function writeCronLastRun(name, payload) {
   try {
     const key = k(['cron', String(name || 'tick'), 'last_run']);
@@ -66,6 +68,28 @@ async function withGiveawayLock(giveawayId, fn) {
   }
 }
 
+async function withTimeout(promise, ms, label) {
+  const p = Promise.resolve(promise)
+    .then((v) => ({ v }))
+    .catch((e) => ({ e }));
+
+  let timeoutId;
+  const timeout = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve({ __timeout: true }), ms);
+  });
+
+  const out = await Promise.race([p, timeout]);
+  clearTimeout(timeoutId);
+
+  if (out && out.__timeout) {
+    const err = new Error(`timeout after ${ms}ms: ${label || 'op'}`);
+    err.code = 'ETIMEDOUT';
+    throw err;
+  }
+  if (out && out.e) throw out.e;
+  return out ? out.v : undefined;
+}
+
 async function endDueGiveaways(now = new Date()) {
   const due = await db.listGiveawaysToEnd(CRON_END_BATCH);
   const ended = [];
@@ -83,7 +107,11 @@ async function endDueGiveaways(now = new Date()) {
     // Optional: notify owner/channel.
     try {
       const api = getBot().api;
-      await notifyGiveawayEnded({ api, db, g, reason: 'time' });
+      await withTimeout(
+        notifyGiveawayEnded({ api, db, g, reason: 'time' }),
+        NOTIFY_TIMEOUT_MS,
+        'notifyGiveawayEnded'
+      );
     } catch {
       // ignore
     }
@@ -125,24 +153,32 @@ async function autoDrawEnded() {
 
       // Notify owner that winners are ready.
       try {
-        await notifyGiveawayWinnersReady({
-          api: bot.api,
-          db,
-          g,
-          reason: 'auto_draw',
-        });
+        await withTimeout(
+          notifyGiveawayWinnersReady({
+            api: bot.api,
+            db,
+            g,
+            reason: 'auto_draw',
+          }),
+          NOTIFY_TIMEOUT_MS,
+          'notifyGiveawayWinnersReady'
+        );
       } catch {
         // ignore
       }
 
       // DM winners directly.
       try {
-        await notifyGiveawayWinnersDM({
-          api: bot.api,
-          db,
-          gwId: g.id,
-          reason: 'auto_draw',
-        });
+        await withTimeout(
+          notifyGiveawayWinnersDM({
+            api: bot.api,
+            db,
+            gwId: g.id,
+            reason: 'auto_draw',
+          }),
+          NOTIFY_TIMEOUT_MS,
+          'notifyGiveawayWinnersDM'
+        );
       } catch {
         // ignore
       }
@@ -314,14 +350,21 @@ async function issueIntroRetryCredits() {
         const tgId = u?.tg_id;
         if (tgId) {
           const kb = new InlineKeyboard().text('🎫 Brand Pass', 'a:brand_pass|ws:0');
-          await bot.api.sendMessage(
-            Number(tgId),
-            `🎟 <b>Retry credit начислен</b>\n\nПо одному из интро не было ответа ${Number(
-              CFG.INTRO_RETRY_AFTER_HOURS || 24
-            )}ч — мы вернули тебе 1 Retry credit.\nДействует ${Number(
-              CFG.INTRO_RETRY_EXPIRES_DAYS || 7
-            )} дней и списывается автоматически при следующем интро.`,
-            { parse_mode: 'HTML', reply_markup: kb }
+          await withTimeout(
+            bot.api.sendMessage(
+              Number(tgId),
+              `🎟 <b>Retry credit начислен</b>
+
+По одному из интро не было ответа ${Number(
+                CFG.INTRO_RETRY_AFTER_HOURS || 24
+              )}ч — мы вернули тебе 1 Retry credit.
+Действует ${Number(
+                CFG.INTRO_RETRY_EXPIRES_DAYS || 7
+              )} дней и списывается автоматически при следующем интро.`,
+              { parse_mode: 'HTML', reply_markup: kb }
+            ),
+            NOTIFY_TIMEOUT_MS,
+            'retryCreditNotify'
           );
         }
       }
