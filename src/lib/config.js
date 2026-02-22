@@ -34,6 +34,11 @@ function parseCsvStr(v) {
 
 const DEFAULT_SUPER_ADMINS = '';
 
+const PAYMENT_SESSION_TTL_MIN = (() => {
+  const m = parseIntSafe(process.env.PAYMENT_SESSION_TTL_MIN, 360); // default: 6h
+  return Math.max(10, Math.min(m, 24 * 60)); // 10 min .. 24h
+})();
+
 export const CFG = {
   APP_ENV: process.env.APP_ENV || 'dev',
 
@@ -165,9 +170,24 @@ export const CFG = {
   // Payments toggles (runtime override via admin → stored in Redis)
   PAYMENTS_ACCEPT_DEFAULT: parseBoolSafe(process.env.PAYMENTS_ACCEPT_DEFAULT, true),
   PAYMENTS_AUTO_APPLY_DEFAULT: parseBoolSafe(process.env.PAYMENTS_AUTO_APPLY_DEFAULT, true),
+  // Payments: fulfill based on invoice payload even if Redis pay_* session expired.
+  // Helps eliminate ORPHANED: missing_session.
+  PAYMENTS_FALLBACK_APPLY_ENABLED: parseBoolSafe(process.env.PAYMENTS_FALLBACK_APPLY_ENABLED, true),
+
+  // Payments: auto-heal ORPHANED payments with note=missing_session (cron + admin action).
+  PAYMENTS_ORPHANED_AUTOHEAL_ENABLED: parseBoolSafe(process.env.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED, true),
+  PAYMENTS_ORPHANED_AUTOHEAL_BATCH: (() => {
+    const n = parseIntSafe(process.env.PAYMENTS_ORPHANED_AUTOHEAL_BATCH, 20);
+    return Math.max(0, Math.min(n, 100));
+  })(),
   // Smart Matching / Featured paid add-ons: allow full auto-apply on successful Stars payment
   // When disabled, paid match/feat payments are marked ORPHANED and require admin processing.
   MATCH_FEAT_AUTO_APPLY_ENABLED: parseBoolSafe(process.env.MATCH_FEAT_AUTO_APPLY_ENABLED, false),
+
+  // Payments: link Stars invoice payloads to UI context (Redis pay_* tokens).
+  // Increase to reduce ORPHANED due to expired session; keep bounded.
+  PAYMENT_SESSION_TTL_MIN: PAYMENT_SESSION_TTL_MIN,
+  PAYMENT_SESSION_TTL_SEC: PAYMENT_SESSION_TTL_MIN * 60,
 
   // Feature flags
   ANALYTICS_ENABLED: parseBoolSafe(process.env.ANALYTICS_ENABLED, false),
