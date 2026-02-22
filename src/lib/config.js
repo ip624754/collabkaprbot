@@ -45,6 +45,9 @@ export const CFG = {
   BOT_USERNAME: (process.env.BOT_USERNAME || '').replace(/^@/, ''),
   BOT_ID: process.env.BOT_ID ? Number(process.env.BOT_ID) : 0,
 
+  // Support / feedback routing (optional). Set to a Telegram group/chat id to collect feedback.
+  SUPPORT_CHAT_ID: process.env.SUPPORT_CHAT_ID || '',
+
   // Security
   WEBHOOK_SECRET_TOKEN: process.env.WEBHOOK_SECRET_TOKEN || '',
   CRON_SECRET: process.env.CRON_SECRET || '',
@@ -127,7 +130,9 @@ export const CFG = {
   OFFICIAL_30D_PRICE: parseIntSafe(process.env.OFFICIAL_30D_PRICE, 1299),
 
   // Intro credits & anti-spam
-  INTRO_TRIAL_CREDITS: parseIntSafe(process.env.INTRO_TRIAL_CREDITS, 3),
+  // 1-time bonus credits on the very first intro (new dialog) for brands.
+  // Keep default conservative to avoid accidental oversized freebies.
+  INTRO_TRIAL_CREDITS: parseIntSafe(process.env.INTRO_TRIAL_CREDITS, 1),
   INTRO_COST_PER_INTRO: parseIntSafe(process.env.INTRO_COST_PER_INTRO, 1),
   INTRO_DAILY_LIMIT: parseIntSafe(process.env.INTRO_DAILY_LIMIT, 20),
   INTRO_DAILY_LIMIT_UNVERIFIED: parseIntSafe(process.env.INTRO_DAILY_LIMIT_UNVERIFIED, 10),
