@@ -22517,6 +22517,29 @@ if (p.a === 'a:match_home') {
       const usernames = usersRaw.split(',').filter(Boolean);
       if (!usernames.length) return ctx.answerCallbackQuery({ text: 'Нет юзернеймов.' });
 
+      const buildGiftAppliedKb = (type) => {
+        const kb = new InlineKeyboard();
+        if (type === 'bp_start' || type === 'bp_pro') {
+          kb
+            .text('🏢 Перейти в режим Бренд', 'a:home_mode|m:brand').row()
+            .text('⭐️ Открыть Brand Plan', 'a:brand_plan|ws:0').row();
+        }
+        kb
+          .text('🔗 Поделиться ботом', 'a:share')
+          .text('📋 Меню', 'a:menu');
+        return kb;
+      };
+
+      const giftAppliedText = (type, label) => {
+        if (type === 'bp_start' || type === 'bp_pro') {
+          return `🎁 <b>${escapeHtml(label)}</b> активирован ✅\n\nХочешь использовать как бренд? Нажми «Перейти в режим Бренд».`;
+        }
+        if (type === 'pro') {
+          return `🎁 <b>${escapeHtml(label)}</b> активирован ✅\n\nОткрой меню и продолжай работу.`;
+        }
+        return `🎁 <b>${escapeHtml(label)}</b> активирован ✅`;
+      };
+
       const results = [];
       for (const uname of usernames) {
         const clean = uname.replace(/^@/, '').trim().toLowerCase();
@@ -22531,11 +22554,32 @@ if (p.a === 'a:match_home') {
             await db.activateBrandPlan(found.id, 'start', CFG.BRAND_PLAN_DURATION_DAYS);
             if (planDef?.credits) await db.addBrandCredits(found.id, planDef.credits);
             results.push(`✅ @${clean} — Brand Plan Старт + ${planDef?.credits || 0} кредитов`);
+
+            // Notify recipient with a clear next step (no forced mode switch)
+            try {
+              if (found.tg_id) {
+                await bot.api.sendMessage(
+                  Number(found.tg_id),
+                  giftAppliedText('bp_start', '⭐️ Brand Plan Старт'),
+                  { parse_mode: 'HTML', reply_markup: buildGiftAppliedKb('bp_start') }
+                );
+              }
+            } catch {}
           } else if (giftType === 'bp_pro') {
             const planDef = BRAND_PLANS.find(pl => pl.id === 'pro');
             await db.activateBrandPlan(found.id, 'pro', CFG.BRAND_PLAN_DURATION_DAYS);
             if (planDef?.credits) await db.addBrandCredits(found.id, planDef.credits);
             results.push(`✅ @${clean} — Brand Plan Про + ${planDef?.credits || 0} кредитов`);
+
+            try {
+              if (found.tg_id) {
+                await bot.api.sendMessage(
+                  Number(found.tg_id),
+                  giftAppliedText('bp_pro', '🚀 Brand Plan Про'),
+                  { parse_mode: 'HTML', reply_markup: buildGiftAppliedKb('bp_pro') }
+                );
+              }
+            } catch {}
           } else if (giftType === 'pro') {
             const wsList = await db.listWorkspaces(found.id);
             if (!wsList.length) { results.push(`⚠️ @${clean} — нет каналов, PRO не применён`); continue; }
@@ -22543,6 +22587,16 @@ if (p.a === 'a:match_home') {
               await db.activateWorkspacePro(ws.id, CFG.PRO_DURATION_DAYS);
             }
             results.push(`✅ @${clean} — PRO на ${wsList.length} ${ruPlural(wsList.length, 'канал', 'канала', 'каналов')}`);
+
+            try {
+              if (found.tg_id) {
+                await bot.api.sendMessage(
+                  Number(found.tg_id),
+                  giftAppliedText('pro', '✨ PRO Креатор'),
+                  { parse_mode: 'HTML', reply_markup: buildGiftAppliedKb('pro') }
+                );
+              }
+            } catch {}
           } else {
             results.push(`❌ @${clean} — неизвестный тип`);
           }
