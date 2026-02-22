@@ -1813,24 +1813,27 @@ async function renderFounderSale(ctx, u, params = {}) {
 
 async function renderRoleSelection(ctx, u, opts = {}) {
   // Gatekeeper for first-time users: choose UI mode explicitly (stored in Redis).
-  // Keep this screen максимально коротким — без карты и без лишних кнопок.
+  // Keep this screen максимально коротким.
   const edit = opts.edit === true;
 
   const text =
-    `👋 <b>Добро пожаловать!</b>\n\n` +
-    `Настроим меню под ваши задачи — это скроет лишнее и сэкономит время.\n` +
-    `<i>Режим всегда можно переключить позже на «🏠 Home».</i>\n\n` +
-    `<b>Кто вы?</b>`;
+    `❓ <b>Ты бренд или креатор?</b>
+
+` +
+    `Выбери роль ниже — я настрою меню под тебя.
+` +
+    `<i>Роль можно переключить позже на «🏠 Home».</i>`;
 
   const kb = new InlineKeyboard()
-    .text('🏢 Я Бренд / Заказчик', 'a:home_mode|m:brand')
+    .text('🏢 Бренд / Заказчик', 'a:home_mode|m:brand')
     .row()
-    .text('🤳 Я Креатор / Блогер', 'a:home_mode|m:creator');
+    .text('🤳 Креатор / Блогер', 'a:home_mode|m:creator')
+    .row()
+    .text('🔗 Поделиться ботом', 'a:share');
 
   if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
-
 
 async function renderRoleHub(ctx, u, flags) {
   // Role hub is a navigation home for Back in BX flows
@@ -18277,6 +18280,16 @@ if (p.a === 'a:share') {
   const shareText = 'Collabka PR — коллаборации брендов и креаторов в Telegram. Зайди в бот и напиши «креатор» или «бренд».'.trim();
   const tgShare = tgShareUrl(tgLink, shareText);
 
+  // If user hasn't chosen a role yet, offer a safe way back to role selection.
+  let hasUiModeKey = true;
+  try {
+    const raw = await redis.get(k(['ui_mode', ctx.from.id]));
+    hasUiModeKey = !!raw;
+  } catch {
+    hasUiModeKey = true; // fail-open
+  }
+
+
   const text =
     `🔗 <b>Поделиться ботом</b>\n\n` +
     `<b>Telegram</b> (трек):\n${escapeHtml(tgLink)}\n\n` +
@@ -18287,6 +18300,7 @@ if (p.a === 'a:share') {
   const kb = new InlineKeyboard();
   if (tgShare) kb.url('💬 Поделиться в Telegram', tgShare).row();
   if (igLink) kb.url('📲 Открыть ссылку для Instagram', igLink).row();
+  if (!hasUiModeKey) kb.row().text('⬅️ Назад', 'a:role_pick');
   kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
@@ -18822,6 +18836,12 @@ if (p.a === 'a:menu') {
     }
 
     // HOME HUB (Commit87)
+    if (p.a === 'a:role_pick') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      await renderRoleSelection(ctx, u, { edit: true });
+      return;
+    }
+
     if (p.a === 'a:home') {
       await ctx.answerCallbackQuery();
       const flags2 = await getRoleFlags(u, ctx.from.id);
