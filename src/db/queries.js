@@ -442,20 +442,111 @@ export async function addBrandCredits(userId, credits) {
   return Number(r.rows[0]?.brand_credits ?? 0);
 }
 
+// Add Brand Pass credits that are explicitly gifted (admin gifts).
+// These can later be safely revoked without touching purchased/trial credits.
+export async function addGiftedBrandCredits(userId, credits) {
+  const uid = Number(userId);
+  const c = Math.max(0, Math.floor(Number(credits) || 0));
+  if (!uid || !c) return await addBrandCredits(uid, c);
+
+  try {
+    const r = await pool.query(
+      `update users
+         set brand_credits = brand_credits + $2,
+             brand_credits_gifted = brand_credits_gifted + $2,
+             brand_credits_updated_at = now()
+       where id=$1
+       returning brand_credits`,
+      [uid, c]
+    );
+    return Number(r.rows[0]?.brand_credits ?? 0);
+  } catch (e) {
+    // Rolling upgrade safety: if column doesn't exist yet.
+    if (e && e.code === '42703') {
+      return await addBrandCredits(uid, c);
+    }
+    throw e;
+  }
+}
+
+// Revoke all remaining gifted credits (does not touch purchased/trial credits).
+// Returns {taken, brand_credits, brand_credits_gifted}
+export async function revokeGiftedBrandCredits(userId) {
+  const uid = Number(userId);
+  if (!uid) return { taken: 0, brand_credits: 0, brand_credits_gifted: 0 };
+
+  try {
+    const r = await pool.query(
+      `with s as (
+         select id,
+                coalesce(brand_credits,0)::int as total,
+                coalesce(brand_credits_gifted,0)::int as gifted,
+                least(coalesce(brand_credits,0), coalesce(brand_credits_gifted,0))::int as take
+         from users
+         where id=$1
+       )
+       update users u
+          set brand_credits = u.brand_credits - s.take,
+              brand_credits_gifted = least(greatest(0, u.brand_credits_gifted - s.take), u.brand_credits - s.take),
+              brand_credits_updated_at = now(),
+              updated_at = now()
+         from s
+        where u.id = s.id
+       returning s.take::int as taken, u.brand_credits::int as brand_credits, u.brand_credits_gifted::int as brand_credits_gifted`,
+      [uid]
+    );
+    const row = r.rows[0] || null;
+    if (!row) return { taken: 0, brand_credits: 0, brand_credits_gifted: 0 };
+    return {
+      taken: Number(row.taken || 0),
+      brand_credits: Number(row.brand_credits || 0),
+      brand_credits_gifted: Number(row.brand_credits_gifted || 0)
+    };
+  } catch (e) {
+    // Column missing -> nothing to revoke (can't distinguish gifted)
+    if (e && e.code === '42703') {
+      return { taken: 0, brand_credits: await getBrandCredits(uid), brand_credits_gifted: 0 };
+    }
+    throw e;
+  }
+}
+
 // Spend Brand Pass credits (atomic, no negatives). Returns new balance or null if insufficient.
 export async function spendBrandCredits(userId, cost = 1) {
   const c = Math.max(1, Math.floor(Number(cost) || 1));
-  const r = await pool.query(
-    `update users
-     set brand_credits = brand_credits - $2,
-         brand_credits_spent = brand_credits_spent + $2,
-         updated_at=now()
-     where id=$1 and brand_credits >= $2
-     returning brand_credits`,
-    [Number(userId), c]
-  );
-  if (!r.rows.length) return null;
-  return Number(r.rows[0]?.brand_credits ?? 0);
+  const uid = Number(userId);
+
+  // Rolling-upgrade safety: if brand_credits_gifted column isn't applied yet, fall back to old query.
+  try {
+    const r = await pool.query(
+      `update users
+       set brand_credits = brand_credits - $2,
+           brand_credits_spent = brand_credits_spent + $2,
+           brand_credits_gifted = greatest(0, brand_credits_gifted - $2),
+           updated_at=now()
+       where id=$1 and brand_credits >= $2
+       returning brand_credits`,
+      [uid, c]
+    );
+    if (!r.rows.length) return null;
+    return Number(r.rows[0]?.brand_credits ?? 0);
+  } catch (e) {
+    // 42703 = undefined_column
+    if (e && e.code === '42703') {
+      const r = await pool.query(
+        `update users
+         set brand_credits = brand_credits - $2,
+             brand_credits_spent = brand_credits_spent + $2,
+             updated_at=now()
+         where id=$1 and brand_credits >= $2
+         returning brand_credits`,
+        [uid, c]
+      );
+      if (!r.rows.length) return null;
+      return Number(r.rows[0]?.brand_credits ?? 0);
+    }
+    throw e;
+  }
 }
 
 // -----------------------------
@@ -2145,16 +2236,36 @@ if (requireCredits) {
   if (retryUsed && retryId) {
     await redeemRetryCredit(client, retryId, ins.rows[0].id);
   } else {
-    const chargedRes = await client.query(
-      `update users
-       set brand_credits = greatest(0, brand_credits - $2),
-           brand_credits_spent = brand_credits_spent + $2,
-           updated_at=now()
-       where id=$1
-       returning brand_credits`,
-      [buyerUserId, normalizedCost]
-    );
+    let chargedRes;
+    try {
+      chargedRes = await client.query(
+        `update users
+         set brand_credits = greatest(0, brand_credits - $2),
+             brand_credits_spent = brand_credits_spent + $2,
+             brand_credits_gifted = greatest(0, brand_credits_gifted - $2),
+             updated_at=now()
+         where id=$1
+         returning brand_credits`,
+        [buyerUserId, normalizedCost]
+      );
+    } catch (e) {
+      // Rolling upgrade safety: 42703 = undefined_column
+      if (e && e.code === '42703') {
+        chargedRes = await client.query(
+          `update users
+           set brand_credits = greatest(0, brand_credits - $2),
+               brand_credits_spent = brand_credits_spent + $2,
+               updated_at=now()
+           where id=$1
+           returning brand_credits`,
+          [buyerUserId, normalizedCost]
+        );
+      } else {
+        throw e;
+      }
+    }
     balance = Number(chargedRes.rows[0]?.brand_credits || 0);
+
   }
 
   // track daily usage (counts retry too: it's still an intro attempt)
@@ -2532,10 +2643,22 @@ export async function revokeBrandPlan(userId) {
 }
 
 export async function resetBrandCredits(userId) {
-  await pool.query(
-    `update users set brand_credits = 0, updated_at = now() where id = $1`,
-    [Number(userId)]
-  );
+  const uid = Number(userId);
+  try {
+    await pool.query(
+      `update users set brand_credits = 0, brand_credits_gifted = 0, updated_at = now() where id = $1`,
+      [uid]
+    );
+  } catch (e) {
+    if (e && e.code === '42703') {
+      await pool.query(
+        `update users set brand_credits = 0, updated_at = now() where id = $1`,
+        [uid]
+      );
+      return;
+    }
+    throw e;
+  }
 }
 
 export async function revokeAllWorkspacePro(userId) {
