@@ -243,6 +243,12 @@ export function parseStartPayload(text) {
   m = t.match(/\/start\s+fs_(\w+)/);
   if (m) return { type: 'fs', tag: m[1] };
 
+  // Lightweight acquisition source markers (no business logic):
+  // - /start src_tg  (shared in Telegram)
+  // - /start src_ig  (shared via Instagram)
+  m = t.match(/\/start\s+src_(ig|tg)(?:\b|_)/);
+  if (m) return { type: 'src', src: String(m[1] || '').toLowerCase() };
+
   return null;
 }
 

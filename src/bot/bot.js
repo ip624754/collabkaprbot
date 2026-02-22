@@ -929,6 +929,52 @@ function withTimeout(promise, ms, label = 'op') {
   });
 }
 
+// Share helpers (no DB): provide simple tracked /start links.
+function botUsernameNoAt() {
+  return String(CFG.BOT_USERNAME || '').replace(/^@/, '').trim();
+}
+
+function botStartLink(startParam) {
+  const un = botUsernameNoAt();
+  if (!un) return null;
+  const p = String(startParam || '').trim();
+  if (!p) return `https://t.me/${un}`;
+  return `https://t.me/${un}?start=${encodeURIComponent(p)}`;
+}
+
+function tgShareUrl(url, text) {
+  const u = String(url || '').trim();
+  if (!u) return null;
+  const t = String(text || '').trim();
+  const qs = `url=${encodeURIComponent(u)}${t ? `&text=${encodeURIComponent(t)}` : ''}`;
+  return `https://t.me/share/url?${qs}`;
+}
+
+async function trackAcqSource(tgId, src) {
+  const uid = Number(tgId || 0);
+  const s = String(src || '').toLowerCase().trim();
+  if (!uid || (s !== 'ig' && s !== 'tg')) return;
+
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
+  const totalKey = k(['ref', 'src', s, 'total']);
+  const dayKey = k(['ref', 'src', s, 'd', day]);
+  const lastKey = k(['ref', 'user', uid, 'last_src']);
+
+  try {
+    const [dayN] = await Promise.all([
+      redis.incr(dayKey),
+      redis.incr(totalKey),
+      redis.set(lastKey, s, { ex: 60 * 60 * 24 * 30 }),
+    ]);
+    // keep daily buckets for ~60 days
+    if (Number(dayN) === 1) {
+      try { await redis.expire(dayKey, 60 * 60 * 24 * 60); } catch {}
+    }
+  } catch {
+    // best-effort; never block /start
+  }
+}
+
 async function redisGetSafe(key, ms = 1500) {
   try {
     return await withTimeout(redis.get(key), ms, `redis.get:${String(key).slice(0, 40)}`);
@@ -1047,7 +1093,7 @@ function mainMenuKb(flags = {}) {
     if (uname) kb.url('📢 Официальный канал', `https://t.me/${uname}`).row();
   }
 
-  kb.text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
+  kb.text('🧭 Быстрый старт', 'a:guide').text('🔗 Поделиться', 'a:share').text('💬 Поддержка', 'a:support').row();
   kb.text('🔄 Обновить', 'a:main_menu').row();
 
   const extra = [];
@@ -1101,6 +1147,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 
   kb
     .text('🧭 Быстрый старт', 'a:guide')
+    .text('🔗 Поделиться', 'a:share')
     .text('💬 Поддержка', 'a:support')
     .row();
 
@@ -1168,6 +1215,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
 
   kb.row()
     .text('🧭 Быстрый старт', 'a:guide')
+    .text('🔗 Поделиться', 'a:share')
     .text('💬 Поддержка', 'a:support')
     .row()
     .text('✨ Я Creator / канал', 'a:ui_mode_set|m:creator|ret:menu');
@@ -1648,7 +1696,8 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   if (flags?.isModerator) kb.text('🛡 Модерация', 'a:mod_home').row();
   if (flags?.isAdmin) kb.text('👑 Админка', 'a:admin_home').row();
 
-  kb.text('📋 Меню', 'a:menu').text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
+  kb.text('📋 Меню', 'a:menu').text('🧭 Быстрый старт', 'a:guide').text('🔗 Поделиться', 'a:share').row();
+  kb.text('💬 Поддержка', 'a:support').row();
 
   if (showHint) kb.row().text('✅ Понятно', 'a:home_hint_ack');
 
@@ -16721,7 +16770,15 @@ ${list}
   bot.command('start', async (ctx) => {
     let preMsg = null;
     try {
-      const payload = parseStartPayload(ctx.message?.text || '');
+      const rawPayload = parseStartPayload(ctx.message?.text || '');
+      let payload = rawPayload;
+      const acqSrc = payload?.type === 'src' ? String(payload.src || '').toLowerCase() : null;
+
+      // Lightweight acquisition tracking (Redis-only) and then treat as a normal /start.
+      if (acqSrc) {
+        await trackAcqSource(ctx.from?.id, acqSrc);
+        payload = null;
+      }
 
       // Early feedback for giveaway deep-links (Jobs-style)
       if (payload?.type === 'gw') preMsg = await ctx.reply('⏳ Открываю конкурс…');
@@ -16736,7 +16793,15 @@ ${list}
         return;
       }
 
-      db.trackEvent('start', { userId: u.id, meta: { payloadType: payload?.type || null, payloadTag: (payload?.type === 'fs' ? (payload?.tag || null) : null), hasPayload: !!payload } });
+      db.trackEvent('start', {
+        userId: u.id,
+        meta: {
+          payloadType: payload?.type || null,
+          payloadTag: (payload?.type === 'fs' ? (payload?.tag || null) : null),
+          hasPayload: !!payload,
+          acqSrc: acqSrc || null,
+        }
+      });
     if (payload?.type === 'gwj') {
       const loading = preMsg || await ctx.reply('⏳ Записываю участие…');
       const g = await db.getGiveawayInfoForUser(payload.id);
@@ -18161,6 +18226,38 @@ if (p.a === 'a:go_requests') {
   if (!ws) return;
 
   await renderWsLeadsList(ctx, u.id, ws.id, 'new', 0, 'ws_open');
+  return;
+}
+
+if (p.a === 'a:share') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+
+  const un = botUsernameNoAt();
+  if (!un) {
+    const text = `⚠️ <b>Поделиться пока нельзя</b>\n\nНе задан <code>BOT_USERNAME</code> в ENV.`;
+    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+    return;
+  }
+
+  const tgLink = botStartLink('src_tg');
+  const igLink = botStartLink('src_ig');
+
+  const shareText = 'Collabka PR — коллаборации брендов и креаторов в Telegram. Зайди в бот и напиши «креатор» или «бренд».'.trim();
+  const tgShare = tgShareUrl(tgLink, shareText);
+
+  const text =
+    `🔗 <b>Поделиться ботом</b>\n\n` +
+    `<b>Telegram</b> (трек):\n${escapeHtml(tgLink)}\n\n` +
+    `<b>Instagram</b> (трек):\n${escapeHtml(igLink)}\n\n` +
+    `💬 Для Telegram нажми кнопку ниже — откроется окно «Поделиться».\n` +
+    `📲 Для Instagram просто скопируй ссылку и вставь в био/сторис/сообщение.`;
+
+  const kb = new InlineKeyboard();
+  if (tgShare) kb.url('💬 Поделиться в Telegram', tgShare).row();
+  if (igLink) kb.url('📲 Открыть ссылку для Instagram', igLink).row();
+  kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
   return;
 }
 
