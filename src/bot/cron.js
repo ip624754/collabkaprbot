@@ -446,11 +446,11 @@ async function autoHealOrphanedPayments() {
     try {
       const api = getBot().api;
       await queueOpsAlert(api, {
-        group: 'payments',
+        group: 'ops',
         reason: 'autoheal_failed',
         title: 'Auto-heal ORPHANED missing_session: failures',
         paymentId: failedIds.length ? failedIds[0] : null,
-        kind: 'autoheal',
+        kind: 'cron',
         payload: '',
         extra: [
           `Checked: ${cand.length}`,
@@ -470,7 +470,8 @@ export async function giveawaysTick() {
   const lockKey = k(['lock', 'giveaways_tick']);
   const startedAt = Date.now();
 
-  return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
+  try {
+    return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
     const ended = await endDueGiveaways();
     const drawn = await autoDrawEnded();
     const published = await autoPublishDrawn();
@@ -479,7 +480,7 @@ export async function giveawaysTick() {
     const payheal = await autoHealOrphanedPayments();
     // Best-effort ops digest flush (anti-spam). Sends at most once per OPS_ALERT_SUMMARY_MIN.
     try {
-      await flushOpsAlerts(getBot().api, 'payments');
+      await flushOpsAlerts(getBot().api, 'ops');
     } catch {}
     const duration_ms = Date.now() - startedAt;
 
@@ -516,7 +517,20 @@ export async function giveawaysTick() {
     });
 
     return out;
-  });
+    });
+  } catch (e) {
+    // Best-effort ops alert on cron crash.
+    try {
+      await queueOpsAlert(getBot().api, {
+        group: 'ops',
+        reason: 'cron_failed',
+        title: 'giveaways_tick crashed',
+        kind: 'cron',
+        extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
+      });
+    } catch {}
+    throw e;
+  }
 }
 
 // =====================================================
@@ -640,7 +654,8 @@ async function sendBroadcastMessage(api, tgId, bc) {
 export async function broadcastTick() {
   const lockKey = k(['lock', 'broadcast_tick']);
 
-  return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
+  try {
+    return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
     const bc = await db.getActiveBroadcast();
     if (!bc) {
       const out = { status: 'idle', reason: 'no_active_broadcast' };
@@ -812,5 +827,18 @@ export async function broadcastTick() {
     };
     await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
     return out;
-  });
+    });
+  } catch (e) {
+    // Best-effort ops alert on cron crash.
+    try {
+      await queueOpsAlert(getBot().api, {
+        group: 'ops',
+        reason: 'cron_failed',
+        title: 'broadcast_tick crashed',
+        kind: 'cron',
+        extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
+      });
+    } catch {}
+    throw e;
+  }
 }

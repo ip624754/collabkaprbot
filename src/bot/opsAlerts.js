@@ -76,6 +76,17 @@ export async function queueOpsAlert(api, {
   extra = [],
 } = {}) {
   try {
+    // "Silent" mode: keep the operator chat quiet; only failures/errors should pass.
+    try {
+      if (CFG.OPS_ALERT_SILENT) {
+        const r = String(reason || '').toLowerCase();
+        const isErrorish = r.includes('error') || r.includes('failed') || r.includes('exception') || r.includes('panic');
+        if (!isErrorish) return { queued: false, skipped: 'silent' };
+      }
+    } catch {
+      // ignore
+    }
+
     const targets = resolveOpsTargets();
     if (!targets.length) return { queued: false, skipped: 'no_targets' };
 
@@ -167,19 +178,32 @@ export async function flushOpsAlerts(api, group = 'ops', { force = false, fallba
     events.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
 
     const byReason = {};
+    const byKind = {};
     const payIds = [];
     for (const e of events) {
       const r = String(e.reason || 'error');
       byReason[r] = (byReason[r] || 0) + 1;
+      const knd = String(e.kind || '').trim() || 'ops';
+      byKind[knd] = (byKind[knd] || 0) + 1;
       if (e.paymentId) payIds.push(Number(e.paymentId));
     }
     const uniqPay = uniq(payIds).slice(0, 5);
 
-    const head = `⚠️ <b>OPS</b> · <b>${esc(g)}</b> · <b>${events.length}</b> событий`;
+    const silent = !!CFG.OPS_ALERT_SILENT;
+    const head = `⚠️ <b>OPS</b>${silent ? ' · <b>quiet</b>' : ''} · <b>${esc(g)}</b> · <b>${events.length}</b> событий`;
     const lines = [head, ''];
 
     for (const [r, c] of Object.entries(byReason).sort((a, b) => Number(b[1]) - Number(a[1]))) {
       lines.push(`• <b>${esc(r)}</b>: <code>${c}</code>`);
+    }
+
+    const kinds = Object.entries(byKind).sort((a, b) => Number(b[1]) - Number(a[1]));
+    if (kinds.length > 1) {
+      lines.push('');
+      lines.push('<b>По типам:</b>');
+      for (const [knd, c] of kinds) {
+        lines.push(`• <b>${esc(knd)}</b>: <code>${c}</code>`);
+      }
     }
 
     // show last few events (compact)
@@ -195,12 +219,16 @@ export async function flushOpsAlerts(api, group = 'ops', { force = false, fallba
     }
 
     const kb = new InlineKeyboard();
-    // Open ORPHANED list in bot admin.
-    kb.text('💳 ORPHANED', 'a:admin_payments|st:ORPHANED|p:0');
-    kb.row();
-    for (const id of uniqPay) {
-      kb.text(`🧾 #${id}`, `a:admin_pay_view|id:${id}|st:ORPHANED|p:0`).row();
+    const hasPayments = uniqPay.length > 0 || events.some((e) => String(e.kind || '').toLowerCase().includes('pay'));
+    if (hasPayments) {
+      // Open ORPHANED list in bot admin.
+      kb.text('💳 ORPHANED', 'a:admin_payments|st:ORPHANED|p:0');
+      kb.row();
+      for (const id of uniqPay) {
+        kb.text(`🧾 #${id}`, `a:admin_pay_view|id:${id}|st:ORPHANED|p:0`).row();
+      }
     }
+    kb.text('👑 Админка', 'a:admin_home');
 
     const msg = lines.join('\n');
 

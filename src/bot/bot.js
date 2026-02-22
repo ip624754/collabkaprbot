@@ -14032,6 +14032,78 @@ ${escapeHtml(safeCap)}
   });
   bot.on('message:text', async (ctx, next) => {
     if (!ctx.from) return next();
+
+    // ------------------------------------------------------------
+    // Support: allow super-admins to reply to users прямо из support-группы.
+    // Flow:
+    // 1) In support chat, press "✍️ Ответить" on a ticket.
+    // 2) Bot posts a prompt with ForceReply.
+    // 3) Admin replies to that prompt -> bot forwards to user.
+    // Works even with Telegram group privacy mode ON (bots receive replies to their own messages).
+    // ------------------------------------------------------------
+    try {
+      const chatType = String(ctx.chat?.type || '');
+      if ((chatType === 'group' || chatType === 'supergroup') && isSuperAdminTg(ctx.from.id)) {
+        const rep = ctx.message?.reply_to_message;
+        const meId = Number(ctx.me?.id || CFG.BOT_ID || 0);
+        if (rep && rep.from && meId && Number(rep.from.id) === meId) {
+          const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
+          const sess = await redis.get(sessKey);
+          if (
+            sess &&
+            Number(sess.chatId || 0) === Number(ctx.chat?.id || 0) &&
+            Number(sess.promptMsgId || 0) === Number(rep.message_id || 0)
+          ) {
+            const raw = String(ctx.message?.text || '').trim();
+            const low = raw.toLowerCase();
+            if (low === '/cancel' || low === 'cancel' || low === 'отмена' || low === 'стоп') {
+              try { await redis.del(sessKey); } catch {}
+              await ctx.reply('❌ Отменено.');
+              return;
+            }
+
+            if (!raw) {
+              await ctx.reply('Напиши текст ответа одним сообщением.');
+              return;
+            }
+
+            const targetTgId = Number(sess.targetTgId || 0);
+            const targetUserId = Number(sess.targetUserId || 0);
+            if (!targetTgId) {
+              try { await redis.del(sessKey); } catch {}
+              await ctx.reply('⚠️ Не найден TG ID получателя.');
+              return;
+            }
+
+            const safe = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
+            const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+
+            let ok = false;
+            try {
+              const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+              await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+              ok = true;
+            } catch (e) {
+              await ctx.reply(`❌ Не удалось отправить (юзер заблокировал бота?).\nОшибка: ${String(e?.message || e).slice(0, 140)}`);
+            }
+
+            if (ok) {
+              try { await redis.del(sessKey); } catch {}
+              const kb = new InlineKeyboard()
+                .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
+                .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
+                .row()
+                .text('⬅️ Админка', 'a:admin_home');
+              await ctx.reply(`✅ Ответ отправлен пользователю (tg:${targetTgId}).`, { reply_markup: kb });
+            }
+            return;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     const text = String(ctx.message?.text || '');
     const isCommand = text.startsWith('/') &&
       Array.isArray(ctx.message?.entities) &&
@@ -17602,13 +17674,13 @@ bot.on('message:successful_payment', async (ctx) => {
 
       // Anti-spam digest: first alert in a window is sent immediately, the rest is summarized.
       return await queueOpsAlert(ctx.api, {
-        group: 'payments',
+        group: 'ops',
         reason: String(reason || 'pay_error'),
         title: 'Payments',
         paymentId: paymentId || null,
         userId: u.id,
         tgId: ctx.from?.id || null,
-        kind,
+        kind: 'payments',
         payload: invoicePayload,
         extra,
       });
@@ -22806,10 +22878,56 @@ if (p.a === 'a:match_home') {
       const targetUserId = Number(p.uid || 0);
       if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
 
-      const kb = new InlineKeyboard()
-        .text('❌ Отмена', 'a:admin_home');
-      await safeEditOrReply(ctx, `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\nНапиши текст ответа одним сообщением — я отправлю его пользователю от имени поддержки.`, { parse_mode: 'HTML', reply_markup: kb });
-      await setExpectText(ctx.from.id, { type: 'adm_support_reply', targetTgId, targetUserId });
+      const chatType = String(ctx.chat?.type || '');
+      const isPrivate = chatType === 'private';
+
+      // In private chat with bot: legacy flow (expectText).
+      if (isPrivate) {
+        const kb = new InlineKeyboard().text('❌ Отмена', 'a:admin_home');
+        await safeEditOrReply(
+          ctx,
+          `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\nНапиши текст ответа одним сообщением — я отправлю его пользователю от имени поддержки.`,
+          { parse_mode: 'HTML', reply_markup: kb }
+        );
+        await setExpectText(ctx.from.id, { type: 'adm_support_reply', targetTgId, targetUserId });
+        return;
+      }
+
+      // In support group: "one button" reply flow.
+      // We post a bot prompt and ask admin to reply to that prompt message.
+      // Even with Telegram group privacy mode ON, bots receive replies to their own messages.
+      const exSec = 20 * 60;
+      const sessionKey = k(['adm_support_reply', String(ctx.from.id)]);
+      const promptText =
+        `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\n` +
+        `Отправь текст <b>ответом на это сообщение</b> (reply) — я доставлю его пользователю от имени поддержки.\n\n` +
+        `<i>Отмена:</i> ответь словом <code>/cancel</code>.`;
+
+      const prompt = await ctx.api.sendMessage(ctx.chat.id, promptText, {
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+        reply_markup: {
+          force_reply: true,
+          input_field_placeholder: 'Текст ответа…',
+          selective: true,
+        },
+      });
+
+      try {
+        await redis.set(
+          sessionKey,
+          {
+            targetTgId,
+            targetUserId,
+            chatId: ctx.chat.id,
+            promptMsgId: prompt.message_id,
+            createdAt: new Date().toISOString(),
+          },
+          { ex: exSec }
+        );
+      } catch {
+        // If Redis is unavailable, at least keep UX: admin can still reply in DM using legacy flow.
+      }
       return;
     }
 
