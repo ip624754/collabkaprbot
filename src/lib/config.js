@@ -184,6 +184,11 @@ export const CFG = {
   // When disabled, paid match/feat payments are marked ORPHANED and require admin processing.
   MATCH_FEAT_AUTO_APPLY_ENABLED: parseBoolSafe(process.env.MATCH_FEAT_AUTO_APPLY_ENABLED, false),
 
+  // When Match/Feat auto-apply is disabled (env/runtime), still allow a self-service flow:
+  // user pays → bot asks for brief/content → request created automatically.
+  // This removes "manual queue" work for solo operators.
+  MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF: parseBoolSafe(process.env.MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF, true),
+
   // Payments: link Stars invoice payloads to UI context (Redis pay_* tokens).
   // Increase to reduce ORPHANED due to expired session; keep bounded.
   PAYMENT_SESSION_TTL_MIN: PAYMENT_SESSION_TTL_MIN,
