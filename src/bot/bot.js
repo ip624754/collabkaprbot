@@ -1563,7 +1563,7 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     if (effective === 'brand' || effective === 'brand_manager') {
       return `${title}
 • Открой «📰 Лента креаторов» или «🔎 Поиск креаторов»
-• Напиши креатору → дальше всё в «📥 Inbox»
+• Напиши креатору — если это <b>первый диалог</b>, он тестовый 🎁 (1 раз)
 
 `;
     }
@@ -11899,7 +11899,7 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 
   const trialLine = !meta.brand_trial_granted && trialCredits > 0
     ? `
-🎁 Стартовый бонус: <b>${trialCredits}</b> кредит(ов) (1 раз, при первом интро — новом диалоге).
+🎁 Первый диалог — <b>тестовый</b>: бонус <b>${trialCredits}</b> кредит(ов) (1 раз).
 `
     : '';
 
@@ -23860,7 +23860,7 @@ if (p.a === 'a:match_home') {
       if (res.charged) {
         const left = Number(res.balance ?? 0);
         const amt = Number(res.chargedAmount || cost || 1);
-        const bonus = res.trialGranted ? '🎁 Бонус активирован. ' : '';
+        const bonus = res.trialGranted ? '🎁 Тест-диалог: бонус активирован. ' : '';
         try { await ctx.answerCallbackQuery({ text: `${bonus}✅ Диалог открыт. -${amt} кредит(ов). Осталось: ${left}`, show_alert: true }); } catch {}
       }
       else if (res.retryUsed) {
