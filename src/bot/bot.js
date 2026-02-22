@@ -106,6 +106,124 @@ const BRAND_PLANS = [
   { id: 'pro', title: 'Про', stars: CFG.BRAND_PLAN_PRO_PRICE, credits: CFG.BRAND_PLAN_PRO_CREDITS }
 ];
 
+// Founder Sale (limited time promo; UI-only, no migrations)
+// NOTE: effective settings may be overridden from Admin (Redis runtime), so prices/credits are computed at runtime.
+const FOUNDER_PRODUCT_DEFS = [
+  { id: 'founder_brand_3m', scope: 'brand', title: 'Brand Plan Pro', subtitle: '3 месяца', durationDays: 90 },
+  { id: 'founder_brand_12m', scope: 'brand', title: 'Brand Plan Pro', subtitle: '12 месяцев', durationDays: 365 },
+  { id: 'founder_creator_12m', scope: 'creator', title: 'PRO', subtitle: '12 месяцев', durationDays: 365 },
+];
+
+function _boolish(v, d = null) {
+  if (v === undefined || v === null) return d;
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toLowerCase();
+  if (['1','true','yes','y','on'].includes(s)) return true;
+  if (['0','false','no','n','off'].includes(s)) return false;
+  return d;
+}
+
+function _intish(v, d = null) {
+  if (v === undefined || v === null || v === '') return d;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return d;
+  return Math.trunc(n);
+}
+
+function _parseDateSafe(s) {
+  const raw = String(s || '').trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return null;
+  return d;
+}
+
+function founderDeadlineFormatted(deadlineDate) {
+  // Marketing-friendly RU date in Moscow time (stable for promos), e.g. "1 марта 23:59 (МСК)".
+  try {
+    const d = deadlineDate instanceof Date ? deadlineDate : new Date(deadlineDate);
+    if (!Number.isFinite(d.getTime())) return '—';
+    const fmt = new Intl.DateTimeFormat('ru-RU', {
+      timeZone: 'Europe/Moscow',
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    });
+    // Usually: "1 марта, 23:59" → "1 марта 23:59".
+    const s = fmt.format(d).replace(',', '').replace(/\s+/g, ' ').trim();
+    return `${s} (МСК)`;
+  } catch {
+    try {
+      return fmtTs(deadlineDate instanceof Date ? deadlineDate.toISOString() : String(deadlineDate));
+    } catch {
+      return '—';
+    }
+  }
+}
+
+async function getFounderSaleState(now = new Date()) {
+  // Base from ENV
+  const base = {
+    enabled: !!CFG.FOUNDER_SALE_ENABLED,
+    deadline: String(CFG.FOUNDER_SALE_DEADLINE || '').trim(),
+    brand3Price: Number(CFG.FOUNDER_BRAND_3M_PRICE || 0),
+    brand12Price: Number(CFG.FOUNDER_BRAND_12M_PRICE || 0),
+    creator12Price: Number(CFG.FOUNDER_CREATOR_12M_PRICE || 0),
+    brand3Credits: Number(CFG.FOUNDER_BRAND_3M_CREDITS || 0),
+    brand12Credits: Number(CFG.FOUNDER_BRAND_12M_CREDITS || 0),
+  };
+
+  // Optional override from Redis (Admin control plane).
+  const ov = await getSysObj(SYS_KEYS.founder_sale);
+
+  const eff = { ...base };
+  const hasOverride = !!(ov && typeof ov === 'object' && !Array.isArray(ov));
+  if (hasOverride) {
+    const en = _boolish(ov.enabled, null);
+    if (en !== null) eff.enabled = en;
+
+    if (typeof ov.deadline === 'string') eff.deadline = ov.deadline.trim();
+
+    const b3 = _intish(ov.brand3Price, null);
+    if (b3 !== null && b3 >= 0) eff.brand3Price = b3;
+    const b12 = _intish(ov.brand12Price, null);
+    if (b12 !== null && b12 >= 0) eff.brand12Price = b12;
+    const c12 = _intish(ov.creator12Price, null);
+    if (c12 !== null && c12 >= 0) eff.creator12Price = c12;
+
+    const cr3 = _intish(ov.brand3Credits, null);
+    if (cr3 !== null && cr3 >= 0) eff.brand3Credits = cr3;
+    const cr12 = _intish(ov.brand12Credits, null);
+    if (cr12 !== null && cr12 >= 0) eff.brand12Credits = cr12;
+  }
+
+  const deadlineDate = _parseDateSafe(eff.deadline);
+  const active = !!(eff.enabled && deadlineDate && (Number(now?.getTime?.() || 0) < deadlineDate.getTime()));
+  const daysLeft = active ? Math.max(0, Math.ceil((deadlineDate.getTime() - Number(now?.getTime?.() || Date.now())) / 86400000)) : 0;
+  const deadlineLabel = deadlineDate ? founderDeadlineFormatted(deadlineDate) : '—';
+
+  // Product list from effective settings
+  const normalBrand3 = 3 * Number(CFG.BRAND_PLAN_PRO_PRICE || 0);
+  const normalBrand12 = 12 * Number(CFG.BRAND_PLAN_PRO_PRICE || 0);
+  const normalCreator12 = 12 * Number(CFG.PRO_STARS_PRICE || 0);
+
+  const products = FOUNDER_PRODUCT_DEFS.map((d) => {
+    if (d.id === 'founder_brand_3m') return { ...d, stars: Number(eff.brand3Price || 0), credits: Number(eff.brand3Credits || 0), normalStars: normalBrand3 };
+    if (d.id === 'founder_brand_12m') return { ...d, stars: Number(eff.brand12Price || 0), credits: Number(eff.brand12Credits || 0), normalStars: normalBrand12 };
+    return { ...d, stars: Number(eff.creator12Price || 0), credits: 0, normalStars: normalCreator12 };
+  });
+
+  return { base, override: hasOverride ? ov : null, effective: eff, hasOverride, active, deadlineDate, deadlineLabel, daysLeft, products };
+}
+
+function founderBackCb(ret) {
+  const r = String(ret || 'menu').toLowerCase();
+  if (r === 'home') return 'a:home';
+  return 'a:menu';
+}
+
 const MATCH_TIERS = [
   { id: 'S', title: 'Match S', stars: CFG.MATCH_S_PRICE, count: CFG.MATCH_S_COUNT },
   { id: 'M', title: 'Match M', stars: CFG.MATCH_M_PRICE, count: CFG.MATCH_M_COUNT },
@@ -368,7 +486,9 @@ function formatGwWinnersOwner(winners, { oneLineMax = GW_WINNERS_ONE_LINE_MAX, m
 const SYS_KEYS = {
   pay_accept: k(['sys', 'pay_accept']),
   pay_auto_apply: k(['sys', 'pay_auto_apply']),
-  matchfeat_auto_apply: k(['sys', 'matchfeat_auto_apply'])
+  matchfeat_auto_apply: k(['sys', 'matchfeat_auto_apply']),
+  // Founder Sale runtime overrides (Admin -> Redis)
+  founder_sale: k(['sys', 'founder_sale'])
 };
 
 
@@ -410,6 +530,35 @@ async function getSysBool(key, defaultValue = false) {
 async function setSysBool(key, value) {
   try {
     await redis.set(key, value ? '1' : '0');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getSysObj(key) {
+  try {
+    const v = await redis.get(key);
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+async function setSysObj(key, obj) {
+  try {
+    if (!obj || typeof obj !== 'object') return false;
+    await redis.set(key, obj);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function delSysKey(key) {
+  try {
+    await redis.del(key);
     return true;
   } catch {
     return false;
@@ -938,6 +1087,8 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
     .text('🎁 Розыгрыши', 'a:gw_list')
     .row();
 
+  if (opts.founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:menu').row();
+
   if (isFolderEditor) kb.text('📁 Папки', 'a:folders_my').row();
 
   // Role shortcuts (pairs where possible)
@@ -998,10 +1149,9 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   const profDone = (typeof teamBasicDone === 'number') ? teamBasicDone : null;
   const profTag = (profDone === 4) ? ' ✅' : (profDone === null ? '' : ` ${profDone}/4`);
 
-  kb.text(`⭐️ Brand Plan${planTag}`, 'a:brand_plan|ws:0')
-    .row()
-    .text(`🏷 Профиль бренда${profTag}`, 'a:brand_profile|ws:0|ret:brand')
-    .row();
+  kb.text(`⭐️ Brand Plan${planTag}`, 'a:brand_plan|ws:0').row();
+  if (opts.founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:menu').row();
+  kb.text(`🏷 Профиль бренда${profTag}`, 'a:brand_profile|ws:0|ret:brand').row();
 
   if (canManager) {
     kb.text('🧑‍💼 Я менеджер бренда', 'a:bm_mode_set|v:1|ret:menu').row();
@@ -1241,6 +1391,10 @@ async function renderMainMenu(ctx, flags, params = {}) {
   let text;
   let kb;
 
+  // Founder Sale state (may be overridden from Admin via Redis)
+  const founderState = await getFounderSaleState();
+  const founderActive = !!founderState.active;
+
   if (mode === UI_MODES.BRAND && u) {
     const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
@@ -1271,7 +1425,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
 Для команды бренда — Inbox и поиск креаторов.
 
 Выбери действие:`;
-      kb = mainMenuBrandKb(flags, { isManager: true, hasMultipleBrands: (bm.brands || []).length > 1 });
+      kb = mainMenuBrandKb(flags, { isManager: true, hasMultipleBrands: (bm.brands || []).length > 1, founderActive });
     } else {
       const base = `🏠 <b>Главное меню</b>
 
@@ -1284,7 +1438,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
       let canManager = false;
       try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
       // V4: no extra Neon queries in menu render (status will be checked on click)
-      kb = mainMenuBrandKb(flags, { isManager: false, canManager, teamLocked: false, teamBasicDone: null, teamPaid: null });
+      kb = mainMenuBrandKb(flags, { isManager: false, canManager, teamLocked: false, teamBasicDone: null, teamPaid: null, founderActive });
     }
   } else if (mode === UI_MODES.BRAND) {
     const base = `🏠 <b>Главное меню</b>
@@ -1296,7 +1450,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
 
 Выбери действие:`;
     // V4: no extra Neon queries in menu render (status will be checked on click)
-    kb = mainMenuBrandKb(flags, { isManager: false, teamLocked: false, teamBasicDone: null, teamPaid: null });
+    kb = mainMenuBrandKb(flags, { isManager: false, teamLocked: false, teamBasicDone: null, teamPaid: null, founderActive });
   } else {
     const base = `🏠 <b>Главное меню</b>
 
@@ -1310,7 +1464,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
     if (u) {
       try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
     }
-    kb = mainMenuCreatorKb(flags, { canManager });
+    kb = mainMenuCreatorKb(flags, { canManager, founderActive });
   }
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
@@ -1411,10 +1565,22 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
 `
     : '';
 
+
+  const founderState = await getFounderSaleState();
+  const founderActive = !!founderState.active;
+  const founderDeadlineLabel = founderState.deadlineLabel || '—';
+  const founderBanner = founderActive
+    ? `🔥 <b>Founder Sale — ограниченное предложение!</b>
+Подписка по спеццене до <b>${escapeHtml(founderDeadlineLabel)}</b>.
+
+`
+    : '';
+
   const textMsg =
     `🏠 <b>Домашняя</b>
 
 ` +
+    founderBanner +
     bannerText +
     mapText +
     `Выбери режим работы.
@@ -1434,6 +1600,8 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     .text(bCreator, 'a:home_mode|m:creator')
     .text(bBrand, 'a:home_mode|m:brand')
     .row();
+
+  if (founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:home').row();
 
   if (canManager) kb.text(bBm, 'a:home_mode|m:brand_manager').row();
   if (flags?.isCurator) kb.text(bCur, 'a:home_mode|m:curator').row();
@@ -1467,6 +1635,101 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
   }
 }
 
+
+
+
+async function renderFounderSale(ctx, u, params = {}) {
+  const edit = params.edit !== false;
+  const ret = String(params.ret || 'menu');
+  const backCb = founderBackCb(ret);
+
+  const st = await getFounderSaleState();
+  const active = !!st.active;
+  const deadlineLabel = st.deadlineLabel || '—';
+  const daysLeft = active ? Number(st.daysLeft || 0) : 0;
+
+  const pBrand3 = (st.products || []).find((x) => x.id === 'founder_brand_3m') || null;
+  const pBrand12 = (st.products || []).find((x) => x.id === 'founder_brand_12m') || null;
+  const pCreator12 = (st.products || []).find((x) => x.id === 'founder_creator_12m') || null;
+
+  const brand3 = Number(pBrand3?.stars || 0);
+  const brand12 = Number(pBrand12?.stars || 0);
+  const creator12 = Number(pCreator12?.stars || 0);
+
+  const brand3Credits = Number(pBrand3?.credits || 0);
+  const brand12Credits = Number(pBrand12?.credits || 0);
+
+  const normalBrand3 = Number(pBrand3?.normalStars || 0);
+  const normalBrand12 = Number(pBrand12?.normalStars || 0);
+  const normalCreator12 = Number(pCreator12?.normalStars || 0);
+
+  let text = `🔥 <b>Founder Launch — ограниченное предложение</b>
+
+`;
+
+  if (!active) {
+    text += `⛔ <b>Акция завершена</b>
+
+`;
+    if (st.effective?.enabled && st.deadlineDate) {
+      text += `Дедлайн был: <b>${escapeHtml(deadlineLabel)}</b>.
+
+`;
+    } else if (!st.effective?.enabled) {
+      text += `Сейчас акция выключена.
+
+`;
+    } else if (!st.deadlineDate) {
+      text += `Дедлайн не задан (акция скрыта).
+
+`;
+    }
+  } else {
+    text += `До <b>${escapeHtml(deadlineLabel)}</b> можно купить подписку по спеццене.
+После завершения акции цены вырастут.
+
+`;
+  }
+
+  text += `<b>Для брендов:</b>
+` +
+    `⭐ 3 месяца Brand Plan Pro — ${brand3}⭐️ (обычно ${normalBrand3}⭐️)` +
+    (brand3Credits ? `
+   💳 +${brand3Credits} кредитов` : '') +
+    `
+` +
+    `⭐ 12 месяцев Brand Plan Pro — ${brand12}⭐️ (обычно ${normalBrand12}⭐️)` +
+    (brand12Credits ? `
+   💳 +${brand12Credits} кредитов` : '') +
+    `
+
+` +
+    `<b>Для креаторов:</b>
+` +
+    `⭐ 12 месяцев PRO — ${creator12}⭐️ (обычно ${normalCreator12}⭐️)
+`;
+
+  if (active) {
+    const dl = Math.max(0, Number(daysLeft || 0));
+    text += `
+⏳ Осталось: <b>${dl}</b> ${ruPlural(dl, 'день', 'дня', 'дней')}
+`;
+  }
+
+  const kb = new InlineKeyboard();
+  if (active) {
+    if (brand3 > 0) kb.text(`⭐ Brand 3 мес · ${brand3}⭐️`, `a:founder_buy|id:founder_brand_3m|ret:${ret}`);
+    if (brand12 > 0) kb.text(`⭐ Brand 12 мес · ${brand12}⭐️`, `a:founder_buy|id:founder_brand_12m|ret:${ret}`);
+    if (brand3 > 0 || brand12 > 0) kb.row();
+    if (creator12 > 0) kb.text(`⭐ PRO 12 мес · ${creator12}⭐️`, `a:founder_buy|id:founder_creator_12m|ret:${ret}`).row();
+  }
+
+  kb.text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  const opts = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
+  if (edit) await safeEditOrReply(ctx, text, opts);
+  else await ctx.reply(text, opts);
+}
 
 async function renderRoleSelection(ctx, u, opts = {}) {
   // Gatekeeper for first-time users: choose UI mode explicitly (stored in Redis).
@@ -15242,6 +15505,110 @@ if (exp.type === 'brand_deals_search') {
       await ctx.reply(`✅ Жалоба отправлена (id: ${r.id}). Модератор посмотрит.`, { reply_markup: kb });
       return;
     }
+    // Admin: Founder Sale inputs
+    if (exp.type === 'admin_founder_deadline') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const raw = String(ctx.message?.text || '').trim();
+      const low = raw.toLowerCase();
+      const wantClear = (low === '-' || low === 'сброс' || low === 'reset' || low === 'clear');
+
+      const ov = (await getSysObj(SYS_KEYS.founder_sale)) || {};
+      if (wantClear) {
+        delete ov.deadline;
+      } else {
+        const d = new Date(raw);
+        if (!Number.isFinite(d.getTime())) {
+          await ctx.reply(`Формат не распознан. Пример: <code>2026-03-01T23:59:59Z</code>.
+Чтобы сбросить к ENV — отправь <code>-</code>.`, { parse_mode: 'HTML' });
+          await setExpectText(ctx.from.id, exp, 15 * 60);
+          return;
+        }
+        ov.deadline = raw;
+      }
+
+      // Persist (or delete if empty)
+      if (Object.keys(ov).length === 0) await delSysKey(SYS_KEYS.founder_sale);
+      else await setSysObj(SYS_KEYS.founder_sale, ov);
+
+      await clearExpectText(ctx.from.id);
+      await renderAdminFounder(ctx);
+      return;
+    }
+
+    if (exp.type === 'admin_founder_prices') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const raw = String(ctx.message?.text || '').trim();
+      const low = raw.toLowerCase();
+      const wantClear = (low === '-' || low === 'сброс' || low === 'reset' || low === 'clear');
+
+      const ov = (await getSysObj(SYS_KEYS.founder_sale)) || {};
+      if (wantClear) {
+        delete ov.brand3Price;
+        delete ov.brand12Price;
+        delete ov.creator12Price;
+      } else {
+        const parts = raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+        if (parts.length < 3) {
+          await ctx.reply(`Нужно 3 числа: <code>brand3 brand12 creator12</code>. Пример: <code>1999 4999 2499</code>.
+Чтобы сбросить к ENV — отправь <code>-</code>.`, { parse_mode: 'HTML' });
+          await setExpectText(ctx.from.id, exp, 15 * 60);
+          return;
+        }
+        const nums = parts.slice(0, 3).map(x => Math.trunc(Number(x)));
+        if (nums.some(n => !Number.isFinite(n) || n < 0)) {
+          await ctx.reply('Числа должны быть целыми и ≥ 0. Пример: <code>1999 4999 2499</code>.', { parse_mode: 'HTML' });
+          await setExpectText(ctx.from.id, exp, 15 * 60);
+          return;
+        }
+        ov.brand3Price = nums[0];
+        ov.brand12Price = nums[1];
+        ov.creator12Price = nums[2];
+      }
+
+      if (Object.keys(ov).length === 0) await delSysKey(SYS_KEYS.founder_sale);
+      else await setSysObj(SYS_KEYS.founder_sale, ov);
+
+      await clearExpectText(ctx.from.id);
+      await renderAdminFounder(ctx);
+      return;
+    }
+
+    if (exp.type === 'admin_founder_credits') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const raw = String(ctx.message?.text || '').trim();
+      const low = raw.toLowerCase();
+      const wantClear = (low === '-' || low === 'сброс' || low === 'reset' || low === 'clear');
+
+      const ov = (await getSysObj(SYS_KEYS.founder_sale)) || {};
+      if (wantClear) {
+        delete ov.brand3Credits;
+        delete ov.brand12Credits;
+      } else {
+        const parts = raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+        if (parts.length < 2) {
+          await ctx.reply(`Нужно 2 числа: <code>brand3Credits brand12Credits</code>. Пример: <code>100 200</code>.
+Чтобы сбросить к ENV — отправь <code>-</code>.`, { parse_mode: 'HTML' });
+          await setExpectText(ctx.from.id, exp, 15 * 60);
+          return;
+        }
+        const nums = parts.slice(0, 2).map(x => Math.trunc(Number(x)));
+        if (nums.some(n => !Number.isFinite(n) || n < 0)) {
+          await ctx.reply('Числа должны быть целыми и ≥ 0. Пример: <code>100 200</code>.', { parse_mode: 'HTML' });
+          await setExpectText(ctx.from.id, exp, 15 * 60);
+          return;
+        }
+        ov.brand3Credits = nums[0];
+        ov.brand12Credits = nums[1];
+      }
+
+      if (Object.keys(ov).length === 0) await delSysKey(SYS_KEYS.founder_sale);
+      else await setSysObj(SYS_KEYS.founder_sale, ov);
+
+      await clearExpectText(ctx.from.id);
+      await renderAdminFounder(ctx);
+      return;
+    }
+
     // Admin: add moderator by @username
     if (exp.type === 'admin_add_mod_username') {
       const txt = String(ctx.message.text || '').trim();
@@ -16182,7 +16549,7 @@ ${list}
         return;
       }
 
-      db.trackEvent('start', { userId: u.id, meta: { payloadType: payload?.type || null, hasPayload: !!payload } });
+      db.trackEvent('start', { userId: u.id, meta: { payloadType: payload?.type || null, payloadTag: (payload?.type === 'fs' ? (payload?.tag || null) : null), hasPayload: !!payload } });
     if (payload?.type === 'gwj') {
       const loading = preMsg || await ctx.reply('⏳ Записываю участие…');
       const g = await db.getGiveawayInfoForUser(payload.id);
@@ -16422,6 +16789,12 @@ if (payload?.type === 'bxo') {
       const wsId = Number(thread.workspace_id);
       const kb = bxThreadKb(wsId, thread.id, { back: 'inbox', page: 0, offerId: thread.offer_id });
       return ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
+    }
+
+    if (payload?.type === 'fs') {
+      // Founder Sale deep-link: /start fs_* → open the promo screen.
+      await renderFounderSale(ctx, u, { edit: false, ret: 'home' });
+      return;
     }
 
     // Gatekeeper: if user hasn't выбран режим (ui_mode) и это не deep-link — покажем простую развилку (2 кнопки).
@@ -16734,6 +17107,7 @@ bot.on('message:successful_payment', async (ctx) => {
   const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
 
   const kind =
+    invoicePayload.startsWith('founder_') ? 'founder' :
     invoicePayload.startsWith('pro_') ? 'pro' :
     invoicePayload.startsWith('brand_') ? 'brand_pass' :
     invoicePayload.startsWith('bplan_') ? 'brand_plan' :
@@ -17011,7 +17385,72 @@ bot.on('message:successful_payment', async (ctx) => {
     }
   }
 
-  // PRO activation
+
+  // Founder Sale activation
+  if (invoicePayload.startsWith('founder_')) {
+    try {
+      const parts = String(invoicePayload || '').split('_');
+      const productId = parts.slice(0, 3).join('_');
+      const payUserId = Number(parts[3] || 0);
+      const token = parts.slice(4).join('_');
+
+      const data = token ? await redis.get(k(['pay_founder', token])) : null;
+      const ok =
+        data &&
+        Number(data.userId) === payUserId &&
+        Number(data.tgId) === Number(ctx.from.id) &&
+        String(data.productId || '') === productId;
+
+      if (!ok) {
+        await markStatus('ORPHANED', 'missing_session');
+        await ctx.reply('✅ Платеж получен. Но сессия оплаты не найдена (возможно, истекла). Напиши /start — я помогу.');
+        return;
+      }
+
+      const durationDays = Number(data.durationDays || 0) || 0;
+      const credits = Number(data.credits || 0) || 0;
+      const wsId = Number(data.wsId || 0) || 0;
+
+      if (productId === 'founder_creator_12m') {
+        if (!wsId) throw new Error('Missing wsId');
+        await db.activateWorkspacePro(wsId, durationDays || 365);
+        try {
+          await db.auditWorkspace(wsId, payUserId, 'pro.activated.founder', {
+            duration_days: durationDays || 365,
+            currency: sp.currency,
+            total_amount: sp.total_amount,
+            telegram_payment_charge_id: sp.telegram_payment_charge_id
+          });
+        } catch {}
+      } else {
+        const d = durationDays || (productId === 'founder_brand_3m' ? 90 : 365);
+        await db.activateBrandPlan(payUserId, 'pro', d);
+        if (credits > 0) await db.addBrandCredits(payUserId, credits);
+      }
+
+      try { await redis.del(k(['pay_founder', token])); } catch {}
+      await markApplied(`auto_apply_founder:${productId}`);
+
+      const kb = new InlineKeyboard();
+      let msg = '✅ Founder Sale применён!';
+      if (productId === 'founder_creator_12m') {
+        msg += `\n\n⭐️ PRO активирован на ${durationDays || 365} дней.`;
+        if (wsId) kb.text('⭐️ PRO', `a:ws_pro|ws:${wsId}`).text('📣 Мои каналы', 'a:ws_list').row();
+      } else {
+        const d = durationDays || (productId === 'founder_brand_3m' ? 90 : 365);
+        msg += `\n\n⭐️ Brand Plan Pro активирован на ${d} дней.`;
+        if (credits > 0) msg += `\n💳 +${credits} кредитов начислено.`;
+        kb.text('⭐️ Brand Plan', 'a:brand_plan|ws:0').text('💳 Кредиты', 'a:brand_pass|ws:0').row();
+      }
+      kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+      await ctx.reply(msg, { reply_markup: kb });
+      return;
+    } catch (e) {
+      await markStatus('ERROR', `auto_apply_error: ${String(e?.message || e).slice(0, 120)}`);
+      await ctx.reply('✅ Платеж получен. Возникла ошибка авто-выдачи — я применю вручную.');
+      return;
+    }
+  }  // PRO activation
   if (invoicePayload.startsWith('pro_')) {
     try {
       const parts = invoicePayload.split('_');
@@ -17912,6 +18351,88 @@ if (p.a === 'a:menu') {
     }
 
 
+
+    if (p.a === 'a:founder') {
+      await ctx.answerCallbackQuery();
+      await renderFounderSale(ctx, u, { ret: String(p.ret || 'menu'), edit: true });
+      return;
+    }
+
+    if (p.a === 'a:founder_buy') {
+      const { accept } = await getPaymentsRuntimeFlags();
+      if (!accept) {
+        return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
+      }
+      await ctx.answerCallbackQuery();
+
+      const ret = String(p.ret || 'menu');
+      const st = await getFounderSaleState();
+      if (!st.active) {
+        try { await ctx.answerCallbackQuery({ text: 'Акция завершена', show_alert: true }); } catch {}
+        await renderFounderSale(ctx, u, { ret, edit: true });
+        return;
+      }
+
+      const productId = String(p.id || '').trim();
+      const prod = (st.products || []).find((x) => x.id === productId) || null;
+      if (!prod) {
+        try { await ctx.answerCallbackQuery({ text: 'Пакет не найден', show_alert: true }); } catch {}
+        await renderFounderSale(ctx, u, { ret, edit: true });
+        return;
+      }
+
+      const price = Number(prod.stars || 0);
+      if (!Number.isFinite(price) || price <= 0) {
+        try { await ctx.answerCallbackQuery({ text: 'Пакет временно недоступен', show_alert: true }); } catch {}
+        await renderFounderSale(ctx, u, { ret, edit: true });
+        return;
+      }
+
+      let wsId = 0;
+      if (prod.scope === 'creator') {
+        const ws = await ensureWorkspaceForOwner(ctx, u.id, { minimal: true, backCb: `a:founder|ret:${ret}` });
+        if (!ws) return;
+        wsId = Number(ws.id || 0);
+      }
+
+      const token = randomToken(10);
+      await redis.set(
+        k(['pay_founder', token]),
+        {
+          tgId: ctx.from.id,
+          userId: u.id,
+          productId: prod.id,
+          durationDays: Number(prod.durationDays || 0),
+          credits: Number(prod.credits || 0),
+          wsId
+        },
+        { ex: 60 * 60 }
+      );
+
+      const payload = `${prod.id}_${u.id}_${token}`;
+
+      const dur = Number(prod.durationDays || 0);
+      const credits = Number(prod.credits || 0);
+      const normal = Number(prod.normalStars || 0);
+
+      const descrLines = [];
+      if (prod.scope === 'brand') {
+        descrLines.push(`Brand Plan Pro на ${dur} дней.`);
+        if (credits > 0) descrLines.push(`💳 +${credits} кредитов (интро).`);
+      } else {
+        descrLines.push(`PRO на ${dur} дней (для выбранного канала).`);
+      }
+      if (normal > 0) descrLines.push(`Обычно: ${normal}⭐️.`);
+
+      await sendStarsInvoice(ctx, {
+        title: `Founder Sale · ${prod.title} · ${prod.subtitle}`,
+        description: descrLines.join(' ') || 'Founder Sale',
+        payload,
+        amount: price,
+        backCb: `a:founder|ret:${ret}`
+      });
+      return;
+    }
 
     // HOME HUB (Commit87)
     if (p.a === 'a:home') {
@@ -22002,6 +22523,117 @@ if (p.a === 'a:match_home') {
       await renderAdminHome(ctx);
       return;
     }
+
+    // Admin: Founder Sale (runtime controls in Redis)
+    if (p.a === 'a:admin_founder') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminFounder(ctx);
+      return;
+    }
+
+    if (p.a === 'a:admin_founder_toggle') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      const st = await getFounderSaleState();
+      const cur = !!st.effective?.enabled;
+      const ov = (await getSysObj(SYS_KEYS.founder_sale)) || {};
+      ov.enabled = !cur;
+      await setSysObj(SYS_KEYS.founder_sale, ov);
+      await renderAdminFounder(ctx);
+      return;
+    }
+
+    if (p.a === 'a:admin_founder_reset') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await delSysKey(SYS_KEYS.founder_sale);
+      await renderAdminFounder(ctx);
+      return;
+    }
+
+    if (p.a === 'a:admin_founder_set_deadline') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', 'a:admin_founder')
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(ctx,
+        `🗓 <b>Founder Sale — дедлайн</b>
+
+Введи дату/время в формате ISO (UTC).
+Пример: <code>2026-03-01T23:59:59Z</code>
+
+Чтобы сбросить к ENV — отправь <code>-</code>.`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      await setExpectText(ctx.from.id, { type: 'admin_founder_deadline', backCb: 'a:admin_founder' }, 15 * 60);
+      return;
+    }
+
+    if (p.a === 'a:admin_founder_set_prices') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', 'a:admin_founder')
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(ctx,
+        `💰 <b>Founder Sale — цены (Stars)</b>
+
+Введи 3 числа через пробел/запятую:
+<code>brand3 brand12 creator12</code>
+Пример: <code>1999 4999 2499</code>
+
+Чтобы сбросить к ENV — отправь <code>-</code>.`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      await setExpectText(ctx.from.id, { type: 'admin_founder_prices', backCb: 'a:admin_founder' }, 15 * 60);
+      return;
+    }
+
+    if (p.a === 'a:admin_founder_set_credits') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', 'a:admin_founder')
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(ctx,
+        `💳 <b>Founder Sale — кредиты</b>
+
+Введи 2 числа через пробел/запятую:
+<code>brand3Credits brand12Credits</code>
+Пример: <code>100 200</code>
+
+Чтобы сбросить к ENV — отправь <code>-</code>.`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      await setExpectText(ctx.from.id, { type: 'admin_founder_credits', backCb: 'a:admin_founder' }, 15 * 60);
+      return;
+    }
+
+    if (p.a === 'a:admin_founder_links') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await renderAdminFounderLinks(ctx);
+      return;
+    }
+
+    if (p.a === 'a:admin_founder_texts') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await renderAdminFounderTexts(ctx);
+      return;
+    }
+
     if (p.a === 'a:admin_payments') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
@@ -26112,6 +26744,12 @@ async function renderAdminHome(ctx) {
   text += `\n⚙️ Платежи: прием ${payAccept ? 'ON' : 'OFF'} • автовыдача ${payAutoApply ? 'ON' : 'OFF'}\n`;
   text += `⚙️ Match/Feat auto-apply: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
 
+  const founderState = await getFounderSaleState();
+  const founderOn = !!founderState.effective?.enabled;
+  const founderActive = !!founderState.active;
+  const founderUntil = founderState.deadlineLabel || '—';
+  text += `⚙️ Founder Sale: ${founderOn ? 'ON' : 'OFF'} • ${founderActive ? 'ACTIVE' : 'INACTIVE'} • до ${founderUntil}${founderState.hasOverride ? ' (ADMIN)' : ''}\n`;
+
   const kb = new InlineKeyboard()
     .text('👥 Пользователи', 'a:admin_users|f:all|p:0')
     .text('💰 Платежи', 'a:admin_payments')
@@ -26121,6 +26759,8 @@ async function renderAdminHome(ctx) {
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
     .row();
+
+  kb.text('🔥 Founder Sale', 'a:admin_founder').row();
 
   kb.text(`💳 Прием: ${payAccept ? 'ON' : 'OFF'}`, 'a:admin_pay_accept_toggle')
     .text(`⚙️ Автовыдача: ${payAutoApply ? 'ON' : 'OFF'}`, 'a:admin_pay_auto_toggle')
@@ -26142,6 +26782,215 @@ async function renderAdminHome(ctx) {
 
   await safeEditOrReply(ctx, text, { reply_markup: kb });
 }
+
+
+async function renderAdminFounder(ctx) {
+  const st = await getFounderSaleState();
+  const eff = st.effective || {};
+
+  const pBrand3 = (st.products || []).find((x) => x.id === 'founder_brand_3m') || null;
+  const pBrand12 = (st.products || []).find((x) => x.id === 'founder_brand_12m') || null;
+  const pCreator12 = (st.products || []).find((x) => x.id === 'founder_creator_12m') || null;
+
+  const brand3 = Number(pBrand3?.stars || 0);
+  const brand12 = Number(pBrand12?.stars || 0);
+  const creator12 = Number(pCreator12?.stars || 0);
+  const cr3 = Number(pBrand3?.credits || 0);
+  const cr12 = Number(pBrand12?.credits || 0);
+
+  const status = st.active
+    ? 'ACTIVE'
+    : (!eff.enabled ? 'OFF' : (st.deadlineDate ? 'INACTIVE' : 'HIDDEN'));
+
+  let text = `🔥 <b>Founder Sale</b>
+
+`;
+  text += `Источник настроек: <b>${st.hasOverride ? 'ADMIN (Redis override)' : 'ENV'}</b>
+`;
+  text += `ENABLED: <b>${eff.enabled ? 'ON' : 'OFF'}</b>
+`;
+  text += `DEADLINE: <b>${escapeHtml(st.deadlineLabel || '—')}</b>
+`;
+  text += `STATUS: <b>${escapeHtml(status)}</b>
+`;
+  if (st.active) {
+    const dl = Math.max(0, Number(st.daysLeft || 0));
+    text += `⏳ Осталось: <b>${dl}</b> ${ruPlural(dl, 'день', 'дня', 'дней')}
+`;
+  }
+
+  text += `
+💰 <b>Цены / кредиты</b>
+`;
+  text += `• Brand 3м: <b>${brand3 || '—'}</b>⭐️${cr3 ? ` · +${cr3} кр.` : ''}
+`;
+  text += `• Brand 12м: <b>${brand12 || '—'}</b>⭐️${cr12 ? ` · +${cr12} кр.` : ''}
+`;
+  text += `• Creator PRO 12м: <b>${creator12 || '—'}</b>⭐️
+`;
+
+  // Helpful hint about safety
+  text += `
+ℹ️ Изменения цен/дедлайна применяются к новым инвойсам.
+Чтобы вернуть к ENV — используй «Сброс к ENV».`;
+
+  const kb = new InlineKeyboard()
+    .text(`ENABLED: ${eff.enabled ? 'ON' : 'OFF'}`, 'a:admin_founder_toggle')
+    .row()
+    .text('🗓 Дедлайн', 'a:admin_founder_set_deadline')
+    .text('💰 Цены', 'a:admin_founder_set_prices')
+    .row()
+    .text('💳 Кредиты', 'a:admin_founder_set_credits')
+    .text('♻️ Сброс к ENV', 'a:admin_founder_reset')
+    .row()
+    .text('🔗 Ссылки', 'a:admin_founder_links')
+    .text('📝 Тексты', 'a:admin_founder_texts')
+    .row()
+    .text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+// --- Founder Sale marketing helpers (Admin-only) ---
+function buildStartLink(tag) {
+  const t = String(tag || '').trim();
+  const u = (CFG.BOT_USERNAME || '').replace(/^@/, '');
+  if (!u || !t) return '';
+  return `https://t.me/${u}?start=${encodeURIComponent(t)}`;
+}
+
+function founderLinksPreset() {
+  return [
+    { key: 'offers_a', tag: 'fs_offers_a', title: 'Offers A' },
+    { key: 'offers_b', tag: 'fs_offers_b', title: 'Offers B' },
+    { key: 'gw_brand', tag: 'fs_gw_brand', title: 'Giveaway Brand' },
+    { key: 'gw_creator', tag: 'fs_gw_creator', title: 'Giveaway Creator' },
+  ];
+}
+
+async function renderAdminFounderLinks(ctx) {
+  const links = founderLinksPreset().map((x) => ({ ...x, url: buildStartLink(x.tag) })).filter((x) => x.url);
+
+  let text = `🔗 <b>Founder Sale — ссылки</b>
+
+`;
+  text += `Эти ссылки <b>стабильно переживают пересылку</b> (в отличие от inline-кнопок).
+`;
+  text += `Используй разные теги для A/B — потом видно по starts/analytics.
+
+`;
+
+  const lines = links.map((x) => `${x.tag}: ${x.url}`).join('\n');
+  text += `<pre>${escapeHtml(lines || '—')}</pre>
+
+`;
+
+  const line = buildStartLink('fs_offers_a');
+  if (line) text += `⚡ Быстро: вставляй в конец поста: <code>🔥 Founder Sale: ${escapeHtml(line)}</code>`;
+
+  const kb = new InlineKeyboard();
+  for (let i = 0; i < links.length; i += 2) {
+    const a = links[i];
+    const b = links[i + 1];
+    if (a) kb.url(`🌐 ${a.title}`, a.url);
+    if (b) kb.url(`🌐 ${b.title}`, b.url);
+    kb.row();
+  }
+
+  kb.text('📝 Тексты', 'a:admin_founder_texts')
+    .row()
+    .text('⬅️ Founder Sale', 'a:admin_founder')
+    .text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderAdminFounderTexts(ctx) {
+  const bot = CFG.BOT_USERNAME ? '@' + CFG.BOT_USERNAME.replace(/^@/, '') : '@collabkaprbot';
+  const ch = CFG.OFFICIAL_CHANNEL_USERNAME ? '@' + String(CFG.OFFICIAL_CHANNEL_USERNAME).replace(/^@/, '') : '@collabka_offers';
+
+  const linkA = buildStartLink('fs_offers_a');
+  const linkB = buildStartLink('fs_offers_b');
+  const linkBrand = buildStartLink('fs_gw_brand');
+  const linkCreator = buildStartLink('fs_gw_creator');
+
+  const brandPost = [
+    '🎁 РОЗЫГРЫШ ДЛЯ БРЕНДОВ: Brand Plan PRO (30 дней)',
+    '',
+    'Разыгрываем 2 подписки Brand Plan PRO на 30 дней!',
+    '',
+    'Что получишь:',
+    '• 50 кредитов на интро с блогерами',
+    '• Smart Match (10 каналов/мес)',
+    '• Featured размещение (7 дней)',
+    '',
+    'Как участвовать:',
+    `1) Подпишись на ${ch}`,
+    `2) Запусти бота ${bot}`,
+    '3) В боте нажми «Участвовать»',
+    '',
+    '⏳ Итоги: [дата через 7 дней]',
+    '',
+    `🔥 Founder Sale (ограничено по времени): ${linkBrand || linkA}`,
+  ].join('\n');
+
+  const creatorPost = [
+    '🎁 РОЗЫГРЫШ ДЛЯ КРЕАТОРОВ: PRO (30 дней)',
+    '',
+    'Разыгрываем 3 PRO подписки на 30 дней!',
+    '',
+    'Что получишь:',
+    '• Закреплённые офферы',
+    '• Расширенные возможности',
+    '• Приоритет в ленте брендов',
+    '',
+    'Как участвовать:',
+    `1) Подпишись на ${ch}`,
+    `2) Запусти бота ${bot}`,
+    '3) В боте нажми «Участвовать»',
+    '',
+    '⏳ Итоги: [дата через 7 дней]',
+    '',
+    `🔥 Founder Sale (ограничено по времени): ${linkCreator || linkB || linkA}`,
+  ].join('\n');
+
+  const followUp = [
+    '✅ Ты участвуешь!',
+    '',
+    'Пока ждёшь итоги — действует Founder Sale (ограничено по времени).',
+    `Открыть: ${linkA}`,
+  ].join('\n');
+
+  const saleLine = `🔥 Founder Sale: ${linkA}`;
+
+  let text = `📝 <b>Founder Sale — тексты (copy/paste)</b>
+
+`;
+  text += `Сделано так, чтобы работало при пересылках: всегда есть ссылка (deep-link).
+
+`;
+  text += `<b>1) Пост (бренды)</b>
+<pre>${escapeHtml(brandPost)}</pre>
+`;
+  text += `<b>2) Пост (креаторы)</b>
+<pre>${escapeHtml(creatorPost)}</pre>
+`;
+  text += `<b>3) Сообщение в боте после «Участвовать»</b>
+<pre>${escapeHtml(followUp)}</pre>
+`;
+  text += `<b>4) Короткая строка для любого поста</b>
+<pre>${escapeHtml(saleLine)}</pre>`;
+
+  const kb = new InlineKeyboard();
+  if (linkA) kb.url('🌐 Открыть Offers A', linkA).url('🌐 Offers B', linkB).row();
+  kb.text('🔗 Ссылки', 'a:admin_founder_links')
+    .row()
+    .text('⬅️ Founder Sale', 'a:admin_founder')
+    .text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
 
 
 async function renderAdminMetrics(ctx, days = 14) {
