@@ -13381,7 +13381,7 @@ async function doEligibilityCheck(ctx, gwId, userTgId) {
 
   let lock = null;
   try {
-    lock = await redis.set(lockKey, '1', { nx: true, ex: 15 });
+    lock = await acquireLock(lockKey, 15);
   } catch {
     lock = null;
   }
@@ -13461,7 +13461,8 @@ async function doEligibilityCheck(ctx, gwId, userTgId) {
 
     return payload;
   } finally {
-    try { await redis.del(lockKey); } catch {}
+    // Token-based lock release: never delete a lock we don't own.
+    try { await releaseLock(lockKey, lock?.token); } catch {}
   }
 }
 
@@ -25451,8 +25452,8 @@ ${list}
 
       // Idempotency: lock per giveaway
       const lockKey = k(['lock', 'gw_publish', gwId]);
-      const locked = await redis.set(lockKey, { by: u.id }, { nx: true, ex: 30 });
-      if (!locked) {
+      const lock = await acquireLock(lockKey, 30);
+      if (!lock) {
         await ctx.answerCallbackQuery({ text: 'Секунду… уже публикуется.' });
         return;
       }
@@ -25568,7 +25569,7 @@ ${winnersHeader}`;
         await ctx.answerCallbackQuery({ text: 'Ошибка публикации.' });
       } finally {
         // best-effort unlock
-        try { await redis.del(lockKey); } catch {}
+        try { await releaseLock(lockKey, lock?.token); } catch {}
       }
       return;
     }
@@ -26405,8 +26406,8 @@ ${actionHint}`;
 
       // Idempotency lock per giveaway
       const lockKey = k(['lock', 'gw_draw', gwId]);
-      const locked = await redis.set(lockKey, { by: u.id }, { nx: true, ex: 30 });
-      if (!locked) {
+      const lock = await acquireLock(lockKey, 30);
+      if (!lock) {
         await ctx.answerCallbackQuery({ text: 'Секунду… уже выбираю.' });
         return;
       }
@@ -26490,7 +26491,7 @@ ${actionHint}`;
       } catch (e) {
         await ctx.answerCallbackQuery({ text: 'Ошибка выбора.' });
       } finally {
-        try { await redis.del(lockKey); } catch {}
+        try { await releaseLock(lockKey, lock?.token); } catch {}
       }
       return;
     }
