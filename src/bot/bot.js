@@ -14031,6 +14031,8 @@ ${escapeHtml(safeCap)}
     try { await setExpectText(ctx.from.id, exp); } catch {}
   });
   bot.on('message:text', async (ctx, next) => {
+    if (!ctx.from) return next();
+
     // ------------------------------------------------------------
     // Support: allow super-admins to reply to users прямо из support-группы.
     // Flow:
@@ -14038,59 +14040,24 @@ ${escapeHtml(safeCap)}
     // 2) Bot posts a prompt with ForceReply.
     // 3) Admin replies to that prompt -> bot forwards to user.
     // Works even with Telegram group privacy mode ON (bots receive replies to their own messages).
-    // IMPORTANT: some admins may write as "Anonymous admin" / "Send as channel".
-    // In that case Telegram may omit `from`, so we show an explicit hint instead of silently ignoring.
     // ------------------------------------------------------------
     try {
       const chatType = String(ctx.chat?.type || '');
-      const isGroup = (chatType === 'group' || chatType === 'supergroup');
-      if (isGroup) {
+      if ((chatType === 'group' || chatType === 'supergroup') && isSuperAdminTg(ctx.from.id)) {
         const rep = ctx.message?.reply_to_message;
-        const meId = Number(BOT?.botInfo?.id || ctx.me?.id || CFG.BOT_ID || 0);
-        const isReplyToBot = !!(rep && rep.from && meId && Number(rep.from.id) === meId);
-
-        // 1) Happy path: admin replies (reply) to our prompt message.
-        if (isReplyToBot) {
-          const promptKey = k(['adm_support_reply_prompt', String(ctx.chat?.id || 0), String(rep.message_id || 0)]);
-          let sess = null;
-          try { sess = await redis.get(promptKey); } catch {}
-
-          // Back-compat: older sessions stored only under admin key.
-          if (!sess && ctx.from) {
-            try {
-              const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
-              const s2 = await redis.get(sessKey);
-              if (
-                s2 &&
-                Number(s2.chatId || 0) === Number(ctx.chat?.id || 0) &&
-                Number(s2.promptMsgId || 0) === Number(rep.message_id || 0)
-              ) {
-                sess = s2;
-              }
-            } catch {}
-          }
-
-          const sessThreadId = Number(sess?.threadId || 0);
-          const msgThreadId = Number(ctx.message?.message_thread_id || 0);
+        const meId = Number(ctx.me?.id || CFG.BOT_ID || 0);
+        if (rep && rep.from && meId && Number(rep.from.id) === meId) {
+          const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
+          const sess = await redis.get(sessKey);
           if (
             sess &&
             Number(sess.chatId || 0) === Number(ctx.chat?.id || 0) &&
-            Number(sess.promptMsgId || 0) === Number(rep.message_id || 0) &&
-            (!sessThreadId || sessThreadId === msgThreadId)
+            Number(sess.promptMsgId || 0) === Number(rep.message_id || 0)
           ) {
             const raw = String(ctx.message?.text || '').trim();
             const low = raw.toLowerCase();
-
-            const cleanup = async () => {
-              try { await redis.del(promptKey); } catch {}
-              const owner = Number(sess.ownerTgId || 0) || Number(ctx.from?.id || 0);
-              if (owner) {
-                try { await redis.del(k(['adm_support_reply', String(owner)])); } catch {}
-              }
-            };
-
             if (low === '/cancel' || low === 'cancel' || low === 'отмена' || low === 'стоп') {
-              await cleanup();
+              try { await redis.del(sessKey); } catch {}
               await ctx.reply('❌ Отменено.');
               return;
             }
@@ -14100,32 +14067,10 @@ ${escapeHtml(safeCap)}
               return;
             }
 
-            // If Telegram omitted `from` (anonymous admin), we can't safely attribute/authorize.
-            if (!ctx.from) {
-              const kb = new InlineKeyboard().text('⬅️ Админка', 'a:admin_home').text('📋 Меню', 'a:menu');
-              await ctx.reply(
-                '⚠️ Я вижу ответ на подсказку, но Telegram прислал сообщение без автора (анонимный админ / отправка от имени канала).\n\n' +
-                'Чтобы я отправил сообщение пользователю, ответь на подсказку <b>от своего имени</b> (выключи анонимный режим / "Send as channel").',
-                { parse_mode: 'HTML', reply_markup: kb }
-              );
-              return;
-            }
-
-            if (!isSuperAdminTg(ctx.from.id)) {
-              await ctx.reply('Нет доступа.');
-              return;
-            }
-
-            const owner = Number(sess.ownerTgId || 0);
-            if (owner && Number(ctx.from.id) !== owner) {
-              await ctx.reply('⚠️ Этот режим ответа запустил другой админ. Нажми «✍️ Ответить» в тикете ещё раз.');
-              return;
-            }
-
             const targetTgId = Number(sess.targetTgId || 0);
             const targetUserId = Number(sess.targetUserId || 0);
             if (!targetTgId) {
-              await cleanup();
+              try { await redis.del(sessKey); } catch {}
               await ctx.reply('⚠️ Не найден TG ID получателя.');
               return;
             }
@@ -14143,7 +14088,7 @@ ${escapeHtml(safeCap)}
             }
 
             if (ok) {
-              await cleanup();
+              try { await redis.del(sessKey); } catch {}
               const kb = new InlineKeyboard()
                 .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
                 .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
@@ -14154,46 +14099,10 @@ ${escapeHtml(safeCap)}
             return;
           }
         }
-
-        // 2) Helpful hint: admin pressed "✍️ Ответить" but wrote without replying to our prompt.
-        if (ctx.from && isSuperAdminTg(ctx.from.id) && !isReplyToBot) {
-          try {
-            const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
-            const sess = await redis.get(sessKey);
-            const sessThreadId = Number(sess?.threadId || 0);
-            const msgThreadId = Number(ctx.message?.message_thread_id || 0);
-            if (
-              sess &&
-              Number(sess.chatId || 0) === Number(ctx.chat?.id || 0) &&
-              Number(sess.promptMsgId || 0) > 0 &&
-              (!sessThreadId || sessThreadId === msgThreadId)
-            ) {
-              const raw = String(ctx.message?.text || '').trim();
-              const low = raw.toLowerCase();
-              if (low === '/cancel' || low === 'cancel' || low === 'отмена' || low === 'стоп') {
-                const pKey = k(['adm_support_reply_prompt', String(sess.chatId || 0), String(sess.promptMsgId || 0)]);
-                try { await redis.del(pKey); } catch {}
-                try { await redis.del(sessKey); } catch {}
-                await ctx.reply('❌ Отменено.');
-                return;
-              }
-              await ctx.reply(
-                'ℹ️ Я жду текст <b>ответом (reply)</b> на подсказку, которую я отправил выше.\n' +
-                'Нажми на подсказку и выбери «Ответить / Reply». Для отмены — <code>/cancel</code>.',
-                { parse_mode: 'HTML' }
-              );
-              return;
-            }
-          } catch {
-            // ignore
-          }
-        }
       }
     } catch {
       // ignore
     }
-
-    if (!ctx.from) return next();
 
     const text = String(ctx.message?.text || '');
     const isCommand = text.startsWith('/') &&
@@ -23008,31 +22917,14 @@ if (p.a === 'a:match_home') {
       // Even with Telegram group privacy mode ON, bots receive replies to their own messages.
       const exSec = 20 * 60;
       const sessionKey = k(['adm_support_reply', String(ctx.from.id)]);
-      // Store by prompt id too (so we can detect anonymous-admin messages and show a clear hint).
-      // Also cleanup any previous pending prompt for this admin to avoid orphan sessions.
-      try {
-        const prev = await redis.get(sessionKey);
-        if (prev && prev.chatId && prev.promptMsgId) {
-          const prevPromptKey = k(['adm_support_reply_prompt', String(prev.chatId), String(prev.promptMsgId)]);
-          try { await redis.del(prevPromptKey); } catch {}
-        }
-        try { await redis.del(sessionKey); } catch {}
-      } catch {
-        // ignore
-      }
       const promptText =
         `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\n` +
         `Отправь текст <b>ответом на это сообщение</b> (reply) — я доставлю его пользователю от имени поддержки.\n\n` +
-        `<i>Отмена:</i> ответь словом <code>/cancel</code>.\n` +
-        `<i>Важно:</i> отвечай <b>от своего имени</b> (не анонимно), иначе Telegram не пришлёт автора.`;
-
-      // If support chat is a forum (topics), keep the prompt in the same topic as the ticket.
-      const threadId = Number(ctx.callbackQuery?.message?.message_thread_id || 0);
+        `<i>Отмена:</i> ответь словом <code>/cancel</code>.`;
 
       const prompt = await ctx.api.sendMessage(ctx.chat.id, promptText, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
-        ...(threadId ? { message_thread_id: threadId } : {}),
         reply_markup: {
           force_reply: true,
           input_field_placeholder: 'Текст ответа…',
@@ -23041,19 +22933,17 @@ if (p.a === 'a:match_home') {
       });
 
       try {
-        const sess = {
-          targetTgId,
-          targetUserId,
-          ownerTgId: Number(ctx.from.id),
-          chatId: ctx.chat.id,
-          threadId: threadId || 0,
-          promptMsgId: prompt.message_id,
-          createdAt: new Date().toISOString(),
-        };
-
-        await redis.set(sessionKey, sess, { ex: exSec });
-        const promptKey = k(['adm_support_reply_prompt', String(ctx.chat.id), String(prompt.message_id)]);
-        await redis.set(promptKey, sess, { ex: exSec });
+        await redis.set(
+          sessionKey,
+          {
+            targetTgId,
+            targetUserId,
+            chatId: ctx.chat.id,
+            promptMsgId: prompt.message_id,
+            createdAt: new Date().toISOString(),
+          },
+          { ex: exSec }
+        );
       } catch {
         // If Redis is unavailable, at least keep UX: admin can still reply in DM using legacy flow.
       }
