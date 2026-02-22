@@ -1,4 +1,14 @@
-# Brand Leads — Notes (Curator Notes) Spec v2
+# Brand Leads — Curator Notes — SPEC (compat) — 2026-02-20
+
+> ⚠️ Compatibility mirror: основной файл для правок — docs/spec/23_LEAD_NOTES_SPEC.md.
+>
+> Каноническая версия — в docs/spec/23_LEAD_NOTES_SPEC.md, ниже — полная копия.
+
+---
+
+
+Документ описывает формат хранения и UX заметок команды по заявкам брендов (`brand_leads`).
+
 
 ## Назначение
 **Curator Notes** — внутренние заметки, прикреплённые к заявке бренда (`brand_leads`). Используются owner/admin/curator для:

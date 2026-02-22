@@ -1,49 +1,75 @@
-# MENU SPEC v1 (Collabka PR)
+# MENU / NAVIGATION — SPEC (compat) — 2026-02-20
+
+> ⚠️ Compatibility mirror: основной файл для правок — docs/spec/21_MENU_SPEC.md.
+>
+> Ниже — полная копия актуального спека, чтобы старые ссылки не вели в пустышку.
+
+---
+
 
 Protocol: Jobs / Vitalik / Woz — **Zero regressions**.
 
-## Navigation Invariants
+**Цель:** сделать навигацию предсказуемой и дешёвой для Neon: без лишних DB-запросов в горячих UI-путях.
 
-- **⬅️ Back**: return-to context (`ret`) — always goes back to the screen you came from.
-- **📋 Menu**: role hub (current role):
-  - Creator: `ws_open` (active workspace hub)
-  - Brand: `bx_open` (brand cabinet, `ws:0`)
-  - Brand Manager: `bm_home` / `bx_inbox` (limited)
-  - Curator: `cur_home`
-  - Admin: `adm_home`
-- **🏠 Home**: **HOME HUB** (global start screen, mode selector)
+Связанные документы:
+- `docs/00_CURRENT_STATE.md` (source of truth)
+- `docs/spec/20_HOME_HUB_SPEC.md`
 
-## Primary user flows
+---
 
-### Creator flow (Workspace / Channel)
+## 1) Инварианты навигации
 
-`/start` → **HOME HUB** → `👤 Creator` → `ws_open`
+### 1.1 `⬅️ Back`
+- Всегда возвращает в исходный контекст через `ret` / `r`.
+- Никаких «угадываний» через DB — только то, что уже есть в payload.
 
-`ws_open` must always expose 3 pillars:
-1) **🪟 Витрина / Профиль** → `ws_profile` → `ws_share` → deep-link `/start wsp_<wsId>`
-2) **📨 Запросы брендов** → `ws_leads` (tabs: new/in_progress/closed/spam) → `lead_view` (card) → reply/status
-3) **🎬 UGC / Офферы** → `bx_my` → offer wizard → publish → bump/share
+### 1.2 `📋 Menu`
+Открывает **хаб текущего режима** (а не HomeHub):
+- Creator → workspace hub (активный ws)
+- Brand → brand cabinet (`ws:0`)
+- Brand Manager → manager hub
+- Curator → curator hub
+- Admin → admin hub
 
-### Brand flow (No workspace, `ws:0`)
+### 1.3 `🏠 Home`
+Всегда открывает **HOME HUB** (глобальный режим‑селектор).
 
-`/start` → **HOME HUB** → `🏷 Brand` → `bx_open|ws:0`
+---
 
-Pillars:
-1) **⚙️ Фильтры** → `bx_filters`
-2) **🧷 Лента** → `bx_feed` → creator card → contact (starts thread)
-3) **📥 Inbox** → `bx_inbox` → threads/replies/status
+## 2) Горячие UI пути
 
-## Return-to contract (ret)
+К горячим путям относим:
+- показ меню/хаба,
+- переходы по кнопкам в футере,
+- листинги/экраны, на которые пользователь попадает чаще всего.
 
-- When opening `ws_leads` from `ws_open`, pass `ret=ws_open`.
-- `ws_leads` builds Back as:
-  - `ret === 'ws_open'` → `a:ws_open|ws:<wsId>`
-  - otherwise → `a:ws_profile|ws:<wsId>`
-- When opening `lead_view` from `ws_leads`, preserve `ret` in callback and in backCb to ws_leads.
+**Правило:** не добавлять новые DB‑запросы в эти места без сильного обоснования.
 
-## Footer standard (target)
+---
 
-On all key screens we standardize:
-- Row: `⬅️ Back` (if meaningful) + `📋 Menu` + `🏠 Home`
+## 3) Return-to контракт (`ret`)
 
-(We will stage this via commits 87–91.)
+### 3.1 Принцип
+Экран A открывает экран B → в callback B передаём `ret=A`.
+
+Пример (паттерн):
+- `ws_open` → `ws_leads` (передаём `ret=ws_open`)
+- `ws_leads` → `lead_view` (протаскиваем `ret` дальше)
+
+### 3.2 Обязательность
+Если экран может быть открыт из двух мест — `ret` обязателен.
+
+---
+
+## 4) Safe edit contract
+
+**Инвариант:** нет «молчаливых» кнопок.
+- сначала `safeEditOrReply` (попытка edit)
+- если не получилось → `reply`
+
+---
+
+## 5) Ограничения Telegram
+
+- `callback_data ≤ 64 bytes` (UTF‑8) → payloadы держим короткими.
+- Любые длинные параметры — через Redis/DB (но не в меню‑путях).

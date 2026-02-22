@@ -49,6 +49,43 @@ ENV:
 - `AUDIT_DB_ENABLED=true` — включить/выключить DB-аудит целиком.
 - `AUDIT_DB_THROTTLE_ENABLED=true` — включить троттлинг.
 - `AUDIT_DB_THROTTLE_LIMIT=60` + `AUDIT_DB_THROTTLE_WINDOW_SEC=60` — максимум записей на (workspace × prefix) в окно.
-- `AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_` — какие действия считаем «шумными».
+- `AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_` — какие действия считаем «шумными» (можно расширять точечно).
 
-Стратегия: сначала включаем троттлинг на проде, смотрим логи/метрики и при необходимости поднимаем лимиты.
+### Как наблюдать эффект
+Смотри `/api/health`:
+- `audit.throttle.suppressed_today_total`
+- `audit.throttle.suppressed_today_by_prefix`
+
+Это Redis-only метрики: Neon не трогаем.
+
+### Готовые профили (low/medium/high saving)
+**LOW (мягко):**
+```
+AUDIT_DB_THROTTLE_ENABLED=true
+AUDIT_DB_THROTTLE_WINDOW_SEC=60
+AUDIT_DB_THROTTLE_LIMIT=600
+```
+
+**MEDIUM (баланс, по умолчанию):**
+```
+AUDIT_DB_THROTTLE_ENABLED=true
+AUDIT_DB_THROTTLE_WINDOW_SEC=60
+AUDIT_DB_THROTTLE_LIMIT=180
+```
+
+**HIGH (жёстко, максимум экономии):**
+```
+AUDIT_DB_THROTTLE_ENABLED=true
+AUDIT_DB_THROTTLE_WINDOW_SEC=60
+AUDIT_DB_THROTTLE_LIMIT=60
+```
+
+### Расширение префиксов (если suppressed = 0, а Neon всё равно жрёт)
+Если видишь в `/api/health`, что `suppressed_today_total = 0`, но по ощущениям/Neon CU всё равно дорогие, значит список префиксов слишком узкий.
+
+Пример расширенного набора для “операционки”:
+```
+AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_,deal.,inbox.,brand.
+```
+
+Стратегия: сначала включаем троттлинг (MEDIUM) → смотрим `/api/health` → точечно правим `PREFIXES` и лимиты.

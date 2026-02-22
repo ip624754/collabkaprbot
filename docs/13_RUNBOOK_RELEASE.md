@@ -14,11 +14,12 @@ node migrations/run.js
 ```
 
 ## Smoke tests (short)
-1) `node -c` (lint-check) — если используешь.
-2) `node migrations/run.js --dry-run` → должно быть “skip all”.
-3) `/api/cron/giveaways-tick` с Bearer → 200 OK.
-4) Создать giveaway → дождаться ENDED → проверить WINNERS_DRAWN.
-5) Проверить что winners не рисуются дважды (второй вызов tick не меняет winners).
+1) `node --check src/bot/bot.js`
+2) `node --check src/bot/cron.js`
+3) `node migrations/run.js --dry-run` → должно быть “skip all”.
+4) `GET /api/cron/giveaways-tick` с `Authorization: Bearer <CRON_SECRET>` → 200 OK.
+5) `GET /api/cron/broadcast-tick` с Bearer → 200 OK.
+6) Создать giveaway → дождаться ENDED → проверить WINNERS_DRAWN; повторный запуск tick не меняет winners.
 
 ## Smoke tests (full)
 - Одновременный двойной запуск tick (две вкладки) → только один draw.

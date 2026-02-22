@@ -1,31 +1,98 @@
-# HOME HUB SPEC v1
+# HOME HUB — SPEC (compat) — 2026-02-20
 
-Goal: provide a single, predictable center for the bot.
+> ⚠️ Compatibility mirror: основной файл для правок — docs/spec/20_HOME_HUB_SPEC.md.
+>
+> Если ты открыл этот файл по старой ссылке — ок: ниже полная копия актуального спека.
 
-## Entry points
+---
 
-- `/start` (default)
-- `🏠 Home` button anywhere
 
-Both must open **HOME HUB**.
+**Назначение:** единая предсказуемая точка входа в бота, которая:
+- не ломает deep-links (`/start <payload>`),
+- минимально спрашивает пользователя «кто ты»,
+- поддерживает multi-role (Creator / Brand / Brand Manager / Curator / Admin),
+- работает **fail-open** при проблемах Redis.
 
-## HOME HUB UI
+Связанный source of truth: `docs/00_CURRENT_STATE.md`.
 
-Title: `🏠 Collabka PR — выбери режим`
+---
 
-Buttons shown conditionally:
-- `👤 Creator` → open creator hub (`ws_open` or `ws_list` if no workspaces)
-- `🏷 Brand` → `bx_open|ws:0`
-- `🧑‍💼 Brand Manager` → manager hub (only if role/invite present)
-- `🧹 Curator` → curator hub (only if role present)
-- `🛠 Admin` → admin hub (only for superadmins)
+## 1) Точки входа
 
-Secondary:
-- `⚙️ Настройки` (optional)
+1) `/start`
+2) Глобальная кнопка `🏠 Home` (если есть в футере)
+3) `📋 Menu` → хаб текущего режима (а не HomeHub)
+
+**Инвариант:** `/start` без payload должен приводить к HomeHub (или к короткому role-gate, см. ниже).
+
+---
+
+## 2) Приоритеты маршрутизации (/start)
+
+### 2.1 Payload всегда важнее ui_mode
+Если есть start payload (deep-link):
+- **сначала** `parseStartPayload(payload)`
+- **потом** любые проверки режима
+
+Это гарантирует, что shortcuts не ломаются:
+- `gw_...` (конкурсы)
+- `bp_...` (профиль/витрина)
+- `offer_...` (оффер)
+
+### 2.2 Если payload нет → role-gate (только если ui_mode не задан)
+Если `ui_mode` (Redis) отсутствует → показываем короткую развилку:
+- `✨ Я Creator / канал`
+- `🏷 Я бренд`
+
+Нажатие на кнопку:
+- `SET ui_mode = creator|brand` (TTL ~ 365d)
+- редирект в HomeHub (или напрямую в соответствующий хаб)
+
+### 2.3 Fail-open
+Если Redis недоступен/ошибка:
+- gate **не должен блокировать** пользователя
+- показываем HomeHub (или старое поведение, но без падения)
+
+---
+
+## 3) UI HOME HUB
+
+**Заголовок (пример):** `🏠 Collabka PR — выбери режим`
+
+### 3.1 Основные кнопки
+- `👤 Creator` → creator hub (workspace hub)
+- `🏷 Brand` → brand hub (`ws:0`)
+
+### 3.2 Условные роли
+Показываем только если роль/права подтверждены:
+- `🧑‍💼 Brand Manager` → manager hub
+- `🧹 Curator` → curator hub
+- `🛠 Admin` → admin hub (только `SUPER_ADMIN_TG_IDS`)
+
+### 3.3 Вторичные
 - `❓ Поддержка`
+- (опционально) `⚙️ Настройки` — только если реально есть отдельная страница
 
-## Invariants
+---
 
-- No breaking existing deep-links and callback payloads.
-- Only add aliases/adapters.
-- Never silent: safeEditOrReply + fallback reply.
+## 4) Контракты навигации
+
+### 4.1 Footer standard (целевое состояние)
+На ключевых экранах (хабы/вьюшки) приводим к стандарту:
+- `⬅️ Back` (если есть осмысленный return-to)
+- `📋 Menu` (хаб текущего режима)
+- `🏠 Home` (HomeHub)
+
+### 4.2 Back = return-to контекст
+`Back` строится из `ret` (или `r`) в callback payload.
+
+**Инвариант:** не добавлять DB-запросы ради навигации.
+
+---
+
+## 5) Что нельзя ломать
+
+- Deep-links должны работать независимо от выбранного режима.
+- `callback_data ≤ 64 bytes` → payloadы должны оставаться короткими.
+- Никаких лишних DB-read на рендер меню/кнопок.
+- Любой edit должен иметь fallback (`safeEditOrReply`).
