@@ -39,6 +39,12 @@ const PAYMENT_SESSION_TTL_MIN = (() => {
   return Math.max(10, Math.min(m, 24 * 60)); // 10 min .. 24h
 })();
 
+// Ops alerts: summarize noisy alerts in a digest every N minutes.
+const OPS_ALERT_SUMMARY_MIN = (() => {
+  const m = parseIntSafe(process.env.OPS_ALERT_SUMMARY_MIN, 10);
+  return Math.max(1, Math.min(m, 60)); // 1..60 min
+})();
+
 export const CFG = {
   APP_ENV: process.env.APP_ENV || 'dev',
 
@@ -52,6 +58,11 @@ export const CFG = {
 
   // Support / feedback routing (optional). Set to a Telegram group/chat id to collect feedback.
   SUPPORT_CHAT_ID: process.env.SUPPORT_CHAT_ID || '',
+
+  // Ops alerts / operator chat (support chat is also used for ops alerts).
+  OPS_ALERT_SUMMARY_MIN,
+  OPS_ALERT_SUMMARY_SEC: OPS_ALERT_SUMMARY_MIN * 60,
+  OPS_ALERT_BUFFER_MAX: parseIntSafe(process.env.OPS_ALERT_BUFFER_MAX, 200),
 
   // Security
   WEBHOOK_SECRET_TOKEN: process.env.WEBHOOK_SECRET_TOKEN || '',
@@ -183,11 +194,6 @@ export const CFG = {
   // Smart Matching / Featured paid add-ons: allow full auto-apply on successful Stars payment
   // When disabled, paid match/feat payments are marked ORPHANED and require admin processing.
   MATCH_FEAT_AUTO_APPLY_ENABLED: parseBoolSafe(process.env.MATCH_FEAT_AUTO_APPLY_ENABLED, false),
-
-  // When Match/Feat auto-apply is disabled (env/runtime), still allow a self-service flow:
-  // user pays → bot asks for brief/content → request created automatically.
-  // This removes "manual queue" work for solo operators.
-  MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF: parseBoolSafe(process.env.MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF, true),
 
   // Payments: link Stars invoice payloads to UI context (Redis pay_* tokens).
   // Increase to reduce ORPHANED due to expired session; keep bounded.
