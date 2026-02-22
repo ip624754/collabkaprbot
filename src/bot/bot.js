@@ -13838,6 +13838,25 @@ ${escapeHtml(safeCap)}
     const exp = await getExpectText(ctx.from.id);
 if (!exp) {
   if (isCommand) return next(); // allow commands like /start to reach bot.command()
+
+  // Public CTA: user can type "креатор" / "бренд" (or creator/brand) to set UI mode explicitly.
+  // Keep it strict to avoid accidental triggers in normal chats.
+  try {
+    const clean = String(text || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+    const toks = clean ? clean.split(/\s+/g) : [];
+    // Only treat very short phrases as a role selection.
+    if (toks.length > 0 && toks.length <= 3) {
+      const isCreator = toks.includes('креатор') || toks.includes('криэтор') || toks.includes('криэйтор') || toks.includes('creator');
+      const isBrand = toks.includes('бренд') || toks.includes('brand');
+      if (isBrand && !isCreator) await setUiMode(ctx.from.id, UI_MODES.BRAND);
+      else if (isCreator && !isBrand) await setUiMode(ctx.from.id, UI_MODES.CREATOR);
+    }
+  } catch {}
+
   const flags = await getRoleFlags(null, ctx.from.id);
   await renderMainMenu(ctx, flags, { edit: false });
   return;
