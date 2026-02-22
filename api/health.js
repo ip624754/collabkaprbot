@@ -16,6 +16,7 @@ export default async function handler(_req, res) {
     ops: {
       alert_summary_min: Number(CFG.OPS_ALERT_SUMMARY_MIN || 0),
       alert_buffer_max: Number(CFG.OPS_ALERT_BUFFER_MAX || 0),
+      silent: !!CFG.OPS_ALERT_SILENT,
       pending: null,
     },
     payments: {
@@ -59,8 +60,8 @@ export default async function handler(_req, res) {
     // Ops alert buffer status (Redis-only).
     try {
       const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const pendingPayments = Number(await redis.llen(k(['ops', 'alerts', 'payments', 'd', day]))) || 0;
-      base.ops.pending = { payments: pendingPayments };
+      const pendingOps = Number(await redis.llen(k(['ops', 'alerts', 'ops', 'd', day]))) || 0;
+      base.ops.pending = { ops: pendingOps };
     } catch {
       // ignore
     }
