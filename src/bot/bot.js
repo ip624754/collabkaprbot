@@ -800,6 +800,44 @@ function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }
   return kb;
 }
 
+// ------------------------------------------------------------
+// Support: быстрые шаблоны ответов (кнопки) в support-чате.
+// Цель: отвечать в 1 клик без ввода текста.
+// ------------------------------------------------------------
+const SUPPORT_QUICK_REPLIES = [
+  { k: 'ack', label: '✅ Принято', text: 'Принято. Мы посмотрим и вернёмся с ответом.' },
+  { k: 'need', label: '❓ Нужны детали', text: 'Нужны детали: что именно происходит и на каком шаге? Если можно — скрин/пример.' },
+  { k: 'done', label: '✅ Сделали', text: 'Готово — исправили. Проверь, пожалуйста.' },
+  { k: 'wait', label: '⏳ В работе', text: 'Взяли в работу. Вернёмся с обновлением.' },
+];
+
+function getSupportQuickReplyDef(key) {
+  const k0 = String(key || '').trim();
+  if (!k0) return null;
+  return SUPPORT_QUICK_REPLIES.find(x => String(x.k) === k0) || null;
+}
+
+function buildSupportTicketKb(targetTgId, targetUserId) {
+  const tg = Number(targetTgId || 0);
+  const uid = Number(targetUserId || 0);
+  const kb = new InlineKeyboard()
+    .text('✍️ Ответить', `a:adm_support_reply|tg:${tg}|uid:${uid}`)
+    .text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`);
+
+  // Quick replies (2 per row to keep it compact).
+  if (tg && SUPPORT_QUICK_REPLIES.length) {
+    kb.row();
+    for (let i = 0; i < SUPPORT_QUICK_REPLIES.length; i++) {
+      const q = SUPPORT_QUICK_REPLIES[i];
+      kb.text(String(q.label || '✅'), `a:adm_support_qr|tg:${tg}|uid:${uid}|k:${String(q.k)}`);
+      if (i % 2 === 1 && i !== SUPPORT_QUICK_REPLIES.length - 1) kb.row();
+    }
+  }
+
+  return kb;
+}
+
+
 /**
  * Notify workspace team (owner + curators) about lead events.
  * @param {object} api - bot API instance
@@ -13914,9 +13952,7 @@ ${escapeHtml(safeCap)}
       const targetChatId = t;
       if (!targetChatId) continue;
       try {
-        const replyKb = new InlineKeyboard()
-          .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
-          .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`);
+        const replyKb = buildSupportTicketKb(ctx.from.id, u.id);
         // Send header with reply button
         await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
 
@@ -14272,9 +14308,7 @@ ${escapeHtml(safe)}`;
         const targetChatId = t;
         if (!targetChatId) continue;
         try {
-          const replyKb = new InlineKeyboard()
-            .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
-            .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`);
+          const replyKb = buildSupportTicketKb(ctx.from.id, u.id);
           await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
           sent += 1;
         } catch {}
@@ -22869,6 +22903,41 @@ if (p.a === 'a:match_home') {
       await renderAdminUserCard(ctx, uid, f, page);
       return;
     }
+    // --- Admin: Support quick replies (one-click templates) ---
+    if (p.a === 'a:adm_support_qr') {
+      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const targetTgId = Number(p.tg || 0);
+      const targetUserId = Number(p.uid || 0);
+      const key = String(p.k || '').trim();
+      if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
+
+      const def = getSupportQuickReplyDef(key);
+      if (!def) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
+
+      const safe = String(def.text || '').trim();
+      if (!safe) return ctx.answerCallbackQuery({ text: 'Пустой шаблон.' });
+
+      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+
+      try {
+        const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+        await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+      } catch (e) {
+        return ctx.answerCallbackQuery({ text: `Не удалось отправить: ${String(e?.message || e).slice(0, 60)}`, show_alert: true });
+      }
+
+      // Confirmation in support chat (keeps original ticket intact)
+      try {
+        const kb2 = buildSupportTicketKb(targetTgId, targetUserId || 0);
+        kb2.row().text('⬅️ Админка', 'a:admin_home');
+        await ctx.reply(`✅ Отправлено: <b>${escapeHtml(String(def.label || 'Шаблон'))}</b> → пользователю (tg:${targetTgId}).`, { parse_mode: 'HTML', reply_markup: kb2 });
+      } catch {}
+
+      return ctx.answerCallbackQuery({ text: '✅ Отправлено' });
+    }
+
+
 
     // --- Admin: Reply to support message ---
     if (p.a === 'a:adm_support_reply') {
