@@ -10,18 +10,23 @@ export default async function handler(_req, res) {
     ts: new Date().toISOString(),
     env: CFG.APP_ENV,
     support: {
-      chat_configured: !!Number(CFG.SUPPORT_CHAT_ID || 0),
+      configured: !!String(CFG.SUPPORT_CHAT_ID || '').trim() || (Array.isArray(CFG.SUPER_ADMIN_TG_IDS) && CFG.SUPER_ADMIN_TG_IDS.length > 0),
+      chat_configured: !!String(CFG.SUPPORT_CHAT_ID || '').trim(),
+    },
+    ops: {
+      alert_summary_min: Number(CFG.OPS_ALERT_SUMMARY_MIN || 0),
+      alert_buffer_max: Number(CFG.OPS_ALERT_BUFFER_MAX || 0),
+      pending: null,
     },
     payments: {
       accept_default: !!CFG.PAYMENTS_ACCEPT_DEFAULT,
       auto_apply_default: !!CFG.PAYMENTS_AUTO_APPLY_DEFAULT,
       match_feat_auto_apply_enabled: !!CFG.MATCH_FEAT_AUTO_APPLY_ENABLED,
-      match_feat_self_service_when_auto_off: !!CFG.MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF,
       fallback_apply_enabled: !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED,
       orphaned_autoheal_enabled: !!CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED,
       orphaned_autoheal_batch: Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_BATCH || 0),
       session_ttl_min: Number(CFG.PAYMENT_SESSION_TTL_MIN || 0),
-      session_ttl_sec: Number(CFG.PAYMENT_SESSION_TTL_SEC || 0),
+      session_ttl_sec: Number(CFG.PAYMENT_SESSION_TTL_SEC || 0)
     }
   };
 
@@ -50,6 +55,15 @@ export default async function handler(_req, res) {
 
   try {
     const { redis, k } = await import('../src/lib/redis.js');
+
+    // Ops alert buffer status (Redis-only).
+    try {
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const pendingPayments = Number(await redis.llen(k(['ops', 'alerts', 'payments', 'd', day]))) || 0;
+      base.ops.pending = { payments: pendingPayments };
+    } catch {
+      // ignore
+    }
 
     const [giveawaysTick, broadcastTick] = await Promise.all([
       redis.get(k(['cron', 'giveaways_tick', 'last_run'])),
