@@ -13841,6 +13841,7 @@ if (!exp) {
 
   // Public CTA: user can type "креатор" / "бренд" (or creator/brand) to set UI mode explicitly.
   // Keep it strict to avoid accidental triggers in normal chats.
+  let pickedRole = null; // 'creator' | 'brand'
   try {
     const clean = String(text || '')
       .toLowerCase()
@@ -13852,10 +13853,28 @@ if (!exp) {
     if (toks.length > 0 && toks.length <= 3) {
       const isCreator = toks.includes('креатор') || toks.includes('криэтор') || toks.includes('криэйтор') || toks.includes('creator');
       const isBrand = toks.includes('бренд') || toks.includes('brand');
-      if (isBrand && !isCreator) await setUiMode(ctx.from.id, UI_MODES.BRAND);
-      else if (isCreator && !isBrand) await setUiMode(ctx.from.id, UI_MODES.CREATOR);
+      if (isBrand && !isCreator) {
+        await setUiMode(ctx.from.id, UI_MODES.BRAND);
+        pickedRole = 'brand';
+      } else if (isCreator && !isBrand) {
+        await setUiMode(ctx.from.id, UI_MODES.CREATOR);
+        pickedRole = 'creator';
+      }
     }
   } catch {}
+
+  if (pickedRole) {
+    const human = pickedRole === 'brand' ? 'Бренд' : 'Креатор';
+    await ctx.reply(`✅ Режим выбран: ${human}.
+Нажми /start, чтобы продолжить.`, {
+      reply_markup: {
+        keyboard: [[{ text: '/start' }]],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    });
+    return;
+  }
 
   const flags = await getRoleFlags(null, ctx.from.id);
   await renderMainMenu(ctx, flags, { edit: false });
