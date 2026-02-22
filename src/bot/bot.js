@@ -12538,9 +12538,11 @@ async function renderGwOpen(ctx, ownerUserId, gwId) {
   const rawSt = String(g.status || '').toUpperCase();
   if (effSt === 'ENDED' && rawSt !== 'ENDED' && gwIsEndedByTime(g, nowMs)) {
     try {
-      await db.updateGiveaway(gwId, { status: 'ENDED' });
-      await db.auditGiveaway(gwId, g.workspace_id, ownerUserId, 'gw.ended_lazy', { by_time: true });
-      g.status = 'ENDED';
+      const ended = await db.atomicEndGiveaway(gwId);
+      if (ended) {
+        await db.auditGiveaway(gwId, g.workspace_id, ownerUserId, 'gw.ended_lazy', { by_time: true });
+        g.status = 'ENDED';
+      }
     } catch {}
   }
   const sponsors = await db.listGiveawaySponsors(gwId);
@@ -26315,19 +26317,23 @@ ${actionHint}`;
       const g = await db.getGiveawayForOwner(gwId, u.id);
       if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       const prevStatus = String(g.status || '').toUpperCase();
-      await db.updateGiveaway(gwId, { status: 'ENDED' });
-      await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.ended', { manual: true });
+      const ended = await db.atomicEndGiveaway(gwId);
+      if (ended) {
+        await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.ended', { manual: true });
 
-      // Optional: post a compact “contest ended” notice into the published channel (reply to original post).
-      // Owner DM is skipped (owner already in bot flow).
-      try {
-        if (prevStatus !== 'ENDED' && prevStatus !== 'WINNERS_DRAWN' && prevStatus !== 'RESULTS_PUBLISHED') {
-          await notifyGiveawayEnded({ api: ctx.api, db, g, reason: 'manual_end', skipOwner: true });
+        // Optional: post a compact “contest ended” notice into the published channel (reply to original post).
+        // Owner DM is skipped (owner already in bot flow).
+        try {
+          if (prevStatus !== 'ENDED' && prevStatus !== 'WINNERS_DRAWN' && prevStatus !== 'RESULTS_PUBLISHED') {
+            await notifyGiveawayEnded({ api: ctx.api, db, g, reason: 'manual_end', skipOwner: true });
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
+        await ctx.answerCallbackQuery({ text: 'Завершен' });
+      } else {
+        await ctx.answerCallbackQuery({ text: 'Уже завершен' });
       }
-      await ctx.answerCallbackQuery({ text: 'Завершен' });
       await renderGwOpen(ctx, u.id, gwId);
       return;
     }
@@ -26437,8 +26443,10 @@ ${actionHint}`;
         }
         if (String(g.status || '').toUpperCase() !== 'ENDED') {
           try {
-            await db.updateGiveaway(gwId, { status: 'ENDED' });
-            await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.ended_lazy', { by_time: true, manual_draw: true });
+            const ended = await db.atomicEndGiveaway(gwId);
+            if (ended) {
+              await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.ended_lazy', { by_time: true, manual_draw: true });
+            }
           } catch {}
         }
 
