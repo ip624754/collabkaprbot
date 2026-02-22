@@ -71,7 +71,10 @@ async function endDueGiveaways(now = new Date()) {
   const ended = [];
 
   for (const g of due) {
-    await db.updateGiveaway(g.id, { status: 'ENDED' });
+    // Atomic: only transition if still in endable status (prevents double-end on lock expiry)
+    const changed = await db.atomicEndGiveaway(g.id);
+    if (!changed) continue;
+
     await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.ended', {
       manual: false,
       now: now.toISOString(),
@@ -157,68 +160,70 @@ async function autoPublishDrawn() {
   for (const g of list) {
     if (!g.published_chat_id) continue;
 
-    try {
-      const winners = await db.getWinnersWithTgId(g.id);
-      if (!winners.length) continue;
+    // Per-giveaway Redis lock: prevents double-post if global lock expires
+    await withGiveawayLock(g.id, async () => {
+      try {
+        const winners = await db.getWinnersWithTgId(g.id);
+        if (!winners.length) return;
 
-      const winnerLines = winners
-        .map((w) => {
-          const name = w.username ? `@${w.username}` : `tg:${w.tg_id}`;
-          return `${w.place}. ${name}`;
-        })
-        .join('\n');
+        const winnerLines = winners
+          .map((w) => {
+            const name = w.username ? `@${w.username}` : `tg:${w.tg_id}`;
+            return `${w.place}. ${name}`;
+          })
+          .join('\n');
 
-      const body = `🏁 <b>Итоги конкурса</b>\n\n🏆 Победители:\n${winnerLines}`;
+        const body = `🏁 <b>Итоги конкурса</b>\n\n🏆 Победители:\n${winnerLines}`;
 
-      const chatId = Number(g.published_chat_id);
+        const chatId = Number(g.published_chat_id);
 
-      // Prefer editing the original announcement message (idempotent), fallback to sending a new one.
-      const origMsgId = g.results_message_id ? null : g.published_message_id || null;
+        // Prefer editing the original announcement message (idempotent), fallback to sending a new one.
+        const origMsgId = g.results_message_id ? null : g.published_message_id || null;
 
-      let publishedId = null;
+        let publishedId = null;
 
-      if (origMsgId) {
-        try {
-          await bot.api.editMessageText(chatId, Number(origMsgId), body, {
-            parse_mode: 'HTML',
-          });
-          publishedId = Number(origMsgId);
-        } catch {
-          // ignore edit errors
+        if (origMsgId) {
+          try {
+            await bot.api.editMessageText(chatId, Number(origMsgId), body, {
+              parse_mode: 'HTML',
+            });
+            publishedId = Number(origMsgId);
+          } catch {
+            // ignore edit errors
+          }
         }
-      }
 
-      if (!publishedId) {
-        const replyParams = origMsgId
-          ? {
-              reply_parameters: {
-                message_id: Number(origMsgId),
-                allow_sending_without_reply: true,
-              },
-            }
-          : {};
+        if (!publishedId) {
+          const replyParams = origMsgId
+            ? {
+                reply_parameters: {
+                  message_id: Number(origMsgId),
+                  allow_sending_without_reply: true,
+                },
+              }
+            : {};
 
-        const sent = await bot.api.sendMessage(chatId, body, {
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-          ...replyParams,
+          const sent = await bot.api.sendMessage(chatId, body, {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+            ...replyParams,
+          });
+
+          publishedId = sent.message_id;
+        }
+
+        // Atomic: claim publish only if still WINNERS_DRAWN (prevents double-post)
+        const claimed = await db.atomicPublishGiveawayResults(g.id, publishedId);
+        if (!claimed) return; // another tick already published
+
+        await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.results_auto_published', {
+          message_id: publishedId,
         });
-
-        publishedId = sent.message_id;
+        published.push(g.id);
+      } catch {
+        // skip individual failures
       }
-
-      await db.updateGiveaway(g.id, {
-        status: 'RESULTS_PUBLISHED',
-        results_message_id: publishedId,
-        results_published_at: new Date().toISOString(),
-      });
-      await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.results_auto_published', {
-        message_id: publishedId,
-      });
-      published.push(g.id);
-    } catch {
-      // skip individual failures
-    }
+    });
   }
 
   return published;
@@ -452,12 +457,16 @@ export async function broadcastTick() {
       return out;
     }
 
-    // Transition PENDING → RUNNING
+    // Atomic transition PENDING → RUNNING (prevents double-start on lock expiry)
     if (bc.status === 'PENDING') {
-      await db.updateBroadcast(bc.id, {
-        status: 'RUNNING',
+      const ok = await db.atomicTransitionBroadcast(bc.id, 'PENDING', 'RUNNING', {
         started_at: new Date().toISOString(),
       });
+      if (!ok) {
+        const out = { status: 'skip', reason: 'already_running', broadcast_id: bc.id };
+        await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+        return out;
+      }
     }
 
     const lastUserId = Number(bc.last_sent_user_id || 0);
@@ -469,11 +478,16 @@ export async function broadcastTick() {
     );
 
     if (!recipients.length) {
-      // No more recipients → DONE
-      await db.updateBroadcast(bc.id, {
-        status: 'DONE',
+      // Atomic: No more recipients → DONE (prevents double-finish on lock expiry)
+      const done = await db.atomicTransitionBroadcast(bc.id, 'RUNNING', 'DONE', {
         finished_at: new Date().toISOString(),
       });
+
+      if (!done) {
+        const out = { status: 'skip', reason: 'already_done', broadcast_id: bc.id };
+        await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+        return out;
+      }
 
       // Notify admin
       try {
@@ -510,17 +524,21 @@ export async function broadcastTick() {
     const bot = getBot();
     let sent = 0;
     let failed = 0;
-    let cursorUserId = lastUserId;
+    let lastId = lastUserId;
 
     for (const recipient of recipients) {
       const uid = Number(recipient.user_id);
       const tgId = Number(recipient.tg_id);
 
+      // Advance cursor only after we have *logged* an outcome for this uid.
+      // Important for 429: if rate-limited, we must NOT advance or the uid can be skipped forever.
+      let advanced = false;
+
       try {
         await sendBroadcastMessage(bot.api, tgId, bc);
         await db.logBroadcastSent(bc.id, uid, 'sent');
         sent++;
-        cursorUserId = uid;
+        advanced = true;
       } catch (err) {
         const code = err?.error_code || err?.statusCode || 0;
         const desc = String(err?.description || err?.message || '');
@@ -535,9 +553,9 @@ export async function broadcastTick() {
         ) {
           await db.logBroadcastSent(bc.id, uid, 'blocked');
           failed++;
-          cursorUserId = uid;
+          advanced = true;
         }
-        // 429 = rate limit → stop batch early, retry next tick (IMPORTANT: don't advance cursor)
+        // 429 = rate limit → stop batch early, retry next tick
         else if (code === 429) {
           const retryAfter = Number(err?.parameters?.retry_after || 5);
           console.error(`[BROADCAST] 429 rate limit, retry_after=${retryAfter}`);
@@ -549,10 +567,11 @@ export async function broadcastTick() {
           console.error(`[BROADCAST] send error uid=${uid}`, desc);
           await db.logBroadcastSent(bc.id, uid, 'failed');
           failed++;
-          cursorUserId = uid;
+          advanced = true;
         }
       }
 
+      if (advanced) lastId = uid;
 
       // Throttle between messages
       if (BROADCAST_SEND_DELAY_MS > 0) await sleep(BROADCAST_SEND_DELAY_MS);
@@ -562,7 +581,7 @@ export async function broadcastTick() {
     await db.updateBroadcast(bc.id, {
       sent_count: Number(bc.sent_count || 0) + sent,
       failed_count: Number(bc.failed_count || 0) + failed,
-      last_sent_user_id: cursorUserId,
+      last_sent_user_id: lastId,
     });
 
     const out = {
