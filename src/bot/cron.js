@@ -4,6 +4,7 @@ import { getBot } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
+import { flushOpsAlerts, queueOpsAlert } from './opsAlerts.js';
 import {
   notifyGiveawayEnded,
   notifyGiveawayWinnersReady,
@@ -36,22 +37,6 @@ const GIVEAWAY_LOCK_TTL_SEC = 120;
 const CRON_LAST_RUN_TTL_SEC = 14 * 24 * 60 * 60; // 14 days
 
 const NOTIFY_TIMEOUT_MS = 5000; // best-effort Telegram notifications in cron
-
-async function sendOpsAlert(api, msg) {
-  try {
-    const chatId = Number(CFG.SUPPORT_CHAT_ID || 0);
-    if (chatId) {
-      await api.sendMessage(chatId, msg);
-      return;
-    }
-  } catch {}
-  try {
-    const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
-    for (const a of admins) {
-      try { await api.sendMessage(a, msg); } catch {}
-    }
-  } catch {}
-}
 
 async function writeCronLastRun(name, payload) {
   try {
@@ -408,6 +393,9 @@ async function autoHealOrphanedPayments() {
   let applied = 0;
   let failed = 0;
   let skipped = 0;
+  const failedIds = [];
+  const failedReasons = [];
+
 
   // Fetch a slightly larger window; then filter missing_session.
   const rows = await db.listPaymentsByStatus('ORPHANED', 50, 0);
@@ -444,19 +432,34 @@ async function autoHealOrphanedPayments() {
       } else {
         skipped += 1;
       }
-    } catch {
+    } catch (e) {
       failed += 1;
+      try {
+        if (failedIds.length < 5) failedIds.push(Number(r.id));
+        if (failedReasons.length < 3) failedReasons.push(String(e?.message || e).slice(0, 120));
+      } catch {}
     }
   }
 
+  // Ops alert if auto-heal had failures (best-effort).
   if (failed > 0) {
     try {
-      const msg = [
-        '⚠️ Payments auto-heal: failures detected',
-        `checked=${cand.length} applied=${applied} failed=${failed} skipped=${skipped}`,
-        'Tip: open Admin → Payments → ORPHANED to inspect.',
-      ].join('\n');
-      await sendOpsAlert(api, msg);
+      const api = getBot().api;
+      await queueOpsAlert(api, {
+        group: 'payments',
+        reason: 'autoheal_failed',
+        title: 'Auto-heal ORPHANED missing_session: failures',
+        paymentId: failedIds.length ? failedIds[0] : null,
+        kind: 'autoheal',
+        payload: '',
+        extra: [
+          `Checked: ${cand.length}`,
+          `Applied: ${applied}`,
+          `Failed: ${failed}`,
+          `Ids: ${failedIds.join(',') || '-'}`,
+          failedReasons.length ? `Reason: ${failedReasons[0]}` : '',
+        ].filter(Boolean),
+      });
     } catch {}
   }
 
@@ -474,6 +477,10 @@ export async function giveawaysTick() {
     const official = await expireOfficialPosts();
     const retry = await issueIntroRetryCredits();
     const payheal = await autoHealOrphanedPayments();
+    // Best-effort ops digest flush (anti-spam). Sends at most once per OPS_ALERT_SUMMARY_MIN.
+    try {
+      await flushOpsAlerts(getBot().api, 'payments');
+    } catch {}
     const duration_ms = Date.now() - startedAt;
 
     // Keep the API response stable; write only a compact summary to Redis.
