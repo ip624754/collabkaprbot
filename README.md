@@ -1,9 +1,7 @@
-# Collabka Bot (CollabGirlsBot) (v1.2.9)
+# Collabka PR Bot (@collabkaprbot) (v1.3.19)
 
-## Release v1.2.9
-- Hotfix: moved dev polling out of `/api` into `scripts/dev-polling.js` (prevents serverless endpoint exposure).
-- Added P1 improvements: analytics events + **👑 Админка → 📈 Метрики**, rate limits (flag), onboarding v2 (flag), presets/templates, verification CTA in paywall.
-- Recommended: generate `package-lock.json` for deterministic installs (`npm install --package-lock-only`).
+
+> Source of truth docs: `docs/README.md` → `docs/00_CURRENT_STATE.md`
 
 UGC/Collab CRM в Telegram:
 - Workspaces = ваши каналы (профиль создателя)
@@ -19,13 +17,14 @@ UGC/Collab CRM в Telegram:
 > Stack: Node.js (ESM) + grammY + Postgres + Upstash Redis (REST). Designed for Vercel.
 
 ## 1) Env vars
-Copy `.env.example` and set these in Vercel:
+Set these in Vercel (Project Settings → Environment Variables):
 - `APP_ENV` = `prod` or `dev`
 - `BOT_TOKEN`, `BOT_USERNAME`
 - `DATABASE_URL`
 - Postgres pool hardening (optional): `PG_POOL_MAX`, `PG_CONN_TIMEOUT_MS`, `PG_IDLE_TIMEOUT_MS`, `PG_STATEMENT_TIMEOUT_MS`
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
-- required for prod hardening: `WEBHOOK_SECRET_TOKEN`, `CRON_SECRET`, `SUPER_ADMIN_TG_IDS`
+- required for prod hardening: `WEBHOOK_SECRET_TOKEN`, `CRON_SECRET`, `SUPER_ADMIN_TG_IDS`, `SUPPORT_CHAT_ID`
+- ops alerts tuning: `OPS_ALERT_SILENT`, `OPS_ALERT_SUMMARY_MIN`, `OPS_ALERT_BUFFER_MAX`
 - payments support: `PAY_SUPPORT_TEXT` (shown on `/paysupport`)
 - optional rate limiting (infra): `RATE_LIMIT_ENABLED`, `BX_MSG_RATE_LIMIT`, `BX_MSG_RATE_WINDOW_SEC`, `INTRO_RATE_LIMIT`, `INTRO_RATE_WINDOW_SEC`
 - optional: `BOT_ID`, `PRO_STARS_PRICE`, `PRO_DURATION_DAYS`
@@ -67,24 +66,24 @@ curl -s "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
 Webhook protection is required in prod. Use `secret_token` on setWebhook and validate it in `api/webhook.js`.
 
 ## 5) Cron tick
-Endpoint:
-- `POST /api/cron/giveaways-tick`
+Endpoints (GET or POST):
+- `/api/cron/giveaways-tick`
+- `/api/cron/broadcast-tick`
 
 Auth (prod):
 - `Authorization: Bearer $CRON_SECRET`
 
 Example:
 ```bash
-curl -s -X POST "https://YOUR_VERCEL_DOMAIN/api/cron/giveaways-tick" \
+curl -s -X GET "https://YOUR_VERCEL_DOMAIN/api/cron/giveaways-tick" \
   -H "Authorization: Bearer $CRON_SECRET"
 ```
 
-Configure Vercel Cron (dashboard) to call it every minute or every 2–5 minutes.
+Configure Vercel Cron (dashboard) or QStash to call ticks on schedule.
 
 What it does:
-- Ends giveaways when `ends_at <= now()`
-- If `auto_draw` is ON: draws winners deterministically among eligible participants
-- Sends owner a preview notification in DM (safe)
+- Giveaways tick: ends giveaways, draws winners (deterministic), sends notify (safe).
+- Broadcast tick: sends 1 batch per tick, 429-safe cursor + Redis cooldown.
 
 ## 6) Bot UX (MVP)
 - Add workspace: connect a channel by forwarding any post from that channel (bot must be admin)
@@ -95,7 +94,7 @@ What it does:
 ## Dev mode (local polling)
 ```bash
 npm i
-node api/dev-polling.js
+node scripts/dev-polling.js
 ```
 
 ## Files
