@@ -395,6 +395,8 @@ async function autoHealOrphanedPayments() {
   let skipped = 0;
   const failedIds = [];
   const failedReasons = [];
+  let notifySkipped = 0;
+  const notifySkippedIds = [];
 
 
   // Fetch a slightly larger window; then filter missing_session.
@@ -420,7 +422,10 @@ async function autoHealOrphanedPayments() {
         // Best-effort notify user (avoid silent surprise).
         try {
           const tgId = Number(r.tg_id || 0);
-          if (tgId) {
+          if (!tgId) {
+            notifySkipped += 1;
+            if (notifySkippedIds.length < 5) notifySkippedIds.push(Number(r.id));
+          } else {
             let msg = '✅ Оплата применена автоматически (восстановлено после задержки).';
             if (fb.kind === 'brand_pass') msg += `\n\n💳 Кредиты начислены: +${Number(fb.credits || 0)}.`;
             if (fb.kind === 'brand_plan') msg += `\n\n⭐️ Brand Plan активирован (${String(fb.plan || '')}).`;
@@ -428,7 +433,10 @@ async function autoHealOrphanedPayments() {
             if (fb.kind === 'founder_brand') msg += `\n\n⭐️ Founder Sale применён.`;
             await api.sendMessage(tgId, msg);
           }
-        } catch {}
+        } catch {
+          notifySkipped += 1;
+          if (notifySkippedIds.length < 5) notifySkippedIds.push(Number(r.id));
+        }
       } else {
         skipped += 1;
       }
@@ -439,6 +447,27 @@ async function autoHealOrphanedPayments() {
         if (failedReasons.length < 3) failedReasons.push(String(e?.message || e).slice(0, 120));
       } catch {}
     }
+  }
+
+  // Ops alert if auto-heal couldn't notify users (missing tg_id or send errors).
+  // Treated as a failure so it passes OPS_ALERT_SILENT filters.
+  if (notifySkipped > 0) {
+    try {
+      const api = getBot().api;
+      await queueOpsAlert(api, {
+        group: 'ops',
+        reason: 'autoheal_notify_failed',
+        title: 'Auto-heal ORPHANED: notify skipped',
+        paymentId: notifySkippedIds.length ? notifySkippedIds[0] : null,
+        kind: 'cron',
+        payload: '',
+        extra: [
+          `Applied: ${applied}`,
+          `Notify skipped: ${notifySkipped}`,
+          `Ids: ${notifySkippedIds.join(',') || '-'}`,
+        ].filter(Boolean),
+      });
+    } catch {}
   }
 
   // Ops alert if auto-heal had failures (best-effort).
