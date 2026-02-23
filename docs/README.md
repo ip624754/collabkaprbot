@@ -56,11 +56,16 @@
 ## Как использовать в новом чате
 Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.
 
-## Что нового в текущем snapshot (2026-02-22)
+## Что нового в текущем snapshot (2026-02-23)
+- Support: обращения пользователей идут в операторский чат `SUPPORT_CHAT_ID`, там же есть **✍️ Ответить** (ответ через reply на подсказку бота) и **шаблоны быстрых ответов** (✅/❓/✅/⏳).
+- Ops alerts: алерты (payments/cron/прочее) объединены в тот же `SUPPORT_CHAT_ID`, есть **quiet‑режим** (`OPS_ALERT_SILENT=1`) + дайджест (`OPS_ALERT_SUMMARY_MIN`).
+- Admin: подарки Brand Plan/PRO + безопасный отзыв **подарочных кредитов** через `brand_credits_gifted` (не трогает купленные/триал).
+- Пояснение про владение брендом: профиль/план/кредиты привязаны к Telegram‑аккаунту; менеджеров добавляем через Brand Team.
+
+Остальное (как раньше):
 - `/api/health`: cron last_run + audit throttle counters (Redis-only) + видимый **broadcast cooldown** после 429.
 - Экономия Neon: audit write-shedding (`AUDIT_DB_THROTTLE_*`) + готовые профили (`docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`).
 - Broadcast надёжность: курсор **не сдвигается** на 429, есть **Redis cooldown** и отображение его в `/api/health`.
-- Cron safety: **token-based Redis locks** (safe unlock) + SQL atomic guards на ключевых переходах (ended/publish/expire, broadcast transitions).
+- Cron safety: **token-based Redis locks** (safe unlock) + SQL atomic guards на ключевых переходах.
 - Official publish (@collabka_offers): анти‑дубли **token‑lock + DB‑reserve `PUBLISHING`** (stale rescue) + runbook (`docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`).
-- Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*` + маркетинг‑шаблоны.
-- Cron throughput: уведомления (Telegram notify) ограничены по времени (`withTimeout ~5s`), тик не “залипает” на одном сообщении.
+- Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*`.

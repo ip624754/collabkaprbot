@@ -43,7 +43,9 @@
 - Broadcast: URL‑кнопки (до 3), deep‑link shortcuts (`gw_/bp_/offer_`), шаблоны кнопок, ссылки “в слово” (entities → HTML), финальный экран завершения с кнопками
 - Broadcast: 429 rate-limit → Redis cooldown + /api/health показывает паузу
 - `/start` role gate: если нет `ui_mode` (Redis) и нет payload → короткая развилка (Бренд/Креатор), fail‑open; payload всегда в приоритете
+- Support/Ops: `SUPPORT_CHAT_ID` как единый операторский чат; reply-flow (✍️ Ответить) требует, чтобы бот был админом в группе
 - Official publish (@collabka_offers): idempotency token-lock + DB-reserve PUBLISHING (см. docs/19)
+- Admin gifts: `brand_credits_gifted` (подарочные кредиты) + безопасный revoke
 - Founder Sale: runtime управление из админки + deep-link fs_* (для маркетинга)
 
 ---
