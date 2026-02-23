@@ -2017,44 +2017,6 @@ function kbNavRow(kb, backCb) {
   return kb;
 }
 
-// ------------------------------------------------------------
-// Support: быстрые шаблоны ответов (кнопки) в support-чате.
-// Цель: отвечать в 1 клик без ввода текста.
-// ------------------------------------------------------------
-const SUPPORT_QUICK_REPLIES = [
-  { k: 'ack', label: '✅ Принято', text: 'Принято. Мы посмотрим и вернёмся с ответом.' },
-  { k: 'need', label: '❓ Нужны детали', text: 'Нужны детали: что именно происходит и на каком шаге? Если можно — скрин/пример.' },
-  { k: 'done', label: '✅ Сделали', text: 'Готово — исправили. Проверь, пожалуйста.' },
-  { k: 'wait', label: '⏳ В работе', text: 'Взяли в работу. Вернёмся с обновлением.' },
-];
-
-function getSupportQuickReplyDef(key) {
-  const k0 = String(key || '').trim();
-  if (!k0) return null;
-  return SUPPORT_QUICK_REPLIES.find(x => String(x.k) === k0) || null;
-}
-
-function buildSupportTicketKb(targetTgId, targetUserId) {
-  const tg = Number(targetTgId || 0);
-  const uid = Number(targetUserId || 0);
-
-  const kb = new InlineKeyboard()
-    .text('✍️ Ответить', `a:adm_support_reply|tg:${tg}|uid:${uid}`)
-    .text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`);
-
-  // Quick replies (2 per row to keep it compact)
-  if (tg && SUPPORT_QUICK_REPLIES.length) {
-    kb.row();
-    for (let i = 0; i < SUPPORT_QUICK_REPLIES.length; i++) {
-      const q = SUPPORT_QUICK_REPLIES[i];
-      kb.text(String(q.label || '✅'), `a:adm_support_qr|tg:${tg}|uid:${uid}|k:${String(q.k)}`);
-      if (i % 2 === 1 && i !== SUPPORT_QUICK_REPLIES.length - 1) kb.row();
-    }
-  }
-
-  return kb;
-}
-
 
 // STEP57: Focused done screens (1 primary CTA + "More actions")
 function kbBxPubDone(wsId, offerId, page = 0, back = 'my') {
@@ -13952,7 +13914,15 @@ ${escapeHtml(safeCap)}
       const targetChatId = t;
       if (!targetChatId) continue;
       try {
-        const replyKb = buildSupportTicketKb(ctx.from.id, u.id);
+        const replyKb = new InlineKeyboard()
+          .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`)
+          .row()
+          .text('✅ Принято', `a:adm_support_qr|k:ack|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('❓ Нужны детали', `a:adm_support_qr|k:need|tg:${ctx.from.id}|uid:${u.id}`)
+          .row()
+          .text('✅ Сделали', `a:adm_support_qr|k:done|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('⏳ В работе', `a:adm_support_qr|k:wip|tg:${ctx.from.id}|uid:${u.id}`);
         // Send header with reply button
         await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
 
@@ -14067,174 +14037,78 @@ ${escapeHtml(safeCap)}
     try { await setExpectText(ctx.from.id, exp); } catch {}
   });
   bot.on('message:text', async (ctx, next) => {
+    if (!ctx.from) return next();
 
-    // ------------------------------------------------------------
     // ------------------------------------------------------------
     // Support: allow super-admins to reply to users прямо из support-группы.
     // Flow:
     // 1) In support chat, press "✍️ Ответить" on a ticket.
-    // 2) Bot posts a prompt with ForceReply (in the same topic/thread).
+    // 2) Bot posts a prompt with ForceReply.
     // 3) Admin replies to that prompt -> bot forwards to user.
-    //
-    // Hardening (zero regressions):
-    // - Supports Telegram Topics (message_thread_id).
-    // - If Redis session is missing, we can still parse TG ID from the replied bot message text.
-    // - Supports anonymous admins (Send as group) via prompt-keyed session (no ctx.from).
+    // Works even with Telegram group privacy mode ON (bots receive replies to their own messages).
     // ------------------------------------------------------------
     try {
       const chatType = String(ctx.chat?.type || '');
-      const isGroup = chatType === 'group' || chatType === 'supergroup';
-      if (isGroup) {
-        const supportChatId = Number(String(CFG.SUPPORT_CHAT_ID || '').trim() || 0);
-        const inSupportChat = !supportChatId || Number(ctx.chat?.id || 0) === supportChatId;
-        if (inSupportChat) {
-          const rep = ctx.message?.reply_to_message;
-          if (rep) {
-            const repMsgId = Number(rep.message_id || 0) || 0;
-            const curThreadId = Number(ctx.message?.message_thread_id || 0) || 0;
-
-            // 1) Prompt-keyed session (works even if ctx.from is missing — anonymous admin).
-            const promptKey = k(['adm_support_prompt', String(ctx.chat.id), String(repMsgId)]);
-            let sessPrompt = null;
-            try { sessPrompt = await redis.get(promptKey); } catch {}
-            if (typeof sessPrompt === 'string') {
-              try { sessPrompt = JSON.parse(sessPrompt); } catch { /* ignore */ }
-            }
-
-            // 2) Per-admin session (classic flow).
-            const actorTgId = Number(ctx.from?.id || 0) || 0;
-            const adminKey = actorTgId ? k(['adm_support_reply', String(actorTgId)]) : null;
-            let sessAdmin = null;
-            if (adminKey) {
-              try { sessAdmin = await redis.get(adminKey); } catch {}
-              if (typeof sessAdmin === 'string') {
-                try { sessAdmin = JSON.parse(sessAdmin); } catch { /* ignore */ }
-              }
-            }
-
-            // Permission:
-            // - If we know actor TG ID: require super-admin.
-            // - If actor is anonymous (no ctx.from): allow only when replying to a prompt with a valid session.
-            if (actorTgId) {
-              if (!isSuperAdminTg(actorTgId)) return;
-            } else {
-              if (!sessPrompt) return;
-            }
-
-            const matchSess = (sess) =>
-              !!sess &&
-              Number(sess.chatId || 0) === Number(ctx.chat?.id || 0) &&
-              Number(sess.promptMsgId || 0) === repMsgId &&
-              (!Number(sess.threadId || 0) || Number(sess.threadId || 0) === curThreadId);
-
-            let sess = null;
-            let usedPrompt = false;
-            let usedAdmin = false;
-
-            if (matchSess(sessPrompt)) { sess = sessPrompt; usedPrompt = true; }
-            else if (matchSess(sessAdmin)) { sess = sessAdmin; usedAdmin = true; }
-
-            let targetTgId = Number(sess?.targetTgId || 0) || 0;
-            let targetUserId = Number(sess?.targetUserId || 0) || 0;
-
-            // Fallback parse: only if actor TG is known + super-admin (avoid abuse in anonymous mode).
-            if (!targetTgId && actorTgId) {
-              const repFrom = rep?.from;
-              const meId = Number(ctx.me?.id || BOT?.botInfo?.id || CFG.BOT_ID || 0);
-              const repUname = String(repFrom?.username || '').replace(/^@/, '').toLowerCase();
-              const isOurBotMsg =
-                !!repFrom &&
-                !!repFrom.is_bot &&
-                (
-                  (meId && Number(repFrom.id) === meId) ||
-                  (!meId && CFG.BOT_USERNAME && repUname === String(CFG.BOT_USERNAME || '').toLowerCase())
-                );
-
-              const repText = String(rep.text || rep.caption || '').trim();
-              if (isOurBotMsg && repText) {
-                const mTg =
-                  repText.match(/\btg:(\d{4,})\b/i) ||
-                  repText.match(/TG ID:\s*<code>(\d+)<\/code>/i) ||
-                  repText.match(/TG ID:\s*(\d{4,})/i);
-                if (mTg) targetTgId = Number(mTg[1] || 0) || 0;
-
-                const mUid =
-                  repText.match(/\buid:(\d+)\b/i) ||
-                  repText.match(/User ID:\s*<code>(\d+)<\/code>/i) ||
-                  repText.match(/User ID:\s*(\d+)/i);
-                if (mUid) targetUserId = Number(mUid[1] || 0) || 0;
-              }
-            }
-
-            const sessAdminId = Number(sess?.adminTgId || 0) || 0;
-            const adminKeyFromSess = sessAdminId ? k(['adm_support_reply', String(sessAdminId)]) : null;
-
-            if (targetTgId) {
-              const raw = String(ctx.message?.text || '').trim();
-              const low = raw.toLowerCase();
-              if (low === '/cancel' || low === 'cancel' || low === 'отмена' || low === 'стоп') {
-                if (usedPrompt) { try { await redis.del(promptKey); } catch {} }
-                if (usedAdmin && adminKey) { try { await redis.del(adminKey); } catch {} }
-                if (usedPrompt && adminKeyFromSess) { try { await redis.del(adminKeyFromSess); } catch {} }
-                await ctx.reply('❌ Отменено.');
-                return;
-              }
-
-              if (!raw) {
-                await ctx.reply('Напиши текст ответа одним сообщением.');
-                return;
-              }
-
-              const safe = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
-              const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
-
-              let ok = false;
-              try {
-                const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
-                await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-                ok = true;
-              } catch (e) {
-                await ctx.reply(`❌ Не удалось отправить (юзер заблокировал бота?).\nОшибка: ${String(e?.message || e).slice(0, 140)}`);
-              }
-
-              if (ok) {
-                if (usedPrompt) { try { await redis.del(promptKey); } catch {} }
-                if (usedAdmin && adminKey) { try { await redis.del(adminKey); } catch {} }
-                if (usedPrompt && adminKeyFromSess) { try { await redis.del(adminKeyFromSess); } catch {} }
-
-                const kb = buildSupportTicketKb(targetTgId, targetUserId || 0);
-                kb.row().text('⬅️ Админка', 'a:admin_home');
-                await ctx.reply(`✅ Ответ отправлен пользователю (tg:${targetTgId}).`, { reply_markup: kb });
-              }
+      if ((chatType === 'group' || chatType === 'supergroup') && isSuperAdminTg(ctx.from.id)) {
+        const rep = ctx.message?.reply_to_message;
+        const meId = Number(ctx.me?.id || CFG.BOT_ID || 0);
+        if (rep && rep.from && meId && Number(rep.from.id) === meId) {
+          const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
+          const sess = await redis.get(sessKey);
+          if (
+            sess &&
+            Number(sess.chatId || 0) === Number(ctx.chat?.id || 0) &&
+            Number(sess.promptMsgId || 0) === Number(rep.message_id || 0)
+          ) {
+            const raw = String(ctx.message?.text || '').trim();
+            const low = raw.toLowerCase();
+            if (low === '/cancel' || low === 'cancel' || low === 'отмена' || low === 'стоп') {
+              try { await redis.del(sessKey); } catch {}
+              await ctx.reply('❌ Отменено.');
               return;
             }
 
-            // Short hint (only when actor TG is known super-admin).
-            if (actorTgId) {
-              const repFrom = rep?.from;
-              const meId = Number(ctx.me?.id || BOT?.botInfo?.id || CFG.BOT_ID || 0);
-              const repUname = String(repFrom?.username || '').replace(/^@/, '').toLowerCase();
-              const isOurBotMsg =
-                !!repFrom &&
-                !!repFrom.is_bot &&
-                (
-                  (meId && Number(repFrom.id) === meId) ||
-                  (!meId && CFG.BOT_USERNAME && repUname === String(CFG.BOT_USERNAME || '').toLowerCase())
-                );
-              if (isOurBotMsg) {
-                await ctx.reply('⚠️ Не вижу активной сессии ответа. Нажми «✍️ Ответить» в тикете ещё раз и отправь текст ответом на подсказку.');
-                return;
-              }
+            if (!raw) {
+              await ctx.reply('Напиши текст ответа одним сообщением.');
+              return;
             }
+
+            const targetTgId = Number(sess.targetTgId || 0);
+            const targetUserId = Number(sess.targetUserId || 0);
+            if (!targetTgId) {
+              try { await redis.del(sessKey); } catch {}
+              await ctx.reply('⚠️ Не найден TG ID получателя.');
+              return;
+            }
+
+            const safe = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
+            const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+
+            let ok = false;
+            try {
+              const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+              await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+              ok = true;
+            } catch (e) {
+              await ctx.reply(`❌ Не удалось отправить (юзер заблокировал бота?).\nОшибка: ${String(e?.message || e).slice(0, 140)}`);
+            }
+
+            if (ok) {
+              try { await redis.del(sessKey); } catch {}
+              const kb = new InlineKeyboard()
+                .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
+                .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
+                .row()
+                .text('⬅️ Админка', 'a:admin_home');
+              await ctx.reply(`✅ Ответ отправлен пользователю (tg:${targetTgId}).`, { reply_markup: kb });
+            }
+            return;
           }
         }
       }
     } catch {
       // ignore
     }
-
-    if (!ctx.from) return next();
-
 
     const text = String(ctx.message?.text || '');
     const isCommand = text.startsWith('/') &&
@@ -14404,7 +14278,15 @@ ${escapeHtml(safe)}`;
         const targetChatId = t;
         if (!targetChatId) continue;
         try {
-          const replyKb = buildSupportTicketKb(ctx.from.id, u.id);
+          const replyKb = new InlineKeyboard()
+          .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`)
+          .row()
+          .text('✅ Принято', `a:adm_support_qr|k:ack|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('❓ Нужны детали', `a:adm_support_qr|k:need|tg:${ctx.from.id}|uid:${u.id}`)
+          .row()
+          .text('✅ Сделали', `a:adm_support_qr|k:done|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('⏳ В работе', `a:adm_support_qr|k:wip|tg:${ctx.from.id}|uid:${u.id}`);
           await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
           sent += 1;
         } catch {}
@@ -14869,22 +14751,6 @@ ${escapeHtml(safe)}`;
 
 Открой кабинет куратора — там будут каналы и конкурсы, где нужна твоя помощь.`,
           { parse_mode: 'HTML', reply_markup: kb }
-        );
-
-        // Also store session by prompt message id — supports anonymous admins (no ctx.from)
-        // and makes the flow resilient if per-admin session key can't be resolved.
-        const promptKey = k(['adm_support_prompt', String(ctx.chat.id), String(prompt.message_id)]);
-        await redis.set(
-          promptKey,
-          {
-            targetTgId,
-            targetUserId,
-            chatId: ctx.chat.id,
-            threadId: threadId || 0,
-            promptMsgId: prompt.message_id,
-            createdAt: new Date().toISOString(),
-          },
-          { ex: exSec }
         );
       } catch {}
       return;
@@ -23035,40 +22901,6 @@ if (p.a === 'a:match_home') {
       return;
     }
 
-    // --- Admin: Support quick replies (one-click templates) ---
-    if (p.a === 'a:adm_support_qr') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-
-      const targetTgId = Number(p.tg || 0);
-      const targetUserId = Number(p.uid || 0);
-      const key = String(p.k || '').trim();
-      if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
-
-      const def = getSupportQuickReplyDef(key);
-      if (!def) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
-
-      const safe = String(def.text || '').trim();
-      if (!safe) return ctx.answerCallbackQuery({ text: 'Пустой шаблон.' });
-
-      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
-
-      try {
-        const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
-        await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-      } catch (e) {
-        return ctx.answerCallbackQuery({ text: `Не удалось отправить: ${String(e?.message || e).slice(0, 60)}`, show_alert: true });
-      }
-
-      try {
-        const kb2 = buildSupportTicketKb(targetTgId, targetUserId || 0);
-        kb2.row().text('⬅️ Админка', 'a:admin_home');
-        await ctx.reply(`✅ Отправлено: <b>${escapeHtml(String(def.label || 'Шаблон'))}</b> → пользователю (tg:${targetTgId}).`, { parse_mode: 'HTML', reply_markup: kb2 });
-      } catch {}
-
-      return ctx.answerCallbackQuery({ text: '✅ Отправлено' });
-    }
-
     // --- Admin: Reply to support message ---
     if (p.a === 'a:adm_support_reply') {
       await ctx.answerCallbackQuery();
@@ -23097,19 +22929,14 @@ if (p.a === 'a:match_home') {
       // Even with Telegram group privacy mode ON, bots receive replies to their own messages.
       const exSec = 20 * 60;
       const sessionKey = k(['adm_support_reply', String(ctx.from.id)]);
-      const threadId = Number(ctx.callbackQuery?.message?.message_thread_id || 0) || 0;
-      const ticketMsgId = Number(ctx.callbackQuery?.message?.message_id || 0) || 0;
-
       const promptText =
-        `✍️ <b>Ответ пользователю</b> (tg:${targetTgId}${targetUserId ? ` · uid:${targetUserId}` : ''})\n\n` +
+        `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\n` +
         `Отправь текст <b>ответом на это сообщение</b> (reply) — я доставлю его пользователю от имени поддержки.\n\n` +
         `<i>Отмена:</i> ответь словом <code>/cancel</code>.`;
 
       const prompt = await ctx.api.sendMessage(ctx.chat.id, promptText, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
-        ...(threadId ? { message_thread_id: threadId } : {}),
-        ...(ticketMsgId ? { reply_to_message_id: ticketMsgId } : {}),
         reply_markup: {
           force_reply: true,
           input_field_placeholder: 'Текст ответа…',
@@ -23117,26 +22944,87 @@ if (p.a === 'a:match_home') {
         },
       });
 
-      const promptKey = k(['adm_support_prompt', String(ctx.chat.id), String(prompt.message_id)]);
-      const sess = {
-        adminTgId: Number(ctx.from.id),
-        targetTgId,
-        targetUserId,
-        chatId: ctx.chat.id,
-        threadId: threadId || 0,
-        promptMsgId: prompt.message_id,
-        createdAt: new Date().toISOString(),
-      };
-
       try {
-        await redis.set(sessionKey, sess, { ex: exSec });
-        await redis.set(promptKey, sess, { ex: exSec });
+        await redis.set(
+          sessionKey,
+          {
+            targetTgId,
+            targetUserId,
+            chatId: ctx.chat.id,
+            promptMsgId: prompt.message_id,
+            createdAt: new Date().toISOString(),
+          },
+          { ex: exSec }
+        );
       } catch {
-        // If Redis is unavailable, we still can handle replies by parsing TG ID from the prompt/ticket text.
+        // If Redis is unavailable, at least keep UX: admin can still reply in DM using legacy flow.
       }
       return;
     }
 
+
+    // --- Admin: Quick reply to support message (1 click templates) ---
+    if (p.a === 'a:adm_support_qr') {
+      if (!isSuperAdminTg(ctx.from.id)) {
+        try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+        return;
+      }
+      const targetTgId = Number(p.tg || 0);
+      const targetUserId = Number(p.uid || 0);
+      const key = String(p.k || '').trim();
+
+      if (!targetTgId) {
+        try { await ctx.answerCallbackQuery({ text: 'Нет TG ID.' }); } catch {}
+        return;
+      }
+
+      const TPL = {
+        ack: 'Принято ✅\n\nПриняли запрос. Сейчас посмотрим и вернёмся с ответом.',
+        need: 'Нужны детали ❓\n\nУточни, пожалуйста: что именно не получается (шаги), и если есть — скрин/ошибка.',
+        done: 'Готово ✅\n\nСделали. Проверь, пожалуйста, сейчас. Если что — напиши ещё раз.',
+        wip: 'В работе ⏳\n\nПриняли в работу. Дадим обновление, как только будет результат.',
+      };
+
+      const raw = TPL[key] || '';
+      if (!raw) {
+        try { await ctx.answerCallbackQuery({ text: 'Шаблон не найден.' }); } catch {}
+        return;
+      }
+
+      const safe = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
+      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+
+      let ok = false;
+      try {
+        const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+        await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+        ok = true;
+      } catch (e) {
+        try {
+          await ctx.answerCallbackQuery({ text: '❌ Не удалось отправить (возможно, бот заблокирован).', show_alert: true });
+        } catch {}
+      }
+
+      // Confirm in support chat (keep topic if forum-enabled)
+      if (ok) {
+        try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
+
+        try {
+          const threadId = Number(ctx.callbackQuery?.message?.message_thread_id || 0);
+          const kb = new InlineKeyboard()
+            .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
+            .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
+            .row()
+            .text('⬅️ Админка', 'a:admin_home');
+
+          const text = `✅ Быстрый ответ отправлен (tg:${targetTgId}).`;
+          const opts = { reply_markup: kb, disable_web_page_preview: true };
+          if (threadId) opts.message_thread_id = threadId;
+          await ctx.api.sendMessage(ctx.chat.id, text, opts);
+        } catch {}
+      }
+      return;
+    }
 
     // Admin: Copy user TG ID (shows alert with ID for easy copy)
     if (p.a === 'a:adm_ucopy') {
