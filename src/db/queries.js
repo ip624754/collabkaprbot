@@ -486,8 +486,8 @@ export async function revokeGiftedBrandCredits(userId) {
          where id=$1
        )
        update users u
-          set brand_credits = u.brand_credits - s.take,
-              brand_credits_gifted = least(greatest(0, u.brand_credits_gifted - s.take), u.brand_credits - s.take),
+          set brand_credits = greatest(0, coalesce(u.brand_credits,0) - s.take),
+              brand_credits_gifted = greatest(0, least(greatest(0, coalesce(u.brand_credits_gifted,0) - s.take), greatest(0, coalesce(u.brand_credits,0) - s.take))),
               brand_credits_updated_at = now(),
               updated_at = now()
          from s
