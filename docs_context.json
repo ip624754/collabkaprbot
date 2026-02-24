@@ -1,13 +1,14 @@
 {
   "project": "Collabka PR / @collabkaprbot",
-  "as_of": "2026-02-23",
+  "as_of": "2026-02-24",
   "source_of_truth": [
     "docs/00_CURRENT_STATE.md",
     "docs/00_BOOT.md",
     "docs/12_INFRA_CONTROL_PLANE.md",
     "docs/14_BRAND_TEAM_UX_V4.md",
     "docs/16_RELEASE_CHECKLIST.md",
-    "docs/17_START_NEW_CHAT_PROMPT.md"
+    "docs/17_START_NEW_CHAT_PROMPT.md",
+    "docs/20_SECURITY_REVIEW_FAIL_OPEN_MONETIZATION.md"
   ],
   "invariants": {
     "zero_regressions": true,
@@ -28,15 +29,7 @@
     "AUDIT_DB_THROTTLE_PREFIXES": "Comma-separated prefixes to throttle (lead./deal./inbox./...)",
     "AUDIT_DB_THROTTLE_LIMIT": "Max allowed audit writes per window",
     "AUDIT_DB_THROTTLE_WINDOW_SEC": "Window size for audit throttling",
-    "TRACE_REDIS_ENABLED": "Optional short-lived Redis trace for debugging",
-    "SUPPORT_CHAT_ID": "Operator group chat id for support tickets + ops alerts (optional; falls back to SUPER_ADMIN_TG_IDS).",
-    "OPS_ALERT_SILENT": "Quiet mode for ops alerts (only error/failed).",
-    "OPS_ALERT_SUMMARY_MIN": "Digest window for ops alerts (minutes).",
-    "OPS_ALERT_BUFFER_MAX": "Max buffered ops events (Redis list cap).",
-    "CONTACT_UNLOCK_COST": "Brand Pass: credits cost to unlock contacts (default 1).",
-    "CONTACT_UNLOCK_TTL_DAYS": "Brand Pass: unlock TTL (days, default 30).",
-    "PAYMENTS_FALLBACK_APPLY_ENABLED": "Apply payments by invoice_payload if pay_* session expired (anti-ORPHANED).",
-    "PAYMENTS_ORPHANED_AUTOHEAL_ENABLED": "Cron auto-heal ORPHANED missing_session payments."
+    "TRACE_REDIS_ENABLED": "Optional short-lived Redis trace for debugging"
   },
   "ux_entrypoints": {
     "brand_profile": {
@@ -58,9 +51,8 @@
     }
   },
   "ops_observability": {
-    "health": "/api/health returns cron last_run + audit throttle counters + ops alert status (Redis-only; no DB)",
-    "cron": "giveaways_tick + broadcast_tick store last_run summary in Redis",
-    "support_ops_chat": "SUPPORT_CHAT_ID receives user support tickets + ops alerts; admins can reply via ✍️ Ответить (reply to bot prompt) or 1-click templates."
+    "health": "/api/health returns cron last_run + broadcast.cooldown + audit throttle suppression counters (Redis-only; no DB)",
+    "cron": "giveaways_tick + broadcast_tick store last_run summary in Redis"
   },
   "specs": [
     "docs/spec/20_HOME_HUB_SPEC.md",
