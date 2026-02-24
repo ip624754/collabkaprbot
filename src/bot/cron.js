@@ -58,6 +58,9 @@ function bcDeferSetDayKey(day) {
 function bcDeferWaitDayKey(day) {
   return k(['broadcast', 'defer_wait', 'd', String(day || 'na')]);
 }
+function bcQuarantineSetDayKey(day) {
+  return k(['broadcast', 'quarantine_set', 'd', String(day || 'na')]);
+}
 
 async function incrDayCounter(key, ttlSec = CRON_LAST_RUN_TTL_SEC) {
   try {
@@ -648,12 +651,48 @@ const BROADCAST_SEND_DELAY_MS = 50; // ~20 msg/sec
 // Stored in Redis only (no DB) to keep Neon cheap.
 const BROADCAST_COOLDOWN_PAD_SEC = 30;
 
+// Per-recipient quarantine: if a recipient repeatedly hits 429 (deferred), we extend its retry window
+// to avoid burning cron ticks on problematic chats.
+const BROADCAST_QUARANTINE_THRESHOLD = Math.max(
+  2,
+  Math.min(10, Number(process.env.BROADCAST_QUARANTINE_THRESHOLD || 3) || 3)
+);
+// Default: 20 minutes. Keep bounded so a single broadcast doesn't block the pipeline for hours.
+const BROADCAST_QUARANTINE_SEC = Math.max(
+  60,
+  Math.min(6 * 3600, Number(process.env.BROADCAST_QUARANTINE_SEC || 1200) || 1200)
+);
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
 function broadcastCooldownKey(broadcastId) {
   return k(['broadcast', String(broadcastId), 'cooldown_until']);
+}
+
+function broadcastQuarantineCountKey(broadcastId, userId) {
+  return k(['broadcast', String(broadcastId), 'qcnt', String(userId)]);
+}
+
+async function resetBroadcastQuarantineCount(broadcastId, userId) {
+  try {
+    await redis.del(broadcastQuarantineCountKey(broadcastId, userId));
+  } catch {}
+}
+
+async function bumpBroadcastQuarantineCount(broadcastId, userId) {
+  try {
+    const key = broadcastQuarantineCountKey(broadcastId, userId);
+    const v = await redis.incr(key);
+    // Bound storage: expire daily counters quickly; per-recipient counts expire in 24h.
+    try {
+      await redis.expire(key, 24 * 60 * 60);
+    } catch {}
+    return Number(v) || 0;
+  } catch {
+    return 0;
+  }
 }
 
 async function getBroadcastCooldownUntilMs(broadcastId) {
@@ -931,6 +970,7 @@ export async function broadcastTick() {
       try {
         await sendBroadcastMessage(bot.api, tgId, bc);
         await db.logBroadcastSent(bc.id, uid, 'sent');
+        await resetBroadcastQuarantineCount(bc.id, uid);
         sent++;
         advanced = true;
       } catch (err) {
@@ -946,6 +986,7 @@ export async function broadcastTick() {
           desc.includes('user is deactivated')
         ) {
           await db.logBroadcastSent(bc.id, uid, 'blocked');
+          await resetBroadcastQuarantineCount(bc.id, uid);
           failed++;
           advanced = true;
         }
@@ -955,16 +996,34 @@ export async function broadcastTick() {
           cooldownSetSec = retryAfter;
           // Persist per-recipient retry_after (DB-truth) so this user won't stall the whole job.
           // We still respect Telegram retry_after globally via Redis cooldown (early-exit on next tick).
+          let qCount = 0;
           try {
             await db.logBroadcastDeferred(bc.id, uid, retryAfter);
             deferred++;
             advanced = true;
+            qCount = await bumpBroadcastQuarantineCount(bc.id, uid);
           } catch {
             // If DB is unavailable, fall back to global cooldown only (cursor won't advance).
           }
 
           const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
           await incrDayCounter(bcDeferSetDayKey(day));
+
+          // If the same recipient keeps triggering 429 repeatedly, quarantine it for a longer window.
+          // This avoids wasting cron ticks on problematic chats while keeping broadcast progress.
+          if (qCount >= BROADCAST_QUARANTINE_THRESHOLD) {
+            try {
+              await resetBroadcastQuarantineCount(bc.id, uid);
+              await db.logBroadcastQuarantine(bc.id, uid, BROADCAST_QUARANTINE_SEC);
+              await incrDayCounter(bcQuarantineSetDayKey(day));
+              console.error(
+                `[BROADCAST] quarantine uid=${uid} for ${BROADCAST_QUARANTINE_SEC}s after ${qCount} deferrals`
+              );
+            } catch {
+              // ignore quarantine failures
+            }
+          }
+
           await setBroadcastCooldown(bc.id, retryAfter, 'telegram_429');
           console.error(`[BROADCAST] 429 rate limit, retry_after=${retryAfter} (uid=${uid})`);
           // Stop batch early — serverless safe. Next tick continues after cursor.
@@ -974,6 +1033,7 @@ export async function broadcastTick() {
         else {
           console.error(`[BROADCAST] send error uid=${uid}`, desc);
           await db.logBroadcastSent(bc.id, uid, 'failed');
+          await resetBroadcastQuarantineCount(bc.id, uid);
           failed++;
           advanced = true;
         }
