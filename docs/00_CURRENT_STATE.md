@@ -89,8 +89,11 @@
 
 Надёжность / rate-limit:
 - На `429 Too Many Requests` курсор **не сдвигается** (получатель не теряется).
-- Ставим **Redis cooldown** на `retry_after`, следующие тики делают `skip` до истечения.
-- Cooldown виден в `/api/health` → `broadcast.cooldown`.
+- Ставим **Redis cooldown** на `retry_after`.
+  - per-broadcast: `broadcast:<id>:cooldown_until`
+  - global: `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id` (чтобы cron мог делать early-exit без DB polling)
+- Пока cooldown активен, `broadcast_tick` делает `skip` **без обращения к Neon**.
+- Cooldown и счётчики видны в `/api/health` → `broadcast`.
 
 Ключевые файлы:
 - `src/bot/cron.js` — отправка и финальное сообщение

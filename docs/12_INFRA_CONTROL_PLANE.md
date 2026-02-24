@@ -65,8 +65,13 @@ TTL истёк → новый инстанс взял лок → старый и
 
 Правила:
 - На `429 Too Many Requests` **не двигаем курсор** (чтобы не пропустить user).
-- Ставим **cooldown в Redis** (`broadcast:<id>:cooldown_until`) на `retry_after` и следующие тики делают `skip` до истечения.
-- Cooldown отображается в `/api/health`.
+- Ставим **cooldown в Redis**:
+  - per-broadcast: `broadcast:<id>:cooldown_until`
+  - global (для DB-free early-exit): `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id`
+- Следующие тики **выходят раньше**, без DB polling, пока `now < broadcast:cooldown_until`.
+- `/api/health` показывает cooldown + счётчики:
+  - `broadcast.last_429_at`, `broadcast.last_429_reason`
+  - `broadcast.counters.cooldown_set` / `cooldown_skip` за текущий день
 
 ## Cron: notify не должен стопорить batch
 Уведомления в Telegram (notify в канал/DM) могут зависать. Чтобы тик не «залипал» на одном сообщении:
