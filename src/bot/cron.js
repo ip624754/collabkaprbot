@@ -38,6 +38,47 @@ const CRON_LAST_RUN_TTL_SEC = 14 * 24 * 60 * 60; // 14 days
 
 const NOTIFY_TIMEOUT_MS = 5000; // best-effort Telegram notifications in cron
 
+// Broadcast: global 429 cooldown keys (Redis-only).
+// Goal: when cooldown is active, exit BEFORE any DB polling.
+const BC_COOLDOWN_TTL_SEC = 24 * 60 * 60; // keep state for ops visibility (bounded)
+const BC_COOLDOWN_UNTIL_KEY = k(['broadcast', 'cooldown_until']);
+const BC_COOLDOWN_BROADCAST_ID_KEY = k(['broadcast', 'cooldown_broadcast_id']);
+const BC_COOLDOWN_LAST_429_AT_KEY = k(['broadcast', 'last_429_at']);
+const BC_COOLDOWN_LAST_429_REASON_KEY = k(['broadcast', 'last_429_reason']);
+
+function bcCooldownSetDayKey(day) {
+  return k(['broadcast', 'cooldown_set', 'd', String(day || 'na')]);
+}
+function bcCooldownSkipDayKey(day) {
+  return k(['broadcast', 'cooldown_skip', 'd', String(day || 'na')]);
+}
+
+async function incrDayCounter(key, ttlSec = CRON_LAST_RUN_TTL_SEC) {
+  try {
+    const v = await redis.incr(key);
+    // Ensure counter expires (bounded storage). Best-effort.
+    try {
+      await redis.expire(key, ttlSec);
+    } catch {}
+    return Number(v) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function getGlobalBroadcastCooldown() {
+  try {
+    const rawUntil = await redis.get(BC_COOLDOWN_UNTIL_KEY);
+    const untilMs = Number(rawUntil) || 0;
+    if (!untilMs) return null;
+    const rawBid = await redis.get(BC_COOLDOWN_BROADCAST_ID_KEY);
+    const bid = Number(rawBid) || 0;
+    return { untilMs, broadcastId: bid > 0 ? bid : null };
+  } catch {
+    return null;
+  }
+}
+
 async function writeCronLastRun(name, payload) {
   try {
     const key = k(['cron', String(name || 'tick'), 'last_run']);
@@ -635,6 +676,23 @@ async function setBroadcastCooldown(broadcastId, retryAfterSec) {
       Math.ceil((finalUntil - now) / 1000) + BROADCAST_COOLDOWN_PAD_SEC
     );
     await redis.set(key, String(finalUntil), { ex: ttlSec });
+
+    // Global cooldown: enables DB-free early exit on next cron ticks.
+    // Keep TTL aligned with the actual cooldown window.
+    await redis.set(BC_COOLDOWN_UNTIL_KEY, String(finalUntil), { ex: ttlSec });
+    await redis.set(BC_COOLDOWN_BROADCAST_ID_KEY, String(broadcastId), { ex: ttlSec });
+    // Ops breadcrumbs (longer TTL).
+    await redis.set(BC_COOLDOWN_LAST_429_AT_KEY, new Date(now).toISOString(), {
+      ex: BC_COOLDOWN_TTL_SEC,
+    });
+    await redis.set(BC_COOLDOWN_LAST_429_REASON_KEY, 'telegram_429', {
+      ex: BC_COOLDOWN_TTL_SEC,
+    });
+
+    // Daily counters for /api/health.
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    await incrDayCounter(bcCooldownSetDayKey(day));
+
     return finalUntil;
   } catch {
     // Best-effort: even if Redis fails, we still break the batch on 429.
@@ -715,6 +773,27 @@ export async function broadcastTick() {
 
   try {
     return await withLock(lockKey, CRON_LOCK_TTL_SEC, async () => {
+    // EARLY EXIT on Telegram 429 cooldown (Redis-only) — avoid DB polling during cooldown.
+    const globalCd = await getGlobalBroadcastCooldown();
+    if (globalCd && globalCd.untilMs > Date.now()) {
+      const retry_after_sec = Math.max(
+        1,
+        Math.ceil((globalCd.untilMs - Date.now()) / 1000)
+      );
+      const out = {
+        status: 'skip',
+        reason: 'cooldown',
+        cooldown_source: 'redis_global',
+        broadcast_id: globalCd.broadcastId,
+        retry_after_sec,
+        cooldown_until: new Date(globalCd.untilMs).toISOString(),
+      };
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      await incrDayCounter(bcCooldownSkipDayKey(day));
+      await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+      return out;
+    }
+
     const bc = await db.getActiveBroadcast();
     if (!bc) {
       const out = { status: 'idle', reason: 'no_active_broadcast' };
