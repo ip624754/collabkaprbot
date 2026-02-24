@@ -73,6 +73,31 @@ const cases = [
     opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['415'] }
   },
   {
+    name: 'ru phone with dots redacted',
+    input: 'Тел: 8.999.123.45.67',
+    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['8.999.123.45.67'] }
+  },
+  {
+    name: 'phone with emoji separators redacted',
+    input: 'Тел: +7 999 🤝 123 🤝 45 🤝 67',
+    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['999 🤝 123'] }
+  },
+  {
+    name: 'phone with leading zeros and unicode dash redacted',
+    input: 'Тел: +7 (000) 123‑45‑67',
+    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['000'] }
+  },
+  {
+    name: 't․me obfuscated dot leader redacted',
+    input: 'Пиши: t․me/abc',
+    opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['t․me/'] }
+  },
+  {
+    name: 't . me / abc spaced obfuscation redacted',
+    input: 'Пиши: t . me / abc',
+    opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['t . me'] }
+  },
+  {
     name: 'credit card like 16 digits not redacted',
     input: 'Карта: 1234 5678 9012 3456',
     opts: { redacted: false, contains: ['1234 5678 9012 3456'] }
