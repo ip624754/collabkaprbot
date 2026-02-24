@@ -51,6 +51,10 @@
 10.1) В degraded mode Redis: **mutating callbacks** должны быть fail-closed (отклоняем выполнение),
      кроме строго allowlisted действий, которые safe-by-design и опираются на DB truth (например, paid-unlock).
 
+10.2) Реестр callback actions — единая точка правды:
+   - `src/bot/actionRegistry.js` (тип action: view/edit/pay/admin/ops + guard mode)
+   - проверка консистентности: `npm run actions:check` (должен проходить перед релизом)
+
 ---
 
 ## D) Deep-links / callback_data

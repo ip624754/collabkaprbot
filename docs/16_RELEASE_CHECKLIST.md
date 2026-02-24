@@ -3,7 +3,8 @@
 ## Before deploy
 - `node --check src/bot/bot.js`
 - `node --check src/bot/cron.js`
-- `npm run test:redact` (sanitizer regression: links/emails/@/phones, incl. “dirty” formats)
+- `npm run test:redact` (sanitizer regression: links/emails/@/phones)
+- `npm run actions:check` (registry covers all callback actions; fail-closed guard is strict)
 - Ensure env vars exist (see `.env.example`)
 - If schema changed: run migrations via `node migrations/run.js`
 

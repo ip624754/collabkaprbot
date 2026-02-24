@@ -9,7 +9,7 @@
 - Payments: валидация payload/amount/currency в `pre_checkout` и `successful_payment` (fail-safe apply).
 - Contacts unlock: DB truth + advisory lock (exactly-once), Redis только кеш/TTL.
 - Ownership: safe-getters с ownership внутри SQL для лидов/заявок и опасных действий.
-- Redis degraded mode: mutating callbacks работают **fail-closed** (кроме строго allowlisted DB-safe действий).
+- Redis degraded mode: mutating callbacks работают **fail-closed** (кроме строго allowlisted DB-safe действий). Guard использует строгий реестр `src/bot/actionRegistry.js`.
 
 
 
