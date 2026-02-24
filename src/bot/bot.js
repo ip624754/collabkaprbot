@@ -3822,8 +3822,7 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
 ` +
     `⚠️ Заполни 4 поля, чтобы писать креаторам и попадать в каталог брендов.
 ` +
-    `ℹ️ Раздел «Менеджеры бренда» доступен после покупки <b>Brand Plan</b>.
-💡 Регистрируй бренд на владельца. Если помогает менеджер — работайте через «👔 Менеджеры бренда».`;
+    `ℹ️ Раздел «Менеджеры бренда» доступен после покупки <b>Brand Plan</b>.`;
 
   const kb = new InlineKeyboard();
 
@@ -7834,7 +7833,10 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const contactRawTxt = ws.profile_contact ? String(ws.profile_contact).trim() : '';
   const aboutRaw = ws.profile_about ? String(ws.profile_about).trim() : '';
 
-  const canUnlockContacts = !!contactRawTxt || !!ws.channel_username;
+  const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
+
+  // Contacts unlock also gates any external links (IG/portfolio) to prevent bypassing monetization.
+  const canUnlockContacts = !!contactRawTxt || !!ws.channel_username || !!ig || (ports && ports.length);
 
   let igLine = '';
   if (ig) {
@@ -7843,13 +7845,17 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         `<a href="https://instagram.com/${escapeHtml(ig)}">instagram.com/${escapeHtml(ig)}</a>\n` +
         `<code>@${escapeHtml(ig)}</code>`;
     } else {
-      const igPlain = deLinkifyText(`instagram.com/${ig} • @${ig}`);
-      igLine = `<code>${escapeHtml(igPlain)}</code>`;
+      if (isPreview) {
+        // Curator preview: show as plain text (not clickable) to assist moderation/review.
+        const igPlain = deLinkifyText(`instagram.com/${ig} • @${ig}`);
+        igLine = `<code>${escapeHtml(igPlain)}</code>`;
+      } else {
+        igLine = `<b>🔒 скрыто</b> (открывается через «${escapeHtml(contactUnlockBtnLabel())}»)`;
+      }
     }
   }
 
   let portLine = '';
-  const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
   if (ports.length) {
     if (linksEnabled) {
       portLine = ports
@@ -7857,12 +7863,17 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         .map(u => `• <a href="${escapeHtml(String(u))}">${escapeHtml(shortUrl(u))}</a>`)
         .join('\n');
     } else {
-      portLine = ports
-        .slice(0, 3)
-        .map(u => `• <code>${escapeHtml(deLinkifyText(String(u)))}</code>`)
-        .join('\n');
+      if (isPreview) {
+        portLine = ports
+          .slice(0, 3)
+          .map(u => `• <code>${escapeHtml(deLinkifyText(String(u)))}</code>`)
+          .join('\n');
+      } else {
+        portLine = `<b>🔒 скрыто</b> (открывается через «${escapeHtml(contactUnlockBtnLabel())}»)`;
+      }
     }
-    if (ports.length > 3) portLine += `\n• <i>+ ещё ${ports.length - 3}</i>`;
+    // Only show extra count when links are revealed (avoid teasing exact URLs in locked state).
+    if (ports.length > 3 && (linksEnabled || isPreview)) portLine += `\n• <i>+ ещё ${ports.length - 3}</i>`;
   }
 
   const modeLine = PROFILE_MODE_LABELS[mode] || PROFILE_MODE_LABELS.both;
@@ -7990,7 +8001,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     if (rowHas) kb.row();
 
     // Row 2: contacts gate (or direct contact once unlocked)
-    const hasHidden = !!contactRawTxt || !!ws.channel_username || !!contactUrl;
+    const hasHidden = !!contactRawTxt || !!ws.channel_username || !!contactUrl || !!ig || (ports && ports.length);
     if (linksEnabled) {
       if (contactUrl) {
         kb.url('💬 Написать', contactUrl);
@@ -8493,6 +8504,19 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
   const ws = realWsId ? await db.getWorkspaceAny(realWsId) : null;
   const channel = ws?.channel_username ? '@' + String(ws.channel_username) : (ws?.title || 'Креатор');
 
+  // Prevent monetization bypass: do not reveal direct channel handle in the lead dialog
+  // unless contacts were unlocked for this brand on this workspace.
+  let contactsUnlocked = false;
+  if (realWsId && ws) {
+    try {
+      const key = k(['wsp_contact', realWsId, brandUserId]);
+      contactsUnlocked = !!(await redis.get(key));
+    } catch {
+      contactsUnlocked = false;
+    }
+  }
+  const channelShown = (ws?.channel_username && !contactsUnlocked) ? '🔒 скрыто' : channel;
+
   let credits = 0;
   try { credits = Number(await db.getBrandCredits(brandUserId)); } catch {}
 
@@ -8515,7 +8539,7 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
 ` +
     `Креатор: <b>${escapeHtml(who)}</b>
 ` +
-    `Канал: <b>${escapeHtml(channel)}</b>
+    `Канал: <b>${escapeHtml(channelShown)}</b>
 ` +
     `Статус: <b>${escapeHtml(statusTitle)}</b>
 ` +
