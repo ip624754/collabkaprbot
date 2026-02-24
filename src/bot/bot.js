@@ -764,6 +764,175 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
   }
 }
 
+// -----------------------------
+// Payments hardening (Stars)
+// -----------------------------
+
+function _isSafeInvoicePayload(payload) {
+  const s = String(payload || '');
+  // Telegram payload limit is 128 bytes; keep strict and predictable.
+  if (!s || s.length > 128) return false;
+  // Only allow ASCII alnum + underscore (our payloads are underscore-separated).
+  return /^[A-Za-z0-9_]+$/.test(s);
+}
+
+function _parseIntStrict(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const i = Math.trunc(n);
+  if (String(i) !== String(n) && !Number.isInteger(n)) return null;
+  return i;
+}
+
+function _safeKindFromPayload(payload) {
+  const s = String(payload || '');
+  if (s.startsWith('founder_')) return 'founder';
+  if (s.startsWith('pro_')) return 'pro';
+  if (s.startsWith('brand_')) return 'brand_pass';
+  if (s.startsWith('bplan_')) return 'brand_plan';
+  if (s.startsWith('match_')) return 'matching';
+  if (s.startsWith('feat_')) return 'featured';
+  if (s.startsWith('offpub_')) return 'official_publish';
+  return 'unknown';
+}
+
+async function _expectedStarsForInvoicePayload(payload) {
+  const s = String(payload || '');
+  if (!_isSafeInvoicePayload(s)) return { ok: false, reason: 'bad_payload_chars', expected: 0, kind: _safeKindFromPayload(s) };
+
+  // Split once; validate structure per-kind.
+  const parts = s.split('_');
+  const kind = _safeKindFromPayload(s);
+
+  // founder_brand_3m_<userId>_<token>
+  if (kind === 'founder') {
+    if (parts.length < 5) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
+    const productId = parts.slice(0, 3).join('_');
+    const userId = _parseIntStrict(parts[3]);
+    if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
+
+    try {
+      const st = await getFounderSaleConfig();
+      const prod = (st?.products || []).find((x) => String(x.id) === String(productId)) || null;
+      const expected = _parseIntStrict(prod?.stars);
+      if (!expected || expected <= 0) return { ok: false, reason: 'unknown_product', expected: 0, kind };
+      return { ok: true, expected, kind, meta: { productId, userId } };
+    } catch {
+      // Safe fallback: use base config (no Redis overrides)
+      const base = FOUNDER_PRODUCT_DEFS.find((x) => x.id === productId) || null;
+      const expected = _parseIntStrict(
+        productId === 'founder_brand_3m' ? CFG.FOUNDER_BRAND_3M_PRICE :
+        productId === 'founder_brand_12m' ? CFG.FOUNDER_BRAND_12M_PRICE :
+        productId === 'founder_creator_12m' ? CFG.FOUNDER_CREATOR_12M_PRICE :
+        0
+      );
+      if (!base || !expected || expected <= 0) return { ok: false, reason: 'unknown_product', expected: 0, kind };
+      return { ok: true, expected, kind, meta: { productId, userId } };
+    }
+  }
+
+  // pro_<wsId>_<userId>_<token> OR legacy pro_<wsId>_<token>
+  if (kind === 'pro') {
+    if (parts.length < 3) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
+    const wsId = _parseIntStrict(parts[1]);
+    if (!wsId || wsId <= 0) return { ok: false, reason: 'bad_ws', expected: 0, kind };
+    const expected = _parseIntStrict(CFG.PRO_STARS_PRICE);
+    if (!expected || expected <= 0) return { ok: false, reason: 'bad_price', expected: 0, kind };
+    // Optional payer userId in new format
+    let userId = null;
+    if (parts.length >= 4 && /^\d+$/.test(String(parts[2] || ''))) userId = _parseIntStrict(parts[2]);
+    return { ok: true, expected, kind, meta: { wsId, userId } };
+  }
+
+  // brand_<userId>_<S|M|L>_<token>
+  if (kind === 'brand_pass') {
+    if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
+    const userId = _parseIntStrict(parts[1]);
+    if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
+    const packId = String(parts[2] || '').toUpperCase();
+    const pack = getBrandPack(packId);
+    const expected = _parseIntStrict(pack?.stars);
+    if (!expected || expected <= 0) return { ok: false, reason: 'bad_pack', expected: 0, kind };
+    return { ok: true, expected, kind, meta: { userId, packId } };
+  }
+
+  // bplan_<userId>_<start|pro>_<token>
+  if (kind === 'brand_plan') {
+    if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
+    const userId = _parseIntStrict(parts[1]);
+    if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
+    const plan = String(parts[2] || 'start').toLowerCase();
+    const planDef = BRAND_PLANS.find((pl) => String(pl.id) === String(plan)) || null;
+    const expected = _parseIntStrict(planDef?.stars);
+    if (!expected || expected <= 0) return { ok: false, reason: 'bad_plan', expected: 0, kind };
+    return { ok: true, expected, kind, meta: { userId, plan } };
+  }
+
+  // match_<userId>_<S|M|L>_<token>
+  if (kind === 'matching') {
+    if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
+    const userId = _parseIntStrict(parts[1]);
+    if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
+    const tierId = String(parts[2] || '').toUpperCase();
+    const tier = MATCH_TIERS.find((t) => String(t.id) === String(tierId)) || null;
+    const expected = _parseIntStrict(tier?.stars);
+    if (!expected || expected <= 0) return { ok: false, reason: 'bad_tier', expected: 0, kind };
+    return { ok: true, expected, kind, meta: { userId, tierId } };
+  }
+
+  // feat_<userId>_<days>_<token>
+  if (kind === 'featured') {
+    if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
+    const userId = _parseIntStrict(parts[1]);
+    if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
+    const days = _parseIntStrict(parts[2]);
+    if (!days || days <= 0) return { ok: false, reason: 'bad_days', expected: 0, kind };
+    const d = FEATURED_DURATIONS.find((x) => Number(x.days) === Number(days)) || null;
+    const expected = _parseIntStrict(d?.stars);
+    if (!expected || expected <= 0) return { ok: false, reason: 'bad_duration', expected: 0, kind };
+    return { ok: true, expected, kind, meta: { userId, days } };
+  }
+
+  // offpub_<userId>_<offerId>_<days>_<token>
+  if (kind === 'official_publish') {
+    if (parts.length < 5) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
+    const userId = _parseIntStrict(parts[1]);
+    const offerId = _parseIntStrict(parts[2]);
+    const days = _parseIntStrict(parts[3]);
+    if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
+    if (!offerId || offerId <= 0) return { ok: false, reason: 'bad_offer', expected: 0, kind };
+    if (!days || days <= 0) return { ok: false, reason: 'bad_days', expected: 0, kind };
+    const d = OFFICIAL_DURATIONS.find((x) => Number(x.days) === Number(days)) || null;
+    const expected = _parseIntStrict(d?.price);
+    if (!expected || expected <= 0) return { ok: false, reason: 'bad_duration', expected: 0, kind };
+    return { ok: true, expected, kind, meta: { userId, offerId, days } };
+  }
+
+  return { ok: false, reason: 'unknown_kind', expected: 0, kind };
+}
+
+async function _validateStarsPaymentStrict({ payload, currency, totalAmount, payerUserId = null }) {
+  const cur = String(currency || 'XTR').toUpperCase();
+  if (cur !== 'XTR') return { ok: false, reason: 'bad_currency', expected: 0, kind: _safeKindFromPayload(payload) };
+
+  const paid = _parseIntStrict(totalAmount);
+  if (!paid || paid <= 0) return { ok: false, reason: 'bad_amount', expected: 0, kind: _safeKindFromPayload(payload) };
+
+  const exp = await _expectedStarsForInvoicePayload(payload);
+  if (!exp.ok) return exp;
+
+  // Optional: verify payload-embedded userId matches the payer.
+  if (payerUserId && exp.meta && exp.meta.userId && Number(exp.meta.userId) !== Number(payerUserId)) {
+    return { ok: false, reason: 'payer_mismatch', expected: exp.expected, kind: exp.kind, meta: exp.meta };
+  }
+
+  if (Number(paid) !== Number(exp.expected)) {
+    return { ok: false, reason: 'amount_mismatch', expected: exp.expected, kind: exp.kind, meta: exp.meta, paid };
+  }
+
+  return { ok: true, expected: exp.expected, kind: exp.kind, meta: exp.meta, paid };
+}
+
 async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list') {
   const wss = await db.listWorkspaces(ownerUserId);
   const kb = new InlineKeyboard();
@@ -17815,10 +17984,37 @@ UGC vs Интеграция
 
   // --- Payments (Telegram Stars) ---
   bot.on('pre_checkout_query', async (ctx) => {
+    // Hardening: validate payload + amount before letting Telegram charge.
     try {
+      const q = ctx.update?.pre_checkout_query;
+      const payload = String(q?.invoice_payload || '');
+      const currency = String(q?.currency || 'XTR');
+      const totalAmount = Number(q?.total_amount || 0);
+
+      const { accept } = await getPaymentsRuntimeFlags();
+      if (!accept) {
+        await ctx.answerPreCheckoutQuery(false, { error_message: 'Платежи временно на паузе. Попробуй позже.' });
+        return;
+      }
+
+      const v = await _validateStarsPaymentStrict({ payload, currency, totalAmount });
+      if (!v.ok) {
+        await ctx.answerPreCheckoutQuery(false, { error_message: 'Ошибка счета. Нажми /paysupport — поможем.' });
+        try {
+          // Best-effort: keep logs for debugging without spamming.
+          console.warn('[PAY] pre_checkout rejected', { reason: v.reason, payload: String(payload).slice(0, 64), paid: totalAmount, expected: v.expected || 0, currency });
+        } catch {}
+        return;
+      }
+
       await ctx.answerPreCheckoutQuery(true);
-    } catch (_) {
-      // ignore
+    } catch (e) {
+      // Fail-safe: reject if we cannot validate.
+      try {
+        await ctx.answerPreCheckoutQuery(false, { error_message: 'Временно не могу проверить счет. Попробуй ещё раз.' });
+      } catch (_) {
+        // ignore
+      }
     }
   });
 
@@ -17830,15 +18026,7 @@ bot.on('message:successful_payment', async (ctx) => {
   // ensure user exists
   const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
 
-  const kind =
-    invoicePayload.startsWith('founder_') ? 'founder' :
-    invoicePayload.startsWith('pro_') ? 'pro' :
-    invoicePayload.startsWith('brand_') ? 'brand_pass' :
-    invoicePayload.startsWith('bplan_') ? 'brand_plan' :
-    invoicePayload.startsWith('match_') ? 'matching' :
-    invoicePayload.startsWith('feat_') ? 'featured' :
-    invoicePayload.startsWith('offpub_') ? 'official_publish' :
-    'unknown';
+  const kind = _safeKindFromPayload(invoicePayload);
 
   db.trackEvent('payment_success', { userId: u.id, meta: { kind, payload: invoicePayload, amount: sp.total_amount, currency: sp.currency || 'XTR' } });
 
@@ -17940,6 +18128,30 @@ bot.on('message:successful_payment', async (ctx) => {
   const isMatchPay = invoicePayload.startsWith('match_');
   const isFeatPay = invoicePayload.startsWith('feat_');
   const isOffpubPay = invoicePayload.startsWith('offpub_');
+
+  // Hardening: validate Stars amount/currency/payload before any fulfillment.
+  // Pre-checkout already rejects invalid invoices, but this covers retries/edge cases.
+  {
+    const v = await _validateStarsPaymentStrict({
+      payload: invoicePayload,
+      currency: sp.currency || 'XTR',
+      totalAmount: sp.total_amount,
+      payerUserId: u.id,
+    });
+
+    if (!v.ok) {
+      const note = `validation_failed:${String(v.reason || 'unknown')} exp:${Number(v.expected || 0)} got:${Number(v.paid || sp.total_amount || 0)} cur:${String(sp.currency || 'XTR')}`;
+      await markStatus('ORPHANED', note.slice(0, 240));
+      db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'validation_failed', v } });
+      await notifyPayOps('validation_failed', [
+        `Reason: ${String(v.reason || 'unknown')}`,
+        `Expected: ${Number(v.expected || 0)} ${String(sp.currency || 'XTR')}`,
+        `Paid: ${Number(v.paid || sp.total_amount || 0)} ${String(sp.currency || 'XTR')}`,
+      ]);
+      await ctx.reply('✅ Оплата получена. Но я не смог безопасно подтвердить счёт. Нажми /paysupport — поможем быстро.');
+      return;
+    }
+  }
 
   // Official channel posts are always ORPHANED post-payment (moderation).
   if (isOffpubPay) {
@@ -29044,6 +29256,30 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
   }
 
   const payload = String(row.invoice_payload || '');
+
+  // Hardening: do not apply payments if amount/currency/payload do not match the current product catalog.
+  try {
+    const v = await _validateStarsPaymentStrict({
+      payload,
+      currency: String(row.currency || 'XTR'),
+      totalAmount: Number(row.total_amount || 0),
+      payerUserId: Number(row.user_id || 0) || null,
+    });
+    if (!v.ok) {
+      const note = `manual_apply_blocked:${String(v.reason || 'unknown')} exp:${Number(v.expected || 0)} got:${Number(v.paid || row.total_amount || 0)} cur:${String(row.currency || 'XTR')}`;
+      try { await db.setPaymentStatus(row.id, 'ERROR', note.slice(0, 240)); } catch {}
+      await ctx.answerCallbackQuery({ text: '⛔️ Apply заблокирован: счёт невалидный/не совпадает сумма.', show_alert: true });
+      await renderAdminPaymentView(ctx, row.id, backStatus, page);
+      return;
+    }
+  } catch {
+    // If we cannot validate, block apply (fail-safe).
+    try { await db.setPaymentStatus(row.id, 'ERROR', 'manual_apply_blocked: validation_exception'); } catch {}
+    await ctx.answerCallbackQuery({ text: '⛔️ Apply заблокирован: ошибка валидации.', show_alert: true });
+    await renderAdminPaymentView(ctx, row.id, backStatus, page);
+    return;
+  }
+
   try {
     if (payload.startsWith('pro_')) {
       const parts = payload.split('_');

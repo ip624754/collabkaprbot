@@ -65,6 +65,47 @@ function brandPackCredits(packId, packIdRaw = '') {
   return 0;
 }
 
+function brandPackStars(packId, packIdRaw = '') {
+  const id = safeUpper(packId);
+  if (id === 'S') return Number(CFG.BRAND_TOPUP_S_PRICE || 0);
+  if (id === 'M') return Number(CFG.BRAND_TOPUP_M_PRICE || 0);
+  if (id === 'L') return Number(CFG.BRAND_TOPUP_L_PRICE || 0);
+
+  // Legacy numeric credits: map back to known pack price when possible.
+  if (/^\d+$/.test(String(packIdRaw || ''))) {
+    const credits = Number(packIdRaw);
+    if (Number(CFG.BRAND_TOPUP_S_CREDITS || 0) === credits) return Number(CFG.BRAND_TOPUP_S_PRICE || 0);
+    if (Number(CFG.BRAND_TOPUP_M_CREDITS || 0) === credits) return Number(CFG.BRAND_TOPUP_M_PRICE || 0);
+    if (Number(CFG.BRAND_TOPUP_L_CREDITS || 0) === credits) return Number(CFG.BRAND_TOPUP_L_PRICE || 0);
+  }
+
+  return 0;
+}
+
+function brandPlanStars(plan) {
+  const p = safeLower(plan);
+  if (p === 'start' || p === 'basic') return Number(CFG.BRAND_PLAN_START_PRICE || 0);
+  if (p === 'pro' || p === 'max') return Number(CFG.BRAND_PLAN_PRO_PRICE || 0);
+  return 0;
+}
+
+function founderStars(productId) {
+  const pid = String(productId || '');
+  if (pid === 'founder_brand_3m') return Number(CFG.FOUNDER_BRAND_3M_PRICE || 0);
+  if (pid === 'founder_brand_12m') return Number(CFG.FOUNDER_BRAND_12M_PRICE || 0);
+  return 0;
+}
+
+function isStarsPaymentAmountValid(expected, totalAmount, currency = 'XTR') {
+  const cur = safeUpper(currency || 'XTR');
+  if (cur !== 'XTR') return false;
+  const paid = Number(totalAmount || 0);
+  const exp = Number(expected || 0);
+  if (!exp || exp <= 0) return false;
+  if (!paid || paid <= 0) return false;
+  return Number(paid) === Number(exp);
+}
+
 function brandPlanCredits(plan) {
   const p = safeLower(plan);
   if (p === 'start' || p === 'basic') return Number(CFG.BRAND_PLAN_START_CREDITS || 0);
@@ -119,6 +160,10 @@ export async function applyPaymentFallbackNoSession({
     if (!wsId || !payUserId) return { applied: false, reason: 'missing_userid_or_wsid' };
     if (Number(payUserId) !== Number(paymentUserId)) return { applied: false, reason: 'user_mismatch' };
 
+    if (!isStarsPaymentAmountValid(Number(CFG.PRO_STARS_PRICE || 0), totalAmount, currency)) {
+      return { applied: false, reason: 'amount_mismatch' };
+    }
+
     const ws = await db.getWorkspace(paymentUserId, wsId);
     if (!ws) return { applied: false, reason: 'no_ws_access' };
 
@@ -142,6 +187,11 @@ export async function applyPaymentFallbackNoSession({
     if (!userId) return { applied: false, reason: 'missing_userid' };
     if (Number(userId) !== Number(paymentUserId)) return { applied: false, reason: 'user_mismatch' };
 
+    const expectedStars = brandPackStars(packId, packIdRaw);
+    if (!isStarsPaymentAmountValid(expectedStars, totalAmount, currency)) {
+      return { applied: false, reason: 'amount_mismatch' };
+    }
+
     const credits = brandPackCredits(packId, packIdRaw);
     if (!credits || credits <= 0) return { applied: false, reason: 'bad_pack' };
 
@@ -157,6 +207,11 @@ export async function applyPaymentFallbackNoSession({
     if (Number(userId) !== Number(paymentUserId)) return { applied: false, reason: 'user_mismatch' };
 
     const planId = normalizeBrandPlanId(plan);
+    const expectedStars = brandPlanStars(planId);
+    if (!isStarsPaymentAmountValid(expectedStars, totalAmount, currency)) {
+      return { applied: false, reason: 'amount_mismatch' };
+    }
+
     await db.activateBrandPlan(paymentUserId, planId, CFG.BRAND_PLAN_DURATION_DAYS);
 
     const credits = brandPlanCredits(planId);
@@ -171,6 +226,11 @@ export async function applyPaymentFallbackNoSession({
     const { productId, userId } = parseFounderPayload(payload);
     if (!userId) return { applied: false, reason: 'missing_userid' };
     if (Number(userId) !== Number(paymentUserId)) return { applied: false, reason: 'user_mismatch' };
+
+    const expectedStars = founderStars(productId);
+    if (!isStarsPaymentAmountValid(expectedStars, totalAmount, currency)) {
+      return { applied: false, reason: 'amount_mismatch' };
+    }
 
     if (productId !== 'founder_brand_3m' && productId !== 'founder_brand_12m') {
       return { applied: false, reason: 'unsupported_founder_product' };
