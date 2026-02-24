@@ -1,14 +1,17 @@
--- 026_brand_managers.sql
--- Brand Team (single role): allow a brand owner user to grant manager access.
--- This is intentionally minimal: one role (Brand Manager), no permissions table.
+-- Brand Pass: persistent contacts unlocks (DB fallback when Redis is down)
 
-create table if not exists brand_managers (
-  brand_user_id bigint not null references users(id) on delete cascade,
-  manager_user_id bigint not null references users(id) on delete cascade,
-  added_by_user_id bigint references users(id) on delete set null,
+create table if not exists brand_contact_unlocks (
+  id bigserial primary key,
+  brand_user_id int not null references users(id) on delete cascade,
+  workspace_id int not null references workspaces(id) on delete cascade,
+  unlocked_until timestamptz not null,
   created_at timestamptz not null default now(),
-  primary key (brand_user_id, manager_user_id)
+  updated_at timestamptz not null default now(),
+  unique (brand_user_id, workspace_id)
 );
 
-create index if not exists idx_brand_managers_brand_created on brand_managers (brand_user_id, created_at desc);
-create index if not exists idx_brand_managers_manager_created on brand_managers (manager_user_id, created_at desc);
+create index if not exists idx_brand_contact_unlocks_brand_until
+  on brand_contact_unlocks (brand_user_id, unlocked_until desc);
+
+create index if not exists idx_brand_contact_unlocks_ws_until
+  on brand_contact_unlocks (workspace_id, unlocked_until desc);
