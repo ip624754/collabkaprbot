@@ -10,6 +10,7 @@
 - Contacts unlock: DB truth + advisory lock (exactly-once), Redis только кеш/TTL.
 - Ownership: safe-getters с ownership внутри SQL для лидов/заявок и опасных действий.
 - Redis degraded mode: mutating callbacks работают **fail-closed** (кроме строго allowlisted DB-safe действий). Guard использует строгий реестр `src/bot/actionRegistry.js`.
+  - Markdown экспорт реестра action keys для аудитов: `npm run actions:md` → `docs/02_ACTION_KEYS_REGISTRY.md`.
 
 
 

@@ -54,6 +54,7 @@
 10.2) Реестр callback actions — единая точка правды:
    - `src/bot/actionRegistry.js` (тип action: view/edit/pay/admin/ops + guard mode)
    - проверка консистентности: `npm run actions:check` (должен проходить перед релизом)
+   - экспорт для аудитов/доков (Markdown): `npm run actions:md` → `docs/02_ACTION_KEYS_REGISTRY.md`
 
 ---
 

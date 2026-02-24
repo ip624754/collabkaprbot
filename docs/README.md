@@ -5,6 +5,7 @@
 ## 0) BOOT (всегда читаем сначала)
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
+- `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
 - `15_NEW_CHAT_HANDOFF.md` — copy‑paste для старта нового чата
 - `17_START_NEW_CHAT_PROMPT.md` — готовый промпт для старта нового чата
 
