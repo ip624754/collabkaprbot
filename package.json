@@ -10,7 +10,9 @@
     "dev": "node scripts/dev-polling.js",
     "migrate": "node migrations/run.js",
     "test:redact": "node scripts/test-redactContactsInText.js",
-    "zip": "bash scripts/zip.sh"
+    "zip": "bash scripts/zip.sh",
+    "actions:check": "node scripts/actions-registry-check.js",
+    "actions:dump": "node scripts/actions-registry-check.js"
   },
   "dependencies": {
     "@upstash/redis": "^1.35.3",
