@@ -8650,9 +8650,26 @@ async function renderCuratorInbox(ctx, userId, status = 'new', page = 0, assignF
   }
 }
 
+// Safe wrappers: keep ownership checks inside SQL where possible.
+async function getLeadForActorSafe(ctx, actorUserId, leadId) {
+  const id = Number(leadId || 0);
+  if (!id) return null;
+  // Super-admin can inspect any lead.
+  if (isSuperAdminTg(ctx.from?.id)) return await db.getBrandLeadById(id);
+  return await db.getBrandLeadForActor(id, actorUserId);
+}
+
+async function getBrandAppForActorSafe(ctx, actorUserId, appId) {
+  const id = Number(appId || 0);
+  if (!id) return null;
+  // Super-admin can inspect any application.
+  if (isSuperAdminTg(ctx.from?.id)) return await safeBrandApplications(() => db.getBrandApplicationById(id), async () => null);
+  return await safeBrandApplications(() => db.getBrandApplicationForActor(id, actorUserId), async () => null);
+}
+
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
   const stepId = `lead_view:${Number(leadId || 0)}`;
-  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(leadId), 4500);
+  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => getLeadForActorSafe(ctx, actorUserId, leadId), 4500);
   if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
@@ -8661,16 +8678,8 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  let isCurator = false;
-  if (!isOwner && !isAdmin) {
-    try { isCurator = await db.isCuratorForWorkspace(wsId, actorUserId); } catch {}
-  }
-  if (!isOwner && !isAdmin && !isCurator) {
-    await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
-    return;
-  }
   const canManualReply = isOwner || isAdmin;
-  const actorRole = (isCurator && !isOwner && !isAdmin) ? 'curator' : (isAdmin ? 'admin' : 'owner');
+  const actorRole = (!isOwner && !isAdmin) ? 'curator' : (isAdmin ? 'admin' : 'owner');
   const plainUi = !canManualReply; // curator view: no clickable URLs / @mentions
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
@@ -8828,15 +8837,9 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
     return;
   }
 
-  const lead = await db.getBrandLeadById(id);
+  const lead = await getLeadForActorSafe(ctx, brandUserId, id);
   if (!lead) {
     await safeEditOrReply(ctx, '⚠️ Диалог не найден или удалён. Открой 📋 Меню и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
-    return;
-  }
-
-  // Access: only the brand who created the lead (best-effort by brand_user_id and brand_tg_id)
-  if (Number(lead.brand_user_id) !== Number(brandUserId) && Number(lead.brand_tg_id) !== Number(ctx.from?.id)) {
-    await safeEditOrReply(ctx, '⚠️ Нет доступа к этому диалогу.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
     return;
   }
 
@@ -8954,7 +8957,7 @@ async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: nu
     return;
   }
 
-  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => db.getBrandLeadById(id), 4500);
+  const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => getLeadForActorSafe(ctx, actorUserId, id), 4500);
   if (!lead) {
     await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
     return;
@@ -8969,14 +8972,6 @@ async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: nu
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  let isCurator = false;
-  if (!isOwner && !isAdmin) {
-    try { isCurator = await db.isCuratorForWorkspace(wsId, actorUserId); } catch {}
-  }
-  if (!isOwner && !isAdmin && !isCurator) {
-    await safeEditOrReply(ctx, '⚠️ Нет доступа к заметкам этой заявки.', { reply_markup: navKb('a:menu') });
-    return;
-  }
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const notesRaw = (lead.meta && Array.isArray(lead.meta.curator_notes)) ? lead.meta.curator_notes : [];
@@ -9431,7 +9426,7 @@ async function renderBrandDealsList(ctx, actorUserId, brandUserId, stage = 'nego
 }
 
 async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'negotiation', page: 0 }) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
@@ -9499,7 +9494,7 @@ if (threadBlock) {
 }
 
 async function renderBrandAppView(ctx, actorUserId, appId, back = { status: 'new', page: 0 }) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
@@ -9601,7 +9596,7 @@ ${threadBlock}`;
 }
 
 async function startBrandAppReply(ctx, actorUserId, appId, back) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
@@ -9642,7 +9637,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
 }
 
 async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'negotiation', page: 0 }) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
@@ -9684,7 +9679,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
 }
 
 async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage: 'negotiation', page: 0 }) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
@@ -9728,7 +9723,7 @@ async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage:
 }
 
 async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = { stage: 'negotiation', page: 0 }) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
@@ -9874,7 +9869,7 @@ async function renderTemplatePreviewFlow(ctx, actorUserId, kind, id, key, backCb
 }
 
 async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
@@ -9957,7 +9952,7 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
 }
 
 async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
-  const lead = await db.getBrandLeadById(leadId);
+  const lead = await getLeadForActorSafe(ctx, actorUserId, leadId);
   if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
@@ -9966,14 +9961,7 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  let isCurator = false;
-  if (!isOwner && !isAdmin) {
-    try { isCurator = await db.isCuratorForWorkspace(wsId, actorUserId); } catch {}
-  }
-  if (!isOwner && !isAdmin && !isCurator) {
-    await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
-    return;
-  }
+  const isCurator = !isOwner && !isAdmin;
   const canManualReply = isOwner || isAdmin;
 
   const retKey = String(back?.ret || '').trim();
@@ -10062,7 +10050,7 @@ async function renderBrandAppTemplatePreview(ctx, actorUserId, appId, key, back)
 
 
 async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
@@ -10188,7 +10176,7 @@ ${escapeHtml(replyText)}`;
 }
 
 async function acceptBrandApplication(ctx, actorUserId, appId, back) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
@@ -10295,7 +10283,7 @@ async function renderCreatorApplications(ctx, creatorUserId, page = 0) {
 
 
 async function renderBrandAppCardForCreator(ctx, actorUserId, appId) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   if (Number(app.creator_user_id) !== Number(actorUserId)) {
@@ -10378,7 +10366,7 @@ ${tail}`;
 }
 
 async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   if (Number(app.creator_user_id) !== Number(actorUserId)) {
@@ -10449,7 +10437,7 @@ async function renderLeadTemplatePreview(ctx, actorUserId, leadId, key, back) {
 
 
 async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
-  const lead = await db.getBrandLeadById(leadId);
+  const lead = await getLeadForActorSafe(ctx, actorUserId, leadId);
   if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
@@ -10458,14 +10446,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
-  let isCurator = false;
-  if (!isOwner && !isAdmin) {
-    try { isCurator = await db.isCuratorForWorkspace(wsId, actorUserId); } catch {}
-  }
-  if (!isOwner && !isAdmin && !isCurator) {
-    await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
-    return;
-  }
+  const isCurator = !isOwner && !isAdmin;
   const canManualReply = isOwner || isAdmin;
   const actorRole = (isCurator && !isOwner && !isAdmin) ? 'curator' : (isAdmin ? 'admin' : 'owner');
 
@@ -15982,7 +15963,7 @@ ${escapeHtml(reply)}`;
       }
 
       // Persist reply + append to thread + move to "in progress" if still new
-      const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+      const app = await getBrandAppForActorSafe(ctx, u.id, appId);
       await safeBrandAppsWrite(() => db.markBrandApplicationReplied(appId, reply, u.id), { op: 'brand_app_mark_replied', appId });
       await safeBrandAppsWrite(() => db.appendBrandApplicationThreadMessage(appId, {
         from: 'brand',
@@ -16118,7 +16099,7 @@ if (exp.type === 'brand_deals_search') {
 
       await safeDeleteIncomingUserMessage(ctx);
 
-      const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
+      const app = await getBrandAppForActorSafe(ctx, u.id, appId);
       if (!app) { await clearExpectText(ctx.from.id); return ctx.reply('⚠️ Заявка не найдена.'); }
       if (Number(app.creator_user_id) !== Number(u.id)) { await clearExpectText(ctx.from.id); return ctx.reply('Нет доступа.'); }
 
@@ -20573,6 +20554,8 @@ if (p.a === 'a:brand_app_del_do') {
   await ctx.answerCallbackQuery();
   const appId = Number(p.id || 0);
   if (!appId) return;
+  const app = await getBrandAppForActorSafe(ctx, u.id, appId);
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
   await db.softDeleteBrandApplication(appId, u.id);
   await ctx.answerCallbackQuery({ text: '🗑 Заявка удалена' });
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
@@ -20586,6 +20569,14 @@ if (p.a === 'a:brand_app_set') {
   if (!appId) return;
   const st = normLeadStatus(String(p.st || 'new'));
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
+
+  const app = await getBrandAppForActorSafe(ctx, u.id, appId);
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+  if (!isAdmin && Number(app.creator_user_id) === Number(u.id)) {
+    try { await ctx.answerCallbackQuery({ text: 'Статус меняет только бренд.' }); } catch {}
+    return;
+  }
 
   // Update in DB if available
   const updated = await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, st), { op: 'brand_app_status', appId, st });
@@ -20727,8 +20718,8 @@ if (p.a === 'a:brand_app_card') {
   if (!appId) return;
 
   // Route by role: creator sees their card, brand/manager sees brand view
-  const app = await safeBrandApplications(() => db.getBrandApplicationById(appId), async () => null);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  const app = await getBrandAppForActorSafe(ctx, u.id, appId);
+  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена или нет доступа.' }); } catch {} return; }
 
   if (Number(app.creator_user_id) === Number(u.id)) {
     await renderBrandAppCardForCreator(ctx, u.id, appId);
@@ -20855,9 +20846,21 @@ if (p.a === 'a:lead_assign') {
   const leadId = Number(p.id || 0);
   if (!leadId) return;
   const action = String(p.do || '');
-  const lead = await db.getBrandLeadById(leadId);
-  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  const lead = await getLeadForActorSafe(ctx, u.id, leadId);
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена или нет доступа.' }); } catch {} return; }
   const wsId = Number(lead.workspace_id);
+
+  // Only curator/owner/admin can assign.
+  const isOwner = Number(lead.owner_user_id || 0) === Number(u.id);
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+  let isCurator = false;
+  if (!isOwner && !isAdmin) {
+    try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
+  }
+  if (!isOwner && !isAdmin && !isCurator) {
+    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    return;
+  }
 
   if (action === 'me') {
     // Assign to me — but warn if already assigned to someone else
@@ -20946,14 +20949,29 @@ if (p.a === 'a:lead_del_do') {
   await ctx.answerCallbackQuery();
   const leadId = Number(p.id || 0);
   if (!leadId) return;
+  const lead = await getLeadForActorSafe(ctx, u.id, leadId);
+  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+  const wsIdReal = Number(lead.workspace_id);
+
+  // Soft delete is global (deleted_by_user_ids affects team listing) — restrict to curator/owner/admin.
+  const isOwner = Number(lead.owner_user_id || 0) === Number(u.id);
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+  let isCurator = false;
+  if (!isOwner && !isAdmin) {
+    try { isCurator = await db.isCuratorForWorkspace(wsIdReal, u.id); } catch {}
+  }
+  if (!isOwner && !isAdmin && !isCurator) {
+    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    return;
+  }
+
   await db.softDeleteBrandLead(leadId, u.id);
   await ctx.answerCallbackQuery({ text: '🗑 Заявка удалена' });
   const retKey = String(p.ret || p.r || '').trim();
-  const wsId = Number(p.w || 0);
   if (retKey === 'ci') {
     await renderCuratorInbox(ctx, u.id, leadStatusFromCb(p.s || 'n'), Number(p.p || 0));
   } else {
-    await renderWsLeadsList(ctx, u.id, wsId, leadStatusFromCb(p.s || 'n'), Number(p.p || 0));
+    await renderWsLeadsList(ctx, u.id, wsIdReal, leadStatusFromCb(p.s || 'n'), Number(p.p || 0));
   }
   return;
 }
@@ -20965,7 +20983,7 @@ if (p.a === 'a:lead_set') {
         await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
-      const lead = await db.getBrandLeadById(leadId);
+      const lead = await getLeadForActorSafe(ctx, u.id, leadId);
       if (!lead) {
         await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
@@ -21095,7 +21113,7 @@ if (p.a === 'a:lead_set') {
       const leadId = Number(p.id || 0);
       if (!leadId) return;
 
-      const lead = await db.getBrandLeadById(leadId);
+      const lead = await getLeadForActorSafe(ctx, u.id, leadId);
       if (!lead) {
         await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
@@ -21168,7 +21186,7 @@ if (p.a === 'a:lead_set') {
       const leadId = Number(p.id || 0);
       if (!leadId) return;
 
-      const lead = await db.getBrandLeadById(leadId);
+      const lead = await getLeadForActorSafe(ctx, u.id, leadId);
       if (!lead) {
         await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
@@ -21232,7 +21250,7 @@ if (p.a === 'a:lead_set') {
       const leadId = Number(p.id || 0);
       if (!leadId) return;
 
-      const lead = await db.getBrandLeadById(leadId);
+      const lead = await getLeadForActorSafe(ctx, u.id, leadId);
       if (!lead) {
         await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
@@ -21317,7 +21335,7 @@ if (p.a === 'a:lead_set') {
       const leadId = Number(p.id || 0);
       if (!leadId) return;
 
-      const lead = await db.getBrandLeadById(leadId);
+      const lead = await getLeadForActorSafe(ctx, u.id, leadId);
       if (!lead) return safeEditOrReply(ctx, 'Заявка не найдена.');
 
       const ws = await db.getWorkspaceAny(Number(lead.workspace_id));
@@ -24836,12 +24854,8 @@ if (p.a === 'a:match_home') {
         return;
       }
 
-      const offer = await db.getBarterOfferPublic(offerId);
+      const offer = await db.getBarterOfferForOwner(u.id, offerId);
       if (!offer) {
-        await ctx.answerCallbackQuery({ text: 'Оффер не найден.', show_alert: true });
-        return;
-      }
-      if (Number(offer.owner_user_id) !== Number(u.id)) {
         await ctx.answerCallbackQuery({ text: 'Покупать может только владелец Workspace.', show_alert: true });
         return;
       }
