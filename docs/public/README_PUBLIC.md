@@ -1,4 +1,4 @@
-# PUBLIC DOCS — Collabka PR Bot (@collabkaprbot)
+# PUBLIC DOCS — Collabka PR (@collabkaprbot)
 
 Эта папка — **публичный пакет материалов** для публикаций, партнёров и пользователей.
 
