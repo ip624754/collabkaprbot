@@ -84,13 +84,15 @@ export default async function handler(_req, res) {
     };
     try {
       const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const [untilRaw, bidRaw, lastAt, lastReason, setCnt, skipCnt] = await Promise.all([
+      const [untilRaw, bidRaw, lastAt, lastReason, setCnt, skipCnt, deferSetCnt, deferWaitCnt] = await Promise.all([
         redis.get(k(['broadcast', 'cooldown_until'])),
         redis.get(k(['broadcast', 'cooldown_broadcast_id'])),
         redis.get(k(['broadcast', 'last_429_at'])),
         redis.get(k(['broadcast', 'last_429_reason'])),
         redis.get(k(['broadcast', 'cooldown_set', 'd', day])),
         redis.get(k(['broadcast', 'cooldown_skip', 'd', day])),
+        redis.get(k(['broadcast', 'defer_set', 'd', day])),
+        redis.get(k(['broadcast', 'defer_wait', 'd', day])),
       ]);
 
       const untilMs = Number(untilRaw) || 0;
@@ -103,6 +105,8 @@ export default async function handler(_req, res) {
         day,
         cooldown_set: Number(setCnt) || 0,
         cooldown_skip: Number(skipCnt) || 0,
+        defer_set: Number(deferSetCnt) || 0,
+        defer_wait: Number(deferWaitCnt) || 0,
       };
 
       if (untilMs > 0) {
