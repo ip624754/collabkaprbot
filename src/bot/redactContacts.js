@@ -36,8 +36,8 @@ export function redactContactsInText(raw) {
     s = s.replace(tgRe, '🔒 ссылка скрыта');
   }
 
-  // t.me / telegram.me
-  const tmeRe = /\b(?:t\.me|telegram\.me)\/[\w\-./?=&%+#]+/gi;
+  // t.me / telegram.me (also catches common obfuscations like: "t . me / abc", "t․me/abc")
+  const tmeRe = /\b(?:t\s*[.\u2024\uFF0E\u2027]\s*me|telegram\s*[.\u2024\uFF0E\u2027]\s*me)\s*\/\s*[^\s<>()]+/gi;
   if (tmeRe.test(s)) {
     redacted = true;
     s = s.replace(tmeRe, '🔒 ссылка скрыта');
@@ -57,14 +57,20 @@ export function redactContactsInText(raw) {
     s = s.replace(emailRe, '🔒 email скрыт');
   }
 
-  // phone numbers (mask only when it really looks like a phone)
-  const phoneCandRe = /(?:\+?\d[\d\s().\-]{7,}\d)/g;
+  // phone numbers (mask only when it really looks like a phone).
+  // Allow "dirty" separators (dots, unicode dashes, emoji between digits), but avoid letters.
+  const phoneCandRe = /(?:\+?\d(?:[^\dA-Za-zА-Яа-я]{0,4}\d){9,})/g;
   if (phoneCandRe.test(s)) {
     s = s.replace(phoneCandRe, (m) => {
       const rawM = String(m || '');
       const digits = rawM.replace(/\D/g, '');
-      if (digits.length < 9 || digits.length > 15) return rawM;
-      const hasSep = /[\s().\-]/.test(rawM);
+      // A bit conservative: modern phones are typically 10-15 digits.
+      // Also avoid masking 16-digit card-like sequences.
+      if (digits.length < 10 || digits.length > 15) return rawM;
+      if (digits.length === 16) return rawM;
+      // Bail out if letters are present (likely not a phone).
+      if (/[A-Za-zА-Яа-я]/.test(rawM)) return rawM;
+      const hasSep = /[^\d+]/.test(rawM);
       const looksRuMobile = (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8')));
       const ok = looksRuMobile || rawM.includes('+') || hasSep || rawM.includes('(');
       if (!ok) return rawM;
