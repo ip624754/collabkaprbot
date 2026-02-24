@@ -12,7 +12,8 @@
     "test:redact": "node scripts/test-redactContactsInText.js",
     "zip": "bash scripts/zip.sh",
     "actions:check": "node scripts/actions-registry-check.js",
-    "actions:dump": "node scripts/actions-registry-check.js"
+    "actions:dump": "node scripts/actions-registry-check.js",
+    "actions:md": "node scripts/actions-registry-export-md.js --out docs/02_ACTION_KEYS_REGISTRY.md"
   },
   "dependencies": {
     "@upstash/redis": "^1.35.3",
