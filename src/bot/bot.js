@@ -18149,6 +18149,26 @@ bot.on('message:successful_payment', async (ctx) => {
     return;
   }
 
+  // Idempotency hardening (serverless + Telegram retries):
+  // claim payment fulfillment in DB to prevent double-apply races.
+  if (paymentId) {
+    const claimed = await db.claimPaymentApplying(paymentId, u.id);
+    if (!claimed) {
+      // Either already APPLIED, or being processed by another runner.
+      try {
+        const existing = tgChargeId ? await db.getPaymentByTelegramChargeId(tgChargeId) : null;
+        if (existing && String(existing.status || '').toUpperCase() === 'APPLIED') {
+          await ctx.reply('✅ Платеж уже обработан.');
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      await ctx.reply('⏳ Платёж уже обрабатывается. Если через пару минут не применится — нажми /paysupport.');
+      return;
+    }
+  }
+
   const { autoApply } = await getPaymentsRuntimeFlags();
   if (!autoApply) {
     await markStatus('ORPHANED', 'auto_apply_paused');
@@ -18673,6 +18693,55 @@ bot.on('message:successful_payment', async (ctx) => {
       'a:home_hub': 'a:home',
     };
     if (_aliasA[p.a]) p.a = _aliasA[p.a];
+
+    // Fail-closed middleware (Redis degraded mode) for mutating callbacks.
+    // Rationale: when Redis is down we must not perform dangerous mutations that rely on ephemeral state.
+    // Exceptions are strictly allowlisted (DB-truth / safe-by-design).
+    const _MUTATION_ALLOWLIST_NO_REDIS = new Set([
+      'a:wsp_contact_unlock',
+      'a:admin_pay_apply',
+      'a:admin_pay_autoheal',
+    ]);
+    const _isMutatingActionKey = (a) => {
+      const s = String(a || '');
+      if (!s.startsWith('a:')) return false;
+      if (_MUTATION_ALLOWLIST_NO_REDIS.has(s)) return false;
+      // Most mutating actions follow *_do / *_set / *_apply / *_del / *_assign patterns.
+      return (
+        s.includes('_do') ||
+        s.includes('_set') ||
+        s.includes('_save') ||
+        s.includes('_del') ||
+        s.includes('_delete') ||
+        s.includes('_assign') ||
+        s.includes('_apply') ||
+        s.includes('_autoheal') ||
+        s.includes('_publish') ||
+        s.includes('_send') ||
+        s.includes('_reply') ||
+        s.includes('_edit') ||
+        s.includes('_create') ||
+        s.includes('_add') ||
+        s.includes('_remove') ||
+        s.includes('_ban') ||
+        s.includes('_revoke') ||
+        s.includes('_gift')
+      );
+    };
+    if (_isMutatingActionKey(p.a)) {
+      try {
+        // Lightweight health read (no writes) to detect Redis outage.
+        await redis.get(k(['health', 'redis_cb_guard']));
+      } catch {
+        try {
+          await ctx.answerCallbackQuery({
+            text: '⛔ Временно недоступно (кеш/сессии). Попробуй чуть позже.',
+            show_alert: true,
+          });
+        } catch {}
+        return;
+      }
+    }
 
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
 
@@ -29249,6 +29318,14 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
     return;
   }
 
+  // Claim fulfillment in DB to prevent double-apply (retries / parallel admins / cron).
+  const claimed = await db.claimPaymentApplying(row.id, adminUserRow.id);
+  if (!claimed) {
+    await ctx.answerCallbackQuery({ text: '⏳ Платёж уже обрабатывается или применён.', show_alert: true });
+    await renderAdminPaymentView(ctx, row.id, backStatus, page);
+    return;
+  }
+
   try {
     if (payload.startsWith('pro_')) {
       const parts = payload.split('_');
@@ -29366,6 +29443,13 @@ async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED',
 
   for (const r of cand) {
     try {
+      // Claim fulfillment in DB to prevent double-apply (cron/admin parallelism).
+      const claimed = await db.claimPaymentApplying(Number(r.id), adminUserRow?.id || Number(r.user_id));
+      if (!claimed) {
+        skipped += 1;
+        continue;
+      }
+
       const fb = await applyPaymentFallbackNoSession({
         paymentId: Number(r.id),
         paymentUserId: Number(r.user_id),
