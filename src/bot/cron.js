@@ -52,6 +52,12 @@ function bcCooldownSetDayKey(day) {
 function bcCooldownSkipDayKey(day) {
   return k(['broadcast', 'cooldown_skip', 'd', String(day || 'na')]);
 }
+function bcDeferSetDayKey(day) {
+  return k(['broadcast', 'defer_set', 'd', String(day || 'na')]);
+}
+function bcDeferWaitDayKey(day) {
+  return k(['broadcast', 'defer_wait', 'd', String(day || 'na')]);
+}
 
 async function incrDayCounter(key, ttlSec = CRON_LAST_RUN_TTL_SEC) {
   try {
@@ -660,7 +666,7 @@ async function getBroadcastCooldownUntilMs(broadcastId) {
   }
 }
 
-async function setBroadcastCooldown(broadcastId, retryAfterSec) {
+async function setBroadcastCooldown(broadcastId, retryAfterSec, reason = 'telegram_429') {
   const now = Date.now();
   const safeSec = Math.max(1, Math.min(3600, Number(retryAfterSec || 0) || 0));
   const proposedUntil = now + safeSec * 1000;
@@ -685,13 +691,16 @@ async function setBroadcastCooldown(broadcastId, retryAfterSec) {
     await redis.set(BC_COOLDOWN_LAST_429_AT_KEY, new Date(now).toISOString(), {
       ex: BC_COOLDOWN_TTL_SEC,
     });
-    await redis.set(BC_COOLDOWN_LAST_429_REASON_KEY, 'telegram_429', {
+    await redis.set(BC_COOLDOWN_LAST_429_REASON_KEY, String(reason || 'telegram_429'), {
       ex: BC_COOLDOWN_TTL_SEC,
     });
 
     // Daily counters for /api/health.
     const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     await incrDayCounter(bcCooldownSetDayKey(day));
+    if (String(reason) === 'deferred_wait') {
+      await incrDayCounter(bcDeferWaitDayKey(day));
+    }
 
     return finalUntil;
   } catch {
@@ -840,6 +849,27 @@ export async function broadcastTick() {
     );
 
     if (!recipients.length) {
+      // If we have deferred recipients waiting for retry_after, do NOT finish the broadcast.
+      // Instead, set a Redis cooldown until the earliest deferred retry window.
+      try {
+        const nextRetryMs = await db.getNextBroadcastDeferredRetryMs(bc.id);
+        if (nextRetryMs && nextRetryMs > Date.now()) {
+          const retrySec = Math.max(1, Math.ceil((nextRetryMs - Date.now()) / 1000));
+          await setBroadcastCooldown(bc.id, retrySec, 'deferred_wait');
+          const out = {
+            status: 'skip',
+            reason: 'deferred_wait',
+            broadcast_id: bc.id,
+            retry_after_sec: retrySec,
+            retry_at: new Date(nextRetryMs).toISOString(),
+          };
+          await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+          return out;
+        }
+      } catch {
+        // ignore and continue to DONE
+      }
+
       // Atomic: No more recipients → DONE (prevents double-finish on lock expiry)
       const done = await db.atomicTransitionBroadcast(bc.id, 'RUNNING', 'DONE', {
         finished_at: new Date().toISOString(),
@@ -886,6 +916,7 @@ export async function broadcastTick() {
     const bot = getBot();
     let sent = 0;
     let failed = 0;
+    let deferred = 0;
     let lastId = lastUserId;
     let cooldownSetSec = 0;
 
@@ -922,9 +953,21 @@ export async function broadcastTick() {
         else if (code === 429) {
           const retryAfter = extractRetryAfterSec(err);
           cooldownSetSec = retryAfter;
-          await setBroadcastCooldown(bc.id, retryAfter);
-          console.error(`[BROADCAST] 429 rate limit, retry_after=${retryAfter}`);
-          // Don't log as sent — will retry next tick
+          // Persist per-recipient retry_after (DB-truth) so this user won't stall the whole job.
+          // We still respect Telegram retry_after globally via Redis cooldown (early-exit on next tick).
+          try {
+            await db.logBroadcastDeferred(bc.id, uid, retryAfter);
+            deferred++;
+            advanced = true;
+          } catch {
+            // If DB is unavailable, fall back to global cooldown only (cursor won't advance).
+          }
+
+          const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+          await incrDayCounter(bcDeferSetDayKey(day));
+          await setBroadcastCooldown(bc.id, retryAfter, 'telegram_429');
+          console.error(`[BROADCAST] 429 rate limit, retry_after=${retryAfter} (uid=${uid})`);
+          // Stop batch early — serverless safe. Next tick continues after cursor.
           break;
         }
         // Other errors → log as failed, continue
@@ -936,7 +979,7 @@ export async function broadcastTick() {
         }
       }
 
-      if (advanced) lastId = uid;
+      if (advanced) lastId = Math.max(lastId, uid);
 
       // Throttle between messages
       if (BROADCAST_SEND_DELAY_MS > 0) await sleep(BROADCAST_SEND_DELAY_MS);
@@ -959,6 +1002,7 @@ export async function broadcastTick() {
       broadcast_id: bc.id,
       batch_sent: sent,
       batch_failed: failed,
+      ...(deferred ? { batch_deferred: deferred } : {}),
       total_sent: Number(bc.sent_count || 0) + sent,
       total_count: bc.total_count,
       ...(cooldownSetSec ? { cooldown_sec: cooldownSetSec } : {}),
