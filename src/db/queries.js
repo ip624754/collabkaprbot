@@ -5362,12 +5362,32 @@ export async function logBroadcastDeferred(broadcastId, userId, retryAfterSec) {
   );
 }
 
+// Broadcast quarantine for recipients that keep hitting 429 repeatedly.
+// Reuses broadcast_sent_log (no schema change): status='quarantined', retry_after_until extended.
+export async function logBroadcastQuarantine(broadcastId, userId, quarantineSec) {
+  const sec = Math.max(60, Math.min(86400, Number(quarantineSec || 0) || 0));
+  await pool.query(
+    `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until)
+     values ($1, $2, 'quarantined', now() + ($3 || ' seconds')::interval)
+     on conflict (broadcast_id, user_id)
+     do update set
+       status = 'quarantined',
+       retry_after_until = greatest(
+         coalesce(broadcast_sent_log.retry_after_until, now()),
+         now() + ($3 || ' seconds')::interval
+       ),
+       sent_at = now()
+     where broadcast_sent_log.status in ('deferred','quarantined')`,
+    [Number(broadcastId), Number(userId), String(sec)]
+  );
+}
+
 export async function getNextBroadcastDeferredRetryMs(broadcastId) {
   const r = await pool.query(
     `select extract(epoch from min(retry_after_until)) * 1000 as ms
      from broadcast_sent_log
      where broadcast_id = $1
-       and status = 'deferred'
+       and status in ('deferred','quarantined')
        and retry_after_until is not null
        and retry_after_until > now()`,
     [Number(broadcastId)]
@@ -5456,7 +5476,7 @@ export async function listBroadcastUnsentRecipients(broadcastId, audience = 'all
      from broadcast_sent_log sl
      join users u on u.id = sl.user_id
      where sl.broadcast_id = $1
-       and sl.status = 'deferred'
+       and sl.status in ('deferred','quarantined')
        and sl.retry_after_until is not null
        and sl.retry_after_until <= now()
      order by sl.user_id
