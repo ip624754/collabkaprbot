@@ -14,6 +14,7 @@ import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
 import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
+import { redactContactsInText } from './redactContacts.js';
 
 let BOT;
 
@@ -110,71 +111,7 @@ function brandPassTrialLineHtml(credits) {
   return `🎁 Осталось (тест): <b>${escapeHtml(String(have))}/${escapeHtml(String(trial))}</b>`;
 }
 
-function redactContactsInText(raw) {
-  const s0 = String(raw || '');
-  if (!s0) return { text: s0, redacted: false };
-
-  let s = s0;
-  let redacted = false;
-
-  // URLs
-  const urlRe = /\bhttps?:\/\/[^\s<>()]+/gi;
-  if (urlRe.test(s)) {
-    redacted = true;
-    s = s.replace(urlRe, '🔒 ссылка скрыта');
-  }
-
-  // t.me / telegram.me
-  const tmeRe = /\b(?:t\.me|telegram\.me)\/[\w\-./?=&%+#]+/gi;
-  if (tmeRe.test(s)) {
-    redacted = true;
-    s = s.replace(tmeRe, '🔒 ссылка скрыта');
-  }
-
-  // common social domains without protocol
-  const socialRe = /\b(?:instagram\.com|instagr\.am|vk\.com|youtube\.com|youtu\.be)\/[^\s<>()]+/gi;
-  if (socialRe.test(s)) {
-    redacted = true;
-    s = s.replace(socialRe, '🔒 ссылка скрыта');
-  }
-
-  // emails
-  const emailRe = /\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi;
-  if (emailRe.test(s)) {
-    redacted = true;
-    s = s.replace(emailRe, '🔒 email скрыт');
-  }
-
-
-  // phone numbers (mask only when it really looks like a phone)
-  const phoneCandRe = /(?:\+?\d[\d\s().\-]{7,}\d)/g;
-  if (phoneCandRe.test(s)) {
-    s = s.replace(phoneCandRe, (m) => {
-      const raw = String(m || '');
-      const digits = raw.replace(/\D/g, '');
-      if (digits.length < 9 || digits.length > 15) return raw;
-      const hasSep = /[\s().\-]/.test(raw);
-      const looksRuMobile = (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8')));
-      const ok = looksRuMobile || raw.includes('+') || hasSep || raw.includes('(');
-      if (!ok) return raw;
-      redacted = true;
-      return '🔒 номер скрыт';
-    });
-  }
-
-
-  // @handles (telegram/instagram-style)
-  const atRe = /(^|[^\w@])@([a-z0-9_]{3,32})\b/gi;
-  if (atRe.test(s)) {
-    redacted = true;
-    s = s.replace(atRe, (m, p1) => `${p1}🔒@скрыто`);
-  }
-
-  // Prevent accidental linkification by Telegram entities.
-  if (redacted) s = deLinkifyText(s);
-
-  return { text: s, redacted };
-}
+// redactContactsInText is implemented in ./redactContacts.js (dependency-free, unit-tested)
 
 function brandPassContactsNeedLineHtml(credits) {
   const have = Number(credits || 0);
