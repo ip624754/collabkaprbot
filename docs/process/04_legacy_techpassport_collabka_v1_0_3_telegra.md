@@ -1,15 +1,19 @@
 # Техпаспорт Collabka (BeautyCollabBot) v1.0.3 — Telegra.ph
 
 > ⚠️ **Legacy reference (v1.0.3):** часть деталей может не совпадать с текущим PR ботом.
-> Source of truth: `docs/00_CURRENT_STATE.md` (2026-02-22).
+> Source of truth: `docs/00_CURRENT_STATE.md` (2026-02-24).
 
 
-## PR Bot deltas (2026-02-20) — читать перед использованием legacy-описаний
-- `/api/health`: cron last_run + audit-throttle counters (Redis-only, fail-open).
-- Audit write-shedding: `AUDIT_DB_THROTTLE_*` (снижаем INSERT в `workspace_audit`).
-- Broadcast: `/api/cron/broadcast-tick`, URL-кнопки (до 3), shortcuts `gw_/bp_/offer_`, links “в слово” (entities → HTML).
+## PR Bot deltas (2026-02-24) — читать перед использованием legacy-описаний
+- Текущий бот: **Collabka PR** (**@collabkaprbot**).
+- `/api/health`: cron last_run + audit-throttle counters (Redis-only, fail-open) + `broadcast.cooldown` после 429.
+- Broadcast: `/api/cron/broadcast-tick`, URL-кнопки (до 3), shortcuts `gw_/bp_/offer_`, links “в слово” (entities → HTML), финальный экран с кнопками, 429-safe курсор + Redis cooldown.
 - `/start` role-gate: `ui_mode` (Redis), payload priority, fail-open.
+- Brand Pass (контакты): анти-bypass текста профиля + paid-unlock **exactly-once** (DB `brand_contact_unlocks`), Redis как кеш.
+- Payments (Stars): `pre_checkout` + `successful_payment` валидируют `payload/amount/currency`, невалидное → ORPHANED + OPS.
+- Access control: ownership для лидов/заявок/части офферов проверяется **в SQL** (safe-getters).
 - Cron auth: `Authorization: Bearer <CRON_SECRET>` (в legacy может встречаться `CRON_KEY`).
+
 
 > Документ для владельца и тех.команды: **архитектура**, **модули**, **схемы флоу**, **ENV**, **миграции**, **тестирование**, **релиз-чеклист**.
 

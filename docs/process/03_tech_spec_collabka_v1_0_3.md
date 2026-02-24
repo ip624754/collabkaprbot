@@ -9,16 +9,21 @@
 # Техническая спецификация Collabka v1.0.3 — Jobs/Vitalik/Woz Edition
 
 > ⚠️ **Legacy reference (v1.0.3):** этот документ про старое ядро (BeautyCollabBot).
-> Для текущего **Collabka PR Bot** см. `docs/00_CURRENT_STATE.md` (2026-02-22).
+> Для текущего **Collabka PR** см. `docs/00_CURRENT_STATE.md` (2026-02-24).
 > Ключевые дельты: `/api/health` + audit-throttle метрики, `broadcast-tick`, `/start` ui_mode role-gate (payload priority, fail-open).
 
 
-## PR Bot deltas (2026-02-20) — читать перед использованием legacy-описаний
-- `/api/health`: cron last_run + audit-throttle counters (Redis-only, fail-open).
-- Audit write-shedding: `AUDIT_DB_THROTTLE_*` (снижаем INSERT в `workspace_audit`).
-- Broadcast: `/api/cron/broadcast-tick`, URL-кнопки (до 3), shortcuts `gw_/bp_/offer_`, links “в слово” (entities → HTML).
+## PR Bot deltas (2026-02-24) — читать перед использованием legacy-описаний
+- Текущий бот: **Collabka PR** (**@collabkaprbot**).
+- `/api/health`: cron last_run + audit-throttle counters (Redis-only, fail-open) + `broadcast.cooldown` после 429.
+- Audit write-shedding: `AUDIT_DB_THROTTLE_*` (снижаем INSERT в audit), метрики suppressed видны в `/api/health`.
+- Broadcast: `/api/cron/broadcast-tick`, URL-кнопки (до 3), shortcuts `gw_/bp_/offer_`, links “в слово” (entities → HTML), 429-safe курсор + Redis cooldown.
 - `/start` role-gate: `ui_mode` (Redis), payload priority, fail-open.
+- Brand Pass (контакты): анти-bypass текста профиля + paid-unlock **exactly-once** (DB `brand_contact_unlocks`).
+- Payments (Stars): `pre_checkout` + `successful_payment` валидируют `payload/amount/currency`, невалидное → ORPHANED + OPS.
+- Access control: ownership проверяется **в SQL** (safe-getters) для лидов/заявок; часть оффер-экшенов также через owner-query.
 - Cron auth: `Authorization: Bearer <CRON_SECRET>` (в legacy может встречаться `CRON_KEY`).
+
 
 > **Jobs:** “Simplicity is the ultimate sophistication” — интерфейсы и флоу должны быть простыми.
 >
