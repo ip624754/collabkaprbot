@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR Bot) — 2026-02-24
+# 00 — CURRENT STATE (Collabka PR) — 2026-02-24
 
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
@@ -287,6 +287,8 @@
   - `db.getBrandApplicationForActor(appId, actorUserId)`
 - Действия с глобальным эффектом по лидам (assign / soft-delete) дополнительно ограничены ролями: <b>owner/curator/admin</b>.
 - Покупка размещения в офиц.канале (`a:off_buy`) получает оффер только через `db.getBarterOfferForOwner(ownerUserId, offerId)` (ownership в SQL).
+
+См. также: внутренний разбор внешней рецензии по fail-open/монетизации → `docs/20_SECURITY_REVIEW_FAIL_OPEN_MONETIZATION.md`. 
 
 ---
 

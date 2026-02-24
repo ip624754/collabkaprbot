@@ -1,6 +1,6 @@
 # DOCS — START HERE
 
-Это актуальный комплект документации по проекту **Collabka PR Bot**.
+Это актуальный комплект документации по проекту **Collabka PR**.
 
 ## 0) BOOT (всегда читаем сначала)
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
@@ -14,6 +14,7 @@
 - `migration_pack/` — ручные SQL-скрипты для экстренной миграции/repair (см. `docs/11_MIGRATIONS_PACK.md`)
 - `18_NEON_COST_SAVING_AUDIT_THROTTLE.md` — как экономить Neon: audit write-shedding + метрики в `/api/health`
 - `19_OFFICIAL_PUBLISH_IDEMPOTENCY.md` — Official publish: анти‑дубли (token‑lock + DB‑reserve) + что делать при дубле
+- `20_SECURITY_REVIEW_FAIL_OPEN_MONETIZATION.md` — разбор внешней рецензии и принятые меры (fail-open границы, payments hardening, ownership-in-SQL)
 - `13_RUNBOOK_RELEASE.md` + `16_RELEASE_CHECKLIST.md` — релизы/проверки
 - `14_BRAND_TEAM_UX_V4.md` — UX “Менеджеры бренда” (кнопка всегда видна, гейт внутри)
 
@@ -56,16 +57,16 @@
 ## Как использовать в новом чате
 Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.
 
-## Что нового в текущем snapshot (2026-02-23)
-- Support: обращения пользователей идут в операторский чат `SUPPORT_CHAT_ID`, там же есть **✍️ Ответить** (ответ через reply на подсказку бота) и **шаблоны быстрых ответов** (✅/❓/✅/⏳).
-- Ops alerts: алерты (payments/cron/прочее) объединены в тот же `SUPPORT_CHAT_ID`, есть **quiet‑режим** (`OPS_ALERT_SILENT=1`) + дайджест (`OPS_ALERT_SUMMARY_MIN`).
-- Admin: подарки Brand Plan/PRO + безопасный отзыв **подарочных кредитов** через `brand_credits_gifted` (не трогает купленные/триал).
-- Пояснение про владение брендом: профиль/план/кредиты привязаны к Telegram‑аккаунту; менеджеров добавляем через Brand Team.
-
-Остальное (как раньше):
+## Что нового в текущем snapshot (2026-02-24)
 - `/api/health`: cron last_run + audit throttle counters (Redis-only) + видимый **broadcast cooldown** после 429.
-- Экономия Neon: audit write-shedding (`AUDIT_DB_THROTTLE_*`) + готовые профили (`docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`).
+- Экономия Neon: audit write-shedding (`AUDIT_DB_THROTTLE_*`) + метрики suppressed в `/api/health` (без DB).
 - Broadcast надёжность: курсор **не сдвигается** на 429, есть **Redis cooldown** и отображение его в `/api/health`.
 - Cron safety: **token-based Redis locks** (safe unlock) + SQL atomic guards на ключевых переходах.
-- Official publish (@collabka_offers): анти‑дубли **token‑lock + DB‑reserve `PUBLISHING`** (stale rescue) + runbook (`docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`).
-- Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*`.
+- Official publish (@collabka_offers): анти-дубли **token-lock + DB-reserve `PUBLISHING`** (stale rescue) + runbook (`docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`).
+- Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*` + маркетинг-шаблоны.
+- Brand UI: баланс кредитов берём **Redis-first** (TTL, `BRAND_CREDITS_CACHE_TTL_SEC`) — меньше чтений Neon в витрине/плане.
+- Brand Pass (контакты): анти-bypass текста профиля + явный счётчик разлоков + после списания выдаём полный **контакт-пакет**.
+- Защита монетизации при деградации Redis: paid-unlock контактов фиксируется в DB (`brand_contact_unlocks.unlocked_until`) → **no double charge**, Redis остаётся кешем/UX.
+- Payments hardening (Stars): `pre_checkout_query` и `successful_payment` валидируют `invoice_payload + total_amount + currency`; невалидное → ORPHANED + OPS алерт; fallback/autoheal только для безопасных типов.
+- Access control hardening: **ownership в SQL** (safe-getters) для brand leads / brand applications; `off_buy` берёт оффер через owner-query.
+- Добавлен внутренний разбор внешней рецензии: `docs/20_SECURITY_REVIEW_FAIL_OPEN_MONETIZATION.md`.
