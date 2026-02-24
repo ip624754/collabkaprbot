@@ -68,6 +68,10 @@ TTL истёк → новый инстанс взял лок → старый и
   - пишем в DB `broadcast_sent_log.status='deferred'` + `retry_after_until`
   - двигаем scan-курсор вперёд (чтобы один “тяжёлый” uid не стопорил рассылку)
   - deferred доставляется позже, когда `retry_after_until <= now()`
+- Если один и тот же получатель ловит `429` **N раз подряд**, переводим в **quarantine**:
+  - DB: `broadcast_sent_log.status='quarantined'`
+  - `retry_after_until` продлевается на `BROADCAST_QUARANTINE_SEC`
+  - цель: не жечь тики на “проблемных” чатах
 - Ставим **cooldown в Redis**:
   - per-broadcast: `broadcast:<id>:cooldown_until`
   - global (для DB-free early-exit): `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id`
@@ -77,6 +81,7 @@ TTL истёк → новый инстанс взял лок → старый и
   - `broadcast.counters.cooldown_set` / `cooldown_skip` за текущий день
   - `broadcast.counters.defer_set` (сколько раз поставили per-recipient defer)
   - `broadcast.counters.defer_wait` (сколько раз ждали deferred без новых получателей)
+  - `broadcast.counters.quarantine_set` (сколько раз включали quarantine)
 
 ## Cron: notify не должен стопорить batch
 Уведомления в Telegram (notify в канал/DM) могут зависать. Чтобы тик не «залипал» на одном сообщении:

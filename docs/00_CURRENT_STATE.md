@@ -92,11 +92,17 @@
   - пишем в DB `broadcast_sent_log.status='deferred'` + `retry_after_until`
   - двигаем scan-курсор вперёд (чтобы один “тяжёлый” получатель не стопорил весь батч)
   - deferred получатели догоняются позже, когда `retry_after_until <= now()`
+- Если один и тот же получатель ловит `429` **N раз подряд**, включаем **quarantine**:
+  - DB: `broadcast_sent_log.status='quarantined'`
+  - `retry_after_until` продлевается на `BROADCAST_QUARANTINE_SEC`
+  - порог: `BROADCAST_QUARANTINE_THRESHOLD`
+
 - Ставим **Redis cooldown** на `retry_after`.
   - per-broadcast: `broadcast:<id>:cooldown_until`
   - global: `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id` (чтобы cron мог делать early-exit без DB polling)
 - Пока cooldown активен, `broadcast_tick` делает `skip` **без обращения к Neon**.
 - Cooldown и счётчики видны в `/api/health` → `broadcast`.
+- В `/api/health` counters: `cooldown_set/cooldown_skip/defer_set/defer_wait/quarantine_set`.
 
 Ключевые файлы:
 - `src/bot/cron.js` — отправка и финальное сообщение
