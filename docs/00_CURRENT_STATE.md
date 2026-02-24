@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR Bot) — 2026-02-23
+# 00 — CURRENT STATE (Collabka PR Bot) — 2026-02-24
 
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
@@ -64,11 +64,6 @@
 Принцип: **кнопка видна всегда**, доступ гейтится *внутри* фичи, есть “Почему так?” и корректный back через `ret`.
 Подробно: `docs/14_BRAND_TEAM_UX_V4.md`.
 
-**Важно про владение брендом**
-- Профиль бренда, Brand Plan и кредиты привязаны к Telegram-аккаунту, на котором всё создано.
-- Если помогает менеджер — регистрируй бренд на владельца и работайте через «👔 Менеджеры бренда».
-- Передачи прав между аккаунтами сейчас нет; спорные случаи решаются через поддержку.
-
 ### B) Broadcast (рассылки)
 Состояние (актуально):
 - Тик может запускаться по расписанию (обычно 1 раз/час) или вручную (QStash “Run it manually”).
@@ -115,6 +110,59 @@
 ## 5) ENV (важные флаги)
 
 - `ANALYTICS_ENABLED=false` — держим выключенным (меньше DB-write в `events`).
+
+### Базовые обязательные (чтобы бот вообще запустился)
+
+- `BOT_TOKEN` — токен Telegram-бота.
+- `BOT_USERNAME` — username бота (без @).
+- `DATABASE_URL` — Neon Postgres.
+- `REDIS_URL` — Upstash Redis (locks, counters, сессии).
+- `SUPER_ADMIN_TG_IDS` — список TG ID админов (через запятую).
+- `CRON_SECRET` — секрет для вызова `/api/cron/*` (Bearer).
+
+> Если используешь поддержку через группу: задай `SUPPORT_CHAT_ID` и **сделай бота админом** в этой группе, иначе он не увидит reply-сообщения.
+
+### ENV: полный список (1:1 с `src/lib/config.js`)
+
+Ниже перечислены **все** переменные окружения, которые читает проект через `src/lib/config.js`.
+Дефолты и парсинг см. в коде (это источник истины).
+
+- **BOT**: `BOT_ID` `BOT_TOKEN` `BOT_USERNAME` `BOT_VARIANT`
+- **APP**: `APP_ENV`
+- **DATABASE**: `DATABASE_URL`
+- **UPSTASH**: `UPSTASH_REDIS_REST_TOKEN` `UPSTASH_REDIS_REST_URL`
+- **CRON**: `CRON_SECRET`
+- **SUPER**: `SUPER_ADMIN_TG_IDS`
+- **SUPPORT**: `SUPPORT_CHAT_ID`
+- **OPS**: `OPS_ALERT_BUFFER_MAX` `OPS_ALERT_SILENT` `OPS_ALERT_SUMMARY_MIN`
+- **PAYMENT**: `PAYMENT_SESSION_TTL_MIN`
+- **PAYMENTS**: `PAYMENTS_ACCEPT_DEFAULT` `PAYMENTS_AUTO_APPLY_DEFAULT` `PAYMENTS_FALLBACK_APPLY_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_BATCH` `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED`
+- **FOUNDER**: `FOUNDER_BRAND_12M_CREDITS` `FOUNDER_BRAND_12M_PRICE` `FOUNDER_BRAND_3M_CREDITS` `FOUNDER_BRAND_3M_PRICE` `FOUNDER_CREATOR_12M_PRICE` `FOUNDER_SALE_DEADLINE` `FOUNDER_SALE_ENABLED`
+- **INTRO**: `INTRO_COST_PER_INTRO` `INTRO_DAILY_LIMIT` `INTRO_DAILY_LIMIT_UNVERIFIED` `INTRO_RATE_LIMIT` `INTRO_RATE_WINDOW_SEC` `INTRO_RETRY_AFTER_HOURS` `INTRO_RETRY_ENABLED` `INTRO_RETRY_EXPIRES_DAYS` `INTRO_RETRY_NOTIFY` `INTRO_TRIAL_CREDITS`
+- **AUDIT**: `AUDIT_DB_ENABLED` `AUDIT_DB_THROTTLE_ENABLED` `AUDIT_DB_THROTTLE_LIMIT` `AUDIT_DB_THROTTLE_PREFIXES` `AUDIT_DB_THROTTLE_WINDOW_SEC`
+- **BRAND**:
+  - `BRAND_BANNER_FILE_ID` `BRAND_LEAD_RATE_LIMIT` `BRAND_LEAD_RATE_WINDOW_SEC` `BRAND_PLAN_BASIC_PRICE` `BRAND_PLAN_DURATION_DAYS` `BRAND_PLAN_MAX_PRICE` `BRAND_PLAN_PRO_CREDITS` `BRAND_PLAN_PRO_FEATURED_DAYS` `BRAND_PLAN_PRO_MATCH` `BRAND_PLAN_PRO_PRICE`
+  - `BRAND_PLAN_START_CREDITS` `BRAND_PLAN_START_PRICE` `BRAND_PROFILE_REQUIRED` `BRAND_TOPUP_L_CREDITS` `BRAND_TOPUP_L_PRICE` `BRAND_TOPUP_M_CREDITS` `BRAND_TOPUP_M_PRICE` `BRAND_TOPUP_S_CREDITS` `BRAND_TOPUP_S_PRICE` `BRAND_VERIFY_REQUIRES_EXTENDED`
+- **CREATOR**: `CREATOR_BRAND_APPLY_DAILY_LIMIT` `CREATOR_BRAND_APPLY_DAILY_WINDOW_SEC` `CREATOR_BRAND_APPLY_RATE_LIMIT` `CREATOR_BRAND_APPLY_RATE_WINDOW_SEC`
+- **MATCH**: `MATCH_FEAT_AUTO_APPLY_ENABLED` `MATCH_L_COUNT` `MATCH_L_PRICE` `MATCH_M_COUNT` `MATCH_M_PRICE` `MATCH_S_COUNT` `MATCH_S_PRICE`
+- **BARTER**: `BARTER_BUMP_COOLDOWN_HOURS` `BARTER_BUMP_COOLDOWN_HOURS_FREE` `BARTER_BUMP_COOLDOWN_HOURS_PRO` `BARTER_FEED_PAGE_SIZE` `BARTER_INBOX_PAGE_SIZE` `BARTER_MAX_ACTIVE_OFFERS_FREE` `BARTER_MAX_ACTIVE_OFFERS_PRO`
+- **GIVEAWAY**: `GIVEAWAY_BANNER_FILE_ID` `GIVEAWAY_NOTIFY_CHANNEL_ON_END` `GIVEAWAY_NOTIFY_CHANNEL_ON_WINNERS` `GIVEAWAY_NOTIFY_OWNER_ON_END` `GIVEAWAY_NOTIFY_OWNER_ON_WINNERS` `GIVEAWAY_SPONSORS_MAX_FREE` `GIVEAWAY_SPONSORS_MAX_PRO`
+- **BX**: `BX_MSG_RATE_LIMIT` `BX_MSG_RATE_WINDOW_SEC`
+- **RATE**: `RATE_LIMIT_ENABLED`
+- **WEBHOOK**: `WEBHOOK_SECRET_TOKEN`
+- **ANALYTICS**: `ANALYTICS_ENABLED`
+- **BANNER**: `BANNER_COOLDOWN_HOURS`
+- **FEATURED**: `FEATURED_1D_PRICE` `FEATURED_30D_PRICE` `FEATURED_7D_PRICE` `FEATURED_MAX_SLOTS`
+- **GUIDE**: `GUIDE_BANNER_FILE_ID`
+- **MENU**: `MENU_BANNER_FILE_ID`
+- **OFFICIAL**: `OFFICIAL_1D_PRICE` `OFFICIAL_30D_PRICE` `OFFICIAL_7D_PRICE` `OFFICIAL_CHANNEL_ID` `OFFICIAL_CHANNEL_USERNAME` `OFFICIAL_MANUAL_DEFAULT_DAYS` `OFFICIAL_PUBLISH_ENABLED` `OFFICIAL_PUBLISH_MODE`
+- **ONBOARDING**: `ONBOARDING_V2_ENABLED`
+- **PAY**: `PAY_SUPPORT_TEXT`
+- **PRO**: `PRO_DURATION_DAYS` `PRO_PAYMENT_URL` `PRO_STARS_PRICE`
+- **TG**: `TG_ACCESS_CHECK_CONCURRENCY`
+- **VERIFICATION**: `VERIFICATION_ENABLED`
+- **WORKSPACE**: `WORKSPACE_CURATORS_MAX_FREE` `WORKSPACE_CURATORS_MAX_PRO` `WORKSPACE_EDITOR_INVITE_TTL_MIN` `WORKSPACE_FOLDER_MAX_ITEMS_FREE` `WORKSPACE_FOLDER_MAX_ITEMS_PRO`
+
 
 ### Intro trial (для брендов)
 - `INTRO_TRIAL_CREDITS=3` — разовый тест-бонус: **3** кредита на первые интро (чтобы бренду было проще попробовать). Для выключения: `INTRO_TRIAL_CREDITS=0`.
@@ -176,11 +224,6 @@
 - Cron: token-based locks (safe unlock) + SQL atomic guards на критичных статусных переходах
 - Cron: Telegram notify обёрнуты в `withTimeout(~5s)` чтобы тик не “залипал”
 
-- Support: единый операторский чат `SUPPORT_CHAT_ID` + ответ из группы (✍️ Ответить через reply) + быстрые шаблоны ответов.
-- Ops alerts: payments/cron/прочее в тот же чат, quiet‑режим по умолчанию.
-- Admin gifts: отзыв подарочных кредитов (`brand_credits_gifted`) без затрагивания купленных/триала.
-- UX: подсказка про владение брендом (владелец vs менеджеры через Brand Team).
-
 Примечание: в корне репозитория есть `migration_pack/` — ручные SQL-скрипты для экстренного переноса/repair (не используются рантаймом).
 
 
@@ -210,11 +253,7 @@
 ### Smart Matching / Featured — авто-обработка оплат (Stars)
 
 - `MATCH_FEAT_AUTO_APPLY_ENABLED=1` — после оплаты бот автоматически запускает Smart Matching / Featured (попросит бриф/контент).
-- `MATCH_FEAT_AUTO_APPLY_ENABLED=0` — авто-режим выключен.
-  - если `MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF=1` (рекомендуется) → бот не требует ручной обработки: после оплаты попросит бриф/контент и создаст заявку (self-service).
-  - если `MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF=0` → оплаты match/feat попадают в очередь как ORPHANED и требуют ручной обработки.
-
-- `MATCH_FEAT_SELF_SERVICE_WHEN_AUTO_OFF=1|0` — поведение при выключенном авто-режиме (см. выше).
+- `MATCH_FEAT_AUTO_APPLY_ENABLED=0` — авто-режим выключен: оплаты Smart Matching / Featured помечаются как **ORPHANED** и требуют ручной обработки в админке.
 
 ### Payments: TTL сессии оплаты (чтобы не ловить ORPHANED)
 
