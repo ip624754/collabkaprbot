@@ -5336,11 +5336,44 @@ export async function listBroadcastRecipients(audience = 'all', batchSize = 30, 
 
 export async function logBroadcastSent(broadcastId, userId, status = 'sent') {
   await pool.query(
-    `insert into broadcast_sent_log (broadcast_id, user_id, status)
-     values ($1, $2, $3)
-     on conflict (broadcast_id, user_id) do nothing`,
+    `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until)
+     values ($1, $2, $3, null)
+     on conflict (broadcast_id, user_id)
+     do update set
+       status = excluded.status,
+       retry_after_until = null,
+       sent_at = now()`,
     [Number(broadcastId), Number(userId), String(status)]
   );
+}
+
+// Broadcast per-recipient 429 deferral (so one heavy recipient doesn't stall the whole job).
+export async function logBroadcastDeferred(broadcastId, userId, retryAfterSec) {
+  const sec = Math.max(1, Math.min(3600, Number(retryAfterSec || 0) || 0));
+  await pool.query(
+    `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until)
+     values ($1, $2, 'deferred', now() + ($3 || ' seconds')::interval)
+     on conflict (broadcast_id, user_id)
+     do update set
+       status = 'deferred',
+       retry_after_until = now() + ($3 || ' seconds')::interval,
+       sent_at = now()`,
+    [Number(broadcastId), Number(userId), String(sec)]
+  );
+}
+
+export async function getNextBroadcastDeferredRetryMs(broadcastId) {
+  const r = await pool.query(
+    `select extract(epoch from min(retry_after_until)) * 1000 as ms
+     from broadcast_sent_log
+     where broadcast_id = $1
+       and status = 'deferred'
+       and retry_after_until is not null
+       and retry_after_until > now()`,
+    [Number(broadcastId)]
+  );
+  const ms = Number(r.rows[0]?.ms || 0);
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
 }
 
 export async function isBroadcastSentToUser(broadcastId, userId) {
@@ -5380,7 +5413,10 @@ export async function getActiveBroadcast() {
  */
 export async function listBroadcastUnsentRecipients(broadcastId, audience = 'all', batchSize = 25, lastUserId = 0) {
   const filter = String(audience || 'all').toLowerCase();
-  const where = ['u.id > $1', 'not exists (select 1 from broadcast_sent_log sl where sl.broadcast_id = $3 and sl.user_id = u.id)'];
+  const where = [
+    'u.id > $1',
+    'not exists (select 1 from broadcast_sent_log sl where sl.broadcast_id = $3 and sl.user_id = u.id)'
+  ];
   if (filter === 'brands') {
     where.push(`(
       exists (select 1 from brand_profiles bp where bp.user_id = u.id)
@@ -5397,7 +5433,8 @@ export async function listBroadcastUnsentRecipients(broadcastId, audience = 'all
   } else if (filter === 'managers') {
     where.push(`exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`);
   }
-  const r = await pool.query(
+  // 1) Fresh recipients (forward-only cursor, excludes any status in broadcast_sent_log).
+  const fresh = await pool.query(
     `select u.id as user_id, u.tg_id
      from users u
      where ${where.join(' and ')}
@@ -5405,7 +5442,29 @@ export async function listBroadcastUnsentRecipients(broadcastId, audience = 'all
      limit $2`,
     [Number(lastUserId), Number(batchSize), Number(broadcastId)]
   );
-  return r.rows || [];
+
+  const rows = fresh.rows || [];
+  if (rows.length >= Number(batchSize)) return rows;
+
+  // 2) If we have remaining capacity, also process due deferred recipients (retry_after has elapsed).
+  // Important: deferred recipients can have user_id <= lastUserId, so caller must treat cursor as monotonic (max).
+  const remaining = Math.max(0, Number(batchSize) - rows.length);
+  if (!remaining) return rows;
+
+  const deferred = await pool.query(
+    `select sl.user_id, u.tg_id
+     from broadcast_sent_log sl
+     join users u on u.id = sl.user_id
+     where sl.broadcast_id = $1
+       and sl.status = 'deferred'
+       and sl.retry_after_until is not null
+       and sl.retry_after_until <= now()
+     order by sl.user_id
+     limit $2`,
+    [Number(broadcastId), Number(remaining)]
+  );
+
+  return rows.concat(deferred.rows || []);
 }
 
 
