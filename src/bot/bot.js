@@ -38,6 +38,45 @@ const CONTACT_UNLOCK_COST = envInt('CONTACT_UNLOCK_COST', 1, { min: 0, max: 10 }
 const CONTACT_UNLOCK_TTL_DAYS = envInt('CONTACT_UNLOCK_TTL_DAYS', 30, { min: 1, max: 365 });
 const CONTACT_UNLOCK_TTL_SEC = CONTACT_UNLOCK_TTL_DAYS * 24 * 60 * 60;
 
+
+const BRAND_CREDITS_CACHE_TTL_SEC = envInt('BRAND_CREDITS_CACHE_TTL_SEC', 60, { min: 5, max: 3600 });
+
+async function getBrandCreditsCached(userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return 0;
+
+  const key = k(['brand_credits', uid]);
+
+  // Redis-first (cheap). Fail-open to DB.
+  try {
+    const v = await redis.get(key);
+    if (v !== null && v !== undefined) {
+      const n = Number(v);
+      if (Number.isFinite(n)) return Math.max(0, Math.trunc(n));
+    }
+  } catch {}
+
+  let n = 0;
+  try {
+    n = Number(await db.getBrandCredits(uid));
+    if (!Number.isFinite(n)) n = 0;
+    n = Math.max(0, Math.trunc(n));
+  } catch {
+    n = 0;
+  }
+
+  try { await redis.set(key, String(n), { ex: BRAND_CREDITS_CACHE_TTL_SEC }); } catch {}
+  return n;
+}
+
+async function setBrandCreditsCache(userId, credits) {
+  const uid = Number(userId || 0);
+  if (!uid) return;
+  const n = Number(credits || 0);
+  const v = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+  try { await redis.set(k(['brand_credits', uid]), String(v), { ex: BRAND_CREDITS_CACHE_TTL_SEC }); } catch {}
+}
+
 function fmtCredits(n) {
   const x = Number(n || 0);
   return `${x} ${ruPlural(x, 'кредит', 'кредита', 'кредитов')}`;
@@ -7862,7 +7901,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   let brandCredits = null;
   if (!isPreview && viewer) {
     try {
-      brandCredits = Number(await withTimeout(db.getBrandCredits(viewer.id), 2500, 'brand.credits'));
+      brandCredits = Number(await withTimeout(getBrandCreditsCached(viewer.id), 2500, 'brand.credits'));
       if (!Number.isFinite(brandCredits)) brandCredits = 0;
     } catch {
       brandCredits = null;
@@ -7876,11 +7915,26 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   // Contacts can be revealed via paid unlock (Brand Pass credits) and cached in Redis.
   let unlocked = false;
   if (!isPreview && viewer) {
+    const key = k(['wsp_contact', wsId, viewer.id]);
+    let redisOk = true;
     try {
-      const key = k(['wsp_contact', wsId, viewer.id]);
       unlocked = !!(await redis.get(key));
     } catch {
       unlocked = false;
+      redisOk = false;
+    }
+
+    // DB fallback ONLY when Redis is unavailable.
+    if (!unlocked && !redisOk) {
+      try {
+        unlocked = !!(await withTimeout(db.isWorkspaceContactsUnlocked(viewer.id, wsId), 2500, 'wsp.unlock.db'));
+      } catch {
+        unlocked = false;
+      }
+      // Heal Redis cache best-effort (if it comes back).
+      if (unlocked) {
+        try { await redis.set(key, 1, { ex: CONTACT_UNLOCK_TTL_SEC }); } catch {}
+      }
     }
   }
   const revealContacts = !!isPreview || !!unlocked || !!opts?.revealContacts;
@@ -8625,17 +8679,31 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
   // unless contacts were unlocked for this brand on this workspace.
   let contactsUnlocked = false;
   if (realWsId && ws) {
+    const key = k(['wsp_contact', realWsId, brandUserId]);
+    let redisOk = true;
     try {
-      const key = k(['wsp_contact', realWsId, brandUserId]);
       contactsUnlocked = !!(await redis.get(key));
     } catch {
       contactsUnlocked = false;
+      redisOk = false;
+    }
+
+    // DB fallback ONLY when Redis is unavailable.
+    if (!contactsUnlocked && !redisOk) {
+      try {
+        contactsUnlocked = !!(await withTimeout(db.isWorkspaceContactsUnlocked(brandUserId, realWsId), 2500, 'wsp.unlock.db'));
+      } catch {
+        contactsUnlocked = false;
+      }
+      if (contactsUnlocked) {
+        try { await redis.set(key, 1, { ex: CONTACT_UNLOCK_TTL_SEC }); } catch {}
+      }
     }
   }
   const channelShown = (ws?.channel_username && !contactsUnlocked) ? '🔒 скрыто' : channel;
 
   let credits = 0;
-  try { credits = Number(await db.getBrandCredits(brandUserId)); } catch {}
+  try { credits = Number(await withTimeout(getBrandCreditsCached(brandUserId), 2500, 'brand.credits')); } catch {}
 
   const needContacts = Number(CONTACT_UNLOCK_COST || 0);
   const needsContactsTopup = needContacts > 0 && Number(credits || 0) < needContacts;
@@ -10845,7 +10913,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
   const isCurator = ownerUserId ? await db.hasAnyCuratorRole(ownerUserId) : false;
   const wsNum = Number(wsId || 0);
   if (wsNum === 0) {
-    const credits = await db.getBrandCredits(ownerUserId);
+    const credits = await getBrandCreditsCached(ownerUserId);
     const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(ownerUserId) : 0;
     const planRow = await db.getBrandPlan(ownerUserId);
     const active = await db.isBrandPlanActive(ownerUserId);
@@ -12469,7 +12537,7 @@ function isBrandPlanRowActive(planRow) {
 }
 
 async function renderBrandPassTopup(ctx, userId, wsId) {
-  const credits = await db.getBrandCredits(userId);
+  const credits = await getBrandCreditsCached(userId);
   const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(userId) : 0;
   const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
   const kb = new InlineKeyboard();
@@ -12504,7 +12572,7 @@ async function renderBrandPass(ctx, userId, wsId) {
 async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
   const planRow = await db.getBrandPlan(userId);
   const active = await db.isBrandPlanActive(userId);
-  const credits = await db.getBrandCredits(userId);
+  const credits = await getBrandCreditsCached(userId);
   const status = brandPlanStatusText(planRow, active);
   let paidAuto = Boolean(CFG.MATCH_FEAT_AUTO_APPLY_ENABLED);
   if (paidAuto) paidAuto = await getMatchFeatAutoApplyRuntime();
@@ -19821,16 +19889,33 @@ if (p.a === 'a:wsp_preview') {
       const backCb = fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : `a:wsp_open|ws:${wsId}`;
 
       // already unlocked?
-      try {
+      {
         const key = k(['wsp_contact', wsId, u.id]);
-        if (await redis.get(key)) {
-          try { await ctx.answerCallbackQuery({ text: 'Уже открыто ✅' }); } catch {}
-          await renderWsPublicProfile(ctx, wsId, { revealContacts: true, hideApply: fromLead, backCb: backCb, contactCbExtra: ctxExtra, dialogCb: fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : '' });
-          return;
+        let redisOk = true;
+        try {
+          if (await redis.get(key)) {
+            try { await ctx.answerCallbackQuery({ text: 'Уже открыто ✅' }); } catch {}
+            await renderWsPublicProfile(ctx, wsId, { revealContacts: true, hideApply: fromLead, backCb: backCb, contactCbExtra: ctxExtra, dialogCb: fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : '' });
+            return;
+          }
+        } catch {
+          redisOk = false;
         }
-      } catch {}
 
-      const bal = await db.getBrandCredits(u.id);
+        // DB fallback ONLY when Redis is unavailable.
+        if (!redisOk) {
+          try {
+            if (await withTimeout(db.isWorkspaceContactsUnlocked(u.id, wsId), 2500, 'wsp.unlock.db')) {
+              try { await redis.set(key, 1, { ex: CONTACT_UNLOCK_TTL_SEC }); } catch {}
+              try { await ctx.answerCallbackQuery({ text: 'Уже открыто ✅' }); } catch {}
+              await renderWsPublicProfile(ctx, wsId, { revealContacts: true, hideApply: fromLead, backCb: backCb, contactCbExtra: ctxExtra, dialogCb: fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : '' });
+              return;
+            }
+          } catch {}
+        }
+      }
+
+      const bal = await getBrandCreditsCached(u.id);
       const kb = new InlineKeyboard();
       const balNum = Number(bal || 0);
       if (CONTACT_UNLOCK_COST <= 0 || balNum >= CONTACT_UNLOCK_COST) {
@@ -19903,19 +19988,37 @@ ${tail}`;
         }
       } catch {}
 
-      const left = await db.spendBrandCredits(u.id, CONTACT_UNLOCK_COST);
-      if (left === null) {
-        try { await ctx.answerCallbackQuery({ text: 'Нужны кредиты. Оформи Brand Plan.', show_alert: true }); } catch {}
-        await renderBrandPass(ctx, u.id, 0);
+      const rUnlock = await db.unlockWorkspaceContactsWithCredits(u.id, wsId, CONTACT_UNLOCK_COST, CONTACT_UNLOCK_TTL_SEC);
+      if (!rUnlock?.ok) {
+        if (rUnlock?.needPaywall) {
+          try { await ctx.answerCallbackQuery({ text: 'Нужны кредиты. Оформи Brand Plan.', show_alert: true }); } catch {}
+          await renderBrandPass(ctx, u.id, 0);
+          return;
+        }
+        try { await ctx.answerCallbackQuery({ text: 'Не получилось открыть контакты. Попробуй ещё раз.', show_alert: true }); } catch {}
         return;
       }
 
+      const left = rUnlock.left;
+      const charged = !!rUnlock.charged;
+
+      // Best-effort: keep Redis cache in sync for UI (reduces Neon reads).
+      if (charged && left !== null && left !== undefined) {
+        try { await setBrandCreditsCache(u.id, left); } catch {}
+      }
+
+      // Cache unlock in Redis (best-effort). Even if not charged, this heals missing keys.
       try {
         const key = k(['wsp_contact', wsId, u.id]);
         await redis.set(key, 1, { ex: CONTACT_UNLOCK_TTL_SEC });
       } catch {}
 
-      try { await ctx.answerCallbackQuery({ text: `✅ Контакты открыты на ${CONTACT_UNLOCK_TTL_DAYS} ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}. Баланс: ${left}`, show_alert: true }); } catch {}
+      try {
+        const msg = charged
+          ? `✅ Контакты открыты на ${CONTACT_UNLOCK_TTL_DAYS} ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}. Баланс: ${left}`
+          : 'Уже открыто ✅';
+        await ctx.answerCallbackQuery({ text: msg, show_alert: true });
+      } catch {}
       await renderWsPublicProfile(ctx, wsId, { revealContacts: true, ...roOpts });
 
       // Brand-facing: send a compact contact pack right after paid unlock
