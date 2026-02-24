@@ -3318,6 +3318,43 @@ export async function getPaymentById(paymentId) {
   return r.rows[0] || null;
 }
 
+export async function getPaymentByTelegramChargeId(telegramPaymentChargeId) {
+  const cid = String(telegramPaymentChargeId || '').trim();
+  if (!cid) return null;
+  const r = await pool.query(`select * from payments where telegram_payment_charge_id=$1 limit 1`, [cid]);
+  return r.rows[0] || null;
+}
+
+/**
+ * Claim a payment for fulfillment to prevent duplicate apply on Telegram retries.
+ * Returns the updated row if claimed; null if already APPLIED or currently APPLYING.
+ *
+ * Safety: allow re-claiming a stale APPLYING payment after a long timeout (serverless crash).
+ */
+export async function claimPaymentApplying(paymentId, applyingByUserId) {
+  const pid = Number(paymentId);
+  const uid = Number(applyingByUserId || 0) || null;
+  if (!pid) return null;
+
+  const r = await pool.query(
+    `update payments
+        set status='APPLYING',
+            applying_by_user_id=$2,
+            applying_at=now(),
+            updated_at=now()
+      where id=$1
+        and status <> 'APPLIED'
+        and (
+              status in ('RECEIVED','ORPHANED','ERROR')
+           or (status='APPLYING' and applying_at is not null and applying_at < now() - interval '20 minutes')
+        )
+      returning *`,
+    [pid, uid]
+  );
+
+  return r.rows[0] || null;
+}
+
 export async function setPaymentStatus(paymentId, status, note = null) {
   const st = String(status || 'ORPHANED').toUpperCase();
   const r = await pool.query(
