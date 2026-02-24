@@ -12,9 +12,9 @@
    - `currency`,
    - `total_amount` (сумма должна соответствовать продукту/плану).
 2) В `successful_payment` делаем **повторную** валидацию (защита от повторов/краевых кейсов).
-3) Любая auto-heal логика (cron / fallback apply) работает **fail-safe**:
+3) Любая auto-heal логика (cron / fallback apply) работает **fail-safe** и использует ту же строгую валидацию, что и `pre_checkout_query`/`successful_payment`:
    - если валидация не проходит → **не применять**,
-   - пометить как `ORPHANED` / `validation_failed` + ops alert.
+   - пометить как `ORPHANED` / `manual_required` / `validation_failed` + ops alert.
 4) Ручной apply из админки:
    - запрещён при невалидной сумме/валюте/пейлоаде,
    - фиксируем причину в audit/логах.
@@ -27,6 +27,9 @@
    - используем **PG advisory lock** на пару `(brand_user_id, workspace_id)`,
    - делаем атомарную транзакцию: *activate unlock* + *списание кредита*.
 6) Повторный клик внутри окна unlock **не списывает** повторно (0 rows → no charge).
+7) Anti-bypass в текстах профиля/описания (до unlock):
+   - маскируем `http(s)://`, `t.me/*`, email, `@handle`, **телефоны** (как текст, так и entity-linkify).
+
 7) Redis — только быстрый кеш/TTL/UX:
    - при деградации Redis используем DB fallback **только для проверки unlock**,
    - при восстановлении Redis — best-effort “healing” ключей.
