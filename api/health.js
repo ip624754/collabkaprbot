@@ -71,21 +71,69 @@ export default async function handler(_req, res) {
       redis.get(k(['cron', 'broadcast_tick', 'last_run'])),
     ]);
 
-    // Optional: show current broadcast 429 cooldown (Redis-only; no DB).
-    // Useful even if the last tick didn't run in "cooldown" mode yet.
-    let broadcast = { cooldown_until: null, retry_after_sec: null, broadcast_id: null };
+    // Optional: show current broadcast 429 cooldown + counters (Redis-only; no DB).
+    // Global keys exist even when we early-exit before DB polling.
+    let broadcast = {
+      cooldown_until: null,
+      retry_after_sec: null,
+      broadcast_id: null,
+      cooldown_source: null,
+      last_429_at: null,
+      last_429_reason: null,
+      counters: null,
+    };
     try {
-      const bid = Number(broadcastTick?.broadcast_id || 0);
-      if (bid > 0) {
-        const raw = await redis.get(k(['broadcast', bid, 'cooldown_until']));
-        const untilMs = Number(raw) || 0;
-        broadcast.broadcast_id = bid;
-        if (untilMs > 0) {
-          broadcast.cooldown_until = new Date(untilMs).toISOString();
-          if (untilMs > Date.now()) {
-            broadcast.retry_after_sec = Math.max(1, Math.ceil((untilMs - Date.now()) / 1000));
-          } else {
-            broadcast.retry_after_sec = 0;
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const [untilRaw, bidRaw, lastAt, lastReason, setCnt, skipCnt] = await Promise.all([
+        redis.get(k(['broadcast', 'cooldown_until'])),
+        redis.get(k(['broadcast', 'cooldown_broadcast_id'])),
+        redis.get(k(['broadcast', 'last_429_at'])),
+        redis.get(k(['broadcast', 'last_429_reason'])),
+        redis.get(k(['broadcast', 'cooldown_set', 'd', day])),
+        redis.get(k(['broadcast', 'cooldown_skip', 'd', day])),
+      ]);
+
+      const untilMs = Number(untilRaw) || 0;
+      const bid = Number(bidRaw) || 0;
+
+      broadcast.broadcast_id = bid > 0 ? bid : null;
+      broadcast.last_429_at = lastAt || null;
+      broadcast.last_429_reason = lastReason || null;
+      broadcast.counters = {
+        day,
+        cooldown_set: Number(setCnt) || 0,
+        cooldown_skip: Number(skipCnt) || 0,
+      };
+
+      if (untilMs > 0) {
+        broadcast.cooldown_source = 'redis_global';
+        broadcast.cooldown_until = new Date(untilMs).toISOString();
+        if (untilMs > Date.now()) {
+          broadcast.retry_after_sec = Math.max(
+            1,
+            Math.ceil((untilMs - Date.now()) / 1000)
+          );
+        } else {
+          broadcast.retry_after_sec = 0;
+        }
+      } else {
+        // Fallback: per-broadcast key (legacy; useful if global key expired).
+        const bid2 = Number(broadcastTick?.broadcast_id || 0);
+        if (bid2 > 0) {
+          const raw = await redis.get(k(['broadcast', bid2, 'cooldown_until']));
+          const untilMs2 = Number(raw) || 0;
+          broadcast.broadcast_id = bid2;
+          if (untilMs2 > 0) {
+            broadcast.cooldown_source = 'redis_per_broadcast';
+            broadcast.cooldown_until = new Date(untilMs2).toISOString();
+            if (untilMs2 > Date.now()) {
+              broadcast.retry_after_sec = Math.max(
+                1,
+                Math.ceil((untilMs2 - Date.now()) / 1000)
+              );
+            } else {
+              broadcast.retry_after_sec = 0;
+            }
           }
         }
       }
