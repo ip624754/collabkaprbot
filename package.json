@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node scripts/dev-polling.js",
     "migrate": "node migrations/run.js",
+    "test:redact": "node scripts/test-redactContactsInText.js",
     "zip": "bash scripts/zip.sh"
   },
   "dependencies": {
