@@ -15,6 +15,7 @@ import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersD
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
 import { redactContactsInText } from './redactContacts.js';
+import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 
 let BOT;
 
@@ -18693,42 +18694,13 @@ bot.on('message:successful_payment', async (ctx) => {
       'a:home_hub': 'a:home',
     };
     if (_aliasA[p.a]) p.a = _aliasA[p.a];
-
-    // Fail-closed middleware (Redis degraded mode) for mutating callbacks.
+    // Fail-closed middleware (Redis degraded mode) for dangerous callbacks.
+    // Source of truth: src/bot/actionRegistry.js (no suffix heuristics).
+    //
     // Rationale: when Redis is down we must not perform dangerous mutations that rely on ephemeral state.
-    // Exceptions are strictly allowlisted (DB-truth / safe-by-design).
-    const _MUTATION_ALLOWLIST_NO_REDIS = new Set([
-      'a:wsp_contact_unlock',
-      'a:admin_pay_apply',
-      'a:admin_pay_autoheal',
-    ]);
-    const _isMutatingActionKey = (a) => {
-      const s = String(a || '');
-      if (!s.startsWith('a:')) return false;
-      if (_MUTATION_ALLOWLIST_NO_REDIS.has(s)) return false;
-      // Most mutating actions follow *_do / *_set / *_apply / *_del / *_assign patterns.
-      return (
-        s.includes('_do') ||
-        s.includes('_set') ||
-        s.includes('_save') ||
-        s.includes('_del') ||
-        s.includes('_delete') ||
-        s.includes('_assign') ||
-        s.includes('_apply') ||
-        s.includes('_autoheal') ||
-        s.includes('_publish') ||
-        s.includes('_send') ||
-        s.includes('_reply') ||
-        s.includes('_edit') ||
-        s.includes('_create') ||
-        s.includes('_add') ||
-        s.includes('_remove') ||
-        s.includes('_ban') ||
-        s.includes('_revoke') ||
-        s.includes('_gift')
-      );
-    };
-    if (_isMutatingActionKey(p.a)) {
+    // Some actions are safe-by-design (DB-truth) and are allowlisted via ACTION_REGISTRY.guard = NONE.
+    const _meta = getActionMeta(p.a);
+    if (_meta?.guard === ACTION_GUARD.REQUIRE_REDIS) {
       try {
         // Lightweight health read (no writes) to detect Redis outage.
         await redis.get(k(['health', 'redis_cb_guard']));
