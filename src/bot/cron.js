@@ -1,6 +1,6 @@
 import { redis, k, acquireLock, releaseLock } from '../lib/redis.js';
 import * as db from '../db/queries.js';
-import { getBot } from './bot.js';
+import { getBot, _validateStarsPaymentStrict } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
@@ -407,6 +407,22 @@ async function autoHealOrphanedPayments() {
 
   for (const r of cand) {
     try {
+      // Hardening: validate payload/amount/currency against current catalog before fallback apply.
+      // If it doesn't validate, auto-heal must stop retrying (manual review required).
+      const v = await _validateStarsPaymentStrict({
+        payload: String(r.invoice_payload || ''),
+        currency: String(r.currency || 'XTR'),
+        totalAmount: Number(r.total_amount || 0),
+        payerUserId: Number(r.user_id || 0) || null,
+      });
+      if (!v || !v.ok) {
+        try {
+          await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${String(v?.reason || 'validation_failed')}`);
+        } catch {}
+        skipped += 1;
+        continue;
+      }
+
       const fb = await applyPaymentFallbackNoSession({
         paymentId: Number(r.id),
         paymentUserId: Number(r.user_id),
@@ -439,6 +455,13 @@ async function autoHealOrphanedPayments() {
         }
       } else {
         skipped += 1;
+        // Avoid retry loop for permanent non-applied cases.
+        const rr = String(fb?.reason || '');
+        if (rr === 'unsupported_payload' || rr === 'missing_userid_or_wsid' || rr === 'bad_input' || rr === 'user_mismatch') {
+          try {
+            await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`);
+          } catch {}
+        }
       }
     } catch (e) {
       failed += 1;

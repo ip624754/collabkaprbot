@@ -145,6 +145,24 @@ function redactContactsInText(raw) {
     s = s.replace(emailRe, '🔒 email скрыт');
   }
 
+
+  // phone numbers (mask only when it really looks like a phone)
+  const phoneCandRe = /(?:\+?\d[\d\s().\-]{7,}\d)/g;
+  if (phoneCandRe.test(s)) {
+    s = s.replace(phoneCandRe, (m) => {
+      const raw = String(m || '');
+      const digits = raw.replace(/\D/g, '');
+      if (digits.length < 9 || digits.length > 15) return raw;
+      const hasSep = /[\s().\-]/.test(raw);
+      const looksRuMobile = (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8')));
+      const ok = looksRuMobile || raw.includes('+') || hasSep || raw.includes('(');
+      if (!ok) return raw;
+      redacted = true;
+      return '🔒 номер скрыт';
+    });
+  }
+
+
   // @handles (telegram/instagram-style)
   const atRe = /(^|[^\w@])@([a-z0-9_]{3,32})\b/gi;
   if (atRe.test(s)) {
@@ -911,7 +929,7 @@ async function _expectedStarsForInvoicePayload(payload) {
   return { ok: false, reason: 'unknown_kind', expected: 0, kind };
 }
 
-async function _validateStarsPaymentStrict({ payload, currency, totalAmount, payerUserId = null }) {
+export async function _validateStarsPaymentStrict({ payload, currency, totalAmount, payerUserId = null }) {
   const cur = String(currency || 'XTR').toUpperCase();
   if (cur !== 'XTR') return { ok: false, reason: 'bad_currency', expected: 0, kind: _safeKindFromPayload(payload) };
 
