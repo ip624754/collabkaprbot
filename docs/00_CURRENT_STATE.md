@@ -88,7 +88,10 @@
 - Финальное сообщение “✅ Рассылка завершена” теперь **с кнопками** (нет тупика UX).
 
 Надёжность / rate-limit:
-- На `429 Too Many Requests` курсор **не сдвигается** (получатель не теряется).
+- На `429 Too Many Requests` получатель **не теряется** и рассылка **не залипает** на одном uid:
+  - пишем в DB `broadcast_sent_log.status='deferred'` + `retry_after_until`
+  - двигаем scan-курсор вперёд (чтобы один “тяжёлый” получатель не стопорил весь батч)
+  - deferred получатели догоняются позже, когда `retry_after_until <= now()`
 - Ставим **Redis cooldown** на `retry_after`.
   - per-broadcast: `broadcast:<id>:cooldown_until`
   - global: `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id` (чтобы cron мог делать early-exit без DB polling)

@@ -61,7 +61,7 @@
 ## Что нового в текущем snapshot (2026-02-22)
 - `/api/health`: cron last_run + audit throttle counters (Redis-only) + видимый **broadcast cooldown** после 429.
 - Экономия Neon: audit write-shedding (`AUDIT_DB_THROTTLE_*`) + готовые профили (`docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`).
-- Broadcast надёжность: курсор **не сдвигается** на 429, есть **Redis cooldown** и отображение его в `/api/health`.
+- Broadcast надёжность: на 429 получатель **не теряется** (DB `deferred` + `retry_after_until`), scan-курсор идёт дальше, есть **Redis cooldown** + счётчики в `/api/health`.
 - Cron safety: **token-based Redis locks** (safe unlock) + SQL atomic guards на ключевых переходах (ended/publish/expire, broadcast transitions).
 - Official publish (@collabka_offers): анти‑дубли **token‑lock + DB‑reserve `PUBLISHING`** (stale rescue) + runbook (`docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`).
 - Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*` + маркетинг‑шаблоны.
