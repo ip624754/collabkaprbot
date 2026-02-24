@@ -1,8 +1,16 @@
-# 00 — CURRENT STATE (Collabka PR) — 2026-02-24
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-02-24
 
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
 ---
+
+## 0) Security invariants (must-not-break)
+См. `01_SECURITY_INVARIANTS.md`. Ключевое на текущий момент:
+- Payments: валидация payload/amount/currency в `pre_checkout` и `successful_payment` (fail-safe apply).
+- Contacts unlock: DB truth + advisory lock (exactly-once), Redis только кеш/TTL.
+- Ownership: safe-getters с ownership внутри SQL для лидов/заявок и опасных действий.
+
+
 
 ## 1) Платформа и компоненты
 
@@ -287,8 +295,6 @@
   - `db.getBrandApplicationForActor(appId, actorUserId)`
 - Действия с глобальным эффектом по лидам (assign / soft-delete) дополнительно ограничены ролями: <b>owner/curator/admin</b>.
 - Покупка размещения в офиц.канале (`a:off_buy`) получает оффер только через `db.getBarterOfferForOwner(ownerUserId, offerId)` (ownership в SQL).
-
-См. также: внутренний разбор внешней рецензии по fail-open/монетизации → `docs/20_SECURITY_REVIEW_FAIL_OPEN_MONETIZATION.md`. 
 
 ---
 

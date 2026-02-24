@@ -19,3 +19,6 @@
 16) Rolling-upgrade: любые новые колонки/таблицы — с graceful fallback по `42703/42P01`, код можно деплоить до миграции.
 17) Telegram rate-limit: 429 → Redis cooldown + возобновление; никаких «дожимов»/ретраев в цикле в одном запросе.
 18) `callback_data` ≤ 64 байта: держим ключи короткими; если нужен контекст — токен → payload в Redis (TTL).
+
+## См. также
+- `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (payments, кредиты/разлок, ownership-in-SQL, deep-links, cron).
