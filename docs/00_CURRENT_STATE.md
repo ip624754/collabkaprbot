@@ -274,6 +274,20 @@
 - `PAYMENTS_FALLBACK_APPLY_ENABLED=1` — если Redis-сессия оплаты `pay_*` истекла, бот всё равно применит оплату по `invoice_payload` (без ручной очереди).
 - `PAYMENTS_FALLBACK_APPLY_ENABLED=0` — строгий режим: без `pay_*` сессии оплата станет ORPHANED `missing_session`.
 
+### Payments hardening: защита от неверных счетов/сумм
+
+- `pre_checkout_query` теперь **валидирует** `invoice_payload + total_amount + currency` до списания Stars.
+- На `successful_payment` повторная валидация (защита от ретраев/краевых кейсов) → при несоответствии статус **ORPHANED** + алерт в OPS.
+- Fallback apply (cron/админка) и ручной Apply в админке **блокируются**, если сумма/валюта не совпадают с ожидаемыми для продукта.
+
+### Ownership-in-SQL (anti-bypass) для чувствительных сущностей
+
+- Для лидов/заявок больше не используем паттерн «достали по id → потом проверили». В callback-router применяются safe-getters:
+  - `db.getBrandLeadForActor(leadId, actorUserId)`
+  - `db.getBrandApplicationForActor(appId, actorUserId)`
+- Действия с глобальным эффектом по лидам (assign / soft-delete) дополнительно ограничены ролями: <b>owner/curator/admin</b>.
+- Покупка размещения в офиц.канале (`a:off_buy`) получает оффер только через `db.getBarterOfferForOwner(ownerUserId, offerId)` (ownership в SQL).
+
 ---
 
 ## Admin: подарки и отзыв подписок
