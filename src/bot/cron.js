@@ -423,6 +423,13 @@ async function autoHealOrphanedPayments() {
         continue;
       }
 
+      // Claim fulfillment in DB to prevent double-apply (cron parallelism / retries).
+      const claimed = await db.claimPaymentApplying(Number(r.id), Number(r.user_id));
+      if (!claimed) {
+        skipped += 1;
+        continue;
+      }
+
       const fb = await applyPaymentFallbackNoSession({
         paymentId: Number(r.id),
         paymentUserId: Number(r.user_id),
