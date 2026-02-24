@@ -2034,15 +2034,14 @@ export async function restoreBarterOfferForOwner(offerId, ownerUserId) {
 export async function getBarterOfferForOwner(ownerUserId, offerId) {
   const r = await pool.query(
     `select o.*, w.owner_user_id
-     from barter_offers o
-     join workspaces w on w.id = o.workspace_id
-     where o.id=$1`,
-    [offerId]
+       from barter_offers o
+       join workspaces w on w.id = o.workspace_id
+      where o.id = $1
+        and w.owner_user_id = $2
+      limit 1`,
+    [Number(offerId), Number(ownerUserId)]
   );
-  const row = r.rows[0];
-  if (!row) return null;
-  if (Number(row.owner_user_id) !== Number(ownerUserId)) return null;
-  return row;
+  return r.rows[0] || null;
 }
 
 export async function updateBarterOffer(offerId, patch) {
@@ -4423,6 +4422,47 @@ export async function getBrandLeadById(leadId) {
   return r.rows[0] || null;
 }
 
+// Safe getter: returns lead only if actor has access (owner/curator/brand/brand-manager).
+// This prevents "fetch by id then check" footguns in bot logic.
+export async function getBrandLeadForActor(leadId, actorUserId) {
+  const id = Number(leadId || 0);
+  const uId = Number(actorUserId || 0);
+  if (!id || !uId) return null;
+
+  const r = await pool.query(
+    `select
+        l.*,
+        ws.title as workspace_title,
+        ws.channel_username as workspace_username,
+        ws.owner_user_id as workspace_owner_user_id
+     from brand_leads l
+     join workspaces ws on ws.id = l.workspace_id
+     left join workspace_settings ss on ss.workspace_id = ws.id
+     where l.id = $1
+       and not (coalesce(l.deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($2::bigint))
+       and (
+         ws.owner_user_id = $2
+         or l.brand_user_id = $2
+         or exists (
+           select 1 from brand_managers bm
+            where bm.brand_user_id = l.brand_user_id
+              and bm.manager_user_id = $2
+         )
+         or (
+           coalesce(ss.curator_enabled, false) = true
+           and exists (
+             select 1 from workspace_curators c
+              where c.workspace_id = ws.id
+                and c.user_id = $2
+           )
+         )
+       )
+     limit 1`,
+    [id, uId]
+  );
+  return r.rows[0] || null;
+}
+
 export async function countBrandLeadsByStatus(workspaceId) {
   const r = await pool.query(
     `select status, count(*)::int as cnt
@@ -4748,6 +4788,32 @@ export async function createBrandApplication({
 
 export async function getBrandApplicationById(appId) {
   const r = await pool.query(`select * from brand_applications where id=$1`, [Number(appId)]);
+  return r.rows[0] || null;
+}
+
+// Safe getter: returns application only if actor is brand owner/manager or the creator.
+export async function getBrandApplicationForActor(appId, actorUserId) {
+  const id = Number(appId || 0);
+  const uId = Number(actorUserId || 0);
+  if (!id || !uId) return null;
+
+  const r = await pool.query(
+    `select a.*
+       from brand_applications a
+      where a.id = $1
+        and not (coalesce(a.deleted_by_user_ids, '[]'::jsonb) @> to_jsonb($2::bigint))
+        and (
+          a.creator_user_id = $2
+          or a.brand_user_id = $2
+          or exists (
+            select 1 from brand_managers bm
+             where bm.brand_user_id = a.brand_user_id
+               and bm.manager_user_id = $2
+          )
+        )
+      limit 1`,
+    [id, uId]
+  );
   return r.rows[0] || null;
 }
 
