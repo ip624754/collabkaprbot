@@ -549,6 +549,140 @@ export async function spendBrandCredits(userId, cost = 1) {
   }
 }
 
+// ----------------------------------------
+// Brand Pass: workspace contacts unlock
+// ----------------------------------------
+
+// DB fallback for contacts unlock state.
+// IMPORTANT: callers should only use this when Redis is unavailable,
+// to avoid adding Neon reads on hot UI paths.
+export async function isWorkspaceContactsUnlocked(brandUserId, workspaceId) {
+  const uid = Number(brandUserId || 0);
+  const wsId = Number(workspaceId || 0);
+  if (!uid || !wsId) return false;
+
+  try {
+    const r = await pool.query(
+      `select 1
+       from brand_contact_unlocks
+       where brand_user_id=$1 and workspace_id=$2 and unlocked_until > now()
+       limit 1`,
+      [uid, wsId]
+    );
+    return !!r.rowCount;
+  } catch (e) {
+    // 42P01 = undefined_table (rolling upgrade safety)
+    if (e && e.code === '42P01') return false;
+    throw e;
+  }
+}
+
+// Exactly-once charging for contacts unlock:
+// - If unlock is already active => charged=false
+// - If unlock is expired/missing => charge credits (if cost>0) and activate unlock
+// Uses PG advisory lock so it stays safe even when Redis is down.
+export async function unlockWorkspaceContactsWithCredits(brandUserId, workspaceId, cost = 1, ttlSec = 30 * 24 * 60 * 60) {
+  const uid = Number(brandUserId || 0);
+  const wsId = Number(workspaceId || 0);
+  const c = Math.max(0, Math.floor(Number(cost) || 0));
+  const ttl = Math.max(60, Math.floor(Number(ttlSec) || 0));
+  if (!uid || !wsId) return { ok: false, error: 'bad_args' };
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+
+    // Per-(brand,workspace) exactly-once guard even with Redis degradation.
+    await client.query(
+      `select pg_advisory_xact_lock(hashtext($1))`,
+      [`wsp_contact:${wsId}:${uid}`]
+    );
+
+    // Activate unlock only if it is missing/expired. If still active => no-op (0 rows).
+    let activated = false;
+    let unlockedUntil = null;
+    try {
+      const rUnlock = await client.query(
+        `insert into brand_contact_unlocks (brand_user_id, workspace_id, unlocked_until)
+         values ($1, $2, now() + ($3::text || ' seconds')::interval)
+         on conflict (brand_user_id, workspace_id)
+         do update set unlocked_until = excluded.unlocked_until, updated_at = now()
+         where brand_contact_unlocks.unlocked_until < now()
+         returning unlocked_until`,
+        [uid, wsId, ttl]
+      );
+      activated = rUnlock.rowCount > 0;
+      unlockedUntil = rUnlock.rows[0]?.unlocked_until ?? null;
+    } catch (e) {
+      // rolling upgrade safety
+      if (e && e.code === '42P01') {
+        await client.query('rollback');
+
+        // Fallback to legacy behavior (no DB unlock tracking).
+        const left = c > 0 ? await spendBrandCredits(uid, c) : 0;
+        if (c > 0 && left === null) return { ok: false, needPaywall: true };
+        return { ok: true, charged: c > 0, left: left ?? 0, unlockedUntil: null, legacy: true };
+      }
+      throw e;
+    }
+
+    if (!activated) {
+      await client.query('commit');
+      return { ok: true, charged: false, left: null, unlockedUntil: null };
+    }
+
+    // Free unlock: keep the DB record but don't charge.
+    if (c <= 0) {
+      await client.query('commit');
+      return { ok: true, charged: false, left: 0, unlockedUntil };
+    }
+
+    // Spend credits atomically within the same TX.
+    let rSpend;
+    try {
+      rSpend = await client.query(
+        `update users
+         set brand_credits = brand_credits - $2,
+             brand_credits_spent = brand_credits_spent + $2,
+             brand_credits_gifted = greatest(0, brand_credits_gifted - $2),
+             updated_at=now()
+         where id=$1 and brand_credits >= $2
+         returning brand_credits`,
+        [uid, c]
+      );
+    } catch (e) {
+      // 42703 = undefined_column (brand_credits_gifted rolling upgrade)
+      if (e && e.code === '42703') {
+        rSpend = await client.query(
+          `update users
+           set brand_credits = brand_credits - $2,
+               brand_credits_spent = brand_credits_spent + $2,
+               updated_at=now()
+           where id=$1 and brand_credits >= $2
+           returning brand_credits`,
+          [uid, c]
+        );
+      } else {
+        throw e;
+      }
+    }
+
+    if (!rSpend.rowCount) {
+      await client.query('rollback');
+      return { ok: false, needPaywall: true };
+    }
+
+    const left = Number(rSpend.rows[0]?.brand_credits ?? 0);
+    await client.query('commit');
+    return { ok: true, charged: true, left, unlockedUntil };
+  } catch (e) {
+    try { await client.query('rollback'); } catch {}
+    throw e;
+  } finally {
+    try { client.release(); } catch {}
+  }
+}
+
 // -----------------------------
 // Intro retry credits (fairness)
 // -----------------------------
