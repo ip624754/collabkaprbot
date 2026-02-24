@@ -53,6 +53,72 @@ function brandPassBalanceLineHtml(credits) {
   return `💳 Кредиты: <b>${escapeHtml(fmtCredits(x))}</b>`;
 }
 
+function brandPassUnlocksLineHtml(credits) {
+  const have = Number(credits || 0);
+  const need = Number(CONTACT_UNLOCK_COST || 0);
+  if (!Number.isFinite(have) || have < 0) return '';
+  if (!Number.isFinite(need) || need <= 0) return `🔓 Разлок контактов: <b>∞</b>`;
+  const n = Math.max(0, Math.floor(have / Math.max(1, need)));
+  return `🔓 Разлок контактов: <b>${escapeHtml(String(n))}</b>`;
+}
+
+function brandPassTrialLineHtml(credits) {
+  const trial = Math.max(0, Number(CFG.INTRO_TRIAL_CREDITS || 0));
+  const have = Math.max(0, Number(credits || 0));
+  if (!trial) return '';
+  // Show only around initial trial window to keep UX clean once brand has real top-ups.
+  if (have > trial) return '';
+  return `🎁 Осталось (тест): <b>${escapeHtml(String(have))}/${escapeHtml(String(trial))}</b>`;
+}
+
+function redactContactsInText(raw) {
+  const s0 = String(raw || '');
+  if (!s0) return { text: s0, redacted: false };
+
+  let s = s0;
+  let redacted = false;
+
+  // URLs
+  const urlRe = /\bhttps?:\/\/[^\s<>()]+/gi;
+  if (urlRe.test(s)) {
+    redacted = true;
+    s = s.replace(urlRe, '🔒 ссылка скрыта');
+  }
+
+  // t.me / telegram.me
+  const tmeRe = /\b(?:t\.me|telegram\.me)\/[\w\-./?=&%+#]+/gi;
+  if (tmeRe.test(s)) {
+    redacted = true;
+    s = s.replace(tmeRe, '🔒 ссылка скрыта');
+  }
+
+  // common social domains without protocol
+  const socialRe = /\b(?:instagram\.com|instagr\.am|vk\.com|youtube\.com|youtu\.be)\/[^\s<>()]+/gi;
+  if (socialRe.test(s)) {
+    redacted = true;
+    s = s.replace(socialRe, '🔒 ссылка скрыта');
+  }
+
+  // emails
+  const emailRe = /\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi;
+  if (emailRe.test(s)) {
+    redacted = true;
+    s = s.replace(emailRe, '🔒 email скрыт');
+  }
+
+  // @handles (telegram/instagram-style)
+  const atRe = /(^|[^\w@])@([a-z0-9_]{3,32})\b/gi;
+  if (atRe.test(s)) {
+    redacted = true;
+    s = s.replace(atRe, (m, p1) => `${p1}🔒@скрыто`);
+  }
+
+  // Prevent accidental linkification by Telegram entities.
+  if (redacted) s = deLinkifyText(s);
+
+  return { text: s, redacted };
+}
+
 function brandPassContactsNeedLineHtml(credits) {
   const have = Number(credits || 0);
   const need = Number(CONTACT_UNLOCK_COST || 0);
@@ -7833,10 +7899,36 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const contactRawTxt = ws.profile_contact ? String(ws.profile_contact).trim() : '';
   const aboutRaw = ws.profile_about ? String(ws.profile_about).trim() : '';
 
+  let aboutTxt = aboutRaw;
+  let aboutRedacted = false;
+  if (!isPreview && !revealContacts && aboutRaw) {
+    try {
+      const r = redactContactsInText(aboutRaw);
+      aboutTxt = r.text;
+      aboutRedacted = r.redacted;
+    } catch {
+      aboutTxt = aboutRaw;
+      aboutRedacted = false;
+    }
+  } else if (isCuratorPreview && aboutRaw) {
+    aboutTxt = deLinkifyText(aboutRaw);
+  }
+
   const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
 
   // Contacts unlock also gates any external links (IG/portfolio) to prevent bypassing monetization.
   const canUnlockContacts = !!contactRawTxt || !!ws.channel_username || !!ig || (ports && ports.length);
+
+  const contactUrl = (() => {
+    const contactRaw = contactRawTxt;
+    if (!contactRaw) return null;
+    const tg = wsTgUrlFromContact(contactRaw);
+    if (tg) return tg;
+    if (/^https?:\/\//i.test(contactRaw)) return contactRaw;
+    if (/^t\.me\//i.test(contactRaw)) return 'https://' + contactRaw;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactRaw)) return 'mailto:' + contactRaw;
+    return null;
+  })();
 
   let igLine = '';
   if (ig) {
@@ -7900,10 +7992,18 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
     if (brandCredits !== null) {
       blocks.push(brandPassBalanceLineHtml(brandCredits));
+      const uLine = brandPassUnlocksLineHtml(brandCredits);
+      if (uLine) blocks.push(uLine);
+      const tLine = brandPassTrialLineHtml(brandCredits);
+      if (tLine) blocks.push(tLine);
       if (canUnlockContacts && !revealContacts) {
         const needLine = brandPassContactsNeedLineHtml(brandCredits);
         if (needLine) blocks.push(needLine);
       }
+    }
+
+    if (canUnlockContacts && revealContacts) {
+      blocks.push('✅ <b>Контакты открыты</b>');
     }
   }
 
@@ -7911,7 +8011,15 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   {
     const lines = [];
     lines.push(`<b>Основное</b>`);
-    lines.push(`• Канал: <b>${escapeHtml(revealContacts ? channel : '🔒 скрыто')}</b>`);
+    const channelHtml = (() => {
+      if (!revealContacts) return `<b>🔒 скрыто</b>`;
+      if (linksEnabled && ws.channel_username) {
+        const un = String(ws.channel_username).replace(/^@/, '');
+        return `<a href="https://t.me/${escapeHtml(un)}">@${escapeHtml(un)}</a>`;
+      }
+      return `<b>${escapeHtml(channel)}</b>`;
+    })();
+    lines.push(`• Канал: ${channelHtml}`);
     lines.push(`• Режим: <b>${escapeHtml(modeLine)}</b>`);
     if (geoRaw) lines.push(`• Гео: <b>${escapeHtml(geoRaw)}</b>`);
     if (verticalsTxt && verticalsTxt !== '—') lines.push(`• Ниши: <code>${escapeHtml(clipText(verticalsTxt, 180))}</code>`);
@@ -7922,10 +8030,11 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   // Контент
   {
     const lines = [];
-    if ((formatsTxt && formatsTxt !== '—') || aboutRaw) {
+    if ((formatsTxt && formatsTxt !== '—') || aboutTxt) {
       lines.push(`<b>Контент</b>`);
       if (formatsTxt && formatsTxt !== '—') lines.push(`• Форматы: <code>${escapeHtml(clipText(formatsTxt, 220))}</code>`);
-      if (aboutRaw) lines.push(`• Описание: ${escapeHtml(clipText(aboutRaw, 320))}`);
+      if (aboutTxt) lines.push(`• Описание: ${escapeHtml(clipText(aboutTxt, 320))}`);
+      if (aboutRedacted) lines.push(`• <i>Контакты в тексте скрыты до разблокировки</i>`);
       blocks.push('');
       blocks.push(lines.join('\n'));
     }
@@ -7949,8 +8058,24 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     if (canUnlockContacts) {
       lines.push(`<b>Контакты</b>`);
       if (revealContacts) {
-        if (contactRawTxt) lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt)}</b>`);
-        else lines.push(`• Контакт: —`);
+        // Full contact pack after paid unlock
+        if (linksEnabled && ws.channel_username) {
+          const un = String(ws.channel_username).replace(/^@/, '');
+          lines.push(`• Telegram: <a href="https://t.me/${escapeHtml(un)}">@${escapeHtml(un)}</a>`);
+        }
+        if (contactRawTxt) {
+          if (contactUrl) lines.push(`• Контакт: <a href="${escapeHtml(contactUrl)}">${escapeHtml(contactRawTxt)}</a>`);
+          else lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt)}</b>`);
+        } else {
+          lines.push(`• Контакт: —`);
+        }
+        if (ig && linksEnabled) {
+          lines.push(`• Instagram: <a href="https://instagram.com/${escapeHtml(ig)}">@${escapeHtml(ig)}</a>`);
+        }
+        if (ports.length && linksEnabled) {
+          const u0 = String(ports[0] || '').trim();
+          if (u0) lines.push(`• Портфолио: <a href="${escapeHtml(u0)}">${escapeHtml(shortUrl(u0))}</a>${ports.length > 1 ? ` <i>+ ещё ${ports.length - 1}</i>` : ''}`);
+        }
       } else {
         lines.push(`• Контакты: <b>🔒 скрыто</b> (открываются через «${contactUnlockBtnLabel()}»)`);
       }
@@ -7970,18 +8095,6 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   }
 
   const text = blocks.filter((x) => x !== null && x !== undefined).join('\n');
-
-  const contactRaw = contactRawTxt;
-  const contactUrl = (() => {
-    if (!contactRaw) return null;
-    const tg = wsTgUrlFromContact(contactRaw);
-    if (tg) return tg;
-    if (/^https?:\/\//i.test(contactRaw)) return contactRaw;
-    if (/^t\.me\//i.test(contactRaw)) return 'https://' + contactRaw;
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactRaw)) return 'mailto:' + contactRaw;
-    return null;
-  })();
-
   const kb = new InlineKeyboard();
 
   // CTA row
@@ -8039,6 +8152,10 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   // Links
   if (ws.channel_username && linksEnabled) kb.url('📣 Telegram канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
   if (ig && linksEnabled) kb.url('📸 Instagram', `https://instagram.com/${ig}`);
+  if (ports.length && linksEnabled) {
+    const u0 = String(ports[0] || '').trim();
+    if (u0) kb.url('🗂 Портфолио', u0);
+  }
   const backCb = opts?.backCb || (isOwner ? `a:ws_profile|ws:${wsId}` : null);
   if (backCb) kb.row().text('⬅️ Назад', backCb);
   kb.row().text('📋 Меню', 'a:menu');
@@ -8546,6 +8663,8 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
     `Создано: <code>${escapeHtml(String(when))}</code>
 ` +
     `${brandPassBalanceLineHtml(credits)}
+${brandPassUnlocksLineHtml(credits)}
+${brandPassTrialLineHtml(credits)}
 ` +
     (needLine ? `${needLine}
 ` : ``) +
@@ -10742,6 +10861,8 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
 Здесь бренд может работать с UGC/офферами без подключения канала.
 
 ${brandPassBalanceLineHtml(credits)}
+${brandPassUnlocksLineHtml(credits)}
+${brandPassTrialLineHtml(credits)}
 🎟 Повторные кредиты: <b>${retry}</b>
 ⭐️ Brand Plan: <b>${active ? (planName === 'pro' ? 'Про' : 'Старт') : 'Нет'}</b>${untilTxt}
 
@@ -12076,6 +12197,8 @@ ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бе
 👥 Раздел «Менеджеры бренда» открывается после покупки Brand Plan.
 ${trialLine}${limitLine}${verifyHintLine}
 ${brandPassBalanceLineHtml(credits)}
+${brandPassUnlocksLineHtml(credits)}
+${brandPassTrialLineHtml(credits)}
 🎟 Повторные кредиты: <b>${retry}</b>${retryHintLine}
 
 Выбери пакет:`;
@@ -12359,6 +12482,8 @@ async function renderBrandPassTopup(ctx, userId, wsId) {
     `💳 <b>Докупить кредиты</b>
 
 ${brandPassBalanceLineHtml(credits)}
+${brandPassUnlocksLineHtml(credits)}
+${brandPassTrialLineHtml(credits)}
 🎟 Повторные кредиты: <b>${retry}</b>
 
 <b>Как работает:</b>
@@ -12404,6 +12529,8 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
 
 Статус: <b>${escapeHtml(status)}</b>
 ${brandPassBalanceLineHtml(credits)}
+${brandPassUnlocksLineHtml(credits)}
+${brandPassTrialLineHtml(credits)}
 <i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 <b>Старт</b> · ${startPl.stars}⭐️/мес
@@ -15870,6 +15997,7 @@ if (exp.type === 'brand_deals_search') {
       const wantClear = ['-', '—', 'нет', 'no', 'clear'].includes(rawLc);
 
       const patch = {};
+      let warnBypass = false;
 
       // title / niche / contact / geo
       if (field === 'title') {
@@ -15918,6 +16046,12 @@ if (exp.type === 'brand_deals_search') {
         const v = wantClear ? null : raw.slice(0, 400);
         if (!wantClear && (!v || v.length < 5)) { await ctx.reply('Слишком коротко (нужно 5+ символов).'); await setExpectText(ctx.from.id, exp); return; }
         patch.profile_about = v;
+        if (!wantClear && v) {
+          try {
+            const r = redactContactsInText(v);
+            if (r.redacted) warnBypass = true;
+          } catch {}
+        }
       }
 
       // Portfolio URLs (1–3)
@@ -15947,6 +16081,11 @@ if (exp.type === 'brand_deals_search') {
       await clearExpectText(ctx.from.id);
       const editTarget = (exp && exp.chatId && exp.messageId) ? { chatId: exp.chatId, messageId: exp.messageId } : null;
       await renderWsProfile(ctx, u.id, wsId, { editTarget });
+
+      if (warnBypass) {
+        const kb = new InlineKeyboard().text('👤 Профиль', `a:ws_profile|ws:${wsId}`);
+        await ctx.reply('⚠️ В описании найдены @/ссылки. Для брендов они будут скрыты до «🔓 Контакты». Лучше вынеси контакт в поле «Контакт».', { reply_markup: kb });
+      }
       return;
     }
 
@@ -19721,6 +19860,8 @@ if (p.a === 'a:wsp_preview') {
 Переписка внутри открытого диалога — бесплатна.
 
 ${brandPassBalanceLineHtml(balNum)}
+${brandPassUnlocksLineHtml(balNum)}
+${brandPassTrialLineHtml(balNum)}
 
 ${tail}`;
 
@@ -19776,6 +19917,54 @@ ${tail}`;
 
       try { await ctx.answerCallbackQuery({ text: `✅ Контакты открыты на ${CONTACT_UNLOCK_TTL_DAYS} ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}. Баланс: ${left}`, show_alert: true }); } catch {}
       await renderWsPublicProfile(ctx, wsId, { revealContacts: true, ...roOpts });
+
+      // Brand-facing: send a compact contact pack right after paid unlock
+      try {
+        const ws2 = await db.getWorkspaceAny(wsId);
+        if (ws2) {
+          const ig2 = ws2.profile_ig ? String(ws2.profile_ig) : '';
+          const ports2 = Array.isArray(ws2.profile_portfolio_urls) ? ws2.profile_portfolio_urls : [];
+          const contactRaw2 = ws2.profile_contact ? String(ws2.profile_contact).trim() : '';
+          const contactUrl2 = (() => {
+            if (!contactRaw2) return null;
+            const tg = wsTgUrlFromContact(contactRaw2);
+            if (tg) return tg;
+            if (/^https?:\/\//i.test(contactRaw2)) return contactRaw2;
+            if (/^t\.me\//i.test(contactRaw2)) return 'https://' + contactRaw2;
+            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactRaw2)) return 'mailto:' + contactRaw2;
+            return null;
+          })();
+
+          const lines = [];
+          lines.push(`✅ <b>Контакт‑пакет</b> (доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')})`);
+          lines.push('');
+          if (ws2.channel_username) {
+            const un = String(ws2.channel_username).replace(/^@/, '');
+            lines.push(`• Telegram: <a href="https://t.me/${escapeHtml(un)}">@${escapeHtml(un)}</a>`);
+          }
+          if (contactRaw2) {
+            if (contactUrl2) lines.push(`• Контакт: <a href="${escapeHtml(contactUrl2)}">${escapeHtml(contactRaw2)}</a>`);
+            else lines.push(`• Контакт: <b>${escapeHtml(contactRaw2)}</b>`);
+          }
+          if (ig2) lines.push(`• Instagram: <a href="https://instagram.com/${escapeHtml(ig2)}">@${escapeHtml(ig2)}</a>`);
+          if (ports2.length) {
+            const u0 = String(ports2[0] || '').trim();
+            if (u0) lines.push(`• Портфолио: <a href="${escapeHtml(u0)}">${escapeHtml(shortUrl(u0))}</a>${ports2.length > 1 ? ` <i>+ ещё ${ports2.length - 1}</i>` : ''}`);
+          }
+
+          const kb2 = new InlineKeyboard();
+          if (ws2.channel_username) kb2.url('📣 Telegram канал', `https://t.me/${String(ws2.channel_username).replace(/^@/, '')}`);
+          if (ig2) kb2.url('📸 Instagram', `https://instagram.com/${ig2}`);
+          if (ports2.length) {
+            const u0 = String(ports2[0] || '').trim();
+            if (u0) kb2.url('🗂 Портфолио', u0);
+          }
+          kb2.row().text('🪟 Витрина', `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}`).text('💳 Купить ещё', 'a:brand_pass|ws:0');
+
+          await ctx.reply(lines.join('\n'), { parse_mode: 'HTML', reply_markup: kb2, disable_web_page_preview: true });
+        }
+      } catch {}
+
       return;
     }
 
