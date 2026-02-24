@@ -9,6 +9,7 @@
 - Payments: валидация payload/amount/currency в `pre_checkout` и `successful_payment` (fail-safe apply).
 - Contacts unlock: DB truth + advisory lock (exactly-once), Redis только кеш/TTL.
 - Ownership: safe-getters с ownership внутри SQL для лидов/заявок и опасных действий.
+- Redis degraded mode: mutating callbacks работают **fail-closed** (кроме строго allowlisted DB-safe действий).
 
 
 
@@ -291,6 +292,11 @@
 - `pre_checkout_query` теперь **валидирует** `invoice_payload + total_amount + currency` до списания Stars.
 - На `successful_payment` повторная валидация (защита от ретраев/краевых кейсов) → при несоответствии статус **ORPHANED** + алерт в OPS.
 - Fallback apply (cron/админка) и ручной Apply в админке **блокируются**, если сумма/валюта не совпадают с ожидаемыми для продукта.
+
+### Payments idempotency: защита от дублей apply (serverless)
+
+- В payments ledger используется уникальный `telegram_payment_charge_id` (и дополнительный unique для `provider_payment_charge_id`).
+- Перед любыми сайд‑эффектами (начисления/активации) payment **claim**-ится в DB статусом `APPLYING` (atomic update). Это защищает от Telegram retries и параллельного apply (cron/admin/user).
 
 ### Ownership-in-SQL (anti-bypass) для чувствительных сущностей
 

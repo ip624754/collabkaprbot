@@ -12,6 +12,10 @@
    - `currency`,
    - `total_amount` (сумма должна соответствовать продукту/плану).
 2) В `successful_payment` делаем **повторную** валидацию (защита от повторов/краевых кейсов).
+2.1) Идемпотентность apply — **на уровне Postgres**:
+   - payments ledger хранит `telegram_payment_charge_id` (unique) и (опционально) `provider_payment_charge_id` (unique);
+   - перед любыми сайд‑эффектами payment должен быть **claimed** (status `APPLYING`) через atomic `UPDATE ... WHERE status != 'APPLIED'`.
+   Это защищает от гонок при Telegram retries и параллельных apply (cron/admin/user).
 3) Любая auto-heal логика (cron / fallback apply) работает **fail-safe** и использует ту же строгую валидацию, что и `pre_checkout_query`/`successful_payment`:
    - если валидация не проходит → **не применять**,
    - пометить как `ORPHANED` / `manual_required` / `validation_failed` + ops alert.
@@ -44,6 +48,8 @@
 9) Опасные действия с глобальным эффектом (delete, assign, publish, apply) — дополнительно **role-gate**:
    - owner/curator/admin (и только по необходимости).
 10) Любая “мягкая деградация” (fail-open) **не может** раскрывать платные/приватные данные.
+10.1) В degraded mode Redis: **mutating callbacks** должны быть fail-closed (отклоняем выполнение),
+     кроме строго allowlisted действий, которые safe-by-design и опираются на DB truth (например, paid-unlock).
 
 ---
 
@@ -75,7 +81,7 @@
 17) В горячих UI путях (меню/рендер кнопок/хабы) **не добавляем** DB-чтения без измерения.
 18) Redis-first кеши допустимы, но деньги/доступы всё равно закреплены DB-инвариантами (см. B).
 
-Мини‑регрессия, которую обязаны ловить перед релизом: прогнать `npm run test:redact` (маскирование ссылок/email/@/телефонов в тексте профиля, включая «грязные» форматы с пробелами/точками/emoji между цифрами).
+Мини‑регрессия, которую обязаны ловить перед релизом: прогнать `npm run test:redact` (маскирование ссылок/email/@/телефонов в тексте профиля).
 
 ---
 
