@@ -38,8 +38,9 @@ const CRON_LAST_RUN_TTL_SEC = 14 * 24 * 60 * 60; // 14 days
 
 const NOTIFY_TIMEOUT_MS = 5000; // best-effort Telegram notifications in cron
 
-// Broadcast: global 429 cooldown keys (Redis-only).
+// Broadcast: global 429 cooldown keys (Redis fast path).
 // Goal: when cooldown is active, exit BEFORE any DB polling.
+// If Redis is unavailable, we fall back to a DB fuse stored on the broadcast row.
 const BC_COOLDOWN_TTL_SEC = 24 * 60 * 60; // keep state for ops visibility (bounded)
 const BC_COOLDOWN_UNTIL_KEY = k(['broadcast', 'cooldown_until']);
 const BC_COOLDOWN_BROADCAST_ID_KEY = k(['broadcast', 'cooldown_broadcast_id']);
@@ -648,7 +649,8 @@ export async function giveawaysTick() {
 const BROADCAST_BATCH_SIZE = 25;
 const BROADCAST_SEND_DELAY_MS = 50; // ~20 msg/sec
 // When Telegram returns 429, we respect retry_after and avoid hammering.
-// Stored in Redis only (no DB) to keep Neon cheap.
+// Stored in Redis (fast path). If Redis is unavailable, we persist a DB fuse (broadcasts.cooldown_until)
+// to avoid expensive recipient polling in Neon during cooldown.
 const BROADCAST_COOLDOWN_PAD_SEC = 30;
 
 // Per-recipient quarantine: if a recipient repeatedly hits 429 (deferred), we extend its retry window
@@ -743,7 +745,16 @@ async function setBroadcastCooldown(broadcastId, retryAfterSec, reason = 'telegr
 
     return finalUntil;
   } catch {
-    // Best-effort: even if Redis fails, we still break the batch on 429.
+    // Redis down: persist a DB fuse so next ticks can skip BEFORE polling recipients.
+    try {
+      await db.atomicMaxBroadcastCooldownUntil(
+        broadcastId,
+        new Date(proposedUntil).toISOString(),
+        reason
+      );
+    } catch {}
+
+    // Best-effort: even if both Redis and DB fuse fail, we still break the batch on 429.
     return proposedUntil;
   }
 }
@@ -849,20 +860,43 @@ export async function broadcastTick() {
       return out;
     }
 
-    // Redis-only cooldown on 429. Prevents hammering and smooths delivery.
-    const cooldownUntilMs = await getBroadcastCooldownUntilMs(bc.id);
-    if (cooldownUntilMs && cooldownUntilMs > Date.now()) {
+    // 429 cooldown:
+    // - fast path: Redis (early exit without DB polling)
+    // - DB fuse: broadcasts.cooldown_until (used only when Redis is unavailable)
+    const nowMs = Date.now();
+
+    const redisCooldownUntilMs = await getBroadcastCooldownUntilMs(bc.id);
+    if (redisCooldownUntilMs && redisCooldownUntilMs > nowMs) {
       const retry_after_sec = Math.max(
         1,
-        Math.ceil((cooldownUntilMs - Date.now()) / 1000)
+        Math.ceil((redisCooldownUntilMs - nowMs) / 1000)
       );
       const out = {
         status: 'skip',
         reason: 'cooldown',
+        cooldown_source: 'redis_per_broadcast',
         broadcast_id: bc.id,
         retry_after_sec,
-        cooldown_until: new Date(cooldownUntilMs).toISOString(),
+        cooldown_until: new Date(redisCooldownUntilMs).toISOString(),
       };
+      await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+      return out;
+    }
+
+    const dbCooldownUntilMs = bc.cooldown_until ? Date.parse(String(bc.cooldown_until)) : 0;
+    if (dbCooldownUntilMs && Number.isFinite(dbCooldownUntilMs) && dbCooldownUntilMs > nowMs) {
+      const retry_after_sec = Math.max(1, Math.ceil((dbCooldownUntilMs - nowMs) / 1000));
+      const out = {
+        status: 'skip',
+        reason: 'cooldown',
+        cooldown_source: 'db_fuse',
+        broadcast_id: bc.id,
+        retry_after_sec,
+        cooldown_until: new Date(dbCooldownUntilMs).toISOString(),
+        ...(bc.cooldown_reason ? { cooldown_reason: String(bc.cooldown_reason) } : {}),
+      };
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      await incrDayCounter(bcCooldownSkipDayKey(day));
       await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
       return out;
     }
