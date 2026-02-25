@@ -3180,6 +3180,33 @@ export async function setOfficialPostStatus(offerId, status, input = {}) {
   return r.rows[0] || null;
 }
 
+// STEP129: self-heal for serverless hard-kill during official publish
+// When our bot successfully posts to the official channel but the function dies
+// before persisting message_id, Telegram will still deliver a channel_post update
+// to our webhook. We attach that message_id here to finish the transaction.
+export async function atomicAttachOfficialPostMessageId(offerId, input = {}) {
+  const channelChatId = Number(input.channelChatId || 0);
+  const messageId = Number(input.messageId || 0);
+  if (!offerId || !channelChatId || !messageId) return null;
+
+  const r = await pool.query(
+    `update official_posts
+        set channel_chat_id=$2,
+            message_id=$3,
+            status='ACTIVE',
+            last_error=null,
+            updated_at=now()
+      where offer_id=$1
+        and (
+          status='PUBLISHING'
+          or (status='ACTIVE' and (message_id is null or message_id=0))
+        )
+      returning *`,
+    [Number(offerId), channelChatId, messageId]
+  );
+  return r.rows[0] || null;
+}
+
 /**
  * Atomically expire an official post only if it is still ACTIVE.
  * Returns true if the row was updated; false means another tick already expired it.
@@ -4950,8 +4977,6 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
   const uid = Number(brandUserId);
   const c = Math.max(0, Math.floor(Number(cost) || 0));
 
-  let left = null;
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -4992,7 +5017,6 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
           await client.query('ROLLBACK');
           return { status: 'insufficient_credits' };
         }
-        try { left = Number(spend.rows[0]?.brand_credits); } catch { left = null; }
       } catch (e) {
         // Rolling upgrade safety: brand_credits_gifted may be missing.
         if (e && e.code === '42703') {
@@ -5009,7 +5033,6 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
             await client.query('ROLLBACK');
             return { status: 'insufficient_credits' };
           }
-          try { left = Number(spend.rows[0]?.brand_credits); } catch { left = null; }
         } else {
           throw e;
         }
@@ -5048,7 +5071,7 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
     );
 
     await client.query('COMMIT');
-    return { status: 'accepted', charged: c > 0, left };
+    return { status: 'accepted' };
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch {}
     throw e;
