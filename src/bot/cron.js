@@ -3,7 +3,12 @@ import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
-import { qstashPublishJSON, getQStashDeliveryUrl, getBroadcastFlowControl } from '../lib/qstash.js';
+import {
+  qstashPublishJSON,
+  getQStashDeliveryUrl,
+  getBroadcastFlowControl,
+  isQStashLibAvailable,
+} from '../lib/qstash.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import { flushOpsAlerts, queueOpsAlert } from './opsAlerts.js';
 import {
@@ -82,6 +87,10 @@ async function incrDayCounter(key, ttlSec = CRON_LAST_RUN_TTL_SEC) {
 }
 
 async function getBroadcastQStashFanoutEnabled() {
+  // Hard safety: if QStash lib/token is missing, fan-out must be OFF
+  // (and cron falls back to the legacy direct-send path).
+  if (!isQStashLibAvailable()) return false;
+  if (!(process.env.QSTASH_TOKEN || '')) return false;
   try {
     const v = await redis.get(SYS_BC_QSTASH_FANOUT_KEY);
     if (v === null || v === undefined) return false;

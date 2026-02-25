@@ -16,7 +16,7 @@ import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
-import { qstashPublishJSON, getQStashDeliveryUrl } from '../lib/qstash.js';
+import { qstashPublishJSON, getQStashDeliveryUrl, getQStashLibHealth } from '../lib/qstash.js';
 
 let BOT;
 
@@ -25162,6 +25162,30 @@ if (p.a === 'a:match_home') {
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery({ text: 'Пинг отправляю…' });
 
+      const lib = getQStashLibHealth();
+      if (!lib.available) {
+        const em = String(lib?.error?.message || 'missing');
+        await safeEditOrReply(
+          ctx,
+          `⛔ QStash недоступен: пакет <code>@upstash/qstash</code> не установлен.
+
+Причина: <code>${escapeHtml(em.slice(0, 220))}</code>
+
+Решение: обнови <code>package.json</code> (dependencies) и сделай redeploy.`,
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
+        );
+        return;
+      }
+
+      if (!(process.env.QSTASH_TOKEN || '')) {
+        await safeEditOrReply(
+          ctx,
+          '⛔ QSTASH_TOKEN не задан в Vercel. Ping недоступен.',
+          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
+        );
+        return;
+      }
+
       const url = getQStashDeliveryUrl('/api/qstash/ping');
       if (!url) {
         await safeEditOrReply(
@@ -29521,6 +29545,11 @@ async function renderAdminHome(ctx) {
 async function renderAdminQStashStatus(ctx) {
   const fanout = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
 
+  const lib = getQStashLibHealth();
+  const envTokenOk = !!(process.env.QSTASH_TOKEN || '');
+  const envSignOk = !!(process.env.QSTASH_CURRENT_SIGNING_KEY || '');
+  const envBaseOk = !!(CFG.PUBLIC_BASE_URL || '');
+
   let lastTick = null;
   let lastDeliveryAt = null;
   let lastPingAt = null;
@@ -29571,6 +29600,18 @@ async function renderAdminQStashStatus(ctx) {
   let text = `🛰 <b>QStash — статус</b>
 
 `;
+
+  text += `Lib (@upstash/qstash): <b>${lib.available ? 'OK' : 'MISSING'}</b>
+`;
+  if (!lib.available && lib?.error?.message) {
+    text += `• error: <code>${escapeHtml(String(lib.error.message).slice(0, 160))}</code>
+`;
+  }
+
+  text += `ENV: token <b>${envTokenOk ? 'OK' : 'MISS'}</b> · signing <b>${envSignOk ? 'OK' : 'MISS'}</b> · base_url <b>${envBaseOk ? 'OK' : 'MISS'}</b>
+
+`;
+
   text += `Fan-out (Redis): <b>${fanout ? 'ON' : 'OFF'}</b>
 `;
   text += `Broadcast tick last_run: ${tickTs ? fmtAgo(tickTs) : '—'}${tickMode ? `
