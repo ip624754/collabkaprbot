@@ -2382,6 +2382,73 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
   }
 }
 
+// STEP128: Stateless fallback navigation (Redis-degraded safe UI)
+// - No Redis reads/writes
+// - No DB calls
+// - Used only as a minimal "escape hatch" when Redis is down
+function kbStatelessFallback(kind = 'menu') {
+  const kb = new InlineKeyboard();
+  if (kind !== 'menu') kb.text('📋 Меню', 's:menu');
+  if (kind !== 'home') kb.text('🏠 Home', 's:home');
+  if (kind !== 'help') kb.text('🧭 Помощь', 's:help');
+  return kb;
+}
+
+async function handleStatelessCallback(ctx, p) {
+  const a = String(p?.a || '');
+  if (!a.startsWith('s:')) return false;
+
+  const key = a.slice(2);
+  if (key === 'home') {
+    await safeEditOrReply(
+      ctx,
+      `🏠 <b>Home (безопасный режим)</b>
+
+Сейчас часть функций может быть временно недоступна (кеш/сессии).
+
+Что можно сделать прямо сейчас:
+• Открой «Меню (безопасный режим)»
+• Попробуй команду <code>/start</code> чуть позже
+• Если ты уже был в процессе заполнения формы — просто повтори действие, когда всё восстановится`,
+      { parse_mode: 'HTML', reply_markup: kbStatelessFallback('home') }
+    );
+    return true;
+  }
+
+  if (key === 'help') {
+    await safeEditOrReply(
+      ctx,
+      `🧭 <b>Помощь (безопасный режим)</b>
+
+Почему так:
+• Сейчас кеш/сессии могут быть недоступны, поэтому опасные действия блокируются.
+
+Как вернуться к обычной работе:
+1) Подожди 1–2 минуты
+2) Нажми <code>/start</code>
+
+Если ты админ и нужно срочно:
+• Открой админку и используй break-glass только по необходимости`,
+      { parse_mode: 'HTML', reply_markup: kbStatelessFallback('help') }
+    );
+    return true;
+  }
+
+  // default: menu
+  await safeEditOrReply(
+    ctx,
+    `📋 <b>Меню (безопасный режим)</b>
+
+Сейчас часть функций временно недоступны (кеш/сессии).
+
+Быстрые действия:
+• Нажми <code>/start</code> (перезапуск)
+• Повтори действие чуть позже`,
+    { parse_mode: 'HTML', reply_markup: kbStatelessFallback('menu') }
+  );
+  return true;
+}
+
 
 
 
@@ -7213,117 +7280,6 @@ function formatWsContactCard(ws, wsId, opts = {}) {
   return lines.join('\n');
 }
 
-
-
-// Brand-facing: компактный контакт‑пакет (structured contacts → fallback).
-// Used after paid actions (e.g. Contact Unlock, Brand App Accept) to make value obvious.
-function buildWsContactPackLines(ws, opts = {}) {
-  const ttlDays = opts.ttlDays ? Math.max(0, Number(opts.ttlDays) || 0) : 0;
-  const title = String(opts.title || '').trim();
-
-  const channelUser = ws?.channel_username ? String(ws.channel_username).replace(/^@/, '') : '';
-  const channelUrl = channelUser ? `https://t.me/${channelUser}` : null;
-
-  const ig = wsIgHandleFromWs(ws);
-  const igUrl = wsIgUrlFromWs(ws);
-
-  const ports = Array.isArray(ws?.profile_portfolio_urls) ? ws.profile_portfolio_urls.filter(Boolean).map(String) : [];
-  const port0 = ports.length ? String(ports[0]).trim() : '';
-
-  const contactLegacyRaw = ws?.profile_contact ? String(ws.profile_contact).trim() : '';
-
-  const contactsObj = (ws?.profile_contacts && typeof ws.profile_contacts === 'object') ? ws.profile_contacts : null;
-  const cTgRaw = contactsObj?.tg ? String(contactsObj.tg).trim() : '';
-  const cTg = cTgRaw.replace(/^@/, '');
-  const cEmail = contactsObj?.email ? String(contactsObj.email).trim() : '';
-  const cPhone = contactsObj?.phone ? String(contactsObj.phone).trim() : '';
-  const cSiteRaw = contactsObj?.site ? String(contactsObj.site).trim() : '';
-  const cSite = cSiteRaw && !/^https?:\/\//i.test(cSiteRaw) ? ('https://' + cSiteRaw.replace(/^\/+/, '')) : cSiteRaw;
-  const cOther = contactsObj?.other ? String(contactsObj.other).trim() : '';
-
-  const hasStructured = !!(cTg || cEmail || cPhone || cSite || cOther);
-
-  const contactUrlLegacy = (() => {
-    const contactRaw = contactLegacyRaw;
-    if (!contactRaw) return null;
-    const tg = wsTgUrlFromContact(contactRaw);
-    if (tg) return tg;
-    if (/^https?:\/\//i.test(contactRaw)) return contactRaw;
-    if (/^t\.me\//i.test(contactRaw)) return 'https://' + contactRaw;
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactRaw)) return 'mailto:' + contactRaw;
-    return null;
-  })();
-
-  // Primary URL for “написать”: structured tg → legacy contact → structured site.
-  const primaryContactUrl = (() => {
-    if (cTg) return `https://t.me/${cTg}`;
-    if (contactUrlLegacy) return contactUrlLegacy;
-    if (cSite) return cSite;
-    return null;
-  })();
-
-  const lines = [];
-  if (title) {
-    lines.push(title);
-  } else if (ttlDays > 0) {
-    lines.push(`✅ <b>Контакт‑пакет</b> (доступ на <b>${ttlDays}</b> ${ruPlural(ttlDays,'день','дня','дней')})`);
-  } else {
-    lines.push('✅ <b>Контакт‑пакет</b>');
-  }
-  lines.push('');
-
-  const creatorName = safeCreatorDisplayName(ws) || 'Креатор';
-  lines.push(`👤 <b>${escapeHtml(String(creatorName))}</b>`);
-
-  if (channelUser) {
-    lines.push(`• Telegram: <a href="${escapeHtml(channelUrl)}">@${escapeHtml(channelUser)}</a>`);
-  }
-
-  if (hasStructured) {
-    if (cTg) lines.push(`• TG username: <a href="https://t.me/${escapeHtml(cTg)}">@${escapeHtml(cTg)}</a>`);
-    if (cEmail) lines.push(`• Email: <a href="mailto:${escapeHtml(cEmail)}">${escapeHtml(cEmail)}</a>`);
-    if (cPhone) lines.push(`• Phone: <b>${escapeHtml(deLinkifyText(clipText(cPhone, 80)))}</b>`);
-    if (cSite) lines.push(`• Website: <a href="${escapeHtml(cSite)}">${escapeHtml(shortUrl(cSite))}</a>`);
-    if (cOther) lines.push(`• Доп.: <b>${escapeHtml(deLinkifyText(clipText(cOther, 120)))}</b>`);
-  }
-
-  if (contactLegacyRaw) {
-    const shown = clipText(contactLegacyRaw, 120);
-    if (contactUrlLegacy) lines.push(`• Контакт: <a href="${escapeHtml(contactUrlLegacy)}">${escapeHtml(shown)}</a>`);
-    else lines.push(`• Контакт: <b>${escapeHtml(shown)}</b>`);
-  }
-
-  if (ig && igUrl) {
-    lines.push(`• Instagram: <a href="${escapeHtml(igUrl)}">@${escapeHtml(ig)}</a>`);
-  }
-
-  if (port0) {
-    lines.push(`• Портфолио: <a href="${escapeHtml(port0)}">${escapeHtml(shortUrl(port0))}</a>${ports.length > 1 ? ` <i>+ ещё ${ports.length - 1}</i>` : ''}`);
-  }
-
-  return {
-    lines,
-    primaryContactUrl,
-    channelUrl,
-    igUrl,
-    port0,
-    channelUser,
-    ig,
-  };
-}
-
-function fmtBrandCreditsBlockHtml(cost, left) {
-  const c = Math.max(0, Number(cost || 0));
-  const l = (left === null || left === undefined) ? null : Number(left);
-  const out = [];
-  if (c > 0) out.push(`💸 Списано: <b>${escapeHtml(String(c))}</b> ${ruPlural(c,'кредит','кредита','кредитов')}`);
-  if (Number.isFinite(l)) {
-    out.push(brandPassBalanceLineHtml(Math.max(0, Math.trunc(l))));
-    out.push(brandPassUnlocksLineHtml(Math.max(0, Math.trunc(l))));
-    out.push(brandPassTrialLineHtml(Math.max(0, Math.trunc(l))));
-  }
-  return out.filter(Boolean).join('\n');
-}
 function buildWsShareText(ws, wsId, variant = 'short') {
 const link = wsBrandLink(wsId);
 
@@ -10735,76 +10691,6 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
     return;
   }
 
-
-
-  // Keep Brand Pass credits cache consistent (no extra reads): acceptBrandApplicationWithCharge returns left balance.
-  const creditsLeft = (res && res.left !== undefined && res.left !== null && Number.isFinite(Number(res.left)))
-    ? Math.max(0, Math.trunc(Number(res.left)))
-    : null;
-  if (creditsLeft !== null && res && res.charged) {
-    try { await setBrandCreditsCache(brandUserId, creditsLeft); } catch {}
-  }
-
-  // Brand-facing: send a compact contact pack right after accept (best-effort, no effect on accept).
-  try {
-    const meta = normalizeJsonb(app?.meta) || {};
-    const wsId = Math.max(0, Number(meta.wsId || 0));
-
-    let ws = null;
-    if (wsId) {
-      try { ws = await withTimeout(db.getWorkspaceAny(wsId), 4500, 'ws.get'); } catch { ws = null; }
-    }
-
-    let packText = '';
-    let packLinks = null;
-
-    if (ws) {
-      const pack = buildWsContactPackLines(ws, { title: `✅ <b>Контакт‑пакет</b> · заявка #${app.id}` });
-      packLinks = pack;
-      const creditsBlock = fmtBrandCreditsBlockHtml(cost, creditsLeft);
-      packText = pack.lines.join('\n');
-      if (creditsBlock) {
-        packText += `\n\n${creditsBlock}`;
-      }
-      packText += `\n\n💡 Можно копировать строки и писать напрямую, либо отвечать внутри бота.`;
-    } else {
-      const who = app.creator_username ? '@' + String(app.creator_username).replace(/^@/, '') : (app.creator_tg_id ? `id:${app.creator_tg_id}` : 'креатор');
-      const creditsBlock = fmtBrandCreditsBlockHtml(cost, creditsLeft);
-      packText =
-        `✅ <b>Контакт‑пакет</b> · заявка #${app.id}\n\n` +
-        `🧑‍🎨 Креатор: <b>${escapeHtml(String(who))}</b>\n` +
-        `ℹ️ Контакты не найдены (профиль ещё не заполнен).\n\n` +
-        `💬 Используй «✍️ Ответить» / «⚡ Шаблоны» — креатор получит кнопку “💬 Написать бренду”.` +
-        (creditsBlock ? `\n\n${creditsBlock}` : '');
-    }
-
-    // Guard: Telegram max message length is 4096
-    if (packText.length > 3900) {
-      packText = packText.slice(0, 3880) + '…';
-    }
-
-    const kbPack = new InlineKeyboard();
-
-    // Prefer direct TG contact if we have one.
-    if (packLinks?.primaryContactUrl) {
-      kbPack.url('💬 Написать', packLinks.primaryContactUrl);
-    }
-    if (packLinks?.channelUrl) kbPack.url('📣 Канал', packLinks.channelUrl);
-    if (packLinks?.igUrl) kbPack.url('📸 Instagram', packLinks.igUrl);
-    if (packLinks?.port0) kbPack.url('🗂 Портфолио', packLinks.port0);
-
-    if (packLinks?.primaryContactUrl || packLinks?.channelUrl || packLinks?.igUrl || packLinks?.port0) kbPack.row();
-
-    kbPack
-      .text('📨 Открыть заявку', `a:brand_app_view|id:${app.id}|s:in_progress|p:${Math.max(0, Number(back.page) || 0)}`)
-      .text('✍️ Ответить', `a:brand_app_reply|id:${app.id}|s:in_progress|p:${Math.max(0, Number(back.page) || 0)}`)
-      .row()
-      .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:app|id:${app.id}|s:in_progress|p:${Math.max(0, Number(back.page) || 0)}`)
-      .text('📋 Меню', 'a:menu')
-      .text('🏠 Home', 'a:home');
-
-    await ctx.reply(packText, { parse_mode: 'HTML', reply_markup: kbPack, disable_web_page_preview: true });
-  } catch {}
   // notify creator
   const creatorTgId = Number(app.creator_tg_id || 0);
   if (creatorTgId) {
@@ -19478,6 +19364,15 @@ bot.on('message:successful_payment', async (ctx) => {
       'a:home_hub': 'a:home',
     };
     if (_aliasA[p.a]) p.a = _aliasA[p.a];
+
+    // STEP128: Stateless fallback routing (always available, no Redis/DB)
+    // Used as an escape hatch when Redis is degraded to avoid "dead-end" UI.
+    if (String(p.a || '').startsWith('s:')) {
+      try {
+        const handled = await handleStatelessCallback(ctx, p);
+        if (handled) return;
+      } catch {}
+    }
     // Fail-closed middleware (Redis degraded mode) for dangerous callbacks.
     // Source of truth: src/bot/actionRegistry.js (no suffix heuristics).
     //
@@ -19528,8 +19423,8 @@ bot.on('message:successful_payment', async (ctx) => {
             .text('🚨 Продолжить (break-glass)', confirmCb)
             .row()
             .text('⬅️ Отмена', 'a:admin_home')
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Home', 'a:home');
+            .text('📋 Меню', 's:menu')
+            .text('🏠 Home', 's:home');
 
           await safeEditOrReply(
             ctx,
@@ -19550,7 +19445,7 @@ Redis сейчас недоступен. Обычно опасные дейст�
             `⛔ Временно недоступно (кеш/сессии). Попробуй чуть позже.
 
 Если ты админ и нужно срочно — открой админку и используй аварийный доступ (break-glass) только по необходимости.`,
-            { reply_markup: new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
+            { reply_markup: new InlineKeyboard().text('📋 Меню', 's:menu').text('🏠 Home', 's:home') }
           );
         } catch {}
         return;
