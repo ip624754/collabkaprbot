@@ -16,6 +16,7 @@
     "actions:md": "node scripts/actions-registry-export-md.js --out docs/02_ACTION_KEYS_REGISTRY.md"
   },
   "dependencies": {
+    "@upstash/qstash": "^2.7.5",
     "@upstash/redis": "^1.35.3",
     "dotenv": "^16.4.5",
     "grammy": "^1.32.0",
