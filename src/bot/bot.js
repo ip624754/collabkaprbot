@@ -9935,27 +9935,31 @@ ${threadBlock}`;
 ℹ️ <i>Статусы “В работу / Закрыть / Спам” — внутренняя сортировка бренда: они только сортируют заявки по вкладкам 🆕/💬/✅/🗑. Креатор их не видит.</i>`;
 
   const kb = new InlineKeyboard();
-  if (st === 'new') kb.text('✅ Принять', `a:brand_app_accept|id:${app.id}|s:${back.status}|p:${back.page}`).row();
+  if (st === 'new') {
+    kb.text('✅ Принять', `a:brand_app_accept|id:${app.id}|s:${back.status}|p:${back.page}`).row();
 
-  if (dealStage) {
-    kb.text('📌 В сделках', `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0`).row();
-  }
+    // До принятия разрешаем только безопасные действия: СПАМ/удаление.
+    // “В работу/Закрыть/Ответить/Шаблоны” доступны после ✅ Принять.
+    kb
+      .text('⛔ Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
+      .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
+  } else {
+    if (dealStage) {
+      kb.text('📌 В сделках', `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0`).row();
+    }
 
-  // Prevent monetization bypass: until accepted, don't allow reply/templates.
-  if (st !== 'new') {
     kb
       .text('✍️ Ответить', `a:brand_app_reply|id:${app.id}|s:${back.status}|p:${back.page}`)
       .text('⚡ Шаблоны', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
       .row();
-  }
 
-  // Internal triage is always allowed.
-  kb
-    .text('💬 В работу', `a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`)
-    .text('✅ Закрыть', `a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`)
-    .row()
-    .text('⛔ Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
-    .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
+    kb
+      .text('💬 В работу', `a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`)
+      .text('✅ Закрыть', `a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`)
+      .row()
+      .text('⛔ Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
+      .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
+  }
 
   kbNavRow(kb, `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`);
 
@@ -9978,7 +9982,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
         : 'Сначала ✅ Принять';
       await ctx.answerCallbackQuery({ text: t });
     } catch {}
-    await renderBrandAppView(ctx, actorUserId, appId, back);
+    await renderBrandAppView(ctx, actorUserId, appId, { status: normLeadStatus(app.status), page: back.page });
     return;
   }
 
@@ -10651,7 +10655,7 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
   }), { op: 'brand_app_thread_append', appId });
 
   try { await ctx.answerCallbackQuery({ text: '✅ Принято' }); } catch {}
-  await renderBrandAppView(ctx, actorUserId, appId, back);
+  await renderBrandAppView(ctx, actorUserId, appId, { status: 'in_progress', page: back.page });
 }
 
 /**
@@ -10815,10 +10819,28 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
   // allow chat if accepted OR already in progress (brand replied / accepted)
   const st = normLeadStatus(app.status);
   if (st === 'new') {
-    return ctx.answerCallbackQuery({ text: 'Бренд ещё не принял заявку.' });
+    try { await ctx.answerCallbackQuery({ text: 'Бренд ещё не принял заявку.' }); } catch {}
+    // Не оставляем пользователя в ‘тишине’: открываем карточку заявки с подсказкой.
+    await renderBrandAppCardForCreator(ctx, actorUserId, appId);
+    return;
   }
 
-  await setExpectText(ctx.from.id, { type: 'brand_app_chat_send', appId: Number(app.id) });
+  try {
+    await setExpectText(ctx.from.id, { type: 'brand_app_chat_send', appId: Number(app.id) });
+  } catch (e) {
+    const kb = new InlineKeyboard()
+      .text('📨 Открыть заявку', `a:brand_app_card|id:${app.id}`)
+      .row()
+      .text('📋 Меню', 'a:menu')
+      .text('🏠 Home', 'a:home');
+    const msg = '⛔ Сейчас нельзя открыть чат (временная проблема с кешем/сессиями). Попробуй чуть позже.';
+    try {
+      await safeEditOrReply(ctx, msg, { reply_markup: kb });
+    } catch {
+      await ctx.reply(msg, { reply_markup: kb });
+    }
+    return;
+  }
 
   const kb = new InlineKeyboard()
     .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
@@ -21253,6 +21275,19 @@ if (p.a === 'a:brand_app_set') {
     return;
   }
 
+  // Gate: до ✅ Принять нельзя переводить в ‘В работу/Закрыть’ (иначе создаёт путаницу и ощущение ‘заявка пропала’).
+  const curSt = normLeadStatus(app.status);
+  if (curSt === 'new' && (st === 'in_progress' || st === 'closed')) {
+    try {
+      const t = BRAND_APP_ACCEPT_COST > 0
+        ? `Сначала ✅ Принять (спишется ${BRAND_APP_ACCEPT_COST} ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')})`
+        : 'Сначала ✅ Принять';
+      await ctx.answerCallbackQuery({ text: t });
+    } catch {}
+    await renderBrandAppView(ctx, u.id, appId, back);
+    return;
+  }
+
   // Update in DB if available
   const updated = await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, st), { op: 'brand_app_status', appId, st });
   if (!updated) {
@@ -21270,13 +21305,15 @@ if (p.a === 'a:brand_app_set') {
     await ctx.answerCallbackQuery({ text: `✅ Перемещено: ${t}` });
   } catch {}
 
+  const nextBack = { status: st, page: back.page };
+
   try {
-    await renderBrandAppView(ctx, u.id, appId, back);
+    await renderBrandAppView(ctx, u.id, appId, nextBack);
   } catch (e) {
     try { console.warn('[brand_app_set] unhandled', { appId, st, back, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
     const text = '✅ Статус обновлён. (Экран не удалось перерисовать — попробуй открыть заявку заново.)';
     const kb = new InlineKeyboard()
-      .text('⬅️ Назад', 'a:brand_apps|ws:0|s:' + back.status + '|p:' + back.page)
+      .text('⬅️ Назад', 'a:brand_apps|ws:0|s:' + nextBack.status + '|p:' + nextBack.page)
       .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     try { await safeEditOrReply(ctx, text, { reply_markup: kb }); } catch { await ctx.reply(text, { reply_markup: kb }); }
   }
@@ -21376,7 +21413,18 @@ if (p.a === 'a:brand_app_chat') {
   try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   if (!appId) return;
-  await startBrandAppChatForCreator(ctx, u.id, appId);
+  try {
+    await startBrandAppChatForCreator(ctx, u.id, appId);
+  } catch (e) {
+    try { console.warn('[brand_app_chat] unhandled', { appId, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    const kb = new InlineKeyboard()
+      .text('📨 Открыть заявку', `a:brand_app_card|id:${appId}`)
+      .row()
+      .text('📋 Меню', 'a:menu')
+      .text('🏠 Home', 'a:home');
+    const msg = '⚠️ Не удалось открыть чат. Попробуй ещё раз или открой заявку заново.';
+    try { await safeEditOrReply(ctx, msg, { reply_markup: kb }); } catch { await ctx.reply(msg, { reply_markup: kb }); }
+  }
   return;
 }
 

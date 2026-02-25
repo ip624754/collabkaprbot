@@ -101,7 +101,7 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:brand_app_accept": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:brand_app_accepted_done": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:brand_app_card": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
-  "a:brand_app_chat": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:brand_app_chat": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:brand_app_del_do": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:brand_app_del_q": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:brand_app_reply": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
