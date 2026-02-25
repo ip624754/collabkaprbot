@@ -5506,9 +5506,143 @@ export async function logBroadcastSent(broadcastId, userId, status = 'sent') {
      do update set
        status = excluded.status,
        retry_after_until = null,
+       non_retryable = false,
+       last_error = null,
        sent_at = now()`,
     [Number(broadcastId), Number(userId), String(status)]
   );
+}
+
+// QStash fan-out: mark recipient queued (idempotent, does NOT increment attempts).
+export async function logBroadcastQueued(broadcastId, userId) {
+  await pool.query(
+    `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until, non_retryable)
+     values ($1, $2, 'queued', null, false)
+     on conflict (broadcast_id, user_id)
+     do update set
+       status = 'queued',
+       retry_after_until = null,
+       non_retryable = false,
+       last_error = null,
+       sent_at = now()`,
+    [Number(broadcastId), Number(userId)]
+  );
+}
+
+// QStash fan-out: atomically claim delivery for sending.
+// Allows reclaim of stale 'sending' rows (serverless hard-kill) after N seconds.
+export async function claimBroadcastDelivery(broadcastId, userId, staleSendingSec = 60) {
+  const stale = Math.max(10, Math.min(600, Number(staleSendingSec || 0) || 0));
+  const r = await pool.query(
+    `with ins as (
+       insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until, non_retryable)
+       values ($1, $2, 'queued', null, false)
+       on conflict do nothing
+     ),
+     claim as (
+       update broadcast_sent_log
+          set status = 'sending',
+              attempts = attempts + 1,
+              last_attempt_at = now(),
+              last_error = null
+        where broadcast_id = $1
+          and user_id = $2
+          and non_retryable = false
+          and (
+            status in ('queued','retry','deferred','quarantined')
+            or (status = 'sending' and last_attempt_at is not null and last_attempt_at < now() - ($3 || ' seconds')::interval)
+          )
+          and (retry_after_until is null or retry_after_until <= now())
+        returning *
+     )
+     select * from claim`,
+    [Number(broadcastId), Number(userId), String(stale)]
+  );
+  return r.rows[0] || null;
+}
+
+export async function markBroadcastDeliverySent(broadcastId, userId) {
+  await pool.query(
+    `update broadcast_sent_log
+        set status = 'sent',
+            retry_after_until = null,
+            non_retryable = false,
+            last_error = null,
+            sent_at = now()
+      where broadcast_id = $1 and user_id = $2`,
+    [Number(broadcastId), Number(userId)]
+  );
+}
+
+export async function markBroadcastDeliveryBlocked(broadcastId, userId, errorText = '') {
+  await pool.query(
+    `update broadcast_sent_log
+        set status = 'blocked',
+            retry_after_until = null,
+            non_retryable = true,
+            last_error = $3,
+            sent_at = now()
+      where broadcast_id = $1 and user_id = $2`,
+    [Number(broadcastId), Number(userId), String(errorText || '').slice(0, 500)]
+  );
+}
+
+export async function markBroadcastDeliveryFailedNonRetryable(broadcastId, userId, errorText = '') {
+  await pool.query(
+    `update broadcast_sent_log
+        set status = 'failed',
+            retry_after_until = null,
+            non_retryable = true,
+            last_error = $3,
+            sent_at = now()
+      where broadcast_id = $1 and user_id = $2`,
+    [Number(broadcastId), Number(userId), String(errorText || '').slice(0, 500)]
+  );
+}
+
+export async function markBroadcastDeliveryRetry(broadcastId, userId, retryAfterSec, errorText = '') {
+  const sec = Math.max(1, Math.min(24 * 3600, Number(retryAfterSec || 0) || 0));
+  await pool.query(
+    `update broadcast_sent_log
+        set status = 'retry',
+            retry_after_until = now() + ($3 || ' seconds')::interval,
+            non_retryable = false,
+            last_error = $4,
+            sent_at = now()
+      where broadcast_id = $1 and user_id = $2`,
+    [Number(broadcastId), Number(userId), String(sec), String(errorText || '').slice(0, 500)]
+  );
+}
+
+export async function countBroadcastPendingDeliveries(broadcastId) {
+  const r = await pool.query(
+    `select count(*)::int as n
+       from broadcast_sent_log
+      where broadcast_id = $1
+        and status in ('queued','sending','retry','deferred','quarantined')`,
+    [Number(broadcastId)]
+  );
+  return Number(r.rows[0]?.n || 0) || 0;
+}
+
+export async function countBroadcastDeliveryStats(broadcastId) {
+  const r = await pool.query(
+    `select
+        count(*) filter (where status = 'sent')::int as sent,
+        count(*) filter (where status = 'failed')::int as failed,
+        count(*) filter (where status = 'blocked')::int as blocked,
+        count(*) filter (where status in ('queued','sending','retry','deferred','quarantined'))::int as pending
+     from broadcast_sent_log
+     where broadcast_id = $1`,
+    [Number(broadcastId)]
+  );
+  const row = r.rows[0] || {};
+  return {
+    sent: Number(row.sent || 0) || 0,
+    failed: Number(row.failed || 0) || 0,
+    blocked: Number(row.blocked || 0) || 0,
+    pending: Number(row.pending || 0) || 0,
+  };
 }
 
 // Broadcast per-recipient 429 deferral (so one heavy recipient doesn't stall the whole job).
@@ -5521,6 +5655,8 @@ export async function logBroadcastDeferred(broadcastId, userId, retryAfterSec) {
      do update set
        status = 'deferred',
        retry_after_until = now() + ($3 || ' seconds')::interval,
+       non_retryable = false,
+       last_error = null,
        sent_at = now()`,
     [Number(broadcastId), Number(userId), String(sec)]
   );
@@ -5540,6 +5676,8 @@ export async function logBroadcastQuarantine(broadcastId, userId, quarantineSec)
          coalesce(broadcast_sent_log.retry_after_until, now()),
          now() + ($3 || ' seconds')::interval
        ),
+       non_retryable = false,
+       last_error = null,
        sent_at = now()
      where broadcast_sent_log.status in ('deferred','quarantined')`,
     [Number(broadcastId), Number(userId), String(sec)]
