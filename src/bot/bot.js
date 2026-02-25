@@ -40,6 +40,11 @@ const CONTACT_UNLOCK_COST = envInt('CONTACT_UNLOCK_COST', 1, { min: 0, max: 10 }
 const CONTACT_UNLOCK_TTL_DAYS = envInt('CONTACT_UNLOCK_TTL_DAYS', 30, { min: 1, max: 365 });
 const CONTACT_UNLOCK_TTL_SEC = CONTACT_UNLOCK_TTL_DAYS * 24 * 60 * 60;
 
+// Brand Applications (Creator → Brand): accept opens dialog and charges Brand Pass credits.
+// Optional env override:
+// - BRAND_APP_ACCEPT_COST (default: 1)
+const BRAND_APP_ACCEPT_COST = envInt('BRAND_APP_ACCEPT_COST', 1, { min: 0, max: 10 });
+
 
 const BRAND_CREDITS_CACHE_TTL_SEC = envInt('BRAND_CREDITS_CACHE_TTL_SEC', 60, { min: 5, max: 3600 });
 
@@ -9873,7 +9878,10 @@ ${threadBlock}`;
   if (st === 'new') {
     text += `
 
-💡 <i>Нажми ✅ Принять, чтобы открыть диалог: креатор получит кнопку “💬 Написать бренду”.</i>`;
+💡 <i>Нажми ✅ Принять, чтобы открыть диалог: креатор получит кнопку “💬 Написать бренду”.</i>` +
+      (BRAND_APP_ACCEPT_COST > 0
+        ? `\n<i>✅ Принять спишет: <b>${BRAND_APP_ACCEPT_COST}</b> ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')}.</i>`
+        : `\n<i>✅ Принять: бесплатно.</i>`);
   }
 
   // UX note: statuses are internal triage for brand inbox
@@ -9888,10 +9896,16 @@ ${threadBlock}`;
     kb.text('📌 В сделках', `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0`).row();
   }
 
+  // Prevent monetization bypass: until accepted, don't allow reply/templates.
+  if (st !== 'new') {
+    kb
+      .text('✍️ Ответить', `a:brand_app_reply|id:${app.id}|s:${back.status}|p:${back.page}`)
+      .text('⚡ Шаблоны', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
+      .row();
+  }
+
+  // Internal triage is always allowed.
   kb
-    .text('✍️ Ответить', `a:brand_app_reply|id:${app.id}|s:${back.status}|p:${back.page}`)
-    .text('⚡ Шаблоны', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
-    .row()
     .text('💬 В работу', `a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`)
     .text('✅ Закрыть', `a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`)
     .row()
@@ -9910,6 +9924,18 @@ ${threadBlock}`;
 async function startBrandAppReply(ctx, actorUserId, appId, back) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+
+  // Guard: reply is only allowed after accept (accept charges credits).
+  if (normLeadStatus(app.status) === 'new') {
+    try {
+      const t = BRAND_APP_ACCEPT_COST > 0
+        ? `Сначала ✅ Принять (спишется ${BRAND_APP_ACCEPT_COST} ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')})`
+        : 'Сначала ✅ Принять';
+      await ctx.answerCallbackQuery({ text: t });
+    } catch {}
+    await renderBrandAppView(ctx, actorUserId, appId, back);
+    return;
+  }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -10188,6 +10214,18 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
   if (!access.ok) return;
 
+  // Guard: templates are only allowed after accept (accept charges credits).
+  if (normLeadStatus(app.status) === 'new') {
+    try {
+      const t = BRAND_APP_ACCEPT_COST > 0
+        ? `Сначала ✅ Принять (спишется ${BRAND_APP_ACCEPT_COST} ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')})`
+        : 'Сначала ✅ Принять';
+      await ctx.answerCallbackQuery({ text: t });
+    } catch {}
+    await renderBrandAppView(ctx, actorUserId, appId, back);
+    return;
+  }
+
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
@@ -10369,6 +10407,18 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
   if (!access.ok) return;
 
+  // Guard: templates are only allowed after accept (accept charges credits).
+  if (normLeadStatus(app.status) === 'new') {
+    try {
+      const t = BRAND_APP_ACCEPT_COST > 0
+        ? `Сначала ✅ Принять (спишется ${BRAND_APP_ACCEPT_COST} ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')})`
+        : 'Сначала ✅ Принять';
+      await ctx.answerCallbackQuery({ text: t });
+    } catch {}
+    await renderBrandAppView(ctx, actorUserId, appId, back);
+    return;
+  }
+
   const creatorTgId = Number(app.creator_tg_id || 0);
   if (!creatorTgId) { try { await ctx.answerCallbackQuery({ text: 'У креатора нет TG id.' }); } catch {} return; }
 
@@ -10455,9 +10505,7 @@ ${escapeHtml(replyText)}`;
     by_tg_id: Number(ctx.from?.id || 0),
     by_username: ctx.from?.username || null
   }), { op: 'brand_app_thread_append', appId });
-  if (normLeadStatus(app.status) === 'new') {
-    await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, 'in_progress'), { op: 'brand_app_status', appId, st: 'in_progress' });
-  }
+
 
   if (!sendRes.ok) return;
 
@@ -10495,8 +10543,37 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
   if (!access.ok) return;
 
-  // mark accepted (status=in_progress + meta.deal)
-  await safeBrandAppsWrite(() => db.markBrandApplicationAccepted(appId, actorUserId), { op: 'brand_app_accept', appId });
+  // Accept is the monetization gate: spend credits exactly-once, then open dialog.
+  // Idempotent: if already accepted / already charged -> no double charge.
+  const cost = Math.max(0, Number(BRAND_APP_ACCEPT_COST || 0));
+  const res = await safeBrandAppsWrite(
+    () => db.acceptBrandApplicationWithCharge(appId, actorUserId, brandUserId, cost),
+    { op: 'brand_app_accept_charge', appId }
+  );
+
+  if (res && res.status === 'insufficient_credits') {
+    try { await ctx.answerCallbackQuery({ text: 'Недостаточно кредитов для ✅ Принять.' }); } catch {}
+    const kb = new InlineKeyboard()
+      .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:app|id:${app.id}|s:${back.status}|p:${back.page}`)
+      .row()
+      .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+    const txt =
+      `⚠️ <b>Недостаточно кредитов</b>\n\n` +
+      `Чтобы принять заявку и открыть диалог, нужно <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}.\n` +
+      `Докупи кредиты и вернись сюда.`;
+
+    await safeEditOrReply(ctx, txt, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    return;
+  }
+
+  // If already accepted earlier, don't duplicate side effects (notifications/thread).
+  if (res && (res.status === 'already_accepted' || res.status === 'already')) {
+    try { await ctx.answerCallbackQuery({ text: '✅ Уже принято' }); } catch {}
+    await renderBrandAppView(ctx, actorUserId, appId, back);
+    return;
+  }
 
   // notify creator
   const creatorTgId = Number(app.creator_tg_id || 0);
@@ -13012,6 +13089,13 @@ async function renderBrandPassTopup(ctx, userId, wsId, opts = {}) {
   const bpRws = Number(opts?.rws || 0);
   if (bpRet === 'wsp' && bpRws > 0) {
     kb.text('⬅️ Вернуться к витрине', `a:wsp_open|ws:${bpRws}|m:ro`);
+  }
+
+  const bpAppId = Number(opts?.id || 0);
+  const bpBackStatus = String(opts?.s || 'new');
+  const bpBackPage = Number(opts?.p || 0);
+  if (bpRet === 'app' && bpAppId > 0) {
+    kb.text('⬅️ Вернуться к заявке', `a:brand_app_view|id:${bpAppId}|s:${bpBackStatus}|p:${bpBackPage}`);
   }
 
   await safeEditOrReply(ctx, 
@@ -23264,7 +23348,10 @@ ${link}`;
 
       const ret = String(p.ret || '').trim();
       const rws = Number(p.rws || 0);
-      await renderBrandPass(ctx, u.id, wsId, { ret, rws });
+      const id = Number(p.id || 0);
+      const s = String(p.s || 'new');
+      const page = Number(p.p || 0);
+      await renderBrandPass(ctx, u.id, wsId, { ret, rws, id, s, p: page });
       return;
     }
 
