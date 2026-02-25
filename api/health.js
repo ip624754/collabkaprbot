@@ -80,6 +80,7 @@ export default async function handler(_req, res) {
       cooldown_source: null,
       last_429_at: null,
       last_429_reason: null,
+      qstash_last_delivery_at: null,
       counters: null,
     };
     try {
@@ -95,6 +96,12 @@ export default async function handler(_req, res) {
         redis.get(k(['broadcast', 'defer_wait', 'd', day])),
         redis.get(k(['broadcast', 'quarantine_set', 'd', day])),
       ]);
+
+      try {
+        broadcast.qstash_last_delivery_at = (await redis.get(k(['qstash', 'broadcast_deliver', 'last_at']))) || null;
+      } catch {
+        broadcast.qstash_last_delivery_at = null;
+      }
 
       const untilMs = Number(untilRaw) || 0;
       const bid = Number(bidRaw) || 0;
