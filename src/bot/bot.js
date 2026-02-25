@@ -12388,6 +12388,22 @@ async function notifyOfficialQueueAdmins(api, input = {}) {
 // Official publish/remove idempotency: per-offer token lock (prevents duplicate posts on parallel actions).
 const OFFICIAL_OFFER_LOCK_TTL_SEC = 180;
 
+// STEP129: protect against Vercel hard-kill during slow Telegram API responses.
+// grammY supports AbortSignal as the last argument for API calls.
+// Keep this below typical serverless timeout to ensure we can revert DB markers.
+const OFFICIAL_TG_CALL_TIMEOUT_MS = 5500;
+
+function tgTimeoutSignal(ms = OFFICIAL_TG_CALL_TIMEOUT_MS) {
+  const t = Math.max(1, Number(ms) || 1);
+  try {
+    // Node.js 20+
+    return AbortSignal.timeout(t);
+  } catch {
+    const ac = new AbortController();
+    setTimeout(() => { try { ac.abort(); } catch {} }, t);
+    return ac.signal;
+  }
+}
 
 
 async function buildOfficialOfferPost(offerRow, opts = {}) {
@@ -12435,6 +12451,16 @@ async function buildOfficialOfferPost(offerRow, opts = {}) {
   const kb = new InlineKeyboard();
   if (link) kb.url('🚀 Открыть оффер', link);
   return { text, kb };
+}
+
+// STEP129: helper to parse offerId from the official channel post text/caption
+function extractOfferIdFromOfficialPostText(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  const m = /оффер\s*#\s*(\d+)/i.exec(s);
+  if (!m) return null;
+  const id = Number(m[1]);
+  return Number.isFinite(id) && id > 0 ? id : null;
 }
 
 async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
@@ -12517,11 +12543,11 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
     if (!messageId) return false;
     // Try both (text vs media).
     try {
-      await api.editMessageText(channelId, messageId, text, { parse_mode: 'HTML', reply_markup: replyMarkup });
+      await api.editMessageText(channelId, messageId, text, { parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
       return true;
     } catch {}
     try {
-      await api.editMessageCaption(channelId, messageId, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup });
+      await api.editMessageCaption(channelId, messageId, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
       return true;
     } catch {}
     return false;
@@ -12536,16 +12562,16 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
 
     if (hasMedia && fid) {
       if (mt === 'photo') {
-        sent = await api.sendPhoto(channelId, fid, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup });
+        sent = await api.sendPhoto(channelId, fid, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
       } else if (mt === 'video') {
-        sent = await api.sendVideo(channelId, fid, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup });
+        sent = await api.sendVideo(channelId, fid, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
       } else if (mt === 'animation' || mt === 'gif') {
-        sent = await api.sendAnimation(channelId, fid, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup });
+        sent = await api.sendAnimation(channelId, fid, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
       } else {
-        sent = await api.sendMessage(channelId, text, { parse_mode: 'HTML', reply_markup: replyMarkup });
+        sent = await api.sendMessage(channelId, text, { parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
       }
     } else {
-      sent = await api.sendMessage(channelId, text, { parse_mode: 'HTML', reply_markup: replyMarkup });
+      sent = await api.sendMessage(channelId, text, { parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
     }
 
     const newId = sent?.message_id ? Number(sent.message_id) : null;
@@ -12553,7 +12579,7 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
 
     // Remove old message (best-effort) if it existed.
     if (messageId && newId !== messageId) {
-      try { await api.deleteMessage(channelId, messageId); } catch {}
+      try { await api.deleteMessage(channelId, messageId, tgTimeoutSignal()); } catch {}
     }
     messageId = newId;
   }
@@ -12616,9 +12642,9 @@ async function removeOfficialOfferPost(api, offerId, reason = 'REMOVED') {
         ? '⌛️ Размещение истекло.'
         : '📴 Размещение снято.';
       try {
-        await api.editMessageText(channelId, msgId, text, { parse_mode: 'HTML' });
+        await api.editMessageText(channelId, msgId, text, { parse_mode: 'HTML' }, tgTimeoutSignal());
       } catch (_) {
-        try { await api.editMessageCaption(channelId, msgId, { caption: text, parse_mode: 'HTML' }); } catch (_) {}
+        try { await api.editMessageCaption(channelId, msgId, { caption: text, parse_mode: 'HTML' }, tgTimeoutSignal()); } catch (_) {}
       }
     } catch (_) {}
   }
@@ -14602,6 +14628,38 @@ export function getBot() {
       },
     }, 'bot.error');
   });
+
+  // STEP129: Self-heal for official publish stuck in PUBLISHING.
+  // If we successfully posted to the official channel but serverless died
+  // before persisting message_id, Telegram will deliver a channel_post update
+  // and we can attach message_id here.
+  const officialChannelId = Number(CFG.OFFICIAL_CHANNEL_ID || 0);
+  if (CFG.OFFICIAL_PUBLISH_ENABLED && officialChannelId) {
+    const selfHeal = async (ctx, msg) => {
+      try {
+        if (!msg || Number(msg?.chat?.id || 0) != officialChannelId) return;
+        const rawText = (msg.text || msg.caption || '');
+        const offerId = extractOfferIdFromOfficialPostText(rawText);
+        if (!offerId) return;
+        const messageId = Number(msg.message_id || 0);
+        if (!messageId) return;
+        const updated = await safeOfficialPosts(
+          () => db.atomicAttachOfficialPostMessageId(offerId, { channelChatId: officialChannelId, messageId }),
+          async () => null
+        );
+        if (updated) {
+          console.log('[OFFICIAL] selfheal attached message_id', { offerId, messageId });
+        }
+      } catch (_) {}
+    };
+
+    bot.on('channel_post', async (ctx) => {
+      await selfHeal(ctx, ctx.update?.channel_post);
+    });
+    bot.on('edited_channel_post', async (ctx) => {
+      await selfHeal(ctx, ctx.update?.edited_channel_post);
+    });
+  }
 
   // --- TEXT INPUT router (expectText) ---
 
