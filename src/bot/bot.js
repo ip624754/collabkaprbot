@@ -898,8 +898,15 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
   const wss = await db.listWorkspaces(ownerUserId);
   const kb = new InlineKeyboard();
   if (!wss.length) {
-    kb.text('📋 Меню', 'a:menu');
-    await safeEditOrReply(ctx, 'Сначала подключи канал: нажми «🚀 Подключить канал» в меню.', { reply_markup: kb });
+    kb.text('🚀 Подключить канал', 'a:setup').row();
+    kb.text('📣 Мои каналы', 'a:ws_list').row();
+    kb.text('⬅️ Назад', backCb).row();
+    kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    await safeEditOrReply(
+      ctx,
+      '⚠️ Чтобы создать розыгрыш, сначала подключи канал (витрину).\n\nНажми «🚀 Подключить канал», добавь бота админом в свой канал и вернись сюда.',
+      { reply_markup: kb }
+    );
     return;
   }
 
@@ -911,6 +918,26 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
 
   await safeEditOrReply(ctx, 
     `Выбери канал, где создать новый конкурс:`,
+    { reply_markup: kb }
+  );
+}
+
+async function renderGwNewGate(ctx, { backCb = 'a:gw_list', reason = '' } = {}) {
+  const kb = new InlineKeyboard()
+    .text('🚀 Подключить канал', 'a:setup')
+    .text('📣 Мои каналы', 'a:ws_list')
+    .row()
+    .text('📣 Выбрать канал', 'a:gw_new_pick')
+    .row()
+    .text('⬅️ Назад', backCb)
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+
+  const tail = reason ? `\n\nПричина: ${String(reason)}` : '';
+  await safeEditOrReply(
+    ctx,
+    `⚠️ Чтобы создать розыгрыш, нужен подключённый канал (витрина).\n\n1) Нажми «🚀 Подключить канал» и добавь бота админом.\n2) Затем вернись и выбери канал («📣 Выбрать канал»).${tail}`,
     { reply_markup: kb }
   );
 }
@@ -27970,8 +27997,20 @@ ${winnersHeader}`;
     if (p.a === 'a:gw_new') {
       const wsId = Number(p.ws);
       db.trackEvent('gw_new_open', { userId: u.id, wsId, meta: {} });
+      if (!wsId || wsId <= 0) {
+        await ctx.answerCallbackQuery({ text: 'Выбери канал.' });
+        await renderGwNewGate(ctx, { backCb: 'a:gw_list', reason: 'Не выбран канал.' });
+        return;
+      }
+
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) {
+        // active_ws can become stale (channel removed / permissions changed). Clear it so the UI falls back to picker.
+        try { await redis.del(k(['active_ws', ctx.from.id])); } catch {}
+        await ctx.answerCallbackQuery({ text: 'Сначала выбери канал.' });
+        await renderGwNewGate(ctx, { backCb: 'a:gw_list', reason: 'Канал не найден или нет доступа. Выбери канал заново.' });
+        return;
+      }
       await clearDraft(ctx.from.id);
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '🎁 <b>Новый конкурс</b>\n\nКонкурс — инструмент PR и роста аудитории.\nИспользуй его, чтобы собрать участников, вовлечённость и заявки брендов.\n\n<b>Шаг 1/6:</b> выбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
