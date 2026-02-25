@@ -5390,6 +5390,27 @@ export async function updateBroadcast(id, fields = {}) {
 }
 
 /**
+ * DB fuse for Telegram 429 cooldown when Redis is unavailable.
+ * Stores a per-broadcast cooldown window in Neon (best-effort).
+ *
+ * Important:
+ * - Uses GREATEST to avoid shortening an existing cooldown.
+ * - This is invoked only on Redis failures in cron (not on hot UI paths).
+ */
+export async function atomicMaxBroadcastCooldownUntil(id, cooldownUntilIso, reason = 'telegram_429') {
+  const r = await pool.query(
+    `update broadcasts
+       set cooldown_until = greatest(coalesce(cooldown_until, 'epoch'::timestamptz), $2::timestamptz),
+           cooldown_reason = $3,
+           updated_at = now()
+     where id = $1
+     returning cooldown_until`,
+    [Number(id), String(cooldownUntilIso), String(reason || 'telegram_429')]
+  );
+  return r.rows[0]?.cooldown_until || null;
+}
+
+/**
  * Count audience for a broadcast filter.
  * Mirrors listUsersDirectory filter logic.
  */
