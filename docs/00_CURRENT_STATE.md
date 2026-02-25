@@ -121,6 +121,7 @@
 - QStash fan-out доставка (serverless-safe): cron только энкьюит задачи, доставляет воркер `POST /api/qstash/broadcast-deliver`.
 - Runtime toggle (Redis): `sys:broadcast_qstash_fanout` (по умолчанию OFF).
 - Setup/rollout: `docs/17_QSTASH_RUNBOOK.md`.
+- Admin self-check: 👑 Админка → 🛰 QStash статус → 🧪 Send signed ping (endpoint `POST /api/qstash/ping`).
 
 ### C) HomeHub / ui_mode и Role Gate
 - `ui_mode` хранится в Redis (`brand` / `creator`).

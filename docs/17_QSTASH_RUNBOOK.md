@@ -68,7 +68,32 @@ Vercel → Project → **Settings → Environment Variables**:
 
 ---
 
-## 4) Рекомендуемый rollout (без регрессий)
+## 4) Быстрый self-check (10 секунд): Admin → QStash статус → signed ping
+
+Зачем: быстро проверить, что:
+- `QSTASH_TOKEN` работает (мы можем публиковать job)
+- подпись `Upstash-Signature` валидируется (signing keys корректные)
+- воркер доступен и доходит до нашего приложения
+
+Шаги:
+1) Открой **👑 Админка**
+2) Нажми **🛰 QStash статус**
+3) Нажми **🧪 Send signed ping**
+4) Подожди 1–3 секунды и обнови экран статуса
+
+Ожидаемое:
+- `Ping enqueued` обновился (это мы записали в Redis на стороне бота)
+- `Ping received` обновился (это пришёл подписанный запрос от QStash и прошёл verify)
+- `ping status: OK`
+
+Если `Ping received` не обновляется:
+- проверяй signing keys (`QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`)
+- проверь, что `CFG.PUBLIC_BASE_URL` верный (QStash доставляет по абсолютному URL)
+
+---
+
+## 5) Рекомендуемый rollout (без регрессий)
+
 
 ### После деплоя
 1) Держим fan-out **OFF**.
@@ -92,7 +117,7 @@ Vercel → Project → **Settings → Environment Variables**:
 
 ---
 
-## 5) Политика деградаций (фиксировано)
+## 6) Политика деградаций (фиксировано)
 
 - **Redis down → fail-open**
   - воркер продолжает доставку
@@ -108,7 +133,7 @@ Vercel → Project → **Settings → Environment Variables**:
 
 ---
 
-## 6) Troubleshooting (быстро)
+## 7) Troubleshooting (быстро)
 
 ### Ошибка: `qstash_token_missing`
 - не задан `QSTASH_TOKEN` в окружении
