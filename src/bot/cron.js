@@ -449,6 +449,14 @@ async function autoHealOrphanedPayments() {
   let notifySkipped = 0;
   const notifySkippedIds = [];
 
+  // Manual review markers (to avoid silent retry loops and surface to ops).
+  let validationFailed = 0;
+  const validationFailedIds = [];
+  const validationFailedReasons = [];
+  let manualRequired = 0;
+  const manualRequiredIds = [];
+  const manualRequiredReasons = [];
+
 
   // Fetch a slightly larger window; then filter missing_session.
   const rows = await db.listPaymentsByStatus('ORPHANED', 50, 0);
@@ -467,8 +475,12 @@ async function autoHealOrphanedPayments() {
         payerUserId: Number(r.user_id || 0) || null,
       });
       if (!v || !v.ok) {
+        const rr = String(v?.reason || 'validation_failed');
+        validationFailed += 1;
+        if (validationFailedIds.length < 5) validationFailedIds.push(Number(r.id));
+        if (validationFailedReasons.length < 3) validationFailedReasons.push(rr);
         try {
-          await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${String(v?.reason || 'validation_failed')}`);
+          await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`);
         } catch {}
         skipped += 1;
         continue;
@@ -516,6 +528,9 @@ async function autoHealOrphanedPayments() {
         // Avoid retry loop for permanent non-applied cases.
         const rr = String(fb?.reason || '');
         if (rr === 'unsupported_payload' || rr === 'missing_userid_or_wsid' || rr === 'bad_input' || rr === 'user_mismatch') {
+          manualRequired += 1;
+          if (manualRequiredIds.length < 5) manualRequiredIds.push(Number(r.id));
+          if (manualRequiredReasons.length < 3) manualRequiredReasons.push(rr);
           try {
             await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`);
           } catch {}
@@ -568,6 +583,53 @@ async function autoHealOrphanedPayments() {
           `Failed: ${failed}`,
           `Ids: ${failedIds.join(',') || '-'}`,
           failedReasons.length ? `Reason: ${failedReasons[0]}` : '',
+        ].filter(Boolean),
+      });
+    } catch {}
+  }
+
+
+
+  // Ops alert when strict validation fails (manual review required).
+  // Reason includes "failed" so it passes OPS_ALERT_SILENT filters.
+  if (validationFailed > 0) {
+    try {
+      const api = getBot().api;
+      await queueOpsAlert(api, {
+        group: 'ops',
+        reason: 'autoheal_validation_failed',
+        title: 'Auto-heal ORPHANED: strict validation failed',
+        paymentId: validationFailedIds.length ? validationFailedIds[0] : null,
+        kind: 'cron',
+        payload: '',
+        extra: [
+          `Checked: ${cand.length}`,
+          `Applied: ${applied}`,
+          `Validation failed: ${validationFailed}`,
+          `Ids: ${validationFailedIds.join(',') || '-'}`,
+          validationFailedReasons.length ? `Reason: ${validationFailedReasons[0]}` : '',
+        ].filter(Boolean),
+      });
+    } catch {}
+  }
+
+  // Ops alert for permanent non-applied cases we marked as manual_required.
+  if (manualRequired > 0) {
+    try {
+      const api = getBot().api;
+      await queueOpsAlert(api, {
+        group: 'ops',
+        reason: 'autoheal_manual_required_failed',
+        title: 'Auto-heal ORPHANED: manual review required',
+        paymentId: manualRequiredIds.length ? manualRequiredIds[0] : null,
+        kind: 'cron',
+        payload: '',
+        extra: [
+          `Checked: ${cand.length}`,
+          `Applied: ${applied}`,
+          `Manual required: ${manualRequired}`,
+          `Ids: ${manualRequiredIds.join(',') || '-'}`,
+          manualRequiredReasons.length ? `Reason: ${manualRequiredReasons[0]}` : '',
         ].filter(Boolean),
       });
     } catch {}
