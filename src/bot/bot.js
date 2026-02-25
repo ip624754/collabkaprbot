@@ -8076,6 +8076,19 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const formatsTxt = fmtMatrix(ws.profile_formats, PROFILE_FORMATS);
   const geoRaw = ws.profile_geo ? String(ws.profile_geo).trim() : '';
   const contactRawTxt = ws.profile_contact ? String(ws.profile_contact).trim() : '';
+
+  // STEP105: optional structured contacts (read-only support).
+  // Source of truth remains legacy fields until creators start filling structured contacts.
+  const contactsObj = (ws.profile_contacts && typeof ws.profile_contacts === 'object') ? ws.profile_contacts : null;
+  const cTgRaw = contactsObj?.tg ? String(contactsObj.tg).trim() : '';
+  const cTg = cTgRaw.replace(/^@/, '');
+  const cEmail = contactsObj?.email ? String(contactsObj.email).trim() : '';
+  const cPhone = contactsObj?.phone ? String(contactsObj.phone).trim() : '';
+  const cSiteRaw = contactsObj?.site ? String(contactsObj.site).trim() : '';
+  const cSite = cSiteRaw && !/^https?:\/\//i.test(cSiteRaw) ? ('https://' + cSiteRaw.replace(/^\/+/, '')) : cSiteRaw;
+  const cOther = contactsObj?.other ? String(contactsObj.other).trim() : '';
+  const hasStructuredContacts = !!(cTg || cEmail || cPhone || cSite || cOther);
+
   const aboutRaw = ws.profile_about ? String(ws.profile_about).trim() : '';
 
   let aboutTxt = aboutRaw;
@@ -8096,9 +8109,9 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
 
   // Contacts unlock also gates any external links (IG/portfolio) to prevent bypassing monetization.
-  const canUnlockContacts = !!contactRawTxt || !!ws.channel_username || !!ig || (ports && ports.length);
+  const canUnlockContacts = hasStructuredContacts || !!contactRawTxt || !!ws.channel_username || !!ig || (ports && ports.length);
 
-  const contactUrl = (() => {
+  const contactUrlLegacy = (() => {
     const contactRaw = contactRawTxt;
     if (!contactRaw) return null;
     const tg = wsTgUrlFromContact(contactRaw);
@@ -8106,6 +8119,15 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     if (/^https?:\/\//i.test(contactRaw)) return contactRaw;
     if (/^t\.me\//i.test(contactRaw)) return 'https://' + contactRaw;
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactRaw)) return 'mailto:' + contactRaw;
+    return null;
+  })();
+
+  // Primary contact URL for brand-facing "💬 Написать".
+  // Prefer structured Telegram username, then legacy, then structured site.
+  const primaryContactUrl = (() => {
+    if (cTg) return `https://t.me/${cTg}`;
+    if (contactUrlLegacy) return contactUrlLegacy;
+    if (cSite) return cSite;
     return null;
   })();
 
@@ -8242,10 +8264,30 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
           const un = String(ws.channel_username).replace(/^@/, '');
           lines.push(`• Telegram: <a href="https://t.me/${escapeHtml(un)}">@${escapeHtml(un)}</a>`);
         }
+        if (hasStructuredContacts) {
+          if (cTg) {
+            if (linksEnabled) lines.push(`• TG username: <a href="https://t.me/${escapeHtml(cTg)}">@${escapeHtml(cTg)}</a>`);
+            else lines.push(`• TG username: <b>${escapeHtml(deLinkifyText('@' + cTg))}</b>`);
+          }
+          if (cEmail) {
+            if (linksEnabled) lines.push(`• Email: <a href="mailto:${escapeHtml(cEmail)}">${escapeHtml(cEmail)}</a>`);
+            else lines.push(`• Email: <b>${escapeHtml(deLinkifyText(cEmail))}</b>`);
+          }
+          if (cPhone) {
+            lines.push(`• Phone: <b>${escapeHtml(deLinkifyText(cPhone))}</b>`);
+          }
+          if (cSite) {
+            if (linksEnabled) lines.push(`• Website: <a href="${escapeHtml(cSite)}">${escapeHtml(shortUrl(cSite))}</a>`);
+            else lines.push(`• Website: <b>${escapeHtml(deLinkifyText(cSite))}</b>`);
+          }
+          if (cOther) {
+            lines.push(`• Доп.: <b>${escapeHtml(deLinkifyText(cOther))}</b>`);
+          }
+        }
         if (contactRawTxt) {
-          if (contactUrl) lines.push(`• Контакт: <a href="${escapeHtml(contactUrl)}">${escapeHtml(contactRawTxt)}</a>`);
-          else lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt)}</b>`);
-        } else {
+          if (linksEnabled && contactUrlLegacy) lines.push(`• Контакт (legacy): <a href="${escapeHtml(contactUrlLegacy)}">${escapeHtml(contactRawTxt)}</a>`);
+          else lines.push(`• Контакт (legacy): <b>${escapeHtml(deLinkifyText(contactRawTxt))}</b>`);
+        } else if (!hasStructuredContacts) {
           lines.push(`• Контакт: —`);
         }
         if (ig && linksEnabled) {
@@ -8293,10 +8335,10 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     if (rowHas) kb.row();
 
     // Row 2: contacts gate (or direct contact once unlocked)
-    const hasHidden = !!contactRawTxt || !!ws.channel_username || !!contactUrl || !!ig || (ports && ports.length);
+    const hasHidden = hasStructuredContacts || !!contactRawTxt || !!ws.channel_username || !!contactUrlLegacy || !!ig || (ports && ports.length);
     if (linksEnabled) {
-      if (contactUrl) {
-        kb.url('💬 Написать', contactUrl);
+      if (primaryContactUrl) {
+        kb.url('💬 Написать', primaryContactUrl);
         kb.row();
       }
     } else if (hasHidden) {
@@ -20217,6 +20259,16 @@ ${tail}`;
           const ig2 = ws2.profile_ig ? String(ws2.profile_ig) : '';
           const ports2 = Array.isArray(ws2.profile_portfolio_urls) ? ws2.profile_portfolio_urls : [];
           const contactRaw2 = ws2.profile_contact ? String(ws2.profile_contact).trim() : '';
+          const contactsObj2 = (ws2.profile_contacts && typeof ws2.profile_contacts === 'object') ? ws2.profile_contacts : null;
+          const cTgRaw2 = contactsObj2?.tg ? String(contactsObj2.tg).trim() : '';
+          const cTg2 = cTgRaw2.replace(/^@/, '');
+          const cEmail2 = contactsObj2?.email ? String(contactsObj2.email).trim() : '';
+          const cPhone2 = contactsObj2?.phone ? String(contactsObj2.phone).trim() : '';
+          const cSiteRaw2 = contactsObj2?.site ? String(contactsObj2.site).trim() : '';
+          const cSite2 = cSiteRaw2 && !/^https?:\/\//i.test(cSiteRaw2) ? ('https://' + cSiteRaw2.replace(/^\/+/, '')) : cSiteRaw2;
+          const cOther2 = contactsObj2?.other ? String(contactsObj2.other).trim() : '';
+          const hasStructured2 = !!(cTg2 || cEmail2 || cPhone2 || cSite2 || cOther2);
+
           const contactUrl2 = (() => {
             if (!contactRaw2) return null;
             const tg = wsTgUrlFromContact(contactRaw2);
@@ -20234,6 +20286,15 @@ ${tail}`;
             const un = String(ws2.channel_username).replace(/^@/, '');
             lines.push(`• Telegram: <a href="https://t.me/${escapeHtml(un)}">@${escapeHtml(un)}</a>`);
           }
+
+          if (hasStructured2) {
+            if (cTg2) lines.push(`• TG username: <a href="https://t.me/${escapeHtml(cTg2)}">@${escapeHtml(cTg2)}</a>`);
+            if (cEmail2) lines.push(`• Email: <a href="mailto:${escapeHtml(cEmail2)}">${escapeHtml(cEmail2)}</a>`);
+            if (cPhone2) lines.push(`• Phone: <b>${escapeHtml(deLinkifyText(cPhone2))}</b>`);
+            if (cSite2) lines.push(`• Website: <a href="${escapeHtml(cSite2)}">${escapeHtml(shortUrl(cSite2))}</a>`);
+            if (cOther2) lines.push(`• Доп.: <b>${escapeHtml(deLinkifyText(cOther2))}</b>`);
+          }
+
           if (contactRaw2) {
             if (contactUrl2) lines.push(`• Контакт: <a href="${escapeHtml(contactUrl2)}">${escapeHtml(contactRaw2)}</a>`);
             else lines.push(`• Контакт: <b>${escapeHtml(contactRaw2)}</b>`);
