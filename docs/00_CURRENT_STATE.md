@@ -117,6 +117,10 @@
 - `src/bot/bot.js` — wizard рассылок + шаблоны кнопок
 - `src/bot/helpers.js` — `telegramEntitiesToHtml()`, `parseStartPayload()` (bp_/offer_)
 
+Опционально (P3, расширение поверхности):
+- QStash fan-out доставка (serverless-safe): cron только энкьюит задачи, доставляет воркер `POST /api/qstash/broadcast-deliver`.
+- Runtime toggle (Redis): `sys:broadcast_qstash_fanout` (по умолчанию OFF).
+
 ### C) HomeHub / ui_mode и Role Gate
 - `ui_mode` хранится в Redis (`brand` / `creator`).
 - `/start`:

@@ -6,6 +6,10 @@
 - `npm run test:redact` (sanitizer regression: links/emails/@/phones)
 - `npm run actions:check` (registry covers all callback actions; fail-closed guard is strict)
 - Ensure env vars exist (see `.env.example`)
+  - Если включаешь QStash fan-out для рассылок (`sys:broadcast_qstash_fanout=1`):
+    - `QSTASH_TOKEN`
+    - `QSTASH_CURRENT_SIGNING_KEY` (+ `QSTASH_NEXT_SIGNING_KEY` для ротации)
+    - `PUBLIC_BASE_URL` (или корректный `VERCEL_URL` fallback)
 - If schema changed: run migrations via `node migrations/run.js`
 
 ## After deploy

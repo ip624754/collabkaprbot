@@ -76,11 +76,6 @@ TTL истёк → новый инстанс взял лок → старый и
   - fast path (Redis):
     - per-broadcast: `broadcast:<id>:cooldown_until`
     - global (для DB-free early-exit): `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id`
-
-  - fallback fuse (DB, только при деградации Redis):
-    - `broadcasts.cooldown_until` + `broadcasts.cooldown_reason`
-    - при 429 сначала пытаемся поставить Redis cooldown; если Redis write fail — пишем fuse в DB
-    - в `broadcastTick` при Redis down/empty проверяем `cooldown_until` и выходим ДО выборки recipients (не прожигаем Neon)
   - fallback fuse (DB, только если Redis недоступен):
     - `broadcasts.cooldown_until`, `broadcasts.cooldown_reason`
 - Следующие тики **выходят раньше**:
@@ -92,6 +87,21 @@ TTL истёк → новый инстанс взял лок → старый и
   - `broadcast.counters.defer_set` (сколько раз поставили per-recipient defer)
   - `broadcast.counters.defer_wait` (сколько раз ждали deferred без новых получателей)
   - `broadcast.counters.quarantine_set` (сколько раз включали quarantine)
+
+### Broadcast: QStash fan-out (serverless-safe)
+Опциональный режим доставки рассылок через Upstash QStash:
+
+- cron `broadcast_tick` **не шлёт** Telegram сам — он только **энкьюит** задачи доставки.
+- доставка идёт через endpoint воркера: `POST /api/qstash/broadcast-deliver`.
+- endpoint обязан проверять `Upstash-Signature` (JWT подпись). Верификация подписи делается по raw body (нельзя `JSON.stringify(object)`).
+- идемпотентность: DB-truth в `broadcast_sent_log` + статусы `queued/sending/retry/deferred/quarantined/sent/failed/blocked`.
+
+Политика деградаций (как обычно по проекту):
+- Redis down → fail-open (cooldown best-effort, но DB guard остаётся главным).
+- DB down → fail-closed (воркер не отправляет без DB guard, QStash ретраит позже).
+- non-retryable Telegram ошибки → `2xx` + `non_retryable=true` (QStash не гоняет бесконечные ретраи).
+
+Runtime toggle (Redis): `sys:broadcast_qstash_fanout`.
 
 ## Cron: notify не должен стопорить batch
 Уведомления в Telegram (notify в канал/DM) могут зависать. Чтобы тик не «залипал» на одном сообщении:
