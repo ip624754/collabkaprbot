@@ -7394,6 +7394,93 @@ function parseUrlsFromText(input, max = 3) {
   return out;
 }
 
+function detectLegacyContactForMigration(legacyInput) {
+  const raw = String(legacyInput || '').trim();
+  if (!raw) return { ok: false, reason: 'empty' };
+  if (raw.length > 600) return { ok: false, reason: 'too_long' };
+
+  // Collect candidates. We avoid "smart" extraction: if multiple different types found → ambiguous.
+  const tg = new Set();
+  const email = new Set();
+  const phone = new Set();
+  const site = new Set();
+
+  // Telegram: @user and t.me/user
+  {
+    const reAt = /@([A-Za-z0-9_]{5,32})/g;
+    let m;
+    while ((m = reAt.exec(raw))) {
+      const v = normalizeTgUsername('@' + (m[1] || ''));
+      if (v) tg.add(v);
+    }
+    const reTm = /(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_]{5,32})/gi;
+    while ((m = reTm.exec(raw))) {
+      const v = normalizeTgUsername('https://t.me/' + (m[1] || ''));
+      if (v) tg.add(v);
+    }
+  }
+
+  // Email
+  {
+    const re = /\b[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']{2,}\b/g;
+    const ms = raw.match(re) || [];
+    for (const x of ms) {
+      const v = normalizeEmailAddr(x);
+      if (v) email.add(v);
+    }
+  }
+
+  // Phone-like (we validate via normalizePhoneE164Like)
+  {
+    const re = /(\+?\d[\d\s().-]{8,}\d)/g;
+    let m;
+    while ((m = re.exec(raw))) {
+      const v = normalizePhoneE164Like(m[1]);
+      if (v) phone.add(v);
+    }
+  }
+
+  // Website: urls with scheme, plus simple domain tokens (no scheme)
+  {
+    const urls = parseUrlsFromText(raw, 5);
+    for (const u of urls) {
+      const r = normalizeWebsiteUrl(u);
+      if (r.ok) site.add(r.value);
+    }
+
+    // If no explicit urls, allow a single domain token like example.com
+    if (!site.size) {
+      const tokens = raw.split(/\s+/).filter(Boolean);
+      const domainish = tokens.filter(t => /\.[A-Za-z]{2,}/.test(t) && !t.startsWith('@'));
+      if (domainish.length === 1) {
+        const r = normalizeWebsiteUrl(domainish[0]);
+        if (r.ok) site.add(r.value);
+      }
+    }
+  }
+
+  const counts = {
+    tg: tg.size,
+    email: email.size,
+    phone: phone.size,
+    site: site.size,
+  };
+  const nonZero = Object.entries(counts).filter(([, n]) => n > 0);
+
+  if (!nonZero.length) return { ok: false, reason: 'no_match' };
+  if (nonZero.length > 1) return { ok: false, reason: 'ambiguous_multi_types', counts };
+
+  const [kind, n] = nonZero[0];
+  if (n !== 1) return { ok: false, reason: 'ambiguous_multi_values', kind, count: n };
+
+  const pick = (set) => Array.from(set.values())[0];
+  if (kind === 'tg') return { ok: true, key: 'tg', value: pick(tg) };
+  if (kind === 'email') return { ok: true, key: 'email', value: pick(email) };
+  if (kind === 'phone') return { ok: true, key: 'phone', value: pick(phone) };
+  if (kind === 'site') return { ok: true, key: 'site', value: pick(site) };
+  return { ok: false, reason: 'unknown' };
+}
+
 function extractFirstContact(input) {
   const text = String(input || '');
   const m = text.match(/@([a-zA-Z0-9_]{5,})/);
@@ -7657,10 +7744,17 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
   const phone = o.phone ? String(o.phone) : '';
   const site = o.site ? String(o.site) : '';
 
+  const legacyRaw = ws.profile_contact ? String(ws.profile_contact).trim() : '';
+  const legacyHas = legacyRaw && legacyRaw !== '—';
+
   const cCount = wsProfileContactsCount(o, ['tg', 'email', 'phone', 'site']);
 
   const lines = [];
   lines.push(`📇 <b>Контакты (структурно)</b>`);
+  if (opts && opts.flashHtml) {
+    lines.push('');
+    lines.push(String(opts.flashHtml));
+  }
   lines.push('');
   lines.push(`Эти поля <b>показываются бренду только после</b> «${escapeHtml(contactUnlockBtnLabel())}».`);
   lines.push(`Структурные контакты имеют <b>приоритет</b> над «Контакт (legacy)».`);
@@ -7672,6 +7766,7 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
   lines.push(`• Email: ${email ? `<code>${escapeHtml(deLinkifyText(email))}</code>` : '—'}`);
   lines.push(`• Phone: ${phone ? `<code>${escapeHtml(deLinkifyText(phone))}</code>` : '—'}`);
   lines.push(`• Website: ${site ? `<code>${escapeHtml(deLinkifyText(site))}</code>` : '—'}`);
+  if (legacyHas) lines.push(`• Legacy: <code>${escapeHtml(deLinkifyText(legacyRaw))}</code>`);
   lines.push('');
   lines.push(`Чтобы очистить любое поле — отправь <code>-</code> при вводе или используй «🧹 Очистить поле».`);
 
@@ -7683,8 +7778,11 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
     .text('✍️ Email', `a:ws_prof_contacts_edit|ws:${wsId}|k:email`)
     .text('✍️ Phone', `a:ws_prof_contacts_edit|ws:${wsId}|k:phone`)
     .row()
-    .text('✍️ Website', `a:ws_prof_contacts_edit|ws:${wsId}|k:site`)
-    .row()
+    .text('✍️ Website', `a:ws_prof_contacts_edit|ws:${wsId}|k:site`);
+
+  if (legacyHas) kb.row().text('✨ Перенести из legacy', `a:ws_prof_contacts_migrate|ws:${wsId}`);
+
+  kb.row()
     .text('🧹 Очистить поле', `a:ws_prof_contacts_clear|ws:${wsId}`)
     .row()
     .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`)
@@ -22139,6 +22237,56 @@ if (p.a === 'a:ws_prof_mode') {
       const wsId = Number(p.ws);
       if (!wsId) return;
       await renderWsProfileContactsStructured(ctx, u.id, wsId);
+      return;
+    }
+
+    if (p.a === 'a:ws_prof_contacts_migrate') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      if (!wsId) return;
+
+      const isAdmin = isSuperAdminTg(ctx.from?.id);
+      const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const legacy = ws.profile_contact ? String(ws.profile_contact).trim() : '';
+      if (!legacy) {
+        await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: 'ℹ️ Legacy контакт пуст — переносить нечего.' });
+        return;
+      }
+
+      const r = detectLegacyContactForMigration(legacy);
+      const label = { tg: 'Telegram', email: 'Email', phone: 'Phone', site: 'Website' };
+
+      if (!r.ok) {
+        const reason = (() => {
+          if (r.reason === 'too_long') return 'слишком длинный текст';
+          if (r.reason === 'no_match') return 'не нашёл tg/email/phone/url';
+          if (r.reason === 'ambiguous_multi_types') return 'нашёл сразу несколько типов контактов';
+          if (r.reason === 'ambiguous_multi_values') return 'нашёл несколько вариантов одного типа';
+          return 'не могу распознать безопасно';
+        })();
+
+        const hint = `⚠️ <b>Не получилось перенести</b>\nПричина: <b>${escapeHtml(reason)}</b>\n\nСовет: оставь в «Контакт (legacy)» <b>только одно</b> значение (например только @user или только почту), либо заполни поля вручную.`;
+
+        await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: hint });
+        return;
+      }
+
+      const o = wsProfileContactsObj(ws);
+      const cur = o[r.key] ? String(o[r.key]) : '';
+      if (cur && cur !== String(r.value)) {
+        const msg = `⚠️ Поле <b>${escapeHtml(label[r.key] || r.key)}</b> уже заполнено.\n\nТекущее: <code>${escapeHtml(deLinkifyText(cur))}</code>\nНайдено в legacy: <code>${escapeHtml(deLinkifyText(String(r.value)))}</code>\n\nЕсли хочешь заменить — сначала очисти поле, потом введи нужное значение.`;
+        await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: msg });
+        return;
+      }
+
+      o[r.key] = String(r.value);
+      await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: 1 });
+      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_contacts_migrated', { from: 'legacy', key: r.key }); } catch {}
+
+      const okMsg = `✅ Перенёс в <b>${escapeHtml(label[r.key] || r.key)}</b>: <code>${escapeHtml(deLinkifyText(String(r.value)))}</code>\n\nLegacy поле оставил как есть (по желанию очисти через «✏️ Контакт (legacy)» → <code>-</code>).`;
+      await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: okMsg });
       return;
     }
 
