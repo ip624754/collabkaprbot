@@ -14568,6 +14568,7 @@ export function getBot() {
       return;
     }
 
+
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
 
     const title = f.title || 'Channel';
@@ -19280,16 +19281,74 @@ bot.on('message:successful_payment', async (ctx) => {
     // Rationale: when Redis is down we must not perform dangerous mutations that rely on ephemeral state.
     // Some actions are safe-by-design (DB-truth) and are allowlisted via ACTION_REGISTRY.guard = NONE.
     const _meta = getActionMeta(p.a);
+
+    // Fail-closed middleware (Redis degraded mode) for dangerous callbacks.
+    // Source of truth: src/bot/actionRegistry.js (no suffix heuristics).
+    //
+    // Break-glass: when Redis is down, super-admin can access a *very small* allowlist
+    // of DB-truth admin screens (e.g., payments) via a double-confirm button (bg=1).
     if (_meta?.guard === ACTION_GUARD.REQUIRE_REDIS) {
+      let redisOk = true;
       try {
         // Lightweight health read (no writes) to detect Redis outage.
         await redis.get(k(['health', 'redis_cb_guard']));
       } catch {
+        redisOk = false;
+      }
+
+      if (!redisOk) {
+        const isAdmin = isSuperAdminTg(ctx.from?.id);
+        const canBreakGlass = !!(_meta && _meta.breakGlass);
+        const armed = String(p.bg || '') === '1';
+
+        if (isAdmin && canBreakGlass && armed) {
+          // Best-effort ops log (anti-spam digest is handled by opsAlerts).
+          try {
+            await queueOpsAlert(ctx.api, {
+              group: 'ops',
+              reason: 'break_glass',
+              title: 'Admin break-glass',
+              kind: 'break_glass',
+              tgId: Number(ctx.from?.id || 0) || null,
+              payload: String(p.a || ''),
+              extra: [
+                `Action: ${String(p.a || '')}`,
+                `Cb: ${String(ctx.callbackQuery?.data || '').slice(0, 200)}`,
+              ],
+            });
+          } catch {}
+          // Continue to handler (may still degrade, but this is an explicit emergency path).
+        } else if (isAdmin && canBreakGlass && !armed) {
+          const raw = String(ctx.callbackQuery?.data || p.raw || '');
+          const confirmCb = raw.includes('|bg:') ? raw : `${raw}|bg:1`;
+          const kb = new InlineKeyboard()
+            .text('🚨 Продолжить (break-glass)', confirmCb)
+            .row()
+            .text('⬅️ Отмена', 'a:admin_home')
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home');
+
+          await safeEditOrReply(
+            ctx,
+            `🚨 <b>Аварийный режим</b>
+
+Redis сейчас недоступен. Обычно опасные действия блокируются, чтобы не сломать деньги/сессии.
+
+Ты суперадмин. Если действие критично — нажми «Продолжить (break-glass)».`,
+            { parse_mode: 'HTML', reply_markup: kb }
+          );
+          return;
+        }
+
+        // Default: fail-closed for everyone else
         try {
-          await ctx.answerCallbackQuery({
-            text: '⛔ Временно недоступно (кеш/сессии). Попробуй чуть позже.',
-            show_alert: true,
-          });
+          await safeEditOrReply(
+            ctx,
+            `⛔ Временно недоступно (кеш/сессии). Попробуй чуть позже.
+
+Если ты админ и нужно срочно — открой админку и используй аварийный доступ (break-glass) только по необходимости.`,
+            { reply_markup: new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
+          );
         } catch {}
         return;
       }
