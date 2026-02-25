@@ -105,6 +105,8 @@ Runtime toggle (Redis): `sys:broadcast_qstash_fanout`.
 
 Runbook (env + rollout/rollback): `docs/17_QSTASH_RUNBOOK.md`.
 
+Ops quick-check: 👑 Админка → 🛰 QStash статус → 🧪 Send signed ping.
+
 ## Cron: notify не должен стопорить batch
 Уведомления в Telegram (notify в канал/DM) могут зависать. Чтобы тик не «залипал» на одном сообщении:
 - оборачиваем notify в `withTimeout(~5s)`
