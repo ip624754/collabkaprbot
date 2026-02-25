@@ -97,10 +97,15 @@
   - `retry_after_until` продлевается на `BROADCAST_QUARANTINE_SEC`
   - порог: `BROADCAST_QUARANTINE_THRESHOLD`
 
-- Ставим **Redis cooldown** на `retry_after`.
-  - per-broadcast: `broadcast:<id>:cooldown_until`
-  - global: `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id` (чтобы cron мог делать early-exit без DB polling)
-- Пока cooldown активен, `broadcast_tick` делает `skip` **без обращения к Neon**.
+- Ставим **cooldown** на `retry_after`:
+  - fast path (Redis):
+    - per-broadcast: `broadcast:<id>:cooldown_until`
+    - global: `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id` (early-exit без DB polling)
+  - fallback fuse (DB, только если Redis недоступен):
+    - `broadcasts.cooldown_until`, `broadcasts.cooldown_reason`
+- Пока cooldown активен:
+  - обычно `broadcast_tick` делает `skip` **без обращения к Neon** (Redis-global)
+  - при деградации Redis — `skip` после одного лёгкого `getActiveBroadcast` (без polling recipients)
 - Cooldown и счётчики видны в `/api/health` → `broadcast`.
 - В `/api/health` counters: `cooldown_set/cooldown_skip/defer_set/defer_wait/quarantine_set`.
 
@@ -207,6 +212,7 @@
   - UX правило: достаточно **1** контакта (обычно Telegram). Email/Website — опционально. Phone — не обязателен.
 - STEP107 (опционально): добавлена кнопка «✨ Перенести из «Контакт»» — переносит **одно** значение из `profile_contact` в `profile_contacts` (tg/email/phone/site) только если распознавание однозначное. Никакой авто-магии и без перетирания уже заполненных полей.
 - STEP119: усилен anti‑bypass для телефонов в свободном тексте — маскируем номера, написанные **словами** (например: «плюс семь девять…»).
+- STEP120: broadcast 429 cooldown: добавлен DB fuse `broadcasts.cooldown_until` на случай деградации Redis (без polling recipients).
 - Баланс кредитов для Brand UI берём **Redis-first** (TTL ~60s, `BRAND_CREDITS_CACHE_TTL_SEC`) → меньше чтений Neon.
 
 #### Brand Inbox (заявки креаторов → бренду)

@@ -72,10 +72,15 @@ TTL истёк → новый инстанс взял лок → старый и
   - DB: `broadcast_sent_log.status='quarantined'`
   - `retry_after_until` продлевается на `BROADCAST_QUARANTINE_SEC`
   - цель: не жечь тики на “проблемных” чатах
-- Ставим **cooldown в Redis**:
-  - per-broadcast: `broadcast:<id>:cooldown_until`
-  - global (для DB-free early-exit): `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id`
-- Следующие тики **выходят раньше**, без DB polling, пока `now < broadcast:cooldown_until`.
+- Ставим **cooldown**:
+  - fast path (Redis):
+    - per-broadcast: `broadcast:<id>:cooldown_until`
+    - global (для DB-free early-exit): `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id`
+  - fallback fuse (DB, только если Redis недоступен):
+    - `broadcasts.cooldown_until`, `broadcasts.cooldown_reason`
+- Следующие тики **выходят раньше**:
+  - обычно без DB polling (Redis-global)
+  - при деградации Redis — после одного лёгкого `getActiveBroadcast` (без polling recipients)
 - `/api/health` показывает cooldown + счётчики:
   - `broadcast.last_429_at`, `broadcast.last_429_reason`
   - `broadcast.counters.cooldown_set` / `cooldown_skip` за текущий день
