@@ -10,6 +10,7 @@
 - Contacts unlock: DB truth + advisory lock (exactly-once), Redis только кеш/TTL.
 - Ownership: safe-getters с ownership внутри SQL для лидов/заявок и опасных действий.
 - Redis degraded mode: mutating callbacks работают **fail-closed** (кроме строго allowlisted DB-safe действий). Guard использует строгий реестр `src/bot/actionRegistry.js`.
+  - Break-glass (Admin): при Redis down супер‑админ может открыть *строго ограниченный* allowlist экранов (payments/users/audit) через двойное подтверждение (`bg=1`). Каждое использование логируется в ops alerts.
   - Markdown экспорт реестра action keys для аудитов: `npm run actions:md` → `docs/02_ACTION_KEYS_REGISTRY.md`.
 
 
@@ -382,5 +383,11 @@
 - `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED=1` — cron будет периодически пытаться авто-применять ORPHANED с `note=missing_session` (только безопасные типы: PRO / кредиты / Brand Plan / founder_brand_*).
 - `PAYMENTS_ORPHANED_AUTOHEAL_BATCH=20` — сколько платежей чинить за один тик (0..100).
 - В админке: **Admin → Payments (ORPHANED)** → кнопка **Auto-heal missing_session**.
+
+Auto-heal safeguards + ops alerts:
+- Перед apply делает **строгую валидацию** payload/amount/currency. Если не проходит → помечает `note=autoheal_manual_required:<reason>` и шлёт ops alert `autoheal_validation_failed` (чтобы не было тихих ретраев).
+- Для постоянных non-applied кейсов (unsupported_payload / bad_input / user_mismatch / missing_userid_or_wsid) → помечает `note=autoheal_manual_required:<reason>` и шлёт ops alert `autoheal_manual_required_failed`.
+- Если apply прошёл, но user notify не удалось → ops alert `autoheal_notify_failed`.
+- Исключения/ошибки в тикe → ops alert `autoheal_failed`.
 
 Примечание: оплаты `offpub_*` (публикация в офиц.канал) остаются ручными по дизайну (модерация).

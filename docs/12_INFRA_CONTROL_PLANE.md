@@ -132,6 +132,12 @@ ENV:
 - В сообщении алерта есть кнопки: **💳 ORPHANED** (список) и **🧾 #payment** (карточка платежа в админке бота).
   Плюс кнопка **👑 Админка**.
 
+Payments auto-heal (ORPHANED `missing_session`) дополнительно пишет алерты (дайджестом):
+- `autoheal_validation_failed` — строгая валидация не прошла → помечаем `autoheal_manual_required:*` (manual review).
+- `autoheal_manual_required_failed` — постоянный non-applied кейс (unsupported_payload/bad_input/user_mismatch/...).
+- `autoheal_failed` — ошибки/исключения в тике.
+- `autoheal_notify_failed` — apply прошёл, но уведомить пользователя не удалось.
+
 ### Готовые профили (low/medium/high saving)
 **LOW (мягко):**
 ```
