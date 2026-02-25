@@ -7543,7 +7543,7 @@ function wsProfileKb(wsId, ws) {
     .text(`🎬 Форматы (${fCount}/5)`, `a:ws_prof_formats|ws:${wsId}`)
     .row()
     .text('✏️ Название', `a:ws_prof_edit|ws:${wsId}|f:title`)
-    .text('✏️ Контакт (legacy)', `a:ws_prof_edit|ws:${wsId}|f:contact`)
+    .text('✏️ Контакт', `a:ws_prof_edit|ws:${wsId}|f:contact`)
     .row()
     .text(`📇 Контакты (${cCount}/4)`, `a:ws_prof_contacts|ws:${wsId}`)
     .row()
@@ -7602,7 +7602,7 @@ function calcWsProfileProgress(ws) {
   if (!formatsOk) missing.push('🎬 Форматы: выбери 3–5 (брендам проще выбрать)');
   if (!verticalsOk) missing.push('🏷 Ниши: выбери до 3 (точнее матчи)');
   if (!igOk) missing.push('📸 Instagram: укажи @ или ссылку (доверие)');
-  if (!contactOk) missing.push('✉️ Контакты: заполни «📇 Контакты (структурно)» или «Контакт (legacy)»');
+  if (!contactOk) missing.push('✉️ Контакты: заполни «📇 Контакты (структурно)» или «Контакт»');
   if (!aboutOk) missing.push('📝 Описание: 1–2 строки, что именно ты снимаешь');
 
   const nextHint = !portfolioOk
@@ -7735,7 +7735,7 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
     const cCount = wsProfileContactsCount(contactsObj, ['tg', 'email', 'phone', 'site']);
     lines.push(`<b>Контакты</b>`);
     lines.push(`• Контакты (структурно): <b>${cCount}/4</b>`);
-    lines.push(`• Контакт (legacy): <b>${escapeHtml(contactRawTxt || '—')}</b>`);
+    lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt || '—')}</b>`);
     lines.push(`• <i>Рекомендация: достаточно 1 контакта (обычно Telegram). Телефон не обязателен.</i>`);
     blocks.push('');
     blocks.push(lines.join('\n'));
@@ -7796,7 +7796,7 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
   lines.push('');
   lines.push(`Эти поля <b>показываются бренду только после</b> «${escapeHtml(contactUnlockBtnLabel())}».`);
   lines.push(`💡 Достаточно <b>1</b> контакта — обычно <b>Telegram</b>. Телефон <i>не обязателен</i>.`);
-  lines.push(`Приоритет после разлока: <b>структурные</b> → (если пусто) <b>Контакт (legacy)</b>.`);
+  lines.push(`Приоритет после разлока: <b>структурные</b> → (если пусто) <b>Контакт</b>.`);
   lines.push('');
   lines.push(`Заполнено: <b>${cCount}/4</b>`);
   lines.push('');
@@ -7805,7 +7805,7 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
   lines.push(`• Email: ${email ? `<code>${escapeHtml(deLinkifyText(email))}</code>` : '—'}`);
   lines.push(`• Phone: ${phone ? `<code>${escapeHtml(deLinkifyText(phone))}</code>` : '—'}`);
   lines.push(`• Website: ${site ? `<code>${escapeHtml(deLinkifyText(site))}</code>` : '—'}`);
-  if (legacyHas) lines.push(`• Legacy: <code>${escapeHtml(deLinkifyText(legacyRaw))}</code>`);
+  if (legacyHas) lines.push(`• Контакт (текст): <code>${escapeHtml(deLinkifyText(legacyRaw))}</code>`);
   lines.push('');
   lines.push(`Чтобы очистить любое поле — отправь <code>-</code> при вводе или используй «🧹 Очистить поле».`);
 
@@ -7819,7 +7819,7 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
     .row()
     .text('✍️ Website', `a:ws_prof_contacts_edit|ws:${wsId}|k:site`);
 
-  if (legacyHas) kb.row().text('✨ Перенести из legacy', `a:ws_prof_contacts_migrate|ws:${wsId}`);
+  if (legacyHas) kb.row().text('✨ Перенести из «Контакт»', `a:ws_prof_contacts_migrate|ws:${wsId}`);
 
   kb.row()
     .text('🧹 Очистить поле', `a:ws_prof_contacts_clear|ws:${wsId}`)
@@ -8631,8 +8631,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
           }
         }
         if (contactRawTxt) {
-          if (linksEnabled && contactUrlLegacy) lines.push(`• Контакт (legacy): <a href="${escapeHtml(contactUrlLegacy)}">${escapeHtml(contactRawTxt)}</a>`);
-          else lines.push(`• Контакт (legacy): <b>${escapeHtml(deLinkifyText(contactRawTxt))}</b>`);
+          if (linksEnabled && contactUrlLegacy) lines.push(`• Контакт: <a href="${escapeHtml(contactUrlLegacy)}">${escapeHtml(contactRawTxt)}</a>`);
+          else lines.push(`• Контакт: <b>${escapeHtml(deLinkifyText(contactRawTxt))}</b>`);
         } else if (!hasStructuredContacts) {
           lines.push(`• Контакт: —`);
         }
@@ -22403,7 +22403,7 @@ if (p.a === 'a:ws_prof_mode') {
           return 'не могу распознать безопасно';
         })();
 
-        const hint = `⚠️ <b>Не получилось перенести</b>\nПричина: <b>${escapeHtml(reason)}</b>\n\nСовет: оставь в «Контакт (legacy)» <b>только одно</b> значение (например только @user или только почту), либо заполни поля вручную.`;
+        const hint = `⚠️ <b>Не получилось перенести</b>\nПричина: <b>${escapeHtml(reason)}</b>\n\nСовет: оставь в «Контакт» <b>только одно</b> значение (например только @user или только почту), либо заполни поля вручную.`;
 
         await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: hint });
         return;
@@ -22421,7 +22421,7 @@ if (p.a === 'a:ws_prof_mode') {
       await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: 1 });
       try { await db.auditWorkspace(wsId, u.id, 'ws.profile_contacts_migrated', { from: 'legacy', key: r.key }); } catch {}
 
-      const okMsg = `✅ Перенёс в <b>${escapeHtml(label[r.key] || r.key)}</b>: <code>${escapeHtml(deLinkifyText(String(r.value)))}</code>\n\nLegacy поле оставил как есть (по желанию очисти через «✏️ Контакт (legacy)» → <code>-</code>).`;
+      const okMsg = `✅ Перенёс в <b>${escapeHtml(label[r.key] || r.key)}</b>: <code>${escapeHtml(deLinkifyText(String(r.value)))}</code>\n\nПоле «Контакт» оставил как есть (по желанию можно очистить).`;
       await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: okMsg });
       return;
     }
@@ -22482,6 +22482,27 @@ if (p.a === 'a:ws_prof_mode') {
       return;
     }
 
+    // Creator profile: clear a single legacy field (UI button). We keep "-" as an implicit shortcut, but do not mention it in UI.
+    if (p.a === 'a:ws_prof_clear') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      const field = String(p.f || '');
+      if (!wsId) return;
+      if (field !== 'contact') return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
+
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      await db.setWorkspaceSetting(wsId, { profile_contact: null });
+      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_updated', { field: 'contact', cleared: true, via: 'button' }); } catch {}
+
+      // If user was in expectText mode for this edit — drop it to avoid confusion.
+      try { await clearExpectText(ctx.from.id); } catch {}
+      try { await ctx.answerCallbackQuery({ text: '✅ Очищено' }); } catch {}
+      await renderWsProfile(ctx, u.id, wsId);
+      return;
+    }
+
     if (p.a === 'a:ws_prof_edit') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
@@ -22492,12 +22513,15 @@ if (p.a === 'a:ws_prof_mode') {
         ig: '✍️ Пришли Instagram: @handle или ссылку на профиль (instagram.com/handle).\n\nЧтобы очистить поле — отправь “-”.',
         about: '✍️ Короткое описание (1–2 предложения).\n\nПример: “Тестирую косметику и делаю распаковки. Люблю честные обзоры.”',
         portfolio: '✍️ Пришли 1–3 ссылки на портфолио (каждая с новой строки или в одном сообщении).\n\nЧтобы очистить поле — отправь “-”.',
-        contact: '✍️ Контакт (legacy, старое): @username / ссылка / почта.\n\n💡 Достаточно одного контакта — обычно Telegram.\nЛучше заполнять «📇 Контакты (структурно)»: там контакты валидируются и показываются бренду только после разлока.\n\nЧтобы очистить поле — отправь “-”.',
+        contact: '✍️ Контакт: @username / ссылка / почта.\n\n💡 Достаточно 1 контакта — обычно Telegram.\nЕсли хочешь — заполни «📇 Контакты (структурно)»: там контакты валидируются и показываются бренду только после разлока.',
         geo: '✍️ Введи город/гео.'
       };
-      await safeEditOrReply(ctx, prompts[field] || prompts.title, {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu')
-      });
+
+      const kb = new InlineKeyboard();
+      if (field === 'contact') kb.text('🧹 Очистить', `a:ws_prof_clear|ws:${wsId}|f:contact`).row();
+      kb.text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu');
+
+      await safeEditOrReply(ctx, prompts[field] || prompts.title, { reply_markup: kb });
       await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
       return;
     }
