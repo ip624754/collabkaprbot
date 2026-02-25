@@ -7699,6 +7699,7 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
     lines.push(`<b>Контакты</b>`);
     lines.push(`• Контакты (структурно): <b>${cCount}/4</b>`);
     lines.push(`• Контакт (legacy): <b>${escapeHtml(contactRawTxt || '—')}</b>`);
+    lines.push(`• <i>Рекомендация: достаточно 1 контакта (обычно Telegram). Телефон не обязателен.</i>`);
     blocks.push('');
     blocks.push(lines.join('\n'));
   }
@@ -7757,7 +7758,8 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
   }
   lines.push('');
   lines.push(`Эти поля <b>показываются бренду только после</b> «${escapeHtml(contactUnlockBtnLabel())}».`);
-  lines.push(`Структурные контакты имеют <b>приоритет</b> над «Контакт (legacy)».`);
+  lines.push(`💡 Достаточно <b>1</b> контакта — обычно <b>Telegram</b>. Телефон <i>не обязателен</i>.`);
+  lines.push(`Приоритет после разлока: <b>структурные</b> → (если пусто) <b>Контакт (legacy)</b>.`);
   lines.push('');
   lines.push(`Заполнено: <b>${cCount}/4</b>`);
   lines.push('');
@@ -22299,10 +22301,10 @@ if (p.a === 'a:ws_prof_mode') {
       if (!allowed.includes(key)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
 
       const prompts = {
-        tg: '✍️ Telegram username: пришли @user или ссылку t.me/user.\n\nЧтобы очистить поле — отправь “-”.',
-        email: '✍️ Email: пришли почту вида name@domain.com.\n\nЧтобы очистить поле — отправь “-”.',
-        phone: '✍️ Phone: пришли номер (можно с пробелами/скобками). Сохраню в формате +цифры.\n\nЧтобы очистить поле — отправь “-”.',
-        site: '✍️ Website: пришли ссылку или домен (example.com).\n\nВажно: t.me лучше указать в Telegram username.\n\nЧтобы очистить поле — отправь “-”.',
+        tg: '✍️ Telegram username (рекомендуется): пришли @user или ссылку t.me/user.\n\nДостаточно 1 контакта — обычно Telegram.\n\nЧтобы очистить поле — отправь “-”.',
+        email: '✍️ Email (опционально): пришли почту вида name@domain.com.\n\nЧтобы очистить поле — отправь “-”.',
+        phone: '✍️ Phone (опционально, не обязателен): пришли номер (можно с пробелами/скобками). Сохраню в формате +цифры.\n\nЧтобы очистить поле — отправь “-”.',
+        site: '✍️ Website (опционально): пришли ссылку или домен (example.com).\n\nВажно: t.me лучше указать в Telegram username.\n\nЧтобы очистить поле — отправь “-”.',
       };
 
       await safeEditOrReply(ctx, prompts[key] || prompts.tg, {
@@ -22356,7 +22358,7 @@ if (p.a === 'a:ws_prof_mode') {
         ig: '✍️ Пришли Instagram: @handle или ссылку на профиль (instagram.com/handle).\n\nЧтобы очистить поле — отправь “-”.',
         about: '✍️ Короткое описание (1–2 предложения).\n\nПример: “Тестирую косметику и делаю распаковки. Люблю честные обзоры.”',
         portfolio: '✍️ Пришли 1–3 ссылки на портфолио (каждая с новой строки или в одном сообщении).\n\nЧтобы очистить поле — отправь “-”.',
-        contact: '✍️ Контакт (legacy): @username / ссылка / почта.\n\nЛучше: «📇 Контакты (структурно)» — это удобнее и безопаснее для монетизации.\n\nЧтобы очистить поле — отправь “-”.',
+        contact: '✍️ Контакт (legacy, старое): @username / ссылка / почта.\n\n💡 Достаточно одного контакта — обычно Telegram.\nЛучше заполнять «📇 Контакты (структурно)»: там контакты валидируются и показываются бренду только после разлока.\n\nЧтобы очистить поле — отправь “-”.',
         geo: '✍️ Введи город/гео.'
       };
       await safeEditOrReply(ctx, prompts[field] || prompts.title, {
