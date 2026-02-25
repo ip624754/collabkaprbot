@@ -717,10 +717,14 @@ docs/01_SECURITY_INVARIANTS.md
 - **STEP116** — Sweep: убрали “молчаливые тупики” на популярных кнопках/переходах, добавили понятные подсказки и кнопки назад/меню/home; очистка IG/портфолио/описания тоже через `🧹 Очистить`.
 - **STEP117** — Унификация текстов гейтов для новичка (короткий единый стиль без перегруза).
 
+---
 
-- **STEP118** — Docs refresh: приведены доки в соответствие текущему поведению (contacts/inbox/giveaways/newbie UX).
-- **STEP119** — Anti-bypass: маскируем телефоны, написанные словами в `profile_about`.
-- **STEP120** — Broadcast 429: DB fuse `broadcasts.cooldown_until` при деградации Redis (ранний выход без polling recipients).
-- **STEP121** — Break-glass: супер‑админ allowlist при Redis down (двойное подтверждение + ops alert).
-- **STEP122 (optional)** — Auto-heal orphaned payments: ops alerts при validation_failed/manual_required + метка для ручной проверки.
-- **STEP123** — Docs consistency: закрытие аудита, консистентность доков с кодом и архивом (119–122).
+## Продолжение (актуализация до STEP124)
+
+- **STEP118** — привели docs в порядок под актуальный snapshot (contacts model / handoff / README / process).
+- **STEP119** — anti‑bypass: маскирование телефонов, написанных **словами** в `profile_about` (defense-in-depth до unlock).
+- **STEP120** — Broadcast 429: добавлен **DB fuse** `broadcasts.cooldown_until` на случай деградации Redis (ранний exit до polling recipients).
+- **STEP121** — Break‑glass allowlist для супер‑админа при Redis down (двойное подтверждение `bg=1` + ops alert), остальное fail‑closed.
+- **STEP122** — Ops alerts для auto‑heal ORPHANED payments при `validation_failed`/`manual_required` (без изменения apply-логики).
+- **STEP123** — Docs closeout по аудиту (консистентность доков с кодом + процессный файл audit closeout).
+- **STEP124** — Inbox polish: до ✅ Принять (status=new) доступны только ✅ Принять / ⛔ Спам / 🗑 Удалить; запрет «💬 В работу/✅ Закрыть» до принятия; исправлен креаторский CTA «💬 Написать бренду» (без “тишины”).
