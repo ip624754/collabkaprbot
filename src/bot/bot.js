@@ -7279,6 +7279,105 @@ function normalizeIgHandle(input) {
   return hm[1];
 }
 
+
+// STEP106: Structured contacts (profile_contacts) — validation/normalization helpers.
+const PROFILE_CONTACTS_KEYS_V1 = ['tg', 'email', 'phone', 'site', 'other'];
+
+function wsProfileContactsObj(ws) {
+  const raw = ws?.profile_contacts;
+  let o = {};
+  if (raw && typeof raw === 'object') o = raw;
+  else if (typeof raw === 'string') {
+    try { o = JSON.parse(raw); } catch { o = {}; }
+  }
+  const out = {};
+  for (const k of PROFILE_CONTACTS_KEYS_V1) {
+    const v = o?.[k];
+    if (v === null || v === undefined) continue;
+    const s = String(v).trim();
+    if (!s) continue;
+    out[k] = s;
+  }
+  return out;
+}
+
+function wsProfileContactsCount(o, keys = ['tg', 'email', 'phone', 'site']) {
+  const obj = o && typeof o === 'object' ? o : {};
+  let n = 0;
+  for (const k of keys) {
+    const v = obj[k];
+    if (v !== null && v !== undefined && String(v).trim().length) n++;
+  }
+  return n;
+}
+
+function normalizeTgUsername(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  let s = raw.replace(/\s+/g, '');
+  s = s.replace(/^@/, '');
+
+  // t.me/<username>
+  const tm = s.match(/(?:https?:\/\/)?t\.me\/([A-Za-z0-9_]{5,32})/i);
+  if (tm) s = String(tm[1] || '').trim();
+
+  const m = s.match(/^([A-Za-z0-9_]{5,32})$/);
+  if (!m) return null;
+  // Avoid obviously invalid leading underscore
+  if (m[1].startsWith('_')) return null;
+  return m[1].toLowerCase();
+}
+
+function normalizeEmailAddr(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  const s = raw.replace(/\s+/g, '').toLowerCase();
+  if (s.length > 120) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s)) return null;
+  return s;
+}
+
+function normalizePhoneE164Like(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  const digits = raw.replace(/[^\d]+/g, '');
+  if (digits.length < 10 || digits.length > 15) return null;
+  return '+' + digits;
+}
+
+function normalizeWebsiteUrl(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return { ok: false, err: 'empty' };
+
+  let s = raw.replace(/\s+/g, '');
+  s = s.replace(/^[<]+|[>]+$/g, '');
+  // Avoid storing telegram deep links or t.me here.
+  if (s.startsWith('@') || /^tg:\/\//i.test(s) || /(?:^|\/\/)t\.me\//i.test(s) || /telegram\.me\//i.test(s)) {
+    return { ok: false, err: 'telegram' };
+  }
+
+  // If no scheme, add https://
+  if (!/^https?:\/\//i.test(s)) {
+    // If has another scheme — reject (javascript:, ftp:, etc)
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(s)) return { ok: false, err: 'scheme' };
+    s = 'https://' + s.replace(/^\/+/, '');
+  }
+
+  if (s.length > 300) return { ok: false, err: 'too_long' };
+
+  try {
+    const u = new URL(s);
+    if (!['http:', 'https:'].includes(u.protocol)) return { ok: false, err: 'scheme' };
+    if (!u.hostname) return { ok: false, err: 'host' };
+    // normalize trailing slash (keep root slash)
+    let out = u.toString();
+    if (out.endsWith('/') && u.pathname === '/' && !u.search && !u.hash) out = out.slice(0, -1);
+    return { ok: true, value: out };
+  } catch {
+    return { ok: false, err: 'invalid' };
+  }
+}
+
 function parseUrlsFromText(input, max = 3) {
   const text = String(input || '');
   const re = /(https?:\/\/[^\s<>"']+)/gi;
@@ -7309,6 +7408,8 @@ function extractFirstContact(input) {
 function wsProfileKb(wsId, ws) {
   const vCount = Array.isArray(ws.profile_verticals) ? ws.profile_verticals.length : 0;
   const fCount = Array.isArray(ws.profile_formats) ? ws.profile_formats.length : 0;
+  const contactsObj = wsProfileContactsObj(ws);
+  const cCount = wsProfileContactsCount(contactsObj, ['tg', 'email', 'phone', 'site']);
 
   // UX: "Предпросмотр" — главный CTA, дальше парные кнопки по смыслу.
   const kb = new InlineKeyboard()
@@ -7318,7 +7419,9 @@ function wsProfileKb(wsId, ws) {
     .text(`🎬 Форматы (${fCount}/5)`, `a:ws_prof_formats|ws:${wsId}`)
     .row()
     .text('✏️ Название', `a:ws_prof_edit|ws:${wsId}|f:title`)
-    .text('✏️ Контакт', `a:ws_prof_edit|ws:${wsId}|f:contact`)
+    .text('✏️ Контакт (legacy)', `a:ws_prof_edit|ws:${wsId}|f:contact`)
+    .row()
+    .text(`📇 Контакты (${cCount}/4)`, `a:ws_prof_contacts|ws:${wsId}`)
     .row()
     .text('📸 Instagram', `a:ws_prof_edit|ws:${wsId}|f:ig`)
     .text('🔗 Портфолио', `a:ws_prof_edit|ws:${wsId}|f:portfolio`)
@@ -7348,7 +7451,9 @@ function hasText(v) {
 function calcWsProfileProgress(ws) {
   // Core fields that most сильно влияют на конверсию
   const igOk = hasText(ws.profile_ig);
-  const contactOk = hasText(ws.profile_contact);
+  const contactsObj = wsProfileContactsObj(ws);
+  const structuredOk = wsProfileContactsCount(contactsObj, ['tg', 'email', 'phone', 'site']) > 0;
+  const contactOk = structuredOk || hasText(ws.profile_contact);
   const verticalsOk = Array.isArray(ws.profile_verticals) && ws.profile_verticals.length > 0;
   const formatsOk = Array.isArray(ws.profile_formats) && ws.profile_formats.length > 0;
   const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
@@ -7373,7 +7478,7 @@ function calcWsProfileProgress(ws) {
   if (!formatsOk) missing.push('🎬 Форматы: выбери 3–5 (брендам проще выбрать)');
   if (!verticalsOk) missing.push('🏷 Ниши: выбери до 3 (точнее матчи)');
   if (!igOk) missing.push('📸 Instagram: укажи @ или ссылку (доверие)');
-  if (!contactOk) missing.push('✉️ Контакт: @username / t.me/... (быстро договориться)');
+  if (!contactOk) missing.push('✉️ Контакты: заполни «📇 Контакты (структурно)» или «Контакт (legacy)»');
   if (!aboutOk) missing.push('📝 Описание: 1–2 строки, что именно ты снимаешь');
 
   const nextHint = !portfolioOk
@@ -7502,13 +7607,16 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   // Контакты
   {
     const lines = [];
+    const contactsObj = wsProfileContactsObj(ws);
+    const cCount = wsProfileContactsCount(contactsObj, ['tg', 'email', 'phone', 'site']);
     lines.push(`<b>Контакты</b>`);
-    lines.push(`• Контакт: <b>${escapeHtml(contactRawTxt || '—')}</b>`);
+    lines.push(`• Контакты (структурно): <b>${cCount}/4</b>`);
+    lines.push(`• Контакт (legacy): <b>${escapeHtml(contactRawTxt || '—')}</b>`);
     blocks.push('');
     blocks.push(lines.join('\n'));
   }
 
-  blocks.push('');
+blocks.push('');
   blocks.push(
     link
       ? `🔗 <b>Ссылка для брендов</b> (вставь в IG bio / сторис):\n<code>${escapeHtml(link)}</code>`
@@ -7532,6 +7640,107 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   } catch {
     await ctx.reply(text, extra);
   }
+}
+
+
+
+// STEP106: Structured contacts editor (opt-in).
+async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = {}) {
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+
+  const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
+  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+
+  const o = wsProfileContactsObj(ws);
+  const tg = o.tg ? String(o.tg).replace(/^@/, '') : '';
+  const email = o.email ? String(o.email) : '';
+  const phone = o.phone ? String(o.phone) : '';
+  const site = o.site ? String(o.site) : '';
+
+  const cCount = wsProfileContactsCount(o, ['tg', 'email', 'phone', 'site']);
+
+  const lines = [];
+  lines.push(`📇 <b>Контакты (структурно)</b>`);
+  lines.push('');
+  lines.push(`Эти поля <b>показываются бренду только после</b> «${escapeHtml(contactUnlockBtnLabel())}».`);
+  lines.push(`Структурные контакты имеют <b>приоритет</b> над «Контакт (legacy)».`);
+  lines.push('');
+  lines.push(`Заполнено: <b>${cCount}/4</b>`);
+  lines.push('');
+  lines.push(`<b>Текущие значения</b>`);
+  lines.push(`• Telegram: ${tg ? `<code>@${escapeHtml(deLinkifyText(tg))}</code>` : '—'}`);
+  lines.push(`• Email: ${email ? `<code>${escapeHtml(deLinkifyText(email))}</code>` : '—'}`);
+  lines.push(`• Phone: ${phone ? `<code>${escapeHtml(deLinkifyText(phone))}</code>` : '—'}`);
+  lines.push(`• Website: ${site ? `<code>${escapeHtml(deLinkifyText(site))}</code>` : '—'}`);
+  lines.push('');
+  lines.push(`Чтобы очистить любое поле — отправь <code>-</code> при вводе или используй «🧹 Очистить поле».`);
+
+  const text = lines.join('\n');
+
+  const kb = new InlineKeyboard()
+    .text('✍️ Telegram username', `a:ws_prof_contacts_edit|ws:${wsId}|k:tg`)
+    .row()
+    .text('✍️ Email', `a:ws_prof_contacts_edit|ws:${wsId}|k:email`)
+    .text('✍️ Phone', `a:ws_prof_contacts_edit|ws:${wsId}|k:phone`)
+    .row()
+    .text('✍️ Website', `a:ws_prof_contacts_edit|ws:${wsId}|k:site`)
+    .row()
+    .text('🧹 Очистить поле', `a:ws_prof_contacts_clear|ws:${wsId}`)
+    .row()
+    .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`)
+    .text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
+
+  const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
+
+  const et = opts && opts.editTarget ? opts.editTarget : null;
+  if (et && et.chatId && et.messageId) {
+    try {
+      await ctx.api.editMessageText(Number(et.chatId), Number(et.messageId), text, extra);
+      return;
+    } catch {}
+  }
+
+  try { await safeEditOrReply(ctx, text, extra); } catch { await ctx.reply(text, extra); }
+}
+
+async function renderWsProfileContactsClearMenu(ctx, ownerUserId, wsId) {
+  const isAdmin = isSuperAdminTg(ctx.from?.id);
+  const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
+  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+
+  const o = wsProfileContactsObj(ws);
+  const items = [
+    { k: 'tg', label: 'Telegram', v: o.tg ? ('@' + String(o.tg).replace(/^@/, '')) : '' },
+    { k: 'email', label: 'Email', v: o.email ? String(o.email) : '' },
+    { k: 'phone', label: 'Phone', v: o.phone ? String(o.phone) : '' },
+    { k: 'site', label: 'Website', v: o.site ? String(o.site) : '' },
+  ].filter(x => x.v);
+
+  const lines = [];
+  lines.push(`🧹 <b>Очистить поле</b>`);
+  lines.push('');
+  if (!items.length) {
+    lines.push('Нечего очищать — все поля пустые.');
+  } else {
+    lines.push('Выбери, что очистить:');
+    lines.push('');
+    for (const it of items) {
+      lines.push(`• ${escapeHtml(it.label)}: <code>${escapeHtml(deLinkifyText(it.v))}</code>`);
+    }
+  }
+
+  const kb = new InlineKeyboard();
+  if (items.length) {
+    for (const it of items) {
+      kb.text(`🧹 ${it.label}`, `a:ws_prof_contacts_clear_k|ws:${wsId}|k:${it.k}`).row();
+    }
+  }
+  kb.text('⬅️ Назад', `a:ws_prof_contacts|ws:${wsId}`).text('👤 Профиль', `a:ws_profile|ws:${wsId}`);
+  kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, lines.join('\n'), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
 
@@ -16305,6 +16514,89 @@ if (exp.type === 'brand_deals_search') {
       return;
     }
 
+
+    // Workspace structured contacts edit (profile_contacts)
+    if (exp.type === 'ws_prof_contacts_edit') {
+      const wsId = Number(exp.wsId);
+      const key = String(exp.key || '');
+      const allowed = ['tg', 'email', 'phone', 'site'];
+      if (!wsId || !allowed.includes(key)) { await ctx.reply('Поле не найдено.'); return; }
+
+      const isAdmin = isSuperAdminTg(ctx.from?.id);
+      const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(u.id, wsId);
+      if (!ws) { await ctx.reply('Нет доступа к этому каналу.'); return; }
+
+      const raw = String(ctx.message.text || '').trim();
+      await safeDeleteIncomingUserMessage(ctx);
+      const rawLc = raw.toLowerCase();
+      const wantClear = ['-', '—', 'нет', 'no', 'clear', 'reset'].includes(rawLc);
+
+      const o = wsProfileContactsObj(ws);
+
+      const kbBack = new InlineKeyboard()
+        .text('⬅️ Назад', `a:ws_prof_contacts|ws:${wsId}`)
+        .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
+
+      if (wantClear) {
+        delete o[key];
+        await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: 1 });
+        try { await db.auditWorkspace(wsId, u.id, 'ws.profile_contacts_updated', { key, cleared: true }); } catch {}
+
+        await clearExpectText(ctx.from.id);
+        const editTarget = (exp && exp.chatId && exp.messageId) ? { chatId: exp.chatId, messageId: exp.messageId } : null;
+        await renderWsProfileContactsStructured(ctx, u.id, wsId, { editTarget });
+        return;
+      }
+
+      let v = null;
+      let err = null;
+
+      if (key === 'tg') {
+        v = normalizeTgUsername(raw);
+        if (!v) err = '⚠️ Не похоже на Telegram username. Пример: <code>@someuser</code> или <code>t.me/someuser</code>.';
+      }
+      if (key === 'email') {
+        v = normalizeEmailAddr(raw);
+        if (!v) err = '⚠️ Не похоже на email. Пример: <code>name@domain.com</code>.';
+      }
+      if (key === 'phone') {
+        v = normalizePhoneE164Like(raw);
+        if (!v) err = '⚠️ Не похоже на номер. Пример: <code>+79991234567</code> (10–15 цифр).';
+      }
+      if (key === 'site') {
+        const r = normalizeWebsiteUrl(raw);
+        if (!r.ok) {
+          if (r.err === 'telegram') err = '⚠️ Это похоже на Telegram (t.me / @...). Укажи это в поле «Telegram username».';
+          else err = '⚠️ Не похоже на ссылку/домен. Пример: <code>example.com</code> или <code>https://example.com</code>.';
+        } else {
+          v = r.value;
+        }
+      }
+
+      if (!v) {
+        await ctx.reply((err || '⚠️ Формат не распознан.') + '\n\nЧтобы очистить поле — отправь <code>-</code>.', { parse_mode: 'HTML', reply_markup: kbBack, disable_web_page_preview: true });
+        await setExpectText(ctx.from.id, exp);
+        return;
+      }
+
+      // Save normalized
+      if (key === 'tg') o.tg = v;
+      if (key === 'email') o.email = v;
+      if (key === 'phone') o.phone = v;
+      if (key === 'site') o.site = v;
+
+      await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: 1 });
+      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_contacts_updated', { key }); } catch {}
+
+      await clearExpectText(ctx.from.id);
+      const editTarget = (exp && exp.chatId && exp.messageId) ? { chatId: exp.chatId, messageId: exp.messageId } : null;
+      await renderWsProfileContactsStructured(ctx, u.id, wsId, { editTarget });
+      return;
+    }
+
     // Moderation report (offer/thread)
     if (exp.type === 'bx_report') {
       const offerId = exp.offerId ? Number(exp.offerId) : null;
@@ -21841,6 +22133,71 @@ if (p.a === 'a:ws_prof_mode') {
       return;
     }
 
+
+    if (p.a === 'a:ws_prof_contacts') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      if (!wsId) return;
+      await renderWsProfileContactsStructured(ctx, u.id, wsId);
+      return;
+    }
+
+    if (p.a === 'a:ws_prof_contacts_edit') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      const key = String(p.k || '');
+      const allowed = ['tg', 'email', 'phone', 'site'];
+      if (!wsId) return;
+      if (!allowed.includes(key)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
+
+      const prompts = {
+        tg: '✍️ Telegram username: пришли @user или ссылку t.me/user.\n\nЧтобы очистить поле — отправь “-”.',
+        email: '✍️ Email: пришли почту вида name@domain.com.\n\nЧтобы очистить поле — отправь “-”.',
+        phone: '✍️ Phone: пришли номер (можно с пробелами/скобками). Сохраню в формате +цифры.\n\nЧтобы очистить поле — отправь “-”.',
+        site: '✍️ Website: пришли ссылку или домен (example.com).\n\nВажно: t.me лучше указать в Telegram username.\n\nЧтобы очистить поле — отправь “-”.',
+      };
+
+      await safeEditOrReply(ctx, prompts[key] || prompts.tg, {
+        reply_markup: new InlineKeyboard()
+          .text('⬅️ Отмена', `a:ws_prof_contacts|ws:${wsId}`)
+          .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
+          .row()
+          .text('📋 Меню', 'a:menu')
+      });
+
+      await setExpectText(ctx.from.id, { type: 'ws_prof_contacts_edit', wsId, key, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
+      return;
+    }
+
+    if (p.a === 'a:ws_prof_contacts_clear') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      if (!wsId) return;
+      await renderWsProfileContactsClearMenu(ctx, u.id, wsId);
+      return;
+    }
+
+    if (p.a === 'a:ws_prof_contacts_clear_k') {
+      await ctx.answerCallbackQuery();
+      const wsId = Number(p.ws);
+      const key = String(p.k || '');
+      const allowed = ['tg', 'email', 'phone', 'site', 'other'];
+      if (!wsId) return;
+      if (!allowed.includes(key)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
+
+      const isAdmin = isSuperAdminTg(ctx.from?.id);
+      const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const o = wsProfileContactsObj(ws);
+      delete o[key];
+
+      await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: 1 });
+      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_contacts_cleared', { key }); } catch {}
+      await renderWsProfileContactsStructured(ctx, u.id, wsId);
+      return;
+    }
+
     if (p.a === 'a:ws_prof_edit') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
@@ -21851,7 +22208,7 @@ if (p.a === 'a:ws_prof_mode') {
         ig: '✍️ Пришли Instagram: @handle или ссылку на профиль (instagram.com/handle).\n\nЧтобы очистить поле — отправь “-”.',
         about: '✍️ Короткое описание (1–2 предложения).\n\nПример: “Тестирую косметику и делаю распаковки. Люблю честные обзоры.”',
         portfolio: '✍️ Пришли 1–3 ссылки на портфолио (каждая с новой строки или в одном сообщении).\n\nЧтобы очистить поле — отправь “-”.',
-        contact: '✍️ Введи контакт (например: @username / ссылка / почта).',
+        contact: '✍️ Контакт (legacy): @username / ссылка / почта.\n\nЛучше: «📇 Контакты (структурно)» — это удобнее и безопаснее для монетизации.\n\nЧтобы очистить поле — отправь “-”.',
         geo: '✍️ Введи город/гео.'
       };
       await safeEditOrReply(ctx, prompts[field] || prompts.title, {
@@ -21877,7 +22234,7 @@ if (p.a === 'a:ws_prof_mode') {
 • Ниши и форматы
 • Гео и описание
 • Instagram и ссылки портфолио
-• Контакт
+• Контакты (legacy + структурно)
 
 <b>Не трогаем</b>: диалоги/заявки, оплаты, PRO и подключение канала.
 
@@ -21907,6 +22264,8 @@ if (p.a === 'a:ws_prof_mode') {
         profile_formats: [],
         profile_geo: null,
         profile_contact: null,
+        profile_contacts: {},
+        profile_contacts_v: 1,
         profile_portfolio_urls: [],
         profile_about: null,
         profile_mode: 'both',
