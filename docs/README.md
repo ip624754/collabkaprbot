@@ -52,6 +52,7 @@
 - `02_jobs_vitalik_woz_protocol.md` — Jobs/Vitalik/Woz: high-signal протокол
 - `06_AUDIT_STEP94_HARDCORE.md` — reference аудит (источник рекомендаций/гипотез, не source of truth)
 - `07_WORK_HISTORY_2026_02.md` — timeline заметки по шагам/решениям (для восстановления контекста)
+- `08_AUDIT_CLOSEOUT_2026_02.md` — закрытие внешнего аудита (findings→fixes + мини‑QA)
 - `03_legacy_tech_spec_collabka_v1_0_3.md` — базовая техспека (legacy reference)
 - `04_legacy_techpassport_collabka_v1_0_3_telegra.md` — техпаспорт (legacy reference)
 - `05_legacy_telegraph_article_and_manual.md` — telegraph‑статья/мануал (legacy reference)
@@ -70,12 +71,9 @@
 - Cron safety: **token-based Redis locks** (safe unlock) + SQL atomic guards на ключевых переходах (ended/publish/expire, broadcast transitions).
 - Official publish (@collabka_offers): анти‑дубли **token‑lock + DB‑reserve `PUBLISHING`** (stale rescue) + runbook (`docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`).
 - Contacts / Brand Pass (P2): structured contacts (`profile_contacts` JSONB) + opt‑in UI для креатора + перенос из «Контакт» (однозначно) + явные подсказки (TG рекомендован, остальное опционально) + кнопки очистки полей.
-- Brand Inbox: «✅ Принять» — точка списания (exactly‑once), до принятия нельзя «Ответить/Шаблоны», баланс кредитов в карточке (Redis-only).
+- Brand Inbox: «✅ Принять» — точка списания (exactly‑once). До принятия доступны только ✅ Принять/⛔ Спам/🗑 Удалить (нельзя Ответить/Шаблоны/В работу/Закрыть). Баланс кредитов в карточке (Redis-only).
 - Brand Pass UX: «💳 Купить ещё» из витрины креатора → Brand Pass → «⬅️ Вернуться к витрине».
 - Giveaways: «➕ Новый розыгрыш» без канала показывает gate‑экран (подключить/выбрать канал) + корректный back.
 - Новичок UX: вместо “тишины” на устаревших кнопках — понятные подсказки + кнопки назад/меню/home; очистка полей через `🧹 Очистить` (без упоминания “-”).
 - Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*` + маркетинг‑шаблоны.
 - Cron throughput: уведомления (Telegram notify) ограничены по времени (`withTimeout ~5s`), тик не “залипает” на одном сообщении.
-
-### Process / audit
-- `docs/process/08_AUDIT_CLOSEOUT_2026_02.md` — закрытие последнего аудита (утечка телефонов словами / broadcast 429 / break-glass / auto-heal alerts).

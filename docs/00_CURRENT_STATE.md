@@ -287,6 +287,12 @@
 
 - Contacts / Brand Pass (P2): structured contacts (`profile_contacts` JSONB) + opt-in UI + перенос из «Контакт» + явные подсказки (см. `docs/20_CONTACTS_MODEL.md`).
 
+- Anti-bypass: телефоны, написанные **словами**, маскируем в `profile_about` до unlock (STEP119).
+- Broadcast 429: Redis cooldown + **DB fuse** `broadcasts.cooldown_until` при деградации Redis (STEP120).
+- Admin break-glass: при Redis down супер‑админ может открыть allowlist (payments/users/audit) через `bg=1` + ops alert (STEP121).
+- Payments auto-heal: ops alerts при `validation_failed` / `manual_required` (STEP122).
+- Brand Inbox UX: до ✅ Принять (status=new) доступны только ✅ Принять / ⛔ Спам / 🗑 Удалить; фикс креаторского CTA «💬 Написать бренду» (STEP124).
+
 - Official channel publish: token-lock + DB-reserve (PUBLISHING) для защиты от дублей
 - Broadcast: Redis cooldown на 429 + отображение cooldown в `/api/health`
 - Cron: token-based locks (safe unlock) + SQL atomic guards на критичных статусных переходах

@@ -46,7 +46,7 @@
 - Official publish (@collabka_offers): idempotency token-lock + DB-reserve PUBLISHING (см. docs/19)
 - Founder Sale: runtime управление из админки + deep-link fs_* (для маркетинга)
 - Contacts / Brand Pass: unlock DB-truth + anti-bypass redaction + structured contacts (`profile_contacts` JSONB) с приоритетом structured→контакт (текстом) (см. docs/20)
-- Brand Inbox: «✅ Принять» — точка списания (до принятия нельзя «Ответить/Шаблоны»), баланс кредитов в карточке (Redis-only)
+- Brand Inbox: «✅ Принять» — точка списания (status=new→in_progress). До принятия доступны только ✅ Принять / ⛔ Спам / 🗑 Удалить; нельзя «Ответить/Шаблоны/В работу/Закрыть». Баланс кредитов в карточке (Redis-only).
 - Giveaways: «➕ Новый розыгрыш» без канала показывает gate‑экран (как у офферов), без молчаливых тупиков
 - Creator → заявки брендам: «✍️ Написать заявку» включает явный режим ввода + «❌ Отмена ввода»
 - Новичок UX: вместо “тишины” — понятные подсказки + кнопки назад/меню/home; очистка полей через `🧹 Очистить`
@@ -105,10 +105,3 @@
 4) “Предлагаю шаг 1: … (маленький патч)”
 5) “QA: …”
 6) “Артефакты: FULL zip + hotfix zip + patch + files list”
-
-
-## Доп. контекст: последние защиты (audit closeout)
-- STEP119: phone-words anti-bypass (profile_about)
-- STEP120: broadcast cooldown DB fuse
-- STEP121: break-glass allowlist (admin)
-- STEP122: auto-heal ops alerts

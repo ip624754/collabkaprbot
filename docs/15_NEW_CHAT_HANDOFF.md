@@ -31,10 +31,12 @@
 - /api/health: cron last_run + метрики audit throttle
 - audit write‑shedding (ENV‑гейт) для снижения INSERT в workspace_audit
 - broadcast: URL‑кнопки до 3, deep-link shortcuts (gw/bp/offer), шаблоны кнопок, ссылки “в слово”, финальный экран рассылки с кнопками
-- broadcast: 429-safe курсор + Redis cooldown (пауза) + cooldown виден в /api/health
+- broadcast: 429-safe курсор + Redis cooldown (пауза) + **DB fuse** `broadcasts.cooldown_until` при деградации Redis + cooldown виден в /api/health
 - Contacts / Brand Pass: structured contacts (`profile_contacts` JSONB) + opt-in UI для креатора + приоритет structured→контакт (текстом) + unlock DB-truth (см. `docs/20_CONTACTS_MODEL.md`)
+- Anti-bypass: телефоны в тексте маскируем и цифрами, и **словами** (до unlock)
+- Break-glass (Admin): при Redis down супер‑админ может открыть allowlist (payments/users/audit) через `bg=1` + ops alert
 - Creator → Каталог брендов: «✍️ Написать заявку» включает явный режим ввода + «❌ Отмена ввода» (без “тишины”)
-- Brand Inbox: «✅ Принять» — точка списания (до принятия нельзя «Ответить/Шаблоны»), в карточке показываем баланс кредитов (Redis-only)
+- Brand Inbox: «✅ Принять» — точка списания (status=new→in_progress). До принятия доступны только ✅ Принять / ⛔ Спам / 🗑 Удалить; нельзя «Ответить/Шаблоны/В работу/Закрыть». В карточке показываем баланс кредитов (Redis-only).
 - Giveaways: «➕ Новый розыгрыш» без подключённого канала показывает gate‑экран (подключить/выбрать канал) + корректный back
 - UX polish: очистка полей через кнопки `🧹 Очистить` (без упоминания “-”), “legacy/старое” не показываем пользователю
 - /start role gate: если нет ui_mode (Redis) и нет payload → короткая развилка (Бренд/Креатор), fail‑open
@@ -65,10 +67,3 @@
 ## 4) Быстрый шаблон промпта
 Если хочется прям “как надо” — используй файл:
 `docs/17_START_NEW_CHAT_PROMPT.md`
-
-
-### Последние критичные изменения (проверить при старте)
-- STEP119: anti-bypass телефонов словами в `profile_about`.
-- STEP120: broadcast cooldown DB fuse `broadcasts.cooldown_until` при Redis деградации.
-- STEP121: break-glass allowlist для суперадмина при Redis down (двойное подтверждение + ops alert).
-- STEP122: ops alerts при auto-heal orphaned payments (validation_failed / manual_required).
