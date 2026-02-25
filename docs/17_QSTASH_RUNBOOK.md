@@ -11,6 +11,11 @@
 
 ## 1) Где взять значения для ENV
 
+⚠️ Важно про зависимости:
+- пакет `@upstash/qstash` должен быть в `package.json` → `dependencies`
+- если его нет (например, применили hotfix zip без обновления `package.json`), то QStash‑фичи автоматически **выключаются**, но бот **не падает**
+
+
 ### QSTASH_TOKEN
 Это Bearer‑token для публикации задач в QStash.
 
@@ -68,63 +73,12 @@ Vercel → Project → **Settings → Environment Variables**:
 
 ---
 
-## 4) Admin: 🛰 QStash статус + 🧪 Send signed ping (проверка за 10 секунд)
+## 4) Быстрый self-check (10 секунд): Admin → QStash статус → signed ping
 
-Это самый быстрый способ убедиться, что **QStash подключён реально**, а не «в теории»:
-- `QSTASH_TOKEN` позволяет **публиковать** jobs
-- подпись `Upstash-Signature` **валидируется** (signing keys корректные)
-- QStash **доставляет** запрос в наш воркер по публичному URL
-
-Важно:
-- экран статуса — **Redis-only**, best-effort
-- если Redis деградирует, метрики могут быть `—`, но это не означает «всё сломано»
-
-### Где в админке
-👑 Админка → **🛰 QStash статус**
-
-### Что показывает экран (как читать поля)
-
-1) `Fan-out (Redis): ON/OFF`
-- читается из Redis key `sys:broadcast_qstash_fanout`
-- **ON**: cron `broadcast_tick` только **энкьюит** delivery‑jobs в QStash
-- **OFF**: cron `broadcast_tick` работает в legacy‑режиме (отправляет сам)
-
-2) `Broadcast tick last_run`
-- берётся из Redis метрики `cron:broadcast_tick:last_run` (best-effort)
-- показывает, что cron «дышит» и когда последний раз стартовал
-- `mode` (если указан) помогает понять, каким путём tick работал
-
-3) `Worker last delivery`
-- Redis breadcrumb `qstash:broadcast_deliver:last_at`
-- обновляется **на стороне воркера** `/api/qstash/broadcast-deliver`
-- если fan-out ON, но `last delivery` давно не обновлялся — это сигнал проверить подпись/URL/QStash
-
-4) `Ping enqueued / Ping received / ping status`
-- `Ping enqueued` — бот записал факт «мы отправили ping в QStash»
-- `Ping received` — наш endpoint `/api/qstash/ping` получил **подписанный** запрос и прошёл verify
-- `ping status`:
-  - `OK` — nonce совпал (значит цепочка publish → deliver → verify работает)
-  - `WAIT` — ping отправили, но подтверждение ещё не пришло
-
-5) `Broadcast cooldown`
-- Redis-only поля `broadcast:cooldown_until`, `broadcast:last_429_at`, `broadcast:last_429_reason`
-- **ACTIVE** означает, что воркер/тик видели 429 и включили паузу
-
-### Что происходит при ON/OFF (и когда это применяется)
-
-`📣 Fan-out: ON/OFF` переключает **только режим рассылок**:
-- OFF → рассылки выполняются старым путём (без QStash)
-- ON → tick публикует jobs в QStash, а доставка идёт через воркер
-
-Изменение применяется «на следующем запуске cron» (tick читает флаг при старте).
-
-### Что делает кнопка 🧪 Send signed ping
-
-Это безопасный тест, который **не влияет на рассылки**:
-1) бот публикует в QStash job на URL `/api/qstash/ping`
-2) QStash вызывает наш endpoint с `Upstash-Signature`
-3) endpoint проверяет подпись (`QSTASH_CURRENT_SIGNING_KEY`/`NEXT`) и пишет breadcrumbs в Redis
-4) экран статуса сравнивает `enqueued nonce` и `received nonce` → показывает `OK/WAIT`
+Зачем: быстро проверить, что:
+- `QSTASH_TOKEN` работает (мы можем публиковать job)
+- подпись `Upstash-Signature` валидируется (signing keys корректные)
+- воркер доступен и доходит до нашего приложения
 
 Шаги:
 1) Открой **👑 Админка**
@@ -133,15 +87,13 @@ Vercel → Project → **Settings → Environment Variables**:
 4) Подожди 1–3 секунды и обнови экран статуса
 
 Ожидаемое:
-- `Ping enqueued` обновился
-- `Ping received` обновился
+- `Ping enqueued` обновился (это мы записали в Redis на стороне бота)
+- `Ping received` обновился (это пришёл подписанный запрос от QStash и прошёл verify)
 - `ping status: OK`
 
-Если `WAIT` держится дольше 10–20 секунд:
-- проверь ENV `QSTASH_TOKEN` и Signing Keys (оба ключа)
-- проверь, что задан `PUBLIC_BASE_URL` (пинг и воркер используют абсолютный URL)
-- проверь, что endpoint `/api/qstash/ping` задеплоен и доступен (Vercel logs)
-- проверь в Upstash QStash, не ушёл ли ping в DLQ
+Если `Ping received` не обновляется:
+- проверяй signing keys (`QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`)
+- проверь, что `CFG.PUBLIC_BASE_URL` верный (QStash доставляет по абсолютному URL)
 
 ---
 
@@ -190,6 +142,10 @@ Vercel → Project → **Settings → Environment Variables**:
 
 ### Ошибка: `qstash_token_missing`
 - не задан `QSTASH_TOKEN` в окружении
+
+### Ошибка: `qstash_lib_missing`
+- в деплое отсутствует npm‑пакет `@upstash/qstash`
+- решение: добавить в `package.json` → `dependencies` и сделать redeploy
 
 ### Ошибка: `signature_invalid` / 401
 - не задан(ы) signing keys
