@@ -6894,10 +6894,10 @@ function brandReplyKb(ws, wsId, brandCredits = 0, leadId = 0) {
   // UX: if balance is low — показываем и «Контакты», и быстрый путь купить Brand Pass.
   const bal = Number(brandCredits || 0);
   if (bal <= 0) {
-    kb.text('💳 Купить кредиты', 'a:brand_pass|ws:0');
+    kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
   } else if (CONTACT_UNLOCK_COST > 0 && bal < CONTACT_UNLOCK_COST) {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`)
-      .text('💳 Купить кредиты', 'a:brand_pass|ws:0');
+      .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
   } else {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`);
   }
@@ -8663,10 +8663,10 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
       } else if (balNum !== null) {
         if (balNum <= 0) {
-          kb.text('💳 Купить кредиты', 'a:brand_pass|ws:0');
+          kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
         } else if (balNum < CONTACT_UNLOCK_COST) {
           kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`)
-            .text('💳 Купить кредиты', 'a:brand_pass|ws:0');
+            .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
         } else {
           kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
         }
@@ -9247,10 +9247,10 @@ ${threadBlock}`;
     .row();
 
   if (Number(credits || 0) <= 0) {
-    kb.text('💳 Купить кредиты', 'a:brand_pass|ws:0');
+    kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
   } else if (needsContactsTopup) {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
-      .text('💳 Купить кредиты', 'a:brand_pass|ws:0');
+      .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
   } else {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
   }
@@ -12998,7 +12998,7 @@ function isBrandPlanRowActive(planRow) {
   return new Date(until).getTime() > Date.now();
 }
 
-async function renderBrandPassTopup(ctx, userId, wsId) {
+async function renderBrandPassTopup(ctx, userId, wsId, opts = {}) {
   const credits = await getBrandCreditsCached(userId);
   const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(userId) : 0;
   const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
@@ -13007,6 +13007,12 @@ async function renderBrandPassTopup(ctx, userId, wsId) {
     kb.text(`💳 ${p.title} · ${p.stars}⭐️`, `a:brand_buy|ws:${wsId}|pack:${p.id}`).row();
   }
   kb.text('⬅️ К Brand Plan', `a:brand_plan|ws:${wsId}`);
+  kb.row();
+  const bpRet = String(opts?.ret || '').trim().toLowerCase();
+  const bpRws = Number(opts?.rws || 0);
+  if (bpRet === 'wsp' && bpRws > 0) {
+    kb.text('⬅️ Вернуться к витрине', `a:wsp_open|ws:${bpRws}|m:ro`);
+  }
 
   await safeEditOrReply(ctx, 
     `💳 <b>Докупить кредиты</b>
@@ -13027,8 +13033,8 @@ ${brandPassTrialLineHtml(credits)}
 }
 
 // Back-compat alias (some UI buttons still call renderBrandPass)
-async function renderBrandPass(ctx, userId, wsId) {
-  return renderBrandPassTopup(ctx, userId, wsId);
+async function renderBrandPass(ctx, userId, wsId, opts = {}) {
+  return renderBrandPassTopup(ctx, userId, wsId, opts);
 }
 
 async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
@@ -20562,7 +20568,7 @@ if (p.a === 'a:wsp_preview') {
         kb.text(contactUnlockActionLabel(), `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`).row();
       }
       kb
-        .text('💳 Купить кредиты', 'a:brand_pass|ws:0')
+        .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`)
         .row()
         .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb);
 
@@ -20721,7 +20727,7 @@ ${tail}`;
             const u0 = String(ports2[0] || '').trim();
             if (u0) kb2.url('🗂 Портфолио', u0);
           }
-          kb2.row().text('🪟 Витрина', `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}`).text('💳 Купить ещё', 'a:brand_pass|ws:0');
+          kb2.row().text('🪟 Витрина', `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}`).text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
 
           await ctx.reply(lines.join('\n'), { parse_mode: 'HTML', reply_markup: kb2, disable_web_page_preview: true });
         }
@@ -23256,7 +23262,9 @@ ${link}`;
         return;
       }
 
-      await renderBrandPass(ctx, u.id, wsId);
+      const ret = String(p.ret || '').trim();
+      const rws = Number(p.rws || 0);
+      await renderBrandPass(ctx, u.id, wsId, { ret, rws });
       return;
     }
 
