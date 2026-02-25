@@ -710,6 +710,19 @@ export async function giveawaysTick() {
 // =====================================================
 const BROADCAST_BATCH_SIZE = 25;
 const BROADCAST_SEND_DELAY_MS = 50; // ~20 msg/sec
+// Global time budget for one cron invocation (serverless-safe).
+// We stop sending before the deadline to ensure we can persist cursor/counters.
+const BROADCAST_TIME_BUDGET_MS = Math.max(
+  8000,
+  Math.min(55_000, Number(process.env.BROADCAST_TIME_BUDGET_MS || 45_000) || 45_000)
+);
+const BROADCAST_TIME_BUDGET_RESERVE_MS = Math.max(
+  1500,
+  Math.min(
+    15_000,
+    Number(process.env.BROADCAST_TIME_BUDGET_RESERVE_MS || 5_000) || 5_000
+  )
+);
 // When Telegram returns 429, we respect retry_after and avoid hammering.
 // Stored in Redis (fast path). If Redis is unavailable, we persist a DB fuse (broadcasts.cooldown_until)
 // to avoid expensive recipient polling in Neon during cooldown.
@@ -1049,6 +1062,13 @@ export async function broadcastTick() {
     }
 
     const bot = getBot();
+    const startedAt = Date.now();
+    const reserveMs = Math.min(
+      BROADCAST_TIME_BUDGET_RESERVE_MS,
+      Math.max(1000, BROADCAST_TIME_BUDGET_MS - 1000)
+    );
+    const deadlineAt = startedAt + BROADCAST_TIME_BUDGET_MS;
+    let timeBudgetHit = false;
     let sent = 0;
     let failed = 0;
     let deferred = 0;
@@ -1056,6 +1076,13 @@ export async function broadcastTick() {
     let cooldownSetSec = 0;
 
     for (const recipient of recipients) {
+      // Global budget: stop early to avoid Vercel hard-kill mid-loop and to
+      // always have time to persist cursor/counters.
+      if (Date.now() >= deadlineAt - reserveMs) {
+        timeBudgetHit = true;
+        break;
+      }
+
       const uid = Number(recipient.user_id);
       const tgId = Number(recipient.tg_id);
 
@@ -1153,6 +1180,7 @@ export async function broadcastTick() {
       });
     }
 
+    const duration_ms = Date.now() - startedAt;
     const out = {
       status: 'running',
       broadcast_id: bc.id,
@@ -1162,6 +1190,14 @@ export async function broadcastTick() {
       total_sent: Number(bc.sent_count || 0) + sent,
       total_count: bc.total_count,
       ...(cooldownSetSec ? { cooldown_sec: cooldownSetSec } : {}),
+      ...(timeBudgetHit
+        ? {
+            exit_reason: 'time_budget',
+            time_budget_ms: BROADCAST_TIME_BUDGET_MS,
+            time_budget_reserve_ms: reserveMs,
+          }
+        : {}),
+      duration_ms,
     };
     await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
     return out;
