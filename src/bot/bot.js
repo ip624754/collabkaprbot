@@ -904,7 +904,7 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
     kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     await safeEditOrReply(
       ctx,
-      '⚠️ Чтобы создать розыгрыш, сначала подключи канал (витрину).\n\nНажми «🚀 Подключить канал», добавь бота админом в свой канал и вернись сюда.',
+      '⚠️ Нужен подключённый канал (витрина), чтобы создать розыгрыш.\n\n1) Нажми «🚀 Подключить канал» и добавь бота админом.\n2) Вернись сюда и выбери канал.',
       { reply_markup: kb }
     );
     return;
@@ -917,7 +917,7 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
   kbNavRow(kb, backCb);
 
   await safeEditOrReply(ctx, 
-    `Выбери канал, где создать новый конкурс:`,
+    `Выбери канал, где создать новый розыгрыш:`,
     { reply_markup: kb }
   );
 }
@@ -937,7 +937,7 @@ async function renderGwNewGate(ctx, { backCb = 'a:gw_list', reason = '' } = {}) 
   const tail = reason ? `\n\nПричина: ${String(reason)}` : '';
   await safeEditOrReply(
     ctx,
-    `⚠️ Чтобы создать розыгрыш, нужен подключённый канал (витрина).\n\n1) Нажми «🚀 Подключить канал» и добавь бота админом.\n2) Затем вернись и выбери канал («📣 Выбрать канал»).${tail}`,
+    `⚠️ Нужен подключённый канал (витрина), чтобы создать розыгрыш.\n\n1) Нажми «🚀 Подключить канал» и добавь бота админом.\n2) Затем вернись и выбери канал («📣 Выбрать канал»).${tail}`,
     { reply_markup: kb }
   );
 }
@@ -5108,8 +5108,8 @@ async function renderBrandApply(ctx, u, brandUserId, backPage, opts = {}) {
     else kbGate.text('🚀 Подключить канал', 'a:setup');
 
     const gateText = hasAnyWs
-      ? '⚠️ Чтобы отправить заявку бренду, сначала выбери активный канал (витрину).\n\nОткрой «📣 Мои каналы», выбери канал и повтори.'
-      : '⚠️ Чтобы отправить заявку бренду, сначала подключи канал (витрину).\n\nНажми «🚀 Подключить канал», добавь бота админом в свой канал и повтори.';
+      ? '⚠️ Для заявки нужен активный канал (витрина).\n\nОткрой «📣 Мои каналы», выбери канал и вернись сюда.'
+      : '⚠️ Нужен подключённый канал (витрина), чтобы отправить заявку.\n\n1) Нажми «🚀 Подключить канал» и добавь бота админом.\n2) Затем вернись сюда и повтори.';
 
     await safeEditOrReply(ctx, gateText, { reply_markup: kbGate }, edit);
     return;
@@ -5126,7 +5126,7 @@ async function renderBrandApply(ctx, u, brandUserId, backPage, opts = {}) {
       .row()
       .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
-    await safeEditOrReply(ctx, '⚠️ Выбери активный канал (витрину) в «📣 Мои каналы» и повтори.', { reply_markup: kbGate }, edit);
+    await safeEditOrReply(ctx, '⚠️ Выбери активный канал (витрину) в «📣 Мои каналы» и вернись сюда.', { reply_markup: kbGate }, edit);
     return;
   }
 
@@ -6356,7 +6356,10 @@ async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
         })()
       : mainMenuKb(await getRoleFlags(u, ctx.from.id));
 
-    await safeEditOrReply(ctx, 'Сначала подключи канал: нажми “🚀 Подключить канал”.', { reply_markup: kb });
+    await safeEditOrReply(ctx, `⚠️ Чтобы продолжить, нужен подключённый канал (витрина).
+
+1) Нажми «🚀 Подключить канал» и добавь бота админом в свой канал.
+2) Затем вернись сюда и повтори действие.`, { reply_markup: kb });
     return null;
   }
   const active = await getActiveWorkspace(ctx.from.id);
@@ -6372,9 +6375,9 @@ async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
 async function renderWsList(ctx, ownerUserId) {
   const items = await db.listWorkspaces(ownerUserId);
   if (!items.length) {
-    await safeEditOrReply(ctx, `У тебя пока нет подключенных каналов.
+    await safeEditOrReply(ctx, `⚠️ У тебя пока нет подключённых каналов.
 
-Нажми “🚀 Подключить канал”.`, { reply_markup: mainMenuKb(await getRoleFlags(await db.upsertUser(ctx.from.id, ctx.from.username ?? null), ctx.from.id)) });
+Нажми «🚀 Подключить канал», добавь бота админом в свой канал — и после этого появится витрина и все функции.`, { reply_markup: mainMenuKb(await getRoleFlags(await db.upsertUser(ctx.from.id, ctx.from.username ?? null), ctx.from.id)) });
     return;
   }
   const kb = new InlineKeyboard();
