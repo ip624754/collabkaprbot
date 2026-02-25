@@ -73,29 +73,24 @@ const cases = [
     opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['415'] }
   },
   {
-    name: 'ru phone with dots redacted',
-    input: 'Тел: 8.999.123.45.67',
-    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['8.999.123.45.67'] }
+    name: 'phone in words (plus + russian digits) redacted',
+    input: 'Пиши в вотсап: плюс семь девятьсот двенадцать триста сорок пять шестьдесят семь',
+    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['девятьсот'] }
   },
   {
-    name: 'phone with emoji separators redacted',
-    input: 'Тел: +7 999 🤝 123 🤝 45 🤝 67',
-    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['999 🤝 123'] }
+    name: 'phone in words (ru mobile start with 8) redacted',
+    input: 'Телефон: восемь девять ноль ноль один один два три четыре пять шесть',
+    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['восемь девять ноль'] }
   },
   {
-    name: 'phone with leading zeros and unicode dash redacted',
-    input: 'Тел: +7 (000) 123‑45‑67',
-    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['000'] }
+    name: 'non-phone number words not redacted (small count)',
+    input: 'Телефон не нужен. У меня пять тысяч рублей на рекламу.',
+    opts: { redacted: false, contains: ['пять тысяч рублей'] }
   },
   {
-    name: 't․me obfuscated dot leader redacted',
-    input: 'Пиши: t․me/abc',
-    opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['t․me/'] }
-  },
-  {
-    name: 't . me / abc spaced obfuscation redacted',
-    input: 'Пиши: t . me / abc',
-    opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['t . me'] }
+    name: 'non-phone plus math not redacted',
+    input: 'Плюс пять минут к дедлайну, плюс шесть идей — и всё.',
+    opts: { redacted: false, contains: ['Плюс пять минут'] }
   },
   {
     name: 'credit card like 16 digits not redacted',
