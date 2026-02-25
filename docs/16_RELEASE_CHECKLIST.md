@@ -8,8 +8,9 @@
 - Ensure env vars exist (see `.env.example`)
   - Если включаешь QStash fan-out для рассылок (`sys:broadcast_qstash_fanout=1`):
     - `QSTASH_TOKEN`
-    - `QSTASH_CURRENT_SIGNING_KEY` (+ `QSTASH_NEXT_SIGNING_KEY` для ротации)
+    - `QSTASH_CURRENT_SIGNING_KEY` + `QSTASH_NEXT_SIGNING_KEY`
     - `PUBLIC_BASE_URL` (или корректный `VERCEL_URL` fallback)
+  - Runbook: `docs/17_QSTASH_RUNBOOK.md`
 - If schema changed: run migrations via `node migrations/run.js`
 
 ## After deploy
