@@ -23,6 +23,8 @@
    - запрещён при невалидной сумме/валюте/пейлоаде,
    - фиксируем причину в audit/логах.
 
+**Auto-heal orphaned payments:** если strict validation не прошла или требуется manual review — **ничего не применяем автоматически**, помечаем для ручной проверки и отправляем ops alert (`autoheal_validation_failed` / `autoheal_manual_required_failed`).
+
 ---
 
 ## B) Credits & paid unlock (контакты / Brand Pass)
@@ -71,6 +73,12 @@
    - `src/bot/actionRegistry.js` (тип action: view/edit/pay/admin/ops + guard mode)
    - проверка консистентности: `npm run actions:check` (должен проходить перед релизом)
    - экспорт для аудитов/доков (Markdown): `npm run actions:md` → `docs/02_ACTION_KEYS_REGISTRY.md`
+
+10.3) Break-glass (Admin-only) при Redis down:
+   - по умолчанию все `REQUIRE_REDIS` callbacks блокируются (fail-closed),
+   - но супер‑админ может открыть *строго ограниченный* allowlist экранов (payments/users/audit),
+   - только через двойное подтверждение (`bg=1`),
+   - и каждое использование отправляет ops alert (digest anti-spam).
 
 ---
 
@@ -126,3 +134,6 @@
 - Повторные списания при повторном клике/ретраях.
 - Ретраи/циклы в одном serverless запросе.
 - Новые DB-чтения в меню/кнопках/рендере без очень жёсткого обоснования.
+
+
+Anti-bypass: redactContactsInText маскирует телефоны цифрами и словами.

@@ -69,6 +69,13 @@
 - Broadcast надёжность: на 429 получатель **не теряется** (DB `deferred` + `retry_after_until`), scan-курсор идёт дальше, есть **Redis cooldown** + quarantine + счётчики в `/api/health`.
 - Cron safety: **token-based Redis locks** (safe unlock) + SQL atomic guards на ключевых переходах (ended/publish/expire, broadcast transitions).
 - Official publish (@collabka_offers): анти‑дубли **token‑lock + DB‑reserve `PUBLISHING`** (stale rescue) + runbook (`docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`).
-- Contacts / Brand Pass (P2): structured contacts (`profile_contacts` JSONB) + opt‑in UI для креатора + однозначный перенос из legacy + явные подсказки (TG рекомендован, остальное опционально).
+- Contacts / Brand Pass (P2): structured contacts (`profile_contacts` JSONB) + opt‑in UI для креатора + перенос из «Контакт» (однозначно) + явные подсказки (TG рекомендован, остальное опционально) + кнопки очистки полей.
+- Brand Inbox: «✅ Принять» — точка списания (exactly‑once), до принятия нельзя «Ответить/Шаблоны», баланс кредитов в карточке (Redis-only).
+- Brand Pass UX: «💳 Купить ещё» из витрины креатора → Brand Pass → «⬅️ Вернуться к витрине».
+- Giveaways: «➕ Новый розыгрыш» без канала показывает gate‑экран (подключить/выбрать канал) + корректный back.
+- Новичок UX: вместо “тишины” на устаревших кнопках — понятные подсказки + кнопки назад/меню/home; очистка полей через `🧹 Очистить` (без упоминания “-”).
 - Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*` + маркетинг‑шаблоны.
 - Cron throughput: уведомления (Telegram notify) ограничены по времени (`withTimeout ~5s`), тик не “залипает” на одном сообщении.
+
+### Process / audit
+- `docs/process/08_AUDIT_CLOSEOUT_2026_02.md` — закрытие последнего аудита (утечка телефонов словами / broadcast 429 / break-glass / auto-heal alerts).

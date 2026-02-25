@@ -214,6 +214,8 @@
 - STEP107 (опционально): добавлена кнопка «✨ Перенести из «Контакт»» — переносит **одно** значение из `profile_contact` в `profile_contacts` (tg/email/phone/site) только если распознавание однозначное. Никакой авто-магии и без перетирания уже заполненных полей.
 - STEP119: усилен anti‑bypass для телефонов в свободном тексте — маскируем номера, написанные **словами** (например: «плюс семь девять…»).
 - STEP120: broadcast 429 cooldown: добавлен DB fuse `broadcasts.cooldown_until` на случай деградации Redis (без polling recipients).
+- STEP121: break-glass для супер‑админа при Redis down: строго ограниченный allowlist (payments/users/audit) + двойное подтверждение + ops alert.
+- STEP122 (optional): auto-heal orphaned payments: если strict validation не прошла или нужен manual review — помечаем и отправляем ops alert (ничего не применяем автоматически).
 - Баланс кредитов для Brand UI берём **Redis-first** (TTL ~60s, `BRAND_CREDITS_CACHE_TTL_SEC`) → меньше чтений Neon.
 
 #### Brand Inbox (заявки креаторов → бренду)

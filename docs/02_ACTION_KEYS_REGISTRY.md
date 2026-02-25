@@ -4,17 +4,17 @@
 >
 > Regenerate: `npm run actions:md`
 
-Generated at: `2026-02-24T22:51:46.480Z`
+Generated at: `2026-02-25T13:10:41.486Z`
 
-- Actions in code: **451**
-- Actions in registry: **451**
+- Actions in code: **458**
+- Actions in registry: **458**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
 | admin | 43 |
-| edit | 323 |
+| edit | 330 |
 | ops | 74 |
 | pay | 11 |
 
@@ -23,7 +23,7 @@ Generated at: `2026-02-24T22:51:46.480Z`
 | Guard | Count |
 |---|---:|
 | none | 119 |
-| require_redis | 332 |
+| require_redis | 339 |
 
 ## Actions table
 
@@ -123,6 +123,7 @@ Generated at: `2026-02-24T22:51:46.480Z`
 | `a:brand_app_tpls` | edit | require_redis |
 | `a:brand_app_view` | edit | none |
 | `a:brand_apply` | edit | require_redis |
+| `a:brand_apply_cancel` | edit | require_redis |
 | `a:brand_apply_clear` | edit | require_redis |
 | `a:brand_apply_done` | edit | none |
 | `a:brand_apply_preview` | edit | require_redis |
@@ -458,6 +459,12 @@ Generated at: `2026-02-24T22:51:46.480Z`
 | `a:ws_pro_pin` | edit | require_redis |
 | `a:ws_pro_pin_clear` | edit | require_redis |
 | `a:ws_pro_pin_set` | edit | require_redis |
+| `a:ws_prof_clear` | edit | require_redis |
+| `a:ws_prof_contacts` | edit | require_redis |
+| `a:ws_prof_contacts_clear` | edit | require_redis |
+| `a:ws_prof_contacts_clear_k` | edit | require_redis |
+| `a:ws_prof_contacts_edit` | edit | require_redis |
+| `a:ws_prof_contacts_migrate` | edit | require_redis |
 | `a:ws_prof_edit` | edit | require_redis |
 | `a:ws_prof_fmt_clear` | edit | require_redis |
 | `a:ws_prof_fmt_t` | edit | require_redis |

@@ -76,6 +76,11 @@ TTL истёк → новый инстанс взял лок → старый и
   - fast path (Redis):
     - per-broadcast: `broadcast:<id>:cooldown_until`
     - global (для DB-free early-exit): `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id`
+
+  - fallback fuse (DB, только при деградации Redis):
+    - `broadcasts.cooldown_until` + `broadcasts.cooldown_reason`
+    - при 429 сначала пытаемся поставить Redis cooldown; если Redis write fail — пишем fuse в DB
+    - в `broadcastTick` при Redis down/empty проверяем `cooldown_until` и выходим ДО выборки recipients (не прожигаем Neon)
   - fallback fuse (DB, только если Redis недоступен):
     - `broadcasts.cooldown_until`, `broadcasts.cooldown_reason`
 - Следующие тики **выходят раньше**:
