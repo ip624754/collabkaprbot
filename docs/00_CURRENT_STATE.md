@@ -203,6 +203,7 @@
   - Legacy поля (`profile_contact`, `profile_ig`, `profile_portfolio_urls`) продолжают работать и используются, если `profile_contacts` пуст.
 - Защита от повторного списания при деградации Redis: unlock фиксируется в DB (`brand_contact_unlocks.unlocked_until`), Redis остаётся как кеш/UX.
 - STEP106: добавлен opt-in UI для креатора: «📇 Контакты (структурно)» в профиле. Ввод валидируется/нормализуется на входе и сохраняется в `profile_contacts`.
+  - UX правило: достаточно **1** контакта (обычно Telegram). Email/Website — опционально. Phone — не обязателен.
 - STEP107 (опционально): добавлена кнопка «✨ Перенести из legacy» — переносит **одно** значение из `profile_contact` в `profile_contacts` (tg/email/phone/site) только если распознавание однозначное. Никакой авто-магии и без перетирания уже заполненных полей.
 - Баланс кредитов для Brand UI берём **Redis-first** (TTL ~60s, `BRAND_CREDITS_CACHE_TTL_SEC`) → меньше чтений Neon.
 
