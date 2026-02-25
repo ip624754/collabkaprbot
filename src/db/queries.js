@@ -808,6 +808,7 @@ export async function listWorkspaces(ownerUserId) {
     `select ws.*, s.network_enabled, s.curator_enabled, s.auto_draw_default, s.auto_publish_default,
             s.plan, s.pro_until, s.pro_pinned_offer_id,
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
+            s.profile_contacts, s.profile_contacts_v,
             s.profile_mode, s.profile_ig, s.profile_verticals, s.profile_formats, s.profile_portfolio_urls, s.profile_about
      from workspaces ws
      left join workspace_settings s on s.workspace_id = ws.id
@@ -823,6 +824,7 @@ export async function getWorkspace(ownerUserId, workspaceId) {
     `select ws.*, s.network_enabled, s.curator_enabled, s.auto_draw_default, s.auto_publish_default,
             s.plan, s.pro_until, s.pro_pinned_offer_id,
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
+            s.profile_contacts, s.profile_contacts_v,
             s.profile_mode, s.profile_ig, s.profile_verticals, s.profile_formats, s.profile_portfolio_urls, s.profile_about
      from workspaces ws
      left join workspace_settings s on s.workspace_id = ws.id
@@ -840,6 +842,7 @@ export async function getWorkspaceAny(workspaceId) {
     `select ws.*, s.network_enabled, s.curator_enabled, s.auto_draw_default, s.auto_publish_default,
             s.plan, s.pro_until, s.pro_pinned_offer_id,
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
+            s.profile_contacts, s.profile_contacts_v,
             s.profile_mode, s.profile_ig, s.profile_verticals, s.profile_formats, s.profile_portfolio_urls, s.profile_about
      from workspaces ws
      left join workspace_settings s on s.workspace_id = ws.id
@@ -855,6 +858,7 @@ export async function findWorkspaceByChannelUsername(channelUsername) {
     `select ws.*, s.network_enabled, s.curator_enabled, s.auto_draw_default, s.auto_publish_default,
             s.plan, s.pro_until, s.pro_pinned_offer_id,
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
+            s.profile_contacts, s.profile_contacts_v,
             s.profile_mode, s.profile_ig, s.profile_verticals, s.profile_formats, s.profile_portfolio_urls, s.profile_about
      from workspaces ws
      left join workspace_settings s on s.workspace_id = ws.id
