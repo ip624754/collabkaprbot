@@ -11,6 +11,8 @@
 - Ownership: safe-getters с ownership внутри SQL для лидов/заявок и опасных действий.
 - Redis degraded mode: mutating callbacks работают **fail-closed** (кроме строго allowlisted DB-safe действий). Guard использует строгий реестр `src/bot/actionRegistry.js`.
   - Break-glass (Admin): при Redis down супер‑админ может открыть *строго ограниченный* allowlist экранов (payments/users/audit) через двойное подтверждение (`bg=1`). Каждое использование логируется в ops alerts.
+  - STEP128: stateless fallback UI (callback `s:*`) — минимальная навигация, которая работает даже при Redis down и не делает Redis/DB вызовов.
+  - STEP129: official publish anti-timeout — AbortSignal timeout на Telegram API + self-heal по `channel_post` (прикрепляем `message_id`, если функция умерла после отправки).
   - Markdown экспорт реестра action keys для аудитов: `npm run actions:md` → `docs/02_ACTION_KEYS_REGISTRY.md`.
 
 
