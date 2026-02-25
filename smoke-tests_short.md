@@ -1,82 +1,63 @@
-## Patch Series 05–08 — Collab Girls (SHORT)
+# Smoke Tests (short) — 2026-02-20
 
-> Быстрый прогон (10–20 минут): проверяем «золотые пути».
->
-> Хак для ускорения теста лимитов (временно в env):
-> - INTRO_DAILY_LIMIT=2, INTRO_DAILY_LIMIT_UNVERIFIED=1
-> - WORKSPACE_FOLDER_MAX_ITEMS_FREE=2, GIVEAWAY_SPONSORS_MAX_FREE=2
-> Потом верни значения назад.
+Минимальный smoke после деплоя (10–15 минут). Цель: убедиться, что критичные флоу живы и нет регрессий.
 
-### 0) Предусловия
-- Применены миграции (новый мигратор): `npm run migrate`.
-  - Если база существующая и миграции применялись раньше без трекинга: `psql "$DATABASE_URL" -f migration_pack/00_mark_all_applied.sql`, затем `npm run migrate -- --dry-run`.
-  - Если база «под вопросом»: `psql "$DATABASE_URL" -f migration_pack/01_reconcile.sql`, затем `npm run migrate`.
-- Бот живой, inline-кнопки кликаются.
-- Команда /paysupport отвечает (контакт поддержки по оплатам).
-- Есть аккаунты: Owner и второй аккаунт (Editor) для инвайта.
-- У Owner создан Workspace.
- - Для проверки rate-limit: выставь RATE_LIMIT_ENABLED=true (и лимиты BX_MSG_RATE_LIMIT/INTRO_RATE_LIMIT при желании).
+## 0) Health / Cron / Audit
+- `GET /api/health`
+  - `ok=true`, `env=prod`
+  - `cron.enabled=true`, есть `giveaways_tick.last_run` и `broadcast_tick.last_run` (если Redis настроен)
+  - `audit.throttle.enabled` отражает ENV
+  - `audit.throttle.suppressed_today_*` не падает (0 — нормально)
 
-### 1) Commit 05 — Intro trial + daily limits
-1. Под брендом/байером открой offer → нажми «💬 Диалог/Написать».
-   - Ожидаемо: интро создаётся; если кредитов не хватало и trial ещё не был выдан — выдаётся trial и списывается cost.
-2. Повтори интро до упора лимита.
-   - Ожидаемо: при превышении лимита — alert про лимит / paywall.
-3. Попробуй ещё раз.
-   - Ожидаемо: интро НЕ создаётся, списаний нет.
+## 1) Role Gate (/start)
+- Новый пользователь (без ui_mode): `/start` → экран выбора роли (2 кнопки)
+- Выбор роли → попадаем в соответствующий Home/Hub
+- Deep-link: `/start gw_123` / `bp_45` / `offer_777` → открывает цель сразу, gate не мешает
 
-### 2) Commit 06 — Proofs
-1. В thread нажми «🧾 Proofs: N».
-2. «🔗 Ссылка» → отправь https://t.me/... → проверь, что N вырос.
-3. «📎 Скрин» → отправь фото → проверь, что proof добавился.
+## 2) Creator
+- `/start` → меню
+- Подключить канал → открыть витрину
+- Если канал НЕ подключён: зайти в UGC/Офферы → короткое сообщение + клавиатура **Подключить канал / Назад / Меню**
 
-### 3) Commit 07 — CRM stage display
-1. В thread выстави CRM стадию (доступно в Brand Plan).
-   - Ожидаемо: вверху видно CRM: ...
-2. Вернись в Inbox.
-   - Ожидаемо: у треда появился emoji стадии.
+## 3) Brand
+- Переключить режим на Brand
+- Brand menu: нет лишних пунктов (менеджеры/верификация не в главном меню)
+- 🏷 Профиль бренда:
+  - прогресс 0/4..4/4
+  - внутри есть «👔 Менеджеры бренда»
+  - внутри есть «✅ Верификация» (если включено)
 
-### 4) Commit 08 — Folders + Editors + integrations
-#### 4.1 Папки (Owner)
-1. Workspace → «📁 Папки» → создай папку → добавь @каналы списком.
-2. «Экспорт/Список» → бот выдаёт список @каналов.
+## 4) ✅ Верификация
+- `VERIFICATION_ENABLED=false` → кнопок/экранов нет
+- `VERIFICATION_ENABLED=true`:
+  - Creator: заявка требует заполненный профиль канала
+  - Brand: заявка требует заполненный Brand Profile (и расширенный, если включено)
 
-#### 4.2 Editors (Owner → Editor)
-1. «📁 Папки» → «👥 Editors» → Invite editor.
-2. Открой deep-link на аккаунте Editor (/start fed_...).
-3. Под Editor зайди в «📁 Папки» → добавь/удали 1 канал.
+## 5) ⭐️ Brand Plan / Smart Matching / Featured
+- Открыть ⭐️ Brand Plan → текст: кредиты (интро) + квоты match/feat
+- Открыть 🎯 Smart Matching / 🔥 Featured:
+  - есть объяснение + пример
+  - если план активен → видно «Включено: осталось X в этом месяце»
 
-#### 4.3 Giveaways sponsors from folder
-1. Создай конкурс → шаг Sponsors → «📁 Из папки» → выбери папку.
-   - Ожидаемо: sponsors подставились; если лимит превышен — предупреждение.
+## 6) Broadcast
+- Админка → Рассылки:
+  - создать рассылку (текст или 1 медиа)
+  - в тексте проверить «ссылка в слово» (Telegram text_link)
+  - добавить 1–3 кнопки:
+    - ручной формат `Название | https://...`
+    - или shortcuts `gw_123` / `bp_45` / `offer_777`
+    - или пресеты (шаблоны)
+  - отправить → запустить tick вручную (QStash)
+  - после завершения: сообщение «✅ Рассылка #… завершена» содержит кнопки (нет тупика)
 
-#### 4.4 Offer partner folder
-1. Создай offer → прикрепи папку партнёров.
-   - Ожидаемо: в карточке оффера видно название папки и кол-во.
-
-### 5) P1 Commit 05 — Rate limit enforcement (thread + intro)
-1. Включи RATE_LIMIT_ENABLED=true.
-2. Открой любой thread → «💬 Ответить» → быстро отправь 15 сообщений за 1 минуту.
-   - Ожидаемо: после лимита бот отвечает «⏳ Слишком часто...», и повторная отправка после паузы проходит.
-3. В ленте офферов нажми «💬 Написать» много раз подряд.
-   - Ожидаемо: alert «⏳ Слишком часто...», при этом кредиты не списываются.
+## 7) Audit throttle (если включено)
+- Сделать пачку действий (lead/deal/inbox)
+- `GET /api/health` → `audit.throttle.suppressed_today_total` начинает расти (если события попали в prefixes)
 
 
 
-6) Presets: в «Новый конкурс» нажми «🧩 Пресеты» → применить → попадаешь на выбор призовых мест. В «Новый оффер» нажми «🧩 Шаблоны» → применить → шаг 4/4 (текст).
-
-
-### 7) Commit 08 — Verification incentives (paywall CTA)
-1. Под брендом нажми «💬 Написать» по офферу так, чтобы открылся paywall.
-   - Ожидаемо: есть строка про верификацию (лимит станет выше) и кнопка «✅ Увеличить лимит (верификация)».
-2. Нажми кнопку → попадаешь в «✅ Верификация».
-   - Ожидаемо: на экране есть блок «Преимущества» (для Brand/Creator).
-### 6) Retry credits (fairness)
-- В env (на тест): INTRO_RETRY_ENABLED=true, INTRO_RETRY_AFTER_HOURS=0, INTRO_RETRY_EXPIRES_DAYS=1
-- Brand: открой интро и отправь 1 сообщение в тред.
-- Не отвечай со стороны Creator.
-- Запусти cron tick (api/cron/giveaways-tick) → Brand должен получить уведомление и Retry credits увеличится на 1.
-- Открой новое интро → должно открыться без списания Brand Pass (увидишь alert «Использован Retry credit»).
-
-- Проверь Brand Inbox: у треда отображается статус «⏳ waiting reply…» и строка retry (eligible/in ...h).
-- Открой тред (#id): в шапке видно Reply/Retry и строку «💳 Списано: …». Кнопка «ℹ️ Retry» показывает правила.
+## Audit closeout quick checks (STEP119–STEP122)
+- Anti-bypass: в `О себе` у креатора написать телефон словами ("плюс семь девять...") → до unlock должен скрываться.
+- Broadcast: при 429 и проблемах Redis cooldown должен отработать через DB fuse (tick не должен делать дорогие выборки recipients).
+- Redis down: super-admin break-glass allowlist (payments/users/audit) работает через двойное подтверждение.
+- Orphaned autoheal: validation_failed/manual_required должны давать ops alert.
