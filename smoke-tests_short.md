@@ -55,9 +55,15 @@
 - `GET /api/health` → `audit.throttle.suppressed_today_total` начинает расти (если события попали в prefixes)
 
 
-
-## Audit closeout quick checks (STEP119–STEP122)
-- Anti-bypass: в `О себе` у креатора написать телефон словами ("плюс семь девять...") → до unlock должен скрываться.
-- Broadcast: при 429 и проблемах Redis cooldown должен отработать через DB fuse (tick не должен делать дорогие выборки recipients).
-- Redis down: super-admin break-glass allowlist (payments/users/audit) работает через двойное подтверждение.
-- Orphaned autoheal: validation_failed/manual_required должны давать ops alert.
+## 8) Audit closeout (быстро)
+- Phone anti-bypass:
+  - Creator → Профиль → «О себе» (или текстовое поле) → вписать телефон **словами** (например «плюс семь девять…»)
+  - Открыть витрину брендом ДО unlock → номер скрыт (🔒)
+- Brand Inbox:
+  - Creator отправляет заявку бренду
+  - Brand открывает заявку (status=new): доступны только ✅ Принять / ⛔ Спам / 🗑 Удалить
+  - Нельзя перевести в «В работу/Закрыть» до принятия; нельзя «Ответить/Шаблоны» до принятия
+  - ✅ Принять → статус становится in_progress; креатор получает уведомление, кнопка «💬 Написать бренду» работает
+- Break-glass (если можешь эмулировать Redis down):
+  - любые `require_redis` callbacks fail-closed
+  - супер‑админ может открыть allowlist (payments/users/audit) только через `bg=1` + приходит ops alert
