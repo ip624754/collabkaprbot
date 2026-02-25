@@ -1,6 +1,5 @@
-import { Receiver } from '@upstash/qstash';
 import { redis, k } from '../../src/lib/redis.js';
-import { getQStashDeliveryUrl } from '../../src/lib/qstash.js';
+import { getQStashDeliveryUrl, qstashVerifySignature } from '../../src/lib/qstash.js';
 
 export const config = {
   api: {
@@ -45,13 +44,6 @@ export default async function handler(req, res) {
 
     // Verify signature (QStash -> our endpoint)
     const signature = getHeader(req, 'Upstash-Signature');
-    const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY || '';
-    const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY || '';
-
-    if (!signature || !currentSigningKey) {
-      res.status(401).json({ ok: false, error: 'signature_missing' });
-      return;
-    }
 
     const url = getQStashDeliveryUrl('/api/qstash/ping');
     if (!url) {
@@ -59,10 +51,23 @@ export default async function handler(req, res) {
       return;
     }
 
-    const receiver = new Receiver({ currentSigningKey, nextSigningKey });
-    const isValid = await receiver.verify({ body: rawBody, signature, url });
-    if (!isValid) {
-      res.status(401).json({ ok: false, error: 'invalid_signature' });
+    try {
+      await qstashVerifySignature({ signature, body: rawBody, url });
+    } catch (e) {
+      const code = String(e?.message || 'error');
+      if (code === 'qstash_lib_missing') {
+        res.status(503).json({ ok: false, error: 'qstash_disabled' });
+        return;
+      }
+      if (code === 'qstash_signature_missing') {
+        res.status(401).json({ ok: false, error: 'signature_missing' });
+        return;
+      }
+      if (code === 'qstash_invalid_signature') {
+        res.status(401).json({ ok: false, error: 'invalid_signature' });
+        return;
+      }
+      res.status(500).json({ ok: false, error: code });
       return;
     }
 
