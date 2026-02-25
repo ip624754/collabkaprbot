@@ -45,9 +45,7 @@
 - `/start` role gate: если нет `ui_mode` (Redis) и нет payload → короткая развилка (Бренд/Креатор), fail‑open; payload всегда в приоритете
 - Official publish (@collabka_offers): idempotency token-lock + DB-reserve PUBLISHING (см. docs/19)
 - Founder Sale: runtime управление из админки + deep-link fs_* (для маркетинга)
-- Brand Pass: unlock контактов (кредиты) → **exactly-once** в DB + Redis cache; анти-bypass текста профиля; после списания выдаём контакт-пакет
-- Payments (Stars): `pre_checkout` + `successful_payment` валидируют `payload/amount/currency`; ORPHANED + OPS при несоответствии; autoheal только safe типов
-- Access control: ownership проверяем **в SQL** (safe-getters) для brand leads / brand applications; critical actions (delete/assign) ограничены ролями
+- Contacts / Brand Pass: unlock DB-truth + anti-bypass redaction + structured contacts (`profile_contacts` JSONB) с приоритетом structured→legacy (см. docs/20)
 
 ---
 

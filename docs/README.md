@@ -16,6 +16,7 @@
 - `migration_pack/` — ручные SQL-скрипты для экстренной миграции/repair (см. `docs/11_MIGRATIONS_PACK.md`)
 - `18_NEON_COST_SAVING_AUDIT_THROTTLE.md` — как экономить Neon: audit write-shedding + метрики в `/api/health`
 - `19_OFFICIAL_PUBLISH_IDEMPOTENCY.md` — Official publish: анти‑дубли (token‑lock + DB‑reserve) + что делать при дубле
+- `20_CONTACTS_MODEL.md` — модель контактов/монетизации (Brand Pass) + structured contacts + приоритеты/UX
 - `13_RUNBOOK_RELEASE.md` + `16_RELEASE_CHECKLIST.md` — релизы/проверки
 - `14_BRAND_TEAM_UX_V4.md` — UX “Менеджеры бренда” (кнопка всегда видна, гейт внутри)
 
@@ -44,9 +45,13 @@
 
 ## 3) Protocol / Process (как работаем)
 Папка: `docs/process/`
+
 > Старые файлы с прежними именами оставлены как compat mirrors (внутри полный текст), чтобы старые ссылки не ломались.
+
 - `01_HOW_TO_WORK_LIKE_SENIOR.md` — дисциплина артефактов/DoD/анти‑грабли
 - `02_jobs_vitalik_woz_protocol.md` — Jobs/Vitalik/Woz: high-signal протокол
+- `06_AUDIT_STEP94_HARDCORE.md` — reference аудит (источник рекомендаций/гипотез, не source of truth)
+- `07_WORK_HISTORY_2026_02.md` — timeline заметки по шагам/решениям (для восстановления контекста)
 - `03_legacy_tech_spec_collabka_v1_0_3.md` — базовая техспека (legacy reference)
 - `04_legacy_techpassport_collabka_v1_0_3_telegra.md` — техпаспорт (legacy reference)
 - `05_legacy_telegraph_article_and_manual.md` — telegraph‑статья/мануал (legacy reference)
@@ -58,11 +63,12 @@
 ## Как использовать в новом чате
 Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.
 
-## Что нового в текущем snapshot (2026-02-22)
+## Что нового в текущем snapshot (2026-02-25)
 - `/api/health`: cron last_run + audit throttle counters (Redis-only) + видимый **broadcast cooldown** после 429.
 - Экономия Neon: audit write-shedding (`AUDIT_DB_THROTTLE_*`) + готовые профили (`docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`).
-- Broadcast надёжность: на 429 получатель **не теряется** (DB `deferred` + `retry_after_until`), scan-курсор идёт дальше, есть **Redis cooldown** + счётчики в `/api/health`.
+- Broadcast надёжность: на 429 получатель **не теряется** (DB `deferred` + `retry_after_until`), scan-курсор идёт дальше, есть **Redis cooldown** + quarantine + счётчики в `/api/health`.
 - Cron safety: **token-based Redis locks** (safe unlock) + SQL atomic guards на ключевых переходах (ended/publish/expire, broadcast transitions).
 - Official publish (@collabka_offers): анти‑дубли **token‑lock + DB‑reserve `PUBLISHING`** (stale rescue) + runbook (`docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`).
+- Contacts / Brand Pass (P2): structured contacts (`profile_contacts` JSONB) + opt‑in UI для креатора + однозначный перенос из legacy + явные подсказки (TG рекомендован, остальное опционально).
 - Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*` + маркетинг‑шаблоны.
 - Cron throughput: уведомления (Telegram notify) ограничены по времени (`withTimeout ~5s`), тик не “залипает” на одном сообщении.

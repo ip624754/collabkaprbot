@@ -196,9 +196,10 @@
 
 ### Brand Pass: защита монетизации (контакты/ссылки)
 - Витрина креатора для бренда по умолчанию показывает **без контактов**: канал / IG / портфолио скрыты до «🔓 Контакты».
-- В свободном тексте профиля (описание) до unlock **редактируются** паттерны `@...`, `t.me/...`, `http(s)://...`, email → показывается «🔒 … скрыто».
+- В свободном тексте профиля (описание) до unlock **редактируются** паттерны `@...`, `t.me/...`, `http(s)://...`, email, **телефоны** → показывается «🔒 … скрыто». Подробно: `docs/20_CONTACTS_MODEL.md`.
 - После списания «🔓 Контакты» бренд видит полный **контакт‑пакет** (TG/IG/портфолио) + кнопки.
 - STEP105 (P2 roadmap старт): добавлен контейнер **структурированных контактов** `workspace_settings.profile_contacts` (JSONB).
+- Приоритет отображения после unlock: **структурные контакты → (если пусто) legacy**.
   - На этом шаге это **read-only**: если поле заполнено — оно показывается **только после unlock**.
   - Legacy поля (`profile_contact`, `profile_ig`, `profile_portfolio_urls`) продолжают работать и используются, если `profile_contacts` пуст.
 - Защита от повторного списания при деградации Redis: unlock фиксируется в DB (`brand_contact_unlocks.unlocked_until`), Redis остаётся как кеш/UX.
@@ -258,6 +259,8 @@
 - Audit write-shedding (ENV-гейт) + счётчики suppressed в health
 - Broadcast: URL-кнопки до 3, deep-link shortcuts, шаблоны кнопок, ссылки “в слово”, финальный экран с кнопками
 - Role gate на `/start` (Redis `ui_mode`, payload priority, fail-open)
+
+- Contacts / Brand Pass (P2): structured contacts (`profile_contacts` JSONB) + opt-in UI + перенос из legacy + явные подсказки (см. `docs/20_CONTACTS_MODEL.md`).
 
 - Official channel publish: token-lock + DB-reserve (PUBLISHING) для защиты от дублей
 - Broadcast: Redis cooldown на 429 + отображение cooldown в `/api/health`
