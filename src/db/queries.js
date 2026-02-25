@@ -4941,6 +4941,118 @@ export async function markBrandApplicationAccepted(appId, acceptedByUserId) {
   return r.rows[0] || null;
 }
 
+// Accept brand application AND charge Brand Pass credits exactly-once.
+// - If already accepted (status != 'new') -> {status:'already_accepted'}
+// - If insufficient credits -> {status:'insufficient_credits'}
+// - If accepted now -> {status:'accepted'}
+export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, brandUserId, cost = 1) {
+  const aid = Number(appId);
+  const uid = Number(brandUserId);
+  const c = Math.max(0, Math.floor(Number(cost) || 0));
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const appRes = await client.query(
+      `select id, coalesce(status,'new') as status
+       from brand_applications
+       where id=$1
+       for update`,
+      [aid]
+    );
+
+    if (!appRes.rows.length) {
+      await client.query('ROLLBACK');
+      return { status: 'missing' };
+    }
+
+    const st = String(appRes.rows[0]?.status || 'new');
+    if (st !== 'new') {
+      await client.query('COMMIT');
+      return { status: 'already_accepted' };
+    }
+
+    // Spend credits (atomic). If free -> skip.
+    if (c > 0) {
+      try {
+        const spend = await client.query(
+          `update users
+             set brand_credits = brand_credits - $2,
+                 brand_credits_spent = brand_credits_spent + $2,
+                 brand_credits_gifted = greatest(0, brand_credits_gifted - $2),
+                 updated_at=now()
+           where id=$1 and brand_credits >= $2
+           returning brand_credits`,
+          [uid, c]
+        );
+        if (!spend.rows.length) {
+          await client.query('ROLLBACK');
+          return { status: 'insufficient_credits' };
+        }
+      } catch (e) {
+        // Rolling upgrade safety: brand_credits_gifted may be missing.
+        if (e && e.code === '42703') {
+          const spend = await client.query(
+            `update users
+               set brand_credits = brand_credits - $2,
+                   brand_credits_spent = brand_credits_spent + $2,
+                   updated_at=now()
+             where id=$1 and brand_credits >= $2
+             returning brand_credits`,
+            [uid, c]
+          );
+          if (!spend.rows.length) {
+            await client.query('ROLLBACK');
+            return { status: 'insufficient_credits' };
+          }
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    // Mark accepted (status=in_progress + meta.deal)
+    await client.query(
+      `update brand_applications
+         set status='in_progress',
+             meta = jsonb_set(
+               jsonb_set(
+                 jsonb_set(
+                   coalesce(meta,'{}'::jsonb),
+                   '{deal}',
+                   coalesce(coalesce(meta,'{}'::jsonb)->'deal','{}'::jsonb)
+                     || jsonb_build_object(
+                          'accepted_by_user_id', $2,
+                          'accepted_at', now(),
+                          'charged_cost', $3,
+                          'charged_at', now()
+                        ),
+                   true
+                 ),
+                 '{deal_stage}',
+                 to_jsonb(coalesce(nullif(coalesce(meta->>'deal_stage',''),''), 'negotiation')),
+                 true
+               ),
+               '{updated_by}',
+               to_jsonb($2::bigint),
+               true
+             ),
+             updated_at=now()
+       where id=$1 and coalesce(status,'new')='new'`,
+      [aid, acceptedByUserId ? Number(acceptedByUserId) : null, c]
+    );
+
+    await client.query('COMMIT');
+    return { status: 'accepted' };
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 // List brand deals (applications that have deal_stage set)
 export async function countBrandDealsByStage(brandUserId, acceptedByUserId = null) {
   const params = [Number(brandUserId)];
