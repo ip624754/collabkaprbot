@@ -116,6 +116,7 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:brand_apply_preview": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:brand_apply_send": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:brand_apply_write": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:brand_apply_cancel": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:brand_apps": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:brand_bb_clear": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:brand_bb_done": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },

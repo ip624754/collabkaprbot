@@ -5111,6 +5111,7 @@ async function renderBrandApply(ctx, u, brandUserId, backPage, opts = {}) {
   if (hasDraft) kb.text('👀 Предпросмотр', `a:brand_apply_preview|u:${brandUserId}|p:${backPage}`);
   kb.row();
   if (hasDraft) kb.text('🗑 Сбросить черновик', `a:brand_apply_clear|u:${brandUserId}|p:${backPage}`);
+  if (startWrite) kb.row().text('❌ Отмена ввода', `a:brand_apply_cancel|u:${brandUserId}|p:${backPage}`);
 
   // Quick contact improvement (if not filled) — increases chance of response
   const missingContact = !String(activeWs?.profile_contact || '').trim() && !String(ctx.from.username || '').trim();
@@ -5119,10 +5120,14 @@ async function renderBrandApply(ctx, u, brandUserId, backPage, opts = {}) {
   kbNavRow(kb, `a:brand_dir_open|u:${brandUserId}|p:${backPage}`);
 
   const hint = startWrite
-    ? '\n\n✅ Режим ввода включен — напиши сообщение внизу и отправь одним сообщением.\nПотом я покажу предпросмотр и кнопку «Отправить».'
+    ? '\n\n<b>✍️ Режим ввода включён.</b>\nНапиши текст заявки одним сообщением прямо сейчас — после этого я покажу предпросмотр и кнопку «Отправить».\n<i>Отмена — «❌ Отмена ввода».</i>'
     : '';
 
-  const text = `📝 <b>Заявка бренду</b>\n\nБренд: <b>${escapeHtml(brandName)}</b>\n\n1) Нажми «✍️ Написать заявку»\n2) Напиши одним сообщением:\n• кто ты / канал\n• аудитория / охваты\n• что предлагаешь (формат)\n• условия (бартер/сертификат/оплата)\n• контакт\n\nЯ покажу предпросмотр и попрошу подтвердить отправку.${hint}`;
+  const steps = startWrite
+    ? `Напиши одним сообщением:\n• кто ты / канал\n• аудитория / охваты\n• что предлагаешь (формат)\n• условия (бартер/сертификат/оплата)\n• контакт`
+    : `1) Нажми «✍️ Написать заявку»\n2) Напиши одним сообщением:\n• кто ты / канал\n• аудитория / охваты\n• что предлагаешь (формат)\n• условия (бартер/сертификат/оплата)\n• контакт`;
+
+  const text = `📝 <b>Заявка бренду</b>\n\nБренд: <b>${escapeHtml(brandName)}</b>\n\n${steps}\n\nЯ покажу предпросмотр и попрошу подтвердить отправку.${hint}`;
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }, edit);
 }
@@ -19695,6 +19700,18 @@ if (p.a === 'a:brand_dir_open') {
       const brandUserId = Number(p.u || 0);
       const backPage = Math.max(0, Number(p.p || 0));
       await renderBrandApply(ctx, u, brandUserId, backPage, { edit: true, startWrite: true });
+      return;
+    }
+
+    if (p.a === 'a:brand_apply_cancel') {
+      const brandUserId = Number(p.u || 0);
+      const backPage = Math.max(0, Number(p.p || 0));
+      try {
+        const exp = await getExpectText(ctx.from.id);
+        if (exp && exp.type === 'brand_apply') await clearExpectText(ctx.from.id);
+      } catch {}
+      try { await ctx.answerCallbackQuery({ text: '❌ Режим ввода выключен.' }); } catch {}
+      await renderBrandApply(ctx, u, brandUserId, backPage, { edit: true, startWrite: false });
       return;
     }
 
