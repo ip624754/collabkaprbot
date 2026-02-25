@@ -3,6 +3,7 @@ import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
+import { qstashPublishJSON, getQStashDeliveryUrl, getBroadcastFlowControl } from '../lib/qstash.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import { flushOpsAlerts, queueOpsAlert } from './opsAlerts.js';
 import {
@@ -47,6 +48,10 @@ const BC_COOLDOWN_BROADCAST_ID_KEY = k(['broadcast', 'cooldown_broadcast_id']);
 const BC_COOLDOWN_LAST_429_AT_KEY = k(['broadcast', 'last_429_at']);
 const BC_COOLDOWN_LAST_429_REASON_KEY = k(['broadcast', 'last_429_reason']);
 
+// Broadcast QStash fan-out runtime flag (Redis).
+// Default OFF. When ON, cron only enqueues delivery jobs; actual sends happen via QStash worker endpoint.
+const SYS_BC_QSTASH_FANOUT_KEY = k(['sys', 'broadcast_qstash_fanout']);
+
 function bcCooldownSetDayKey(day) {
   return k(['broadcast', 'cooldown_set', 'd', String(day || 'na')]);
 }
@@ -73,6 +78,18 @@ async function incrDayCounter(key, ttlSec = CRON_LAST_RUN_TTL_SEC) {
     return Number(v) || 0;
   } catch {
     return 0;
+  }
+}
+
+async function getBroadcastQStashFanoutEnabled() {
+  try {
+    const v = await redis.get(SYS_BC_QSTASH_FANOUT_KEY);
+    if (v === null || v === undefined) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === '1' || s === 'true' || s === 'on' || s === 'yes';
+  } catch {
+    // Redis down: default OFF (safe)
+    return false;
   }
 }
 
@@ -772,7 +789,7 @@ async function bumpBroadcastQuarantineCount(broadcastId, userId) {
   }
 }
 
-async function getBroadcastCooldownUntilMs(broadcastId) {
+export async function getBroadcastCooldownUntilMs(broadcastId) {
   try {
     const v = await redis.get(broadcastCooldownKey(broadcastId));
     const ms = v ? Number(v) : 0;
@@ -782,7 +799,7 @@ async function getBroadcastCooldownUntilMs(broadcastId) {
   }
 }
 
-async function setBroadcastCooldown(broadcastId, retryAfterSec, reason = 'telegram_429') {
+export async function setBroadcastCooldown(broadcastId, retryAfterSec, reason = 'telegram_429') {
   const now = Date.now();
   const safeSec = Math.max(1, Math.min(3600, Number(retryAfterSec || 0) || 0));
   const proposedUntil = now + safeSec * 1000;
@@ -834,7 +851,7 @@ async function setBroadcastCooldown(broadcastId, retryAfterSec, reason = 'telegr
   }
 }
 
-function extractRetryAfterSec(err) {
+export function extractRetryAfterSec(err) {
   const a = err?.parameters?.retry_after;
   const b = err?.response?.parameters?.retry_after;
   const c = err?.response?.body?.parameters?.retry_after;
@@ -842,7 +859,7 @@ function extractRetryAfterSec(err) {
   return Number.isFinite(v) && v > 0 ? v : 5;
 }
 
-async function sendBroadcastMessage(api, tgId, bc) {
+export async function sendBroadcastMessage(api, tgId, bc) {
   const type = String(bc.draft_type || 'text');
 
   let btns = [];
@@ -986,7 +1003,11 @@ export async function broadcastTick() {
         await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
         return out;
       }
+      // Keep local snapshot consistent (avoid special-casing below).
+      bc.status = 'RUNNING';
     }
+
+    const fanoutEnabled = await getBroadcastQStashFanoutEnabled();
 
     const lastUserId = Number(bc.last_sent_user_id || 0);
     const recipients = await db.listBroadcastUnsentRecipients(
@@ -997,6 +1018,54 @@ export async function broadcastTick() {
     );
 
     if (!recipients.length) {
+      // Fan-out mode: even if there are no more *new* recipients to enqueue,
+      // we must NOT finish the broadcast until all queued deliveries are terminal.
+      if (fanoutEnabled) {
+        try {
+          const pending = await db.countBroadcastPendingDeliveries(bc.id);
+          if (pending > 0) {
+            // If we have deferred/quarantined recipients, set cooldown until the earliest window.
+            try {
+              const nextRetryMs = await db.getNextBroadcastDeferredRetryMs(bc.id);
+              if (nextRetryMs && nextRetryMs > Date.now()) {
+                const retrySec = Math.max(1, Math.ceil((nextRetryMs - Date.now()) / 1000));
+                await setBroadcastCooldown(bc.id, retrySec, 'deferred_wait');
+                const out = {
+                  status: 'skip',
+                  reason: 'deferred_wait',
+                  broadcast_id: bc.id,
+                  pending_count: pending,
+                  retry_after_sec: retrySec,
+                  retry_at: new Date(nextRetryMs).toISOString(),
+                };
+                await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+                return out;
+              }
+            } catch {
+              // ignore and fall back to a generic pending screen
+            }
+
+            const out = {
+              status: 'skip',
+              reason: 'pending_deliveries',
+              broadcast_id: bc.id,
+              pending_count: pending,
+            };
+            await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+            return out;
+          }
+        } catch {
+          // If DB is unstable, avoid finishing. Let next tick decide.
+          const out = {
+            status: 'skip',
+            reason: 'pending_check_failed',
+            broadcast_id: bc.id,
+          };
+          await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+          return out;
+        }
+      }
+
       // If we have deferred recipients waiting for retry_after, do NOT finish the broadcast.
       // Instead, set a Redis cooldown until the earliest deferred retry window.
       try {
@@ -1019,8 +1088,23 @@ export async function broadcastTick() {
       }
 
       // Atomic: No more recipients → DONE (prevents double-finish on lock expiry)
+      // In fan-out mode, compute final counters from broadcast_sent_log to keep admin UI accurate.
+      let finalSent = Number(bc.sent_count || 0);
+      let finalFailed = Number(bc.failed_count || 0);
+      if (fanoutEnabled) {
+        try {
+          const st = await db.countBroadcastDeliveryStats(bc.id);
+          finalSent = Number(st.sent || 0);
+          finalFailed = Number(st.failed || 0) + Number(st.blocked || 0);
+        } catch {
+          // keep best-effort
+        }
+      }
+
       const done = await db.atomicTransitionBroadcast(bc.id, 'RUNNING', 'DONE', {
         finished_at: new Date().toISOString(),
+        sent_count: finalSent,
+        failed_count: finalFailed,
       });
 
       if (!done) {
@@ -1041,9 +1125,11 @@ export async function broadcastTick() {
             .text('➕ Новая рассылка', 'a:bc_start')
             .text('⬅️ Админка', 'a:admin_home');
 
+          const sentShown = fanoutEnabled ? finalSent : bc.sent_count;
+          const failedShown = fanoutEnabled ? finalFailed : bc.failed_count;
           await bot.api.sendMessage(
             Number(creator.tg_id),
-            `✅ <b>Рассылка #${bc.id} завершена</b>\n\n📊 Отправлено: ${bc.sent_count} / ${bc.total_count}\n❌ Ошибок: ${bc.failed_count}`,
+            `✅ <b>Рассылка #${bc.id} завершена</b>\n\n📊 Отправлено: ${sentShown} / ${bc.total_count}\n❌ Ошибок: ${failedShown}`,
             { parse_mode: 'HTML', reply_markup: kb }
           );
         }
@@ -1054,8 +1140,101 @@ export async function broadcastTick() {
       const out = {
         status: 'done',
         broadcast_id: bc.id,
-        sent: bc.sent_count,
-        failed: bc.failed_count,
+        sent: fanoutEnabled ? finalSent : bc.sent_count,
+        failed: fanoutEnabled ? finalFailed : bc.failed_count,
+        ...(fanoutEnabled ? { mode: 'qstash_fanout' } : {}),
+      };
+      await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+      return out;
+    }
+
+    // QStash fan-out: enqueue delivery jobs and exit early (serverless-safe).
+    if (fanoutEnabled) {
+      const deliveryUrl = getQStashDeliveryUrl('/api/qstash/broadcast-deliver');
+      if (!deliveryUrl) {
+        const out = { status: 'error', reason: 'public_base_url_missing', broadcast_id: bc.id };
+        await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+        return out;
+      }
+
+      const startedAt = Date.now();
+      const reserveMs = Math.min(
+        BROADCAST_TIME_BUDGET_RESERVE_MS,
+        Math.max(1000, BROADCAST_TIME_BUDGET_MS - 1000)
+      );
+      const deadlineAt = startedAt + BROADCAST_TIME_BUDGET_MS;
+      let timeBudgetHit = false;
+      let queued = 0;
+      let lastId = lastUserId;
+      let enqueueError = '';
+
+      for (const recipient of recipients) {
+        if (Date.now() >= deadlineAt - reserveMs) {
+          timeBudgetHit = true;
+          break;
+        }
+
+        const uid = Number(recipient.user_id);
+        const tgId = Number(recipient.tg_id);
+
+        try {
+          const dedupId = `b:${bc.id}:u:${uid}`;
+          await qstashPublishJSON({
+            url: deliveryUrl,
+            body: {
+              broadcastId: Number(bc.id),
+              userId: uid,
+              tgId,
+              attempt: 0,
+              bc: {
+                id: Number(bc.id),
+                draft_type: bc.draft_type,
+                draft_text: bc.draft_text,
+                draft_file_id: bc.draft_file_id,
+                draft_caption: bc.draft_caption,
+                buttons_json: bc.buttons_json,
+              },
+            },
+            deduplicationId: dedupId,
+            retries: Number(CFG.QSTASH_BROADCAST_RETRIES || 10),
+            flowControl: getBroadcastFlowControl(bc.id),
+            timeout: '20s',
+          });
+
+          await db.logBroadcastQueued(bc.id, uid);
+          queued++;
+          lastId = Math.max(lastId, uid);
+        } catch (e) {
+          const em = String(e?.message || e).slice(0, 200);
+          console.error('[BROADCAST][QSTASH] enqueue failed', { broadcast_id: bc.id, uid, error: em });
+          enqueueError = em || 'enqueue_failed';
+          // Stop early: do not advance cursor past a failed enqueue.
+          break;
+        }
+      }
+
+      const hasProgress = queued > 0 || lastId !== lastUserId;
+      if (hasProgress) {
+        await db.updateBroadcast(bc.id, {
+          last_sent_user_id: lastId,
+        });
+      }
+
+      const duration_ms = Date.now() - startedAt;
+      const out = {
+        status: 'running',
+        mode: 'qstash_fanout',
+        broadcast_id: bc.id,
+        batch_queued: queued,
+        ...(enqueueError ? { enqueue_error: enqueueError } : {}),
+        ...(timeBudgetHit
+          ? {
+              exit_reason: 'time_budget',
+              time_budget_ms: BROADCAST_TIME_BUDGET_MS,
+              time_budget_reserve_ms: reserveMs,
+            }
+          : {}),
+        duration_ms,
       };
       await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
       return out;

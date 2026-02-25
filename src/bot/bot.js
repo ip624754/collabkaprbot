@@ -555,6 +555,7 @@ const SYS_KEYS = {
   pay_accept: k(['sys', 'pay_accept']),
   pay_auto_apply: k(['sys', 'pay_auto_apply']),
   matchfeat_auto_apply: k(['sys', 'matchfeat_auto_apply']),
+  broadcast_qstash_fanout: k(['sys', 'broadcast_qstash_fanout']),
   // Founder Sale runtime overrides (Admin -> Redis)
   founder_sale: k(['sys', 'founder_sale'])
 };
@@ -25135,6 +25136,17 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    // Admin: Broadcast delivery mode (QStash fan-out)
+    if (p.a === 'a:admin_bc_qstash_toggle') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      const cur = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
+      await setSysBool(SYS_KEYS.broadcast_qstash_fanout, !cur);
+      await renderAdminHome(ctx);
+      return;
+    }
+
     // Admin: Founder Sale (runtime controls in Redis)
     if (p.a === 'a:admin_founder') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -29323,8 +29335,13 @@ async function renderBroadcastView(ctx, broadcastId) {
   const icon = statusIcon[bc.status] || '❓';
 
   const total = Number(bc.total_count || 0);
-  const sent = Number(bc.sent_count || 0);
-  const failed = Number(bc.failed_count || 0);
+  // In QStash fan-out mode, counters in broadcasts table can lag.
+  // For the admin view, compute from broadcast_sent_log (DB-truth).
+  let st = null;
+  try { st = await db.countBroadcastDeliveryStats(Number(bc.id)); } catch { st = null; }
+  const sent = st ? Number(st.sent || 0) : Number(bc.sent_count || 0);
+  const failed = st ? (Number(st.failed || 0) + Number(st.blocked || 0)) : Number(bc.failed_count || 0);
+  const pending = st ? Number(st.pending || 0) : 0;
   const pct = total > 0 ? Math.round((sent + failed) / total * 100) : 0;
 
   // Progress bar (10 segments)
@@ -29341,6 +29358,7 @@ async function renderBroadcastView(ctx, broadcastId) {
   text += `\n<b>Прогресс:</b> [${bar}] ${pct}%\n`;
   text += `✅ Отправлено: <b>${sent}</b> / ${total}\n`;
   text += `❌ Ошибок: <b>${failed}</b>\n`;
+  if (pending > 0) text += `⏳ В очереди/повторы: <b>${pending}</b>\n`;
 
   const kb = new InlineKeyboard();
 
@@ -29385,9 +29403,11 @@ async function renderAdminHome(ctx) {
   const payAccept = await getSysBool(SYS_KEYS.pay_accept, CFG.PAYMENTS_ACCEPT_DEFAULT);
   const payAutoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
   const mfAutoApply = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
+  const bcFanout = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
 
   text += `\n⚙️ Платежи: прием ${payAccept ? 'ON' : 'OFF'} • автовыдача ${payAutoApply ? 'ON' : 'OFF'}\n`;
   text += `⚙️ Match/Feat auto-apply: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
+  text += `⚙️ Broadcast fan-out (QStash): ${bcFanout ? 'ON' : 'OFF'}\n`;
 
   const founderState = await getFounderSaleState();
   const founderOn = !!founderState.effective?.enabled;
@@ -29412,6 +29432,8 @@ async function renderAdminHome(ctx) {
     .row()
     .text(`🎯🔥 Match/Feat: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
     .row();
+
+  kb.text(`📣 QStash fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle').row();
 
   if (CFG.OFFICIAL_PUBLISH_ENABLED) {
     kb.text(`📣 Офиц.канал (${pending})`, 'a:off_queue|p:0').row();
