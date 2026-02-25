@@ -16,6 +16,7 @@ import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
+import { qstashPublishJSON, getQStashDeliveryUrl } from '../lib/qstash.js';
 
 let BOT;
 
@@ -25147,6 +25148,70 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    // Admin: QStash status / signed ping (Redis-only metrics)
+    if (p.a === 'a:admin_qstash_status') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await renderAdminQStashStatus(ctx);
+      return;
+    }
+
+    if (p.a === 'a:admin_qstash_ping') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery({ text: 'Пинг отправляю…' });
+
+      const url = getQStashDeliveryUrl('/api/qstash/ping');
+      if (!url) {
+        await safeEditOrReply(
+          ctx,
+          '⛔ PUBLIC_BASE_URL не задан. Ping недоступен.',
+          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
+        );
+        return;
+      }
+
+      const nonce = randomToken();
+      const nowIso = new Date().toISOString();
+
+      // Best-effort: remember what we enqueued (Redis-only).
+      try {
+        await redis.set(k(['qstash', 'ping', 'last_enqueued_at']), nowIso, { ex: 14 * 24 * 60 * 60 });
+        await redis.set(k(['qstash', 'ping', 'last_enqueued_nonce']), String(nonce), { ex: 14 * 24 * 60 * 60 });
+      } catch {}
+
+      try {
+        await qstashPublishJSON({
+          url,
+          body: {
+            kind: 'signed_ping',
+            ts: nowIso,
+            nonce,
+            by_tg_id: Number(ctx.from.id || 0) || 0,
+          },
+          deduplicationId: `qping:${nonce}`,
+          retries: 0,
+          timeout: '10s',
+        });
+      } catch (e) {
+        const msg = String(e?.message || e || 'error');
+        await safeEditOrReply(
+          ctx,
+          `⛔ Не удалось отправить ping через QStash.
+
+Причина: <code>${escapeHtml(msg)}</code>
+
+Проверь ENV: QSTASH_TOKEN и Signing Keys в Vercel.`,
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
+        );
+        return;
+      }
+
+      await renderAdminQStashStatus(ctx);
+      return;
+    }
+
     // Admin: Founder Sale (runtime controls in Redis)
     if (p.a === 'a:admin_founder') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -29433,7 +29498,9 @@ async function renderAdminHome(ctx) {
     .text(`🎯🔥 Match/Feat: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
     .row();
 
-  kb.text(`📣 QStash fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle').row();
+  kb.text(`📣 QStash fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
+    .text('🛰 QStash статус', 'a:admin_qstash_status')
+    .row();
 
   if (CFG.OFFICIAL_PUBLISH_ENABLED) {
     kb.text(`📣 Офиц.канал (${pending})`, 'a:off_queue|p:0').row();
@@ -29448,6 +29515,105 @@ async function renderAdminHome(ctx) {
     .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { reply_markup: kb });
+}
+
+
+async function renderAdminQStashStatus(ctx) {
+  const fanout = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
+
+  let lastTick = null;
+  let lastDeliveryAt = null;
+  let lastPingAt = null;
+  let lastPingNonce = null;
+  let lastPingBy = null;
+  let lastPingEnqAt = null;
+  let lastPingEnqNonce = null;
+
+  // Redis-only metrics (best-effort).
+  try { lastTick = await redis.get(k(['cron', 'broadcast_tick', 'last_run'])); } catch {}
+  try { lastDeliveryAt = await redis.get(k(['qstash', 'broadcast_deliver', 'last_at'])); } catch {}
+  try { lastPingAt = await redis.get(k(['qstash', 'ping', 'last_at'])); } catch {}
+  try { lastPingNonce = await redis.get(k(['qstash', 'ping', 'last_nonce'])); } catch {}
+  try { lastPingBy = await redis.get(k(['qstash', 'ping', 'last_by_tg_id'])); } catch {}
+  try { lastPingEnqAt = await redis.get(k(['qstash', 'ping', 'last_enqueued_at'])); } catch {}
+  try { lastPingEnqNonce = await redis.get(k(['qstash', 'ping', 'last_enqueued_nonce'])); } catch {}
+
+  // Broadcast cooldown (Redis-only).
+  let cooldownUntilMs = 0;
+  let cooldownBid = 0;
+  let cooldownLast429At = null;
+  let cooldownReason = null;
+  try { cooldownUntilMs = Number(await redis.get(k(['broadcast', 'cooldown_until']))) || 0; } catch {}
+  try { cooldownBid = Number(await redis.get(k(['broadcast', 'cooldown_broadcast_id']))) || 0; } catch {}
+  try { cooldownLast429At = await redis.get(k(['broadcast', 'last_429_at'])); } catch {}
+  try { cooldownReason = await redis.get(k(['broadcast', 'last_429_reason'])); } catch {}
+
+  function fmtAgo(iso) {
+    const raw = iso ? String(iso) : '';
+    if (!raw) return '—';
+    const t = Date.parse(raw);
+    if (!Number.isFinite(t)) return escapeHtml(raw);
+    const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    return `${escapeHtml(raw)}  ( ${fmtWait(sec)} назад )`;
+  }
+
+  const tickTs = (lastTick && typeof lastTick === 'object') ? (lastTick.ts || lastTick.at || lastTick.time || null) : null;
+  const tickMode = (lastTick && typeof lastTick === 'object') ? (lastTick.mode || null) : null;
+
+  const nowMs = Date.now();
+  const cdActive = cooldownUntilMs && cooldownUntilMs > nowMs;
+  const cdLeftSec = cdActive ? Math.ceil((cooldownUntilMs - nowMs) / 1000) : 0;
+
+  const pingOk = (lastPingEnqNonce && lastPingNonce && String(lastPingEnqNonce) === String(lastPingNonce))
+    ? 'OK'
+    : (lastPingEnqNonce ? 'WAIT' : '—');
+
+  let text = `🛰 <b>QStash — статус</b>
+
+`;
+  text += `Fan-out (Redis): <b>${fanout ? 'ON' : 'OFF'}</b>
+`;
+  text += `Broadcast tick last_run: ${tickTs ? fmtAgo(tickTs) : '—'}${tickMode ? `
+• mode: <b>${escapeHtml(String(tickMode))}</b>` : ''}
+
+`;
+  text += `Worker last delivery: ${lastDeliveryAt ? fmtAgo(lastDeliveryAt) : '—'}
+`;
+  text += `Ping received: ${lastPingAt ? fmtAgo(lastPingAt) : '—'}
+`;
+  if (lastPingNonce) text += `• nonce: <code>${escapeHtml(String(lastPingNonce))}</code>
+`;
+  if (lastPingBy) text += `• by tg_id: <code>${escapeHtml(String(lastPingBy))}</code>
+`;
+  if (lastPingEnqAt) text += `Ping enqueued: ${fmtAgo(lastPingEnqAt)}
+`;
+  if (lastPingEnqNonce) text += `• enqueued nonce: <code>${escapeHtml(String(lastPingEnqNonce))}</code>
+`;
+  if (lastPingEnqNonce) text += `• ping status: <b>${pingOk}</b>
+`;
+
+  text += `
+Broadcast cooldown: <b>${cdActive ? 'ACTIVE' : 'OFF'}</b>`;
+  if (cdActive) text += ` (ещё ${fmtWait(cdLeftSec)})`;
+  text += `
+`;
+  if (cooldownBid) text += `• broadcast_id: <code>${cooldownBid}</code>
+`;
+  if (cooldownLast429At) text += `• last_429_at: ${fmtAgo(cooldownLast429At)}
+`;
+  if (cooldownReason) text += `• reason: <code>${escapeHtml(String(cooldownReason))}</code>
+`;
+
+  const kb = new InlineKeyboard()
+    .text('🧪 Send signed ping', 'a:admin_qstash_ping')
+    .row()
+    .text(`📣 Fan-out: ${fanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
+    .text('⬅️ Админка', 'a:admin_home')
+    .row()
+    .text('⬅️ Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 

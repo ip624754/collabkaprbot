@@ -47,6 +47,8 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:admin_founder_toggle": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:admin_home": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:admin_bc_qstash_toggle": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:admin_qstash_status": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:admin_qstash_ping": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:admin_matchfeat_auto_toggle": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:admin_metrics": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:admin_mod_add": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
