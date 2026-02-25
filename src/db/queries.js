@@ -4950,6 +4950,8 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
   const uid = Number(brandUserId);
   const c = Math.max(0, Math.floor(Number(cost) || 0));
 
+  let left = null;
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -4990,6 +4992,7 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
           await client.query('ROLLBACK');
           return { status: 'insufficient_credits' };
         }
+        try { left = Number(spend.rows[0]?.brand_credits); } catch { left = null; }
       } catch (e) {
         // Rolling upgrade safety: brand_credits_gifted may be missing.
         if (e && e.code === '42703') {
@@ -5006,6 +5009,7 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
             await client.query('ROLLBACK');
             return { status: 'insufficient_credits' };
           }
+          try { left = Number(spend.rows[0]?.brand_credits); } catch { left = null; }
         } else {
           throw e;
         }
@@ -5044,7 +5048,7 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
     );
 
     await client.query('COMMIT');
-    return { status: 'accepted' };
+    return { status: 'accepted', charged: c > 0, left };
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch {}
     throw e;
