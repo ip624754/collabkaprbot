@@ -208,6 +208,30 @@ export const CFG = {
   // Feature flags
   ANALYTICS_ENABLED: parseBoolSafe(process.env.ANALYTICS_ENABLED, false),
 
+  // Public base URL (needed for signed webhooks / QStash delivery URLs)
+  // Prefer explicit env. Fallback to Vercel provided hostname.
+  PUBLIC_BASE_URL:
+    process.env.PUBLIC_BASE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ''),
+
+  // QStash (optional): broadcast fan-out in serverless-safe way
+  QSTASH_BROADCAST_PARALLELISM: (() => {
+    const n = parseIntSafe(process.env.QSTASH_BROADCAST_PARALLELISM, 8);
+    return Math.max(1, Math.min(n, 50));
+  })(),
+  QSTASH_BROADCAST_RATE_PER_SEC: (() => {
+    const n = parseIntSafe(process.env.QSTASH_BROADCAST_RATE_PER_SEC, 20);
+    return Math.max(1, Math.min(n, 200));
+  })(),
+  QSTASH_BROADCAST_RETRIES: (() => {
+    const n = parseIntSafe(process.env.QSTASH_BROADCAST_RETRIES, 10);
+    return Math.max(0, Math.min(n, 30));
+  })(),
+  QSTASH_BROADCAST_PAUSE_DELAY_SEC: (() => {
+    const n = parseIntSafe(process.env.QSTASH_BROADCAST_PAUSE_DELAY_SEC, 60);
+    return Math.max(10, Math.min(n, 3600));
+  })(),
+
   // Audit logs (Postgres)
   AUDIT_DB_ENABLED: parseBoolSafe(process.env.AUDIT_DB_ENABLED, true),
   // Optional write-shedding for noisy actions (reduces Neon CU; no UX impact)
