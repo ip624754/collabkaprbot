@@ -2279,6 +2279,16 @@ function kbNavRow(kb, backCb) {
   return kb;
 }
 
+// UX helper: avoid “nothing happens” on stale buttons (old messages / missing params).
+async function renderStaleButton(ctx, opts = {}) {
+  const text = String(opts.text || '⚠️ Кнопка устарела. Открой 📋 Меню и повтори.');
+  const backCb = String(opts.backCb || 'a:menu');
+  try {
+    if (ctx?.callbackQuery) await ctx.answerCallbackQuery({ text: 'Кнопка устарела.' });
+  } catch {}
+  await safeEditOrReply(ctx, text, { reply_markup: navKb(backCb) });
+}
+
 
 // STEP57: Focused done screens (1 primary CTA + "More actions")
 function kbBxPubDone(wsId, offerId, page = 0, back = 'my') {
@@ -6339,12 +6349,14 @@ async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
     const backCb = String(opts?.backCb || 'a:home');
 
     const kb = minimal
-      ? new InlineKeyboard()
-          .text('🚀 Подключить канал', 'a:setup').row()
-          .text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu')
+      ? (() => {
+          const kbx = new InlineKeyboard().text('🚀 Подключить канал', 'a:setup');
+          kbNavRow(kbx, backCb);
+          return kbx;
+        })()
       : mainMenuKb(await getRoleFlags(u, ctx.from.id));
 
-    await ctx.reply('Сначала подключи канал: нажми “🚀 Подключить канал”.', { reply_markup: kb });
+    await safeEditOrReply(ctx, 'Сначала подключи канал: нажми “🚀 Подключить канал”.', { reply_markup: kb });
     return null;
   }
   const active = await getActiveWorkspace(ctx.from.id);
@@ -6388,7 +6400,10 @@ async function renderWsList(ctx, ownerUserId) {
 async function renderWsOpen(ctx, ownerUserId, wsId) {
   const ws = await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
-    await ctx.answerCallbackQuery({ text: 'Канал не найден.' });
+    await renderStaleButton(ctx, {
+      text: '⚠️ Канал не найден или кнопка устарела. Открой 📋 Меню → «📣 Мои каналы» и выбери канал заново.',
+      backCb: 'a:ws_list'
+    });
     return;
   }
   await setActiveWorkspace(ctx.from.id, wsId);
@@ -7807,7 +7822,7 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
   lines.push(`• Website: ${site ? `<code>${escapeHtml(deLinkifyText(site))}</code>` : '—'}`);
   if (legacyHas) lines.push(`• Контакт (текст): <code>${escapeHtml(deLinkifyText(legacyRaw))}</code>`);
   lines.push('');
-  lines.push(`Чтобы очистить любое поле — отправь <code>-</code> при вводе или используй «🧹 Очистить поле».`);
+  lines.push(`Чтобы очистить поле — используй «🧹 Очистить поле».`);
 
   const text = lines.join('\n');
 
@@ -16677,9 +16692,11 @@ if (exp.type === 'brand_deals_search') {
           if (!handle) {
             {
             const kb = new InlineKeyboard()
+              .text('🧹 Очистить', `a:ws_prof_clear|ws:${wsId}|f:ig`)
+              .row()
               .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`)
               .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-            await ctx.reply('⚠️ Пришли @handle или ссылку на профиль вида instagram.com/handle.\n\nЧтобы очистить поле — отправь “-”.', { reply_markup: kb });
+            await ctx.reply('⚠️ Пришли @handle или ссылку на профиль вида instagram.com/handle.\n\nМожно очистить поле кнопкой «🧹 Очистить».', { reply_markup: kb });
           }
             await setExpectText(ctx.from.id, exp);
             return;
@@ -16710,9 +16727,11 @@ if (exp.type === 'brand_deals_search') {
           if (!urls.length) {
             {
             const kb = new InlineKeyboard()
+              .text('🧹 Очистить', `a:ws_prof_clear|ws:${wsId}|f:portfolio`)
+              .row()
               .text('⬅️ Назад', `a:ws_profile|ws:${wsId}`)
               .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-            await ctx.reply('⚠️ Пришли 1–3 ссылки (https://...). Можно в одном сообщении или по строкам.\n\nЧтобы очистить поле — отправь “-”.', { reply_markup: kb });
+            await ctx.reply('⚠️ Пришли 1–3 ссылки (https://...). Можно в одном сообщении или по строкам.\n\nМожно очистить поле кнопкой «🧹 Очистить».', { reply_markup: kb });
           }
             await setExpectText(ctx.from.id, exp);
             return;
@@ -16756,6 +16775,8 @@ if (exp.type === 'brand_deals_search') {
       const o = wsProfileContactsObj(ws);
 
       const kbBack = new InlineKeyboard()
+        .text('🧹 Очистить', `a:ws_prof_contacts_clear_k|ws:${wsId}|k:${key}`)
+        .row()
         .text('⬅️ Назад', `a:ws_prof_contacts|ws:${wsId}`)
         .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
         .row()
@@ -16799,7 +16820,7 @@ if (exp.type === 'brand_deals_search') {
       }
 
       if (!v) {
-        await ctx.reply((err || '⚠️ Формат не распознан.') + '\n\nЧтобы очистить поле — отправь <code>-</code>.', { parse_mode: 'HTML', reply_markup: kbBack, disable_web_page_preview: true });
+        await ctx.reply((err || '⚠️ Формат не распознан.') + '\n\nМожно очистить поле кнопкой «🧹 Очистить».', { parse_mode: 'HTML', reply_markup: kbBack, disable_web_page_preview: true });
         await setExpectText(ctx.from.id, exp);
         return;
       }
@@ -20610,7 +20631,10 @@ if (p.a === 'a:wsp_preview') {
     if (p.a === 'a:wsp_open') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.w || p.ws || 0);
-      if (!wsId) return;
+      if (!wsId) {
+        await renderStaleButton(ctx, { text: '⚠️ Витрина не найдена или кнопка устарела. Открой 📋 Меню и повтори.', backCb: 'a:menu' });
+        return;
+      }
 
       await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
@@ -20637,7 +20661,10 @@ if (p.a === 'a:wsp_preview') {
     if (p.a === 'a:wsp_contact_req') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.w || p.ws || 0);
-      if (!wsId) return;
+      if (!wsId) {
+        await renderStaleButton(ctx, { text: '⚠️ Витрина не найдена или кнопка устарела. Открой 📋 Меню и повтори.', backCb: 'a:menu' });
+        return;
+      }
 
       const ret = String(p.r || '').trim().toLowerCase();
       const leadId = Number(p.l || 0);
@@ -20861,9 +20888,12 @@ if (p.a === 'a:send_request_to_creator') {
 
 if (p.a === 'a:wsp_lead_new') {
       const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return;
+	      if (!wsId) {
+	        await renderStaleButton(ctx, { text: '⚠️ Витрина не найдена или кнопка устарела. Открой витрину заново и попробуй снова.', backCb: 'a:menu' });
+	        return;
+	      }
+	
+	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       // Prevent self-apply and curator-mode confusion (old buttons may still exist)
       const ws = await db.getWorkspaceAny(wsId);
@@ -21316,9 +21346,12 @@ if (p.a === 'a:brand_app_card') {
 if (p.a === 'a:ws_leads') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return;
+	      if (!wsId) {
+	        await renderStaleButton(ctx, { text: '⚠️ Канал не выбран или кнопка устарела. Открой 📋 Меню → «📣 Мои каналы» и выбери канал.', backCb: 'a:ws_list' });
+	        return;
+	      }
+	
+	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const st = leadStatusFromCb(String(p.s || 'new'));
       const retKey = String(p.ret || retFromCb(p.r) || '').trim();
       await renderWsLeadsList(ctx, u.id, wsId, st, Number(p.p || 0), retKey || null);
@@ -22236,7 +22269,10 @@ if (p.a === 'a:ws_open') {
       const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return;
+      if (!wsId) {
+        await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' });
+        return;
+      }
       const v = String(p.v || 'short') === 'long' ? 'long' : 'short';
       await sendWsShareTextMessage(ctx, u.id, wsId, v);
       return;
@@ -22246,7 +22282,7 @@ if (p.a === 'a:ws_open') {
 if (p.a === 'a:ws_ig_templates') {
   await ctx.answerCallbackQuery();
   const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) return;
+  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
   await renderWsIgTemplatesMenu(ctx, u.id, wsId);
   return;
 }
@@ -22254,7 +22290,7 @@ if (p.a === 'a:ws_ig_templates') {
 if (p.a === 'a:ws_ig_templates_send') {
   await ctx.answerCallbackQuery();
   const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) return;
+  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
   const t = String(p.t || 'story');
   await sendWsIgTemplateMessage(ctx, u.id, wsId, t);
   return;
@@ -22264,7 +22300,7 @@ if (p.a === 'a:ws_ig_templates_send') {
 if (p.a === 'a:ws_ig_dm') {
   await ctx.answerCallbackQuery();
   const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) return;
+  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
   const tone = String(p.tone || 'soft');
   const i = Number(p.i || 0);
   await renderWsIgDmTemplate(ctx, u.id, wsId, tone, i);
@@ -22371,7 +22407,7 @@ if (p.a === 'a:ws_prof_mode') {
     if (p.a === 'a:ws_prof_contacts') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
-      if (!wsId) return;
+      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
       await renderWsProfileContactsStructured(ctx, u.id, wsId);
       return;
     }
@@ -22379,7 +22415,7 @@ if (p.a === 'a:ws_prof_mode') {
     if (p.a === 'a:ws_prof_contacts_migrate') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
-      if (!wsId) return;
+      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
 
       const isAdmin = isSuperAdminTg(ctx.from?.id);
       const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(u.id, wsId);
@@ -22431,23 +22467,26 @@ if (p.a === 'a:ws_prof_mode') {
       const wsId = Number(p.ws);
       const key = String(p.k || '');
       const allowed = ['tg', 'email', 'phone', 'site'];
-      if (!wsId) return;
+      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
       if (!allowed.includes(key)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
 
       const prompts = {
-        tg: '✍️ Telegram username (рекомендуется): пришли @user или ссылку t.me/user.\n\nДостаточно 1 контакта — обычно Telegram.\n\nЧтобы очистить поле — отправь “-”.',
-        email: '✍️ Email (опционально): пришли почту вида name@domain.com.\n\nЧтобы очистить поле — отправь “-”.',
-        phone: '✍️ Phone (опционально, не обязателен): пришли номер (можно с пробелами/скобками). Сохраню в формате +цифры.\n\nЧтобы очистить поле — отправь “-”.',
-        site: '✍️ Website (опционально): пришли ссылку или домен (example.com).\n\nВажно: t.me лучше указать в Telegram username.\n\nЧтобы очистить поле — отправь “-”.',
+        tg: '✍️ Telegram username (рекомендуется): пришли @user или ссылку t.me/user.\n\nДостаточно 1 контакта — обычно Telegram.',
+        email: '✍️ Email (опционально): пришли почту вида name@domain.com.',
+        phone: '✍️ Phone (опционально, не обязателен): пришли номер (можно с пробелами/скобками). Сохраню в формате +цифры.',
+        site: '✍️ Website (опционально): пришли ссылку или домен (example.com).\n\nВажно: t.me лучше указать в Telegram username.',
       };
 
-      await safeEditOrReply(ctx, prompts[key] || prompts.tg, {
-        reply_markup: new InlineKeyboard()
-          .text('⬅️ Отмена', `a:ws_prof_contacts|ws:${wsId}`)
-          .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
-          .row()
-          .text('📋 Меню', 'a:menu')
-      });
+      const kb = new InlineKeyboard()
+        .text('🧹 Очистить', `a:ws_prof_contacts_clear_k|ws:${wsId}|k:${key}`)
+        .row()
+        .text('⬅️ Отмена', `a:ws_prof_contacts|ws:${wsId}`)
+        .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
+
+      await safeEditOrReply(ctx, prompts[key] || prompts.tg, { reply_markup: kb });
 
       await setExpectText(ctx.from.id, { type: 'ws_prof_contacts_edit', wsId, key, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
       return;
@@ -22456,7 +22495,7 @@ if (p.a === 'a:ws_prof_mode') {
     if (p.a === 'a:ws_prof_contacts_clear') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
-      if (!wsId) return;
+      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
       await renderWsProfileContactsClearMenu(ctx, u.id, wsId);
       return;
     }
@@ -22466,7 +22505,7 @@ if (p.a === 'a:ws_prof_mode') {
       const wsId = Number(p.ws);
       const key = String(p.k || '');
       const allowed = ['tg', 'email', 'phone', 'site', 'other'];
-      if (!wsId) return;
+      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
       if (!allowed.includes(key)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
 
       const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -22487,14 +22526,22 @@ if (p.a === 'a:ws_prof_mode') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const field = String(p.f || '');
-      if (!wsId) return;
-      if (field !== 'contact') return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
+      if (!wsId) {
+        await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' });
+        return;
+      }
+
+      const allowed = new Set(['contact', 'ig', 'portfolio', 'about']);
+      if (!allowed.has(field)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
 
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
-      await db.setWorkspaceSetting(wsId, { profile_contact: null });
-      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_updated', { field: 'contact', cleared: true, via: 'button' }); } catch {}
+      if (field === 'contact') await db.setWorkspaceSetting(wsId, { profile_contact: null });
+      if (field === 'ig') await db.setWorkspaceSetting(wsId, { profile_ig: null });
+      if (field === 'portfolio') await db.setWorkspaceSetting(wsId, { profile_portfolio_urls: [] });
+      if (field === 'about') await db.setWorkspaceSetting(wsId, { profile_about: null });
+      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_updated', { field, cleared: true, via: 'button' }); } catch {}
 
       // If user was in expectText mode for this edit — drop it to avoid confusion.
       try { await clearExpectText(ctx.from.id); } catch {}
@@ -22510,16 +22557,18 @@ if (p.a === 'a:ws_prof_mode') {
       const prompts = {
         title: '✍️ Введи название витрины (как тебя видит бренд).',
         niche: '✍️ Введи нишу (устар.) — лучше выбрать “🏷 Ниши”.',
-        ig: '✍️ Пришли Instagram: @handle или ссылку на профиль (instagram.com/handle).\n\nЧтобы очистить поле — отправь “-”.',
+        ig: '✍️ Пришли Instagram: @handle или ссылку на профиль (instagram.com/handle).',
         about: '✍️ Короткое описание (1–2 предложения).\n\nПример: “Тестирую косметику и делаю распаковки. Люблю честные обзоры.”',
-        portfolio: '✍️ Пришли 1–3 ссылки на портфолио (каждая с новой строки или в одном сообщении).\n\nЧтобы очистить поле — отправь “-”.',
+        portfolio: '✍️ Пришли 1–3 ссылки на портфолио (каждая с новой строки или в одном сообщении).',
         contact: '✍️ Контакт: @username / ссылка / почта.\n\n💡 Достаточно 1 контакта — обычно Telegram.\nЕсли хочешь — заполни «📇 Контакты (структурно)»: там контакты валидируются и показываются бренду только после разлока.',
         geo: '✍️ Введи город/гео.'
       };
 
       const kb = new InlineKeyboard();
-      if (field === 'contact') kb.text('🧹 Очистить', `a:ws_prof_clear|ws:${wsId}|f:contact`).row();
-      kb.text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu');
+      if (['contact', 'ig', 'portfolio', 'about'].includes(field)) {
+        kb.text('🧹 Очистить', `a:ws_prof_clear|ws:${wsId}|f:${field}`).row();
+      }
+      kb.text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
       await safeEditOrReply(ctx, prompts[field] || prompts.title, { reply_markup: kb });
       await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
