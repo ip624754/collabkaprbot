@@ -73,9 +73,11 @@ export default async function handler(req, res) {
     for (const p of data) {
       const pageId = p?.id;
       if (!pageId) continue;
+      // Prefer Page access token when available (more reliable for page-scoped fields).
+      const pageToken = p?.access_token ? String(p.access_token) : accessToken;
       try {
-        const r = await getPageIgBusinessAccount({ pageId, accessToken });
-        const ig = r?.instagram_business_account?.id;
+        const r = await getPageIgBusinessAccount({ pageId, accessToken: pageToken });
+        const ig = r?.instagram_business_account?.id || r?.connected_instagram_account?.id;
         if (ig) { igUserId = String(ig); break; }
       } catch {
         // ignore this page
