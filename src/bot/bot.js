@@ -7776,43 +7776,45 @@ async function renderWsIgVerifyStart(ctx, ownerUserId, wsId, opts = {}) {
 
   const igMeta = wsIgMeta(ws) || {};
   const verified = igMeta.verified === true;
-  const pending = (igMeta.pending && typeof igMeta.pending === 'object') ? igMeta.pending : null;
+  const method = String(igMeta.verified_method || '');
+  const verifiedAt = igMeta.verified_at ? String(igMeta.verified_at) : null;
 
   const igHandle = normalizeIgHandle(ws.profile_ig) || (igMeta.handle ? normalizeIgHandle(igMeta.handle) : null);
 
   const lines = [];
-  lines.push(`🔗 <b>Верификация Instagram</b>`);
+  lines.push(`📸 <b>Instagram (OAuth)</b>`);
   lines.push('');
   lines.push(`Канал: <b>${escapeHtml(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title))}</b>`);
   lines.push('');
-  if (verified) {
+
+  if (verified && method === 'oauth') {
+    lines.push(`Статус: ✅ <b>verified</b> (OAuth)`);
+    if (verifiedAt) lines.push(`Подключено: <code>${escapeHtml(verifiedAt)}</code>`);
+    lines.push(`Бейдж виден брендам в витрине <b>до</b> разблокировки контактов.`);
+    lines.push(`Важно: @handle брендам не раскрывается до unlock.`);
+  } else if (verified) {
+    // legacy/edge: verified without method
     lines.push(`Статус: ✅ <b>verified</b>`);
     lines.push(`Бейдж виден брендам в витрине <b>до</b> разблокировки контактов.`);
-  } else if (pending?.code) {
-    lines.push(`Статус: ⏳ <b>ожидаем подтверждение</b>`);
-    lines.push(`Код: <code>${escapeHtml(String(pending.code))}</code>`);
-    if (pending.expires_at) lines.push(`Истекает: <code>${escapeHtml(String(pending.expires_at))}</code>`);
-    lines.push('');
-    lines.push(`Важно: ник/ссылка сохраняются <b>только</b> из автора комментария. Ввод пользователя игнорируется (защита от подмены).`);
   } else {
     lines.push(`Статус: —`);
-    lines.push(`Можно включить Universal-верификацию (код-коммент под нашим постом).`);
-    lines.push('');
-    lines.push(`Важно: ник/ссылка сохраняются <b>только</b> из автора комментария. Ввод пользователя игнорируется (защита от подмены).`);
+    lines.push(`Подключи Instagram через <b>официальный OAuth</b> (Meta/Graph). Это <b>бесплатно</b>.`);
+    lines.push(`Нужно: Instagram <b>Business/Creator</b>, привязанный к <b>Facebook Page</b>.`);
   }
 
   if (igHandle) {
     lines.push('');
-    lines.push(`Твой IG в профиле: <code>@${escapeHtml(igHandle)}</code>`);
+    lines.push(`Твой IG в профиле: <code>@${escapeHtml(String(igHandle))}</code>`);
   }
 
-  const kb = new InlineKeyboard()
-    .text('✅ Universal (код-коммент)', `a:ws_ig_verify_comment|ws:${wsId}|ret:${ret}`)
-    .row()
-    .text('🔐 OAuth (Business/Creator)', `a:ws_ig_verify_oauth|ws:${wsId}|ret:${ret}`)
-    .row()
-    .text('🔄 Статус', `a:ws_ig_verify_status|ws:${wsId}|ret:${ret}`)
-    .row()
+  const kb = new InlineKeyboard();
+  if (verified && method === 'oauth') {
+    kb.text('🔌 Отключить', `a:ws_ig_oauth_disconnect|ws:${wsId}|ret:${ret}`).row();
+  } else {
+    kb.text('🔗 Подключить Instagram', `a:ws_ig_verify_oauth|ws:${wsId}|ret:${ret}`).row();
+  }
+
+  kb.text('🔄 Статус', `a:ws_ig_verify_status|ws:${wsId}|ret:${ret}`).row()
     .text('⬅️ Назад', ret === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`)
     .text('📋 Меню', 'a:menu')
     .row()
@@ -7829,51 +7831,15 @@ async function renderWsIgVerifyComment(ctx, ownerUserId, wsId, opts = {}) {
     return;
   }
 
-  const code = randomIgCode(6);
-  const expiresAt = addMinutes(new Date(), Math.ceil(IG_VERIFY_CODE_TTL_SEC / 60)).toISOString();
-
-  // Best-effort Redis accelerator: code -> wsId
-  try {
-    await redis.set(igPendingKey(code), { wsId: Number(wsId), created_at: new Date().toISOString(), expires_at: expiresAt }, { ex: IG_VERIFY_CODE_TTL_SEC });
-    await redis.set(igWsPendingKey(wsId), String(code), { ex: IG_VERIFY_CODE_TTL_SEC });
-  } catch {}
-
-  // Persist pending in DB (so the state survives Redis resets)
-  const o = wsProfileContactsObj(ws);
-  const ig0 = (o.ig && typeof o.ig === 'object') ? o.ig : {};
-
-  // Clear previous pending (best-effort)
-  if (ig0?.pending?.code) {
-    try { await redis.del(igPendingKey(String(ig0.pending.code))); } catch {}
-  }
-
-  ig0.pending = { code, expires_at: expiresAt };
-  ig0.verified_method = 'comment';
-  if (ig0.verified !== true) ig0.verified = false;
-  o.ig = ig0;
-
-  await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: 1 });
-  try { await db.auditWorkspace(wsId, ownerUserId, 'ws.ig_verify_pending_created', { code_len: String(code).length }); } catch {}
-
   const lines = [];
-  lines.push(`📌 <b>Universal-верификация (код-коммент)</b>`);
+  lines.push(`⚠️ <b>Universal-верификация (комментарии) отключена</b>`);
   lines.push('');
-  lines.push(`Твой код:`);
-  lines.push(`<code>${escapeHtml(code)}</code>`);
+  lines.push(`Причина: публичные комментарии создают bypass — бренд может собрать список usernames.`);
   lines.push('');
-  lines.push(`Что сделать:`);
-  lines.push(`1) Открой <b>@collabka_offers</b>`);
-  lines.push(`2) Найди закреплённый пост “Verification”`);
-  lines.push(`3) Оставь комментарий с кодом <code>${escapeHtml(code)}</code>`);
-  lines.push('');
-  lines.push(`⚠️ Важно: мы сохраняем IG handle <b>только</b> из автора комментария. Ввод пользователя игнорируется (защита от подмены).`);
-  lines.push('');
-  lines.push(`После комментария нажми «🔄 Статус».
-
-ℹ️ В этом шаге проверка комментария ещё не подключена (это будет следующим патчем).`);
+  lines.push(`Используй <b>официальный OAuth</b>: он даёт Verified badge без утечки аккаунта.`);
 
   const kb = new InlineKeyboard()
-    .text('🔄 Статус', `a:ws_ig_verify_status|ws:${wsId}|ret:${ret}`)
+    .text('🔗 Подключить Instagram', `a:ws_ig_verify_oauth|ws:${wsId}|ret:${ret}`)
     .row()
     .text('⬅️ Назад', `a:ws_ig_verify|ws:${wsId}|ret:${ret}`)
     .text('📋 Меню', 'a:menu')
@@ -17067,6 +17033,9 @@ if (exp.type === 'brand_deals_search') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) { await ctx.reply('Нет доступа к этому каналу.'); return; }
 
+      const igMeta0 = wsIgMeta(ws) || {};
+      const igLockedByOAuth = igMeta0?.verified === true && String(igMeta0?.verified_method || '') === 'oauth';
+
       const raw = String(ctx.message.text || '').trim();
       await safeDeleteIncomingUserMessage(ctx);
       const rawLc = raw.toLowerCase();
@@ -17099,6 +17068,12 @@ if (exp.type === 'brand_deals_search') {
 
       // Instagram
       if (field === 'ig') {
+        if (igLockedByOAuth) {
+          const kb = new InlineKeyboard().text('📸 IG (OAuth)', `a:ws_ig_verify|ws:${wsId}|ret:ws_profile`).row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+          await ctx.reply('⚠️ Instagram подключён через OAuth и защищён от ручной подмены.\n\nЧтобы изменить аккаунт — сначала отключи OAuth в разделе «📸 IG (OAuth)».', { reply_markup: kb });
+          await setExpectText(ctx.from.id, exp);
+          return;
+        }
         if (wantClear) {
           patch.profile_ig = null;
         } else {
@@ -22849,11 +22824,49 @@ if (p.a === 'a:ws_ig_verify_status') {
 }
 
 if (p.a === 'a:ws_ig_verify_oauth') {
-  try { await ctx.answerCallbackQuery({ text: 'OAuth (Business/Creator) будет добавлен следующим шагом.', show_alert: true }); } catch { try { await ctx.answerCallbackQuery(); } catch {} }
+  await ctx.answerCallbackQuery();
   const wsId = Number(p.w || p.ws || 0);
   if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-  const ret = String(p.ret || 'ws_profile');
-  await renderWsIgVerifyStart(ctx, u.id, wsId, { ret });
+
+  if (!CFG.IG_OAUTH_ENABLED) {
+    await safeEditOrReply(ctx, '⚠️ Instagram OAuth пока отключён администратором (IG_OAUTH_ENABLED=0).', { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) });
+    return;
+  }
+  if (!CFG.PUBLIC_BASE_URL) {
+    await safeEditOrReply(ctx, '⚠️ Не настроено: PUBLIC_BASE_URL.
+
+Админ должен указать домен бота, чтобы OAuth работал.', { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) });
+    return;
+  }
+
+  const ws = await db.getWorkspace(u.id, wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  // One-time token for web OAuth start (TTL 10 min).
+  const t = randomToken();
+  const payload = { wsId: Number(wsId), ownerUserId: Number(u.id), tgId: Number(ctx.from.id), created_at: new Date().toISOString() };
+  try { await redis.set(k(['ig_oauth_t', t]), payload, { ex: 10 * 60 }); } catch {}
+
+  const url = String(CFG.PUBLIC_BASE_URL).replace(/\/$/, '') + `/api/ig/oauth/start?t=${encodeURIComponent(t)}`;
+
+  const kb = new InlineKeyboard()
+    .url('🌐 Открыть подключение', url)
+    .row()
+    .text('🔄 Статус', `a:ws_ig_verify_status|ws:${wsId}|ret:${String(p.ret || 'ws_profile')}`)
+    .row()
+    .text('⬅️ Назад', `a:ws_ig_verify|ws:${wsId}|ret:${String(p.ret || 'ws_profile')}`)
+    .text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
+
+  const msg =
+    `🔗 <b>Подключение Instagram через OAuth</b>\n\n` +
+    `1) Нажми кнопку ниже и авторизуйся в Meta/Instagram\n` +
+    `2) Разреши доступ приложению\n` +
+    `3) После успеха вернись в бот — бейдж <b>verified</b> появится автоматически\n\n` +
+    `ℹ️ Требуется IG <b>Business/Creator</b>, привязанный к Facebook Page.`;
+
+  await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   return;
 }
 
