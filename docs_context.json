@@ -1,14 +1,13 @@
 {
   "project": "Collabka PR / @collabkaprbot",
-  "as_of": "2026-02-24",
+  "as_of": "2026-02-20",
   "source_of_truth": [
     "docs/00_CURRENT_STATE.md",
     "docs/00_BOOT.md",
     "docs/12_INFRA_CONTROL_PLANE.md",
     "docs/14_BRAND_TEAM_UX_V4.md",
     "docs/16_RELEASE_CHECKLIST.md",
-    "docs/17_START_NEW_CHAT_PROMPT.md",
-    "docs/20_SECURITY_REVIEW_FAIL_OPEN_MONETIZATION.md"
+    "docs/17_START_NEW_CHAT_PROMPT.md"
   ],
   "invariants": {
     "zero_regressions": true,
@@ -51,7 +50,7 @@
     }
   },
   "ops_observability": {
-    "health": "/api/health returns cron last_run + broadcast.cooldown + audit throttle suppression counters (Redis-only; no DB)",
+    "health": "/api/health returns cron last_run + audit throttle suppression counters (Redis-only; no DB)",
     "cron": "giveaways_tick + broadcast_tick store last_run summary in Redis"
   },
   "specs": [

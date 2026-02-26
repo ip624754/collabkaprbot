@@ -1,80 +1,108 @@
-# DOCS — START HERE
+# Collabka Bot (CollabGirlsBot) (v1.2.9)
 
-Это актуальный комплект документации по проекту **Collabka PR**.
+## Release v1.2.9
+- Hotfix: moved dev polling out of `/api` into `scripts/dev-polling.js` (prevents serverless endpoint exposure).
+- Added P1 improvements: analytics events + **👑 Админка → 📈 Метрики**, rate limits (flag), onboarding v2 (flag), presets/templates, verification CTA in paywall.
+- Recommended: generate `package-lock.json` for deterministic installs (`npm install --package-lock-only`).
 
-## 0) BOOT (всегда читаем сначала)
-- `00_BOOT.md` — 10–15 строк, что нельзя забывать
-- `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
-- `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
-- `15_NEW_CHAT_HANDOFF.md` — copy‑paste для старта нового чата
-- `17_START_NEW_CHAT_PROMPT.md` — готовый промпт для старта нового чата
+UGC/Collab CRM в Telegram:
+- Workspaces = ваши каналы (профиль создателя)
+- Публичная витрина по deep-link (IG → TG)
+- Лиды/запросы от брендов: Inbox + статусы + история
+- 🎬 UGC/офферы: лента, размещение, управление и Inbox
+- 🎁 Розыгрыши (опционально): спонсоры, проверка условий, статистика
+- Кураторская модель (опционально) + инвайты
+- Прозрачность: детерминированный PRNG (seedHash), audit trail
+- Монетизация: PRO (Stars) + Brand Pass/Plan (анти-спам)
+- Модерация: очередь жалоб + audit
 
-## 1) Текущее состояние (source of truth)
-- `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (source of truth)
-- `12_INFRA_CONTROL_PLANE.md` — Cron/Locks/Outbox/гарантии (Control Plane)
-- `11_MIGRATIONS_PACK.md` — как безопасно поднять БД на Neon (exactly-once runner)
-- `migration_pack/` — ручные SQL-скрипты для экстренной миграции/repair (см. `docs/11_MIGRATIONS_PACK.md`)
-- `18_NEON_COST_SAVING_AUDIT_THROTTLE.md` — как экономить Neon: audit write-shedding + метрики в `/api/health`
-- `19_OFFICIAL_PUBLISH_IDEMPOTENCY.md` — Official publish: анти‑дубли (token‑lock + DB‑reserve) + что делать при дубле
-- `20_CONTACTS_MODEL.md` — модель контактов/монетизации (Brand Pass) + structured contacts + приоритеты/UX
-- `13_RUNBOOK_RELEASE.md` + `16_RELEASE_CHECKLIST.md` — релизы/проверки
-- `14_BRAND_TEAM_UX_V4.md` — UX “Менеджеры бренда” (кнопка всегда видна, гейт внутри)
+> Stack: Node.js (ESM) + grammY + Postgres + Upstash Redis (REST). Designed for Vercel.
 
-## 1.5) Публичные документы (для публикаций и объяснения пользователям)
-Папка: `docs/public/`
-- `README_PUBLIC.md` — индекс: что публиковать и куда
-- `00_product_overview_ru.md` — что такое бот и зачем (маркетинг + “по‑человечески”)
-- `01_for_creators_ru.md` — гайд для креаторов
-- `02_for_brands_ru.md` — гайд для брендов/агентств
-- `03_faq_ru.md` — FAQ
-- `04_tech_overview_ru.md` — лёгкий тех‑обзор (для партнёров)
-- `05_publication_templates_ru.md` — шаблоны постов/Telegraph
-- `06_telegraph_article_ru.md` — большая Telegraph‑статья “под ключ”
-- `07_press_kit_ru.md` — пресс‑кит/медиакит (готовые формулировки)
-- `08_privacy_security_ru.md` — публичное объяснение приватности и безопасности
+## 1) Env vars
+Copy `.env.example` and set these in Vercel:
+- `APP_ENV` = `prod` or `dev`
+- `BOT_TOKEN`, `BOT_USERNAME`
+- `DATABASE_URL`
+- Postgres pool hardening (optional): `PG_POOL_MAX`, `PG_CONN_TIMEOUT_MS`, `PG_IDLE_TIMEOUT_MS`, `PG_STATEMENT_TIMEOUT_MS`
+- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+- required for prod hardening: `WEBHOOK_SECRET_TOKEN`, `CRON_SECRET`, `SUPER_ADMIN_TG_IDS`
+- payments support: `PAY_SUPPORT_TEXT` (shown on `/paysupport`)
+- optional rate limiting (infra): `RATE_LIMIT_ENABLED`, `BX_MSG_RATE_LIMIT`, `BX_MSG_RATE_WINDOW_SEC`, `INTRO_RATE_LIMIT`, `INTRO_RATE_WINDOW_SEC`
+- optional: `BOT_ID`, `PRO_STARS_PRICE`, `PRO_DURATION_DAYS`
 
-## 2) SPEC / UX reference (актуально, но не является source of truth)
-Папка: `docs/spec/`
+## 2) DB migration
+Run once (locally) or via a one-off script in your environment:
 
-> Старые файлы в корне docs/ (HOME_HUB_SPEC_V1.md, MENU_SPEC_V1.md и т.п.) оставлены как compat mirrors: внутри полный текст, чтобы старые ссылки не вели в пустышку.
+```bash
+npm i
+npm run migrate
+```
 
-- `20_HOME_HUB_SPEC.md` — HOME HUB + `/start` role-gate (`ui_mode`, payload priority, fail-open)
-- `21_MENU_SPEC.md` — контракт навигации (Back/Menu/Home, `ret`)
-- `22_OFFER_WIZARD_SPEC.md` — визард оффера (финальный экран без тупиков)
-- `23_LEAD_NOTES_SPEC.md` — Curator Notes по заявкам брендов
-- `24_IG_INTEGRATION_SPEC.md` — Instagram: trust layer + ускоритель сделок + PRO-слой (без регрессий)
+`npm run migrate` использует `migrations/run.js` и таблицу `schema_migrations`:
+- применяет каждую миграцию **ровно один раз**
+- проверяет **checksum** (если старую миграцию кто-то отредактировал — мигратор упадёт)
 
-## 3) Protocol / Process (как работаем)
-Папка: `docs/process/`
+Если база уже существовала и миграции применялись раньше без трекинга — см. `migration_pack/README.md` (или `docs/11_MIGRATIONS_PACK.md`).
 
-> Старые файлы с прежними именами оставлены как compat mirrors (внутри полный текст), чтобы старые ссылки не ломались.
+## 3) Deploy to Vercel
+1) Push repo to GitHub
+2) Import to Vercel
+3) Set env vars
 
-- `01_HOW_TO_WORK_LIKE_SENIOR.md` — дисциплина артефактов/DoD/анти‑грабли
-- `02_jobs_vitalik_woz_protocol.md` — Jobs/Vitalik/Woz: high-signal протокол
-- `06_AUDIT_STEP94_HARDCORE.md` — reference аудит (источник рекомендаций/гипотез, не source of truth)
-- `07_WORK_HISTORY_2026_02.md` — timeline заметки по шагам/решениям (для восстановления контекста)
-- `08_AUDIT_CLOSEOUT_2026_02.md` — закрытие внешнего аудита (findings→fixes + мини‑QA)
-- `03_legacy_tech_spec_collabka_v1_0_3.md` — базовая техспека (legacy reference)
-- `04_legacy_techpassport_collabka_v1_0_3_telegra.md` — техпаспорт (legacy reference)
-- `05_legacy_telegraph_article_and_manual.md` — telegraph‑статья/мануал (legacy reference)
+Webhook endpoint:
+- `POST /api/webhook`
 
-## 4) Архив
-Исторический docs-pack (2026-02-19) вынесен из репозитория, чтобы не путать с актуальным состоянием.
-Если понадобится — восстановим из отдельного архива/релиза.
+Test health:
+- `GET /api/health` returns `{ ok: true }`
 
-## Как использовать в новом чате
-Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.
+## 4) Set Telegram webhook
+After deploy:
 
-## Что нового в текущем snapshot (2026-02-25)
-- `/api/health`: cron last_run + audit throttle counters (Redis-only) + видимый **broadcast cooldown** после 429.
-- Экономия Neon: audit write-shedding (`AUDIT_DB_THROTTLE_*`) + готовые профили (`docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`).
-- Broadcast надёжность: на 429 получатель **не теряется** (DB `deferred` + `retry_after_until`), scan-курсор идёт дальше, есть **Redis cooldown** + quarantine + счётчики в `/api/health`.
-- Cron safety: **token-based Redis locks** (safe unlock) + SQL atomic guards на ключевых переходах (ended/publish/expire, broadcast transitions).
-- Official publish (@collabka_offers): анти‑дубли **token‑lock + DB‑reserve `PUBLISHING`** (stale rescue) + runbook (`docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`).
-- Contacts / Brand Pass (P2): structured contacts (`profile_contacts` JSONB) + opt‑in UI для креатора + перенос из «Контакт» (однозначно) + явные подсказки (TG рекомендован, остальное опционально) + кнопки очистки полей.
-- Brand Inbox: «✅ Принять» — точка списания (exactly‑once). До принятия доступны только ✅ Принять/⛔ Спам/🗑 Удалить (нельзя Ответить/Шаблоны/В работу/Закрыть). Баланс кредитов в карточке (Redis-only).
-- Brand Pass UX: «💳 Купить ещё» из витрины креатора → Brand Pass → «⬅️ Вернуться к витрине».
-- Giveaways: «➕ Новый розыгрыш» без канала показывает gate‑экран (подключить/выбрать канал) + корректный back.
-- Новичок UX: вместо “тишины” на устаревших кнопках — понятные подсказки + кнопки назад/меню/home; очистка полей через `🧹 Очистить` (без упоминания “-”).
-- Founder Sale: экран акции + покупка Stars + runtime управление из админки + deep-link `fs_*` + маркетинг‑шаблоны.
-- Cron throughput: уведомления (Telegram notify) ограничены по времени (`withTimeout ~5s`), тик не “залипает” на одном сообщении.
+```bash
+curl -s "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
+  -d "url=https://YOUR_VERCEL_DOMAIN/api/webhook" \
+  -d "secret_token=$WEBHOOK_SECRET_TOKEN"
+```
+
+Webhook protection is required in prod. Use `secret_token` on setWebhook and validate it in `api/webhook.js`.
+
+## 5) Cron tick
+Endpoint:
+- `POST /api/cron/giveaways-tick`
+
+Auth (prod):
+- `Authorization: Bearer $CRON_SECRET`
+
+Example:
+```bash
+curl -s -X POST "https://YOUR_VERCEL_DOMAIN/api/cron/giveaways-tick" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Configure Vercel Cron (dashboard) to call it every minute or every 2–5 minutes.
+
+What it does:
+- Ends giveaways when `ends_at <= now()`
+- If `auto_draw` is ON: draws winners deterministically among eligible participants
+- Sends owner a preview notification in DM (safe)
+
+## 6) Bot UX (MVP)
+- Add workspace: connect a channel by forwarding any post from that channel (bot must be admin)
+- New giveaway: prize → winners count → sponsors (up to 10) → deadline → publish
+- Participant: `/start gw_<id>` shows status + “🔄 Check”
+- Owner: stats + export usernames + access check (bot admin?) + audit logs
+
+## Dev mode (local polling)
+```bash
+npm i
+node api/dev-polling.js
+```
+
+## Files
+- `src/bot/bot.js` — handlers, menus, create flow, eligibility, stats
+- `src/bot/cron.js` — tick logic + lock
+- `src/bot/prng.js` — deterministic PRNG + seedHash
+- `src/db/*.js` — Postgres pool + queries
+- `src/lib/redis.js` — Upstash Redis REST client
+- `api/webhook.js` — Vercel webhook
+- `api/cron/giveaways-tick.js` — Vercel cron route
