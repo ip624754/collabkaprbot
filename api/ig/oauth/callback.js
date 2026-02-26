@@ -66,26 +66,93 @@ export default async function handler(req, res) {
     const tokenExpiresAt = expiresIn > 0 ? new Date(Date.now() + expiresIn * 1000).toISOString() : null;
 
     // 3) find Page-backed IG user
-    const pages = await listPages({ accessToken });
+    // Use the short-lived token for asset discovery: it is guaranteed to be tied to the just-approved
+    // Business Login session and its granular asset selection.
+    const pages = await listPages({ accessToken: shortToken });
     const data = Array.isArray(pages?.data) ? pages.data : [];
 
+    function pickId(x) {
+      if (!x) return null;
+      if (typeof x === 'string' || typeof x === 'number') return String(x);
+      if (typeof x === 'object') {
+        if (x.id) return String(x.id);
+      }
+      return null;
+    }
+
+    function extractIgId(r) {
+      // Graph sometimes returns a nested object with {id}, sometimes a plain id.
+      return (
+        pickId(r?.instagram_business_account) ||
+        pickId(r?.connected_instagram_account) ||
+        null
+      );
+    }
+
     let igUserId = null;
+    const diag = [];
     for (const p of data) {
       const pageId = p?.id;
       if (!pageId) continue;
-      // Prefer Page access token when available (more reliable for page-scoped fields).
-      const pageToken = p?.access_token ? String(p.access_token) : accessToken;
-      try {
-        const r = await getPageIgBusinessAccount({ pageId, accessToken: pageToken });
-        const ig = r?.instagram_business_account?.id || r?.connected_instagram_account?.id;
-        if (ig) { igUserId = String(ig); break; }
-      } catch {
-        // ignore this page
+
+      const pageToken = p?.access_token ? String(p.access_token) : null;
+
+      // Try multiple tokens for max compatibility across Meta account setups.
+      // 1) Page token (if present)
+      // 2) Short-lived user token (granular session)
+      // 3) Long-lived user token (stored)
+      const tryTokens = [pageToken, shortToken, accessToken].filter(Boolean);
+      let lastErr = null;
+
+      for (const tok of tryTokens) {
+        try {
+          const r = await getPageIgBusinessAccount({ pageId, accessToken: tok });
+          const ig = extractIgId(r);
+          diag.push({ pageId: String(pageId), ok: true, hasIg: Boolean(ig) });
+          if (ig) { igUserId = String(ig); break; }
+          // If request succeeded but no IG link, no need to retry other tokens.
+          break;
+        } catch (e) {
+          lastErr = e;
+        }
       }
+
+      if (lastErr) {
+        try {
+          diag.push({
+            pageId: String(pageId),
+            ok: false,
+            code: lastErr?.code || null,
+            msg: String(lastErr?.message || 'error')
+          });
+        } catch {
+          diag.push({ pageId: String(pageId), ok: false, code: null, msg: 'error' });
+        }
+      }
+
+      if (igUserId) break;
     }
 
     if (!igUserId) {
-      res.status(422).send(html('No linked IG', '<h2>Не найден Instagram, привязанный к Facebook Page</h2><p>Проверь, что IG аккаунт — профессиональный (Business/Creator) и он привязан к Facebook Page, которой ты управляешь.</p><p>Вернись в бот и попробуй ещё раз.</p>'));
+      const pagesCount = data.length;
+      const diagTxt = (() => {
+        try {
+          const items = diag.slice(0, 8).map(d => {
+            if (d.ok) return `page ${d.pageId}: ok (hasIG=${d.hasIg ? 'yes' : 'no'})`;
+            return `page ${d.pageId}: err (${d.code || 'code?'}) ${d.msg}`;
+          }).join('<br>');
+          if (!items) return '';
+          return `<hr><p style="font-size:12px;opacity:.8"><b>debug</b>: pages=${pagesCount}<br>${items}</p>`;
+        } catch {
+          return '';
+        }
+      })();
+
+      const hint = pagesCount === 0
+        ? '<h2>Meta не вернула ни одной Facebook Page</h2><p>Похоже, в окне Meta ты не выбрал(а) страницу, либо Meta не выдала доступ к страницам.</p><p>Вернись назад и выбери <b>только</b> страницу <b>Collabkapr</b> (и Instagram <b>collabkapr</b>), затем попробуй ещё раз.</p>'
+        : '<h2>Не найден Instagram, привязанный к Facebook Page</h2><p>Проверь, что IG аккаунт — профессиональный (Business/Creator) и он привязан к Facebook Page, которой ты управляешь.</p><p>Вернись в бот и попробуй ещё раз.</p>';
+
+      res.status(422).send(html('No linked IG', hint + diagTxt));
       return;
     }
 
