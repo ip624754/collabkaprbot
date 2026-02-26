@@ -1,153 +1,239 @@
-# 24 — IG INTEGRATION — SPEC v1 — 2026-02-26
+# 24 — IG INTEGRATION (OAUTH ONLY) — SPEC v2 — 2026-02-26
 
-**Назначение:** сделать Instagram не «ещё одним полем», а:
-- **слоем доверия** (verified badge виден брендам *до* unlock),
-- **ускорителем сделки** (handle + ссылка + stats *после* unlock),
-- **точкой монетизации** (Level A / PRO-функции),
-при этом **без регрессий**, **без лишних DB-запросов в hot paths**, **Neon-safe**.
+**Назначение:** интеграция Instagram как:
+- **trust‑signal** (Verified badge виден бренду *до* unlock),
+- **контакт‑канал** (handle + ссылка видны *только после* unlock),
+- **платформа** (stats/publish/automations на базе Graph API — позже),
+
+при этом без утечек аккаунтов креаторов и без влияния на монетизацию.
+
+> ✅ На текущем этапе **OAuth‑подключение и Verified badge доступны на FREE**. Никаких paywall/PRO-гейтов для креаторов. Монетизация остаётся на уровне unlock контактов.
 
 Связанные документы:
-- `docs/00_CURRENT_STATE.md`
 - `docs/01_SECURITY_INVARIANTS.md`
 - `docs/12_INFRA_CONTROL_PLANE.md`
-- `docs/17_QSTASH_RUNBOOK.md` (паттерны: подпись, деградации)
-- `docs/20_CONTACTS_MODEL.md` (Brand Pass unlock + anti-bypass)
-- `docs/spec/20_HOME_HUB_SPEC.md`, `docs/spec/21_MENU_SPEC.md`, `docs/spec/22_OFFER_WIZARD_SPEC.md`
+- `docs/20_CONTACTS_MODEL.md`
+- `docs/17_QSTASH_RUNBOOK.md` (паттерны: подпись, деградации; для будущих PRO джоб)
+
+> ⚠️ В этом SPEC **нет Level B (комментарии/коды)**. Публичная comment‑верификация создаёт bypass (бренд может собрать список usernames на посте) и **не используется**.
 
 ---
 
 ## 0) Инварианты (жёстко)
 
-1) **Никаких Instagram API** в hot paths: меню, хабы, рендер витрины, генерация кнопок.
-2) **Монетизация никогда не зависит от IG API**.
-3) **IG handle = контакт ⇒ paywall**. До unlock нельзя раскрывать `@handle` и ссылку.
-4) **Verified badge = trust signal ⇒ можно показывать до unlock** (без раскрытия контакта).
-5) Любые изменения статусов/списаний/публикаций — **idempotent / exactly-once**.
-6) Redis down → **fail-open**, DB down → **fail-closed** для критичных операций.
+1) **Никаких IG API** в hot paths (меню/хабы/витрина/кнопки). Только async / по явному действию.
+2) **Монетизация не зависит от IG API.** Unlock/кредиты/платежи живут отдельно.
+3) **IG handle = контакт ⇒ paywall.** До unlock нельзя раскрывать `@handle`, url, `ig_user_id`.
+4) **Verified badge = trust signal.** Его можно показывать до unlock, но без контакта.
+5) Токены **не логируем**, **не отправляем в клиент**, **храним шифрованно**.
+6) Redis down → **fail‑open** для UI (покажем “временно недоступно”), DB down → **fail‑closed** для connect/disconnect.
 
 ---
 
-## 1) Два уровня интеграции
+## 1) Цели и не‑цели
 
-### Level B — Universal Verification (стартовый)
-Подходит для *любых* аккаунтов.
+### Цели
+- Верификация креатора через **официальный OAuth** (Meta/Instagram Graph).
+- Verified badge появляется **только** после успешного OAuth.
+- Бренду до unlock виден **только** бейдж (без контакта).
+- Минимальный “plumbing” для следующих шагов: stats cache / one‑click publish.
 
-Механика:
-- Бот выдаёт код `COLLABKA-XXXXXX` (привязан к `wsId`).
-- Креатор оставляет комментарий с кодом под **нашим** verification-постом `@collabka_offers`.
-- Проверка выполняется асинхронно (cron):
-  - матч по коду,
-  - **handle и url сохраняются исключительно из автора комментария** (поле `username` автора). **Ввод пользователя игнорируется** — защита от подмены.
-
-Результат:
-- `verified=true` (badge можно показывать до unlock).
-- `handle` сохраняется как контакт, но **показывается только после unlock**.
-
-### Level A — Compliant OAuth (PRO)
-Только Business/Creator, даёт publish/insights/DM (если получим permissions).
-
-Правила:
-- токены храним безопасно (encrypted),
-- инсайты — **только Redis cache** (TTL 24h),
-- отсутствие OAuth не ломает Level B.
+### Не‑цели (на STEP140A)
+- Insights/stats (это следующий шаг, cache 24h).
+- Публикация/DM/авто‑воронки.
+- Любая публичная comment‑верификация.
 
 ---
 
-## 2) Data model
+## 2) UX‑контракт (что видят стороны)
 
-Храним метаданные IG в `workspace_settings.profile_contacts` (JSONB):
+### Бренд ДО unlock
+- `Instagram: ✅ Verified` (если подключено)
+- **Никаких** `@handle`, ссылок, username, id.
 
-```json
-{
-  "ig": {
-    "verified": true,
-    "verified_at": "2026-02-26T12:00:00.000Z",
-    "verified_method": "comment" | "oauth",
-    "handle": "username",
-    "url": "https://www.instagram.com/username/",
-    "pending": { "code": "COLLABKA-ABC123", "expires_at": "..." },
-    "graph": { "ig_user_id": "...", "page_id": "...", "access_token_encrypted": "...", "token_expires_at": "..." }
-  }
-}
-```
+### Бренд ПОСЛЕ unlock (в contact‑pack)
+- `@handle`
+- `https://instagram.com/<handle>`
+- (позже) stats из кэша
 
-### Совместимость с текущим UI
-Сейчас витрина использует legacy поле `workspace_settings.profile_ig`.
-
-Правило:
-- при успешной Level B верификации cron **может** синхронизировать `profile_ig = handle` (если поле пустое), чтобы:
-  - handle автоматически попал в paywall-логику (уже готово),
-  - бренд видел IG после unlock без отдельной переработки витрины.
+### Креатор (owner)
+- Статус: `Не подключено` / `Подключено` / `Ошибка` / `Истекло`
+- Отображаем свой `@handle`
+- Кнопки: `🔗 Подключить Instagram (PRO)` / `❌ Отключить`
 
 ---
 
-## 3) UX правила
+## 3) OAuth Flow (минимальный)
 
-### Витрина креатора (brand-facing)
-- **До unlock:** можно показать только trust-сигнал
-  - `Instagram: ✅ verified`
-  - **нельзя** показывать `@handle` и url.
-- **После unlock:**
-  - показываем `@handle` + url,
-  - если есть кэш stats (Level A) — добавить “followers / ER / posts/30d”.
+### 3.1 Entry: кнопка в боте
+Бот показывает кнопку `🔗 Подключить Instagram (PRO)`.
 
-### Профиль креатора (owner-facing)
-- Кнопка `🔗 Верифицировать IG`.
-- Экран выбора: `Universal (код-коммент)` / `OAuth (скоро)`.
-- Выдача кода + понятная инструкция.
+По нажатию бот выдаёт **URL‑кнопку** (внешняя ссылка):
+- `PUBLIC_BASE_URL/api/ig/oauth/start?t=<one_time_token>`
 
----
+`one_time_token` создаётся ботом и хранится в Redis (TTL 10 минут). Это заменяет веб‑логин и жёстко связывает браузер‑флоу с `wsId`.
 
-## 4) Redis keys
+### 3.2 Start endpoint
+`/api/ig/oauth/start`:
+- consume `t` (one‑time)
+- создаёт `state` (nonce), кладёт в Redis (TTL 10 минут)
+- делает `302` на Meta OAuth URL
 
-- `ig_pending:<CODE>` (TTL = `IG_VERIFY_CODE_TTL_SEC`) → `{ wsId, created_at, expires_at }`
-- `ig_ws_pending:<wsId>` (TTL = `IG_VERIFY_CODE_TTL_SEC`) → `<CODE>`
+### 3.3 Callback
+`/api/ig/oauth/callback`:
+- проверяет `state` (существует, не истёк, одноразовый)
+- меняет `code → access_token` (и при возможности → long‑lived)
+- запрашивает Graph профиль (минимум: `ig_user_id`, `username`, `account_type`)
+- сохраняет привязку и включает Verified
+- `302` обратно в “returnTo” (или на нейтральную страницу “Готово, вернись в Telegram”)
 
-Цель: ускорить матчинги при cron и снизить DB нагрев.
-
----
-
-## 5) Cron (следующий шаг после skeleton)
-
-`/api/cron/ig-verify-tick`:
-- Redis lock + (где нужно) SQL guard,
-- читает комментарии на verification-посте (Graph для *нашего* аккаунта),
-- находит коды, выставляет `verified=true`, сохраняет `handle` из автора,
-- чистит pending.
+### 3.4 Disconnect
+`/api/ig/oauth/disconnect`:
+- только owner
+- снимает Verified
+- удаляет/инвалидирует токены
 
 ---
 
-## 6) Value & Metrics
+## 4) Endpoints (контракты)
 
-### Что получает креатор
-- **Trust badge** в витрине: бренды быстрее принимают решение.
-- Снижение “пустых” диалогов: меньше подозрений и спама.
-- В будущем (Level A/PRO): автопост/инсайты/авто-уведомления.
+### GET `/api/ig/oauth/start`
+- **Auth:** `t=<one_time_token>` (Redis TTL 10m, consume once)
+- **Side effects:** создать `state` в Redis, redirect на OAuth
 
-### Что получает бренд
-- Быстрый trust-signal до unlock.
-- После unlock: быстрый доступ к IG как к каналу проверки контента.
+### GET `/api/ig/oauth/callback`
+- **Auth:** `state` (Redis TTL 10m, consume once)
+- **Side effects:** upsert связку в БД, включить verified
 
-### Что получает продукт (мы)
-- Рост конверсии в unlock (когда доверие выше).
-- Рост accept rate по заявкам.
-- PRO upsell через Level A.
+### POST `/api/ig/oauth/disconnect`
+- **Auth:** `t=<one_time_token>` (или отдельная owner‑сессия, если появится веб‑кабинет)
+- **Side effects:** revoke/disconnect
 
-### KPI (минимальный набор)
-- `unlock_rate` в витрине (brand-facing) до/после бейджа.
-- `apply_to_accept_rate` (бренд принял → списание).
-- `time_to_first_message` (минуты/часы).
-- `profile_completion_rate` (доля заполненных профилей).
-- `verified_share` (доля витрин с verified).
+### GET `/api/ig/oauth/status`
+- **Auth:** только owner (через `t`)
+- **Returns:** status + `@handle` (только owner)
+
+> Вариант на будущее: если появится полноценный web‑кабинет, `t` можно заменить на нормальную сессию. Для STEP140A достаточно one‑time token.
 
 ---
 
-## 7) DoD для STEP136 (skeleton)
+## 5) Состояния (state machine)
 
-- `/start ig_verify` и `/start igv_<handle>` открывают экран верификации.
-- Добавлены action keys и UI flow.
-- **Никаких IG API вызовов**.
-- **Нельзя** выставлять `verified=true` «по кнопке» (только pending).
-- В vitrina: **badge показывается до unlock**, но handle не раскрывается.
-- `npm run actions:check` проходит.
-- Старые кнопки/forward не ломаются.
+- `NONE` — не подключено
+- `PENDING` — стартовали OAuth (state создан), ждём callback
+- `CONNECTED` — verified активен
+- `ERROR` — ошибка на callback/обмене/Graph
+- `DISCONNECTED` — отключено пользователем
+- `EXPIRED` — ревокнули/истекло (в STEP140A можно не детектить активно; просто ставим при явной ошибке Graph)
+
+Правило: **Verified badge = (status == CONNECTED)**.
+
+---
+
+## 6) Data model
+
+### 6.1 Новая таблица: `ig_oauth_accounts`
+Одна запись на `ws_id`.
+
+Минимальные поля:
+- `ws_id bigint primary key`
+- `ig_user_id text not null`
+- `ig_username text not null`
+- `account_type text null` (creator/business/personal/unknown)
+- `status text not null` (см. state machine)
+- `access_token_enc text not null` (шифртекст)
+- `token_expires_at timestamptz null`
+- `scope text null`
+- `connected_at timestamptz not null default now()`
+- `updated_at timestamptz not null default now()`
+- `last_error_code text null`
+- `last_error_msg_short text null`
+- `last_error_at timestamptz null`
+
+### 6.2 Совместимость с текущей витриной/контактами
+Для UI и paywall‑логики сохраняем **public‑флаги** в `workspace_settings.profile_contacts`:
+
+`profile_contacts.ig`:
+- `verified: boolean`
+- `verified_at: timestamptz`
+- `verified_method: 'oauth'`
+- `handle: string` (контакт; выдаём только после unlock)
+- `url: string` (контакт; выдаём только после unlock)
+
+**Важно:** любые ответы бренду используют существующую redaction/paywall‑логику (см. `docs/20_CONTACTS_MODEL.md`). До unlock `handle/url` должны быть вычищены.
+
+---
+
+## 7) Redis keys (минимум)
+
+### 7.1 One‑time link token (из Telegram)
+- `ig_oauth:link:<token>` (TTL 10m) → `{ wsId, ownerUserId, returnTo }`
+
+### 7.2 OAuth state
+- `ig_oauth:state:<nonce>` (TTL 10m) → `{ wsId, ownerUserId, returnTo, code_verifier? }`
+
+### 7.3 Идемпотентность (опционально)
+- `ig_oauth:lock:ws:<wsId>` (TTL 30s) — чтобы два callback’а не перетёрли статус
+
+---
+
+## 8) Security
+
+- **State обязателен** (anti‑CSRF) и строго одноразовый.
+- `t` (one‑time link) строго одноразовый.
+- Токен шифруем: `IG_TOKEN_ENC_KEY` (32 bytes), алгоритм AES‑GCM (или libsodium sealed box).
+- В логах допускается только `cid`/`wsId` и короткий `error_code` (без токенов/урлов).
+- Минимальный scope: только то, что реально нужно на STEP140A.
+
+---
+
+## 9) Rollout
+
+Feature flag:
+- `IG_OAUTH_ENABLED=1` (показывать кнопку подключения и включать endpoints)
+
+По умолчанию:
+- flag = 0 → UI скрыт, endpoints могут отвечать `404/disabled`.
+
+---
+
+## 10) Минимальный file plan (для реализации STEP140A)
+
+> Это список **минимальных** файлов/правок в стиле текущего репо (Vercel `api/`, monolith‑bot, `src/db/queries.js`).
+
+### Добавить
+- `api/ig/oauth/start.js`
+- `api/ig/oauth/callback.js`
+- `api/ig/oauth/status.js`
+- `api/ig/oauth/disconnect.js`
+- `migrations/041_ig_oauth_accounts.sql`
+- `src/lib/igOAuth.js` (формирование OAuth URL, обмен code→token, Graph запрос профиля)
+- `src/lib/cryptoBox.js` (encrypt/decrypt токена)
+
+### Изменить
+- `src/lib/config.js`
+  - добавить env: `IG_OAUTH_ENABLED`, `IG_OAUTH_CLIENT_ID`, `IG_OAUTH_CLIENT_SECRET`, `IG_OAUTH_REDIRECT_URI`, `IG_TOKEN_ENC_KEY`
+- `src/db/queries.js`
+  - `upsertIgOauthAccount(wsId, ...)`
+  - `getIgOauthAccount(wsId)`
+  - `disconnectIgOauthAccount(wsId)`
+  - `setWsIgContactsFromOauth(wsId, { verified, verified_at, handle, url, method:'oauth' })`
+- `src/bot/bot.js`
+  - добавить экран/кнопку `🔗 Подключить Instagram (PRO)` (owner)
+  - генерировать `one_time_token` (uuid) + писать `ig_oauth:link:<token>` в Redis
+  - отдавать URL‑кнопку: `PUBLIC_BASE_URL/api/ig/oauth/start?t=<token>`
+- `src/bot/actionRegistry.js`
+  - зарегистрировать новые action keys (навигация + disconnect), затем обновить `docs/02_ACTION_KEYS_REGISTRY.md` командой `npm run actions:md`
+
+### Не трогать (на STEP140A)
+- Любые механики comment‑верификации, cron, QStash check‑now.
+
+---
+
+## 11) QA (для будущего STEP140A)
+
+- Бренд до unlock видит только `Verified` без контакта.
+- После unlock — контакт‑пакет содержит `@handle` и url.
+- Callback без state / с протухшим state / повторный state → отказ.
+- Disconnect снимает verified и чистит токен.
+- В логах нет токенов.
