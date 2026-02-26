@@ -22833,9 +22833,11 @@ if (p.a === 'a:ws_ig_verify_oauth') {
     return;
   }
   if (!CFG.PUBLIC_BASE_URL) {
-    await safeEditOrReply(ctx, '⚠️ Не настроено: PUBLIC_BASE_URL.
-
-Админ должен указать домен бота, чтобы OAuth работал.', { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) });
+    await safeEditOrReply(
+      ctx,
+      `⚠️ Не настроено: PUBLIC_BASE_URL.\n\nАдмин должен указать домен бота, чтобы OAuth работал.`,
+      { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) }
+    );
     return;
   }
 
