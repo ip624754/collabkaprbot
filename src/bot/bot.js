@@ -22852,23 +22852,73 @@ if (p.a === 'a:ws_ig_verify_oauth') {
   const url = String(CFG.PUBLIC_BASE_URL).replace(/\/$/, '') + `/api/ig/oauth/start?t=${encodeURIComponent(t)}`;
 
   const kb = new InlineKeyboard()
-    .url('🌐 Открыть подключение', url)
+    .url('🔗 Вход через Meta', url)
     .row()
-    .text('🔄 Статус', `a:ws_ig_verify_status|ws:${wsId}|ret:${String(p.ret || 'ws_profile')}`)
-    .row()
+    .text('❓ Почему так?', `a:ws_ig_verify_oauth_help|ws:${wsId}|ret:${String(p.ret || 'ws_profile')}`)
     .text('⬅️ Назад', `a:ws_ig_verify|ws:${wsId}|ret:${String(p.ret || 'ws_profile')}`)
+    .row()
     .text('📋 Меню', 'a:menu')
     .row()
     .text('🏠 Home', 'a:home');
 
   const msg =
-    `🔗 <b>Подключение Instagram через OAuth</b>\n\n` +
-    `1) Нажми кнопку ниже и авторизуйся в Meta/Instagram\n` +
-    `2) Разреши доступ приложению\n` +
-    `3) После успеха вернись в бот — бейдж <b>verified</b> появится автоматически\n\n` +
-    `ℹ️ Требуется IG <b>Business/Creator</b>, привязанный к Facebook Page.`;
+    `🔗 <b>Подключение Instagram происходит через Meta</b>\n\n` +
+    `Это официальный вход Instagram Graph через Meta (Facebook) — он нужен из‑за привязки проф. Instagram к Facebook‑Странице.\n` +
+    `Вы просто подтверждаете ваш профиль.\n\n` +
+    `<b>Что дальше:</b>\n` +
+    `1) Нажми «🔗 Вход через Meta»\n` +
+    `2) Подтверди доступ приложению\n` +
+    `3) Вернёшься в бот — появится ✅ <b>Verified</b>\n\n` +
+    `Если открылось внутри Telegram — нажми ⋮ → «Открыть в браузере».`;
 
   await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  return;
+}
+
+if (p.a === 'a:ws_ig_verify_oauth_help') {
+  await ctx.answerCallbackQuery();
+  const wsId = Number(p.w || p.ws || 0);
+  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+
+  if (!CFG.IG_OAUTH_ENABLED) {
+    await safeEditOrReply(ctx, '⚠️ Instagram OAuth пока отключён администратором (IG_OAUTH_ENABLED=0).', { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) });
+    return;
+  }
+  if (!CFG.PUBLIC_BASE_URL) {
+    await safeEditOrReply(
+      ctx,
+      `⚠️ Не настроено: PUBLIC_BASE_URL.\n\nАдмин должен указать домен бота, чтобы OAuth работал.`,
+      { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) }
+    );
+    return;
+  }
+
+  const ws = await db.getWorkspace(u.id, wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  // New one-time token for web OAuth start (TTL 10 min).
+  const t = randomToken();
+  const payload = { wsId: Number(wsId), ownerUserId: Number(u.id), tgId: Number(ctx.from.id), created_at: new Date().toISOString() };
+  try { await redis.set(k(['ig_oauth_t', t]), payload, { ex: 10 * 60 }); } catch {}
+
+  const url = String(CFG.PUBLIC_BASE_URL).replace(/\/$/, '') + `/api/ig/oauth/start?t=${encodeURIComponent(t)}`;
+  const ret = String(p.ret || 'ws_profile');
+
+  const text = `❓ <b>Почему вход через Meta?</b>
+
+• Instagram Graph работает через Meta, потому что проф. Instagram связан с Facebook‑Страницей.
+• Это официальный способ подтвердить, что аккаунт принадлежит вам.
+• Мы не показываем ваш @username брендам до разлока контактов.`;
+
+  const kb = new InlineKeyboard()
+    .url('🔗 Вход через Meta', url)
+    .row()
+    .text('⬅️ Назад', `a:ws_ig_verify_oauth|ws:${wsId}|ret:${ret}`)
+    .text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   return;
 }
 
