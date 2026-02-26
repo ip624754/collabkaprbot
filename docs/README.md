@@ -43,6 +43,7 @@
 - `21_MENU_SPEC.md` — контракт навигации (Back/Menu/Home, `ret`)
 - `22_OFFER_WIZARD_SPEC.md` — визард оффера (финальный экран без тупиков)
 - `23_LEAD_NOTES_SPEC.md` — Curator Notes по заявкам брендов
+- `24_IG_INTEGRATION_SPEC.md` — Instagram integration: trust badge + paywall + PRO hooks
 
 ## 3) Protocol / Process (как работаем)
 Папка: `docs/process/`
