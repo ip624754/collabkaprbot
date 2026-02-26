@@ -1,4 +1,5 @@
 import { Bot, InlineKeyboard, InputFile } from 'grammy';
+import crypto from 'crypto';
 import { CFG, assertEnv } from '../lib/config.js';
 import logger from '../lib/logger.js';
 import { redis, k, rateLimit, consumeOnce, acquireLock, releaseLock } from '../lib/redis.js';
@@ -40,6 +41,11 @@ function envInt(name, def, opts = {}) {
 const CONTACT_UNLOCK_COST = envInt('CONTACT_UNLOCK_COST', 1, { min: 0, max: 10 });
 const CONTACT_UNLOCK_TTL_DAYS = envInt('CONTACT_UNLOCK_TTL_DAYS', 30, { min: 1, max: 365 });
 const CONTACT_UNLOCK_TTL_SEC = CONTACT_UNLOCK_TTL_DAYS * 24 * 60 * 60;
+
+// IG Verification (Level B comment-code / Level A OAuth)
+// TTL for pending codes (seconds). No IG API calls in hot paths; verification is async (cron/manual check).
+const IG_VERIFY_CODE_TTL_SEC = envInt('IG_VERIFY_CODE_TTL_SEC', 2 * 60 * 60, { min: 300, max: 24 * 60 * 60 });
+
 
 // Brand Applications (Creator → Brand): accept opens dialog and charges Brand Pass credits.
 // Optional env override:
@@ -7405,7 +7411,7 @@ function normalizeIgHandle(input) {
 
 
 // STEP106: Structured contacts (profile_contacts) — validation/normalization helpers.
-const PROFILE_CONTACTS_KEYS_V1 = ['tg', 'email', 'phone', 'site', 'other'];
+const PROFILE_CONTACTS_KEYS_V1 = ['tg', 'email', 'phone', 'site', 'other', 'ig'];
 
 function wsProfileContactsObj(ws) {
   const raw = ws?.profile_contacts;
@@ -7414,10 +7420,47 @@ function wsProfileContactsObj(ws) {
   else if (typeof raw === 'string') {
     try { o = JSON.parse(raw); } catch { o = {}; }
   }
+
   const out = {};
   for (const k of PROFILE_CONTACTS_KEYS_V1) {
     const v = o?.[k];
     if (v === null || v === undefined) continue;
+
+    // Preserve IG verification subtree (object) so editing tg/email/phone/site won't wipe it.
+    if (k === 'ig') {
+      if (v && typeof v === 'object') {
+        const ig = {};
+        const handle = v.handle ? normalizeIgHandle(v.handle) : null;
+        if (handle) ig.handle = handle;
+
+        // URL is derived from handle if not provided
+        if (v.url) {
+          const url = String(v.url || '').trim();
+          if (url) ig.url = url;
+        } else if (handle) {
+          ig.url = `https://www.instagram.com/${handle}/`;
+        }
+
+        if (v.verified === true) ig.verified = true;
+        if (v.verified_at) ig.verified_at = String(v.verified_at);
+        if (v.verified_method) ig.verified_method = String(v.verified_method);
+
+        if (v.pending && typeof v.pending === 'object') {
+          const code = String(v.pending.code || '').trim().toUpperCase();
+          const expiresAt = String(v.pending.expires_at || '').trim();
+          if (code && expiresAt) ig.pending = { code, expires_at: expiresAt };
+        }
+
+        // Keep Level A subtree as-is (tokens are stored encrypted).
+        if (v.graph && typeof v.graph === 'object') {
+          ig.graph = v.graph;
+        }
+
+        if (Object.keys(ig).length) out.ig = ig;
+      }
+      continue;
+    }
+
     const s = String(v).trim();
     if (!s) continue;
     out[k] = s;
@@ -7621,6 +7664,8 @@ function wsProfileKb(wsId, ws) {
   const fCount = Array.isArray(ws.profile_formats) ? ws.profile_formats.length : 0;
   const contactsObj = wsProfileContactsObj(ws);
   const cCount = wsProfileContactsCount(contactsObj, ['tg', 'email', 'phone', 'site']);
+  const igMeta = (contactsObj.ig && typeof contactsObj.ig === 'object') ? contactsObj.ig : null;
+  const igVerified = igMeta?.verified === true;
 
   // UX: "Предпросмотр" — главный CTA, дальше парные кнопки по смыслу.
   const kb = new InlineKeyboard()
@@ -7636,6 +7681,8 @@ function wsProfileKb(wsId, ws) {
     .row()
     .text('📸 Instagram', `a:ws_prof_edit|ws:${wsId}|f:ig`)
     .text('🔗 Портфолио', `a:ws_prof_edit|ws:${wsId}|f:portfolio`)
+    .row()
+    .text(igVerified ? '✅ IG verified' : '🔗 Верифицировать IG', `a:ws_ig_verify|ws:${wsId}|ret:ws_profile`)
     .row()
     .text('✏️ Гео', `a:ws_prof_edit|ws:${wsId}|f:geo`)
     .text('📝 Описание', `a:ws_prof_edit|ws:${wsId}|f:about`)
@@ -7653,6 +7700,215 @@ function wsProfileKb(wsId, ws) {
 
   return kb;
 }
+
+// -----------------------------
+// IG verification (Level B skeleton)
+// -----------------------------
+
+function igPendingKey(code) {
+  return k(['ig_pending', String(code || '').trim().toUpperCase()]);
+}
+
+function igWsPendingKey(wsId) {
+  return k(['ig_ws_pending', Number(wsId || 0)]);
+}
+
+function randomIgCode(len = 6) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < len; i++) {
+    const b = crypto.randomBytes(1)[0];
+    out += alphabet[b % alphabet.length];
+  }
+  return `COLLABKA-${out}`;
+}
+
+function wsIgMeta(ws) {
+  const o = wsProfileContactsObj(ws);
+  const ig = (o.ig && typeof o.ig === 'object') ? o.ig : null;
+  return ig;
+}
+
+async function renderIgVerifyEntryFromStart(ctx, ownerUserId, opts = {}) {
+  const handleHint = opts?.handleHint ? normalizeIgHandle(opts.handleHint) : null;
+  let wss = [];
+  try { wss = await db.listWorkspaces(ownerUserId); } catch { wss = []; }
+
+  if (!wss || wss.length === 0) {
+    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    const msg = `🔗 <b>Верификация Instagram</b>
+
+Сначала подключи канал (бот должен быть админом) и создай витрину.
+
+Потом вернись сюда: /start ig_verify`;
+    await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb });
+    return;
+  }
+
+  if (wss.length === 1) {
+    await renderWsIgVerifyStart(ctx, ownerUserId, Number(wss[0].id), { ret: 'ws_profile', handleHint });
+    return;
+  }
+
+  const kb = new InlineKeyboard();
+  for (const ws of wss.slice(0, 10)) {
+    const wsId = Number(ws.id || 0);
+    if (!wsId) continue;
+    const label = ws.profile_title || (ws.channel_username ? ('@' + String(ws.channel_username).replace(/^@/, '')) : (ws.title || `Канал #${wsId}`));
+    kb.text(`👤 ${clipText(label, 20)}`, `a:ws_ig_verify|ws:${wsId}|ret:ws_profile`);
+    kb.row();
+  }
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  const msg = `🔗 <b>Верификация Instagram</b>
+
+Выбери канал/витрину, для которой хочешь включить IG-верификацию.`;
+  await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function renderWsIgVerifyStart(ctx, ownerUserId, wsId, opts = {}) {
+  const ret = String(opts.ret || 'ws_profile');
+  const ws = isSuperAdminTg(ctx.from?.id) ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
+  if (!ws) {
+    await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { reply_markup: navKb('a:ws_list') });
+    return;
+  }
+
+  const igMeta = wsIgMeta(ws) || {};
+  const verified = igMeta.verified === true;
+  const pending = (igMeta.pending && typeof igMeta.pending === 'object') ? igMeta.pending : null;
+
+  const igHandle = normalizeIgHandle(ws.profile_ig) || (igMeta.handle ? normalizeIgHandle(igMeta.handle) : null);
+
+  const lines = [];
+  lines.push(`🔗 <b>Верификация Instagram</b>`);
+  lines.push('');
+  lines.push(`Канал: <b>${escapeHtml(ws.profile_title || (ws.channel_username ? '@' + ws.channel_username : ws.title))}</b>`);
+  lines.push('');
+  if (verified) {
+    lines.push(`Статус: ✅ <b>verified</b>`);
+    lines.push(`Бейдж виден брендам в витрине <b>до</b> разблокировки контактов.`);
+  } else if (pending?.code) {
+    lines.push(`Статус: ⏳ <b>ожидаем подтверждение</b>`);
+    lines.push(`Код: <code>${escapeHtml(String(pending.code))}</code>`);
+    if (pending.expires_at) lines.push(`Истекает: <code>${escapeHtml(String(pending.expires_at))}</code>`);
+    lines.push('');
+    lines.push(`Важно: ник/ссылка сохраняются <b>только</b> из автора комментария. Ввод пользователя игнорируется (защита от подмены).`);
+  } else {
+    lines.push(`Статус: —`);
+    lines.push(`Можно включить Universal-верификацию (код-коммент под нашим постом).`);
+    lines.push('');
+    lines.push(`Важно: ник/ссылка сохраняются <b>только</b> из автора комментария. Ввод пользователя игнорируется (защита от подмены).`);
+  }
+
+  if (igHandle) {
+    lines.push('');
+    lines.push(`Твой IG в профиле: <code>@${escapeHtml(igHandle)}</code>`);
+  }
+
+  const kb = new InlineKeyboard()
+    .text('✅ Universal (код-коммент)', `a:ws_ig_verify_comment|ws:${wsId}|ret:${ret}`)
+    .row()
+    .text('🔐 OAuth (Business/Creator)', `a:ws_ig_verify_oauth|ws:${wsId}|ret:${ret}`)
+    .row()
+    .text('🔄 Статус', `a:ws_ig_verify_status|ws:${wsId}|ret:${ret}`)
+    .row()
+    .text('⬅️ Назад', ret === 'ws_open' ? `a:ws_open|ws:${wsId}` : `a:ws_profile|ws:${wsId}`)
+    .text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, lines.join('\n'), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderWsIgVerifyComment(ctx, ownerUserId, wsId, opts = {}) {
+  const ret = String(opts.ret || 'ws_profile');
+  const ws = isSuperAdminTg(ctx.from?.id) ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
+  if (!ws) {
+    await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { reply_markup: navKb('a:ws_list') });
+    return;
+  }
+
+  const code = randomIgCode(6);
+  const expiresAt = addMinutes(new Date(), Math.ceil(IG_VERIFY_CODE_TTL_SEC / 60)).toISOString();
+
+  // Best-effort Redis accelerator: code -> wsId
+  try {
+    await redis.set(igPendingKey(code), { wsId: Number(wsId), created_at: new Date().toISOString(), expires_at: expiresAt }, { ex: IG_VERIFY_CODE_TTL_SEC });
+    await redis.set(igWsPendingKey(wsId), String(code), { ex: IG_VERIFY_CODE_TTL_SEC });
+  } catch {}
+
+  // Persist pending in DB (so the state survives Redis resets)
+  const o = wsProfileContactsObj(ws);
+  const ig0 = (o.ig && typeof o.ig === 'object') ? o.ig : {};
+
+  // Clear previous pending (best-effort)
+  if (ig0?.pending?.code) {
+    try { await redis.del(igPendingKey(String(ig0.pending.code))); } catch {}
+  }
+
+  ig0.pending = { code, expires_at: expiresAt };
+  ig0.verified_method = 'comment';
+  if (ig0.verified !== true) ig0.verified = false;
+  o.ig = ig0;
+
+  await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: 1 });
+  try { await db.auditWorkspace(wsId, ownerUserId, 'ws.ig_verify_pending_created', { code_len: String(code).length }); } catch {}
+
+  const lines = [];
+  lines.push(`📌 <b>Universal-верификация (код-коммент)</b>`);
+  lines.push('');
+  lines.push(`Твой код:`);
+  lines.push(`<code>${escapeHtml(code)}</code>`);
+  lines.push('');
+  lines.push(`Что сделать:`);
+  lines.push(`1) Открой <b>@collabka_offers</b>`);
+  lines.push(`2) Найди закреплённый пост “Verification”`);
+  lines.push(`3) Оставь комментарий с кодом <code>${escapeHtml(code)}</code>`);
+  lines.push('');
+  lines.push(`⚠️ Важно: мы сохраняем IG handle <b>только</b> из автора комментария. Ввод пользователя игнорируется (защита от подмены).`);
+  lines.push('');
+  lines.push(`После комментария нажми «🔄 Статус».
+
+ℹ️ В этом шаге проверка комментария ещё не подключена (это будет следующим патчем).`);
+
+  const kb = new InlineKeyboard()
+    .text('🔄 Статус', `a:ws_ig_verify_status|ws:${wsId}|ret:${ret}`)
+    .row()
+    .text('⬅️ Назад', `a:ws_ig_verify|ws:${wsId}|ret:${ret}`)
+    .text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, lines.join('\n'), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderWsIgVerifyStatus(ctx, ownerUserId, wsId, opts = {}) {
+  const ret = String(opts.ret || 'ws_profile');
+  const ws = isSuperAdminTg(ctx.from?.id) ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
+  if (!ws) {
+    await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { reply_markup: navKb('a:ws_list') });
+    return;
+  }
+
+  const igMeta = wsIgMeta(ws) || {};
+  const verified = igMeta.verified === true;
+  const pending = (igMeta.pending && typeof igMeta.pending === 'object') ? igMeta.pending : null;
+
+  if (verified) {
+    try { await ctx.answerCallbackQuery({ text: '✅ IG verified', show_alert: false }); } catch {}
+  } else if (pending?.code) {
+    try { await ctx.answerCallbackQuery({ text: '⏳ Ожидаем подтверждение', show_alert: false }); } catch {}
+  } else {
+    try { await ctx.answerCallbackQuery({ text: 'Статус: —', show_alert: false }); } catch {}
+  }
+
+  // NOTE: In this STEP we do NOT call IG API and do NOT auto-verify.
+  // Real check will be done in a cron tick (next STEP).
+
+  await renderWsIgVerifyStart(ctx, ownerUserId, wsId, { ret, handleHint: opts?.handleHint || null });
+}
+
 
 
 function hasText(v) {
@@ -8564,21 +8820,26 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     return null;
   })();
 
+  // Trust layer: verified badge is allowed BEFORE unlock, but handle/url are paywalled (contacts).
   let igLine = '';
   if (ig) {
     if (linksEnabled) {
       igLine =
+        `${igVerified ? '✅ <b>verified</b>\n' : ''}` +
         `<a href="https://instagram.com/${escapeHtml(ig)}">instagram.com/${escapeHtml(ig)}</a>\n` +
         `<code>@${escapeHtml(ig)}</code>`;
     } else {
       if (isPreview) {
         // Curator preview: show as plain text (not clickable) to assist moderation/review.
         const igPlain = deLinkifyText(`instagram.com/${ig} • @${ig}`);
-        igLine = `<code>${escapeHtml(igPlain)}</code>`;
+        igLine = `${igVerified ? '✅ verified • ' : ''}<code>${escapeHtml(igPlain)}</code>`;
       } else {
-        igLine = `<b>🔒 скрыто</b> (открывается через «${escapeHtml(contactUnlockBtnLabel())}»)`;
+        igLine = `${igVerified ? '✅ <b>verified</b> · ' : ''}<b>🔒 скрыто</b> (открывается через «${escapeHtml(contactUnlockBtnLabel())}»)`;
       }
     }
+  } else if (igVerified) {
+    // Verified but handle is not stored in legacy field yet — show only the badge.
+    igLine = `✅ <b>verified</b>`;
   }
 
   let portLine = '';
@@ -18326,6 +18587,12 @@ if (payload?.type === 'bxo') {
       return ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     }
 
+    if (payload?.type === 'ig_verify') {
+      // IG verification entrypoint (payload has priority over ui_mode gate)
+      await renderIgVerifyEntryFromStart(ctx, u.id, { handleHint: payload.handle || null });
+      return;
+    }
+
     if (payload?.type === 'fs') {
       // Founder Sale deep-link: /start fs_* → open the promo screen.
       await renderFounderSale(ctx, u, { edit: false, ret: 'home' });
@@ -22550,6 +22817,43 @@ if (p.a === 'a:ws_ig_dm') {
   const tone = String(p.tone || 'soft');
   const i = Number(p.i || 0);
   await renderWsIgDmTemplate(ctx, u.id, wsId, tone, i);
+  return;
+}
+
+
+// IG verification (Level B skeleton)
+if (p.a === 'a:ws_ig_verify') {
+  await ctx.answerCallbackQuery();
+  const wsId = Number(p.w || p.ws || 0);
+  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+  const ret = String(p.ret || 'ws_profile');
+  await renderWsIgVerifyStart(ctx, u.id, wsId, { ret });
+  return;
+}
+
+if (p.a === 'a:ws_ig_verify_comment') {
+  await ctx.answerCallbackQuery();
+  const wsId = Number(p.w || p.ws || 0);
+  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+  const ret = String(p.ret || 'ws_profile');
+  await renderWsIgVerifyComment(ctx, u.id, wsId, { ret });
+  return;
+}
+
+if (p.a === 'a:ws_ig_verify_status') {
+  const wsId = Number(p.w || p.ws || 0);
+  if (!wsId) { try { await ctx.answerCallbackQuery(); } catch {} await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+  const ret = String(p.ret || 'ws_profile');
+  await renderWsIgVerifyStatus(ctx, u.id, wsId, { ret });
+  return;
+}
+
+if (p.a === 'a:ws_ig_verify_oauth') {
+  try { await ctx.answerCallbackQuery({ text: 'OAuth (Business/Creator) будет добавлен следующим шагом.', show_alert: true }); } catch { try { await ctx.answerCallbackQuery(); } catch {} }
+  const wsId = Number(p.w || p.ws || 0);
+  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+  const ret = String(p.ret || 'ws_profile');
+  await renderWsIgVerifyStart(ctx, u.id, wsId, { ret });
   return;
 }
 

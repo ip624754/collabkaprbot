@@ -243,6 +243,15 @@ export function parseStartPayload(text) {
   m = t.match(/\/start\s+fs_(\w+)/);
   if (m) return { type: 'fs', tag: m[1] };
 
+  // IG verification deep-links (Level B / Level A entrypoint)
+  // - /start ig_verify
+  // - /start ig_verify_<handle>
+  // - /start igv_<handle>
+  m = t.match(/\/start\s+igv_([A-Za-z0-9._]{2,30})/i);
+  if (m) return { type: 'ig_verify', handle: String(m[1] || '').trim() || null };
+  m = t.match(/\/start\s+ig_verify(?:_([A-Za-z0-9._]{2,30}))?/i);
+  if (m) return { type: 'ig_verify', handle: m[1] ? String(m[1]).trim() : null };
+
   // Lightweight acquisition source markers (no business logic):
   // - /start src_tg  (shared in Telegram)
   // - /start src_ig  (shared via Instagram)
