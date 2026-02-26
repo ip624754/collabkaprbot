@@ -1,6 +1,6 @@
 import { CFG } from '../../../src/lib/config.js';
 import { consumeOnce, k } from '../../../src/lib/redis.js';
-import { exchangeCodeForShortLivedToken, exchangeForLongLivedToken, listPages, getPageIgBusinessAccount, getIgUser } from '../../../src/lib/igOAuth.js';
+import { exchangeCodeForShortLivedToken, exchangeForLongLivedToken, listPages, getPageIgBusinessAccount, getIgUser, getMe, listPermissions, listBusinesses, listBusinessPages } from '../../../src/lib/igOAuth.js';
 import { encryptText } from '../../../src/lib/cryptoBox.js';
 import { tgSendMessage } from '../../../src/lib/tgApi.js';
 import * as db from '../../../src/db/queries.js';
@@ -65,11 +65,33 @@ export default async function handler(req, res) {
 
     const tokenExpiresAt = expiresIn > 0 ? new Date(Date.now() + expiresIn * 1000).toISOString() : null;
 
-    // 3) find Page-backed IG user
+    // 3) Discover Page-backed IG user.
     // Use the short-lived token for asset discovery: it is guaranteed to be tied to the just-approved
     // Business Login session and its granular asset selection.
+    let me = null;
+    let perms = null;
+    let biz = null;
+
+    try { me = await getMe({ accessToken: shortToken }); } catch {}
+    try { perms = await listPermissions({ accessToken: shortToken }); } catch {}
+
     const pages = await listPages({ accessToken: shortToken });
-    const data = Array.isArray(pages?.data) ? pages.data : [];
+    let data = Array.isArray(pages?.data) ? pages.data : [];
+
+    // Fallback: some Meta account types (and some New Page Experience setups) don't surface Pages in /me/accounts,
+    // but do surface them via Business Manager edges. This requires business_management.
+    if (data.length === 0) {
+      try {
+        biz = await listBusinesses({ accessToken: shortToken });
+        const bizList = Array.isArray(biz?.data) ? biz.data : [];
+        const agg = [];
+        for (const b of bizList.slice(0, 10)) {
+          const pages2 = await listBusinessPages({ businessId: b.id, accessToken: shortToken });
+          if (Array.isArray(pages2?.data)) agg.push(...pages2.data.map(p => ({ ...p, _bizId: b.id })));
+        }
+        if (agg.length) data = agg;
+      } catch {}
+    }
 
     function pickId(x) {
       if (!x) return null;
@@ -134,22 +156,40 @@ export default async function handler(req, res) {
     }
 
     if (!igUserId) {
-      const pagesCount = data.length;
+            const pagesCount = data.length;
       const diagTxt = (() => {
         try {
-          const items = diag.slice(0, 8).map(d => {
+          const permsArr = Array.isArray(perms?.data) ? perms.data : [];
+          const granted = permsArr.filter(x => x?.status === 'granted').map(x => x?.permission).filter(Boolean);
+          const denied = permsArr.filter(x => x?.status === 'declined').map(x => x?.permission).filter(Boolean);
+
+          const bizCount = Array.isArray(biz?.data) ? biz.data.length : 0;
+
+          const items = diag.slice(0, 10).map(d => {
             if (d.ok) return `page ${d.pageId}: ok (hasIG=${d.hasIg ? 'yes' : 'no'})`;
             return `page ${d.pageId}: err (${d.code || 'code?'}) ${d.msg}`;
           }).join('<br>');
-          if (!items) return '';
-          return `<hr><p style="font-size:12px;opacity:.8"><b>debug</b>: pages=${pagesCount}<br>${items}</p>`;
+
+          const head = [
+            me?.id ? `me=${esc(me.id)}` : null,
+            `pages=${pagesCount}`,
+            bizCount ? `biz=${bizCount}` : null,
+          ].filter(Boolean).join(' · ');
+
+          const permsLine = granted.length
+            ? `<br>perms(granted): ${esc(granted.slice(0, 12).join(','))}${granted.length > 12 ? '…' : ''}`
+            : (denied.length ? `<br>perms(denied): ${esc(denied.slice(0, 12).join(','))}${denied.length > 12 ? '…' : ''}` : '');
+
+          const body = items ? `<br>${items}` : '';
+
+          return `<hr><p style="font-size:12px;opacity:.85"><b>debug</b>: ${head}${permsLine}${body}</p>`;
         } catch {
           return '';
         }
       })();
 
       const hint = pagesCount === 0
-        ? '<h2>Meta не вернула ни одной Facebook Page</h2><p>Похоже, в окне Meta ты не выбрал(а) страницу, либо Meta не выдала доступ к страницам.</p><p>Вернись назад и выбери <b>только</b> страницу <b>Collabkapr</b> (и Instagram <b>collabkapr</b>), затем попробуй ещё раз.</p>'
+        ? '<h2>Meta не вернула ни одной Facebook Page</h2><p>Мы получили токен, но список Pages оказался пустым. Обычно это значит одно из двух: (1) Meta не выдала доступ к Pages, или (2) ты вошёл(а) через бизнес‑аккаунт/профиль, который не отдаёт Pages через Graph.</p><p>Попробуй ещё раз и выбери <b>только</b> страницу <b>Collabkapr</b> и Instagram <b>collabkapr</b>. Если снова будет 0 Pages — смотри блок <b>debug</b> ниже: он покажет, какие permissions реально выданы.</p>'
         : '<h2>Не найден Instagram, привязанный к Facebook Page</h2><p>Проверь, что IG аккаунт — профессиональный (Business/Creator) и он привязан к Facebook Page, которой ты управляешь.</p><p>Вернись в бот и попробуй ещё раз.</p>';
 
       res.status(422).send(html('No linked IG', hint + diagTxt));
