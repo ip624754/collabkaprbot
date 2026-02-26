@@ -47,7 +47,7 @@ async function jget(url) {
 }
 
 export function buildAuthorizeUrl({ state, redirectUri }) {
-  const scopes = String(CFG.IG_OAUTH_SCOPES || 'instagram_basic,pages_show_list,pages_read_engagement')
+  const scopes = String(CFG.IG_OAUTH_SCOPES || 'instagram_basic,pages_show_list,pages_read_engagement,business_management')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean)
@@ -89,6 +89,57 @@ export async function listPages({ accessToken }) {
     access_token: accessToken
   })}`;
   return await jget(url);
+}
+
+export async function getMe({ accessToken }) {
+  const url = `${base()}/me?${qs({
+    fields: 'id,name',
+    access_token: accessToken
+  })}`;
+  return await jget(url);
+}
+
+export async function listPermissions({ accessToken }) {
+  const url = `${base()}/me/permissions?${qs({
+    access_token: accessToken
+  })}`;
+  return await jget(url);
+}
+
+export async function listBusinesses({ accessToken }) {
+  const url = `${base()}/me/businesses?${qs({
+    fields: 'id,name',
+    access_token: accessToken
+  })}`;
+  return await jget(url);
+}
+
+export async function listBusinessPages({ businessId, accessToken }) {
+  const bid = encodeURIComponent(String(businessId));
+  const edges = ['owned_pages', 'client_pages'];
+  const all = [];
+  for (const edge of edges) {
+    try {
+      const url = `${base()}/${bid}/${edge}?${qs({
+        fields: 'id,name',
+        limit: 50,
+        access_token: accessToken
+      })}`;
+      const r = await jget(url);
+      if (Array.isArray(r?.data)) all.push(...r.data);
+    } catch (e) {
+      // ignore edge if not available for this business / permissions
+    }
+  }
+  const seen = new Set();
+  const uniq = [];
+  for (const p of all) {
+    const id = p?.id ? String(p.id) : null;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    uniq.push({ id, name: p?.name || null });
+  }
+  return { data: uniq };
 }
 
 export async function getPageIgBusinessAccount({ pageId, accessToken }) {
