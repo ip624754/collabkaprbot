@@ -921,6 +921,24 @@ export async function setWorkspaceSetting(workspaceId, patch) {
   );
 }
 
+// IG verification: list workspaces with pending comment-code (DB truth; Redis is only an accelerator).
+export async function listIgVerifyPendingWorkspaces(limit = 200) {
+  const lim = Math.max(1, Math.min(Number(limit || 0) || 200, 1000));
+  const r = await pool.query(
+    `select ws.id as workspace_id, ws.owner_user_id,
+            s.profile_contacts
+     from workspaces ws
+     join workspace_settings s on s.workspace_id = ws.id
+     where (s.profile_contacts->'ig'->'pending'->>'code') is not null
+       and coalesce((s.profile_contacts->'ig'->>'verified')::boolean, false) = false
+       and (s.profile_contacts->'ig'->'pending'->>'expires_at')::timestamptz > now()
+     order by ws.id asc
+     limit $1`,
+    [lim]
+  );
+  return r.rows || [];
+}
+
 // Curators
 export async function addCurator(workspaceId, curatorUserId, addedByUserId) {
   const r = await pool.query(
@@ -6157,3 +6175,59 @@ export async function atomicTransitionBroadcast(id, fromStatus, toStatus, extraF
   return r.rowCount > 0;
 }
 
+
+
+// -----------------------------
+// Instagram OAuth (Level A)
+// -----------------------------
+export async function getIgOAuthAccount(wsId) {
+  const r = await pool.query(
+    `select ws_id, ig_user_id, ig_username, account_type, status, token_expires_at, scope, connected_at, updated_at
+     from ig_oauth_accounts where ws_id=$1`,
+    [Number(wsId)]
+  );
+  return r.rows[0] || null;
+}
+
+export async function upsertIgOAuthAccount(wsId, {
+  igUserId,
+  igUsername,
+  accountType = null,
+  status = 'CONNECTED',
+  accessTokenEnc,
+  tokenExpiresAt = null,
+  scope = null
+} = {}) {
+  const r = await pool.query(
+    `insert into ig_oauth_accounts
+       (ws_id, ig_user_id, ig_username, account_type, status, access_token_enc, token_expires_at, scope, connected_at, updated_at)
+     values
+       ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
+     on conflict (ws_id)
+     do update set
+       ig_user_id=excluded.ig_user_id,
+       ig_username=excluded.ig_username,
+       account_type=excluded.account_type,
+       status=excluded.status,
+       access_token_enc=excluded.access_token_enc,
+       token_expires_at=excluded.token_expires_at,
+       scope=excluded.scope,
+       updated_at=now()
+     returning ws_id`,
+    [
+      Number(wsId),
+      String(igUserId),
+      String(igUsername),
+      accountType ? String(accountType) : null,
+      String(status || 'CONNECTED'),
+      String(accessTokenEnc || ''),
+      tokenExpiresAt ? new Date(tokenExpiresAt) : null,
+      scope ? String(scope) : null
+    ]
+  );
+  return r.rows[0] || null;
+}
+
+export async function deleteIgOAuthAccount(wsId) {
+  await pool.query(`delete from ig_oauth_accounts where ws_id=$1`, [Number(wsId)]);
+}
