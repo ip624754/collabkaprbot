@@ -232,6 +232,23 @@ export const CFG = {
     return Math.max(10, Math.min(n, 3600));
   })(),
 
+  // Instagram verification (Level B comment-code) — optional cron.
+  IG_VERIFY_TICK_ENABLED: parseBoolSafe(process.env.IG_VERIFY_TICK_ENABLED, false),
+  IG_VERIFY_ACCESS_TOKEN: process.env.IG_VERIFY_ACCESS_TOKEN || '',
+  IG_VERIFY_MEDIA_ID: process.env.IG_VERIFY_MEDIA_ID || '',
+  IG_VERIFY_COMMENTS_LIMIT: (() => {
+    const n = parseIntSafe(process.env.IG_VERIFY_COMMENTS_LIMIT, 50);
+    return Math.max(5, Math.min(n, 200));
+  })(),
+  // Instagram OAuth (Level A, OAuth-only). FREE for creators (badge + connect).
+  IG_OAUTH_ENABLED: parseBoolSafe(process.env.IG_OAUTH_ENABLED, false),
+  IG_OAUTH_CLIENT_ID: process.env.IG_OAUTH_CLIENT_ID || '',
+  IG_OAUTH_CLIENT_SECRET: process.env.IG_OAUTH_CLIENT_SECRET || '',
+  IG_OAUTH_SCOPES: process.env.IG_OAUTH_SCOPES || 'instagram_basic,pages_show_list,pages_read_engagement',
+  IG_OAUTH_GRAPH_VERSION: process.env.IG_OAUTH_GRAPH_VERSION || 'v25.0',
+  IG_TOKEN_ENC_KEY: process.env.IG_TOKEN_ENC_KEY || '',
+
+
   // Audit logs (Postgres)
   AUDIT_DB_ENABLED: parseBoolSafe(process.env.AUDIT_DB_ENABLED, true),
   // Optional write-shedding for noisy actions (reduces Neon CU; no UX impact)
@@ -298,6 +315,13 @@ export function assertEnv() {
     if (!CFG.CRON_SECRET) missing.push('CRON_SECRET');
     if (!CFG.SUPER_ADMIN_TG_IDS?.length) missing.push('SUPER_ADMIN_TG_IDS');
   }
+  if (CFG.IG_OAUTH_ENABLED) {
+    if (!CFG.PUBLIC_BASE_URL) missing.push('PUBLIC_BASE_URL');
+    if (!CFG.IG_OAUTH_CLIENT_ID) missing.push('IG_OAUTH_CLIENT_ID');
+    if (!CFG.IG_OAUTH_CLIENT_SECRET) missing.push('IG_OAUTH_CLIENT_SECRET');
+    if (!CFG.IG_TOKEN_ENC_KEY) missing.push('IG_TOKEN_ENC_KEY');
+  }
+
 
   if (missing.length) {
     throw new Error(`Missing env: ${missing.join(', ')}`);
