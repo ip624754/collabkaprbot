@@ -7809,7 +7809,7 @@ async function renderWsIgVerifyStart(ctx, ownerUserId, wsId, opts = {}) {
 
   const kb = new InlineKeyboard();
   if (verified && method === 'oauth') {
-    kb.text('🔌 Отключить', `a:ws_ig_oauth_disconnect|ws:${wsId}|ret:${ret}`).row();
+    kb.text('🔌 Отвязать Instagram', `a:ws_ig_oauth_disconnect|ws:${wsId}|ret:${ret}`).row();
   } else {
     kb.text('🔗 Подключить Instagram', `a:ws_ig_verify_oauth|ws:${wsId}|ret:${ret}`).row();
   }
@@ -22851,34 +22851,33 @@ if (p.a === 'a:ws_ig_verify_oauth') {
 
   const url = String(CFG.PUBLIC_BASE_URL).replace(/\/$/, '') + `/api/ig/oauth/start?t=${encodeURIComponent(t)}`;
 
+  const ret = String(p.ret || 'ws_profile');
   const kb = new InlineKeyboard()
     .url('🔗 Вход через Meta', url)
     .row()
-    .text('❓ Почему так?', `a:ws_ig_verify_oauth_help|ws:${wsId}|ret:${String(p.ret || 'ws_profile')}`)
-    .text('⬅️ Назад', `a:ws_ig_verify|ws:${wsId}|ret:${String(p.ret || 'ws_profile')}`)
+    .text('❓ Почему так?', `a:ws_ig_oauth_why|ws:${wsId}|ret:${ret}`)
+    .text('🔄 Статус', `a:ws_ig_verify_status|ws:${wsId}|ret:${ret}`)
     .row()
+    .text('⬅️ Назад', `a:ws_ig_verify|ws:${wsId}|ret:${ret}`)
     .text('📋 Меню', 'a:menu')
     .row()
     .text('🏠 Home', 'a:home');
 
   const msg =
     `🔗 <b>Подключение Instagram происходит через Meta</b>\n\n` +
-    `Это официальный вход Instagram Graph через Meta (Facebook) — он нужен из‑за привязки проф. Instagram к Facebook‑Странице.\n` +
+    `Это официальный вход Instagram через Meta (Facebook) — он нужен из-за привязки вашего проф. Instagram к Facebook-Странице. ` +
     `Вы просто подтверждаете ваш профиль.\n\n` +
-    `<b>Что дальше:</b>\n` +
-    `1) Нажми «🔗 Вход через Meta»\n` +
-    `2) Подтверди доступ приложению\n` +
-    `3) Вернёшься в бот — появится ✅ <b>Verified</b>\n\n` +
-    `Если открылось внутри Telegram — нажми ⋮ → «Открыть в браузере».`;
+    `После входа вы вернётесь назад в бот и у вас появится ✅ <b>Verified</b>.`;
 
   await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   return;
 }
 
-if (p.a === 'a:ws_ig_verify_oauth_help') {
+if (p.a === 'a:ws_ig_oauth_why') {
   await ctx.answerCallbackQuery();
   const wsId = Number(p.w || p.ws || 0);
   if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+  const ret = String(p.ret || 'ws_profile');
 
   if (!CFG.IG_OAUTH_ENABLED) {
     await safeEditOrReply(ctx, '⚠️ Instagram OAuth пока отключён администратором (IG_OAUTH_ENABLED=0).', { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) });
@@ -22896,19 +22895,12 @@ if (p.a === 'a:ws_ig_verify_oauth_help') {
   const ws = await db.getWorkspace(u.id, wsId);
   if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
-  // New one-time token for web OAuth start (TTL 10 min).
+  // New one-time token (TTL 10 min) for web OAuth start.
   const t = randomToken();
   const payload = { wsId: Number(wsId), ownerUserId: Number(u.id), tgId: Number(ctx.from.id), created_at: new Date().toISOString() };
   try { await redis.set(k(['ig_oauth_t', t]), payload, { ex: 10 * 60 }); } catch {}
 
   const url = String(CFG.PUBLIC_BASE_URL).replace(/\/$/, '') + `/api/ig/oauth/start?t=${encodeURIComponent(t)}`;
-  const ret = String(p.ret || 'ws_profile');
-
-  const text = `❓ <b>Почему вход через Meta?</b>
-
-• Instagram Graph работает через Meta, потому что проф. Instagram связан с Facebook‑Страницей.
-• Это официальный способ подтвердить, что аккаунт принадлежит вам.
-• Мы не показываем ваш @username брендам до разлока контактов.`;
 
   const kb = new InlineKeyboard()
     .url('🔗 Вход через Meta', url)
@@ -22918,7 +22910,77 @@ if (p.a === 'a:ws_ig_verify_oauth_help') {
     .row()
     .text('🏠 Home', 'a:home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  const msg =
+    `❓ <b>Почему вход через Meta?</b>\n\n` +
+    `• Instagram Graph работает через Meta, потому что проф. Instagram связан с Facebook-Страницей.\n` +
+    `• Это официальный способ подтвердить, что аккаунт принадлежит вам.\n` +
+    `• Бренды не увидят ваш @username до разблокировки контактов.`;
+
+  await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  return;
+}
+
+if (p.a === 'a:ws_ig_oauth_disconnect') {
+  await ctx.answerCallbackQuery();
+  const wsId = Number(p.w || p.ws || 0);
+  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+  const ret = String(p.ret || 'ws_profile');
+
+  const ws = await db.getWorkspace(u.id, wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  const kb = new InlineKeyboard()
+    .text('✅ Отвязать', `a:ws_ig_oauth_disconnect_do|ws:${wsId}|ret:${ret}`)
+    .row()
+    .text('⬅️ Назад', `a:ws_ig_verify|ws:${wsId}|ret:${ret}`)
+    .text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
+
+  const msg =
+    `🔌 <b>Отвязать Instagram?</b>\n\n` +
+    `Это действие снимет ✅ <b>Verified</b> и отключит доступ приложения к вашему Instagram.\n` +
+    `@username в профиле вы можете оставить или удалить вручную.`;
+
+  await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  return;
+}
+
+if (p.a === 'a:ws_ig_oauth_disconnect_do') {
+  await ctx.answerCallbackQuery();
+  const wsId = Number(p.w || p.ws || 0);
+  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+  const ret = String(p.ret || 'ws_profile');
+
+  const ws = await db.getWorkspace(u.id, wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  // 1) Remove OAuth binding/tokens.
+  try { await db.deleteIgOAuthAccount(wsId); } catch {}
+
+  // 2) Remove verified badge in workspace profile_contacts (keep handle as-is).
+  try {
+    const o = wsProfileContactsObj(ws);
+    const ig0 = (o.ig && typeof o.ig === 'object') ? { ...o.ig } : {};
+    delete ig0.verified;
+    delete ig0.verified_at;
+    delete ig0.verified_method;
+    delete ig0.graph;
+    if (Object.keys(ig0).length) o.ig = ig0; else delete o.ig;
+    const nextV = Math.max(1, Number(ws.profile_contacts_v || 0) + 1);
+    await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: nextV });
+    try { await db.auditWorkspace(wsId, u.id, 'ws.ig_oauth_disconnected', {}); } catch {}
+  } catch {}
+
+  try {
+    await safeEditOrReply(
+      ctx,
+      `✅ <b>Instagram отвязан</b>\n\nVerified снят. Вы можете подключить Instagram снова в любой момент.`,
+      { parse_mode: 'HTML' }
+    );
+  } catch {}
+
+  await renderWsIgVerifyStart(ctx, u.id, wsId, { ret });
   return;
 }
 
