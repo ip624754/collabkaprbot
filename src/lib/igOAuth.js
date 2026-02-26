@@ -83,13 +83,18 @@ export async function exchangeForLongLivedToken({ shortLivedToken }) {
 }
 
 export async function listPages({ accessToken }) {
-  const url = `${base()}/me/accounts?${qs({ access_token: accessToken })}`;
+  // Request page access tokens explicitly (newer Graph versions may not include it by default).
+  const url = `${base()}/me/accounts?${qs({
+    fields: 'id,name,access_token',
+    access_token: accessToken
+  })}`;
   return await jget(url);
 }
 
 export async function getPageIgBusinessAccount({ pageId, accessToken }) {
   const url = `${base()}/${encodeURIComponent(String(pageId))}?${qs({
-    fields: 'instagram_business_account',
+    // Some accounts expose the link under different fields; we try both.
+    fields: 'instagram_business_account,connected_instagram_account',
     access_token: accessToken
   })}`;
   return await jget(url);
