@@ -42,11 +42,6 @@ psql "$DATABASE_URL" -f migration_pack/00_mark_all_applied.sql
 node migrations/run.js --dry-run
 ```
 
-> ⚠️ Важно: `migration_pack/00_mark_all_applied.sql` **не выполняет миграции** — он только заполняет `schema_migrations`. Используй его лишь если ты уверен, что схема уже соответствует текущему набору файлов в `migrations/` (например, после полного dump/restore).
->
-> Если прогнать `00_mark_all_applied.sql` на базе, где часть миграций не применена, ты можешь **навсегда “проскочить”** новые таблицы/колонки (например, `brand_contact_unlocks` для защиты paid-unlock).
-
-
 ### Existing DB (не уверен в состоянии)
 ```bash
 psql "$DATABASE_URL" -f migration_pack/01_reconcile.sql
@@ -66,4 +61,8 @@ node migrations/run.js
 - `migration_pack/01_reconcile.sql` — привести БД к минимальному инфраструктурному состоянию (pgcrypto/outbox/audit/индексы/soft-delete колонки), безопасно запускать повторно.
 
 ⚠️ Эти файлы **не используются** рантаймом и не запускаются автоматически. Основной путь миграций — `node migrations/run.js` (exactly-once + checksum).
+## Важно: `migration_pack/*` не должен дублироваться в `migrations/`
+Раннер `migrations/run.js` применяет **все** файлы в `migrations/`, которые подходят под шаблон `NNN_name.sql`.
+Поэтому скрипты из `migration_pack/` (например `00_mark_all_applied.sql`, `01_reconcile.sql`) **должны жить только в `migration_pack/`** и не должны быть скопированы в `migrations/`.
 
+Иначе есть риск, что раннер применит их как обычные миграции (особенно опасно на fresh DB).
