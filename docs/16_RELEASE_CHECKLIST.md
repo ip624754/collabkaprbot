@@ -10,7 +10,7 @@
     - `QSTASH_TOKEN`
     - `QSTASH_CURRENT_SIGNING_KEY` + `QSTASH_NEXT_SIGNING_KEY`
     - `PUBLIC_BASE_URL` (или корректный `VERCEL_URL` fallback)
-  - Runbook: `docs/17_QSTASH_RUNBOOK.md`
+  - Runbook: `docs/10_QSTASH_RUNBOOK.md`
 - If schema changed: run migrations via `node migrations/run.js`
 
 ## After deploy

@@ -13,25 +13,11 @@
 
 Открой и усвой по порядку:
 
-1) `docs/15_NEW_CHAT_HANDOFF.md` — что загрузить/что вставить первым сообщением (copy‑paste)
-2) `docs/README.md` — карта документации (START HERE)
-3) `docs/00_BOOT.md` — якорь контекста (что нельзя забывать)
-4) `docs/00_CURRENT_STATE.md` — текущее состояние проекта (**source of truth**)
-4.1) (опционально) `docs/90_OWNER_RUNBOOK.md` — как владелец управляет продом (ENV/cron/migrations)
-5) `docs/12_INFRA_CONTROL_PLANE.md` — cron/locks/outbox/гарантии (как не словить дубли)
-6) `docs/11_MIGRATIONS_PACK.md` — миграции (exactly‑once runner, Neon‑safe)
-7) `docs/16_RELEASE_CHECKLIST.md` + `smoke-tests_short.md` — релиз и минимальный smoke
-
-Дальше по задаче:
-- UX / контракты навигации: `docs/spec/*` (актуальные reference‑спеки)
-- Протокол работы: `docs/process/01_*` и `docs/process/02_*`
-- Legacy reference: `docs/process/*legacy*` (исторические документы, не source of truth)
-
-**Важно про спеки:** старые файлы в корне `docs/` (например, `HOME_HUB_SPEC_V1.md`) — это **compat mirrors**. Внутри полный текст, но правки делаем в `docs/spec/*`.
-
-Если находишь расхождения между legacy и текущими доками — считаем **legacy как reference**, а **истина = `docs/00_CURRENT_STATE.md` + код**.
-
----
+1) `docs/README.md` — карта документации (START HERE)
+2) `docs/00_BOOT.md` — якорь контекста (что нельзя забывать)
+3) `docs/00_CURRENT_STATE.md` — текущее состояние проекта (**source of truth**)
+4) `docs/91_PROD_LAUNCH_30MIN.md` — запуск продакшена за 30 минут (one‑pager)
+5) `docs/15_NEW_CHAT_HANDOFF.md` — что загрузить/что вставить первым сообщением (copy‑paste)
 
 ## 1) Контекст и цель
 

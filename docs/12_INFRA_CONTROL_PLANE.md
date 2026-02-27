@@ -19,6 +19,7 @@
 Глобальные замки на tick:
 - `lock:giveaways_tick`
 - `lock:broadcast_tick`
+- `lock:ig_verify_tick`
 
 Реализация **token-based**: lock снимается только если token совпадает (Lua CAS). Это защищает от сценария:
 TTL истёк → новый инстанс взял лок → старый инстанс в `finally` сделал `DEL` и случайно снял **чужой** лок.
@@ -103,9 +104,7 @@ TTL истёк → новый инстанс взял лок → старый и
 
 Runtime toggle (Redis): `sys:broadcast_qstash_fanout`.
 
-Runbook (env + rollout/rollback): `docs/17_QSTASH_RUNBOOK.md`.
-
-Ops quick-check: 👑 Админка → 🛰 QStash статус → 🧪 Send signed ping.
+Runbook (env + rollout/rollback): `docs/10_QSTASH_RUNBOOK.md`.
 
 ## Cron: notify не должен стопорить batch
 Уведомления в Telegram (notify в канал/DM) могут зависать. Чтобы тик не «залипал» на одном сообщении:

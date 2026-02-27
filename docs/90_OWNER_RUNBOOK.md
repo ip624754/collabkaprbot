@@ -102,7 +102,7 @@
 
 Ссылки:
 - `docs/12_INFRA_CONTROL_PLANE.md`
-- `docs/17_QSTASH_RUNBOOK.md`
+- `docs/10_QSTASH_RUNBOOK.md`
 
 ---
 
