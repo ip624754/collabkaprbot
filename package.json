@@ -11,9 +11,12 @@
     "migrate": "node migrations/run.js",
     "test:redact": "node scripts/test-redactContactsInText.js",
     "zip": "bash scripts/zip.sh",
+    "lint:nav": "node scripts/lint-footer-nav.js",
     "actions:check": "node scripts/actions-registry-check.js",
     "actions:dump": "node scripts/actions-registry-check.js",
-    "actions:md": "node scripts/actions-registry-export-md.js --out docs/02_ACTION_KEYS_REGISTRY.md"
+    "actions:md": "node scripts/actions-registry-export-md.js --out docs/02_ACTION_KEYS_REGISTRY.md",
+    "gen:migration-pack": "node scripts/gen-mark-all-applied.js",
+    "gen:mark-all-applied": "node scripts/gen-mark-all-applied.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
