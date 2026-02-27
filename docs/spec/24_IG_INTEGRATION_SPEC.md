@@ -17,7 +17,7 @@
 - `docs/01_SECURITY_INVARIANTS.md`
 - `docs/12_INFRA_CONTROL_PLANE.md`
 - `docs/20_CONTACTS_MODEL.md`
-- `docs/17_QSTASH_RUNBOOK.md` (паттерны: подпись, деградации; для будущих PRO джоб)
+- `docs/10_QSTASH_RUNBOOK.md` (паттерны: подпись, деградации; для будущих PRO джоб)
 
 > ⚠️ В этом SPEC **нет Level B (комментарии/коды)**. Публичная comment‑верификация создаёт bypass (бренд может собрать список usernames на посте) и **не используется**.
 
