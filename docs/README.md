@@ -11,6 +11,7 @@
 
 ## 1) Текущее состояние (source of truth)
 - `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (source of truth)
+- `91_PROD_LAUNCH_30MIN.md` — one‑pager: запуск продакшена за 30 минут
 - `12_INFRA_CONTROL_PLANE.md` — Cron/Locks/Outbox/гарантии (Control Plane)
 - `17_QSTASH_RUNBOOK.md` — QStash: где взять ключи/env, как включать fan-out, rollout/rollback
 - `22_IG_GRAPH_OAUTH_2026.md` — IG Graph OAuth (Business/Creator): официальный OAuth через Meta (runbook)
