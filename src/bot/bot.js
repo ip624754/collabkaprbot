@@ -83,6 +83,21 @@ async function getBrandCreditsCached(userId) {
   return n;
 }
 
+async function getBrandCreditsRedisOnly(userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return null;
+  const key = k(['brand_credits', uid]);
+  try {
+    const v = await redis.get(key);
+    if (v === null || v === undefined) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return Math.max(0, Math.trunc(n));
+  } catch {
+    return null;
+  }
+}
+
 async function setBrandCreditsCache(userId, credits) {
   const uid = Number(userId || 0);
   if (!uid) return;
@@ -10166,6 +10181,9 @@ async function renderBrandAppView(ctx, actorUserId, appId, back = { status: 'new
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
+  // Brand Pass balance in this card is Redis-only (no DB reads here).
+  const creditsCached = await getBrandCreditsRedisOnly(brandUserId);
+
   const who = app.creator_username ? '@' + String(app.creator_username).replace(/^@/, '') : (app.creator_tg_id ? `id:${app.creator_tg_id}` : 'creator');
   const when = app.created_at ? fmtTs(app.created_at) : '—';
   const st = normLeadStatus(app.status);
@@ -10225,8 +10243,25 @@ ${threadBlock}`;
 
 💡 <i>Нажми ✅ Принять, чтобы открыть диалог: креатор получит кнопку “💬 Написать бренду”.</i>` +
       (BRAND_APP_ACCEPT_COST > 0
-        ? `\n<i>✅ Принять спишет: <b>${BRAND_APP_ACCEPT_COST}</b> ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')}.</i>`
-        : `\n<i>✅ Принять: бесплатно.</i>`);
+        ? `
+<i>✅ Принять спишет: <b>${BRAND_APP_ACCEPT_COST}</b> ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')}.</i>`
+        : `
+<i>✅ Принять: бесплатно.</i>`);
+
+    // Balance line: Redis-only cache. If missing, show placeholder (no DB read).
+    const bpLines = [];
+    if (creditsCached !== null && creditsCached !== undefined) {
+      const balNum = Math.max(0, Math.trunc(Number(creditsCached) || 0));
+      bpLines.push(brandPassBalanceLineHtml(balNum));
+      const uLine = brandPassUnlocksLineHtml(balNum);
+      if (uLine) bpLines.push(uLine);
+      const tLine = brandPassTrialLineHtml(balNum);
+      if (tLine) bpLines.push(tLine);
+    } else {
+      bpLines.push('💳 Кредиты: <b>—</b>');
+      bpLines.push('<i>(баланс появится после покупки/операции)</i>');
+    }
+    if (bpLines.length) text += '\n\n' + bpLines.join('\n');
   }
 
   // UX note: statuses are internal triage for brand inbox
@@ -10899,6 +10934,17 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
     () => db.acceptBrandApplicationWithCharge(appId, actorUserId, brandUserId, cost),
     { op: 'brand_app_accept_charge', appId }
   );
+
+  // Best-effort: keep Redis credits cache in sync (UI is Redis-only).
+  if (res && res.status === 'accepted') {
+    const left = res.left;
+    if (left !== null && left !== undefined) {
+      try { await setBrandCreditsCache(brandUserId, left); } catch {}
+    }
+  } else if (res && res.status === 'insufficient_credits') {
+    // If cache was stale and showed more than реально есть — лучше сбросить.
+    try { await redis.del(k(['brand_credits', brandUserId])); } catch {}
+  }
 
   if (res && res.status === 'insufficient_credits') {
     try { await ctx.answerCallbackQuery({ text: 'Недостаточно кредитов для ✅ Принять.' }); } catch {}
@@ -19339,7 +19385,10 @@ bot.on('message:successful_payment', async (ctx) => {
       } else {
         const d = durationDays || (productId === 'founder_brand_3m' ? 90 : 365);
         await db.activateBrandPlan(payUserId, 'pro', d);
-        if (credits > 0) await db.addBrandCredits(payUserId, credits);
+        if (credits > 0) {
+          const newBalance = await db.addBrandCredits(payUserId, credits);
+          try { await setBrandCreditsCache(payUserId, newBalance); } catch {}
+        }
       }
 
       try { await redis.del(k(['pay_founder', token])); } catch {}
@@ -19466,6 +19515,7 @@ bot.on('message:successful_payment', async (ctx) => {
 
       const creditsToAdd = Number(data.credits || 0);
       const newBalance = await db.addBrandCredits(payUserId, creditsToAdd);
+      try { await setBrandCreditsCache(payUserId, newBalance); } catch {}
       const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
       await redis.del(k(['pay_brand', token]));
 
@@ -19541,9 +19591,9 @@ bot.on('message:successful_payment', async (ctx) => {
       // Credit bonus included in plan
       const bonusCredits = Number(data.credits || 0);
       if (bonusCredits > 0) {
-        await db.addBrandCredits(payUserId, bonusCredits);
+        const newBalance = await db.addBrandCredits(payUserId, bonusCredits);
+        try { await setBrandCreditsCache(payUserId, newBalance); } catch {}
       }
-
       await redis.del(k(['pay_bplan', token]));
 
       const wsId = Number(data.wsId || 0);
@@ -26657,6 +26707,11 @@ if (p.a === 'a:match_home') {
         }
       );
 
+      // Best-effort: keep Redis credits cache in sync (no extra DB reads; balance already computed).
+      if (res && res.balance !== null && res.balance !== undefined) {
+        try { await setBrandCreditsCache(actorUserId, res.balance); } catch {}
+      }
+
       if (!res) {
         return ctx.answerCallbackQuery({ text: 'Не получилось открыть диалог. Возможно оффер закрыт.' });
       }
@@ -30961,7 +31016,8 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
       }
 
       if (!userId || !pack) throw new Error('Bad userId/pack');
-      await db.addBrandCredits(userId, Number(pack.credits));
+      const newBalance = await db.addBrandCredits(userId, Number(pack.credits));
+      try { await setBrandCreditsCache(userId, newBalance); } catch {}
       await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_brand_pass:+${pack.credits}`);
       await ctx.answerCallbackQuery({ text: 'Кредиты начислены ✅', show_alert: true });
       await renderAdminPaymentView(ctx, row.id, backStatus, page);
@@ -30976,7 +31032,10 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
       await db.activateBrandPlan(userId, plan, CFG.BRAND_PLAN_DURATION_DAYS);
       // Credit bonus
       const planDef = BRAND_PLANS.find(pl => pl.id === plan) || BRAND_PLANS.find(pl => (plan === 'basic' && pl.id === 'start') || (plan === 'max' && pl.id === 'pro'));
-      if (planDef?.credits) await db.addBrandCredits(userId, planDef.credits);
+      if (planDef?.credits) {
+        const newBalance = await db.addBrandCredits(userId, planDef.credits);
+        try { await setBrandCreditsCache(userId, newBalance); } catch {}
+      }
       await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_brand_plan:${plan}${planDef?.credits ? `:+${planDef.credits}cr` : ''}`);
       await ctx.answerCallbackQuery({ text: 'Brand Plan применён ✅', show_alert: true });
       await renderAdminPaymentView(ctx, row.id, backStatus, page);
