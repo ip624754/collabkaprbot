@@ -85,6 +85,8 @@
 
 Подробно: `docs/31_FEEDS_VITRINES_CATALOGS.md`.
 
+Публичное объяснение (для постов/FAQ): `docs/public/11_feeds_and_discovery_ru.md`.
+
 ### A) Brand Team UX V4
 Принцип: **кнопка видна всегда**, доступ гейтится *внутри* фичи, есть “Почему так?” и корректный back через `ret`.
 Подробно: `docs/14_BRAND_TEAM_UX_V4.md`.
