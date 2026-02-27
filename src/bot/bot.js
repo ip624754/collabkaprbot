@@ -121,6 +121,12 @@ function brandPassBalanceLineHtml(credits) {
   return `💳 Кредиты: <b>${escapeHtml(fmtCredits(x))}</b>`;
 }
 
+function brandPassBalanceLineHtmlDash(credits) {
+  if (credits === null || credits === undefined) return `💳 Кредиты: <b>—</b>`;
+  return brandPassBalanceLineHtml(credits);
+}
+
+
 function brandPassUnlocksLineHtml(credits) {
   const have = Number(credits || 0);
   const need = Number(CONTACT_UNLOCK_COST || 0);
@@ -3676,6 +3682,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
 function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
   const { showCurator = false } = opts || {};
   const planLabel = plan?.active ? (plan.name === 'pro' ? 'Про ✅' : 'Старт ✅') : 'OFF';
+  const creditsLabel = (credits === null || credits === undefined) ? '—' : fmtCredits(credits);
   const kb = new InlineKeyboard()
 .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
 .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:0|h:bo|r:bo`)
@@ -3689,7 +3696,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('📌 Сделки', `a:brand_deals|ws:${wsId}|st:negotiation|p:0`)
 .text(`⭐️ Brand Plan: ${planLabel}`, `a:brand_plan|ws:${wsId}`)
 .row()
-.text(`💳 Кредиты: ${fmtCredits(credits)}${retry ? ' · 🎟' + retry : ''}`, `a:brand_pass|ws:${wsId}`)
+.text(`💳 Кредиты: ${creditsLabel}${retry ? ' · 🎟' + retry : ''}`, `a:brand_pass|ws:${wsId}`)
 .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:brand`);
 
 
@@ -8697,8 +8704,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   let brandCredits = null;
   if (!isPreview && viewer) {
     try {
-      brandCredits = Number(await withTimeout(getBrandCreditsCached(viewer.id), 2500, 'brand.credits'));
-      if (!Number.isFinite(brandCredits)) brandCredits = 0;
+      brandCredits = await withTimeout(getBrandCreditsRedisOnly(viewer.id), 2500, 'brand.credits.redis');
     } catch {
       brandCredits = null;
     }
@@ -8870,15 +8876,17 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     if (hideApply) blocks.push(`🪟 Витрина (read-only): продолжай через «💬 Диалог». Контакты на витрине — через «${contactUnlockBtnLabel()}».`);
     else blocks.push(`🪟 Витрина: нажми «📝 Оставить заявку». Контакты на витрине — через «${contactUnlockBtnLabel()}».`);
 
-    if (brandCredits !== null) {
-      blocks.push(brandPassBalanceLineHtml(brandCredits));
-      const uLine = brandPassUnlocksLineHtml(brandCredits);
-      if (uLine) blocks.push(uLine);
-      const tLine = brandPassTrialLineHtml(brandCredits);
-      if (tLine) blocks.push(tLine);
-      if (canUnlockContacts && !revealContacts) {
-        const needLine = brandPassContactsNeedLineHtml(brandCredits);
-        if (needLine) blocks.push(needLine);
+    if (viewer) {
+      blocks.push(brandPassBalanceLineHtmlDash(brandCredits));
+      if (brandCredits !== null) {
+        const uLine = brandPassUnlocksLineHtml(brandCredits);
+        if (uLine) blocks.push(uLine);
+        const tLine = brandPassTrialLineHtml(brandCredits);
+        if (tLine) blocks.push(tLine);
+        if (canUnlockContacts && !revealContacts) {
+          const needLine = brandPassContactsNeedLineHtml(brandCredits);
+          if (needLine) blocks.push(needLine);
+        }
       }
     }
 
@@ -9037,6 +9045,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         }
       } else {
         kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
+        if (CONTACT_UNLOCK_COST > 0) kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
       }
       kb.row();
     }
@@ -9551,12 +9560,13 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
   }
   const channelShown = (ws?.channel_username && !contactsUnlocked) ? '🔒 скрыто' : channel;
 
-  let credits = 0;
-  try { credits = Number(await withTimeout(getBrandCreditsCached(brandUserId), 2500, 'brand.credits')); } catch {}
+  let credits = null;
+  try { credits = await withTimeout(getBrandCreditsRedisOnly(brandUserId), 2500, 'brand.credits.redis'); } catch { credits = null; }
+  const creditsNum = (credits === null || credits === undefined) ? 0 : Number(credits || 0);
 
   const needContacts = Number(CONTACT_UNLOCK_COST || 0);
-  const needsContactsTopup = needContacts > 0 && Number(credits || 0) < needContacts;
-  const needLine = brandPassContactsNeedLineHtml(credits);
+  const needsContactsTopup = (credits !== null) && needContacts > 0 && creditsNum < needContacts;
+  const needLine = (credits !== null) ? brandPassContactsNeedLineHtml(creditsNum) : '';
 
   const who = ws ? safeCreatorDisplayName(ws) : 'Креатор';
   const when = lead.created_at ? fmtTs(lead.created_at) : '—';
@@ -9579,10 +9589,11 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
 ` +
     `Создано: <code>${escapeHtml(String(when))}</code>
 ` +
-    `${brandPassBalanceLineHtml(credits)}
-${brandPassUnlocksLineHtml(credits)}
-${brandPassTrialLineHtml(credits)}
+    `${brandPassBalanceLineHtmlDash(credits)}
 ` +
+    (credits !== null ? `${brandPassUnlocksLineHtml(creditsNum)}
+${brandPassTrialLineHtml(creditsNum)}
+` : ``) +
     (needLine ? `${needLine}
 ` : ``) +
     ``;
@@ -9611,7 +9622,12 @@ ${threadBlock}`;
     .text('🪟 Витрина', `a:wsp_open|ws:${realWsId}|m:ro|r:bl|l:${id}`)
     .row();
 
-  if (Number(credits || 0) <= 0) {
+  if (needContacts <= 0) {
+    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
+  } else if (credits === null) {
+    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
+      .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
+  } else if (Number(creditsNum || 0) <= 0) {
     kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
   } else if (needsContactsTopup) {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
@@ -11865,7 +11881,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
   const isCurator = ownerUserId ? await db.hasAnyCuratorRole(ownerUserId) : false;
   const wsNum = Number(wsId || 0);
   if (wsNum === 0) {
-    const credits = await getBrandCreditsCached(ownerUserId);
+    const credits = await getBrandCreditsRedisOnly(ownerUserId);
     const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(ownerUserId) : 0;
     const planRow = await db.getBrandPlan(ownerUserId);
     const active = await db.isBrandPlanActive(ownerUserId);
@@ -11875,14 +11891,18 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
     const untilTxt = (active && planRow?.brand_plan_until) ? `
 До: <b>${escapeHtml(fmtTs(planRow.brand_plan_until))}</b>` : '';
 
+    const creditsLine = brandPassBalanceLineHtmlDash(credits);
+    const unlocksLine = (credits === null) ? '' : brandPassUnlocksLineHtml(credits);
+    const trialLine = (credits === null) ? '' : brandPassTrialLineHtml(credits);
+
     await safeEditOrReply(ctx, 
       `🏷 <b>Для брендов</b>
 
 Здесь бренд может работать с UGC/офферами без подключения канала.
 
-${brandPassBalanceLineHtml(credits)}
-${brandPassUnlocksLineHtml(credits)}
-${brandPassTrialLineHtml(credits)}
+${creditsLine}
+${unlocksLine}
+${trialLine}
 🎟 Повторные кредиты: <b>${retry}</b>
 ⭐️ Brand Plan: <b>${active ? (planName === 'pro' ? 'Про' : 'Старт') : 'Нет'}</b>${untilTxt}
 
