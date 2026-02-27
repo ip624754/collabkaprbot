@@ -48,6 +48,29 @@ psql "$DATABASE_URL" -f migration_pack/01_reconcile.sql
 node migrations/run.js
 ```
 
+
+## Генератор `00_mark_all_applied.sql` (без человеческого фактора)
+`migration_pack/00_mark_all_applied.sql` **генерируется** из текущих файлов в `migrations/`.
+Чек‑сумма = **sha256 содержимого SQL-файла** (точно как в `migrations/run.js`).
+
+### Команда
+```bash
+npm run gen:migration-pack
+```
+
+### Проверка перед коммитом
+```bash
+npm run gen:migration-pack
+git diff -- migration_pack/00_mark_all_applied.sql
+```
+
+### Dry-run (печать в stdout)
+```bash
+node scripts/gen-mark-all-applied.js --dry-run | head
+```
+
+⚠️ Важно: этот файл **не создаёт схему**, он только заполняет `schema_migrations` как “уже применено”.
+Использовать **только** если схема базы уже соответствует текущему набору миграций.
 ## Инварианты (обязательно)
 - Миграции **не редактируем** задним числом.
 - Любое ручное изменение в Neon → оформляем новой миграцией (или добавляем в `01_reconcile.sql` как safety-net).

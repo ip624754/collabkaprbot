@@ -68,6 +68,7 @@
 - Winners draw: детерминированно/воспроизводимо, guards по статусам (`winners_drawn_at`, транзакции).
 - Миграции: только `migrations/run.js` (exactly-once + checksum).
 - Migration pack (Neon move/emergency): `migration_pack/00_mark_all_applied.sql` обновлён под миграции до `041_*.sql`; `migration_pack/01_reconcile.sql` расширен как safety‑net. Pack‑файлы **не** дублируем в `migrations/`.
+- STEP163: добавлен генератор `npm run gen:migration-pack` (скрипт `scripts/gen-mark-all-applied.js`) — пересчитывает sha256 из `migrations/` и обновляет `migration_pack/00_mark_all_applied.sql` детерминированно.
 - Горячие UI-пути: **не добавлять DB-запросы** в рендер меню/кнопок без сильного обоснования.
 
 ---
