@@ -7664,8 +7664,6 @@ function wsProfileKb(wsId, ws) {
   const fCount = Array.isArray(ws.profile_formats) ? ws.profile_formats.length : 0;
   const contactsObj = wsProfileContactsObj(ws);
   const cCount = wsProfileContactsCount(contactsObj, ['tg', 'email', 'phone', 'site']);
-  const igMeta = (contactsObj.ig && typeof contactsObj.ig === 'object') ? contactsObj.ig : null;
-  const igVerified = igMeta?.verified === true;
 
   // UX: "Предпросмотр" — главный CTA, дальше парные кнопки по смыслу.
   const kb = new InlineKeyboard()
@@ -7681,8 +7679,6 @@ function wsProfileKb(wsId, ws) {
     .row()
     .text('📸 Instagram', `a:ws_prof_edit|ws:${wsId}|f:ig`)
     .text('🔗 Портфолио', `a:ws_prof_edit|ws:${wsId}|f:portfolio`)
-    .row()
-    .text(igVerified ? '✅ IG verified' : '🔗 Верифицировать IG', `a:ws_ig_verify|ws:${wsId}|ret:ws_profile`)
     .row()
     .text('✏️ Гео', `a:ws_prof_edit|ws:${wsId}|f:geo`)
     .text('📝 Описание', `a:ws_prof_edit|ws:${wsId}|f:about`)
@@ -7730,6 +7726,11 @@ function wsIgMeta(ws) {
 }
 
 async function renderIgVerifyEntryFromStart(ctx, ownerUserId, opts = {}) {
+  if (!CFG.IG_OAUTH_UI_ENABLED) {
+    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    return;
+  }
   const handleHint = opts?.handleHint ? normalizeIgHandle(opts.handleHint) : null;
   let wss = [];
   try { wss = await db.listWorkspaces(ownerUserId); } catch { wss = []; }
@@ -8735,6 +8736,9 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   // STEP105: optional structured contacts (read-only support).
   // Source of truth remains legacy fields until creators start filling structured contacts.
   const contactsObj = (ws.profile_contacts && typeof ws.profile_contacts === 'object') ? ws.profile_contacts : null;
+  // IG Trust badge (OAuth-only): stored in structured contacts meta to avoid leaking handle.
+  const igMeta = (contactsObj?.ig && typeof contactsObj.ig === 'object') ? contactsObj.ig : null;
+  const igVerified = igMeta?.verified === true;
   const cTgRaw = contactsObj?.tg ? String(contactsObj.tg).trim() : '';
   const cTg = cTgRaw.replace(/^@/, '');
   const cEmail = contactsObj?.email ? String(contactsObj.email).trim() : '';
@@ -17069,8 +17073,8 @@ if (exp.type === 'brand_deals_search') {
       // Instagram
       if (field === 'ig') {
         if (igLockedByOAuth) {
-          const kb = new InlineKeyboard().text('📸 IG (OAuth)', `a:ws_ig_verify|ws:${wsId}|ret:ws_profile`).row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-          await ctx.reply('⚠️ Instagram подключён через OAuth и защищён от ручной подмены.\n\nЧтобы изменить аккаунт — сначала отключи OAuth в разделе «📸 IG (OAuth)».', { reply_markup: kb });
+          const kb = new InlineKeyboard().text('⬅️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
+          await ctx.reply('⚠️ Instagram подключён через OAuth и защищён от ручной подмены.\n\nСейчас управление IG временно недоступно. Позже вернём эту настройку.', { reply_markup: kb });
           await setExpectText(ctx.from.id, exp);
           return;
         }
@@ -22819,6 +22823,14 @@ if (p.a === 'a:ws_ig_verify') {
   await ctx.answerCallbackQuery();
   const wsId = Number(p.w || p.ws || 0);
   if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+
+  // Launch-safe: IG OAuth can be temporarily hidden from UI while Meta side is unstable.
+  if (!CFG.IG_OAUTH_UI_ENABLED) {
+    const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
+    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    return;
+  }
+
   const ret = String(p.ret || 'ws_profile');
   await renderWsIgVerifyStart(ctx, u.id, wsId, { ret });
   return;
@@ -22828,6 +22840,11 @@ if (p.a === 'a:ws_ig_verify_comment') {
   await ctx.answerCallbackQuery();
   const wsId = Number(p.w || p.ws || 0);
   if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+  if (!CFG.IG_OAUTH_UI_ENABLED) {
+    const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
+    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    return;
+  }
   const ret = String(p.ret || 'ws_profile');
   await renderWsIgVerifyComment(ctx, u.id, wsId, { ret });
   return;
@@ -22836,6 +22853,12 @@ if (p.a === 'a:ws_ig_verify_comment') {
 if (p.a === 'a:ws_ig_verify_status') {
   const wsId = Number(p.w || p.ws || 0);
   if (!wsId) { try { await ctx.answerCallbackQuery(); } catch {} await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+  if (!CFG.IG_OAUTH_UI_ENABLED) {
+    try { await ctx.answerCallbackQuery(); } catch {}
+    const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
+    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    return;
+  }
   const ret = String(p.ret || 'ws_profile');
   await renderWsIgVerifyStatus(ctx, u.id, wsId, { ret });
   return;
@@ -22845,6 +22868,12 @@ if (p.a === 'a:ws_ig_verify_oauth') {
   await ctx.answerCallbackQuery();
   const wsId = Number(p.w || p.ws || 0);
   if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
+
+  if (!CFG.IG_OAUTH_UI_ENABLED) {
+    const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
+    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    return;
+  }
 
   if (!CFG.IG_OAUTH_ENABLED) {
     await safeEditOrReply(ctx, '⚠️ Instagram OAuth пока отключён администратором (IG_OAUTH_ENABLED=0).', { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) });
