@@ -806,7 +806,7 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
 `
       : 'Не удалось отправить инвойс. Проверь, что Telegram обновлён и Stars доступны.';
     try {
-      const kb = backCb ? navKb(backCb) : new InlineKeyboard().text('📋 Меню', 'a:menu');
+      const kb = backCb ? navKb(backCb) : navKb('a:menu');
       await ctx.reply(text, { reply_markup: kb });
     } catch {}
     return false;
@@ -1696,7 +1696,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
   if (bm.dbMissing) {
-    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+    const kb = navKb('a:menu');
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
@@ -1707,7 +1707,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
 
   if (bm.revoked || !(bm.brands || []).length) {
     await disableBrandManagerState(ctx.from.id);
-    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+    const kb = navKb('a:menu');
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
@@ -1758,7 +1758,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
   if (bm.dbMissing) {
-    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+    const kb = navKb('a:menu');
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
@@ -1768,7 +1768,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
 
   if (bm.revoked) {
     await disableBrandManagerState(ctx.from.id);
-    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+    const kb = navKb('a:menu');
     const text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
@@ -1849,14 +1849,14 @@ async function renderMainMenu(ctx, flags, params = {}) {
       text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
 
 В Neon должна быть таблица <code>brand_managers</code>.`;
-      kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+      kb = navKb('a:menu');
     } else if (bm.revoked) {
       await disableBrandManagerState(ctx.from.id);
       modeHuman = 'Менеджер бренда';
       text = `⛔ <b>Доступ менеджера отозван</b>
 
 Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
-      kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+      kb = navKb('a:menu');
     } else if (bm.enabled && bm.needsPick) {
       await renderBmPickBrand(ctx, u, { ret: 'menu', wsId: 0, page: 0, edit });
       return;
@@ -2978,7 +2978,7 @@ function wsMenuKb(wsId, opts = {}) {
 
   if (showCurator) kb.text('🧹 Кураторы блогера', 'a:cur_home').row();
 
-  kbNavRow(kb, 'a:ws_list');
+  kb.text('⬅️ Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -2995,7 +2995,8 @@ function wsSettingsKb(wsId, s) {
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row();
 
-  kbNavRow(kb, `a:ws_open|ws:${wsId}`);
+  kb.row().text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -3021,7 +3022,8 @@ function curManageKb(wsId, ws = null) {
   // Редко, но полезно (техническая история воркспейса).
   kb.text('🧾 История', `a:ws_history|ws:${wsId}`).row();
 
-  kbNavRow(kb, `a:ws_settings|ws:${wsId}`);
+  kb.row().text('⬅️ Назад', `a:ws_settings|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -3482,15 +3484,14 @@ ${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
 
 
 function brandTeamKb({ wsId = 0, ret = 'menu', backCb = 'a:menu' } = {}) {
-  const kb = new InlineKeyboard()
+  return new InlineKeyboard()
     .text('👤 Пригласить ссылкой', `a:bm_invite|ws:${wsId}|ret:${ret}`)
     .row()
     .text('➕ Добавить по @username', `a:bm_add_username|ws:${wsId}|ret:${ret}`)
     .row()
-    .text('👥 Список менеджеров', `a:bm_list|ws:${wsId}|ret:${ret}`);
-
-  kbNavRow(kb, backCb);
-  return kb;
+    .text('👥 Список менеджеров', `a:bm_list|ws:${wsId}|ret:${ret}`)
+    .row()
+    .text('⬅️ Назад', backCb);
 }
 
 
@@ -3515,7 +3516,7 @@ function brandTeamLockedKb(st, backCb = 'a:menu', wsId = 0, ret = 'menu') {
     .text('🔄 Проверить снова', `a:brand_team|ws:${wsId}|ret:${ret}`)
     .text('ℹ️ Почему так?', `a:brand_team_help|ws:${wsId}|ret:${ret}`);
 
-  kbNavRow(kb, backCb);
+  kb.row().text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -3594,7 +3595,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true, backCb = 'a:menu',
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: false });
 
   if (bm.dbMissing) {
-    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+    const kb = navKb('a:menu');
     const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>\n\nВ Neon должна быть таблица <code>brand_managers</code>.`;
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -3612,7 +3613,7 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true, backCb = 'a:menu',
   const st = await getBrandTeamGateState(u.id);
 
   if (st.missingRelation) {
-    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+    const kb = navKb('a:menu');
     const text = `⚠️ <b>Нужна миграция 024_brand_profiles</b>\n\nВ Neon должна быть таблица <code>brand_profiles</code>.`;
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -6115,8 +6116,8 @@ function gwNewStepPrizeKb(wsId) {
     .row()
     .text('✨ Другое', `a:gw_prize|ws:${wsId}|t:other`)
     .text('🧩 Пресеты', `a:gw_preset_home|ws:${wsId}`)
-    .row()
-    .text('⬅️ Отмена', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
+	    .row()
+	    .text('⬅️ Отмена', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 }
 
 const GW_PRESETS = [
@@ -6170,34 +6171,30 @@ function gwPrizePrompt(prizeType) {
 }
 
 function gwPresetKb(wsId) {
-  const kb = new InlineKeyboard()
+  return new InlineKeyboard()
     .text(GW_PRESETS[0].title, `a:gw_preset_apply|ws:${wsId}|id:${GW_PRESETS[0].id}`)
     .row()
     .text(GW_PRESETS[1].title, `a:gw_preset_apply|ws:${wsId}|id:${GW_PRESETS[1].id}`)
     .row()
     .text(GW_PRESETS[2].title, `a:gw_preset_apply|ws:${wsId}|id:${GW_PRESETS[2].id}`)
-    .row();
-
-  kbNavRow(kb, `a:gw_new|ws:${wsId}`);
-  return kb;
-}
+    .row()
+    .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
+  }
 
 function gwNewStepWinnersKb(wsId) {
-  const kb = new InlineKeyboard()
+  return new InlineKeyboard()
     .text('1', `a:gw_winners|ws:${wsId}|n:1`)
     .text('2', `a:gw_winners|ws:${wsId}|n:2`)
     .text('3', `a:gw_winners|ws:${wsId}|n:3`)
     .text('5', `a:gw_winners|ws:${wsId}|n:5`)
     .row()
     .text('✍️ Ввести число', `a:gw_winners_custom|ws:${wsId}`)
-    .row();
-
-  kbNavRow(kb, `a:gw_new|ws:${wsId}`);
-  return kb;
+    .row()
+    .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
 }
 
 function gwNewStepDeadlineKb(wsId) {
-  const kb = new InlineKeyboard()
+  return new InlineKeyboard()
     .text('⏳ 1 час', `a:gw_deadline|ws:${wsId}|m:60`)
     .text('⏳ 6 часов', `a:gw_deadline|ws:${wsId}|m:360`)
     .row()
@@ -6205,14 +6202,12 @@ function gwNewStepDeadlineKb(wsId) {
     .text('⏳ 3 дня', `a:gw_deadline|ws:${wsId}|m:4320`)
     .row()
     .text('✍️ Ввести (DD.MM HH:MM МСК)', `a:gw_deadline_custom|ws:${wsId}`)
-    .row();
-
-  kbNavRow(kb, `a:gw_step_sponsors|ws:${wsId}`);
-  return kb;
+    .row()
+    .text('⬅️ Назад', `a:gw_step_sponsors|ws:${wsId}`);
 }
 
 function gwSponsorsOptionalKb(wsId) {
-  const kb = new InlineKeyboard()
+  return new InlineKeyboard()
     .text('✅ Без спонсоров (соло)', `a:gw_sponsors_skip|ws:${wsId}`)
     .row()
     .text('✍️ Ввести списком', `a:gw_sponsors_enter|ws:${wsId}`)
@@ -6220,36 +6215,29 @@ function gwSponsorsOptionalKb(wsId) {
     .text('📁 Из папки', `a:gw_sponsors_from_folder|ws:${wsId}`)
     .row()
     .text('🧭 Что такое спонсоры?', `a:gw_sponsors_help|ws:${wsId}`)
-    .row();
-
-  kbNavRow(kb, `a:gw_new|ws:${wsId}`);
-  return kb;
+    .row()
+    .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
 }
 
 
 
 function gwSponsorsReviewKb(wsId) {
-  const kb = new InlineKeyboard()
+  return new InlineKeyboard()
     .text('✍️ Изменить', `a:gw_sponsors_edit|ws:${wsId}`)
     .text('🧹 Очистить', `a:gw_sponsors_clear|ws:${wsId}`)
     .row()
     .text('➡️ Дальше', `a:gw_sponsors_next|ws:${wsId}`)
-    .row();
-
-  kbNavRow(kb, `a:gw_step_sponsors|ws:${wsId}`);
-  return kb;
+    .row()
+    .text('⬅️ Назад', `a:gw_step_sponsors|ws:${wsId}`);
 }
 
 function gwConfirmKb(wsId) {
-  const kb = new InlineKeyboard()
+  return new InlineKeyboard()
     .text('👁 Превью', `a:gw_preview|ws:${wsId}`)
     .text('📣 Опубликовать', `a:gw_publish|ws:${wsId}`)
     .row()
     .text('🖼 Медиа', `a:gw_media_step|ws:${wsId}`)
-    .row();
-
-  kbNavRow(kb, `a:gw_step_deadline|ws:${wsId}`);
-  return kb;
+    .text('⬅️ Назад', `a:gw_step_deadline|ws:${wsId}`);
 }
 
 function gwMediaKb(wsId, hasMedia = false) {
@@ -6268,7 +6256,7 @@ function gwMediaKb(wsId, hasMedia = false) {
     kb.text('⏭ Пропустить', `a:gw_media_skip|ws:${wsId}`);
   }
 
-  kbNavRow(kb, `a:gw_step_deadline|ws:${wsId}`);
+  kb.row().text('⬅️ Назад', `a:gw_step_deadline|ws:${wsId}`);
   return kb;
 }
 
@@ -6846,9 +6834,8 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     .row()
     .text('🔎 Найти', `a:pm_run|ws:${wsId}|p:0`)
     .text('🗑 Сброс', `a:pm_reset|ws:${wsId}`)
-    .row();
-
-  kbNavRow(kb, backCb);
+    .row()
+    .text('⬅️ Назад', backCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -6868,8 +6855,7 @@ async function renderProfileMatchingPick(ctx, ownerUserId, wsId, type) {
     const chosen = sel.includes(it.key);
     kb.text(`${chosen ? '✅ ' : ''}${it.title}`, `a:pm_tog|ws:${wsId}|t:${type}|k:${it.key}`).row();
   }
-  kb.text('✅ Готово', `a:pm_home|ws:${wsId}`).text('🗑 Сброс', `a:pm_reset|ws:${wsId}`).row();
-  kbNavRow(kb, `a:pm_home|ws:${wsId}`);
+  kb.text('✅ Готово', `a:pm_home|ws:${wsId}`).text('🗑 Сброс', `a:pm_reset|ws:${wsId}`);
 
   const text =
     `${title}\n\n` +
@@ -6906,8 +6892,8 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
   if (!items.length) {
     const kb = new InlineKeyboard()
       .text('⚙️ Изменить фильтры', `a:pm_home|ws:${wsId}`)
-      .row();
-    kbNavRow(kb, backCb);
+      .row()
+      .text('⬅️ Назад', backCb);
     return safeEditOrReply(ctx, 
       head + '😶 Ничего не нашёл по фильтрам.\n\nПопробуй упростить фильтр (меньше ниш/форматов).',
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
@@ -6940,9 +6926,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     kb.row();
   }
 
-    kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).row();
-
-  kbNavRow(kb, backCb);
+    kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', backCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -11499,7 +11483,7 @@ ${escapeHtml(pro)}
   } else {
     kb.text('📌 Пин в ленте', `a:ws_pro_pin|ws:${wsId}`).row();
   }
-  kbNavRow(kb, `a:ws_open|ws:${wsId}`);
+  kb.text('⬅️ Назад', `a:ws_open|ws:${wsId}`);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -11523,7 +11507,7 @@ async function renderWsProPinPick(ctx, ownerUserId, wsId) {
     kb.text(label, `a:ws_pro_pin_set|ws:${wsId}|o:${o.id}`).row();
   }
   kb.text('❌ Снять пин', `a:ws_pro_pin_clear|ws:${wsId}`).row();
-  kbNavRow(kb, `a:ws_pro|ws:${wsId}`);
+  kb.text('⬅️ Назад', `a:ws_pro|ws:${wsId}`);
 
   await safeEditOrReply(ctx, `📌 <b>Пин в ленте</b>
 
@@ -11587,7 +11571,8 @@ function foldersHomeKb(access, folders) {
   }
 
   const backCb = access.isOwner ? `a:ws_open|ws:${wsId}` : 'a:folders_my';
-  kbNavRow(kb, backCb);
+  kb.row().text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -11631,7 +11616,8 @@ function folderViewKb(access, wsId, folderId) {
     kb.text('📤 Выгрузить списком', `a:folder_export|ws:${wsId}|f:${folderId}`).row();
   }
 
-  kbNavRow(kb, `a:folders_home|ws:${wsId}`);
+  kb.row().text('⬅️ Назад', `a:folders_home|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -11681,7 +11667,8 @@ async function renderWsEditors(ctx, ownerUserId, wsId) {
     }
   }
 
-  kbNavRow(kb, `a:folders_home|ws:${wsId}`);
+  kb.row().text('⬅️ Назад', `a:folders_home|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.row().text('🏠 Home', 'a:home');
 
   const lines = editors.map(e => `• ${e.tg_username ? '@' + escapeHtml(e.tg_username) : 'id:' + escapeHtml(String(e.tg_id))}`);
 
@@ -11832,7 +11819,8 @@ function bxBrandOnlyNoticeKb() {
     .text('🏷 Каталог брендов', 'a:brands_home|p:0')
     .text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
     .row()
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 }
 
 async function renderBxBrandOnlyNotice(ctx) {
@@ -14209,7 +14197,7 @@ function curatorHomeKb(items, modeEnabled = false, queueCounts = null) {
 
   // Help + footer
   kb.text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
-  kbNavRow(kb, 'a:home');
+  kb.text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -15401,7 +15389,7 @@ ${escapeHtml(safeCap)}
 
             let ok = false;
             try {
-              const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+              const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
               await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
               ok = true;
             } catch (e) {
@@ -15414,7 +15402,7 @@ ${escapeHtml(safeCap)}
                 .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
                 .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
                 .row()
-                .text('⬅️ Назад', 'a:admin_home');
+                .text('⬅️ Админка', 'a:admin_home');
               await ctx.reply(`✅ Ответ отправлен пользователю (tg:${targetTgId}).`, { reply_markup: kb });
             }
             return;
@@ -15726,7 +15714,8 @@ ${escapeHtml(safe)}`;
       try {
         const kb = new InlineKeyboard()
           .text('💬 Поддержка', 'a:support')
-          .text('📋 Меню', 'a:menu');
+	          .text('📋 Меню', 'a:menu')
+	          .text('🏠 Home', 'a:home');
         await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
         ok = true;
       } catch (e) {
@@ -15738,7 +15727,7 @@ ${escapeHtml(safe)}`;
           .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${exp.targetUserId || 0}`)
           .text('👤 Карточка', `a:adm_ucard|id:${exp.targetUserId || 0}|f:all|p:0`)
           .row()
-          .text('⬅️ Назад', 'a:admin_home');
+          .text('⬅️ Админка', 'a:admin_home');
         await ctx.reply(`✅ Ответ отправлен пользователю (tg:${targetTgId}).`, { reply_markup: kb });
       }
       return;
@@ -16452,7 +16441,8 @@ ${escapeHtml(safe)}`;
           const waitMins = Math.max(1, Math.ceil((rl.resetSec || leadWin) / 60));
           const kb = new InlineKeyboard()
             .text('⬅️ Назад к витрине', `a:wsp_open|ws:${wsId}`)
-            .text('📋 Меню', 'a:menu');
+	        	    .text('📋 Меню', 'a:menu')
+	        	    .text('🏠 Home', 'a:home');
           await ctx.reply(
             `⏳ Слишком часто. Можно отправлять <b>${leadLim}</b> заявку каждые <b>${mins}</b> мин в одну витрину.\nПопробуй снова через <b>${waitMins}</b> мин.`,
             { parse_mode: 'HTML', reply_markup: kb }
@@ -16543,7 +16533,8 @@ ${escapeHtml(safe)}`;
 
       const backKb = new InlineKeyboard()
         .text('⬅️ Назад к витрине', `a:wsp_open|ws:${wsId}`)
-        .text('📋 Меню', 'a:menu');
+	        .text('📋 Меню', 'a:menu')
+	        .text('🏠 Home', 'a:home');
 
       if (sent > 0) {
         await ctx.reply('✅ Заявка отправлена. Уведомление владельцу доставлено.', { reply_markup: backKb });
@@ -17143,7 +17134,8 @@ if (exp.type === 'brand_deals_search') {
           .text('📨 Мои заявки', 'a:my_apps|p:0')
           .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
           .row()
-          .text('📋 Меню', 'a:menu')
+	          .text('📋 Меню', 'a:menu')
+	          .text('🏠 Home', 'a:home')
       });
     }
 
@@ -17190,7 +17182,7 @@ if (exp.type === 'brand_deals_search') {
       // Instagram
       if (field === 'ig') {
         if (igLockedByOAuth) {
-          const kb = new InlineKeyboard().text('⬅️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+          const kb = new InlineKeyboard().text('⬅️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
           await ctx.reply('⚠️ Instagram подключён через OAuth и защищён от ручной подмены.\n\nСейчас управление IG временно недоступно. Позже вернём эту настройку.', { reply_markup: kb });
           await setExpectText(ctx.from.id, exp);
           return;
@@ -18522,7 +18514,7 @@ ${list}
 Канал: <b>${escapeHtml(wsTitle)}</b>
 
 Попроси владельца увеличить лимит (PRO) или отозвать кого-то из списка.`;
-        const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+        const kb = navKb('a:menu');
         return ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb });
       }
 
@@ -18600,7 +18592,8 @@ ${list}
         .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
         .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
         .row()
-        .text('📋 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
       await ctx.reply(
         `✅ Ты добавлен в <b>команду бренда</b>: <b>${escapeHtml(brandLabel)}</b>
@@ -18807,7 +18800,8 @@ UGC vs Интеграция
       .text('✍️ Написать в поддержку', 'a:support_write')
       .row()
       .text('🧭 Быстрый старт', 'a:guide')
-      .text('📋 Меню', 'a:menu');
+	      .text('📋 Меню', 'a:menu')
+	      .text('🏠 Home', 'a:home');
 
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
   });
@@ -19003,7 +18997,8 @@ UGC vs Интеграция
     const kb = new InlineKeyboard()
       .text('✍️ Написать в поддержку', 'a:support_write')
       .row()
-      .text('📋 Меню', 'a:menu');
+	  	  .text('📋 Меню', 'a:menu')
+	  	  .text('🏠 Home', 'a:home');
     await ctx.reply(
       `💬 <b>Поддержка по оплате / Stars</b>\n\nЕсли что-то пошло не так с оплатой — нажми кнопку ниже и опиши проблему.\n\n<b>Что указать:</b>\n• Что покупал (PRO / Brand Plan)\n• Примерное время оплаты\n• Скрин чека (если есть)`,
       { parse_mode: 'HTML', reply_markup: kb }
@@ -19311,7 +19306,8 @@ bot.on('message:successful_payment', async (ctx) => {
         .text('🎯 Smart Matching (подбор офферов)', cbJoin('a:match_home', { ws: wsId, ret, bpr }))
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
-        .text('📋 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
       await ctx.reply(
         `✅ <b>Оплата получена — Smart Matching активирован</b>\n\nПришли бриф одним сообщением (ниша, гео, аудитория, формат).`,
@@ -19366,7 +19362,8 @@ bot.on('message:successful_payment', async (ctx) => {
         .text('🔥 Featured', cbJoin('a:feat_home', { ws: wsId, ret, bpr }))
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
-        .text('📋 Меню', 'a:menu');
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
       await ctx.reply(
         `✅ <b>Оплата получена — Featured активирован</b>\n\nПришли контент:\n• 1 строка — заголовок\n• далее описание\n• последняя строка — контакт (@username / ссылка)`,
@@ -20231,7 +20228,8 @@ if (p.a === 'a:support') {
     .text('✍️ Написать в поддержку', 'a:support_write')
     .row()
     .text('🧭 Быстрый старт', 'a:guide')
-    .text('📋 Меню', 'a:menu');
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
   return;
@@ -23463,9 +23461,8 @@ if (p.a === 'a:ws_prof_mode') {
             .text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:${ret}`).row()
             .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${linkRet}`)
             .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}|ret:${linkRet}`)
-            .row();
-
-          kbNavRow(kb, backCb);
+            .row()
+            .text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
 
           await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
           return;
@@ -24595,7 +24592,7 @@ if (p.a === 'a:match_home') {
         .row()
         .text('⛔ Забрать / отменить подписку', 'a:adm_gift_revoke')
         .row()
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx, `🎁 <b>Подарить подписку</b>\n\nВыбери тип подписки.\nПосле этого введи @username (или несколько через пробел/запятую).`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -24616,7 +24613,7 @@ if (p.a === 'a:match_home') {
         .text('🧹 Обнулить кредиты (опасно)', 'a:adm_gift_revoke_input|t:cr')
         .row()
         .text('⬅️ Назад', 'a:adm_gift')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(
         ctx,
         `⛔ <b>Забрать / отменить</b>\n\nВыбери, что забрать у пользователей.\nДальше введи @username (можно несколько).`,
@@ -24633,7 +24630,7 @@ if (p.a === 'a:match_home') {
       const label = labels[revType] || revType;
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:adm_gift_revoke')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       const warn = revType === 'cr'
         ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены. Используй только если уверен.'
         : (revType === 'gcr' || revType === 'bp_gcr')
@@ -24656,7 +24653,7 @@ if (p.a === 'a:match_home') {
       const label = labels[giftType] || giftType;
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:adm_gift')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx, `🎁 <b>${escapeHtml(label)}</b>\n\nВведи @username получателей (через пробел, запятую или каждый с новой строки).\n\nПример:\n<code>@user1 @user2 @user3</code>`, { parse_mode: 'HTML', reply_markup: kb });
       await setExpectText(ctx.from.id, { type: 'adm_gift_users', giftType });
       return;
@@ -24760,7 +24757,7 @@ if (p.a === 'a:match_home') {
 
       const kb = new InlineKeyboard()
         .text('🎁 Ещё подарить', 'a:adm_gift')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx, `🎁 <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -24809,7 +24806,7 @@ if (p.a === 'a:match_home') {
 
       const kb = new InlineKeyboard()
         .text('⛔ Ещё забрать', 'a:adm_gift_revoke')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx, `⛔ <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -24850,7 +24847,7 @@ if (p.a === 'a:match_home') {
       }
       const kb = new InlineKeyboard()
         .text('⛔ Ещё забрать', 'a:adm_gift_revoke')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx, `⛔ <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -24901,7 +24898,7 @@ if (p.a === 'a:match_home') {
       }
       const kb = new InlineKeyboard()
         .text('🎁 Ещё подарить', 'a:adm_gift')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx, `🎁 <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -24929,7 +24926,7 @@ if (p.a === 'a:match_home') {
         .row()
         .text('🧹 Сбросить поиск', `a:admin_users_reset|f:${f}|p:0`)
         .row()
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx, '🔎 Введи @username или tg_id (цифрами).', { reply_markup: kb });
       await setExpectText(ctx.from.id, { type: 'admin_users_search', f });
       return;
@@ -25055,7 +25052,7 @@ if (p.a === 'a:match_home') {
 
       let ok = false;
       try {
-        const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+        const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
         await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
         ok = true;
       } catch (e) {
@@ -25074,7 +25071,7 @@ if (p.a === 'a:match_home') {
             .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
             .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
             .row()
-            .text('⬅️ Назад', 'a:admin_home');
+            .text('⬅️ Админка', 'a:admin_home');
 
           const text = `✅ Быстрый ответ отправлен (tg:${targetTgId}).`;
           const opts = { reply_markup: kb, disable_web_page_preview: true };
@@ -25289,7 +25286,7 @@ if (p.a === 'a:match_home') {
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Назад', 'a:admin_home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
         });
         return;
       }
@@ -25307,7 +25304,7 @@ if (p.a === 'a:match_home') {
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Назад', 'a:admin_home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
         });
         return;
       }
@@ -25337,7 +25334,7 @@ if (p.a === 'a:match_home') {
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Назад', 'a:admin_home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
         });
         return;
       }
@@ -25384,7 +25381,7 @@ if (p.a === 'a:match_home') {
         const rl = await rateLimit(k(['rl', 'bc_confirm', ctx.from.id]), { limit: 1, windowSec: 60 });
         if (!rl.ok && !rl.allowed) {
           await safeEditOrReply(ctx, `⏳ Подожди минуту перед следующей рассылкой.`, {
-            reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+            reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
           });
           return;
         }
@@ -25394,7 +25391,7 @@ if (p.a === 'a:match_home') {
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Назад', 'a:admin_home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
         });
         return;
       }
@@ -25413,12 +25410,12 @@ if (p.a === 'a:match_home') {
         try { await clearDraft(ctx.from.id); } catch {}
         await safeEditOrReply(ctx,
           `✅ <b>Рассылка #${bc.id} создана</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n⏳ Рассылка будет запущена при следующем тике cron.\nПрогресс можно отслеживать в Админке.`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home') }
         );
       } catch (err) {
         console.error('[ADMIN] broadcast confirm error', err);
         await safeEditOrReply(ctx, '⚠️ Ошибка при создании рассылки.', {
-          reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+          reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
         });
       }
       return;
@@ -25526,7 +25523,7 @@ if (p.a === 'a:match_home') {
           reply_markup: new InlineKeyboard()
             .text('⬅️ Отмена', `a:aud|h:${h}|p:0`)
             .row()
-            .text('⬅️ Назад', 'a:admin_home')
+            .text('⬅️ Админка', 'a:admin_home')
         }
       );
       await setExpectText(ctx.from.id, { type: 'aud_search', h }, 15 * 60);
@@ -25660,7 +25657,7 @@ if (p.a === 'a:match_home') {
 Причина: <code>${escapeHtml(em.slice(0, 220))}</code>
 
 Решение: обнови <code>package.json</code> (dependencies) и сделай redeploy.`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
         );
         return;
       }
@@ -25669,7 +25666,7 @@ if (p.a === 'a:match_home') {
         await safeEditOrReply(
           ctx,
           '⛔ QSTASH_TOKEN не задан в Vercel. Ping недоступен.',
-          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
+          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
         );
         return;
       }
@@ -25679,7 +25676,7 @@ if (p.a === 'a:match_home') {
         await safeEditOrReply(
           ctx,
           '⛔ PUBLIC_BASE_URL не задан. Ping недоступен.',
-          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
+          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
         );
         return;
       }
@@ -25715,7 +25712,7 @@ if (p.a === 'a:match_home') {
 Причина: <code>${escapeHtml(msg)}</code>
 
 Проверь ENV: QSTASH_TOKEN и Signing Keys в Vercel.`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
         );
         return;
       }
@@ -25762,7 +25759,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:admin_founder')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx,
         `🗓 <b>Founder Sale — дедлайн</b>
 
@@ -25782,7 +25779,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:admin_founder')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx,
         `💰 <b>Founder Sale — цены (Stars)</b>
 
@@ -25803,7 +25800,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:admin_founder')
-        .text('⬅️ Назад', 'a:admin_home');
+        .text('⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx,
         `💳 <b>Founder Sale — кредиты</b>
 
@@ -29299,7 +29296,7 @@ ${actionHint}`;
         await ctx.answerCallbackQuery({ text: 'Не удалось опубликовать.' });
         await safeEditOrReply(ctx, 
           `⚠️ Не удалось отправить пост в канал.\n\nПроверь: бот админ в канале, есть право писать.\n\nОшибка: ${escapeHtml(String(e?.message || e))}`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) }
         );
       }
       return;
@@ -29793,7 +29790,7 @@ async function renderBroadcastAudiencePicker(ctx) {
   const draft = await getDraft(ctx.from.id);
   if (!draft || !draft.type) {
     await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
-      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Назад', 'a:admin_home')
+      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
     });
     return;
   }
@@ -29827,7 +29824,7 @@ async function renderBroadcastAudiencePicker(ctx) {
 async function renderBroadcastPreview(ctx, draft) {
   if (!draft || !draft.type) {
     await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Назад', 'a:admin_home')
+      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
     });
     return;
   }
@@ -29898,7 +29895,7 @@ async function renderBroadcastList(ctx, page = 0) {
   if (hasNext) kb.text('➡️', `a:bc_list|p:${page + 1}`);
   if (page > 0 || hasNext) kb.row();
   kb.text('📣 Новая рассылка', 'a:bc_start').row();
-  kb.text('⬅️ Назад', 'a:admin_home');
+  kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -29957,7 +29954,7 @@ async function renderBroadcastView(ctx, broadcastId) {
   }
 
   kb.text('⬅️ К списку', 'a:bc_list|p:0').row();
-  kb.text('⬅️ Назад', 'a:admin_home');
+  kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -30028,7 +30025,7 @@ async function renderAdminHome(ctx) {
     .row()
     .text('🎁 Подарить подписку', 'a:adm_gift')
     .row()
-    .text('📋 Меню', 'a:menu')
+	    .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { reply_markup: kb });
@@ -30142,9 +30139,9 @@ Broadcast cooldown: <b>${cdActive ? 'ACTIVE' : 'OFF'}</b>`;
     .text('🧪 Send signed ping', 'a:admin_qstash_ping')
     .row()
     .text(`📣 Fan-out: ${fanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
-    .text('⬅️ Назад', 'a:admin_home')
+    .text('⬅️ Админка', 'a:admin_home')
     .row()
-    .text('📋 Меню', 'a:menu')
+	    .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -30213,7 +30210,7 @@ async function renderAdminFounder(ctx) {
     .text('🔗 Ссылки', 'a:admin_founder_links')
     .text('📝 Тексты', 'a:admin_founder_texts')
     .row()
-    .text('⬅️ Назад', 'a:admin_home');
+    .text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -30267,7 +30264,7 @@ async function renderAdminFounderLinks(ctx) {
   kb.text('📝 Тексты', 'a:admin_founder_texts')
     .row()
     .text('⬅️ Founder Sale', 'a:admin_founder')
-    .text('⬅️ Назад', 'a:admin_home');
+    .text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -30353,7 +30350,7 @@ async function renderAdminFounderTexts(ctx) {
   kb.text('🔗 Ссылки', 'a:admin_founder_links')
     .row()
     .text('⬅️ Founder Sale', 'a:admin_founder')
-    .text('⬅️ Назад', 'a:admin_home');
+    .text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -30443,7 +30440,7 @@ async function renderAdminMetrics(ctx, days = 14) {
     .row()
     .text('📋 Модераторы', 'a:admin_mod_list')
     .row()
-    .text('⬅️ Назад', 'a:admin_home');
+    .text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -30475,7 +30472,7 @@ async function renderAdminModerators(ctx) {
     kb.text(`🗑 ${who}`, `a:admin_mod_rm|uid:${r.user_id}`).row();
   }
 
-  kb.text('⬅️ Назад', 'a:admin_home');
+  kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -30597,7 +30594,7 @@ async function renderAdminAudit(ctx, { afterHours = 24, page = 0 } = {}) {
   if (hasNext) kb.text('➡️', `a:aud|h:${h}|p:${p + 1}`);
   if (p > 0 || hasNext) kb.row();
 
-  kb.text('⬅️ Назад', 'a:admin_home');
+  kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -30662,7 +30659,7 @@ async function sendAdminAuditExport(ctx, afterHours = 24) {
       caption,
       reply_markup: new InlineKeyboard()
         .text('⬅️ Аудит', `a:aud|h:${afterHours}|p:0`)
-        .text('⬅️ Назад', 'a:admin_home')
+        .text('⬅️ Админка', 'a:admin_home')
     }
   );
 }
@@ -30757,7 +30754,7 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
   if (hasNext) kb.text('➡️ Далее', `a:admin_users|f:${filter}|p:${p + 1}`);
   if (p > 0 || hasNext) kb.row();
 
-  kb.text('⬅️ Назад', 'a:admin_home');
+  kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -30868,7 +30865,7 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   }
 
   kb.text('⬅️ К списку', `a:admin_users|f:${backFilter}|p:${backPage}`).row();
-  kb.text('⬅️ Назад', 'a:admin_home');
+  kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -30927,7 +30924,7 @@ async function sendAdminUsersCsv(ctx, filter = 'all', q = '') {
       caption,
       reply_markup: new InlineKeyboard()
         .text('⬅️ К списку', `a:admin_users|f:${filter}|p:0`)
-        .text('⬅️ Назад', 'a:admin_home')
+        .text('⬅️ Админка', 'a:admin_home')
     }
   );
 }
@@ -30963,7 +30960,7 @@ async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
   }
   if ((Number(page) || 0) > 0) kb.text('⬅️ Назад', `a:admin_payments|st:${status}|p:${Number(page) - 1}`);
   if (rows.length === limit) kb.text('➡️ Далее', `a:admin_payments|st:${status}|p:${Number(page) + 1}`);
-    kb.row().text('⬅️ Назад', 'a:admin_home');
+    kb.row().text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, 
     `💳 <b>Payments</b> • <b>${escapeHtml(status)}</b>
@@ -30989,7 +30986,7 @@ async function renderAdminPaymentView(ctx, paymentId, backStatus = 'ORPHANED', p
   const kb = new InlineKeyboard();
   if (canApply) kb.text('✅ Apply (manual)', `a:admin_pay_apply|id:${p.id}|st:${backStatus}|p:${page}`).row();
   kb.text('⬅️ К списку', `a:admin_payments|st:${backStatus}|p:${page}`).row();
-  kb.text('⬅️ Назад', 'a:admin_home');
+  kb.text('⬅️ Админка', 'a:admin_home');
 
   const text = `💳 <b>Payment #${p.id}</b>
 

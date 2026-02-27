@@ -47,7 +47,6 @@ export async function notifyGiveawayEnded({ api, db, g, reason = 'time', skipOwn
       .text('🗑 Убрать', 'a:nd')
       .row()
       .text('🧾 Лог', `a:gw_log|i:${gwId}`)
-      .row()
       .text('📋 Меню', 'a:menu')
       .text('🏠 Home', 'a:home');
 
@@ -112,7 +111,6 @@ export async function notifyGiveawayWinnersReady({ api, db, g, reason = 'drawn',
       .text('🗑 Убрать', 'a:nd')
       .row()
       .text('🧾 Лог', `a:gw_log|i:${gwId}`)
-      .row()
       .text('📋 Меню', 'a:menu')
       .text('🏠 Home', 'a:home');
 
