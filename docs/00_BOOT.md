@@ -10,7 +10,7 @@
 8) Ошибка → лучше “мягко остановиться” (runtime guard), чем получить hard-kill Vercel.
 9) Cron notify не должен тормозить batch: `withTimeout(~5s)` на Telegram notify.
 10) Миграции только через **migrations/run.js** (exactly-once, checksum), без ручных ALTER в проде.
-11) Каждый патч: **маленький**, обратимый, артефакты: **FULL zip + Hotfix zip + git-apply patch** + список файлов + QA чеклист.
+11) Каждый патч: **маленький**, обратимый, артефакты: **FULL zip + Hotfix zip + git-apply patch** + список файлов + QA чеклист + обновление доков (минимум: `docs/00_CURRENT_STATE.md` + `docs/process/07_WORK_HISTORY_*.md`).
 12) UX принцип: **кнопка видна**, доступ гейтится внутри фичи, CTA ведёт туда, где решить проблему.
 13) Держим стиль **Jobs/Vitalik/Woz**: просто, прозрачно, детерминированно, без магии.
 

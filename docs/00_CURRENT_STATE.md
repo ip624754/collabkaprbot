@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-02-25
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-02-27
 
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
@@ -76,6 +76,28 @@
 ### A) Brand Team UX V4
 Принцип: **кнопка видна всегда**, доступ гейтится *внутри* фичи, есть “Почему так?” и корректный back через `ret`.
 Подробно: `docs/14_BRAND_TEAM_UX_V4.md`.
+
+
+### A1) Brand Pass / credits balance — Redis-only UI (STEP153–155)
+Политика: в **горячих экранах** баланс кредитов **не читаем из DB**. Показываем только то, что есть в Redis:
+- Brand Inbox (карточка заявки `status=new`)
+- Публичная витрина креатора (`renderWsPublicProfile`)
+- Диалог по заявке бренда (`renderBrandLeadDialog`)
+- Brand hub (`bx_open`, `ws=0`)
+
+Если Redis‑кеша нет → показываем `💳 Кредиты: —` (и CTA на покупку/операцию), **без** fallback в Neon.
+
+Redis keys:
+- `brand_credits:<brandUserId>` — short TTL (`BRAND_CREDITS_CACHE_TTL_SEC`, default **60s**)
+- `brand_credits_snap:<brandUserId>` — snapshot для гидрации (`BRAND_CREDITS_SNAP_TTL_SEC`, default **90d**)
+
+Прогрев/гидрация:
+- на входе в hub используем `getBrandCreditsRedisOnly({ warm:true })` → продлевает TTL и обновляет snapshot
+- если короткий ключ пуст — гидратим из `brand_credits_snap:*` (всё ещё Redis‑only)
+
+Обновление кеша (best‑effort):
+- после мутаций кредитов (покупка/accept/unlock/интро) вызываем `setBrandCreditsCache(brandUserId, newBalance)`
+
 
 ### B) Broadcast (рассылки)
 Состояние (актуально):
@@ -179,7 +201,7 @@
 Ниже перечислены **все** переменные окружения, которые читает проект через `src/lib/config.js`.
 Дефолты и парсинг см. в коде (это источник истины).
 
-> Примечание: `CONTACT_UNLOCK_COST`, `CONTACT_UNLOCK_TTL_DAYS`, `BRAND_CREDITS_CACHE_TTL_SEC`, `BRAND_APP_ACCEPT_COST` читаются напрямую в `src/bot/bot.js` (не через `CFG`).
+> Примечание: `CONTACT_UNLOCK_COST`, `CONTACT_UNLOCK_TTL_DAYS`, `BRAND_CREDITS_CACHE_TTL_SEC`, `BRAND_CREDITS_SNAP_TTL_SEC`, `BRAND_APP_ACCEPT_COST` читаются напрямую в `src/bot/bot.js` (не через `CFG`).
 
 Дополнительно (Instagram OAuth, сейчас UI скрыт):
 - `IG_OAUTH_ENABLED` (0/1)
@@ -199,7 +221,7 @@
 - **SUPPORT**: `SUPPORT_CHAT_ID`
 - **OPS**: `OPS_ALERT_BUFFER_MAX` `OPS_ALERT_SILENT` `OPS_ALERT_SUMMARY_MIN`
 - **PAYMENT**: `PAYMENT_SESSION_TTL_MIN`
-- **CONTACTS**: `CONTACT_UNLOCK_COST` `CONTACT_UNLOCK_TTL_DAYS` `BRAND_CREDITS_CACHE_TTL_SEC`
+- **CONTACTS**: `CONTACT_UNLOCK_COST` `CONTACT_UNLOCK_TTL_DAYS` `BRAND_CREDITS_CACHE_TTL_SEC` `BRAND_CREDITS_SNAP_TTL_SEC`
 - **PAYMENTS**: `PAYMENTS_ACCEPT_DEFAULT` `PAYMENTS_AUTO_APPLY_DEFAULT` `PAYMENTS_FALLBACK_APPLY_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_BATCH` `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED`
 - **FOUNDER**: `FOUNDER_BRAND_12M_CREDITS` `FOUNDER_BRAND_12M_PRICE` `FOUNDER_BRAND_3M_CREDITS` `FOUNDER_BRAND_3M_PRICE` `FOUNDER_CREATOR_12M_PRICE` `FOUNDER_SALE_DEADLINE` `FOUNDER_SALE_ENABLED`
 - **INTRO**: `INTRO_COST_PER_INTRO` `INTRO_DAILY_LIMIT` `INTRO_DAILY_LIMIT_UNVERIFIED` `INTRO_RATE_LIMIT` `INTRO_RATE_WINDOW_SEC` `INTRO_RETRY_AFTER_HOURS` `INTRO_RETRY_ENABLED` `INTRO_RETRY_EXPIRES_DAYS` `INTRO_RETRY_NOTIFY` `INTRO_TRIAL_CREDITS`
@@ -414,6 +436,9 @@
 
 Примечание про кредиты Brand Pass:
 - UX: если открыть покупку из витрины креатора (кнопка «💳 Купить ещё»), в экране Brand Pass появляется «⬅️ Вернуться к витрине» (контекст wsId).
+
+- Показ баланса в горячих UX (вход в BX/Inbox/витрина) — <b>строго Redis-only</b>, без DB-fallback.
+- Redis кеш баланса: короткий TTL ключ `brand_credits:<brandUserId>` + долгоживущий snapshot `brand_credits_snap:<brandUserId>`; при входе в brand-hub snapshot прогревается/обновляется, а короткий ключ гидратируется из snapshot при необходимости.
 
 - В базе есть общий баланс `brand_credits` и отдельный остаток подарков `brand_credits_gifted`.
 - При списании кредиты тратятся сначала из подарочных (уменьшается `brand_credits_gifted` до 0).
