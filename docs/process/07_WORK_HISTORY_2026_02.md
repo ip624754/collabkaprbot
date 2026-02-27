@@ -24,6 +24,7 @@
 - STEP159: админ-навигация (QStash статус): кнопка “⬅️ Назад” возвращает в 👑 Админку, “📋 Меню” — в пользовательское меню; убран дубликат Home в кураторском кабинете.
 - STEP160: мини-аудит footer‑рядов: везде единый низ (⬅️ Назад / 📋 Меню / 🏠 Home) через `navKb`/`kbNavRow`; выровнены PRO/папки/Brand Team/поиск креаторов/шаги розыгрыша + gw_access + fallback replies.
 - STEP161: добавлен линтер `npm run lint:nav` (scripts/lint-footer-nav.js), который ловит регрессии footer’ов; дополнительно добили несколько мест, где был `📋 Меню` без `🏠 Home`, чтобы lint проходил и UX был консистентным.
+- STEP163: добавлен генератор `npm run gen:migration-pack` для `migration_pack/00_mark_all_applied.sql` (sha256 как в `migrations/run.js`), чтобы pack всегда совпадал с текущими миграциями.
 
 
 Подробности по IG: `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`.
@@ -757,3 +758,8 @@ docs/01_SECURITY_INVARIANTS.md
 - Обновили `migration_pack/01_reconcile.sql`: расширили idempotent repair (pgcrypto/outbox/audit + safety‑net для broadcast/qstash/brand pass/structured contacts/payments).
 - Убрали дубли `migrations/00_mark_all_applied.sql` и `migrations/01_reconcile.sql`, чтобы раннер `migrations/run.js` не применял pack‑скрипты как обычные миграции (особенно опасно на fresh DB).
 - Доки синхронизированы: `docs/11_MIGRATIONS_PACK.md`, `docs/00_CURRENT_STATE.md`.
+
+## STEP163 — Generator for `00_mark_all_applied.sql` (migration_pack)
+- Добавили `scripts/gen-mark-all-applied.js`: читает `migrations/*.sql`, считает sha256 как в `migrations/run.js`, генерирует `migration_pack/00_mark_all_applied.sql`.
+- Добавили команды: `npm run gen:migration-pack` и алиас `npm run gen:mark-all-applied`.
+- Обновили доки: `docs/11_MIGRATIONS_PACK.md`, `docs/00_CURRENT_STATE.md`.
