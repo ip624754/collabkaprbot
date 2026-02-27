@@ -750,3 +750,10 @@ docs/01_SECURITY_INVARIANTS.md
 - **STEP122** — Ops alerts для auto‑heal ORPHANED payments при `validation_failed`/`manual_required` (без изменения apply-логики).
 - **STEP123** — Docs closeout по аудиту (консистентность доков с кодом + процессный файл audit closeout).
 - **STEP124** — Inbox polish: до ✅ Принять (status=new) доступны только ✅ Принять / ⛔ Спам / 🗑 Удалить; запрет «💬 В работу/✅ Закрыть» до принятия; исправлен креаторский CTA «💬 Написать бренду» (без “тишины”).
+---
+
+## STEP162 — Migration pack refresh (Neon move safety)
+- Обновили `migration_pack/00_mark_all_applied.sql`: теперь покрывает весь текущий набор миграций **до `041_*.sql`** и актуальные sha256 checksums.
+- Обновили `migration_pack/01_reconcile.sql`: расширили idempotent repair (pgcrypto/outbox/audit + safety‑net для broadcast/qstash/brand pass/structured contacts/payments).
+- Убрали дубли `migrations/00_mark_all_applied.sql` и `migrations/01_reconcile.sql`, чтобы раннер `migrations/run.js` не применял pack‑скрипты как обычные миграции (особенно опасно на fresh DB).
+- Доки синхронизированы: `docs/11_MIGRATIONS_PACK.md`, `docs/00_CURRENT_STATE.md`.
