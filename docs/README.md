@@ -61,6 +61,7 @@
 Папка: `docs/process/`
 - `01_HOW_TO_WORK_LIKE_SENIOR.md` — дисциплина артефактов/DoD/анти‑грабли
 - `02_jobs_vitalik_woz_protocol.md` — Jobs/Vitalik/Woz: high‑signal протокол
+- `scripts/lint-footer-nav.js` — авто‑проверка footer‑навигации (запуск: `npm run lint:nav`)
 - `06_AUDIT_STEP94_HARDCORE.md` — reference аудит (не source of truth)
 - `07_WORK_HISTORY_2026_02.md` — timeline по шагам/решениям (для восстановления контекста)
 - `08_AUDIT_CLOSEOUT_2026_02.md` — закрытие внешнего аудита (findings→fixes + мини‑QA)
