@@ -2978,7 +2978,7 @@ function wsMenuKb(wsId, opts = {}) {
 
   if (showCurator) kb.text('🧹 Кураторы блогера', 'a:cur_home').row();
 
-  kb.text('⬅️ Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  kbNavRow(kb, 'a:ws_list');
   return kb;
 }
 
@@ -2995,8 +2995,7 @@ function wsSettingsKb(wsId, s) {
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row();
 
-  kb.row().text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
-  kb.row().text('🏠 Home', 'a:home');
+  kbNavRow(kb, `a:ws_open|ws:${wsId}`);
   return kb;
 }
 
@@ -3022,8 +3021,7 @@ function curManageKb(wsId, ws = null) {
   // Редко, но полезно (техническая история воркспейса).
   kb.text('🧾 История', `a:ws_history|ws:${wsId}`).row();
 
-  kb.row().text('⬅️ Назад', `a:ws_settings|ws:${wsId}`).text('📋 Меню', 'a:menu');
-  kb.row().text('🏠 Home', 'a:home');
+  kbNavRow(kb, `a:ws_settings|ws:${wsId}`);
   return kb;
 }
 
@@ -3484,14 +3482,15 @@ ${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
 
 
 function brandTeamKb({ wsId = 0, ret = 'menu', backCb = 'a:menu' } = {}) {
-  return new InlineKeyboard()
+  const kb = new InlineKeyboard()
     .text('👤 Пригласить ссылкой', `a:bm_invite|ws:${wsId}|ret:${ret}`)
     .row()
     .text('➕ Добавить по @username', `a:bm_add_username|ws:${wsId}|ret:${ret}`)
     .row()
-    .text('👥 Список менеджеров', `a:bm_list|ws:${wsId}|ret:${ret}`)
-    .row()
-    .text('⬅️ Назад', backCb);
+    .text('👥 Список менеджеров', `a:bm_list|ws:${wsId}|ret:${ret}`);
+
+  kbNavRow(kb, backCb);
+  return kb;
 }
 
 
@@ -3516,7 +3515,7 @@ function brandTeamLockedKb(st, backCb = 'a:menu', wsId = 0, ret = 'menu') {
     .text('🔄 Проверить снова', `a:brand_team|ws:${wsId}|ret:${ret}`)
     .text('ℹ️ Почему так?', `a:brand_team_help|ws:${wsId}|ret:${ret}`);
 
-  kb.row().text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
+  kbNavRow(kb, backCb);
   return kb;
 }
 
@@ -6171,30 +6170,34 @@ function gwPrizePrompt(prizeType) {
 }
 
 function gwPresetKb(wsId) {
-  return new InlineKeyboard()
+  const kb = new InlineKeyboard()
     .text(GW_PRESETS[0].title, `a:gw_preset_apply|ws:${wsId}|id:${GW_PRESETS[0].id}`)
     .row()
     .text(GW_PRESETS[1].title, `a:gw_preset_apply|ws:${wsId}|id:${GW_PRESETS[1].id}`)
     .row()
     .text(GW_PRESETS[2].title, `a:gw_preset_apply|ws:${wsId}|id:${GW_PRESETS[2].id}`)
-    .row()
-    .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
-  }
+    .row();
+
+  kbNavRow(kb, `a:gw_new|ws:${wsId}`);
+  return kb;
+}
 
 function gwNewStepWinnersKb(wsId) {
-  return new InlineKeyboard()
+  const kb = new InlineKeyboard()
     .text('1', `a:gw_winners|ws:${wsId}|n:1`)
     .text('2', `a:gw_winners|ws:${wsId}|n:2`)
     .text('3', `a:gw_winners|ws:${wsId}|n:3`)
     .text('5', `a:gw_winners|ws:${wsId}|n:5`)
     .row()
     .text('✍️ Ввести число', `a:gw_winners_custom|ws:${wsId}`)
-    .row()
-    .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
+    .row();
+
+  kbNavRow(kb, `a:gw_new|ws:${wsId}`);
+  return kb;
 }
 
 function gwNewStepDeadlineKb(wsId) {
-  return new InlineKeyboard()
+  const kb = new InlineKeyboard()
     .text('⏳ 1 час', `a:gw_deadline|ws:${wsId}|m:60`)
     .text('⏳ 6 часов', `a:gw_deadline|ws:${wsId}|m:360`)
     .row()
@@ -6202,12 +6205,14 @@ function gwNewStepDeadlineKb(wsId) {
     .text('⏳ 3 дня', `a:gw_deadline|ws:${wsId}|m:4320`)
     .row()
     .text('✍️ Ввести (DD.MM HH:MM МСК)', `a:gw_deadline_custom|ws:${wsId}`)
-    .row()
-    .text('⬅️ Назад', `a:gw_step_sponsors|ws:${wsId}`);
+    .row();
+
+  kbNavRow(kb, `a:gw_step_sponsors|ws:${wsId}`);
+  return kb;
 }
 
 function gwSponsorsOptionalKb(wsId) {
-  return new InlineKeyboard()
+  const kb = new InlineKeyboard()
     .text('✅ Без спонсоров (соло)', `a:gw_sponsors_skip|ws:${wsId}`)
     .row()
     .text('✍️ Ввести списком', `a:gw_sponsors_enter|ws:${wsId}`)
@@ -6215,29 +6220,36 @@ function gwSponsorsOptionalKb(wsId) {
     .text('📁 Из папки', `a:gw_sponsors_from_folder|ws:${wsId}`)
     .row()
     .text('🧭 Что такое спонсоры?', `a:gw_sponsors_help|ws:${wsId}`)
-    .row()
-    .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
+    .row();
+
+  kbNavRow(kb, `a:gw_new|ws:${wsId}`);
+  return kb;
 }
 
 
 
 function gwSponsorsReviewKb(wsId) {
-  return new InlineKeyboard()
+  const kb = new InlineKeyboard()
     .text('✍️ Изменить', `a:gw_sponsors_edit|ws:${wsId}`)
     .text('🧹 Очистить', `a:gw_sponsors_clear|ws:${wsId}`)
     .row()
     .text('➡️ Дальше', `a:gw_sponsors_next|ws:${wsId}`)
-    .row()
-    .text('⬅️ Назад', `a:gw_step_sponsors|ws:${wsId}`);
+    .row();
+
+  kbNavRow(kb, `a:gw_step_sponsors|ws:${wsId}`);
+  return kb;
 }
 
 function gwConfirmKb(wsId) {
-  return new InlineKeyboard()
+  const kb = new InlineKeyboard()
     .text('👁 Превью', `a:gw_preview|ws:${wsId}`)
     .text('📣 Опубликовать', `a:gw_publish|ws:${wsId}`)
     .row()
     .text('🖼 Медиа', `a:gw_media_step|ws:${wsId}`)
-    .text('⬅️ Назад', `a:gw_step_deadline|ws:${wsId}`);
+    .row();
+
+  kbNavRow(kb, `a:gw_step_deadline|ws:${wsId}`);
+  return kb;
 }
 
 function gwMediaKb(wsId, hasMedia = false) {
@@ -6256,7 +6268,7 @@ function gwMediaKb(wsId, hasMedia = false) {
     kb.text('⏭ Пропустить', `a:gw_media_skip|ws:${wsId}`);
   }
 
-  kb.row().text('⬅️ Назад', `a:gw_step_deadline|ws:${wsId}`);
+  kbNavRow(kb, `a:gw_step_deadline|ws:${wsId}`);
   return kb;
 }
 
@@ -6702,7 +6714,7 @@ async function exportWsHistory(ctx, ownerUserId, wsId) {
     new InputFile(Buffer.from(txt, 'utf-8'), filename),
     {
       caption: '📥 Полный лог (MSK). Если нужно — перешли это в поддержку.',
-      reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_history|ws:${wsId}`).text('📋 Меню', 'a:menu')
+      reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_history|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
     }
   );
 }
@@ -6834,8 +6846,9 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     .row()
     .text('🔎 Найти', `a:pm_run|ws:${wsId}|p:0`)
     .text('🗑 Сброс', `a:pm_reset|ws:${wsId}`)
-    .row()
-    .text('⬅️ Назад', backCb);
+    .row();
+
+  kbNavRow(kb, backCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -6855,7 +6868,8 @@ async function renderProfileMatchingPick(ctx, ownerUserId, wsId, type) {
     const chosen = sel.includes(it.key);
     kb.text(`${chosen ? '✅ ' : ''}${it.title}`, `a:pm_tog|ws:${wsId}|t:${type}|k:${it.key}`).row();
   }
-  kb.text('✅ Готово', `a:pm_home|ws:${wsId}`).text('🗑 Сброс', `a:pm_reset|ws:${wsId}`);
+  kb.text('✅ Готово', `a:pm_home|ws:${wsId}`).text('🗑 Сброс', `a:pm_reset|ws:${wsId}`).row();
+  kbNavRow(kb, `a:pm_home|ws:${wsId}`);
 
   const text =
     `${title}\n\n` +
@@ -6892,8 +6906,8 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
   if (!items.length) {
     const kb = new InlineKeyboard()
       .text('⚙️ Изменить фильтры', `a:pm_home|ws:${wsId}`)
-      .row()
-      .text('⬅️ Назад', backCb);
+      .row();
+    kbNavRow(kb, backCb);
     return safeEditOrReply(ctx, 
       head + '😶 Ничего не нашёл по фильтрам.\n\nПопробуй упростить фильтр (меньше ниш/форматов).',
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
@@ -6926,7 +6940,9 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
     kb.row();
   }
 
-    kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).text('⬅️ Назад', backCb);
+    kb.text('⚙️ Фильтры', `a:pm_home|ws:${wsId}`).row();
+
+  kbNavRow(kb, backCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -11483,7 +11499,7 @@ ${escapeHtml(pro)}
   } else {
     kb.text('📌 Пин в ленте', `a:ws_pro_pin|ws:${wsId}`).row();
   }
-  kb.text('⬅️ Назад', `a:ws_open|ws:${wsId}`);
+  kbNavRow(kb, `a:ws_open|ws:${wsId}`);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -11507,7 +11523,7 @@ async function renderWsProPinPick(ctx, ownerUserId, wsId) {
     kb.text(label, `a:ws_pro_pin_set|ws:${wsId}|o:${o.id}`).row();
   }
   kb.text('❌ Снять пин', `a:ws_pro_pin_clear|ws:${wsId}`).row();
-  kb.text('⬅️ Назад', `a:ws_pro|ws:${wsId}`);
+  kbNavRow(kb, `a:ws_pro|ws:${wsId}`);
 
   await safeEditOrReply(ctx, `📌 <b>Пин в ленте</b>
 
@@ -11571,8 +11587,7 @@ function foldersHomeKb(access, folders) {
   }
 
   const backCb = access.isOwner ? `a:ws_open|ws:${wsId}` : 'a:folders_my';
-  kb.row().text('⬅️ Назад', backCb).text('📋 Меню', 'a:menu');
-  kb.row().text('🏠 Home', 'a:home');
+  kbNavRow(kb, backCb);
   return kb;
 }
 
@@ -11616,8 +11631,7 @@ function folderViewKb(access, wsId, folderId) {
     kb.text('📤 Выгрузить списком', `a:folder_export|ws:${wsId}|f:${folderId}`).row();
   }
 
-  kb.row().text('⬅️ Назад', `a:folders_home|ws:${wsId}`).text('📋 Меню', 'a:menu');
-  kb.row().text('🏠 Home', 'a:home');
+  kbNavRow(kb, `a:folders_home|ws:${wsId}`);
   return kb;
 }
 
@@ -11667,8 +11681,7 @@ async function renderWsEditors(ctx, ownerUserId, wsId) {
     }
   }
 
-  kb.row().text('⬅️ Назад', `a:folders_home|ws:${wsId}`).text('📋 Меню', 'a:menu');
-  kb.row().text('🏠 Home', 'a:home');
+  kbNavRow(kb, `a:folders_home|ws:${wsId}`);
 
   const lines = editors.map(e => `• ${e.tg_username ? '@' + escapeHtml(e.tg_username) : 'id:' + escapeHtml(String(e.tg_id))}`);
 
@@ -14196,7 +14209,7 @@ function curatorHomeKb(items, modeEnabled = false, queueCounts = null) {
 
   // Help + footer
   kb.text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
-  kb.text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu');
+  kbNavRow(kb, 'a:home');
   return kb;
 }
 
@@ -17177,7 +17190,7 @@ if (exp.type === 'brand_deals_search') {
       // Instagram
       if (field === 'ig') {
         if (igLockedByOAuth) {
-          const kb = new InlineKeyboard().text('⬅️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
+          const kb = new InlineKeyboard().text('⬅️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
           await ctx.reply('⚠️ Instagram подключён через OAuth и защищён от ручной подмены.\n\nСейчас управление IG временно недоступно. Позже вернём эту настройку.', { reply_markup: kb });
           await setExpectText(ctx.from.id, exp);
           return;
@@ -23450,8 +23463,9 @@ if (p.a === 'a:ws_prof_mode') {
             .text('👔 Менеджеры бренда', `a:brand_team|ws:${wsId}|ret:${ret}`).row()
             .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:${linkRet}`)
             .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}|ret:${linkRet}`)
-            .row()
-            .text('⬅️ Назад', backCb).text('🏠 Home', 'a:home');
+            .row();
+
+          kbNavRow(kb, backCb);
 
           await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
           return;
@@ -25370,7 +25384,7 @@ if (p.a === 'a:match_home') {
         const rl = await rateLimit(k(['rl', 'bc_confirm', ctx.from.id]), { limit: 1, windowSec: 60 });
         if (!rl.ok && !rl.allowed) {
           await safeEditOrReply(ctx, `⏳ Подожди минуту перед следующей рассылкой.`, {
-            reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_home')
+            reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
           });
           return;
         }
@@ -25399,12 +25413,12 @@ if (p.a === 'a:match_home') {
         try { await clearDraft(ctx.from.id); } catch {}
         await safeEditOrReply(ctx,
           `✅ <b>Рассылка #${bc.id} создана</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n⏳ Рассылка будет запущена при следующем тике cron.\nПрогресс можно отслеживать в Админке.`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_home') }
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
         );
       } catch (err) {
         console.error('[ADMIN] broadcast confirm error', err);
         await safeEditOrReply(ctx, '⚠️ Ошибка при создании рассылки.', {
-          reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_home')
+          reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
       }
       return;
@@ -25646,7 +25660,7 @@ if (p.a === 'a:match_home') {
 Причина: <code>${escapeHtml(em.slice(0, 220))}</code>
 
 Решение: обнови <code>package.json</code> (dependencies) и сделай redeploy.`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
         );
         return;
       }
@@ -25655,7 +25669,7 @@ if (p.a === 'a:match_home') {
         await safeEditOrReply(
           ctx,
           '⛔ QSTASH_TOKEN не задан в Vercel. Ping недоступен.',
-          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
+          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
         );
         return;
       }
@@ -25665,7 +25679,7 @@ if (p.a === 'a:match_home') {
         await safeEditOrReply(
           ctx,
           '⛔ PUBLIC_BASE_URL не задан. Ping недоступен.',
-          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
+          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
         );
         return;
       }
@@ -25701,7 +25715,7 @@ if (p.a === 'a:match_home') {
 Причина: <code>${escapeHtml(msg)}</code>
 
 Проверь ENV: QSTASH_TOKEN и Signing Keys в Vercel.`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
         );
         return;
       }
@@ -29285,7 +29299,7 @@ ${actionHint}`;
         await ctx.answerCallbackQuery({ text: 'Не удалось опубликовать.' });
         await safeEditOrReply(ctx, 
           `⚠️ Не удалось отправить пост в канал.\n\nПроверь: бот админ в канале, есть право писать.\n\nОшибка: ${escapeHtml(String(e?.message || e))}`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) }
+          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') }
         );
       }
       return;
