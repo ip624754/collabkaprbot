@@ -1,6 +1,7 @@
 -- Collabka migration pack: mark all current migrations as applied
--- Use ONLY if your DB schema is already up-to-date (e.g. you ran migrations manually before).
--- Safe to re-run.
+-- Use ONLY if your DB schema is already up-to-date (e.g. you ran migrations manually before,
+-- or you restored a full DB dump/restore from an already-up-to-date database).
+-- Safe to re-run (idempotent).
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id BIGSERIAL PRIMARY KEY,
@@ -34,6 +35,7 @@ INSERT INTO schema_migrations(name, checksum) VALUES ('022_profile_matrix_match_
 INSERT INTO schema_migrations(name, checksum) VALUES ('023_barter_offer_media.sql', '7460110405aac5cb91a4438953adb993bbd5cc33ac1b0e33358d5a07869d5427') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('024_brand_profiles.sql', 'fea11a1d066c6893317ace74f7b70252b53fce8cf73a1e6c7a7c5d9234a889a9') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('025_giveaways_media.sql', '413ec2b9af6d12eecdabfa1a1ca4685dbba406d9fe358c2b8938a78041b58245') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('026_brand_contact_unlocks.sql', 'ced1a6c35f9259d127a1731144d5425987ba75de9556408b013533f3309d4ae1') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('026_brand_managers.sql', '61ecbdb6848206737b1d7935ba5cf95dac2d7d6c87cb117084a01118da877e6d') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('027_brand_applications.sql', '1046ef08d7925a8bae2fd21b90bf6534e02027613055a0cb39a7c1309274d0db') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('028_barter_offers_meta.sql', 'a1f81c3fdeb885693fe47e1b47abafb37050341550dafda1f2c5c3b27fd8564e') ON CONFLICT (name) DO NOTHING;
@@ -42,4 +44,11 @@ INSERT INTO schema_migrations(name, checksum) VALUES ('030_broadcasts.sql', '5da
 INSERT INTO schema_migrations(name, checksum) VALUES ('031_brand_leads_assignment.sql', '439b378d246d70f11799aaa350e747bcc774946e80c1dd71f5617149faba6fdf') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('032_soft_delete.sql', 'c105cad1b808962caf3af89058076c6b4f27ff87a571e64382472f83bb531736') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('033_user_ban.sql', '0ad442783d8da3d2b80e18459bc2f6ad718f0507b6668260591e1a4b319d44d5') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('034_SQL Migration Neon Postgres.sql', 'c2eb9d2d1fe5cdcc658a45fbd38d72a7ee0cb0644fe79f06d18d34ce3b1de892') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('034_SQL Migration Neon Postgres.sql', 'cab0aaf1ec636798398eb5889cd513c39a3efff59e35d67d722f0bd0f847e2d7') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('035_brand_credits_gifted.sql', 'ae64c2338b8432c6cd6968f460f4a99716e874f4d3b72b12eb259a7a7a040a86') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('036_payments_provider_charge_unique.sql', '095731743e88dbfc15baf840941ac4843ca39df9647b4d2cead06bdd91cd7375') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('037_broadcast_sent_log_retry_after.sql', '0976b79f876ed7231c33b8b62995b5f2f4c619bcb42dad6c881ed14e51fdd639') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('038_workspace_profile_contacts.sql', 'cef0e900eb2e69c64ee54d1d0ae924d1713d7a919cdd1f07bbc385f2fe8ff749') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('039_broadcast_cooldown_db_fuse.sql', '9ece465ca51c44d69a6046c48472b1a02cbcf2d427601bb517f26ffd9ccb845f') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('040_broadcast_fanout_qstash.sql', '058feff0a93196d77e580cb463daeed32ed9de7cca3cde01048b9b9c954dbb79') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('041_ig_oauth_accounts.sql', '91f821dc3a351e6f782ea1c810c97866eac5e33cfc692aa8306dc74945b705a5') ON CONFLICT (name) DO NOTHING;
