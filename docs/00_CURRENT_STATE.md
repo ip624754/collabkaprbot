@@ -158,6 +158,7 @@ Redis keys:
 - Runtime toggle (Redis): `sys:broadcast_qstash_fanout` (по умолчанию OFF).
 - Setup/rollout: `docs/10_QSTASH_RUNBOOK.md`.
 - Admin self-check: 👑 Админка → 🛰 QStash статус → 🧪 Send signed ping (endpoint `POST /api/qstash/ping`).
+- Навигация: на экране “🛰 QStash статус” кнопка “⬅️ Назад” ведёт в 👑 Админку, “📋 Меню” — в пользовательское меню.
 
 ### C) HomeHub / ui_mode и Role Gate
 - `ui_mode` хранится в Redis (`brand` / `creator`).
