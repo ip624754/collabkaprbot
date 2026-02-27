@@ -48,7 +48,7 @@ async function replyUnknown(ctx, deps, action) {
     await ctx.answerCallbackQuery({ text: 'Кнопка устарела. Открой меню.' });
   } catch {}
 
-  const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+  const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   const msg =
     `⚠️ <b>Кнопка устарела</b> (после обновления).
 
@@ -84,7 +84,7 @@ async function replyError(ctx, deps, action, err) {
     await ctx.answerCallbackQuery({ text: 'Ошибка. Открой меню.' });
   } catch {}
 
-  const kb = new InlineKeyboard().text('📋 Меню', 'a:menu');
+  const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   const dbg = `
 
 <code>cid: ${escHtml(cid)}
