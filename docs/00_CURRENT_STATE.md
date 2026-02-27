@@ -141,6 +141,22 @@
 
 Оперативные действия при проблемах/дублях: `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`.
 
+### E) Instagram (OAuth) — временно выключено
+
+План был: **OAuth-only** (без комментариев/кодов), где:
+- **Verified badge** = trust-signal (можно показывать до unlock)
+- **@handle/ссылка** = контакт и выдаётся только **после unlock**
+
+Но на практике Meta начала возвращать `pages=0` и местами блокировать доступ к Pages/приложению.
+Чтобы не ломать UX и не тормозить запуск, мы:
+- **скрыли кнопку IG подключения в профиле** (пользователь видит “функция пока недоступна”)
+- **оставили код/эндпоинты** и миграцию в базе, чтобы вернуться позже
+
+Доки:
+- Runbook: `docs/22_IG_GRAPH_OAUTH_2026.md`
+- Пост‑мортем + план возврата: `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`
+- Спека: `docs/spec/24_IG_INTEGRATION_SPEC.md`
+
 ---
 
 ## 5) ENV (важные флаги)
@@ -164,6 +180,14 @@
 Дефолты и парсинг см. в коде (это источник истины).
 
 > Примечание: `CONTACT_UNLOCK_COST`, `CONTACT_UNLOCK_TTL_DAYS`, `BRAND_CREDITS_CACHE_TTL_SEC`, `BRAND_APP_ACCEPT_COST` читаются напрямую в `src/bot/bot.js` (не через `CFG`).
+
+Дополнительно (Instagram OAuth, сейчас UI скрыт):
+- `IG_OAUTH_ENABLED` (0/1)
+- `IG_OAUTH_UI_ENABLED` (0/1)
+- `IG_OAUTH_CLIENT_ID`
+- `IG_OAUTH_CLIENT_SECRET`
+- `PUBLIC_BASE_URL`
+- `IG_TOKEN_ENC_KEY`
 
 
 - **BOT**: `BOT_ID` `BOT_TOKEN` `BOT_USERNAME` `BOT_VARIANT`

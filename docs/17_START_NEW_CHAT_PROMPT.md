@@ -17,6 +17,7 @@
 2) `docs/README.md` — карта документации (START HERE)
 3) `docs/00_BOOT.md` — якорь контекста (что нельзя забывать)
 4) `docs/00_CURRENT_STATE.md` — текущее состояние проекта (**source of truth**)
+4.1) (опционально) `docs/90_OWNER_RUNBOOK.md` — как владелец управляет продом (ENV/cron/migrations)
 5) `docs/12_INFRA_CONTROL_PLANE.md` — cron/locks/outbox/гарантии (как не словить дубли)
 6) `docs/11_MIGRATIONS_PACK.md` — миграции (exactly‑once runner, Neon‑safe)
 7) `docs/16_RELEASE_CHECKLIST.md` + `smoke-tests_short.md` — релиз и минимальный smoke
@@ -47,6 +48,7 @@
 - Founder Sale: runtime управление из админки + deep-link fs_* (для маркетинга)
 - Contacts / Brand Pass: unlock DB-truth + anti-bypass redaction + structured contacts (`profile_contacts` JSONB) с приоритетом structured→контакт (текстом) (см. docs/20)
 - Brand Inbox: «✅ Принять» — точка списания (status=new→in_progress). До принятия доступны только ✅ Принять / ⛔ Спам / 🗑 Удалить; нельзя «Ответить/Шаблоны/В работу/Закрыть». Баланс кредитов в карточке (Redis-only).
+- Instagram: OAuth-интеграция **временно скрыта из UI** (не блокирует прод). Контекст: `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`.
 - Giveaways: «➕ Новый розыгрыш» без канала показывает gate‑экран (как у офферов), без молчаливых тупиков
 - Creator → заявки брендам: «✍️ Написать заявку» включает явный режим ввода + «❌ Отмена ввода»
 - Новичок UX: вместо “тишины” — понятные подсказки + кнопки назад/меню/home; очистка полей через `🧹 Очистить`

@@ -1,4 +1,4 @@
-# 22 — Instagram Graph OAuth (Business/Creator) — Runbook — 2026-02-26
+# 22 — Instagram Graph OAuth (Business/Creator) — Runbook — 2026-02-27
 
 Этот документ описывает **официальный** путь подключить Instagram через **Meta OAuth (Business Login)**, чтобы получить доступ к:
 - профилю профессионального IG аккаунта (username, account_type),
@@ -6,6 +6,8 @@
 
 > Важно: это работает **только** для Instagram **Business или Creator** аккаунтов, которые **привязаны к Facebook Page**.
 > Личные IG аккаунты Graph API не поддерживает.
+
+⚠️ Реальность UX: даже если цель — Instagram, **вход почти всегда идёт через Meta** (и иногда выглядит как Facebook‑логин). Это нормальный официальный флоу для Page‑backed IG.
 
 ## 0) Что понадобится
 
@@ -46,10 +48,15 @@ Redirect должен совпадать **точно** (включая https, �
 - `pages_show_list`
 - `pages_read_engagement`
 
+Практика (важно для Business Manager / Business Portfolio): часто без `business_management` Meta отдаёт **0 страниц** в `GET /me/accounts` даже при наличии `pages_show_list`.
+Поэтому для стабильного получения страниц добавляем:
+
+- `business_management`
+
 Для будущих шагов:
 - комментарии: `instagram_manage_comments`
 - insights: `instagram_manage_insights`
-- публикация: `instagram_content_publish`
+- публикация: `instagram_content_publish` (в UI может отображаться как `instagram_content_publishing`)
 
 > Для продакшена расширенные permissions обычно требуют **App Review**.
 
@@ -71,6 +78,12 @@ Redirect должен совпадать **точно** (включая https, �
 
 Если `instagram_business_account` не находится — значит IG **не привязан** к Page или ты смотришь не ту Page.
 
+Если `GET /me/accounts` возвращает `pages=0`:
+- проверь, что permissions реально выданы (в Meta → Permissions & Features должен быть статус хотя бы “Ready for testing”)
+- проверь, что FB‑пользователь добавлен в роли приложения (Admin/Developer/Tester)
+- попробуй добавить `business_management` и повторить OAuth
+- если Meta пишет “У вас нет доступа” — это уже ограничение/блокировка на стороне Meta (часто лечится Business Verification + App Review/Advanced access)
+
 ## 6) Checklist перед запуском
 
 - IG профессиональный (Business/Creator)
@@ -88,6 +101,7 @@ Redirect должен совпадать **точно** (включая https, �
 
 - **redirect_uri mismatch** → разные слэши/домен/протокол
 - **no instagram_business_account** → IG не привязан к Page или нет прав на Page
+- **pages=0** при `pages_show_list` → часто не хватает `business_management` или Meta не выдала доступ (роли/verification/review)
 - **insufficient permissions** → нет нужных scopes или App Review не пройден
 - **token expired** → нужно refresh long-lived или повторить OAuth
 

@@ -13,7 +13,9 @@
 - `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (source of truth)
 - `12_INFRA_CONTROL_PLANE.md` — Cron/Locks/Outbox/гарантии (Control Plane)
 - `17_QSTASH_RUNBOOK.md` — QStash: где взять ключи/env, как включать fan-out, rollout/rollback
-- `21_IG_VERIFY_RUNBOOK.md` — IG verify (Level B): как получить `IG_VERIFY_ACCESS_TOKEN` и `IG_VERIFY_MEDIA_ID`, как включить cron
+- `22_IG_GRAPH_OAUTH_2026.md` — IG Graph OAuth (Business/Creator): официальный OAuth через Meta (runbook)
+- `23_IG_CONNECT_WORKLOG_AND_RESUME.md` — что уже сделано по IG, что сломалось у Meta и как вернуться
+- `21_IG_VERIFY_RUNBOOK.md` — IG verify (Level B): legacy reference (не рекомендуем включать)
 - `11_MIGRATIONS_PACK.md` — как безопасно поднять БД на Neon (exactly-once runner)
 - `migration_pack/` — ручные SQL-скрипты для экстренной миграции/repair (см. `docs/11_MIGRATIONS_PACK.md`)
 - `18_NEON_COST_SAVING_AUDIT_THROTTLE.md` — как экономить Neon: audit write-shedding + метрики в `/api/health`
@@ -45,6 +47,9 @@
 - `22_OFFER_WIZARD_SPEC.md` — визард оффера (финальный экран без тупиков)
 - `23_LEAD_NOTES_SPEC.md` — Curator Notes по заявкам брендов
 - `24_IG_INTEGRATION_SPEC.md` — Instagram integration (OAuth only): trust badge + paywall + PRO hooks (Level B комментарии не используем)
+
+## 2.5) Owner docs (для управления продом)
+- `90_OWNER_RUNBOOK.md` — шпаргалка владельца: деплой/ENV/migrations/cron/health/инциденты
 
 ## 3) Protocol / Process (как работаем)
 Папка: `docs/process/`
@@ -85,3 +90,8 @@
 - Level B: cron `/api/cron/ig-verify-tick` + ручной ускоритель “⚡ Проверить сейчас” через QStash.
 - Runbook: `docs/21_IG_VERIFY_RUNBOOK.md`.
 - Админка: экран “📸 IG verify статус” (ENV ok/miss, last cron run, last check-now run).
+
+## Что нового по IG OAuth (2026-02-27)
+- Спека обновлена: OAuth‑only, FREE, без “PRO” в UX.
+- Из-за ограничений Meta интеграция **временно скрыта в UI** (запуск проекта без зависимости от IG).
+- Добавлены документы: runbook + пост‑мортем + owner‑шпаргалка.
