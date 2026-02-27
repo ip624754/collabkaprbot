@@ -20,6 +20,7 @@
 - STEP155: Добавлен Redis snapshot `brand_credits_snap:*` + прогрев/гидрация (всё Redis-only) и единый UI helper для блока “💳/🔓/trial”.
 - STEP156 (docs-only): зафиксировали STEP153–155 в `00_CURRENT_STATE`/`WORK_HISTORY` + процесс: каждый следующий STEP обновляет доки.
 - STEP157 (docs-only): описали поверхности просмотра (витрина/лента/каталог) + пагинацию; добавили публичный текст `docs/public/11_feeds_and_discovery_ru.md`.
+- STEP158 (docs-only): добавили короткий блок в публичный one‑pager и FAQ со ссылкой на `docs/public/11_feeds_and_discovery_ru.md` (чтобы объяснение было “в одном месте” и без длинных сообщений).
 
 
 Подробности по IG: `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`.
