@@ -242,6 +242,9 @@ export const CFG = {
   })(),
   // Instagram OAuth (Level A, OAuth-only). FREE for creators (badge + connect).
   IG_OAUTH_ENABLED: parseBoolSafe(process.env.IG_OAUTH_ENABLED, false),
+  // UX switch: show/hide IG OAuth connect UI in creator profile.
+  // Default OFF (safe): enable later when Meta side is stable.
+  IG_OAUTH_UI_ENABLED: parseBoolSafe(process.env.IG_OAUTH_UI_ENABLED, false),
   IG_OAUTH_CLIENT_ID: process.env.IG_OAUTH_CLIENT_ID || '',
   IG_OAUTH_CLIENT_SECRET: process.env.IG_OAUTH_CLIENT_SECRET || '',
   IG_OAUTH_SCOPES: process.env.IG_OAUTH_SCOPES || 'instagram_basic,pages_show_list,pages_read_engagement',
