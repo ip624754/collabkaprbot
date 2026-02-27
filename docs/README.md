@@ -20,6 +20,7 @@
 - `18_NEON_COST_SAVING_AUDIT_THROTTLE.md` — как экономить Neon: audit write‑shedding + метрики в `/api/health`
 - `19_OFFICIAL_PUBLISH_IDEMPOTENCY.md` — Official publish: анти‑дубли (token‑lock + DB‑reserve) + что делать при дубле
 - `20_CONTACTS_MODEL.md` — контакты/монетизация (Brand Pass) + structured contacts + приоритеты/UX
+- `31_FEEDS_VITRINES_CATALOGS.md` — как устроены витрина/лента/каталог и пагинация (без бесконечного скролла)
 
 ### Instagram (временно скрыто в UI)
 - `22_IG_GRAPH_OAUTH_2026.md` — IG Graph OAuth (Business/Creator): официальный OAuth через Meta (runbook)
@@ -39,6 +40,9 @@
 - `06_telegraph_article_ru.md` — большая Telegraph‑статья “под ключ”
 - `07_press_kit_ru.md` — пресс‑кит/медиакит (готовые формулировки)
 - `08_privacy_security_ru.md` — публичное объяснение приватности и безопасности
+- `09_use_cases_ru.md` — сценарии/кейсы применения
+- `10_brand_plan_explainer_ru.md` — простое объяснение Brand Plan/кредитов
+- `11_feeds_and_discovery_ru.md` — где “лента/витрина/каталог” (простое объяснение)
 
 ## 2) SPEC / UX reference (актуально, но не является source of truth)
 Папка: `docs/spec/`
