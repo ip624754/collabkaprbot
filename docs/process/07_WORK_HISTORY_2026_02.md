@@ -15,6 +15,12 @@
 - STEP140–148: IG OAuth-only (Level A) — реализовано, но Meta начала резать доступ к Pages (`pages=0`), поэтому…
 - STEP149: IG UI **скрыт** (функция временно недоступна), остальной прод готовим к запуску
 
+- STEP153: Brand Inbox (карточка заявки `status=new`) — баланс кредитов в UI **строго Redis-only**, без DB fallback; кеш обновляется после accept/платежей через `UPDATE ... RETURNING`.
+- STEP154: Витрина креатора + диалог по заявке + brand hub (`bx_open`, `ws=0`) — баланс **строго Redis-only**, при пустом кеше показываем `—` (без чтения из Neon).
+- STEP155: Добавлен Redis snapshot `brand_credits_snap:*` + прогрев/гидрация (всё Redis-only) и единый UI helper для блока “💳/🔓/trial”.
+- STEP156 (docs-only): зафиксировали STEP153–155 в `00_CURRENT_STATE`/`WORK_HISTORY` + процесс: каждый следующий STEP обновляет доки.
+
+
 Подробности по IG: `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`.
 
 
