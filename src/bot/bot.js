@@ -54,6 +54,8 @@ const BRAND_APP_ACCEPT_COST = envInt('BRAND_APP_ACCEPT_COST', 1, { min: 0, max: 
 
 
 const BRAND_CREDITS_CACHE_TTL_SEC = envInt('BRAND_CREDITS_CACHE_TTL_SEC', 60, { min: 5, max: 3600 });
+const BRAND_CREDITS_SNAP_TTL_SEC = envInt('BRAND_CREDITS_SNAP_TTL_SEC', 90 * 24 * 60 * 60, { min: 3600, max: 365 * 24 * 60 * 60 });
+
 
 async function getBrandCreditsCached(userId) {
   const uid = Number(userId || 0);
@@ -83,16 +85,56 @@ async function getBrandCreditsCached(userId) {
   return n;
 }
 
-async function getBrandCreditsRedisOnly(userId) {
+function brandCreditsMainKey(uid) {
+  return k(['brand_credits', uid]);
+}
+
+function brandCreditsSnapKey(uid) {
+  return k(['brand_credits_snap', uid]);
+}
+
+function normalizeCreditsValue(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.trunc(n));
+}
+
+// Redis-only credits getter for hot UI (no DB fallback).
+// Improvement (STEP155): if the short TTL cache is missing, we try a longer-lived Redis snapshot
+// and hydrate the short TTL key from it (still Redis-only).
+async function getBrandCreditsRedisOnly(userId, opts = {}) {
   const uid = Number(userId || 0);
   if (!uid) return null;
-  const key = k(['brand_credits', uid]);
+  const warm = !!opts?.warm;
+  const key = brandCreditsMainKey(uid);
+
   try {
     const v = await redis.get(key);
-    if (v === null || v === undefined) return null;
-    const n = Number(v);
-    if (!Number.isFinite(n)) return null;
-    return Math.max(0, Math.trunc(n));
+    if (v !== null && v !== undefined) {
+      const n = normalizeCreditsValue(v);
+      if (n === null) return null;
+      if (warm) {
+        try { await redis.expire(key, BRAND_CREDITS_CACHE_TTL_SEC); } catch {}
+        try { await redis.set(brandCreditsSnapKey(uid), String(n), { ex: BRAND_CREDITS_SNAP_TTL_SEC }); } catch {}
+      }
+      return n;
+    }
+  } catch {
+    // ignore
+  }
+
+  // Fallback: Redis snapshot (longer TTL). Still Redis-only.
+  try {
+    const snap = await redis.get(brandCreditsSnapKey(uid));
+    if (snap === null || snap === undefined) return null;
+    const n = normalizeCreditsValue(snap);
+    if (n === null) return null;
+    // hydrate short TTL cache best-effort
+    try { await redis.set(key, String(n), { ex: BRAND_CREDITS_CACHE_TTL_SEC }); } catch {}
+    if (warm) {
+      try { await redis.expire(brandCreditsSnapKey(uid), BRAND_CREDITS_SNAP_TTL_SEC); } catch {}
+    }
+    return n;
   } catch {
     return null;
   }
@@ -101,9 +143,10 @@ async function getBrandCreditsRedisOnly(userId) {
 async function setBrandCreditsCache(userId, credits) {
   const uid = Number(userId || 0);
   if (!uid) return;
-  const n = Number(credits || 0);
-  const v = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
-  try { await redis.set(k(['brand_credits', uid]), String(v), { ex: BRAND_CREDITS_CACHE_TTL_SEC }); } catch {}
+  const n = normalizeCreditsValue(credits);
+  const v = n === null ? 0 : n;
+  try { await redis.set(brandCreditsMainKey(uid), String(v), { ex: BRAND_CREDITS_CACHE_TTL_SEC }); } catch {}
+  try { await redis.set(brandCreditsSnapKey(uid), String(v), { ex: BRAND_CREDITS_SNAP_TTL_SEC }); } catch {}
 }
 
 function fmtCredits(n) {
@@ -124,6 +167,22 @@ function brandPassBalanceLineHtml(credits) {
 function brandPassBalanceLineHtmlDash(credits) {
   if (credits === null || credits === undefined) return `💳 Кредиты: <b>—</b>`;
   return brandPassBalanceLineHtml(credits);
+}
+
+function brandPassCreditsBlockLines(credits, opts = {}) {
+  const showHintWhenUnknown = !!opts?.showHintWhenUnknown;
+  if (credits === null || credits === undefined) {
+    const lines = [brandPassBalanceLineHtmlDash(null)];
+    if (showHintWhenUnknown) lines.push('<i>(баланс появится после покупки/операции)</i>');
+    return lines;
+  }
+  const n = Math.max(0, Math.trunc(Number(credits) || 0));
+  const lines = [brandPassBalanceLineHtml(n)];
+  const uLine = brandPassUnlocksLineHtml(n);
+  if (uLine) lines.push(uLine);
+  const tLine = brandPassTrialLineHtml(n);
+  if (tLine) lines.push(tLine);
+  return lines;
 }
 
 
@@ -8877,16 +8936,10 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     else blocks.push(`🪟 Витрина: нажми «📝 Оставить заявку». Контакты на витрине — через «${contactUnlockBtnLabel()}».`);
 
     if (viewer) {
-      blocks.push(brandPassBalanceLineHtmlDash(brandCredits));
-      if (brandCredits !== null) {
-        const uLine = brandPassUnlocksLineHtml(brandCredits);
-        if (uLine) blocks.push(uLine);
-        const tLine = brandPassTrialLineHtml(brandCredits);
-        if (tLine) blocks.push(tLine);
-        if (canUnlockContacts && !revealContacts) {
-          const needLine = brandPassContactsNeedLineHtml(brandCredits);
-          if (needLine) blocks.push(needLine);
-        }
+      for (const line of brandPassCreditsBlockLines(brandCredits)) blocks.push(line);
+      if (brandCredits !== null && canUnlockContacts && !revealContacts) {
+        const needLine = brandPassContactsNeedLineHtml(brandCredits);
+        if (needLine) blocks.push(needLine);
       }
     }
 
@@ -9562,7 +9615,7 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
 
   let credits = null;
   try { credits = await withTimeout(getBrandCreditsRedisOnly(brandUserId), 2500, 'brand.credits.redis'); } catch { credits = null; }
-  const creditsNum = (credits === null || credits === undefined) ? 0 : Number(credits || 0);
+  const creditsNum = (credits === null || credits === undefined) ? 0 : Math.max(0, Math.trunc(Number(credits) || 0));
 
   const needContacts = Number(CONTACT_UNLOCK_COST || 0);
   const needsContactsTopup = (credits !== null) && needContacts > 0 && creditsNum < needContacts;
@@ -9589,11 +9642,8 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
 ` +
     `Создано: <code>${escapeHtml(String(when))}</code>
 ` +
-    `${brandPassBalanceLineHtmlDash(credits)}
+    `${brandPassCreditsBlockLines(credits).join('\n')}
 ` +
-    (credits !== null ? `${brandPassUnlocksLineHtml(creditsNum)}
-${brandPassTrialLineHtml(creditsNum)}
-` : ``) +
     (needLine ? `${needLine}
 ` : ``) +
     ``;
@@ -10262,21 +10312,8 @@ ${threadBlock}`;
         ? `
 <i>✅ Принять спишет: <b>${BRAND_APP_ACCEPT_COST}</b> ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')}.</i>`
         : `
-<i>✅ Принять: бесплатно.</i>`);
-
-    // Balance line: Redis-only cache. If missing, show placeholder (no DB read).
-    const bpLines = [];
-    if (creditsCached !== null && creditsCached !== undefined) {
-      const balNum = Math.max(0, Math.trunc(Number(creditsCached) || 0));
-      bpLines.push(brandPassBalanceLineHtml(balNum));
-      const uLine = brandPassUnlocksLineHtml(balNum);
-      if (uLine) bpLines.push(uLine);
-      const tLine = brandPassTrialLineHtml(balNum);
-      if (tLine) bpLines.push(tLine);
-    } else {
-      bpLines.push('💳 Кредиты: <b>—</b>');
-      bpLines.push('<i>(баланс появится после покупки/операции)</i>');
-    }
+<i>✅ Принять: бесплатно.</i>`);    // Balance block: Redis-only (STEP155: snapshot hydrate), consistent placeholder/hint.
+    const bpLines = brandPassCreditsBlockLines(creditsCached, { showHintWhenUnknown: true });
     if (bpLines.length) text += '\n\n' + bpLines.join('\n');
   }
 
@@ -11881,7 +11918,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
   const isCurator = ownerUserId ? await db.hasAnyCuratorRole(ownerUserId) : false;
   const wsNum = Number(wsId || 0);
   if (wsNum === 0) {
-    const credits = await getBrandCreditsRedisOnly(ownerUserId);
+    const credits = await getBrandCreditsRedisOnly(ownerUserId, { warm: true });
     const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(ownerUserId) : 0;
     const planRow = await db.getBrandPlan(ownerUserId);
     const active = await db.isBrandPlanActive(ownerUserId);
@@ -11891,9 +11928,10 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
     const untilTxt = (active && planRow?.brand_plan_until) ? `
 До: <b>${escapeHtml(fmtTs(planRow.brand_plan_until))}</b>` : '';
 
-    const creditsLine = brandPassBalanceLineHtmlDash(credits);
-    const unlocksLine = (credits === null) ? '' : brandPassUnlocksLineHtml(credits);
-    const trialLine = (credits === null) ? '' : brandPassTrialLineHtml(credits);
+    const bpLines = brandPassCreditsBlockLines(credits);
+    const creditsLine = bpLines[0] || '';
+    const unlocksLine = bpLines[1] || '';
+    const trialLine = bpLines[2] || '';
 
     await safeEditOrReply(ctx, 
       `🏷 <b>Для брендов</b>
