@@ -552,6 +552,22 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 - `MATCH_FEAT_AUTO_APPLY_ENABLED=1` — после оплаты бот автоматически запускает Smart Matching / Featured (попросит бриф/контент).
 - `MATCH_FEAT_AUTO_APPLY_ENABLED=0` — авто-режим выключен: оплаты Smart Matching / Featured помечаются как **ORPHANED** и требуют ручной обработки в админке.
 
+
+## STEP190 — Admin: шаблоны DM для сообщений пользователям (Redis-only CRUD)
+
+Расширили STEP187: шаблоны для “✉️ Написать пользователю” больше не хардкод.
+
+- Хранение: **только Redis** (key `sys:admin_dm_templates`).
+- Админка: `👑 Админка → 📌 Шаблоны DM`
+  - список шаблонов (пагинация),
+  - **➕ Новый шаблон** (1-я строка — название кнопки, дальше — текст),
+  - **✏️ Изменить / 🗑 Удалить**,
+  - **♻️ Сбросить к дефолту** (удаляет кастомный набор из Redis).
+- В карточке пользователя (`👑 Админка → Пользователи → Карточка → ✉️ Написать`) кнопки шаблонов берутся из Redis; если кастома нет или Redis недоступен — используем дефолтный набор.
+- Без миграций и без DB‑логов: всё управление и хранение — Redis-only.
+
+
+
 ### Payments: TTL сессии оплаты (чтобы не ловить ORPHANED)
 
 - `PAYMENT_SESSION_TTL_MIN=360` — TTL (в минутах) для Redis-сессий оплаты `pay_*` (контекст счёта: wsId/ret/packId и т.д.).
@@ -605,6 +621,54 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 - В базе есть общий баланс `brand_credits` и отдельный остаток подарков `brand_credits_gifted`.
 - При списании кредиты тратятся сначала из подарочных (уменьшается `brand_credits_gifted` до 0).
 - Команда «🧾 забрать подарочные» снимает только остаток подарочных, не затрагивая купленные/триал.
+
+---
+
+## STEP187 — Admin: сообщения пользователям из карточки (MVP)
+
+- В `👑 Админка → Пользователи → Карточка пользователя` добавлена кнопка **«✉️ Написать»**.
+- Можно отправить:
+  - **шаблонное** сообщение (6 быстрых шаблонов),
+  - **свободный текст** (вводится в DM с ботом, затем предпросмотр и подтверждение).
+- Без миграций/DB-логов: отправка — через Telegram `sendMessage`.
+- Защита от двойных кликов: best‑effort Redis dedup на 60 сек по `(admin_tg_id, target_tg_id, hash(text))`.
+- Лог отправки (best‑effort): в `SUPPORT_CHAT_ID` (если задан) иначе всем `SUPER_ADMIN_TG_IDS`.
+
+
+## STEP188 — System Notice (Redis-only banner, без рассылки)
+
+- В админке добавлен экран: `👑 Админка → 📣 Объявление`.
+- Объявление хранится **только в Redis** (без DB), ключ: `sys:notice` (object):
+  - `active` — показывать или нет,
+  - `severity` — `info` / `warn` / `critical`,
+  - `version` — номер версии (целое число),
+  - `text` — текст объявления,
+  - `updatedAt` — время последнего изменения (best-effort).
+- Публикация: кнопка **«🚀 Опубликовать (новая версия)»** увеличивает `version` на 1 и включает `active=ON`.
+- Показ пользователям: при входе в `📋 Меню` или `🏠 Home` бот делает **Redis-only** проверку:
+  - если `active=ON`, `version>0` и у пользователя нет метки `seen` для этой версии — отправляет объявление отдельным сообщением и ставит `seen`.
+  - `seen` ключ: `sys:notice:seen:<tg_id>:<version>` (TTL ~180 дней).
+- Это **не broadcast**: нет массовой отправки и нет DB‑сканов; сообщение “подхватывается” только когда пользователь сам открывает меню/хаб.
+
+
+## STEP189 — System Notice v2 (targeting + CTA + auto-expire)
+
+Расширили System Notice (STEP188), всё ещё **Redis-only** и **без рассылки**.
+
+- Новые поля `sys:notice`:
+  - `target` — `all` / `brand` / `creator` (таргетинг по роли, определяем **только из Redis**: `ui_mode` + `bm_mode`),
+  - `ctaLabel` / `ctaUrl` — опциональная URL‑кнопка,
+  - `expiresAt` — auto‑expire (epoch seconds; в админке можно вводить ISO со смещением).
+- В админке (`👑 Админка → 📣 Объявление`) добавлены кнопки:
+  - **🎯 Кому** (циклом `all→brand→creator`),
+  - **🔗 CTA** (label + URL),
+  - **⏰ Expire** (дедлайн).
+- Показ пользователям:
+  - если объявление истекло (`expiresAt` в прошлом) — **не показываем**,
+  - если `target!=all` — показываем только целевой роли,
+  - если `ctaUrl` задан — добавляется URL‑кнопка в сообщении.
+
+
 ### Payments: auto-heal ORPHANED `missing_session` (cron + админка)
 
 - `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED=1` — cron будет периодически пытаться авто-применять ORPHANED с `note=missing_session` (только безопасные типы: PRO / кредиты / Brand Plan / founder_brand_*).
@@ -635,3 +699,12 @@ Auto-heal safeguards + ops alerts:
 ## Repo sync note
 - **STEP184:** архив репозитория и NotebookLM audit-pack синхронизированы с состоянием **STEP183** (без изменения поведения).
 - **STEP185:** исправлено битое имя файла в `docs/neon/` (теперь реально `ИСТОРИЯ_НЕОН.txt`, как и указано в доках/аудит-паке).
+
+### STEP186 — NotebookLM pack ≤50 files (NotebookLM50)
+- NotebookLM лимит: максимум 50 файлов; .sql часто не загружается.
+
+### STEP187 — Admin: user messages from user card
+- Добавлена отправка сообщений пользователям из админки (из карточки пользователя): шаблоны + свободный текст + предпросмотр.
+- Добавлен Redis dedup против случайных дублей.
+- Добавлен curated pack: `docs/audit/notebooklm_pack/` (бандлы core/features/process + code bundle + migrations bundle).
+- Генератор `npm run gen:notebooklm-sources` теперь собирает `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip` и валидирует лимит 50 файлов.
