@@ -773,13 +773,13 @@ function normalizeNoticeTarget(v) {
 }
 
 function normalizeNoticeCtaLabel(v) {
-  const raw = String(v || '').replace(/
-/g, '
-').trim();
-  if (!raw) return '';
-  // Keep label compact (no ellipsis in button text).
+  const raw0 = String(v || '').replace(/\r/g, '').trim();
+  if (!raw0) return '';
+  // Keep label compact: one line, no ellipsis in button text.
+  const raw = raw0.replace(/\s+/g, ' ').trim();
   return clipCodepoints(raw, CTA_LABEL_MAX, { ellipsis: '' }).text;
 }
+
 
 
 function normalizeNoticeCtaUrl(v) {
