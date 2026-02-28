@@ -243,9 +243,7 @@ ${accessHelpText(botUsername)}`;
     .text('👤 Проверить меня', `a:gw_access_checkme|i:${gwId}`)
     .text('🔎 Проверить по ID', `a:gw_access_user_prompt|i:${gwId}`)
     .row()
-    .text('⬅️ Назад', `a:gw_open|i:${gwId}`)
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Home', 'a:home');
+    .text('⬅️ Назад', `a:gw_open|i:${gwId}`);
 
   await safeAnswerCb(ctx);
   await safeEditOrReply(ctx, text, kb);
