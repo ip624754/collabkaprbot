@@ -114,6 +114,17 @@ Redis keys:
 Обновление кеша (best‑effort):
 - после мутаций кредитов (покупка/accept/unlock/интро) вызываем `setBrandCreditsCache(brandUserId, newBalance)`
 
+STEP166 (P0): **монетизация не должна “умирать” из‑за Redis/прочерка**.
+- CTA **✅ Принять** и **🔓 Разлок контактов** показываем всегда (даже если баланс = `—`).
+- Проверка баланса/списание — **только на клике** (DB truth + idempotency).
+- В реестре действий `src/bot/actionRegistry.js` `a:brand_app_accept` не требует Redis (иначе accept блокируется при деградации Redis).
+
+STEP167 (P0): **anti-ORPHANED платежи + буфер против гонок cron**.
+- Auto-heal ORPHANED `missing_session` теперь **не трогает** слишком свежие платежи (по умолчанию ~5 минут).
+- ENV: `PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC` (0..3600, default 300).
+- UX при `missing_session`: если auto-heal включён, бот сообщает, что попробует применить оплату автоматически в течение ~N минут.
+
+
 ### A2) Unified navigation footer (STEP160)
 Во всех экранах (кроме корневых меню и safety-mode `s:*`) используется единый footer‑ряд:
 - **⬅️ Назад** — возврат в предыдущий экран (return-to)
@@ -257,7 +268,7 @@ Redis keys:
 - **OPS**: `OPS_ALERT_BUFFER_MAX` `OPS_ALERT_SILENT` `OPS_ALERT_SUMMARY_MIN`
 - **PAYMENT**: `PAYMENT_SESSION_TTL_MIN`
 - **CONTACTS**: `CONTACT_UNLOCK_COST` `CONTACT_UNLOCK_TTL_DAYS` `BRAND_CREDITS_CACHE_TTL_SEC` `BRAND_CREDITS_SNAP_TTL_SEC`
-- **PAYMENTS**: `PAYMENTS_ACCEPT_DEFAULT` `PAYMENTS_AUTO_APPLY_DEFAULT` `PAYMENTS_FALLBACK_APPLY_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_BATCH` `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED`
+- **PAYMENTS**: `PAYMENTS_ACCEPT_DEFAULT` `PAYMENTS_AUTO_APPLY_DEFAULT` `PAYMENTS_FALLBACK_APPLY_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_BATCH` `PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC`
 - **FOUNDER**: `FOUNDER_BRAND_12M_CREDITS` `FOUNDER_BRAND_12M_PRICE` `FOUNDER_BRAND_3M_CREDITS` `FOUNDER_BRAND_3M_PRICE` `FOUNDER_CREATOR_12M_PRICE` `FOUNDER_SALE_DEADLINE` `FOUNDER_SALE_ENABLED`
 - **INTRO**: `INTRO_COST_PER_INTRO` `INTRO_DAILY_LIMIT` `INTRO_DAILY_LIMIT_UNVERIFIED` `INTRO_RATE_LIMIT` `INTRO_RATE_WINDOW_SEC` `INTRO_RETRY_AFTER_HOURS` `INTRO_RETRY_ENABLED` `INTRO_RETRY_EXPIRES_DAYS` `INTRO_RETRY_NOTIFY` `INTRO_TRIAL_CREDITS`
 - **AUDIT**: `AUDIT_DB_ENABLED` `AUDIT_DB_THROTTLE_ENABLED` `AUDIT_DB_THROTTLE_LIMIT` `AUDIT_DB_THROTTLE_PREFIXES` `AUDIT_DB_THROTTLE_WINDOW_SEC`
@@ -346,7 +357,10 @@ Redis keys:
 ### Audit DB throttling
 - `AUDIT_DB_THROTTLE_ENABLED=true|false`
 - `AUDIT_DB_THROTTLE_LIMIT`, `AUDIT_DB_THROTTLE_WINDOW_SEC`
-- `AUDIT_DB_THROTTLE_PREFIXES` — какие audit-события считаем шумными (можно расширять точечно после метрик).
+- `AUDIT_DB_THROTTLE_PREFIXES` — какие audit-события считаем шумными.
+  - Default (guardrail): `lead.,folders.,ws.profile_,deal.,inbox.`
+  - Можно расширять точечно после метрик в `/api/health`
+- Поведение при деградации Redis: для событий, попавших под throttle-prefix, аудит **fail-closed** (просто дропаем запись), чтобы не “сжечь” Neon лишними INSERT.
 
 Подробный план и готовые профили: `docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`.
 
@@ -482,6 +496,8 @@ Redis keys:
 
 - `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED=1` — cron будет периодически пытаться авто-применять ORPHANED с `note=missing_session` (только безопасные типы: PRO / кредиты / Brand Plan / founder_brand_*).
 - `PAYMENTS_ORPHANED_AUTOHEAL_BATCH=20` — сколько платежей чинить за один тик (0..100).
+- `PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC=300` — не трогать слишком свежие ORPHANED (моложе ~5 минут), чтобы избежать гонок/задержанных обновлений. Диапазон: 0..3600 сек.
+
 - В админке: **Admin → Payments (ORPHANED)** → кнопка **Auto-heal missing_session**.
 
 Auto-heal safeguards + ops alerts:
@@ -491,3 +507,12 @@ Auto-heal safeguards + ops alerts:
 - Исключения/ошибки в тикe → ops alert `autoheal_failed`.
 
 Примечание: оплаты `offpub_*` (публикация в офиц.канал) остаются ручными по дизайну (модерация).
+
+
+### STEP164 — NotebookLM audit pack (docs-only)
+- Добавлен комплект для стороннего аудита: `docs/audit/*` (инструкция загрузки + промпт + audio focus).
+
+### STEP165 — NotebookLM: workaround для .sql + генератор sources
+- Добавлен генератор `npm run gen:notebooklm-sources`, который готовит папку/ZIP `dist/notebooklm_sources/`.
+- В sources SQL миграции и migration_pack кладутся как `.txt` копии (`migrations_txt/*.sql.txt`), чтобы NotebookLM принимал файлы.
+- Добавлен исторический контекст Neon: `docs/neon/ИСТОРИЯ_НЕОН.txt`.

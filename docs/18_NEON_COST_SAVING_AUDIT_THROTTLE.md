@@ -13,7 +13,7 @@
 1) `ANALYTICS_ENABLED=false` — держим выключенным (иначе `events` добавляют DB‑write).
 2) Throttle режет **только `auditWorkspace()`** (таблица `workspace_audit`).
 3) **Конкурсы/розыгрыши** логируются отдельно (обычно `giveaway_audit`) и **не попадают** под этот throttle. Если когда‑то начнут жечь — делаем отдельный throttle для `auditGiveaway()` отдельным маленьким патчем.
-4) Всё **safe-by-default**: если Redis недоступен — бот не падает; /api/health отдаётся fail‑open.
+4) Всё **safe-by-default**: если Redis недоступен — бот не падает; audit‑записи под throttle-prefix **дропаются (fail‑closed)**, а `/api/health` продолжает отвечать.
 
 ---
 
@@ -46,7 +46,7 @@ AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_,deal.,inbox.,brand.
 AUDIT_DB_THROTTLE_ENABLED=true
 AUDIT_DB_THROTTLE_WINDOW_SEC=60
 AUDIT_DB_THROTTLE_LIMIT=600
-AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_
+AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_,deal.,inbox.
 ```
 Подходит, если хочешь слегка успокоить всплески, но сохранять почти всё.
 
@@ -55,7 +55,7 @@ AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_
 AUDIT_DB_THROTTLE_ENABLED=true
 AUDIT_DB_THROTTLE_WINDOW_SEC=60
 AUDIT_DB_THROTTLE_LIMIT=180
-AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_
+AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_,deal.,inbox.
 ```
 Рекомендуемый старт на 1–2 дня.
 
@@ -64,7 +64,7 @@ AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_
 AUDIT_DB_THROTTLE_ENABLED=true
 AUDIT_DB_THROTTLE_WINDOW_SEC=60
 AUDIT_DB_THROTTLE_LIMIT=60
-AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_
+AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_,deal.,inbox.
 ```
 Если Neon реально горит — режем сильнее, история становится более “агрегированной”.
 

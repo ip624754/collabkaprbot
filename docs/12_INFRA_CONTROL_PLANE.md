@@ -129,7 +129,7 @@ ENV:
 - `AUDIT_DB_ENABLED=true` — включить/выключить DB-аудит целиком.
 - `AUDIT_DB_THROTTLE_ENABLED=true` — включить троттлинг.
 - `AUDIT_DB_THROTTLE_LIMIT=60` + `AUDIT_DB_THROTTLE_WINDOW_SEC=60` — максимум записей на (workspace × prefix) в окно.
-- `AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_` — какие действия считаем «шумными» (можно расширять точечно).
+- `AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_,deal.,inbox.` — какие действия считаем «шумными» (можно расширять точечно).
 
 ### Как наблюдать эффект
 Смотри `/api/health`:
