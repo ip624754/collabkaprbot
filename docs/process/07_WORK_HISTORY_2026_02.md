@@ -763,3 +763,177 @@ docs/01_SECURITY_INVARIANTS.md
 - Добавили `scripts/gen-mark-all-applied.js`: читает `migrations/*.sql`, считает sha256 как в `migrations/run.js`, генерирует `migration_pack/00_mark_all_applied.sql`.
 - Добавили команды: `npm run gen:migration-pack` и алиас `npm run gen:mark-all-applied`.
 - Обновили доки: `docs/11_MIGRATIONS_PACK.md`, `docs/00_CURRENT_STATE.md`.
+
+
+- STEP164 (docs-only): добавлен NotebookLM audit pack (`docs/audit/*`): порядок загрузки, промпт аудита, текст для аудиопересказа.
+
+## STEP165 — NotebookLM: SQL workaround + sources generator (docs-only + tooling)
+- NotebookLM часто блокирует `.sql` → добавили txt-копии для загрузки: `migrations_txt/*.sql.txt` и `migration_pack_txt/*.sql.txt`.
+- Добавили команду `npm run gen:notebooklm-sources`: генерит `dist/notebooklm_sources/` и (best-effort) `dist/NOTEBOOKLM_AUDIT_SOURCES.zip`.
+- Добавили `docs/neon/ИСТОРИЯ_НЕОН.txt` как доп. контекст по Neon (не миграция).
+
+## STEP166 — P0: Monetization CTAs survive Redis degradation
+- **Не прячем CTA из‑за “💳 Кредиты: —”**: действия списания (✅ Принять / 🔓 Разлок) доступны всегда.
+- Проверка баланса и списание происходят **только на клике** (DB truth, idempotent SQL).
+- `a:brand_app_accept` в `src/bot/actionRegistry.js` переведён на guard `NONE`, чтобы accept не блокировался при Redis down.
+- Экран запроса разлока контактов на витрине (`a:wsp_contact_req`) больше не скрывает кнопку разлока при неизвестном балансе.
+
+## STEP167 — Payments: anti-ORPHANED + anti-race buffer (serverless-safe)
+- Добавлен буфер для auto-heal ORPHANED `missing_session`: **не трогаем слишком свежие платежи** (по умолчанию 5 минут).
+  - ENV: `PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC` (0..3600, default 300).
+- Cron auto-heal (`src/bot/cron.js`) и ручной auto-heal в админке теперь **пропускают** платежи моложе min-age.
+- UX: при `missing_session` пользователю показываем, что бот попробует применить оплату автоматически в течение ~N минут (если auto-heal эффективен).
+- `/api/health` показывает `orphaned_autoheal_min_age_sec` и `orphaned_autoheal_effective`.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/01_SECURITY_INVARIANTS.md`.
+
+
+## STEP168 — Audit DB: fail-closed на деградации Redis + расширили throttle-prefixes
+- `auditWorkspace()` больше не делает **fail-open** при ошибках Redis rate-limit: если Redis недоступен, события под `AUDIT_DB_THROTTLE_PREFIXES` **дропаются** (fail-closed), чтобы не “сжечь” Neon всплеском `INSERT`.
+- Расширили default `AUDIT_DB_THROTTLE_PREFIXES`: теперь в guardrail входят `deal.` и `inbox.` (помимо `lead.`/`folders.`/`ws.profile_`).
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/12_INFRA_CONTROL_PLANE.md`, `docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`.
+
+
+## STEP169 — Broadcast/QStash: 429 retryable + quarantine + cooldown fast-path (Neon-safe)
+- В воркере `POST /api/qstash/broadcast-deliver` 429 **не помечается non-retryable**: получатели не “вылетают навсегда”.
+- Добавили per-recipient quarantine на повторных 429 (Redis counter → DB `status='quarantined'`, `retry_after_until` продлевается).
+  - ENV: `BROADCAST_QUARANTINE_THRESHOLD` (default 3), `BROADCAST_QUARANTINE_SEC` (default 1200).
+- Чтобы не сжигать Neon CU на массовых 429: cooldown проверяется **до DB reads** (Redis-only) + micro-memo `QSTASH_BC_COOLDOWN_MEMO_TTL_MS`.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/10_QSTASH_RUNBOOK.md`.
+
+
+## STEP170 — Instagram OAuth: kill-switch (UI hidden → API closed)
+- Закрыли “теневое API”: если `IG_OAUTH_UI_ENABLED=0`, то все роуты `/api/ig/oauth/*` возвращают **404** ещё до выполнения логики.
+- Это не влияет на прод‑функции (IG UI и так скрыт), но уменьшает поверхность атаки и исключает неожиданные вызовы эндпоинтов “в обход UI”.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`.
+
+
+## STEP171 — Monetization circuit breaker: 2s timeout → «в обработке» + QStash retry
+- Для критичных списаний (✅ Принять / 🔓 Разлок контактов) добавили короткий timeout на DB‑вызовы.
+- При TIMEOUT/транзиентных ошибках: UI отвечает «⏳ В обработке…» и ставит задачу в QStash (dedup) на `POST /api/qstash/monetization-retry`.
+- Воркер делает DB‑truth мутацию и best‑effort обновляет Redis‑кеши (`brand_credits`, `wsp_contact`) + отправляет уведомления в Telegram.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP172 — /api/health: mon.retry (Redis-only)
+- Добавили в `/api/health` блок `mon.retry` с полями `last_at` и `last_action`.
+- Данные берутся **только из Redis** (ключи пишет воркер `POST /api/qstash/monetization-retry`).
+- Цель: быстро видеть, что воркер отрабатывает и QStash‑ретраи не “молчат”, без DB‑запросов.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP173 — /api/health: mon.retry.last_status + last_error (Redis-only)
+- Расширили breadcrumbs воркера монетизации (QStash retry): добавили поля `last_status` (`ok` / `skipped` / `error`) и `last_error` (короткий код).
+- Все значения пишутся/читаются **только через Redis**:
+  - воркер `POST /api/qstash/monetization-retry` записывает `mon:retry:last_status` / `mon:retry:last_error` (best-effort).
+  - `/api/health` читает эти ключи и отражает в `mon.retry`.
+- Цель: видеть не только “было ли”, но и “успешно/пропущено/ошибка”, без DB‑нагрузки.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+## STEP174 — Optimistic monetization: Redis token-lock (~10m) + QStash commit
+- Перевели критичные клики монетизации на “queue‑first” режим (если QStash настроен):
+  - ✅ Принять заявку бренда (`a:brand_app_accept`)
+  - 🔓 Разлок контактов на витрине (`a:wsp_contact_unlock`)
+- На клике берём **Redis token‑lock** (safe lock) и публикуем задачу в `POST /api/qstash/monetization-retry` (dedup).
+  - Повторные клики в окне lock → «⏳ Уже в обработке…» без дублей.
+- Воркер (QStash) best‑effort освобождает lock по токену после обработки (или ждём TTL).
+- Fail‑open: если Redis/QStash недоступен — остаётся синхронный DB‑truth путь (и STEP171 circuit breaker на таймауты).
+- ENV:
+  - `MONETIZATION_TOKEN_LOCK_TTL_SEC` (default 600) — TTL token‑lock.
+
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+## STEP175 — UI anti-spam: hide monetization CTAs while token-lock active (Redis-only)
+- В Brand Inbox карточке `status=new`: если token‑lock `mon:lock:brand_app_accept:<appId>` активен, скрываем **✅ Принять** и показываем «⏳ …в обработке» + «🔄 Обновить».
+- В витрине (locked contacts): если token‑lock `mon:lock:wsp_contact_unlock:<wsId>:<brandUserId>` активен, скрываем CTA разлока и показываем “pending” + «🔄 Обновить».
+- В экране `a:wsp_contact_req`: если разлок уже в очереди — не показываем кнопку списания повторно.
+- Всё сделано **без DB**: только Redis GET по ключам `mon:lock:*`.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+## STEP176 — Intro (💬 Написать): token-lock + circuit breaker + QStash commit + pending UI
+- Для клика «💬 Написать» (интро = новый диалог, списание кредитов) добавили защиту “как у монетизации”:
+  - Redis token‑lock `mon:lock:intro_open:<offerId>:<buyerUserId>` (anti-double-click)
+  - короткий timeout на DB‑операцию (circuit breaker)
+  - при TIMEOUT/транзиентных ошибках → ставим `action=intro_open` в `POST /api/qstash/monetization-retry` (dedup) и показываем UI «⏳ В обработке…».
+- Воркер QStash:
+  - выполняет `getOrCreateBarterThreadWithCredits()` идемпотентно
+  - обновляет Redis `brand_credits` кеш (best-effort)
+  - шлёт Telegram‑уведомление с кнопкой “Открыть диалог” или “Купить кредиты”/“Лимит”
+  - освобождает token‑lock по токену (best-effort) или ждём TTL.
+- UI anti‑spam на карточке оффера (`renderBxPublicView`): если token‑lock активен, скрываем «💬 Написать», показываем “pending” + Inbox/Обновить (Redis-only).
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+## STEP177 — Intro: fail-open guard (Redis degraded safe)
+- `a:bx_msg` переведён на `guard=NONE`, чтобы при деградации Redis интро не блокировалось на входе.
+- При проблемах Redis token-lock может быть недоступен, но остаётся краткий sync‑путь (circuit breaker) и QStash retry (dedup) с понятным pending UI.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+## STEP178 — Intro DB exact-once: pg advisory lock по (offer_id, buyer_user_id)
+- В `getOrCreateBarterThreadWithCredits()` добавили `pg_advisory_xact_lock` по паре `(offer_id, buyer_user_id)` и повторную проверку треда после lock.
+- Это делает интро “железобетонным” при double-click и параллельных вызовах (sync + QStash): один тред, одно списание, без ложных paywall/limit ответов.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+## STEP179 — /api/health: mon.intro breadcrumbs (Redis-only)
+- Добавили в `/api/health` блок `mon.intro`:
+  - `last_at`
+  - `last_status` (`ok` / `skipped` / `error`)
+  - `last_error` (короткий код)
+  - `last_offer_id` (masked)
+- Все значения пишутся/читаются **только через Redis**:
+  - клик `a:bx_msg` (интро) записывает breadcrumbs best‑effort.
+  - воркер `POST /api/qstash/monetization-retry` (action=`intro_open`) тоже обновляет breadcrumbs.
+- Цель: видеть “интро живо / блок (paywall/limit) / ошибка” одним взглядом, без DB‑нагрузки.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+## STEP180 — Монетизационные breadcrumbs: общий helper `src/lib/monDiag.js`
+- Вынесли общие утилиты диагностики в один модуль:
+  - short‑code нормализация (`toMonCode`)
+  - маскирование ID (`maskId`)
+  - запись Redis breadcrumbs (`setMonRetryMeta`, `setMonRetryDiag`, `setMonIntroDiag`)
+- Подключили helper в:
+  - `src/bot/bot.js` (интро attempt/результат)
+  - `api/qstash/monetization-retry.js` (воркер retry + intro_open)
+- Цель: убрать дублирование и исключить “дрейф” форматов/ключей/TTL, без изменения продуктовой логики.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP181 — Pending UX standardization: Inbox + Refresh (Redis-only)
+- Привели “pending” UI к единому стандарту для ключевых кликов монетизации:
+  - ✅ Принять заявку бренда: единый текст “⏳ В обработке…” + кнопки **📥 Inbox / 🔄 Обновить**.
+  - 🔓 Разлок контактов: единый pending экран (Inbox/Обновить + **💳 Купить ещё**) и общий helper внутри обработчика.
+  - 💬 Интро: pending UI приведён к стандарту (Inbox/Обновить), включая карточку оффера (кнопки вместо “⏳ Интро…”).
+- В pending-рендерах — **только Redis** (token-lock/breadcrumbs), без лишних DB-чтений в UI.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+## STEP182 — /api/health: mon.accept + mon.unlock breadcrumbs (Redis-only)
+- Добавили в `/api/health` два новых блока наблюдаемости:
+  - `mon.accept` (✅ Принять, Brand Inbox):
+    - `last_at`
+    - `last_status` (`ok` / `skipped` / `error`)
+    - `last_error` (короткий код)
+    - `last_app_id` (masked)
+  - `mon.unlock` (🔓 Разлок контактов):
+    - `last_at`
+    - `last_status` (`ok` / `skipped` / `error`)
+    - `last_error` (короткий код)
+    - `last_ws_id` (masked)
+- Запись breadcrumbs — **best-effort и Redis-only**:
+  - клик‑обработчики (`a:brand_app_accept`, `a:wsp_contact_unlock`) пишут attempt/результат.
+  - воркер `POST /api/qstash/monetization-retry` (actions `brand_app_accept` / `wsp_contact_unlock`) пишет итог воркера.
+- Общий формат/ключи/TTL централизованы в `src/lib/monDiag.js`.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+
+## STEP183 — /api/health: mon.accept + mon.unlock last_source (Redis-only)
+- В блоки `/api/health.mon.accept` и `/api/health.mon.unlock` добавили поле:
+  - `last_source` (`click` / `worker`)
+- Значение пишется **только в Redis**, best-effort:
+  - клик‑обработчики монетизации пишут `last_source=click`
+  - воркер `POST /api/qstash/monetization-retry` пишет `last_source=worker`
+- Цель: мгновенно видеть в `/api/health`, что “последнее обновление” пришло от клика в боте или от фонового воркера.
+- Общий формат/ключи/TTL централизованы в `src/lib/monDiag.js`.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+## STEP184 — Repo + Audit packs synced to STEP183 snapshot
+- Сверили архив репозитория пользователя с `FULL_STEP183` и привели к **точно такому же** состоянию (код + доки + миграции).
+- Обновили audit-pack (NotebookLM sources) на базе актуальных `docs/` + `migrations/` + `migration_pack/`.
+- Этот шаг **не меняет поведение** по сравнению с STEP183; это чисто синхронизация артефактов/доков.

@@ -1,4 +1,4 @@
-# 02 — Jobs × Vitalik × Woz — High‑Signal Builder Protocol (для Collabka PR)
+# 02 — Jobs × Vitalik × Woz — High‑Signal Builder Protocol (для Collabka PR Bot)
 
 > Примечание: держим **один** файл (Windows распаковка не дружит с двумя путями, отличающимися только регистром).
 
