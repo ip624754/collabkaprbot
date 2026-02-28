@@ -21293,23 +21293,25 @@ cid: ${cid}`, { reply_markup: kb });
         }
       }
 
-      const bal = await getBrandCreditsCached(u.id);
+      // IMPORTANT (STEP166): never hide monetization actions because of an unknown balance.
+      // Balance can be "—" (Redis degradation / cold cache), but the click handler is DB-truth.
+      const bal = await getBrandCreditsRedisOnly(u.id, { warm: true });
       const kb = new InlineKeyboard();
-      const balNum = Number(bal || 0);
-      if (CONTACT_UNLOCK_COST <= 0 || balNum >= CONTACT_UNLOCK_COST) {
-        kb.text(contactUnlockActionLabel(), `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`).row();
-      }
+      kb.text(contactUnlockActionLabel(), `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`).row();
       kb
         .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`)
         .row()
         .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb);
 
-      const canUnlock = (CONTACT_UNLOCK_COST <= 0) || (balNum >= CONTACT_UNLOCK_COST);
+      const balNum = (bal === null || bal === undefined) ? null : Number(bal || 0);
+      const canUnlock = (CONTACT_UNLOCK_COST <= 0) || (balNum !== null && balNum >= CONTACT_UNLOCK_COST);
       const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
 
       const tail = canUnlock
         ? `Нажми «${contactUnlockActionLabel()}» или купи кредиты.`
-        : `Недостаточно кредитов для ${contactUnlockBtnLabel()}: нужно <b>${CONTACT_UNLOCK_COST}</b>, у тебя <b>${balNum}</b>. Купи кредиты и повтори.`;
+        : (balNum === null
+          ? `Нажми «${contactUnlockActionLabel()}» — баланс проверим при нажатии. Если кредитов не хватит, предложим докупить.`
+          : `Недостаточно кредитов для ${contactUnlockBtnLabel()}: нужно <b>${CONTACT_UNLOCK_COST}</b>, у тебя <b>${balNum}</b>. Купи кредиты и повтори.`);
 
       const text =
         `🔒 <b>Контакты скрыты</b>
@@ -21322,9 +21324,7 @@ cid: ${cid}`, { reply_markup: kb });
 
 Переписка внутри открытого диалога — бесплатна.
 
-${brandPassBalanceLineHtml(balNum)}
-${brandPassUnlocksLineHtml(balNum)}
-${brandPassTrialLineHtml(balNum)}
+${brandPassCreditsBlockLines(bal, { showHintWhenUnknown: true }).join('\n')}
 
 ${tail}`;
 
@@ -21369,7 +21369,7 @@ ${tail}`;
       const rUnlock = await db.unlockWorkspaceContactsWithCredits(u.id, wsId, CONTACT_UNLOCK_COST, CONTACT_UNLOCK_TTL_SEC);
       if (!rUnlock?.ok) {
         if (rUnlock?.needPaywall) {
-          try { await ctx.answerCallbackQuery({ text: 'Нужны кредиты. Оформи Brand Plan.', show_alert: true }); } catch {}
+          try { await ctx.answerCallbackQuery({ text: 'Недостаточно кредитов. Докупи и повтори.', show_alert: true }); } catch {}
           await renderBrandPass(ctx, u.id, 0);
           return;
         }
