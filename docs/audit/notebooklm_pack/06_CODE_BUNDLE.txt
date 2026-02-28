@@ -2,11 +2,10 @@
 
 Собрано для NotebookLM. Только для чтения/аудита.
 
-Обновлено: 2026-02-28 12:26 UTC
+Обновлено: 2026-02-28 14:45 UTC
 
 
 ---
-
 
 ## FILE: `api/health.js`
 
@@ -380,6 +379,7 @@ export default async function handler(_req, res) {
 }
 
 
+---
 
 ## FILE: `api/qstash/monetization-retry.js`
 
@@ -1007,6 +1007,7 @@ export default async function handler(req, res) {
 }
 
 
+---
 
 ## FILE: `src/bot/bot.js`
 
@@ -1659,6 +1660,7 @@ const SYS_KEYS = {
   // Founder Sale runtime overrides (Admin -> Redis)
   founder_sale: k(['sys', 'founder_sale']),
   sys_notice: k(['sys', 'notice']),
+  admin_dm_templates: k(['sys', 'admin_dm_templates']),
 };
 
 
@@ -1768,6 +1770,47 @@ function normalizeNoticeSeverity(v) {
   return 'info';
 }
 
+function normalizeNoticeTarget(v) {
+  const s = String(v || '').toLowerCase().trim();
+  if (s === 'brand' || s === 'brands') return 'brand';
+  if (s === 'creator' || s === 'creators') return 'creator';
+  return 'all';
+}
+
+function normalizeNoticeCtaLabel(v) {
+  const raw = String(v || '').replace(/\r\n/g, '\n').trim();
+  if (!raw) return '';
+  const clipped = raw.length > 32 ? raw.slice(0, 32) : raw;
+  return clipped;
+}
+
+function normalizeNoticeCtaUrl(v) {
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+  const low = raw.toLowerCase();
+  if (!(low.startsWith('https://') || low.startsWith('http://'))) return '';
+  // Keep URL reasonably short to avoid Telegram limits / weird UI
+  return raw.length > 512 ? raw.slice(0, 512) : raw;
+}
+
+function normalizeNoticeExpiresAtSec(v) {
+  if (v == null) return null;
+  // Epoch seconds (preferred)
+  if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+    return Math.trunc(v);
+  }
+  const s = String(v || '').trim();
+  if (!s) return null;
+  if (/^\d{9,}$/.test(s)) {
+    const n = Number(s);
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  // ISO date-time (must include timezone to be unambiguous; but we accept best-effort)
+  const ms = Date.parse(s);
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return Math.trunc(ms / 1000);
+}
+
 function noticeIcon(sev) {
   const s = normalizeNoticeSeverity(sev);
   if (s === 'critical') return '🚨';
@@ -1786,13 +1829,26 @@ function normalizeSysNotice(obj) {
   const src = (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
   const active = !!src.active;
   const severity = normalizeNoticeSeverity(src.severity);
+  const target = normalizeNoticeTarget(src.target ?? src.audience ?? src.role ?? 'all');
+
   let version = Number(src.version || 0);
   if (!Number.isFinite(version) || version < 0) version = 0;
   version = Math.trunc(version);
+
   // Keep text as plain user-facing content (no HTML), we escape it on send
   const text = String(src.text || '').replace(/\r\n/g, '\n').trim();
+
+  const ctaLabelRaw = src.ctaLabel ?? src.cta_label ?? (src.cta && src.cta.label) ?? '';
+  const ctaUrlRaw = src.ctaUrl ?? src.cta_url ?? (src.cta && src.cta.url) ?? '';
+  const ctaUrl = normalizeNoticeCtaUrl(ctaUrlRaw);
+  const ctaLabel = ctaUrl ? (normalizeNoticeCtaLabel(ctaLabelRaw) || '🔗 Подробнее') : '';
+
+  const expiresAtRaw = src.expiresAt ?? src.expires_at ?? src.expireAt ?? src.expire_at ?? null;
+  const expiresAt = normalizeNoticeExpiresAtSec(expiresAtRaw);
+
   const updatedAt = src.updatedAt ? String(src.updatedAt) : null;
-  return { active, severity, version, text, updatedAt };
+
+  return { active, severity, target, version, text, ctaLabel, ctaUrl, expiresAt, updatedAt };
 }
 
 async function getSysNotice() {
@@ -1803,6 +1859,344 @@ async function getSysNotice() {
 async function setSysNotice(next) {
   const obj = normalizeSysNotice(next);
   return await setSysObj(SYS_KEYS.sys_notice, obj);
+}
+
+// --- Admin: DM message templates (Redis-only) ---
+// Stored under SYS_KEYS.admin_dm_templates. If missing/unavailable -> defaults.
+const DEFAULT_ADMIN_DM_TEMPLATES = [
+  {
+    id: 'ack',
+    label: '✅ Принято',
+    text: 'Принято ✅\n\nПриняли запрос. Если нужны детали — уточним и вернёмся с ответом.',
+  },
+  {
+    id: 'need',
+    label: '❓ Нужны детали',
+    text: 'Нужны детали ❓\n\nУточни, пожалуйста: шаги воспроизведения + что видишь на экране. Если есть — скрин/видео.',
+  },
+  {
+    id: 'done',
+    label: '✅ Готово',
+    text: 'Готово ✅\n\nСделали. Проверь, пожалуйста, сейчас. Если что-то ещё — напиши в поддержку.',
+  },
+  {
+    id: 'wip',
+    label: '⏳ В работе',
+    text: 'В работе ⏳\n\nПриняли в работу. Вернёмся с обновлением, как только будет результат.',
+  },
+  {
+    id: 'pay',
+    label: '💳 Кредиты/оплата',
+    text: 'По оплате/кредитам 💳\n\nПосмотрели ситуацию. Если видишь несоответствие — пришли, пожалуйста, скрин и время операции (по МСК).',
+  },
+  {
+    id: 'limit',
+    label: 'ℹ️ Ограничение',
+    text: 'Ограничение ℹ️\n\nСейчас действие недоступно из-за ограничения/статуса. Если это неожиданно — напиши в поддержку, мы проверим.',
+  },
+];
+
+// --- Admin DM placeholders (STEP191) ---
+// Strict allowlist for templates and free text. Unknown placeholders are left as-is.
+const ADMIN_DM_PLACEHOLDERS = [
+  { key: 'username', token: '{{username}}', desc: 'Юзернейм получателя (например @name). Если нет — пусто.' },
+  { key: 'user_id', token: '{{user_id}}', desc: 'TG ID получателя (цифры).' },
+  { key: 'first_name', token: '{{first_name}}', desc: 'Имя (Telegram first_name), best-effort. Если нет — пусто.' },
+  { key: 'role', token: '{{role}}', desc: 'Роль по Redis ui_mode: brand/creator/unknown.' },
+  { key: 'bot_name', token: '{{bot_name}}', desc: 'Название проекта (Collabka PR).' },
+];
+
+const ADMIN_DM_PLACEHOLDER_KEYS = new Set(ADMIN_DM_PLACEHOLDERS.map((x) => x.key));
+
+function adminDmPlaceholdersHelpHtml() {
+  let t = '📎 <b>Плейсхолдеры</b>\n\n';
+  t += 'Вставляй в шаблоны / свободный текст. При предпросмотре и отправке будут подставлены значения.\n\n';
+  for (const p of ADMIN_DM_PLACEHOLDERS) {
+    t += `• <code>${escapeHtml(p.token)}</code> — ${escapeHtml(p.desc)}\n`;
+  }
+  t += '\nПример:\n<pre>Привет, {{first_name}}!\nТвой username: {{username}}\nID: {{user_id}}</pre>';
+  return t;
+}
+
+async function buildAdminDmPlaceholderValues(ctx, targetTgId, opts = {}) {
+  const tgId = Number(targetTgId || 0);
+  const storedUsername = String(opts.username || '').replace(/^@/, '').trim();
+  const storedFirstName = String(opts.firstName || '').trim();
+
+  let chatUsername = '';
+  let chatFirstName = '';
+  try {
+    const chat = await ctx.api.getChat(tgId);
+    chatUsername = chat?.username ? String(chat.username).replace(/^@/, '').trim() : '';
+    chatFirstName = chat?.first_name ? String(chat.first_name).trim() : '';
+  } catch {}
+
+  const usernameRaw = (chatUsername || storedUsername || '').trim();
+  const username = usernameRaw ? '@' + usernameRaw : '';
+  const first_name = (chatFirstName || storedFirstName || '').trim();
+
+  let role = 'unknown';
+  try {
+    const mode = await resolveUiMode(tgId);
+    const m = normalizeUiMode(mode);
+    role = (m === UI_MODES.BRAND) ? 'brand' : 'creator';
+  } catch {}
+
+  return {
+    username,
+    user_id: String(tgId || ''),
+    first_name,
+    role,
+    bot_name: 'Collabka PR',
+  };
+}
+
+function applyAdminDmPlaceholders(input, values = {}) {
+  const src = String(input ?? '');
+  const used = new Set();
+  const unknown = new Set();
+
+  const out = src.replace(/{{\s*([a-z_]+)\s*}}/gi, (m, k0) => {
+    const key = String(k0 || '').toLowerCase().trim();
+    if (!ADMIN_DM_PLACEHOLDER_KEYS.has(key)) {
+      unknown.add(key);
+      return m;
+    }
+    used.add(key);
+    const v = values?.[key];
+    if (v === undefined || v === null) return '';
+    return String(v);
+  });
+
+  return { text: out, used: [...used], unknown: [...unknown] };
+}
+
+
+function normalizeAdminDmTemplates(obj) {
+  const out = {
+    version: Math.max(0, Number(obj?.version || 0) || 0),
+    updatedAt: String(obj?.updatedAt || ''),
+    items: [],
+  };
+
+  const src = Array.isArray(obj?.items) ? obj.items : [];
+  for (const it of src) {
+    const id = String(it?.id || '').trim();
+    const label = String(it?.label || '').trim();
+    const text = String(it?.text || '').trim();
+    if (!id || !label || !text) continue;
+    if (id.length > 48 || label.length > 48) continue;
+    if (text.length > 6000) continue;
+    out.items.push({ id, label, text });
+  }
+
+  // Hard guarantee: always have at least defaults.
+  if (!out.items.length) {
+    out.items = DEFAULT_ADMIN_DM_TEMPLATES.map((t) => ({ ...t }));
+  }
+
+  return out;
+}
+
+async function getAdminDmTemplatesWithMeta() {
+  // We intentionally read Redis directly here to detect whether a custom set exists.
+  let raw = null;
+  try { raw = await redis.get(SYS_KEYS.admin_dm_templates); } catch { raw = null; }
+
+  const isCustom = !!(raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray(raw.items));
+  const tpls = normalizeAdminDmTemplates(raw);
+
+  // If key existed but was malformed/empty — treat as defaults + not custom.
+  const customOk = isCustom && Array.isArray(raw?.items) && raw.items.length > 0;
+
+  return { tpls, isCustom: customOk };
+}
+
+async function setAdminDmTemplates(next) {
+  const obj = normalizeAdminDmTemplates(next);
+  // IMPORTANT: keep items as-is (normalize ensures non-empty). This makes "add" persist defaults too.
+  return await setSysObj(SYS_KEYS.admin_dm_templates, {
+    version: Math.max(0, Number(next?.version || obj.version || 0) || 0),
+    updatedAt: String(next?.updatedAt || obj.updatedAt || ''),
+    items: obj.items,
+  });
+}
+
+async function resetAdminDmTemplates() {
+  return await delSysKey(SYS_KEYS.admin_dm_templates);
+}
+
+function findAdminDmTemplate(items, tplId) {
+  const id = String(tplId || '').trim();
+  if (!id) return null;
+  return (Array.isArray(items) ? items : []).find((t) => String(t?.id || '') === id) || null;
+}
+
+function parseAdminDmTemplateFromText(rawText) {
+  const raw = String(rawText || '').replace(/\r/g, '').trim();
+  const lines = raw.split('\n');
+  const label = String(lines.shift() || '').trim();
+  const text = lines.join('\n').trim();
+  return { label, text };
+}
+
+// --- Admin: Outbox log (Redis-only) (STEP193) ---
+// Stores last N admin DM sends (ok/failed) with short snippet. No DB writes.
+const ADMIN_OUTBOX_MAX = 200;
+
+function adminOutboxKey() {
+  return k(['admin_outbox']);
+}
+
+function safeJsonParse(s) {
+  if (!s) return null;
+  if (typeof s === 'object') return s;
+  try { return JSON.parse(String(s)); } catch { return null; }
+}
+
+async function appendAdminOutbox(entry) {
+  const key = adminOutboxKey();
+  const e = (entry && typeof entry === 'object' && !Array.isArray(entry)) ? { ...entry } : {};
+  if (!e.ts) e.ts = new Date().toISOString();
+  if (!e.id) e.id = 'o' + randomToken(6);
+  const payload = JSON.stringify(e);
+  try {
+    await redis.lpush(key, payload);
+    await redis.ltrim(key, 0, ADMIN_OUTBOX_MAX - 1);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getAdminOutboxPage(page = 0, perPage = 8) {
+  const key = adminOutboxKey();
+  const p = Math.max(0, Number(page) || 0);
+  const lim = Math.max(1, Math.min(20, Number(perPage) || 8));
+  const start = p * lim;
+  const stop = start + lim - 1;
+  let total = 0;
+  let raw = [];
+  try { total = Number(await redis.llen(key)) || 0; } catch { total = 0; }
+  try { raw = await redis.lrange(key, start, stop); } catch { raw = []; }
+  const items = (Array.isArray(raw) ? raw : []).map((x) => safeJsonParse(x)).filter(Boolean);
+  const pages = Math.max(1, Math.ceil((total || 0) / lim));
+  return { items, total, page: Math.min(p, pages - 1), pages, perPage: lim, startIndex: start };
+}
+
+async function getAdminOutboxItemByIndex(index) {
+  const key = adminOutboxKey();
+  const i = Math.max(0, Number(index) || 0);
+  try {
+    if (typeof redis.lindex === 'function') {
+      const v = await redis.lindex(key, i);
+      return safeJsonParse(v);
+    }
+  } catch {}
+  try {
+    const arr = await redis.lrange(key, i, i);
+    return safeJsonParse(Array.isArray(arr) ? arr[0] : null);
+  } catch {
+    return null;
+  }
+}
+
+async function clearAdminOutbox() {
+  try { await redis.del(adminOutboxKey()); return true; } catch { return false; }
+}
+
+function fmtOutboxBtnTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return '';
+  try {
+    const fmt = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', hour12: false });
+    return fmt.format(d);
+  } catch {
+    return '';
+  }
+}
+
+
+// --- Admin: User Notes (Redis-only) (STEP194) ---
+// Per-user internal note visible only to super-admins. Stored in Redis; no DB tables/migrations.
+const ADMIN_USER_NOTE_MAX = 1400;
+
+function adminUserNoteKey(userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return k(['adm_user_note', '0']);
+  return k(['adm_user_note', String(uid)]);
+}
+
+function normalizeAdminUserNote(v) {
+  if (!v) return null;
+
+  // Backward-compatible: allow plain string
+  if (typeof v === 'string') {
+    const t = String(v).replace(/\r/g, '').trim();
+    if (!t) return null;
+    return { text: t, updatedAt: '', byAdminTgId: 0, byAdminUsername: '' };
+  }
+
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    const txt = String(v.text || '').replace(/\r/g, '').trim();
+    if (!txt) return null;
+    const text = txt.length > ADMIN_USER_NOTE_MAX ? (txt.slice(0, ADMIN_USER_NOTE_MAX) + '…') : txt;
+    return {
+      text,
+      updatedAt: String(v.updatedAt || ''),
+      byAdminTgId: Number(v.byAdminTgId || 0) || 0,
+      byAdminUsername: String(v.byAdminUsername || ''),
+    };
+  }
+
+  return null;
+}
+
+async function getAdminUserNote(userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return null;
+  try {
+    const v = await redis.get(adminUserNoteKey(uid));
+    return normalizeAdminUserNote(v);
+  } catch {
+    return null;
+  }
+}
+
+async function setAdminUserNote(userId, noteText, meta = {}) {
+  const uid = Number(userId || 0);
+  if (!uid) return false;
+
+  const raw = String(noteText || '').replace(/\r/g, '').trim();
+  if (!raw) return false;
+
+  const text = raw.length > ADMIN_USER_NOTE_MAX ? (raw.slice(0, ADMIN_USER_NOTE_MAX) + '…') : raw;
+
+  const obj = {
+    text,
+    updatedAt: new Date().toISOString(),
+    byAdminTgId: Number(meta.byAdminTgId || 0) || 0,
+    byAdminUsername: String(meta.byAdminUsername || ''),
+  };
+
+  try {
+    await redis.set(adminUserNoteKey(uid), obj);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function clearAdminUserNote(userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return false;
+  try {
+    await redis.del(adminUserNoteKey(uid));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function sysNoticeSeenKey(tgId, version) {
@@ -1819,9 +2213,34 @@ async function maybeSendSystemNotice(ctx) {
 
     const n = await getSysNotice();
     if (!n.active) return;
+
     const ver = Number(n.version || 0);
     if (!Number.isFinite(ver) || ver <= 0) return;
     if (!n.text) return;
+
+    // Auto-expire (best-effort): do not show after deadline.
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expSec = Number(n.expiresAt || 0);
+    if (Number.isFinite(expSec) && expSec > 0 && nowSec >= expSec) return;
+
+    // Targeting: all / brand / creator (Redis-only)
+    const target = normalizeNoticeTarget(n.target);
+    if (target !== 'all') {
+      let ui = 'creator';
+      try {
+        const raw = await redis.get(k(['ui_mode', tgId]));
+        ui = String(raw || '').toLowerCase().trim() === 'brand' ? 'brand' : 'creator';
+      } catch {
+        // If Redis is degraded, fail-closed (avoid accidental spam)
+        return;
+      }
+
+      let bm = false;
+      try { bm = await getBrandManagerMode(tgId); } catch { bm = false; }
+
+      const audience = (ui === 'brand' || bm) ? 'brand' : 'creator';
+      if (audience !== target) return;
+    }
 
     const seenKey = sysNoticeSeenKey(tgId, ver);
     try {
@@ -1840,7 +2259,13 @@ async function maybeSendSystemNotice(ctx) {
     const safeText = String(n.text || '').slice(0, 3500);
 
     const msg = `${icon} <b>${title}</b>\n\n${escapeHtml(safeText)}\n\n<i>v${escapeHtml(String(ver))}</i>`;
-    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+    const kb = new InlineKeyboard();
+    if (n.ctaUrl) {
+      const label = String(n.ctaLabel || '🔗 Подробнее').slice(0, 32);
+      kb.url(label, String(n.ctaUrl)).row();
+    }
+    kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
     await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }).catch(() => {});
   } catch {
@@ -17123,11 +17548,17 @@ ${escapeHtml(safe)}`;
         return;
       }
 
-      const trimmedPlain = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
-      const bodyHtml = escapeHtml(trimmedPlain);
+      const templateRaw = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
 
       const targetTgId = Number(exp.targetTgId || 0);
       const targetUsername = String(exp.targetUsername || '');
+
+      const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: targetUsername });
+      const phRes = applyAdminDmPlaceholders(templateRaw, phVals);
+      const expandedPlain = phRes.text.length > 3500 ? (phRes.text.slice(0, 3500) + '…') : phRes.text;
+      const bodyHtml = escapeHtml(expandedPlain);
+      const phUsed = phRes.used || [];
+      const phUnknown = phRes.unknown || [];
       if (!uid || !targetTgId) {
         await ctx.reply('⚠️ Не найден получатель (нет tg_id).');
         return;
@@ -17141,8 +17572,11 @@ ${escapeHtml(safe)}`;
           targetUserId: uid,
           targetTgId,
           targetUsername,
-          bodyHtml,
-          plain: trimmedPlain,
+          templateRaw,
+          templateId: 'free',
+          templateLabel: 'Свободный текст',
+          phUsed,
+          phUnknown,
           createdAt: new Date().toISOString(),
         }, { ex: 10 * 60 });
         stored = true;
@@ -17160,26 +17594,164 @@ ${escapeHtml(safe)}`;
           targetUserId: uid,
           targetTgId,
           targetUsername,
-          bodyHtml,
-          plain: trimmedPlain,
+          templateRaw,
+          phUsed,
+          phUnknown,
         }, { f, page, backUid: uid });
         return;
       }
 
       const uname = targetUsername ? '@' + targetUsername : '';
+
+      let phInfo = '';
+      if (phUsed.length) {
+        const tags = phUsed.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+        phInfo += `\n📎 Подставим: ${tags}`;
+      }
+      if (phUnknown.length) {
+        const tags = phUnknown.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+        phInfo += `\n⚠️ Неизвестные: ${tags}`;
+      }
+
       const preview = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
       const kb = new InlineKeyboard()
         .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('📎 Вставить', `a:adm_ph|r:umsg_free|id:${uid}|f:${f}|p:${page}`)
         .row()
         .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
         .text('⬅️ Админка', 'a:admin_home');
 
       await safeEditOrReply(
         ctx,
-        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}\n\n${preview}`,
+        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}${phInfo}\n\n${preview}`,
         { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
       );
+      return;
+    }
+
+
+    // --- Admin: DM template input (add/edit) ---
+    if (exp.type === 'admin_umsg_tpl_add') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const page = Math.max(0, Number(exp.page) || 0);
+      const raw = String(ctx.message?.text || '').trim();
+      const { label, text } = parseAdminDmTemplateFromText(raw);
+
+      if (!label || !text) {
+        await ctx.reply('Нужно 2 части: 1-я строка — название, дальше — текст. Попробуй ещё раз.');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      const safeLabel = clipText(label, 48).trim();
+      const safeText = (text.length > 3500 ? (text.slice(0, 3500) + '…') : text).trim();
+      if (!safeLabel || !safeText) {
+        await ctx.reply('Слишком коротко. Попробуй ещё раз.');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      const { tpls } = await getAdminDmTemplatesWithMeta();
+      const items = Array.isArray(tpls.items) ? tpls.items.map((t) => ({ ...t })) : [];
+
+      // Unique id
+      let id = '';
+      for (let i = 0; i < 5; i++) {
+        const cand = 't' + randomToken(6);
+        if (!items.some((t) => String(t.id || '') === cand)) { id = cand; break; }
+      }
+      if (!id) id = 't' + String(Date.now());
+
+      items.push({ id, label: safeLabel, text: safeText });
+
+      await setAdminDmTemplates({ version: Number(tpls.version || 0) + 1, updatedAt: new Date().toISOString(), items });
+
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminDmTemplates(ctx, page);
+      return;
+    }
+
+    if (exp.type === 'admin_umsg_tpl_edit') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const page = Math.max(0, Number(exp.page) || 0);
+      const tplId = String(exp.tplId || '').trim();
+      const raw = String(ctx.message?.text || '').trim();
+      const { label, text } = parseAdminDmTemplateFromText(raw);
+
+      if (!tplId) {
+        await ctx.reply('⚠️ Нет ID шаблона.');
+        return;
+      }
+
+      if (!label || !text) {
+        await ctx.reply('Нужно 2 части: 1-я строка — название, дальше — текст. Попробуй ещё раз.');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      const safeLabel = clipText(label, 48).trim();
+      const safeText = (text.length > 3500 ? (text.slice(0, 3500) + '…') : text).trim();
+
+      const { tpls } = await getAdminDmTemplatesWithMeta();
+      const items = Array.isArray(tpls.items) ? tpls.items.map((t) => ({ ...t })) : [];
+      const idx = items.findIndex((t) => String(t.id || '') === tplId);
+      if (idx < 0) {
+        await ctx.reply('⚠️ Шаблон не найден (возможно, уже удалён).');
+        return;
+      }
+
+      items[idx] = { id: tplId, label: safeLabel, text: safeText };
+
+      await setAdminDmTemplates({ version: Number(tpls.version || 0) + 1, updatedAt: new Date().toISOString(), items });
+
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminDmTemplateView(ctx, tplId, page);
+      return;
+    }
+
+
+    // --- Admin: User Note input (Redis-only) (STEP194) ---
+    if (exp.type === 'adm_user_note') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+
+      const uid = Number(exp.uid || 0);
+      const f = String(exp.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(exp.page) || 0);
+
+      const chatType = String(ctx.chat?.type || '');
+      if (chatType !== 'private') {
+        await ctx.reply('📝 Заметку можно редактировать только в личном чате с ботом (DM).');
+        try { await setExpectText(ctx.from.id, exp, 20 * 60); } catch {}
+        return;
+      }
+
+      const raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Введи заметку одним сообщением (или clear).');
+        try { await setExpectText(ctx.from.id, exp, 20 * 60); } catch {}
+        return;
+      }
+
+      const low = raw.toLowerCase().trim();
+      const cancelCmd = (low === '/cancel' || low === 'cancel' || low === 'отмена');
+      if (cancelCmd) {
+        try { await clearExpectText(ctx.from.id); } catch {}
+        await renderAdminUserCard(ctx, uid, f, page);
+        return;
+      }
+
+      const clearCmd = (low === 'clear' || low === 'сброс' || low === 'очистить' || low === '0' || low === '-');
+
+      if (clearCmd) {
+        await clearAdminUserNote(uid);
+      } else {
+        await setAdminUserNote(uid, raw, { byAdminTgId: tgId, byAdminUsername: String(ctx.from?.username || '') });
+      }
+
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminUserNote(ctx, uid, f, page);
       return;
     }
 
@@ -17220,6 +17792,129 @@ ${escapeHtml(safe)}`;
       return;
     }
 
+
+    if (exp.type === 'admin_notice_cta') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Отправь текст кнопки и URL (или clear).');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      const low = raw.toLowerCase().trim();
+      const clearCmd = (low === 'clear' || low === 'off' || low === '0' || low === '-' || low === 'сброс' || low === 'очистить');
+
+      const cur = await getSysNotice();
+
+      if (clearCmd) {
+        cur.ctaUrl = '';
+        cur.ctaLabel = '';
+        cur.updatedAt = new Date().toISOString();
+        await setSysNotice(cur);
+        try { await clearExpectText(ctx.from.id); } catch {}
+
+        const kb = new InlineKeyboard()
+          .text('⬅️ Назад', 'a:admin_notice')
+          .text('⬅️ Админка', 'a:admin_home');
+
+        await safeEditOrReply(ctx, '🧹 CTA отключён.', { reply_markup: kb });
+        return;
+      }
+
+      const lines = raw.replace(/\r\n/g, '\n').split('\n').map(s => s.trim()).filter(Boolean);
+      let label = '';
+      let url = '';
+
+      if (lines.length >= 2) {
+        label = lines[0];
+        url = lines[1];
+      } else {
+        // one line: treat as URL
+        url = lines[0] || '';
+        label = '';
+      }
+
+      const normUrl = normalizeNoticeCtaUrl(url);
+      if (!normUrl) {
+        await ctx.reply('URL должен начинаться с http:// или https://. Пример: https://example.com');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      const normLabel = normalizeNoticeCtaLabel(label) || '🔗 Подробнее';
+
+      cur.ctaUrl = normUrl;
+      cur.ctaLabel = normLabel;
+      cur.updatedAt = new Date().toISOString();
+      await setSysNotice(cur);
+
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', 'a:admin_notice')
+        .text('🚀 Опубликовать', 'a:admin_notice_publish')
+        .row()
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(ctx, '✅ CTA сохранён. Чтобы пользователи увидели — нажми «🚀 Опубликовать» (новая версия).', { reply_markup: kb });
+      return;
+    }
+
+    if (exp.type === 'admin_notice_expire') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Введи дедлайн (ISO/epoch) или off.');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      const low = raw.toLowerCase().trim();
+      const clearCmd = (low === 'clear' || low === 'off' || low === '0' || low === '-' || low === 'сброс' || low === 'очистить');
+
+      const cur = await getSysNotice();
+
+      if (clearCmd) {
+        cur.expiresAt = null;
+        cur.updatedAt = new Date().toISOString();
+        await setSysNotice(cur);
+        try { await clearExpectText(ctx.from.id); } catch {}
+
+        const kb = new InlineKeyboard()
+          .text('⬅️ Назад', 'a:admin_notice')
+          .text('⬅️ Админка', 'a:admin_home');
+
+        await safeEditOrReply(ctx, '✅ Expire отключён.', { reply_markup: kb });
+        return;
+      }
+
+      const sec = normalizeNoticeExpiresAtSec(raw);
+      const nowSec = Math.floor(Date.now() / 1000);
+
+      if (!sec || sec <= nowSec + 30) {
+        await ctx.reply('Не понял дату/время. Используй ISO со смещением (например 2026-03-01T12:00:00-05:00) или epoch seconds (например 1772366400).');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      // Guard against absurdly far deadlines
+      const maxSec = nowSec + 365 * 24 * 3600;
+      cur.expiresAt = Math.min(sec, maxSec);
+      cur.updatedAt = new Date().toISOString();
+      await setSysNotice(cur);
+
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', 'a:admin_notice')
+        .text('🚀 Опубликовать', 'a:admin_notice_publish')
+        .row()
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(ctx, '✅ Expire сохранён. Чтобы пользователи увидели обновление настроек — нажми «🚀 Опубликовать» (новая версия).', { reply_markup: kb });
+      return;
+    }
 
     if (exp.type === 'admin_users_search') {
       const isAdmin = isSuperAdminTg(tgId);
@@ -26263,6 +26958,74 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    if (p.a === 'a:admin_notice_target') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const cur = await getSysNotice();
+      const order = ['all', 'brand', 'creator'];
+      const now = normalizeNoticeTarget(cur.target);
+      const i = order.indexOf(now);
+      cur.target = order[(i + 1 + order.length) % order.length];
+      cur.updatedAt = new Date().toISOString();
+      await setSysNotice(cur);
+      await renderAdminSysNotice(ctx);
+      return;
+    }
+
+    if (p.a === 'a:admin_notice_cta') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', 'a:admin_notice')
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(
+        ctx,
+        `🔗 <b>CTA‑кнопка (опционально)</b>
+
+Отправь одним сообщением:
+
+1-я строка — текст кнопки (необязательно)
+2-я строка — URL (обязательно, http/https)
+
+Пример:
+<pre>Подробнее
+https://collabka.com/status</pre>
+
+Команда: <code>clear</code> — убрать CTA.`,
+        { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+      );
+
+      await setExpectText(ctx.from.id, { type: 'admin_notice_cta' });
+      return;
+    }
+
+    if (p.a === 'a:admin_notice_expire') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', 'a:admin_notice')
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(
+        ctx,
+        `⏰ <b>Auto‑expire (опционально)</b>
+
+Укажи дедлайн, после которого объявление <b>не показывается</b>.
+
+Форматы:
+• ISO со смещением: <code>2026-03-01T12:00:00-05:00</code>
+• Epoch seconds: <code>1772366400</code>
+
+Команда: <code>off</code> / <code>clear</code> — убрать expire.`,
+        { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+      );
+
+      await setExpectText(ctx.from.id, { type: 'admin_notice_expire' });
+      return;
+    }
     if (p.a === 'a:admin_notice_clear') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
@@ -26693,6 +27456,110 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+
+    // --- Admin: User Note (Redis-only) (STEP194) ---
+    if (p.a === 'a:adm_unote') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminUserNote(ctx, uid, f, page);
+      return;
+    }
+
+    if (p.a === 'a:adm_unote_edit') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', `a:adm_unote|id:${uid}|f:${f}|p:${page}`)
+        .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(
+        ctx,
+        `✏️ <b>Заметка админа</b>
+
+Отправь заметку <b>одним сообщением</b>.
+
+Команды:
+• <code>clear</code> — очистить заметку
+• <code>/cancel</code> — отмена (вернёт к карточке)`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+
+      await setExpectText(ctx.from.id, { type: 'adm_user_note', uid, f, page }, 20 * 60);
+      return;
+    }
+
+    if (p.a === 'a:adm_unote_clear_q') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      const kb = new InlineKeyboard()
+        .text('🧹 Очистить', `a:adm_unote_clear|id:${uid}|f:${f}|p:${page}`)
+        .text('❌ Отмена', `a:adm_unote|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(ctx, '🧹 <b>Очистить заметку?</b>', { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_unote_clear') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      await clearAdminUserNote(uid);
+      await renderAdminUserNote(ctx, uid, f, page);
+      return;
+    }
+
+    // Admin: placeholders helper (STEP191)
+    if (p.a === 'a:adm_ph') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const ret = String(p.r || '').trim();
+      const uid = Number(p.id || 0);
+      const tplId = String(p.tid || '').trim();
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      let backCb = 'a:admin_home';
+      if (ret === 'umsg') backCb = `a:adm_umsg|id:${uid}|f:${f}|p:${page}`;
+      else if (ret === 'umsg_free') backCb = `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`;
+      else if (ret === 'tpl_list') backCb = `a:admin_umsg_tpls|p:${page}`;
+      else if (ret === 'tpl_add') backCb = `a:admin_umsg_tpl_add|p:${page}`;
+      else if (ret === 'tpl_edit') backCb = `a:admin_umsg_tpl_edit|tid:${tplId}|p:${page}`;
+      else if (ret === 'tpl_view') backCb = `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`;
+
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', backCb)
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(ctx, adminDmPlaceholdersHelpHtml(), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+      return;
+    }
+
     // Admin: Message user from user card (MVP)
     if (p.a === 'a:adm_umsg') {
       await ctx.answerCallbackQuery();
@@ -26717,19 +27584,17 @@ if (p.a === 'a:match_home') {
       }
 
       const kb = new InlineKeyboard();
-      const tplBtns = [
-        ['✅ Принято', 'ack'],
-        ['❓ Нужны детали', 'need'],
-        ['✅ Готово', 'done'],
-        ['⏳ В работе', 'wip'],
-        ['💳 Кредиты/оплата', 'pay'],
-        ['ℹ️ Ограничение', 'limit'],
-      ];
 
-      for (const [label, key] of tplBtns) {
-        kb.text(label, `a:adm_umsg_tpl|id:${uid}|k:${key}|f:${f}|p:${page}`).row();
+      const { tpls } = await getAdminDmTemplatesWithMeta();
+      const items = Array.isArray(tpls.items) ? tpls.items.slice(0, 12) : [];
+
+      for (const it of items) {
+        kb.text(String(it.label || '—'), `a:adm_umsg_tpl|id:${uid}|t:${String(it.id || '')}|f:${f}|p:${page}`).row();
       }
+      kb.text('📎 Вставить', `a:adm_ph|r:umsg|id:${uid}|f:${f}|p:${page}`).row();
       kb.text('✍️ Свободный текст', `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`).row();
+      kb.text('📌 Шаблоны (админ)', 'a:admin_umsg_tpls|p:0').row();
+      kb.text('📤 Outbox', 'a:admin_outbox|p:0').row();
       kb.text('⬅️ Назад', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`).row();
       kb.text('⬅️ Админка', 'a:admin_home');
 
@@ -26753,20 +27618,39 @@ Username: ${escapeHtml(uname)}
       try { await clearExpectText(ctx.from.id); } catch {}
 
       const uid = Number(p.id || 0);
-      const key = String(p.k || '').trim();
+      const tplId = String(p.t || '').trim(); // new (Redis templates)
+      const key = String(p.k || '').trim(); // legacy (defaults only)
       const f = String(p.f || 'all').toLowerCase();
       const page = Math.max(0, Number(p.p) || 0);
 
-      const TPL = {
-        ack: 'Принято ✅\n\nПриняли запрос. Если нужны детали — уточним и вернёмся с ответом.',
-        need: 'Нужны детали ❓\n\nУточни, пожалуйста: шаги воспроизведения + что видишь на экране. Если есть — скрин/видео.',
-        done: 'Готово ✅\n\nСделали. Проверь, пожалуйста, сейчас. Если что-то ещё — напиши в поддержку.',
-        wip: 'В работе ⏳\n\nПриняли в работу. Вернёмся с обновлением, как только будет результат.',
-        pay: 'По оплате/кредитам 💳\n\nПосмотрели ситуацию. Если видишь несоответствие — пришли, пожалуйста, скрин и время операции (по МСК).',
-        limit: 'Ограничение ℹ️\n\nСейчас действие недоступно из-за ограничения/статуса. Если это неожиданно — напиши в поддержку, мы проверим.',
-      };
+      let raw = '';
+      let usedDefaultKey = '';
+      let tplLabel = '';
 
-      const raw = TPL[key] || '';
+      if (tplId) {
+        const { tpls } = await getAdminDmTemplatesWithMeta();
+        const it = findAdminDmTemplate(tpls.items, tplId);
+        raw = String(it?.text || '').trim();
+        tplLabel = String(it?.label || '').trim();
+      }
+
+      if (!raw && key) {
+        // Fallback to built-in defaults for old callback data.
+        const TPL = {
+          ack: DEFAULT_ADMIN_DM_TEMPLATES.find((t) => t.id === 'ack')?.text || '',
+          need: DEFAULT_ADMIN_DM_TEMPLATES.find((t) => t.id === 'need')?.text || '',
+          done: DEFAULT_ADMIN_DM_TEMPLATES.find((t) => t.id === 'done')?.text || '',
+          wip: DEFAULT_ADMIN_DM_TEMPLATES.find((t) => t.id === 'wip')?.text || '',
+          pay: DEFAULT_ADMIN_DM_TEMPLATES.find((t) => t.id === 'pay')?.text || '',
+          limit: DEFAULT_ADMIN_DM_TEMPLATES.find((t) => t.id === 'limit')?.text || '',
+        };
+        raw = TPL[key] || '';
+        if (raw) {
+          usedDefaultKey = key;
+          tplLabel = String(DEFAULT_ADMIN_DM_TEMPLATES.find((t) => t.id === key)?.label || '').trim();
+        }
+      }
+
       if (!raw) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
 
       const row = await db.getUserTgIdByUserId(uid);
@@ -26775,8 +27659,13 @@ Username: ${escapeHtml(uname)}
       if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
 
       const token = randomToken(8);
-      const bodyHtml = escapeHtml(raw);
-      const plain = raw;
+
+      const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: String(row?.tg_username || '') });
+      const phRes = applyAdminDmPlaceholders(raw, phVals);
+      const expandedPlain = phRes.text.length > 3500 ? (phRes.text.slice(0, 3500) + '…') : phRes.text;
+      const bodyHtml = escapeHtml(expandedPlain);
+      const phUsed = phRes.used || [];
+      const phUnknown = phRes.unknown || [];
 
       let stored = false;
       try {
@@ -26785,8 +27674,11 @@ Username: ${escapeHtml(uname)}
           targetUserId: uid,
           targetTgId,
           targetUsername: String(row?.tg_username || ''),
-          bodyHtml,
-          plain,
+          templateRaw: raw,
+          templateId: tplId || usedDefaultKey || '',
+          templateLabel: tplLabel || '',
+          phUsed,
+          phUnknown,
           createdAt: new Date().toISOString(),
         }, { ex: 10 * 60 });
         stored = true;
@@ -26794,16 +27686,42 @@ Username: ${escapeHtml(uname)}
         stored = false;
       }
 
+      // If Redis is unavailable, send immediately (no confirm screen).
+      if (!stored) {
+        await sendAdminMessageToUser(ctx, {
+          byAdminTgId: Number(ctx.from.id),
+          targetUserId: uid,
+          targetTgId,
+          targetUsername: String(row?.tg_username || ''),
+          templateRaw: raw,
+        }, { f, page, backUid: uid });
+        return;
+      }
+
+      let phInfo = '';
+      if (phUsed.length) {
+        const tags = phUsed.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+        phInfo += `
+📎 Подставим: ${tags}`;
+      }
+      if (phUnknown.length) {
+        const tags = phUnknown.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+        phInfo += `
+⚠️ Неизвестные: ${tags}`;
+      }
+
       const preview = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
       const kb = new InlineKeyboard()
-        .text('✅ Отправить', stored ? `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}` : `a:adm_umsg_send|tk:${token}|nostore:1|id:${uid}|k:${key}|f:${f}|p:${page}`)
+        .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('📎 Вставить', `a:adm_ph|r:umsg|id:${uid}|f:${f}|p:${page}`)
         .row()
         .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
         .text('⬅️ Админка', 'a:admin_home');
 
       await safeEditOrReply(ctx,
-        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}\n\n${preview}`,
+        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}${phInfo}\n\n${preview}`,
         { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
       );
       return;
@@ -26876,14 +27794,12 @@ Username: ${escapeHtml(uname)}
         const row = await db.getUserTgIdByUserId(uid);
         const targetTgId = Number(row?.tg_id || 0);
         if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
-        const bodyHtml = escapeHtml(plain);
         const payload = {
           byAdminTgId: Number(ctx.from.id),
           targetUserId: uid,
           targetTgId,
           targetUsername: String(row?.tg_username || ''),
-          bodyHtml,
-          plain,
+          templateRaw: plain,
         };
         await sendAdminMessageToUser(ctx, payload, { f, page, backUid: uid });
         return;
@@ -26905,7 +27821,178 @@ Username: ${escapeHtml(uname)}
       return;
     }
 
-    // --- Admin: Reply to support message ---
+    
+
+
+    // --- Admin: Outbox (Redis-only) (STEP193) ---
+    if (p.a === 'a:admin_outbox') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminOutbox(ctx, page);
+      return;
+    }
+
+    if (p.a === 'a:admin_outbox_v') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const idx = Math.max(0, Number(p.i) || 0);
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminOutboxView(ctx, idx, page);
+      return;
+    }
+
+    if (p.a === 'a:admin_outbox_clear_q') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const page = Math.max(0, Number(p.p) || 0);
+      let total = 0;
+      try { total = Number(await redis.llen(adminOutboxKey())) || 0; } catch { total = 0; }
+      const kb = new InlineKeyboard()
+        .text('🧹 Очистить', `a:admin_outbox_clear|p:${page}`)
+        .text('❌ Отмена', `a:admin_outbox|p:${page}`)
+        .row()
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(ctx, `🧹 <b>Очистить Outbox?</b>
+
+Будет удалено записей: <b>${escapeHtml(String(total || 0))}</b>`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:admin_outbox_clear') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const page = Math.max(0, Number(p.p) || 0);
+      await clearAdminOutbox();
+      await renderAdminOutbox(ctx, page);
+      return;
+    }
+    // --- Admin: DM Templates (Redis-only) ---
+    if (p.a === 'a:admin_umsg_tpls') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminDmTemplates(ctx, page);
+      return;
+    }
+
+    if (p.a === 'a:admin_umsg_tpl_view') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const tplId = String(p.tid || '').trim();
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminDmTemplateView(ctx, tplId, page);
+      return;
+    }
+
+    if (p.a === 'a:admin_umsg_tpl_add') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const page = Math.max(0, Number(p.p) || 0);
+      const kb = new InlineKeyboard()
+        .text('📎 Вставить', `a:adm_ph|r:tpl_add|p:${page}`)
+        .row()
+        .text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`)
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(
+        ctx,
+        `➕ <b>Новый шаблон</b>\n\nОтправь одним сообщением:\n\n1-я строка — название кнопки\nостальное — текст сообщения\n\nПример:\n<pre>✅ Принято\n\nПриняли запрос. Если нужны детали — уточним и вернёмся с ответом.</pre>`,
+        { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+      );
+
+      try { await setExpectText(ctx.from.id, { type: 'admin_umsg_tpl_add', page }); } catch {}
+      return;
+    }
+
+    if (p.a === 'a:admin_umsg_tpl_edit') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const tplId = String(p.tid || '').trim();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      const { tpls } = await getAdminDmTemplatesWithMeta();
+      const it = findAdminDmTemplate(tpls.items, tplId);
+      if (!it) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
+
+      const kb = new InlineKeyboard()
+        .text('📎 Вставить', `a:adm_ph|r:tpl_edit|tid:${String(it.id || '')}|p:${page}`)
+        .row()
+        .text('⬅️ Назад', `a:admin_umsg_tpl_view|tid:${String(it.id || '')}|p:${page}`)
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(
+        ctx,
+        `✏️ <b>Изменить шаблон</b>\n\nОтправь одним сообщением:\n\n1-я строка — название кнопки\nостальное — текст сообщения\n\nТекущая версия:\n<pre>${escapeHtml(String(it.label || ''))}\n\n${escapeHtml(String(it.text || ''))}</pre>`,
+        { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+      );
+
+      try { await setExpectText(ctx.from.id, { type: 'admin_umsg_tpl_edit', tplId: String(it.id || ''), page }); } catch {}
+      return;
+    }
+
+    if (p.a === 'a:admin_umsg_tpl_del_q') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+
+      const tplId = String(p.tid || '').trim();
+      const page = Math.max(0, Number(p.p) || 0);
+      const kb = new InlineKeyboard()
+        .text('🗑 Удалить', `a:admin_umsg_tpl_del|tid:${tplId}|p:${page}`)
+        .text('❌ Отмена', `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`)
+        .row()
+        .text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`)
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(ctx, `🗑 <b>Удалить шаблон?</b>\n\nID: <code>${escapeHtml(tplId)}</code>`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:admin_umsg_tpl_del') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+
+      const tplId = String(p.tid || '').trim();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      const { tpls } = await getAdminDmTemplatesWithMeta();
+      const items = Array.isArray(tpls.items) ? tpls.items.filter((t) => String(t?.id || '') !== tplId) : [];
+      const next = { version: Number(tpls.version || 0) + 1, updatedAt: new Date().toISOString(), items };
+      await setAdminDmTemplates(next);
+      await renderAdminDmTemplates(ctx, page);
+      return;
+    }
+
+    if (p.a === 'a:admin_umsg_tpl_reset_q') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+
+      const page = Math.max(0, Number(p.p) || 0);
+      const kb = new InlineKeyboard()
+        .text('♻️ Сбросить', `a:admin_umsg_tpl_reset|p:${page}`)
+        .text('❌ Отмена', `a:admin_umsg_tpls|p:${page}`)
+        .row()
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(ctx, '♻️ <b>Сбросить шаблоны к дефолту?</b>\n\nКастомные шаблоны в Redis будут удалены.', { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:admin_umsg_tpl_reset') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+
+      const page = Math.max(0, Number(p.p) || 0);
+      await resetAdminDmTemplates();
+      await renderAdminDmTemplates(ctx, page);
+      return;
+    }
+
+// --- Admin: Reply to support message ---
     if (p.a === 'a:adm_support_reply') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
@@ -32067,7 +33154,11 @@ async function renderAdminHome(ctx) {
     .text('📈 Метрики', 'a:admin_metrics|d:14')
     .row();
 
-  kb.text('📣 Объявление', 'a:admin_notice').row();
+  kb.text('📣 Объявление', 'a:admin_notice')
+    .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
+    .row();
+
+  kb.text('📤 Outbox', 'a:admin_outbox|p:0').row();
 
   kb.text('🔥 Founder Sale', 'a:admin_founder').row();
 
@@ -32102,6 +33193,22 @@ async function renderAdminSysNotice(ctx) {
 
   const verLabel = n.version > 0 ? `v${n.version}` : '—';
   const sev = normalizeNoticeSeverity(n.severity);
+  const tgt = normalizeNoticeTarget(n.target);
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  let expLabel = '—';
+  if (n.expiresAt && Number(n.expiresAt) > 0) {
+    const exp = Number(n.expiresAt);
+    const iso = new Date(exp * 1000).toISOString();
+    const left = exp - nowSec;
+    expLabel = left <= 0 ? `${iso} (EXPIRED)` : `${iso} (ещё ${fmtWait(left)})`;
+  }
+
+  let ctaLabel = '—';
+  if (n.ctaUrl) {
+    const lbl = n.ctaLabel ? String(n.ctaLabel) : '🔗 Подробнее';
+    ctaLabel = `${escapeHtml(lbl)} → <code>${escapeHtml(String(n.ctaUrl).slice(0, 180))}</code>`;
+  }
 
   let text = `📣 <b>Системное объявление</b>
 
@@ -32109,6 +33216,12 @@ async function renderAdminSysNotice(ctx) {
   text += `STATUS: <b>${n.active ? 'ON' : 'OFF'}</b>
 `;
   text += `SEVERITY: <b>${escapeHtml(sev)}</b>
+`;
+  text += `TARGET: <b>${escapeHtml(tgt)}</b>
+`;
+  text += `EXPIRES: <code>${escapeHtml(String(expLabel))}</code>
+`;
+  text += `CTA: ${ctaLabel}
 `;
   text += `VERSION: <b>${escapeHtml(String(verLabel))}</b>
 `;
@@ -32126,15 +33239,20 @@ async function renderAdminSysNotice(ctx) {
   text += `
 
 ℹ️ Показывается пользователям <b>1 раз на версию</b> при входе в «📋 Меню» / «🏠 Home».
+Таргетинг: <code>all/brand/creator</code>. Авто‑expire: после дедлайна не показываем.
 Чтобы показать снова — жми «🚀 Опубликовать» (увеличит версию).`;
 
   const kb = new InlineKeyboard()
     .text(n.active ? '⚫ Выключить' : '🟢 Включить', 'a:admin_notice_toggle')
     .text(`🎚 Уровень: ${sev}`, 'a:admin_notice_sev')
     .row()
-    .text('✍️ Изменить текст', 'a:admin_notice_text')
-    .text('🧹 Очистить', 'a:admin_notice_clear')
+    .text(`🎯 Кому: ${tgt}`, 'a:admin_notice_target')
+    .text('⏰ Expire', 'a:admin_notice_expire')
     .row()
+    .text('🔗 CTA', 'a:admin_notice_cta')
+    .text('✍️ Текст', 'a:admin_notice_text')
+    .row()
+    .text('🧹 Очистить текст', 'a:admin_notice_clear')
     .text('🚀 Опубликовать (новая версия)', 'a:admin_notice_publish')
     .row()
     .text('⬅️ Админка', 'a:admin_home')
@@ -32259,6 +33377,238 @@ Broadcast cooldown: <b>${cdActive ? 'ACTIVE' : 'OFF'}</b>`;
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
+
+async function renderAdminDmTemplates(ctx, page = 0) {
+  const { tpls, isCustom } = await getAdminDmTemplatesWithMeta();
+  const items = Array.isArray(tpls.items) ? tpls.items : [];
+  const perPage = 8;
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const slice = items.slice(p * perPage, p * perPage + perPage);
+
+  let text =
+    `📌 <b>Шаблоны сообщений (DM)</b>\n\n` +
+    `Источник: <b>${isCustom ? 'custom (Redis)' : 'default'}</b>\n` +
+    `Версия: <b>v${Number(tpls.version || 0)}</b>\n` +
+    `Обновлено: <code>${escapeHtml(tpls.updatedAt || '—')}</code>\n\n`;
+
+  if (!slice.length) {
+    text += 'Пока нет шаблонов. Добавь первый через “➕ Новый шаблон”.';
+  } else {
+    text += 'Список (страница ' + (p + 1) + '/' + pages + '):\n\n';
+    for (const it of slice) {
+      const lbl = escapeHtml(String(it.label || '—'));
+      const sn = clipText(String(it.text || '').replace(/\n+/g, ' / '), 80);
+      text += `• <b>${lbl}</b> — <i>${escapeHtml(sn)}</i>\n`;
+    }
+  }
+
+  const kb = new InlineKeyboard();
+  for (const it of slice) {
+    kb.text(String(it.label || '—'), `a:admin_umsg_tpl_view|tid:${String(it.id || '')}|p:${p}`).row();
+  }
+
+  kb.text('➕ Новый шаблон', `a:admin_umsg_tpl_add|p:${p}`)
+    .text('♻️ Сбросить к дефолту', `a:admin_umsg_tpl_reset_q|p:${p}`)
+    .row();
+
+  if (pages > 1) {
+    const prev = (p - 1 + pages) % pages;
+    const next = (p + 1) % pages;
+    kb.text('⬅️', `a:admin_umsg_tpls|p:${prev}`)
+      .text(`${p + 1}/${pages}`, `a:admin_umsg_tpls|p:${p}`)
+      .text('➡️', `a:admin_umsg_tpls|p:${next}`)
+      .row();
+  }
+
+  kb.text('📎 Вставить', `a:adm_ph|r:tpl_list|p:${p}`).row();
+
+  kb.text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
+  const { tpls } = await getAdminDmTemplatesWithMeta();
+  const it = findAdminDmTemplate(tpls.items, tplId);
+  if (!it) {
+    await safeEditOrReply(ctx, '⚠️ Шаблон не найден.', {
+      reply_markup: new InlineKeyboard()
+        .text('⬅️ Назад', `a:admin_umsg_tpls|p:${Math.max(0, Number(backPage) || 0)}`)
+        .text('⬅️ Админка', 'a:admin_home')
+    });
+    return;
+  }
+
+  const text =
+    `📌 <b>Шаблон</b>\n\n` +
+    `ID: <code>${escapeHtml(String(it.id || ''))}</code>\n` +
+    `Название: <b>${escapeHtml(String(it.label || ''))}</b>\n\n` +
+    `<pre>${escapeHtml(String(it.text || ''))}</pre>\n\n` +
+    `<i>Редактирование: 1-я строка — название, дальше — текст.</i>`;
+
+  const kb = new InlineKeyboard()
+    .text('✏️ Изменить', `a:admin_umsg_tpl_edit|tid:${String(it.id || '')}|p:${Math.max(0, Number(backPage) || 0)}`)
+    .text('🗑 Удалить', `a:admin_umsg_tpl_del_q|tid:${String(it.id || '')}|p:${Math.max(0, Number(backPage) || 0)}`)
+    .row()
+    .text('📎 Вставить', `a:adm_ph|r:tpl_view|tid:${String(it.id || '')}|p:${Math.max(0, Number(backPage) || 0)}`)
+    .row()
+    .text('⬅️ Назад', `a:admin_umsg_tpls|p:${Math.max(0, Number(backPage) || 0)}`)
+    .text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+  async function renderAdminOutbox(ctx, page = 0) {
+    const { items, total, pages, perPage, page: p, startIndex } = await getAdminOutboxPage(page, 8);
+
+    let text = `📤 <b>Outbox</b>
+
+` +
+      `Всего записей: <b>${escapeHtml(String(total || 0))}</b>
+` +
+      `Хранение: <b>Redis-only</b> (последние ${ADMIN_OUTBOX_MAX})
+
+`;
+
+    if (!items.length) {
+      text += 'Пока пусто.';
+    } else {
+      text += `Страница ${p + 1}/${pages}:
+
+`;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i] || {};
+        const absIdx = startIndex + i; // 0-based Redis list index
+        const ok = String(it.status || '').toLowerCase() === 'ok' || String(it.status || '').toLowerCase() === 'sent';
+        const icon = ok ? '✅' : '❌';
+        const to = it.target_username
+          ? ('@' + String(it.target_username).replace(/^@/, ''))
+          : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
+        const when = fmtTs(it.ts);
+        const sn = clipText(String(it.preview || it.snippet || '').replace(/\n+/g, ' / '), 110);
+        const num = absIdx + 1;
+        text += `${icon} <b>#${num}</b> · ${escapeHtml(when)} → <b>${escapeHtml(to)}</b>
+<i>${escapeHtml(sn || '—')}</i>
+`;
+        if (!ok && it.error) text += `<code>${escapeHtml(clipText(String(it.error), 140))}</code>
+`;
+        text += '\n';
+      }
+    }
+
+    const kb = new InlineKeyboard();
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i] || {};
+      const absIdx = startIndex + i;
+      const ok = String(it.status || '').toLowerCase() === 'ok' || String(it.status || '').toLowerCase() === 'sent';
+      const icon = ok ? '✅' : '❌';
+      const to = it.target_username
+        ? ('@' + String(it.target_username).replace(/^@/, ''))
+        : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
+      const t = fmtOutboxBtnTime(it.ts) || '';
+      const label = clipText(`${icon} ${t} ${to}`, 48);
+      kb.text(label, `a:admin_outbox_v|i:${absIdx}|p:${p}`).row();
+    }
+
+    if (pages > 1) {
+      const prev = (p - 1 + pages) % pages;
+      const next = (p + 1) % pages;
+      kb.text('⬅️', `a:admin_outbox|p:${prev}`)
+        .text(`${p + 1}/${pages}`, `a:admin_outbox|p:${p}`)
+        .text('➡️', `a:admin_outbox|p:${next}`)
+        .row();
+    }
+
+    kb.text('🧹 Очистить', `a:admin_outbox_clear_q|p:${p}`).row();
+    kb.text('⬅️ Админка', 'a:admin_home');
+
+    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  }
+
+  async function renderAdminOutboxView(ctx, index, backPage = 0) {
+    const it = await getAdminOutboxItemByIndex(index);
+    const p = Math.max(0, Number(backPage) || 0);
+
+    if (!it) {
+      await safeEditOrReply(ctx, '⚠️ Запись не найдена (возможно, очищено).', {
+        reply_markup: new InlineKeyboard().text('⬅️ К списку', `a:admin_outbox|p:${p}`).text('⬅️ Админка', 'a:admin_home')
+      });
+      return;
+    }
+
+    const ok = String(it.status || '').toLowerCase() === 'ok' || String(it.status || '').toLowerCase() === 'sent';
+    const icon = ok ? '✅' : '❌';
+    const toU = it.target_username ? ('@' + String(it.target_username).replace(/^@/, '')) : '—';
+    const toId = it.target_tg_id ? String(it.target_tg_id) : '—';
+    const byU = it.admin_username ? ('@' + String(it.admin_username).replace(/^@/, '')) : '—';
+    const byId = it.admin_tg_id ? String(it.admin_tg_id) : '—';
+    const when = fmtTs(it.ts);
+    const hash = it.text_hash ? String(it.text_hash) : '';
+
+    const tplLine = it.template_label || it.template_id
+      ? `
+Шаблон: <b>${escapeHtml(String(it.template_label || it.template_id))}</b>`
+      : '';
+
+    const used = Array.isArray(it.placeholders_used) ? it.placeholders_used : [];
+    const unknown = Array.isArray(it.placeholders_unknown) ? it.placeholders_unknown : [];
+    let phLine = '';
+    if (used.length) {
+      phLine += `
+📎 used: ${used.map((x) => `<code>{{${escapeHtml(String(x))}}}</code>`).join(' ')}`;
+    }
+    if (unknown.length) {
+      phLine += `
+⚠️ unknown: ${unknown.map((x) => `<code>{{${escapeHtml(String(x))}}}</code>`).join(' ')}`;
+    }
+
+    const err = it.error ? `
+Ошибка: <code>${escapeHtml(String(it.error))}</code>` : '';
+    const snippet = String(it.snippet || it.preview || '').trim();
+
+    const text =
+      `${icon} <b>Outbox запись</b>
+
+` +
+      `Время: <b>${escapeHtml(when)}</b>
+` +
+      `To: <b>${escapeHtml(toU)}</b> (tg:<code>${escapeHtml(toId)}</code>)
+` +
+      `By: <b>${escapeHtml(byU)}</b> (tg:<code>${escapeHtml(byId)}</code>)
+` +
+      `Статус: <b>${escapeHtml(String(it.status || (ok ? 'ok' : 'failed')))}</b>` +
+      (hash ? `
+Hash: <code>${escapeHtml(hash)}</code>` : '') +
+      tplLine +
+      phLine +
+      err +
+      `
+
+<b>Текст (snippet)</b>:
+<pre>${escapeHtml(snippet || '—')}</pre>`;
+
+    const kb = new InlineKeyboard()
+      .text('⬅️ К списку', `a:admin_outbox|p:${p}`)
+      .text('🧹 Очистить', `a:admin_outbox_clear_q|p:${p}`)
+      .row();
+
+    const uid = Number(it.target_user_id || 0);
+    if (uid) {
+      kb.text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`)
+        .text('✉️ Написать', `a:adm_umsg|id:${uid}|f:all|p:0`)
+        .row();
+    }
+
+    kb.text('⬅️ Админка', 'a:admin_home');
+
+    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  }
+
+
+
 
 
 async function renderAdminFounder(ctx) {
@@ -32902,6 +34252,21 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   text += `<b>Обновлён:</b> ${msk(card.updated_at)}\n`;
   if (card.banned_at) text += `🚫 <b>ЗАБЛОКИРОВАН:</b> ${msk(card.banned_at)}\n`;
 
+  // Admin note (Redis-only, STEP194). We show the snippet only in DM to avoid leaks in group chats.
+  const inPrivate = String(ctx.chat?.type || '') === 'private';
+  if (inPrivate) {
+    const note = await getAdminUserNote(card.id);
+    if (note?.text) {
+      const sn = clipText(String(note.text).replace(/\n+/g, ' / '), 180);
+      text += `📝 <b>Заметка:</b> ${escapeHtml(sn)}\n`;
+    } else {
+      text += `📝 <b>Заметка:</b> —\n`;
+    }
+  } else {
+    text += `📝 <b>Заметка:</b> <i>(только в DM)</i>\n`;
+  }
+
+
   // Brand info
   if (isBrand) {
     text += `\n<b>— Бренд —</b>\n`;
@@ -32951,6 +34316,8 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   kb.text(`📋 Скопировать ID: ${card.tg_id}`, `a:adm_ucopy|id:${card.id}`).row();
 
   kb.text('✉️ Написать', `a:adm_umsg|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
+  kb.text('📝 Заметка', `a:adm_unote|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
+
 
   // Quick gift from card
   kb.text('🎁 Подарить подписку', `a:adm_ugift|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
@@ -32982,7 +34349,86 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   kb.text('⬅️ К списку', `a:admin_users|f:${backFilter}|p:${backPage}`).row();
   kb.text('⬅️ Админка', 'a:admin_home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  
+async function renderAdminUserNote(ctx, userId, backFilter = 'all', backPage = 0) {
+  const uid = Number(userId || 0);
+  const f = String(backFilter || 'all').toLowerCase();
+  const page = Math.max(0, Number(backPage) || 0);
+
+  const backKb = new InlineKeyboard()
+    .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+    .text('⬅️ Админка', 'a:admin_home');
+
+  if (!uid) {
+    await safeEditOrReply(ctx, '⚠️ Нет user_id.', { reply_markup: backKb });
+    return;
+  }
+
+  // Safety: keep admin notes in DM to avoid accidental leaks in group chats.
+  const chatType = String(ctx.chat?.type || '');
+  if (chatType !== 'private') {
+    await safeEditOrReply(
+      ctx,
+      `📝 <b>Заметка админа</b>
+
+Эта функция доступна только в <b>личном чате</b> с ботом (DM), чтобы заметки не светились в группах.
+
+Открой бота в личке и зайди в карточку пользователя ещё раз.`,
+      { parse_mode: 'HTML', reply_markup: backKb }
+    );
+    return;
+  }
+
+  const card = await db.getUserCardById(uid);
+  if (!card) {
+    await safeEditOrReply(ctx, '⚠️ Пользователь не найден.', { reply_markup: backKb });
+    return;
+  }
+
+  const note = await getAdminUserNote(uid);
+
+  const uname = card.tg_username ? '@' + String(card.tg_username) : '—';
+  const updated = note?.updatedAt ? (new Date(note.updatedAt).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })) : '—';
+  const by = note?.byAdminTgId
+    ? (note.byAdminUsername ? ('@' + String(note.byAdminUsername).replace(/^@/, '')) : ('tg:' + String(note.byAdminTgId)))
+    : '—';
+
+  let text = `📝 <b>Заметка (admin)</b>
+
+User ID: <code>${uid}</code>
+TG ID: <code>${escapeHtml(String(card.tg_id || '—'))}</code>
+Username: ${escapeHtml(uname)}
+
+`;
+
+  if (note?.text) {
+    text += `<b>Текст</b>
+<pre>${escapeHtml(String(note.text))}</pre>
+
+`;
+  } else {
+    text += `<i>Пока пусто.</i>
+
+`;
+  }
+
+  text += `Updated: <code>${escapeHtml(String(updated))}</code>
+By: <code>${escapeHtml(String(by))}</code>
+`;
+
+  const kb = new InlineKeyboard()
+    .text('✏️ Изменить', `a:adm_unote_edit|id:${uid}|f:${f}|p:${page}`);
+
+  if (note?.text) kb.text('🧹 Очистить', `a:adm_unote_clear_q|id:${uid}|f:${f}|p:${page}`);
+  kb.row();
+  kb.text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+    .text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+
+await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function sendAdminMessageToUser(ctx, payload, nav = {}) {
@@ -32990,11 +34436,37 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
   const targetUserId = Number(payload?.targetUserId || 0);
   const targetTgId = Number(payload?.targetTgId || 0);
   const targetUsername = String(payload?.targetUsername || '').trim();
-  const bodyHtml = String(payload?.bodyHtml || '').trim();
-  const plain = String(payload?.plain || '').trim();
+  const templateRaw = String(payload?.templateRaw || payload?.tplRaw || payload?.plain || '').trim();
+  const bodyHtmlFallback = String(payload?.bodyHtml || '').trim();
+  const templateId = String(payload?.templateId || payload?.tplId || '').trim();
+  const templateLabel = String(payload?.templateLabel || '').trim();
   const f = String(nav.f || 'all').toLowerCase();
   const page = Math.max(0, Number(nav.page) || 0);
   const backUid = Number(nav.backUid || targetUserId || 0);
+
+  // Expand placeholders (best-effort) — both in preview and at send time.
+  let expandedPlain = '';
+  let phUsed = [];
+  let phUnknown = [];
+  if (templateRaw) {
+    try {
+      const vals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: targetUsername });
+      const res = applyAdminDmPlaceholders(templateRaw, vals);
+      expandedPlain = String(res.text || '').trim();
+      phUsed = Array.isArray(res.used) ? res.used : [];
+      phUnknown = Array.isArray(res.unknown) ? res.unknown : [];
+    } catch {
+      expandedPlain = templateRaw;
+      phUsed = [];
+      phUnknown = [];
+    }
+  }
+
+  // Fallback (older payloads)
+  if (!expandedPlain) expandedPlain = String(payload?.plain || '').trim();
+
+  const expandedSafe = expandedPlain.length > 3500 ? (expandedPlain.slice(0, 3500) + '…') : expandedPlain;
+  const bodyHtml = bodyHtmlFallback || escapeHtml(expandedSafe);
 
   if (!adminTgId || !targetTgId || !bodyHtml) {
     await safeEditOrReply(ctx, '⚠️ Не удалось отправить: не хватает данных.', {
@@ -33004,9 +34476,10 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
   }
 
   // Dedup (best-effort): prevent accidental double-send (double click / retries)
+  let textHash = '';
   try {
-    const h = crypto.createHash('sha1').update(String(plain || bodyHtml)).digest('hex').slice(0, 12);
-    const dkey = k(['adm_umsg_dedup', String(adminTgId), String(targetTgId), h]);
+    textHash = crypto.createHash('sha1').update(String(expandedSafe || bodyHtml)).digest('hex').slice(0, 12);
+    const dkey = k(['adm_umsg_dedup', String(adminTgId), String(targetTgId), textHash]);
     const ok = await redis.set(dkey, '1', { nx: true, ex: 60 });
     if (!ok) {
       await safeEditOrReply(ctx, '⏳ Это сообщение уже отправлялось недавно (anti-двойной клик).', {
@@ -33033,6 +34506,30 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
     err = String(e?.message || e).slice(0, 160);
   }
 
+
+
+// Outbox log (Redis-only) — record send result (ok/failed). Best-effort.
+try {
+  const snippet = expandedSafe.length > 900 ? (String(expandedSafe).slice(0, 900) + '…') : String(expandedSafe || '');
+  const preview = clipText(String(expandedSafe || '').replace(/\n+/g, ' / '), 160);
+  await appendAdminOutbox({
+    ts: new Date().toISOString(),
+    status: ok ? 'ok' : 'failed',
+    admin_tg_id: adminTgId,
+    admin_username: String(ctx.from?.username || ''),
+    target_user_id: targetUserId,
+    target_tg_id: targetTgId,
+    target_username: targetUsername,
+    template_id: templateId,
+    template_label: templateLabel,
+    placeholders_used: phUsed,
+    placeholders_unknown: phUnknown,
+    text_hash: textHash,
+    preview,
+    snippet,
+    error: ok ? '' : err,
+  });
+} catch {}
   const uname = targetUsername ? '@' + targetUsername : '—';
   if (!ok) {
     await safeEditOrReply(ctx, `❌ <b>Не удалось отправить</b>\n\nПользователь: <b>${escapeHtml(uname)}</b> (tg:<code>${targetTgId}</code>)\n\nОшибка: <code>${escapeHtml(err || 'unknown')}</code>`, {
@@ -33069,7 +34566,7 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
     }
 
     const by = ctx.from?.username ? '@' + String(ctx.from.username) : ('tg:' + String(adminTgId));
-    const snippet = (plain || '').length > 900 ? (String(plain).slice(0, 900) + '…') : String(plain || '');
+    const snippet = expandedSafe.length > 900 ? (String(expandedSafe).slice(0, 900) + '…') : String(expandedSafe || '');
     const logText = `📨 <b>Admin message</b>\n\nTo: <b>${escapeHtml(uname)}</b> (tg:<code>${targetTgId}</code>)\nBy: <b>${escapeHtml(by)}</b>\nTime: <code>${new Date().toISOString()}</code>\n\n<b>Text:</b>\n${escapeHtml(snippet)}`;
     const logKb = new InlineKeyboard()
       .text('👤 Карточка', `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`)
@@ -33597,6 +35094,7 @@ ${escapeHtml(v.submitted_text || '—')}`;
 }
 
 
+---
 
 ## FILE: `src/bot/actionRegistry.js`
 
@@ -33632,6 +35130,10 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:adm_umsg": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:adm_umsg_free": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:adm_umsg_send": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
+  "a:adm_unote": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:adm_unote_edit": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:adm_unote_clear_q": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:adm_unote_clear": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:adm_umsg_tpl": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:adm_uban_do": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:adm_uban_q": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
@@ -34102,6 +35604,7 @@ export function listActionKeysSorted() {
 }
 
 
+---
 
 ## FILE: `src/db/queries.js`
 
@@ -40362,6 +41865,7 @@ export async function deleteIgOAuthAccount(wsId) {
 }
 
 
+---
 
 ## FILE: `src/lib/monDiag.js`
 
@@ -40521,3 +42025,5 @@ export async function setMonUnlockDiag({ atIso, status, errorCode, wsId, source 
   }
 }
 
+
+---
