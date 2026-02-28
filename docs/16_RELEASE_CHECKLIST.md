@@ -1,28 +1,52 @@
-# 16 — RELEASE CHECKLIST — 2026-02-20
+# 16 — RELEASE CHECKLIST (2 минуты) — 2026-03-01
 
-## Before deploy
-- `node --check src/bot/bot.js`
-- `node --check src/bot/cron.js`
-- `npm run test:redact` (sanitizer regression: links/emails/@/phones)
-- `npm run actions:check` (registry covers all callback actions; fail-closed guard is strict)
-- Ensure env vars exist (see `.env.example`)
-  - Если включаешь QStash fan-out для рассылок (`sys:broadcast_qstash_fanout=1`):
-    - `QSTASH_TOKEN`
-    - `QSTASH_CURRENT_SIGNING_KEY` + `QSTASH_NEXT_SIGNING_KEY`
-    - `PUBLIC_BASE_URL` (или корректный `VERCEL_URL` fallback)
-  - Runbook: `docs/10_QSTASH_RUNBOOK.md`
-- If schema changed: run migrations via `node migrations/run.js`
+Цель: перед каждым деплоем делать один и тот же короткий прогон, чтобы ловить ошибки **до** продакшена.
 
-## After deploy
-- Run `smoke-tests_short.md`
-- Check `/api/health` once:
+## A) Перед деплоем (локально)
+
+1) Быстрый прогон
+
+```bash
+npm run preflight
+# (алиас)
+npm run qa:fast
+```
+
+Ожидаем: без ошибок. Если упало — см. `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+2) Если в STEP были миграции — прогнать их заранее (или dry-run)
+
+```bash
+node migrations/run.js
+# или
+node migrations/run.js --dry-run
+```
+
+> Если STEP без миграций — этот пункт пропускаем.
+
+## B) Сразу после деплоя (1 минута)
+
+1) Health
+- Открыть `GET /api/health`
+- Проверить:
   - `ok:true`
-  - `cron.*` присутствует
-  - если включён audit throttle → `audit.throttle.suppressed_*` не ломает ответ
-- Trigger cron endpoints manually once (with CRON_SECRET) to confirm:
-  - lock works
-  - no duplicates
-- Watch logs for first 24h:
-  - no repeated winners
-  - no “act: a:brand_profile_edit” errors
+  - есть блок `cron.*`
 
+2) 2–3 клика в админке (быстрый sanity UI)
+- **Comms / Support**: открыть экран, убедиться что рендерится и навигация не “тупик”.
+- **Outbox**: открыть список → открыть одну запись (просмотр).
+- **Users**: открыть карточку пользователя → открыть “Заметка/Теги” (если есть).
+
+> Ничего не отправляем и не нажимаем “опасные” действия — только проверяем, что экраны открываются.
+
+## C) Если что-то пошло не так
+
+- Остановиться и не “дожимать” прод.
+- Быстрое восстановление: откатить деплой на предыдущую версию.
+- Детальнее: `docs/13_RUNBOOK_RELEASE.md`.
+
+---
+
+### Примечания
+- `preflight` покрывает: action registry, автоген docs реестра, nav-lint, redact-тесты.
+- Эта страница — **каноничный короткий чек**. Подробности — в `docs/13_RUNBOOK_RELEASE.md`.

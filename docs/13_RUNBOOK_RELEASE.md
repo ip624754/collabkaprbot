@@ -1,5 +1,7 @@
 # 13 — Runbook: Deploy / Smoke tests / Rollback
 
+Быстрый чек “2 минуты перед деплоем”: `docs/16_RELEASE_CHECKLIST.md`.
+
 ## Перед деплоем
 1) ENV:
 - `DATABASE_URL`

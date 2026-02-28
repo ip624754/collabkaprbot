@@ -4,51 +4,26 @@
 >
 > Regenerate: `npm run actions:md`
 
-Generated at: `2026-02-28T14:45:55.196Z`
 
-- Actions in code: **496**
-- Actions in registry: **474**
-
-## ❌ Missing in registry (present in code)
-
-- `a:adm_ph`
-- `a:admin_notice`
-- `a:admin_notice_clear`
-- `a:admin_notice_cta`
-- `a:admin_notice_expire`
-- `a:admin_notice_publish`
-- `a:admin_notice_sev`
-- `a:admin_notice_target`
-- `a:admin_notice_text`
-- `a:admin_notice_toggle`
-- `a:admin_outbox`
-- `a:admin_outbox_clear`
-- `a:admin_outbox_clear_q`
-- `a:admin_outbox_v`
-- `a:admin_umsg_tpl_add`
-- `a:admin_umsg_tpl_del`
-- `a:admin_umsg_tpl_del_q`
-- `a:admin_umsg_tpl_edit`
-- `a:admin_umsg_tpl_reset`
-- `a:admin_umsg_tpl_reset_q`
-- `a:admin_umsg_tpl_view`
-- `a:admin_umsg_tpls`
+- Actions in code: **505**
+- Actions in registry: **505**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
-| admin | 54 |
+| admin | 83 |
 | edit | 335 |
 | ops | 74 |
 | pay | 11 |
+| view | 2 |
 
 ## Summary by guard
 
 | Guard | Count |
 |---|---:|
-| none | 127 |
-| require_redis | 347 |
+| none | 129 |
+| require_redis | 376 |
 
 ## Actions table
 
@@ -62,6 +37,7 @@ Generated at: `2026-02-28T14:45:55.196Z`
 | `a:adm_gift_revoke_batch` | admin | require_redis |
 | `a:adm_gift_revoke_do` | admin | require_redis |
 | `a:adm_gift_revoke_input` | admin | require_redis |
+| `a:adm_ph` | admin | none |
 | `a:adm_support_qr` | admin | none |
 | `a:adm_support_reply` | admin | require_redis |
 | `a:adm_uban_do` | admin | require_redis |
@@ -79,10 +55,12 @@ Generated at: `2026-02-28T14:45:55.196Z`
 | `a:adm_unote_clear` | admin | require_redis |
 | `a:adm_unote_clear_q` | admin | require_redis |
 | `a:adm_unote_edit` | admin | require_redis |
+| `a:adm_unote_tag` | admin | require_redis |
 | `a:adm_urevoke_do` | admin | require_redis |
 | `a:adm_urevoke_q` | admin | none |
 | `a:admin` | admin | require_redis |
 | `a:admin_bc_qstash_toggle` | admin | require_redis |
+| `a:admin_comms` | admin | require_redis |
 | `a:admin_founder` | admin | require_redis |
 | `a:admin_founder_links` | admin | require_redis |
 | `a:admin_founder_reset` | admin | require_redis |
@@ -97,6 +75,23 @@ Generated at: `2026-02-28T14:45:55.196Z`
 | `a:admin_mod_add` | admin | require_redis |
 | `a:admin_mod_list` | admin | none |
 | `a:admin_mod_rm` | admin | require_redis |
+| `a:admin_notice` | admin | require_redis |
+| `a:admin_notice_clear` | admin | require_redis |
+| `a:admin_notice_cta` | admin | require_redis |
+| `a:admin_notice_expire` | admin | require_redis |
+| `a:admin_notice_publish` | admin | require_redis |
+| `a:admin_notice_sev` | admin | require_redis |
+| `a:admin_notice_target` | admin | require_redis |
+| `a:admin_notice_text` | admin | require_redis |
+| `a:admin_notice_toggle` | admin | require_redis |
+| `a:admin_ops` | admin | require_redis |
+| `a:admin_outbox` | admin | require_redis |
+| `a:admin_outbox_clear` | admin | require_redis |
+| `a:admin_outbox_clear_q` | admin | require_redis |
+| `a:admin_outbox_note` | admin | require_redis |
+| `a:admin_outbox_repeat` | admin | require_redis |
+| `a:admin_outbox_to_tpl` | admin | require_redis |
+| `a:admin_outbox_v` | admin | require_redis |
 | `a:admin_pay_accept_toggle` | admin | require_redis |
 | `a:admin_pay_apply` | admin | none |
 | `a:admin_pay_auto_toggle` | admin | require_redis |
@@ -105,6 +100,15 @@ Generated at: `2026-02-28T14:45:55.196Z`
 | `a:admin_payments` | admin | require_redis |
 | `a:admin_qstash_ping` | admin | require_redis |
 | `a:admin_qstash_status` | admin | require_redis |
+| `a:admin_sys` | admin | require_redis |
+| `a:admin_umsg_tpl_add` | admin | require_redis |
+| `a:admin_umsg_tpl_del` | admin | require_redis |
+| `a:admin_umsg_tpl_del_q` | admin | require_redis |
+| `a:admin_umsg_tpl_edit` | admin | require_redis |
+| `a:admin_umsg_tpl_reset` | admin | require_redis |
+| `a:admin_umsg_tpl_reset_q` | admin | require_redis |
+| `a:admin_umsg_tpl_view` | admin | require_redis |
+| `a:admin_umsg_tpls` | admin | require_redis |
 | `a:admin_users` | admin | require_redis |
 | `a:admin_users_reset` | admin | require_redis |
 | `a:admin_users_search` | admin | require_redis |
@@ -445,6 +449,7 @@ Generated at: `2026-02-28T14:45:55.196Z`
 | `a:net_q` | edit | none |
 | `a:net_set` | edit | require_redis |
 | `a:nop` | edit | require_redis |
+| `a:notice` | view | require_redis |
 | `a:off_buy` | pay | require_redis |
 | `a:off_buy_home` | pay | none |
 | `a:off_manage` | edit | require_redis |
@@ -473,6 +478,7 @@ Generated at: `2026-02-28T14:45:55.196Z`
 | `a:support_write` | ops | require_redis |
 | `a:team` | edit | require_redis |
 | `a:ui_mode_set` | edit | require_redis |
+| `a:usr_ack` | view | none |
 | `a:verify_home` | edit | none |
 | `a:verify_info` | edit | none |
 | `a:verify_kind` | edit | require_redis |
