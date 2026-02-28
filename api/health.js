@@ -30,6 +30,40 @@ export default async function handler(_req, res) {
       orphaned_autoheal_effective: !!(CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED),
       session_ttl_min: Number(CFG.PAYMENT_SESSION_TTL_MIN || 0),
       session_ttl_sec: Number(CFG.PAYMENT_SESSION_TTL_SEC || 0)
+    },
+    // Monetization retry breadcrumbs (Redis-only)
+    // Filled by /api/qstash/monetization-retry worker.
+    mon: {
+      retry: {
+        last_at: null,
+        last_action: null,
+        last_status: null,
+        last_error: null,
+      },
+      // Intro breadcrumbs (Redis-only)
+      // Filled by click handler (a:bx_msg) and/or /api/qstash/monetization-retry worker.
+      intro: {
+        last_at: null,
+        last_status: null,
+        last_error: null,
+        last_offer_id: null,
+      },
+      // Accept (✅ Принять) breadcrumbs (Redis-only)
+      accept: {
+        last_at: null,
+        last_status: null,
+        last_error: null,
+        last_app_id: null,
+        last_source: null,
+      },
+      // Unlock (🔓 Контакты) breadcrumbs (Redis-only)
+      unlock: {
+        last_at: null,
+        last_status: null,
+        last_error: null,
+        last_ws_id: null,
+        last_source: null,
+      }
     }
   };
 
@@ -64,6 +98,74 @@ export default async function handler(_req, res) {
       const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const pendingOps = Number(await redis.llen(k(['ops', 'alerts', 'ops', 'd', day]))) || 0;
       base.ops.pending = { ops: pendingOps };
+    } catch {
+      // ignore
+    }
+
+    // Accept breadcrumbs (Redis-only)
+    try {
+      const [lastAt, lastStatus, lastError, lastAppId, lastSource] = await Promise.all([
+        redis.get(k(['mon', 'accept', 'last_at'])),
+        redis.get(k(['mon', 'accept', 'last_status'])),
+        redis.get(k(['mon', 'accept', 'last_error'])),
+        redis.get(k(['mon', 'accept', 'last_app_id'])),
+        redis.get(k(['mon', 'accept', 'last_source'])),
+      ]);
+      base.mon.accept.last_at = lastAt || null;
+      base.mon.accept.last_status = lastStatus || null;
+      base.mon.accept.last_error = lastError || null;
+      base.mon.accept.last_app_id = lastAppId || null;
+      base.mon.accept.last_source = lastSource || null;
+    } catch {
+      // ignore
+    }
+
+    // Unlock breadcrumbs (Redis-only)
+    try {
+      const [lastAt, lastStatus, lastError, lastWsId, lastSource] = await Promise.all([
+        redis.get(k(['mon', 'unlock', 'last_at'])),
+        redis.get(k(['mon', 'unlock', 'last_status'])),
+        redis.get(k(['mon', 'unlock', 'last_error'])),
+        redis.get(k(['mon', 'unlock', 'last_ws_id'])),
+        redis.get(k(['mon', 'unlock', 'last_source'])),
+      ]);
+      base.mon.unlock.last_at = lastAt || null;
+      base.mon.unlock.last_status = lastStatus || null;
+      base.mon.unlock.last_error = lastError || null;
+      base.mon.unlock.last_ws_id = lastWsId || null;
+      base.mon.unlock.last_source = lastSource || null;
+    } catch {
+      // ignore
+    }
+
+    // Monetization retry breadcrumbs (Redis-only)
+    try {
+      const [lastAt, lastAction, lastStatus, lastError] = await Promise.all([
+        redis.get(k(['mon', 'retry', 'last_at'])),
+        redis.get(k(['mon', 'retry', 'last_action'])),
+        redis.get(k(['mon', 'retry', 'last_status'])),
+        redis.get(k(['mon', 'retry', 'last_error'])),
+      ]);
+      base.mon.retry.last_at = lastAt || null;
+      base.mon.retry.last_action = lastAction || null;
+      base.mon.retry.last_status = lastStatus || null;
+      base.mon.retry.last_error = lastError || null;
+    } catch {
+      // ignore
+    }
+
+    // Intro breadcrumbs (Redis-only)
+    try {
+      const [lastAt, lastStatus, lastError, lastOfferId] = await Promise.all([
+        redis.get(k(['mon', 'intro', 'last_at'])),
+        redis.get(k(['mon', 'intro', 'last_status'])),
+        redis.get(k(['mon', 'intro', 'last_error'])),
+        redis.get(k(['mon', 'intro', 'last_offer_id'])),
+      ]);
+      base.mon.intro.last_at = lastAt || null;
+      base.mon.intro.last_status = lastStatus || null;
+      base.mon.intro.last_error = lastError || null;
+      base.mon.intro.last_offer_id = lastOfferId || null;
     } catch {
       // ignore
     }
