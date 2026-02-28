@@ -814,6 +814,30 @@ docs/01_SECURITY_INVARIANTS.md
 - Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
 
 
+## STEP189 — System Notice v2: targeting + CTA + auto-expire (Redis-only)
+- Расширили объект `sys:notice` (Redis-only): добавлены `target` (`all/brand/creator`), `ctaLabel/ctaUrl` (URL‑кнопка), `expiresAt` (epoch seconds).
+- Админка: новые действия **🎯 Кому**, **🔗 CTA**, **⏰ Expire** (всё без DB).
+- Показ пользователям по-прежнему 1 раз на версию:
+  - если `expiresAt` в прошлом — не показываем,
+  - если `target!=all` — показываем только целевой роли (определяем по Redis: `ui_mode` + `bm_mode`),
+  - если `ctaUrl` задан — добавляем URL‑кнопку.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP190 — Admin: DM templates CRUD (Redis-only)
+- Добавили управление шаблонами для админ‑DM из STEP187: `👑 Админка → 📌 Шаблоны DM`.
+- Хранение: Redis object `sys:admin_dm_templates` (без DB).
+- CRUD:
+  - ➕ новый шаблон (1-я строка — название, дальше текст),
+  - ✏️ редактирование,
+  - 🗑 удаление,
+  - ♻️ сброс к дефолту (удаляет ключ в Redis).
+- В `✉️ Написать` шаблоны подтягиваются из Redis; если кастома нет / Redis деградировал — используем дефолтный набор.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+
+
 ## STEP172 — /api/health: mon.retry (Redis-only)
 - Добавили в `/api/health` блок `mon.retry` с полями `last_at` и `last_action`.
 - Данные берутся **только из Redis** (ключи пишет воркер `POST /api/qstash/monetization-retry`).
@@ -942,3 +966,29 @@ docs/01_SECURITY_INVARIANTS.md
 - Исправили битое имя файла в `docs/neon/`: теперь файл называется `ИСТОРИЯ_НЕОН.txt` (UTF‑8), как и указано в `docs/neon/README.md`.
 - Обновили audit-pack (NotebookLM sources), чтобы туда тоже попал файл с правильным именем.
 - Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+### STEP186 — NotebookLM pack ≤50 files (no .sql), bundled sources
+- Added `docs/audit/notebooklm_pack/` with curated bundles for NotebookLM (≤50 files, .md/.txt only).
+- Added code bundle + migrations bundle as text for NotebookLM.
+- Updated `scripts/gen-notebooklm-sources.js` to output `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip` and enforce 50-file limit.
+- Updated `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md` with NotebookLM constraints.
+
+
+## STEP187 — Admin: send message to user from user card (MVP)
+- В `👑 Админка → Пользователи → Карточка пользователя` добавлена кнопка **«✉️ Написать»**.
+- Два режима:
+  - шаблоны (6 кнопок: ack/need/done/wip/pay/limit) → предпросмотр → подтверждение;
+  - свободный текст (в DM с ботом) → предпросмотр → подтверждение.
+- Без миграций: отправка напрямую через Telegram `sendMessage`.
+- Best‑effort анти‑дубликат: Redis dedup на 60 сек по `(admin_tg_id, target_tg_id, hash(text))`.
+- Best‑effort лог отправки: в `SUPPORT_CHAT_ID` (если задан) иначе всем `SUPER_ADMIN_TG_IDS`.
+
+
+## STEP188 — Admin: System Notice (Redis-only banner, без рассылки)
+- В админке добавлен экран **«📣 Объявление»** для управления системным сообщением проекта.
+- Хранение: **только Redis** (object key `sys:notice`): `active`, `severity`, `version`, `text`, `updatedAt`.
+- Публикация: кнопка **«🚀 Опубликовать (новая версия)»** увеличивает `version` и включает `active`.
+- Показ пользователям: при входе в `📋 Меню` / `🏠 Home` бот отправляет объявление **1 раз на версию** (seen‑ключи в Redis с TTL ~180d).
+- Никакой рассылки/сканов по базе: это пассивное сообщение, не трогающее Neon.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
