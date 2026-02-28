@@ -1,0 +1,1775 @@
+# Collabka PR — MIGRATIONS (all) as text
+
+NotebookLM не принимает .sql, поэтому всё собрано в один .txt.
+
+
+
+---
+## FILE: `migrations/run.js`
+
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+import { pool } from '../src/db/pool.js';
+
+// =====================================================
+// Migration runner (Jobs/Vitalik/Woz):
+// - Deterministic ordering
+// - Exactly-once application (schema_migrations table)
+// - Checksums to prevent "silent edits" of old migrations
+// - Each migration runs in its own transaction
+// =====================================================
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const MIGRATIONS_TABLE = 'schema_migrations';
+
+function sha256Hex(s) {
+  return crypto
+    .createHash('sha256')
+    .update(String(s || ''), 'utf8')
+    .digest('hex');
+}
+
+async function ensureMigrationsTable() {
+  await pool.query(
+    `
+    CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      checksum TEXT NOT NULL,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    `
+  );
+}
+
+async function getApplied(name) {
+  const r = await pool.query(
+    `SELECT name, checksum, applied_at FROM ${MIGRATIONS_TABLE} WHERE name = $1`,
+    [name]
+  );
+  return r.rows?.[0] || null;
+}
+
+async function run() {
+  const args = new Set(process.argv.slice(2));
+  const dryRun = args.has('--dry-run');
+
+  await ensureMigrationsTable();
+
+  const files = fs
+    .readdirSync(__dirname)
+    .filter((f) => /^\d+_.*\.sql$/.test(f))
+    .sort();
+
+  let applied = 0;
+  let skipped = 0;
+
+  for (const f of files) {
+    const fullPath = path.join(__dirname, f);
+    const sql = fs.readFileSync(fullPath, 'utf8');
+    const checksum = sha256Hex(sql);
+
+    const prev = await getApplied(f);
+    if (prev) {
+      if (String(prev.checksum || '') !== checksum) {
+        throw new Error(
+          `[MIGRATIONS] Checksum mismatch for ${f}.\n` +
+            `This indicates an old migration file was edited.\n` +
+            `Expected: ${prev.checksum}\nActual:   ${checksum}`
+        );
+      }
+      skipped += 1;
+      continue;
+    }
+
+    if (dryRun) {
+      console.log(`[MIGRATIONS] (dry-run) would apply: ${f}`);
+      continue;
+    }
+
+    console.log(`[MIGRATIONS] Applying: ${f}`);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query(
+        `INSERT INTO ${MIGRATIONS_TABLE}(name, checksum) VALUES ($1, $2)`,
+        [f, checksum]
+      );
+      await client.query('COMMIT');
+      applied += 1;
+    } catch (e) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  if (!dryRun) {
+    console.log(`[MIGRATIONS] Complete. applied=${applied} skipped=${skipped}`);
+  }
+
+  await pool.end();
+}
+
+run().catch(async (e) => {
+  console.error(e);
+  try {
+    await pool.end();
+  } catch {}
+  process.exit(1);
+});
+
+
+
+---
+
+## FILE: `migrations/001_init.sql`
+
+-- MicroGiveaways Bot schema (v0.9)
+
+create table if not exists users (
+  id bigserial primary key,
+  tg_id bigint not null unique,
+  tg_username text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists workspaces (
+  id bigserial primary key,
+  owner_user_id bigint not null references users(id) on delete cascade,
+  title text not null,
+  channel_id bigint not null,
+  channel_username text,
+  created_at timestamptz not null default now(),
+  unique(owner_user_id, channel_id)
+);
+
+create table if not exists workspace_settings (
+  workspace_id bigint primary key references workspaces(id) on delete cascade,
+  network_enabled boolean not null default false,
+  curator_enabled boolean not null default false,
+  auto_draw_default boolean not null default false,
+  auto_publish_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists workspace_curators (
+  id bigserial primary key,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  user_id bigint not null references users(id) on delete cascade,
+  added_by_user_id bigint not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(workspace_id, user_id)
+);
+
+create table if not exists workspace_audit (
+  id bigserial primary key,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  actor_user_id bigint not null references users(id) on delete cascade,
+  action text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_workspace_audit_ws_time on workspace_audit(workspace_id, created_at desc);
+create index if not exists idx_workspace_audit_actor_time on workspace_audit(actor_user_id, created_at desc);
+
+create table if not exists giveaways (
+  id bigserial primary key,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  status text not null default 'DRAFT',
+  prize_value_text text,
+  winners_count int not null default 1,
+  ends_at timestamptz,
+  auto_draw boolean not null default false,
+  auto_publish boolean not null default false,
+  published_chat_id bigint,
+  published_message_id bigint,
+  winners_drawn_at timestamptz,
+  results_published_at timestamptz,
+  results_message_id bigint,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_giveaways_workspace on giveaways(workspace_id, created_at desc);
+create index if not exists idx_giveaways_status on giveaways(status);
+
+create table if not exists giveaway_sponsors (
+  id bigserial primary key,
+  giveaway_id bigint not null references giveaways(id) on delete cascade,
+  position int not null,
+  sponsor_text text not null
+);
+
+create index if not exists idx_gw_sponsors_gw on giveaway_sponsors(giveaway_id, position);
+
+create table if not exists giveaway_entries (
+  giveaway_id bigint not null references giveaways(id) on delete cascade,
+  user_id bigint not null references users(id) on delete cascade,
+  joined_at timestamptz not null default now(),
+  is_eligible boolean not null default false,
+  last_checked_at timestamptz,
+  primary key (giveaway_id, user_id)
+);
+
+create index if not exists idx_gw_entries_gw on giveaway_entries(giveaway_id);
+create index if not exists idx_gw_entries_eligible on giveaway_entries(giveaway_id, is_eligible);
+
+create table if not exists giveaway_winners (
+  id bigserial primary key,
+  giveaway_id bigint not null references giveaways(id) on delete cascade,
+  user_id bigint not null references users(id) on delete cascade,
+  place int not null,
+  created_at timestamptz not null default now(),
+  unique(giveaway_id, place),
+  unique(giveaway_id, user_id)
+);
+
+create table if not exists giveaway_audit (
+  id bigserial primary key,
+  giveaway_id bigint not null references giveaways(id) on delete cascade,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  actor_user_id bigint references users(id) on delete set null,
+  action text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_giveaway_audit_gw_time on giveaway_audit(giveaway_id, created_at desc);
+
+-- Optional: network sponsors (future barters marketplace)
+create table if not exists network_sponsors (
+  id bigserial primary key,
+  category text,
+  title text not null,
+  contact text,
+  created_by_user_id bigint references users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+
+
+---
+
+## FILE: `migrations/002_barters.sql`
+
+-- Barters Marketplace (v0.9.1)
+
+create table if not exists barter_offers (
+  id bigserial primary key,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  creator_user_id bigint references users(id) on delete set null,
+  status text not null default 'ACTIVE', -- ACTIVE | PAUSED | CLOSED
+  category text not null, -- cosmetics | skincare | accessories | other
+  offer_type text not null, -- ad | review | giveaway | other
+  compensation_type text not null, -- barter | cert | rub | mixed
+  title text not null,
+  description text not null,
+  contact text,
+  bump_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_barter_offers_feed on barter_offers(status, bump_at desc);
+create index if not exists idx_barter_offers_ws on barter_offers(workspace_id, created_at desc);
+create index if not exists idx_barter_offers_category on barter_offers(category, status, bump_at desc);
+
+create table if not exists barter_offer_audit (
+  id bigserial primary key,
+  offer_id bigint not null references barter_offers(id) on delete cascade,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  actor_user_id bigint references users(id) on delete set null,
+  action text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_barter_offer_audit_offer_time on barter_offer_audit(offer_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/003_barters_ideal.sql`
+
+-- Barters Marketplace "ideal" layer (v0.9.2)
+
+-- bump counters
+alter table barter_offers add column if not exists bump_count int not null default 0;
+
+-- Inbox / mini-deals (brand <-> blogger)
+create table if not exists barter_threads (
+  id bigserial primary key,
+  offer_id bigint not null references barter_offers(id) on delete cascade,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  buyer_user_id bigint not null references users(id) on delete cascade,
+  seller_user_id bigint not null references users(id) on delete cascade,
+  status text not null default 'OPEN', -- OPEN | CLOSED
+  last_message_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (offer_id, buyer_user_id)
+);
+
+create index if not exists idx_barter_threads_user_time on barter_threads(buyer_user_id, last_message_at desc);
+create index if not exists idx_barter_threads_seller_time on barter_threads(seller_user_id, last_message_at desc);
+
+create table if not exists barter_messages (
+  id bigserial primary key,
+  thread_id bigint not null references barter_threads(id) on delete cascade,
+  sender_user_id bigint not null references users(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_barter_messages_thread_time on barter_messages(thread_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/004_final_pack.sql`
+
+-- Final Pack v1.0.0 (Monetization + Moderation)
+
+-- Workspace: plan, profile, pinned
+alter table workspace_settings add column if not exists plan text not null default 'free';
+alter table workspace_settings add column if not exists pro_until timestamptz;
+alter table workspace_settings add column if not exists pro_pinned_offer_id bigint;
+
+alter table workspace_settings add column if not exists profile_title text;
+alter table workspace_settings add column if not exists profile_niche text;
+alter table workspace_settings add column if not exists profile_contact text;
+alter table workspace_settings add column if not exists profile_geo text;
+
+-- Ensure enum-ish plan values
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='workspace_settings_plan_chk'
+  ) THEN
+    ALTER TABLE workspace_settings
+      ADD CONSTRAINT workspace_settings_plan_chk CHECK (plan in ('free','pro'));
+  END IF;
+END$$;
+
+-- Network moderators ("curators of quality")
+create table if not exists network_moderators (
+  user_id bigint primary key references users(id) on delete cascade,
+  added_by_user_id bigint not null references users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+-- Reports / disputes (queue for moderators)
+create table if not exists barter_reports (
+  id bigserial primary key,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  offer_id bigint references barter_offers(id) on delete set null,
+  thread_id bigint references barter_threads(id) on delete set null,
+  reporter_user_id bigint references users(id) on delete set null,
+  reason text not null,
+  details text,
+  status text not null default 'OPEN', -- OPEN | RESOLVED
+  resolved_by_user_id bigint references users(id) on delete set null,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_barter_reports_status_time on barter_reports(status, created_at desc);
+create index if not exists idx_barter_reports_ws_time on barter_reports(workspace_id, created_at desc);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='barter_reports_status_chk'
+  ) THEN
+    ALTER TABLE barter_reports
+      ADD CONSTRAINT barter_reports_status_chk CHECK (status in ('OPEN','RESOLVED'));
+  END IF;
+END$$;
+
+
+
+---
+
+## FILE: `migrations/005_brand_pass.sql`
+
+-- Brand Pass credits (minimal)
+
+alter table users
+  add column if not exists brand_credits int not null default 0;
+
+alter table users
+  add column if not exists brand_credits_spent int not null default 0;
+
+alter table users
+  add column if not exists brand_credits_updated_at timestamptz;
+
+create index if not exists idx_users_brand_credits on users(brand_credits);
+
+
+
+---
+
+## FILE: `migrations/006_brand_plan.sql`
+
+-- Brand Plan (tools subscription for brands)
+
+alter table users
+  add column if not exists brand_plan text;
+
+alter table users
+  add column if not exists brand_plan_until timestamptz;
+
+alter table users
+  add column if not exists brand_plan_updated_at timestamptz;
+
+create index if not exists idx_users_brand_plan_until on users (brand_plan_until);
+
+
+
+---
+
+## FILE: `migrations/007_matching.sql`
+
+-- Smart Matching requests
+
+create table if not exists matching_requests (
+  id bigserial primary key,
+  user_id bigint not null references users(id) on delete cascade,
+  tier text not null,
+  stars_paid int not null default 0,
+  brief text,
+  result_offer_ids jsonb,
+  status text not null default 'PAID',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_matching_requests_user on matching_requests (user_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/008_featured.sql`
+
+-- Featured placements (sell attention in the feed)
+
+create table if not exists featured_placements (
+  id bigserial primary key,
+  user_id bigint not null references users(id) on delete cascade,
+  duration_days int not null,
+  stars_paid int not null default 0,
+  title text,
+  body text,
+  contact text,
+  status text not null default 'DRAFT',
+  starts_at timestamptz,
+  ends_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_featured_active on featured_placements (status, ends_at desc);
+create index if not exists idx_featured_user on featured_placements (user_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/009_crm_stage.sql`
+
+-- CRM stage in Inbox threads (for brands)
+
+alter table barter_threads
+  add column if not exists buyer_stage text;
+
+create index if not exists idx_barter_threads_buyer_stage on barter_threads (buyer_user_id, buyer_stage);
+
+
+
+---
+
+## FILE: `migrations/010_user_verifications.sql`
+
+-- user verifications (rolling upgrade)
+
+create table if not exists user_verifications (
+  user_id bigint primary key references users(id) on delete cascade,
+  kind text not null default 'creator',
+  status text not null default 'PENDING',
+  submitted_text text,
+  submitted_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  reviewed_by_user_id bigint references users(id),
+  rejection_reason text,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_user_verifications_status on user_verifications(status);
+create index if not exists idx_user_verifications_submitted_at on user_verifications(submitted_at desc);
+
+
+
+---
+
+## FILE: `migrations/011_stars_payments.sql`
+
+-- Stars payments ledger (idempotency + refunds)
+
+create table if not exists stars_payments (
+  id bigserial primary key,
+  user_id bigint not null references users(id) on delete cascade,
+  kind text not null,
+  invoice_payload text not null,
+  currency text not null,
+  total_amount int not null,
+  telegram_payment_charge_id text not null,
+  provider_payment_charge_id text,
+  raw jsonb,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists uq_stars_payments_telegram_charge
+  on stars_payments (telegram_payment_charge_id);
+
+-- extra safety: invoice payloads should not be applied twice
+create unique index if not exists uq_stars_payments_invoice_payload
+  on stars_payments (invoice_payload);
+
+create index if not exists idx_stars_payments_user
+  on stars_payments (user_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/012_payments_ledger.sql`
+
+-- Payments ledger (admin apply + status)
+--
+-- statuses: RECEIVED | APPLIED | ORPHANED | ERROR
+
+create table if not exists payments (
+  id bigserial primary key,
+  user_id bigint not null references users(id) on delete cascade,
+  kind text not null,
+  invoice_payload text not null,
+  currency text not null,
+  total_amount int not null,
+  telegram_payment_charge_id text not null,
+  provider_payment_charge_id text,
+  status text not null default 'RECEIVED',
+  note text,
+  raw jsonb,
+
+  applying_by_user_id bigint references users(id) on delete set null,
+  applying_at timestamptz,
+
+  applied_by_user_id bigint references users(id) on delete set null,
+  applied_at timestamptz,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists uq_payments_telegram_charge
+  on payments (telegram_payment_charge_id);
+
+create unique index if not exists uq_payments_invoice_payload
+  on payments (invoice_payload);
+
+create index if not exists idx_payments_status_time
+  on payments (status, created_at desc);
+
+create index if not exists idx_payments_user_time
+  on payments (user_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/013_payments_extras.sql`
+
+-- Payments ledger extras: status constraint + helper indexes
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'payments_status_check'
+  ) then
+    alter table payments
+      add constraint payments_status_check
+      check (status in ('RECEIVED','APPLIED','ORPHANED','ERROR'));
+  end if;
+end $$;
+
+-- Admin queue performance helpers
+create index if not exists idx_payments_created_at
+  on payments (created_at desc);
+
+create index if not exists idx_payments_orphaned_time
+  on payments (created_at desc)
+  where status = 'ORPHANED';
+
+
+
+---
+
+## FILE: `migrations/014_intro_trial_daily_limits.sql`
+
+-- Intro pricing + trial credits + daily limits (v1.1.9)
+
+-- One-time trial for brands (gift intro credits)
+alter table users
+  add column if not exists brand_trial_granted boolean not null default false;
+
+alter table users
+  add column if not exists brand_trial_granted_at timestamptz;
+
+-- Daily intro usage (anti-spam / fairness)
+create table if not exists intro_daily_usage (
+  user_id bigint not null references users(id) on delete cascade,
+  day date not null,
+  used_count int not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, day)
+);
+
+create index if not exists idx_intro_daily_usage_day on intro_daily_usage(day desc);
+
+
+
+---
+
+## FILE: `migrations/015_barter_thread_proofs.sql`
+
+-- Proofs for barter threads (simple evidence: link or screenshot)
+
+create table if not exists barter_thread_proofs (
+  id bigserial primary key,
+  thread_id bigint not null references barter_threads(id) on delete cascade,
+  kind text not null check (kind in ('LINK', 'SCREENSHOT')),
+  url text,
+  tg_file_id text,
+  tg_file_unique_id text,
+  added_by_user_id bigint references users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_barter_thread_proofs_thread_id
+  on barter_thread_proofs (thread_id, created_at desc);
+
+create index if not exists idx_barter_thread_proofs_added_by
+  on barter_thread_proofs (added_by_user_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/016_channel_folders_and_editors.sql`
+
+-- Channel folders (workspace-level reusable lists of @channels)
+-- Use-case: joint contests / partner lists that can be reused in giveaways & barter offers.
+
+create table if not exists channel_folders (
+  id bigserial primary key,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  created_by_user_id bigint not null references users(id),
+  title text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_channel_folders_workspace_id on channel_folders(workspace_id);
+create unique index if not exists uniq_channel_folders_workspace_title on channel_folders(workspace_id, lower(title));
+
+create table if not exists channel_folder_items (
+  id bigserial primary key,
+  folder_id bigint not null references channel_folders(id) on delete cascade,
+  channel_username text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_channel_folder_items_folder_id on channel_folder_items(folder_id);
+create unique index if not exists uniq_channel_folder_items_folder_username on channel_folder_items(folder_id, lower(channel_username));
+
+create table if not exists workspace_editors (
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  user_id bigint not null references users(id) on delete cascade,
+  added_by_user_id bigint not null references users(id),
+  created_at timestamptz not null default now(),
+  primary key (workspace_id, user_id)
+);
+
+create index if not exists idx_workspace_editors_user_id on workspace_editors(user_id);
+
+alter table barter_offers
+  add column if not exists partner_folder_id bigint references channel_folders(id) on delete set null;
+
+create index if not exists idx_barter_offers_partner_folder_id on barter_offers(partner_folder_id);
+
+
+
+---
+
+## FILE: `migrations/017_analytics_events.sql`
+
+-- 017_analytics_events.sql
+-- Minimal event log for product analytics / funnel tracking
+
+create table if not exists events (
+  id bigserial primary key,
+  ts timestamptz not null default now(),
+  user_id bigint null references users(id) on delete set null,
+  ws_id bigint null references workspaces(id) on delete set null,
+  name text not null,
+  meta jsonb not null default '{}'::jsonb
+);
+
+create index if not exists events_name_ts_idx on events (name, ts desc);
+create index if not exists events_ws_ts_idx on events (ws_id, ts desc);
+create index if not exists events_user_ts_idx on events (user_id, ts desc);
+
+
+
+---
+
+## FILE: `migrations/018_official_channel_posts.sql`
+
+-- 018_official_channel_posts.sql
+-- Official channel publishing for barter offers (paid or manual placements)
+
+create table if not exists official_posts (
+  id bigserial primary key,
+  offer_id bigint not null references barter_offers(id) on delete cascade,
+  channel_chat_id bigint not null,
+  message_id bigint null,
+  status text not null default 'PENDING',
+  placement_type text not null default 'MANUAL',
+  payment_id bigint null references payments(id) on delete set null,
+  slot_days int null,
+  slot_expires_at timestamptz null,
+  published_by_user_id bigint null references users(id) on delete set null,
+  last_error text null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists official_posts_offer_id_uniq on official_posts (offer_id);
+create index if not exists official_posts_status_idx on official_posts (status, updated_at desc);
+create index if not exists official_posts_expires_idx on official_posts (slot_expires_at) where slot_expires_at is not null;
+
+
+
+---
+
+## FILE: `migrations/019_intro_retry_credits.sql`
+
+-- Intro Retry Credits (v1.3.2)
+-- Fairness: if a brand sends a message and creator doesn't reply within N hours,
+-- we grant 1 "Retry credit" (expires in M days). Used automatically before paid credits.
+
+-- Track intro payment + first reply timing
+alter table barter_threads
+  add column if not exists intro_cost int not null default 0,
+  add column if not exists intro_charge_source text, -- NONE | CREDITS | RETRY
+  add column if not exists intro_charged_at timestamptz,
+  add column if not exists buyer_first_msg_at timestamptz,
+  add column if not exists seller_first_reply_at timestamptz,
+  add column if not exists retry_issued_at timestamptz;
+
+create index if not exists idx_barter_threads_intro_retry on barter_threads(intro_charge_source, retry_issued_at);
+create index if not exists idx_barter_threads_first_msg on barter_threads(buyer_first_msg_at);
+
+-- Retry credits ledger (separate from brand_credits; expires)
+create table if not exists brand_retry_credits (
+  id bigserial primary key,
+  user_id bigint not null references users(id) on delete cascade,
+  source_thread_id bigint not null references barter_threads(id) on delete cascade,
+  status text not null default 'AVAILABLE', -- AVAILABLE | REDEEMED | EXPIRED
+  reason text,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  redeemed_at timestamptz,
+  redeemed_thread_id bigint references barter_threads(id) on delete set null,
+  unique (source_thread_id)
+);
+
+create index if not exists idx_brand_retry_credits_user_status on brand_retry_credits(user_id, status, expires_at);
+create index if not exists idx_brand_retry_credits_status_expires on brand_retry_credits(status, expires_at);
+
+
+
+---
+
+## FILE: `migrations/020_profile_matrix_ig_tg_deals.sql`
+
+-- Profile Matrix v1 (IG leads -> TG deals)
+-- Structured niches/formats + IG + portfolio on workspace profile.
+
+alter table workspace_settings add column if not exists profile_mode text not null default 'both';
+alter table workspace_settings add column if not exists profile_ig text;
+alter table workspace_settings add column if not exists profile_verticals text[] not null default '{}'::text[];
+alter table workspace_settings add column if not exists profile_formats text[] not null default '{}'::text[];
+alter table workspace_settings add column if not exists profile_portfolio_urls text[] not null default '{}'::text[];
+alter table workspace_settings add column if not exists profile_about text;
+
+-- Enum-ish check for mode
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='workspace_settings_profile_mode_chk'
+  ) THEN
+    ALTER TABLE workspace_settings
+      ADD CONSTRAINT workspace_settings_profile_mode_chk
+      CHECK (profile_mode in ('channel','ugc','both'));
+  END IF;
+END$$;
+
+-- Helpful indexes
+create index if not exists idx_ws_settings_profile_ig on workspace_settings (lower(profile_ig))
+  where profile_ig is not null and profile_ig <> '';
+
+create index if not exists gin_ws_settings_profile_verticals on workspace_settings using gin (profile_verticals);
+create index if not exists gin_ws_settings_profile_formats on workspace_settings using gin (profile_formats);
+create index if not exists gin_ws_settings_profile_portfolio_urls on workspace_settings using gin (profile_portfolio_urls);
+
+
+
+---
+
+## FILE: `migrations/021_brand_leads.sql`
+
+-- Brand Leads v1 (IG leads -> TG deals)
+-- Brands can send a request from a creator public profile (vitrina).
+-- Owners / SUPER_ADMIN can process and reply.
+
+create table if not exists brand_leads (
+  id bigserial primary key,
+  workspace_id bigint not null references workspaces(id) on delete cascade,
+  owner_user_id bigint not null references users(id) on delete cascade,
+  brand_user_id bigint not null references users(id) on delete cascade,
+  brand_tg_id bigint not null,
+  brand_username text,
+  brand_name text,
+  message text not null,
+  status text not null default 'new',
+  meta jsonb,
+  reply_text text,
+  replied_by_user_id bigint references users(id) on delete set null,
+  replied_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='brand_leads_status_chk') THEN
+    ALTER TABLE brand_leads
+      ADD CONSTRAINT brand_leads_status_chk
+      CHECK (status in ('new','in_progress','closed','spam'));
+  END IF;
+END$$;
+
+create index if not exists idx_brand_leads_ws_status_created on brand_leads (workspace_id, status, created_at desc);
+create index if not exists idx_brand_leads_owner_status_created on brand_leads (owner_user_id, status, created_at desc);
+create index if not exists idx_brand_leads_brand_user_created on brand_leads (brand_user_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/022_profile_matrix_match_indexes.sql`
+
+-- 022_profile_matrix_match_indexes.sql
+-- Ускоряем overlap-запросы по text[] (profile_verticals / profile_formats)
+
+create index if not exists idx_ws_settings_profile_verticals_gin
+  on workspace_settings using gin (profile_verticals);
+
+create index if not exists idx_ws_settings_profile_formats_gin
+  on workspace_settings using gin (profile_formats);
+
+create index if not exists idx_ws_settings_profile_mode_btree
+  on workspace_settings (profile_mode);
+
+
+
+---
+
+## FILE: `migrations/023_barter_offer_media.sql`
+
+-- 023_barter_offer_media.sql
+-- Add media fields for barter offers (photo / animation(gif) / video)
+
+ALTER TABLE barter_offers
+  ADD COLUMN IF NOT EXISTS media_type TEXT,
+  ADD COLUMN IF NOT EXISTS media_file_id TEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'barter_offers_media_type_chk'
+  ) THEN
+    ALTER TABLE barter_offers
+      ADD CONSTRAINT barter_offers_media_type_chk
+      CHECK (media_type IS NULL OR media_type IN ('photo', 'animation', 'video'));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_barter_offers_media_type ON barter_offers(media_type);
+
+
+
+---
+
+## FILE: `migrations/024_brand_profiles.sql`
+
+-- 024_brand_profiles.sql
+-- Minimal brand profile for Brand Mode (gating for messaging + optional extended fields)
+
+create table if not exists brand_profiles (
+  user_id bigint primary key references users(id) on delete cascade,
+
+  brand_name text,
+  brand_link text,
+  contact text,
+
+  niche text,
+  geo text,
+  collab_types text,
+  budget text,
+  goals text,
+  requirements text,
+
+  meta jsonb,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_brand_profiles_updated_at on brand_profiles(updated_at desc);
+
+
+
+---
+
+## FILE: `migrations/025_giveaways_media.sql`
+
+-- 025_giveaways_media.sql
+-- Adds optional media (photo/gif/video) to giveaways.
+
+alter table if exists giveaways
+  add column if not exists media_type text,
+  add column if not exists media_file_id text;
+
+create index if not exists idx_giveaways_media_type on giveaways(media_type);
+
+
+
+---
+
+## FILE: `migrations/026_brand_contact_unlocks.sql`
+
+-- Brand Pass: persistent contacts unlocks (DB fallback when Redis is down)
+
+create table if not exists brand_contact_unlocks (
+  id bigserial primary key,
+  brand_user_id int not null references users(id) on delete cascade,
+  workspace_id int not null references workspaces(id) on delete cascade,
+  unlocked_until timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (brand_user_id, workspace_id)
+);
+
+create index if not exists idx_brand_contact_unlocks_brand_until
+  on brand_contact_unlocks (brand_user_id, unlocked_until desc);
+
+create index if not exists idx_brand_contact_unlocks_ws_until
+  on brand_contact_unlocks (workspace_id, unlocked_until desc);
+
+
+
+---
+
+## FILE: `migrations/026_brand_managers.sql`
+
+-- 026_brand_managers.sql
+-- Brand Team (single role): allow a brand owner user to grant manager access.
+-- This is intentionally minimal: one role (Brand Manager), no permissions table.
+
+create table if not exists brand_managers (
+  brand_user_id bigint not null references users(id) on delete cascade,
+  manager_user_id bigint not null references users(id) on delete cascade,
+  added_by_user_id bigint references users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (brand_user_id, manager_user_id)
+);
+
+create index if not exists idx_brand_managers_brand_created on brand_managers (brand_user_id, created_at desc);
+create index if not exists idx_brand_managers_manager_created on brand_managers (manager_user_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/027_brand_applications.sql`
+
+-- 027_brand_applications.sql
+-- Creator → Brand applications (from brand directory card).
+-- Stored and visible in Brand Inbox (Managers can read/reply).
+
+create table if not exists brand_applications (
+  id bigserial primary key,
+  brand_user_id bigint not null references users(id) on delete cascade,
+  creator_user_id bigint not null references users(id) on delete cascade,
+  creator_tg_id bigint not null,
+  creator_username text,
+  message text not null,
+  status text not null default 'new',
+  reply_text text,
+  replied_by_user_id bigint references users(id) on delete set null,
+  replied_at timestamptz,
+  meta jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_brand_applications_brand_status_created on brand_applications (brand_user_id, status, created_at desc);
+create index if not exists idx_brand_applications_brand_created on brand_applications (brand_user_id, created_at desc);
+create index if not exists idx_brand_applications_creator_created on brand_applications (creator_user_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/028_barter_offers_meta.sql`
+
+-- Adds structured meta to barter offers (creator offers)
+-- Used for brand-side filtering + richer cards + official channel posts.
+
+alter table if exists barter_offers
+  add column if not exists meta jsonb not null default '{}'::jsonb;
+
+-- Optional: speeds up tag overlap filters (goals_tags/req_tags)
+create index if not exists idx_barter_offers_meta_gin on barter_offers using gin (meta);
+
+
+
+---
+
+## FILE: `migrations/029_barter_threads_triage_status.sql`
+
+-- Add lightweight buyer-side triage status to barter threads.
+-- Safe to run multiple times.
+
+alter table barter_threads
+  add column if not exists triage_status text not null default 'open';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'barter_threads_triage_status_chk'
+  ) then
+    alter table barter_threads
+      add constraint barter_threads_triage_status_chk
+      check (triage_status in ('open','in_progress','spam'));
+  end if;
+exception when undefined_table then
+  -- If the base schema isn't present in this DB yet, ignore.
+  null;
+end $$;
+
+create index if not exists idx_barter_threads_triage_status on barter_threads(triage_status);
+
+
+
+---
+
+## FILE: `migrations/030_broadcasts.sql`
+
+-- 030_broadcasts.sql
+-- Broadcast jobs: admin mass-messaging with batched delivery.
+
+create table if not exists broadcasts (
+  id bigserial primary key,
+  created_by_user_id bigint not null references users(id),
+  status text not null default 'DRAFT',
+  -- DRAFT → PENDING → RUNNING → DONE / PAUSED / STOPPED / ERROR
+  audience text not null default 'all',
+  -- all / creators / brands / curators / managers
+  draft_type text,
+  -- text / photo / video / animation / document
+  draft_text text,
+  draft_file_id text,
+  draft_caption text,
+  buttons_json text,
+  -- JSON array: [{text, url}]
+  total_count int not null default 0,
+  sent_count int not null default 0,
+  failed_count int not null default 0,
+  last_sent_user_id bigint,
+  started_at timestamptz,
+  finished_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_broadcasts_status on broadcasts(status);
+
+-- Track which users received which broadcast (idempotency).
+create table if not exists broadcast_sent_log (
+  broadcast_id bigint not null references broadcasts(id) on delete cascade,
+  user_id bigint not null references users(id) on delete cascade,
+  status text not null default 'sent',
+  -- sent / failed / blocked
+  sent_at timestamptz not null default now(),
+  primary key (broadcast_id, user_id)
+);
+
+
+
+---
+
+## FILE: `migrations/031_brand_leads_assignment.sql`
+
+-- 031: Assignment — distribute leads among curators
+-- assigned_user_id = curator who took this lead
+-- assigned_at = when it was assigned
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='brand_leads' AND column_name='assigned_user_id'
+  ) THEN
+    ALTER TABLE brand_leads ADD COLUMN assigned_user_id bigint REFERENCES users(id) ON DELETE SET NULL;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='brand_leads' AND column_name='assigned_at'
+  ) THEN
+    ALTER TABLE brand_leads ADD COLUMN assigned_at timestamptz;
+  END IF;
+END$$;
+
+CREATE INDEX IF NOT EXISTS idx_brand_leads_assigned ON brand_leads (assigned_user_id) WHERE assigned_user_id IS NOT NULL;
+
+
+
+---
+
+## FILE: `migrations/032_soft_delete.sql`
+
+-- 032: Soft delete — each user can hide items from their own view
+-- deleted_by_user_ids = jsonb array of user IDs who "deleted" this item
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='barter_threads' AND column_name='deleted_by_user_ids'
+  ) THEN
+    ALTER TABLE barter_threads ADD COLUMN deleted_by_user_ids jsonb DEFAULT '[]'::jsonb;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='brand_leads' AND column_name='deleted_by_user_ids'
+  ) THEN
+    ALTER TABLE brand_leads ADD COLUMN deleted_by_user_ids jsonb DEFAULT '[]'::jsonb;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='brand_applications' AND column_name='deleted_by_user_ids'
+  ) THEN
+    ALTER TABLE brand_applications ADD COLUMN deleted_by_user_ids jsonb DEFAULT '[]'::jsonb;
+  END IF;
+END$$;
+
+
+
+---
+
+## FILE: `migrations/033_user_ban.sql`
+
+-- 033: User ban support
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='brand_leads_status_chk') THEN
+    ALTER TABLE brand_leads 
+      ADD CONSTRAINT brand_leads_status_chk 
+      CHECK (status in ('new','in_progress','closed','spam'));
+  END IF;
+END$$;
+
+create index if not exists idx_brand_leads_ws_status_created on brand_leads (workspace_id, status, created_at desc);
+create index if not exists idx_brand_leads_owner_status_created on brand_leads (owner_user_id, status, created_at desc);
+create index if not exists idx_brand_leads_brand_user_created on brand_leads (brand_user_id, created_at desc);
+
+
+
+---
+
+## FILE: `migrations/034_SQL Migration Neon Postgres.sql`
+
+-- 1. Включаем криптографию для детерминированных розыгрышей
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- 2. Таблица событий (Outbox)
+CREATE TABLE event_outbox (
+    id BIGSERIAL PRIMARY KEY,
+    type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    status TEXT DEFAULT 'PENDING', -- PENDING, DONE, DEAD
+    attempts INTEGER DEFAULT 0,
+    next_attempt_at TIMESTAMPTZ,
+    processed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Индекс для быстрого выбора задач воркером
+CREATE INDEX idx_outbox_worker ON event_outbox (status, next_attempt_at) 
+WHERE status = 'PENDING';
+
+-- 3. Таблица аудита
+CREATE TABLE audit_events (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id UUID,
+    entity_type TEXT NOT NULL, -- 'giveaway', 'user', 'system'
+    entity_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    actor_id TEXT,
+    payload JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Индекс для аналитики
+CREATE INDEX idx_audit_entity ON audit_events (entity_type, entity_id);
+
+-- 4. Оптимизация для Giveaway
+CREATE INDEX idx_giveaways_expiration ON giveaways (status, ends_at) 
+WHERE status IN ('ACTIVE', 'RUNNING');
+
+CREATE INDEX idx_entries_draw ON giveaway_entries (giveaway_id, is_eligible);
+
+
+
+---
+
+## FILE: `migrations/035_brand_credits_gifted.sql`
+
+-- Track gifted Brand Pass credits separately from purchased/trial.
+-- Allows safe revoke of gifts without touching purchased credits.
+
+alter table users
+  add column if not exists brand_credits_gifted int not null default 0;
+
+create index if not exists idx_users_brand_credits_gifted on users(brand_credits_gifted);
+
+
+
+---
+
+## FILE: `migrations/036_payments_provider_charge_unique.sql`
+
+-- Harden payments idempotency: unique provider charge id (best-effort)
+-- Telegram Stars provides both telegram_payment_charge_id and provider_payment_charge_id.
+-- We already dedupe by telegram_payment_charge_id; this adds an extra safety net.
+
+create unique index if not exists uq_stars_payments_provider_charge
+  on stars_payments (provider_payment_charge_id)
+  where provider_payment_charge_id is not null;
+
+create unique index if not exists uq_payments_provider_charge
+  on payments (provider_payment_charge_id)
+  where provider_payment_charge_id is not null;
+
+
+
+---
+
+## FILE: `migrations/037_broadcast_sent_log_retry_after.sql`
+
+-- 037_broadcast_sent_log_retry_after.sql
+-- Broadcast per-recipient retry_after (defer recipients that hit Telegram 429)
+-- Goal: one "heavy" recipient must NOT stall the whole broadcast forever.
+
+alter table broadcast_sent_log
+  add column if not exists retry_after_until timestamptz;
+
+create index if not exists idx_broadcast_sent_log_deferred_retry
+  on broadcast_sent_log (broadcast_id, retry_after_until)
+  where status = 'deferred';
+
+
+
+---
+
+## FILE: `migrations/038_workspace_profile_contacts.sql`
+
+-- STEP105: Structured profile contacts (read-only support)
+--
+-- Goal: add an optional structured contacts container to workspace_settings.
+-- In STEP105 we only READ these contacts (no creator UI changes yet).
+
+alter table workspace_settings
+  add column if not exists profile_contacts jsonb not null default '{}'::jsonb;
+
+alter table workspace_settings
+  add column if not exists profile_contacts_v int not null default 1;
+
+
+
+---
+
+## FILE: `migrations/039_broadcast_cooldown_db_fuse.sql`
+
+-- 039_broadcast_cooldown_db_fuse.sql
+-- DB fuse for broadcast 429 cooldown when Redis is unavailable.
+-- Goal: avoid expensive recipient polling in Neon during cooldown.
+
+alter table broadcasts
+  add column if not exists cooldown_until timestamptz,
+  add column if not exists cooldown_reason text;
+
+create index if not exists idx_broadcasts_cooldown_until on broadcasts(cooldown_until);
+
+
+
+---
+
+## FILE: `migrations/040_broadcast_fanout_qstash.sql`
+
+-- 040_broadcast_fanout_qstash.sql
+-- QStash fan-out delivery: extend broadcast_sent_log to support queue/worker retries
+-- Keep backwards-compatible with legacy direct-send cron.
+
+alter table broadcast_sent_log
+  add column if not exists attempts int not null default 0,
+  add column if not exists non_retryable boolean not null default false,
+  add column if not exists last_error text,
+  add column if not exists last_attempt_at timestamptz;
+
+-- Pending statuses are used by QStash delivery worker.
+-- (No CHECK constraint: keep schema permissive for future extensions.)
+
+create index if not exists idx_broadcast_sent_log_pending
+  on broadcast_sent_log (broadcast_id, status)
+  where status in ('queued','sending','retry','deferred','quarantined');
+
+create index if not exists idx_broadcast_sent_log_sending_stale
+  on broadcast_sent_log (broadcast_id, last_attempt_at)
+  where status = 'sending';
+
+
+
+---
+
+## FILE: `migrations/041_ig_oauth_accounts.sql`
+
+-- STEP141: IG OAuth accounts (Level A, OAuth-only)
+-- Store IG professional account binding + encrypted token per workspace.
+-- Invariants:
+-- - No tokens in logs
+-- - Tokens stored encrypted (app-level)
+-- - Brands never see handle before unlock (enforced in bot rendering)
+
+create table if not exists ig_oauth_accounts (
+  ws_id bigint primary key references workspaces(id) on delete cascade,
+  ig_user_id text not null,
+  ig_username text not null,
+  account_type text null,
+  status text not null default 'CONNECTED',
+  access_token_enc text not null,
+  token_expires_at timestamptz null,
+  scope text null,
+  connected_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists ig_oauth_accounts_ig_user_id_idx on ig_oauth_accounts(ig_user_id);
+
+
+
+# migration_pack
+
+
+
+---
+
+## FILE: `migration_pack/00_mark_all_applied.sql`
+
+-- Collabka migration pack: mark all current migrations as applied
+-- Auto-generated by: node scripts/gen-mark-all-applied.js
+-- Use ONLY if your DB schema is already up-to-date (e.g. you ran migrations manually before,
+-- or you restored a full DB dump/restore from an already-up-to-date database).
+-- Safe to re-run (idempotent).
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  checksum TEXT NOT NULL,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO schema_migrations(name, checksum) VALUES ('001_init.sql', '2e0913e8ddaf69983643d5c5a0c6c9984f37d0bdac2d407d21a5524051a971a0') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('002_barters.sql', 'ce99f9e5e593d9852e1db2bb22a5951816f1da51aebab6a27411f75cdb603c02') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('003_barters_ideal.sql', '26b3316b8fa78c109249d3d38a23d7888137d1e92d72c9009f8ff00d8efd5875') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('004_final_pack.sql', '7e214d45460706a1a66e0977e1c6f113e45223f83b135cb971b5301906b795e4') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('005_brand_pass.sql', '59e13a4c7d21f0edd031574c93945810ca88af610624a8fd671d159dd729cf07') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('006_brand_plan.sql', '857d2c224c9c5e332d0f9ff7dcc80e2c98f60dedbd3ad836a50cf02dd47e0171') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('007_matching.sql', '0034226974621aa85207b5ce0160b143acc82e69ccc8855de645313342b002f7') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('008_featured.sql', 'efd11e88811b11aff18e9aa47bac3d4715205e3c3c613c98ae1d97a3f06669b5') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('009_crm_stage.sql', '8446a1357e56ef3e24dcd968d471af99c7a70ed3f5911c98c29e21faf7452acc') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('010_user_verifications.sql', '5a8d2236639c76d79a7498c5ac6bc4aaa91be84e0d553cdfd084debb50cd9ff9') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('011_stars_payments.sql', 'acfa7ccbdfcb6fd7f85da445534edcc8933ba449ee5535436916354b6a207223') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('012_payments_ledger.sql', 'c749d0d047377d05ef23d4eb23c69084c8fff72fdcc902fc396ed294b65722bc') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('013_payments_extras.sql', '6405254225375609d23a7e69b8cf9535a1626d6b555bbe6f19201b08db504a0b') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('014_intro_trial_daily_limits.sql', 'd2701864ea15bc5ea3b543d0600390773553fcf805638d784260d22a873611bf') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('015_barter_thread_proofs.sql', '97ab38d51350c6348660d5fcc63aae631a6eb3a05472334b8127d1bf239e7e6b') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('016_channel_folders_and_editors.sql', '8895619b272938e3fdfbd806785fb16578ed2cdf2dba23662f72572536b90b98') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('017_analytics_events.sql', 'cd193899d2508dac200fb0e188bba3303220b49dace8bb7c489b53273559613d') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('018_official_channel_posts.sql', '560d50a66313ec122a95b554fc7247ace68658c84fe901c7fb74ba53149995a4') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('019_intro_retry_credits.sql', 'e3a17d890ffb2f82770878f8ca35ec1f4f8eaf3fa3dd07650454ac68b6125ddf') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('020_profile_matrix_ig_tg_deals.sql', '89b49e8dedf438c7c11dd1e99a49f4114c6742cb68d428ad793f18acf9ec0a5d') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('021_brand_leads.sql', '083d997375e209b79cd6108b6eee1392b519387fbe5b20b0544691d61b5bbe9d') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('022_profile_matrix_match_indexes.sql', '7e4b2edb600b25af869b58f419d8981fa23af6fcaca994ae47d6638090a9dde4') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('023_barter_offer_media.sql', '7460110405aac5cb91a4438953adb993bbd5cc33ac1b0e33358d5a07869d5427') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('024_brand_profiles.sql', 'fea11a1d066c6893317ace74f7b70252b53fce8cf73a1e6c7a7c5d9234a889a9') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('025_giveaways_media.sql', '413ec2b9af6d12eecdabfa1a1ca4685dbba406d9fe358c2b8938a78041b58245') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('026_brand_contact_unlocks.sql', 'ced1a6c35f9259d127a1731144d5425987ba75de9556408b013533f3309d4ae1') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('026_brand_managers.sql', '61ecbdb6848206737b1d7935ba5cf95dac2d7d6c87cb117084a01118da877e6d') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('027_brand_applications.sql', '1046ef08d7925a8bae2fd21b90bf6534e02027613055a0cb39a7c1309274d0db') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('028_barter_offers_meta.sql', 'a1f81c3fdeb885693fe47e1b47abafb37050341550dafda1f2c5c3b27fd8564e') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('029_barter_threads_triage_status.sql', 'cff3f1199d89bbf8779232cad7cb6975660e0cf8290adc3ae7ccfa70289ac41b') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('030_broadcasts.sql', '5daffd79a078bce86c20238dd0aa579ca8bdef0ed6c736a21a558857fd6975ce') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('031_brand_leads_assignment.sql', '439b378d246d70f11799aaa350e747bcc774946e80c1dd71f5617149faba6fdf') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('032_soft_delete.sql', 'c105cad1b808962caf3af89058076c6b4f27ff87a571e64382472f83bb531736') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('033_user_ban.sql', '0ad442783d8da3d2b80e18459bc2f6ad718f0507b6668260591e1a4b319d44d5') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('034_SQL Migration Neon Postgres.sql', 'cab0aaf1ec636798398eb5889cd513c39a3efff59e35d67d722f0bd0f847e2d7') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('035_brand_credits_gifted.sql', 'ae64c2338b8432c6cd6968f460f4a99716e874f4d3b72b12eb259a7a7a040a86') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('036_payments_provider_charge_unique.sql', '095731743e88dbfc15baf840941ac4843ca39df9647b4d2cead06bdd91cd7375') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('037_broadcast_sent_log_retry_after.sql', '0976b79f876ed7231c33b8b62995b5f2f4c619bcb42dad6c881ed14e51fdd639') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('038_workspace_profile_contacts.sql', 'cef0e900eb2e69c64ee54d1d0ae924d1713d7a919cdd1f07bbc385f2fe8ff749') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('039_broadcast_cooldown_db_fuse.sql', '9ece465ca51c44d69a6046c48472b1a02cbcf2d427601bb517f26ffd9ccb845f') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('040_broadcast_fanout_qstash.sql', '058feff0a93196d77e580cb463daeed32ed9de7cca3cde01048b9b9c954dbb79') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('041_ig_oauth_accounts.sql', '91f821dc3a351e6f782ea1c810c97866eac5e33cfc692aa8306dc74945b705a5') ON CONFLICT (name) DO NOTHING;
+
+
+
+---
+
+## FILE: `migration_pack/01_reconcile.sql`
+
+-- Collabka migration pack: reconcile/repair (idempotent)
+-- Purpose:
+--   Bring ANY database to a minimum required infra state without conflicts.
+--   Safe to run multiple times.
+--
+-- Notes:
+--   - This script is NOT a full schema install. It only "patches" infra pieces that are safe to add.
+--   - Everything here is written to be re-runnable (IF EXISTS / IF NOT EXISTS + guards).
+
+-- 1) Crypto extension (sha256)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- 2) Outbox (reliable events)
+CREATE TABLE IF NOT EXISTS event_outbox (
+  id BIGSERIAL PRIMARY KEY,
+  type TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  status TEXT DEFAULT 'PENDING', -- PENDING, DONE, DEAD
+  attempts INTEGER DEFAULT 0,
+  next_attempt_at TIMESTAMPTZ,
+  processed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_worker
+  ON event_outbox (status, next_attempt_at)
+  WHERE status = 'PENDING';
+
+-- 3) Audit (immutable events log)
+CREATE TABLE IF NOT EXISTS audit_events (
+  id BIGSERIAL PRIMARY KEY,
+  tenant_id UUID,
+  entity_type TEXT NOT NULL, -- 'giveaway', 'user', 'system'
+  entity_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  actor_id TEXT,
+  payload JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_entity
+  ON audit_events (entity_type, entity_id);
+
+-- 4) Soft-delete support (safe add)
+ALTER TABLE IF EXISTS barter_threads
+  ADD COLUMN IF NOT EXISTS deleted_by_user_ids jsonb DEFAULT '[]'::jsonb;
+
+ALTER TABLE IF EXISTS brand_leads
+  ADD COLUMN IF NOT EXISTS deleted_by_user_ids jsonb DEFAULT '[]'::jsonb;
+
+ALTER TABLE IF EXISTS brand_applications
+  ADD COLUMN IF NOT EXISTS deleted_by_user_ids jsonb DEFAULT '[]'::jsonb;
+
+-- 5) Giveaway performance indexes (safe, only if base tables exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='giveaways') THEN
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_giveaways_expiration
+        ON giveaways (status, ends_at)
+        WHERE status IN ('ACTIVE', 'RUNNING');
+    $$;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='giveaway_entries') THEN
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_entries_draw
+        ON giveaway_entries (giveaway_id, is_eligible);
+    $$;
+  END IF;
+END $$;
+
+-- 6) Brand Pass: gifted credits bucket (safe add)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='users') THEN
+    EXECUTE $$
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS brand_credits_gifted int not null default 0;
+    $$;
+
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_users_brand_credits_gifted
+        ON users(brand_credits_gifted);
+    $$;
+  END IF;
+END $$;
+
+-- 7) Brand Pass: persistent contacts unlocks (safe create)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='users')
+     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='workspaces') THEN
+
+    EXECUTE $$
+      CREATE TABLE IF NOT EXISTS brand_contact_unlocks (
+        id bigserial primary key,
+        brand_user_id int not null references users(id) on delete cascade,
+        workspace_id int not null references workspaces(id) on delete cascade,
+        unlocked_until timestamptz not null,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (brand_user_id, workspace_id)
+      );
+    $$;
+
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_brand_contact_unlocks_brand_until
+        ON brand_contact_unlocks (brand_user_id, unlocked_until desc);
+    $$;
+
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_brand_contact_unlocks_ws_until
+        ON brand_contact_unlocks (workspace_id, unlocked_until desc);
+    $$;
+
+  END IF;
+END $$;
+
+-- 8) Payments idempotency hardening (safe indexes)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='stars_payments') THEN
+    EXECUTE $$
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_stars_payments_provider_charge
+        ON stars_payments (provider_payment_charge_id)
+        WHERE provider_payment_charge_id is not null;
+    $$;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='payments') THEN
+    EXECUTE $$
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_provider_charge
+        ON payments (provider_payment_charge_id)
+        WHERE provider_payment_charge_id is not null;
+    $$;
+  END IF;
+END $$;
+
+-- 9) Broadcast: per-recipient retry_after (429 defer) (safe add + index)
+ALTER TABLE IF EXISTS broadcast_sent_log
+  ADD COLUMN IF NOT EXISTS retry_after_until timestamptz;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='broadcast_sent_log') THEN
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_broadcast_sent_log_deferred_retry
+        ON broadcast_sent_log (broadcast_id, retry_after_until)
+        WHERE status = 'deferred';
+    $$;
+  END IF;
+END $$;
+
+-- 10) Broadcast: DB fuse for cooldown when Redis is unavailable (safe add + index)
+ALTER TABLE IF EXISTS broadcasts
+  ADD COLUMN IF NOT EXISTS cooldown_until timestamptz,
+  ADD COLUMN IF NOT EXISTS cooldown_reason text;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='broadcasts') THEN
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_broadcasts_cooldown_until
+        ON broadcasts(cooldown_until);
+    $$;
+  END IF;
+END $$;
+
+-- 11) Broadcast: QStash fan-out delivery support (safe add + indexes)
+ALTER TABLE IF EXISTS broadcast_sent_log
+  ADD COLUMN IF NOT EXISTS attempts int not null default 0,
+  ADD COLUMN IF NOT EXISTS non_retryable boolean not null default false,
+  ADD COLUMN IF NOT EXISTS last_error text,
+  ADD COLUMN IF NOT EXISTS last_attempt_at timestamptz;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='broadcast_sent_log') THEN
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_broadcast_sent_log_pending
+        ON broadcast_sent_log (broadcast_id, status)
+        WHERE status in ('queued','sending','retry','deferred','quarantined');
+    $$;
+
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_broadcast_sent_log_sending_stale
+        ON broadcast_sent_log (broadcast_id, last_attempt_at)
+        WHERE status = 'sending';
+    $$;
+  END IF;
+END $$;
+
+-- 12) Structured profile contacts container (safe add)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='workspace_settings') THEN
+    EXECUTE $$
+      ALTER TABLE workspace_settings
+        ADD COLUMN IF NOT EXISTS profile_contacts jsonb not null default '{}'::jsonb,
+        ADD COLUMN IF NOT EXISTS profile_contacts_v int not null default 1;
+    $$;
+  END IF;
+END $$;
+
+-- 13) IG OAuth accounts (safe create)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='workspaces') THEN
+    EXECUTE $$
+      CREATE TABLE IF NOT EXISTS ig_oauth_accounts (
+        ws_id bigint primary key references workspaces(id) on delete cascade,
+        ig_user_id text not null,
+        ig_username text not null,
+        account_type text null,
+        status text not null default 'CONNECTED',
+        access_token_enc text not null,
+        token_expires_at timestamptz null,
+        scope text null,
+        connected_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+    $$;
+
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS ig_oauth_accounts_ig_user_id_idx
+        ON ig_oauth_accounts(ig_user_id);
+    $$;
+  END IF;
+END $$;
+
+
+
+---
+
+## FILE: `migration_pack/README.md`
+
+# migration_pack — ручные операции с Postgres (Neon/restore/emergency)
+
+Эта папка **не используется рантаймом** и **не должна** попадать в стандартный пайплайн миграций.
+Она нужна как "страховка" для ручного переноса/восстановления Postgres (например, при миграции на новый Neon‑проект, когда схему/данные переносили dump/restore и таблица `schema_migrations` потерялась или стала неконсистентной).
+
+## Когда это НЕ нужно
+Если база новая/пустая — используйте только стандартный раннер миграций:
+
+```bash
+npm i
+npm run migrate
+```
+
+## Основные сценарии
+
+### A) Перенос/restore базы: схема и данные уже актуальные, но `schema_migrations` пустая/отсутствует
+1) (Опционально, но полезно) привести БД к минимальному инфраструктурному состоянию (идемпотентно):
+
+```bash
+psql "$DATABASE_URL" -f migration_pack/01_reconcile.sql
+```
+
+2) **Только если вы уверены**, что схема реально соответствует текущему набору миграций в `migrations/`:
+
+```bash
+psql "$DATABASE_URL" -f migration_pack/00_mark_all_applied.sql
+```
+
+> ⚠️ Важно: `00_mark_all_applied.sql` **не выполняет миграции**, он лишь создаёт/заполняет `schema_migrations`.
+> Используйте его только когда схема уже приведена в актуальный вид (например, вы переносили базу целиком).
+
+3) Проверка (без применения):
+
+```bash
+node migrations/run.js --dry-run
+```
+
+Ожидаемо: все миграции будут `skip`.
+
+### B) Быстрый repair после нестабильного переноса
+Если после restore что-то "не хватает" из инфраструктуры (индексы/колонки/таблицы outbox/audit), можно безопасно повторить:
+
+```bash
+psql "$DATABASE_URL" -f migration_pack/01_reconcile.sql
+```
+
+## Что внутри
+- `01_reconcile.sql` — безопасный (идемпотентный) "repair": включает минимальные инфраструктурные вещи (pgcrypto/outbox/audit/индексы/soft-delete/часть безопасных колонок и таблиц). Можно запускать повторно.
+- `00_mark_all_applied.sql` — создаёт `schema_migrations` и отмечает **весь текущий** набор миграций как применённый (использовать осторожно).
+
+## Важное про папку `migrations/`
+В папке `migrations/` должны лежать **только настоящие миграции** вида `NNN_name.sql`.
+Файлы `migration_pack/*` не должны дублироваться внутри `migrations/`, иначе раннер миграций может применить их как обычные миграции.
