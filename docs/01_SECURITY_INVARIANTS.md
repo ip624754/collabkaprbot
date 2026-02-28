@@ -19,6 +19,7 @@
 3) Любая auto-heal логика (cron / fallback apply) работает **fail-safe** и использует ту же строгую валидацию, что и `pre_checkout_query`/`successful_payment`:
    - если валидация не проходит → **не применять**,
    - пометить как `ORPHANED` / `manual_required` / `validation_failed` + ops alert.
+   - auto-heal **не трогает** слишком свежие платежи (min-age: `PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC`), чтобы избежать гонок с задержанными webhook/ретраями.
 4) Ручной apply из админки:
    - запрещён при невалидной сумме/валюте/пейлоаде,
    - фиксируем причину в audit/логах.
