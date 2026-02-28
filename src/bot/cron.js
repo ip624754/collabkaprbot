@@ -1305,7 +1305,10 @@ export async function broadcastTick() {
             .text(`🔎 #${bc.id}`, `a:bc_view|id:${bc.id}`)
             .row()
             .text('➕ Новая рассылка', 'a:bc_start')
-            .text('⬅️ Админка', 'a:admin_home');
+            .text('⬅️ Админка', 'a:admin_home')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home');
 
           const sentShown = fanoutEnabled ? finalSent : bc.sent_count;
           const failedShown = fanoutEnabled ? finalFailed : bc.failed_count;

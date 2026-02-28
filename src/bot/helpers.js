@@ -165,6 +165,38 @@ export function randomToken(nBytes = 12) {
   return crypto.randomBytes(nBytes).toString('hex');
 }
 
+// Count Unicode code points (safe for emoji / surrogate pairs).
+export function countCodepoints(s) {
+  return [...String(s ?? '')].length;
+}
+
+// Clip by Unicode code points (safe for emoji). Adds ellipsis by default when clipped.
+export function clipCodepoints(s, max, opts = {}) {
+  const src = String(s ?? '');
+  const ellipsis = (opts && opts.ellipsis !== undefined) ? String(opts.ellipsis) : '…';
+  const arr = [...src];
+  const origLen = arr.length;
+
+  const limit = Math.max(0, Number(max) || 0);
+  if (!limit || origLen <= limit) {
+    return { text: src, origLen, newLen: origLen, wasClipped: false };
+  }
+
+  const ellArr = [...ellipsis];
+  const keep = Math.max(0, limit - ellArr.length);
+  const clipped = arr.slice(0, keep).join('') + ellipsis;
+  const newLen = [...clipped].length;
+  return { text: clipped, origLen, newLen, wasClipped: true };
+}
+
+// Best-effort URL detection for "soft confirm" warnings in previews.
+export function containsUrl(s) {
+  const t = String(s ?? '');
+  if (!t) return false;
+  return /(https?:\/\/\S+|t\.me\/\S+|www\.\S+)/i.test(t);
+}
+
+
 export function parseCb(data) {
   // example: a:gw_export|i:12|t:all
   // supports compact aliases (backward compatible):

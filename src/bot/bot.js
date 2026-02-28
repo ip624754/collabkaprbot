@@ -6,7 +6,7 @@ import { redis, k, rateLimit, consumeOnce, acquireLock, releaseLock } from '../l
 import { setMonIntroDiag, setMonAcceptDiag, setMonUnlockDiag } from '../lib/monDiag.js';
 import * as db from '../db/queries.js';
 import { pool } from '../db/pool.js';
-import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes, parseMoscowDateTime, computeThreadReplyStatus, formatBxChargeLine, telegramEntitiesToHtml } from './helpers.js';
+import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, countCodepoints, clipCodepoints, containsUrl, addMinutes, parseMoscowDateTime, computeThreadReplyStatus, formatBxChargeLine, telegramEntitiesToHtml } from './helpers.js';
 import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import { queueOpsAlert } from './opsAlerts.js';
@@ -749,6 +749,14 @@ async function getPaymentMode() {
 // Storage: Redis-only (SYS_KEYS.sys_notice object). No DB.
 // Seen markers: Redis-only key per tg_id × version.
 const SYS_NOTICE_SEEN_TTL_SEC = 180 * 24 * 60 * 60; // 180 days
+// Telegram message hard limit is 4096 chars. We keep a safer body budget for messages that add headers/footers.
+const TG_TEXT_MAX = 4096;
+const TG_SAFE_BODY_MAX = 3500;
+
+// CTA field limits (keep UI clean; also below Telegram limits).
+const CTA_LABEL_MAX = 32;
+const CTA_URL_MAX = 512;
+
 
 function normalizeNoticeSeverity(v) {
   const s = String(v || '').toLowerCase().trim();
@@ -765,20 +773,24 @@ function normalizeNoticeTarget(v) {
 }
 
 function normalizeNoticeCtaLabel(v) {
-  const raw = String(v || '').replace(/\r\n/g, '\n').trim();
+  const raw = String(v || '').replace(/
+/g, '
+').trim();
   if (!raw) return '';
-  const clipped = raw.length > 32 ? raw.slice(0, 32) : raw;
-  return clipped;
+  // Keep label compact (no ellipsis in button text).
+  return clipCodepoints(raw, CTA_LABEL_MAX, { ellipsis: '' }).text;
 }
+
 
 function normalizeNoticeCtaUrl(v) {
   const raw = String(v || '').trim();
   if (!raw) return '';
   const low = raw.toLowerCase();
   if (!(low.startsWith('https://') || low.startsWith('http://'))) return '';
-  // Keep URL reasonably short to avoid Telegram limits / weird UI
-  return raw.length > 512 ? raw.slice(0, 512) : raw;
+  // Keep URL reasonably short to avoid Telegram limits / weird UI (no ellipsis).
+  return clipCodepoints(raw, CTA_URL_MAX, { ellipsis: '' }).text;
 }
+
 
 function normalizeNoticeExpiresAtSec(v) {
   if (v == null) return null;
@@ -822,8 +834,10 @@ function normalizeSysNotice(obj) {
   if (!Number.isFinite(version) || version < 0) version = 0;
   version = Math.trunc(version);
 
-  // Keep text as plain user-facing content (no HTML), we escape it on send
-  const text = String(src.text || '').replace(/\r\n/g, '\n').trim();
+  // Keep text as plain user-facing content (no HTML), we escape it on send.
+  // Hard-clip to Telegram limit (safe for emoji).
+  const text0 = String(src.text || '').replace(/\r\n/g, '\n').trim();
+  const text = clipCodepoints(text0, TG_TEXT_MAX).text;
 
   const ctaLabelRaw = src.ctaLabel ?? src.cta_label ?? (src.cta && src.cta.label) ?? '';
   const ctaUrlRaw = src.ctaUrl ?? src.cta_url ?? (src.cta && src.cta.url) ?? '';
@@ -970,11 +984,12 @@ function normalizeAdminDmTemplates(obj) {
   for (const it of src) {
     const id = String(it?.id || '').trim();
     const label = String(it?.label || '').trim();
-    const text = String(it?.text || '').trim();
-    if (!id || !label || !text) continue;
-    if (id.length > 48 || label.length > 48) continue;
-    if (text.length > 6000) continue;
-    out.items.push({ id, label, text });
+const text0 = String(it?.text || '').trim();
+if (!id || !label || !text0) continue;
+if (id.length > 48 || label.length > 48) continue;
+const text = clipCodepoints(text0, TG_SAFE_BODY_MAX).text;
+if (!text) continue;
+out.items.push({ id, label, text });
   }
 
   // Hard guarantee: always have at least defaults.
@@ -1092,6 +1107,44 @@ async function clearAdminOutbox() {
   try { await redis.del(adminOutboxKey()); return true; } catch { return false; }
 }
 
+
+// --- Admin: User note return context (Redis-only) (STEP204) ---
+// Allows opening admin note from contexts like Outbox and returning back without polluting callback data.
+// Stored per-admin for short TTL.
+function adminUserNoteReturnKey(adminTgId) {
+  return k(['adm_unote_ret', String(adminTgId || 0)]);
+}
+
+async function setAdminUserNoteReturn(adminTgId, obj, ttlSec = 10 * 60) {
+  const aid = Number(adminTgId || 0);
+  if (!aid) return false;
+  try {
+    await redis.set(adminUserNoteReturnKey(aid), obj, { ex: Math.max(60, Number(ttlSec) || 600) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getAdminUserNoteReturn(adminTgId) {
+  const aid = Number(adminTgId || 0);
+  if (!aid) return null;
+  try {
+    const v = await redis.get(adminUserNoteReturnKey(aid));
+    if (v && typeof v === 'object') return v;
+    return safeJsonParse(v);
+  } catch {
+    return null;
+  }
+}
+
+async function clearAdminUserNoteReturn(adminTgId) {
+  const aid = Number(adminTgId || 0);
+  if (!aid) return false;
+  try { await redis.del(adminUserNoteReturnKey(aid)); return true; } catch { return false; }
+}
+
+
 function fmtOutboxBtnTime(ts) {
   if (!ts) return '';
   const d = new Date(ts);
@@ -1109,6 +1162,36 @@ function fmtOutboxBtnTime(ts) {
 // Per-user internal note visible only to super-admins. Stored in Redis; no DB tables/migrations.
 const ADMIN_USER_NOTE_MAX = 1400;
 
+// Strict allowlist for admin note tags (STEP195). Stored in Redis together with note.
+const ADMIN_USER_NOTE_TAGS = [
+  { id: 'vip', title: 'VIP' },
+  { id: 'suspect_spam', title: 'SPAM?' },
+  { id: 'needs_followup', title: 'FOLLOW' },
+  { id: 'payments_sensitive', title: 'PAY' },
+];
+
+function adminUserNoteTagTitle(id) {
+  const t = ADMIN_USER_NOTE_TAGS.find(x => x.id === id);
+  return t ? t.title : '';
+}
+
+function normalizeAdminUserNoteTags(tags) {
+  const arr = Array.isArray(tags) ? tags.map(x => String(x || '').trim()).filter(Boolean) : [];
+  const out = [];
+  for (const t of ADMIN_USER_NOTE_TAGS) {
+    if (arr.includes(t.id)) out.push(t.id);
+  }
+  // keep any unexpected tags out (strict allowlist)
+  return out;
+}
+
+function hasAdminUserNoteData(note) {
+  if (!note) return false;
+  const txt = String(note.text || '').trim();
+  const tags = Array.isArray(note.tags) ? note.tags : [];
+  return !!txt || tags.length > 0;
+}
+
 function adminUserNoteKey(userId) {
   const uid = Number(userId || 0);
   if (!uid) return k(['adm_user_note', '0']);
@@ -1118,19 +1201,26 @@ function adminUserNoteKey(userId) {
 function normalizeAdminUserNote(v) {
   if (!v) return null;
 
-  // Backward-compatible: allow plain string
+  // Backward-compatible: allow plain string (text-only, no tags)
   if (typeof v === 'string') {
     const t = String(v).replace(/\r/g, '').trim();
     if (!t) return null;
-    return { text: t, updatedAt: '', byAdminTgId: 0, byAdminUsername: '' };
+    return { text: t, tags: [], updatedAt: '', byAdminTgId: 0, byAdminUsername: '' };
   }
 
   if (typeof v === 'object' && !Array.isArray(v)) {
-    const txt = String(v.text || '').replace(/\r/g, '').trim();
-    if (!txt) return null;
-    const text = txt.length > ADMIN_USER_NOTE_MAX ? (txt.slice(0, ADMIN_USER_NOTE_MAX) + '…') : txt;
+    const rawTxt = String(v.text || '').replace(/\r/g, '').trim();
+    const tags = normalizeAdminUserNoteTags(v.tags);
+
+    if (!rawTxt && tags.length === 0) return null;
+
+    const text = rawTxt
+      ? (rawTxt.length > ADMIN_USER_NOTE_MAX ? (rawTxt.slice(0, ADMIN_USER_NOTE_MAX) + '…') : rawTxt)
+      : '';
+
     return {
       text,
+      tags,
       updatedAt: String(v.updatedAt || ''),
       byAdminTgId: Number(v.byAdminTgId || 0) || 0,
       byAdminUsername: String(v.byAdminUsername || ''),
@@ -1151,17 +1241,86 @@ async function getAdminUserNote(userId) {
   }
 }
 
-async function setAdminUserNote(userId, noteText, meta = {}) {
+// Bulk loader for admin user notes (Redis-only).
+// Returns Map<userId, note> only for non-empty notes/tags.
+// Best effort: uses MGET if supported, otherwise falls back to per-key GET.
+async function getAdminUserNotesBulk(userIds = []) {
+  const ids = Array.from(
+    new Set(
+      (Array.isArray(userIds) ? userIds : [])
+        .map((x) => Number(x || 0))
+        .filter((x) => Number.isFinite(x) && x > 0)
+    )
+  );
+
+  const out = new Map();
+  if (!ids.length) return out;
+
+  const keys = ids.map((id) => adminUserNoteKey(id));
+
+  try {
+    let vals = null;
+    if (typeof redis.mget === 'function') {
+      vals = await redis.mget(keys);
+    } else {
+      // Fallback to sequential GET (admin directory page is small).
+      vals = [];
+      for (const kk of keys) {
+        // eslint-disable-next-line no-await-in-loop
+        vals.push(await redis.get(kk));
+      }
+    }
+
+    for (let i = 0; i < ids.length; i++) {
+      const note = normalizeAdminUserNote(vals?.[i]);
+      if (hasAdminUserNoteData(note)) out.set(ids[i], note);
+    }
+    return out;
+  } catch {
+    // Best-effort fallback: per user.
+    for (const id of ids) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const note = await getAdminUserNote(id);
+        if (hasAdminUserNoteData(note)) out.set(id, note);
+      } catch {
+        // ignore
+      }
+    }
+    return out;
+  }
+}
+
+async function upsertAdminUserNote(userId, patch = {}, meta = {}) {
   const uid = Number(userId || 0);
   if (!uid) return false;
 
-  const raw = String(noteText || '').replace(/\r/g, '').trim();
-  if (!raw) return false;
+  // Load existing (best-effort) to preserve fields not being updated.
+  let cur = null;
+  try { cur = await getAdminUserNote(uid); } catch { cur = null; }
 
-  const text = raw.length > ADMIN_USER_NOTE_MAX ? (raw.slice(0, ADMIN_USER_NOTE_MAX) + '…') : raw;
+  let text = cur?.text ? String(cur.text) : '';
+  let tags = Array.isArray(cur?.tags) ? cur.tags.map(String) : [];
+
+  if (patch && Object.prototype.hasOwnProperty.call(patch, 'text')) {
+    const raw = String(patch.text || '').replace(/\r/g, '').trim();
+    text = raw ? (raw.length > ADMIN_USER_NOTE_MAX ? (raw.slice(0, ADMIN_USER_NOTE_MAX) + '…') : raw) : '';
+  }
+
+  if (patch && Object.prototype.hasOwnProperty.call(patch, 'tags')) {
+    tags = normalizeAdminUserNoteTags(patch.tags);
+  } else {
+    tags = normalizeAdminUserNoteTags(tags);
+  }
+
+  // If everything is empty — delete key (clean state).
+  if (!String(text || '').trim() && (!Array.isArray(tags) || tags.length === 0)) {
+    try { await redis.del(adminUserNoteKey(uid)); return true; } catch { return false; }
+  }
 
   const obj = {
     text,
+    tags,
     updatedAt: new Date().toISOString(),
     byAdminTgId: Number(meta.byAdminTgId || 0) || 0,
     byAdminUsername: String(meta.byAdminUsername || ''),
@@ -1173,6 +1332,29 @@ async function setAdminUserNote(userId, noteText, meta = {}) {
   } catch {
     return false;
   }
+}
+
+async function setAdminUserNote(userId, noteText, meta = {}) {
+  const raw = String(noteText || '').replace(/\r/g, '').trim();
+  if (!raw) return false;
+  return await upsertAdminUserNote(userId, { text: raw }, meta);
+}
+
+async function toggleAdminUserNoteTag(userId, tagId, meta = {}) {
+  const tid = String(tagId || '').trim();
+  if (!tid) return false;
+  if (!ADMIN_USER_NOTE_TAGS.some(t => t.id === tid)) return false;
+
+  let cur = null;
+  try { cur = await getAdminUserNote(userId); } catch { cur = null; }
+  const text = cur?.text ? String(cur.text) : '';
+  let tags = Array.isArray(cur?.tags) ? cur.tags.map(String) : [];
+
+  if (tags.includes(tid)) tags = tags.filter(x => x !== tid);
+  else tags.push(tid);
+
+  tags = normalizeAdminUserNoteTags(tags);
+  return await upsertAdminUserNote(userId, { text, tags }, meta);
 }
 
 async function clearAdminUserNote(userId) {
@@ -1190,7 +1372,47 @@ function sysNoticeSeenKey(tgId, version) {
   return k(['sys', 'notice', 'seen', String(tgId || 0), String(version || 0)]);
 }
 
-async function maybeSendSystemNotice(ctx) {
+async function getSysNoticeAvailabilityForUser(tgId, n) {
+  const uid = Number(tgId || 0);
+  if (!uid) return { ok: false, audience: 'unknown', reason: 'no_tg_id' };
+
+  const notice = (n && typeof n === 'object') ? n : null;
+  if (!notice || !notice.active) return { ok: false, audience: 'unknown', reason: 'inactive' };
+
+  const ver = Number(notice.version || 0);
+  if (!Number.isFinite(ver) || ver <= 0) return { ok: false, audience: 'unknown', reason: 'bad_version' };
+  if (!notice.text) return { ok: false, audience: 'unknown', reason: 'no_text' };
+
+  // Auto-expire (best-effort): do not show after deadline.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expSec = Number(notice.expiresAt || 0);
+  if (Number.isFinite(expSec) && expSec > 0 && nowSec >= expSec) return { ok: false, audience: 'unknown', reason: 'expired' };
+
+  // Targeting: all / brand / creator (Redis-only)
+  const target = normalizeNoticeTarget(notice.target);
+  if (target !== 'all') {
+    let ui = 'creator';
+    try {
+      const raw = await redis.get(k(['ui_mode', uid]));
+      ui = String(raw || '').toLowerCase().trim() === 'brand' ? 'brand' : 'creator';
+    } catch {
+      // If Redis is degraded, fail-closed (avoid accidental spam)
+      return { ok: false, audience: 'unknown', reason: 'redis_degraded' };
+    }
+
+    let bm = false;
+    try { bm = await getBrandManagerMode(uid); } catch { bm = false; }
+
+    const audience = (ui === 'brand' || bm) ? 'brand' : 'creator';
+    if (audience !== target) return { ok: false, audience, reason: 'not_target' };
+
+    return { ok: true, audience, reason: '' };
+  }
+
+  return { ok: true, audience: 'unknown', reason: '' };
+}
+
+async function maybeSendSystemNotice(ctx, cached = {}) {
   try {
     const tgId = Number(ctx?.from?.id || 0);
     if (!tgId) return;
@@ -1198,36 +1420,11 @@ async function maybeSendSystemNotice(ctx) {
     const chatType = String(ctx?.chat?.type || '');
     if (chatType && chatType !== 'private') return;
 
-    const n = await getSysNotice();
-    if (!n.active) return;
+    const n = cached?.notice || await getSysNotice();
+    const avail = cached?.avail || await getSysNoticeAvailabilityForUser(tgId, n);
+    if (!avail.ok) return;
 
     const ver = Number(n.version || 0);
-    if (!Number.isFinite(ver) || ver <= 0) return;
-    if (!n.text) return;
-
-    // Auto-expire (best-effort): do not show after deadline.
-    const nowSec = Math.floor(Date.now() / 1000);
-    const expSec = Number(n.expiresAt || 0);
-    if (Number.isFinite(expSec) && expSec > 0 && nowSec >= expSec) return;
-
-    // Targeting: all / brand / creator (Redis-only)
-    const target = normalizeNoticeTarget(n.target);
-    if (target !== 'all') {
-      let ui = 'creator';
-      try {
-        const raw = await redis.get(k(['ui_mode', tgId]));
-        ui = String(raw || '').toLowerCase().trim() === 'brand' ? 'brand' : 'creator';
-      } catch {
-        // If Redis is degraded, fail-closed (avoid accidental spam)
-        return;
-      }
-
-      let bm = false;
-      try { bm = await getBrandManagerMode(tgId); } catch { bm = false; }
-
-      const audience = (ui === 'brand' || bm) ? 'brand' : 'creator';
-      if (audience !== target) return;
-    }
 
     const seenKey = sysNoticeSeenKey(tgId, ver);
     try {
@@ -1243,16 +1440,25 @@ async function maybeSendSystemNotice(ctx) {
 
     const icon = noticeIcon(n.severity);
     const title = noticeTitle(n.severity);
-    const safeText = String(n.text || '').slice(0, 3500);
+    const safeText = clipCodepoints(String(n.text || ''), TG_SAFE_BODY_MAX).text;
 
-    const msg = `${icon} <b>${title}</b>\n\n${escapeHtml(safeText)}\n\n<i>v${escapeHtml(String(ver))}</i>`;
+    const msg =
+      `${icon} <b>${title}</b>
+
+${escapeHtml(safeText)}` +
+      `
+
+<i>Чтобы открыть ещё раз: 📋 Меню → 📣 Актуальное объявление.</i>` +
+      `
+<i>v${escapeHtml(String(ver))}</i>`;
 
     const kb = new InlineKeyboard();
     if (n.ctaUrl) {
-      const label = String(n.ctaLabel || '🔗 Подробнее').slice(0, 32);
+      const label = clipCodepoints(String(n.ctaLabel || '🔗 Подробнее'), CTA_LABEL_MAX, { ellipsis: '' }).text;
       kb.url(label, String(n.ctaUrl)).row();
     }
-    kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    kb.text('📋 Открыть меню', 'a:menu').text('💬 Поддержка', 'a:support').row();
+    kb.text('✅ Понятно', 'a:usr_ack');
 
     await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }).catch(() => {});
   } catch {
@@ -2077,7 +2283,7 @@ function mainMenuKb(flags = {}) {
     if (uname) kb.url('📢 Официальный канал', `https://t.me/${uname}`).row();
   }
 
-  kb.text('🧭 Быстрый старт', 'a:guide').text('🔗 Поделиться', 'a:share').text('💬 Поддержка', 'a:support').row();
+  kb.text('🔗 Поделиться', 'a:share').text('💬 Поддержка', 'a:support').row();
   kb.text('🔄 Обновить', 'a:main_menu').row();
 
   const extra = [];
@@ -2130,10 +2336,11 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
   }
 
   kb
-    .text('🧭 Быстрый старт', 'a:guide')
     .text('🔗 Поделиться', 'a:share')
     .text('💬 Поддержка', 'a:support')
     .row();
+
+  if (opts.noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
 
   if (opts.canManager) {
     kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
@@ -2198,11 +2405,13 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   }
 
   kb.row()
-    .text('🧭 Быстрый старт', 'a:guide')
     .text('🔗 Поделиться', 'a:share')
     .text('💬 Поддержка', 'a:support')
-    .row()
-    .text('✨ Я Creator / канал', 'a:ui_mode_set|m:creator|ret:menu');
+    .row();
+
+  if (opts.noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
+
+  kb.text('✨ Я Creator / канал', 'a:ui_mode_set|m:creator|ret:menu');
 
   const extra = [];
   if (isCurator) extra.push(['🧹 Кураторы блогера', 'a:cur_home']);
@@ -2418,8 +2627,25 @@ async function renderMainMenu(ctx, flags, params = {}) {
   // Track last UI home for resilient Back in BX flows
   if (ctx.from?.id) await setUiHome(ctx.from.id, BX_HOME.MAIN_MENU);
 
-  const mode = await resolveUiMode(ctx.from?.id);
-  try { await maybeSendSystemNotice(ctx); } catch {}
+const mode = await resolveUiMode(ctx.from?.id);
+
+// System Notice availability (for "📣 Актуальное объявление" button). Redis-only, no DB.
+const chatType = String(ctx?.chat?.type || '');
+let notice = null;
+let noticeAvail = { ok: false, audience: 'unknown', reason: '' };
+if (chatType === 'private') {
+  try {
+    notice = await getSysNotice();
+    noticeAvail = await getSysNoticeAvailabilityForUser(Number(ctx?.from?.id || 0), notice);
+  } catch {
+    notice = null;
+    noticeAvail = { ok: false, audience: 'unknown', reason: 'error' };
+  }
+}
+
+try { await maybeSendSystemNotice(ctx, { notice, avail: noticeAvail }); } catch {}
+const noticeActive = chatType === 'private' && !!noticeAvail.ok;
+
 
   let modeHuman = uiModeHuman(mode);
   let text;
@@ -2459,7 +2685,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
 Для команды бренда — Inbox и поиск креаторов.
 
 Выбери действие:`;
-      kb = mainMenuBrandKb(flags, { isManager: true, hasMultipleBrands: (bm.brands || []).length > 1, founderActive });
+      kb = mainMenuBrandKb(flags, { isManager: true, hasMultipleBrands: (bm.brands || []).length > 1, founderActive, noticeActive });
     } else {
       const base = `🏠 <b>Главное меню</b>
 
@@ -2472,7 +2698,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
       let canManager = false;
       try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
       // V4: no extra Neon queries in menu render (status will be checked on click)
-      kb = mainMenuBrandKb(flags, { isManager: false, canManager, teamLocked: false, teamBasicDone: null, teamPaid: null, founderActive });
+      kb = mainMenuBrandKb(flags, { isManager: false, canManager, teamLocked: false, teamBasicDone: null, teamPaid: null, founderActive, noticeActive });
     }
   } else if (mode === UI_MODES.BRAND) {
     const base = `🏠 <b>Главное меню</b>
@@ -2484,7 +2710,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
 
 Выбери действие:`;
     // V4: no extra Neon queries in menu render (status will be checked on click)
-    kb = mainMenuBrandKb(flags, { isManager: false, teamLocked: false, teamBasicDone: null, teamPaid: null, founderActive });
+    kb = mainMenuBrandKb(flags, { isManager: false, teamLocked: false, teamBasicDone: null, teamPaid: null, founderActive, noticeActive });
   } else {
     const base = `🏠 <b>Главное меню</b>
 
@@ -2498,7 +2724,7 @@ async function renderMainMenu(ctx, flags, params = {}) {
     if (u) {
       try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
     }
-    kb = mainMenuCreatorKb(flags, { canManager, founderActive });
+    kb = mainMenuCreatorKb(flags, { canManager, founderActive, noticeActive });
   }
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
@@ -2523,9 +2749,25 @@ async function renderHomeHub(ctx, u, flags = {}, opts = {}) {
     showHint = false;
   }
 
-  const uiMode = await resolveUiMode(tgId);
+const uiMode = await resolveUiMode(tgId);
 
-  try { await maybeSendSystemNotice(ctx); } catch {}
+// System Notice availability (for "📣 Актуальное объявление" button). Redis-only, no DB.
+const chatType = String(ctx?.chat?.type || '');
+let notice = null;
+let noticeAvail = { ok: false, audience: 'unknown', reason: '' };
+if (chatType === 'private') {
+  try {
+    notice = await getSysNotice();
+    noticeAvail = await getSysNoticeAvailabilityForUser(Number(tgId || 0), notice);
+  } catch {
+    notice = null;
+    noticeAvail = { ok: false, audience: 'unknown', reason: 'error' };
+  }
+}
+
+try { await maybeSendSystemNotice(ctx, { notice, avail: noticeAvail }); } catch {}
+const noticeActive = chatType === 'private' && !!noticeAvail.ok;
+
 
   const bmMode = await getBrandManagerMode(tgId);
   const curMode = (flags?.isCurator ? await getCuratorMode(tgId) : false);
@@ -2690,7 +2932,8 @@ ${trialLine}
   if (flags?.isModerator) kb.text('🛡 Модерация', 'a:mod_home').row();
   if (flags?.isAdmin) kb.text('👑 Админка', 'a:admin_home').row();
 
-  kb.text('📋 Меню', 'a:menu').text('🧭 Быстрый старт', 'a:guide').text('🔗 Поделиться', 'a:share').row();
+  kb.text('📋 Меню', 'a:menu').text('🔗 Поделиться', 'a:share').row();
+  if (noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
   kb.text('💬 Поддержка', 'a:support').row();
 
   if (showHint) kb.row().text('✅ Понятно', 'a:home_hint_ack');
@@ -2899,7 +3142,6 @@ function curatorModeMenuKb(flags = {}) {
   const kb = new InlineKeyboard()
     .text('👤 Кабинет куратора', 'a:cur_home')
     .row()
-    .text('🧭 Быстрый старт', 'a:guide')
     .text('💬 Поддержка', 'a:support')
     .row()
     .text('🔄 Обновить', 'a:cur_home')
@@ -2955,6 +3197,14 @@ function kbNavRow(kb, backCb) {
   if (backCb && backCb !== 'a:menu' && backCb !== 'a:home') kb.text('⬅️ Назад', backCb);
   kb.text('📋 Меню', 'a:menu');
   kb.text('🏠 Home', 'a:home');
+  return kb;
+}
+
+function kbAdminFooter(kb, backText = '⬅️ Админка', backCb = 'a:admin_home') {
+  // Admin footer standard: section back + escape row (Menu/Home).
+  // Usage: build your keyboard, then call kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops').
+  kb.row().text(backText, backCb);
+  kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -14984,7 +15234,7 @@ function curatorHomeKb(items, modeEnabled = false, queueCounts = null) {
   }
 
   // Help + footer
-  kb.text('🧭 Быстрый старт', 'a:guide').text('💬 Поддержка', 'a:support').row();
+  kb.text('💬 Поддержка', 'a:support').row();
   kb.text('⬅️ Назад', 'a:home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
@@ -16171,8 +16421,7 @@ ${escapeHtml(safeCap)}
               await ctx.reply('⚠️ Не найден TG ID получателя.');
               return;
             }
-
-            const safe = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
+      const safe = clipCodepoints(raw, TG_SAFE_BODY_MAX).text;
             const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
 
             let ok = false;
@@ -16343,9 +16592,7 @@ ctx.reply = (text, extra) => {
         bmEnabled = !!bm.enabled;
         bmBrand = bm.brandLabel ? String(bm.brandLabel) : '';
       } catch {}
-
-      const safe = txt.length > 3500 ? (txt.slice(0, 3500) + '…') : txt;
-
+      const safe = clipCodepoints(txt, TG_SAFE_BODY_MAX).text;
       const header = `💬 <b>Support</b>
 
 ` +
@@ -16494,8 +16741,7 @@ ${escapeHtml(safe)}`;
         await ctx.reply('⚠️ Не найден TG ID получателя.');
         return;
       }
-
-      const safe = txt.length > 3500 ? (txt.slice(0, 3500) + '…') : txt;
+      const safe = clipCodepoints(txt, TG_SAFE_BODY_MAX).text;
       const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
 
       let ok = false;
@@ -16535,15 +16781,25 @@ ${escapeHtml(safe)}`;
         return;
       }
 
-      const templateRaw = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
+const rawMeta = clipCodepoints(raw, TG_SAFE_BODY_MAX);
+const templateRaw = rawMeta.text;
 
-      const targetTgId = Number(exp.targetTgId || 0);
-      const targetUsername = String(exp.targetUsername || '');
+const targetTgId = Number(exp.targetTgId || 0);
+const targetUsername = String(exp.targetUsername || '');
 
-      const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: targetUsername });
-      const phRes = applyAdminDmPlaceholders(templateRaw, phVals);
-      const expandedPlain = phRes.text.length > 3500 ? (phRes.text.slice(0, 3500) + '…') : phRes.text;
-      const bodyHtml = escapeHtml(expandedPlain);
+const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: targetUsername });
+const phRes = applyAdminDmPlaceholders(templateRaw, phVals);
+const expandedMeta = clipCodepoints(String(phRes.text || ''), TG_SAFE_BODY_MAX);
+const expandedPlain = expandedMeta.text;
+const bodyHtml = escapeHtml(expandedPlain);
+
+const warnLines = [];
+if (rawMeta.wasClipped) warnLines.push(`⚠️ Обрезано: ${rawMeta.origLen} → ${rawMeta.newLen} (лимит ${TG_SAFE_BODY_MAX}).`);
+if (expandedMeta.wasClipped && (!rawMeta.wasClipped || expandedMeta.origLen !== rawMeta.origLen)) {
+  warnLines.push(`⚠️ После подстановки: ${expandedMeta.origLen} → ${expandedMeta.newLen} (лимит ${TG_SAFE_BODY_MAX}).`);
+}
+if (containsUrl(expandedPlain)) warnLines.push('🔗 В тексте есть ссылка — проверь перед отправкой.');
+const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}</i>` : '';
       const phUsed = phRes.used || [];
       const phUnknown = phRes.unknown || [];
       if (!uid || !targetTgId) {
@@ -16600,7 +16856,7 @@ ${escapeHtml(safe)}`;
         phInfo += `\n⚠️ Неизвестные: ${tags}`;
       }
 
-      const preview = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+      const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
       const kb = new InlineKeyboard()
         .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
@@ -16608,18 +16864,87 @@ ${escapeHtml(safe)}`;
         .text('📎 Вставить', `a:adm_ph|r:umsg_free|id:${uid}|f:${f}|p:${page}`)
         .row()
         .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+
+      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+
+      const warn = (!clearCmd && typeof textMeta === 'object' && textMeta.wasClipped)
+        ? `\n\n⚠️ Текст был обрезан до ${TG_SAFE_BODY_MAX} символов (лимит Telegram).`
+        : '';
 
       await safeEditOrReply(
         ctx,
-        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}${phInfo}\n\n${preview}`,
+        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}${phInfo}${warnHtml}\n\n${preview}`,
         { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
       );
       return;
     }
 
 
-    // --- Admin: DM template input (add/edit) ---
+    
+// --- Admin: Outbox -> Save as DM template (label input) (STEP204) ---
+if (exp.type === 'adm_outbox_tpl_label') {
+  if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+
+  const chatType = String(ctx.chat?.type || '');
+  if (chatType !== 'private') {
+    await ctx.reply('Эта операция доступна только в личном чате (DM) с ботом.');
+    return;
+  }
+
+  const labelRaw = String(ctx.message?.text || '').trim();
+  if (!labelRaw) {
+    await ctx.reply('Напиши название шаблона (одной строкой).');
+    try { await setExpectText(ctx.from.id, exp); } catch {}
+    return;
+  }
+
+  const safeLabel = clipText(labelRaw.split('\n')[0], 48).trim();
+  const safeTextMeta = clipCodepoints(String(exp.text || '').trim(), TG_SAFE_BODY_MAX);
+  const safeText = safeTextMeta.text;
+  if (!safeLabel || !safeText) {
+    await ctx.reply('⚠️ Сессия истекла (нет текста). Открой Outbox и попробуй ещё раз.');
+    return;
+  }
+
+  const { tpls } = await getAdminDmTemplatesWithMeta();
+  const items = Array.isArray(tpls.items) ? tpls.items.slice() : [];
+  const id = 't' + randomToken(6);
+
+  // Put new template on top.
+  items.unshift({ id, label: safeLabel, text: safeText });
+
+  await setAdminDmTemplates({
+    version: Math.max(0, Number(tpls.version || 0) + 1),
+    updatedAt: new Date().toISOString(),
+    items,
+  });
+
+  try { await clearExpectText(ctx.from.id); } catch {}
+
+  const idx = Math.max(0, Number(exp.idx) || 0);
+  const page = Math.max(0, Number(exp.page) || 0);
+
+  const kb = new InlineKeyboard()
+    .text('📌 Открыть шаблон', `a:admin_umsg_tpl_view|tid:${id}|p:0`)
+    .row()
+    .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
+    .text('📤 Outbox', `a:admin_outbox_v|i:${idx}|p:${page}`)
+    .row();
+
+  kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+
+  if (safeTextMeta.wasClipped) {
+    try { await ctx.reply(`⚠️ Текст был обрезан до ${TG_SAFE_BODY_MAX} символов (лимит Telegram).`); } catch {}
+  }
+  if (safeTextMeta.wasClipped) {
+    try { await ctx.reply(`⚠️ Текст был обрезан до ${TG_SAFE_BODY_MAX} символов (лимит Telegram).`); } catch {}
+  }
+  await ctx.reply(`✅ Сохранено как шаблон: <b>${escapeHtml(safeLabel)}</b>`, { parse_mode: 'HTML', reply_markup: kb });
+  return;
+}
+
+// --- Admin: DM template input (add/edit) ---
     if (exp.type === 'admin_umsg_tpl_add') {
       if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
       const page = Math.max(0, Number(exp.page) || 0);
@@ -16633,7 +16958,8 @@ ${escapeHtml(safe)}`;
       }
 
       const safeLabel = clipText(label, 48).trim();
-      const safeText = (text.length > 3500 ? (text.slice(0, 3500) + '…') : text).trim();
+      const textMeta = clipCodepoints(text, TG_SAFE_BODY_MAX);
+      const safeText = textMeta.text.trim();
       if (!safeLabel || !safeText) {
         await ctx.reply('Слишком коротко. Попробуй ещё раз.');
         try { await setExpectText(ctx.from.id, exp); } catch {}
@@ -16656,6 +16982,9 @@ ${escapeHtml(safe)}`;
       await setAdminDmTemplates({ version: Number(tpls.version || 0) + 1, updatedAt: new Date().toISOString(), items });
 
       try { await clearExpectText(ctx.from.id); } catch {}
+      if (textMeta.wasClipped) {
+        try { await ctx.reply(`⚠️ Текст шаблона был обрезан до ${TG_SAFE_BODY_MAX} символов (лимит Telegram).`); } catch {}
+      }
       await renderAdminDmTemplates(ctx, page);
       return;
     }
@@ -16679,7 +17008,8 @@ ${escapeHtml(safe)}`;
       }
 
       const safeLabel = clipText(label, 48).trim();
-      const safeText = (text.length > 3500 ? (text.slice(0, 3500) + '…') : text).trim();
+      const textMeta = clipCodepoints(text, TG_SAFE_BODY_MAX);
+      const safeText = textMeta.text.trim();
 
       const { tpls } = await getAdminDmTemplatesWithMeta();
       const items = Array.isArray(tpls.items) ? tpls.items.map((t) => ({ ...t })) : [];
@@ -16694,6 +17024,9 @@ ${escapeHtml(safe)}`;
       await setAdminDmTemplates({ version: Number(tpls.version || 0) + 1, updatedAt: new Date().toISOString(), items });
 
       try { await clearExpectText(ctx.from.id); } catch {}
+      if (textMeta.wasClipped) {
+        try { await ctx.reply(`⚠️ Текст шаблона был обрезан до ${TG_SAFE_BODY_MAX} символов (лимит Telegram).`); } catch {}
+      }
       await renderAdminDmTemplateView(ctx, tplId, page);
       return;
     }
@@ -16756,7 +17089,8 @@ ${escapeHtml(safe)}`;
       const clearCmd = (low === 'clear' || low === 'сброс' || low === 'очистить' || low === '0' || low === '-');
 
       const cur = await getSysNotice();
-      cur.text = clearCmd ? '' : (raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw);
+      const textMeta = clipCodepoints(raw, TG_SAFE_BODY_MAX);
+      cur.text = clearCmd ? '' : textMeta.text;
       cur.updatedAt = new Date().toISOString();
 
       await setSysNotice(cur);
@@ -16767,13 +17101,18 @@ ${escapeHtml(safe)}`;
         .text('🚀 Опубликовать', 'a:admin_notice_publish')
         .row()
         .text('⬅️ Назад', 'a:admin_notice')
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+
+      const warn = (!clearCmd && typeof textMeta === 'object' && textMeta.wasClipped)
+        ? `\n\n⚠️ Текст был обрезан до ${TG_SAFE_BODY_MAX} символов (лимит Telegram).`
+        : '';
 
       await safeEditOrReply(
         ctx,
         clearCmd
-          ? '🧹 Текст очищен. Чтобы показать пользователям — задай текст и нажми «🚀 Опубликовать».'
-          : '✅ Текст сохранён. Нажми «🚀 Опубликовать», чтобы показать пользователям новую версию (1 раз на версию).',
+          ? '🧹 Текст очищен. Чтобы показать пользователям — задай текст и нажми «🚀 Опубликовать». '
+          : ('✅ Текст сохранён. Нажми «🚀 Опубликовать», чтобы показать пользователям новую версию (1 раз на версию).' + warn),
         { reply_markup: kb }
       );
       return;
@@ -16801,9 +17140,8 @@ ${escapeHtml(safe)}`;
         await setSysNotice(cur);
         try { await clearExpectText(ctx.from.id); } catch {}
 
-        const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:admin_notice')
-          .text('⬅️ Админка', 'a:admin_home');
+        const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
         await safeEditOrReply(ctx, '🧹 CTA отключён.', { reply_markup: kb });
         return;
@@ -16831,6 +17169,15 @@ ${escapeHtml(safe)}`;
 
       const normLabel = normalizeNoticeCtaLabel(label) || '🔗 Подробнее';
 
+      const warnLines = [];
+      const urlOrigLen = countCodepoints(String(url || '').trim());
+      const urlNewLen = countCodepoints(String(normUrl || ''));
+      if (urlOrigLen > urlNewLen) warnLines.push(`⚠️ URL обрезан: ${urlOrigLen} → ${urlNewLen} (лимит ${CTA_URL_MAX}).`);
+      const labelOrigLen = countCodepoints(String(label || '').replace(/\r\n/g, '\n').trim());
+      const labelNewLen = countCodepoints(String(normLabel || ''));
+      if (labelOrigLen && labelOrigLen > labelNewLen) warnLines.push(`⚠️ Текст кнопки обрезан: ${labelOrigLen} → ${labelNewLen} (лимит ${CTA_LABEL_MAX}).`);
+      const warn = warnLines.length ? ('\n\n' + warnLines.join('\n')) : '';
+
       cur.ctaUrl = normUrl;
       cur.ctaLabel = normLabel;
       cur.updatedAt = new Date().toISOString();
@@ -16841,10 +17188,10 @@ ${escapeHtml(safe)}`;
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:admin_notice')
         .text('🚀 Опубликовать', 'a:admin_notice_publish')
-        .row()
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
-      await safeEditOrReply(ctx, '✅ CTA сохранён. Чтобы пользователи увидели — нажми «🚀 Опубликовать» (новая версия).', { reply_markup: kb });
+      await safeEditOrReply(ctx, '✅ CTA сохранён. Чтобы пользователи увидели — нажми «🚀 Опубликовать» (новая версия).' + warn, { reply_markup: kb });
       return;
     }
 
@@ -16868,9 +17215,8 @@ ${escapeHtml(safe)}`;
         await setSysNotice(cur);
         try { await clearExpectText(ctx.from.id); } catch {}
 
-        const kb = new InlineKeyboard()
-          .text('⬅️ Назад', 'a:admin_notice')
-          .text('⬅️ Админка', 'a:admin_home');
+        const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
         await safeEditOrReply(ctx, '✅ Expire отключён.', { reply_markup: kb });
         return;
@@ -16896,8 +17242,8 @@ ${escapeHtml(safe)}`;
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:admin_notice')
         .text('🚀 Опубликовать', 'a:admin_notice_publish')
-        .row()
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(ctx, '✅ Expire сохранён. Чтобы пользователи увидели обновление настроек — нажми «🚀 Опубликовать» (новая версия).', { reply_markup: kb });
       return;
@@ -21848,6 +22194,59 @@ if (p.a === 'a:menu') {
     }
 
 
+// Hide buttons under service/system messages (user-friendly ack)
+if (p.a === 'a:usr_ack') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+  const chatId = ctx?.callbackQuery?.message?.chat?.id;
+  const msgId = ctx?.callbackQuery?.message?.message_id;
+  if (!chatId || !msgId) return;
+  try { await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined }); } catch {}
+  return;
+}
+
+// Users: open current System Notice again (without affecting seen)
+if (p.a === 'a:notice') {
+  await ctx.answerCallbackQuery();
+
+  const chatType = String(ctx.chat?.type || '');
+  if (chatType !== 'private') {
+    await safeEditOrReply(ctx, '📣 Актуальное объявление доступно только в личном чате с ботом.', { reply_markup: navKb('a:menu') });
+    return;
+  }
+
+  const tgId = Number(ctx?.from?.id || 0);
+  const n = await getSysNotice();
+  const avail = await getSysNoticeAvailabilityForUser(tgId, n);
+  if (!avail.ok) {
+    const kb = new InlineKeyboard().text('📋 Открыть меню', 'a:menu').text('💬 Поддержка', 'a:support');
+    await safeEditOrReply(ctx, 'ℹ️ Сейчас нет активного объявления.', { reply_markup: kb });
+    return;
+  }
+
+  const ver = Number(n.version || 0);
+  const icon = noticeIcon(n.severity);
+  const title = noticeTitle(n.severity);
+  const safeText = clipCodepoints(String(n.text || ''), TG_SAFE_BODY_MAX).text;
+
+  const msg = `${icon} <b>${title}</b>
+
+${escapeHtml(safeText)}
+
+<i>v${escapeHtml(String(ver))}</i>`;
+
+  const kb = new InlineKeyboard();
+  if (n.ctaUrl) {
+    const label = String(n.ctaLabel || '🔗 Подробнее').slice(0, 32);
+    kb.url(label, String(n.ctaUrl)).row();
+  }
+  kb.text('⬅️ В меню', 'a:menu').text('💬 Поддержка', 'a:support');
+
+  await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  return;
+}
+
+
+
 
     if (p.a === 'a:founder') {
       await ctx.answerCallbackQuery();
@@ -25912,6 +26311,37 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    if (p.a === 'a:admin_ops') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      try { await clearDraft(ctx.from.id); } catch {}
+      await renderAdminOps(ctx);
+      return;
+    }
+
+    if (p.a === 'a:admin_comms') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      try { await clearDraft(ctx.from.id); } catch {}
+      await renderAdminComms(ctx);
+      return;
+    }
+
+    if (p.a === 'a:admin_sys') {
+      await ctx.answerCallbackQuery();
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      try { await clearDraft(ctx.from.id); } catch {}
+      await renderAdminSystem(ctx);
+      return;
+    }
+
+
     // --- Admin: System Notice (Redis-only, no broadcast) ---
     if (p.a === 'a:admin_notice') {
       await ctx.answerCallbackQuery();
@@ -25963,9 +26393,8 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
 
-      const kb = new InlineKeyboard()
-        .text('⬅️ Назад', 'a:admin_notice')
-        .text('⬅️ Админка', 'a:admin_home');
+      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(
         ctx,
@@ -25992,9 +26421,8 @@ https://collabka.com/status</pre>
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
 
-      const kb = new InlineKeyboard()
-        .text('⬅️ Назад', 'a:admin_notice')
-        .text('⬅️ Админка', 'a:admin_home');
+      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(
         ctx,
@@ -26046,9 +26474,8 @@ https://collabka.com/status</pre>
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
 
-      const kb = new InlineKeyboard()
-        .text('⬅️ Назад', 'a:admin_notice')
-        .text('⬅️ Админка', 'a:admin_home');
+      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(
         ctx,
@@ -26078,7 +26505,10 @@ https://collabka.com/status</pre>
         .row()
         .text('⛔ Забрать / отменить подписку', 'a:adm_gift_revoke')
         .row()
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       await safeEditOrReply(ctx, `🎁 <b>Подарить подписку</b>\n\nВыбери тип подписки.\nПосле этого введи @username (или несколько через пробел/запятую).`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -26099,7 +26529,10 @@ https://collabka.com/status</pre>
         .text('🧹 Обнулить кредиты (опасно)', 'a:adm_gift_revoke_input|t:cr')
         .row()
         .text('⬅️ Назад', 'a:adm_gift')
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       await safeEditOrReply(
         ctx,
         `⛔ <b>Забрать / отменить</b>\n\nВыбери, что забрать у пользователей.\nДальше введи @username (можно несколько).`,
@@ -26116,7 +26549,10 @@ https://collabka.com/status</pre>
       const label = labels[revType] || revType;
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:adm_gift_revoke')
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       const warn = revType === 'cr'
         ? '\n\n⚠️ <b>Внимание:</b> кредиты будут обнулены. Используй только если уверен.'
         : (revType === 'gcr' || revType === 'bp_gcr')
@@ -26139,7 +26575,10 @@ https://collabka.com/status</pre>
       const label = labels[giftType] || giftType;
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', 'a:adm_gift')
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       await safeEditOrReply(ctx, `🎁 <b>${escapeHtml(label)}</b>\n\nВведи @username получателей (через пробел, запятую или каждый с новой строки).\n\nПример:\n<code>@user1 @user2 @user3</code>`, { parse_mode: 'HTML', reply_markup: kb });
       await setExpectText(ctx.from.id, { type: 'adm_gift_users', giftType });
       return;
@@ -26243,7 +26682,10 @@ https://collabka.com/status</pre>
 
       const kb = new InlineKeyboard()
         .text('🎁 Ещё подарить', 'a:adm_gift')
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       await safeEditOrReply(ctx, `🎁 <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -26292,7 +26734,10 @@ https://collabka.com/status</pre>
 
       const kb = new InlineKeyboard()
         .text('⛔ Ещё забрать', 'a:adm_gift_revoke')
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       await safeEditOrReply(ctx, `⛔ <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -26333,7 +26778,10 @@ https://collabka.com/status</pre>
       }
       const kb = new InlineKeyboard()
         .text('⛔ Ещё забрать', 'a:adm_gift_revoke')
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       await safeEditOrReply(ctx, `⛔ <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -26384,7 +26832,10 @@ https://collabka.com/status</pre>
       }
       const kb = new InlineKeyboard()
         .text('🎁 Ещё подарить', 'a:adm_gift')
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       await safeEditOrReply(ctx, `🎁 <b>Результат</b>\n\n${results.join('\n')}`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -26412,7 +26863,10 @@ https://collabka.com/status</pre>
         .row()
         .text('🧹 Сбросить поиск', `a:admin_users_reset|f:${f}|p:0`)
         .row()
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       await safeEditOrReply(ctx, '🔎 Введи @username или tg_id (цифрами).', { reply_markup: kb });
       await setExpectText(ctx.from.id, { type: 'admin_users_search', f });
       return;
@@ -26500,9 +26954,11 @@ https://collabka.com/status</pre>
         .text('❌ Отмена', `a:adm_unote|id:${uid}|f:${f}|p:${page}`)
         .row()
         .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
 
-      await safeEditOrReply(ctx, '🧹 <b>Очистить заметку?</b>', { parse_mode: 'HTML', reply_markup: kb });
+      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+
+      await safeEditOrReply(ctx, '🧹 <b>Очистить заметку и теги?</b>', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
 
@@ -26516,6 +26972,25 @@ https://collabka.com/status</pre>
       const page = Math.max(0, Number(p.p) || 0);
 
       await clearAdminUserNote(uid);
+      await renderAdminUserNote(ctx, uid, f, page);
+      return;
+    }
+
+
+    if (p.a === 'a:adm_unote_tag') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const uid = Number(p.id || 0);
+      const tagId = String(p.t || '').trim();
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      if (uid && tagId) {
+        await toggleAdminUserNoteTag(uid, tagId, { byAdminTgId: ctx.from.id, byAdminUsername: String(ctx.from?.username || '') });
+      }
+
       await renderAdminUserNote(ctx, uid, f, page);
       return;
     }
@@ -26539,9 +27014,18 @@ https://collabka.com/status</pre>
       else if (ret === 'tpl_edit') backCb = `a:admin_umsg_tpl_edit|tid:${tplId}|p:${page}`;
       else if (ret === 'tpl_view') backCb = `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`;
 
-      const kb = new InlineKeyboard()
-        .text('⬅️ Назад', backCb)
-        .text('⬅️ Админка', 'a:admin_home');
+      let sectionBackText = '⬅️ Админка';
+      let sectionBackCb = 'a:admin_home';
+      if (['tpl_list', 'tpl_add', 'tpl_edit', 'tpl_view'].includes(ret)) {
+        sectionBackText = '⬅️ Коммуникации';
+        sectionBackCb = 'a:admin_comms';
+      } else if (['umsg', 'umsg_free'].includes(ret)) {
+        sectionBackText = '⬅️ Операции';
+        sectionBackCb = 'a:admin_ops';
+      }
+
+      const kb = new InlineKeyboard().text('⬅️ Назад', backCb);
+      kbAdminFooter(kb, sectionBackText, sectionBackCb);
 
       await safeEditOrReply(ctx, adminDmPlaceholdersHelpHtml(), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
       return;
@@ -26563,9 +27047,11 @@ https://collabka.com/status</pre>
 
       if (!uid || !targetTgId) {
         await safeEditOrReply(ctx, '⚠️ Не удалось найти пользователя (нет tg_id).', {
-          reply_markup: new InlineKeyboard()
-            .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
-            .text('⬅️ Админка', 'a:admin_home')
+          reply_markup: (() => {
+            const kb = new InlineKeyboard().text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`);
+            kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+            return kb;
+          })()
         });
         return;
       }
@@ -26583,7 +27069,7 @@ https://collabka.com/status</pre>
       kb.text('📌 Шаблоны (админ)', 'a:admin_umsg_tpls|p:0').row();
       kb.text('📤 Outbox', 'a:admin_outbox|p:0').row();
       kb.text('⬅️ Назад', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`).row();
-      kb.text('⬅️ Админка', 'a:admin_home');
+      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
 
       await safeEditOrReply(
         ctx,
@@ -26647,12 +27133,24 @@ Username: ${escapeHtml(uname)}
 
       const token = randomToken(8);
 
-      const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: String(row?.tg_username || '') });
-      const phRes = applyAdminDmPlaceholders(raw, phVals);
-      const expandedPlain = phRes.text.length > 3500 ? (phRes.text.slice(0, 3500) + '…') : phRes.text;
-      const bodyHtml = escapeHtml(expandedPlain);
-      const phUsed = phRes.used || [];
-      const phUnknown = phRes.unknown || [];
+const rawMeta = clipCodepoints(raw, TG_SAFE_BODY_MAX);
+const safeRaw = rawMeta.text;
+
+const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: String(row?.tg_username || '') });
+const phRes = applyAdminDmPlaceholders(safeRaw, phVals);
+const expandedMeta = clipCodepoints(String(phRes.text || ''), TG_SAFE_BODY_MAX);
+const expandedPlain = expandedMeta.text;
+const bodyHtml = escapeHtml(expandedPlain);
+const phUsed = phRes.used || [];
+const phUnknown = phRes.unknown || [];
+
+const warnLines = [];
+if (rawMeta.wasClipped) warnLines.push(`⚠️ Обрезано: ${rawMeta.origLen} → ${rawMeta.newLen} (лимит ${TG_SAFE_BODY_MAX}).`);
+if (expandedMeta.wasClipped && (!rawMeta.wasClipped || expandedMeta.origLen !== rawMeta.origLen)) {
+  warnLines.push(`⚠️ После подстановки: ${expandedMeta.origLen} → ${expandedMeta.newLen} (лимит ${TG_SAFE_BODY_MAX}).`);
+}
+if (containsUrl(expandedPlain)) warnLines.push('🔗 В тексте есть ссылка — проверь перед отправкой.');
+const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}</i>` : '';
 
       let stored = false;
       try {
@@ -26661,7 +27159,7 @@ Username: ${escapeHtml(uname)}
           targetUserId: uid,
           targetTgId,
           targetUsername: String(row?.tg_username || ''),
-          templateRaw: raw,
+          templateRaw: safeRaw,
           templateId: tplId || usedDefaultKey || '',
           templateLabel: tplLabel || '',
           phUsed,
@@ -26697,7 +27195,7 @@ Username: ${escapeHtml(uname)}
 ⚠️ Неизвестные: ${tags}`;
       }
 
-      const preview = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+      const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
       const kb = new InlineKeyboard()
         .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
@@ -26705,7 +27203,9 @@ Username: ${escapeHtml(uname)}
         .text('📎 Вставить', `a:adm_ph|r:umsg|id:${uid}|f:${f}|p:${page}`)
         .row()
         .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+
+      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
 
       await safeEditOrReply(ctx,
         `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}${phInfo}\n\n${preview}`,
@@ -26724,9 +27224,11 @@ Username: ${escapeHtml(uname)}
         const f = String(p.f || 'all').toLowerCase();
         const page = Math.max(0, Number(p.p) || 0);
         await safeEditOrReply(ctx, '✍️ Свободный текст можно вводить только в личном чате с ботом (DM).\n\nОткрой бота в личке и повтори действие.', {
-          reply_markup: new InlineKeyboard()
-            .text('⬅️ Назад', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
-            .text('⬅️ Админка', 'a:admin_home')
+          reply_markup: (() => {
+            const kb = new InlineKeyboard().text('⬅️ Назад', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`);
+            kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+            return kb;
+          })()
         });
         return;
       }
@@ -26738,7 +27240,9 @@ Username: ${escapeHtml(uname)}
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
         .row()
         .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+
+      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
       await safeEditOrReply(
         ctx,
         `✍️ <b>Свободный текст</b>\n\nНапиши сообщение одним текстом (можно со ссылками).\n\nПотом я покажу предпросмотр и попрошу подтвердить отправку.`,
@@ -26798,7 +27302,11 @@ Username: ${escapeHtml(uname)}
       try { data = await redis.get(k(['adm_umsg', token])); } catch { data = null; }
       if (!data || Number(data.byAdminTgId || 0) !== Number(ctx.from.id)) {
         await safeEditOrReply(ctx, '⚠️ Сессия истекла. Открой сообщение заново.', {
-          reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
+          reply_markup: (() => {
+          const kb = new InlineKeyboard();
+          kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+          return kb;
+        })()
         });
         return;
       }
@@ -26829,7 +27337,225 @@ Username: ${escapeHtml(uname)}
       return;
     }
 
-    if (p.a === 'a:admin_outbox_clear_q') {
+    
+// STEP204: Outbox quick actions (repeat / note / save as template)
+if (p.a === 'a:admin_outbox_note') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  const idx = Math.max(0, Number(p.i) || 0);
+  const page = Math.max(0, Number(p.p) || 0);
+
+  const it = await getAdminOutboxItemByIndex(idx);
+  const uid = Number(it?.target_user_id || 0);
+
+  if (!uid) {
+    await safeEditOrReply(ctx, '⚠️ Нет user_id у записи (нельзя открыть заметку).', {
+      reply_markup: (() => {
+        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+        return kb;
+      })()
+    });
+    return;
+  }
+
+  // Preserve return route back to Outbox for this admin (short TTL).
+  await setAdminUserNoteReturn(ctx.from.id, {
+    uid,
+    backText: '⬅️ Outbox',
+    backCb: `a:admin_outbox_v|i:${idx}|p:${page}`,
+    sectionBackText: '⬅️ Коммуникации',
+    sectionBackCb: 'a:admin_comms',
+  });
+
+  await renderAdminUserNote(ctx, uid, 'all', 0);
+  return;
+}
+
+if (p.a === 'a:admin_outbox_repeat') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+
+  const chatType = String(ctx.chat?.type || '');
+  if (chatType !== 'private') {
+    const idx = Math.max(0, Number(p.i) || 0);
+    const page = Math.max(0, Number(p.p) || 0);
+    await safeEditOrReply(ctx, '✉️ Повтор из Outbox доступен только в <b>личном чате</b> с ботом (DM), чтобы не светить содержимое сообщений в группах.', {
+      parse_mode: 'HTML',
+      reply_markup: (() => {
+        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+        return kb;
+      })()
+    });
+    return;
+  }
+
+  const idx = Math.max(0, Number(p.i) || 0);
+  const page = Math.max(0, Number(p.p) || 0);
+
+  const it = await getAdminOutboxItemByIndex(idx);
+  if (!it) return ctx.answerCallbackQuery({ text: 'Запись не найдена.' });
+
+  const uid = Number(it.target_user_id || 0);
+  const targetTgId = Number(it.target_tg_id || 0);
+  const targetUsername = String(it.target_username || '').trim();
+const raw0 = String(it.snippet || it.preview || '').trim();
+const rawMeta = clipCodepoints(raw0, TG_SAFE_BODY_MAX);
+const templateRaw = rawMeta.text;
+
+  if (!targetTgId || !templateRaw) {
+    await safeEditOrReply(ctx, '⚠️ Нельзя повторить: нет TG ID или текста.', {
+      reply_markup: (() => {
+        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+        return kb;
+      })()
+    });
+    return;
+  }
+
+  // Apply placeholders (best-effort) — useful if admin intentionally keeps {{...}} in the text.
+  const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: targetUsername });
+const phRes = applyAdminDmPlaceholders(templateRaw, phVals);
+const expandedMeta = clipCodepoints(String(phRes.text || ''), TG_SAFE_BODY_MAX);
+const expandedPlain = expandedMeta.text;
+const bodyHtml = escapeHtml(expandedPlain);
+
+const warnLines = [];
+if (rawMeta.wasClipped) warnLines.push(`⚠️ Обрезано: ${rawMeta.origLen} → ${rawMeta.newLen} (лимит ${TG_SAFE_BODY_MAX}).`);
+if (expandedMeta.wasClipped && (!rawMeta.wasClipped || expandedMeta.origLen !== rawMeta.origLen)) {
+  warnLines.push(`⚠️ После подстановки: ${expandedMeta.origLen} → ${expandedMeta.newLen} (лимит ${TG_SAFE_BODY_MAX}).`);
+}
+if (containsUrl(expandedPlain)) warnLines.push('🔗 В тексте есть ссылка — проверь перед отправкой.');
+const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}</i>` : '';
+  const phUsed = phRes.used || [];
+  const phUnknown = phRes.unknown || [];
+
+  const token = randomToken(8);
+
+  let stored = false;
+  try {
+    await redis.set(k(['adm_umsg', token]), {
+      byAdminTgId: Number(ctx.from.id),
+      targetUserId: uid,
+      targetTgId,
+      targetUsername,
+      templateRaw,
+      templateId: 'outbox_repeat',
+      templateLabel: 'Повтор из Outbox',
+      phUsed,
+      phUnknown,
+      // Return route for sendAdminMessageToUser (so “done/back” stays inside Outbox)
+      retCb: `a:admin_outbox_v|i:${idx}|p:${page}`,
+      retText: '⬅️ Outbox',
+      sectionBackText: '⬅️ Коммуникации',
+      sectionBackCb: 'a:admin_comms',
+      createdAt: new Date().toISOString(),
+    }, { ex: 10 * 60 });
+    stored = true;
+  } catch {
+    stored = false;
+  }
+
+  if (!stored) {
+    await safeEditOrReply(ctx, '⚠️ Redis недоступен — нельзя безопасно показать предпросмотр и подтверждение. Повтор отменён.', {
+      reply_markup: (() => {
+        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+        return kb;
+      })()
+    });
+    return;
+  }
+
+  let phInfo = '';
+  if (phUsed.length) {
+    const tags = phUsed.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+    phInfo += `\n📎 Подставим: ${tags}`;
+  }
+  if (phUnknown.length) {
+    const tags = phUnknown.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+    phInfo += `\n⚠️ Неизвестные: ${tags}`;
+  }
+
+  const uname = targetUsername ? '@' + targetUsername : '';
+  const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
+
+  const kb = new InlineKeyboard()
+    .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:all|p:0`)
+    .text('❌ Отмена', `a:admin_outbox_v|i:${idx}|p:${page}`)
+    .row();
+
+  if (uid) kb.text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`).row();
+
+  kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+
+  await safeEditOrReply(ctx, `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}${phInfo}${warnHtml}\n\n${preview}`, {
+    parse_mode: 'HTML',
+    reply_markup: kb,
+    disable_web_page_preview: true,
+  });
+  return;
+}
+
+if (p.a === 'a:admin_outbox_to_tpl') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+
+  const chatType = String(ctx.chat?.type || '');
+  if (chatType !== 'private') {
+    const idx = Math.max(0, Number(p.i) || 0);
+    const page = Math.max(0, Number(p.p) || 0);
+    await safeEditOrReply(ctx, '📌 Сохранение в шаблоны доступно только в <b>личном чате</b> с ботом (DM).', {
+      parse_mode: 'HTML',
+      reply_markup: (() => {
+        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+        return kb;
+      })()
+    });
+    return;
+  }
+
+  const idx = Math.max(0, Number(p.i) || 0);
+  const page = Math.max(0, Number(p.p) || 0);
+  const it = await getAdminOutboxItemByIndex(idx);
+  if (!it) return ctx.answerCallbackQuery({ text: 'Запись не найдена.' });
+
+  const raw0 = String(it.snippet || it.preview || '').trim();
+  const safeText = clipCodepoints(raw0, TG_SAFE_BODY_MAX).text;
+  if (!safeText) return ctx.answerCallbackQuery({ text: 'Нет текста.' });
+
+  // Ask label; store context in expectText (Redis-only).
+  try {
+    await setExpectText(ctx.from.id, {
+      type: 'adm_outbox_tpl_label',
+      idx,
+      page,
+      text: safeText,
+    });
+  } catch {}
+
+  const hint = clipText(safeText.replace(/\n+/g, ' / '), 160);
+
+  const kb = new InlineKeyboard()
+    .text('❌ Отмена', `a:admin_outbox_v|i:${idx}|p:${page}`)
+    .row()
+    .text('⬅️ Коммуникации', 'a:admin_comms')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, `📌 <b>Сохранить в шаблоны</b>\n\nНапиши <b>название</b> шаблона одним сообщением.\n\n<i>Текст будет взят из этой Outbox‑записи:</i>\n<code>${escapeHtml(hint)}</code>`, {
+    parse_mode: 'HTML',
+    reply_markup: kb,
+    disable_web_page_preview: true,
+  });
+  return;
+}
+
+if (p.a === 'a:admin_outbox_clear_q') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
       const page = Math.max(0, Number(p.p) || 0);
@@ -26839,7 +27565,10 @@ Username: ${escapeHtml(uname)}
         .text('🧹 Очистить', `a:admin_outbox_clear|p:${page}`)
         .text('❌ Отмена', `a:admin_outbox|p:${page}`)
         .row()
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('⬅️ Коммуникации', 'a:admin_comms')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
       await safeEditOrReply(ctx, `🧹 <b>Очистить Outbox?</b>
 
 Будет удалено записей: <b>${escapeHtml(String(total || 0))}</b>`, { parse_mode: 'HTML', reply_markup: kb });
@@ -26882,7 +27611,8 @@ Username: ${escapeHtml(uname)}
         .text('📎 Вставить', `a:adm_ph|r:tpl_add|p:${page}`)
         .row()
         .text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`)
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(
         ctx,
@@ -26910,7 +27640,8 @@ Username: ${escapeHtml(uname)}
         .text('📎 Вставить', `a:adm_ph|r:tpl_edit|tid:${String(it.id || '')}|p:${page}`)
         .row()
         .text('⬅️ Назад', `a:admin_umsg_tpl_view|tid:${String(it.id || '')}|p:${page}`)
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(
         ctx,
@@ -26933,7 +27664,8 @@ Username: ${escapeHtml(uname)}
         .text('❌ Отмена', `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`)
         .row()
         .text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`)
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(ctx, `🗑 <b>Удалить шаблон?</b>\n\nID: <code>${escapeHtml(tplId)}</code>`, { parse_mode: 'HTML', reply_markup: kb });
       return;
@@ -26962,8 +27694,8 @@ Username: ${escapeHtml(uname)}
       const kb = new InlineKeyboard()
         .text('♻️ Сбросить', `a:admin_umsg_tpl_reset|p:${page}`)
         .text('❌ Отмена', `a:admin_umsg_tpls|p:${page}`)
-        .row()
-        .text('⬅️ Админка', 'a:admin_home');
+        .row();
+      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(ctx, '♻️ <b>Сбросить шаблоны к дефолту?</b>\n\nКастомные шаблоны в Redis будут удалены.', { parse_mode: 'HTML', reply_markup: kb });
       return;
@@ -27068,8 +27800,7 @@ Username: ${escapeHtml(uname)}
         try { await ctx.answerCallbackQuery({ text: 'Шаблон не найден.' }); } catch {}
         return;
       }
-
-      const safe = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
+      const safe = clipCodepoints(raw, TG_SAFE_BODY_MAX).text;
       const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
 
       let ok = false;
@@ -27093,7 +27824,10 @@ Username: ${escapeHtml(uname)}
             .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
             .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
             .row()
-            .text('⬅️ Админка', 'a:admin_home');
+            .text('⬅️ Операции', 'a:admin_ops')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home');
 
           const text = `✅ Быстрый ответ отправлен (tg:${targetTgId}).`;
           const opts = { reply_markup: kb, disable_web_page_preview: true };
@@ -27308,7 +28042,7 @@ Username: ${escapeHtml(uname)}
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
         return;
       }
@@ -27326,7 +28060,7 @@ Username: ${escapeHtml(uname)}
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
         return;
       }
@@ -27356,7 +28090,7 @@ Username: ${escapeHtml(uname)}
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
         return;
       }
@@ -27403,7 +28137,11 @@ Username: ${escapeHtml(uname)}
         const rl = await rateLimit(k(['rl', 'bc_confirm', ctx.from.id]), { limit: 1, windowSec: 60 });
         if (!rl.ok && !rl.allowed) {
           await safeEditOrReply(ctx, `⏳ Подожди минуту перед следующей рассылкой.`, {
-            reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
+            reply_markup: (() => {
+          const kb = new InlineKeyboard();
+          kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+          return kb;
+        })()
           });
           return;
         }
@@ -27413,7 +28151,7 @@ Username: ${escapeHtml(uname)}
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
         return;
       }
@@ -27432,12 +28170,20 @@ Username: ${escapeHtml(uname)}
         try { await clearDraft(ctx.from.id); } catch {}
         await safeEditOrReply(ctx,
           `✅ <b>Рассылка #${bc.id} создана</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n⏳ Рассылка будет запущена при следующем тике cron.\nПрогресс можно отслеживать в Админке.`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home') }
+          { parse_mode: 'HTML', reply_markup: (() => {
+          const kb = new InlineKeyboard();
+          kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+          return kb;
+        })() }
         );
       } catch (err) {
         console.error('[ADMIN] broadcast confirm error', err);
         await safeEditOrReply(ctx, '⚠️ Ошибка при создании рассылки.', {
-          reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
+          reply_markup: (() => {
+          const kb = new InlineKeyboard();
+          kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+          return kb;
+        })()
         });
       }
       return;
@@ -27546,6 +28292,9 @@ Username: ${escapeHtml(uname)}
             .text('⬅️ Отмена', `a:aud|h:${h}|p:0`)
             .row()
             .text('⬅️ Админка', 'a:admin_home')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home')
         }
       );
       await setExpectText(ctx.from.id, { type: 'aud_search', h }, 15 * 60);
@@ -27621,7 +28370,7 @@ Username: ${escapeHtml(uname)}
       await ctx.answerCallbackQuery();
       const cur = await getSysBool(SYS_KEYS.pay_accept, CFG.PAYMENTS_ACCEPT_DEFAULT);
       await setSysBool(SYS_KEYS.pay_accept, !cur);
-      await renderAdminHome(ctx);
+      await renderAdminSystem(ctx);
       return;
     }
     if (p.a === 'a:admin_pay_auto_toggle') {
@@ -27630,7 +28379,7 @@ Username: ${escapeHtml(uname)}
       await ctx.answerCallbackQuery();
       const cur = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
       await setSysBool(SYS_KEYS.pay_auto_apply, !cur);
-      await renderAdminHome(ctx);
+      await renderAdminSystem(ctx);
       return;
     }
 
@@ -27640,7 +28389,7 @@ Username: ${escapeHtml(uname)}
       await ctx.answerCallbackQuery();
       const cur = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
       await setSysBool(SYS_KEYS.matchfeat_auto_apply, !cur);
-      await renderAdminHome(ctx);
+      await renderAdminSystem(ctx);
       return;
     }
 
@@ -27651,7 +28400,7 @@ Username: ${escapeHtml(uname)}
       await ctx.answerCallbackQuery();
       const cur = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
       await setSysBool(SYS_KEYS.broadcast_qstash_fanout, !cur);
-      await renderAdminHome(ctx);
+      await renderAdminSystem(ctx);
       return;
     }
 
@@ -27779,9 +28528,8 @@ Username: ${escapeHtml(uname)}
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      const kb = new InlineKeyboard()
-        .text('⬅️ Назад', 'a:admin_founder')
-        .text('⬅️ Админка', 'a:admin_home');
+      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_founder');
+      kbAdminFooter(kb, '⬅️ Система', 'a:admin_sys');
       await safeEditOrReply(ctx,
         `🗓 <b>Founder Sale — дедлайн</b>
 
@@ -27799,9 +28547,8 @@ Username: ${escapeHtml(uname)}
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      const kb = new InlineKeyboard()
-        .text('⬅️ Назад', 'a:admin_founder')
-        .text('⬅️ Админка', 'a:admin_home');
+      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_founder');
+      kbAdminFooter(kb, '⬅️ Система', 'a:admin_sys');
       await safeEditOrReply(ctx,
         `💰 <b>Founder Sale — цены (Stars)</b>
 
@@ -27820,9 +28567,8 @@ Username: ${escapeHtml(uname)}
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      const kb = new InlineKeyboard()
-        .text('⬅️ Назад', 'a:admin_founder')
-        .text('⬅️ Админка', 'a:admin_home');
+      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_founder');
+      kbAdminFooter(kb, '⬅️ Система', 'a:admin_sys');
       await safeEditOrReply(ctx,
         `💳 <b>Founder Sale — кредиты</b>
 
@@ -31927,7 +32673,7 @@ async function renderBroadcastAudiencePicker(ctx) {
   const draft = await getDraft(ctx.from.id);
   if (!draft || !draft.type) {
     await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
-      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
     });
     return;
   }
@@ -31961,7 +32707,7 @@ async function renderBroadcastAudiencePicker(ctx) {
 async function renderBroadcastPreview(ctx, draft) {
   if (!draft || !draft.type) {
     await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home')
+      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
     });
     return;
   }
@@ -32098,38 +32844,33 @@ async function renderBroadcastView(ctx, broadcastId) {
 
 async function renderAdminHome(ctx) {
   // Access is checked in the callback handler via isSuperAdminTg().
-
-  let pending = 0;
-  if (CFG.OFFICIAL_PUBLISH_ENABLED) {
-    try {
-      pending = await safeOfficialPosts(() => db.countOfficialPending(), async () => 0);
-    } catch {
-      pending = 0;
-    }
-  }
-
   let text = '👑 Админ-панель\n\n';
-  text += '• Пользователи: каталог (фильтры, пагинация)\n';
-  text += '• Платежи: manual/apply\n';
-  text += '• Рассылка: broadcast по аудитории\n';
-  text += '• Аудит: глобальный поиск/экспорт событий\n';
-  text += '• Метрики: DAU/MAU, конверсии, воронки\n';
-  if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• Офиц.канал: очередь публикаций (${pending})\n`;
+  text += 'Выбери раздел:\n';
+  text += '• 🧰 Операции — пользователи, платежи, рассылка, аудит, метрики\n';
+  text += '• 💬 Коммуникации — объявление, шаблоны DM, outbox, офиц.канал\n';
+  text += '• ⚙️ Система — тумблеры, QStash, модераторы, подарки, Founder\n';
 
-  const payAccept = await getSysBool(SYS_KEYS.pay_accept, CFG.PAYMENTS_ACCEPT_DEFAULT);
-  const payAutoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
-  const mfAutoApply = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
-  const bcFanout = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
+  const kb = new InlineKeyboard()
+    .text('🧰 Операции', 'a:admin_ops')
+    .text('💬 Коммуникации', 'a:admin_comms')
+    .row()
+    .text('⚙️ Система', 'a:admin_sys')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 
-  text += `\n⚙️ Платежи: прием ${payAccept ? 'ON' : 'OFF'} • автовыдача ${payAutoApply ? 'ON' : 'OFF'}\n`;
-  text += `⚙️ Match/Feat auto-apply: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
-  text += `⚙️ Broadcast fan-out (QStash): ${bcFanout ? 'ON' : 'OFF'}\n`;
+  await safeEditOrReply(ctx, text, { reply_markup: kb });
+}
 
-  const founderState = await getFounderSaleState();
-  const founderOn = !!founderState.effective?.enabled;
-  const founderActive = !!founderState.active;
-  const founderUntil = founderState.deadlineLabel || '—';
-  text += `⚙️ Founder Sale: ${founderOn ? 'ON' : 'OFF'} • ${founderActive ? 'ACTIVE' : 'INACTIVE'} • до ${founderUntil}${founderState.hasOverride ? ' (ADMIN)' : ''}\n`;
+
+async function renderAdminOps(ctx) {
+  // Access is checked in the callback handler via isSuperAdminTg().
+  let text = '🧰 Админка → Операции\n\n';
+  text += '• 👥 Пользователи — каталог, фильтры, карточка\n';
+  text += '• 💰 Платежи — manual/apply\n';
+  text += '• 📣 Рассылка — broadcast по аудитории\n';
+  text += '• 📜 Аудит — поиск/экспорт событий\n';
+  text += '• 📈 Метрики — DAU/MAU, конверсии\n';
 
   const kb = new InlineKeyboard()
     .text('👥 Пользователи', 'a:admin_users|f:all|p:0')
@@ -32139,41 +32880,95 @@ async function renderAdminHome(ctx) {
     .text('📜 Аудит', 'a:aud|h:24|p:0')
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
-    .row();
-
-  kb.text('📣 Объявление', 'a:admin_notice')
-    .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
-    .row();
-
-  kb.text('📤 Outbox', 'a:admin_outbox|p:0').row();
-
-  kb.text('🔥 Founder Sale', 'a:admin_founder').row();
-
-  kb.text(`💳 Прием: ${payAccept ? 'ON' : 'OFF'}`, 'a:admin_pay_accept_toggle')
-    .text(`⚙️ Автовыдача: ${payAutoApply ? 'ON' : 'OFF'}`, 'a:admin_pay_auto_toggle')
     .row()
-    .text(`🎯🔥 Match/Feat: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
-    .row();
-
-  kb.text(`📣 QStash fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
-    .text('🛰 QStash статус', 'a:admin_qstash_status')
-    .row();
-
-  if (CFG.OFFICIAL_PUBLISH_ENABLED) {
-    kb.text(`📣 Офиц.канал (${pending})`, 'a:off_queue|p:0').row();
-  }
-
-  kb.text('➕ Модератор', 'a:admin_mod_add')
-    .text('📋 Модераторы', 'a:admin_mod_list')
+    .text('⬅️ Админка', 'a:admin_home')
     .row()
-    .text('🎁 Подарить подписку', 'a:adm_gift')
-    .row()
-	    .text('📋 Меню', 'a:menu')
+    .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { reply_markup: kb });
 }
 
+
+async function renderAdminComms(ctx) {
+  // Access is checked in the callback handler via isSuperAdminTg().
+  let pending = 0;
+  if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+    try {
+      pending = await safeOfficialPosts(() => db.countOfficialPending(), async () => 0);
+    } catch {
+      pending = 0;
+    }
+  }
+
+  let text = '💬 Админка → Коммуникации\n\n';
+  text += '• 📣 Системное объявление — баннер без рассылки (показ 1 раз)\n';
+  text += '• 📌 Шаблоны DM — быстрые ответы из админки\n';
+  text += '• 📤 Outbox — журнал отправок\n';
+  if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• 📣 Офиц.канал — очередь публикаций (${pending})\n`;
+
+  const kb = new InlineKeyboard()
+    .text('📣 Объявление', 'a:admin_notice')
+    .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
+    .row()
+    .text('📤 Outbox', 'a:admin_outbox|p:0');
+
+  if (CFG.OFFICIAL_PUBLISH_ENABLED) {
+    kb.row().text(`📣 Офиц.канал (${pending})`, 'a:off_queue|p:0');
+  }
+
+  kb
+    .row()
+    .text('⬅️ Админка', 'a:admin_home')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { reply_markup: kb });
+}
+
+
+async function renderAdminSystem(ctx) {
+  // Access is checked in the callback handler via isSuperAdminTg().
+  const payAccept = await getSysBool(SYS_KEYS.pay_accept, CFG.PAYMENTS_ACCEPT_DEFAULT);
+  const payAutoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
+  const mfAutoApply = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
+  const bcFanout = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
+
+  const founderState = await getFounderSaleState();
+  const founderOn = !!founderState.effective?.enabled;
+  const founderActive = !!founderState.active;
+  const founderUntil = founderState.deadlineLabel || '—';
+
+  let text = '⚙️ Админка → Система\n\n';
+  text += `Платежи: прием ${payAccept ? 'ON' : 'OFF'} • автовыдача ${payAutoApply ? 'ON' : 'OFF'}\n`;
+  text += `Match/Feat auto-apply: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
+  text += `Broadcast fan-out (QStash): ${bcFanout ? 'ON' : 'OFF'}\n`;
+  text += `Founder Sale: ${founderOn ? 'ON' : 'OFF'} • ${founderActive ? 'ACTIVE' : 'INACTIVE'} • до ${founderUntil}${founderState.hasOverride ? ' (ADMIN)' : ''}\n`;
+
+  const kb = new InlineKeyboard()
+    .text(`💳 Прием: ${payAccept ? 'ON' : 'OFF'}`, 'a:admin_pay_accept_toggle')
+    .text(`⚙️ Автовыдача: ${payAutoApply ? 'ON' : 'OFF'}`, 'a:admin_pay_auto_toggle')
+    .row()
+    .text(`🎯🔥 Match/Feat: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
+    .row()
+    .text(`📣 QStash fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
+    .text('🛰 QStash статус', 'a:admin_qstash_status')
+    .row()
+    .text('🔥 Founder Sale', 'a:admin_founder')
+    .row()
+    .text('➕ Модератор', 'a:admin_mod_add')
+    .text('📋 Модераторы', 'a:admin_mod_list')
+    .row()
+    .text('🎁 Подарить подписку', 'a:adm_gift')
+    .row()
+    .text('⬅️ Админка', 'a:admin_home')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { reply_markup: kb });
+}
 
 async function renderAdminSysNotice(ctx) {
   const n = await getSysNotice();
@@ -32242,7 +33037,7 @@ async function renderAdminSysNotice(ctx) {
     .text('🧹 Очистить текст', 'a:admin_notice_clear')
     .text('🚀 Опубликовать (новая версия)', 'a:admin_notice_publish')
     .row()
-    .text('⬅️ Админка', 'a:admin_home')
+    .text('⬅️ Коммуникации', 'a:admin_comms')
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
@@ -32357,7 +33152,7 @@ Broadcast cooldown: <b>${cdActive ? 'ACTIVE' : 'OFF'}</b>`;
     .text('🧪 Send signed ping', 'a:admin_qstash_ping')
     .row()
     .text(`📣 Fan-out: ${fanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
-    .text('⬅️ Админка', 'a:admin_home')
+    .text('⬅️ Система', 'a:admin_sys')
     .row()
 	    .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
@@ -32411,7 +33206,7 @@ async function renderAdminDmTemplates(ctx, page = 0) {
 
   kb.text('📎 Вставить', `a:adm_ph|r:tpl_list|p:${p}`).row();
 
-  kb.text('⬅️ Админка', 'a:admin_home');
+  kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -32421,9 +33216,11 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
   const it = findAdminDmTemplate(tpls.items, tplId);
   if (!it) {
     await safeEditOrReply(ctx, '⚠️ Шаблон не найден.', {
-      reply_markup: new InlineKeyboard()
-        .text('⬅️ Назад', `a:admin_umsg_tpls|p:${Math.max(0, Number(backPage) || 0)}`)
-        .text('⬅️ Админка', 'a:admin_home')
+      reply_markup: (() => {
+        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_umsg_tpls|p:${Math.max(0, Number(backPage) || 0)}`);
+        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+        return kb;
+      })()
     });
     return;
   }
@@ -32442,7 +33239,9 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
     .text('📎 Вставить', `a:adm_ph|r:tpl_view|tid:${String(it.id || '')}|p:${Math.max(0, Number(backPage) || 0)}`)
     .row()
     .text('⬅️ Назад', `a:admin_umsg_tpls|p:${Math.max(0, Number(backPage) || 0)}`)
-    .text('⬅️ Админка', 'a:admin_home');
+    .row();
+
+  kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -32510,7 +33309,7 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
     }
 
     kb.text('🧹 Очистить', `a:admin_outbox_clear_q|p:${p}`).row();
-    kb.text('⬅️ Админка', 'a:admin_home');
+    kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -32521,7 +33320,11 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
 
     if (!it) {
       await safeEditOrReply(ctx, '⚠️ Запись не найдена (возможно, очищено).', {
-        reply_markup: new InlineKeyboard().text('⬅️ К списку', `a:admin_outbox|p:${p}`).text('⬅️ Админка', 'a:admin_home')
+        reply_markup: (() => {
+        const kb = new InlineKeyboard().text('⬅️ К списку', `a:admin_outbox|p:${p}`);
+        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+        return kb;
+      })()
       });
       return;
     }
@@ -32587,9 +33390,20 @@ Hash: <code>${escapeHtml(hash)}</code>` : '') +
       kb.text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`)
         .text('✉️ Написать', `a:adm_umsg|id:${uid}|f:all|p:0`)
         .row();
+
+      const canRepeat = !!(Number(it.target_tg_id || 0) && String(it.snippet || it.preview || '').trim());
+      if (canRepeat) {
+        kb.text('✉️ Повторить', `a:admin_outbox_repeat|i:${index}|p:${p}`)
+          .text('📝 Заметка', `a:admin_outbox_note|i:${index}|p:${p}`)
+          .row()
+          .text('📌 В шаблон', `a:admin_outbox_to_tpl|i:${index}|p:${p}`)
+          .row();
+      } else {
+        kb.text('📝 Заметка', `a:admin_outbox_note|i:${index}|p:${p}`).row();
+      }
     }
 
-    kb.text('⬅️ Админка', 'a:admin_home');
+    kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -32660,7 +33474,10 @@ async function renderAdminFounder(ctx) {
     .text('🔗 Ссылки', 'a:admin_founder_links')
     .text('📝 Тексты', 'a:admin_founder_texts')
     .row()
-    .text('⬅️ Админка', 'a:admin_home');
+    .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -32714,7 +33531,10 @@ async function renderAdminFounderLinks(ctx) {
   kb.text('📝 Тексты', 'a:admin_founder_texts')
     .row()
     .text('⬅️ Founder Sale', 'a:admin_founder')
-    .text('⬅️ Админка', 'a:admin_home');
+    .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -32800,7 +33620,10 @@ async function renderAdminFounderTexts(ctx) {
   kb.text('🔗 Ссылки', 'a:admin_founder_links')
     .row()
     .text('⬅️ Founder Sale', 'a:admin_founder')
-    .text('⬅️ Админка', 'a:admin_home');
+    .text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -32888,9 +33711,10 @@ async function renderAdminMetrics(ctx, days = 14) {
     .text('30д', 'a:admin_metrics|d:30')
     .text('90д', 'a:admin_metrics|d:90')
     .row()
-    .text('📋 Модераторы', 'a:admin_mod_list')
+    .text('⬅️ Операции', 'a:admin_ops')
     .row()
-    .text('⬅️ Админка', 'a:admin_home');
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -32922,7 +33746,10 @@ async function renderAdminModerators(ctx) {
     kb.text(`🗑 ${who}`, `a:admin_mod_rm|uid:${r.user_id}`).row();
   }
 
-  kb.text('⬅️ Админка', 'a:admin_home');
+  kb.text('⬅️ Система', 'a:admin_sys')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -33044,7 +33871,7 @@ async function renderAdminAudit(ctx, { afterHours = 24, page = 0 } = {}) {
   if (hasNext) kb.text('➡️', `a:aud|h:${h}|p:${p + 1}`);
   if (p > 0 || hasNext) kb.row();
 
-  kb.text('⬅️ Админка', 'a:admin_home');
+  kb.text('⬅️ Операции', 'a:admin_ops');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -33110,6 +33937,9 @@ async function sendAdminAuditExport(ctx, afterHours = 24) {
       reply_markup: new InlineKeyboard()
         .text('⬅️ Аудит', `a:aud|h:${afterHours}|p:0`)
         .text('⬅️ Админка', 'a:admin_home')
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home')
     }
   );
 }
@@ -33158,21 +33988,45 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
 `;
   const kb = new InlineKeyboard();
 
+  // STEP196: show admin note marker in directory only in DM to avoid accidental leaks in group chats.
+  const inPrivate = String(ctx.chat?.type || '') === 'private';
+  const notesMap = inPrivate ? await getAdminUserNotesBulk(rows.map((r) => r.user_id)) : new Map();
+
   if (!rows.length) {
     text += 'Пользователей нет по этому фильтру.';
   } else {
     for (const r of rows) {
       const who = r.tg_username ? '@' + r.tg_username : 'id ' + r.tg_id;
       const when = r.created_at ? new Date(r.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
-      text += `• ${roleBadges(r)} <b>${escapeHtml(who)}</b> · ${escapeHtml(when)}\n`;
+
+      let noteSuffix = '';
+      if (inPrivate) {
+        const note = notesMap.get(Number(r.user_id || 0));
+        if (note) {
+          const tags = Array.isArray(note.tags) ? note.tags : [];
+          const tagTitles = tags.map(adminUserNoteTagTitle).filter(Boolean);
+          const short = tagTitles.slice(0, 2);
+          const tagPart = short.length
+            ? ` 🏷 ${escapeHtml(short.join(', '))}${tagTitles.length > 2 ? '…' : ''}`
+            : '';
+          noteSuffix = ` · 📝${tagPart}`;
+        }
+      }
+
+      text += `• ${roleBadges(r)} <b>${escapeHtml(who)}</b> · ${escapeHtml(when)}${noteSuffix}\n`;
     }
   }
 
-  // If small result set (search or filtered) — show direct card buttons
-  if (rows.length >= 1 && rows.length <= 5) {
+  // STEP197: If small result set — show quick actions right in the list (DM only).
+  // Helps support flows without opening the card first.
+  if (inPrivate && rows.length >= 1 && rows.length <= 5) {
     for (const r of rows) {
       const who = r.tg_username ? '@' + r.tg_username : 'id ' + r.tg_id;
-      kb.text(`👤 ${who}`, `a:adm_ucard|id:${r.user_id}|f:${filter}|p:${p}`).row();
+      const hasNote = notesMap.has(Number(r.user_id || 0));
+      kb.text(`👤 ${who}${hasNote ? ' 📝' : ''}`, `a:adm_ucard|id:${r.user_id}|f:${filter}|p:${p}`);
+      kb.text('✉️', `a:adm_umsg|id:${r.user_id}|f:${filter}|p:${p}`);
+      kb.text('📝', `a:adm_unote|id:${r.user_id}|f:${filter}|p:${p}`);
+      kb.row();
     }
   }
 
@@ -33204,7 +34058,7 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
   if (hasNext) kb.text('➡️ Далее', `a:admin_users|f:${filter}|p:${p + 1}`);
   if (p > 0 || hasNext) kb.row();
 
-  kb.text('⬅️ Админка', 'a:admin_home');
+  kb.text('⬅️ Операции', 'a:admin_ops');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -33213,7 +34067,7 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   const card = await db.getUserCardById(Number(userId));
   if (!card) {
     await safeEditOrReply(ctx, '⚠️ Пользователь не найден.', {
-      reply_markup: new InlineKeyboard().text('⬅️ К списку', `a:admin_users|f:${backFilter}|p:${backPage}`)
+      reply_markup: new InlineKeyboard().text('⬅️ К списку', `a:admin_users|f:${backFilter}|p:${backPage}`),
     });
     return;
   }
@@ -33239,20 +34093,25 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   text += `<b>Обновлён:</b> ${msk(card.updated_at)}\n`;
   if (card.banned_at) text += `🚫 <b>ЗАБЛОКИРОВАН:</b> ${msk(card.banned_at)}\n`;
 
-  // Admin note (Redis-only, STEP194). We show the snippet only in DM to avoid leaks in group chats.
+  // Admin note (Redis-only, STEP194/195). Show snippet+tags only in DM to avoid leaks in group chats.
   const inPrivate = String(ctx.chat?.type || '') === 'private';
   if (inPrivate) {
     const note = await getAdminUserNote(card.id);
+    const tags = Array.isArray(note?.tags) ? note.tags : [];
+    const tagTitles = tags.map(adminUserNoteTagTitle).filter(Boolean);
+
     if (note?.text) {
       const sn = clipText(String(note.text).replace(/\n+/g, ' / '), 180);
       text += `📝 <b>Заметка:</b> ${escapeHtml(sn)}\n`;
     } else {
       text += `📝 <b>Заметка:</b> —\n`;
     }
+
+    text += `🏷 <b>Теги:</b> ${tagTitles.length ? escapeHtml(tagTitles.join(', ')) : '—'}\n`;
   } else {
     text += `📝 <b>Заметка:</b> <i>(только в DM)</i>\n`;
+    text += `🏷 <b>Теги:</b> <i>(только в DM)</i>\n`;
   }
-
 
   // Brand info
   if (isBrand) {
@@ -33264,8 +34123,7 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
     const spentCr = Number(card.brand_credits_spent || 0);
     const giftedCr = Number(card.brand_credits_gifted || 0);
     const giftedPart = giftedCr > 0 ? `, подарочные: ${giftedCr}` : '';
-    text += `<b>Credits:</b> ${totalCr} (потрачено: ${spentCr}${giftedPart})
-`;
+    text += `<b>Credits:</b> ${totalCr} (потрачено: ${spentCr}${giftedPart})\n`;
     if (card.brand_trial_granted) text += `<b>Trial:</b> ✅ выдан ${msk(card.brand_trial_granted_at)}\n`;
     if (card._brand_profile) {
       const bp = card._brand_profile;
@@ -33305,7 +34163,6 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   kb.text('✉️ Написать', `a:adm_umsg|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
   kb.text('📝 Заметка', `a:adm_unote|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
 
-
   // Quick gift from card
   kb.text('🎁 Подарить подписку', `a:adm_ugift|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
 
@@ -33334,17 +34191,27 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   }
 
   kb.text('⬅️ К списку', `a:admin_users|f:${backFilter}|p:${backPage}`).row();
-  kb.text('⬅️ Админка', 'a:admin_home');
+  kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
 
-  
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
 async function renderAdminUserNote(ctx, userId, backFilter = 'all', backPage = 0) {
   const uid = Number(userId || 0);
   const f = String(backFilter || 'all').toLowerCase();
   const page = Math.max(0, Number(backPage) || 0);
 
-  const backKb = new InlineKeyboard()
-    .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
-    .text('⬅️ Админка', 'a:admin_home');
+const adminTgId = Number(ctx.from?.id || 0);
+const ret = await getAdminUserNoteReturn(adminTgId);
+const hasRet = !!(ret && Number(ret.uid || 0) === uid && String(ret.backCb || '').trim());
+const sectionBackText = hasRet ? String(ret.sectionBackText || '⬅️ Коммуникации') : '⬅️ Операции';
+const sectionBackCb = hasRet ? String(ret.sectionBackCb || 'a:admin_comms') : 'a:admin_ops';
+
+const backKb = new InlineKeyboard();
+backKb.text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`);
+if (hasRet) backKb.text(String(ret.backText || '⬅️ Outbox'), String(ret.backCb));
+backKb.row();
+kbAdminFooter(backKb, sectionBackText, sectionBackCb);
 
   if (!uid) {
     await safeEditOrReply(ctx, '⚠️ Нет user_id.', { reply_markup: backKb });
@@ -33356,11 +34223,7 @@ async function renderAdminUserNote(ctx, userId, backFilter = 'all', backPage = 0
   if (chatType !== 'private') {
     await safeEditOrReply(
       ctx,
-      `📝 <b>Заметка админа</b>
-
-Эта функция доступна только в <b>личном чате</b> с ботом (DM), чтобы заметки не светились в группах.
-
-Открой бота в личке и зайди в карточку пользователя ещё раз.`,
+      `📝 <b>Заметка админа</b>\n\nЭта функция доступна только в <b>личном чате</b> с ботом (DM), чтобы заметки не светились в группах.\n\nОткрой бота в личке и зайди в карточку пользователя ещё раз.`,
       { parse_mode: 'HTML', reply_markup: backKb }
     );
     return;
@@ -33375,49 +34238,57 @@ async function renderAdminUserNote(ctx, userId, backFilter = 'all', backPage = 0
   const note = await getAdminUserNote(uid);
 
   const uname = card.tg_username ? '@' + String(card.tg_username) : '—';
-  const updated = note?.updatedAt ? (new Date(note.updatedAt).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })) : '—';
+  const tags = Array.isArray(note?.tags) ? note.tags : [];
+  const tagTitles = tags.map(adminUserNoteTagTitle).filter(Boolean);
+
+  const updated = note?.updatedAt
+    ? (new Date(note.updatedAt).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }))
+    : '—';
   const by = note?.byAdminTgId
     ? (note.byAdminUsername ? ('@' + String(note.byAdminUsername).replace(/^@/, '')) : ('tg:' + String(note.byAdminTgId)))
     : '—';
 
-  let text = `📝 <b>Заметка (admin)</b>
-
-User ID: <code>${uid}</code>
-TG ID: <code>${escapeHtml(String(card.tg_id || '—'))}</code>
-Username: ${escapeHtml(uname)}
-
-`;
+  let text = `📝 <b>Заметка (admin)</b>\n\n` +
+    `User ID: <code>${uid}</code>\n` +
+    `TG ID: <code>${escapeHtml(String(card.tg_id || '—'))}</code>\n` +
+    `Username: ${escapeHtml(uname)}\n\n` +
+    `🏷 <b>Теги</b>: ${tagTitles.length ? escapeHtml(tagTitles.join(', ')) : '—'}\n` +
+    `<i>Нажимай на кнопки тегов ниже — включить/выключить.</i>\n\n`;
 
   if (note?.text) {
-    text += `<b>Текст</b>
-<pre>${escapeHtml(String(note.text))}</pre>
-
-`;
+    text += `<b>Текст</b>\n<pre>${escapeHtml(String(note.text))}</pre>\n\n`;
   } else {
-    text += `<i>Пока пусто.</i>
-
-`;
+    text += `<i>Текст заметки пока пуст.</i>\n\n`;
   }
 
-  text += `Updated: <code>${escapeHtml(String(updated))}</code>
-By: <code>${escapeHtml(String(by))}</code>
-`;
+  text += `Updated: <code>${escapeHtml(String(updated))}</code>\n` +
+    `By: <code>${escapeHtml(String(by))}</code>\n`;
 
-  const kb = new InlineKeyboard()
-    .text('✏️ Изменить', `a:adm_unote_edit|id:${uid}|f:${f}|p:${page}`);
+  const kb = new InlineKeyboard();
 
-  if (note?.text) kb.text('🧹 Очистить', `a:adm_unote_clear_q|id:${uid}|f:${f}|p:${page}`);
-  kb.row();
-  kb.text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
-    .text('⬅️ Админка', 'a:admin_home');
+  kb.text('✏️ Изменить текст', `a:adm_unote_edit|id:${uid}|f:${f}|p:${page}`).row();
+
+  // Tag toggles (strict allowlist)
+  for (let i = 0; i < ADMIN_USER_NOTE_TAGS.length; i++) {
+    const t = ADMIN_USER_NOTE_TAGS[i];
+    const on = tags.includes(t.id);
+    const label = on ? `✅ ${t.title}` : `🏷 ${t.title}`;
+    kb.text(label, `a:adm_unote_tag|id:${uid}|t:${t.id}|f:${f}|p:${page}`);
+    if (i % 2 === 1) kb.row();
+  }
+  if (ADMIN_USER_NOTE_TAGS.length % 2 === 1) kb.row();
+
+  if (hasAdminUserNoteData(note)) {
+    kb.text('🧹 Очистить всё', `a:adm_unote_clear_q|id:${uid}|f:${f}|p:${page}`).row();
+  }
+
+kb.text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`);
+if (hasRet) kb.text(String(ret.backText || '⬅️ Outbox'), String(ret.backCb));
+kb.row();
+kbAdminFooter(kb, sectionBackText, sectionBackCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
-
-
-await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
-}
-
 async function sendAdminMessageToUser(ctx, payload, nav = {}) {
   const adminTgId = Number(payload?.byAdminTgId || ctx.from?.id || 0);
   const targetUserId = Number(payload?.targetUserId || 0);
@@ -33427,9 +34298,17 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
   const bodyHtmlFallback = String(payload?.bodyHtml || '').trim();
   const templateId = String(payload?.templateId || payload?.tplId || '').trim();
   const templateLabel = String(payload?.templateLabel || '').trim();
-  const f = String(nav.f || 'all').toLowerCase();
-  const page = Math.max(0, Number(nav.page) || 0);
-  const backUid = Number(nav.backUid || targetUserId || 0);
+const f = String(nav.f || 'all').toLowerCase();
+const page = Math.max(0, Number(nav.page) || 0);
+const backUid = Number(nav.backUid || targetUserId || 0);
+
+// Optional return route (used by Outbox quick actions, STEP204)
+const retCb = String(payload?.retCb || nav.retCb || '').trim();
+const retText = String(payload?.retText || nav.retText || '⬅️ Назад').trim();
+const sectionBackText = String(payload?.sectionBackText || nav.sectionBackText || '').trim();
+const sectionBackCb = String(payload?.sectionBackCb || nav.sectionBackCb || '').trim();
+const sectionText = sectionBackText || (retCb ? '⬅️ Коммуникации' : '⬅️ Операции');
+const sectionCb = sectionBackCb || (retCb ? 'a:admin_comms' : 'a:admin_ops');
 
   // Expand placeholders (best-effort) — both in preview and at send time.
   let expandedPlain = '';
@@ -33452,12 +34331,21 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
   // Fallback (older payloads)
   if (!expandedPlain) expandedPlain = String(payload?.plain || '').trim();
 
-  const expandedSafe = expandedPlain.length > 3500 ? (expandedPlain.slice(0, 3500) + '…') : expandedPlain;
+  const expandedMeta = clipCodepoints(expandedPlain, TG_SAFE_BODY_MAX);
+  const expandedSafe = expandedMeta.text;
   const bodyHtml = bodyHtmlFallback || escapeHtml(expandedSafe);
 
   if (!adminTgId || !targetTgId || !bodyHtml) {
     await safeEditOrReply(ctx, '⚠️ Не удалось отправить: не хватает данных.', {
-      reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
+      reply_markup: (() => {
+        const cardCb = `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`;
+        const kb = new InlineKeyboard();
+        if (retCb) kb.text(retText || '⬅️ Назад', retCb).text('👤 Карточка', cardCb);
+        else kb.text('⬅️ К карточке', cardCb);
+        kb.row();
+        kbAdminFooter(kb, sectionText, sectionCb);
+        return kb;
+      })()
     });
     return;
   }
@@ -33470,9 +34358,15 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
     const ok = await redis.set(dkey, '1', { nx: true, ex: 60 });
     if (!ok) {
       await safeEditOrReply(ctx, '⏳ Это сообщение уже отправлялось недавно (anti-двойной клик).', {
-        reply_markup: new InlineKeyboard()
-          .text('⬅️ К карточке', `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`)
-          .text('⬅️ Админка', 'a:admin_home')
+        reply_markup: (() => {
+          const cardCb = `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`;
+          const kb = new InlineKeyboard();
+          if (retCb) kb.text(retText || '⬅️ Назад', retCb).text('👤 Карточка', cardCb);
+          else kb.text('⬅️ К карточке', cardCb);
+          kb.row();
+          kbAdminFooter(kb, sectionText, sectionCb);
+          return kb;
+        })()
       });
       return;
     }
@@ -33480,8 +34374,12 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
     // If Redis is degraded — skip dedup.
   }
 
-  const userMsg = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
-  const userKb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  const userMsg = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
+  const userKb = new InlineKeyboard()
+    .text('📋 Открыть меню', 'a:menu')
+    .text('💬 Поддержка', 'a:support')
+    .row()
+    .text('✅ Понятно', 'a:usr_ack');
 
   let ok = false;
   let err = '';
@@ -33521,22 +34419,36 @@ try {
   if (!ok) {
     await safeEditOrReply(ctx, `❌ <b>Не удалось отправить</b>\n\nПользователь: <b>${escapeHtml(uname)}</b> (tg:<code>${targetTgId}</code>)\n\nОшибка: <code>${escapeHtml(err || 'unknown')}</code>`, {
       parse_mode: 'HTML',
-      reply_markup: new InlineKeyboard()
-        .text('⬅️ Назад', `a:adm_umsg|id:${backUid}|f:${f}|p:${page}`)
-        .text('⬅️ К карточке', `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`)
-        .row()
-        .text('⬅️ Админка', 'a:admin_home'),
+      reply_markup: (() => {
+        const cardCb = `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`;
+        const msgCb = `a:adm_umsg|id:${backUid}|f:${f}|p:${page}`;
+        const kb = new InlineKeyboard();
+        if (retCb) {
+          kb.text(retText || '⬅️ Назад', retCb).text('👤 Карточка', cardCb).row();
+          kb.text('✉️ Написать', msgCb).row();
+        } else {
+          kb.text('⬅️ Назад', msgCb).text('⬅️ К карточке', cardCb).row();
+        }
+        kbAdminFooter(kb, sectionText, sectionCb);
+        return kb;
+      })(),
+
       disable_web_page_preview: true,
     });
     return;
   }
 
-  // Admin confirm
-  const kbDone = new InlineKeyboard()
-    .text('✉️ Ещё сообщение', `a:adm_umsg|id:${backUid}|f:${f}|p:${page}`)
-    .text('👤 Карточка', `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`)
-    .row()
-    .text('⬅️ Админка', 'a:admin_home');
+// Admin confirm
+const cardCb = `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`;
+const msgCb = `a:adm_umsg|id:${backUid}|f:${f}|p:${page}`;
+const kbDone = new InlineKeyboard();
+if (retCb) {
+  kbDone.text(retText || '⬅️ Назад', retCb).text('👤 Карточка', cardCb).row();
+  kbDone.text('✉️ Ещё сообщение', msgCb).row();
+} else {
+  kbDone.text('✉️ Ещё сообщение', msgCb).text('👤 Карточка', cardCb).row();
+}
+kbAdminFooter(kbDone, sectionText, sectionCb);
   await safeEditOrReply(ctx, `✅ <b>Отправлено</b> пользователю ${escapeHtml(uname)} (tg:<code>${targetTgId}</code>).`, { parse_mode: 'HTML', reply_markup: kbDone });
 
   // Ops/admin log (best-effort): send to support chat if configured, else to super-admins.
@@ -33658,7 +34570,7 @@ async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
   }
   if ((Number(page) || 0) > 0) kb.text('⬅️ Назад', `a:admin_payments|st:${status}|p:${Number(page) - 1}`);
   if (rows.length === limit) kb.text('➡️ Далее', `a:admin_payments|st:${status}|p:${Number(page) + 1}`);
-    kb.row().text('⬅️ Админка', 'a:admin_home');
+    kb.row().text('⬅️ Операции', 'a:admin_ops');
 
   await safeEditOrReply(ctx, 
     `💳 <b>Payments</b> • <b>${escapeHtml(status)}</b>
@@ -33684,7 +34596,7 @@ async function renderAdminPaymentView(ctx, paymentId, backStatus = 'ORPHANED', p
   const kb = new InlineKeyboard();
   if (canApply) kb.text('✅ Apply (manual)', `a:admin_pay_apply|id:${p.id}|st:${backStatus}|p:${page}`).row();
   kb.text('⬅️ К списку', `a:admin_payments|st:${backStatus}|p:${page}`).row();
-  kb.text('⬅️ Админка', 'a:admin_home');
+  kb.text('⬅️ Операции', 'a:admin_ops');
 
   const text = `💳 <b>Payment #${p.id}</b>
 
