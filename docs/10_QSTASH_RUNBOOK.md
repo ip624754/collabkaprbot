@@ -156,6 +156,19 @@ Vercel → Project → **Settings → Environment Variables**:
 - снизь flow control (rate/parallelism)
 - проверь cooldown контур (Redis best-effort)
 
+Поведение системы при 429 (важно):
+- 429 **не является non-retryable** — получатели не “вылетают навсегда”.
+- Воркер ставит **Redis cooldown** (broadcast-level) и **сам перепубликует job** с задержкой.
+- Чтобы не сжигать Neon CU в момент массовых 429: воркер сначала проверяет cooldown **до DB reads**.
+- Пер-recipient защита: повторные 429 по одному и тому же пользователю переводятся в **quarantine** (status=`quarantined`, retry_after_until увеличен).
+
+Тюнинг quarantine:
+- `BROADCAST_QUARANTINE_THRESHOLD` (default 3)
+- `BROADCAST_QUARANTINE_SEC` (default 1200)
+
+Микро-оптимизация воркера (Redis memo):
+- `QSTASH_BC_COOLDOWN_MEMO_TTL_MS` (default 1500)
+
 ### Jobs в DLQ
 - смотри `last_error` в DB (`broadcast_sent_log`)
 - для `non_retryable=true` — это ожидаемо (пользователь заблокировал бота)

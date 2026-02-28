@@ -186,6 +186,11 @@ STEP167 (P0): **anti-ORPHANED платежи + буфер против гоно�
 
 Опционально (P3, расширение поверхности):
 - QStash fan-out доставка (serverless-safe): cron только энкьюит задачи, доставляет воркер `POST /api/qstash/broadcast-deliver`.
+- Воркер fan-out при 429:
+  - **не помечает non-retryable** (получатели не “теряются”)
+  - пишет `deferred/quarantined` и **сам перепубликует job** с `delaySec`
+  - проверяет Redis cooldown **до DB reads** (защита Neon от лавины)
+  - micro-memo: `QSTASH_BC_COOLDOWN_MEMO_TTL_MS`
 - Runtime toggle (Redis): `sys:broadcast_qstash_fanout` (по умолчанию OFF).
 - Setup/rollout: `docs/10_QSTASH_RUNBOOK.md`.
 - Admin self-check: 👑 Админка → 🛰 QStash статус → 🧪 Send signed ping (endpoint `POST /api/qstash/ping`).
