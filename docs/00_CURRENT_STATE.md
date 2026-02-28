@@ -223,7 +223,8 @@ STEP167 (P0): **anti-ORPHANED платежи + буфер против гоно�
 Но на практике Meta начала возвращать `pages=0` и местами блокировать доступ к Pages/приложению.
 Чтобы не ломать UX и не тормозить запуск, мы:
 - **скрыли кнопку IG подключения в профиле** (пользователь видит “функция пока недоступна”)
-- **оставили код/эндпоинты** и миграцию в базе, чтобы вернуться позже
+- **оставили код/миграции**, чтобы вернуться позже, но **закрыли OAuth API при скрытом UI**:
+  - если `IG_OAUTH_UI_ENABLED=0` → `/api/ig/oauth/*` возвращает **404** (нет “теневого API”)
 
 Доки:
 - Runbook: `docs/22_IG_GRAPH_OAUTH_2026.md`
@@ -255,8 +256,8 @@ STEP167 (P0): **anti-ORPHANED платежи + буфер против гоно�
 > Примечание: `CONTACT_UNLOCK_COST`, `CONTACT_UNLOCK_TTL_DAYS`, `BRAND_CREDITS_CACHE_TTL_SEC`, `BRAND_CREDITS_SNAP_TTL_SEC`, `BRAND_APP_ACCEPT_COST` читаются напрямую в `src/bot/bot.js` (не через `CFG`).
 
 Дополнительно (Instagram OAuth, сейчас UI скрыт):
+- `IG_OAUTH_UI_ENABLED` (0/1) — если 0, то **и UI, и `/api/ig/oauth/*` закрыты (404)**
 - `IG_OAUTH_ENABLED` (0/1)
-- `IG_OAUTH_UI_ENABLED` (0/1)
 - `IG_OAUTH_CLIENT_ID`
 - `IG_OAUTH_CLIENT_SECRET`
 - `PUBLIC_BASE_URL`
