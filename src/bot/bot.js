@@ -883,6 +883,82 @@ const DEFAULT_ADMIN_DM_TEMPLATES = [
   },
 ];
 
+// --- Admin DM placeholders (STEP191) ---
+// Strict allowlist for templates and free text. Unknown placeholders are left as-is.
+const ADMIN_DM_PLACEHOLDERS = [
+  { key: 'username', token: '{{username}}', desc: 'Юзернейм получателя (например @name). Если нет — пусто.' },
+  { key: 'user_id', token: '{{user_id}}', desc: 'TG ID получателя (цифры).' },
+  { key: 'first_name', token: '{{first_name}}', desc: 'Имя (Telegram first_name), best-effort. Если нет — пусто.' },
+  { key: 'role', token: '{{role}}', desc: 'Роль по Redis ui_mode: brand/creator/unknown.' },
+  { key: 'bot_name', token: '{{bot_name}}', desc: 'Название проекта (Collabka PR).' },
+];
+
+const ADMIN_DM_PLACEHOLDER_KEYS = new Set(ADMIN_DM_PLACEHOLDERS.map((x) => x.key));
+
+function adminDmPlaceholdersHelpHtml() {
+  let t = '📎 <b>Плейсхолдеры</b>\n\n';
+  t += 'Вставляй в шаблоны / свободный текст. При предпросмотре и отправке будут подставлены значения.\n\n';
+  for (const p of ADMIN_DM_PLACEHOLDERS) {
+    t += `• <code>${escapeHtml(p.token)}</code> — ${escapeHtml(p.desc)}\n`;
+  }
+  t += '\nПример:\n<pre>Привет, {{first_name}}!\nТвой username: {{username}}\nID: {{user_id}}</pre>';
+  return t;
+}
+
+async function buildAdminDmPlaceholderValues(ctx, targetTgId, opts = {}) {
+  const tgId = Number(targetTgId || 0);
+  const storedUsername = String(opts.username || '').replace(/^@/, '').trim();
+  const storedFirstName = String(opts.firstName || '').trim();
+
+  let chatUsername = '';
+  let chatFirstName = '';
+  try {
+    const chat = await ctx.api.getChat(tgId);
+    chatUsername = chat?.username ? String(chat.username).replace(/^@/, '').trim() : '';
+    chatFirstName = chat?.first_name ? String(chat.first_name).trim() : '';
+  } catch {}
+
+  const usernameRaw = (chatUsername || storedUsername || '').trim();
+  const username = usernameRaw ? '@' + usernameRaw : '';
+  const first_name = (chatFirstName || storedFirstName || '').trim();
+
+  let role = 'unknown';
+  try {
+    const mode = await resolveUiMode(tgId);
+    const m = normalizeUiMode(mode);
+    role = (m === UI_MODES.BRAND) ? 'brand' : 'creator';
+  } catch {}
+
+  return {
+    username,
+    user_id: String(tgId || ''),
+    first_name,
+    role,
+    bot_name: 'Collabka PR',
+  };
+}
+
+function applyAdminDmPlaceholders(input, values = {}) {
+  const src = String(input ?? '');
+  const used = new Set();
+  const unknown = new Set();
+
+  const out = src.replace(/{{\s*([a-z_]+)\s*}}/gi, (m, k0) => {
+    const key = String(k0 || '').toLowerCase().trim();
+    if (!ADMIN_DM_PLACEHOLDER_KEYS.has(key)) {
+      unknown.add(key);
+      return m;
+    }
+    used.add(key);
+    const v = values?.[key];
+    if (v === undefined || v === null) return '';
+    return String(v);
+  });
+
+  return { text: out, used: [...used], unknown: [...unknown] };
+}
+
+
 function normalizeAdminDmTemplates(obj) {
   const out = {
     version: Math.max(0, Number(obj?.version || 0) || 0),
@@ -16301,11 +16377,17 @@ ${escapeHtml(safe)}`;
         return;
       }
 
-      const trimmedPlain = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
-      const bodyHtml = escapeHtml(trimmedPlain);
+      const templateRaw = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
 
       const targetTgId = Number(exp.targetTgId || 0);
       const targetUsername = String(exp.targetUsername || '');
+
+      const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: targetUsername });
+      const phRes = applyAdminDmPlaceholders(templateRaw, phVals);
+      const expandedPlain = phRes.text.length > 3500 ? (phRes.text.slice(0, 3500) + '…') : phRes.text;
+      const bodyHtml = escapeHtml(expandedPlain);
+      const phUsed = phRes.used || [];
+      const phUnknown = phRes.unknown || [];
       if (!uid || !targetTgId) {
         await ctx.reply('⚠️ Не найден получатель (нет tg_id).');
         return;
@@ -16319,8 +16401,9 @@ ${escapeHtml(safe)}`;
           targetUserId: uid,
           targetTgId,
           targetUsername,
-          bodyHtml,
-          plain: trimmedPlain,
+          templateRaw,
+          phUsed,
+          phUnknown,
           createdAt: new Date().toISOString(),
         }, { ex: 10 * 60 });
         stored = true;
@@ -16338,26 +16421,23 @@ ${escapeHtml(safe)}`;
           targetUserId: uid,
           targetTgId,
           targetUsername,
-          bodyHtml,
-          plain: trimmedPlain,
+          templateRaw,
+          phUsed,
+          phUnknown,
         }, { f, page, backUid: uid });
         return;
       }
 
       const uname = targetUsername ? '@' + targetUsername : '';
 
-      // If Redis is degraded, we can still send built-in templates via nostore path.
-      // For custom templates (Redis-only), if we failed to store preview state — send immediately (best-effort).
-      if (!stored && !usedDefaultKey) {
-        await sendAdminMessageToUser(ctx, {
-          byAdminTgId: Number(ctx.from.id),
-          targetUserId: uid,
-          targetTgId,
-          targetUsername: String(row?.tg_username || ''),
-          bodyHtml,
-          plain,
-        }, { f, page, backUid: uid });
-        return;
+      let phInfo = '';
+      if (phUsed.length) {
+        const tags = phUsed.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+        phInfo += `\n📎 Подставим: ${tags}`;
+      }
+      if (phUnknown.length) {
+        const tags = phUnknown.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+        phInfo += `\n⚠️ Неизвестные: ${tags}`;
       }
 
       const preview = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
@@ -16365,12 +16445,14 @@ ${escapeHtml(safe)}`;
         .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
         .row()
+        .text('📎 Вставить', `a:adm_ph|r:umsg_free|id:${uid}|f:${f}|p:${page}`)
+        .row()
         .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
         .text('⬅️ Админка', 'a:admin_home');
 
       await safeEditOrReply(
         ctx,
-        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}\n\n${preview}`,
+        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}${phInfo}\n\n${preview}`,
         { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
       );
       return;
@@ -26157,6 +26239,33 @@ https://collabka.com/status</pre>
       return;
     }
 
+    // Admin: placeholders helper (STEP191)
+    if (p.a === 'a:adm_ph') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const ret = String(p.r || '').trim();
+      const uid = Number(p.id || 0);
+      const tplId = String(p.tid || '').trim();
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      let backCb = 'a:admin_home';
+      if (ret === 'umsg') backCb = `a:adm_umsg|id:${uid}|f:${f}|p:${page}`;
+      else if (ret === 'umsg_free') backCb = `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`;
+      else if (ret === 'tpl_list') backCb = `a:admin_umsg_tpls|p:${page}`;
+      else if (ret === 'tpl_add') backCb = `a:admin_umsg_tpl_add|p:${page}`;
+      else if (ret === 'tpl_edit') backCb = `a:admin_umsg_tpl_edit|tid:${tplId}|p:${page}`;
+      else if (ret === 'tpl_view') backCb = `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`;
+
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', backCb)
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(ctx, adminDmPlaceholdersHelpHtml(), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+      return;
+    }
+
     // Admin: Message user from user card (MVP)
     if (p.a === 'a:adm_umsg') {
       await ctx.answerCallbackQuery();
@@ -26188,6 +26297,7 @@ https://collabka.com/status</pre>
       for (const it of items) {
         kb.text(String(it.label || '—'), `a:adm_umsg_tpl|id:${uid}|t:${String(it.id || '')}|f:${f}|p:${page}`).row();
       }
+      kb.text('📎 Вставить', `a:adm_ph|r:umsg|id:${uid}|f:${f}|p:${page}`).row();
       kb.text('✍️ Свободный текст', `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`).row();
       kb.text('📌 Шаблоны (админ)', 'a:admin_umsg_tpls|p:0').row();
       kb.text('⬅️ Назад', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`).row();
@@ -26249,8 +26359,13 @@ Username: ${escapeHtml(uname)}
       if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
 
       const token = randomToken(8);
-      const bodyHtml = escapeHtml(raw);
-      const plain = raw;
+
+      const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: String(row?.tg_username || '') });
+      const phRes = applyAdminDmPlaceholders(raw, phVals);
+      const expandedPlain = phRes.text.length > 3500 ? (phRes.text.slice(0, 3500) + '…') : phRes.text;
+      const bodyHtml = escapeHtml(expandedPlain);
+      const phUsed = phRes.used || [];
+      const phUnknown = phRes.unknown || [];
 
       let stored = false;
       try {
@@ -26259,8 +26374,9 @@ Username: ${escapeHtml(uname)}
           targetUserId: uid,
           targetTgId,
           targetUsername: String(row?.tg_username || ''),
-          bodyHtml,
-          plain,
+          templateRaw: raw,
+          phUsed,
+          phUnknown,
           createdAt: new Date().toISOString(),
         }, { ex: 10 * 60 });
         stored = true;
@@ -26268,16 +26384,42 @@ Username: ${escapeHtml(uname)}
         stored = false;
       }
 
+      // If Redis is unavailable, send immediately (no confirm screen).
+      if (!stored) {
+        await sendAdminMessageToUser(ctx, {
+          byAdminTgId: Number(ctx.from.id),
+          targetUserId: uid,
+          targetTgId,
+          targetUsername: String(row?.tg_username || ''),
+          templateRaw: raw,
+        }, { f, page, backUid: uid });
+        return;
+      }
+
+      let phInfo = '';
+      if (phUsed.length) {
+        const tags = phUsed.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+        phInfo += `
+📎 Подставим: ${tags}`;
+      }
+      if (phUnknown.length) {
+        const tags = phUnknown.map((k) => `<code>{{${escapeHtml(String(k))}}}</code>`).join(' ');
+        phInfo += `
+⚠️ Неизвестные: ${tags}`;
+      }
+
       const preview = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
       const kb = new InlineKeyboard()
-        .text('✅ Отправить', stored ? `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}` : `a:adm_umsg_send|tk:${token}|nostore:1|id:${uid}|k:${usedDefaultKey}|f:${f}|p:${page}`)
+        .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('📎 Вставить', `a:adm_ph|r:umsg|id:${uid}|f:${f}|p:${page}`)
         .row()
         .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
         .text('⬅️ Админка', 'a:admin_home');
 
       await safeEditOrReply(ctx,
-        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}\n\n${preview}`,
+        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}${phInfo}\n\n${preview}`,
         { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
       );
       return;
@@ -26350,14 +26492,12 @@ Username: ${escapeHtml(uname)}
         const row = await db.getUserTgIdByUserId(uid);
         const targetTgId = Number(row?.tg_id || 0);
         if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
-        const bodyHtml = escapeHtml(plain);
         const payload = {
           byAdminTgId: Number(ctx.from.id),
           targetUserId: uid,
           targetTgId,
           targetUsername: String(row?.tg_username || ''),
-          bodyHtml,
-          plain,
+          templateRaw: plain,
         };
         await sendAdminMessageToUser(ctx, payload, { f, page, backUid: uid });
         return;
@@ -26405,6 +26545,8 @@ Username: ${escapeHtml(uname)}
 
       const page = Math.max(0, Number(p.p) || 0);
       const kb = new InlineKeyboard()
+        .text('📎 Вставить', `a:adm_ph|r:tpl_add|p:${page}`)
+        .row()
         .text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`)
         .text('⬅️ Админка', 'a:admin_home');
 
@@ -26431,6 +26573,8 @@ Username: ${escapeHtml(uname)}
       if (!it) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
 
       const kb = new InlineKeyboard()
+        .text('📎 Вставить', `a:adm_ph|r:tpl_edit|tid:${String(it.id || '')}|p:${page}`)
+        .row()
         .text('⬅️ Назад', `a:admin_umsg_tpl_view|tid:${String(it.id || '')}|p:${page}`)
         .text('⬅️ Админка', 'a:admin_home');
 
@@ -31929,6 +32073,8 @@ async function renderAdminDmTemplates(ctx, page = 0) {
       .row();
   }
 
+  kb.text('📎 Вставить', `a:adm_ph|r:tpl_list|p:${p}`).row();
+
   kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -31956,6 +32102,8 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
   const kb = new InlineKeyboard()
     .text('✏️ Изменить', `a:admin_umsg_tpl_edit|tid:${String(it.id || '')}|p:${Math.max(0, Number(backPage) || 0)}`)
     .text('🗑 Удалить', `a:admin_umsg_tpl_del_q|tid:${String(it.id || '')}|p:${Math.max(0, Number(backPage) || 0)}`)
+    .row()
+    .text('📎 Вставить', `a:adm_ph|r:tpl_view|tid:${String(it.id || '')}|p:${Math.max(0, Number(backPage) || 0)}`)
     .row()
     .text('⬅️ Назад', `a:admin_umsg_tpls|p:${Math.max(0, Number(backPage) || 0)}`)
     .text('⬅️ Админка', 'a:admin_home');
@@ -32694,11 +32842,35 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
   const targetUserId = Number(payload?.targetUserId || 0);
   const targetTgId = Number(payload?.targetTgId || 0);
   const targetUsername = String(payload?.targetUsername || '').trim();
-  const bodyHtml = String(payload?.bodyHtml || '').trim();
-  const plain = String(payload?.plain || '').trim();
+  const templateRaw = String(payload?.templateRaw || payload?.tplRaw || payload?.plain || '').trim();
+  const bodyHtmlFallback = String(payload?.bodyHtml || '').trim();
   const f = String(nav.f || 'all').toLowerCase();
   const page = Math.max(0, Number(nav.page) || 0);
   const backUid = Number(nav.backUid || targetUserId || 0);
+
+  // Expand placeholders (best-effort) — both in preview and at send time.
+  let expandedPlain = '';
+  let phUsed = [];
+  let phUnknown = [];
+  if (templateRaw) {
+    try {
+      const vals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: targetUsername });
+      const res = applyAdminDmPlaceholders(templateRaw, vals);
+      expandedPlain = String(res.text || '').trim();
+      phUsed = Array.isArray(res.used) ? res.used : [];
+      phUnknown = Array.isArray(res.unknown) ? res.unknown : [];
+    } catch {
+      expandedPlain = templateRaw;
+      phUsed = [];
+      phUnknown = [];
+    }
+  }
+
+  // Fallback (older payloads)
+  if (!expandedPlain) expandedPlain = String(payload?.plain || '').trim();
+
+  const expandedSafe = expandedPlain.length > 3500 ? (expandedPlain.slice(0, 3500) + '…') : expandedPlain;
+  const bodyHtml = bodyHtmlFallback || escapeHtml(expandedSafe);
 
   if (!adminTgId || !targetTgId || !bodyHtml) {
     await safeEditOrReply(ctx, '⚠️ Не удалось отправить: не хватает данных.', {
@@ -32709,7 +32881,7 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
 
   // Dedup (best-effort): prevent accidental double-send (double click / retries)
   try {
-    const h = crypto.createHash('sha1').update(String(plain || bodyHtml)).digest('hex').slice(0, 12);
+    const h = crypto.createHash('sha1').update(String(expandedSafe || bodyHtml)).digest('hex').slice(0, 12);
     const dkey = k(['adm_umsg_dedup', String(adminTgId), String(targetTgId), h]);
     const ok = await redis.set(dkey, '1', { nx: true, ex: 60 });
     if (!ok) {
@@ -32773,7 +32945,7 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
     }
 
     const by = ctx.from?.username ? '@' + String(ctx.from.username) : ('tg:' + String(adminTgId));
-    const snippet = (plain || '').length > 900 ? (String(plain).slice(0, 900) + '…') : String(plain || '');
+    const snippet = expandedSafe.length > 900 ? (String(expandedSafe).slice(0, 900) + '…') : String(expandedSafe || '');
     const logText = `📨 <b>Admin message</b>\n\nTo: <b>${escapeHtml(uname)}</b> (tg:<code>${targetTgId}</code>)\nBy: <b>${escapeHtml(by)}</b>\nTime: <code>${new Date().toISOString()}</code>\n\n<b>Text:</b>\n${escapeHtml(snippet)}`;
     const logKb = new InlineKeyboard()
       .text('👤 Карточка', `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`)
