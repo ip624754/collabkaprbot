@@ -2236,6 +2236,23 @@ export async function getOrCreateBarterThreadWithCredits(offerId, buyerUserId, o
       return { ok: true, thread: existingRes.rows[0], charged: false, chargedAmount: 0 };
     }
 
+    // Serialize first-contact charging/opening per (offer_id, buyer_user_id) to avoid races:
+    // - prevents false paywall/limit responses on double-click when another txn already created the thread
+    // - ensures credits/retry/trial logic runs exactly once per pair
+    const k1 = Math.abs(Number(offerId || 0)) % 2147483647;
+    const k2 = Math.abs(Number(buyerUserId || 0)) % 2147483647;
+    await client.query(`select pg_advisory_xact_lock($1::int, $2::int)`, [k1, k2]);
+
+    // Re-check thread after lock (another request may have created it while we waited)
+    const existingRes2 = await client.query(
+      `select * from barter_threads where offer_id=$1 and buyer_user_id=$2`,
+      [offerId, buyerUserId]
+    );
+    if (existingRes2.rows.length) {
+      await client.query('commit');
+      return { ok: true, thread: existingRes2.rows[0], charged: false, chargedAmount: 0 };
+    }
+
     // who is buyer
     const buyer = await client.query(
       `select id, brand_credits, brand_trial_granted
