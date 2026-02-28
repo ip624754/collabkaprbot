@@ -15995,6 +15995,80 @@ ${escapeHtml(safe)}`;
       return;
     }
 
+    // --- Admin: Send message to user from user card (free text) ---
+    if (exp.type === 'adm_user_msg_text') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const uid = Number(exp.uid || 0);
+      const f = String(exp.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(exp.page) || 0);
+
+      const raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Напиши текст одним сообщением.');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+
+      const trimmedPlain = raw.length > 3500 ? (raw.slice(0, 3500) + '…') : raw;
+      const bodyHtml = escapeHtml(trimmedPlain);
+
+      const targetTgId = Number(exp.targetTgId || 0);
+      const targetUsername = String(exp.targetUsername || '');
+      if (!uid || !targetTgId) {
+        await ctx.reply('⚠️ Не найден получатель (нет tg_id).');
+        return;
+      }
+
+      const token = randomToken(8);
+      let stored = false;
+      try {
+        await redis.set(k(['adm_umsg', token]), {
+          byAdminTgId: Number(ctx.from.id),
+          targetUserId: uid,
+          targetTgId,
+          targetUsername,
+          bodyHtml,
+          plain: trimmedPlain,
+          createdAt: new Date().toISOString(),
+        }, { ex: 10 * 60 });
+        stored = true;
+      } catch {
+        stored = false;
+      }
+
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      // If Redis is unavailable, we cannot show a safe confirm screen.
+      // In this degraded mode we send immediately and report status.
+      if (!stored) {
+        await sendAdminMessageToUser(ctx, {
+          byAdminTgId: Number(ctx.from.id),
+          targetUserId: uid,
+          targetTgId,
+          targetUsername,
+          bodyHtml,
+          plain: trimmedPlain,
+        }, { f, page, backUid: uid });
+        return;
+      }
+
+      const uname = targetUsername ? '@' + targetUsername : '';
+      const preview = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+      const kb = new InlineKeyboard()
+        .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
+        .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(
+        ctx,
+        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}\n\n${preview}`,
+        { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+      );
+      return;
+    }
+
     if (exp.type === 'admin_users_search') {
       const isAdmin = isSuperAdminTg(tgId);
       if (!isAdmin) {
@@ -25382,6 +25456,218 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    // Admin: Message user from user card (MVP)
+    if (p.a === 'a:adm_umsg') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      const row = await db.getUserTgIdByUserId(uid);
+      const targetTgId = Number(row?.tg_id || 0);
+      const uname = row?.tg_username ? '@' + String(row.tg_username) : '—';
+
+      if (!uid || !targetTgId) {
+        await safeEditOrReply(ctx, '⚠️ Не удалось найти пользователя (нет tg_id).', {
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+            .text('⬅️ Админка', 'a:admin_home')
+        });
+        return;
+      }
+
+      const kb = new InlineKeyboard();
+      const tplBtns = [
+        ['✅ Принято', 'ack'],
+        ['❓ Нужны детали', 'need'],
+        ['✅ Готово', 'done'],
+        ['⏳ В работе', 'wip'],
+        ['💳 Кредиты/оплата', 'pay'],
+        ['ℹ️ Ограничение', 'limit'],
+      ];
+
+      for (const [label, key] of tplBtns) {
+        kb.text(label, `a:adm_umsg_tpl|id:${uid}|k:${key}|f:${f}|p:${page}`).row();
+      }
+      kb.text('✍️ Свободный текст', `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`).row();
+      kb.text('⬅️ Назад', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`).row();
+      kb.text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(
+        ctx,
+        `✉️ <b>Сообщение пользователю</b>
+
+User ID: <code>${uid}</code>
+TG ID: <code>${targetTgId}</code>
+Username: ${escapeHtml(uname)}
+
+Выбери шаблон или отправь свой текст.`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      return;
+    }
+
+    if (p.a === 'a:adm_umsg_tpl') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const uid = Number(p.id || 0);
+      const key = String(p.k || '').trim();
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      const TPL = {
+        ack: 'Принято ✅\n\nПриняли запрос. Если нужны детали — уточним и вернёмся с ответом.',
+        need: 'Нужны детали ❓\n\nУточни, пожалуйста: шаги воспроизведения + что видишь на экране. Если есть — скрин/видео.',
+        done: 'Готово ✅\n\nСделали. Проверь, пожалуйста, сейчас. Если что-то ещё — напиши в поддержку.',
+        wip: 'В работе ⏳\n\nПриняли в работу. Вернёмся с обновлением, как только будет результат.',
+        pay: 'По оплате/кредитам 💳\n\nПосмотрели ситуацию. Если видишь несоответствие — пришли, пожалуйста, скрин и время операции (по МСК).',
+        limit: 'Ограничение ℹ️\n\nСейчас действие недоступно из-за ограничения/статуса. Если это неожиданно — напиши в поддержку, мы проверим.',
+      };
+
+      const raw = TPL[key] || '';
+      if (!raw) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
+
+      const row = await db.getUserTgIdByUserId(uid);
+      const targetTgId = Number(row?.tg_id || 0);
+      const uname = row?.tg_username ? '@' + String(row.tg_username) : '';
+      if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
+
+      const token = randomToken(8);
+      const bodyHtml = escapeHtml(raw);
+      const plain = raw;
+
+      let stored = false;
+      try {
+        await redis.set(k(['adm_umsg', token]), {
+          byAdminTgId: Number(ctx.from.id),
+          targetUserId: uid,
+          targetTgId,
+          targetUsername: String(row?.tg_username || ''),
+          bodyHtml,
+          plain,
+          createdAt: new Date().toISOString(),
+        }, { ex: 10 * 60 });
+        stored = true;
+      } catch {
+        stored = false;
+      }
+
+      const preview = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+      const kb = new InlineKeyboard()
+        .text('✅ Отправить', stored ? `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}` : `a:adm_umsg_send|tk:${token}|nostore:1|id:${uid}|k:${key}|f:${f}|p:${page}`)
+        .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(ctx,
+        `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}\n\n${preview}`,
+        { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+      );
+      return;
+    }
+
+    if (p.a === 'a:adm_umsg_free') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      const chatType = String(ctx.chat?.type || '');
+      if (chatType !== 'private') {
+        const uid = Number(p.id || 0);
+        const f = String(p.f || 'all').toLowerCase();
+        const page = Math.max(0, Number(p.p) || 0);
+        await safeEditOrReply(ctx, '✍️ Свободный текст можно вводить только в личном чате с ботом (DM).\n\nОткрой бота в личке и повтори действие.', {
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ Назад', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
+            .text('⬅️ Админка', 'a:admin_home')
+        });
+        return;
+      }
+
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      const kb = new InlineKeyboard()
+        .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(
+        ctx,
+        `✍️ <b>Свободный текст</b>\n\nНапиши сообщение одним текстом (можно со ссылками).\n\nПотом я покажу предпросмотр и попрошу подтвердить отправку.`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+
+      try {
+        const row = await db.getUserTgIdByUserId(uid);
+        await setExpectText(ctx.from.id, { type: 'adm_user_msg_text', uid, targetTgId: Number(row?.tg_id || 0), targetUsername: String(row?.tg_username || ''), f, page });
+      } catch {
+        // If Redis degraded, expectText may fail. Keep UX.
+      }
+      return;
+    }
+
+    if (p.a === 'a:adm_umsg_send') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      const token = String(p.tk || '').trim();
+
+      // Fallback path when Redis was unavailable on preview step.
+      const noStore = String(p.nostore || '') === '1';
+      if (noStore) {
+        const uid = Number(p.id || 0);
+        const key = String(p.k || '').trim();
+        const TPL = {
+          ack: 'Принято ✅\n\nПриняли запрос. Если нужны детали — уточним и вернёмся с ответом.',
+          need: 'Нужны детали ❓\n\nУточни, пожалуйста: шаги воспроизведения + что видишь на экране. Если есть — скрин/видео.',
+          done: 'Готово ✅\n\nСделали. Проверь, пожалуйста, сейчас. Если что-то ещё — напиши в поддержку.',
+          wip: 'В работе ⏳\n\nПриняли в работу. Вернёмся с обновлением, как только будет результат.',
+          pay: 'По оплате/кредитам 💳\n\nПосмотрели ситуацию. Если видишь несоответствие — пришли, пожалуйста, скрин и время операции (по МСК).',
+          limit: 'Ограничение ℹ️\n\nСейчас действие недоступно из-за ограничения/статуса. Если это неожиданно — напиши в поддержку, мы проверим.',
+        };
+        const plain = TPL[key] || '';
+        if (!plain) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
+        const row = await db.getUserTgIdByUserId(uid);
+        const targetTgId = Number(row?.tg_id || 0);
+        if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
+        const bodyHtml = escapeHtml(plain);
+        const payload = {
+          byAdminTgId: Number(ctx.from.id),
+          targetUserId: uid,
+          targetTgId,
+          targetUsername: String(row?.tg_username || ''),
+          bodyHtml,
+          plain,
+        };
+        await sendAdminMessageToUser(ctx, payload, { f, page, backUid: uid });
+        return;
+      }
+
+      if (!token) return ctx.answerCallbackQuery({ text: 'Сессия истекла.' });
+
+      let data = null;
+      try { data = await redis.get(k(['adm_umsg', token])); } catch { data = null; }
+      if (!data || Number(data.byAdminTgId || 0) !== Number(ctx.from.id)) {
+        await safeEditOrReply(ctx, '⚠️ Сессия истекла. Открой сообщение заново.', {
+          reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
+        });
+        return;
+      }
+
+      await sendAdminMessageToUser(ctx, data, { f, page, backUid: Number(data.targetUserId || 0) });
+      try { await redis.del(k(['adm_umsg', token])); } catch {}
+      return;
+    }
+
     // --- Admin: Reply to support message ---
     if (p.a === 'a:adm_support_reply') {
       await ctx.answerCallbackQuery();
@@ -31377,6 +31663,8 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   const kb = new InlineKeyboard();
   kb.text(`📋 Скопировать ID: ${card.tg_id}`, `a:adm_ucopy|id:${card.id}`).row();
 
+  kb.text('✉️ Написать', `a:adm_umsg|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
+
   // Quick gift from card
   kb.text('🎁 Подарить подписку', `a:adm_ugift|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
 
@@ -31408,6 +31696,105 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function sendAdminMessageToUser(ctx, payload, nav = {}) {
+  const adminTgId = Number(payload?.byAdminTgId || ctx.from?.id || 0);
+  const targetUserId = Number(payload?.targetUserId || 0);
+  const targetTgId = Number(payload?.targetTgId || 0);
+  const targetUsername = String(payload?.targetUsername || '').trim();
+  const bodyHtml = String(payload?.bodyHtml || '').trim();
+  const plain = String(payload?.plain || '').trim();
+  const f = String(nav.f || 'all').toLowerCase();
+  const page = Math.max(0, Number(nav.page) || 0);
+  const backUid = Number(nav.backUid || targetUserId || 0);
+
+  if (!adminTgId || !targetTgId || !bodyHtml) {
+    await safeEditOrReply(ctx, '⚠️ Не удалось отправить: не хватает данных.', {
+      reply_markup: new InlineKeyboard().text('⬅️ Админка', 'a:admin_home')
+    });
+    return;
+  }
+
+  // Dedup (best-effort): prevent accidental double-send (double click / retries)
+  try {
+    const h = crypto.createHash('sha1').update(String(plain || bodyHtml)).digest('hex').slice(0, 12);
+    const dkey = k(['adm_umsg_dedup', String(adminTgId), String(targetTgId), h]);
+    const ok = await redis.set(dkey, '1', { nx: true, ex: 60 });
+    if (!ok) {
+      await safeEditOrReply(ctx, '⏳ Это сообщение уже отправлялось недавно (anti-двойной клик).', {
+        reply_markup: new InlineKeyboard()
+          .text('⬅️ К карточке', `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`)
+          .text('⬅️ Админка', 'a:admin_home')
+      });
+      return;
+    }
+  } catch {
+    // If Redis is degraded — skip dedup.
+  }
+
+  const userMsg = `📣 <b>Сообщение от Collabka PR</b>\n\n${bodyHtml}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+  const userKb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  let ok = false;
+  let err = '';
+  try {
+    await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: userKb, disable_web_page_preview: true });
+    ok = true;
+  } catch (e) {
+    ok = false;
+    err = String(e?.message || e).slice(0, 160);
+  }
+
+  const uname = targetUsername ? '@' + targetUsername : '—';
+  if (!ok) {
+    await safeEditOrReply(ctx, `❌ <b>Не удалось отправить</b>\n\nПользователь: <b>${escapeHtml(uname)}</b> (tg:<code>${targetTgId}</code>)\n\nОшибка: <code>${escapeHtml(err || 'unknown')}</code>`, {
+      parse_mode: 'HTML',
+      reply_markup: new InlineKeyboard()
+        .text('⬅️ Назад', `a:adm_umsg|id:${backUid}|f:${f}|p:${page}`)
+        .text('⬅️ К карточке', `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`)
+        .row()
+        .text('⬅️ Админка', 'a:admin_home'),
+      disable_web_page_preview: true,
+    });
+    return;
+  }
+
+  // Admin confirm
+  const kbDone = new InlineKeyboard()
+    .text('✉️ Ещё сообщение', `a:adm_umsg|id:${backUid}|f:${f}|p:${page}`)
+    .text('👤 Карточка', `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`)
+    .row()
+    .text('⬅️ Админка', 'a:admin_home');
+  await safeEditOrReply(ctx, `✅ <b>Отправлено</b> пользователю ${escapeHtml(uname)} (tg:<code>${targetTgId}</code>).`, { parse_mode: 'HTML', reply_markup: kbDone });
+
+  // Ops/admin log (best-effort): send to support chat if configured, else to super-admins.
+  try {
+    const supportChatIdRaw = String(CFG.SUPPORT_CHAT_ID || '').trim();
+    const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
+    const targets = [];
+    if (supportChatIdRaw) targets.push(supportChatIdRaw);
+    else {
+      for (const a of admins) {
+        const aid = Number(a || 0);
+        if (aid) targets.push(aid);
+      }
+    }
+
+    const by = ctx.from?.username ? '@' + String(ctx.from.username) : ('tg:' + String(adminTgId));
+    const snippet = (plain || '').length > 900 ? (String(plain).slice(0, 900) + '…') : String(plain || '');
+    const logText = `📨 <b>Admin message</b>\n\nTo: <b>${escapeHtml(uname)}</b> (tg:<code>${targetTgId}</code>)\nBy: <b>${escapeHtml(by)}</b>\nTime: <code>${new Date().toISOString()}</code>\n\n<b>Text:</b>\n${escapeHtml(snippet)}`;
+    const logKb = new InlineKeyboard()
+      .text('👤 Карточка', `a:adm_ucard|id:${backUid}|f:${f}|p:${page}`)
+      .text('✉️ Ещё', `a:adm_umsg|id:${backUid}|f:${f}|p:${page}`);
+
+    for (const t of targets) {
+      if (!t) continue;
+      try {
+        await ctx.api.sendMessage(t, logText, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: logKb });
+      } catch {}
+    }
+  } catch {}
 }
 
 async function sendAdminUsersCsv(ctx, filter = 'all', q = '') {
