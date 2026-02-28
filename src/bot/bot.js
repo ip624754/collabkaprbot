@@ -19431,7 +19431,11 @@ bot.on('message:successful_payment', async (ctx) => {
         }
 
         await markStatus('ORPHANED', 'missing_session');
-        await ctx.reply('✅ Платеж получен. Но сессия оплаты не найдена (возможно, истекла). Напиши /start — я помогу.');
+        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
+        const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
+        await ctx.reply(
+          `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и нажми «💬 Поддержка».`
+        );
         return;
       }
 
@@ -19525,7 +19529,11 @@ bot.on('message:successful_payment', async (ctx) => {
         }
 
         await markStatus('ORPHANED', 'missing_session');
-        await ctx.reply('✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла). Напиши /start и открой ⭐️ PRO — помогу разобраться.');
+        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
+        const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
+        await ctx.reply(
+          `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и открой ⭐️ PRO — помогу разобраться.`
+        );
         return;
       }
 
@@ -19577,7 +19585,11 @@ bot.on('message:successful_payment', async (ctx) => {
         }
 
         await markStatus('ORPHANED', 'missing_session');
-        await ctx.reply('✅ Платеж получен. Но сессия оплаты не найдена (возможно, истекла). Напиши /start — я помогу.');
+        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
+        const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
+        await ctx.reply(
+          `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и нажми «💬 Поддержка».`
+        );
         return;
       }
 
@@ -19650,7 +19662,11 @@ bot.on('message:successful_payment', async (ctx) => {
         }
 
         await markStatus('ORPHANED', 'missing_session');
-        await ctx.reply('✅ Платеж получен. Но сессия оплаты не найдена (возможно, истекла). Напиши /start — я помогу.');
+        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
+        const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
+        await ctx.reply(
+          `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и нажми «💬 Поддержка».`
+        );
         return;
       }
 
@@ -31167,8 +31183,21 @@ async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED',
   }
 
   // Only heal ORPHANED missing_session (safe, intended to be auto-applied).
+  // Safety: ignore very fresh payments to avoid races with late webhook/session reconciliation.
   const rows = await db.listPaymentsByStatus('ORPHANED', 50, 0);
-  const cand = (rows || []).filter(r => String(r.note || '').includes('missing_session')).slice(0, batch);
+  const minAgeSec = Math.max(0, Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 0) || 0);
+  const nowMs = Date.now();
+  const miss = (rows || []).filter(r => String(r.note || '').includes('missing_session'));
+  const eligible = miss.filter(r => {
+    if (minAgeSec <= 0) return true;
+    try {
+      const t = new Date(r.created_at).getTime();
+      if (!t) return true;
+      return (nowMs - t) / 1000 >= minAgeSec;
+    } catch { return true; }
+  });
+  const skippedYoung = Math.max(0, miss.length - eligible.length);
+  const cand = eligible.slice(0, batch);
 
   let applied = 0;
   let failed = 0;
@@ -31225,7 +31254,7 @@ async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED',
 
   try {
     await ctx.answerCallbackQuery({
-      text: `Auto-heal: applied ${applied}, failed ${failed}, skipped ${skipped}`,
+      text: `Auto-heal: applied ${applied}, failed ${failed}, skipped ${skipped}${skippedYoung ? `, young ${skippedYoung}` : ''}`,
       show_alert: true
     });
   } catch {}
