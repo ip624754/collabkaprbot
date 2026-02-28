@@ -26,6 +26,8 @@ export default async function handler(_req, res) {
       fallback_apply_enabled: !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED,
       orphaned_autoheal_enabled: !!CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED,
       orphaned_autoheal_batch: Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_BATCH || 0),
+      orphaned_autoheal_min_age_sec: Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 0),
+      orphaned_autoheal_effective: !!(CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED),
       session_ttl_min: Number(CFG.PAYMENT_SESSION_TTL_MIN || 0),
       session_ttl_sec: Number(CFG.PAYMENT_SESSION_TTL_SEC || 0)
     }
@@ -66,9 +68,10 @@ export default async function handler(_req, res) {
       // ignore
     }
 
-    const [giveawaysTick, broadcastTick] = await Promise.all([
+    const [giveawaysTick, broadcastTick, igVerifyTick] = await Promise.all([
       redis.get(k(['cron', 'giveaways_tick', 'last_run'])),
       redis.get(k(['cron', 'broadcast_tick', 'last_run'])),
+      redis.get(k(['cron', 'ig_verify_tick', 'last_run'])),
     ]);
 
     // Optional: show current broadcast 429 cooldown + counters (Redis-only; no DB).
@@ -245,6 +248,7 @@ export default async function handler(_req, res) {
         enabled: true,
         giveaways_tick: giveawaysTick || null,
         broadcast_tick: broadcastTick || null,
+        ig_verify_tick: igVerifyTick || null,
       },
       broadcast,
       ref,
