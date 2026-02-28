@@ -21,6 +21,72 @@ export const config = {
   },
 };
 
+// Micro-memo for cooldown checks (per lambda instance).
+// Prevents repeated Redis reads during QStash fan-out bursts.
+const cooldownMemo = new Map(); // broadcastId -> { untilMs, expAtMs }
+const COOLDOWN_MEMO_TTL_MS = Math.max(
+  200,
+  Math.min(10_000, Number(process.env.QSTASH_BC_COOLDOWN_MEMO_TTL_MS || 1500) || 1500)
+);
+
+function getCooldownMemo(broadcastId) {
+  const v = cooldownMemo.get(String(broadcastId));
+  if (!v) return null;
+  if (Date.now() > Number(v.expAtMs || 0)) {
+    cooldownMemo.delete(String(broadcastId));
+    return null;
+  }
+  return Number(v.untilMs || 0) || 0;
+}
+
+function setCooldownMemo(broadcastId, untilMs) {
+  cooldownMemo.set(String(broadcastId), {
+    untilMs: Number(untilMs || 0) || 0,
+    expAtMs: Date.now() + COOLDOWN_MEMO_TTL_MS,
+  });
+}
+
+async function getCooldownUntilFast(broadcastId) {
+  const memo = getCooldownMemo(broadcastId);
+  if (memo) return memo;
+  const ms = await getBroadcastCooldownUntilMs(broadcastId);
+  if (ms) setCooldownMemo(broadcastId, ms);
+  return ms;
+}
+
+function broadcastQuarantineCountKey(broadcastId, userId) {
+  return k(['broadcast', String(broadcastId), 'qcnt', String(userId)]);
+}
+
+async function resetBroadcastQuarantineCount(broadcastId, userId) {
+  try {
+    await redis.del(broadcastQuarantineCountKey(broadcastId, userId));
+  } catch {}
+}
+
+async function bumpBroadcastQuarantineCount(broadcastId, userId) {
+  try {
+    const key = broadcastQuarantineCountKey(broadcastId, userId);
+    const v = await redis.incr(key);
+    try {
+      await redis.expire(key, 24 * 60 * 60);
+    } catch {}
+    return Number(v) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function getQuarantineThreshold() {
+  const v = Number(process.env.BROADCAST_QUARANTINE_THRESHOLD || 3) || 3;
+  return Math.max(2, Math.min(10, v));
+}
+
+function getQuarantineSec() {
+  const v = Number(process.env.BROADCAST_QUARANTINE_SEC || 1200) || 1200;
+  return Math.max(60, Math.min(6 * 3600, v));
+}
+
 function getHeader(req, name) {
   const n = String(name || '').toLowerCase();
   const h = req.headers || {};
@@ -120,6 +186,41 @@ export default async function handler(req, res) {
       return;
     }
 
+    // Cooldown (Redis-only fast path).
+    // Important: check BEFORE any DB reads to avoid burning Neon CU during 429 bursts.
+    const nowMs0 = Date.now();
+    const cdMs0 = await getCooldownUntilFast(broadcastId);
+    if (cdMs0 && cdMs0 > nowMs0) {
+      const retryAfterSec = Math.max(1, Math.ceil((cdMs0 - nowMs0) / 1000));
+
+      // Best-effort: keep DB log consistent, but never fail the request because of DB here.
+      try {
+        await db.logBroadcastQueued(broadcastId, userId);
+        await db.markBroadcastDeliveryRetry(broadcastId, userId, retryAfterSec, 'cooldown');
+      } catch {}
+
+      try {
+        const url = getQStashDeliveryUrl('/api/qstash/broadcast-deliver');
+        const dedupId = `b:${broadcastId}:u:${userId}:a:${attempt + 1}`;
+        await qstashPublishJSON({
+          url,
+          body: { ...payload, attempt: attempt + 1 },
+          deduplicationId: dedupId,
+          delaySec: retryAfterSec,
+          retries: Number(CFG.QSTASH_BROADCAST_RETRIES || 10),
+          flowControl: getBroadcastFlowControl(broadcastId),
+          timeout: '20s',
+        });
+      } catch (e) {
+        console.error('[QSTASH][BC] republish on cooldown failed', String(e?.message || e));
+        res.status(500).json({ ok: false, error: 'republish_failed' });
+        return;
+      }
+
+      res.status(200).json({ ok: true, delayed: true, reason: 'cooldown', retry_after_sec: retryAfterSec });
+      return;
+    }
+
     // DB down → fail-closed (never send without DB guard).
     const bcRow = await db.getBroadcast(broadcastId);
     if (!bcRow) {
@@ -178,8 +279,9 @@ export default async function handler(req, res) {
     }
 
     // Cooldown (Redis best-effort). Redis down → fail-open.
+    // Second check (race-friendly): cooldown could be set by a parallel delivery.
     const nowMs = Date.now();
-    const cdMs = await getBroadcastCooldownUntilMs(broadcastId);
+    const cdMs = await getCooldownUntilFast(broadcastId);
     if (cdMs && cdMs > nowMs) {
       const retryAfterSec = Math.max(1, Math.ceil((cdMs - nowMs) / 1000));
       try {
@@ -222,6 +324,7 @@ export default async function handler(req, res) {
 
     try {
       await sendBroadcastMessage(bot.api, tgId, bcPayload);
+      await resetBroadcastQuarantineCount(broadcastId, userId);
 
       // Mark sent. Best-effort retries.
       let marked = false;
@@ -249,6 +352,7 @@ export default async function handler(req, res) {
       if (isNonRetryableTelegramError(code, desc)) {
         try {
           await db.markBroadcastDeliveryBlocked(broadcastId, userId, desc || `telegram_${code}`);
+          await resetBroadcastQuarantineCount(broadcastId, userId);
         } catch {
           // DB down: fail-closed
           res.status(500).json({ ok: false, error: 'db_unavailable' });
@@ -261,8 +365,22 @@ export default async function handler(req, res) {
       // 429 → set cooldown + delay-republish + 2xx
       if (Number(code) === 429) {
         const retryAfter = extractRetryAfterSec(err);
+        const threshold = getQuarantineThreshold();
+        const quarantineSec = getQuarantineSec();
+        let qCount = 0;
+        let delaySec = retryAfter;
         try {
           await db.logBroadcastDeferred(broadcastId, userId, retryAfter);
+          qCount = await bumpBroadcastQuarantineCount(broadcastId, userId);
+
+          // If the same recipient keeps triggering 429 repeatedly, quarantine it for a longer window.
+          // This avoids burning QStash retries on problematic chats while keeping broadcast progress.
+          if (qCount >= threshold) {
+            await resetBroadcastQuarantineCount(broadcastId, userId);
+            await db.logBroadcastQuarantine(broadcastId, userId, quarantineSec);
+            delaySec = quarantineSec;
+          }
+
           await setBroadcastCooldown(broadcastId, retryAfter, 'telegram_429');
         } catch {
           // DB down: fail-closed
@@ -276,7 +394,7 @@ export default async function handler(req, res) {
             url,
             body: { ...payload, attempt: attempt + 1 },
             deduplicationId: dedupId,
-            delaySec: retryAfter,
+            delaySec,
             retries: Number(CFG.QSTASH_BROADCAST_RETRIES || 10),
             flowControl: getBroadcastFlowControl(broadcastId),
             timeout: '20s',
@@ -288,7 +406,7 @@ export default async function handler(req, res) {
           return;
         }
 
-        res.status(200).json({ ok: true, deferred: true, retry_after_sec: retryAfter });
+        res.status(200).json({ ok: true, deferred: true, retry_after_sec: delaySec, qcnt: qCount || 0 });
         return;
       }
 
