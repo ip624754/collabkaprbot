@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { CFG, assertEnv } from '../lib/config.js';
 import logger from '../lib/logger.js';
 import { redis, k, rateLimit, consumeOnce, acquireLock, releaseLock } from '../lib/redis.js';
+import { setMonIntroDiag, setMonAcceptDiag, setMonUnlockDiag } from '../lib/monDiag.js';
 import * as db from '../db/queries.js';
 import { pool } from '../db/pool.js';
 import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, addMinutes, parseMoscowDateTime, computeThreadReplyStatus, formatBxChargeLine, telegramEntitiesToHtml } from './helpers.js';
@@ -1280,6 +1281,70 @@ function withTimeout(promise, ms, label = 'op') {
       .catch(err => { clearTimeout(id); reject(err); });
   });
 }
+
+// --- Monetization circuit breaker (Neon slow → "в обработке" + QStash retry) ---
+const MONETIZATION_CB_TIMEOUT_MS = envInt('MONETIZATION_CB_TIMEOUT_MS', 2000, { min: 500, max: 10000 });
+const MONETIZATION_QSTASH_DELAY_SEC = envInt('MONETIZATION_QSTASH_DELAY_SEC', 10, { min: 1, max: 300 });
+const MONETIZATION_NOTIFY_TTL_SEC = envInt('MONETIZATION_NOTIFY_TTL_SEC', 90 * 24 * 60 * 60, { min: 3600, max: 365 * 24 * 60 * 60 });
+const MONETIZATION_TOKEN_LOCK_TTL_SEC = envInt('MONETIZATION_TOKEN_LOCK_TTL_SEC', 10 * 60, { min: 60, max: 3600 });
+
+function isTransientNeonError(e) {
+  const info = errInfo(e);
+  const code = String(info.code || '');
+  const msg = String(info.message || '').toLowerCase();
+
+  if (code === 'TIMEOUT' || msg.startsWith('timeout:') || msg.startsWith('timeout')) return true;
+
+  // Common Node/network signals
+  if (msg.includes('etimedout') || msg.includes('econnreset') || msg.includes('econnrefused')) return true;
+  if (msg.includes('socket hang up') || msg.includes('connection terminated') || msg.includes('terminating connection')) return true;
+
+  // Common Postgres transient errors
+  if (['53300', '57p01', '57p02', '57p03', '08006', '08001'].includes(code.toLowerCase())) return true;
+
+  return false;
+}
+
+async function enqueueMonetizationRetry(action, payload, dedupKey) {
+  try {
+    const url = getQStashDeliveryUrl('/api/qstash/monetization-retry');
+    if (!url) return { ok: false, error: 'public_base_url_missing' };
+
+    const health = getQStashLibHealth();
+    if (!health.available) return { ok: false, error: 'qstash_disabled' };
+
+    await qstashPublishJSON({
+      url,
+      body: { action: String(action || ''), ...(payload || {}), queued_at: new Date().toISOString() },
+      deduplicationId: dedupKey ? String(dedupKey) : undefined,
+      delaySec: MONETIZATION_QSTASH_DELAY_SEC,
+      retries: 10,
+    });
+
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e || 'error') };
+  }
+}
+
+function brandAppAcceptNotifiedKey(appId) {
+  return k(['brand_app', 'accept_notified', Number(appId || 0)]);
+}
+
+function isMonetizationAsyncRetryEnabled() {
+  try {
+    const url = getQStashDeliveryUrl('/api/qstash/monetization-retry');
+    if (!url) return false;
+    const health = getQStashLibHealth();
+    if (!health.available) return false;
+    if (!process.env.QSTASH_TOKEN) return false;
+    if (!process.env.QSTASH_CURRENT_SIGNING_KEY) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 
 // Share helpers (no DB): provide simple tracked /start links.
 function botUsernameNoAt() {
@@ -8850,6 +8915,17 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   // Contacts unlock also gates any external links (IG/portfolio) to prevent bypassing monetization.
   const canUnlockContacts = hasStructuredContacts || !!contactRawTxt || !!ws.channel_username || !!ig || (ports && ports.length);
 
+  // STEP175: anti-spam UI — if token-lock exists, show "pending" and hide unlock CTA until it resolves.
+  let contactUnlockPending = false;
+  if (!isPreview && viewer && canUnlockContacts && !revealContacts) {
+    const lockKey = k(['mon', 'lock', 'wsp_contact_unlock', wsId, viewer.id]);
+    try {
+      contactUnlockPending = !!(await withTimeout(redis.get(lockKey), 1200, 'mon.lock'));
+    } catch {
+      contactUnlockPending = false;
+    }
+  }
+
   const contactUrlLegacy = (() => {
     const contactRaw = contactRawTxt;
     if (!contactRaw) return null;
@@ -8943,8 +9019,11 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
       }
     }
 
+
     if (canUnlockContacts && revealContacts) {
       blocks.push('✅ <b>Контакты открыты</b>');
+    } else if (canUnlockContacts && contactUnlockPending) {
+      blocks.push('⏳ <b>В обработке…</b> (контакты в очереди)');
     }
   }
 
@@ -9037,6 +9116,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
           const u0 = String(ports[0] || '').trim();
           if (u0) lines.push(`• Портфолио: <a href="${escapeHtml(u0)}">${escapeHtml(shortUrl(u0))}</a>${ports.length > 1 ? ` <i>+ ещё ${ports.length - 1}</i>` : ''}`);
         }
+      } else if (contactUnlockPending) {
+        lines.push(`• Контакты: <b>⏳ в обработке</b> (обнови витрину через 10–30 сек)`);
       } else {
         lines.push(`• Контакты: <b>🔒 скрыто</b> (открываются через «${contactUnlockBtnLabel()}»)`);
       }
@@ -9082,6 +9163,12 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         kb.row();
       }
     } else if (hasHidden) {
+      const openCb = `a:wsp_open|ws:${wsId}${hideApply ? '|m:ro' : ''}${contactCbExtra}`;
+      if (contactUnlockPending) {
+        kb.text('🔄 Обновить', openCb);
+        if (CONTACT_UNLOCK_COST > 0) kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
+        kb.row();
+      } else {
       // Brand-facing UX: если кредитов нет — сразу ведём на покупку.
       // Если кредитов мало — оставляем и «Контакты», и «Купить», чтобы путь был очевиден.
       const balNum = (brandCredits === null || brandCredits === undefined) ? null : Number(brandCredits || 0);
@@ -9101,6 +9188,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         if (CONTACT_UNLOCK_COST > 0) kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
       }
       kb.row();
+      }
     }
   } else {
     // Preview: keep buttons minimal (no direct contact links).
@@ -10322,9 +10410,32 @@ ${threadBlock}`;
 
 ℹ️ <i>Статусы “В работу / Закрыть / Спам” — внутренняя сортировка бренда: они только сортируют заявки по вкладкам 🆕/💬/✅/🗑. Креатор их не видит.</i>`;
 
+  // STEP175: anti-spam UI — if monetization token-lock is active, hide the spending CTA.
+  let acceptPending = false;
+  if (st === 'new') {
+    const lockKey = k(['mon', 'lock', 'brand_app_accept', app.id]);
+    try {
+      acceptPending = !!(await withTimeout(redis.get(lockKey), 1200, 'mon.lock'));
+    } catch {
+      acceptPending = false;
+    }
+    if (acceptPending) {
+      text += `
+
+⏳ <b>В обработке…</b>
+<i>✅ Принять</i>
+
+Запрос уже в очереди. Открой «📥 Inbox» или нажми «🔄 Обновить» через 10–30 секунд.`;
+    }
+  }
+
   const kb = new InlineKeyboard();
   if (st === 'new') {
-    kb.text('✅ Принять', `a:brand_app_accept|id:${app.id}|s:${back.status}|p:${back.page}`).row();
+    if (acceptPending) {
+      kb.text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm').text('🔄 Обновить', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`).row();
+    } else {
+      kb.text('✅ Принять', `a:brand_app_accept|id:${app.id}|s:${back.status}|p:${back.page}`).row();
+    }
 
     // До принятия разрешаем только безопасные действия: СПАМ/удаление.
     // “В работу/Закрыть/Ответить/Шаблоны” доступны после ✅ Принять.
@@ -10973,20 +11084,137 @@ ${escapeHtml(replyText)}`;
 }
 
 async function acceptBrandApplication(ctx, actorUserId, appId, back) {
-  const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
+  const aid = Number(appId || 0);
+  const uid = Number(actorUserId || 0);
+
+  const dedupId = `mzr:brand_app_accept:${aid || 'na'}`;
+  const asyncRetryEnabled = isMonetizationAsyncRetryEnabled();
+
+  const refreshCb = `a:brand_app_view|id:${aid}|s:${back.status}|p:${back.page}`;
+  const inboxCb = 'a:bx_inbox|ws:0|p:0|h:mm';
+
+  const renderAcceptPending = async (opts = {}) => {
+    const alreadyQueued = !!opts.alreadyQueued;
+    const reason = String(opts.reason || '').trim();
+    try { await ctx.answerCallbackQuery({ text: alreadyQueued ? '⏳ Уже в обработке…' : '⏳ В обработке…', show_alert: false }); } catch {}
+
+    const kb = new InlineKeyboard()
+      .text('📥 Inbox', inboxCb)
+      .text('🔄 Обновить', refreshCb)
+      .row()
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+    const hint = alreadyQueued ? 'Запрос уже в очереди.' : 'Мы поставили задачу в очередь.';
+    const extra = reason ? `${reason}
+
+` : '';
+
+    await safeEditOrReply(
+      ctx,
+      `⏳ <b>В обработке…</b>
+<i>✅ Принять</i>
+
+${extra}${hint} Открой «📥 Inbox» или нажми «🔄 Обновить» через 10–30 секунд.`,
+      { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+    );
+  };
+
+  let app = null;
+  try {
+    app = asyncRetryEnabled
+      ? await withTimeout(getBrandAppForActorSafe(ctx, actorUserId, appId), MONETIZATION_CB_TIMEOUT_MS, 'brand_app.get')
+      : await getBrandAppForActorSafe(ctx, actorUserId, appId);
+  } catch (e) {
+    if (asyncRetryEnabled && isTransientNeonError(e)) {
+      const q = await enqueueMonetizationRetry('brand_app_accept', { app_id: aid, actor_user_id: uid, actor_tg_id: Number(ctx.from?.id || 0) }, dedupId);
+      if (q.ok) {
+        await setMonAcceptDiag({ source: 'click',  status: 'ok', errorCode: 'queued', appId: aid });
+        await renderAcceptPending({ reason: 'База данных сейчас отвечает медленно — мы поставили задачу в очередь.' });
+        return;
+      }
+    }
+
+    await setMonAcceptDiag({ source: 'click',  status: 'error', errorCode: 'db_error', appId: aid });
+
+    try { await ctx.answerCallbackQuery({ text: 'Не удалось обработать. Попробуй ещё раз.', show_alert: true }); } catch {}
+    return;
+  }
+
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
   if (!access.ok) return;
 
+  // If already accepted earlier, don't enqueue/charge again.
+  if (normLeadStatus(app.status) !== 'new') {
+    await setMonAcceptDiag({ source: 'click',  status: 'skipped', errorCode: 'already', appId: aid });
+    try { await ctx.answerCallbackQuery({ text: '✅ Уже принято' }); } catch {}
+    await renderBrandAppView(ctx, actorUserId, appId, back);
+    return;
+  }
+
   // Accept is the monetization gate: spend credits exactly-once, then open dialog.
   // Idempotent: if already accepted / already charged -> no double charge.
   const cost = Math.max(0, Number(BRAND_APP_ACCEPT_COST || 0));
-  const res = await safeBrandAppsWrite(
-    () => db.acceptBrandApplicationWithCharge(appId, actorUserId, brandUserId, cost),
-    { op: 'brand_app_accept_charge', appId }
-  );
+
+  // STEP174: optimistic accept (queue-first) when async retry is configured.
+  // Goal: UX must not depend on synchronous Neon writes; DB-truth happens in QStash worker.
+  if (asyncRetryEnabled) {
+    const lockKey = k(['mon', 'lock', 'brand_app_accept', aid]);
+    let lock = null;
+    let lockErr = false;
+    try {
+      lock = await acquireLock(lockKey, MONETIZATION_TOKEN_LOCK_TTL_SEC);
+    } catch {
+      lockErr = true;
+      lock = null;
+    }
+
+    if (!lockErr) {
+      if (!lock) {
+        await setMonAcceptDiag({ source: 'click',  status: 'skipped', errorCode: 'queued', appId: aid });
+                await renderAcceptPending({ alreadyQueued: true });
+        return;
+      }
+
+      const q = await enqueueMonetizationRetry(
+        'brand_app_accept',
+        { app_id: aid, actor_user_id: uid, actor_tg_id: Number(ctx.from?.id || 0), lock_key: lockKey, lock_token: lock.token },
+        dedupId
+      );
+
+      if (q.ok) {
+        await setMonAcceptDiag({ source: 'click',  status: 'ok', errorCode: 'queued', appId: aid });
+        await renderAcceptPending({ reason: 'Если кредитов не хватит — бот подскажет.' });
+        return;
+      }
+
+      // enqueue failed → release lock and fall through to sync DB path
+      try { await releaseLock(lockKey, lock.token); } catch {}
+    }
+  }
+
+  let res = null;
+  try {
+    res = asyncRetryEnabled
+      ? await withTimeout(db.acceptBrandApplicationWithCharge(appId, actorUserId, brandUserId, cost), MONETIZATION_CB_TIMEOUT_MS, 'brand_app.accept')
+      : await db.acceptBrandApplicationWithCharge(appId, actorUserId, brandUserId, cost);
+  } catch (e) {
+    if (asyncRetryEnabled && isTransientNeonError(e)) {
+      const q = await enqueueMonetizationRetry('brand_app_accept', { app_id: aid, actor_user_id: uid, actor_tg_id: Number(ctx.from?.id || 0) }, dedupId);
+      if (q.ok) {
+        await setMonAcceptDiag({ source: 'click',  status: 'ok', errorCode: 'queued', appId: aid });
+        await renderAcceptPending({ reason: 'База данных сейчас отвечает медленно — мы поставили задачу в очередь.' });
+        return;
+      }
+    }
+
+    await setMonAcceptDiag({ source: 'click',  status: 'error', errorCode: 'db_error', appId: aid });
+
+    try { await ctx.answerCallbackQuery({ text: 'Не удалось обработать. Попробуй ещё раз.', show_alert: true }); } catch {}
+    return;
+  }
 
   // Best-effort: keep Redis credits cache in sync (UI is Redis-only).
   if (res && res.status === 'accepted') {
@@ -10998,6 +11226,22 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
     // If cache was stale and showed more than реально есть — лучше сбросить.
     try { await redis.del(k(['brand_credits', brandUserId])); } catch {}
   }
+
+  // STEP182: Redis-only breadcrumbs for ✅ Принять (accept)
+  try {
+    const st = (res && (res.status === 'accepted')) ? 'ok'
+      : (res && (res.status === 'insufficient_credits')) ? 'ok'
+      : (res && (res.status === 'already_accepted' || res.status === 'already')) ? 'skipped'
+      : (res ? 'ok' : 'error');
+
+    const code = (res && (res.status === 'accepted')) ? 'accepted'
+      : (res && (res.status === 'insufficient_credits')) ? 'need_paywall'
+      : (res && (res.status === 'already_accepted' || res.status === 'already')) ? 'already'
+      : (res && res.status) ? String(res.status) : '';
+
+    await setMonAcceptDiag({ source: 'click',  status: st, errorCode: code, appId: aid });
+  } catch {}
+
 
   if (res && res.status === 'insufficient_credits') {
     try { await ctx.answerCallbackQuery({ text: 'Недостаточно кредитов для ✅ Принять.' }); } catch {}
@@ -11052,6 +11296,9 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
     at: new Date().toISOString(),
     by_user_id: Number(actorUserId)
   }), { op: 'brand_app_thread_append', appId });
+
+  // Idempotent notify guard for async retry worker (QStash).
+  try { await redis.set(brandAppAcceptNotifiedKey(appId), '1', { ex: MONETIZATION_NOTIFY_TTL_SEC }); } catch {}
 
   try { await ctx.answerCallbackQuery({ text: '✅ Принято' }); } catch {}
   await renderBrandAppView(ctx, actorUserId, appId, { status: 'in_progress', page: back.page });
@@ -12592,7 +12839,22 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
 
   const h = normBxHome(opts.h, Number(wsId || 0) ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
-  const kb = new InlineKeyboard().text('💬 Написать', `a:bx_msg|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
+// STEP176: UI anti-spam for paid Intro (token-lock, Redis-only)
+const asyncRetryEnabled = isMonetizationAsyncRetryEnabled();
+const introLockKey = asyncRetryEnabled ? k(['mon', 'lock', 'intro_open', offerId, userId]) : '';
+let introPending = false;
+if (introLockKey) {
+  try { introPending = !!(await redis.get(introLockKey)); } catch { introPending = false; }
+}
+
+const kb = new InlineKeyboard();
+if (introPending) {
+  kb.text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`)
+    .text('🔄 Обновить', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`)
+    .row();
+} else {
+  kb.text('💬 Написать', `a:bx_msg|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`);
+}
 
   let canOfficial = false;
   if (CFG.OFFICIAL_PUBLISH_ENABLED) {
@@ -21309,6 +21571,38 @@ cid: ${cid}`, { reply_markup: kb });
         }
       }
 
+      // STEP175: if unlock is already queued (token-lock exists), don't show the spending button again.
+      {
+        const lockKey = k(['mon', 'lock', 'wsp_contact_unlock', wsId, u.id]);
+        let pending = false;
+        try {
+          pending = !!(await withTimeout(redis.get(lockKey), 1200, 'mon.lock'));
+        } catch {
+          pending = false;
+        }
+
+        if (pending) {
+          const openCb = fromLead ? `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}` : `a:wsp_open|ws:${wsId}`;
+          const kb = new InlineKeyboard()
+            .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
+            .text('🔄 Обновить', openCb)
+            .row()
+            .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`)
+            .row()
+            .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb)
+            .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+          const text =
+            `⏳ <b>В обработке…</b>
+<i>🔓 Открываем контакты</i>
+
+Запрос уже в очереди. Нажми «🔄 Обновить» через 10–30 секунд.`;
+
+          await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+          return;
+        }
+      }
+
       // IMPORTANT (STEP166): never hide monetization actions because of an unknown balance.
       // Balance can be "—" (Redis degradation / cold cache), but the click handler is DB-truth.
       const bal = await getBrandCreditsRedisOnly(u.id, { warm: true });
@@ -21351,9 +21645,13 @@ ${tail}`;
     if (p.a === 'a:wsp_contact_unlock') {
       const wsId = Number(p.w || p.ws || 0);
       if (!wsId) {
+        await setMonUnlockDiag({ source: 'click',  status: 'skipped', errorCode: 'bad_ws_id', wsId: null });
         try { await ctx.answerCallbackQuery({ text: 'Workspace не найден.', show_alert: true }); } catch {}
         return;
       }
+
+      const dedupId = `mzr:wsp_contact_unlock:${wsId}:${Number(u.id || 0)}`;
+      const asyncRetryEnabled = isMonetizationAsyncRetryEnabled();
 
       const ret = String(p.r || '').trim().toLowerCase();
       const leadId = Number(p.l || 0);
@@ -21362,29 +21660,134 @@ ${tail}`;
       const backCb = fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : `a:wsp_open|ws:${wsId}`;
       const roOpts = fromLead ? { hideApply: true, backCb, contactCbExtra: ctxExtra, dialogCb: backCb } : {};
 
+      const openCb = fromLead ? `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}` : `a:wsp_open|ws:${wsId}`;
+      const inboxCb = 'a:bx_inbox|ws:0|p:0|h:mm';
+      const buyCb = `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`;
+
+      const renderUnlockPending = async (opts = {}) => {
+        const alreadyQueued = !!opts.alreadyQueued;
+        const reason = String(opts.reason || '').trim();
+        try { await ctx.answerCallbackQuery({ text: alreadyQueued ? '⏳ Уже в обработке…' : '⏳ В обработке…', show_alert: false }); } catch {}
+
+        const kb = new InlineKeyboard()
+          .text('📥 Inbox', inboxCb)
+          .text('🔄 Обновить', openCb)
+          .row()
+          .text('💳 Купить ещё', buyCb)
+          .row()
+          .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb)
+          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+        const hint = alreadyQueued ? 'Запрос уже в очереди.' : 'Мы поставили задачу в очередь.';
+        const extra = reason ? `${reason}\n\n` : '';
+
+        await safeEditOrReply(
+          ctx,
+          `⏳ <b>В обработке…</b>
+<i>🔓 Открываем контакты</i>
+
+${extra}${hint} Нажми «🔄 Обновить» через 10–30 секунд.`,
+          { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+        );
+      };
+
       // owner/curator should never pay
       try {
-        const ws = await db.getWorkspaceAny(wsId);
+        const ws = asyncRetryEnabled
+          ? await withTimeout(db.getWorkspaceAny(wsId), MONETIZATION_CB_TIMEOUT_MS, 'wsp.owner')
+          : await db.getWorkspaceAny(wsId);
         if (ws && Number(ws.owner_user_id) === Number(u.id)) {
+          await setMonUnlockDiag({ source: 'click',  status: 'skipped', errorCode: 'owner', wsId });
           try { await ctx.answerCallbackQuery({ text: 'Это твоя витрина ✅' }); } catch {}
           await renderWsPublicProfile(ctx, wsId, { revealContacts: true, ...roOpts });
           return;
         }
-      } catch {}
+      } catch (e) {
+        if (asyncRetryEnabled && isTransientNeonError(e)) {
+          const q = await enqueueMonetizationRetry('wsp_contact_unlock', { ws_id: wsId, brand_user_id: Number(u.id || 0), actor_tg_id: Number(ctx.from?.id || 0) }, dedupId);
+          if (q.ok) {
+            await setMonUnlockDiag({ source: 'click',  status: 'ok', errorCode: 'queued', wsId });
+                        await renderUnlockPending({ reason: 'База данных сейчас отвечает медленно — мы поставили задачу в очередь.' });
+            return;
+          }
+        }
+      }
 
       // idempotency (cached in Redis)
       try {
         const key = k(['wsp_contact', wsId, u.id]);
         if (await redis.get(key)) {
+          await setMonUnlockDiag({ source: 'click',  status: 'skipped', errorCode: 'already', wsId });
           try { await ctx.answerCallbackQuery({ text: 'Уже открыто ✅' }); } catch {}
           await renderWsPublicProfile(ctx, wsId, { revealContacts: true, ...roOpts });
           return;
         }
       } catch {}
 
-      const rUnlock = await db.unlockWorkspaceContactsWithCredits(u.id, wsId, CONTACT_UNLOCK_COST, CONTACT_UNLOCK_TTL_SEC);
+      // STEP174: optimistic unlock (queue-first) when async retry is configured.
+      // Goal: UX must not depend on synchronous Neon writes; DB-truth happens in QStash worker.
+      if (asyncRetryEnabled) {
+        const lockKey = k(['mon', 'lock', 'wsp_contact_unlock', wsId, u.id]);
+        let lock = null;
+        let lockErr = false;
+        try {
+          lock = await acquireLock(lockKey, MONETIZATION_TOKEN_LOCK_TTL_SEC);
+        } catch {
+          lockErr = true;
+          lock = null;
+        }
+
+        if (!lockErr) {
+          if (!lock) {
+            await setMonUnlockDiag({ source: 'click',  status: 'skipped', errorCode: 'queued', wsId });
+                        await renderUnlockPending({ alreadyQueued: true });
+            return;
+          }
+
+          const q = await enqueueMonetizationRetry(
+            'wsp_contact_unlock',
+            { ws_id: wsId, brand_user_id: Number(u.id || 0), actor_tg_id: Number(ctx.from?.id || 0), lock_key: lockKey, lock_token: lock.token },
+            dedupId
+          );
+
+          if (q.ok) {
+            await setMonUnlockDiag({ source: 'click',  status: 'ok', errorCode: 'queued', wsId });
+            await renderUnlockPending({ reason: 'Если кредитов не хватит — бот подскажет.' });
+            return;
+          }
+
+          // enqueue failed → release lock and fall through to sync DB path
+          try { await releaseLock(lockKey, lock.token); } catch {}
+        }
+      }
+
+      let rUnlock = null;
+      try {
+        rUnlock = asyncRetryEnabled
+          ? await withTimeout(
+              db.unlockWorkspaceContactsWithCredits(u.id, wsId, CONTACT_UNLOCK_COST, CONTACT_UNLOCK_TTL_SEC),
+              MONETIZATION_CB_TIMEOUT_MS,
+              'wsp.unlock'
+            )
+          : await db.unlockWorkspaceContactsWithCredits(u.id, wsId, CONTACT_UNLOCK_COST, CONTACT_UNLOCK_TTL_SEC);
+      } catch (e) {
+        if (asyncRetryEnabled && isTransientNeonError(e)) {
+          const q = await enqueueMonetizationRetry('wsp_contact_unlock', { ws_id: wsId, brand_user_id: Number(u.id || 0), actor_tg_id: Number(ctx.from?.id || 0) }, dedupId);
+          if (q.ok) {
+            await setMonUnlockDiag({ source: 'click',  status: 'ok', errorCode: 'queued', wsId });
+            await renderUnlockPending({ reason: 'База данных сейчас отвечает медленно — мы поставили задачу в очередь.' });
+            return;
+          }
+        }
+
+        await setMonUnlockDiag({ source: 'click',  status: 'error', errorCode: 'db_error', wsId });
+
+        try { await ctx.answerCallbackQuery({ text: 'Не получилось открыть контакты. Попробуй ещё раз.', show_alert: true }); } catch {}
+        return;
+      }
       if (!rUnlock?.ok) {
         if (rUnlock?.needPaywall) {
+          await setMonUnlockDiag({ source: 'click',  status: 'ok', errorCode: 'need_paywall', wsId });
           try { await ctx.answerCallbackQuery({ text: 'Недостаточно кредитов. Докупи и повтори.', show_alert: true }); } catch {}
           await renderBrandPass(ctx, u.id, 0);
           return;
@@ -21395,6 +21798,12 @@ ${tail}`;
 
       const left = rUnlock.left;
       const charged = !!rUnlock.charged;
+
+      // STEP182: Redis-only breadcrumbs for 🔓 Разлок контактов
+      try {
+        await setMonUnlockDiag({ source: 'click',  status: 'ok', errorCode: charged ? 'charged' : 'ok', wsId });
+      } catch {}
+
 
       // Best-effort: keep Redis cache in sync for UI (reduces Neon reads).
       if (charged && left !== null && left !== undefined) {
@@ -26769,28 +27178,137 @@ if (p.a === 'a:match_home') {
         }
       });
 
+      const dedupId = `mzr:intro_open:${offerId}:${actorUserId}`;
+      const asyncRetryEnabled = isMonetizationAsyncRetryEnabled();
+
+      // Redis-only breadcrumbs for ops
+      try { await setMonIntroDiag({ offerId }); } catch {}
+
+      const offerCb = `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`;
+      const inboxCb = `a:bx_inbox|ws:${wsId}|p:0|h:${h}`;
+
+      const renderIntroPending = async (alreadyQueued = false) => {
+        try { await ctx.answerCallbackQuery({ text: alreadyQueued ? '⏳ Уже в обработке…' : '⏳ В обработке…', show_alert: false }); } catch {}
+
+        const kb = new InlineKeyboard()
+          .text('📥 Inbox', inboxCb)
+          .text('🔄 Обновить', offerCb)
+          .row()
+          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+        const hint = alreadyQueued
+          ? 'Запрос уже в очереди.'
+          : 'Мы поставили задачу в очередь.';
+
+        await safeEditOrReply(
+          ctx,
+          `⏳ <b>В обработке…</b>
+<i>💬 Открываем диалог</i>
+
+${hint} Открой «📥 Inbox» или нажми «🔄 Обновить» через 10–30 секунд.`,
+          { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
+        );
+      };
+
+      // STEP176: Intro open (paid) — token-lock + circuit breaker + optional QStash commit.
+      const lockKey = asyncRetryEnabled ? k(['mon', 'lock', 'intro_open', offerId, actorUserId]) : '';
+      let lock = null;
+      if (asyncRetryEnabled && lockKey) {
+        let lockErr = false;
+        try {
+          lock = await acquireLock(lockKey, MONETIZATION_TOKEN_LOCK_TTL_SEC);
+        } catch {
+          lockErr = true;
+          lock = null;
+        }
+
+        if (!lockErr && !lock) {
+          try { await setMonIntroDiag({ status: 'ok', errorCode: 'queued', offerId }); } catch {}
+          await renderIntroPending(true);
+          return;
+        }
+      }
+
       // Pricing / limits (configurable)
       const cost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
       const trialCredits = Math.max(0, Number(CFG.INTRO_TRIAL_CREDITS || 0));
 
-      let isVerified = false;
-      if (CFG.VERIFICATION_ENABLED) {
-        const v = await safeUserVerifications(() => db.getUserVerification(actorUserId), async () => null);
-        isVerified = String(v?.status || '').toUpperCase() === 'APPROVED' && String(v?.kind || '').toLowerCase() === 'brand';
-      }
-      const dailyLimit = Math.max(0, Number(isVerified ? CFG.INTRO_DAILY_LIMIT : CFG.INTRO_DAILY_LIMIT_UNVERIFIED));
-
-      const res = await db.getOrCreateBarterThreadWithCredits(
-        offerId,
-        actorUserId,
-        {
-          ...(wsId === 0 ? { forceBrand: true } : {}),
-          cost,
-          trialCredits,
-          dailyLimit: dailyLimit > 0 ? dailyLimit : null,
-          retryEnabled: CFG.INTRO_RETRY_ENABLED
+      let res = null;
+      try {
+        let isVerified = false;
+        if (CFG.VERIFICATION_ENABLED) {
+          const v = await safeUserVerifications(() => db.getUserVerification(actorUserId), async () => null);
+          isVerified = String(v?.status || '').toUpperCase() === 'APPROVED' && String(v?.kind || '').toLowerCase() === 'brand';
         }
-      );
+        const dailyLimit = Math.max(0, Number(isVerified ? CFG.INTRO_DAILY_LIMIT : CFG.INTRO_DAILY_LIMIT_UNVERIFIED));
+
+        res = asyncRetryEnabled
+          ? await withTimeout(
+              db.getOrCreateBarterThreadWithCredits(
+                offerId,
+                actorUserId,
+                {
+                  ...(wsId === 0 ? { forceBrand: true } : {}),
+                  cost,
+                  trialCredits,
+                  dailyLimit: dailyLimit > 0 ? dailyLimit : null,
+                  retryEnabled: CFG.INTRO_RETRY_ENABLED
+                }
+              ),
+              MONETIZATION_CB_TIMEOUT_MS,
+              'intro.open'
+            )
+          : await db.getOrCreateBarterThreadWithCredits(
+              offerId,
+              actorUserId,
+              {
+                ...(wsId === 0 ? { forceBrand: true } : {}),
+                cost,
+                trialCredits,
+                dailyLimit: dailyLimit > 0 ? dailyLimit : null,
+                retryEnabled: CFG.INTRO_RETRY_ENABLED
+              }
+            );
+      } catch (e) {
+        // Neon slow / transient → queue commit (if lock acquired)
+        if (asyncRetryEnabled && lock && isTransientNeonError(e)) {
+          const q = await enqueueMonetizationRetry(
+            'intro_open',
+            {
+              offer_id: offerId,
+              buyer_user_id: actorUserId,
+              force_brand: wsId === 0 ? 1 : 0,
+              ws_ctx: wsId,
+              actor_tg_id: Number(ctx.from?.id || 0),
+              lock_key: lockKey,
+              lock_token: lock.token,
+            },
+            dedupId
+          );
+          if (q.ok) {
+            try { await setMonIntroDiag({ status: 'ok', errorCode: 'queued', offerId }); } catch {}
+            await renderIntroPending(false);
+            return;
+          }
+        }
+
+        // Queue path failed or not eligible
+        try { await setMonIntroDiag({ status: 'error', errorCode: isTransientNeonError(e) ? 'queue_failed' : (e?.code || e?.message || 'error'), offerId }); } catch {}
+
+        // enqueue failed or not eligible → release lock and show error
+        if (lock && lockKey) {
+          try { await releaseLock(lockKey, lock.token); } catch {}
+        }
+        try {
+          await ctx.answerCallbackQuery({ text: '⚠️ Не получилось открыть диалог. Попробуй ещё раз позже.', show_alert: true });
+        } catch {}
+        return;
+      }
+
+      // release lock (normal sync path)
+      if (lock && lockKey) {
+        try { await releaseLock(lockKey, lock.token); } catch {}
+      }
 
       // Best-effort: keep Redis credits cache in sync (no extra DB reads; balance already computed).
       if (res && res.balance !== null && res.balance !== undefined) {
@@ -26798,11 +27316,13 @@ if (p.a === 'a:match_home') {
       }
 
       if (!res) {
+        try { await setMonIntroDiag({ status: 'skipped', errorCode: 'missing', offerId }); } catch {}
         return ctx.answerCallbackQuery({ text: 'Не получилось открыть диалог. Возможно оффер закрыт.' });
       }
 
       if (res.limitReached) {
-        const lim = Number(res.dailyLimit || dailyLimit || 0);
+        try { await setMonIntroDiag({ status: 'skipped', errorCode: 'limit_reached', offerId }); } catch {}
+        const lim = Number(res.dailyLimit || 0);
         const used = Number(res.dailyUsed || 0);
         db.trackEvent('intro_blocked_daily_limit', { userId: actorUserId, wsId: wsId || null, meta: { offerId, lim, used } });
         try { await ctx.answerCallbackQuery({ text: `Лимит интро (новых диалогов) на сегодня: ${lim} (использовано: ${used}). Попробуй завтра.`, show_alert: true }); } catch {}
@@ -26810,14 +27330,18 @@ if (p.a === 'a:match_home') {
       }
 
       if (res.needPaywall) {
-        db.trackEvent('paywall_shown', { userId: actorUserId, wsId: wsId || null, meta: { offerId, cost, balance: Number(res.balance ?? 0), usedToday: Number(res.dailyUsed ?? 0), dailyLimit: Number(res.dailyLimit ?? dailyLimit ?? 0) } });
+        try { await setMonIntroDiag({ status: 'skipped', errorCode: 'need_paywall', offerId }); } catch {}
+        db.trackEvent('paywall_shown', { userId: actorUserId, wsId: wsId || null, meta: { offerId, cost, balance: Number(res.balance ?? 0), usedToday: Number(res.dailyUsed ?? 0), dailyLimit: Number(res.dailyLimit ?? 0) } });
         await renderBrandPaywall(ctx, actorUserId, wsId, offerId, page);
         return;
       }
 
       if (!res.ok || !res.thread) {
+        try { await setMonIntroDiag({ status: 'error', errorCode: 'not_ok', offerId }); } catch {}
         return ctx.answerCallbackQuery({ text: 'Не получилось открыть диалог. Возможно оффер закрыт.' });
       }
+
+      try { await setMonIntroDiag({ status: 'ok', errorCode: '', offerId }); } catch {}
 
       db.trackEvent('thread_opened', { userId: actorUserId, wsId: wsId || null, meta: { offerId, threadId: res.thread.id, charged: !!res.charged, chargedAmount: Number(res.chargedAmount || cost || 1) } });
 
