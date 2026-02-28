@@ -7,6 +7,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Keep in sync with migrations/run.js
+const MIGRATION_FILE_RE = /^\d{3}_.+\.sql$/i;
+
 function sha256Hex(s) {
   return crypto
     .createHash('sha256')
@@ -41,18 +44,47 @@ function main() {
     ? path.resolve(process.cwd(), args.out)
     : path.join(repoRoot, 'migration_pack', '00_mark_all_applied.sql');
 
+  // Safety: never allow writing the generated pack into migrations/
+  const migrationsDirResolved = path.resolve(migrationsDir);
+  const outResolved = path.resolve(outPath);
+  if (
+    outResolved === migrationsDirResolved ||
+    outResolved.startsWith(migrationsDirResolved + path.sep)
+  ) {
+    console.error(
+      `[gen-mark-all-applied] Refusing to write into migrations/: ${outResolved}`
+    );
+    process.exit(1);
+  }
+
   if (!fs.existsSync(migrationsDir)) {
     console.error(`[gen-mark-all-applied] migrations/ not found at: ${migrationsDir}`);
     process.exit(1);
   }
 
-  const files = fs
-    .readdirSync(migrationsDir)
-    .filter((f) => /^\d+_.*\.sql$/.test(f))
+  const dirEntries = fs.readdirSync(migrationsDir);
+
+  // Fail fast if any `.sql` file does NOT match the strict migration naming rule.
+  // Prevents accidental inclusion of `00_mark_all_applied.sql` etc.
+  const rogueSql = dirEntries
+    .filter((f) => String(f).toLowerCase().endsWith('.sql'))
+    .filter((f) => !MIGRATION_FILE_RE.test(f))
     .sort();
 
+  if (rogueSql.length) {
+    console.error(
+      `[gen-mark-all-applied] Unsafe .sql files detected in migrations/ (refusing to run).\n` +
+        `Allowed pattern: NNN_name.sql (e.g. 041_example.sql).\n` +
+        `Move these files out of migrations/ (usually to migration_pack/):\n` +
+        rogueSql.map((x) => `- ${x}`).join('\n')
+    );
+    process.exit(1);
+  }
+
+  const files = dirEntries.filter((f) => MIGRATION_FILE_RE.test(f)).sort();
+
   if (!files.length) {
-    console.error('[gen-mark-all-applied] No migration files found matching /^\\d+_.*\\.sql$/');
+    console.error('[gen-mark-all-applied] No migration files found matching /^\\d{3}_.+\\.sql$/');
     process.exit(1);
   }
 
