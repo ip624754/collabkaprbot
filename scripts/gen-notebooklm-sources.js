@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
@@ -10,7 +9,9 @@ const ROOT = path.resolve(__dirname, '..');
 
 const DIST_DIR = path.join(ROOT, 'dist');
 const OUT_DIR = path.join(DIST_DIR, 'notebooklm_sources');
-const OUT_ZIP = path.join(DIST_DIR, 'NOTEBOOKLM_AUDIT_SOURCES.zip');
+const OUT_ZIP = path.join(DIST_DIR, 'NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip');
+
+const PACK_DIR = path.join(ROOT, 'docs', 'audit', 'notebooklm_pack');
 
 async function exists(p) {
   try {
@@ -34,19 +35,29 @@ async function copyFile(src, dst) {
   await fs.copyFile(src, dst);
 }
 
-async function copyDir(srcDir, dstDir, { filter } = {}) {
+async function copyDir(srcDir, dstDir) {
   await mkdirp(dstDir);
   const entries = await fs.readdir(srcDir, { withFileTypes: true });
   for (const ent of entries) {
     const src = path.join(srcDir, ent.name);
     const dst = path.join(dstDir, ent.name);
-    if (filter && !filter(src, ent)) continue;
-    if (ent.isDirectory()) {
-      await copyDir(src, dst, { filter });
-    } else if (ent.isFile()) {
-      await copyFile(src, dst);
+    if (ent.isDirectory()) await copyDir(src, dst);
+    else if (ent.isFile()) await copyFile(src, dst);
+  }
+}
+
+async function listFiles(dir) {
+  const out = [];
+  async function walk(d) {
+    const ents = await fs.readdir(d, { withFileTypes: true });
+    for (const ent of ents) {
+      const p = path.join(d, ent.name);
+      if (ent.isDirectory()) await walk(p);
+      else if (ent.isFile()) out.push(p);
     }
   }
+  await walk(dir);
+  return out;
 }
 
 async function writeText(dst, text) {
@@ -54,44 +65,11 @@ async function writeText(dst, text) {
   await fs.writeFile(dst, text, 'utf8');
 }
 
-async function listFiles(dir, { suffix } = {}) {
-  const out = [];
-  async function walk(d) {
-    const ents = await fs.readdir(d, { withFileTypes: true });
-    for (const ent of ents) {
-      const p = path.join(d, ent.name);
-      if (ent.isDirectory()) await walk(p);
-      else if (ent.isFile()) {
-        if (!suffix || p.endsWith(suffix)) out.push(p);
-      }
-    }
-  }
-  await walk(dir);
-  return out;
-}
-
-function shasum(text) {
-  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-async function convertSqlDirToTxt(srcDir, dstDir) {
-  if (!(await exists(srcDir))) return;
-  await mkdirp(dstDir);
-  const files = (await fs.readdir(srcDir))
-    .filter((f) => f.toLowerCase().endsWith('.sql'))
-    .sort((a, b) => a.localeCompare(b, 'en'));
-
-  for (const name of files) {
-    const src = path.join(srcDir, name);
-    const body = await fs.readFile(src, 'utf8');
-    const checksum = shasum(body);
-    const header = [
-      `-- SOURCE: ${path.basename(srcDir)}/${name}`,
-      `-- SHA256: ${checksum}`,
-      '',
-    ].join('\n');
-    const dst = path.join(dstDir, `${name}.txt`); // => 001_init.sql.txt
-    await writeText(dst, header + body);
+function runZip(cwd, outZip) {
+  // requires `zip` available (mac/linux). In CI / local dev it should exist.
+  const r = spawnSync('zip', ['-r', outZip, '.'], { cwd, stdio: 'inherit' });
+  if (r.status !== 0) {
+    throw new Error('zip failed. Make sure `zip` is installed.');
   }
 }
 
@@ -100,62 +78,48 @@ async function main() {
   await rmrf(OUT_DIR);
   await rmrf(OUT_ZIP);
 
-  // 1) Docs (весь docs/ — это текст, NotebookLM ест нормально)
-  await copyDir(path.join(ROOT, 'docs'), path.join(OUT_DIR, 'docs'));
-
-  // 2) SQL (NotebookLM часто блокирует .sql, поэтому кладём .txt версии)
-  await convertSqlDirToTxt(path.join(ROOT, 'migrations'), path.join(OUT_DIR, 'migrations_txt'));
-  await convertSqlDirToTxt(path.join(ROOT, 'migration_pack'), path.join(OUT_DIR, 'migration_pack_txt'));
-
-  // 3) Доп. контекст (Neon history, если есть в репо)
-  const neonHist = path.join(ROOT, 'docs', 'neon', 'ИСТОРИЯ_НЕОН.txt');
-  if (await exists(neonHist)) {
-    await copyFile(neonHist, path.join(OUT_DIR, 'NEON_HISTORY', 'ИСТОРИЯ_НЕОН.txt'));
+  if (!(await exists(PACK_DIR))) {
+    throw new Error('Missing docs/audit/notebooklm_pack. Generate it first (STEP186+).');
   }
 
-  // 4) Индекс, чтобы аудитору было проще
+  const files = await listFiles(PACK_DIR);
+  const rels = files.map((p) => path.relative(PACK_DIR, p)).sort((a, b) => a.localeCompare(b, 'en'));
+
+  // NotebookLM limit: 50 files max
+  if (rels.length > 50) {
+    throw new Error(`NotebookLM limit exceeded: ${rels.length} files (max 50). Reduce notebooklm_pack.`);
+  }
+
+  // NotebookLM часто не принимает .sql
+  const bad = rels.filter((r) => r.toLowerCase().endsWith('.sql'));
+  if (bad.length) {
+    throw new Error(`NotebookLM blocks .sql. Found: ${bad.join(', ')}`);
+  }
+
+  // Copy pack
+  await copyDir(PACK_DIR, path.join(OUT_DIR, 'notebooklm_pack'));
+
+  // Index
   const idx = [
-    '# NotebookLM audit sources (generated)',
+    '# NotebookLM audit sources (NOTEBOOKLM50)',
     '',
-    'Содержимое:',
-    '- docs/ — вся документация проекта (включая docs/audit/*)',
-    '- migrations_txt/ — копии миграций в формате .txt (каждый файл содержит SHA256)',
-    '- migration_pack_txt/ — копии migration_pack скриптов в формате .txt (каждый файл содержит SHA256)',
-    '- NEON_HISTORY/ — дополнительный контекст (если присутствует)',
+    'Этот архив собран под лимит NotebookLM: максимум 50 файлов.',
+    'Все источники текстовые (.md/.txt). Миграции и ключевой код — в бандлах.',
     '',
-    'Примечание: реальные миграции применяются только из migrations/*.sql через migrations/run.js.',
+    'Файлы:',
+    ...rels.map((r) => `- notebooklm_pack/${r}`),
+    '',
+    'Открой сначала: notebooklm_pack/00_NOTEBOOKLM_PACK_RULES_RU.md',
   ].join('\n');
-  await writeText(path.join(OUT_DIR, 'INDEX.md'), idx);
 
-  // 5) Zip (best-effort)
-  const zipBin = process.platform === 'win32' ? 'powershell' : 'zip';
-  if (zipBin === 'zip') {
-    const rel = path.relative(DIST_DIR, OUT_DIR);
-    const res = spawnSync('zip', ['-r', path.basename(OUT_ZIP), rel], {
-      cwd: DIST_DIR,
-      stdio: 'inherit',
-    });
-    if (res.status !== 0) {
-      console.error('\n[WARN] zip command failed. Folder is ready:', OUT_DIR);
-      process.exitCode = 1;
-      return;
-    }
-    console.log('\nOK:', OUT_ZIP);
-  } else {
-    console.log('Windows: zip generation is skipped. Folder is ready:', OUT_DIR);
-  }
+  await writeText(path.join(OUT_DIR, 'README_NOTEBOOKLM_PACK.txt'), idx);
 
-  // 6) Small sanity: print file counts
-  const docCount = (await listFiles(path.join(OUT_DIR, 'docs'))).length;
-  const migCount = (await exists(path.join(OUT_DIR, 'migrations_txt')))
-    ? (await listFiles(path.join(OUT_DIR, 'migrations_txt'))).length
-    : 0;
-  const packCount = (await exists(path.join(OUT_DIR, 'migration_pack_txt')))
-    ? (await listFiles(path.join(OUT_DIR, 'migration_pack_txt'))).length
-    : 0;
-  console.log(`Docs files: ${docCount}`);
-  console.log(`migrations_txt files: ${migCount}`);
-  console.log(`migration_pack_txt files: ${packCount}`);
+  // zip
+  await mkdirp(path.dirname(OUT_ZIP));
+  runZip(OUT_DIR, OUT_ZIP);
+
+  // Print summary
+  console.log(`OK: ${rels.length} files. Output: ${OUT_ZIP}`);
 }
 
 main().catch((e) => {

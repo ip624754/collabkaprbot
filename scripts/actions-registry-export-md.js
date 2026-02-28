@@ -94,7 +94,6 @@ function buildMarkdown({ inCode, missing, extra }) {
     guardCount.set(meta.guard, (guardCount.get(meta.guard) || 0) + 1);
   }
 
-  const nowIso = new Date().toISOString();
   const typeRows = [...typeCount.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   const guardRows = [...guardCount.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -105,7 +104,6 @@ function buildMarkdown({ inCode, missing, extra }) {
   lines.push('>');
   lines.push('> Regenerate: `npm run actions:md`');
   lines.push('');
-  lines.push(`Generated at: \`${nowIso}\``);
   lines.push('');
   lines.push(`- Actions in code: **${inCode.size}**`);
   lines.push(`- Actions in registry: **${Object.keys(ACTION_REGISTRY || {}).length}**`);

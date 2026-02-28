@@ -6,7 +6,7 @@
 //
 // Heuristic (fast, dependency-free):
 // - Scan code for InlineKeyboard construction blocks.
-// - If a keyboard contains a back-like control ("⬅️ Назад" / "⬅️ Отмена" / "⬅️ Админка"),
+// - If a keyboard contains a back-like control ('⬅️ Назад'/ '⬅️ Отмена'/ '⬅️ Админка'/ '⬅️ Операции'/ '⬅️ Коммуникации'/ '⬅️ Система'),
 //   then it must also contain both "📋 Меню" and "🏠 Home" somewhere nearby
 //   (or use nav helpers navKb()/kbNavRow()).
 //
@@ -71,11 +71,12 @@ function analyzeFile(file, text) {
     const window = text.slice(start, Math.min(text.length, start + 9000));
 
     // If helper adds nav row later, consider it OK (conservative).
-    if (/\b(navKb|kbNavRow)\s*\(/.test(window)) continue;
+    if (/\b(navKb|kbNavRow|kbAdminFooter)\s*\(/.test(window)) continue;
 
     const block = sliceToSemicolon(text, start);
 
-    const hasBackLike = /['"`]⬅️\s*(Назад|Отмена|Админка)/.test(block);
+    const hasBackLike = /['"`]⬅️\s*(Назад|Отмена|Админка|Операции|Коммуникации|Система)/.test(block);
+    const hasAdminBack = /['"`]⬅️\s*(Админка|Операции|Коммуникации|Система)/.test(block);
     const hasMenu = block.includes('📋 Меню');
     const hasHome = block.includes('🏠 Home');
 
@@ -83,7 +84,7 @@ function analyzeFile(file, text) {
     // A keyboard is footer-ish if it already contains either Menu or Home.
     // Strict mode (NAVLINT_STRICT=1): also enforce on any keyboard that has a Back-like control.
     const strict = String(process.env.NAVLINT_STRICT || '') === '1';
-    const footerish = hasMenu || hasHome || (strict && hasBackLike);
+    const footerish = hasMenu || hasHome || hasAdminBack || (strict && hasBackLike);
     if (!footerish) continue;
 
     const missing = [];
