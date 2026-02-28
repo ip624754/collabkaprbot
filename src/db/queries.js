@@ -1176,7 +1176,8 @@ export async function auditWorkspace(workspaceId, actorUserId, action, payload =
           return null;
         }
       } catch {
-        // Fail open: audit must never break bot UX
+        // Fail-closed: if Redis rate limiter is unavailable, drop audit writes to protect Neon.
+        return null;
       }
     }
   }
