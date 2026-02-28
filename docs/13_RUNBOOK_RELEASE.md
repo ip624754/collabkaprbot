@@ -17,11 +17,9 @@ node migrations/run.js
 1) `node --check src/bot/bot.js`
 2) `node --check src/bot/cron.js`
 3) `node migrations/run.js --dry-run` → должно быть “skip all”.
-4) `GET /api/cron/giveaways-tick` (или POST) с `Authorization: Bearer <CRON_SECRET>` → 200 OK.
-5) `GET /api/cron/broadcast-tick` (или POST) с Bearer → 200 OK.
-6) Support: user → 💬 Поддержка → тикет приходит в `SUPPORT_CHAT_ID` с кнопками → быстрый шаблон отправляет ответ.
-7) Support: ✍️ Ответить → reply на подсказку → ответ уходит пользователю + подтверждение ✅.
-8) Создать giveaway → дождаться ENDED → проверить WINNERS_DRAWN; повторный запуск tick не меняет winners.
+4) `GET /api/cron/giveaways-tick` с `Authorization: Bearer <CRON_SECRET>` → 200 OK.
+5) `GET /api/cron/broadcast-tick` с Bearer → 200 OK.
+6) Создать giveaway → дождаться ENDED → проверить WINNERS_DRAWN; повторный запуск tick не меняет winners.
 
 ## Smoke tests (full)
 - Одновременный двойной запуск tick (две вкладки) → только один draw.

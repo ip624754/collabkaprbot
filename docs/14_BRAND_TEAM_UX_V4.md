@@ -1,4 +1,4 @@
-# 14 — BRAND TEAM UX (V4) — 2026-02-23
+# 14 — BRAND TEAM UX (V4) — 2026-02-20
 
 ## Principle
 - **Button is always visible**
@@ -33,6 +33,3 @@ Gate must explain:
 - Do not query DB on every menu render (kills Neon CU on serverless).
 - Do not fork logic into multiple “paidOk” checks — keep single source of truth.
 
-## Ownership note (важно для прода)
-- Профиль бренда и Brand Plan привязаны к Telegram-аккаунту владельца.
-- Если профиль заводит менеджер — лучше заводить на владельца и добавлять менеджеров через Brand Team.

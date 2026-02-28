@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-02-27
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-02-28
 
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
@@ -41,6 +41,10 @@
 - `cron.giveaways_tick` и `cron.broadcast_tick`: последний run (ts + summary)
 - `audit.throttle`: метрики подавления audit-записей (если включено)
 - `broadcast.cooldown`: активная пауза после `429 Too Many Requests` (если есть)
+- `mon.retry`: breadcrumbs по воркеру монетизации (последний запуск ретрая)
+- `mon.intro`: breadcrumbs по интро (💬 Написать) — последний attempt/результат
+- `mon.accept`: breadcrumbs по ✅ Принять (Brand Inbox) — последний attempt/результат
+- `mon.unlock`: breadcrumbs по 🔓 Разлок контактов — последний attempt/результат
 - `ref`: лёгкие счётчики источников входа (`/start src_tg` / `/start src_ig`) — today/total
 - `ref.by_role`: разрез источника × роли (tg/ig/direct × brand/creator) — today/total
 
@@ -58,6 +62,47 @@
 - Instagram: `https://t.me/<bot>?start=src_ig`
 
 Счётчики видны в `/api/health.ref` (и разрез по роли — в `ref.by_role`) и хранятся **только в Redis**.
+
+#### Monetization retry breadcrumbs
+После STEP171 воркер `POST /api/qstash/monetization-retry` пишет в Redis “следы” для ops‑наблюдаемости:
+- `/api/health.mon.retry.last_at`
+- `/api/health.mon.retry.last_action`
+- `/api/health.mon.retry.last_status` (`ok` / `skipped` / `error`)
+- `/api/health.mon.retry.last_error` (короткий код причины)
+
+Это помогает быстро увидеть, что QStash‑ретраи реально отрабатывают (и не “молчат”).
+Формат short‑code/маскирование/запись ключей централизованы в `src/lib/monDiag.js`.
+
+#### Intro breadcrumbs (💬 Написать)
+После STEP179 интро (клик `a:bx_msg` и/или воркер `POST /api/qstash/monetization-retry` с `action=intro_open`) пишет Redis‑breadcrumbs:
+- `/api/health.mon.intro.last_at`
+- `/api/health.mon.intro.last_status` (`ok` / `skipped` / `error`)
+- `/api/health.mon.intro.last_error` (короткий код)
+- `/api/health.mon.intro.last_offer_id` (masked)
+
+Цель: одним взглядом видеть “интро живо / блок (paywall/limit) / ошибка”, не трогая Neon.
+Формат short‑code/маскирование/запись ключей централизованы в `src/lib/monDiag.js`.
+
+
+#### Accept breadcrumbs (✅ Принять)
+После STEP183 клики `a:brand_app_accept` и/или воркер `POST /api/qstash/monetization-retry` (action=`brand_app_accept`) пишут Redis‑breadcrumbs:
+- `/api/health.mon.accept.last_at`
+- `/api/health.mon.accept.last_status` (`ok` / `skipped` / `error`)
+- `/api/health.mon.accept.last_error` (короткий код)
+- `/api/health.mon.accept.last_app_id` (masked)
+- `/api/health.mon.accept.last_source` (`click` / `worker`)
+
+Цель: одним взглядом видеть “✅ Принять живо / уже в очереди / paywall / ошибка”, не трогая Neon.
+
+#### Unlock breadcrumbs (🔓 Разлок контактов)
+После STEP183 клики `a:wsp_contact_unlock` и/или воркер `POST /api/qstash/monetization-retry` (action=`wsp_contact_unlock`) пишут Redis‑breadcrumbs:
+- `/api/health.mon.unlock.last_at`
+- `/api/health.mon.unlock.last_status` (`ok` / `skipped` / `error`)
+- `/api/health.mon.unlock.last_error` (короткий код)
+- `/api/health.mon.unlock.last_ws_id` (masked)
+- `/api/health.mon.unlock.last_source` (`click` / `worker`)
+
+Цель: быстро видеть “разлок отрабатывает / в очереди / недостаточно кредитов / ошибка”, без DB.
 
 ---
 
@@ -123,6 +168,68 @@ STEP167 (P0): **anti-ORPHANED платежи + буфер против гоно�
 - Auto-heal ORPHANED `missing_session` теперь **не трогает** слишком свежие платежи (по умолчанию ~5 минут).
 - ENV: `PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC` (0..3600, default 300).
 - UX при `missing_session`: если auto-heal включён, бот сообщает, что попробует применить оплату автоматически в течение ~N минут.
+
+STEP171 (P0): **Monetization circuit breaker** (Neon slow → без таймаутов в UI)
+- Для критичных списаний (✅ Принять / 🔓 Разлок контактов) ставим короткий timeout на DB‑операции.
+- Если Neon отвечает медленно → показываем «⏳ В обработке…» и ставим безопасный ретрай в QStash: `POST /api/qstash/monetization-retry`.
+- Ретрай идемпотентен: exact‑once списание держим на уровне SQL guards / advisory lock.
+- ENV:
+  - `MONETIZATION_CB_TIMEOUT_MS` (default 2000)
+  - `MONETIZATION_QSTASH_DELAY_SEC` (default 10)
+  - `MONETIZATION_NOTIFY_TTL_SEC` (default 90d)
+
+
+
+STEP174 (P0/P1): **Optimistic accept/unlock** (queue‑first + token‑lock)
+- Если QStash retry настроен, то критичные списания (✅ Принять / 🔓 Разлок контактов) выполняются **через очередь**, без ожидания синхронного DB‑write.
+- На клике берём **Redis token‑lock** (safe lock) на ~10 минут и публикуем задачу в QStash (dedup). UI сразу показывает «⏳ В обработке…» + кнопку обновления.
+- Воркер `POST /api/qstash/monetization-retry` выполняет DB‑truth мутацию идемпотентно, обновляет Redis кеши и **best‑effort** освобождает token‑lock (или он сам истечёт по TTL).
+- Fail‑open: если Redis недоступен или QStash не настроен — остаётся прежний синхронный путь (и STEP171 circuit breaker на таймауты).
+
+ENV:
+- `MONETIZATION_TOKEN_LOCK_TTL_SEC` (default **600**, min 60, max 3600) — TTL token‑lock для “optimistic queue‑first”.
+
+
+STEP175 (P1): **UI anti-spam по token‑lock** (Redis-only)
+- Пока активен monetization token‑lock, **скрываем кнопки списания** в UI и показываем “pending”:
+  - Brand Inbox карточка заявки (`status=new`): скрываем **✅ Принять**, показываем «⏳ …в обработке» + «🔄 Обновить».
+  - Витрина (locked contacts): скрываем CTA на разлок контактов, показываем «⏳ …в обработке» + «🔄 Обновить».
+  - Экран разлока (`a:wsp_contact_req`): если разлок уже в очереди — не показываем кнопку списания повторно.
+- Реализация: **только Redis GET** по ключам `mon:lock:*` (без DB‑чтений в этих рендерах).
+
+
+STEP176 (P0/P1): **Intro open hardening** (token-lock + circuit breaker + optional QStash commit)
+- Клик «💬 Написать» (это интро = открытие нового диалога) защищён от дублей и зависаний:
+  - берём Redis token‑lock `mon:lock:intro_open:<offerId>:<buyerUserId>` (TTL ~10м)
+  - быстрый sync‑путь остаётся (как раньше), но при транзиентных ошибках/timeout → «⏳ В обработке…»
+- При медленном Neon задача ставится в QStash (`action=intro_open` → `POST /api/qstash/monetization-retry`, dedup).
+  Воркер открывает диалог/списывает кредиты идемпотентно и шлёт Telegram‑уведомление с кнопкой “Открыть диалог”.
+- UI anti‑spam: пока token‑lock активен, в `renderBxPublicView` скрываем «💬 Написать» и показываем “pending” + кнопки “Inbox/Обновить” (Redis‑only, без DB).
+
+
+STEP177 (P0/P1): **Intro fail-open guard (Redis degraded safe)**
+- Действие `a:bx_msg` (клик «💬 Написать») переведено на fail-open guard (без fail-closed блокировок на входе), чтобы при деградации Redis кнопка не становилась “мёртвой”.
+- При недоступном Redis продолжаем работать через короткий DB timeout (circuit breaker) и/или QStash retry (dedup), показывая пользователю понятный pending UI.
+
+
+STEP178 (P0): **Intro DB exact-once guard (advisory lock)**
+- В `getOrCreateBarterThreadWithCredits()` добавлен `pg_advisory_xact_lock` по паре `(offer_id, buyer_user_id)` + повторная проверка существующего треда после lock.
+- Цель: исключить гонки/дубли при двойном клике и параллельных вызовах (sync + QStash), а также убрать ложные ответы типа “paywall/limit” если тред уже создан другим запросом.
+
+
+STEP180 (P1): **Monetization diagnostics helper** (`src/lib/monDiag.js`)
+- Централизовали утилиты: short‑code, маскирование id, запись Redis breadcrumbs (`mon.retry`, `mon.intro`).
+- Цель: убрать дублирование и исключить дрейф форматов/ключей/TTL, без изменения продуктовой логики.
+
+STEP181 (P1): **Pending UX standardization (Redis-only)**
+- Привели “pending” состояния к одному стандарту в ключевых монетизационных кликах:
+  - ✅ Принять (Brand Inbox)
+  - 🔓 Разлок контактов (витрина / экран разлока)
+  - 💬 Интро (Написать)
+- Везде быстрые кнопки: **📥 Inbox + 🔄 Обновить** (и **💳 Купить ещё** там, где уместно).
+- В рендерах pending используем только **Redis token‑lock / breadcrumbs** (без DB‑чтений в UI).
+
+
 
 
 ### A2) Unified navigation footer (STEP160)
@@ -522,3 +629,8 @@ Auto-heal safeguards + ops alerts:
 - Добавлен генератор `npm run gen:notebooklm-sources`, который готовит папку/ZIP `dist/notebooklm_sources/`.
 - В sources SQL миграции и migration_pack кладутся как `.txt` копии (`migrations_txt/*.sql.txt`), чтобы NotebookLM принимал файлы.
 - Добавлен исторический контекст Neon: `docs/neon/ИСТОРИЯ_НЕОН.txt`.
+
+---
+
+## Repo sync note
+- **STEP184:** архив репозитория и NotebookLM audit-pack синхронизированы с состоянием **STEP183** (без изменения поведения).

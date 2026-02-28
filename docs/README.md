@@ -14,6 +14,7 @@
 - `91_PROD_LAUNCH_30MIN.md` — one‑pager: запуск продакшена за 30 минут
 - `10_QSTASH_RUNBOOK.md` — QStash: ключи/env, rollout/rollback, типовые задачи
 - `11_MIGRATIONS_PACK.md` — как безопасно поднять/чинить БД на Neon (exactly‑once runner)
+- `neon/README.md` + `neon/ИСТОРИЯ_НЕОН.txt` — исторический контекст по Neon (для аудита/разбора; не source of truth)
 - `12_INFRA_CONTROL_PLANE.md` — Cron/Locks/Outbox/гарантии (Control Plane)
 - `13_RUNBOOK_RELEASE.md` + `16_RELEASE_CHECKLIST.md` — релизы/проверки
 - `14_BRAND_TEAM_UX_V4.md` — UX “Менеджеры бренда” (кнопка всегда видна, гейт внутри)
@@ -75,3 +76,9 @@
 ## Что нового в текущем snapshot (2026-02-27)
 - IG OAuth/verify: UI **скрыт** (launch‑safe). Документы и код оставлены, чтобы вернуться позже без потери контекста.
 - One‑pager запуска: `91_PROD_LAUNCH_30MIN.md`.
+
+
+## Аудит (NotebookLM / внешняя проверка)
+- `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md` — что загрузить, в каком порядке
+- `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt` — жёсткий промпт аудита
+- `docs/audit/02_NOTEBOOKLM_AUDIO_RECAP_FOCUS_RU.md` — короткий текст для аудиопересказа
