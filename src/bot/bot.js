@@ -1027,6 +1027,164 @@ function parseAdminDmTemplateFromText(rawText) {
   return { label, text };
 }
 
+// --- Admin: Outbox log (Redis-only) (STEP193) ---
+// Stores last N admin DM sends (ok/failed) with short snippet. No DB writes.
+const ADMIN_OUTBOX_MAX = 200;
+
+function adminOutboxKey() {
+  return k(['admin_outbox']);
+}
+
+function safeJsonParse(s) {
+  if (!s) return null;
+  if (typeof s === 'object') return s;
+  try { return JSON.parse(String(s)); } catch { return null; }
+}
+
+async function appendAdminOutbox(entry) {
+  const key = adminOutboxKey();
+  const e = (entry && typeof entry === 'object' && !Array.isArray(entry)) ? { ...entry } : {};
+  if (!e.ts) e.ts = new Date().toISOString();
+  if (!e.id) e.id = 'o' + randomToken(6);
+  const payload = JSON.stringify(e);
+  try {
+    await redis.lpush(key, payload);
+    await redis.ltrim(key, 0, ADMIN_OUTBOX_MAX - 1);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getAdminOutboxPage(page = 0, perPage = 8) {
+  const key = adminOutboxKey();
+  const p = Math.max(0, Number(page) || 0);
+  const lim = Math.max(1, Math.min(20, Number(perPage) || 8));
+  const start = p * lim;
+  const stop = start + lim - 1;
+  let total = 0;
+  let raw = [];
+  try { total = Number(await redis.llen(key)) || 0; } catch { total = 0; }
+  try { raw = await redis.lrange(key, start, stop); } catch { raw = []; }
+  const items = (Array.isArray(raw) ? raw : []).map((x) => safeJsonParse(x)).filter(Boolean);
+  const pages = Math.max(1, Math.ceil((total || 0) / lim));
+  return { items, total, page: Math.min(p, pages - 1), pages, perPage: lim, startIndex: start };
+}
+
+async function getAdminOutboxItemByIndex(index) {
+  const key = adminOutboxKey();
+  const i = Math.max(0, Number(index) || 0);
+  try {
+    if (typeof redis.lindex === 'function') {
+      const v = await redis.lindex(key, i);
+      return safeJsonParse(v);
+    }
+  } catch {}
+  try {
+    const arr = await redis.lrange(key, i, i);
+    return safeJsonParse(Array.isArray(arr) ? arr[0] : null);
+  } catch {
+    return null;
+  }
+}
+
+async function clearAdminOutbox() {
+  try { await redis.del(adminOutboxKey()); return true; } catch { return false; }
+}
+
+function fmtOutboxBtnTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return '';
+  try {
+    const fmt = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', hour12: false });
+    return fmt.format(d);
+  } catch {
+    return '';
+  }
+}
+
+
+// --- Admin: User Notes (Redis-only) (STEP194) ---
+// Per-user internal note visible only to super-admins. Stored in Redis; no DB tables/migrations.
+const ADMIN_USER_NOTE_MAX = 1400;
+
+function adminUserNoteKey(userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return k(['adm_user_note', '0']);
+  return k(['adm_user_note', String(uid)]);
+}
+
+function normalizeAdminUserNote(v) {
+  if (!v) return null;
+
+  // Backward-compatible: allow plain string
+  if (typeof v === 'string') {
+    const t = String(v).replace(/\r/g, '').trim();
+    if (!t) return null;
+    return { text: t, updatedAt: '', byAdminTgId: 0, byAdminUsername: '' };
+  }
+
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    const txt = String(v.text || '').replace(/\r/g, '').trim();
+    if (!txt) return null;
+    const text = txt.length > ADMIN_USER_NOTE_MAX ? (txt.slice(0, ADMIN_USER_NOTE_MAX) + '…') : txt;
+    return {
+      text,
+      updatedAt: String(v.updatedAt || ''),
+      byAdminTgId: Number(v.byAdminTgId || 0) || 0,
+      byAdminUsername: String(v.byAdminUsername || ''),
+    };
+  }
+
+  return null;
+}
+
+async function getAdminUserNote(userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return null;
+  try {
+    const v = await redis.get(adminUserNoteKey(uid));
+    return normalizeAdminUserNote(v);
+  } catch {
+    return null;
+  }
+}
+
+async function setAdminUserNote(userId, noteText, meta = {}) {
+  const uid = Number(userId || 0);
+  if (!uid) return false;
+
+  const raw = String(noteText || '').replace(/\r/g, '').trim();
+  if (!raw) return false;
+
+  const text = raw.length > ADMIN_USER_NOTE_MAX ? (raw.slice(0, ADMIN_USER_NOTE_MAX) + '…') : raw;
+
+  const obj = {
+    text,
+    updatedAt: new Date().toISOString(),
+    byAdminTgId: Number(meta.byAdminTgId || 0) || 0,
+    byAdminUsername: String(meta.byAdminUsername || ''),
+  };
+
+  try {
+    await redis.set(adminUserNoteKey(uid), obj);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function clearAdminUserNote(userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return false;
+  try {
+    await redis.del(adminUserNoteKey(uid));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function sysNoticeSeenKey(tgId, version) {
   return k(['sys', 'notice', 'seen', String(tgId || 0), String(version || 0)]);
@@ -16402,6 +16560,8 @@ ${escapeHtml(safe)}`;
           targetTgId,
           targetUsername,
           templateRaw,
+          templateId: 'free',
+          templateLabel: 'Свободный текст',
           phUsed,
           phUnknown,
           createdAt: new Date().toISOString(),
@@ -16535,6 +16695,50 @@ ${escapeHtml(safe)}`;
 
       try { await clearExpectText(ctx.from.id); } catch {}
       await renderAdminDmTemplateView(ctx, tplId, page);
+      return;
+    }
+
+
+    // --- Admin: User Note input (Redis-only) (STEP194) ---
+    if (exp.type === 'adm_user_note') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+
+      const uid = Number(exp.uid || 0);
+      const f = String(exp.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(exp.page) || 0);
+
+      const chatType = String(ctx.chat?.type || '');
+      if (chatType !== 'private') {
+        await ctx.reply('📝 Заметку можно редактировать только в личном чате с ботом (DM).');
+        try { await setExpectText(ctx.from.id, exp, 20 * 60); } catch {}
+        return;
+      }
+
+      const raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Введи заметку одним сообщением (или clear).');
+        try { await setExpectText(ctx.from.id, exp, 20 * 60); } catch {}
+        return;
+      }
+
+      const low = raw.toLowerCase().trim();
+      const cancelCmd = (low === '/cancel' || low === 'cancel' || low === 'отмена');
+      if (cancelCmd) {
+        try { await clearExpectText(ctx.from.id); } catch {}
+        await renderAdminUserCard(ctx, uid, f, page);
+        return;
+      }
+
+      const clearCmd = (low === 'clear' || low === 'сброс' || low === 'очистить' || low === '0' || low === '-');
+
+      if (clearCmd) {
+        await clearAdminUserNote(uid);
+      } else {
+        await setAdminUserNote(uid, raw, { byAdminTgId: tgId, byAdminUsername: String(ctx.from?.username || '') });
+      }
+
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminUserNote(ctx, uid, f, page);
       return;
     }
 
@@ -26239,6 +26443,83 @@ https://collabka.com/status</pre>
       return;
     }
 
+
+    // --- Admin: User Note (Redis-only) (STEP194) ---
+    if (p.a === 'a:adm_unote') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminUserNote(ctx, uid, f, page);
+      return;
+    }
+
+    if (p.a === 'a:adm_unote_edit') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад', `a:adm_unote|id:${uid}|f:${f}|p:${page}`)
+        .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(
+        ctx,
+        `✏️ <b>Заметка админа</b>
+
+Отправь заметку <b>одним сообщением</b>.
+
+Команды:
+• <code>clear</code> — очистить заметку
+• <code>/cancel</code> — отмена (вернёт к карточке)`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+
+      await setExpectText(ctx.from.id, { type: 'adm_user_note', uid, f, page }, 20 * 60);
+      return;
+    }
+
+    if (p.a === 'a:adm_unote_clear_q') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      const kb = new InlineKeyboard()
+        .text('🧹 Очистить', `a:adm_unote_clear|id:${uid}|f:${f}|p:${page}`)
+        .text('❌ Отмена', `a:adm_unote|id:${uid}|f:${f}|p:${page}`)
+        .row()
+        .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+        .text('⬅️ Админка', 'a:admin_home');
+
+      await safeEditOrReply(ctx, '🧹 <b>Очистить заметку?</b>', { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_unote_clear') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+
+      await clearAdminUserNote(uid);
+      await renderAdminUserNote(ctx, uid, f, page);
+      return;
+    }
+
     // Admin: placeholders helper (STEP191)
     if (p.a === 'a:adm_ph') {
       await ctx.answerCallbackQuery();
@@ -26300,6 +26581,7 @@ https://collabka.com/status</pre>
       kb.text('📎 Вставить', `a:adm_ph|r:umsg|id:${uid}|f:${f}|p:${page}`).row();
       kb.text('✍️ Свободный текст', `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`).row();
       kb.text('📌 Шаблоны (админ)', 'a:admin_umsg_tpls|p:0').row();
+      kb.text('📤 Outbox', 'a:admin_outbox|p:0').row();
       kb.text('⬅️ Назад', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`).row();
       kb.text('⬅️ Админка', 'a:admin_home');
 
@@ -26330,11 +26612,13 @@ Username: ${escapeHtml(uname)}
 
       let raw = '';
       let usedDefaultKey = '';
+      let tplLabel = '';
 
       if (tplId) {
         const { tpls } = await getAdminDmTemplatesWithMeta();
         const it = findAdminDmTemplate(tpls.items, tplId);
         raw = String(it?.text || '').trim();
+        tplLabel = String(it?.label || '').trim();
       }
 
       if (!raw && key) {
@@ -26348,7 +26632,10 @@ Username: ${escapeHtml(uname)}
           limit: DEFAULT_ADMIN_DM_TEMPLATES.find((t) => t.id === 'limit')?.text || '',
         };
         raw = TPL[key] || '';
-        if (raw) usedDefaultKey = key;
+        if (raw) {
+          usedDefaultKey = key;
+          tplLabel = String(DEFAULT_ADMIN_DM_TEMPLATES.find((t) => t.id === key)?.label || '').trim();
+        }
       }
 
       if (!raw) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
@@ -26375,6 +26662,8 @@ Username: ${escapeHtml(uname)}
           targetTgId,
           targetUsername: String(row?.tg_username || ''),
           templateRaw: raw,
+          templateId: tplId || usedDefaultKey || '',
+          templateLabel: tplLabel || '',
           phUsed,
           phUnknown,
           createdAt: new Date().toISOString(),
@@ -26520,6 +26809,51 @@ Username: ${escapeHtml(uname)}
     }
 
     
+
+
+    // --- Admin: Outbox (Redis-only) (STEP193) ---
+    if (p.a === 'a:admin_outbox') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminOutbox(ctx, page);
+      return;
+    }
+
+    if (p.a === 'a:admin_outbox_v') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const idx = Math.max(0, Number(p.i) || 0);
+      const page = Math.max(0, Number(p.p) || 0);
+      await renderAdminOutboxView(ctx, idx, page);
+      return;
+    }
+
+    if (p.a === 'a:admin_outbox_clear_q') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const page = Math.max(0, Number(p.p) || 0);
+      let total = 0;
+      try { total = Number(await redis.llen(adminOutboxKey())) || 0; } catch { total = 0; }
+      const kb = new InlineKeyboard()
+        .text('🧹 Очистить', `a:admin_outbox_clear|p:${page}`)
+        .text('❌ Отмена', `a:admin_outbox|p:${page}`)
+        .row()
+        .text('⬅️ Админка', 'a:admin_home');
+      await safeEditOrReply(ctx, `🧹 <b>Очистить Outbox?</b>
+
+Будет удалено записей: <b>${escapeHtml(String(total || 0))}</b>`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:admin_outbox_clear') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const page = Math.max(0, Number(p.p) || 0);
+      await clearAdminOutbox();
+      await renderAdminOutbox(ctx, page);
+      return;
+    }
     // --- Admin: DM Templates (Redis-only) ---
     if (p.a === 'a:admin_umsg_tpls') {
       await ctx.answerCallbackQuery();
@@ -31811,6 +32145,8 @@ async function renderAdminHome(ctx) {
     .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
     .row();
 
+  kb.text('📤 Outbox', 'a:admin_outbox|p:0').row();
+
   kb.text('🔥 Founder Sale', 'a:admin_founder').row();
 
   kb.text(`💳 Прием: ${payAccept ? 'ON' : 'OFF'}`, 'a:admin_pay_accept_toggle')
@@ -32110,6 +32446,155 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
+
+  async function renderAdminOutbox(ctx, page = 0) {
+    const { items, total, pages, perPage, page: p, startIndex } = await getAdminOutboxPage(page, 8);
+
+    let text = `📤 <b>Outbox</b>
+
+` +
+      `Всего записей: <b>${escapeHtml(String(total || 0))}</b>
+` +
+      `Хранение: <b>Redis-only</b> (последние ${ADMIN_OUTBOX_MAX})
+
+`;
+
+    if (!items.length) {
+      text += 'Пока пусто.';
+    } else {
+      text += `Страница ${p + 1}/${pages}:
+
+`;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i] || {};
+        const absIdx = startIndex + i; // 0-based Redis list index
+        const ok = String(it.status || '').toLowerCase() === 'ok' || String(it.status || '').toLowerCase() === 'sent';
+        const icon = ok ? '✅' : '❌';
+        const to = it.target_username
+          ? ('@' + String(it.target_username).replace(/^@/, ''))
+          : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
+        const when = fmtTs(it.ts);
+        const sn = clipText(String(it.preview || it.snippet || '').replace(/\n+/g, ' / '), 110);
+        const num = absIdx + 1;
+        text += `${icon} <b>#${num}</b> · ${escapeHtml(when)} → <b>${escapeHtml(to)}</b>
+<i>${escapeHtml(sn || '—')}</i>
+`;
+        if (!ok && it.error) text += `<code>${escapeHtml(clipText(String(it.error), 140))}</code>
+`;
+        text += '\n';
+      }
+    }
+
+    const kb = new InlineKeyboard();
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i] || {};
+      const absIdx = startIndex + i;
+      const ok = String(it.status || '').toLowerCase() === 'ok' || String(it.status || '').toLowerCase() === 'sent';
+      const icon = ok ? '✅' : '❌';
+      const to = it.target_username
+        ? ('@' + String(it.target_username).replace(/^@/, ''))
+        : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
+      const t = fmtOutboxBtnTime(it.ts) || '';
+      const label = clipText(`${icon} ${t} ${to}`, 48);
+      kb.text(label, `a:admin_outbox_v|i:${absIdx}|p:${p}`).row();
+    }
+
+    if (pages > 1) {
+      const prev = (p - 1 + pages) % pages;
+      const next = (p + 1) % pages;
+      kb.text('⬅️', `a:admin_outbox|p:${prev}`)
+        .text(`${p + 1}/${pages}`, `a:admin_outbox|p:${p}`)
+        .text('➡️', `a:admin_outbox|p:${next}`)
+        .row();
+    }
+
+    kb.text('🧹 Очистить', `a:admin_outbox_clear_q|p:${p}`).row();
+    kb.text('⬅️ Админка', 'a:admin_home');
+
+    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  }
+
+  async function renderAdminOutboxView(ctx, index, backPage = 0) {
+    const it = await getAdminOutboxItemByIndex(index);
+    const p = Math.max(0, Number(backPage) || 0);
+
+    if (!it) {
+      await safeEditOrReply(ctx, '⚠️ Запись не найдена (возможно, очищено).', {
+        reply_markup: new InlineKeyboard().text('⬅️ К списку', `a:admin_outbox|p:${p}`).text('⬅️ Админка', 'a:admin_home')
+      });
+      return;
+    }
+
+    const ok = String(it.status || '').toLowerCase() === 'ok' || String(it.status || '').toLowerCase() === 'sent';
+    const icon = ok ? '✅' : '❌';
+    const toU = it.target_username ? ('@' + String(it.target_username).replace(/^@/, '')) : '—';
+    const toId = it.target_tg_id ? String(it.target_tg_id) : '—';
+    const byU = it.admin_username ? ('@' + String(it.admin_username).replace(/^@/, '')) : '—';
+    const byId = it.admin_tg_id ? String(it.admin_tg_id) : '—';
+    const when = fmtTs(it.ts);
+    const hash = it.text_hash ? String(it.text_hash) : '';
+
+    const tplLine = it.template_label || it.template_id
+      ? `
+Шаблон: <b>${escapeHtml(String(it.template_label || it.template_id))}</b>`
+      : '';
+
+    const used = Array.isArray(it.placeholders_used) ? it.placeholders_used : [];
+    const unknown = Array.isArray(it.placeholders_unknown) ? it.placeholders_unknown : [];
+    let phLine = '';
+    if (used.length) {
+      phLine += `
+📎 used: ${used.map((x) => `<code>{{${escapeHtml(String(x))}}}</code>`).join(' ')}`;
+    }
+    if (unknown.length) {
+      phLine += `
+⚠️ unknown: ${unknown.map((x) => `<code>{{${escapeHtml(String(x))}}}</code>`).join(' ')}`;
+    }
+
+    const err = it.error ? `
+Ошибка: <code>${escapeHtml(String(it.error))}</code>` : '';
+    const snippet = String(it.snippet || it.preview || '').trim();
+
+    const text =
+      `${icon} <b>Outbox запись</b>
+
+` +
+      `Время: <b>${escapeHtml(when)}</b>
+` +
+      `To: <b>${escapeHtml(toU)}</b> (tg:<code>${escapeHtml(toId)}</code>)
+` +
+      `By: <b>${escapeHtml(byU)}</b> (tg:<code>${escapeHtml(byId)}</code>)
+` +
+      `Статус: <b>${escapeHtml(String(it.status || (ok ? 'ok' : 'failed')))}</b>` +
+      (hash ? `
+Hash: <code>${escapeHtml(hash)}</code>` : '') +
+      tplLine +
+      phLine +
+      err +
+      `
+
+<b>Текст (snippet)</b>:
+<pre>${escapeHtml(snippet || '—')}</pre>`;
+
+    const kb = new InlineKeyboard()
+      .text('⬅️ К списку', `a:admin_outbox|p:${p}`)
+      .text('🧹 Очистить', `a:admin_outbox_clear_q|p:${p}`)
+      .row();
+
+    const uid = Number(it.target_user_id || 0);
+    if (uid) {
+      kb.text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`)
+        .text('✉️ Написать', `a:adm_umsg|id:${uid}|f:all|p:0`)
+        .row();
+    }
+
+    kb.text('⬅️ Админка', 'a:admin_home');
+
+    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  }
+
+
 
 
 
@@ -32754,6 +33239,21 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   text += `<b>Обновлён:</b> ${msk(card.updated_at)}\n`;
   if (card.banned_at) text += `🚫 <b>ЗАБЛОКИРОВАН:</b> ${msk(card.banned_at)}\n`;
 
+  // Admin note (Redis-only, STEP194). We show the snippet only in DM to avoid leaks in group chats.
+  const inPrivate = String(ctx.chat?.type || '') === 'private';
+  if (inPrivate) {
+    const note = await getAdminUserNote(card.id);
+    if (note?.text) {
+      const sn = clipText(String(note.text).replace(/\n+/g, ' / '), 180);
+      text += `📝 <b>Заметка:</b> ${escapeHtml(sn)}\n`;
+    } else {
+      text += `📝 <b>Заметка:</b> —\n`;
+    }
+  } else {
+    text += `📝 <b>Заметка:</b> <i>(только в DM)</i>\n`;
+  }
+
+
   // Brand info
   if (isBrand) {
     text += `\n<b>— Бренд —</b>\n`;
@@ -32803,6 +33303,8 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   kb.text(`📋 Скопировать ID: ${card.tg_id}`, `a:adm_ucopy|id:${card.id}`).row();
 
   kb.text('✉️ Написать', `a:adm_umsg|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
+  kb.text('📝 Заметка', `a:adm_unote|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
+
 
   // Quick gift from card
   kb.text('🎁 Подарить подписку', `a:adm_ugift|id:${card.id}|f:${backFilter}|p:${backPage}`).row();
@@ -32834,7 +33336,86 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   kb.text('⬅️ К списку', `a:admin_users|f:${backFilter}|p:${backPage}`).row();
   kb.text('⬅️ Админка', 'a:admin_home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  
+async function renderAdminUserNote(ctx, userId, backFilter = 'all', backPage = 0) {
+  const uid = Number(userId || 0);
+  const f = String(backFilter || 'all').toLowerCase();
+  const page = Math.max(0, Number(backPage) || 0);
+
+  const backKb = new InlineKeyboard()
+    .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+    .text('⬅️ Админка', 'a:admin_home');
+
+  if (!uid) {
+    await safeEditOrReply(ctx, '⚠️ Нет user_id.', { reply_markup: backKb });
+    return;
+  }
+
+  // Safety: keep admin notes in DM to avoid accidental leaks in group chats.
+  const chatType = String(ctx.chat?.type || '');
+  if (chatType !== 'private') {
+    await safeEditOrReply(
+      ctx,
+      `📝 <b>Заметка админа</b>
+
+Эта функция доступна только в <b>личном чате</b> с ботом (DM), чтобы заметки не светились в группах.
+
+Открой бота в личке и зайди в карточку пользователя ещё раз.`,
+      { parse_mode: 'HTML', reply_markup: backKb }
+    );
+    return;
+  }
+
+  const card = await db.getUserCardById(uid);
+  if (!card) {
+    await safeEditOrReply(ctx, '⚠️ Пользователь не найден.', { reply_markup: backKb });
+    return;
+  }
+
+  const note = await getAdminUserNote(uid);
+
+  const uname = card.tg_username ? '@' + String(card.tg_username) : '—';
+  const updated = note?.updatedAt ? (new Date(note.updatedAt).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })) : '—';
+  const by = note?.byAdminTgId
+    ? (note.byAdminUsername ? ('@' + String(note.byAdminUsername).replace(/^@/, '')) : ('tg:' + String(note.byAdminTgId)))
+    : '—';
+
+  let text = `📝 <b>Заметка (admin)</b>
+
+User ID: <code>${uid}</code>
+TG ID: <code>${escapeHtml(String(card.tg_id || '—'))}</code>
+Username: ${escapeHtml(uname)}
+
+`;
+
+  if (note?.text) {
+    text += `<b>Текст</b>
+<pre>${escapeHtml(String(note.text))}</pre>
+
+`;
+  } else {
+    text += `<i>Пока пусто.</i>
+
+`;
+  }
+
+  text += `Updated: <code>${escapeHtml(String(updated))}</code>
+By: <code>${escapeHtml(String(by))}</code>
+`;
+
+  const kb = new InlineKeyboard()
+    .text('✏️ Изменить', `a:adm_unote_edit|id:${uid}|f:${f}|p:${page}`);
+
+  if (note?.text) kb.text('🧹 Очистить', `a:adm_unote_clear_q|id:${uid}|f:${f}|p:${page}`);
+  kb.row();
+  kb.text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+    .text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+
+await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function sendAdminMessageToUser(ctx, payload, nav = {}) {
@@ -32844,6 +33425,8 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
   const targetUsername = String(payload?.targetUsername || '').trim();
   const templateRaw = String(payload?.templateRaw || payload?.tplRaw || payload?.plain || '').trim();
   const bodyHtmlFallback = String(payload?.bodyHtml || '').trim();
+  const templateId = String(payload?.templateId || payload?.tplId || '').trim();
+  const templateLabel = String(payload?.templateLabel || '').trim();
   const f = String(nav.f || 'all').toLowerCase();
   const page = Math.max(0, Number(nav.page) || 0);
   const backUid = Number(nav.backUid || targetUserId || 0);
@@ -32880,9 +33463,10 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
   }
 
   // Dedup (best-effort): prevent accidental double-send (double click / retries)
+  let textHash = '';
   try {
-    const h = crypto.createHash('sha1').update(String(expandedSafe || bodyHtml)).digest('hex').slice(0, 12);
-    const dkey = k(['adm_umsg_dedup', String(adminTgId), String(targetTgId), h]);
+    textHash = crypto.createHash('sha1').update(String(expandedSafe || bodyHtml)).digest('hex').slice(0, 12);
+    const dkey = k(['adm_umsg_dedup', String(adminTgId), String(targetTgId), textHash]);
     const ok = await redis.set(dkey, '1', { nx: true, ex: 60 });
     if (!ok) {
       await safeEditOrReply(ctx, '⏳ Это сообщение уже отправлялось недавно (anti-двойной клик).', {
@@ -32909,6 +33493,30 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
     err = String(e?.message || e).slice(0, 160);
   }
 
+
+
+// Outbox log (Redis-only) — record send result (ok/failed). Best-effort.
+try {
+  const snippet = expandedSafe.length > 900 ? (String(expandedSafe).slice(0, 900) + '…') : String(expandedSafe || '');
+  const preview = clipText(String(expandedSafe || '').replace(/\n+/g, ' / '), 160);
+  await appendAdminOutbox({
+    ts: new Date().toISOString(),
+    status: ok ? 'ok' : 'failed',
+    admin_tg_id: adminTgId,
+    admin_username: String(ctx.from?.username || ''),
+    target_user_id: targetUserId,
+    target_tg_id: targetTgId,
+    target_username: targetUsername,
+    template_id: templateId,
+    template_label: templateLabel,
+    placeholders_used: phUsed,
+    placeholders_unknown: phUnknown,
+    text_hash: textHash,
+    preview,
+    snippet,
+    error: ok ? '' : err,
+  });
+} catch {}
   const uname = targetUsername ? '@' + targetUsername : '—';
   if (!ok) {
     await safeEditOrReply(ctx, `❌ <b>Не удалось отправить</b>\n\nПользователь: <b>${escapeHtml(uname)}</b> (tg:<code>${targetTgId}</code>)\n\nОшибка: <code>${escapeHtml(err || 'unknown')}</code>`, {
