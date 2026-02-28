@@ -17,6 +17,11 @@ const __dirname = path.dirname(__filename);
 
 const MIGRATIONS_TABLE = 'schema_migrations';
 
+// IMPORTANT (fail-fast): only files matching `NNN_name.sql` are allowed in migrations/
+// This prevents accidental placement of scripts like `00_mark_all_applied.sql` into migrations/
+// which could otherwise be executed on a fresh DB.
+const MIGRATION_FILE_RE = /^\d{3}_.+\.sql$/i;
+
 function sha256Hex(s) {
   return crypto
     .createHash('sha256')
@@ -51,10 +56,25 @@ async function run() {
 
   await ensureMigrationsTable();
 
-  const files = fs
-    .readdirSync(__dirname)
-    .filter((f) => /^\d+_.*\.sql$/.test(f))
+  const dirEntries = fs.readdirSync(__dirname);
+
+  // Fail fast if any `.sql` file does NOT match the strict migration naming rule.
+  // If someone accidentally copies `migration_pack/*.sql` into `migrations/`, we want to stop.
+  const rogueSql = dirEntries
+    .filter((f) => String(f).toLowerCase().endsWith('.sql'))
+    .filter((f) => !MIGRATION_FILE_RE.test(f))
     .sort();
+
+  if (rogueSql.length) {
+    throw new Error(
+      `[MIGRATIONS] Unsafe .sql files detected in migrations/ (refusing to run).\n` +
+        `Allowed pattern: NNN_name.sql (e.g. 041_example.sql).\n` +
+        `Move these files out of migrations/ (usually to migration_pack/):\n` +
+        rogueSql.map((x) => `- ${x}`).join('\n')
+    );
+  }
+
+  const files = dirEntries.filter((f) => MIGRATION_FILE_RE.test(f)).sort();
 
   let applied = 0;
   let skipped = 0;
