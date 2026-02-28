@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-02-28
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-01
 
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
@@ -20,6 +20,7 @@
 - STEP205: Polishing Comms — единые лимиты Telegram по длине текста (emoji-safe), предупреждения в предпросмотре, лимиты для System Notice и CTA (без регрессий).
 - STEP206: закреплён короткий релиз‑протокол “2 минуты”: `npm run preflight` + `/api/health` + 2–3 клика по админ‑экранам (Comms/Outbox/Users). См. `docs/16_RELEASE_CHECKLIST.md`.
 - STEP207: hotfix — исправлен SyntaxError (invalid RegExp) в `normalizeNoticeCtaLabel` (CTA label), который мог ломать запуск на Vercel.
+- STEP208: migrations fail-fast — раннер `migrations/run.js` и генератор pack (`scripts/gen-mark-all-applied.js`) принимают только `NNN_name.sql` и **падают**, если в `migrations/` есть любой “левый” `.sql` (защита от случайного копирования `migration_pack/*.sql`).
 
 
 

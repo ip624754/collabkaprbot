@@ -85,7 +85,13 @@ node scripts/gen-mark-all-applied.js --dry-run | head
 
 ⚠️ Эти файлы **не используются** рантаймом и не запускаются автоматически. Основной путь миграций — `node migrations/run.js` (exactly-once + checksum).
 ## Важно: `migration_pack/*` не должен дублироваться в `migrations/`
-Раннер `migrations/run.js` применяет **все** файлы в `migrations/`, которые подходят под шаблон `NNN_name.sql`.
+Раннер `migrations/run.js` применяет **все** файлы в `migrations/`, которые подходят под шаблон **`NNN_name.sql`**
+(ровно **3 цифры** + `_` + имя + `.sql`, regex: `^\d{3}_.+\.sql$`).
 Поэтому скрипты из `migration_pack/` (например `00_mark_all_applied.sql`, `01_reconcile.sql`) **должны жить только в `migration_pack/`** и не должны быть скопированы в `migrations/`.
 
 Иначе есть риск, что раннер применит их как обычные миграции (особенно опасно на fresh DB).
+
+### Fail-fast (защита от человеческого фактора)
+Если в `migrations/` обнаружен **любой** `.sql` файл, который **не** подходит под `NNN_name.sql`,
+то `migrations/run.js` и `scripts/gen-mark-all-applied.js` **остановятся с ошибкой** и перечислят “подозрительные” файлы.
+Это сделано специально, чтобы случайно не выполнить `migration_pack/*.sql` как миграции.
