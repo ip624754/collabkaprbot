@@ -937,3 +937,8 @@ docs/01_SECURITY_INVARIANTS.md
 - Сверили архив репозитория пользователя с `FULL_STEP183` и привели к **точно такому же** состоянию (код + доки + миграции).
 - Обновили audit-pack (NotebookLM sources) на базе актуальных `docs/` + `migrations/` + `migration_pack/`.
 - Этот шаг **не меняет поведение** по сравнению с STEP183; это чисто синхронизация артефактов/доков.
+
+## STEP185 — docs/neon: fix broken filename (mojibake)
+- Исправили битое имя файла в `docs/neon/`: теперь файл называется `ИСТОРИЯ_НЕОН.txt` (UTF‑8), как и указано в `docs/neon/README.md`.
+- Обновили audit-pack (NotebookLM sources), чтобы туда тоже попал файл с правильным именем.
+- Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
