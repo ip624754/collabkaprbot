@@ -262,7 +262,7 @@ export const CFG = {
   AUDIT_DB_THROTTLE_ENABLED: parseBoolSafe(process.env.AUDIT_DB_THROTTLE_ENABLED, false),
   AUDIT_DB_THROTTLE_LIMIT: parseIntSafe(process.env.AUDIT_DB_THROTTLE_LIMIT, 60),
   AUDIT_DB_THROTTLE_WINDOW_SEC: parseIntSafe(process.env.AUDIT_DB_THROTTLE_WINDOW_SEC, 60),
-  AUDIT_DB_THROTTLE_PREFIXES: parseCsvStr(process.env.AUDIT_DB_THROTTLE_PREFIXES || 'lead.,folders.,ws.profile_'),
+  AUDIT_DB_THROTTLE_PREFIXES: parseCsvStr(process.env.AUDIT_DB_THROTTLE_PREFIXES || 'lead.,folders.,ws.profile_,deal.,inbox.'),
 
 
   // Onboarding v2
