@@ -1173,3 +1173,11 @@ docs/01_SECURITY_INVARIANTS.md
 - `docs/process/10_RELEASE_PREFLIGHT.md` дополнен ссылкой на каноничный чек.
 - `docs/13_RUNBOOK_RELEASE.md` теперь явно ссылается на “2 минуты” чеклист как на быстрый вход.
 - Docks sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP207 — Hotfix: Vercel SyntaxError (invalid RegExp) в CTA label
+- Исправлен `SyntaxError: Invalid regular expression: missing /` при старте (Vercel/Node ESM).
+- Причина: в `src/bot/bot.js` в `normalizeNoticeCtaLabel` попал literal newline внутри RegExp.
+- Теперь CTA label нормализуется emoji-safe: убираем `\r`, схлопываем whitespace в одну строку и клипаем до лимита.
+- Без миграций. Zero regressions.
+- Docks sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
