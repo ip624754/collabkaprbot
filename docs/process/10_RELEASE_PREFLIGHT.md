@@ -25,11 +25,16 @@ npm run qa:fast
 4) `test:redact`  
    Проверяет, что маскирование контактов работает корректно (не утечки email/phone/etc. в публичных местах).
 
+5) `lint:redis-atomic`  
+   Grep‑gate на регрессии: запрещает возвращать в runtime‑код неатомарные связки Redis-команд (например `LPUSH+LTRIM(+EXPIRE)`, `INCR+EXPIRE`, `LRANGE+LTRIM`) вне `src/lib/redis.js`.  
+   Это защищает от “immortal keys” и race‑окон, которые мы уже один раз закрывали.
+
 ## Если preflight упал
 
 - На `actions:md changed` → закоммить `docs/02_ACTION_KEYS_REGISTRY.md` и повторить.
 - На `lint:nav` → поправить клавиатуру/футер по `docs/process/09_ADMIN_UX_STANDARD.md`.
 - На `test:redact` → поправить редактирование/маскирование, не допуская “полных” контактов.
+- На `lint:redis-atomic` → перенести операции на helpers из `src/lib/redis.js` (или на Lua‑атомарность), не оставлять fallback‑цепочки.
 
 ## Дальше после preflight
 

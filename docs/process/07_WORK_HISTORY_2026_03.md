@@ -98,8 +98,22 @@
 Риск регрессий: **минимальный** (мы убрали только параметр старта соединения, который валил прод; логика запросов/UX не меняется).
 
 
-### STEP244 — Docs: Neon pooled (pgbouncer) запрет на startup options
-- Обновлён `docs/process/11_ENV_CHEATSHEET_ONE_SCREEN.md`: добавлено явное правило “Neon pooled / pgbouncer не принимает startup options” + напоминание не использовать `PGOPTIONS` и `?options=` в `DATABASE_URL`.
-- Обновлён `docs/00_CURRENT_STATE.md`: закреплено правило в секции Neon hardening.
+### STEP245 — Cleanup: remove backward-compat Redis shims (no non-atomic patterns)
+- Убраны backward‑compat shims (namespace import + fallback функции), которые содержали non‑atomic цепочки (`LPUSH+LTRIM(+EXPIRE)`, `INCR+EXPIRE`) даже как “dead code”.
+- В `src/bot/bot.js`, `src/bot/cron.js`, `src/db/queries.js` восстановлены прямые named imports из `src/lib/redis.js`:
+  - `lpushTrim`, `incrWithExpire`, `incrWithExpireOnFirst`.
+- Обоснование: деплой на Vercel атомарный; helpers реально экспортируются; инвариант проекта — **не держать** неатомарные паттерны в кодовой базе.
 
-Риск регрессий: **нулевой** (только документация).
+Риск регрессий: **низкий** (меняется только способ импорта; основная логика использует те же helper’ы; fallback пути удалены).
+
+
+### STEP246 — Preflight guardrail: redis atomicity grep gate
+- В preflight добавлен `lint:redis-atomic` — быстрый grep‑gate, который не даёт вернуть в runtime‑код неатомарные связки Redis-команд:
+  - `LPUSH+LTRIM(+EXPIRE)` (bounded lists race),
+  - `INCR/INCRBY+EXPIRE` (immortal keys риск),
+  - `LRANGE+LTRIM` (extraction race).
+- Разрешены прямые Redis примитивы только внутри `src/lib/redis.js` (там реализованы атомарные helpers).
+- Дополнительно: `src/db/pool.js` не должен содержать `options:` (Neon pooled/pgbouncer режет startup options) — это тоже проверяется, чтобы не повторить прод‑крэш.
+- Док обновлён: `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+Риск регрессий: **минимальный** (dev‑инструмент; не влияет на runtime, только предотвращает возврат опасных паттернов).
