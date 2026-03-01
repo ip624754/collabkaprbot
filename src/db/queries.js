@@ -5207,6 +5207,14 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
   try {
     await client.query('BEGIN');
 
+    // Advisory lock: serializes concurrent accepts for the same application
+    // across multiple serverless instances (critical when Redis is down and
+    // in-memory click guard is ineffective). Released automatically on COMMIT/ROLLBACK.
+    await client.query(
+      `select pg_advisory_xact_lock(hashtext($1))`,
+      [`brand_app_accept:${aid}`]
+    );
+
     const appRes = await client.query(
       `select id, coalesce(status,'new') as status
        from brand_applications
