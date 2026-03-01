@@ -116,8 +116,11 @@ export async function releaseLock(lockKey, token) {
 export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
   const lim = Number(limit);
   const win = Number(windowSec);
+
+  // lim<=0 => unlimited (fail-open)
   if (!Number.isFinite(lim) || lim <= 0) {
     return {
+      ok: true,
       allowed: true,
       remaining: Number.POSITIVE_INFINITY,
       limit: lim,
@@ -126,43 +129,50 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
     };
   }
 
-  // Atomic INCR + EXPIRE via Lua to prevent immortal keys on crash between operations.
-  // If process dies between non-atomic INCR and EXPIRE, key stays forever without TTL,
-  // permanently blocking rate-limited actions.
-  const luaScript = `
-    local v = redis.call('INCR', KEYS[1])
-    if v == 1 then
-      redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
-    end
-    local t = redis.call('TTL', KEYS[1])
-    return {v, t}
-  `;
-
-  let current, ttl;
+  let current = 0;
   try {
-    const res = await redis.eval(luaScript, [key], [String(win)]);
-    if (Array.isArray(res)) {
-      current = Number(res[0]) || 0;
-      ttl = Number(res[1]);
-      if (ttl < 0) ttl = null;
-    } else {
-      current = Number(res) || 0;
-      ttl = null;
-    }
+    // Atomic INCR + EXPIRE on first hit (prevents keys without TTL).
+    const script = `
+      local v = redis.call('INCR', KEYS[1])
+      if v == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+      return v
+    `;
+    const r = await redis.eval(script, [key], [String(win)]);
+    current = Number(r || 0);
   } catch {
-    // Redis error: fail-open (allow the action).
-    return {
-      allowed: true,
-      remaining: lim,
-      limit: lim,
-      current: 0,
-      resetSec: win
-    };
+    // Fallback: best-effort (non-atomic)
+    try {
+      const r = await redis.incr(key);
+      current = Number(r || 0);
+      if (current == 1) {
+        await redis.expire(key, win);
+      }
+    } catch {
+      // Redis down: fail-open (rate-limit is best-effort)
+      return {
+        ok: true,
+        allowed: true,
+        remaining: Number.POSITIVE_INFINITY,
+        limit: lim,
+        current: 0,
+        resetSec: win
+      };
+    }
   }
 
+  let ttl = null;
+  try {
+    ttl = await redis.ttl(key);
+    if (ttl !== null && ttl < 0) ttl = null;
+  } catch {
+    ttl = null;
+  }
+
+  const allowed = current <= lim;
   const remaining = Math.max(0, lim - current);
   return {
-    allowed: current <= lim,
+    ok: allowed,
+    allowed,
     remaining,
     limit: lim,
     current,
