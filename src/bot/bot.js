@@ -22502,20 +22502,64 @@ if (p.a === 'a:menu_push') {
   try { await ctx.answerCallbackQuery(); } catch {}
 
   // For service/system messages: open Menu in a NEW message (do not overwrite original text).
-  // Best-effort: remove buttons from the original message to avoid repeat clicks.
+  // Best-effort: remove buttons from the original receipt and render the Menu into a fresh UI message.
+  const srcChatId = ctx?.callbackQuery?.message?.chat?.id;
+  const srcMsgId = ctx?.callbackQuery?.message?.message_id;
   try {
-    const chatId = ctx?.callbackQuery?.message?.chat?.id;
-    const msgId = ctx?.callbackQuery?.message?.message_id;
-    if (chatId && msgId) {
-      await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined });
+    if (srcChatId && srcMsgId) {
+      await ctx.api.editMessageReplyMarkup(srcChatId, srcMsgId, { reply_markup: undefined });
     }
   } catch {}
 
-  const ctxPush = Object.create(ctx);
-  ctxPush.callbackQuery = null;
+  // Create a new message that we can safely edit into the actual Menu.
+  // This avoids overwriting the original admin/system message text.
+  let uiMsg = null;
+  try {
+    uiMsg = await ctx.reply('⌛ Открываю меню…');
+  } catch {}
 
-  const flags = await getRoleFlags(u, ctx.from.id);
-  await renderRoleHub(ctxPush, u, flags);
+  // Fallback: if we cannot send a new message, fall back to the regular Menu behavior (edit current message).
+  if (!uiMsg) {
+    const flags = await getRoleFlags(u, ctx.from.id);
+    await renderRoleHub(ctx, u, flags);
+    return;
+  }
+
+  const ctxPush = Object.create(ctx);
+
+  // Fake callbackQuery.message so all edit-based renderers (and safeEditOrReply) target the new UI message.
+  try {
+    const chatId = uiMsg?.chat?.id || ctx.from?.id || srcChatId;
+    const messageId = uiMsg?.message_id;
+    if (chatId && messageId) {
+      try {
+        ctxPush.state = ctxPush.state || {};
+        ctxPush.state.ui = ctxPush.state.ui || {};
+        ctxPush.state.ui.chatId = chatId;
+        ctxPush.state.ui.messageId = messageId;
+      } catch {}
+      ctxPush.callbackQuery = { message: uiMsg, data: 'a:menu_push' };
+    } else {
+      ctxPush.callbackQuery = null;
+    }
+  } catch {
+    ctxPush.callbackQuery = null;
+  }
+
+  try {
+    const flags = await getRoleFlags(u, ctx.from.id);
+    await renderRoleHub(ctxPush, u, flags);
+  } catch (e) {
+    console.error('menu_push_failed', {
+      cid: ctx?.state?.cid,
+      tgId: ctx?.from?.id,
+      err: String(e?.description || e?.message || e),
+    });
+    try {
+      const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+      await safeEditOrReply(ctxPush, '⚠️ Не удалось открыть меню. Нажми /start и попробуй ещё раз.', { reply_markup: kb });
+    } catch {}
+  }
   return;
 }
 
