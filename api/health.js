@@ -79,6 +79,14 @@ export default async function handler(_req, res) {
       enabled: !!CFG.AUDIT_DB_THROTTLE_ENABLED,
       suppressed_today_total: null,
       suppressed_today_by_prefix: null,
+    },
+    buffer: {
+      enabled: !!CFG.AUDIT_BUFFER_ENABLED,
+      len: null,
+      day: null,
+      enqueued_today_total: null,
+      flushed_today_total: null,
+      last_flush: null,
     }
   };
 
@@ -190,10 +198,11 @@ export default async function handler(_req, res) {
       // ignore
     }
 
-    const [giveawaysTick, broadcastTick, igVerifyTick] = await Promise.all([
+    const [giveawaysTick, broadcastTick, igVerifyTick, auditFlushTick] = await Promise.all([
       redis.get(k(['cron', 'giveaways_tick', 'last_run'])),
       redis.get(k(['cron', 'broadcast_tick', 'last_run'])),
-      redis.get(k(['cron', 'ig_verify_tick', 'last_run'])),
+      redis.get(k(['cron', 'ig_verify_tick', 'last_run'])),,
+      redis.get(k(['cron', 'audit_flush_tick', 'last_run'])),
     ]);
 
     // Optional: show current broadcast 429 cooldown + counters (Redis-only; no DB).
@@ -309,6 +318,34 @@ export default async function handler(_req, res) {
           suppressed_today_by_prefix: byPrefix,
         }
       };
+    // Optional audit buffer metrics (Redis-only; no DB)
+    if (CFG.AUDIT_BUFFER_ENABLED) {
+      try {
+        const dayB = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
+        const [lenRaw, enqRaw, flRaw, lastFlush] = await Promise.all([
+          redis.llen(k(['audit', 'buffer', 'ws'])),
+          redis.get(k(['audit', 'buffer', 'enqueued', dayB])),
+          redis.get(k(['audit', 'buffer', 'flushed', dayB])),
+          redis.get(k(['audit', 'buffer', 'last_flush'])),
+        ]);
+
+        audit = {
+          ...audit,
+          buffer: {
+            ...audit.buffer,
+            day: dayB,
+            len: Number(lenRaw) || 0,
+            enqueued_today_total: Number(enqRaw) || 0,
+            flushed_today_total: Number(flRaw) || 0,
+            last_flush: lastFlush || null,
+          }
+        };
+      } catch {
+        // ignore
+      }
+    }
+
+
     }
 
     // Lightweight acquisition counters (Redis-only; no DB)
@@ -371,6 +408,7 @@ export default async function handler(_req, res) {
         giveaways_tick: giveawaysTick || null,
         broadcast_tick: broadcastTick || null,
         ig_verify_tick: igVerifyTick || null,
+              audit_flush_tick: auditFlushTick || null,
       },
       broadcast,
       ref,
