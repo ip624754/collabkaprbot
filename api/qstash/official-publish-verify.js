@@ -1,4 +1,4 @@
-import { CFG } from '../../src/lib/config.js';
+import { CFG } from '../../src/lib/config.js'; 
 import { redis, k } from '../../src/lib/redis.js';
 import * as db from '../../src/db/queries.js';
 import { getBot } from '../../src/bot/bot.js';
