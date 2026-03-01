@@ -126,18 +126,38 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
     };
   }
 
-  const current = await redis.incr(key);
-  if (current === 1) {
-    // set window TTL on first hit
-    await redis.expire(key, win);
-  }
+  // Atomic INCR + EXPIRE via Lua to prevent immortal keys on crash between operations.
+  // If process dies between non-atomic INCR and EXPIRE, key stays forever without TTL,
+  // permanently blocking rate-limited actions.
+  const luaScript = `
+    local v = redis.call('INCR', KEYS[1])
+    if v == 1 then
+      redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+    end
+    local t = redis.call('TTL', KEYS[1])
+    return {v, t}
+  `;
 
-  let ttl = null;
+  let current, ttl;
   try {
-    ttl = await redis.ttl(key);
-    if (ttl !== null && ttl < 0) ttl = null;
+    const res = await redis.eval(luaScript, [key], [String(win)]);
+    if (Array.isArray(res)) {
+      current = Number(res[0]) || 0;
+      ttl = Number(res[1]);
+      if (ttl < 0) ttl = null;
+    } else {
+      current = Number(res) || 0;
+      ttl = null;
+    }
   } catch {
-    ttl = null;
+    // Redis error: fail-open (allow the action).
+    return {
+      allowed: true,
+      remaining: lim,
+      limit: lim,
+      current: 0,
+      resetSec: win
+    };
   }
 
   const remaining = Math.max(0, lim - current);
