@@ -1,4 +1,4 @@
-import { CFG } from '../src/lib/config.js';
+import { CFG } from '../src/lib/config.js'; 
 
 // Simple health endpoint (no secrets).
 // Optional: show last cron ticks from Redis (no DB).
