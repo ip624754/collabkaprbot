@@ -63,6 +63,12 @@ export default async function handler(_req, res) {
         last_error: null,
         last_ws_id: null,
         last_source: null,
+      },
+      // Official publish self-heal breadcrumbs (Redis-only)
+      official: {
+        last_at: null,
+        last_offer_id: null,
+        last_source: null,
       }
     }
   };
@@ -134,6 +140,20 @@ export default async function handler(_req, res) {
       base.mon.unlock.last_error = lastError || null;
       base.mon.unlock.last_ws_id = lastWsId || null;
       base.mon.unlock.last_source = lastSource || null;
+    } catch {
+      // ignore
+    }
+
+    // Official publish breadcrumbs (Redis-only)
+    try {
+      const [lastAt, lastOfferId, lastSource] = await Promise.all([
+        redis.get(k(['mon', 'official', 'last_at'])),
+        redis.get(k(['mon', 'official', 'last_offer_id'])),
+        redis.get(k(['mon', 'official', 'last_source'])),
+      ]);
+      base.mon.official.last_at = lastAt || null;
+      base.mon.official.last_offer_id = lastOfferId || null;
+      base.mon.official.last_source = lastSource || null;
     } catch {
       // ignore
     }
