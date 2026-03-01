@@ -2,7 +2,7 @@ import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import crypto from 'crypto';
 import { CFG, assertEnv } from '../lib/config.js';
 import logger from '../lib/logger.js';
-import { redis, k, rateLimit, consumeOnce, acquireLock, releaseLock } from '../lib/redis.js';
+import { redis, k, rateLimit, consumeOnce, acquireLock, releaseLock, lpushTrim, incrWithExpireOnFirst } from '../lib/redis.js';
 import { setMonIntroDiag, setMonAcceptDiag, setMonUnlockDiag } from '../lib/monDiag.js';
 import * as db from '../db/queries.js';
 import { pool } from '../db/pool.js';
@@ -1097,9 +1097,7 @@ async function appendAdminOutbox(entry) {
   if (!e.id) e.id = 'o' + randomToken(6);
   const payload = JSON.stringify(e);
   try {
-    await redis.lpush(key, payload);
-    await redis.ltrim(key, 0, ADMIN_OUTBOX_MAX - 1);
-    return true;
+    return await lpushTrim(key, payload, ADMIN_OUTBOX_MAX);
   } catch {
     return false;
   }
@@ -2166,14 +2164,11 @@ async function trackAcqSource(tgId, src) {
 
   try {
     const [dayN] = await Promise.all([
-      redis.incr(dayKey),
+      incrWithExpireOnFirst(dayKey, 60 * 60 * 24 * 60),
       redis.incr(totalKey),
       redis.set(lastKey, s, { ex: 60 * 60 * 24 * 30 }),
     ]);
-    // keep daily buckets for ~60 days
-    if (Number(dayN) === 1) {
-      try { await redis.expire(dayKey, 60 * 60 * 24 * 60); } catch {}
-    }
+    // day bucket TTL is set atomically in incrWithExpireOnFirst
   } catch {
     // best-effort; never block /start
   }
@@ -2212,13 +2207,10 @@ async function trackAcqRole(tgId, role) {
   const dayKey = k(["ref", "role", src, r, "d", day]);
   try {
     const [dayN] = await Promise.all([
-      redis.incr(dayKey),
+      incrWithExpireOnFirst(dayKey, 60 * 60 * 24 * 60),
       redis.incr(totalKey),
     ]);
-    // keep daily buckets for ~60 days
-    if (Number(dayN) === 1) {
-      try { await redis.expire(dayKey, 60 * 60 * 24 * 60); } catch {}
-    }
+    // day bucket TTL is set atomically in incrWithExpireOnFirst
   } catch {
     // ignore
   }
@@ -3926,11 +3918,8 @@ async function setCurGwNote(gwId, meta) {
   const listKey = k(['cur_gw_notes', gwId]);
   try {
     const payload = typeof meta === 'string' ? meta : JSON.stringify(meta);
-    if (typeof redis.lpush === 'function') {
-      await redis.lpush(listKey, payload);
-      if (typeof redis.ltrim === 'function') await redis.ltrim(listKey, 0, 2);
-      if (typeof redis.expire === 'function') await redis.expire(listKey, CUR_GW_META_TTL_SEC);
-    }
+    // Atomic list update (LPUSH+LTRIM+EXPIRE)
+    await lpushTrim(listKey, payload, 3, CUR_GW_META_TTL_SEC);
   } catch {
     // ignore
   }
@@ -23555,6 +23544,11 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
         return;
       }
       if (!rUnlock?.ok) {
+        if (rUnlock?.error === 'busy') {
+          await setMonUnlockDiag({ source: 'click',  status: 'skipped', errorCode: 'busy', wsId });
+          await renderUnlockPending({ alreadyQueued: true });
+          return;
+        }
         if (rUnlock?.needPaywall) {
           await setMonUnlockDiag({ source: 'click',  status: 'ok', errorCode: 'need_paywall', wsId });
           try { await ctx.answerCallbackQuery({ text: 'Недостаточно кредитов. Докупи и повтори.', show_alert: true }); } catch {}
@@ -33722,6 +33716,7 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
 }
 
   async function renderAdminOutbox(ctx, page = 0) {
+    const isPrivateChat = (ctx?.chat?.type === 'private');
     const { items, total, pages, perPage, page: p, startIndex } = await getAdminOutboxPage(page, 8);
 
     let text = `📤 <b>Outbox</b>
@@ -33748,7 +33743,9 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
           ? ('@' + String(it.target_username).replace(/^@/, ''))
           : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
         const when = fmtTs(it.ts);
-        const sn = clipText(String(it.preview || it.snippet || '').replace(/\n+/g, ' / '), 110);
+        const sn = isPrivateChat
+          ? clipText(String(it.preview || it.snippet || '').replace(/\n+/g, ' / '), 110)
+          : '🔒 Скрыто (открой Outbox в личке с ботом)';
         const num = absIdx + 1;
         text += `${icon} <b>#${num}</b> · ${escapeHtml(when)} → <b>${escapeHtml(to)}</b>
 <i>${escapeHtml(sn || '—')}</i>
@@ -33792,6 +33789,7 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
   async function renderAdminOutboxView(ctx, index, backPage = 0) {
     const it = await getAdminOutboxItemByIndex(index);
     const p = Math.max(0, Number(backPage) || 0);
+    const isPrivateChat = (ctx?.chat?.type === 'private');
 
     if (!it) {
       await safeEditOrReply(ctx, '⚠️ Запись не найдена (возможно, очищено).', {
@@ -33832,7 +33830,9 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
 
     const err = it.error ? `
 Ошибка: <code>${escapeHtml(String(it.error))}</code>` : '';
-    const snippet = String(it.snippet || it.preview || '').trim();
+    const snippet = isPrivateChat
+      ? String(it.snippet || it.preview || '').trim()
+      : '🔒 Скрыто (открой Outbox в личке с ботом)';
 
     const text =
       `${icon} <b>Outbox запись</b>
@@ -33866,7 +33866,7 @@ Hash: <code>${escapeHtml(hash)}</code>` : '') +
         .text('✉️ Написать', `a:adm_umsg|id:${uid}|f:all|p:0`)
         .row();
 
-      const canRepeat = !!(Number(it.target_tg_id || 0) && String(it.snippet || it.preview || '').trim());
+      const canRepeat = !!(isPrivateChat && Number(it.target_tg_id || 0) && String(it.snippet || it.preview || '').trim());
       if (canRepeat) {
         kb.text('✉️ Повторить', `a:admin_outbox_repeat|i:${index}|p:${p}`)
           .text('📝 Заметка', `a:admin_outbox_note|i:${index}|p:${p}`)
