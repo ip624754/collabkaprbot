@@ -2,6 +2,15 @@
 
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
+### Snapshot: верификация / Instagram (сейчас)
+- **Instagram OAuth / IG verification:** выключено через ENV (routes/UI/cron). Instagram остаётся только как **обычная ссылка/контакт** в карточке креатора.
+- **Единственная “верификация” в продукте:** ручная (заявка → модерация → approve/reject).
+- Контакты (в т.ч. Instagram) **не раскрываются бренду до unlock**.
+
+
+### ENV cheat‑sheet (Vercel)
+См. `docs/process/11_ENV_CHEATSHEET_ONE_SCREEN.md` — один экран, можно копипастить.
+
 ---
 
 ## 0) Security invariants (must-not-break)
@@ -17,6 +26,9 @@
 - STEP202: синхронизирован реестр `src/bot/actionRegistry.js` с фактически используемыми callback‑ключами (админ‑разделы/notice/outbox/templates/ack). `npm run actions:check`/`actions:md` проходят чисто.
 - STEP203: добавлен быстрый релиз‑preflight: `npm run preflight` (alias `npm run qa:fast`) — гоняет `actions:check`, `actions:md` (и проверяет, что `docs/02_ACTION_KEYS_REGISTRY.md` не “грязный”), `lint:nav`, `test:redact`. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
 - STEP204: Outbox стал “центром поддержки”: из записи можно `✉️ Повторить` (с предпросмотром), открыть `📝 Заметку` с возвратом в Outbox и сохранить текст как `📌 шаблон` (DM-only).
+- STEP234: Outbox privacy hardening — если админ открыл Outbox не в личке с ботом (group/supergroup/channel), текстовые snippet’ы скрываются (🔒), а `✉️ Повторить` отключён (чтобы исключить случайные утечки/путаницу).
+- STEP235: Neon timeout hardening — Postgres pool ставит **server-side** `statement_timeout` через `options: -c statement_timeout=...` (ENV `PG_STATEMENT_TIMEOUT_MS`, default 15000) + добавляет явный лог-маркер `db.statement_timeout` при отмене запроса по таймауту (помогает ops/support).
+- STEP236: Audit flush cooldown — при DB outage audit-flush больше не “долбит” Postgres каждую минуту: после requeue или DB‑ошибки ставим короткий cooldown (ENV `AUDIT_BUFFER_REQUEUE_COOLDOWN_SEC`, default 120) и cron временно возвращает `skipped: requeue_cooldown`. В `/api/health` добавлен `audit.buffer.requeue_cooldown_ttl_sec`.
 - STEP205: Polishing Comms — единые лимиты Telegram по длине текста (emoji-safe), предупреждения в предпросмотре, лимиты для System Notice и CTA (без регрессий).
 - STEP206: закреплён короткий релиз‑протокол “2 минуты”: `npm run preflight` + `/api/health` + 2–3 клика по админ‑экранам (Comms/Outbox/Users). См. `docs/16_RELEASE_CHECKLIST.md`.
 - STEP207: hotfix — исправлен SyntaxError (invalid RegExp) в `normalizeNoticeCtaLabel` (CTA label), который мог ломать запуск на Vercel.
@@ -36,7 +48,14 @@
 - STEP221: Admin DM UX — в системных/админских сообщениях пользователю кнопки `📋 Открыть меню` и `💬 Поддержка` открывают экраны **новым сообщением** (не затирают текст‑квитанцию). В админке (`a:adm_umsg`) кнопки уложены сеткой 2×N. Также починен путь cron router под rewrites.
 - STEP223: исправление `a:menu_push` — при нажатии «Открыть меню» создаётся отдельное UI‑сообщение (`⌛ Открываю меню…`) и все edit‑рендеры привязываются к нему.
 - STEP224: hotfix push‑экранов — `a:menu_push` больше не использует `Object.create(ctx)` (устранён источник ошибок контекста), а `a:support_push` всегда отвечает новым сообщением (`reply`), не попадая в общий error‑handler.
-- STEP125: Push‑квитанция (admin DM) — переименована кнопка `📋 Открыть меню` → `📋 Главное меню`, текст синхронизирован; `✅ Понятно` теперь скрывает только себя и оставляет кнопки `📋 Главное меню`/`💬 Поддержка`; `a:menu_push`/`a:support_push` больше не снимают кнопки у квитанции.
+- STEP226: Audit P1 + антикаскад (Neon/Redis) — включена проверка SSL сертификата для Neon (`rejectUnauthorized:true`), rate limiter сделан атомарным (Lua `INCR+EXPIRE` + `ok/allowed` совместимость), а для `✅ Принять` добавлены: PG `pg_try_advisory_xact_lock` (fail-fast при параллельных кликах) + короткий DB timeout и UX «⏳ В обработке…» при Redis degraded (без штормов).
+- STEP227: Admin DM UX v2 — системное/админское сообщение пользователю больше не превращается в тупик: под квитанцией всегда остаются `🏠 Главное меню` + `💬 Поддержка`, а `✅ Принято` убирает только себя (не снимает всю клавиатуру).
+- STEP228: Audit hardening (money + anti-cascade) — закрыты: F-8 (unknown numeric pack → 0), N-1 (убран non-atomic fallback rate limiter → fail-open), N-2 (unlock contacts переведён на `pg_try_advisory_xact_lock` + `busy` UX), F-5 (ops alerts buffer атомарный Lua), F-7 (IG verify comments с пагинацией до 5 страниц).
+- STEP229: Audit buffer flush (lossless) — flush переведён на двухфазную схему Redis list (queue→inflight→ack) без потерь при DB outage; добавлен stuck-requeue (ENV `AUDIT_BUFFER_INFLIGHT_TIMEOUT_SEC`) и токен-лок (ENV `AUDIT_BUFFER_FLUSH_LOCK_TTL_SEC`). `/api/health` теперь показывает `audit.buffer.queue_len/inflight_len/inflight_age_sec` и `requeued_today_total`.
+- STEP230: Final atomic sweep + health polish — добиты остатки неатомарных связок Redis (INCR+EXPIRE, LPUSH+LTRIM) в счётчиках/буферах (cron counters, acquisition buckets, admin outbox, curator notes, broadcast quarantine); `/api/health` переписан и вылечен (SyntaxError/скобки), вывод стабилен даже при Redis degraded.
+
+- STEP231: Release preflight — добавлен мини‑runbook “Redis TTL smoke check” (без KEYS, через SCAN + TTL), чтобы перед релизом быстро ловить `TTL=-1` на ключах, которые обязаны истекать. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
+- STEP232–STEP233: NotebookLM audit (docs‑only) — подготовлен понятный docs‑pack для аудита по текущему состоянию (без кода), добавлены входной индекс и отдельный prompt для docs‑only. См. `docs/audit/05_NOTEBOOKLM_DOCS_ONLY_ENTRYPOINT_2026_03.md`.
 
 
 
@@ -51,6 +70,9 @@
 - **Neon Postgres** (дёшево, но бережём CU)
 - **Upstash Redis** (locks / краткоживущие состояния / счётчики)
 - **QStash / cron** → дергает `/api/cron/*` по расписанию (через `vercel.json` rewrites на единый роутер `api/cron_router.js` — это держит нас в лимите Vercel Hobby по кол-ву функций)
+
+Neon hardening:
+- `PG_STATEMENT_TIMEOUT_MS` (default **15000**) — глобальный server-side `statement_timeout` для всех запросов (pool-level). Для критичных монетизационных транзакций дополнительно используем короткий `SET LOCAL statement_timeout` (circuit breaker).
 
 ### Control Plane (cron endpoints)
 
@@ -394,14 +416,13 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 
 > Примечание: `CONTACT_UNLOCK_COST`, `CONTACT_UNLOCK_TTL_DAYS`, `BRAND_CREDITS_CACHE_TTL_SEC`, `BRAND_CREDITS_SNAP_TTL_SEC`, `BRAND_APP_ACCEPT_COST` читаются напрямую в `src/bot/bot.js` (не через `CFG`).
 
-Дополнительно (Instagram OAuth, сейчас UI скрыт):
-- `IG_OAUTH_UI_ENABLED` (0/1) — если 0, то **и UI, и `/api/ig/oauth/*` закрыты (404)**
-- `IG_ROUTES_ENABLED` (0/1) — master kill‑switch для `/api/ig/*` (и IG cron). По умолчанию следует `IG_OAUTH_UI_ENABLED`.
-- `IG_OAUTH_ENABLED` (0/1)
-- `IG_OAUTH_CLIENT_ID`
-- `IG_OAUTH_CLIENT_SECRET`
-- `PUBLIC_BASE_URL`
-- `IG_TOKEN_ENC_KEY`
+Instagram (текущий режим: **только ссылка в карточке**, OAuth/верификация выключены):
+- `IG_OAUTH_UI_ENABLED=0` — прячет UI подключения и закрывает `/api/ig/oauth/*`.
+- `IG_OAUTH_ENABLED=0` — OAuth не стартует даже при случайном доступе к UI.
+- `IG_ROUTES_ENABLED=0` — kill‑switch: закрывает весь `/api/ig/*` и IG cron.
+- `IG_VERIFY_TICK_ENABLED=0` — выключает legacy verify‑cron по комментариям.
+- `IG_OAUTH_CLIENT_ID/SECRET`, `IG_TOKEN_ENC_KEY`, `IG_VERIFY_ACCESS_TOKEN`, `IG_VERIFY_MEDIA_ID` — можно оставить пустыми.
+> Instagram как ссылка/поле профиля остаётся; показывается брендам только после unlock (контакты скрыты до оплаты).
 
 
 - **BOT**: `BOT_ID` `BOT_TOKEN` `BOT_USERNAME` `BOT_VARIANT`
@@ -417,7 +438,7 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 - **PAYMENTS**: `PAYMENTS_ACCEPT_DEFAULT` `PAYMENTS_AUTO_APPLY_DEFAULT` `PAYMENTS_FALLBACK_APPLY_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_BATCH` `PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC`
 - **FOUNDER**: `FOUNDER_BRAND_12M_CREDITS` `FOUNDER_BRAND_12M_PRICE` `FOUNDER_BRAND_3M_CREDITS` `FOUNDER_BRAND_3M_PRICE` `FOUNDER_CREATOR_12M_PRICE` `FOUNDER_SALE_DEADLINE` `FOUNDER_SALE_ENABLED`
 - **INTRO**: `INTRO_COST_PER_INTRO` `INTRO_DAILY_LIMIT` `INTRO_DAILY_LIMIT_UNVERIFIED` `INTRO_RATE_LIMIT` `INTRO_RATE_WINDOW_SEC` `INTRO_RETRY_AFTER_HOURS` `INTRO_RETRY_ENABLED` `INTRO_RETRY_EXPIRES_DAYS` `INTRO_RETRY_NOTIFY` `INTRO_TRIAL_CREDITS`
-- **AUDIT**: `AUDIT_DB_ENABLED` `AUDIT_DB_THROTTLE_ENABLED` `AUDIT_DB_THROTTLE_LIMIT` `AUDIT_DB_THROTTLE_PREFIXES` `AUDIT_DB_THROTTLE_WINDOW_SEC`
+- **AUDIT**: `AUDIT_DB_ENABLED` `AUDIT_DB_THROTTLE_ENABLED` `AUDIT_DB_THROTTLE_LIMIT` `AUDIT_DB_THROTTLE_PREFIXES` `AUDIT_DB_THROTTLE_WINDOW_SEC` `AUDIT_BUFFER_ENABLED` `AUDIT_BUFFER_ON_DB_ERROR` `AUDIT_BUFFER_MAX_LEN` `AUDIT_BUFFER_TTL_SEC` `AUDIT_BUFFER_FLUSH_BATCH` `AUDIT_BUFFER_FLUSH_MAX_MS` `AUDIT_BUFFER_FLUSH_LOCK_TTL_SEC` `AUDIT_BUFFER_INFLIGHT_TIMEOUT_SEC` `AUDIT_BUFFER_REQUEUE_COOLDOWN_SEC`
 - **BRAND**:
   - `BRAND_BANNER_FILE_ID` `BRAND_LEAD_RATE_LIMIT` `BRAND_LEAD_RATE_WINDOW_SEC` `BRAND_PLAN_BASIC_PRICE` `BRAND_PLAN_DURATION_DAYS` `BRAND_PLAN_MAX_PRICE` `BRAND_PLAN_PRO_CREDITS` `BRAND_PLAN_PRO_FEATURED_DAYS` `BRAND_PLAN_PRO_MATCH` `BRAND_PLAN_PRO_PRICE`
   - `BRAND_PLAN_START_CREDITS` `BRAND_PLAN_START_PRICE` `BRAND_PROFILE_REQUIRED` `BRAND_TOPUP_L_CREDITS` `BRAND_TOPUP_L_PRICE` `BRAND_TOPUP_M_CREDITS` `BRAND_TOPUP_M_PRICE` `BRAND_TOPUP_S_CREDITS` `BRAND_TOPUP_S_PRICE` `BRAND_VERIFY_REQUIRES_EXTENDED`
@@ -528,6 +549,15 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 ---
 
 ## 7) Короткий список изменений за текущую сессию (для handoff)
+
+
+### Последние критичные изменения (2026-03-01)
+- **Instagram OAuth/верификация отключены** (сейчас Instagram — только ссылка в карточке креатора, без OAuth). Для полной “заморозки” IG выставить: `IG_OAUTH_UI_ENABLED=0`, `IG_OAUTH_ENABLED=0`, `IG_ROUTES_ENABLED=0`, `IG_VERIFY_TICK_ENABLED=0`.
+- **Ручная верификация — единственная активная** (заявка → очередь модерации → approve/reject). ✅-бейдж — внутри бота (не Telegram-эмоджи) и влияет на UX/лимиты.
+- **Admin → User сообщения (DM) приведены к канону “квитанция без тупиков”**: `🏠 Главное меню` / `💬 Поддержка` всегда остаются, `✅ Принято` убирает только себя.
+- **Audit hardening:** SSL verify для Neon, rate limiter атомарный Lua (fail-open при деградации), ops alerts атомарный Lua.
+- **Audit flush lossless:** очередь `audit:*` теперь двухфазная `queue → inflight → ack` с auto‑requeue при “залипании”.
+- **Финальный sweep Redis TTL:** убраны остатки неатомарных связок (`INCR+EXPIRE`, `LPUSH+LTRIM`) и добавлен preflight “Redis TTL smoke check” (docs/process/10_RELEASE_PREFLIGHT.md).
 
 - `/api/health`: cron last_run + безопасные Redis-метрики
 - Audit write-shedding (ENV-гейт) + счётчики suppressed в health
@@ -694,13 +724,16 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 
 Цель: чтобы сообщения “от проекта” были максимально понятны и не путали пользователя кнопками.
 
-- **Admin DM (STEP187):** сообщение теперь приходит с явной шапкой “от администрации” и минимальными кнопками:
-  - `📋 Открыть меню` → продолжить работу,
-  - `💬 Поддержка` → задать вопрос,
-  - `✅ Понятно` → убрать кнопки под сообщением (ack).
+- **Admin DM (STEP187):** сообщение приходит с явной шапкой “от администрации” и минимальными, однозначными CTA:
+  - `🏠 Главное меню` → открыть меню **новым** UI‑сообщением (исходная “квитанция” остаётся как есть).
+  - `💬 Поддержка` → открыть поддержку **новым** сообщением (квитанция не трогаем).
+  - `✅ Принято` → убрать только кнопку `✅`, но оставить `🏠 Главное меню` + `💬 Поддержка` (нет “пустых сообщений без кнопок”).
+  - Для этого в callback-data используем `|src:admmsg` (push‑обработчики не снимают reply_markup у квитанции).
+
 - **System Notice (STEP188/189):**
   - при показе “1 раз на версию” кнопки унифицированы: `📋 Открыть меню` / `💬 Поддержка` / `✅ Понятно`,
   - добавлена возможность **открыть объявление повторно**: в `📋 Меню` и `🏠 Home` появляется кнопка `📣 Актуальное объявление` (только если notice активен, не истёк и таргет подходит роли). Нажатие показывает текущий notice, **не влияя** на `seen`.
+
 - Всё остаётся **без рассылки** и **без DB**: только Redis, no-regressions.
 
 
@@ -715,6 +748,7 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
   - Curator Mode меню/кабинета.
 - Быстрый старт остаётся доступен через:
   - `💬 Поддержка` (кнопка `🧭 Быстрый старт` внутри экрана поддержки),
+    - примечание: из admin DM (push) поддержка намеренно минимальная и может не показывать `🧭 Быстрый старт`.
   - команду `/help`.
 - Никаких миграций/DB — только перестановка кнопок. Zero regressions.
 
