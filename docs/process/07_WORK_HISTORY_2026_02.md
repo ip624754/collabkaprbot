@@ -1322,3 +1322,29 @@ docs/01_SECURITY_INVARIANTS.md
 - Исправление Vercel rewrites: cron router файл находится в `api/cron_router.js` (вместо `api/cron/cron_router.js`).
 - Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`, + обновлён `docs/02_ACTION_KEYS_REGISTRY.md`.
 
+## STEP223 — Fix: `a:menu_push` ошибка при нажатии «Открыть меню» в системном DM
+- Симптом: пользователь нажимает `📋 Открыть меню` в админском DM и получает общий экран ошибки (act: `a:menu_push`).
+- Причина: часть меню-рендереров делает edit-based UI; при `ctxPush.callbackQuery=null` контекст мог попадать в нецелевое сообщение.
+- Решение:
+  - `a:menu_push` теперь создаёт отдельное UI-сообщение (`⌛ Открываю меню…`) и «привязывает» все edit-рендеры к нему.
+  - Исходное сообщение остаётся квитанцией (reply_markup снимаем best-effort).
+  - Safe-fallback: если placeholder не отправился — открываем меню стандартным путём.
+- Без миграций. Zero regressions.
+- Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP224 — Hotfix: `a:menu_push`/`a:support_push` (push UI) больше не падают в общий error-handler
+- Симптом: после STEP221 часть пользователей всё ещё ловила общий экран ошибки при клике `📋 Открыть меню` или `💬 Поддержка` в админском/системном DM (act: `a:menu_push` / `a:support_push`).
+- Причина: использование `Object.create(ctx)` могло ломать методы Context (grammY) и приводить к выбросу исключения при `reply/edit` внутри push‑обработчиков.
+- Решение:
+  - Добавлен helper `makeUiCtxForMessage()` — создаёт «UI‑контекст», который редактирует строго конкретное UI‑сообщение через `ctx.api.editMessageText/editMessageReplyMarkup`.
+  - `a:menu_push`: создаёт UI‑сообщение и вызывает `renderRoleHub()` через `makeUiCtxForMessage()` (без клонирования ctx).
+  - `a:support_push`: всегда отправляет поддержку **новым сообщением** через `ctx.reply`, а при редком фейле — fallback на `safeEditOrReply`.
+- Без миграций. Zero regressions.
+- Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+
+---
+
+➡️ Продолжение истории: `docs/process/07_WORK_HISTORY_2026_03.md` (начиная с 2026-03-01).
