@@ -15,6 +15,13 @@
 node migrations/run.js
 ```
 
+## Vercel Hobby: лимит по количеству функций (важно)
+- На Hobby плане деплой падает, если в проекте больше **12** serverless functions.
+- Поэтому cron endpoints у нас не плодятся файлами `api/cron/*.js`.
+- Все cron URL остаются привычными (`/api/cron/*`), но через `vercel.json` они прокидываются на единый роутер `api/cron_router.js`.
+- Добавляешь новый cron‑тик → добавь `job=...` в `api/cron_router.js` (и при необходимости rewrite для legacy URL).
+
+
 ## Smoke tests (short)
 Каноничный чек: `./smoke-tests_short.md` (10–15 минут).
 

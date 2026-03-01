@@ -31,6 +31,7 @@
 - STEP216: expectText TTL + escape hatch — режим ввода текста больше не может “залипнуть навсегда”: `expectText` получает `_startedAt` и общий лимит жизни (ENV `EXPECT_TEXT_MAX_LIFETIME_SEC`, default 2h). В text-input футере добавлен явный выход «❌ Отмена» (в `📋 Меню`), а в приватном чате можно набрать `отмена/cancel/стоп/stop`.
 - STEP217: post-deploy hardening — канонизировали короткий smoke после деплоя: обновлён `./smoke-tests_short.md` (добавлен input-mode `❌ Отмена/отмена` + audit flush tick + акцент на Redis degraded/монетизацию). В `docs/16_RELEASE_CHECKLIST.md` и `docs/13_RUNBOOK_RELEASE.md` добавлены ссылки на этот smoke.
 - STEP218: `npm run smoke:short` — микро-команда для релиза: печатает `./smoke-tests_short.md` + 4 ключевые проверки и ссылки на релизные доки (без влияния на прод-логику).
+- STEP220: Vercel Hobby лимит по функциям (≤12) — cron endpoints агрегированы через один роутер `api/cron_router.js`, а старые URL `/api/cron/*` продолжают работать через `vercel.json` rewrites. Новые cron‑тики добавляем как `job=...` внутри роутера, а не как новый файл в `api/`.
 
 
 
@@ -43,9 +44,11 @@
 - **Vercel serverless** (stateless функции)
 - **Neon Postgres** (дёшево, но бережём CU)
 - **Upstash Redis** (locks / краткоживущие состояния / счётчики)
-- **QStash / cron** → дергает `/api/cron/*` по расписанию
+- **QStash / cron** → дергает `/api/cron/*` по расписанию (через `vercel.json` rewrites на единый роутер `api/cron_router.js` — это держит нас в лимите Vercel Hobby по кол-ву функций)
 
 ### Control Plane (cron endpoints)
+
+> Реализация на Vercel Hobby: один serverless endpoint `api/cron_router.js` + rewrites в `vercel.json` (чтобы не раздувать число функций).
 - `/api/cron/giveaways-tick` — закрытие конкурсов → draw winners → публикация → сервисные задачи
 - `/api/cron/broadcast-tick` — рассылки: 1 batch за тик (дешевле для Neon)
 - Защита: **CRON_SECRET** (Bearer)
