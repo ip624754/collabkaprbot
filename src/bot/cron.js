@@ -1,4 +1,30 @@
-import { redis, k, acquireLock, releaseLock } from '../lib/redis.js'; 
+import * as R from '../lib/redis.js';
+
+const redis = R.redis;
+const k = R.k;
+const acquireLock = R.acquireLock;
+const releaseLock = R.releaseLock;
+
+const incrWithExpire =
+  typeof R.incrWithExpire === 'function'
+    ? R.incrWithExpire
+    : async (key, ttlSec) => {
+        try {
+          const k0 = String(key || '').trim();
+          const ttl = Math.max(1, Number(ttlSec) || 0);
+          if (!k0 || !ttl) return 0;
+          const r = await redis.incr(k0);
+          await redis.expire(k0, ttl);
+          return Number(r) || 0;
+        } catch {
+          return 0;
+        }
+      };
+
+// Metrics-only helper; if missing we fail-silent.
+const incrWithExpireOnFirst =
+  typeof R.incrWithExpireOnFirst === 'function' ? R.incrWithExpireOnFirst : async () => 0;
+
 import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
 import { InlineKeyboard } from 'grammy';
@@ -74,16 +100,10 @@ function bcQuarantineSetDayKey(day) {
 }
 
 async function incrDayCounter(key, ttlSec = CRON_LAST_RUN_TTL_SEC) {
-  try {
-    const v = await redis.incr(key);
-    // Ensure counter expires (bounded storage). Best-effort.
-    try {
-      await redis.expire(key, ttlSec);
-    } catch {}
-    return Number(v) || 0;
-  } catch {
-    return 0;
-  }
+  // Atomic INCR + EXPIRE (bounded storage).
+  // If Redis is degraded, fail-silent: metrics must never break cron.
+  const v = await incrWithExpire(key, ttlSec);
+  return Number(v) || 0;
 }
 
 async function getBroadcastQStashFanoutEnabled() {
@@ -810,11 +830,8 @@ async function resetBroadcastQuarantineCount(broadcastId, userId) {
 async function bumpBroadcastQuarantineCount(broadcastId, userId) {
   try {
     const key = broadcastQuarantineCountKey(broadcastId, userId);
-    const v = await redis.incr(key);
-    // Bound storage: expire daily counters quickly; per-recipient counts expire in 24h.
-    try {
-      await redis.expire(key, 24 * 60 * 60);
-    } catch {}
+    // Atomic INCR + EXPIRE-on-first (prevents keys without TTL).
+    const v = await incrWithExpireOnFirst(key, 24 * 60 * 60);
     return Number(v) || 0;
   } catch {
     return 0;
@@ -1076,27 +1093,28 @@ function extractIgVerifyCodes(text) {
 async function fetchIgVerificationComments({ mediaId, accessToken, limit }) {
   const out = [];
   const lim = Math.max(5, Math.min(Number(limit || 0) || 50, 200));
-  const maxPages = 5; // Safety: never fetch more than 5 pages (~1000 comments).
-
-  let nextUrl = null;
-  {
-    const url = new URL(`https://graph.facebook.com/v19.0/${encodeURIComponent(String(mediaId))}/comments`);
-    url.searchParams.set('fields', 'id,text,username,timestamp');
-    url.searchParams.set('limit', String(lim));
-    url.searchParams.set('access_token', String(accessToken));
-    nextUrl = url.toString();
-  }
+  const url = new URL(`https://graph.facebook.com/v19.0/${encodeURIComponent(String(mediaId))}/comments`);
+  url.searchParams.set('fields', 'id,text,username,timestamp');
+  url.searchParams.set('limit', String(lim));
+  url.searchParams.set('access_token', String(accessToken));
 
   // NOTE: no IG API calls in hot paths; this runs only from cron.
-  for (let page = 0; page < maxPages && nextUrl; page++) {
+  let nextUrl = url.toString();
+  const seen = new Set();
+
+  for (let page = 0; page < 5 && nextUrl; page++) {
     const resp = await fetch(nextUrl, { method: 'GET' });
     if (!resp.ok) {
       const txt = await resp.text().catch(() => '');
       throw new Error(`IG comments fetch failed: ${resp.status} ${txt.slice(0, 300)}`);
     }
+
     const js = await resp.json();
     const data = Array.isArray(js?.data) ? js.data : [];
     for (const x of data) {
+      const id = x?.id ? String(x.id) : '';
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
       out.push({
         id: x?.id,
         text: x?.text,
@@ -1105,12 +1123,14 @@ async function fetchIgVerificationComments({ mediaId, accessToken, limit }) {
       });
     }
 
-    // Follow pagination cursor if available.
     nextUrl = js?.paging?.next || null;
+    if (!nextUrl) break;
+    if (out.length >= 1000) break;
   }
 
   return out;
 }
+
 
 
 export async function broadcastTick() {
