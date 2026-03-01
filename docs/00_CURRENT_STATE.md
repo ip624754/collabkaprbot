@@ -71,6 +71,7 @@
 
 - STEP231: Release preflight — добавлен мини‑runbook “Redis TTL smoke check” (без KEYS, через SCAN + TTL), чтобы перед релизом быстро ловить `TTL=-1` на ключах, которые обязаны истекать. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
 - STEP246: Release preflight — добавлен grep‑gate `lint:redis-atomic`, который запрещает возвращать в runtime‑код неатомарные связки Redis-команд (LPUSH+LTRIM, INCR+EXPIRE, LRANGE+LTRIM) вне `src/lib/redis.js`. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
+- STEP247: Release preflight — добавлен grep‑gate `lint:public-contacts`, который предотвращает регрессии “утечки контактов через пользовательский текст” в публичных карточках (offer description / storefront about) до unlock. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
 - STEP232–STEP233: NotebookLM audit (docs‑only) — подготовлен понятный docs‑pack для аудита по текущему состоянию (без кода), добавлены входной индекс и отдельный prompt для docs‑only. См. `docs/audit/05_NOTEBOOKLM_DOCS_ONLY_ENTRYPOINT_2026_03.md`.
 
 
