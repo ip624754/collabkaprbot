@@ -56,5 +56,8 @@ runNpm("lint:nav");
 logHeader("Preflight: redact tests");
 runNpm("test:redact");
 
+logHeader("Preflight: redis atomicity grep gate");
+runNpm("lint:redis-atomic");
+
 // eslint-disable-next-line no-console
 console.log("\n✅ Preflight OK");
