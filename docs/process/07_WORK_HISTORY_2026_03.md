@@ -28,3 +28,10 @@
 
 Риск регрессий: **минимальный** (меняется только отображение snippet’ов и доступность `Повторить` вне DM; в личке поведение прежнее).
 
+### STEP235 — Neon timeout hardening (PG statement_timeout)
+- Postgres pool теперь задаёт **server-side** `statement_timeout` через параметр подключения `options: -c statement_timeout=...` (ENV `PG_STATEMENT_TIMEOUT_MS`, default 15000).
+- Добавлены явные лог‑маркеры `db.statement_timeout` при отмене запросов по таймауту (и для `pool.query`, и для `client.query` в транзакциях), чтобы ops/support быстрее ловили “Neon завис/медленный ответ”.
+- `SET LOCAL statement_timeout` в монетизационных транзакциях оставлен как “страховка сверху” (circuit breaker).
+
+Риск регрессий: **низкий** (поведение запросов не меняем, кроме предсказуемого отмены “зависших” запросов по таймауту; логирование добавлено без влияния на UX).
+
