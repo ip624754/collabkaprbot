@@ -317,6 +317,14 @@ export const CFG = {
     return Math.max(30, Math.min(n, 1800)); // 30s..30m
   })(),
 
+  // When DB is down, avoid hammering audit flush every minute.
+  // After a requeue or DB failure, set a short cooldown key and skip flush until it expires.
+  // 0 disables.
+  AUDIT_BUFFER_REQUEUE_COOLDOWN_SEC: (() => {
+    const n = parseIntSafe(process.env.AUDIT_BUFFER_REQUEUE_COOLDOWN_SEC, 120);
+    return Math.max(0, Math.min(n, 1800)); // 0..30m
+  })(),
+
 
   // Onboarding v2
   ONBOARDING_V2_ENABLED: parseBoolSafe(process.env.ONBOARDING_V2_ENABLED, false),
