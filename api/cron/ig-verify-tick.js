@@ -17,6 +17,12 @@ export default async function handler(req, res) {
 
     res.setHeader('Cache-Control', 'no-store');
 
+    // Master kill-switch: close IG surface if explicitly disabled.
+    if (!CFG.IG_ROUTES_ENABLED) {
+      res.status(404).end('not_found');
+      return;
+    }
+
     if (!CFG.CRON_SECRET) {
       res.status(500).json({ ok: false, error: 'cron_secret_missing' });
       return;
