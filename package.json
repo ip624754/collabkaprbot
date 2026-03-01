@@ -19,7 +19,8 @@
     "gen:mark-all-applied": "node scripts/gen-mark-all-applied.js",
     "gen:notebooklm-sources": "node scripts/gen-notebooklm-sources.js",
     "preflight": "node scripts/preflight.js",
-    "qa:fast": "npm run preflight"
+    "qa:fast": "npm run preflight",
+    "smoke:short": "node scripts/smoke-short.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
