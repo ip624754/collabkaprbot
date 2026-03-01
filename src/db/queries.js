@@ -1,17 +1,36 @@
 import { pool } from './pool.js'; 
 import { CFG } from '../lib/config.js';
-import * as R from '../lib/redis.js';
+import {
+  redis,
+  k as rk,
+  rateLimit,
+  acquireLock,
+  releaseLock,
+  incrWithExpireOnFirst,
+} from '../lib/redis.js';
 
-const redis = R.redis;
-const rk = R.k;
-const rateLimit = R.rateLimit;
-const acquireLock = R.acquireLock;
-const releaseLock = R.releaseLock;
+// ---------------------------------------------------------
+// Heavy TX hardening: local statement_timeout (defense-in-depth)
+// ---------------------------------------------------------
 
-// Backward-compat: older deployments may not export these helpers.
-// They are metrics-only; if missing we fail-silent to avoid breaking prod.
-const incrWithExpireOnFirst =
-  typeof R.incrWithExpireOnFirst === 'function' ? R.incrWithExpireOnFirst : async () => 0;
+function getHeavyTxStatementTimeoutMs(opts = {}) {
+  const raw = Number(
+    opts?.statementTimeoutMs ||
+    process.env.PG_HEAVY_TX_STATEMENT_TIMEOUT_MS ||
+    process.env.PG_STATEMENT_TIMEOUT_MS ||
+    15000
+  );
+  const ms = Math.floor(raw);
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return ms;
+}
+
+async function txSetLocalStatementTimeout(client, ms) {
+  const v = Math.floor(Number(ms));
+  if (!Number.isFinite(v) || v <= 0) return;
+  // NOTE: SET LOCAL is transaction-scoped and affects waits on row locks too.
+  await client.query(`set local statement_timeout to ${v}`);
+}
 
 // Users
 export async function upsertUser(tgId, username) {
@@ -6359,7 +6378,8 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
   giveawayId,
   workspaceId,
   winnersCount,
-  endsAtIso
+  endsAtIso,
+  opts = {}
 ) {
   const gid = Number(giveawayId);
   const wsid = Number(workspaceId);
@@ -6369,6 +6389,11 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Defense-in-depth: enforce a transaction-scoped statement_timeout for heavy operations.
+    // Global pool timeout exists, but local SET LOCAL is safer against partial deployments.
+    const stm = getHeavyTxStatementTimeoutMs(opts);
+    if (stm) await txSetLocalStatementTimeout(client, stm);
 
     // Transaction-scoped advisory lock: released automatically on COMMIT/ROLLBACK
     const lockRes = await client.query(
