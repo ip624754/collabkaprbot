@@ -29,6 +29,9 @@
 - STEP209: action guards v2 — в `src/bot/actionRegistry.js` добавлены guard-типы `db_truth`/`queue_first` для критичных DB-truth путей (монетизация/ручной apply), обновлён middleware и доки.
 - STEP210: anti-click-storm при Redis down — локальный in-memory limiter (TTL ~8s) на критичных DB-truth/queue-first кликах (`✅ Принять` / `🔓 Разлок контактов`).
 
+- STEP226–230: audit hardening + антикаскад — SSL verify для Neon, атомарный rate limiter (Lua), `pg_try_advisory_xact_lock` в монетизации (accept/unlock), атомарные Redis буферы/счётчики (Lua), IG verify pagination, `/api/health` вылечен.
+- STEP231: release preflight “Redis TTL smoke check” — короткая проверка `TTL=-1` (immortal keys) на expiring‑ключах через SCAN+TTL (док‑runbook).
+
 
 Подробности по IG: `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`.
 
@@ -1373,4 +1376,77 @@ docs/01_SECURITY_INVARIANTS.md
   - `src/bot/bot.js`
   - `docs/00_CURRENT_STATE.md`
   - `docs/process/09_ADMIN_UX_STANDARD.md`
+  - `docs/process/07_WORK_HISTORY_2026_02.md`
+
+## STEP228 — Audit hardening: закрываем остатки (money + anti-cascade)
+- Закрыты оставшиеся critical/near-critical находки из переаудита STEP226 без изменения продуктовой логики:
+  - **F-8**: `brandPackCredits()` больше не принимает неизвестные numeric packs (legacy) — теперь строго catalog-only (unknown → 0).
+  - **N-1**: в `rateLimit()` убран non-atomic fallback `INCR+EXPIRE` (который мог создавать immortal keys). При ошибке `EVAL`/Redis деградации — **fail-open**.
+  - **N-2**: `unlockWorkspaceContactsWithCredits()` переведён на `pg_try_advisory_xact_lock` (fail-fast). При параллельном клике возвращаем `error:'busy'`, UI показывает «⏳ В обработке…» (alreadyQueued).
+  - **F-5**: ops alerts buffer (`LPUSH+LTRIM+EXPIRE`) сделан атомарным через Lua, чтобы не было race при конкурентных алертах.
+  - **F-7**: IG verify comments теперь читаются с пагинацией (`paging.next`) до 5 страниц (покрывает 200+ комментариев).
+- Без миграций. Zero regressions.
+- Изменённые файлы:
+  - `src/bot/payments_fallback.js`
+  - `src/lib/redis.js`
+  - `src/db/queries.js`
+  - `src/bot/bot.js`
+  - `src/bot/opsAlerts.js`
+  - `src/bot/cron.js`
+  - `docs/00_CURRENT_STATE.md`
+  - `docs/process/07_WORK_HISTORY_2026_02.md`
+
+## STEP229 — Audit flush lossless: inflight + stuck-requeue (закрываем LRANGE/LTRIM race без потерь)
+- Проблема (аудит F-3): flush буфера `audit:buffer:ws` делал `LRANGE → INSERT → LTRIM`.
+  При конкурентном `RPUSH` между `LRANGE` и `LTRIM` возможно **потерять событие** (trim удалит “новое” без записи в Postgres).
+- Решение (Zero regressions, без миграций): двухфазная схема **queue → inflight → ack**.
+  - Новые ключи Redis:
+    - `audit:buffer:ws:inflight` — события “в обработке”,
+    - `audit:buffer:ws:inflight_since` — unix-ts (sec) когда inflight стал не пустым,
+    - `audit:buffer:ws:flush_lock` — токен-лок флаша (safe unlock).
+  - Алгоритм флаша:
+    1) берём токен-лок (`AUDIT_BUFFER_FLUSH_LOCK_TTL_SEC`, default 15s);
+    2) если `inflight` “застрял” (age ≥ `AUDIT_BUFFER_INFLIGHT_TIMEOUT_SEC`, default 180s) или потеряна метка `inflight_since` — **requeue**: переносим всё из inflight обратно в head очереди (с сохранением порядка);
+    3) если inflight не пуст — обрабатываем его первым; иначе атомарно переносим batch из queue в inflight (Lua: `LPOP(q) → RPUSH(inflight)`, set `inflight_since` при первом захвате);
+    4) вставляем в Postgres батчем (как раньше);
+    5) ack: `LTRIM(inflight, n, -1)`, и если inflight пуст — удаляем `inflight_since`.
+  - При DB outage: события остаются в inflight (lossless) и будут дофлашены позже.
+  - При crash между extract и insert: inflight будет автоматически requeue’нут после таймаута.
+- Наблюдаемость:
+  - `/api/health` теперь показывает `audit.buffer.len = queue_len + inflight_len`,
+    а также `queue_len`, `inflight_len`, `inflight_age_sec`, `requeued_today_total`.
+  - `audit.buffer.last_flush` расширен: `requeued`, `stuck_age_sec`, `queue_len`, `inflight_len`.
+- Без миграций. Zero regressions.
+- Изменённые файлы:
+  - `src/db/queries.js`
+  - `src/lib/config.js`
+  - `api/health.js`
+  - `docs/00_CURRENT_STATE.md`
+  - `docs/process/07_WORK_HISTORY_2026_02.md`
+
+
+## STEP230 — Финальный прогон: остатки неатомарных связок + полировка /api/health (без новых механизмов)
+- Цель: добить хвосты после STEP228/229 до «почти 10/10» без изменения продуктовой логики.
+- Закрыто:
+  - Убраны оставшиеся неатомарные пары Redis-команд (risk: immortal keys / race в bounded lists):
+    - `INCR+EXPIRE` → atomic Lua helpers (`incrWithExpireOnFirst` / `incrWithExpire`) в `src/lib/redis.js`.
+    - `LPUSH+LTRIM(+EXPIRE)` → atomic helper `lpushTrim()`.
+  - Применено в местах:
+    - Cron counters (`src/bot/cron.js`): дневные/служебные счётчики и broadcast quarantine count теперь не могут “залипнуть” без TTL.
+    - Acquisition counters (`src/bot/bot.js`): daily buckets (`ref:src:*:d:YYYYMMDD`, `ref:role:*:d:YYYYMMDD`) теперь ставят TTL атомарно.
+    - Admin outbox (`src/bot/bot.js`): запись в Redis list (`admin_outbox`) теперь atomic `LPUSH+LTRIM`.
+    - Curator giveaway notes (`src/bot/bot.js`): history list (`cur_gw_notes:*`) теперь atomic `LPUSH+LTRIM+EXPIRE`.
+    - QStash broadcast deliver quarantine counter (`api/qstash/broadcast-deliver.js`) — atomic `INCR+EXPIRE-on-first`.
+    - Audit throttle/buffer metrics (`src/db/queries.js`) — atomic `INCR/INCRBY + EXPIRE-on-first`.
+- Полировка наблюдаемости:
+  - `/api/health.js` переписан и вылечен (раньше был SyntaxError и поломанные скобки) — теперь стабильно отдаёт JSON и не падает.
+- Без миграций. Zero regressions.
+- Изменённые файлы:
+  - `src/lib/redis.js`
+  - `src/bot/bot.js`
+  - `src/bot/cron.js`
+  - `src/db/queries.js`
+  - `api/qstash/broadcast-deliver.js`
+  - `api/health.js`
+  - `docs/00_CURRENT_STATE.md`
   - `docs/process/07_WORK_HISTORY_2026_02.md`

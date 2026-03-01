@@ -35,6 +35,57 @@ npm run qa:fast
 
 Если preflight прошёл — сделай короткий “2 минуты” чек перед деплоем: `docs/16_RELEASE_CHECKLIST.md`.
 
+---
+
+## Redis TTL smoke check (опционально, 1 минута)
+
+Зачем: быстро поймать **"immortal keys" (TTL = -1)** на ключах, которые обязаны истекать (rate‑limit / locks / буферы). Это страховка от регрессий вида `INCR` без `EXPIRE`.
+
+Требования:
+- локально установлен `redis-cli`
+- есть доступ к Redis URL (обычно `REDIS_URL`, `rediss://...`)
+
+### 1) Проверка связи
+
+```bash
+redis-cli -u "$REDIS_URL" PING
+```
+
+### 2) Rate limit keys (должны иметь TTL)
+
+```bash
+redis-cli -u "$REDIS_URL" --scan --pattern 'rl:*' \
+  | head -n 200 \
+  | while read -r k; do
+      ttl=$(redis-cli -u "$REDIS_URL" TTL "$k" 2>/dev/null || echo "err");
+      [ "$ttl" = "-1" ] && echo "IMMORTAL rl key: $k";
+    done
+```
+
+### 3) Audit buffer locks / inflight markers (должны иметь TTL)
+
+```bash
+redis-cli -u "$REDIS_URL" --scan --pattern 'audit:*:flush_lock' \
+  | head -n 200 \
+  | while read -r k; do
+      ttl=$(redis-cli -u "$REDIS_URL" TTL "$k" 2>/dev/null || echo "err");
+      [ "$ttl" = "-1" ] && echo "IMMORTAL audit lock: $k";
+    done
+```
+
+### 4) Ops alerts buffers (должны иметь TTL)
+
+```bash
+redis-cli -u "$REDIS_URL" --scan --pattern 'ops:*' \
+  | head -n 200 \
+  | while read -r k; do
+      ttl=$(redis-cli -u "$REDIS_URL" TTL "$k" 2>/dev/null || echo "err");
+      [ "$ttl" = "-1" ] && echo "IMMORTAL ops key: $k";
+    done
+```
+
+Ожидаемый результат: **пусто** (ничего не печатает). Если видишь `IMMORTAL ...` — это сигнал, что какой‑то путь пишет ключи без TTL, и его нужно чинить до релиза.
+
 ## Принцип
 
 Preflight **не меняет прод-логику**. Это dev‑инструмент для уверенного релиза (Zero regressions).
