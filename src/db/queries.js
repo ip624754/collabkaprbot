@@ -1,6 +1,17 @@
 import { pool } from './pool.js'; 
 import { CFG } from '../lib/config.js';
-import { redis, k as rk, rateLimit, acquireLock, releaseLock, incrWithExpireOnFirst } from '../lib/redis.js';
+import * as R from '../lib/redis.js';
+
+const redis = R.redis;
+const rk = R.k;
+const rateLimit = R.rateLimit;
+const acquireLock = R.acquireLock;
+const releaseLock = R.releaseLock;
+
+// Backward-compat: older deployments may not export these helpers.
+// They are metrics-only; if missing we fail-silent to avoid breaking prod.
+const incrWithExpireOnFirst =
+  typeof R.incrWithExpireOnFirst === 'function' ? R.incrWithExpireOnFirst : async () => 0;
 
 // Users
 export async function upsertUser(tgId, username) {
