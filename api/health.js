@@ -322,21 +322,37 @@ export default async function handler(_req, res) {
     if (CFG.AUDIT_BUFFER_ENABLED) {
       try {
         const dayB = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
-        const [lenRaw, enqRaw, flRaw, lastFlush] = await Promise.all([
+        const nowS = Math.floor(Date.now() / 1000);
+
+        const [qLenRaw, iLenRaw, sinceRaw, enqRaw, flRaw, rqRaw, lastFlush] = await Promise.all([
           redis.llen(k(['audit', 'buffer', 'ws'])),
+          redis.llen(k(['audit', 'buffer', 'ws', 'inflight'])),
+          redis.get(k(['audit', 'buffer', 'ws', 'inflight_since'])),
           redis.get(k(['audit', 'buffer', 'enqueued', dayB])),
           redis.get(k(['audit', 'buffer', 'flushed', dayB])),
+          redis.get(k(['audit', 'buffer', 'requeued', dayB])),
           redis.get(k(['audit', 'buffer', 'last_flush'])),
         ]);
+
+        const queue_len = Number(qLenRaw) || 0;
+        const inflight_len = Number(iLenRaw) || 0;
+
+        let inflight_age_sec = null;
+        const since = Number(sinceRaw) || 0;
+        if (inflight_len > 0 && since > 0) inflight_age_sec = Math.max(0, nowS - since);
 
         audit = {
           ...audit,
           buffer: {
             ...audit.buffer,
             day: dayB,
-            len: Number(lenRaw) || 0,
+            len: queue_len + inflight_len,
+            queue_len,
+            inflight_len,
+            inflight_age_sec,
             enqueued_today_total: Number(enqRaw) || 0,
             flushed_today_total: Number(flRaw) || 0,
+            requeued_today_total: Number(rqRaw) || 0,
             last_flush: lastFlush || null,
           }
         };
