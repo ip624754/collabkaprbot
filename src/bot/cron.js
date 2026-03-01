@@ -1,4 +1,4 @@
-import { redis, k, acquireLock, releaseLock } from '../lib/redis.js';
+import { redis, k, acquireLock, releaseLock } from '../lib/redis.js'; 
 import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
 import { InlineKeyboard } from 'grammy';
