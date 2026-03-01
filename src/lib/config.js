@@ -249,6 +249,14 @@ export const CFG = {
   // UX switch: show/hide IG OAuth connect UI in creator profile.
   // Default OFF (safe): enable later when Meta side is stable.
   IG_OAUTH_UI_ENABLED: parseBoolSafe(process.env.IG_OAUTH_UI_ENABLED, false),
+  // Server kill-switch: close the entire IG API surface (/api/ig/* and IG cron) even if routes exist.
+  // Default: follow IG_OAUTH_UI_ENABLED, unless explicitly overridden.
+  IG_ROUTES_ENABLED: (() => {
+    if (typeof process.env.IG_ROUTES_ENABLED !== 'undefined') {
+      return parseBoolSafe(process.env.IG_ROUTES_ENABLED, false);
+    }
+    return parseBoolSafe(process.env.IG_OAUTH_UI_ENABLED, false);
+  })(),
   IG_OAUTH_CLIENT_ID: process.env.IG_OAUTH_CLIENT_ID || '',
   IG_OAUTH_CLIENT_SECRET: process.env.IG_OAUTH_CLIENT_SECRET || '',
   IG_OAUTH_SCOPES: process.env.IG_OAUTH_SCOPES || 'instagram_basic,pages_show_list,pages_read_engagement',
