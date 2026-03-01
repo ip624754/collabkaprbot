@@ -49,6 +49,12 @@ const OPS_ALERT_SUMMARY_MIN = (() => {
 // Default ON: current code mostly emits only error-level alerts, so this is safe.
 const OPS_ALERT_SILENT = parseBoolSafe(process.env.OPS_ALERT_SILENT, true);
 
+// expectText (text input mode): cap the total lifetime to avoid “stuck forever” UX.
+const EXPECT_TEXT_MAX_LIFETIME_SEC = (() => {
+  const n = parseIntSafe(process.env.EXPECT_TEXT_MAX_LIFETIME_SEC, 2 * 60 * 60); // default: 2h
+  return Math.max(5 * 60, Math.min(n, 24 * 60 * 60)); // 5min..24h
+})();
+
 export const CFG = {
   APP_ENV: process.env.APP_ENV || 'dev',
 
@@ -68,6 +74,9 @@ export const CFG = {
   OPS_ALERT_SUMMARY_SEC: OPS_ALERT_SUMMARY_MIN * 60,
   OPS_ALERT_BUFFER_MAX: parseIntSafe(process.env.OPS_ALERT_BUFFER_MAX, 200),
   OPS_ALERT_SILENT,
+
+  // expectText (text input mode): total lifetime cap (seconds)
+  EXPECT_TEXT_MAX_LIFETIME_SEC,
 
   // Security
   WEBHOOK_SECRET_TOKEN: process.env.WEBHOOK_SECRET_TOKEN || '',
