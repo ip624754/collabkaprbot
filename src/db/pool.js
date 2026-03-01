@@ -14,6 +14,11 @@ const { Pool } = pg;
 //
 // 3. statement_timeout = 15s.
 //    Убиваем зависшие запросы, чтобы бот не висел вечно.
+//
+// IMPORTANT (Neon pooler):
+// Не передаём statement_timeout через startup options (например `options: -c statement_timeout=...`).
+// Neon pooler отклоняет такие параметры как "unsupported startup parameter".
+// Вместо этого задаём timeout через `SET statement_timeout` в connect hook (best-effort).
 
 const PG_POOL_MAX = Number(process.env.PG_POOL_MAX || 1);
 const PG_CONN_TIMEOUT_MS = Number(process.env.PG_CONN_TIMEOUT_MS || 10000); // 10s на случай cold start
@@ -36,10 +41,6 @@ function logStatementTimeout(err, ctx = {}) {
     });
   } catch {}
 }
-
-// NOTE: Do NOT use `options: '-c statement_timeout=...'` here.
-// Neon pooled connections (pgbouncer) reject startup parameters.
-// statement_timeout is set via SET in the connect hook below.
 
 export const pool = new Pool({
   connectionString: CFG.DATABASE_URL,
