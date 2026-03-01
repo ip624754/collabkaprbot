@@ -1,6 +1,6 @@
 import { pool } from './pool.js'; 
 import { CFG } from '../lib/config.js';
-import { redis, k as rk, rateLimit, acquireLock, releaseLock } from '../lib/redis.js';
+import { redis, k as rk, rateLimit, acquireLock, releaseLock, incrWithExpireOnFirst } from '../lib/redis.js';
 
 // Users
 export async function upsertUser(tgId, username) {
@@ -1149,13 +1149,10 @@ async function incrAuditThrottleSuppressed(prefix) {
     const totalKey = rk(['audit', 'throttle', 'suppressed', day]);
     const pKey = rk(['audit', 'throttle', 'suppressed', 'p', sanitizeAuditPrefix(prefix), day]);
 
-    const [t, p] = await Promise.all([
-      redis.incr(totalKey),
-      redis.incr(pKey)
+    await Promise.all([
+      incrWithExpireOnFirst(totalKey, ttlSec),
+      incrWithExpireOnFirst(pKey, ttlSec),
     ]);
-
-    if (t === 1) await redis.expire(totalKey, ttlSec);
-    if (p === 1) await redis.expire(pKey, ttlSec);
   } catch {
     // metrics must never break bot UX
   }
@@ -1178,20 +1175,25 @@ function auditBufferFlushLockKey() {
   return rk(['audit', 'buffer', 'ws', 'flush_lock']);
 }
 
+function auditBufferRequeueCooldownKey() {
+  return rk(['audit', 'buffer', 'ws', 'requeue_cooldown']);
+}
+
 async function incrAuditBufferCounter(kind, delta = 1) {
   // Redis-only metric (no DB). Keep cardinality low: total, per-day (UTC).
   try {
     const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
     const ttlSec = 35 * 86400;
     const key = rk(['audit', 'buffer', kind, day]);
-    // Upstash Redis supports INCRBY; keep fallback for older clients.
-    if (typeof redis.incrby === 'function') {
-      const v = await redis.incrby(key, Number(delta) || 1);
-      if (Number(v) === (Number(delta) || 1)) await redis.expire(key, ttlSec);
-    } else {
-      const v = await redis.incr(key);
-      if (Number(v) === 1) await redis.expire(key, ttlSec);
-    }
+    const d = Number(delta) || 1;
+
+    // Atomic INCRBY + EXPIRE-on-first (prevents keys without TTL).
+    const script = `
+      local v = redis.call('INCRBY', KEYS[1], tonumber(ARGV[1]))
+      if v == tonumber(ARGV[1]) then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2])) end
+      return v
+    `;
+    await redis.eval(script, [key], [String(d), String(ttlSec)]);
   } catch {
     // metrics must never break bot UX
   }
@@ -1244,12 +1246,14 @@ export async function flushWorkspaceAuditBuffer({ batchSize, maxMs } = {}) {
   const inflightKey = auditBufferInflightKey();
   const sinceKey = auditBufferInflightSinceKey();
   const lockKey = auditBufferFlushLockKey();
+  const cooldownKey = auditBufferRequeueCooldownKey();
 
   const batch = Math.max(1, Math.min(Number(batchSize) || Number(CFG.AUDIT_BUFFER_FLUSH_BATCH) || 250, 1000));
   const maxTimeMs = Math.max(100, Math.min(Number(maxMs) || Number(CFG.AUDIT_BUFFER_FLUSH_MAX_MS) || 4500, 9000));
 
   const lockTtlSec = Math.max(5, Math.min(Number(CFG.AUDIT_BUFFER_FLUSH_LOCK_TTL_SEC) || 15, 60));
   const inflightTimeoutSec = Math.max(30, Math.min(Number(CFG.AUDIT_BUFFER_INFLIGHT_TIMEOUT_SEC) || 180, 1800));
+  const cooldownSec = Math.max(0, Math.min(Number(CFG.AUDIT_BUFFER_REQUEUE_COOLDOWN_SEC) || 0, 1800));
 
   const startedAt = Date.now();
   const nowSec = () => Math.floor(Date.now() / 1000);
@@ -1332,8 +1336,23 @@ export async function flushWorkspaceAuditBuffer({ batchSize, maxMs } = {}) {
   let dropped = 0;
   let requeued = 0;
   let stuck_age_sec = null;
+  let cooldown_ttl_sec = null;
+  let db_failed = false;
 
   try {
+    // If we recently requeued (or DB failed), do not hammer Postgres every minute.
+    if (cooldownSec > 0) {
+      try {
+        const ttl = await redis.ttl(cooldownKey);
+        cooldown_ttl_sec = Number(ttl);
+        if (Number.isFinite(cooldown_ttl_sec) && cooldown_ttl_sec > 0) {
+          return { ok: false, skipped: 'requeue_cooldown', cooldown_ttl_sec };
+        }
+      } catch {
+        cooldown_ttl_sec = null;
+      }
+    }
+
     // 0) If previous run crashed after extracting, inflight may have items.
     // Requeue only if stuck for too long; otherwise continue processing inflight first.
     try {
@@ -1344,6 +1363,15 @@ export async function flushWorkspaceAuditBuffer({ batchSize, maxMs } = {}) {
       }
     } catch {
       // ignore
+    }
+
+    // If we had to requeue, set a short cooldown so we don't keep re-extracting and failing on DB outage.
+    if (requeued > 0 && cooldownSec > 0) {
+      try {
+        await redis.set(cooldownKey, '1', { ex: Number(cooldownSec) });
+      } catch {
+        // ignore
+      }
     }
 
     while ((Date.now() - startedAt) < maxTimeMs) {
@@ -1410,6 +1438,7 @@ export async function flushWorkspaceAuditBuffer({ batchSize, maxMs } = {}) {
           flushed += rows.length;
         } catch {
           // DB error: keep items in inflight and exit (lossless).
+          db_failed = true;
           break;
         }
       }
@@ -1427,6 +1456,15 @@ export async function flushWorkspaceAuditBuffer({ batchSize, maxMs } = {}) {
   } finally {
     // Release lock (token-safe). Must never crash.
     try { await releaseLock(lockKey, lock.token); } catch {}
+  }
+
+  // If DB failed during flush, set cooldown to avoid hammering.
+  if (db_failed && cooldownSec > 0) {
+    try {
+      await redis.set(cooldownKey, '1', { ex: Number(cooldownSec) });
+    } catch {
+      // ignore
+    }
   }
 
   // Metrics + last-flush breadcrumbs (Redis-only)
