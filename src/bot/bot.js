@@ -3398,6 +3398,32 @@ async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
   }
 }
 
+// Render helpers: target a specific message as UI surface.
+// This avoids overwriting “receipt” messages (admin/system DMs), while keeping edit-based renderers working.
+function makeUiCtxForMessage(baseCtx, uiMsg) {
+  const chatId = uiMsg?.chat?.id || baseCtx?.chat?.id || baseCtx?.from?.id;
+  const messageId = uiMsg?.message_id;
+  const chatType = uiMsg?.chat?.type || baseCtx?.chat?.type || 'private';
+
+  const uiMessage = {
+    chat: { id: chatId, type: chatType },
+    message_id: messageId,
+  };
+
+  return {
+    api: baseCtx.api,
+    from: baseCtx.from,
+    chat: { id: chatId, type: chatType },
+    state: baseCtx.state,
+    // Force safeEditOrReply to edit THIS message.
+    callbackQuery: { message: uiMessage, data: 'ui:surface' },
+    editMessageText: async (text, extra) => baseCtx.api.editMessageText(chatId, messageId, text, extra),
+    editMessageReplyMarkup: async (extra) => baseCtx.api.editMessageReplyMarkup(chatId, messageId, extra),
+    reply: async (text, extra) => baseCtx.api.sendMessage(chatId, text, extra),
+    answerCallbackQuery: async () => {},
+  };
+}
+
 // STEP128: Stateless fallback navigation (Redis-degraded safe UI)
 // - No Redis reads/writes
 // - No DB calls
@@ -22014,9 +22040,6 @@ if (p.a === 'a:support_push') {
     }
   } catch {}
 
-  const ctxPush = Object.create(ctx);
-  ctxPush.callbackQuery = null;
-
   const text = `💬 <b>Поддержка</b>
 
 ` +
@@ -22043,7 +22066,13 @@ if (p.a === 'a:support_push') {
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
 
-  await safeEditOrReply(ctxPush, text, { parse_mode: 'HTML', reply_markup: kb });
+  // Always send Support as a NEW message (do not edit the receipt message).
+  try {
+    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
+  } catch (e) {
+    // Fallback: if reply failed for some reason, try edit.
+    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  }
   return;
 }
 
@@ -22525,26 +22554,7 @@ if (p.a === 'a:menu_push') {
     return;
   }
 
-  const ctxPush = Object.create(ctx);
-
-  // Fake callbackQuery.message so all edit-based renderers (and safeEditOrReply) target the new UI message.
-  try {
-    const chatId = uiMsg?.chat?.id || ctx.from?.id || srcChatId;
-    const messageId = uiMsg?.message_id;
-    if (chatId && messageId) {
-      try {
-        ctxPush.state = ctxPush.state || {};
-        ctxPush.state.ui = ctxPush.state.ui || {};
-        ctxPush.state.ui.chatId = chatId;
-        ctxPush.state.ui.messageId = messageId;
-      } catch {}
-      ctxPush.callbackQuery = { message: uiMsg, data: 'a:menu_push' };
-    } else {
-      ctxPush.callbackQuery = null;
-    }
-  } catch {
-    ctxPush.callbackQuery = null;
-  }
+  const ctxPush = makeUiCtxForMessage(ctx, uiMsg);
 
   try {
     const flags = await getRoleFlags(u, ctx.from.id);
@@ -22557,7 +22567,7 @@ if (p.a === 'a:menu_push') {
     });
     try {
       const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-      await safeEditOrReply(ctxPush, '⚠️ Не удалось открыть меню. Нажми /start и попробуй ещё раз.', { reply_markup: kb });
+      await safeEditOrReply(ctxPush, '⚠️ Не удалось открыть меню. Нажми /start и попробуй ещё раз.', { reply_markup: kb }, false);
     } catch {}
   }
   return;
