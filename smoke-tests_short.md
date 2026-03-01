@@ -6,6 +6,7 @@
 - `GET /api/health`
   - `ok=true`, `env=prod`
   - `cron.enabled=true`, есть `giveaways_tick.last_run` и `broadcast_tick.last_run` (если Redis настроен)
+  - если включён audit buffer flush (STEP215): есть `audit_flush_tick.last_run`, а `audit.buffer.len`/`audit.buffer.last_flush` присутствуют (len может быть 0)
   - `audit.throttle.enabled` отражает ENV
   - `audit.throttle.suppressed_today_*` не падает (0 — нормально)
 
@@ -71,8 +72,14 @@
 ## 9) Redis degraded UX (fallback)
 - При деградации Redis (fail-closed экраны): кнопки **Меню/Home** открывают **Меню (безопасный режим)** (stateless `s:*`), без тупика и без зависаний.
 
-## 10) OFFICIAL publish (anti-timeout + self-heal)
+## 10) Input-mode (expectText) — нет “залипания”
+- Зайти в любой шаг, где бот ждёт текст (пример: Admin → Outbox → «📌 В шаблон» или любой экран с вводом заметки/текста).
+- В режиме ввода проверить:
+  - кнопка `❌ Отмена` возвращает в `📋 Меню` (без тупика),
+  - в приватном чате можно написать `отмена` / `cancel` / `стоп` / `stop` — ожидание сбрасывается, бот показывает навигацию.
+- (опционально на staging) если временно поставить `EXPECT_TEXT_MAX_LIFETIME_SEC=60`, то через минуту режим ввода должен сам “протухнуть” и не держать пользователя в ожидании.
+
+## 11) OFFICIAL publish (anti-timeout + self-heal)
 - Если OFFICIAL включён:
   - запуск публикации не должен “зависать” надолго при медленном Telegram (локальный timeout)
   - если пост всё же ушёл в канал, запись в БД должна быстро стать `ACTIVE` (self-heal по `channel_post`)
-
