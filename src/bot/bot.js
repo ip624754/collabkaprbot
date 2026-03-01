@@ -2502,22 +2502,39 @@ function bmActiveBrandKey(tgId) {
   return k(['bm_active_brand', Number(tgId || 0)]);
 }
 async function getBrandManagerMode(tgId) {
-  const v = await redis.get(bmModeKey(tgId));
-  return v === '1' || v === 1 || v === true;
+  try {
+    const v = await redis.get(bmModeKey(tgId));
+    return v === '1' || v === 1 || v === true;
+  } catch {
+    // Redis degraded: default to "not in manager mode" (safe)
+    return false;
+  }
 }
 async function setBrandManagerMode(tgId, enabled) {
-  if (enabled) await redis.set(bmModeKey(tgId), '1');
-  else await redis.del(bmModeKey(tgId));
+  try {
+    if (enabled) await redis.set(bmModeKey(tgId), '1');
+    else await redis.del(bmModeKey(tgId));
+  } catch {
+    // ignore
+  }
 }
 async function getBmActiveBrand(tgId) {
-  const v = await redis.get(bmActiveBrandKey(tgId));
-  const n = Number(v || 0);
-  return n || 0;
+  try {
+    const v = await redis.get(bmActiveBrandKey(tgId));
+    const n = Number(v || 0);
+    return n || 0;
+  } catch {
+    return 0;
+  }
 }
 async function setBmActiveBrand(tgId, brandUserId) {
   const n = Number(brandUserId || 0);
   if (!n) return;
-  await redis.set(bmActiveBrandKey(tgId), String(n));
+  try {
+    await redis.set(bmActiveBrandKey(tgId), String(n));
+  } catch {
+    // ignore
+  }
 }
 
 
@@ -3643,22 +3660,38 @@ function expectBackCb(exp) {
 }
 
 async function setActiveWorkspace(tgId, wsId) {
-  await redis.set(k(['active_ws', tgId]), String(wsId), { ex: 30 * 24 * 3600 });
+  try {
+    await redis.set(k(['active_ws', tgId]), String(wsId), { ex: 30 * 24 * 3600 });
+  } catch {
+    // ignore
+  }
 }
 async function getActiveWorkspace(tgId) {
-  const v = await redis.get(k(['active_ws', tgId]));
-  const n = Number(v);
-  return n > 0 ? n : null;
+  try {
+    const v = await redis.get(k(['active_ws', tgId]));
+    const n = Number(v);
+    return n > 0 ? n : null;
+  } catch {
+    return null;
+  }
 }
 
 // Curator UI mode (hide non-curator actions to reduce confusion)
 async function setCuratorMode(tgId, enabled) {
-  await redis.set(k(['cur_mode', tgId]), enabled ? '1' : '0', { ex: 365 * 24 * 3600 });
+  try {
+    await redis.set(k(['cur_mode', tgId]), enabled ? '1' : '0', { ex: 365 * 24 * 3600 });
+  } catch {
+    // ignore
+  }
 }
 
 async function getCuratorMode(tgId) {
-  const v = await redis.get(k(['cur_mode', tgId]));
-  return String(v || '') === '1';
+  try {
+    const v = await redis.get(k(['cur_mode', tgId]));
+    return String(v || '') === '1';
+  } catch {
+    return false;
+  }
 }
 
 // UI mode: Creator vs Brand (reduce main menu overload)
@@ -3671,19 +3704,31 @@ function normalizeUiMode(mode) {
 }
 
 async function setUiMode(tgId, mode) {
-  await redis.set(k(['ui_mode', tgId]), normalizeUiMode(mode), { ex: 365 * 24 * 3600 });
+  try {
+    await redis.set(k(['ui_mode', tgId]), normalizeUiMode(mode), { ex: 365 * 24 * 3600 });
+  } catch {
+    // ignore
+  }
 }
 
 async function getUiMode(tgId) {
-  const v = await redis.get(k(['ui_mode', tgId]));
-  return normalizeUiMode(v || '');
+  try {
+    const v = await redis.get(k(['ui_mode', tgId]));
+    return normalizeUiMode(v || '');
+  } catch {
+    return UI_MODES.CREATOR;
+  }
 }
 
 async function resolveUiMode(tgId) {
   // Default: Creator. Onboarding / explicit switch sets Brand.
-  const v = await redis.get(k(['ui_mode', tgId]));
-  if (v) return normalizeUiMode(v);
-  return UI_MODES.CREATOR;
+  try {
+    const v = await redis.get(k(['ui_mode', tgId]));
+    if (v) return normalizeUiMode(v);
+    return UI_MODES.CREATOR;
+  } catch {
+    return UI_MODES.CREATOR;
+  }
 }
 
 function uiModeHuman(mode) {
@@ -8000,9 +8045,14 @@ function brandReplyKb(ws, wsId, brandCredits = 0, leadId = 0) {
   // Contacts are revealed via paid unlock (Brand Pass credits) to prevent free bypass.
   // UX: if balance is low — показываем и «Контакты», и быстрый путь купить Brand Pass.
   const bal = Number(brandCredits || 0);
-  if (bal <= 0) {
-    kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
-  } else if (CONTACT_UNLOCK_COST > 0 && bal < CONTACT_UNLOCK_COST) {
+  // STEP213: never hide monetization CTAs because of an unknown/stale/zero Redis balance.
+  // показываем «Контакты» всегда, а проверку кредитов делаем на клике (DB-truth).
+  if (CONTACT_UNLOCK_COST <= 0) {
+    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`);
+  } else if (bal <= 0) {
+    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`)
+      .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
+  } else if (bal < CONTACT_UNLOCK_COST) {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`)
       .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
   } else {
@@ -10012,7 +10062,9 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
         kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
       } else if (balNum !== null) {
         if (balNum <= 0) {
-          kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
+          // STEP213: keep «Контакты» visible even when Redis balance is 0/stale.
+          kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`)
+            .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
         } else if (balNum < CONTACT_UNLOCK_COST) {
           kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`)
             .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
@@ -10602,7 +10654,9 @@ ${threadBlock}`;
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
       .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
   } else if (Number(creditsNum || 0) <= 0) {
-    kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
+    // STEP213: don't hide «Контакты» when balance is 0/unknown in Redis.
+    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
+      .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
   } else if (needsContactsTopup) {
     kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
       .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
