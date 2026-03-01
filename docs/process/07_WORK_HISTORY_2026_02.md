@@ -1313,3 +1313,12 @@ docs/01_SECURITY_INVARIANTS.md
 - Примечание: имя `cron_router.js` выбрано специально, чтобы не путаться с `src/bot/cron.js`.
 - Без миграций. Zero regressions.
 - Docs sync: `docs/00_CURRENT_STATE.md`, `docs/13_RUNBOOK_RELEASE.md`, `docs/16_RELEASE_CHECKLIST.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+## STEP221 — Admin DM UX: menu/support открываются новым сообщением + компоновка кнопок + cron_router path fix
+- Пользовательские системные DM от админа: `📋 Открыть меню` / `💬 Поддержка` теперь не редактируют исходный текст.
+  - Новые callbacks: `a:menu_push`, `a:support_push`.
+  - Best-effort: убираем reply_markup у исходного сообщения, затем отправляем меню/поддержку отдельным сообщением.
+- Админка `a:adm_umsg`: шаблоны выводятся сеткой 2×N, а действия сгруппированы по 2 в ряд (меньше «простыни»).
+- Исправление Vercel rewrites: cron router файл находится в `api/cron_router.js` (вместо `api/cron/cron_router.js`).
+- Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`, + обновлён `docs/02_ACTION_KEYS_REGISTRY.md`.
+
