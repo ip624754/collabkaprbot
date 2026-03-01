@@ -272,6 +272,32 @@ export const CFG = {
   AUDIT_DB_THROTTLE_WINDOW_SEC: parseIntSafe(process.env.AUDIT_DB_THROTTLE_WINDOW_SEC, 60),
   AUDIT_DB_THROTTLE_PREFIXES: parseCsvStr(process.env.AUDIT_DB_THROTTLE_PREFIXES || 'lead.,folders.,ws.profile_,deal.,inbox.'),
 
+  // Audit buffering (Redis list -> batch flush to Postgres)
+  // Goal: when AUDIT_DB_THROTTLE suppresses inserts (or DB is flaky), do not lose audit events.
+  // Default: follow AUDIT_DB_THROTTLE_ENABLED unless explicitly overridden.
+  AUDIT_BUFFER_ENABLED: (() => {
+    if (typeof process.env.AUDIT_BUFFER_ENABLED !== 'undefined') {
+      return parseBoolSafe(process.env.AUDIT_BUFFER_ENABLED, false);
+    }
+    return parseBoolSafe(process.env.AUDIT_DB_THROTTLE_ENABLED, false);
+  })(),
+  AUDIT_BUFFER_ON_DB_ERROR: parseBoolSafe(process.env.AUDIT_BUFFER_ON_DB_ERROR, true),
+  AUDIT_BUFFER_MAX_LEN: (() => {
+    const n = parseIntSafe(process.env.AUDIT_BUFFER_MAX_LEN, 5000);
+    return Math.max(200, Math.min(n, 20000));
+  })(),
+  AUDIT_BUFFER_TTL_SEC: (() => {
+    const n = parseIntSafe(process.env.AUDIT_BUFFER_TTL_SEC, 7 * 86400);
+    return Math.max(3600, Math.min(n, 60 * 86400)); // 1h..60d
+  })(),
+  AUDIT_BUFFER_FLUSH_BATCH: (() => {
+    const n = parseIntSafe(process.env.AUDIT_BUFFER_FLUSH_BATCH, 250);
+    return Math.max(10, Math.min(n, 1000));
+  })(),
+  AUDIT_BUFFER_FLUSH_MAX_MS: (() => {
+    const n = parseIntSafe(process.env.AUDIT_BUFFER_FLUSH_MAX_MS, 4500);
+    return Math.max(250, Math.min(n, 9000));
+  })(),
 
   // Onboarding v2
   ONBOARDING_V2_ENABLED: parseBoolSafe(process.env.ONBOARDING_V2_ENABLED, false),
