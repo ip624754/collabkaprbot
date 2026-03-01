@@ -1492,7 +1492,7 @@ ${escapeHtml(safeText)}` +
       kb.url(label, String(n.ctaUrl)).row();
     }
     kb.text('📋 Открыть меню', 'a:menu').text('💬 Поддержка', 'a:support').row();
-    kb.text('✅ Понятно', 'a:usr_ack');
+    kb.text('✅ Принято', 'a:usr_ack|src:admmsg');
 
     await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }).catch(() => {});
   } catch {
@@ -17143,7 +17143,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
         phInfo += `\n⚠️ Неизвестные: ${tags}`;
       }
 
-      const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
+      const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше выбери действие кнопками ниже.</i>`;
       const kb = new InlineKeyboard()
         .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
@@ -22058,15 +22058,19 @@ if (p.a === 'a:share') {
 if (p.a === 'a:support_push') {
   try { await ctx.answerCallbackQuery(); } catch {}
 
-  // For service/system messages: open Support in a NEW message (do not overwrite original text).
-  // Best-effort: remove buttons from the original message to avoid repeat clicks.
-  try {
-    const chatId = ctx?.callbackQuery?.message?.chat?.id;
-    const msgId = ctx?.callbackQuery?.message?.message_id;
-    if (chatId && msgId) {
-      await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined });
-    }
-  } catch {}
+  const src = String(p?.src || '');
+
+  // For admin-to-user receipts (src=admmsg) we MUST keep the original buttons.
+  // For other service/system messages we can hide buttons to avoid repeat clicks.
+  if (src !== 'admmsg') {
+    try {
+      const chatId = ctx?.callbackQuery?.message?.chat?.id;
+      const msgId = ctx?.callbackQuery?.message?.message_id;
+      if (chatId && msgId) {
+        await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined });
+      }
+    } catch {}
+  }
 
   const text = `💬 <b>Поддержка</b>
 
@@ -22087,12 +22091,18 @@ if (p.a === 'a:support_push') {
 ` +
     `⚠️ Спам/реклама — бан.`;
 
-  const kb = new InlineKeyboard()
-    .text('✍️ Написать в поддержку', 'a:support_write')
-    .row()
-    .text('🧭 Быстрый старт', 'a:guide')
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Home', 'a:home');
+  // Minimal support screen when coming from admin DM receipt (no extra distractions).
+  const kb = (src === 'admmsg')
+    ? new InlineKeyboard()
+        .text('✍️ Написать в поддержку', 'a:support_write')
+        .row()
+        .text('🏠 Главное меню', 'a:menu')
+    : new InlineKeyboard()
+        .text('✍️ Написать в поддержку', 'a:support_write')
+        .row()
+        .text('🧭 Быстрый старт', 'a:guide')
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
 
   // Always send Support as a NEW message (do not edit the receipt message).
   try {
@@ -22558,15 +22568,20 @@ if (p.a === 'a:brand_dir_open') {
 if (p.a === 'a:menu_push') {
   try { await ctx.answerCallbackQuery(); } catch {}
 
-  // For service/system messages: open Menu in a NEW message (do not overwrite original text).
-  // Best-effort: remove buttons from the original receipt and render the Menu into a fresh UI message.
+  // Open Menu in a NEW message (do not overwrite original text).
+  // For admin-to-user receipts (src=admmsg) we MUST keep the original buttons (no dead-ends).
   const srcChatId = ctx?.callbackQuery?.message?.chat?.id;
   const srcMsgId = ctx?.callbackQuery?.message?.message_id;
-  try {
-    if (srcChatId && srcMsgId) {
-      await ctx.api.editMessageReplyMarkup(srcChatId, srcMsgId, { reply_markup: undefined });
-    }
-  } catch {}
+
+  const src = String(p?.src || '');
+  if (src !== 'admmsg') {
+    // For other service/system messages we can hide buttons to avoid repeat clicks.
+    try {
+      if (srcChatId && srcMsgId) {
+        await ctx.api.editMessageReplyMarkup(srcChatId, srcMsgId, { reply_markup: undefined });
+      }
+    } catch {}
+  }
 
   // Create a new message that we can safely edit into the actual Menu.
   // This avoids overwriting the original admin/system message text.
@@ -22609,12 +22624,25 @@ if (p.a === 'a:menu') {
     }
 
 
-// Hide buttons under service/system messages (user-friendly ack)
+// User-friendly ack under service/system messages
 if (p.a === 'a:usr_ack') {
-  try { await ctx.answerCallbackQuery(); } catch {}
+  const src = String(p?.src || '');
+  const ackText = (src === 'admmsg') ? '✅ Принято' : '✅ Понятно';
+  try { await ctx.answerCallbackQuery({ text: ackText }); } catch {}
   const chatId = ctx?.callbackQuery?.message?.chat?.id;
   const msgId = ctx?.callbackQuery?.message?.message_id;
   if (!chatId || !msgId) return;
+
+  // Admin-to-user receipts: keep navigation buttons, only remove the ack button.
+  if (src === 'admmsg') {
+    const kb = new InlineKeyboard()
+      .text('🏠 Главное меню', 'a:menu_push|src:admmsg')
+      .text('💬 Поддержка', 'a:support_push|src:admmsg');
+    try { await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: kb }); } catch {}
+    return;
+  }
+
+  // Default behavior for other service messages: hide buttons completely.
   try { await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined }); } catch {}
   return;
 }
@@ -27642,7 +27670,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
 ⚠️ Неизвестные: ${tags}`;
       }
 
-      const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
+      const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше выбери действие кнопками ниже.</i>`;
       const kb = new InlineKeyboard()
         .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
@@ -27927,7 +27955,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
   }
 
   const uname = targetUsername ? '@' + targetUsername : '';
-  const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
+  const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше выбери действие кнопками ниже.</i>`;
 
   const kb = new InlineKeyboard()
     .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:all|p:0`)
@@ -34821,12 +34849,12 @@ const sectionCb = sectionBackCb || (retCb ? 'a:admin_comms' : 'a:admin_ops');
     // If Redis is degraded — skip dedup.
   }
 
-  const userMsg = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
+  const userMsg = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше выбери действие кнопками ниже.</i>`;
   const userKb = new InlineKeyboard()
-    .text('📋 Открыть меню', 'a:menu_push')
-    .text('💬 Поддержка', 'a:support_push')
+    .text('🏠 Главное меню', 'a:menu_push|src:admmsg')
+    .text('💬 Поддержка', 'a:support_push|src:admmsg')
     .row()
-    .text('✅ Понятно', 'a:usr_ack');
+    .text('✅ Принято', 'a:usr_ack|src:admmsg');
 
   let ok = false;
   let err = '';
