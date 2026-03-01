@@ -37,12 +37,15 @@
 
 ## Neon / Postgres hardening
 
+> **Важно (Neon pooled / pgbouncer):** нельзя передавать startup‑параметры Postgres через `options` в `new Pool(...)`, через ENV `PGOPTIONS`, или через `DATABASE_URL` с `?options=...` — Neon pooler это отклонит. Настраиваем таймауты только SQL‑командами после подключения (`SET statement_timeout` в connect hook) и локально в тяжёлых TX (`SET LOCAL statement_timeout`).
+
 | Key | Prod value | Примечание |
 |---|---:|---|
 | `PG_POOL_MAX` | `1` | Serverless‑safe |
 | `PG_CONN_TIMEOUT_MS` | `10000` | |
 | `PG_IDLE_TIMEOUT_MS` | `5000` | |
 | `PG_STATEMENT_TIMEOUT_MS` | `15000` | STEP235: server‑side timeout |
+| `PG_HEAVY_TX_STATEMENT_TIMEOUT_MS` | *(optional)* | STEP242: local `SET LOCAL statement_timeout` для тяжёлых TX (giveaways draw/finalize). Если не задан — используется `PG_STATEMENT_TIMEOUT_MS`. |
 
 ## Ключевые лимиты (пример актуального прод‑набора)
 
@@ -71,10 +74,12 @@ SUPER_ADMIN_TG_IDS=<comma-separated>
 
 # Postgres
 DATABASE_URL=<set>
+# IMPORTANT (Neon pooled/pgbouncer): do NOT set PGOPTIONS and do NOT add ?options=... to DATABASE_URL.
 PG_POOL_MAX=1
 PG_CONN_TIMEOUT_MS=10000
 PG_IDLE_TIMEOUT_MS=5000
 PG_STATEMENT_TIMEOUT_MS=15000
+PG_HEAVY_TX_STATEMENT_TIMEOUT_MS=
 
 # Upstash Redis (REST)
 UPSTASH_REDIS_REST_URL=<set>

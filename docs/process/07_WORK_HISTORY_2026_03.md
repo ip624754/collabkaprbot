@@ -30,7 +30,8 @@
 Риск регрессий: **минимальный** (меняется только отображение snippet’ов и доступность `Повторить` вне DM; в личке поведение прежнее).
 
 ### STEP235 — Neon timeout hardening (PG statement_timeout)
-- Postgres pool теперь задаёт **server-side** `statement_timeout` через параметр подключения `options: -c statement_timeout=...` (ENV `PG_STATEMENT_TIMEOUT_MS`, default 15000).
+- Postgres pool задаёт `statement_timeout` для сессии через `SET statement_timeout` в connect hook (ENV `PG_STATEMENT_TIMEOUT_MS`, default 15000).
+- Важно: Neon pooler отклоняет `statement_timeout`, переданный через startup options (например `options: -c statement_timeout=...`).
 - Добавлены явные лог‑маркеры `db.statement_timeout` при отмене запросов по таймауту (и для `pool.query`, и для `client.query` в транзакциях), чтобы ops/support быстрее ловили “Neon завис/медленный ответ”.
 - `SET LOCAL statement_timeout` в монетизационных транзакциях оставлен как “страховка сверху” (circuit breaker).
 
@@ -44,3 +45,61 @@
 
 Риск регрессий: **низкий** (audit flush — best‑effort; при cooldown мы лишь временно пропускаем flush, данные не теряются: остаются в queue/inflight и будут записаны после восстановления DB).
 
+
+
+### STEP238 — Staff audit docs pack (NotebookLM)
+- Добавлен единый манифест `docs/audit_staff/00_AUDIT_START_MANIFEST.md` + цепочка промптов для NotebookLM.
+- Для docs-only аудита: исключать work history и legacy IG OAuth документы (шум), фокус на current-state.
+- Дата: 2026-03-01
+
+## 2026-03-02
+
+### STEP239 — Anti-bypass: offer description (contacts leak)
+- Закрыт bypass монетизации: креатор мог вставить контакты в `barter_offers.description`, и бренд видел их до unlock.
+- В `renderBxPublicView` для **не-owner** и **не-unlocked** описание пропускается через `redactContactsInText` перед показом бренду.
+- `redactContactsInText` усилен против обхода через fullwidth `＠` (U+FF20) и dot leader `․` (U+2024) в email/доменных именах/соц-доменах и @handles (telegram/instagram-style).
+- Добавлены тесты `scripts/test-redactContactsInText.js` на эти bypass-символы.
+
+Риск регрессий: **низкий** (изменения затрагивают только отображение описания оффера для брендов до unlock; владельцу/после unlock описание остаётся без редактирования).
+
+### STEP240 — Lead notes tags persist (SPEC v2)
+- Теги в curator notes (`#brief/#urgent/...`) теперь сохраняются в БД при записи заметки.
+- `appendBrandLeadCuratorNote()`:
+  - извлекает теги из текста (regex `#tag`),
+  - учитывает `opts.tags` (шаблоны/авто‑события),
+  - сохраняет `tags: []` в объект заметки (`brand_leads.meta.curator_notes[].tags`),
+  - агрегирует теги на уровне лида в `brand_leads.meta.tags` (для будущей фильтрации).
+
+Риск регрессий: **низкий** (поле `tags` добавляется в JSON‑объект заметки; UI уже поддерживает оба варианта — с `tags` и с извлечением из текста).
+
+
+### STEP241 — Hotfix: missing named export from redis.js (Vercel crash)
+- Исправлен крэш на старте функций Vercel: `SyntaxError: The requested module '../lib/redis.js' does not provide an export named 'incrWithExpireOnFirst'`.
+- Причина: частичное применение патчей/слияний могло обновить импорты (`incrWithExpireOnFirst`/`incrWithExpire`/`lpushTrim`) без синхронного обновления `src/lib/redis.js`.
+- Решение (Zero regressions): импорты в `src/db/queries.js`, `src/bot/bot.js`, `src/bot/cron.js` переведены на namespace (`import * as R from '../lib/redis.js'`) + безопасные fallback для отсутствующих helper’ов (metrics-only → no-op; bounded lists → best-effort `LPUSH/LTRIM`).
+- Продуктовая логика не меняется; цель — гарантировать, что бот не упадёт из-за отсутствующего named export.
+
+Риск регрессий: **минимальный** (изменения касаются только способа импорта и fallback на случай несовпадения версий; при наличии helper’ов будет использован основной путь).
+
+
+### STEP242 — Heavy TX hardening: local SET LOCAL statement_timeout
+- Defense-in-depth: в “тяжёлых” транзакциях (giveaways draw+finalize) добавлен `SET LOCAL statement_timeout` сразу после `BEGIN`.
+- Источник таймаута: по умолчанию `PG_STATEMENT_TIMEOUT_MS` (как в STEP235). Можно переопределить `PG_HEAVY_TX_STATEMENT_TIMEOUT_MS`, если понадобится более короткий лимит именно для giveaway TX.
+- Цель: исключить случаи “висим на locks/медленных запросах” даже при частичных деплоях или если pool-level настройка не применилась на конкретном соединении.
+
+Риск регрессий: **низкий** (не меняем бизнес-логику, только добавляем предсказуемое завершение долгих TX по таймауту).
+
+
+### STEP243 — Hotfix: Neon pooler rejects startup options `statement_timeout`
+- Устранён прод‑крэш (Vercel): `unsupported startup parameter in options: statement_timeout`.
+- Причина: Neon pooler не поддерживает установку `statement_timeout` через startup options (включая `options: -c statement_timeout=...`).
+- Решение: убрали передачу startup options из `src/db/pool.js` и оставили `SET statement_timeout` в connect hook (best‑effort) + `SET LOCAL statement_timeout` в тяжёлых/критичных транзакциях (defense‑in‑depth).
+
+Риск регрессий: **минимальный** (мы убрали только параметр старта соединения, который валил прод; логика запросов/UX не меняется).
+
+
+### STEP244 — Docs: Neon pooled (pgbouncer) запрет на startup options
+- Обновлён `docs/process/11_ENV_CHEATSHEET_ONE_SCREEN.md`: добавлено явное правило “Neon pooled / pgbouncer не принимает startup options” + напоминание не использовать `PGOPTIONS` и `?options=` в `DATABASE_URL`.
+- Обновлён `docs/00_CURRENT_STATE.md`: закреплено правило в секции Neon hardening.
+
+Риск регрессий: **нулевой** (только документация).
