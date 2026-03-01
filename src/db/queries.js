@@ -5136,29 +5136,76 @@ export async function appendBrandLeadCuratorNote(leadId, byUserId, text, opts = 
 
   const safeText = t.length > 1200 ? (t.slice(0, 1200) + '…') : t;
 
+  // Lead notes support lightweight tags via "#tag" syntax (e.g. #brief, #urgent).
+  // We store tags explicitly so the UI and future filters do not need to parse text.
+  const extractTags = (s) => {
+    const str = String(s || '');
+    const re = /#([a-zA-Z0-9_А-Яа-я]{2,24})/g;
+    const out = [];
+    let m;
+    while ((m = re.exec(str))) {
+      const tag = String(m[1] || '').trim().toLowerCase();
+      if (!tag) continue;
+      if (!out.includes(tag)) out.push(tag);
+      if (out.length >= 8) break;
+    }
+    return out;
+  };
+
+  const optTagsRaw = (opts && typeof opts === 'object' && Array.isArray(opts.tags)) ? opts.tags : [];
+  const optTags = optTagsRaw
+    .map((x) => String(x || '').trim().replace(/^#/, '').toLowerCase())
+    .filter(Boolean)
+    .slice(0, 8);
+
+  const tags = Array.from(new Set([ ...extractTags(safeText), ...optTags ])).slice(0, 8);
+  const tagsJson = JSON.stringify(tags);
+
   const roleRaw = opts && typeof opts === 'object' ? String(opts.role || '').trim() : '';
   const role = roleRaw ? roleRaw.toLowerCase() : null;
   const r = await pool.query(
     `update brand_leads
      set meta = jsonb_set(
-       coalesce(meta, '{}'::jsonb),
-       '{curator_notes}',
-       (coalesce(coalesce(meta, '{}'::jsonb)->'curator_notes', '[]'::jsonb) ||
-        jsonb_build_array(
-          jsonb_build_object(
-            'by', $2::int,
-            'at', now(),
-            'text', $3::text,
-            'role', $4::text
+       jsonb_set(
+         coalesce(meta, '{}'::jsonb),
+         '{curator_notes}',
+         (coalesce(coalesce(meta, '{}'::jsonb)->'curator_notes', '[]'::jsonb) ||
+          jsonb_build_array(
+            jsonb_build_object(
+              'by', $2::int,
+              'at', now(),
+              'text', $3::text,
+              'role', $4::text,
+              'tags', coalesce($5::jsonb, '[]'::jsonb)
+            )
           )
-        )
+         ),
+         true
+       ),
+       '{tags}',
+       (
+         select to_jsonb(array(
+           select distinct tag
+           from (
+             select jsonb_array_elements_text(
+               case
+                 when jsonb_typeof(coalesce(meta, '{}'::jsonb)->'tags') = 'array' then (coalesce(meta, '{}'::jsonb)->'tags')
+                 else '[]'::jsonb
+               end
+             ) as tag
+             union all
+             select jsonb_array_elements_text(coalesce($5::jsonb, '[]'::jsonb)) as tag
+           ) s
+           where coalesce(tag, '') <> ''
+           limit 32
+         ))
        ),
        true
      ),
      updated_at = now()
      where id = $1
      returning meta`,
-    [id, by, safeText, role]
+    [id, by, safeText, role, tagsJson]
   );
   return r.rows[0] || null;
 }
