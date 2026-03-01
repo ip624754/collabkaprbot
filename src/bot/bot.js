@@ -22,6 +22,40 @@ import { qstashPublishJSON, getQStashDeliveryUrl, getQStashLibHealth } from '../
 
 let BOT;
 
+// STEP210: Anti-click-storm when Redis is degraded.
+// In serverless, token-lock may be unavailable when Redis is down, so we guard a few critical DB-truth/queue-first actions
+// against repeated clicks to avoid spiky Postgres/Neon load. This is best-effort (in-memory, per warm instance).
+const DEGRADED_CLICK_GUARD_TTL_MS = 8000;
+const _degradedClickGuard = new Map(); // key -> expiresAtMs
+
+function _degradedGuardKey(tgId, action, resourceId) {
+  return `${Number(tgId || 0)}:${String(action || '')}:${String(resourceId || '')}`;
+}
+
+function degradedClickGuardAllow(tgId, action, resourceId) {
+  const uid = Number(tgId || 0);
+  const a = String(action || '');
+  if (!uid || !a) return true;
+
+  const rid = String(resourceId || '0');
+  const now = Date.now();
+  const key = _degradedGuardKey(uid, a, rid);
+  const exp = _degradedClickGuard.get(key);
+  if (exp && exp > now) return false;
+
+  _degradedClickGuard.set(key, now + DEGRADED_CLICK_GUARD_TTL_MS);
+
+  // Best-effort cleanup to avoid unbounded growth on long-lived warm instances.
+  if (_degradedClickGuard.size > 1000) {
+    for (const [k2, e2] of _degradedClickGuard) {
+      if (!e2 || e2 <= now) _degradedClickGuard.delete(k2);
+      if (_degradedClickGuard.size <= 800) break;
+    }
+  }
+  return true;
+}
+
+
 // Brand Pass: brands pay credits for first contact (opening a new inbox thread)
 // Contacts reveal on public vitrina is also gated by Brand Pass credits.
 // Semantics: spend CONTACT_UNLOCK_COST credits to reveal contacts for a workspace; cached for CONTACT_UNLOCK_TTL_DAYS days (per brand user).
@@ -1621,31 +1655,57 @@ async function _expectedStarsForInvoicePayload(payload) {
     return { ok: true, expected, kind, meta: { wsId, userId } };
   }
 
-  // brand_<userId>_<S|M|L>_<token>
-  if (kind === 'brand_pass') {
-    if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
-    const userId = _parseIntStrict(parts[1]);
-    if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
-    const packId = String(parts[2] || '').toUpperCase();
-    const pack = getBrandPack(packId);
-    const expected = _parseIntStrict(pack?.stars);
-    if (!expected || expected <= 0) return { ok: false, reason: 'bad_pack', expected: 0, kind };
-    return { ok: true, expected, kind, meta: { userId, packId } };
+  
+// brand_<userId>_<S|M|L>_<token> (legacy supported: numeric credits token)
+if (kind === 'brand_pass') {
+  if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
+  const userId = _parseIntStrict(parts[1]);
+  if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
+
+  const packTokenRaw = String(parts[2] || '').trim();
+  const packTokenUp = packTokenRaw.toUpperCase();
+
+  // Canonical packs: S/M/L. Legacy: numeric credits token (only if matches known packs).
+  let pack = getBrandPack(packTokenUp);
+  let legacyCredits = null;
+  if (!pack && /^\d+$/.test(packTokenRaw)) {
+    legacyCredits = _parseIntStrict(packTokenRaw);
+    if (legacyCredits && legacyCredits > 0) {
+      pack = BRAND_PACKS.find((p) => Number(_parseIntStrict(p.credits) || 0) === Number(legacyCredits)) || null;
+    }
   }
 
-  // bplan_<userId>_<start|pro>_<token>
-  if (kind === 'brand_plan') {
-    if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
-    const userId = _parseIntStrict(parts[1]);
-    if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
-    const plan = String(parts[2] || 'start').toLowerCase();
-    const planDef = BRAND_PLANS.find((pl) => String(pl.id) === String(plan)) || null;
-    const expected = _parseIntStrict(planDef?.stars);
-    if (!expected || expected <= 0) return { ok: false, reason: 'bad_plan', expected: 0, kind };
-    return { ok: true, expected, kind, meta: { userId, plan } };
-  }
+  const expected = _parseIntStrict(pack?.stars);
+  if (!expected || expected <= 0) return { ok: false, reason: 'bad_pack', expected: 0, kind };
 
-  // match_<userId>_<S|M|L>_<token>
+  return {
+    ok: true,
+    expected,
+    kind,
+    meta: {
+      userId,
+      packId: String(pack?.id || packTokenUp),
+      ...(legacyCredits ? { legacyCreditsToken: true, legacyCredits } : {}),
+    },
+  };
+}
+
+// bplan_<userId>_<start|pro>_<token> (legacy supported: basic/max)
+if (kind === 'brand_plan') {
+  if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
+  const userId = _parseIntStrict(parts[1]);
+  if (!userId || userId <= 0) return { ok: false, reason: 'bad_user', expected: 0, kind };
+
+  const planRaw = String(parts[2] || 'start').toLowerCase();
+  const plan = (planRaw === 'basic') ? 'start' : (planRaw === 'max') ? 'pro' : planRaw;
+
+  const planDef = BRAND_PLANS.find((pl) => String(pl.id) === String(plan)) || null;
+  const expected = _parseIntStrict(planDef?.stars);
+  if (!expected || expected <= 0) return { ok: false, reason: 'bad_plan', expected: 0, kind };
+
+  return { ok: true, expected, kind, meta: { userId, plan } };
+}
+// match_<userId>_<S|M|L>_<token>
   if (kind === 'matching') {
     if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
     const userId = _parseIntStrict(parts[1]);
@@ -21333,24 +21393,55 @@ bot.on('message:successful_payment', async (ctx) => {
     // Source of truth: src/bot/actionRegistry.js (no suffix heuristics).
     //
     // Rationale: when Redis is down we must not perform dangerous mutations that rely on ephemeral state.
-    // Some actions are safe-by-design (DB-truth) and are allowlisted via ACTION_REGISTRY.guard = NONE.
+    // Some actions are safe-by-design (DB-truth / queue-first) and remain available even if Redis is degraded
+    // (see ACTION_GUARD.DB_TRUTH / ACTION_GUARD.QUEUE_FIRST in src/bot/actionRegistry.js).
     const _meta = getActionMeta(p.a);
 
     // Fail-closed middleware (Redis degraded mode) for dangerous callbacks.
     // Source of truth: src/bot/actionRegistry.js (no suffix heuristics).
     //
+    // Guard semantics:
+    // - require_redis: fail-closed when Redis is down (default for mutating flows that rely on ephemeral state).
+    // - db_truth / queue_first: safe-by-design critical actions (idempotent in Postgres) that must remain available even if Redis is degraded.
+    // - none: navigation / view-only / safe actions that do not rely on Redis.
+    //
     // Break-glass: when Redis is down, super-admin can access a *very small* allowlist
     // of DB-truth admin screens (e.g., payments) via a double-confirm button (bg=1).
-    if (_meta?.guard === ACTION_GUARD.REQUIRE_REDIS) {
-      let redisOk = true;
+    let redisOk = null;
+    if (_meta?.guard === ACTION_GUARD.REQUIRE_REDIS || _meta?.guard === ACTION_GUARD.DB_TRUTH || _meta?.guard === ACTION_GUARD.QUEUE_FIRST) {
+      let ok = true;
       try {
         // Lightweight health read (no writes) to detect Redis outage.
         await redis.get(k(['health', 'redis_cb_guard']));
       } catch {
-        redisOk = false;
+        ok = false;
       }
+      redisOk = ok;
+      try { ctx.state.redisOk = ok; } catch {}
+    }
 
-      if (!redisOk) {
+// STEP210: Anti-click-storm when Redis is down.
+// When Redis is degraded, token-lock/rate limit paths may be unavailable → protect Postgres/Neon from repeated clicks.
+if (redisOk === false && (_meta?.guard === ACTION_GUARD.DB_TRUTH || _meta?.guard === ACTION_GUARD.QUEUE_FIRST)) {
+  const a = String(p.a || '');
+  const critical = (a === 'a:brand_app_accept' || a === 'a:wsp_contact_unlock');
+  if (critical) {
+    const tgId = Number(ctx.from?.id || 0);
+    const rid = (a === 'a:brand_app_accept')
+      ? String(p.id || 0)
+      : String(p.w || p.ws || 0);
+
+    if (!degradedClickGuardAllow(tgId, a, rid || '0')) {
+      try { await ctx.answerCallbackQuery({ text: '⏳ Уже обрабатываем. Обнови через 10–30 сек.' }); } catch {}
+      return;
+    }
+  }
+}
+
+
+
+    if (_meta?.guard === ACTION_GUARD.REQUIRE_REDIS) {
+      if (redisOk === false) {
         const isAdmin = isSuperAdminTg(ctx.from?.id);
         const canBreakGlass = !!(_meta && _meta.breakGlass);
         const armed = String(p.bg || '') === '1';
@@ -34706,11 +34797,15 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
     if (payload.startsWith('bplan_')) {
       const parts = payload.split('_');
       const userId = Number(parts[1]);
-      const plan = String(parts[2] || 'start').toLowerCase();
+      const planRaw = String(parts[2] || 'start').toLowerCase();
+      const plan = (planRaw === 'basic') ? 'start' : (planRaw === 'max') ? 'pro' : planRaw;
+
       if (!userId) throw new Error('Bad userId');
+      if (plan !== 'start' && plan !== 'pro') throw new Error('Bad plan');
+
       await db.activateBrandPlan(userId, plan, CFG.BRAND_PLAN_DURATION_DAYS);
       // Credit bonus
-      const planDef = BRAND_PLANS.find(pl => pl.id === plan) || BRAND_PLANS.find(pl => (plan === 'basic' && pl.id === 'start') || (plan === 'max' && pl.id === 'pro'));
+      const planDef = BRAND_PLANS.find(pl => pl.id === plan) || null;
       if (planDef?.credits) {
         const newBalance = await db.addBrandCredits(userId, planDef.credits);
         try { await setBrandCreditsCache(userId, newBalance); } catch {}
@@ -34793,12 +34888,37 @@ async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED',
   const skippedYoung = Math.max(0, miss.length - eligible.length);
   const cand = eligible.slice(0, batch);
 
-  let applied = 0;
+    let applied = 0;
   let failed = 0;
   let skipped = 0;
+  let validationFailed = 0;
+  let manualRequired = 0;
 
   for (const r of cand) {
     try {
+      // Hardening: strict-validate Stars payment before any apply.
+      let v = null;
+      try {
+        v = await _validateStarsPaymentStrict({
+          payload: String(r.invoice_payload || ''),
+          currency: String(r.currency || 'XTR'),
+          totalAmount: Number(r.total_amount || 0),
+          payerUserId: Number(r.user_id || 0) || null,
+        });
+      } catch {
+        v = { ok: false, reason: 'validation_exception' };
+      }
+
+      // Extra safety: do not auto-heal PRO without embedded payer userId (legacy payload).
+      const needsPayer = String(r.invoice_payload || '').startsWith('pro_');
+      if (!v || !v.ok || (needsPayer && !(v?.meta && v.meta.userId))) {
+        const rr = (!v || !v.ok) ? String(v?.reason || 'validation_failed') : 'missing_payer_in_payload';
+        validationFailed += 1;
+        try { await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
+        skipped += 1;
+        continue;
+      }
+
       // Claim fulfillment in DB to prevent double-apply (cron/admin parallelism).
       const claimed = await db.claimPaymentApplying(Number(r.id), adminUserRow?.id || Number(r.user_id));
       if (!claimed) {
@@ -34823,23 +34943,22 @@ async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED',
           const tgId = Number(r.tg_id || 0);
           if (tgId) {
             let msg = '✅ Оплата найдена и применена автоматически.';
-            if (fb.kind === 'brand_pass') msg += `
-
-💳 Кредиты начислены: +${Number(fb.credits || 0)}.`;
-            if (fb.kind === 'brand_plan') msg += `
-
-⭐️ Brand Plan активирован (${String(fb.plan || '')}).`;
-            if (fb.kind === 'pro') msg += `
-
-⭐️ PRO активирован.`;
-            if (fb.kind === 'founder_brand') msg += `
-
-⭐️ Founder Sale применён.`;
+            if (fb.kind === 'brand_pass') msg += `\n\n💳 Кредиты начислены: +${Number(fb.credits || 0)}.`;
+            if (fb.kind === 'brand_plan') msg += `\n\n⭐️ Brand Plan активирован (${String(fb.plan || '')}).`;
+            if (fb.kind === 'pro') msg += `\n\n⭐️ PRO активирован.`;
+            if (fb.kind === 'founder_brand') msg += `\n\n⭐️ Founder Sale применён.`;
             await ctx.api.sendMessage(tgId, msg);
           }
         } catch {}
       } else {
         skipped += 1;
+
+        // Avoid retry loops for permanent non-applied cases.
+        const rr = String(fb?.reason || '');
+        if (rr === 'unsupported_payload' || rr === 'missing_userid_or_wsid' || rr === 'bad_input' || rr === 'user_mismatch' || rr === 'amount_mismatch') {
+          manualRequired += 1;
+          try { await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
+        }
       }
     } catch {
       failed += 1;
@@ -34848,7 +34967,7 @@ async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED',
 
   try {
     await ctx.answerCallbackQuery({
-      text: `Auto-heal: applied ${applied}, failed ${failed}, skipped ${skipped}${skippedYoung ? `, young ${skippedYoung}` : ''}`,
+      text: `Auto-heal: applied ${applied}, failed ${failed}, skipped ${skipped}, validation ${validationFailed}, manual ${manualRequired}${skippedYoung ? `, young ${skippedYoung}` : ''}`,
       show_alert: true
     });
   } catch {}
