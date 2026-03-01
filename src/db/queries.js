@@ -1151,6 +1151,179 @@ async function incrAuditThrottleSuppressed(prefix) {
   }
 }
 
+
+function auditBufferListKey() {
+  return rk(['audit', 'buffer', 'ws']);
+}
+
+async function incrAuditBufferCounter(kind, delta = 1) {
+  // Redis-only metric (no DB). Keep cardinality low: total, per-day (UTC).
+  try {
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
+    const ttlSec = 35 * 86400;
+    const key = rk(['audit', 'buffer', kind, day]);
+    // Upstash Redis supports INCRBY; keep fallback for older clients.
+    if (typeof redis.incrby === 'function') {
+      const v = await redis.incrby(key, Number(delta) || 1);
+      if (Number(v) === (Number(delta) || 1)) await redis.expire(key, ttlSec);
+    } else {
+      const v = await redis.incr(key);
+      if (Number(v) === 1) await redis.expire(key, ttlSec);
+    }
+  } catch {
+    // metrics must never break bot UX
+  }
+}
+
+async function enqueueWorkspaceAuditBuffered(wsId, actorUserId, act, payload, reason = 'throttle') {
+  // Best-effort buffering: must never break bot UX.
+  if (!CFG.AUDIT_BUFFER_ENABLED) return false;
+
+  const key = auditBufferListKey();
+  const item = {
+    kind: 'ws',
+    wsId: Number(wsId) || 0,
+    actorUserId: actorUserId ? Number(actorUserId) : null,
+    action: String(act || '').trim(),
+    payload: payload && typeof payload === 'object' ? payload : {},
+    reason: String(reason || 'throttle').slice(0, 64),
+    ts: Date.now()
+  };
+
+  if (!item.wsId || !item.action) return false;
+
+  try {
+    const maxLen = Number(CFG.AUDIT_BUFFER_MAX_LEN) || 5000;
+    const ttlSec = Number(CFG.AUDIT_BUFFER_TTL_SEC) || (7 * 86400);
+
+    // Atomic-ish: RPUSH + EXPIRE + LTRIM in one Lua to keep list bounded.
+    const script = `
+      redis.call('RPUSH', KEYS[1], ARGV[1])
+      redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+      redis.call('LTRIM', KEYS[1], -tonumber(ARGV[3]), -1)
+      return redis.call('LLEN', KEYS[1])
+    `;
+    await redis.eval(script, [key], [JSON.stringify(item), String(ttlSec), String(maxLen)]);
+
+    await incrAuditBufferCounter('enqueued', 1);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Flush buffered workspace audit events from Redis to Postgres in batches.
+// Intended to be called from a cron endpoint (short, bounded runtime).
+export async function flushWorkspaceAuditBuffer({ batchSize, maxMs } = {}) {
+  if (!CFG.AUDIT_DB_ENABLED) return { ok: false, skipped: 'audit_db_disabled' };
+  if (!CFG.AUDIT_BUFFER_ENABLED) return { ok: false, skipped: 'audit_buffer_disabled' };
+
+  const key = auditBufferListKey();
+  const batch = Math.max(1, Math.min(Number(batchSize) || Number(CFG.AUDIT_BUFFER_FLUSH_BATCH) || 250, 1000));
+  const maxTimeMs = Math.max(100, Math.min(Number(maxMs) || Number(CFG.AUDIT_BUFFER_FLUSH_MAX_MS) || 4500, 9000));
+
+  const startedAt = Date.now();
+  let batches = 0;
+  let flushed = 0;
+  let dropped = 0;
+
+  while ((Date.now() - startedAt) < maxTimeMs) {
+    let items = [];
+    try {
+      items = await redis.lrange(key, 0, batch - 1);
+    } catch {
+      break;
+    }
+    if (!Array.isArray(items) || items.length === 0) break;
+
+    // Parse & validate
+    const rows = [];
+    for (const it of items) {
+      let obj = it;
+      try {
+        if (typeof it === 'string') obj = JSON.parse(it);
+      } catch {
+        obj = null;
+      }
+      if (!obj || typeof obj !== 'object') { dropped += 1; continue; }
+
+      const wsId2 = Number(obj.wsId || obj.workspace_id) || 0;
+      const actorUserId2 =
+        obj.actorUserId === null || obj.actorUserId === undefined
+          ? null
+          : (Number(obj.actorUserId || obj.actor_user_id) || null);
+      const action2 = String(obj.action || '').trim();
+      const payload2 = obj.payload && typeof obj.payload === 'object' ? obj.payload : {};
+
+      if (!wsId2 || !action2) { dropped += 1; continue; }
+      rows.push({ workspace_id: wsId2, actor_user_id: actorUserId2, action: action2, payload: payload2 });
+    }
+
+    // Insert batch (best-effort; never crash UX)
+    if (rows.length > 0) {
+      try {
+        await pool.query(
+          `insert into workspace_audit (workspace_id, actor_user_id, action, payload)
+           select workspace_id, actor_user_id, action, payload::jsonb
+           from jsonb_to_recordset($1::jsonb)
+             as x(workspace_id int, actor_user_id int, action text, payload jsonb)`,
+          [JSON.stringify(rows)]
+        );
+        flushed += rows.length;
+      } catch {
+        // DB error: keep items in buffer (do not trim) and exit.
+        break;
+      }
+    }
+
+    // Trim processed items (even if some were dropped as invalid) so the buffer cannot get stuck.
+    try {
+      await redis.ltrim(key, items.length, -1);
+    } catch {
+      // If we cannot trim, we risk duplicates, but that's still better than losing data.
+      break;
+    }
+
+    batches += 1;
+  }
+
+  // Metrics + last-flush breadcrumbs (Redis-only)
+  try {
+    if (flushed > 0) await incrAuditBufferCounter('flushed', flushed);
+  } catch {}
+
+  let remaining = null;
+  try {
+    remaining = Number(await redis.llen(key)) || 0;
+  } catch {
+    remaining = null;
+  }
+
+  try {
+    const lastKey = rk(['audit', 'buffer', 'last_flush']);
+    await redis.set(lastKey, {
+      last_at: new Date().toISOString(),
+      flushed,
+      dropped,
+      batches,
+      duration_ms: Date.now() - startedAt,
+      remaining
+    }, { ex: 14 * 86400 });
+  } catch {
+    // ignore
+  }
+
+  return {
+    ok: true,
+    flushed,
+    dropped,
+    batches,
+    duration_ms: Date.now() - startedAt,
+    remaining
+  };
+}
+
+
 export async function auditWorkspace(workspaceId, actorUserId, action, payload = {}) {
   if (!CFG.AUDIT_DB_ENABLED) return null;
 
@@ -1173,10 +1346,14 @@ export async function auditWorkspace(workspaceId, actorUserId, action, payload =
         if (!rl.allowed) {
           // Track how many inserts we suppressed (Redis-only; no DB)
           await incrAuditThrottleSuppressed(hit);
+          // Best-effort: buffer suppressed audit events in Redis for later batch flush.
+          await enqueueWorkspaceAuditBuffered(wsId, actorUserId, act, payload, `throttle:${sanitizeAuditPrefix(hit)}`);
           return null;
         }
       } catch {
-        // Fail-closed: if Redis rate limiter is unavailable, drop audit writes to protect Neon.
+        // Fail-closed for Neon: if Redis rate limiter is unavailable, avoid DB writes.
+        // Best-effort: try buffer in Redis (may fail if Redis is down).
+        await enqueueWorkspaceAuditBuffered(wsId, actorUserId, act, payload, 'rate_limiter_unavailable');
         return null;
       }
     }
@@ -1189,8 +1366,19 @@ export async function auditWorkspace(workspaceId, actorUserId, action, payload =
       [wsId, actorUserId, act, JSON.stringify(payload || {})]
     );
     return true;
-  } catch {
+  } catch (e) {
     // Missing table/migration or any DB error should not break bot UX.
+    // If DB is temporarily unavailable, best-effort buffer in Redis for later batch flush.
+    const code = e && typeof e === 'object' ? e.code : null;
+    const msg = String(e && e.message ? e.message : '');
+    const missingTable =
+      code === '42P01' ||
+      (msg.includes('workspace_audit') && msg.toLowerCase().includes('does not exist'));
+
+    if (!missingTable && CFG.AUDIT_BUFFER_ON_DB_ERROR) {
+      await enqueueWorkspaceAuditBuffered(wsId, actorUserId, act, payload, 'db_error');
+    }
+
     return null;
   }
 }
