@@ -20,9 +20,34 @@ const PG_CONN_TIMEOUT_MS = Number(process.env.PG_CONN_TIMEOUT_MS || 10000); // 1
 const PG_IDLE_TIMEOUT_MS = Number(process.env.PG_IDLE_TIMEOUT_MS || 5000); // 5s (было 30s)
 const PG_STATEMENT_TIMEOUT_MS = Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000);
 
+function isStatementTimeoutErr(err) {
+  const code = String(err?.code || '');
+  if (code === '57014') return true; // query_canceled (statement_timeout)
+  const msg = String(err?.message || '').toLowerCase();
+  return msg.includes('statement timeout') || msg.includes('canceling statement');
+}
+
+function logStatementTimeout(err, ctx = {}) {
+  try {
+    console.warn('[db.statement_timeout]', {
+      code: err?.code || null,
+      message: String(err?.message || err),
+      ...ctx
+    });
+  } catch {}
+}
+
+const PG_OPTIONS = (() => {
+  const ms = Math.floor(Number(PG_STATEMENT_TIMEOUT_MS));
+  if (!Number.isFinite(ms) || ms <= 0) return undefined;
+  // Guaranteed server-side timeout. This is more reliable than a best-effort "SET" in connect hook.
+  return `-c statement_timeout=${ms}`;
+})();
+
 export const pool = new Pool({
   connectionString: CFG.DATABASE_URL,
   ssl: CFG.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: true },
+  options: PG_OPTIONS,
   
   // Serverless optimization
   max: PG_POOL_MAX, 
@@ -33,8 +58,39 @@ export const pool = new Pool({
   allowExitOnIdle: true 
 });
 
+// Global query wrapper: add a log marker when PG cancels a query due to statement_timeout.
+// (No behavior changes; we only add structured logs to help ops/support.)
+{
+  const _q = pool.query.bind(pool);
+  pool.query = (...args) => {
+    const p = _q(...args);
+    if (p && typeof p.then === 'function') {
+      return p.catch((e) => {
+        if (isStatementTimeoutErr(e)) logStatementTimeout(e, { scope: 'pool.query' });
+        throw e;
+      });
+    }
+    return p;
+  };
+}
+
 // Auto-set statement_timeout on every new connection
 pool.on('connect', (client) => {
+  // Wrap per-client query as well (covers pool.connect() + transactions).
+  try {
+    const _cq = client.query.bind(client);
+    client.query = (...args) => {
+      const p = _cq(...args);
+      if (p && typeof p.then === 'function') {
+        return p.catch((e) => {
+          if (isStatementTimeoutErr(e)) logStatementTimeout(e, { scope: 'client.query' });
+          throw e;
+        });
+      }
+      return p;
+    };
+  } catch {}
+
   const ms = Number(PG_STATEMENT_TIMEOUT_MS);
   if (Number.isFinite(ms) && ms > 0) {
     // Best-effort: never throw from connect hook.
