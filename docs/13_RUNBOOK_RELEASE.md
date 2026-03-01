@@ -18,6 +18,11 @@ node migrations/run.js
 ## Smoke tests (short)
 Каноничный чек: `./smoke-tests_short.md` (10–15 минут).
 
+Удобная команда (печатает чеклист + короткие напоминания):
+```bash
+npm run smoke:short
+```
+
 Дополнительно (по желанию, технический sanity перед/после):
 1) `node --check src/bot/bot.js`
 2) `node --check src/bot/cron.js`
