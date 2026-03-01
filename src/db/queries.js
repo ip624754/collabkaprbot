@@ -581,7 +581,7 @@ export async function isWorkspaceContactsUnlocked(brandUserId, workspaceId) {
 // - If unlock is already active => charged=false
 // - If unlock is expired/missing => charge credits (if cost>0) and activate unlock
 // Uses PG advisory lock so it stays safe even when Redis is down.
-export async function unlockWorkspaceContactsWithCredits(brandUserId, workspaceId, cost = 1, ttlSec = 30 * 24 * 60 * 60) {
+export async function unlockWorkspaceContactsWithCredits(brandUserId, workspaceId, cost = 1, ttlSec = 30 * 24 * 60 * 60, opts = {}) {
   const uid = Number(brandUserId || 0);
   const wsId = Number(workspaceId || 0);
   const c = Math.max(0, Math.floor(Number(cost) || 0));
@@ -591,6 +591,11 @@ export async function unlockWorkspaceContactsWithCredits(brandUserId, workspaceI
   const client = await pool.connect();
   try {
     await client.query('begin');
+
+    const stm = Math.floor(Number(opts?.statementTimeoutMs || 0));
+    if (Number.isFinite(stm) && stm > 0) {
+      await client.query(`set local statement_timeout to ${stm}`);
+    }
 
     // Per-(brand,workspace) exactly-once guard even with Redis degradation.
     await client.query(
@@ -5196,7 +5201,7 @@ export async function markBrandApplicationAccepted(appId, acceptedByUserId) {
 // - If already accepted (status != 'new') -> {status:'already_accepted'}
 // - If insufficient credits -> {status:'insufficient_credits'}
 // - If accepted now -> {status:'accepted'}
-export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, brandUserId, cost = 1) {
+export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, brandUserId, cost = 1, opts = {}) {
   const aid = Number(appId);
   const uid = Number(brandUserId);
   const c = Math.max(0, Math.floor(Number(cost) || 0));
@@ -5207,13 +5212,22 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
   try {
     await client.query('BEGIN');
 
-    // Advisory lock: serializes concurrent accepts for the same application
-    // across multiple serverless instances (critical when Redis is down and
-    // in-memory click guard is ineffective). Released automatically on COMMIT/ROLLBACK.
-    await client.query(
-      `select pg_advisory_xact_lock(hashtext($1))`,
-      [`brand_app_accept:${aid}`]
+    // Degradation hardening: keep Neon safe when Redis is down / click storms happen.
+    const stm = Math.floor(Number(opts?.statementTimeoutMs || 0));
+    if (Number.isFinite(stm) && stm > 0) {
+      // Transaction-scoped: affects waits on row locks too.
+      await client.query(`set local statement_timeout to ${stm}`);
+    }
+
+    // Fast concurrency guard: if another accept is already in-flight, return quickly (no queue of waiting locks).
+    const lockRes = await client.query(
+      'SELECT pg_try_advisory_xact_lock($1::int, $2::int) AS ok',
+      [aid, uid]
     );
+    if (!lockRes.rows?.[0]?.ok) {
+      await client.query('ROLLBACK');
+      return { status: 'busy' };
+    }
 
     const appRes = await client.query(
       `select id, coalesce(status,'new') as status

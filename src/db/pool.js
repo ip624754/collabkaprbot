@@ -38,9 +38,10 @@ pool.on('connect', (client) => {
   const ms = Number(PG_STATEMENT_TIMEOUT_MS);
   if (Number.isFinite(ms) && ms > 0) {
     // Best-effort: never throw from connect hook.
-    client.query(`set statement_timeout to ${Math.floor(ms)}`).catch((e) => {
-      console.warn('[pg] statement_timeout failed:', e?.message || e);
-    });
+    client.query(`set statement_timeout to ${Math.floor(ms)}`)
+      .catch((e) => {
+        try { console.warn('[pg] statement_timeout failed', { message: String(e?.message || e) }); } catch {}
+      });
   }
 });
 
