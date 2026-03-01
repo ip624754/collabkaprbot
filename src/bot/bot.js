@@ -12015,6 +12015,8 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
 
   const dedupId = `mzr:brand_app_accept:${aid || 'na'}`;
   const asyncRetryEnabled = isMonetizationAsyncRetryEnabled();
+  const redisDegraded = (ctx.state?.redisOk === false);
+  const needFastTimeout = (asyncRetryEnabled || redisDegraded);
 
   const refreshCb = `a:brand_app_view|id:${aid}|s:${back.status}|p:${back.page}`;
   const inboxCb = 'a:bx_inbox|ws:0|p:0|h:mm';
@@ -12030,7 +12032,9 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
       .row()
       .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
-    const hint = alreadyQueued ? 'Запрос уже в очереди.' : 'Мы поставили задачу в очередь.';
+    const hint = alreadyQueued
+      ? 'Запрос уже в обработке.'
+      : (asyncRetryEnabled ? 'Мы поставили задачу в очередь.' : 'Запрос обрабатывается.');
     const extra = reason ? `${reason}
 
 ` : '';
@@ -12047,7 +12051,7 @@ ${extra}${hint} Открой «📥 Inbox» или нажми «🔄 Обнов�
 
   let app = null;
   try {
-    app = asyncRetryEnabled
+    app = needFastTimeout
       ? await withTimeout(getBrandAppForActorSafe(ctx, actorUserId, appId), MONETIZATION_CB_TIMEOUT_MS, 'brand_app.get')
       : await getBrandAppForActorSafe(ctx, actorUserId, appId);
   } catch (e) {
@@ -12058,6 +12062,12 @@ ${extra}${hint} Открой «📥 Inbox» или нажми «🔄 Обнов�
         await renderAcceptPending({ reason: 'База данных сейчас отвечает медленно — мы поставили задачу в очередь.' });
         return;
       }
+    }
+
+    if (redisDegraded && isTransientNeonError(e)) {
+      await setMonAcceptDiag({ source: 'click',  status: 'ok', errorCode: 'degraded_timeout', appId: aid });
+      await renderAcceptPending({ reason: 'Redis сейчас недоступен, база может отвечать медленно — попробуй обновить через 10–30 сек.' });
+      return;
     }
 
     await setMonAcceptDiag({ source: 'click',  status: 'error', errorCode: 'db_error', appId: aid });
@@ -12123,8 +12133,13 @@ ${extra}${hint} Открой «📥 Inbox» или нажми «🔄 Обнов�
 
   let res = null;
   try {
-    res = asyncRetryEnabled
-      ? await withTimeout(db.acceptBrandApplicationWithCharge(appId, actorUserId, brandUserId, cost), MONETIZATION_CB_TIMEOUT_MS, 'brand_app.accept')
+    const opts = (needFastTimeout) ? { statementTimeoutMs: MONETIZATION_CB_TIMEOUT_MS } : null;
+    res = needFastTimeout
+      ? await withTimeout(
+          db.acceptBrandApplicationWithCharge(appId, actorUserId, brandUserId, cost, opts),
+          MONETIZATION_CB_TIMEOUT_MS,
+          'brand_app.accept'
+        )
       : await db.acceptBrandApplicationWithCharge(appId, actorUserId, brandUserId, cost);
   } catch (e) {
     if (asyncRetryEnabled && isTransientNeonError(e)) {
@@ -12136,12 +12151,25 @@ ${extra}${hint} Открой «📥 Inbox» или нажми «🔄 Обнов�
       }
     }
 
+    if (redisDegraded && isTransientNeonError(e)) {
+      await setMonAcceptDiag({ source: 'click',  status: 'ok', errorCode: 'degraded_timeout', appId: aid });
+      await renderAcceptPending({ reason: 'Redis сейчас недоступен, база может отвечать медленно — попробуй обновить через 10–30 сек.' });
+      return;
+    }
+
     await setMonAcceptDiag({ source: 'click',  status: 'error', errorCode: 'db_error', appId: aid });
 
     try { await ctx.answerCallbackQuery({ text: 'Не удалось обработать. Попробуй ещё раз.', show_alert: true }); } catch {}
     return;
   }
 
+
+  // If another accept is already in-flight (Redis degraded / multi-instance), show pending instead of piling up DB locks.
+  if (res && res.status === 'busy') {
+    await setMonAcceptDiag({ source: 'click',  status: 'skipped', errorCode: 'busy', appId: aid });
+    await renderAcceptPending({ alreadyQueued: true });
+    return;
+  }
   // Best-effort: keep Redis credits cache in sync (UI is Redis-only).
   if (res && res.status === 'accepted') {
     const left = res.left;
@@ -22031,6 +22059,14 @@ if (p.a === 'a:support_push') {
   try { await ctx.answerCallbackQuery(); } catch {}
 
   // For service/system messages: open Support in a NEW message (do not overwrite original text).
+  // Best-effort: remove buttons from the original message to avoid repeat clicks.
+  try {
+    const chatId = ctx?.callbackQuery?.message?.chat?.id;
+    const msgId = ctx?.callbackQuery?.message?.message_id;
+    if (chatId && msgId) {
+      await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined });
+    }
+  } catch {}
 
   const text = `💬 <b>Поддержка</b>
 
@@ -22523,6 +22559,14 @@ if (p.a === 'a:menu_push') {
   try { await ctx.answerCallbackQuery(); } catch {}
 
   // For service/system messages: open Menu in a NEW message (do not overwrite original text).
+  // Best-effort: remove buttons from the original receipt and render the Menu into a fresh UI message.
+  const srcChatId = ctx?.callbackQuery?.message?.chat?.id;
+  const srcMsgId = ctx?.callbackQuery?.message?.message_id;
+  try {
+    if (srcChatId && srcMsgId) {
+      await ctx.api.editMessageReplyMarkup(srcChatId, srcMsgId, { reply_markup: undefined });
+    }
+  } catch {}
 
   // Create a new message that we can safely edit into the actual Menu.
   // This avoids overwriting the original admin/system message text.
@@ -22564,22 +22608,6 @@ if (p.a === 'a:menu') {
       return;
     }
 
-
-
-// Push receipts: hide only the ✅ button, keep primary actions
-if (p.a === 'a:push_ack') {
-  try { await ctx.answerCallbackQuery(); } catch {}
-  const chatId = ctx?.callbackQuery?.message?.chat?.id;
-  const msgId = ctx?.callbackQuery?.message?.message_id;
-  if (!chatId || !msgId) return;
-  try {
-    const kb = new InlineKeyboard()
-      .text('📋 Главное меню', 'a:menu_push')
-      .text('💬 Поддержка', 'a:support_push');
-    await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: kb });
-  } catch {}
-  return;
-}
 
 // Hide buttons under service/system messages (user-friendly ack)
 if (p.a === 'a:usr_ack') {
@@ -23347,6 +23375,10 @@ ${tail}`;
       const dedupId = `mzr:wsp_contact_unlock:${wsId}:${Number(u.id || 0)}`;
       const asyncRetryEnabled = isMonetizationAsyncRetryEnabled();
 
+
+      const redisDegraded = (ctx.state?.redisOk === false);
+      const needFastTimeout = (asyncRetryEnabled || redisDegraded);
+
       const ret = String(p.r || '').trim().toLowerCase();
       const leadId = Number(p.l || 0);
       const fromLead = ret === 'bl' && !!leadId;
@@ -23372,7 +23404,9 @@ ${tail}`;
           .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb)
           .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
-        const hint = alreadyQueued ? 'Запрос уже в очереди.' : 'Мы поставили задачу в очередь.';
+        const hint = alreadyQueued
+          ? 'Запрос уже в обработке.'
+          : (asyncRetryEnabled ? 'Мы поставили задачу в очередь.' : 'Запрос обрабатывается.');
         const extra = reason ? `${reason}\n\n` : '';
 
         await safeEditOrReply(
@@ -23387,7 +23421,7 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
 
       // owner/curator should never pay
       try {
-        const ws = asyncRetryEnabled
+        const ws = needFastTimeout
           ? await withTimeout(db.getWorkspaceAny(wsId), MONETIZATION_CB_TIMEOUT_MS, 'wsp.owner')
           : await db.getWorkspaceAny(wsId);
         if (ws && Number(ws.owner_user_id) === Number(u.id)) {
@@ -23404,6 +23438,12 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
                         await renderUnlockPending({ reason: 'База данных сейчас отвечает медленно — мы поставили задачу в очередь.' });
             return;
           }
+        }
+
+        if (redisDegraded && isTransientNeonError(e)) {
+          await setMonUnlockDiag({ source: 'click',  status: 'ok', errorCode: 'degraded_timeout', wsId });
+          await renderUnlockPending({ reason: 'Redis сейчас недоступен, база может отвечать медленно — попробуй обновить через 10–30 сек.' });
+          return;
         }
       }
 
@@ -23457,9 +23497,10 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
 
       let rUnlock = null;
       try {
-        rUnlock = asyncRetryEnabled
+        const opts = needFastTimeout ? { statementTimeoutMs: MONETIZATION_CB_TIMEOUT_MS } : null;
+        rUnlock = needFastTimeout
           ? await withTimeout(
-              db.unlockWorkspaceContactsWithCredits(u.id, wsId, CONTACT_UNLOCK_COST, CONTACT_UNLOCK_TTL_SEC),
+              db.unlockWorkspaceContactsWithCredits(u.id, wsId, CONTACT_UNLOCK_COST, CONTACT_UNLOCK_TTL_SEC, opts),
               MONETIZATION_CB_TIMEOUT_MS,
               'wsp.unlock'
             )
@@ -23472,6 +23513,12 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
             await renderUnlockPending({ reason: 'База данных сейчас отвечает медленно — мы поставили задачу в очередь.' });
             return;
           }
+        }
+
+        if (redisDegraded && isTransientNeonError(e)) {
+          await setMonUnlockDiag({ source: 'click',  status: 'ok', errorCode: 'degraded_timeout', wsId });
+          await renderUnlockPending({ reason: 'Redis сейчас недоступен, база может отвечать медленно — попробуй обновить через 10–30 сек.' });
+          return;
         }
 
         await setMonUnlockDiag({ source: 'click',  status: 'error', errorCode: 'db_error', wsId });
@@ -34774,12 +34821,12 @@ const sectionCb = sectionBackCb || (retCb ? 'a:admin_comms' : 'a:admin_ops');
     // If Redis is degraded — skip dedup.
   }
 
-  const userMsg = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше: «📋 Главное меню». Вопросы: «💬 Поддержка».</i>`;
+  const userMsg = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
   const userKb = new InlineKeyboard()
-    .text('📋 Главное меню', 'a:menu_push')
+    .text('📋 Открыть меню', 'a:menu_push')
     .text('💬 Поддержка', 'a:support_push')
     .row()
-    .text('✅ Понятно', 'a:push_ack');
+    .text('✅ Понятно', 'a:usr_ack');
 
   let ok = false;
   let err = '';
