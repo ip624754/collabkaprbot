@@ -852,3 +852,11 @@ Auto-heal safeguards + ops alerts:
 - Добавлен Redis dedup против случайных дублей.
 - Добавлен curated pack: `docs/audit/notebooklm_pack/` (бандлы core/features/process + code bundle + migrations bundle).
 - Генератор `npm run gen:notebooklm-sources` теперь собирает `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip` и валидирует лимит 50 файлов.
+
+### STEP221 — Admin Comms UX + Cron router path fix
+- Админские личные сообщения пользователю: кнопки `📋 Открыть меню` и `💬 Поддержка` больше не затирают текст.
+  - Используются новые action keys: `a:menu_push` и `a:support_push`.
+  - При нажатии бот снимает клавиатуру с исходного сообщения и открывает экран меню/поддержки отдельным сообщением.
+- Админка → «✉️ Сообщение пользователю» (`a:adm_umsg`): быстрые шаблоны в 2 колонки + компактные ряды действий.
+- Vercel Hobby: cron router лежит в `api/cron_router.js` (соответствует `vercel.json` rewrites).
+

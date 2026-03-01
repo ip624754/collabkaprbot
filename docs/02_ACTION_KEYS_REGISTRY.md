@@ -5,16 +5,16 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **505**
-- Actions in registry: **505**
+- Actions in code: **507**
+- Actions in registry: **507**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
 | admin | 83 |
-| edit | 335 |
-| ops | 74 |
+| edit | 336 |
+| ops | 75 |
 | pay | 11 |
 | view | 2 |
 
@@ -22,8 +22,10 @@
 
 | Guard | Count |
 |---|---:|
+| db_truth | 2 |
 | none | 129 |
-| require_redis | 376 |
+| queue_first | 2 |
+| require_redis | 374 |
 
 ## Actions table
 
@@ -93,9 +95,9 @@
 | `a:admin_outbox_to_tpl` | admin | require_redis |
 | `a:admin_outbox_v` | admin | require_redis |
 | `a:admin_pay_accept_toggle` | admin | require_redis |
-| `a:admin_pay_apply` | admin | none |
+| `a:admin_pay_apply` | admin | db_truth |
 | `a:admin_pay_auto_toggle` | admin | require_redis |
-| `a:admin_pay_autoheal` | admin | none |
+| `a:admin_pay_autoheal` | admin | db_truth |
 | `a:admin_pay_view` | admin | none |
 | `a:admin_payments` | admin | require_redis |
 | `a:admin_qstash_ping` | admin | require_redis |
@@ -150,7 +152,7 @@
 | `a:bm_rm_ok` | edit | require_redis |
 | `a:bm_rm_q` | edit | none |
 | `a:bm_set_brand` | edit | require_redis |
-| `a:brand_app_accept` | edit | none |
+| `a:brand_app_accept` | edit | queue_first |
 | `a:brand_app_accepted_done` | edit | none |
 | `a:brand_app_card` | edit | none |
 | `a:brand_app_chat` | edit | none |
@@ -169,7 +171,7 @@
 | `a:brand_apply_preview` | edit | require_redis |
 | `a:brand_apply_send` | edit | require_redis |
 | `a:brand_apply_write` | edit | require_redis |
-| `a:brand_apps` | edit | require_redis |
+| `a:brand_apps` | edit | none |
 | `a:brand_bb_clear` | edit | require_redis |
 | `a:brand_bb_done` | edit | none |
 | `a:brand_bb_pick` | edit | require_redis |
@@ -234,7 +236,7 @@
 | `a:bx_fset` | edit | require_redis |
 | `a:bx_ftype` | edit | require_redis |
 | `a:bx_home` | edit | none |
-| `a:bx_inbox` | edit | require_redis |
+| `a:bx_inbox` | edit | none |
 | `a:bx_kind` | edit | require_redis |
 | `a:bx_mclear` | edit | require_redis |
 | `a:bx_mdone` | edit | none |
@@ -282,7 +284,7 @@
 | `a:bx_smart` | edit | require_redis |
 | `a:bx_smart_reset` | edit | require_redis |
 | `a:bx_stage` | edit | require_redis |
-| `a:bx_thread` | edit | require_redis |
+| `a:bx_thread` | edit | none |
 | `a:bx_thread_close_do` | edit | require_redis |
 | `a:bx_thread_close_q` | edit | none |
 | `a:bx_thread_del_do` | edit | require_redis |
@@ -433,6 +435,7 @@
 | `a:match_home` | edit | none |
 | `a:match_inc` | edit | require_redis |
 | `a:menu` | edit | none |
+| `a:menu_push` | edit | none |
 | `a:mod_home` | edit | none |
 | `a:mod_r_close` | edit | require_redis |
 | `a:mod_r_freeze` | edit | require_redis |
@@ -475,6 +478,7 @@
 | `a:setup` | edit | require_redis |
 | `a:share` | edit | require_redis |
 | `a:support` | ops | require_redis |
+| `a:support_push` | ops | require_redis |
 | `a:support_write` | ops | require_redis |
 | `a:team` | edit | require_redis |
 | `a:ui_mode_set` | edit | require_redis |
@@ -530,7 +534,7 @@
 | `a:ws_toggle_cur` | edit | require_redis |
 | `a:ws_toggle_net` | edit | require_redis |
 | `a:wsp_contact_req` | edit | none |
-| `a:wsp_contact_unlock` | pay | none |
+| `a:wsp_contact_unlock` | pay | queue_first |
 | `a:wsp_lead_new` | edit | require_redis |
 | `a:wsp_open` | edit | none |
 | `a:wsp_preview` | edit | none |
