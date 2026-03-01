@@ -21,6 +21,13 @@
 - STEP206: закреплён короткий релиз‑протокол “2 минуты”: `npm run preflight` + `/api/health` + 2–3 клика по админ‑экранам (Comms/Outbox/Users). См. `docs/16_RELEASE_CHECKLIST.md`.
 - STEP207: hotfix — исправлен SyntaxError (invalid RegExp) в `normalizeNoticeCtaLabel` (CTA label), который мог ломать запуск на Vercel.
 - STEP208: migrations fail-fast — раннер `migrations/run.js` и генератор pack (`scripts/gen-mark-all-applied.js`) принимают только `NNN_name.sql` и **падают**, если в `migrations/` есть любой “левый” `.sql` (защита от случайного копирования `migration_pack/*.sql`).
+- STEP209: action guards v2 — в `src/bot/actionRegistry.js` добавлены guard-типы `db_truth` / `queue_first` (вместо размытого `none` для критичных DB-truth путей), middleware в `src/bot/bot.js` кэширует `redisOk` для этих guard’ов, доки синхронизированы и перегенерирован `docs/02_ACTION_KEYS_REGISTRY.md`.
+- STEP210: anti-click-storm при Redis down — добавлен локальный in-memory limiter (TTL ~8s) для `✅ Принять` и `🔓 Разлок контактов`, чтобы при деградации Redis избежать “клик‑шторма” и спайков нагрузки на Postgres/Neon.
+- STEP211: payments strict validation — auto-heal/ручной apply не применяют Stars‑платежи с невалидным payload/суммой/валютой; admin auto-heal помечает «manual_required» и останавливает retry‑петли; в строгой валидации поддержаны legacy токены (Brand Pass numeric credits, Brand Plan basic/max).
+- STEP212: Instagram routes kill‑switch — `IG_ROUTES_ENABLED` (0/1) закрывает весь `/api/ig/*` (включая IG cron) 404, даже если роуты присутствуют; по умолчанию следует `IG_OAUTH_UI_ENABLED`.
+- STEP213: Monetization UI при Redis down (P0) — кнопки списания не исчезают из UI: «🔓 Контакты» всегда показывается (даже при 0/unknown балансе в Redis), проверки кредитов — на клике (DB-truth). Для навигации разрешены read-only экраны `a:brand_apps`, `a:bx_inbox`, `a:bx_thread` даже при деградации Redis; redis-getters для UI режима/manager mode/active ws сделаны fail-open (не падают).
+- STEP214: Official publish anti-stuck — после DB-reserve (`PUBLISHING`) ставим отложенную QStash‑проверку `/api/qstash/official-publish-verify`: если известен `message_id` (Redis breadcrumb) — прикрепляем и переводим в `ACTIVE`, иначе сбрасываем статус обратно в `PENDING` + логируем `last_error` (разблокируем UI/очередь). См. `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`.
+
 
 
 
@@ -342,6 +349,7 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 - **скрыли кнопку IG подключения в профиле** (пользователь видит “функция пока недоступна”)
 - **оставили код/миграции**, чтобы вернуться позже, но **закрыли OAuth API при скрытом UI**:
   - если `IG_OAUTH_UI_ENABLED=0` → `/api/ig/oauth/*` возвращает **404** (нет “теневого API”)
+  - master kill‑switch: `IG_ROUTES_ENABLED=0` → **весь** `/api/ig/*` (включая cron) возвращает **404** (даже если роуты физически есть)
 
 Доки:
 - Runbook: `docs/22_IG_GRAPH_OAUTH_2026.md`
@@ -374,6 +382,7 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 
 Дополнительно (Instagram OAuth, сейчас UI скрыт):
 - `IG_OAUTH_UI_ENABLED` (0/1) — если 0, то **и UI, и `/api/ig/oauth/*` закрыты (404)**
+- `IG_ROUTES_ENABLED` (0/1) — master kill‑switch для `/api/ig/*` (и IG cron). По умолчанию следует `IG_OAUTH_UI_ENABLED`.
 - `IG_OAUTH_ENABLED` (0/1)
 - `IG_OAUTH_CLIENT_ID`
 - `IG_OAUTH_CLIENT_SECRET`
@@ -410,7 +419,7 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 - **FEATURED**: `FEATURED_1D_PRICE` `FEATURED_30D_PRICE` `FEATURED_7D_PRICE` `FEATURED_MAX_SLOTS`
 - **GUIDE**: `GUIDE_BANNER_FILE_ID`
 - **MENU**: `MENU_BANNER_FILE_ID`
-- **OFFICIAL**: `OFFICIAL_1D_PRICE` `OFFICIAL_30D_PRICE` `OFFICIAL_7D_PRICE` `OFFICIAL_CHANNEL_ID` `OFFICIAL_CHANNEL_USERNAME` `OFFICIAL_MANUAL_DEFAULT_DAYS` `OFFICIAL_PUBLISH_ENABLED` `OFFICIAL_PUBLISH_MODE`
+- **OFFICIAL**: `OFFICIAL_1D_PRICE` `OFFICIAL_30D_PRICE` `OFFICIAL_7D_PRICE` `OFFICIAL_CHANNEL_ID` `OFFICIAL_CHANNEL_USERNAME` `OFFICIAL_MANUAL_DEFAULT_DAYS` `OFFICIAL_PUBLISH_ENABLED` `OFFICIAL_PUBLISH_MODE` `OFFICIAL_PUBLISH_SELFHEAL_DELAY_SEC` `OFFICIAL_PUBLISH_SELFHEAL_MIN_AGE_SEC` `OFFICIAL_PUBLISH_SELFHEAL_MSGID_TTL_SEC`
 - **ONBOARDING**: `ONBOARDING_V2_ENABLED`
 - **PAY**: `PAY_SUPPORT_TEXT`
 - **PRO**: `PRO_DURATION_DAYS` `PRO_PAYMENT_URL` `PRO_STARS_PRICE`

@@ -40,6 +40,24 @@
 
 **Зачем:** сокращает “дедлок” пользователя и повышает устойчивость без внешних очередей.
 
+### 2.3) STEP214: активный self-heal (QStash verify) против “зависло в PUBLISHING”
+Иногда serverless может умереть **после DB-reserve** (`status='PUBLISHING'`) и до того, как:
+- успели сохранить `message_id` в БД,
+- или пришёл `channel_post` webhook.
+
+Результат: UI “залипает” в `⏳ Публикуется` и прячет действия.
+
+Решение: после успешного reserve мы **ставим отложенную QStash‑задачу** `/api/qstash/official-publish-verify`:
+- если в Redis уже известен `message_id` (по `channel_post` или сразу после `sendMessage`) — прикрепляем его в БД (переводим в `ACTIVE`),
+- если `message_id` так и не появился — сбрасываем статус обратно в `PENDING` + пишем `last_error=selfheal_publish_stuck:*`, чтобы не блокировать очередь.
+
+ENV (опционально):
+- `OFFICIAL_PUBLISH_SELFHEAL_DELAY_SEC` (default 90)
+- `OFFICIAL_PUBLISH_SELFHEAL_MIN_AGE_SEC` (default 75)
+- `OFFICIAL_PUBLISH_SELFHEAL_MSGID_TTL_SEC` (default 3d)
+
+> Важно: это best-effort механизм. Он не создаёт новых внешних сайд‑эффектов и не ломает публикацию, если QStash не настроен.
+
 ### 3) Финализация
 После успешной публикации:
 - сохраняем `message_id`
