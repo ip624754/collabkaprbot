@@ -16,12 +16,12 @@ node migrations/run.js
 ```
 
 ## Smoke tests (short)
+Каноничный чек: `./smoke-tests_short.md` (10–15 минут).
+
+Дополнительно (по желанию, технический sanity перед/после):
 1) `node --check src/bot/bot.js`
 2) `node --check src/bot/cron.js`
-3) `node migrations/run.js --dry-run` → должно быть “skip all”.
-4) `GET /api/cron/giveaways-tick` с `Authorization: Bearer <CRON_SECRET>` → 200 OK.
-5) `GET /api/cron/broadcast-tick` с Bearer → 200 OK.
-6) Создать giveaway → дождаться ENDED → проверить WINNERS_DRAWN; повторный запуск tick не меняет winners.
+3) `node migrations/run.js --dry-run` → должно быть “skip all” (если миграций не было).
 
 ## Smoke tests (full)
 - Одновременный двойной запуск tick (две вкладки) → только один draw.
