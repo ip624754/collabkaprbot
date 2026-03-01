@@ -117,3 +117,14 @@
 - Док обновлён: `docs/process/10_RELEASE_PREFLIGHT.md`.
 
 Риск регрессий: **минимальный** (dev‑инструмент; не влияет на runtime, только предотвращает возврат опасных паттернов).
+
+
+### STEP247 — Preflight guardrail: public contacts leak gate
+- В preflight добавлен `lint:public-contacts` — точечный grep‑gate для **публичных (brand‑facing) карточек**, чтобы не вернуть регрессию “утечка контактов через пользовательский текст”.
+- Сейчас проверяет два ключевых инварианта в `src/bot/bot.js`:
+  - `renderBxPublicView`: `barter_offers.description` редактируется для non‑owners до unlock (через `redactContactsInText`).
+  - `renderWsPublicProfile`: `ws.profile_about` редактируется для non‑owners до revealContacts.
+- Gate ловит прямой вывод сырого текста (например `escapeHtml(o.description)` / `clipText(aboutRaw)`), который обходил paywall.
+- Док обновлён: `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+Риск регрессий: **минимальный** (dev‑инструмент; не влияет на runtime, только предотвращает возврат P1 bypass).
