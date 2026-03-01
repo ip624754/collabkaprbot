@@ -3268,6 +3268,16 @@ function navKb(backCb) {
   return kb;
 }
 
+function navKbInput(backCb) {
+  // Text-input mode footer: explicit escape hatch.
+  // Cancel always exits input mode (goes to Menu), Back keeps return-to.
+  const kb = new InlineKeyboard();
+  if (backCb && backCb !== 'a:menu' && backCb !== 'a:home') kb.text('⬅️ Назад', backCb);
+  kb.text('❌ Отмена', 'a:menu');
+  kb.text('🏠 Home', 'a:home');
+  return kb;
+}
+
 function kbNavRow(kb, backCb) {
   // Adds a unified HUB footer row to an existing keyboard (Back -> return-to, Menu -> role hub, Home -> home hub)
   kb.row();
@@ -16579,7 +16589,7 @@ ${escapeHtml(safeCap)}
 
     const backCb = expectBackCb(exp);
     await ctx.reply('Я жду текст одним сообщением. Пожалуйста, напиши текст (не голос/стикер/фото).', {
-      reply_markup: navKb(backCb),
+      reply_markup: navKbInput(backCb),
     });
     // Keep ожидание ввода активным (обновим TTL на всякий случай)
     try { await setExpectText(ctx.from.id, exp); } catch {}
@@ -16730,6 +16740,19 @@ if (!exp) {
       return next();
     }
 
+    // Escape hatch: user can type a cancel word to exit any input mode.
+    {
+      const low = String(text || '').trim().toLowerCase();
+      const isCancel = (String(ctx.chat?.type || '') === 'private') &&
+        (low === 'отмена' || low === 'cancel' || low === 'стоп' || low === 'stop');
+      if (isCancel) {
+        try { await clearExpectText(ctx.from.id); } catch {}
+        const backCb = expectBackCb(exp);
+        await ctx.reply('❌ Отменено.', { reply_markup: navKbInput(backCb) });
+        return;
+      }
+    }
+
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     const tgId = Number(ctx.from.id);
 
@@ -16747,7 +16770,7 @@ const backCb = expectBackCb(exp);
 const _reply = ctx.reply.bind(ctx);
 ctx.reply = (text, extra) => {
   const opts = extra ? { ...extra } : {};
-  if (!opts.reply_markup) opts.reply_markup = navKb(backCb);
+  if (!opts.reply_markup) opts.reply_markup = navKbInput(backCb);
   return _reply(text, opts);
 };
 
