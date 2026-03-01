@@ -16656,7 +16656,10 @@ ${escapeHtml(safeCap)}
                 .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
                 .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
                 .row()
-                .text('⬅️ Админка', 'a:admin_home');
+                .text('⬅️ Админка', 'a:admin_home')
+                .row()
+                .text('📋 Меню', 'a:menu')
+                .text('🏠 Home', 'a:home');
               await ctx.reply(`✅ Ответ отправлен пользователю (tg:${targetTgId}).`, { reply_markup: kb });
             }
             return;
@@ -21997,6 +22000,53 @@ if (p.a === 'a:share') {
   return;
 }
 
+
+if (p.a === 'a:support_push') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+
+  // For service/system messages: open Support in a NEW message (do not overwrite original text).
+  // Best-effort: remove buttons from the original message to avoid repeat clicks.
+  try {
+    const chatId = ctx?.callbackQuery?.message?.chat?.id;
+    const msgId = ctx?.callbackQuery?.message?.message_id;
+    if (chatId && msgId) {
+      await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined });
+    }
+  } catch {}
+
+  const ctxPush = Object.create(ctx);
+  ctxPush.callbackQuery = null;
+
+  const text = `💬 <b>Поддержка</b>
+
+` +
+    `Если что-то не работает или есть вопрос — напиши одним сообщением.
+` +
+    `Я отправлю это в поддержку и вернусь с ответом здесь.
+
+` +
+    `Что помогает быстрее решить:
+` +
+    `• в каком режиме ты был (Креатор / Бренд / Менеджер)
+` +
+    `• что нажимал (кнопки)
+` +
+    `• текст ошибки из логов/скрин (опиши)
+
+` +
+    `⚠️ Спам/реклама — бан.`;
+
+  const kb = new InlineKeyboard()
+    .text('✍️ Написать в поддержку', 'a:support_write')
+    .row()
+    .text('🧭 Быстрый старт', 'a:guide')
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctxPush, text, { parse_mode: 'HTML', reply_markup: kb });
+  return;
+}
+
 if (p.a === 'a:support') {
   const text = `💬 <b>Поддержка</b>
 
@@ -22446,6 +22496,28 @@ if (p.a === 'a:brand_dir_open') {
       await renderMainMenu(ctx, flags, { edit: true, user: u });
       return;
     }
+
+
+if (p.a === 'a:menu_push') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+
+  // For service/system messages: open Menu in a NEW message (do not overwrite original text).
+  // Best-effort: remove buttons from the original message to avoid repeat clicks.
+  try {
+    const chatId = ctx?.callbackQuery?.message?.chat?.id;
+    const msgId = ctx?.callbackQuery?.message?.message_id;
+    if (chatId && msgId) {
+      await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined });
+    }
+  } catch {}
+
+  const ctxPush = Object.create(ctx);
+  ctxPush.callbackQuery = null;
+
+  const flags = await getRoleFlags(u, ctx.from.id);
+  await renderRoleHub(ctxPush, u, flags);
+  return;
+}
 
 if (p.a === 'a:menu') {
       await ctx.answerCallbackQuery();
@@ -27322,15 +27394,28 @@ https://collabka.com/status</pre>
       const { tpls } = await getAdminDmTemplatesWithMeta();
       const items = Array.isArray(tpls.items) ? tpls.items.slice(0, 12) : [];
 
-      for (const it of items) {
-        kb.text(String(it.label || '—'), `a:adm_umsg_tpl|id:${uid}|t:${String(it.id || '')}|f:${f}|p:${page}`).row();
+      // Templates (2 columns) — компактнее и быстрее для админа
+      for (let i = 0; i < items.length; i += 2) {
+        const a = items[i];
+        const b = items[i + 1];
+        if (a) kb.text(String(a.label || '—'), `a:adm_umsg_tpl|id:${uid}|t:${String(a.id || '')}|f:${f}|p:${page}`);
+        if (b) kb.text(String(b.label || '—'), `a:adm_umsg_tpl|id:${uid}|t:${String(b.id || '')}|f:${f}|p:${page}`);
+        kb.row();
       }
-      kb.text('📎 Вставить', `a:adm_ph|r:umsg|id:${uid}|f:${f}|p:${page}`).row();
-      kb.text('✍️ Свободный текст', `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`).row();
-      kb.text('📌 Шаблоны (админ)', 'a:admin_umsg_tpls|p:0').row();
-      kb.text('📤 Outbox', 'a:admin_outbox|p:0').row();
-      kb.text('⬅️ Назад', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`).row();
-      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+
+      kb.text('📎 Вставить', `a:adm_ph|r:umsg|id:${uid}|f:${f}|p:${page}`)
+        .text('✍️ Свободный текст', `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`)
+        .row();
+
+      kb.text('📌 Шаблоны (админ)', 'a:admin_umsg_tpls|p:0')
+        .text('📤 Outbox', 'a:admin_outbox|p:0')
+        .row();
+
+      kb.text('⬅️ Назад', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
+        .text('⬅️ Операции', 'a:admin_ops')
+        .row();
+
+      kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
       await safeEditOrReply(
         ctx,
@@ -34637,8 +34722,8 @@ const sectionCb = sectionBackCb || (retCb ? 'a:admin_comms' : 'a:admin_ops');
 
   const userMsg = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
   const userKb = new InlineKeyboard()
-    .text('📋 Открыть меню', 'a:menu')
-    .text('💬 Поддержка', 'a:support')
+    .text('📋 Открыть меню', 'a:menu_push')
+    .text('💬 Поддержка', 'a:support_push')
     .row()
     .text('✅ Понятно', 'a:usr_ack');
 
