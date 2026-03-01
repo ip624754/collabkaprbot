@@ -53,13 +53,14 @@ function brandPackCredits(packId, packIdRaw = '') {
   if (id === 'M') return Number(CFG.BRAND_TOPUP_M_CREDITS || 0);
   if (id === 'L') return Number(CFG.BRAND_TOPUP_L_CREDITS || 0);
 
-  // Legacy: numeric credits in payload
+  // Legacy: numeric credits in payload — only accept known catalog values
   if (/^\d+$/.test(String(packIdRaw || ''))) {
     const n = Number(packIdRaw);
     if (Number(CFG.BRAND_TOPUP_S_CREDITS || 0) === n) return n;
     if (Number(CFG.BRAND_TOPUP_M_CREDITS || 0) === n) return n;
     if (Number(CFG.BRAND_TOPUP_L_CREDITS || 0) === n) return n;
-    return n;
+    // Unknown numeric pack → reject (strict catalog-only).
+    return 0;
   }
 
   return 0;

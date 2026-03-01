@@ -1076,27 +1076,39 @@ function extractIgVerifyCodes(text) {
 async function fetchIgVerificationComments({ mediaId, accessToken, limit }) {
   const out = [];
   const lim = Math.max(5, Math.min(Number(limit || 0) || 50, 200));
-  const url = new URL(`https://graph.facebook.com/v19.0/${encodeURIComponent(String(mediaId))}/comments`);
-  url.searchParams.set('fields', 'id,text,username,timestamp');
-  url.searchParams.set('limit', String(lim));
-  url.searchParams.set('access_token', String(accessToken));
+  const maxPages = 5; // Safety: never fetch more than 5 pages (~1000 comments).
+
+  let nextUrl = null;
+  {
+    const url = new URL(`https://graph.facebook.com/v19.0/${encodeURIComponent(String(mediaId))}/comments`);
+    url.searchParams.set('fields', 'id,text,username,timestamp');
+    url.searchParams.set('limit', String(lim));
+    url.searchParams.set('access_token', String(accessToken));
+    nextUrl = url.toString();
+  }
 
   // NOTE: no IG API calls in hot paths; this runs only from cron.
-  const resp = await fetch(url.toString(), { method: 'GET' });
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => '');
-    throw new Error(`IG comments fetch failed: ${resp.status} ${txt.slice(0, 300)}`);
+  for (let page = 0; page < maxPages && nextUrl; page++) {
+    const resp = await fetch(nextUrl, { method: 'GET' });
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => '');
+      throw new Error(`IG comments fetch failed: ${resp.status} ${txt.slice(0, 300)}`);
+    }
+    const js = await resp.json();
+    const data = Array.isArray(js?.data) ? js.data : [];
+    for (const x of data) {
+      out.push({
+        id: x?.id,
+        text: x?.text,
+        username: x?.username,
+        timestamp: x?.timestamp,
+      });
+    }
+
+    // Follow pagination cursor if available.
+    nextUrl = js?.paging?.next || null;
   }
-  const js = await resp.json();
-  const data = Array.isArray(js?.data) ? js.data : [];
-  for (const x of data) {
-    out.push({
-      id: x?.id,
-      text: x?.text,
-      username: x?.username,
-      timestamp: x?.timestamp,
-    });
-  }
+
   return out;
 }
 

@@ -116,10 +116,16 @@ export async function queueOpsAlert(api, {
     };
 
     try {
-      await redis.lpush(bufK, JSON.stringify(ev));
-      await redis.ltrim(bufK, 0, Math.max(10, Number(CFG.OPS_ALERT_BUFFER_MAX || 200)) - 1);
-      // Keep 2 days, bounded.
-      await redis.expire(bufK, 2 * 24 * 60 * 60);
+      // Atomic LPUSH + LTRIM + EXPIRE to prevent race between buffer push and trim.
+      const maxBuf = Math.max(10, Number(CFG.OPS_ALERT_BUFFER_MAX || 200));
+      const ttlSec = 2 * 24 * 60 * 60;
+      const opsLua = `
+        redis.call('LPUSH', KEYS[1], ARGV[1])
+        redis.call('LTRIM', KEYS[1], 0, tonumber(ARGV[2]) - 1)
+        redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
+        return 1
+      `;
+      await redis.eval(opsLua, [bufK], [JSON.stringify(ev), String(maxBuf), String(ttlSec)]);
     } catch {
       // If buffer is unavailable, fall back to immediate send.
       return await flushOpsAlerts(api, g, { force: true, fallbackSingle: ev });
