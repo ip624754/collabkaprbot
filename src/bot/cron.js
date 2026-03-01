@@ -1,29 +1,11 @@
-import * as R from '../lib/redis.js';
-
-const redis = R.redis;
-const k = R.k;
-const acquireLock = R.acquireLock;
-const releaseLock = R.releaseLock;
-
-const incrWithExpire =
-  typeof R.incrWithExpire === 'function'
-    ? R.incrWithExpire
-    : async (key, ttlSec) => {
-        try {
-          const k0 = String(key || '').trim();
-          const ttl = Math.max(1, Number(ttlSec) || 0);
-          if (!k0 || !ttl) return 0;
-          const r = await redis.incr(k0);
-          await redis.expire(k0, ttl);
-          return Number(r) || 0;
-        } catch {
-          return 0;
-        }
-      };
-
-// Metrics-only helper; if missing we fail-silent.
-const incrWithExpireOnFirst =
-  typeof R.incrWithExpireOnFirst === 'function' ? R.incrWithExpireOnFirst : async () => 0;
+import {
+  redis,
+  k,
+  acquireLock,
+  releaseLock,
+  incrWithExpire,
+  incrWithExpireOnFirst,
+} from '../lib/redis.js';
 
 import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
