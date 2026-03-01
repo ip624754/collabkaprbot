@@ -1,0 +1,6 @@
+Delete these files after applying the HOTFIX ZIP (because ZIP cannot delete files):
+
+api/cron/audit-flush-tick.js
+api/cron/broadcast-tick.js
+api/cron/giveaways-tick.js
+api/cron/ig-verify-tick.js

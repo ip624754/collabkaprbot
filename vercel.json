@@ -1,3 +1,12 @@
 {
-  "version": 2
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/cron", "destination": "/api/cron_router" },
+    { "source": "/api/cron/", "destination": "/api/cron_router" },
+
+    { "source": "/api/cron/broadcast-tick", "destination": "/api/cron_router?job=broadcast-tick" },
+    { "source": "/api/cron/giveaways-tick", "destination": "/api/cron_router?job=giveaways-tick" },
+    { "source": "/api/cron/ig-verify-tick", "destination": "/api/cron_router?job=ig-verify-tick" },
+    { "source": "/api/cron/audit-flush-tick", "destination": "/api/cron_router?job=audit-flush-tick" }
+  ]
 }
