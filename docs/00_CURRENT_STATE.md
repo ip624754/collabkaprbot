@@ -1,5 +1,15 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-01
 
+## Staff audit
+
+Для staff‑аудита (и NotebookLM) используем единый стартовый манифест:
+- `docs/audit_staff/00_AUDIT_START_MANIFEST.md`
+
+Он фиксирует **текущее**: Instagram OAuth/verify выключены, Instagram — только ссылка/контакт (скрыт до unlock), верификация — только ручная через заявку.
+
+---
+
+
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
 ### Snapshot: верификация / Instagram (сейчас)
@@ -27,8 +37,12 @@
 - STEP203: добавлен быстрый релиз‑preflight: `npm run preflight` (alias `npm run qa:fast`) — гоняет `actions:check`, `actions:md` (и проверяет, что `docs/02_ACTION_KEYS_REGISTRY.md` не “грязный”), `lint:nav`, `test:redact`. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
 - STEP204: Outbox стал “центром поддержки”: из записи можно `✉️ Повторить` (с предпросмотром), открыть `📝 Заметку` с возвратом в Outbox и сохранить текст как `📌 шаблон` (DM-only).
 - STEP234: Outbox privacy hardening — если админ открыл Outbox не в личке с ботом (group/supergroup/channel), текстовые snippet’ы скрываются (🔒), а `✉️ Повторить` отключён (чтобы исключить случайные утечки/путаницу).
-- STEP235: Neon timeout hardening — Postgres pool ставит **server-side** `statement_timeout` через `options: -c statement_timeout=...` (ENV `PG_STATEMENT_TIMEOUT_MS`, default 15000) + добавляет явный лог-маркер `db.statement_timeout` при отмене запроса по таймауту (помогает ops/support).
+- STEP235: Neon timeout hardening — Postgres pool задаёт `statement_timeout` для сессии через `SET statement_timeout` в connect hook (ENV `PG_STATEMENT_TIMEOUT_MS`, default 15000) + добавляет явный лог‑маркер `db.statement_timeout` при отмене запроса по таймауту (помогает ops/support). Важно: в Neon pooler нельзя передавать `statement_timeout` через startup options.
+- STEP242: Heavy TX hardening — в “тяжёлых” транзакциях (например, draw+finalize победителей розыгрыша) дополнительно ставим `SET LOCAL statement_timeout` сразу после `BEGIN` (defense-in-depth против частичных деплоев/нестандартных пулов). По умолчанию берём `PG_STATEMENT_TIMEOUT_MS` (опционально можно переопределить `PG_HEAVY_TX_STATEMENT_TIMEOUT_MS`).
 - STEP236: Audit flush cooldown — при DB outage audit-flush больше не “долбит” Postgres каждую минуту: после requeue или DB‑ошибки ставим короткий cooldown (ENV `AUDIT_BUFFER_REQUEUE_COOLDOWN_SEC`, default 120) и cron временно возвращает `skipped: requeue_cooldown`. В `/api/health` добавлен `audit.buffer.requeue_cooldown_ttl_sec`.
+- STEP239: Anti-bypass offer description — для бренда до unlock описание оффера проходит через `redactContactsInText` (скрываем ссылки/почту/телефоны/@handles). `redactContactsInText` усилен против обхода через `＠` (U+FF20) и `․` (U+2024).
+- STEP240: Lead notes tags persist — теги `#brief/#urgent/...` в curator notes теперь извлекаются и сохраняются в БД: `brand_leads.meta.curator_notes[].tags` (и агрегируются в `brand_leads.meta.tags` для будущей фильтрации). UI больше не обязан парсить текст.
+- STEP241: Hotfix build-compat — импорты из `src/lib/redis.js` переведены на namespace (`import * as R`) с безопасными fallback для опциональных helper’ов (`incrWithExpireOnFirst`, `incrWithExpire`, `lpushTrim`), чтобы частичные деплои/слияния не падали на Vercel с ошибкой «does not provide an export named ...». Поведение прод-логики не меняем, только устраняем crash при загрузке модулей.
 - STEP205: Polishing Comms — единые лимиты Telegram по длине текста (emoji-safe), предупреждения в предпросмотре, лимиты для System Notice и CTA (без регрессий).
 - STEP206: закреплён короткий релиз‑протокол “2 минуты”: `npm run preflight` + `/api/health` + 2–3 клика по админ‑экранам (Comms/Outbox/Users). См. `docs/16_RELEASE_CHECKLIST.md`.
 - STEP207: hotfix — исправлен SyntaxError (invalid RegExp) в `normalizeNoticeCtaLabel` (CTA label), который мог ломать запуск на Vercel.
@@ -53,8 +67,10 @@
 - STEP228: Audit hardening (money + anti-cascade) — закрыты: F-8 (unknown numeric pack → 0), N-1 (убран non-atomic fallback rate limiter → fail-open), N-2 (unlock contacts переведён на `pg_try_advisory_xact_lock` + `busy` UX), F-5 (ops alerts buffer атомарный Lua), F-7 (IG verify comments с пагинацией до 5 страниц).
 - STEP229: Audit buffer flush (lossless) — flush переведён на двухфазную схему Redis list (queue→inflight→ack) без потерь при DB outage; добавлен stuck-requeue (ENV `AUDIT_BUFFER_INFLIGHT_TIMEOUT_SEC`) и токен-лок (ENV `AUDIT_BUFFER_FLUSH_LOCK_TTL_SEC`). `/api/health` теперь показывает `audit.buffer.queue_len/inflight_len/inflight_age_sec` и `requeued_today_total`.
 - STEP230: Final atomic sweep + health polish — добиты остатки неатомарных связок Redis (INCR+EXPIRE, LPUSH+LTRIM) в счётчиках/буферах (cron counters, acquisition buckets, admin outbox, curator notes, broadcast quarantine); `/api/health` переписан и вылечен (SyntaxError/скобки), вывод стабилен даже при Redis degraded.
+- STEP245: Cleanup — убраны backward-compat shims, которые содержали non-atomic паттерны (даже как dead-code). В коде используем только атомарные helper’ы из `src/lib/redis.js` и прямые named imports.
 
 - STEP231: Release preflight — добавлен мини‑runbook “Redis TTL smoke check” (без KEYS, через SCAN + TTL), чтобы перед релизом быстро ловить `TTL=-1` на ключах, которые обязаны истекать. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
+- STEP246: Release preflight — добавлен grep‑gate `lint:redis-atomic`, который запрещает возвращать в runtime‑код неатомарные связки Redis-команд (LPUSH+LTRIM, INCR+EXPIRE, LRANGE+LTRIM) вне `src/lib/redis.js`. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
 - STEP232–STEP233: NotebookLM audit (docs‑only) — подготовлен понятный docs‑pack для аудита по текущему состоянию (без кода), добавлены входной индекс и отдельный prompt для docs‑only. См. `docs/audit/05_NOTEBOOKLM_DOCS_ONLY_ENTRYPOINT_2026_03.md`.
 
 
@@ -72,7 +88,8 @@
 - **QStash / cron** → дергает `/api/cron/*` по расписанию (через `vercel.json` rewrites на единый роутер `api/cron_router.js` — это держит нас в лимите Vercel Hobby по кол-ву функций)
 
 Neon hardening:
-- `PG_STATEMENT_TIMEOUT_MS` (default **15000**) — глобальный server-side `statement_timeout` для всех запросов (pool-level). Для критичных монетизационных транзакций дополнительно используем короткий `SET LOCAL statement_timeout` (circuit breaker).
+- `PG_STATEMENT_TIMEOUT_MS` (default **15000**) — глобальный `statement_timeout` для всех запросов (ставим через `SET statement_timeout` на connect). Для критичных монетизационных транзакций дополнительно используем короткий `SET LOCAL statement_timeout` (circuit breaker).
+- `PG_HEAVY_TX_STATEMENT_TIMEOUT_MS` (optional) — отдельный таймаут для “тяжёлых” транзакций (giveaways draw/finalize). Если не задан, используется `PG_STATEMENT_TIMEOUT_MS`.
 
 ### Control Plane (cron endpoints)
 
