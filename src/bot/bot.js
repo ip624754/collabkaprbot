@@ -13748,6 +13748,42 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
   const contact = isOwner ? contactRaw : '';
   const hasContact = Boolean(contactRaw);
 
+  // Contacts unlock (Brand Pass) also gates contact leakage in offer description.
+  // Redis-first; DB fallback ONLY when Redis is unavailable.
+  let unlocked = false;
+  if (!isOwner && userId && wsId) {
+    const key = k(['wsp_contact', wsId, userId]);
+    let redisOk = true;
+    try {
+      unlocked = !!(await redis.get(key));
+    } catch {
+      unlocked = false;
+      redisOk = false;
+    }
+
+    if (!unlocked && !redisOk) {
+      try {
+        unlocked = !!(await withTimeout(db.isWorkspaceContactsUnlocked(userId, wsId), 2500, 'wsp.unlock.db'));
+      } catch {
+        unlocked = false;
+      }
+      if (unlocked) {
+        try { await redis.set(key, 1, { ex: CONTACT_UNLOCK_TTL_SEC }); } catch {}
+      }
+    }
+  }
+
+  let descTxt = String(o.description || '');
+  if (!isOwner && !unlocked && descTxt) {
+    try {
+      const r = redactContactsInText(descTxt);
+      descTxt = r.text;
+    } catch {
+      // keep raw description
+    }
+  }
+  const descHtml = escapeHtml(descTxt);
+
   let partnerBlock = '';
   if (o.partner_folder_id) {
     try {
@@ -13775,7 +13811,7 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
     `Оплата: <b>${escapeHtml(bxCompLabel(o.compensation_type))}</b>\n\n` +
     `${metaLines ? `${metaLines}\n\n` : ''}` +
     `<b>${escapeHtml(o.title)}</b>\n\n` +
-    `${escapeHtml(o.description)}${partnerBlock}\n\n` +
+    `${descHtml}${partnerBlock}\n\n` +
     `Канал: <b>${escapeHtml(ch)}${o.creator_verified ? ' ✅' : ''}</b>\n` +
     `${isOwner ? (contact ? `Контакт: <b>${escapeHtml(contact)}</b>\n` : '') : (hasContact ? `Контакты: <b>🔒 скрыты</b>\n` : '')}` +
     `\nЕсли бот не может проверить каналы — попроси админа добавить бота в канал-спонсор.`;

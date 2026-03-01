@@ -37,21 +37,21 @@ export function redactContactsInText(raw) {
   }
 
   // t.me / telegram.me
-  const tmeRe = /\b(?:t\.me|telegram\.me)\/[\w\-./?=&%+#]+/gi;
+  const tmeRe = /\b(?:t[.\u2024]me|telegram[.\u2024]me)\/[\w\-./?=&%+#]+/gi;
   if (tmeRe.test(s)) {
     redacted = true;
     s = s.replace(tmeRe, '🔒 ссылка скрыта');
   }
 
   // common social domains without protocol
-  const socialRe = /\b(?:instagram\.com|instagr\.am|vk\.com|youtube\.com|youtu\.be)\/[^\s<>()]+/gi;
+  const socialRe = /\b(?:instagram[.\u2024]com|instagr[.\u2024]am|vk[.\u2024]com|youtube[.\u2024]com|youtu[.\u2024]be)\/[^\s<>()]+/gi;
   if (socialRe.test(s)) {
     redacted = true;
     s = s.replace(socialRe, '🔒 ссылка скрыта');
   }
 
   // emails
-  const emailRe = /\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi;
+  const emailRe = /\b[\w.+\-\.\u2024]+[@＠][\w\-]+(?:[.\u2024][\w\-]+)+\b/gi;
   if (emailRe.test(s)) {
     redacted = true;
     s = s.replace(emailRe, '🔒 email скрыт');
@@ -221,7 +221,7 @@ export function redactContactsInText(raw) {
   }
 
   // @handles (telegram/instagram-style)
-  const atRe = /(^|[^\w@])@([a-z0-9_]{3,32})\b/gi;
+  const atRe = /(^|[^\w@＠])[@＠]([a-z0-9_][a-z0-9_.]{1,30}[a-z0-9_])\b/gi;
   if (atRe.test(s)) {
     redacted = true;
     s = s.replace(atRe, (m, p1) => `${p1}🔒@скрыто`);
