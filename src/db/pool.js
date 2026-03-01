@@ -37,17 +37,13 @@ function logStatementTimeout(err, ctx = {}) {
   } catch {}
 }
 
-const PG_OPTIONS = (() => {
-  const ms = Math.floor(Number(PG_STATEMENT_TIMEOUT_MS));
-  if (!Number.isFinite(ms) || ms <= 0) return undefined;
-  // Guaranteed server-side timeout. This is more reliable than a best-effort "SET" in connect hook.
-  return `-c statement_timeout=${ms}`;
-})();
+// NOTE: Do NOT use `options: '-c statement_timeout=...'` here.
+// Neon pooled connections (pgbouncer) reject startup parameters.
+// statement_timeout is set via SET in the connect hook below.
 
 export const pool = new Pool({
   connectionString: CFG.DATABASE_URL,
   ssl: CFG.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: true },
-  options: PG_OPTIONS,
   
   // Serverless optimization
   max: PG_POOL_MAX, 
