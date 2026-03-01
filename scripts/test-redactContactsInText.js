@@ -47,15 +47,30 @@ const cases = [
     opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['instagram.com'] }
   },
   {
+    name: 'instagram with dot leader redacted',
+    input: 'Инста: instagram․com/myprofile',
+    opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['instagram․com'] }
+  },
+  {
     name: 'email redacted',
     input: 'Почта: test.user+1@example.co',
     opts: { redacted: true, contains: ['🔒 email скрыт'], notContains: ['@example'] }
+  },
+  {
+    name: 'email with fullwidth @ and dot leader redacted',
+    input: 'Почта: test.user+1＠example․co',
+    opts: { redacted: true, contains: ['🔒 email скрыт'], notContains: ['＠example', '․co'] }
   },
   {
     name: '@handle redacted and delinkified',
     input: 'TG: @my_handle',
     // deLinkifyText turns @ into fullwidth ＠
     opts: { redacted: true, contains: ['🔒＠скрыто'], notContains: ['@my_handle'] }
+  },
+  {
+    name: 'fullwidth @handle redacted and delinkified',
+    input: 'IG: ＠my.user',
+    opts: { redacted: true, contains: ['🔒＠скрыто'], notContains: ['＠my.user'] }
   },
   {
     name: 'ru mobile 11 digits (starts with 7) redacted',
