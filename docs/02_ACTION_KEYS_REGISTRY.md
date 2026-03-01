@@ -482,6 +482,7 @@
 | `a:support_write` | ops | require_redis |
 | `a:team` | edit | require_redis |
 | `a:ui_mode_set` | edit | require_redis |
+| `a:push_ack` | view | none |
 | `a:usr_ack` | view | none |
 | `a:verify_home` | edit | none |
 | `a:verify_info` | edit | none |
