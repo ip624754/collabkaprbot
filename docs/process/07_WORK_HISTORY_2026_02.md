@@ -1303,3 +1303,13 @@ docs/01_SECURITY_INVARIANTS.md
   - `docs/13_RUNBOOK_RELEASE.md` — добавлен блок с командой.
 - Без миграций. Zero regressions (не влияет на runtime бота).
 - Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP220 — Vercel Hobby лимит по кол-ву функций: cron router + rewrites (без конфликта имён)
+- Проблема: на Vercel Hobby деплой падает, если в Deployment больше **12** serverless functions (`No more than 12 Serverless Functions...`).
+- Решение: cron endpoints агрегированы в **один** serverless handler `api/cron_router.js`.
+  - Поддерживаем старые URL (`/api/cron/broadcast-tick`, `/api/cron/giveaways-tick`, `/api/cron/ig-verify-tick`, `/api/cron/audit-flush-tick`) через `vercel.json` rewrites.
+  - Также `/api/cron?job=...` и `/api/cron` прокидываются на роутер.
+- Примечание: имя `cron_router.js` выбрано специально, чтобы не путаться с `src/bot/cron.js`.
+- Без миграций. Zero regressions.
+- Docs sync: `docs/00_CURRENT_STATE.md`, `docs/13_RUNBOOK_RELEASE.md`, `docs/16_RELEASE_CHECKLIST.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
