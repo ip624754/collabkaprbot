@@ -21,7 +21,7 @@ export default async function handler(req, res) {
 
     // Kill-switch: if IG OAuth UI is hidden, the entire OAuth API surface must be closed too.
     // (Avoids “shadow API” where routes stay reachable even if UI is disabled.)
-    if (!CFG.IG_OAUTH_UI_ENABLED) {
+    if (!CFG.IG_ROUTES_ENABLED || !CFG.IG_OAUTH_UI_ENABLED) {
       res.status(404).send(html('Not found', '<h2>Not found</h2>'));
       return;
     }

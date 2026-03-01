@@ -7,7 +7,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
 
     // Kill-switch: if IG OAuth UI is hidden, the OAuth routes must be closed too.
-    if (!CFG.IG_OAUTH_UI_ENABLED) {
+    if (!CFG.IG_ROUTES_ENABLED || !CFG.IG_OAUTH_UI_ENABLED) {
       res.status(404).end('not_found');
       return;
     }
