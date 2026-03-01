@@ -1,6 +1,6 @@
 import { pool } from './pool.js'; 
 import { CFG } from '../lib/config.js';
-import { redis, k as rk, rateLimit } from '../lib/redis.js';
+import { redis, k as rk, rateLimit, acquireLock, releaseLock } from '../lib/redis.js';
 
 // Users
 export async function upsertUser(tgId, username) {
@@ -598,10 +598,15 @@ export async function unlockWorkspaceContactsWithCredits(brandUserId, workspaceI
     }
 
     // Per-(brand,workspace) exactly-once guard even with Redis degradation.
-    await client.query(
-      `select pg_advisory_xact_lock(hashtext($1))`,
+    // IMPORTANT: fail-fast on click-storm (do not queue waiting connections in Neon).
+    const lockRes = await client.query(
+      `select pg_try_advisory_xact_lock(hashtext($1)) as ok`,
       [`wsp_contact:${wsId}:${uid}`]
     );
+    if (!lockRes.rows?.[0]?.ok) {
+      await client.query('rollback');
+      return { ok: false, error: 'busy' };
+    }
 
     // Activate unlock only if it is missing/expired. If still active => no-op (0 rows).
     let activated = false;
@@ -1161,6 +1166,18 @@ function auditBufferListKey() {
   return rk(['audit', 'buffer', 'ws']);
 }
 
+function auditBufferInflightKey() {
+  return rk(['audit', 'buffer', 'ws', 'inflight']);
+}
+
+function auditBufferInflightSinceKey() {
+  return rk(['audit', 'buffer', 'ws', 'inflight_since']);
+}
+
+function auditBufferFlushLockKey() {
+  return rk(['audit', 'buffer', 'ws', 'flush_lock']);
+}
+
 async function incrAuditBufferCounter(kind, delta = 1) {
   // Redis-only metric (no DB). Keep cardinality low: total, per-day (UTC).
   try {
@@ -1223,83 +1240,209 @@ export async function flushWorkspaceAuditBuffer({ batchSize, maxMs } = {}) {
   if (!CFG.AUDIT_DB_ENABLED) return { ok: false, skipped: 'audit_db_disabled' };
   if (!CFG.AUDIT_BUFFER_ENABLED) return { ok: false, skipped: 'audit_buffer_disabled' };
 
-  const key = auditBufferListKey();
+  const qKey = auditBufferListKey();
+  const inflightKey = auditBufferInflightKey();
+  const sinceKey = auditBufferInflightSinceKey();
+  const lockKey = auditBufferFlushLockKey();
+
   const batch = Math.max(1, Math.min(Number(batchSize) || Number(CFG.AUDIT_BUFFER_FLUSH_BATCH) || 250, 1000));
   const maxTimeMs = Math.max(100, Math.min(Number(maxMs) || Number(CFG.AUDIT_BUFFER_FLUSH_MAX_MS) || 4500, 9000));
 
+  const lockTtlSec = Math.max(5, Math.min(Number(CFG.AUDIT_BUFFER_FLUSH_LOCK_TTL_SEC) || 15, 60));
+  const inflightTimeoutSec = Math.max(30, Math.min(Number(CFG.AUDIT_BUFFER_INFLIGHT_TIMEOUT_SEC) || 180, 1800));
+
   const startedAt = Date.now();
+  const nowSec = () => Math.floor(Date.now() / 1000);
+
+  const lock = await acquireLock(lockKey, lockTtlSec);
+  if (!lock) return { ok: false, skipped: 'flush_locked' };
+
+  // Lua: if inflight is stuck (or since is missing), move everything back to queue head (preserve order).
+  const requeueLua = `
+    local q = KEYS[1]
+    local infl = KEYS[2]
+    local sinceK = KEYS[3]
+    local now = tonumber(ARGV[1])
+    local timeout = tonumber(ARGV[2])
+
+    local len = redis.call('LLEN', infl)
+    if len <= 0 then redis.call('DEL', sinceK); return {0, 0} end
+
+    local since = tonumber(redis.call('GET', sinceK) or '0')
+    local age = 0
+    if since > 0 then age = now - since end
+
+    -- If since is missing OR age exceeds timeout => treat as stuck and requeue.
+    if (since > 0 and age < timeout) then
+      return {0, age}
+    end
+
+    local moved = 0
+    while true do
+      local v = redis.call('RPOP', infl)
+      if not v then break end
+      redis.call('LPUSH', q, v)
+      moved = moved + 1
+    end
+    redis.call('DEL', sinceK)
+    return {moved, age}
+  `;
+
+  // Lua: move up to N items from queue -> inflight (sets since only when inflight was empty).
+  const extractLua = `
+    local q = KEYS[1]
+    local infl = KEYS[2]
+    local sinceK = KEYS[3]
+    local n = tonumber(ARGV[1])
+    local now = tonumber(ARGV[2])
+
+    local inflLen = redis.call('LLEN', infl)
+
+    local out = {}
+    for i = 1, n do
+      local v = redis.call('LPOP', q)
+      if not v then break end
+      redis.call('RPUSH', infl, v)
+      out[#out + 1] = v
+    end
+
+    if inflLen == 0 and #out > 0 then
+      redis.call('SET', sinceK, now)
+    end
+
+    return out
+  `;
+
+  // Lua: ack N items from inflight head (keeps since while inflight non-empty).
+  const ackLua = `
+    local infl = KEYS[1]
+    local sinceK = KEYS[2]
+    local n = tonumber(ARGV[1])
+    if n <= 0 then return redis.call('LLEN', infl) end
+    redis.call('LTRIM', infl, n, -1)
+    local rem = redis.call('LLEN', infl)
+    if rem <= 0 then
+      redis.call('DEL', sinceK)
+    end
+    return rem
+  `;
+
   let batches = 0;
   let flushed = 0;
   let dropped = 0;
+  let requeued = 0;
+  let stuck_age_sec = null;
 
-  while ((Date.now() - startedAt) < maxTimeMs) {
-    let items = [];
+  try {
+    // 0) If previous run crashed after extracting, inflight may have items.
+    // Requeue only if stuck for too long; otherwise continue processing inflight first.
     try {
-      items = await redis.lrange(key, 0, batch - 1);
-    } catch {
-      break;
-    }
-    if (!Array.isArray(items) || items.length === 0) break;
-
-    // Parse & validate
-    const rows = [];
-    for (const it of items) {
-      let obj = it;
-      try {
-        if (typeof it === 'string') obj = JSON.parse(it);
-      } catch {
-        obj = null;
+      const out = await redis.eval(requeueLua, [qKey, inflightKey, sinceKey], [String(nowSec()), String(inflightTimeoutSec)]);
+      if (Array.isArray(out)) {
+        requeued += Number(out[0] || 0);
+        stuck_age_sec = Number(out[1] || 0);
       }
-      if (!obj || typeof obj !== 'object') { dropped += 1; continue; }
-
-      const wsId2 = Number(obj.wsId || obj.workspace_id) || 0;
-      const actorUserId2 =
-        obj.actorUserId === null || obj.actorUserId === undefined
-          ? null
-          : (Number(obj.actorUserId || obj.actor_user_id) || null);
-      const action2 = String(obj.action || '').trim();
-      const payload2 = obj.payload && typeof obj.payload === 'object' ? obj.payload : {};
-
-      if (!wsId2 || !action2) { dropped += 1; continue; }
-      rows.push({ workspace_id: wsId2, actor_user_id: actorUserId2, action: action2, payload: payload2 });
+    } catch {
+      // ignore
     }
 
-    // Insert batch (best-effort; never crash UX)
-    if (rows.length > 0) {
+    while ((Date.now() - startedAt) < maxTimeMs) {
+      let items = [];
+
+      let inflightLen = 0;
       try {
-        await pool.query(
-          `insert into workspace_audit (workspace_id, actor_user_id, action, payload)
-           select workspace_id, actor_user_id, action, payload::jsonb
-           from jsonb_to_recordset($1::jsonb)
-             as x(workspace_id int, actor_user_id int, action text, payload jsonb)`,
-          [JSON.stringify(rows)]
-        );
-        flushed += rows.length;
+        inflightLen = Number(await redis.llen(inflightKey)) || 0;
       } catch {
-        // DB error: keep items in buffer (do not trim) and exit.
         break;
       }
-    }
 
-    // Trim processed items (even if some were dropped as invalid) so the buffer cannot get stuck.
-    try {
-      await redis.ltrim(key, items.length, -1);
-    } catch {
-      // If we cannot trim, we risk duplicates, but that's still better than losing data.
-      break;
-    }
+      if (inflightLen > 0) {
+        // Continue processing existing inflight (safe: nobody pushes to inflight except this locked worker).
+        try {
+          items = await redis.lrange(inflightKey, 0, batch - 1);
+        } catch {
+          break;
+        }
+      } else {
+        // Move a fresh batch from queue -> inflight atomically.
+        try {
+          items = await redis.eval(extractLua, [qKey, inflightKey, sinceKey], [String(batch), String(nowSec())]);
+        } catch {
+          break;
+        }
+      }
 
-    batches += 1;
+      if (!Array.isArray(items) || items.length === 0) break;
+
+      // Parse & validate
+      const rows = [];
+      for (const it of items) {
+        let obj = it;
+        try {
+          if (typeof it === 'string') obj = JSON.parse(it);
+        } catch {
+          obj = null;
+        }
+        if (!obj || typeof obj !== 'object') { dropped += 1; continue; }
+
+        const wsId2 = Number(obj.wsId || obj.workspace_id) || 0;
+        const actorUserId2 =
+          obj.actorUserId === null || obj.actorUserId === undefined
+            ? null
+            : (Number(obj.actorUserId || obj.actor_user_id) || null);
+        const action2 = String(obj.action || '').trim();
+        const payload2 = obj.payload && typeof obj.payload === 'object' ? obj.payload : {};
+
+        if (!wsId2 || !action2) { dropped += 1; continue; }
+        rows.push({ workspace_id: wsId2, actor_user_id: actorUserId2, action: action2, payload: payload2 });
+      }
+
+      // Insert batch (best-effort; never crash UX)
+      if (rows.length > 0) {
+        try {
+          await pool.query(
+            `insert into workspace_audit (workspace_id, actor_user_id, action, payload)
+             select workspace_id, actor_user_id, action, payload::jsonb
+             from jsonb_to_recordset($1::jsonb)
+               as x(workspace_id int, actor_user_id int, action text, payload jsonb)`,
+            [JSON.stringify(rows)]
+          );
+          flushed += rows.length;
+        } catch {
+          // DB error: keep items in inflight and exit (lossless).
+          break;
+        }
+      }
+
+      // Ack processed items (even if some were dropped as invalid) so inflight cannot get stuck.
+      try {
+        await redis.eval(ackLua, [inflightKey, sinceKey], [String(items.length)]);
+      } catch {
+        // If we cannot ack, we risk duplicates, but that's still better than losing data.
+        break;
+      }
+
+      batches += 1;
+    }
+  } finally {
+    // Release lock (token-safe). Must never crash.
+    try { await releaseLock(lockKey, lock.token); } catch {}
   }
 
   // Metrics + last-flush breadcrumbs (Redis-only)
   try {
     if (flushed > 0) await incrAuditBufferCounter('flushed', flushed);
+    if (requeued > 0) await incrAuditBufferCounter('requeued', requeued);
   } catch {}
 
+  let queue_len = null;
+  let inflight_len = null;
   let remaining = null;
   try {
-    remaining = Number(await redis.llen(key)) || 0;
+    const [qL, iL] = await Promise.all([redis.llen(qKey), redis.llen(inflightKey)]);
+    queue_len = Number(qL) || 0;
+    inflight_len = Number(iL) || 0;
+    remaining = queue_len + inflight_len;
   } catch {
     remaining = null;
   }
@@ -1310,8 +1453,12 @@ export async function flushWorkspaceAuditBuffer({ batchSize, maxMs } = {}) {
       last_at: new Date().toISOString(),
       flushed,
       dropped,
+      requeued,
+      stuck_age_sec,
       batches,
       duration_ms: Date.now() - startedAt,
+      queue_len,
+      inflight_len,
       remaining
     }, { ex: 14 * 86400 });
   } catch {
@@ -1322,8 +1469,12 @@ export async function flushWorkspaceAuditBuffer({ batchSize, maxMs } = {}) {
     ok: true,
     flushed,
     dropped,
+    requeued,
+    stuck_age_sec,
     batches,
     duration_ms: Date.now() - startedAt,
+    queue_len,
+    inflight_len,
     remaining
   };
 }
