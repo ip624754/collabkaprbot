@@ -1343,8 +1343,18 @@ docs/01_SECURITY_INVARIANTS.md
 - Без миграций. Zero regressions.
 - Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
 
-
-
----
-
-➡️ Продолжение истории: `docs/process/07_WORK_HISTORY_2026_03.md` (начиная с 2026-03-01).
+## STEP226 — Audit P1 + антикаскад (Redis degraded → Neon safe)
+- Закрыт P1 (до деплоя):
+  - **F-1**: включена проверка SSL сертификата для Neon Postgres (`rejectUnauthorized:true`).
+  - **F-2**: rate limiter в Redis сделан атомарным (Lua `INCR+EXPIRE`), ключи не могут остаться без TTL; добавлен `ok` для совместимости с существующими call-sites.
+- Антикаскад при Redis degraded:
+  - **F-4**: `acceptBrandApplicationWithCharge()` получил PG `pg_try_advisory_xact_lock(appId, brandUserId)` (fail-fast, без очереди ожидающих `FOR UPDATE`).
+  - **D-2**: при Redis degraded (и/или включённом async retry) на критичные монетизационные DB вызовы ставим короткий timeout и `SET LOCAL statement_timeout` внутри транзакций; при TIMEOUT показываем UX «⏳ В обработке…» вместо ошибки, чтобы не провоцировать клик‑шторм.
+- Без миграций. Zero regressions.
+- Изменённые файлы:
+  - `src/db/pool.js`
+  - `src/lib/redis.js`
+  - `src/db/queries.js`
+  - `src/bot/bot.js`
+  - `docs/00_CURRENT_STATE.md`
+  - `docs/process/07_WORK_HISTORY_2026_02.md`
