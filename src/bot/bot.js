@@ -22031,14 +22031,6 @@ if (p.a === 'a:support_push') {
   try { await ctx.answerCallbackQuery(); } catch {}
 
   // For service/system messages: open Support in a NEW message (do not overwrite original text).
-  // Best-effort: remove buttons from the original message to avoid repeat clicks.
-  try {
-    const chatId = ctx?.callbackQuery?.message?.chat?.id;
-    const msgId = ctx?.callbackQuery?.message?.message_id;
-    if (chatId && msgId) {
-      await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined });
-    }
-  } catch {}
 
   const text = `💬 <b>Поддержка</b>
 
@@ -22531,14 +22523,6 @@ if (p.a === 'a:menu_push') {
   try { await ctx.answerCallbackQuery(); } catch {}
 
   // For service/system messages: open Menu in a NEW message (do not overwrite original text).
-  // Best-effort: remove buttons from the original receipt and render the Menu into a fresh UI message.
-  const srcChatId = ctx?.callbackQuery?.message?.chat?.id;
-  const srcMsgId = ctx?.callbackQuery?.message?.message_id;
-  try {
-    if (srcChatId && srcMsgId) {
-      await ctx.api.editMessageReplyMarkup(srcChatId, srcMsgId, { reply_markup: undefined });
-    }
-  } catch {}
 
   // Create a new message that we can safely edit into the actual Menu.
   // This avoids overwriting the original admin/system message text.
@@ -22580,6 +22564,22 @@ if (p.a === 'a:menu') {
       return;
     }
 
+
+
+// Push receipts: hide only the ✅ button, keep primary actions
+if (p.a === 'a:push_ack') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+  const chatId = ctx?.callbackQuery?.message?.chat?.id;
+  const msgId = ctx?.callbackQuery?.message?.message_id;
+  if (!chatId || !msgId) return;
+  try {
+    const kb = new InlineKeyboard()
+      .text('📋 Главное меню', 'a:menu_push')
+      .text('💬 Поддержка', 'a:support_push');
+    await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: kb });
+  } catch {}
+  return;
+}
 
 // Hide buttons under service/system messages (user-friendly ack)
 if (p.a === 'a:usr_ack') {
@@ -34774,12 +34774,12 @@ const sectionCb = sectionBackCb || (retCb ? 'a:admin_comms' : 'a:admin_ops');
     // If Redis is degraded — skip dedup.
   }
 
-  const userMsg = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Чтобы продолжить — нажми «📋 Открыть меню». Вопросы — «💬 Поддержка».</i>`;
+  const userMsg = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше: «📋 Главное меню». Вопросы: «💬 Поддержка».</i>`;
   const userKb = new InlineKeyboard()
-    .text('📋 Открыть меню', 'a:menu_push')
+    .text('📋 Главное меню', 'a:menu_push')
     .text('💬 Поддержка', 'a:support_push')
     .row()
-    .text('✅ Понятно', 'a:usr_ack');
+    .text('✅ Понятно', 'a:push_ack');
 
   let ok = false;
   let err = '';
