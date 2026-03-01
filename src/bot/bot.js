@@ -13883,6 +13883,14 @@ const OFFICIAL_OFFER_LOCK_TTL_SEC = 180;
 // Keep this below typical serverless timeout to ensure we can revert DB markers.
 const OFFICIAL_TG_CALL_TIMEOUT_MS = 5500;
 
+// STEP214: active self-heal for "PUBLISHING" stuck states.
+// In serverless, the function may die after DB reserve (status=PUBLISHING), which blocks UI.
+// We schedule a delayed QStash verification job to either attach message_id (if known) or
+// reset status back to PENDING (unblock queue / allow manual retry).
+const OFFICIAL_PUBLISH_SELFHEAL_DELAY_SEC = envInt('OFFICIAL_PUBLISH_SELFHEAL_DELAY_SEC', 90, { min: 20, max: 900 });
+const OFFICIAL_PUBLISH_SELFHEAL_MIN_AGE_SEC = envInt('OFFICIAL_PUBLISH_SELFHEAL_MIN_AGE_SEC', 75, { min: 20, max: 600 });
+const OFFICIAL_PUBLISH_SELFHEAL_MSGID_TTL_SEC = envInt('OFFICIAL_PUBLISH_SELFHEAL_MSGID_TTL_SEC', 3 * 24 * 60 * 60, { min: 600, max: 14 * 24 * 60 * 60 });
+
 function tgTimeoutSignal(ms = OFFICIAL_TG_CALL_TIMEOUT_MS) {
   const t = Math.max(1, Number(ms) || 1);
   try {
@@ -13892,6 +13900,70 @@ function tgTimeoutSignal(ms = OFFICIAL_TG_CALL_TIMEOUT_MS) {
     const ac = new AbortController();
     setTimeout(() => { try { ac.abort(); } catch {} }, t);
     return ac.signal;
+  }
+}
+
+function officialPublishMsgIdKey(offerId) {
+  return k(['official', 'pub', 'msgid', String(offerId)]);
+}
+
+async function writeOfficialPublishMsgIdBreadcrumb(offerId, messageId, source = 'unknown') {
+  try {
+    const oid = Number(offerId || 0);
+    const mid = Number(messageId || 0);
+    if (!oid || !mid) return;
+    await redis.set(officialPublishMsgIdKey(oid), String(mid), { ex: OFFICIAL_PUBLISH_SELFHEAL_MSGID_TTL_SEC });
+    // Best-effort breadcrumbs for /api/health
+    try {
+      await redis.set(k(['mon', 'official', 'last_at']), new Date().toISOString(), { ex: 14 * 24 * 60 * 60 });
+      await redis.set(k(['mon', 'official', 'last_offer_id']), String(oid), { ex: 14 * 24 * 60 * 60 });
+      await redis.set(k(['mon', 'official', 'last_source']), String(source || 'unknown').slice(0, 32), { ex: 14 * 24 * 60 * 60 });
+    } catch {}
+  } catch {
+    // ignore
+  }
+}
+
+async function enqueueOfficialPublishVerifyJob(input = {}) {
+  try {
+    if (!CFG.OFFICIAL_PUBLISH_ENABLED) return { ok: false, skipped: 'disabled' };
+    const offerId = Number(input.offerId || 0);
+    if (!offerId) return { ok: false, skipped: 'no_offer' };
+
+    const url = getQStashDeliveryUrl('/api/qstash/official-publish-verify');
+    if (!url) return { ok: false, error: 'public_base_url_missing' };
+
+    const health = getQStashLibHealth();
+    if (!health.available) return { ok: false, error: 'qstash_disabled' };
+    if (!process.env.QSTASH_TOKEN || !process.env.QSTASH_CURRENT_SIGNING_KEY) return { ok: false, error: 'qstash_not_configured' };
+
+    const wsId = Number(input.wsId || 0) || 0;
+    const offerTitle = String(input.offerTitle || '').trim();
+    const channelChatId = Number(input.channelChatId || CFG.OFFICIAL_CHANNEL_ID || 0) || 0;
+
+    // Dedup by (offerId + rounded minute) so multiple retries don't flood QStash.
+    const minute = Math.floor(Date.now() / 60000);
+    const dedupId = `offpv:${offerId}:m:${minute}`;
+
+    await qstashPublishJSON({
+      url,
+      body: {
+        offerId,
+        wsId,
+        offerTitle,
+        channelChatId,
+        minAgeSec: OFFICIAL_PUBLISH_SELFHEAL_MIN_AGE_SEC,
+        queued_at: new Date().toISOString(),
+      },
+      deduplicationId: dedupId,
+      delaySec: OFFICIAL_PUBLISH_SELFHEAL_DELAY_SEC,
+      retries: 3,
+      timeout: '20s',
+    });
+
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e || 'error') };
   }
 }
 
@@ -14017,6 +14089,17 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
   );
   if (!reserved) return { ok: false, locked: true, reason: 'publishing' };
 
+  // STEP214: schedule a delayed self-heal check to avoid long "PUBLISHING" stalls.
+  // Best-effort: never fail publish if QStash is not configured.
+  try {
+    await enqueueOfficialPublishVerifyJob({
+      offerId,
+      wsId: offer.workspace_id,
+      offerTitle: offer.title,
+      channelChatId: channelId,
+    });
+  } catch {}
+
 
   try {
 
@@ -14067,6 +14150,9 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
     const newId = sent?.message_id ? Number(sent.message_id) : null;
     if (!newId) throw new Error('Failed to publish: missing message_id');
 
+    // STEP214: breadcrumb message_id in Redis ASAP (helps self-heal if DB write fails).
+    await writeOfficialPublishMsgIdBreadcrumb(offerId, newId, 'send');
+
     // Remove old message (best-effort) if it existed.
     if (messageId && newId !== messageId) {
       try { await api.deleteMessage(channelId, messageId, tgTimeoutSignal()); } catch {}
@@ -14087,6 +14173,9 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
     }),
     async () => null
   );
+
+  // STEP214: keep breadcrumb even after DB write (helps on webhook/DB glitches).
+  await writeOfficialPublishMsgIdBreadcrumb(offerId, messageId, 'db_active');
 
   // If this was a paid placement, mark payment as "applied" (best-effort).
   if (placementType === 'PAID' && paymentId && publishedByUserId) {
@@ -16133,6 +16222,10 @@ export function getBot() {
         if (!offerId) return;
         const messageId = Number(msg.message_id || 0);
         if (!messageId) return;
+
+        // STEP214: write message_id breadcrumb first (helps recover if DB attach fails).
+        await writeOfficialPublishMsgIdBreadcrumb(offerId, messageId, 'channel_post');
+
         const updated = await safeOfficialPosts(
           () => db.atomicAttachOfficialPostMessageId(offerId, { channelChatId: officialChannelId, messageId }),
           async () => null
