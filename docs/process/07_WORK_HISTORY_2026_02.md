@@ -1358,3 +1358,19 @@ docs/01_SECURITY_INVARIANTS.md
   - `src/bot/bot.js`
   - `docs/00_CURRENT_STATE.md`
   - `docs/process/07_WORK_HISTORY_2026_02.md`
+
+
+## STEP227 — Admin DM UX v2: квитанция без тупиков (src=admmsg)
+- Пользовательские DM от админа теперь максимально однозначны:
+  - футер текста: `Дальше выбери действие кнопками ниже.`
+  - кнопки: `🏠 Главное меню` / `💬 Поддержка` / `✅ Принято`.
+  - в callback-data добавлен маркер `|src:admmsg`.
+- `a:usr_ack|src:admmsg` больше не оставляет “пустую квитанцию”: убирает только кнопку `✅`, оставляя `🏠 Главное меню` + `💬 Поддержка`.
+- `a:menu_push|src:admmsg` и `a:support_push|src:admmsg` **не снимают** reply_markup у квитанции (в отличие от других сервисных сообщений).
+- `a:support_push|src:admmsg` открывает минимальный экран поддержки (без `🧭 Быстрый старт`), чтобы не отвлекать пользователя.
+- Без миграций. Zero regressions.
+- Изменённые файлы:
+  - `src/bot/bot.js`
+  - `docs/00_CURRENT_STATE.md`
+  - `docs/process/09_ADMIN_UX_STANDARD.md`
+  - `docs/process/07_WORK_HISTORY_2026_02.md`
