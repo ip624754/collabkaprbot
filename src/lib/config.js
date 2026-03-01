@@ -308,6 +308,16 @@ export const CFG = {
     return Math.max(250, Math.min(n, 9000));
   })(),
 
+  AUDIT_BUFFER_FLUSH_LOCK_TTL_SEC: (() => {
+    const n = parseIntSafe(process.env.AUDIT_BUFFER_FLUSH_LOCK_TTL_SEC, 15);
+    return Math.max(5, Math.min(n, 60));
+  })(),
+  AUDIT_BUFFER_INFLIGHT_TIMEOUT_SEC: (() => {
+    const n = parseIntSafe(process.env.AUDIT_BUFFER_INFLIGHT_TIMEOUT_SEC, 180);
+    return Math.max(30, Math.min(n, 1800)); // 30s..30m
+  })(),
+
+
   // Onboarding v2
   ONBOARDING_V2_ENABLED: parseBoolSafe(process.env.ONBOARDING_V2_ENABLED, false),
 
