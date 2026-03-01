@@ -25,6 +25,9 @@
 - STEP160: мини-аудит footer‑рядов: везде единый низ (⬅️ Назад / 📋 Меню / 🏠 Home) через `navKb`/`kbNavRow`; выровнены PRO/папки/Brand Team/поиск креаторов/шаги розыгрыша + gw_access + fallback replies.
 - STEP161: добавлен линтер `npm run lint:nav` (scripts/lint-footer-nav.js), который ловит регрессии footer’ов; дополнительно добили несколько мест, где был `📋 Меню` без `🏠 Home`, чтобы lint проходил и UX был консистентным.
 - STEP163: добавлен генератор `npm run gen:migration-pack` для `migration_pack/00_mark_all_applied.sql` (sha256 как в `migrations/run.js`), чтобы pack всегда совпадал с текущими миграциями.
+- STEP208: migrations fail-fast — `migrations/run.js` и `scripts/gen-mark-all-applied.js` принимают только `NNN_name.sql` (ровно 3 цифры) и падают, если в `migrations/` есть “левые” `.sql` (защита от случайного копирования `migration_pack/*.sql`).
+- STEP209: action guards v2 — в `src/bot/actionRegistry.js` добавлены guard-типы `db_truth`/`queue_first` для критичных DB-truth путей (монетизация/ручной apply), обновлён middleware и доки.
+- STEP210: anti-click-storm при Redis down — локальный in-memory limiter (TTL ~8s) на критичных DB-truth/queue-first кликах (`✅ Принять` / `🔓 Разлок контактов`).
 
 
 Подробности по IG: `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`.
@@ -1181,3 +1184,122 @@ docs/01_SECURITY_INVARIANTS.md
 - Теперь CTA label нормализуется emoji-safe: убираем `\r`, схлопываем whitespace в одну строку и клипаем до лимита.
 - Без миграций. Zero regressions.
 - Docks sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP209 — Action guards v2 (require_redis vs db_truth/queue_first) + docs sync
+- В `src/bot/actionRegistry.js` расширили guard-модель:
+  - `require_redis` — fail-closed при Redis down,
+  - `db_truth` — DB-truth идемпотентные действия (можно исполнять даже при Redis down),
+  - `queue_first` — DB-truth путь с оптимистичным UX через очередь (QStash) при норме,
+  - `none` — безопасная навигация/просмотр.
+- Переклассифицированы ключевые монетизационные action keys:
+  - `a:brand_app_accept` и `a:wsp_contact_unlock` → `queue_first`.
+  - ручные платежные админские пути (`admin_pay_apply`/`admin_pay_autoheal`) → `db_truth`.
+- В `src/bot/bot.js` middleware теперь кэширует `redisOk` в `ctx.state.redisOk` для `require_redis/db_truth/queue_first` (подготовка к следующему STEP210: локальный anti-click-storm при Redis down).
+- Перегенерирован авто-документ `docs/02_ACTION_KEYS_REGISTRY.md` (`npm run actions:md`), обновлены `docs/01_SECURITY_INVARIANTS.md` и `docs/00_CURRENT_STATE.md`.
+
+
+## STEP210 — Anti-click-storm при Redis down (локальный предохранитель)
+- Проблема: при деградации Redis недоступны token-lock/часть rate-limit путей → пользователь/админ может нажать кнопку 5–10 раз подряд.
+  Postgres защитит от двойного списания (SQL guards), но Neon можно “заспайкать” шквалом транзакций.
+- Решение: добавлен best-effort **in-memory limiter** (Map + TTL ~8 секунд) на стороне bot runtime:
+  - включается **только если `ctx.state.redisOk === false`**;
+  - ключ: `tgId + action + resourceId`;
+  - защищаем 2 самые “дорогие” кнопки:
+    - `a:brand_app_accept` (✅ Принять),
+    - `a:wsp_contact_unlock` (🔓 Разлок контактов).
+- UX: вместо “тишины” — toast `⏳ Уже обрабатываем. Обнови через 10–30 сек.` при повторных кликах в TTL-окно.
+- Без миграций. Zero regressions.
+- Docks sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP211 — Payments strict validation: auto-heal/apply (P0)
+- Усилена строгая валидация Stars‑платежей по `invoice_payload/currency/total_amount` (единая с webhook‑валидацией).
+- В strict‑валидации поддержаны legacy варианты payload:
+  - Brand Pass: numeric credits token (только если совпадает с известными пакетами),
+  - Brand Plan: `basic/max` нормализуются в `start/pro`.
+- Admin auto-heal (`a:admin_pay_autoheal`) теперь:
+  - валидирует платёж **до** claim/apply,
+  - для невалидных/неприменимых кейсов выставляет `note=autoheal_manual_required:<reason>`, чтобы остановить retry‑петли.
+- Bugfix: manual apply Brand Plan больше не пытается активировать неизвестный plan (`basic/max`), всегда активируем `start/pro`.
+- Без миграций. Zero regressions.
+- Docks sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP212 — Instagram routes kill-switch (P1 security)
+- Цель: убрать “теневую поверхность” IG API на сервере, даже если UI скрыт.
+- Добавлен ENV `IG_ROUTES_ENABLED` (0/1) — **master kill‑switch** для всего `/api/ig/*` (включая IG cron).
+  - Если переменная не задана — по умолчанию следует `IG_OAUTH_UI_ENABLED` (zero regressions).
+- Все IG OAuth endpoints (`/api/ig/oauth/*`) теперь требуют `IG_ROUTES_ENABLED=1` **и** `IG_OAUTH_UI_ENABLED=1`, иначе возвращают 404.
+- IG cron `/api/cron/ig-verify-tick` тоже закрывается (404), если `IG_ROUTES_ENABLED=0`.
+- Без миграций. Zero regressions.
+- Docks sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP213 — Monetization UI при Redis down (P0): кнопки не исчезают
+- Проблема (из аудита): при деградации Redis баланс мог быть `0/—`, и в нескольких местах UI **прятал** кнопки списания (например «🔓 Контакты»), что выглядело как поломка монетизации.
+- Решение: в UI теперь **никогда не скрываем** monetization CTA из-за `0/unknown` Redis-баланса.
+  - Витрина (`renderWsPublicProfile`): «🔓 Контакты» показывается всегда; если нужно — рядом «💳 Купить ещё».
+  - Brand replies (`brandReplyKb`) и карточка lead’а бренда: аналогично — «Контакты» не исчезают, а проверки кредитов выполняются на клике (DB-truth).
+- Для того чтобы бренд мог попасть в монетизационные экраны даже при Redis down, разрешили read‑only навигацию:
+  - `a:brand_apps`, `a:bx_inbox`, `a:bx_thread` → guard `none` (без fail-closed).
+- Harden: ключевые Redis‑getters UI состояния (`ui_mode`, `cur_mode`, `active_ws`, `bm_mode`, `bm_active_brand`) сделаны **fail-open** (try/catch), чтобы бот не падал на простых экранах при Redis outage.
+- Без миграций. Zero regressions.
+- Docks sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP214 — Official publish anti-stuck (active self-heal)
+- Проблема: в serverless при жёстком kill/таймауте возможно “залипание” `official_posts.status='PUBLISHING'` после DB-reserve.
+  UX: карточка оффера показывает `⏳ Публикуется` и прячет действия; модеру/владельцу приходится ждать stale‑rescue (~10 минут) или разбираться вручную.
+- Решение (best-effort, zero regressions):
+  - после успешного reserve мы ставим отложенную QStash‑задачу `/api/qstash/official-publish-verify` (ENV: `OFFICIAL_PUBLISH_SELFHEAL_DELAY_SEC`, `OFFICIAL_PUBLISH_SELFHEAL_MIN_AGE_SEC`),
+  - сохраняем Redis breadcrumb `official:pub:msgid:<offerId>` из двух источников:
+    - сразу после `sendMessage` (как только получили `message_id`),
+    - из `channel_post`/`edited_channel_post` webhook (до DB attach),
+  - воркер пытается прикрепить `message_id` в БД (`atomicAttachOfficialPostMessageId`), а если его нет — сбрасывает статус в `PENDING` с `last_error=selfheal_publish_stuck:*` (разблокирует UI/очередь).
+- Добавлены breadcrumbs в `/api/health`: `mon.official.*`.
+- Без миграций. Zero regressions.
+- Docks sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`, обновлён `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`.
+
+
+## STEP215 — Audit log buffering (Redis list → batch flush в Postgres)
+- Проблема: `AUDIT_DB_THROTTLE` экономит Neon CU, но suppressed audit‑события (workspace_audit) раньше **терялись** (return null).
+- Решение:
+  - при подавлении (rate-limit `!allowed`) добавляем событие в Redis list `audit:buffer:ws` (bounded: `AUDIT_BUFFER_MAX_LEN`, TTL `AUDIT_BUFFER_TTL_SEC`);
+  - при временных DB‑ошибках (кроме “таблица не существует”) — тоже best‑effort буферим (если `AUDIT_BUFFER_ON_DB_ERROR=1`);
+  - новый cron endpoint `/api/cron/audit-flush-tick` батчами переносит буфер в Postgres (`workspace_audit`) через `jsonb_to_recordset`, пишет breadcrumbs `audit.buffer.last_flush`.
+- Наблюдаемость:
+  - `/api/health` → `audit.buffer.*` (len/enqueued/flushed/last_flush) + `cron.audit_flush_tick`.
+- Без миграций. Zero regressions.
+- Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`, обновлён `docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`.
+
+
+## STEP216 — expectText TTL + escape hatch (P1 UX hardening)
+- Проблема: режим ожидания текста (`expectText`) может затянуться/путать пользователя, если в обработчиках шагов мы многократно “пере-армим” ожидание (особенно при ошибках/невалидном вводе).
+- Решение (Redis-only, zero regressions):
+  - `setExpectText()` теперь автоматически добавляет `_startedAt` и ограничивает **общую** жизнь сессии ожидания (по умолчанию 2 часа, ENV `EXPECT_TEXT_MAX_LIFETIME_SEC`). Даже если обработчик пере-установит ожидание, TTL будет обрезан так, чтобы суммарно не превышать лимит.
+  - В text-input режиме показан явный “выход” в меню: футер `navKbInput` добавляет кнопку `❌ Отмена` (ведёт в `📋 Меню`) + `🏠 Home`.
+  - В приватном чате добавлен текстовый escape hatch: если пользователь в режиме ввода и пишет `отмена/cancel/стоп/stop` — ожидание сбрасывается и показывается навигация.
+- Без миграций. Zero regressions.
+- Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP217 — Post-deploy hardening: каноничный smoke-tests_short (input-mode + redis degraded)
+- Обновлён `./smoke-tests_short.md`:
+  - добавлен явный чек по input-mode (`expectText`): `❌ Отмена` и текстовый escape hatch `отмена/cancel/стоп/stop`;
+  - добавлен чек для audit buffer flush (STEP215): `audit_flush_tick.last_run`, `audit.buffer.*`;
+  - акцентировано, что при Redis degraded ключевые монетизационные CTA и навигация остаются “живыми” (нет тупика).
+- `docs/16_RELEASE_CHECKLIST.md` теперь явно рекомендует пройти `./smoke-tests_short.md` сразу после деплоя (10–15 минут).
+- `docs/13_RUNBOOK_RELEASE.md` ссылается на `./smoke-tests_short.md` как на каноничный короткий прогон.
+- Без миграций. Zero regressions.
+- Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
+
+
+## STEP218 — Release UX: `npm run smoke:short` (печать короткого smoke-чека)
+- Добавлена микро-команда `npm run smoke:short` → `node scripts/smoke-short.js`.
+  - Скрипт печатает `./smoke-tests_short.md`, добавляет 4 ключевых напоминания (health/admin UI/redis degraded/expectText escape) и ссылки на релизные доки.
+- Обновлены релизные документы:
+  - `docs/16_RELEASE_CHECKLIST.md` — добавлена рекомендация запускать `npm run smoke:short` после деплоя.
+  - `docs/13_RUNBOOK_RELEASE.md` — добавлен блок с командой.
+- Без миграций. Zero regressions (не влияет на runtime бота).
+- Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
