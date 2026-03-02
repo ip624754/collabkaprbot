@@ -8405,8 +8405,10 @@ ${about}
 🔗 <a href="${escapeHtml(link)}">Открыть витрину</a>` : '');
   return t;
 }
-function buildWsSharePlain(ws, wsId, variant = 'short') {
+function buildWsSharePlain(ws, wsId, variant = 'short', opts = null) {
   const v = String(variant || 'short');
+  const includeLink = Boolean(opts && opts.includeLink);
+  const link = includeLink ? wsBrandLink(wsId) : null;
   const fallbackTitle = ws.channel_username ? ('@' + String(ws.channel_username).replace(/^@/, '')) : (ws.title || 'Creator');
   const titleRaw = String(ws.profile_title || fallbackTitle || 'Creator');
   const title = titleRaw.replace(/^@/, '').trim();
@@ -8433,6 +8435,10 @@ ${about}
       `
 Чтобы оставить заявку: открой витрину и нажми «📝 Оставить заявку».` +
       '';
+    if (link) t += `
+
+🔗 Открыть витрину:
+${link}`;
     return t;
   }
 
@@ -8441,6 +8447,10 @@ ${about}
 
 ` +
     `Оставь заявку: открой витрину и нажми «📝 Оставить заявку».`;
+  if (link) t += `
+
+🔗 Открыть витрину:
+${link}`;
   return t;
 }
 
@@ -9324,9 +9334,10 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
 
   const link = wsBrandLink(wsId);
   const text = buildWsShareText(ws, wsId, variant);
-  // Для системного шаринга (t.me/share/url) мы не можем передать «кнопку/якорь», поэтому отдаём ссылку через url=.
-  const plain = buildWsSharePlain(ws, wsId, variant);
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link || '⁠')}&text=${encodeURIComponent(plain)}`;
+  // Важно: если передать url= в t.me/share/url — Telegram вставляет URL первой строкой.
+  // Нам нужно, чтобы у получателя сообщение начиналось с текста, а ссылка была в конце (не светится в превью).
+  const shareText = buildWsSharePlain(ws, wsId, variant, { includeLink: true });
+  const shareUrl = `https://t.me/share/url?text=${encodeURIComponent(shareText)}`;
 
   const kb = new InlineKeyboard().url('📨 Отправить', shareUrl);
   if (link) kb.url('🔗 Открыть витрину', link);
