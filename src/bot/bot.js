@@ -9361,16 +9361,12 @@ async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
   if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
 
   const link = wsBrandLink(wsId);
-  const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
-  const to = String(ws.profile_title || channel);
 
   const text =
     `📌 <b>Шаблоны для Instagram</b>\n\n` +
     `Скопируй текст ниже (покажу в этом сообщении) и вставь в Stories/пост/DM.\n` +
     `Ссылка ведёт бренда прямо в Telegram-воронку (витрина → заявка → сделка).\n\n` +
-    `Канал: <b>${escapeHtml(channel)}</b>\n` +
-    `Профиль: <b>${escapeHtml(to)}</b>\n` +
-    (link ? `Витрина: <a href="${escapeHtml(link)}">${escapeHtml(link)}</a>\n\n` : '\n') +
+    (link ? `Ссылка на витрину: <a href="${escapeHtml(link)}">Открыть витрину</a>\n\n` : '\n') +
     `Выбери формат:`;
 
   const kb = new InlineKeyboard()
@@ -31349,7 +31345,8 @@ if (p.a === 'a:bx_publish_hint') {
       const text = `👤 <b>Приглашение куратора</b>\n\nСсылка (одноразовая • 10 минут):\n${escapeHtml(link)}\n\nНажми “Поделиться” и отправь приглашение нужному человеку.`;
 
       const shareText = `Приглашение куратора (одноразовая, 10 минут).\nОткрой ссылку: ${link}`;
-      const shareUrl = `https://t.me/share/url?url=&text=${encodeURIComponent(shareText)}`;
+      // Some Telegram clients ignore share links when `url=` is empty. Use an invisible URL value for broad compatibility.
+      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('\u2060')}&text=${encodeURIComponent(shareText)}`;
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, text, {
         parse_mode: 'HTML',
