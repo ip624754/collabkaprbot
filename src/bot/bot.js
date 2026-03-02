@@ -1502,7 +1502,7 @@ ${escapeHtml(safeText)}` +
       kb.url(label, String(n.ctaUrl)).row();
     }
     kb.text('📋 Открыть меню', 'a:menu').text('💬 Поддержка', 'a:support').row();
-    kb.text('✅ Принято', 'a:usr_ack|src:admmsg');
+    kb.text('✅ Понятно', 'a:usr_ack|src:admmsg');
 
     await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }).catch(() => {});
   } catch {
@@ -17111,11 +17111,24 @@ const templateRaw = rawMeta.text;
 const targetTgId = Number(exp.targetTgId || 0);
 const targetUsername = String(exp.targetUsername || '');
 
-const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: targetUsername });
-const phRes = applyAdminDmPlaceholders(templateRaw, phVals);
-const expandedMeta = clipCodepoints(String(phRes.text || ''), TG_SAFE_BODY_MAX);
-const expandedPlain = expandedMeta.text;
-const bodyHtml = escapeHtml(expandedPlain);
+	// Placeholders are best-effort: never block sending if something fails.
+	let phUsed = [];
+	let phUnknown = [];
+	let expandedRaw = templateRaw;
+	try {
+		const phVals = await buildAdminDmPlaceholderValues(ctx, targetTgId, { username: targetUsername });
+		const phRes = applyAdminDmPlaceholders(templateRaw, phVals);
+		expandedRaw = String(phRes.text || '').trim() || templateRaw;
+		phUsed = Array.isArray(phRes.used) ? phRes.used : [];
+		phUnknown = Array.isArray(phRes.unknown) ? phRes.unknown : [];
+	} catch {
+		expandedRaw = templateRaw;
+		phUsed = [];
+		phUnknown = [];
+	}
+	const expandedMeta = clipCodepoints(String(expandedRaw || ''), TG_SAFE_BODY_MAX);
+	const expandedPlain = expandedMeta.text;
+	const bodyHtml = escapeHtml(expandedPlain);
 
 const warnLines = [];
 if (rawMeta.wasClipped) warnLines.push(`⚠️ Обрезано: ${rawMeta.origLen} → ${rawMeta.newLen} (лимит ${TG_SAFE_BODY_MAX}).`);
@@ -17123,9 +17136,7 @@ if (expandedMeta.wasClipped && (!rawMeta.wasClipped || expandedMeta.origLen !== 
   warnLines.push(`⚠️ После подстановки: ${expandedMeta.origLen} → ${expandedMeta.newLen} (лимит ${TG_SAFE_BODY_MAX}).`);
 }
 if (containsUrl(expandedPlain)) warnLines.push('🔗 В тексте есть ссылка — проверь перед отправкой.');
-const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}</i>` : '';
-      const phUsed = phRes.used || [];
-      const phUnknown = phRes.unknown || [];
+	const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}</i>` : '';
       if (!uid || !targetTgId) {
         await ctx.reply('⚠️ Не найден получатель (нет tg_id).');
         return;
@@ -17180,9 +17191,11 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
         phInfo += `\n⚠️ Неизвестные: ${tags}`;
       }
 
-      const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше выбери действие кнопками ниже.</i>`;
+      const preview = renderAdminDmUserMessageHtml(bodyHtml);
       const kb = new InlineKeyboard()
-        .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
+        .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}|wn:1`)
+        .text('⚪ Без «Что дальше»', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}|wn:0`)
+        .row()
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
         .row()
         .text('📎 Вставить', `a:adm_ph|r:umsg_free|id:${uid}|f:${f}|p:${page}`)
@@ -17191,10 +17204,6 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
         .row();
 
       kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-
-      const warn = (!clearCmd && typeof textMeta === 'object' && textMeta.wasClipped)
-        ? `\n\n⚠️ Текст был обрезан до ${TG_SAFE_BODY_MAX} символов (лимит Telegram).`
-        : '';
 
       await safeEditOrReply(
         ctx,
@@ -22133,7 +22142,7 @@ if (p.a === 'a:support_push') {
     ? new InlineKeyboard()
         .text('✍️ Написать в поддержку', 'a:support_write')
         .row()
-        .text('🏠 Главное меню', 'a:menu')
+        .text('📋 Открыть меню', 'a:menu')
     : new InlineKeyboard()
         .text('✍️ Написать в поддержку', 'a:support_write')
         .row()
@@ -22663,9 +22672,20 @@ if (p.a === 'a:menu') {
 
 // User-friendly ack under service/system messages
 if (p.a === 'a:usr_ack') {
-  const src = String(p?.src || '');
-  const ackText = (src === 'admmsg') ? '✅ Принято' : '✅ Понятно';
+  // Some older messages might not include src in callback_data.
+  // Best-effort: infer admin-receipt style by inspecting the current inline keyboard.
+  let src = String(p?.src || '');
+  if (!src) {
+    try {
+      const ik = ctx?.callbackQuery?.message?.reply_markup?.inline_keyboard || [];
+      const cbs = ik.flat().map((b) => String(b?.callback_data || '')).join(' ');
+      if (cbs.includes('src:admmsg') || cbs.includes('a:menu_push') || cbs.includes('a:support_push')) src = 'admmsg';
+    } catch {}
+  }
+
+  const ackText = '✅ Понятно';
   try { await ctx.answerCallbackQuery({ text: ackText }); } catch {}
+
   const chatId = ctx?.callbackQuery?.message?.chat?.id;
   const msgId = ctx?.callbackQuery?.message?.message_id;
   if (!chatId || !msgId) return;
@@ -22673,7 +22693,7 @@ if (p.a === 'a:usr_ack') {
   // Admin-to-user receipts: keep navigation buttons, only remove the ack button.
   if (src === 'admmsg') {
     const kb = new InlineKeyboard()
-      .text('🏠 Главное меню', 'a:menu_push|src:admmsg')
+      .text('📋 Открыть меню', 'a:menu_push|src:admmsg')
       .text('💬 Поддержка', 'a:support_push|src:admmsg');
     try { await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: kb }); } catch {}
     return;
@@ -27712,9 +27732,11 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
 ⚠️ Неизвестные: ${tags}`;
       }
 
-      const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше выбери действие кнопками ниже.</i>`;
+      const preview = renderAdminDmUserMessageHtml(bodyHtml);
       const kb = new InlineKeyboard()
-        .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}`)
+        .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}|wn:1`)
+        .text('⚪ Без «Что дальше»', `a:adm_umsg_send|tk:${token}|f:${f}|p:${page}|wn:0`)
+        .row()
         .text('❌ Отмена', `a:adm_umsg|id:${uid}|f:${f}|p:${page}`)
         .row()
         .text('📎 Вставить', `a:adm_ph|r:umsg|id:${uid}|f:${f}|p:${page}`)
@@ -27784,6 +27806,8 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
       const page = Math.max(0, Number(p.p) || 0);
       const token = String(p.tk || '').trim();
 
+      const withNext = String(p.wn || '') !== '0';
+
       // Fallback path when Redis was unavailable on preview step.
       const noStore = String(p.nostore || '') === '1';
       if (noStore) {
@@ -27809,7 +27833,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
           targetUsername: String(row?.tg_username || ''),
           templateRaw: plain,
         };
-        await sendAdminMessageToUser(ctx, payload, { f, page, backUid: uid });
+        await sendAdminMessageToUser(ctx, payload, { f, page, backUid: uid, withNext });
         return;
       }
 
@@ -27828,7 +27852,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
         return;
       }
 
-      await sendAdminMessageToUser(ctx, data, { f, page, backUid: Number(data.targetUserId || 0) });
+      await sendAdminMessageToUser(ctx, data, { f, page, backUid: Number(data.targetUserId || 0), withNext });
       try { await redis.del(k(['adm_umsg', token])); } catch {}
       return;
     }
@@ -27997,10 +28021,12 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
   }
 
   const uname = targetUsername ? '@' + targetUsername : '';
-  const preview = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше выбери действие кнопками ниже.</i>`;
+  const preview = renderAdminDmUserMessageHtml(bodyHtml);
 
   const kb = new InlineKeyboard()
-    .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:all|p:0`)
+    .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:all|p:0|wn:1`)
+    .text('⚪ Без «Что дальше»', `a:adm_umsg_send|tk:${token}|f:all|p:0|wn:0`)
+    .row()
     .text('❌ Отмена', `a:admin_outbox_v|i:${idx}|p:${page}`)
     .row();
 
@@ -34812,6 +34838,23 @@ kbAdminFooter(kb, sectionBackText, sectionBackCb);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
+
+function renderAdminDmUserMessageHtml(bodyHtml, opts = {}) {
+  const withNext = opts.withNext !== false;
+  const header = `🟦 <b>Сообщение от администратора Collabka PR</b>`;
+  if (!withNext) return `${header}
+
+${bodyHtml}`;
+  return `${header}
+
+${bodyHtml}
+
+<b>Что дальше:</b>
+• Вернуться к действиям бота — «📋 Открыть меню»
+• Вопросы/ошибка — «💬 Поддержка»
+• Прочитано — «✅ Понятно»`;
+}
+
 async function sendAdminMessageToUser(ctx, payload, nav = {}) {
   const adminTgId = Number(payload?.byAdminTgId || ctx.from?.id || 0);
   const targetUserId = Number(payload?.targetUserId || 0);
@@ -34824,6 +34867,8 @@ async function sendAdminMessageToUser(ctx, payload, nav = {}) {
 const f = String(nav.f || 'all').toLowerCase();
 const page = Math.max(0, Number(nav.page) || 0);
 const backUid = Number(nav.backUid || targetUserId || 0);
+
+  const withNext = nav.withNext !== false;
 
 // Optional return route (used by Outbox quick actions, STEP204)
 const retCb = String(payload?.retCb || nav.retCb || '').trim();
@@ -34897,12 +34942,12 @@ const sectionCb = sectionBackCb || (retCb ? 'a:admin_comms' : 'a:admin_ops');
     // If Redis is degraded — skip dedup.
   }
 
-  const userMsg = `📣 <b>Сообщение от администрации Collabka PR</b>\n\n${bodyHtml}\n\n<i>Дальше выбери действие кнопками ниже.</i>`;
+  const userMsg = renderAdminDmUserMessageHtml(bodyHtml, { withNext });
   const userKb = new InlineKeyboard()
-    .text('🏠 Главное меню', 'a:menu_push|src:admmsg')
+    .text('📋 Открыть меню', 'a:menu_push|src:admmsg')
     .text('💬 Поддержка', 'a:support_push|src:admmsg')
     .row()
-    .text('✅ Принято', 'a:usr_ack|src:admmsg');
+    .text('✅ Понятно', 'a:usr_ack|src:admmsg');
 
   let ok = false;
   let err = '';
