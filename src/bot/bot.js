@@ -10120,21 +10120,22 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     // Preview: keep buttons minimal (no direct contact links).
   }
 
-  // Owner-only CTA
+  // Owner-only CTA (sharing tools)
   if (isOwner) {
-    kb.text('🔗 Поделиться', `a:ws_share|ws:${wsId}`).row();
+    kb.text('🔗 Поделиться', `a:ws_share|ws:${wsId}`)
+      .text('📌 IG шаблоны', `a:ws_ig_templates|ws:${wsId}`)
+      .row();
   }
 
   // Links
-  if (ws.channel_username && linksEnabled) kb.url('📣 Telegram канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
+  if (ws.channel_username && linksEnabled) kb.url(isOwner ? '📣 Мой канал' : '📣 Telegram канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
   if (ig && linksEnabled) kb.url('📸 Instagram', `https://instagram.com/${ig}`);
   if (ports.length && linksEnabled) {
     const u0 = String(ports[0] || '').trim();
     if (u0) kb.url('🗂 Портфолио', u0);
   }
   const backCb = opts?.backCb || (isOwner ? `a:ws_profile|ws:${wsId}` : null);
-  if (backCb) kb.row().text('⬅️ Назад', backCb);
-  kb.row().text('📋 Меню', 'a:menu');
+  kbNavRow(kb, backCb);
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   if (ctx.callbackQuery) await safeEditOrReply(ctx, text, extra);
