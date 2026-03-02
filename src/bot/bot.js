@@ -8358,7 +8358,7 @@ function formatWsContactCard(ws, wsId, opts = {}) {
 }
 
 function buildWsShareText(ws, wsId, variant = 'short') {
-const link = wsBrandLink(wsId);
+  const link = wsBrandLink(wsId);
 
   // UI text shown inside bot (short/long preview).
   const v = String(variant || 'short');
@@ -8371,26 +8371,42 @@ const link = wsBrandLink(wsId);
   const about = String(ws.profile_about || '').trim();
 
   if (v === 'long') {
+    // Важно: ссылку на витрину ставим в самый конец, чтобы в превью переписки не светился URL.
     let t =
-      `👋 Привет! Я делаю коллабы / UGC.\n\n`+
-      (link ? `🔗 Витрина: ${link}\n\n` : '\n') +
-      `🏷 Ниши:\n${verticals}\n` +
-      `🎬 Форматы:\n${formats}\n` +
-      (about ? `\nКоротко:\n${about}\n` : '') +
-      `\nЧтобы оставить заявку: открой витрину и нажми «📝 Оставить заявку».`;
+      `👋 Привет! Я делаю коллабы / UGC.
+
+` +
+      `🏷 Ниши:
+${verticals}
+` +
+      `🎬 Форматы:
+${formats}
+` +
+      (about ? `
+Коротко:
+${about}
+` : '') +
+      `
+Чтобы оставить заявку: открой витрину и нажми «📝 Оставить заявку».` +
+      (link ? `
+
+🔗 Витрина: ${link}` : '');
     return t;
   }
 
   // short
   let t =
-    `👋 Привет! Я делаю коллабы / UGC.\n` +
-    (link ? `🔗 Витрина: ${link}\n\n` : '\n') +
-    `Оставь заявку: открой витрину и нажми «📝 Оставить заявку».`;
+    `👋 Привет! Я делаю коллабы / UGC.
+
+` +
+    `Оставь заявку: открой витрину и нажми «📝 Оставить заявку».` +
+    (link ? `
+
+🔗 Витрина: ${link}` : '');
   return t;
 }
-
 function buildWsSharePlain(ws, wsId, variant = 'short') {
-const link = wsBrandLink(wsId);
+  const link = wsBrandLink(wsId);
 
   const v = String(variant || 'short');
   const fallbackTitle = ws.channel_username ? ('@' + String(ws.channel_username).replace(/^@/, '')) : (ws.title || 'Creator');
@@ -8403,19 +8419,35 @@ const link = wsBrandLink(wsId);
 
   if (v === 'long') {
     let t =
-      `👋 Привет! Я делаю коллабы / UGC.\n\n`+
-      (link ? `🔗 Витрина: ${link}\n\n` : '\n') +
-      `🏷 Ниши:\n${verticals}\n` +
-      `🎬 Форматы:\n${formats}\n` +
-      (about ? `\nКоротко:\n${about}\n` : '') +
-      `\nЧтобы оставить заявку: открой витрину и нажми «📝 Оставить заявку».`;
+      `👋 Привет! Я делаю коллабы / UGC.
+
+` +
+      `🏷 Ниши:
+${verticals}
+` +
+      `🎬 Форматы:
+${formats}
+` +
+      (about ? `
+Коротко:
+${about}
+` : '') +
+      `
+Чтобы оставить заявку: открой витрину и нажми «📝 Оставить заявку».` +
+      (link ? `
+
+🔗 Витрина: ${link}` : '');
     return t;
   }
 
   let t =
-    `👋 Привет! Я делаю коллабы / UGC.\n` +
-    (link ? `🔗 Витрина: ${link}\n\n` : '\n') +
-    `Оставь заявку: открой витрину и нажми «📝 Оставить заявку».`;
+    `👋 Привет! Я делаю коллабы / UGC.
+
+` +
+    `Оставь заявку: открой витрину и нажми «📝 Оставить заявку».` +
+    (link ? `
+
+🔗 Витрина: ${link}` : '');
   return t;
 }
 
@@ -9298,39 +9330,8 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
   if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
 
   const text = buildWsShareText(ws, wsId, variant);
-
-  // Показываем текст в этом же сообщении (чтобы не оставлять "висящие" сообщения без кнопок)
-  const link = wsBrandLink(wsId) || '';
-  const channel = ws.channel_username ? '@' + String(ws.channel_username).replace(/^@/, '') : (ws.title || 'канал');
-  const channelUrl = ws.channel_username ? `https://t.me/${String(ws.channel_username).replace(/^@/, '')}` : '';
-  const ig = wsIgHandleFromWs(ws);
-  const igUrl = wsIgUrlFromWs(ws);
-  const plain = (() => {
-  const fallbackTitle = ws.channel_username ? ('@' + String(ws.channel_username).replace(/^@/, '')) : (ws.title || 'Creator');
-  const titleRaw = String(ws.profile_title || fallbackTitle || 'Creator');
-    const title = titleRaw.replace(/^@/, '').trim();
-    const verticals = fmtMatrixList(ws.profile_verticals, PROFILE_VERTICALS, '—');
-    const formats = fmtMatrixList(ws.profile_formats, PROFILE_FORMATS, '—');
-    const about = String(ws.profile_about || '').trim();
-
-    if (String(variant) === 'long') {
-      let t =
-        `👋 Привет! Я делаю коллабы / UGC.\n\n`+
-        (link ? `🔗 Витрина: ${link}\n\n` : '\n') +
-        `🏷 Ниши:\n${verticals}\n` +
-        `🎬 Форматы:\n${formats}\n` +
-        (about ? `\nКоротко:\n${about}\n` : '') +
-        `\nЧтобы оставить заявку: открой витрину и нажми «📝 Оставить заявку».`;
-      return t;
-    }
-
-    // short
-    let t =
-      `👋 Привет! Я делаю коллабы / UGC.\n` +
-      (link ? `🔗 Витрина: ${link}\n\n` : '\n') +
-      `Оставь заявку: открой витрину и нажми «📝 Оставить заявку».`;
-    return t;
-  })();;;
+  // Текст для шаринга: URL в самом конце (чтобы в превью чата не светилась ссылка).
+  const plain = buildWsSharePlain(ws, wsId, variant);
   const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('⁠')}&text=${encodeURIComponent(plain)}`;
 
   const kb = new InlineKeyboard()
