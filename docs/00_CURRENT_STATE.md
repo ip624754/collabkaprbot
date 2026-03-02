@@ -26,12 +26,12 @@
 
 ## 0.05) Выводы последнего регресс-аудита + watchlist
 
-Snapshot: **2026-03-02** (STEP267 Full Regression Audit) — новых **P0/P1** не найдено; совместимость шаринга и degraded‑навигация поддержки подтверждены.
+Snapshot: **2026-03-02** (STEP269 Deep Research Audit) — P0 не найдено; шаринг (U+2060 workaround), degraded‑навигация поддержки и anti‑bypass для IG Templates подтверждены.
 
 Рисковые зоны (если трогаешь — обязателен `npm run preflight` + ручной smoke):
 1) **Share-URL workaround:** не убирать формат `t.me/share/url?url=<U+2060>&text=...` — иначе часть Telegram‑клиентов снова “молчит” на кнопках шаринга.
 2) **Support при Redis degraded:** `a:support` / `a:support_push` должны оставаться `guard: NONE` (поток ввода `a:support_write` может быть `REQUIRE_REDIS`).
-3) **IG Templates anti-bypass:** не вставлять `@username`, “ссылка в профиле” и любые контакты; только CTA через витрину/заявку в боте.
+3) **IG Templates anti-bypass:** не вставлять `@username`, “ссылка в профиле”, портфолио/внешние ссылки и любые контакты; только CTA через витрину/заявку в боте.
 4) **Brand Inbox atomics:** до `✅ Принять` доступны только `✅ Принять / ⛔ Спам / 🗑 Удалить`; переход `new → in_progress` строго атомарный (DB‑truth).
 5) **`/api/health` + cron:** новые cron‑задачи — через `api/cron_router.js`, с lock+throttle и отражением в health без лишних DB‑запросов.
 6) **Official publish:** token‑lock + DB‑reserve `PUBLISHING` менять только с мигра‑планом; иначе риск дублей в @collabka_offers.
