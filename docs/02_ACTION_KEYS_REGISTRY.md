@@ -5,8 +5,8 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **507**
-- Actions in registry: **507**
+- Actions in code: **508**
+- Actions in registry: **508**
 
 ## Summary by type
 
@@ -16,14 +16,14 @@
 | edit | 336 |
 | ops | 75 |
 | pay | 11 |
-| view | 2 |
+| view | 3 |
 
 ## Summary by guard
 
 | Guard | Count |
 |---|---:|
 | db_truth | 2 |
-| none | 129 |
+| none | 130 |
 | queue_first | 2 |
 | require_redis | 374 |
 
@@ -473,6 +473,7 @@
 | `a:pm_tog` | edit | require_redis |
 | `a:pm_view` | edit | none |
 | `a:pro_home` | edit | none |
+| `a:push_ack` | view | none |
 | `a:role_pick` | edit | require_redis |
 | `a:send_request_to_creator` | edit | none |
 | `a:setup` | edit | require_redis |
@@ -482,7 +483,6 @@
 | `a:support_write` | ops | require_redis |
 | `a:team` | edit | require_redis |
 | `a:ui_mode_set` | edit | require_redis |
-| `a:push_ack` | view | none |
 | `a:usr_ack` | view | none |
 | `a:verify_home` | edit | none |
 | `a:verify_info` | edit | none |

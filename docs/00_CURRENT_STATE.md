@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-01
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-02
 
 ## Staff audit
 
@@ -73,6 +73,7 @@
 - STEP246: Release preflight — добавлен grep‑gate `lint:redis-atomic`, который запрещает возвращать в runtime‑код неатомарные связки Redis-команд (LPUSH+LTRIM, INCR+EXPIRE, LRANGE+LTRIM) вне `src/lib/redis.js`. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
 - STEP247: Release preflight — добавлен grep‑gate `lint:public-contacts`, который предотвращает регрессии “утечки контактов через пользовательский текст” в публичных карточках (offer description / storefront about) до unlock. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
 - STEP248: Release preflight — добавлен gate `lint:redis-exports`, который гарантирует наличие обязательных named exports в `src/lib/redis.js` (`incrWithExpireOnFirst`, `incrWithExpire`, `lpushTrim`) и предотвращает падение Vercel на ESM импортах (`does not provide an export named ...`). Дополнительно: в 3 файлах (`bot.js/cron.js/queries.js`) используем namespace import с **atomic/no-op fallback**, чтобы даже при частичном cherry‑pick’е бот не падал на старте. См. `docs/process/10_RELEASE_PREFLIGHT.md`.
+- STEP250: Repo sync fix — `src/lib/redis.js` теперь реально экспортирует `incrWithExpireOnFirst`, `incrWithExpire`, `lpushTrim` (Lua/atomic), а `api/qstash/broadcast-deliver.js` больше не использует non-atomic `INCR+EXPIRE` (переведено на helper). Это чинит падение preflight (`lint:redis-exports`, `lint:redis-atomic`) и исключает Vercel build/regression. Также обновлён `docs/02_ACTION_KEYS_REGISTRY.md`, чтобы `npm run preflight` не оставлял “грязный” diff.
 - STEP232–STEP233: NotebookLM audit (docs‑only) — подготовлен понятный docs‑pack для аудита по текущему состоянию (без кода), добавлены входной индекс и отдельный prompt для docs‑only. См. `docs/audit/05_NOTEBOOKLM_DOCS_ONLY_ENTRYPOINT_2026_03.md`.
 
 
@@ -923,4 +924,3 @@ Auto-heal safeguards + ops alerts:
 - Исправлено поведение `a:menu_push`: теперь меню всегда рендерится в отдельное «UI-сообщение» (через placeholder `⌛ Открываю меню…`).
 - Исходное админское/системное сообщение остаётся «квитанцией» и не перезаписывается.
 - Добавлен safe-fallback: если placeholder не удалось отправить — бот открывает меню обычным способом.
-
