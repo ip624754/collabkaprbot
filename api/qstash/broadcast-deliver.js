@@ -1,5 +1,5 @@
 import { CFG } from '../../src/lib/config.js';
-import { redis, k } from '../../src/lib/redis.js';
+import { redis, k, incrWithExpireOnFirst } from '../../src/lib/redis.js';
 import * as db from '../../src/db/queries.js';
 import { getBot } from '../../src/bot/bot.js';
 import {
@@ -67,15 +67,13 @@ async function resetBroadcastQuarantineCount(broadcastId, userId) {
 async function bumpBroadcastQuarantineCount(broadcastId, userId) {
   try {
     const key = broadcastQuarantineCountKey(broadcastId, userId);
-    const v = await redis.incr(key);
-    try {
-      await redis.expire(key, 24 * 60 * 60);
-    } catch {}
+    const v = await incrWithExpireOnFirst(key, 24 * 60 * 60);
     return Number(v) || 0;
   } catch {
     return 0;
   }
 }
+
 
 function getQuarantineThreshold() {
   const v = Number(process.env.BROADCAST_QUARANTINE_THRESHOLD || 3) || 3;
