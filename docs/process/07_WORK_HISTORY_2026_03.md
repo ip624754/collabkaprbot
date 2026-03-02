@@ -53,6 +53,7 @@
 - Дата: 2026-03-01
 
 ## 2026-03-02
+- STEP252: Vercel warnings hardening — убрали DEP0169 (no query‑getter в api routes; парсим через WHATWG URL) и устранили pg deprecation про concurrent `client.query()` (ленивый `SET statement_timeout` перед первой query).
 
 ### STEP239 — Anti-bypass: offer description (contacts leak)
 - Закрыт bypass монетизации: креатор мог вставить контакты в `barter_offers.description`, и бренд видел их до unlock.
