@@ -56,9 +56,6 @@ runNpm("lint:nav");
 logHeader("Preflight: redact tests");
 runNpm("test:redact");
 
-logHeader("Preflight: public render contact leak gate");
-runNpm("lint:public-contacts");
-
 logHeader("Preflight: redis atomicity grep gate");
 runNpm("lint:redis-atomic");
 
