@@ -56,8 +56,14 @@ runNpm("lint:nav");
 logHeader("Preflight: redact tests");
 runNpm("test:redact");
 
+logHeader("Preflight: public render contact leak gate");
+runNpm("lint:public-contacts");
+
 logHeader("Preflight: redis atomicity grep gate");
 runNpm("lint:redis-atomic");
+
+logHeader("Preflight: redis.js exports gate");
+runNpm("lint:redis-exports");
 
 // eslint-disable-next-line no-console
 console.log("\n✅ Preflight OK");
