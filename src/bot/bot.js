@@ -2,16 +2,19 @@ import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import crypto from 'crypto';
 import { CFG, assertEnv } from '../lib/config.js';
 import logger from '../lib/logger.js';
-import {
-  redis,
-  k,
-  rateLimit,
-  consumeOnce,
-  acquireLock,
-  releaseLock,
-  lpushTrim,
-  incrWithExpireOnFirst,
-} from '../lib/redis.js';
+import * as R from '../lib/redis.js';
+
+// Build-compat: avoid hard ESM named-import crashes if a partial cherry-pick updates
+// call-sites but not `src/lib/redis.js`. Fallbacks are atomic-only / no-op.
+const redis = R.redis;
+const k = R.k;
+const rateLimit = R.rateLimit;
+const consumeOnce = R.consumeOnce;
+const acquireLock = R.acquireLock;
+const releaseLock = R.releaseLock;
+const lpushTrim = typeof R.lpushTrim === 'function' ? R.lpushTrim : async () => false;
+const incrWithExpireOnFirst =
+  typeof R.incrWithExpireOnFirst === 'function' ? R.incrWithExpireOnFirst : async () => 0;
 import { setMonIntroDiag, setMonAcceptDiag, setMonUnlockDiag } from '../lib/monDiag.js';
 import * as db from '../db/queries.js';
 import { pool } from '../db/pool.js';

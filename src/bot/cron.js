@@ -1,11 +1,14 @@
-import {
-  redis,
-  k,
-  acquireLock,
-  releaseLock,
-  incrWithExpire,
-  incrWithExpireOnFirst,
-} from '../lib/redis.js';
+import * as R from '../lib/redis.js';
+
+// Build-compat: avoid hard ESM named-import crashes if a partial cherry-pick updates
+// call-sites but not `src/lib/redis.js`. Fallbacks are atomic-only / no-op.
+const redis = R.redis;
+const k = R.k;
+const acquireLock = R.acquireLock;
+const releaseLock = R.releaseLock;
+const incrWithExpire = typeof R.incrWithExpire === 'function' ? R.incrWithExpire : async () => 0;
+const incrWithExpireOnFirst =
+  typeof R.incrWithExpireOnFirst === 'function' ? R.incrWithExpireOnFirst : async () => 0;
 
 import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
