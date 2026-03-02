@@ -469,8 +469,10 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:send_request_to_creator": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:setup": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:share": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
-  "a:support": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
-  "a:support_push": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
+  // Navigation to support must be fail-open even if Redis is degraded.
+  // Only the write/expectText flow requires Redis.
+  "a:support": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.NONE },
+  "a:support_push": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.NONE },
   "a:support_write": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:team": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:ui_mode_set": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },

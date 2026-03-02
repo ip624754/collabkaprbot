@@ -9332,7 +9332,11 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
   const text = buildWsShareText(ws, wsId, variant);
   // Текст для шаринга: URL в самом конце (чтобы в превью чата не светилась ссылка).
   const plain = buildWsSharePlain(ws, wsId, variant);
-  const shareUrl = `https://t.me/share/url?text=${encodeURIComponent(plain)}`;
+  // IMPORTANT: Some Telegram clients ignore share links without the `url=` param.
+  // At the same time we don't want a real URL to appear as the first line in the recipient preview.
+  // Use a harmless invisible character for `url=` and keep the actual content in `text=`.
+  // U+2060 WORD JOINER is stable across encoders.
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('\u2060')}&text=${encodeURIComponent(plain)}`;
 
   const kb = new InlineKeyboard()
     .url('📨 Отправить', shareUrl)
