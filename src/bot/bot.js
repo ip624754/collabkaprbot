@@ -9399,8 +9399,7 @@ function buildWsIgTemplate(ws, wsId, type = 'story') {
 
   // Do NOT include IG handle in templates (anti-bypass).
 
-  const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
-  const port1 = ports[0] ? String(ports[0]) : '';
+  // IMPORTANT: Do NOT include portfolio links in IG templates (portfolio may contain contacts).
 
   // Do NOT include contacts in IG templates (anti-bypass).
 
@@ -9424,14 +9423,12 @@ function buildWsIgTemplate(ws, wsId, type = 'story') {
       offerLine,
       `Ниши: ${verticalsTxt}`,
       `Форматы: ${formatsTxt}`,
-      port1 ? `Портфолио: ${port1}` : `Портфолио: —`,
       link ? `Для связи — заполните заявку в Telegram: ${link}` : `Для связи — заявка в Telegram: —`,
     ].filter(Boolean).join('\n'),
     dm: [
       `Привет! Я — ${title}.`,
       `Делаю: ${offerLine}`,
       `Ниши: ${verticalsTxt}. Форматы: ${formatsTxt}.`,
-      port1 ? `Портфолио: ${port1}` : '',
       link ? `Если актуально — оставьте заявку/ТЗ в Telegram (1 мин): ${link}` : `Если актуально — заявка/ТЗ в Telegram: —`,
     ].filter(Boolean).join('\n'),
     bio: [
@@ -9450,7 +9447,7 @@ function buildWsIgTemplate(ws, wsId, type = 'story') {
     type === 'story'
       ? `💡 В Stories добавь <b>стикер-ссылку</b> на витрину (Telegram).`
       : type === 'bio'
-        ? `💡 Можно поставить в bio или в link-in-bio.`
+        ? `💡 Можно поставить в bio.`
         : `💡 Скопируй и вставь, потом при желании подправь 1–2 строки под себя.`;
 
   // Anti-bypass: no contacts in template footer. Only bot link is in the template body.
@@ -9470,9 +9467,7 @@ function buildWsIgDmRaw(ws, wsId, tone = 'soft', variantIndex = 0) {
   const verticalsTxt = fmtMatrix(ws.profile_verticals, PROFILE_VERTICALS);
   const formatsTxt = fmtMatrix(ws.profile_formats, PROFILE_FORMATS);
 
-  // Do NOT include IG handle in templates (anti-bypass).
-  const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
-  const port1 = ports[0] ? String(ports[0]) : '';
+  // IMPORTANT: Do NOT include portfolio links in IG DM templates (portfolio may contain contacts).
 
   const offerLine = (() => {
     if (mode === 'ugc') return 'UGC-контент для брендов (видео/сторис/распаковки) + материалы для рекламы.';
@@ -9485,21 +9480,18 @@ function buildWsIgDmRaw(ws, wsId, tone = 'soft', variantIndex = 0) {
       `Привет! Я — ${title} 👋`,
       `Увидела ваш бренд и хочу предложить коллаб: ${offerLine}`,
       `Ниши: ${verticalsTxt}. Форматы: ${formatsTxt}.`,
-      port1 ? `Портфолио: ${port1}` : '',
       link ? `Если ок — можно быстро оставить ТЗ/заявку в Telegram (1 мин): ${link}` : '',
     ].filter(Boolean).join('\n'),
     [
       `Здравствуйте! Я — ${title}.`,
       `Делаю ${offerLine}`,
       `Могу снять: ${formatsTxt} (ниши: ${verticalsTxt}).`,
-      port1 ? `Примеры: ${port1}` : '',
       link ? `Чтобы не теряться — оставьте заявку в Telegram: ${link}` : '',
     ].filter(Boolean).join('\n'),
     [
       `Добрый день! Я — ${title}.`,
       `Ищу коллабы с брендами в нишах: ${verticalsTxt}.`,
       `Форматы: ${formatsTxt}. ${offerLine}`,
-      port1 ? `Портфолио: ${port1}` : '',
       link ? `Если интересно — вот витрина/заявка в Telegram: ${link}` : '',
     ].filter(Boolean).join('\n'),
   ];
@@ -9509,7 +9501,6 @@ function buildWsIgDmRaw(ws, wsId, tone = 'soft', variantIndex = 0) {
       `Привет! Я — ${title}.`,
       `Снимаю ${formatsTxt} для брендов (ниши: ${verticalsTxt}).`,
       `Могу сделать ${offerLine}`,
-      port1 ? `Портфолио: ${port1}` : '',
       link ? `Если хотите обсудить быстро — ТЗ/заявка в Telegram: ${link}` : '',
     ].filter(Boolean).join('\n'),
     [
@@ -9523,7 +9514,6 @@ function buildWsIgDmRaw(ws, wsId, tone = 'soft', variantIndex = 0) {
       `Привет! Я — ${title}.`,
       `Делаю контент “под рекламу” + быстрые согласования.`,
       `Форматы: ${formatsTxt}. Ниши: ${verticalsTxt}.`,
-      port1 ? `Примеры: ${port1}` : '',
       link ? `Если актуально — заполните короткую заявку в Telegram: ${link}` : '',
     ].filter(Boolean).join('\n'),
   ];
