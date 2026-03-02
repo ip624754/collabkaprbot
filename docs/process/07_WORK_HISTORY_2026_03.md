@@ -117,3 +117,30 @@
 - Док обновлён: `docs/process/10_RELEASE_PREFLIGHT.md`.
 
 Риск регрессий: **минимальный** (dev‑инструмент; не влияет на runtime, только предотвращает возврат опасных паттернов).
+
+
+### STEP247 — Preflight guardrail: public contacts leak gate
+- В preflight добавлен `lint:public-contacts` — точечный grep‑gate для **публичных (brand‑facing) карточек**, чтобы не вернуть регрессию “утечка контактов через пользовательский текст”.
+- Сейчас проверяет два ключевых инварианта в `src/bot/bot.js`:
+  - `renderBxPublicView`: `barter_offers.description` редактируется для non‑owners до unlock (через `redactContactsInText`).
+  - `renderWsPublicProfile`: `ws.profile_about` редактируется для non‑owners до revealContacts.
+- Gate ловит прямой вывод сырого текста (например `escapeHtml(o.description)` / `clipText(aboutRaw)`), который обходил paywall.
+- Док обновлён: `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+Риск регрессий: **минимальный** (dev‑инструмент; не влияет на runtime, только предотвращает возврат P1 bypass).
+
+
+### STEP248 — Preflight guardrail: redis.js exports gate (ESM build safety)
+- В preflight добавлен `lint:redis-exports` — проверка, что `src/lib/redis.js` содержит обязательные named exports:
+  - `incrWithExpireOnFirst`
+  - `incrWithExpire`
+  - `lpushTrim`
+- Зачем: предотвращает падение Vercel/Node ESM на старте функций с ошибкой вида:
+  - `SyntaxError: The requested module '../lib/redis.js' does not provide an export named ...`
+- Док обновлён: `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+Дополнительно (runtime safety):
+- В `src/db/queries.js`, `src/bot/bot.js`, `src/bot/cron.js` используем namespace import (`import * as R`) вместо жёстких named imports.
+- Fallback’и для отсутствующих helper’ов **atomic‑only / no‑op** (никаких `INCR+EXPIRE` или `LPUSH+LTRIM`), чтобы не возвращать non‑atomic паттерны и при этом не падать на старте.
+
+Риск регрессий: **минимальный** (основной путь использует реальные helper’ы; fallback’и — no‑op для метрик/буферов и не меняют продуктовую логику, зато исключают crash на старте).
