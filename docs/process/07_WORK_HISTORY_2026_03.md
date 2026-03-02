@@ -144,3 +144,20 @@
 - Fallback’и для отсутствующих helper’ов **atomic‑only / no‑op** (никаких `INCR+EXPIRE` или `LPUSH+LTRIM`), чтобы не возвращать non‑atomic паттерны и при этом не падать на старте.
 
 Риск регрессий: **минимальный** (основной путь использует реальные helper’ы; fallback’и — no‑op для метрик/буферов и не меняют продуктовую логику, зато исключают crash на старте).
+
+## 2026-03-02
+
+### STEP250 — Repo sync fix: Redis helper exports + atomic quarantine counter
+- `src/lib/redis.js`: добавлены реальные named exports (Lua/atomic):
+  - `incrWithExpireOnFirst`
+  - `incrWithExpire`
+  - `lpushTrim`
+- `api/qstash/broadcast-deliver.js`: устранён non-atomic паттерн `INCR+EXPIRE` (который ловит `lint:redis-atomic`) — заменено на `incrWithExpireOnFirst()` для quarantine‑счётчика (TTL 24h).
+- `docs/02_ACTION_KEYS_REGISTRY.md`: регенерирован через `npm run actions:md`, чтобы `npm run preflight` проходил чисто (без auto-доступления файла).
+- Обновлены docs: `docs/00_CURRENT_STATE.md` + текущая запись в истории.
+
+Почему:
+- Репозиторий был в неконсистентном состоянии: preflight guardrail `lint:redis-exports` требовал exports, но `redis.js` их не содержал → сборка могла падать/гейт мог валиться.
+- `broadcast-deliver` содержал `redis.incr` + `redis.expire` рядом → окно гонки + риск “бессмертных” ключей.
+
+Риск регрессий: **низкий** (меняем только helper’ы Redis и один счётчик quarantine; логика продукта не меняется).
