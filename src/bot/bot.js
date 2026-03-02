@@ -9332,7 +9332,7 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
   const text = buildWsShareText(ws, wsId, variant);
   // Текст для шаринга: URL в самом конце (чтобы в превью чата не светилась ссылка).
   const plain = buildWsSharePlain(ws, wsId, variant);
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('⁠')}&text=${encodeURIComponent(plain)}`;
+  const shareUrl = `https://t.me/share/url?text=${encodeURIComponent(plain)}`;
 
   const kb = new InlineKeyboard()
     .url('📨 Отправить', shareUrl)
@@ -9930,7 +9930,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
   blocks.push('');
   if (isPreview) {
     blocks.push(`👁 <b>Предпросмотр</b>: так бренды видят твою витрину.`);
-    if (isOwner) blocks.push(`🔗 Чтобы поделиться витриной — нажми «🔗 Поделиться» ниже.`);
+    if (isOwner) blocks.push(`🔗 Чтобы поделиться витриной — нажми «🔗 Поделиться» ниже. Для Instagram — «📌 IG шаблоны».`);
   } else {
     if (hideApply) blocks.push(`🪟 Витрина (read-only): продолжай через «💬 Диалог». Контакты на витрине — через «${contactUnlockBtnLabel()}».`);
     else blocks.push(`🪟 Витрина: нажми «📝 Оставить заявку». Контакты на витрине — через «${contactUnlockBtnLabel()}».`);
@@ -10120,22 +10120,34 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     // Preview: keep buttons minimal (no direct contact links).
   }
 
-  // Owner-only CTA (sharing tools)
+  // Preview/owner actions (separate from platforms)
   if (isOwner) {
-    kb.text('🔗 Поделиться', `a:ws_share|ws:${wsId}`)
+    kb
+      .text('🔗 Поделиться', `a:ws_share|ws:${wsId}`)
       .text('📌 IG шаблоны', `a:ws_ig_templates|ws:${wsId}`)
       .row();
   }
 
-  // Links
-  if (ws.channel_username && linksEnabled) kb.url(isOwner ? '📣 Мой канал' : '📣 Telegram канал', `https://t.me/${String(ws.channel_username).replace(/^@/, '')}`);
-  if (ig && linksEnabled) kb.url('📸 Instagram', `https://instagram.com/${ig}`);
-  if (ports.length && linksEnabled) {
-    const u0 = String(ports[0] || '').trim();
-    if (u0) kb.url('🗂 Портфолио', u0);
+  // Platforms (only when links are enabled)
+  if (linksEnabled) {
+    const plats = [];
+    if (ws.channel_username) plats.push({ t: (isOwner ? '📣 Мои каналы' : '📣 Telegram канал'), u: `https://t.me/${String(ws.channel_username).replace(/^@/, '')}` });
+    if (ig) plats.push({ t: '📸 Instagram', u: `https://instagram.com/${ig}` });
+    if (ports.length) {
+      const u0 = String(ports[0] || '').trim();
+      if (u0) plats.push({ t: '🗂 Портфолио', u: u0 });
+    }
+
+    for (let i = 0; i < plats.length; i++) {
+      kb.url(plats[i].t, plats[i].u);
+      if (i % 2 === 1) kb.row();
+    }
   }
+
   const backCb = opts?.backCb || (isOwner ? `a:ws_profile|ws:${wsId}` : null);
-  kbNavRow(kb, backCb);
+  kb.row();
+  if (backCb) kb.text('⬅️ Назад', backCb);
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   if (ctx.callbackQuery) await safeEditOrReply(ctx, text, extra);
