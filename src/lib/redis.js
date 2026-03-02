@@ -140,16 +140,24 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
     const r = await redis.eval(script, [key], [String(win)]);
     current = Number(r || 0);
   } catch {
-    // Redis degraded: fail-open (rate-limit is best-effort).
-    // IMPORTANT: do NOT fallback to non-atomic INCR+EXPIRE here (can create immortal keys).
-    return {
-      ok: true,
-      allowed: true,
-      remaining: lim,
-      limit: lim,
-      current: 0,
-      resetSec: win
-    };
+    // Fallback: best-effort (non-atomic)
+    try {
+      const r = await redis.incr(key);
+      current = Number(r || 0);
+      if (current == 1) {
+        await redis.expire(key, win);
+      }
+    } catch {
+      // Redis down: fail-open (rate-limit is best-effort)
+      return {
+        ok: true,
+        allowed: true,
+        remaining: Number.POSITIVE_INFINITY,
+        limit: lim,
+        current: 0,
+        resetSec: win
+      };
+    }
   }
 
   let ttl = null;
@@ -171,82 +179,99 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
     resetSec: ttl ?? win
   };
 }
-
-
 // =====================================================
-// Atomic Redis helpers (Upstash REST safe)
-//
-// Goal: remove remaining non-atomic command pairs like INCR+EXPIRE and LPUSH+LTRIM.
-// These helpers are best-effort and must never break bot UX.
+// Atomic counter helpers (Lua)
 // =====================================================
 
-const LUA_INCR_EXPIRE_ON_FIRST = `
-  local v = redis.call('INCR', KEYS[1])
-  if v == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) end
-  return v
-`;
-
-const LUA_INCR_EXPIRE_ALWAYS = `
-  local v = redis.call('INCR', KEYS[1])
-  redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
-  return v
-`;
-
-const LUA_LPUSH_TRIM_EXPIRE = `
-  redis.call('LPUSH', KEYS[1], ARGV[1])
-  redis.call('LTRIM', KEYS[1], 0, tonumber(ARGV[2]) - 1)
-  local ttl = tonumber(ARGV[3])
-  if ttl and ttl > 0 then
-    redis.call('EXPIRE', KEYS[1], ttl)
-  end
-  return 1
-`;
-
-// Atomically INCR key and set EXPIRE only on the first hit.
-// Returns the current value, or 0 if Redis is unavailable.
+// INCR key; if first hit => EXPIRE ttlSec (does not extend TTL on subsequent hits)
 export async function incrWithExpireOnFirst(key, ttlSec) {
-  const k0 = String(key || '').trim();
-  const ttl = Math.max(1, Number(ttlSec) || 0);
-  if (!k0 || !ttl) return 0;
+  if (!key) return 0;
+  const ttl = Number(ttlSec);
+  if (!Number.isFinite(ttl) || ttl <= 0) {
+    try { return Number(await redis.incr(key)) || 0; } catch { return 0; }
+  }
+
   try {
-    const r = await redis.eval(LUA_INCR_EXPIRE_ON_FIRST, [k0], [String(ttl)]);
-    return Number(r) || 0;
+    const script = `
+      local v = redis.call('INCR', KEYS[1])
+      if v == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+      return v
+    `;
+    const r = await redis.eval(script, [key], [String(ttl)]);
+    return Number(r || 0);
   } catch {
-    // Do not fallback to non-atomic INCR+EXPIRE (can create immortal keys).
-    return 0;
+    // Fallback: best-effort (non-atomic)
+    try {
+      const r = await redis.incr(key);
+      const v = Number(r || 0);
+      if (v == 1) {
+        try { await redis.expire(key, ttl); } catch {}
+      }
+      return v;
+    } catch {
+      return 0;
+    }
   }
 }
 
-// Atomically INCR key and refresh EXPIRE every time (bounded storage).
-// Returns the current value, or 0 if Redis is unavailable.
+// INCR key; always EXPIRE ttlSec (sliding TTL)
 export async function incrWithExpire(key, ttlSec) {
-  const k0 = String(key || '').trim();
-  const ttl = Math.max(1, Number(ttlSec) || 0);
-  if (!k0 || !ttl) return 0;
+  if (!key) return 0;
+  const ttl = Number(ttlSec);
+  if (!Number.isFinite(ttl) || ttl <= 0) {
+    try { return Number(await redis.incr(key)) || 0; } catch { return 0; }
+  }
+
   try {
-    const r = await redis.eval(LUA_INCR_EXPIRE_ALWAYS, [k0], [String(ttl)]);
-    return Number(r) || 0;
+    const script = `
+      local v = redis.call('INCR', KEYS[1])
+      redis.call('EXPIRE', KEYS[1], ARGV[1])
+      return v
+    `;
+    const r = await redis.eval(script, [key], [String(ttl)]);
+    return Number(r || 0);
   } catch {
-    // Best-effort: metrics/counters must never break bot.
-    return 0;
+    // Fallback: best-effort (non-atomic)
+    try {
+      const r = await redis.incr(key);
+      const v = Number(r || 0);
+      try { await redis.expire(key, ttl); } catch {}
+      return v;
+    } catch {
+      return 0;
+    }
   }
 }
 
-// Atomically LPUSH + LTRIM (+ optional EXPIRE) for bounded Redis lists.
-// Returns true if pushed, false otherwise.
-export async function lpushTrim(listKey, payload, maxLen, ttlSec = null) {
-  const k0 = String(listKey || '').trim();
-  const maxN = Math.max(1, Number(maxLen) || 1);
-  const ttl = Math.max(0, Number(ttlSec) || 0);
-  if (!k0) return false;
+// LPUSH + LTRIM (bounded list) with optional EXPIRE; atomic via Lua.
+export async function lpushTrim(key, value, maxLen = 200, ttlSec = null) {
+  if (!key) return false;
+  const n = Math.max(1, Number(maxLen) || 1);
+  const ttl = ttlSec === null || ttlSec === undefined ? null : Number(ttlSec);
+
   try {
-    await redis.eval(
-      LUA_LPUSH_TRIM_EXPIRE,
-      [k0],
-      [String(payload ?? ''), String(maxN), String(ttl)]
-    );
-    return true;
+    const script = `
+      redis.call('LPUSH', KEYS[1], ARGV[1])
+      redis.call('LTRIM', KEYS[1], 0, tonumber(ARGV[2]) - 1)
+      if ARGV[3] and ARGV[3] ~= '' then
+        redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
+      end
+      return 1
+    `;
+    const args = [String(value), String(n), (Number.isFinite(ttl) && ttl > 0) ? String(ttl) : ''];
+    const r = await redis.eval(script, [key], args);
+    return Number(r || 0) === 1;
   } catch {
-    return false;
+    // Fallback: best-effort (non-atomic)
+    try {
+      await redis.lpush(key, value);
+      await redis.ltrim(key, 0, n - 1);
+      if (Number.isFinite(ttl) && ttl > 0) {
+        try { await redis.expire(key, ttl); } catch {}
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
