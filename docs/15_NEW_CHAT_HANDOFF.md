@@ -45,7 +45,7 @@
 - Cron safety: token-based Redis locks + SQL atomic guards на статусных переходах; notify ограничены по времени (withTimeout ~5s)
 
 Пожалуйста:
-1) прочитай docs/README.md → затем docs/00_BOOT.md → затем docs/00_CURRENT_STATE.md
+1) прочитай docs/README.md → затем docs/00_BOOT.md → затем docs/00_CURRENT_STATE.md (в т.ч. раздел «Выводы последнего регресс-аудита + watchlist»)
 2) перечисли 3–7 самых рисковых зон регрессий
 3) предложи следующий микро‑шаг без расширения поверхности и без лишних DB‑запросов в меню
 
