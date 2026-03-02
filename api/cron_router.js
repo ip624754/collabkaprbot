@@ -9,10 +9,8 @@ function getBearerToken(req) {
 }
 
 function getJob(req) {
-  // Vercel обычно даёт query, но на всякий случай парсим URL.
-  const q = req?.query?.job;
-  if (q) return String(q);
-
+  // Не трогаем query-getter: в Vercel это getter, который внутри дергает legacy url.parse()
+  // и поднимает DEP0169. Парсим URL только через WHATWG URL API.
   try {
     const u = new URL(req.url, 'http://localhost');
     const j = u.searchParams.get('job');
