@@ -9387,8 +9387,9 @@ async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
 
 function buildWsIgTemplate(ws, wsId, type = 'story') {
   const link = wsBrandLink(wsId) || '';
-  const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
-  const title = String(ws.profile_title || channel);
+  // Anti-bypass: IG templates must not expose creator/channel handles.
+  // Keep copy-paste templates generic and route contact only through the bot link.
+  const title = 'креатор Collabka PR';
 
   const mode = String(ws.profile_mode || 'both');
   const modeLine = PROFILE_MODE_LABELS[mode] || PROFILE_MODE_LABELS.both;
@@ -9396,14 +9397,12 @@ function buildWsIgTemplate(ws, wsId, type = 'story') {
   const verticalsTxt = fmtMatrix(ws.profile_verticals, PROFILE_VERTICALS);
   const formatsTxt = fmtMatrix(ws.profile_formats, PROFILE_FORMATS);
 
-  const ig = ws.profile_ig ? String(ws.profile_ig).trim() : '';
-  const igCode = ig ? `@${ig.replace(/^@/, '')}` : '';
-  const igLink = ig ? `https://instagram.com/${ig.replace(/^@/, '')}` : '';
+  // Do NOT include IG handle in templates (anti-bypass).
 
   const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
   const port1 = ports[0] ? String(ports[0]) : '';
 
-  const contact = ws.profile_contact ? String(ws.profile_contact).trim() : '';
+  // Do NOT include contacts in IG templates (anti-bypass).
 
   // Decide best "offer line" depending on mode
   const offerLine = (() => {
@@ -9412,48 +9411,33 @@ function buildWsIgTemplate(ws, wsId, type = 'story') {
     return 'UGC + интеграции в Telegram-канале + конкурсы/розыгрыши.';
   })();
 
-  const common = {
-    title,
-    channel,
-    modeLine,
-    verticalsTxt,
-    formatsTxt,
-    link,
-    igCode,
-    igLink,
-    port1,
-    contact,
-    offerLine
-  };
-
   const templates = {
     story: [
       `Бренды 🤝 открыта к коллабам`,
       `${offerLine}`,
       `Ниши: ${verticalsTxt}`,
       `Форматы: ${formatsTxt}`,
-      link ? `ТЗ/заявка в TG: ${link}` : `ТЗ/заявка в TG: (ссылка из профиля)`,
+      link ? `Для связи — заявка в TG: ${link}` : `Для связи — заявка в TG: —`,
     ].join('\n'),
     post: [
-      `Бренды, привет! Я ${title}.`,
+      `Бренды, привет! Я — ${title}.`,
       offerLine,
       `Ниши: ${verticalsTxt}`,
       `Форматы: ${formatsTxt}`,
-      port1 ? `Портфолио: ${port1}` : `Портфолио: (ссылка в TG-профиле)`,
-      link ? `Чтобы быстро обсудить — заполните заявку в Telegram: ${link}` : `Заявка в Telegram: (ссылка из профиля)`,
-      igCode ? `IG: ${igCode}` : '',
+      port1 ? `Портфолио: ${port1}` : `Портфолио: —`,
+      link ? `Для связи — заполните заявку в Telegram: ${link}` : `Для связи — заявка в Telegram: —`,
     ].filter(Boolean).join('\n'),
     dm: [
-      `Привет! Я ${title}.`,
+      `Привет! Я — ${title}.`,
       `Делаю: ${offerLine}`,
       `Ниши: ${verticalsTxt}. Форматы: ${formatsTxt}.`,
       port1 ? `Портфолио: ${port1}` : '',
-      link ? `Если актуально — оставьте заявку/ТЗ в TG (1 мин): ${link}` : `Если актуально — напишите, пришлю ссылку в TG.`,
+      link ? `Если актуально — оставьте заявку/ТЗ в Telegram (1 мин): ${link}` : `Если актуально — заявка/ТЗ в Telegram: —`,
     ].filter(Boolean).join('\n'),
     bio: [
       `UGC + Collabs`,
       `Ниши: ${verticalsTxt}`,
-      link ? `Заявка/ТЗ (TG): ${link}` : `Заявка/ТЗ (TG): (ссылка из профиля)`,
+      link ? `Заявка/ТЗ (TG): ${link}` : `Заявка/ТЗ (TG): —`,
     ].join(' | ')
   };
 
@@ -9479,15 +9463,14 @@ function buildWsIgTemplate(ws, wsId, type = 'story') {
 
 function buildWsIgDmRaw(ws, wsId, tone = 'soft', variantIndex = 0) {
   const link = wsBrandLink(wsId) || '';
-  const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
-  const title = String(ws.profile_title || channel);
+  // Anti-bypass: DM templates must not expose creator/channel handles.
+  const title = 'креатор Collabka PR';
 
   const mode = String(ws.profile_mode || 'both');
   const verticalsTxt = fmtMatrix(ws.profile_verticals, PROFILE_VERTICALS);
   const formatsTxt = fmtMatrix(ws.profile_formats, PROFILE_FORMATS);
 
-  const igHandle = normalizeIgHandle(ws.profile_ig);
-  const igCode = igHandle ? `@${igHandle}` : '';
+  // Do NOT include IG handle in templates (anti-bypass).
   const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
   const port1 = ports[0] ? String(ports[0]) : '';
 
@@ -9499,50 +9482,49 @@ function buildWsIgDmRaw(ws, wsId, tone = 'soft', variantIndex = 0) {
 
   const soft = [
     [
-      `Привет! Я ${title} 👋`,
+      `Привет! Я — ${title} 👋`,
       `Увидела ваш бренд и хочу предложить коллаб: ${offerLine}`,
       `Ниши: ${verticalsTxt}. Форматы: ${formatsTxt}.`,
       port1 ? `Портфолио: ${port1}` : '',
-      link ? `Если ок — можно быстро оставить ТЗ/заявку в TG (1 мин): ${link}` : '',
-      igCode ? `Мой IG: ${igCode}` : '',
+      link ? `Если ок — можно быстро оставить ТЗ/заявку в Telegram (1 мин): ${link}` : '',
     ].filter(Boolean).join('\n'),
     [
-      `Здравствуйте! Я ${title}.`,
+      `Здравствуйте! Я — ${title}.`,
       `Делаю ${offerLine}`,
       `Могу снять: ${formatsTxt} (ниши: ${verticalsTxt}).`,
       port1 ? `Примеры: ${port1}` : '',
-      link ? `Чтобы не теряться — оставьте заявку в TG: ${link}` : '',
+      link ? `Чтобы не теряться — оставьте заявку в Telegram: ${link}` : '',
     ].filter(Boolean).join('\n'),
     [
-      `Добрый день! Я ${title}.`,
+      `Добрый день! Я — ${title}.`,
       `Ищу коллабы с брендами в нишах: ${verticalsTxt}.`,
       `Форматы: ${formatsTxt}. ${offerLine}`,
       port1 ? `Портфолио: ${port1}` : '',
-      link ? `Если интересно — вот витрина/заявка в TG: ${link}` : '',
+      link ? `Если интересно — вот витрина/заявка в Telegram: ${link}` : '',
     ].filter(Boolean).join('\n'),
   ];
 
   const hard = [
     [
-      `Привет! Я ${title}.`,
+      `Привет! Я — ${title}.`,
       `Снимаю ${formatsTxt} для брендов (ниши: ${verticalsTxt}).`,
       `Могу сделать ${offerLine}`,
       port1 ? `Портфолио: ${port1}` : '',
-      link ? `Если хотите обсудить быстро — ТЗ/заявка в TG: ${link}` : '',
+      link ? `Если хотите обсудить быстро — ТЗ/заявка в Telegram: ${link}` : '',
     ].filter(Boolean).join('\n'),
     [
-      `Привет 👋 ${title} на связи.`,
+      `Привет 👋 на связи ${title}.`,
       `Нужно UGC/интеграция без долгих переписок?`,
       `${offerLine}`,
       `Ниши: ${verticalsTxt}. Форматы: ${formatsTxt}.`,
-      link ? `Киньте ТЗ сюда (TG, 1 мин): ${link}` : '',
+      link ? `Киньте ТЗ сюда (Telegram, 1 мин): ${link}` : '',
     ].filter(Boolean).join('\n'),
     [
-      `Привет! Я ${title}.`,
+      `Привет! Я — ${title}.`,
       `Делаю контент “под рекламу” + быстрые согласования.`,
       `Форматы: ${formatsTxt}. Ниши: ${verticalsTxt}.`,
       port1 ? `Примеры: ${port1}` : '',
-      link ? `Если актуально — заполните короткую заявку в TG: ${link}` : '',
+      link ? `Если актуально — заполните короткую заявку в Telegram: ${link}` : '',
     ].filter(Boolean).join('\n'),
   ];
 
