@@ -2,6 +2,16 @@ import { CFG } from '../../../src/lib/config.js';
 import { redis, k } from '../../../src/lib/redis.js';
 import * as db from '../../../src/db/queries.js';
 
+function getParam(req, name) {
+  try {
+    const u = new URL(req.url, 'http://localhost');
+    const v = u.searchParams.get(name);
+    return v ? String(v) : '';
+  } catch {
+    return '';
+  }
+}
+
 export default async function handler(req, res) {
   try {
     res.setHeader('Cache-Control', 'no-store');
@@ -22,7 +32,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const t = String(req.query?.t || '').trim();
+    const t = getParam(req, 't').trim();
     if (!t) { res.status(400).json({ ok: false, error: 'missing_t' }); return; }
 
     const payload = await redis.get(k(['ig_oauth_t', t]));

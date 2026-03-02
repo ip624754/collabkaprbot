@@ -24,6 +24,16 @@ function parseJsonb(raw) {
   try { return JSON.parse(String(raw)); } catch { return {}; }
 }
 
+function getParam(req, name) {
+  try {
+    const u = new URL(req.url, 'http://localhost');
+    const v = u.searchParams.get(name);
+    return v ? String(v) : '';
+  } catch {
+    return '';
+  }
+}
+
 export default async function handler(req, res) {
   try {
     noStore(res);
@@ -39,8 +49,8 @@ export default async function handler(req, res) {
       return;
     }
 
-    const code = String(req.query?.code || '').trim();
-    const state = String(req.query?.state || '').trim();
+    const code = getParam(req, 'code').trim();
+    const state = getParam(req, 'state').trim();
     if (!code || !state) {
       res.status(400).send(html('Bad request', '<h2>Ошибка</h2><p>Не хватает параметров <code>code</code>/<code>state</code>.</p>'));
       return;

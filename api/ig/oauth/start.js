@@ -15,6 +15,16 @@ function randomState() {
   try { return globalThis.crypto?.randomUUID?.() || String(Date.now()) + Math.random().toString(16).slice(2); } catch { return String(Date.now()) + Math.random().toString(16).slice(2); }
 }
 
+function getParam(req, name) {
+  try {
+    const u = new URL(req.url, 'http://localhost');
+    const v = u.searchParams.get(name);
+    return v ? String(v) : '';
+  } catch {
+    return '';
+  }
+}
+
 export default async function handler(req, res) {
   try {
     noStore(res);
@@ -31,7 +41,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const t = String(req.query?.t || '').trim();
+    const t = getParam(req, 't').trim();
     if (!t) {
       res.status(400).send(html('Bad request', '<h2>Ошибка</h2><p>Не передан параметр <code>t</code>.</p>'));
       return;
