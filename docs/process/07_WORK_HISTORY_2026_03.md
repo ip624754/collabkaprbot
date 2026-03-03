@@ -794,3 +794,28 @@ Smoke:
 - Запускать по `docs/audit/16_BRAND_LEADS_E2E_SMOKE_2026_03.md` (10–12 минут).
 
 Риск регрессий: **нулевой** (код не менялся).
+
+
+### STEP285 — Folders: disable Editors UI by default (owner-only)
+Цель:
+- Убрать из UI роль `👥 Editors` для папок, чтобы не плодить лишние сущности/вопросы.
+- Не ломать прод: папки остаются owner-only, а legacy кнопки Editors (если где-то остались) не должны создавать invite и должны отвечать предсказуемо.
+- Убрать лишнее DB-чтение из hot Menu render (если Editors не используются).
+
+Фикс:
+- `src/bot/bot.js`:
+  - `getRoleFlags`: проверка `hasAnyWorkspaceEditorRole` выполняется только если `WORKSPACE_EDITORS_ENABLED=1` (иначе `isFolderEditor=false`).
+  - `getFolderAccess`: доступ folder-editor запрещён, если `WORKSPACE_EDITORS_ENABLED` выключен.
+  - `foldersHomeKb`: кнопка `👥 Editors` показывается только при включённом флаге.
+  - callbacks `a:ws_editors`/invite/add/remove: при выключенном флаге возвращают «Отключено.»
+
+Docs:
+- `docs/audit/17_FOLDERS_EDITORS_DISABLED_BY_DEFAULT_2026_03.md` — отчёт.
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про Editors disabled + ссылка на audit 17.
+- `docs/process/11_ENV_CHEATSHEET_ONE_SCREEN.md` — добавлен ENV `WORKSPACE_EDITORS_ENABLED`.
+
+Smoke:
+- Owner: Workspace → `📁 Папки` → нет кнопки `👥 Editors`.
+- Папки owner работают как раньше.
+
+Риск регрессий: **низкий** (папки owner не тронуты; добавлена только защита/флаг и убран лишний DB read в меню по умолчанию).

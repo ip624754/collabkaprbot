@@ -15,6 +15,7 @@
 | `IG_OAUTH_UI_ENABLED` | `false` | Прячет UI подключения IG OAuth |
 | `IG_OAUTH_ENABLED` | `false` | Запрещает старт OAuth |
 | `IG_VERIFY_TICK_ENABLED` | `false` | Выключает legacy comment‑verify cron |
+| `WORKSPACE_EDITORS_ENABLED` | `0` | UI/роль Editors для папок (по умолчанию выключено) |
 
 ## Audit buffering / cooldown (устойчивость)
 
@@ -91,6 +92,9 @@ CRON_SECRET=<set>
 
 # Manual verification (the only one)
 VERIFICATION_ENABLED=true
+
+# Workspace folder editors (disabled by default)
+WORKSPACE_EDITORS_ENABLED=0
 
 # Instagram OAuth / verification (disabled)
 IG_ROUTES_ENABLED=false
