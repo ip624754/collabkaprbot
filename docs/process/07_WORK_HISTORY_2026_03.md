@@ -883,3 +883,19 @@ QA:
 - Прогнать сценарии A–D на prod/staging (10–15 минут).
 
 Риск регрессий: **нулевой** (код не менялся).
+
+### STEP289 — Broadcast: E2E smoke (docs-only)
+Цель:
+- Зафиксировать быстрый end‑to‑end smoke по рассылкам (Broadcast), чтобы убедиться, что gate без канала, создание с кнопками и механизм 429/cooldown работают предсказуемо и без тупиков.
+
+Изменения (docs-only):
+- Добавлен полный сценарий: `docs/audit/21_BROADCAST_E2E_SMOKE_2026_03.md`.
+- `smoke-tests_short.md` дополнен секцией 14 с кратким описанием и ссылкой на полный сценарий.
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про Broadcast smoke.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — этот шаг.
+
+QA:
+- Открыть `smoke-tests_short.md` и убедиться, что ссылка на `docs/audit/21_BROADCAST_E2E_SMOKE_2026_03.md` корректна.
+- Прогнать сценарии A–C на prod/staging (10–15 минут).
+
+Риск регрессий: **нулевой** (docs-only).
