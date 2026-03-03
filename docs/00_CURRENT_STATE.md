@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-02
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-03
 
 ## Staff audit
 
@@ -41,6 +41,14 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 10) **Dual-role (Creator + Brand + Manager):** переключение роли не должно оставлять “полу‑состояния”. При `a:ui_mode_set` всегда очищать brand‑manager state (bm_mode + active brand). В Redis degraded role switch должен быть **fail‑open** (выбранный режим показываем сразу), даже если его нельзя сохранить.
 11) **Brand/Manager return-to (ret) UX:** в списках "📝 Заявки" и "📌 Сделки" кнопка "⬅️ Назад" должна возвращать: владелец → в роль‑меню (a:menu), менеджер → в 📥 Inbox (a:bx_inbox). См. audit report 07.
 12) **Creator ↔ Curator (кураторский кабинет):** в UI использовать название «🧹 Кабинет куратора» (не «Кураторы блогера»); toggle режима куратора должен использовать `v:0/1` (не `v=...`); при Redis degraded кураторская навигация должна быть доступна (guard NONE), а invite/input/anti-spam send должны fail-closed с понятным сообщением. В ключевых сценариях “куратор обработал → владелец увидел → что дальше” должны быть явные подсказки (без тупиков). См. audit report 08/09.
+13) **Curator ↔ Brand Leads (очередь заявок):** в кураторском режиме должны быть явные подсказки “Что дальше” (очередь → карточка → действия). Возврат из карточки в `📨 Очередь заявок` должен сохранять фильтр назначения (`af: all/my/free`). В кураторском просмотре не показывать кликабельные контакты/URL. См. audit report 10.
+14) **Brand Leads (team notifications):** уведомления по жизненному циклу заявки (новая/взята/ответ/смена статуса/сообщение бренда) должны быть самодостаточными ("Что дальше"), без добавления новых действий и без спама (только при реальном изменении). См. audit report 11.
+15) **Manual replies: return-to-card:** после ручного ответа (owner `lead_reply` и brand `brand_app_reply`) оператор должен попадать обратно в карточку заявки/треда (не на отдельную «квитанцию»). Это снижает тупики и ускоряет дальнейшие действия.
+16) **Creator UI wording (context):** в подсказках креатора не оставлять brand‑термины без контекста. Упоминание «Inbox» должно быть пояснено как «входящие бренда внутри этого бота». См. audit report 13.
+17) **Brand Leads (brand-side signals):** бренд должен получать самодостаточные сообщения “что дальше” при ответе креатора/куратора и при ручной смене статуса заявки (без подсказок обхода unlock/контактов). См. audit report 14.
+18) **Brand Leads (brand reply receipt):** после ручного ответа бренда креатору (blead_reply) квитанция бренду должна содержать короткий блок «Что дальше» и оставаться самодостаточной, без новых действий. См. audit report 15.
+19) **«Что дальше» copy consistency:** новые тексты с блоком «Что дальше» делать по единому гайду, чтобы не разъезжались формулировки и не появлялись намёки на контакты/обход unlock. См. `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md` и smoke `docs/audit/16_...`.
+20) **Folders: Editors disabled by default:** чтобы не плодить лишние роли/вопросы и не добавлять DB‑чтения в hot Menu, UI/роль `👥 Editors` выключены по умолчанию. Включение только через `WORKSPACE_EDITORS_ENABLED=1`. См. audit report 17.
 
 Audit report (one-time scan): `docs/audit/04_CREATOR_UI_BRAND_ACTION_KEYS_AUDIT_2026_03.md`.
 
@@ -53,6 +61,22 @@ Audit report (Brand/Manager nav + ret): `docs/audit/07_BRAND_MANAGER_NAV_RET_AUD
 Audit report (Creator/Curator system): `docs/audit/08_CREATOR_CURATOR_SYSTEM_AUDIT_2026_03.md`.
 
 Audit report (Creator/Curator what-next UX): `docs/audit/09_CREATOR_CURATOR_WHAT_NEXT_UX_2026_03.md`.
+
+Audit report (Curator/Brand Leads what-next UX): `docs/audit/10_CURATOR_BRAND_LEADS_WHAT_NEXT_UX_2026_03.md`.
+
+Audit report (Brand Leads team notifications UX): `docs/audit/11_BRAND_LEADS_TEAM_NOTIFICATIONS_UX_2026_03.md`.
+
+Audit report (Manual reply return-to-card UX): `docs/audit/12_MANUAL_REPLY_RETURN_TO_CARD_UX_2026_03.md`.
+
+Audit report (Creator UI Inbox wording context): `docs/audit/13_CREATOR_UI_INBOX_WORDING_CONTEXT_UX_2026_03.md`.
+
+Audit report (Brand Leads brand-side what-next UX): `docs/audit/14_BRAND_LEADS_BRAND_SIDE_WHAT_NEXT_UX_2026_03.md`.
+
+Audit report (Brand Leads brand reply receipt what-next UX): `docs/audit/15_BRAND_LEADS_BRAND_REPLY_RECEIPT_WHAT_NEXT_UX_2026_03.md`.
+
+Audit report (Brand Leads E2E smoke): `docs/audit/16_BRAND_LEADS_E2E_SMOKE_2026_03.md`.
+
+Audit report (Folders Editors disabled): `docs/audit/17_FOLDERS_EDITORS_DISABLED_BY_DEFAULT_2026_03.md`.
 
 
 ---
