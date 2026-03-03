@@ -2352,7 +2352,7 @@ function mainMenuKb(flags = {}) {
 
   const extra = [];
   if (CFG.VERIFICATION_ENABLED) extra.push(['✅ Верификация', 'a:verify_home']);
-  if (isCurator) extra.push(['🧹 Кураторы блогера', 'a:cur_home']);
+  if (isCurator) extra.push(['🧹 Кабинет куратора', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -2475,7 +2475,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   kb.text('✨ Я Creator / канал', 'a:ui_mode_set|m:creator|ret:menu');
 
   const extra = [];
-  if (isCurator) extra.push(['🧹 Кураторы блогера', 'a:cur_home']);
+  if (isCurator) extra.push(['🧹 Кабинет куратора', 'a:cur_home']);
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
   if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
 
@@ -2965,7 +2965,7 @@ ${trialLine}
   const bCreator = `${effective === 'creator' ? '✅ ' : ''}✨ Creator / канал`;
   const bBrand = `${effective === 'brand' ? '✅ ' : ''}🏷 Бренд`;
   const bBm = `${effective === 'brand_manager' ? '✅ ' : ''}🧑‍💼 Я менеджер бренда`;
-  const bCur = `${effective === 'curator' ? '✅ ' : ''}🧹 Кураторы блогера`;
+  const bCur = `${effective === 'curator' ? '✅ ' : ''}🧹 Кабинет куратора`;
 
   const kb = new InlineKeyboard()
     .text(`▶️ Продолжить: ${modeLabel}`, 'a:menu')
@@ -3715,6 +3715,16 @@ async function getCuratorMode(tgId) {
   }
 }
 
+// Redis health probe (callback-safe). Use ONLY in non-hot flows (invites/input/safety).
+async function redisHealthOkQuick() {
+  try {
+    await redis.get(k(['health', 'redis_cb_guard']));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // UI mode: Creator vs Brand (reduce main menu overload)
 const UI_MODES = { CREATOR: 'creator', BRAND: 'brand' };
 
@@ -3940,7 +3950,7 @@ function wsMenuKb(wsId, opts = {}) {
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row();
 
-  if (showCurator) kb.text('🧹 Кураторы блогера', 'a:cur_home').row();
+  if (showCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
 
   kb.text('⬅️ Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
@@ -4436,7 +4446,7 @@ ${count ? cards : 'Пока нет.'}
 <b>Последние события:</b>
 ${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
 
-💡 Куратор открывает кабинет через «🧹 Кураторы блогера» в меню (если он назначен куратором хотя бы в одном канале).`;
+💡 Куратор открывает кабинет через «🧹 Кабинет куратора» в меню (если он назначен куратором хотя бы в одном канале).`;
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
@@ -4694,7 +4704,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
-  if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
+  if (showCurator) kb.row().text('🧹 Кабинет куратора', 'a:cur_home');
 
   kb.row().text(net, `a:net_q|ws:${wsId}|ret:bx`);
   kbNavRow(kb, `a:ws_open|ws:${wsId}`);
@@ -4725,7 +4735,7 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('🏷 Профиль бренда', `a:brand_profile|ws:${wsId}|ret:brand`);
 
 
-  if (showCurator) kb.row().text('🧹 Кураторы блогера', 'a:cur_home');
+  if (showCurator) kb.row().text('🧹 Кабинет куратора', 'a:cur_home');
 
   kbNavRow(kb, 'a:menu');
   return kb;
@@ -11030,7 +11040,8 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
   if (hasPrev) kb.text('⬅️', `a:brand_apps|ws:0|s:${st}|p:${p - 1}`);
   if (hasNext) kb.text('➡️', `a:brand_apps|ws:0|s:${st}|p:${p + 1}`);
 
-  kbNavRow(kb, 'a:bx_open|ws:0');
+  const hubBackCb = access.isManager ? 'a:bx_inbox|ws:0|p:0|h:mm' : 'a:menu';
+  kbNavRow(kb, hubBackCb);
 
   const text = header + body;
 
@@ -11142,7 +11153,8 @@ async function renderBrandDealsList(ctx, actorUserId, brandUserId, stage = 'nego
   if (hasPrev) kb.text('⬅️', `a:brand_deals|ws:0|st:${st}|p:${p - 1}`);
   if (hasNext) kb.text('➡️', `a:brand_deals|ws:0|st:${st}|p:${p + 1}`);
 
-  kbNavRow(kb, 'a:bx_open|ws:0');
+  const hubBackCb = access.isManager ? 'a:bx_inbox|ws:0|p:0|h:mm' : 'a:menu';
+  kbNavRow(kb, hubBackCb);
 
   const text = header + body;
   try {
@@ -15487,7 +15499,7 @@ function curatorHomeKb(items, modeEnabled = false, queueCounts = null) {
 
   // Mode toggle + exit in one row
   const mLabel = modeEnabled ? '🧹 Режим: ✅ ВКЛ' : '🧹 Режим: ❌ ВЫКЛ';
-  kb.text(mLabel, `a:cur_mode_set|v=${modeEnabled ? 0 : 1}|ret:cur`);
+  kb.text(mLabel, `a:cur_mode_set|v:${modeEnabled ? 0 : 1}|ret:cur`);
   if (modeEnabled) kb.text('🔓 Обычный', 'a:cur_mode_set|v:0|ret:menu');
   kb.row();
 
@@ -15617,7 +15629,7 @@ async function renderCuratorWorkspace(ctx, userId, wsId) {
     const kb = new InlineKeyboard()
       .text('❌ Выйти из канала', `a:cur_leave_q|ws:${wsIdNum}`)
       .row()
-      .text('⬅️ Назад', 'a:cur_home');
+      .text('⬅️ Назад', 'a:cur_home').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     const text = `👤 <b>Куратор</b> • ${escapeHtml(wsTitle)}
 
 Режим куратора в этом канале выключен владельцем.
@@ -15762,6 +15774,12 @@ async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
     return renderCuratorGiveawayOpen(ctx, userId, wsId, gwId);
   }
 
+  if (!(await redisHealthOkQuick())) {
+    await ctx.answerCallbackQuery({ text: '⚠️ Временно недоступно (Redis). Чтобы избежать спама, отправка напоминаний отключена. Попробуй позже.' });
+    await renderCuratorGiveawayOpen(ctx, userId, wsId, gwId);
+    return;
+  }
+
   // rate-limit: 1 remind per 10 minutes per giveaway
   const rlKey = k(['rl', 'gw_remind', String(gwId)]);
   const rl = await rateLimit(rlKey, { limit: 1, windowSec: 10 * 60 });
@@ -15826,6 +15844,12 @@ ${curatorNotesBlock(notes)}
 async function renderCuratorGiveawayOwnerNotifySend(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
   if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  if (!(await redisHealthOkQuick())) {
+    await ctx.answerCallbackQuery({ text: '⚠️ Временно недоступно (Redis). Чтобы не заспамить владельца, отправка отключена. Попробуй позже.' });
+    await renderCuratorGiveawayOpen(ctx, userId, wsId, gwId);
+    return;
+  }
 
   // rate-limit: 1 notify per 10 minutes per giveaway (protect owner from spam)
   const rlKey = k(['rl', 'cur_owner_notify', String(g.id), String(userId)]);
@@ -17979,7 +18003,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       const kb = new InlineKeyboard()
         .text('⬅️ Назад к конкурсу', `a:cur_gw_open|ws:${wsId}|i:${gwId}`)
         .row()
-        .text('🧹 Кураторы блогера', 'a:cur_home');
+        .text('🧹 Кабинет куратора', 'a:cur_home');
 
       await ctx.reply('✅ Заметка сохранена.', { reply_markup: kb });
       return;
@@ -22886,7 +22910,7 @@ ${escapeHtml(safeText)}
       if (m === 'curator') {
         const flags2 = await getRoleFlags(u, ctx.from.id);
         if (!flags2.isCurator) {
-          await safeEditOrReply(ctx, '⛔ Доступ к «Кураторы блогера» не найден.', { reply_markup: navKb('a:home') });
+          await safeEditOrReply(ctx, '⛔ Доступ к кабинету куратора не найден.', { reply_markup: navKb('a:home') });
           return;
         }
         // Curator is a creator-side overlay: persist it explicitly
@@ -23220,6 +23244,14 @@ ${escapeHtml(safeText)}
       const g = await db.getGiveawayForCurator(gwId, u.id);
       if (!g || Number(g.workspace_id) !== wsId) {
         await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        return;
+      }
+
+      if (!(await redisHealthOkQuick())) {
+        await safeEditOrReply(ctx, '⚠️ Временно недоступно: Redis (заметки). Попробуй позже.', {
+          parse_mode: 'HTML',
+          reply_markup: navKb(`a:cur_gw_open|ws:${wsId}|i:${gwId}`)
+        });
         return;
       }
 
@@ -31310,6 +31342,17 @@ if (p.a === 'a:bx_publish_hint') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 
+      if (!(await redisHealthOkQuick())) {
+        await ctx.answerCallbackQuery();
+        await safeEditOrReply(ctx, '⚠️ Временно недоступно: Redis (приглашения). Попробуй позже.', {
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home')
+        });
+        return;
+      }
+
       const token = randomToken(8);
       const key = k(['cur_invite', wsId, token]);
       await redis.set(key, { ownerUserId: u.id }, { ex: 10 * 60 });
@@ -31336,6 +31379,18 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+      if (!(await redisHealthOkQuick())) {
+        await ctx.answerCallbackQuery();
+        await safeEditOrReply(ctx, '⚠️ Временно недоступно: Redis (ввод @username). Попробуй позже.', {
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home')
+        });
+        return;
+      }
+
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➕ Введи @username куратора (он должен уже запускать бота /start).', {
         reply_markup: new InlineKeyboard()
@@ -31410,7 +31465,7 @@ if (p.a === 'a:bx_publish_hint') {
           const kb = new InlineKeyboard()
             .text('🏠 Главное меню', 'a:menu')
             .row()
-            .text('💬 Support', 'a:support');
+            .text('💬 Поддержка', 'a:support');
           await ctx.api.sendMessage(
             Number(info.tg_id),
             `❌ Твоя роль <b>куратора</b> для: <b>${escapeHtml(wsTitle)}</b> была удалена владельцем.`,
