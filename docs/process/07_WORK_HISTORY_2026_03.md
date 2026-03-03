@@ -866,3 +866,20 @@ QA:
 - (опционально) при синтаксической ошибке в любом entrypoint preflight падает на этапе `node --check`.
 
 Риск регрессий: **нулевой** (dev‑инструмент, runtime не менялся).
+
+
+### STEP288 — Giveaways & Offers: E2E smoke (docs-only)
+Цель:
+- Зафиксировать быстрый end‑to‑end smoke по двум публичным контурам: **Giveaways** и **Offers**.
+- Ловить UX‑тупики/возвраты/гейты **после каждого деплоя** за 10–15 минут, без чтения кода.
+
+Изменения (docs-only):
+- Добавлен полный сценарий: `docs/audit/20_GIVEAWAYS_OFFERS_E2E_SMOKE_2026_03.md`.
+- `smoke-tests_short.md` дополнен секцией 13 со ссылкой на полный сценарий.
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про Giveaways/Offers smoke + добавлена ссылка на audit 20.
+
+QA:
+- Открыть `smoke-tests_short.md` и убедиться, что ссылка на `docs/audit/20_...` корректна.
+- Прогнать сценарии A–D на prod/staging (10–15 минут).
+
+Риск регрессий: **нулевой** (код не менялся).
