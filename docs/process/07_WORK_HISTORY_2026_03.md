@@ -476,3 +476,58 @@ Docs:
 - Creator → `🎬 UGC / Офферы`: нет кнопки `📰 Лента креаторов`.
 
 Риск регрессий: **низкий** (audit docs + текст подсказки; без новых DB/Redis вызовов).
+
+
+### STEP273 — Brand Manager system audit + UX hardening (no DB in menus/hubs)
+Цель:
+- “Вылизать” систему работы бренда с менеджером: доступы, тексты, кнопки и гейты.
+- Убрать сценарии “кнопка есть → раздел недоступен” и убрать лишние DB‑запросы в горячих UI путях (📋 Меню / 🏠 Home).
+
+Найдено:
+1) В `renderMainMenu` (📋 Меню) был лишний SQL‑чтение `db.listBrandsForManager()` ради показа кнопки «🧑‍💼 Я менеджер бренда». Это противоречит принципу “hot UI DB‑reads — нет”.
+2) В нескольких местах сообщение для менеджера без доступа называлось “Доступ менеджера отозван”, что путает тех, кого **никогда не добавляли** (это не баг логики, но UX‑шум).
+3) В 🏠 Home рисовалась “менеджерская” подсказка с DB‑lookup активного бренда — лишняя нагрузка для хаба.
+
+Фикс:
+- `mainMenuCreatorKb` и `mainMenuBrandKb`: кнопка «🧑‍💼 Я менеджер бренда» теперь **всегда видна**, без DB‑проверки в рендере меню. Доступ проверяется внутри `a:bm_home` (гейт на клике).
+- `renderMainMenu`: удалены вызовы `db.listBrandsForManager()` в рендере 📋 Меню.
+- `renderHomeHub`: убран DB‑lookup “canManager/активный бренд” из рендера хаба; переключатель “Менеджер бренда” показывается только если режим уже включён (без DB), а вход — через меню.
+- Введён единый текст `bmNoAccessHtml()` и заменены все варианты “отозван” на “не добавили/доступ отозван” (одна консистентная подсказка).
+
+Docs:
+- `docs/00_CURRENT_STATE.md`: watchlist расширен пунктом про Brand Manager UX и ссылкой на audit report.
+
+Как проверить (smoke):
+- Любой пользователь (Creator/Brand) → 📋 Меню: видит кнопку «🧑‍💼 Я менеджер бренда».
+- Нажать «🧑‍💼 Я менеджер бренда» без прав → показывается консистентный гейт‑текст (не “отозван” в одиночку).
+- Для реального менеджера: «🧑‍💼 Я менеджер бренда» → (если брендов несколько) выбор бренда → открывается brand Inbox.
+- Проверить, что 📋 Меню и 🏠 Home не делают `db.listBrandsForManager()` (только на клике `a:home_mode|m:brand_manager`).
+
+Риск регрессий: **низкий** (изменения UI/копирайт + удаление лишних DB‑чтений в меню/хабе; критичная логика списаний/паблиша не тронута).
+
+
+### STEP274 — Dual-role mode switching hardening (Creator + Brand + Brand Manager)
+Цель:
+- Прогнать “двойные роли” (Brand owner + Manager + Creator) и убедиться, что переключение режимов не создаёт “полу‑состояния”.
+- В Redis degraded режиме role switch должен быть fail‑open (не блокировать пользователя).
+
+Найдено:
+1) `renderHomeHub` вычислял effective mode с приоритетом `bm_mode`. Если пользователь переключал UI на Creator, но `bm_mode` оставался включённым, Home/Guide могли показывать “Менеджер бренда” (полу‑состояние).
+2) `a:ui_mode_set` и часть `bm_*` действий были `REQUIRE_REDIS`, что могло блокировать переключение роли при Redis outage.
+3) `clearBmActiveBrand()` делал `redis.del()` без try/catch → потенциальный crash при Redis degraded.
+
+Фикс:
+- `actionRegistry`: `a:ui_mode_set`, `a:bm_mode_set`, `a:bm_pick_brand`, `a:bm_set_brand` переведены на `guard: NONE` (безопасные действия; Redis — только best‑effort).
+- `a:ui_mode_set`: всегда очищаем brand‑manager state (`disableBrandManagerState`) при переключении режима.
+- `clearBmActiveBrand` и `disableBrandManagerState`: try/catch (не падаем при Redis degraded).
+- `renderMainMenu`: добавлен `modeOverride`, чтобы сразу показать выбранный режим даже если Redis не сохраняет state.
+
+Docs:
+- `docs/00_CURRENT_STATE.md`: watchlist расширен пунктом про dual-role и ссылкой на audit report.
+- `docs/audit/06_DUAL_ROLE_MODE_SWITCH_AUDIT_2026_03.md`: отчёт аудита.
+
+Как проверить (smoke):
+- Пользователь-менеджер: `🧑‍💼 Я менеджер бренда` → выйти `✨ Я Creator / канал` → ожидание: Home/Меню показывает Creator (не “Менеджер бренда”).
+- Redis degraded (Preview): `🏷 Я бренд`/`✨ Creator` клики не уходят в общий error; выбранный режим отображается сразу (best‑effort).
+
+Риск регрессий: **низкий** (guards + Redis state cleanup + локальный override в рендере меню).
