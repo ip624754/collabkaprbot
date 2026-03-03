@@ -31752,9 +31752,7 @@ if (p.a === 'a:bx_publish_hint') {
         const kb = new InlineKeyboard()
           .text('📋 Меню', 'a:menu')
           .text('🏠 Home', 'a:home');
-        await safeEditOrReply(ctx, '📁 <b>Папки</b>
-
-Роль Editors отключена. Папками управляет владелец канала: открой «📣 Мои каналы» → выбери канал → «📁 Папки».', { parse_mode: 'HTML', reply_markup: kb });
+        await safeEditOrReply(ctx, '📁 <b>Папки</b>\n\nРоль Editors отключена. Папками управляет владелец канала: открой «📣 Мои каналы» → выбери канал → «📁 Папки».', { parse_mode: 'HTML', reply_markup: kb });
         return;
       }
       await renderFoldersMy(ctx, u.id);
