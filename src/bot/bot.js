@@ -1832,7 +1832,12 @@ async function renderGwNewGate(ctx, { backCb = 'a:gw_list', reason = '' } = {}) 
 async function getRoleFlags(userRow, tgId) {
   const isAdmin = isSuperAdminTg(tgId);
   const isModerator = isAdmin || (userRow ? await db.isNetworkModerator(userRow.id) : false);
-  const isFolderEditor = userRow ? await db.hasAnyWorkspaceEditorRole(userRow.id) : false;
+
+  // Workspace Editors (folder-only) are optional and disabled by default
+  // to reduce cognitive load and avoid extra DB queries in hot Menu render.
+  const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
+  const isFolderEditor = (editorsEnabled && userRow) ? await db.hasAnyWorkspaceEditorRole(userRow.id) : false;
+
   const isCurator = userRow ? await db.hasAnyCuratorRole(userRow.id) : false;
   return { isAdmin, isModerator, isFolderEditor, isCurator };
 }
@@ -12768,6 +12773,11 @@ async function renderFoldersMy(ctx, userId) {
 async function getFolderAccess(userId, wsId) {
   const wsOwned = await db.getWorkspace(userId, Number(wsId));
   if (wsOwned) return { ws: wsOwned, isOwner: true, canEdit: true };
+
+  // Folder-editors are optional (disabled by default).
+  const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
+  if (!editorsEnabled) return null;
+
   const isEd = await db.isWorkspaceEditor(Number(wsId), userId);
   if (!isEd) return null;
   const ws = await db.getWorkspaceById(Number(wsId));
@@ -12778,15 +12788,16 @@ async function getFolderAccess(userId, wsId) {
 function foldersHomeKb(access, folders) {
   const wsId = Number(access.ws.id);
   const kb = new InlineKeyboard();
+  const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
 
   // Top actions (в пару, когда можно)
   if (access.canEdit && access.isOwner) {
-    kb.text('➕ Новая папка', `a:folder_new|ws:${wsId}`)
-      .text('👥 Editors', `a:ws_editors|ws:${wsId}`)
-      .row();
+    kb.text('➕ Новая папка', `a:folder_new|ws:${wsId}`);
+    if (editorsEnabled) kb.text('👥 Editors', `a:ws_editors|ws:${wsId}`);
+    kb.row();
   } else if (access.canEdit) {
     kb.text('➕ Новая папка', `a:folder_new|ws:${wsId}`).row();
-  } else if (access.isOwner) {
+  } else if (access.isOwner && editorsEnabled) {
     kb.text('👥 Editors', `a:ws_editors|ws:${wsId}`).row();
   }
 
@@ -12878,6 +12889,20 @@ async function renderFolderView(ctx, userId, wsId, folderId) {
 async function renderWsEditors(ctx, ownerUserId, wsId) {
   const ws = await db.getWorkspace(ownerUserId, Number(wsId));
   if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
+  if (!editorsEnabled) {
+    const kb = new InlineKeyboard()
+      .text('⬅️ Назад', `a:folders_home|ws:${wsId}`)
+      .text('📋 Меню', 'a:menu')
+      .row()
+      .text('🏠 Home', 'a:home');
+
+    await safeEditOrReply(ctx, `👥 <b>Editors</b>
+
+Функция отключена. Папками управляет только owner.`, { parse_mode: 'HTML', reply_markup: kb });
+    return;
+  }
 
   const editors = await db.listWorkspaceEditors(Number(wsId));
 
@@ -31721,7 +31746,17 @@ if (p.a === 'a:bx_publish_hint') {
 
     // FOLDERS (workspace shared @channel lists)
     if (p.a === 'a:folders_my') {
+      const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
       await ctx.answerCallbackQuery();
+      if (!editorsEnabled) {
+        const kb = new InlineKeyboard()
+          .text('📋 Меню', 'a:menu')
+          .text('🏠 Home', 'a:home');
+        await safeEditOrReply(ctx, '📁 <b>Папки</b>
+
+Роль Editors отключена. Папками управляет владелец канала: открой «📣 Мои каналы» → выбери канал → «📁 Папки».', { parse_mode: 'HTML', reply_markup: kb });
+        return;
+      }
       await renderFoldersMy(ctx, u.id);
       return;
     }
@@ -31876,12 +31911,16 @@ if (p.a === 'a:bx_publish_hint') {
 
     // Workspace editors (folder-only)
     if (p.a === 'a:ws_editors') {
+      const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
+      if (!editorsEnabled) return ctx.answerCallbackQuery({ text: 'Отключено.' });
       await ctx.answerCallbackQuery();
       await renderWsEditors(ctx, u.id, Number(p.ws));
       return;
     }
 
     if (p.a === 'a:ws_editor_invite') {
+      const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
+      if (!editorsEnabled) return ctx.answerCallbackQuery({ text: 'Отключено.' });
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
@@ -31900,6 +31939,8 @@ if (p.a === 'a:bx_publish_hint') {
     }
 
     if (p.a === 'a:ws_editor_add_username') {
+      const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
+      if (!editorsEnabled) return ctx.answerCallbackQuery({ text: 'Отключено.' });
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
@@ -31912,6 +31953,8 @@ if (p.a === 'a:bx_publish_hint') {
     }
 
     if (p.a === 'a:ws_editor_rm_q') {
+      const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
+      if (!editorsEnabled) return ctx.answerCallbackQuery({ text: 'Отключено.' });
       const wsId = Number(p.ws);
       const targetUserId = Number(p.u);
       const ws = await db.getWorkspace(u.id, wsId);
@@ -31926,6 +31969,8 @@ if (p.a === 'a:bx_publish_hint') {
     }
 
     if (p.a === 'a:ws_editor_rm_do') {
+      const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
+      if (!editorsEnabled) return ctx.answerCallbackQuery({ text: 'Отключено.' });
       const wsId = Number(p.ws);
       const targetUserId = Number(p.u);
       const ws = await db.getWorkspace(u.id, wsId);
