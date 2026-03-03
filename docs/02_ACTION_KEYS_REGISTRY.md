@@ -23,9 +23,9 @@
 | Guard | Count |
 |---|---:|
 | db_truth | 2 |
-| none | 130 |
+| none | 152 |
 | queue_first | 2 |
-| require_redis | 374 |
+| require_redis | 352 |
 
 ## Actions table
 
@@ -147,11 +147,11 @@
 | `a:bm_home` | edit | none |
 | `a:bm_invite` | edit | require_redis |
 | `a:bm_list` | edit | none |
-| `a:bm_mode_set` | edit | require_redis |
-| `a:bm_pick_brand` | edit | require_redis |
+| `a:bm_mode_set` | edit | none |
+| `a:bm_pick_brand` | edit | none |
 | `a:bm_rm_ok` | edit | require_redis |
 | `a:bm_rm_q` | edit | none |
-| `a:bm_set_brand` | edit | require_redis |
+| `a:bm_set_brand` | edit | none |
 | `a:brand_app_accept` | edit | queue_first |
 | `a:brand_app_accepted_done` | edit | none |
 | `a:brand_app_card` | edit | none |
@@ -303,31 +303,31 @@
 | `a:bx_wtags` | edit | require_redis |
 | `a:bx_wtagt` | edit | require_redis |
 | `a:bx_wtext` | edit | require_redis |
-| `a:cur_add_username` | edit | require_redis |
-| `a:cur_audit` | edit | require_redis |
-| `a:cur_gw_check_do` | edit | require_redis |
+| `a:cur_add_username` | edit | none |
+| `a:cur_audit` | edit | none |
+| `a:cur_gw_check_do` | edit | none |
 | `a:cur_gw_check_q` | edit | none |
-| `a:cur_gw_log` | edit | require_redis |
+| `a:cur_gw_log` | edit | none |
 | `a:cur_gw_note_q` | edit | none |
 | `a:cur_gw_open` | edit | none |
 | `a:cur_gw_owner_q` | edit | none |
-| `a:cur_gw_owner_send` | edit | require_redis |
+| `a:cur_gw_owner_send` | edit | none |
 | `a:cur_gw_remind_q` | edit | none |
-| `a:cur_gw_remind_send` | edit | require_redis |
-| `a:cur_gw_stats` | edit | require_redis |
+| `a:cur_gw_remind_send` | edit | none |
+| `a:cur_gw_stats` | edit | none |
 | `a:cur_home` | edit | none |
-| `a:cur_inbox` | edit | require_redis |
-| `a:cur_invite` | edit | require_redis |
-| `a:cur_leave_do` | edit | require_redis |
+| `a:cur_inbox` | edit | none |
+| `a:cur_invite` | edit | none |
+| `a:cur_leave_do` | edit | none |
 | `a:cur_leave_q` | edit | none |
 | `a:cur_list` | edit | none |
-| `a:cur_manage` | edit | require_redis |
-| `a:cur_mode_set` | edit | require_redis |
+| `a:cur_manage` | edit | none |
+| `a:cur_mode_set` | edit | none |
 | `a:cur_note_cancel` | edit | none |
-| `a:cur_rm_do` | edit | require_redis |
+| `a:cur_rm_do` | edit | none |
 | `a:cur_rm_q` | edit | none |
-| `a:cur_ws` | edit | require_redis |
-| `a:cur_ws_off` | edit | require_redis |
+| `a:cur_ws` | edit | none |
+| `a:cur_ws_off` | edit | none |
 | `a:curator_home` | edit | none |
 | `a:curators` | edit | require_redis |
 | `a:curators_home` | edit | none |
@@ -478,11 +478,11 @@
 | `a:send_request_to_creator` | edit | none |
 | `a:setup` | edit | require_redis |
 | `a:share` | edit | require_redis |
-| `a:support` | ops | require_redis |
-| `a:support_push` | ops | require_redis |
+| `a:support` | ops | none |
+| `a:support_push` | ops | none |
 | `a:support_write` | ops | require_redis |
 | `a:team` | edit | require_redis |
-| `a:ui_mode_set` | edit | require_redis |
+| `a:ui_mode_set` | edit | none |
 | `a:usr_ack` | view | none |
 | `a:verify_home` | edit | none |
 | `a:verify_info` | edit | none |
@@ -532,7 +532,7 @@
 | `a:ws_settings` | edit | require_redis |
 | `a:ws_share` | edit | require_redis |
 | `a:ws_share_send` | edit | require_redis |
-| `a:ws_toggle_cur` | edit | require_redis |
+| `a:ws_toggle_cur` | edit | none |
 | `a:ws_toggle_net` | edit | require_redis |
 | `a:wsp_contact_req` | edit | none |
 | `a:wsp_contact_unlock` | pay | queue_first |

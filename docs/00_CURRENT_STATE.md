@@ -39,12 +39,19 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 8) **Role‑specific UX (Creator vs Brand):** в режиме Creator не показывать brand‑only кнопки ("📰 Лента креаторов", фильтры/подбор) и не писать текст, который выглядит как инструкция открыть brand‑раздел; формулировки должны быть: "бренды увидят в ленте (режим Brand)".
 9) **Brand Manager (команда бренда):** вход в «🧑‍💼 Я менеджер бренда» всегда виден, но доступ проверяется **на клике** (гейт внутри bm‑flow). В меню/🏠 Home не делать дополнительных SQL‑проверок “canManager”; при отсутствии доступа показывать одну консистентную подсказку (не “отозван”, а “не добавили/доступ отозван”).
 10) **Dual-role (Creator + Brand + Manager):** переключение роли не должно оставлять “полу‑состояния”. При `a:ui_mode_set` всегда очищать brand‑manager state (bm_mode + active brand). В Redis degraded role switch должен быть **fail‑open** (выбранный режим показываем сразу), даже если его нельзя сохранить.
+11) **Brand/Manager return-to (ret) UX:** в списках "📝 Заявки" и "📌 Сделки" кнопка "⬅️ Назад" должна возвращать: владелец → в роль‑меню (a:menu), менеджер → в 📥 Inbox (a:bx_inbox). См. audit report 07.
+12) **Creator ↔ Curator (кураторский кабинет):** в UI использовать название «🧹 Кабинет куратора» (не «Кураторы блогера»); toggle режима куратора должен использовать `v:0/1` (не `v=...`); при Redis degraded кураторская навигация должна быть доступна (guard NONE), а invite/input/anti-spam send должны fail-closed с понятным сообщением. См. audit report 08.
 
 Audit report (one-time scan): `docs/audit/04_CREATOR_UI_BRAND_ACTION_KEYS_AUDIT_2026_03.md`.
 
 Audit report (Brand Manager system): `docs/audit/05_BRAND_MANAGER_SYSTEM_AUDIT_2026_03.md`.
 
 Audit report (Dual-role mode switching): `docs/audit/06_DUAL_ROLE_MODE_SWITCH_AUDIT_2026_03.md`.
+
+Audit report (Brand/Manager nav + ret): `docs/audit/07_BRAND_MANAGER_NAV_RET_AUDIT_2026_03.md`.
+
+Audit report (Creator/Curator system): `docs/audit/08_CREATOR_CURATOR_SYSTEM_AUDIT_2026_03.md`.
+
 
 ---
 
