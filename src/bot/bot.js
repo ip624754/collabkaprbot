@@ -7556,7 +7556,7 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
   await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
 
 Выбери действие:
-<i>Подсказка: 🎬 офферы → 📥 Inbox / 📰 лента. 📨 заявки брендов → входящие.</i>
+<i>Подсказка: 🎬 офферы → ➕ Создать / 📦 Мои / 📥 Inbox. 📨 заявки брендов → входящие.</i>
 <i>Сменить канал: ⬅️ 📣 Мои каналы</i>`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
 }
 
@@ -13150,7 +13150,7 @@ ${trialLine}
 
 Это лента UGC/Collab офферов: контент, интеграции, бартер/бюджет.
 
-Чтобы видеть ленту и публиковать офферы, включи “🌐 Сеть”.`,
+Чтобы публиковать офферы в сеть (чтобы их видели бренды), включи “🌐 Сеть”.`,
       { parse_mode: 'HTML', reply_markup: bxNeedNetworkKb(wsNum) }
     );
     return;
@@ -13161,7 +13161,7 @@ ${trialLine}
 
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
 
-• Создать офер — твой UGC/оффер увидят бренды в «📰 Лента креаторов»
+• ➕ Создать офер — бренды увидят твой оффер в ленте (в режиме Brand)
 • 📥 Inbox — переписка по офферам (бренд ↔ блогер)
 • 📦 Мои офферы — пауза/удаление
 • 🏷 Каталог брендов — найти бренды для заявок`,
