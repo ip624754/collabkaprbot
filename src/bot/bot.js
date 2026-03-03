@@ -16722,8 +16722,10 @@ ${escapeHtml(safeCap)}
       draft.type = 'text';
       draft.text = telegramEntitiesToHtml(msg.text, msg.entities || []);
     } else {
-      await ctx.reply('❌ Неподдерживаемый формат. Отправь текст, фото, видео или GIF.', {
-        reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home')
+      const kb = new InlineKeyboard().text('❌ Отмена', 'a:bc_cancel');
+      kbAdminFooter(kb, '⬅️ Админка', 'a:admin_home');
+      await ctx.reply('❌ Неподдерживаемый формат. Отправь текст, фото, видео, GIF или документ.', {
+        reply_markup: kb
       });
       await setExpectText(ctx.from.id, exp, 30 * 60);
       return;
@@ -16736,16 +16738,19 @@ ${escapeHtml(safeCap)}
 
     // Go to buttons step
     const typeLabel = { text: '📝 Текст', photo: '🖼 Фото', video: '🎬 Видео', animation: '🎞 GIF', document: '📎 Документ' };
+    const kb = new InlineKeyboard()
+      .text('🔗 Добавить кнопки', 'a:bc_buttons')
+      .row()
+      .text('➡️ Без кнопок → аудитория', 'a:bc_btn_done')
+      .row()
+      .text('❌ Отмена', 'a:bc_cancel');
+    kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+
     await ctx.reply(
       `✅ Контент сохранён: <b>${typeLabel[draft.type] || draft.type}</b>\n\nДобавить URL-кнопки к посту?`,
       {
         parse_mode: 'HTML',
-        reply_markup: new InlineKeyboard()
-          .text('🔗 Добавить кнопки', 'a:bc_buttons')
-          .row()
-          .text('➡️ Без кнопок → аудитория', 'a:bc_btn_done')
-          .row()
-          .text('⬅️ Отмена', 'a:bc_cancel')
+        reply_markup: kb
       }
     );
     return;
@@ -28828,9 +28833,12 @@ if (p.a === 'a:admin_outbox_clear_q') {
       try { await clearExpectText(ctx.from.id); } catch {}
       // Clear any previous broadcast draft
       try { await clearDraft(ctx.from.id); } catch {}
+
+      const kb = new InlineKeyboard().text('❌ Отмена', 'a:bc_cancel');
+      kbAdminFooter(kb, '⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx,
-        `📣 <b>Новая рассылка</b>\n\nОтправь мне пост для рассылки:\n• текст\n• фото с подписью\n• видео с подписью\n• GIF с подписью\n\nОдно сообщение = один пост.`,
-        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Отмена', 'a:admin_home') }
+        `📣 <b>Новая рассылка</b>\n\nОтправь мне пост для рассылки:\n• текст\n• фото с подписью\n• видео с подписью\n• GIF с подписью\n• документ с подписью\n\nОдно сообщение = один пост.`,
+        { parse_mode: 'HTML', reply_markup: kb }
       );
       await setExpectText(ctx.from.id, { type: 'bc_content' }, 30 * 60);
       return;
@@ -28867,18 +28875,21 @@ if (p.a === 'a:admin_outbox_clear_q') {
         });
         return;
       }
+      const kb = new InlineKeyboard()
+        .text('🎁 Конкурс', 'a:bc_tpl_gw')
+        .text('🏷 Профиль', 'a:bc_tpl_bp')
+        .row()
+        .text('🎬 Оффер', 'a:bc_tpl_offer')
+        .row()
+        .text('✅ Готово', 'a:bc_btn_done')
+        .text('⬅️ Отмена', 'a:bc_start');
+      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+
       await safeEditOrReply(ctx,
         `🔗 <b>Кнопки</b>\n\nМожно двумя способами:\n1) <b>Шаблоны</b> — выбери ниже (Конкурс/Профиль/Оффер)\n2) <b>Вручную</b> — отправь до 3 строк:\n<code>Текст кнопки | ссылка</code>\n\nСсылка может быть любой:\n• <code>https://...</code> (любая внешняя)\n• <code>t.me/...</code>\n• shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>\n\nПример:\n<code>Перейти в X | https://x.com/...</code>\n\nКогда готово — нажми «✅ Готово».`,
         {
           parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard()
-            .text('🎁 Конкурс', 'a:bc_tpl_gw')
-            .text('🏷 Профиль', 'a:bc_tpl_bp')
-            .row()
-            .text('🎬 Оффер', 'a:bc_tpl_offer')
-            .row()
-            .text('✅ Готово', 'a:bc_btn_done')
-            .text('⬅️ Отмена', 'a:bc_start')
+          reply_markup: kb
         }
       );
       await setExpectText(ctx.from.id, { type: 'bc_button_input' }, 30 * 60);
@@ -28904,15 +28915,18 @@ if (p.a === 'a:admin_outbox_clear_q') {
         ? 'ID конкурса (число), пример: <code>123</code>'
         : (kind === 'bp' ? 'ID профиля бренда (число), пример: <code>123</code>' : 'ID оффера (число), пример: <code>123</code>');
 
+      const kb = new InlineKeyboard()
+        .text('⬅️ Назад к кнопкам', 'a:bc_buttons')
+        .row()
+        .text('✅ Готово', 'a:bc_btn_done')
+        .text('⬅️ Отмена', 'a:bc_start');
+      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+
       await safeEditOrReply(ctx,
         `🔗 <b>${escapeHtml(label)}</b>\n\nОтправь ${hint}.\n\nМожно указать свой текст кнопки так:\n<code>123 | Мой текст</code>\n\n⬅️ «Назад» вернёт к вводу кнопок.`,
         {
           parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard()
-            .text('⬅️ Назад к кнопкам', 'a:bc_buttons')
-            .row()
-            .text('✅ Готово', 'a:bc_btn_done')
-            .text('⬅️ Отмена', 'a:bc_start')
+          reply_markup: kb
         }
       );
       await setExpectText(ctx.from.id, { type: 'bc_btn_tpl_id', kind }, 10 * 60);
@@ -33544,7 +33558,9 @@ async function renderBroadcastAudiencePicker(ctx) {
     .row()
     .text('🧑‍💼 Менеджеры', 'a:bc_audience|aud:managers')
     .row()
-    .text('⬅️ Отмена', 'a:bc_cancel');
+    .text('❌ Отмена', 'a:bc_cancel');
+
+  kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -33590,6 +33606,8 @@ async function renderBroadcastPreview(ctx, draft) {
     .row()
     .text('🔄 Сменить аудиторию', 'a:bc_btn_done');
 
+  kbAdminFooter(confirmKb, '⬅️ Операции', 'a:admin_ops');
+
   await safeEditOrReply(ctx, previewMsg, { parse_mode: 'HTML', reply_markup: confirmKb });
 }
 
@@ -33623,7 +33641,7 @@ async function renderBroadcastList(ctx, page = 0) {
   if (hasNext) kb.text('➡️', `a:bc_list|p:${page + 1}`);
   if (page > 0 || hasNext) kb.row();
   kb.text('📣 Новая рассылка', 'a:bc_start').row();
-  kb.text('⬅️ Админка', 'a:admin_home');
+  kbAdminFooter(kb, '⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -33682,7 +33700,7 @@ async function renderBroadcastView(ctx, broadcastId) {
   }
 
   kb.text('⬅️ К списку', 'a:bc_list|p:0').row();
-  kb.text('⬅️ Админка', 'a:admin_home');
+  kbAdminFooter(kb, '⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
