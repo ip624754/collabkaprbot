@@ -18694,7 +18694,16 @@ ${escapeHtml(details)}`;
       }
 
       await clearExpectText(ctx.from.id);
-      await ctx.reply('✅ Отправлено креатору.', { reply_markup: new InlineKeyboard().text('💬 Диалог', `a:blead_view|id:${leadId}|w:${Number(lead.workspace_id)}`) });
+      const brandReceipt =
+        '✅ Отправлено креатору.\n\n' +
+        '<b>Что дальше:</b>\n' +
+        '• Открой «💬 Диалог» — увидишь переписку по заявке.\n' +
+        '• Жди ответа — он придёт сообщением по этой заявке.';
+      await ctx.reply(brandReceipt, {
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+        reply_markup: new InlineKeyboard().text('💬 Диалог', `a:blead_view|id:${leadId}|w:${Number(lead.workspace_id)}`),
+      });
       return;
     }
 
