@@ -54,5 +54,5 @@ node migrations/run.js --dry-run
 ### Примечания
 - Vercel Hobby: лимит **≤12 serverless functions**. Если деплой вдруг падает по лимиту — проверь, не добавили ли новый файл в `api/`. Cron задачи добавляем через `api/cron_router.js` + `vercel.json` rewrites.
 
-- `preflight` покрывает: action registry, автоген docs реестра, nav-lint, redact-тесты.
+- `preflight` покрывает: action registry, автоген docs реестра, nav-lint, redact-тесты, **node --check (ловит SyntaxError до Vercel)**.
 - Эта страница — **каноничный короткий чек**. Подробности — в `docs/13_RUNBOOK_RELEASE.md`.
