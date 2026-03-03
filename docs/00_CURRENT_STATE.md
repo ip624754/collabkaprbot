@@ -36,6 +36,9 @@ Snapshot: **2026-03-02** (STEP269 Deep Research Audit) — P0 не найден�
 5) **`/api/health` + cron:** новые cron‑задачи — через `api/cron_router.js`, с lock+throttle и отражением в health без лишних DB‑запросов.
 6) **Official publish:** token‑lock + DB‑reserve `PUBLISHING` менять только с мигра‑планом; иначе риск дублей в @collabka_offers.
 7) **Hot UI DB‑reads:** в меню/хабах не добавлять новые SQL‑чтения; Redis‑first, DB только на клике/DB‑truth путях.
+8) **Role‑specific UX (Creator vs Brand):** в режиме Creator не показывать brand‑only кнопки ("📰 Лента креаторов", фильтры/подбор) и не писать текст, который выглядит как инструкция открыть brand‑раздел; формулировки должны быть: "бренды увидят в ленте (режим Brand)".
+
+Audit report (one-time scan): `docs/audit/04_CREATOR_UI_BRAND_ACTION_KEYS_AUDIT_2026_03.md`.
 
 ---
 
