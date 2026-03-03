@@ -4700,14 +4700,16 @@ function curListKb(wsId, curators) {
 function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
   const { showCurator = false } = opts || {};
   const net = networkEnabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
+
+  // Creator menu: show only actions relevant to the creator.
+  // The creators feed is a Brand-mode concept; do not show it here to avoid confusion.
   const kb = new InlineKeyboard()
-  .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
-  .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
-  .row()
-  .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`)
-  .text('➕ Создать офер', `a:bx_new|ws:${wsId}`)
-  .row()
-  .text('🏷 Каталог брендов', 'a:brands_home|p:0');
+    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+    .text('➕ Создать офер', `a:bx_new|ws:${wsId}`)
+    .row()
+    .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`)
+    .text('🏷 Каталог брендов', 'a:brands_home|p:0');
+
 
   if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
@@ -13161,8 +13163,8 @@ ${trialLine}
 
 • Создать офер — твой UGC/оффер увидят бренды в «📰 Лента креаторов»
 • 📥 Inbox — переписка по офферам (бренд ↔ блогер)
-• 📰 Лента креаторов — посмотреть выдачу глазами бренда
-• Мои офферы — пауза/удаление`,
+• 📦 Мои офферы — пауза/удаление
+• 🏷 Каталог брендов — найти бренды для заявок`,
     { parse_mode: 'HTML', reply_markup: bxMenuKb(wsNum, ws.network_enabled, { showCurator: isCurator }) }
   );
 }
