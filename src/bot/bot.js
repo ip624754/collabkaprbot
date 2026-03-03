@@ -16722,10 +16722,13 @@ ${escapeHtml(safeCap)}
       draft.type = 'text';
       draft.text = telegramEntitiesToHtml(msg.text, msg.entities || []);
     } else {
-      const kb = new InlineKeyboard().text('❌ Отмена', 'a:bc_cancel');
-      kbAdminFooter(kb, '⬅️ Админка', 'a:admin_home');
       await ctx.reply('❌ Неподдерживаемый формат. Отправь текст, фото, видео, GIF или документ.', {
-        reply_markup: kb
+        reply_markup: new InlineKeyboard()
+          .text('❌ Отмена', 'a:bc_cancel')
+          .text('⬅️ Админка', 'a:admin_home')
+          .row()
+          .text('📋 Меню', 'a:menu')
+          .text('🏠 Home', 'a:home')
       });
       await setExpectText(ctx.from.id, exp, 30 * 60);
       return;
@@ -16738,19 +16741,16 @@ ${escapeHtml(safeCap)}
 
     // Go to buttons step
     const typeLabel = { text: '📝 Текст', photo: '🖼 Фото', video: '🎬 Видео', animation: '🎞 GIF', document: '📎 Документ' };
-    const kb = new InlineKeyboard()
-      .text('🔗 Добавить кнопки', 'a:bc_buttons')
-      .row()
-      .text('➡️ Без кнопок → аудитория', 'a:bc_btn_done')
-      .row()
-      .text('❌ Отмена', 'a:bc_cancel');
-    kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-
     await ctx.reply(
       `✅ Контент сохранён: <b>${typeLabel[draft.type] || draft.type}</b>\n\nДобавить URL-кнопки к посту?`,
       {
         parse_mode: 'HTML',
-        reply_markup: kb
+        reply_markup: new InlineKeyboard()
+          .text('🔗 Добавить кнопки', 'a:bc_buttons')
+          .row()
+          .text('➡️ Без кнопок → аудитория', 'a:bc_btn_done')
+          .row()
+          .text('⬅️ Отмена', 'a:bc_cancel')
       }
     );
     return;
@@ -22780,6 +22780,10 @@ if (p.a === 'a:brand_dir_open') {
 
 
 if (p.a === 'a:menu_push') {
+  // If user opens Menu while we were expecting text input — cancel it.
+  // Menu is the canonical escape hatch for input-mode keyboards.
+  try { await clearExpectText(ctx.from.id); } catch {}
+
   try { await ctx.answerCallbackQuery(); } catch {}
 
   // Open Menu in a NEW message (do not overwrite original text).
@@ -22832,6 +22836,9 @@ if (p.a === 'a:menu_push') {
 
 if (p.a === 'a:menu') {
       await ctx.answerCallbackQuery();
+      // If user opens Menu while we were expecting text input — cancel it.
+      // Menu is the canonical escape hatch for input-mode keyboards.
+      try { await clearExpectText(ctx.from.id); } catch {}
       const flags = await getRoleFlags(u, ctx.from.id);
       await renderRoleHub(ctx, u, flags);
       return;
@@ -23007,6 +23014,8 @@ ${escapeHtml(safeText)}
 
     if (p.a === 'a:home') {
       await ctx.answerCallbackQuery();
+      // If user navigates to Home while we were expecting text input — cancel it.
+      try { await clearExpectText(ctx.from.id); } catch {}
       const flags2 = await getRoleFlags(u, ctx.from.id);
       await renderHomeHub(ctx, u, flags2, { edit: true });
       return;
@@ -27135,6 +27144,8 @@ if (p.a === 'a:match_home') {
     if (p.a === 'a:admin_notice') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+      try { await clearDraft(ctx.from.id); } catch {}
       await renderAdminSysNotice(ctx);
       return;
     }
@@ -27285,6 +27296,8 @@ https://collabka.com/status</pre>
     if (p.a === 'a:adm_gift') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
+      try { await clearDraft(ctx.from.id); } catch {}
       const kb = new InlineKeyboard()
         .text(`⭐️ Brand Plan Старт (${CFG.BRAND_PLAN_DURATION_DAYS}д)`, 'a:adm_gift_input|t:bp_start')
         .row()
@@ -27709,10 +27722,10 @@ https://collabka.com/status</pre>
       const page = Math.max(0, Number(p.p) || 0);
 
       const kb = new InlineKeyboard()
-        .text('⬅️ Назад', `a:adm_unote|id:${uid}|f:${f}|p:${page}`)
         .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
-        .row()
-        .text('⬅️ Админка', 'a:admin_home');
+        .text('🧹 Очистить', `a:adm_unote_clear_q|id:${uid}|f:${f}|p:${page}`)
+        .row();
+      kbAdminFooter(kb, '⬅️ Пользователи', `a:admin_users|f:${f}|p:${page}`);
 
       await safeEditOrReply(
         ctx,
@@ -28129,6 +28142,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
     if (p.a === 'a:admin_outbox') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
       const page = Math.max(0, Number(p.p) || 0);
       await renderAdminOutbox(ctx, page);
       return;
@@ -28137,6 +28151,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
     if (p.a === 'a:admin_outbox_v') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
+      try { await clearExpectText(ctx.from.id); } catch {}
       const idx = Math.max(0, Number(p.i) || 0);
       const page = Math.max(0, Number(p.p) || 0);
       await renderAdminOutboxView(ctx, idx, page);
@@ -28833,12 +28848,17 @@ if (p.a === 'a:admin_outbox_clear_q') {
       try { await clearExpectText(ctx.from.id); } catch {}
       // Clear any previous broadcast draft
       try { await clearDraft(ctx.from.id); } catch {}
-
-      const kb = new InlineKeyboard().text('❌ Отмена', 'a:bc_cancel');
-      kbAdminFooter(kb, '⬅️ Админка', 'a:admin_home');
       await safeEditOrReply(ctx,
-        `📣 <b>Новая рассылка</b>\n\nОтправь мне пост для рассылки:\n• текст\n• фото с подписью\n• видео с подписью\n• GIF с подписью\n• документ с подписью\n\nОдно сообщение = один пост.`,
-        { parse_mode: 'HTML', reply_markup: kb }
+        `📣 <b>Новая рассылка</b>\n\nОтправь 1 сообщение для рассылки (1 сообщение = 1 пост):\n• текст\n• фото / видео / GIF / документ (подпись — по желанию)\n\nАльбомы не поддерживаются.`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard()
+            .text('❌ Отмена', 'a:bc_cancel')
+            .text('⬅️ Админка', 'a:admin_home')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home')
+        }
       );
       await setExpectText(ctx.from.id, { type: 'bc_content' }, 30 * 60);
       return;
@@ -28875,21 +28895,18 @@ if (p.a === 'a:admin_outbox_clear_q') {
         });
         return;
       }
-      const kb = new InlineKeyboard()
-        .text('🎁 Конкурс', 'a:bc_tpl_gw')
-        .text('🏷 Профиль', 'a:bc_tpl_bp')
-        .row()
-        .text('🎬 Оффер', 'a:bc_tpl_offer')
-        .row()
-        .text('✅ Готово', 'a:bc_btn_done')
-        .text('⬅️ Отмена', 'a:bc_start');
-      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-
       await safeEditOrReply(ctx,
         `🔗 <b>Кнопки</b>\n\nМожно двумя способами:\n1) <b>Шаблоны</b> — выбери ниже (Конкурс/Профиль/Оффер)\n2) <b>Вручную</b> — отправь до 3 строк:\n<code>Текст кнопки | ссылка</code>\n\nСсылка может быть любой:\n• <code>https://...</code> (любая внешняя)\n• <code>t.me/...</code>\n• shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>\n\nПример:\n<code>Перейти в X | https://x.com/...</code>\n\nКогда готово — нажми «✅ Готово».`,
         {
           parse_mode: 'HTML',
-          reply_markup: kb
+          reply_markup: new InlineKeyboard()
+            .text('🎁 Конкурс', 'a:bc_tpl_gw')
+            .text('🏷 Профиль', 'a:bc_tpl_bp')
+            .row()
+            .text('🎬 Оффер', 'a:bc_tpl_offer')
+            .row()
+            .text('✅ Готово', 'a:bc_btn_done')
+            .text('⬅️ Отмена', 'a:bc_start')
         }
       );
       await setExpectText(ctx.from.id, { type: 'bc_button_input' }, 30 * 60);
@@ -28915,18 +28932,15 @@ if (p.a === 'a:admin_outbox_clear_q') {
         ? 'ID конкурса (число), пример: <code>123</code>'
         : (kind === 'bp' ? 'ID профиля бренда (число), пример: <code>123</code>' : 'ID оффера (число), пример: <code>123</code>');
 
-      const kb = new InlineKeyboard()
-        .text('⬅️ Назад к кнопкам', 'a:bc_buttons')
-        .row()
-        .text('✅ Готово', 'a:bc_btn_done')
-        .text('⬅️ Отмена', 'a:bc_start');
-      kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-
       await safeEditOrReply(ctx,
         `🔗 <b>${escapeHtml(label)}</b>\n\nОтправь ${hint}.\n\nМожно указать свой текст кнопки так:\n<code>123 | Мой текст</code>\n\n⬅️ «Назад» вернёт к вводу кнопок.`,
         {
           parse_mode: 'HTML',
-          reply_markup: kb
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ Назад к кнопкам', 'a:bc_buttons')
+            .row()
+            .text('✅ Готово', 'a:bc_btn_done')
+            .text('⬅️ Отмена', 'a:bc_start')
         }
       );
       await setExpectText(ctx.from.id, { type: 'bc_btn_tpl_id', kind }, 10 * 60);
@@ -29420,6 +29434,7 @@ if (p.a === 'a:admin_outbox_clear_q') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
       await renderAdminPayments(ctx, String(p.st || 'ORPHANED'), Number(p.p || 0));
       return;
     }
@@ -29427,6 +29442,7 @@ if (p.a === 'a:admin_outbox_clear_q') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
       await renderAdminPaymentView(ctx, Number(p.id), String(p.st || 'ORPHANED'), Number(p.p || 0));
       return;
     }
@@ -29434,6 +29450,7 @@ if (p.a === 'a:admin_outbox_clear_q') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
       await adminApplyPayment(ctx, u, Number(p.id), String(p.st || 'ORPHANED'), Number(p.p || 0));
       return;
     }
@@ -29442,6 +29459,7 @@ if (p.a === 'a:admin_outbox_clear_q') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
       await adminAutoHealPayments(ctx, u, String(p.st || 'ORPHANED'), Number(p.p || 0));
       return;
     }
@@ -33558,9 +33576,7 @@ async function renderBroadcastAudiencePicker(ctx) {
     .row()
     .text('🧑‍💼 Менеджеры', 'a:bc_audience|aud:managers')
     .row()
-    .text('❌ Отмена', 'a:bc_cancel');
-
-  kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+    .text('⬅️ Отмена', 'a:bc_cancel');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -33606,8 +33622,6 @@ async function renderBroadcastPreview(ctx, draft) {
     .row()
     .text('🔄 Сменить аудиторию', 'a:bc_btn_done');
 
-  kbAdminFooter(confirmKb, '⬅️ Операции', 'a:admin_ops');
-
   await safeEditOrReply(ctx, previewMsg, { parse_mode: 'HTML', reply_markup: confirmKb });
 }
 
@@ -33641,7 +33655,7 @@ async function renderBroadcastList(ctx, page = 0) {
   if (hasNext) kb.text('➡️', `a:bc_list|p:${page + 1}`);
   if (page > 0 || hasNext) kb.row();
   kb.text('📣 Новая рассылка', 'a:bc_start').row();
-  kbAdminFooter(kb, '⬅️ Админка', 'a:admin_home');
+  kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -33700,7 +33714,7 @@ async function renderBroadcastView(ctx, broadcastId) {
   }
 
   kb.text('⬅️ К списку', 'a:bc_list|p:0').row();
-  kbAdminFooter(kb, '⬅️ Админка', 'a:admin_home');
+  kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
