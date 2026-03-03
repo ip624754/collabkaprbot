@@ -91,3 +91,11 @@
 - Бренд отвечает в диалоге → команда получает уведомление с «Что дальше».
 
 Полный сценарий (10–12 минут): `docs/audit/16_BRAND_LEADS_E2E_SMOKE_2026_03.md`.
+
+## 13) Giveaways & Offers (E2E: gate + wizard + финальные экраны)
+Коротко:
+- Giveaways: без канала → gate‑экран с понятным next‑step.
+- Giveaways: с каналом → пройти wizard до preview/publish без тупиков.
+- Offers: пройти wizard до preview/publish без тупиков.
+
+Полный сценарий (10–15 минут): `docs/audit/20_GIVEAWAYS_OFFERS_E2E_SMOKE_2026_03.md`.
