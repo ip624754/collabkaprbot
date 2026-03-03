@@ -26,7 +26,7 @@
 
 ## 0.05) Выводы последнего регресс-аудита + watchlist
 
-Snapshot: **2026-03-02** (STEP269 Deep Research Audit) — P0 не найдено; шаринг (U+2060 workaround), degraded‑навигация поддержки и anti‑bypass для IG Templates подтверждены.
+Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найдено; шаринг (U+2060 workaround), degraded‑навигация поддержки и anti‑bypass для IG Templates подтверждены; Brand Manager UX и dual‑role переключения режимов приведены к fail‑open (без лишних DB‑запросов в меню/хабах).
 
 Рисковые зоны (если трогаешь — обязателен `npm run preflight` + ручной smoke):
 1) **Share-URL workaround:** не убирать формат `t.me/share/url?url=<U+2060>&text=...` — иначе часть Telegram‑клиентов снова “молчит” на кнопках шаринга.
@@ -37,8 +37,14 @@ Snapshot: **2026-03-02** (STEP269 Deep Research Audit) — P0 не найден�
 6) **Official publish:** token‑lock + DB‑reserve `PUBLISHING` менять только с мигра‑планом; иначе риск дублей в @collabka_offers.
 7) **Hot UI DB‑reads:** в меню/хабах не добавлять новые SQL‑чтения; Redis‑first, DB только на клике/DB‑truth путях.
 8) **Role‑specific UX (Creator vs Brand):** в режиме Creator не показывать brand‑only кнопки ("📰 Лента креаторов", фильтры/подбор) и не писать текст, который выглядит как инструкция открыть brand‑раздел; формулировки должны быть: "бренды увидят в ленте (режим Brand)".
+9) **Brand Manager (команда бренда):** вход в «🧑‍💼 Я менеджер бренда» всегда виден, но доступ проверяется **на клике** (гейт внутри bm‑flow). В меню/🏠 Home не делать дополнительных SQL‑проверок “canManager”; при отсутствии доступа показывать одну консистентную подсказку (не “отозван”, а “не добавили/доступ отозван”).
+10) **Dual-role (Creator + Brand + Manager):** переключение роли не должно оставлять “полу‑состояния”. При `a:ui_mode_set` всегда очищать brand‑manager state (bm_mode + active brand). В Redis degraded role switch должен быть **fail‑open** (выбранный режим показываем сразу), даже если его нельзя сохранить.
 
 Audit report (one-time scan): `docs/audit/04_CREATOR_UI_BRAND_ACTION_KEYS_AUDIT_2026_03.md`.
+
+Audit report (Brand Manager system): `docs/audit/05_BRAND_MANAGER_SYSTEM_AUDIT_2026_03.md`.
+
+Audit report (Dual-role mode switching): `docs/audit/06_DUAL_ROLE_MODE_SWITCH_AUDIT_2026_03.md`.
 
 ---
 
