@@ -10219,10 +10219,15 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
   const leads = await db.listBrandLeads(wsId, st, limit, offset);
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
+  const roleHint = (!isOwner && isCurator && !isAdmin)
+    ? `ℹ️ <i>Ты куратор: можешь отвечать шаблонами, ставить статусы и заметки. Владелец видит все изменения.</i>\n\n`
+    : '';
+
   const textHeader =
     `📨 <b>Заявки брендов</b>\n\n` +
     `Канал: <b>${escapeHtml(channel)}</b>\n` +
-    `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>\n\n`;
+    `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>\n\n` +
+    roleHint;
 
   const lines = leads.map((l) => {
     const who = l.brand_username ? '@' + String(l.brand_username).replace(/^@/, '') : (l.brand_name || 'brand');
@@ -10328,10 +10333,19 @@ async function renderCuratorInbox(ctx, userId, status = 'new', page = 0, assignF
 
   const afLabel = af === 'my' ? ' (👤 Мои)' : af === 'free' ? ' (🆓 Свободные)' : '';
 
+  const whatNext =
+    `<b>Что дальше:</b>\n` +
+    `1) Открой заявку ниже.\n` +
+    `2) Нажми «👤 Взять себе» — чтобы закрепить.\n` +
+    `3) Ответь шаблоном (✅/🧾/❌) и поставь статус.\n` +
+    `4) Добавь 📝 заметку — её увидит владелец.\n\n` +
+    `<i>Легенда: 👤 — назначено на тебя, 📌 — назначено на другого куратора.</i>\n\n`;
+
   const textHeader =
     `📨 <b>Очередь заявок</b>${afLabel}\n\n` +
     `Заявки брендов по всем каналам, где ты куратор.\n` +
-    `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>\n\n`;
+    `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>\n\n` +
+    whatNext;
 
   const lines = leads.map((l) => {
     const wsUser = String(l.workspace_username || '').trim();
@@ -10362,7 +10376,7 @@ async function renderCuratorInbox(ctx, userId, status = 'new', page = 0, assignF
       : (String(l.brand_name || '').trim() || 'brand');
     const whoShort = clipText(whoBtn, 14);
     const btnLabel = clipText(`${leadStatusIcon(l.status)} #${l.id} ${wsShort} ${whoShort}`, 56);
-    kb.row().text(btnLabel, `a:lead_view|id:${l.id}|w:${l.workspace_id}|s:${leadStatusToCb(st)}|p:${p}|r:ci`);
+    kb.row().text(btnLabel, `a:lead_view|id:${l.id}|w:${l.workspace_id}|s:${leadStatusToCb(st)}|p:${p}|r:ci|af:${af}`);
   }
 
   // pagination
@@ -10497,10 +10511,19 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     text += `\n\n<b>Назначена:</b> ${escapeHtml(assignIcon)}`;
   }
 
+  if (!canManualReply) {
+    text += `\n\n<b>Что дальше:</b>\n` +
+      `1) 👤 Взять себе — закрепить заявку.\n` +
+      `2) ✅/🧾/❌ — отправить бренду ответ шаблоном.\n` +
+      `3) 💬 В работу / ✅ Закрыть — сортировка по вкладкам.\n` +
+      `4) 📝 Заметка — внутренняя, её увидит владелец.`;
+  }
+
   const retKey = String(back?.ret || '').trim();
   const rPart = retKey ? retPartShort(retKey) : '';
+  const af = ['all','my','free'].includes(String(back?.af || '')) ? String(back.af) : 'all';
   const listCb = (retKey === 'ci')
-    ? `a:cur_inbox|s:${leadStatusToCb(back.status)}|p:${back.page}`
+    ? `a:cur_inbox|s:${leadStatusToCb(back.status)}|p:${back.page}|af:${af}`
     : `a:ws_leads|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`;
 
   const auditCb = `a:cur_audit|ws:${wsId}|u:0|l:${lead.id}|p:0|all:0|b:lv|s:${leadStatusToCb(back.status)}|pg:${back.page}${rPart}`;
@@ -11586,7 +11609,7 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
     await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, 'in_progress'), { op: 'brand_app_status', appId, st: 'in_progress' });
   }
 
-  try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
+  try { await ctx.answerCallbackQuery({ text: '✅ Отправлено креатору' }); } catch {}
   await renderBrandDealView(ctx, actorUserId, appId, back);
 }
 
@@ -11965,7 +11988,7 @@ ${escapeHtml(replyText)}`;
 
   if (!sendRes.ok) return;
 
-  try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
+  try { await ctx.answerCallbackQuery({ text: '✅ Отправлено бренду' }); } catch {}
 
   // Guard: renderBrandAppView can fail (rare, but must be handled)
   try {
@@ -12369,7 +12392,7 @@ ${tail}`;
   } else {
     text += `
 
-💬 Нажми «Написать бренду» и отправь сообщение — оно попадёт в Inbox бренда.`;
+	💬 Нажми «Написать бренду» и отправь сообщение — оно появится у бренда во входящих (Inbox) внутри этого бота.`;
   }
 
   const kb = new InlineKeyboard();
@@ -12434,7 +12457,7 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
     `💬 <b>Сообщение бренду</b>\n\n` +
     `Бренд: <b>${escapeHtml(brandName)}</b>\n` +
     `Заявка: #${app.id}\n\n` +
-    `Напиши сообщение одним текстом — я доставлю его в Inbox бренда.`;
+	    `Напиши сообщение одним текстом — я доставлю его бренду во входящие (Inbox) в этом боте.`;
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -12508,9 +12531,13 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     : '';
   const lockHint = contactsLockedHintHtml(Number(brandCredits || 0) > 0);
 
-  let out = `${header}\n\n${curatorBadge ? curatorBadge + '\n\n' : ''}${escapeHtml(String(replyText))}\n\n${lockHint}`;
+  const whatNext = `<b>Что дальше:</b>
+• Нажми «💬 Диалог» → «✍️ Ответить», чтобы продолжить переписку.
+• «🪟 Витрина» — посмотреть профиль креатора.`;
+
+  let out = `${header}\n\n${curatorBadge ? curatorBadge + '\n\n' : ''}${escapeHtml(String(replyText))}\n\n${whatNext}\n\n${lockHint}`;
   if (out.length > 3900) {
-    out = `${header}\n\n${curatorBadge ? curatorBadge + '\n\n' : ''}${escapeHtml(clipText(String(replyText), 2800))}\n\n${lockHint}`;
+    out = `${header}\n\n${curatorBadge ? curatorBadge + '\n\n' : ''}${escapeHtml(clipText(String(replyText), 2800))}\n\n${whatNext}\n\n${lockHint}`;
   }
 
   const kbToBrand = brandReplyKb(ws, wsId, brandCredits, leadId);
@@ -12604,11 +12631,27 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     const wsForNotif = ws || await db.getWorkspaceAny(wsId);
     const chName = wsForNotif?.channel_username ? '@' + wsForNotif.channel_username : (wsForNotif?.title || '');
     const actorName = ctx.from?.username ? '@' + ctx.from.username : `id:${actorUserId}`;
+    const stLine = (stAfter && stBefore && stAfter !== stBefore)
+      ? `Статус: <b>${escapeHtml((LEAD_STATUSES[normLeadStatus(stBefore)] || {}).title || String(stBefore))} → ${escapeHtml((LEAD_STATUSES[normLeadStatus(stAfter)] || {}).title || String(stAfter))}</b>
+`
+      : '';
     const notifText =
-      `📨 <b>Ответ на заявку #${leadId}</b>\n\n` +
-      `Канал: <b>${escapeHtml(chName)}</b>\n` +
-      `Ответил: <b>${escapeHtml(actorName)}</b> (${escapeHtml(actorRole)})\n` +
-      `Шаблон: <b>${escapeHtml(tplLabel)}</b>`;
+      `📨 <b>Ответ на заявку #${leadId}</b>
+
+` +
+      `Канал: <b>${escapeHtml(chName)}</b>
+` +
+      `Ответил: <b>${escapeHtml(actorName)}</b> (${escapeHtml(actorRole)})
+` +
+      `Шаблон: <b>${escapeHtml(tplLabel)}</b>
+` +
+      stLine +
+      `
+<b>Что дальше:</b>
+` +
+      `• Открой карточку и посмотри тред.
+` +
+      `• Жди ответ бренда — он придёт сообщением по этой заявке.`;
     const notifKb = new InlineKeyboard()
       .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
       .row().text('🗑 Убрать', 'a:nd');
@@ -12623,7 +12666,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
     });
   } catch {}
 
-  try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
+  try { await ctx.answerCallbackQuery({ text: '✅ Отправлено бренду' }); } catch {}
   try {
     await renderLeadView(ctx, actorUserId, leadId, back);
   } catch {
@@ -15820,7 +15863,7 @@ async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
     const replyParams = g.published_message_id ? { reply_parameters: { message_id: Number(g.published_message_id), allow_sending_without_reply: true } } : {};
     await ctx.api.sendMessage(chatId, msg, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb, ...replyParams });
     await db.auditGiveaway(g.id, g.workspace_id, userId, 'gw.reminder_posted', { actor_role: 'curator' });
-    await ctx.answerCallbackQuery({ text: '✅ Отправлено' });
+    await ctx.answerCallbackQuery({ text: '✅ Отправлено бренду' });
   } catch (e) {
     await ctx.answerCallbackQuery({ text: 'Не удалось отправить в канал.' });
   }
@@ -18385,7 +18428,17 @@ if (exp.type === 'adm_outbox_tpl_label') {
         (igUrl ? `IG: <a href="${escapeHtml(String(igUrl))}">${escapeHtml(shortUrl(String(igUrl)))}</a>\n` : '') +
         contactLine +
         `От: <b>${escapeHtml(String(who))}</b> (<code>${tgId}</code>)\n\n` +
-        `<b>Запрос:</b>\n${escapeHtml(details)}`;
+        `<b>Что дальше:</b>
+` +
+        `• Нажми «🔎 Открыть» — посмотреть карточку.
+` +
+        `• «⚡ Шаблоны» — быстрый ответ.
+` +
+        `• «✍️ Ответить» — вручную.
+
+` +
+        `<b>Запрос:</b>
+${escapeHtml(details)}`;
 
       const kb = new InlineKeyboard()
         .text('🔎 Открыть', `a:lead_view|id:${lead.id}|ws:${wsId}|s:new|p:0`)
@@ -18479,10 +18532,16 @@ if (exp.type === 'adm_outbox_tpl_label') {
 
       const lockHint = contactsLockedHintHtml(Number(brandCredits || 0) > 0);
 
+      const whatNext =
+        `<b>Что дальше:</b>\n` +
+        `• Нажми «💬 Диалог» → «✍️ Ответить», чтобы продолжить переписку.\n` +
+        `• «🪟 Витрина» — посмотреть профиль креатора.`;
+
       const out =
         `💬 <b>Ответ по заявке #${leadId}</b>\n\n` +
         `🧑‍🎨 Креатор: <b>${escapeHtml(String(fromName))}</b>\n\n` +
         `${escapeHtml(clipText(replyText, 2800))}\n\n` +
+        `${whatNext}\n\n` +
         `${lockHint}`;
 
       const kbToBrand = brandReplyKb(ws, Number(ws.id), brandCredits, leadId);
@@ -18501,11 +18560,29 @@ if (exp.type === 'adm_outbox_tpl_label') {
       // N3: Notify curators that owner replied
       try {
         const chName = ws.channel_username ? '@' + ws.channel_username : (ws.title || '');
+        const stBefore = normLeadStatus(lead.status);
+        const stAfter = (stBefore === 'new') ? 'in_progress' : stBefore;
+        const stLine = (stAfter && stBefore && stAfter !== stBefore)
+          ? `Статус: <b>${escapeHtml((LEAD_STATUSES[normLeadStatus(stBefore)] || {}).title || String(stBefore))} → ${escapeHtml((LEAD_STATUSES[normLeadStatus(stAfter)] || {}).title || String(stAfter))}</b>
+`
+          : '';
         const notifText =
-          `📨 <b>Ответ на заявку #${leadId}</b>\n\n` +
-          `Канал: <b>${escapeHtml(chName)}</b>\n` +
-          `Ответил: <b>Владелец</b>\n` +
-          `Сниппет: <i>${escapeHtml(clipText(replyText, 100))}</i>`;
+          `📨 <b>Ответ на заявку #${leadId}</b>
+
+` +
+          `Канал: <b>${escapeHtml(chName)}</b>
+` +
+          `Ответил: <b>Владелец</b>
+` +
+          stLine +
+          `Сниппет: <i>${escapeHtml(clipText(replyText, 100))}</i>
+
+` +
+          `<b>Что дальше:</b>
+` +
+          `• Открой карточку и посмотри тред.
+` +
+          `• Жди ответ бренда — он придёт сообщением по этой заявке.`;
         const notifKb = new InlineKeyboard()
           .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:n|p:0`)
           .row().text('🗑 Убрать', 'a:nd');
@@ -18518,15 +18595,24 @@ if (exp.type === 'adm_outbox_tpl_label') {
         });
       } catch {}
 
-      const rPart = exp.ret ? retPartShort(String(exp.ret)) : '';
-
-      const kb = new InlineKeyboard()
-        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${rPart}`)
-        .text('📨 Заявки', `a:ws_leads|ws:${Number(ws.id)}|s:${String(exp.backStatus || 'new')}|p:${Number(exp.backPage || 0)}${rPart}`);
-
       await clearExpectText(ctx.from.id);
 
-      await ctx.reply('✅ Ответ отправлен бренду.', { reply_markup: kb });
+      const back = {
+        status: String(exp.backStatus || 'new'),
+        page: Math.max(0, Number(exp.backPage || 0)),
+        ret: String(exp.ret || '').trim()
+      };
+
+      // UX: после ручного ответа не оставляем оператора на «квитанции» — возвращаем в карточку заявки.
+      try {
+        await renderLeadView(ctx, u.id, leadId, back);
+      } catch (e) {
+        const rPart = back.ret ? retPartShort(back.ret) : '';
+        const kb = new InlineKeyboard()
+          .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:${leadStatusToCb(back.status)}|p:${Number(back.page || 0)}${rPart}`)
+          .text('📨 Заявки', `a:ws_leads|w:${Number(ws.id)}|s:${leadStatusToCb(back.status)}|p:${Number(back.page || 0)}${rPart}`);
+        await ctx.reply('✅ Ответ отправлен бренду.', { reply_markup: kb });
+      }
       return;
     }
 
@@ -18572,6 +18658,13 @@ if (exp.type === 'adm_outbox_tpl_label') {
         `🧑‍🎨 Креатор: <b>${escapeHtml(String(ws?.profile_title || ws?.title || ''))}</b>
 ` +
         `🏷️ Бренд: <b>${escapeHtml(fromBrand)}</b>
+
+` +
+        `<b>Что дальше:</b>
+` +
+        `• Нажми «👀 Открыть» — карточка заявки.
+` +
+        `• «✍️ Ответить» — ответ бренду.
 
 ` +
         `${escapeHtml(clipText(msg, 2800))}`;
@@ -18791,7 +18884,6 @@ ${escapeHtml(reply)}`;
       if (app && String(app.status) === 'new') {
         await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, 'in_progress'), { op: 'brand_app_status', appId, st: 'in_progress' });
       }
-
       await clearExpectText(ctx.from.id);
 
       const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:new|p:0`);
@@ -18800,7 +18892,16 @@ ${escapeHtml(reply)}`;
         .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
       if (delivered) {
-        return ctx.reply('✅ Ответ доставлен креатору.', { reply_markup: kb });
+        // UX: после ручного ответа возвращаем в карточку заявки (не оставляем на квитанции).
+        try {
+          await renderBrandAppView(ctx, u.id, appId, {
+            status: String(exp.backStatus || 'new'),
+            page: Math.max(0, Number(exp.backPage || 0))
+          });
+        } catch (e) {
+          return ctx.reply('✅ Ответ доставлен креатору.', { reply_markup: kb });
+        }
+        return;
       }
 
       const backStatus = String(exp.backStatus || 'new');
@@ -24299,12 +24400,13 @@ if (p.a === 'a:ws_leads') {
       const page = Number(p.p || 0);
       const retKey = String(p.ret || retFromCb(p.r) || '').trim();
       const rPart = retKey ? retPartShort(retKey) : '';
+      const af = ['all','my','free'].includes(String(p.af || '')) ? String(p.af) : 'all';
       const backCb = (retKey === 'ci')
-        ? `a:cur_inbox|s:${leadStatusToCb(st)}|p:${page}`
+        ? `a:cur_inbox|s:${leadStatusToCb(st)}|p:${page}|af:${af}`
         : (wsId ? `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${page}${rPart}` : 'a:menu');
       await safeEditOrReply(ctx, '⏳ Открываю карточку…', { reply_markup: navKb(backCb) });
       try {
-        await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey }), 15000, 'lead.view');
+        await withTimeout(renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: st, page, ret: retKey, af: String(p.af || '') }), 15000, 'lead.view');
       } catch (e) {
         const cid = ctx.state?.cid || null;
         const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
@@ -24455,8 +24557,18 @@ if (p.a === 'a:lead_assign') {
     try {
       const actorName = ctx.from?.username ? '@' + ctx.from.username : `id:${u.id}`;
       const notifText =
-        `👤 <b>Заявка #${leadId} взята</b>\n\n` +
-        `Куратор: <b>${escapeHtml(actorName)}</b>${action === 'force' ? ' (переназначил)' : ''}`;
+        `👤 <b>Заявка #${leadId} взята в работу</b>
+
+` +
+        `Куратор: <b>${escapeHtml(actorName)}</b>${action === 'force' ? ' (переназначил)' : ''}
+
+` +
+        `<b>Что дальше:</b>
+` +
+        `• Открой карточку заявки.
+` +
+        `• Если нужно — переназначь куратора в карточке.
+`;
       const notifKb = new InlineKeyboard()
         .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
         .row().text('🗑 Убрать', 'a:nd');
@@ -24576,15 +24688,55 @@ if (p.a === 'a:lead_set') {
         return;
       }
 
+      // Status-change envelope (for audit + notifications)
+      const actorRole = isAdmin ? 'admin' : (isCuratorActor ? 'curator' : 'owner');
+      const stBefore = normLeadStatus(lead.status);
+      let stAfter = normLeadStatus(st);
+      // Curator meta-updates only change from NEW -> IN_PROGRESS, and set CLOSED if not already closed
+      if (isCuratorActor && stAfter === 'in_progress' && stBefore !== 'new') stAfter = stBefore;
+      if (isCuratorActor && stAfter === 'closed' && stBefore === 'closed') stAfter = stBefore;
+      const statusChanged = !!(stAfter && stBefore && stAfter !== stBefore);
+
+      // Brand-side signal (reverse): when owner/curator changes status manually, notify the brand with safe "what next".
+      if (statusChanged) {
+        try {
+          const brandTgId = Number(lead.brand_tg_id || 0);
+          if (brandTgId) {
+            let brandCredits = 0;
+            try {
+              const uid = Number(lead.brand_user_id || 0);
+              if (uid) brandCredits = await db.getBrandCredits(uid);
+              else brandCredits = await db.getBrandCreditsByTgId(brandTgId);
+            } catch {}
+
+            const titleBefore = (LEAD_STATUSES[normLeadStatus(stBefore)] || {}).title || String(stBefore);
+            const titleAfter = (LEAD_STATUSES[normLeadStatus(stAfter)] || {}).title || String(stAfter);
+            const fromName = String(ws.profile_title || ws.title || 'Креатор');
+
+            const outToBrand =
+              `🔄 <b>Статус заявки #${leadId} обновлён</b>
+
+` +
+              `🧑‍🎨 Креатор: <b>${escapeHtml(String(fromName))}</b>
+` +
+              `Статус: <b>${escapeHtml(String(titleBefore))} → ${escapeHtml(String(titleAfter))}</b>
+
+` +
+              `<b>Что дальше:</b>
+` +
+              `• Если нужно уточнить — открой «💬 Диалог» и напиши сообщение.
+` +
+              `• Или посмотри «🪟 Витрина».`;
+
+            const kbToBrand = brandReplyKb(ws, wsId, brandCredits, leadId);
+            await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, outToBrand, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kbToBrand });
+          }
+        } catch {}
+      }
+
       // Owner-only audit (workspace_audit): status change
       try {
-        const actorRole = isAdmin ? 'admin' : (isCuratorActor ? 'curator' : 'owner');
-        const stBefore = normLeadStatus(lead.status);
-        let stAfter = normLeadStatus(st);
-        // Curator meta-updates only change from NEW -> IN_PROGRESS, and set CLOSED if not already closed
-        if (isCuratorActor && stAfter === 'in_progress' && stBefore !== 'new') stAfter = stBefore;
-        if (isCuratorActor && stAfter === 'closed' && stBefore === 'closed') stAfter = stBefore;
-        if (stAfter && stBefore && stAfter !== stBefore) {
+        if (statusChanged) {
           await db.auditWorkspace(wsId, u.id, 'lead.status_changed', {
             lead_id: Number(leadId),
             from: String(stBefore),
@@ -24594,6 +24746,36 @@ if (p.a === 'a:lead_set') {
           });
         }
       } catch {}
+
+      // N5: Notify owner/assigned curator (only) when curator changed status (no spam)
+      if (isCuratorActor && statusChanged) {
+        try {
+          const chName = ws.channel_username ? '@' + ws.channel_username : (ws.title || '');
+          const actorName = ctx.from?.username ? '@' + ctx.from.username : `id:${u.id}`;
+          const titleBefore = (LEAD_STATUSES[normLeadStatus(stBefore)] || {}).title || String(stBefore);
+          const titleAfter = (LEAD_STATUSES[normLeadStatus(stAfter)] || {}).title || String(stAfter);
+          const notifText =
+            `🔄 <b>Статус заявки #${leadId} изменён</b>\n\n` +
+            `Канал: <b>${escapeHtml(String(chName))}</b>\n` +
+            `Куратор: <b>${escapeHtml(String(actorName))}</b>\n` +
+            `Статус: <b>${escapeHtml(String(titleBefore))} → ${escapeHtml(String(titleAfter))}</b>\n\n` +
+            `<b>Что дальше:</b>\n` +
+            `• Открой карточку заявки и посмотри тред.\n` +
+            `• Если нужно — ответь бренду или добавь заметку.`;
+          const notifKb = new InlineKeyboard()
+            .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
+            .row().text('🗑 Убрать', 'a:nd');
+
+          // If lead has assigned curator — notify only them (+ owner). If not — notify only owner.
+          const assignedTo = lead.assigned_user_id ? Number(lead.assigned_user_id) : Number(u.id);
+          await notifyWorkspaceTeam(apiFromCtx(ctx), wsId, {
+            text: notifText,
+            kb: notifKb,
+            exclude: new Set([Number(ctx.from?.id || 0)]),
+            onlyAssigned: assignedTo || null
+          });
+        } catch {}
+      }
 
       try {
         await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus || st, page: backPage, ret: retKey });
@@ -28403,7 +28585,7 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
       // Confirm in support chat (keep topic if forum-enabled)
       if (ok) {
-        try { await ctx.answerCallbackQuery({ text: '✅ Отправлено' }); } catch {}
+        try { await ctx.answerCallbackQuery({ text: '✅ Отправлено бренду' }); } catch {}
 
         try {
           const threadId = Number(ctx.callbackQuery?.message?.message_thread_id || 0);
