@@ -55,7 +55,7 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 22) **STEP287 preflight: node --check:** `npm run preflight` теперь прогоняет `node --check` по ключевым entrypoint‑ам и ловит SyntaxError ещё до деплоя (страховка от регрессий типа STEP286).
 23) **Giveaways & Offers E2E smoke:** держим быстрый end-to-end smoke (gate + wizard + финальные экраны), чтобы после деплоя быстро поймать тупики/возвраты в розыгрышах и офферах. См. audit report 20 и секцию 13 в `smoke-tests_short.md`.
 
-24) **Broadcast E2E smoke:** держим быстрый end‑to‑end smoke (gate + создание + cooldown), чтобы после деплоя быстро ловить тупики и проверки 429/cooldown в рассылках. См. audit report 21 и секцию 14 в `smoke-tests_short.md`.
+24) **Broadcast E2E smoke:** держим быстрый end‑to‑end smoke (admin access + создание + cooldown), чтобы после деплоя быстро ловить тупики/навигацию в админке и проверки 429/cooldown в рассылках. См. audit report 21 и секцию 14 в `smoke-tests_short.md`.
 
 Audit report (one-time scan): `docs/audit/04_CREATOR_UI_BRAND_ACTION_KEYS_AUDIT_2026_03.md`.
 
@@ -90,6 +90,10 @@ Audit report (STEP286 hotfix invalid token): `docs/audit/18_STEP286_HOTFIX_INVAL
 Audit report (STEP287 preflight node --check): `docs/audit/19_STEP287_PREFLIGHT_NODE_CHECK_2026_03.md`.
 
 Audit report (Giveaways & Offers E2E smoke): `docs/audit/20_GIVEAWAYS_OFFERS_E2E_SMOKE_2026_03.md`.
+
+Audit report (Broadcast E2E smoke): `docs/audit/21_BROADCAST_E2E_SMOKE_2026_03.md`.
+
+Audit report (Admin Broadcast audit + UX hardening): `docs/audit/22_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md`.
 
 
 ---
@@ -406,11 +410,14 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 
 ### B) Broadcast (рассылки)
 Состояние (актуально):
+- Доступ: только **суперадмины** (👑 Админка → 🧰 Операции → 📣 Рассылка).
 - Тик может запускаться по расписанию (обычно 1 раз/час) или вручную (QStash “Run it manually”).
 - Поддержка контента:
   - текст (включая “ссылку в слово”: Telegram entities → HTML)
   - 1 фото (альбомы не включали намеренно)
-  - опрос (poll)
+  - видео с подписью
+  - GIF (animation) с подписью
+  - документ с подписью (как вложение)
 - Кнопки:
   - до **3** URL-кнопок, формат ввода: `Название | ссылка` (по строке)
   - поддержка shortcuts: `gw_123`, `bp_45`, `offer_777` → deep link `https://t.me/<bot>?start=...`
