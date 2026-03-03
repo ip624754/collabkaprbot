@@ -53,6 +53,8 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 21) **STEP286 hotfix:** исправлен `SyntaxError: Invalid or unexpected token` на cold start (newline внутри `'...'` в сообщении `a:folders_my`). Теперь используется экранирование \n\n.
 
 22) **STEP287 preflight: node --check:** `npm run preflight` теперь прогоняет `node --check` по ключевым entrypoint‑ам и ловит SyntaxError ещё до деплоя (страховка от регрессий типа STEP286).
+23) **Giveaways & Offers E2E smoke:** держим быстрый end-to-end smoke (gate + wizard + финальные экраны), чтобы после деплоя быстро поймать тупики/возвраты в розыгрышах и офферах. См. audit report 20 и секцию 13 в `smoke-tests_short.md`.
+
 Audit report (one-time scan): `docs/audit/04_CREATOR_UI_BRAND_ACTION_KEYS_AUDIT_2026_03.md`.
 
 Audit report (Brand Manager system): `docs/audit/05_BRAND_MANAGER_SYSTEM_AUDIT_2026_03.md`.
@@ -82,6 +84,10 @@ Audit report (Brand Leads E2E smoke): `docs/audit/16_BRAND_LEADS_E2E_SMOKE_2026_
 Audit report (Folders Editors disabled): `docs/audit/17_FOLDERS_EDITORS_DISABLED_BY_DEFAULT_2026_03.md`.
 
 Audit report (STEP286 hotfix invalid token): `docs/audit/18_STEP286_HOTFIX_INVALID_TOKEN_2026_03.md`.
+
+Audit report (STEP287 preflight node --check): `docs/audit/19_STEP287_PREFLIGHT_NODE_CHECK_2026_03.md`.
+
+Audit report (Giveaways & Offers E2E smoke): `docs/audit/20_GIVEAWAYS_OFFERS_E2E_SMOKE_2026_03.md`.
 
 
 ---
