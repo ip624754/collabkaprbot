@@ -2406,13 +2406,11 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 
   if (opts.noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
 
-  if (opts.canManager) {
-    kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
-      .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
-      .row();
-  } else {
-    kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu').row();
-  }
+  // Brand Team UX (V4): manager cabinet entry is always visible.
+  // Gate happens inside the manager flow (no extra DB queries in Menu render).
+  kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
+    .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
+    .row();
 
   // Staff shortcuts (pairs)
   const extra = [];
@@ -2455,9 +2453,8 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   if (opts.founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:menu').row();
   kb.text(`🏷 Профиль бренда${profTag}`, 'a:brand_profile|ws:0|ret:brand').row();
 
-  if (canManager) {
-    kb.text('🧑‍💼 Я менеджер бренда', 'a:bm_mode_set|v:1|ret:menu').row();
-  }
+  // Manager cabinet entry is always visible; access is gated on click.
+  kb.text('🧑‍💼 Я менеджер бренда', 'a:bm_home').row();
 } else {
     kb.text('ℹ️ Права менеджера', 'a:bm_help')
       .row();
@@ -2490,10 +2487,6 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   }
 
   
-  if (!isManager && canManager) {
-    kb.row().text('🧑‍💼 Я менеджер бренда', 'a:bm_mode_set|v:1|ret:menu');
-  }
-
   kb.row().text('🏠 Home', 'a:home');
 
   return kb;
@@ -2541,6 +2534,14 @@ async function setBmActiveBrand(tgId, brandUserId) {
   }
 }
 
+function bmNoAccessHtml() {
+  return `⛔ <b>Нет доступа к роли «Менеджер бренда»</b>
+
+Тебя ещё не добавили в «👔 Менеджеры бренда» (или доступ был отозван).
+
+Попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
+}
+
 
 function bmBrandLabelFromRow(row) {
   const id = Number(row?.user_id || 0);
@@ -2553,12 +2554,16 @@ function bmBrandLabelFromRow(row) {
 }
 
 async function clearBmActiveBrand(tgId) {
-  await redis.del(bmActiveBrandKey(tgId));
+  try {
+    await redis.del(bmActiveBrandKey(tgId));
+  } catch {
+    // ignore (Redis degraded)
+  }
 }
 
 async function disableBrandManagerState(tgId) {
-  await setBrandManagerMode(tgId, false);
-  await clearBmActiveBrand(tgId);
+  try { await setBrandManagerMode(tgId, false); } catch {}
+  try { await clearBmActiveBrand(tgId); } catch {}
 }
 
 async function renderBmPickBrand(ctx, u, params = {}) {
@@ -2584,9 +2589,7 @@ async function renderBmPickBrand(ctx, u, params = {}) {
   if (bm.revoked || !(bm.brands || []).length) {
     await disableBrandManagerState(ctx.from.id);
     const kb = navKb('a:menu');
-    const text = `⛔ <b>Доступ менеджера отозван</b>
-
-Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
+    const text = bmNoAccessHtml();
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
@@ -2645,9 +2648,7 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
   if (bm.revoked) {
     await disableBrandManagerState(ctx.from.id);
     const kb = navKb('a:menu');
-    const text = `⛔ <b>Доступ менеджера отозван</b>
-
-Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
+    const text = bmNoAccessHtml();
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -2708,7 +2709,9 @@ async function renderMainMenu(ctx, flags, params = {}) {
   // Track last UI home for resilient Back in BX flows
   if (ctx.from?.id) await setUiHome(ctx.from.id, BX_HOME.MAIN_MENU);
 
-const mode = await resolveUiMode(ctx.from?.id);
+  // NOTE: `modeOverride` is used for immediate UI after a role switch.
+  // When Redis is degraded, the role cannot be persisted — but we still must show the chosen menu (fail-open).
+  const mode = params.modeOverride ? normalizeUiMode(params.modeOverride) : await resolveUiMode(ctx.from?.id);
 
 // System Notice availability (for "📣 Актуальное объявление" button). Redis-only, no DB.
 const chatType = String(ctx?.chat?.type || '');
@@ -2748,9 +2751,7 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
     } else if (bm.revoked) {
       await disableBrandManagerState(ctx.from.id);
       modeHuman = 'Менеджер бренда';
-      text = `⛔ <b>Доступ менеджера отозван</b>
-
-Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
+      text = bmNoAccessHtml();
       kb = navKb('a:menu');
     } else if (bm.enabled && bm.needsPick) {
       await renderBmPickBrand(ctx, u, { ret: 'menu', wsId: 0, page: 0, edit });
@@ -2776,10 +2777,8 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
 Для брендов — поиск креаторов, лента креаторов и Inbox.
 
 Выбери действие:`;
-      let canManager = false;
-      try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
-      // V4: no extra Neon queries in menu render (status will be checked on click)
-      kb = mainMenuBrandKb(flags, { isManager: false, canManager, teamLocked: false, teamBasicDone: null, teamPaid: null, founderActive, noticeActive });
+      // V4: no extra Neon queries in menu render. Manager access is checked on click.
+      kb = mainMenuBrandKb(flags, { isManager: false, canManager: false, teamLocked: false, teamBasicDone: null, teamPaid: null, founderActive, noticeActive });
     }
   } else if (mode === UI_MODES.BRAND) {
     const base = `🏠 <b>Главное меню</b>
@@ -2801,11 +2800,8 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
 Для Creator/UGC — подключение канала, витрина, лента и розыгрыши.
 
 Выбери действие:`;
-    let canManager = false;
-    if (u) {
-      try { canManager = (await db.listBrandsForManager(u.id)).length > 0; } catch { canManager = false; }
-    }
-    kb = mainMenuCreatorKb(flags, { canManager, founderActive, noticeActive });
+    // V4: no extra Neon queries in menu render. Manager access is checked on click.
+    kb = mainMenuCreatorKb(flags, { canManager: false, founderActive, noticeActive });
   }
 
   const opts = { parse_mode: 'HTML', reply_markup: kb };
@@ -2853,15 +2849,9 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
   const bmMode = await getBrandManagerMode(tgId);
   const curMode = (flags?.isCurator ? await getCuratorMode(tgId) : false);
 
-  // Can this user act as a brand manager (even if the mode is currently OFF)?
-  let managerBrands = [];
-  let canManager = false;
-  try {
-    managerBrands = await db.listBrandsForManager(u.id);
-    canManager = Array.isArray(managerBrands) && managerBrands.length > 0;
-  } catch (e) {
-    canManager = false;
-  }
+  // Brand manager access is checked on click (a:home_mode|m:brand_manager).
+  // Keep Home hub render DB-light.
+  const canManager = false;
 
   // Effective mode: curator overlay > brand manager > brand/creator UI mode
   const effective =
@@ -2881,15 +2871,7 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
         : uiModeHuman(uiMode);
 
   let hint = '';
-  if (bmMode && canManager) {
-    try {
-      const active = await getBmActiveBrand(tgId);
-      const row = managerBrands.find((b) => Number(b.user_id) == Number(active)) || managerBrands[0];
-      const label = row ? bmBrandLabelFromRow(row) : '';
-      if (label) hint += `
-• Активный бренд: <b>${escapeHtml(label)}</b>`;
-    } catch {}
-  }
+  // Active brand hint requires DB access; keep it out of the hot Home hub render.
   if (curMode) hint += `
 • Режим куратора: <b>ВКЛ</b>`;
 
@@ -2994,7 +2976,8 @@ ${trialLine}
 
   if (founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:home').row();
 
-  if (canManager) kb.text(bBm, 'a:home_mode|m:brand_manager').row();
+  // Show manager-mode switch only when it's already enabled (no DB lookup here).
+  if (bmMode) kb.text(bBm, 'a:home_mode|m:brand_manager').row();
   if (flags?.isCurator) kb.text(bCur, 'a:home_mode|m:curator').row();
 
 
@@ -3177,9 +3160,7 @@ async function renderRoleHub(ctx, u, flags) {
       }
       if (bm.revoked) {
         await disableBrandManagerState(ctx.from.id);
-        const msg = `⛔ <b>Доступ менеджера отозван</b>
-
-Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
+        const msg = bmNoAccessHtml();
         await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
         return;
       }
@@ -21833,6 +21814,10 @@ if (p.a === 'a:ui_mode_set') {
     hadUiMode = true; // fail-open
   }
 
+  // Dual-role safety: switching UI mode must not keep manager-brand context around.
+  // Otherwise Home/Guide can show "Менеджер бренда" while user explicitly switched to Creator.
+  await disableBrandManagerState(ctx.from.id);
+
   await setUiMode(ctx.from.id, mode);
   if (!hadUiMode) { try { await trackAcqRole(ctx.from.id, mode); } catch {} }
 
@@ -21846,7 +21831,7 @@ if (p.a === 'a:ui_mode_set') {
     return;
   }
 
-  await renderMainMenu(ctx, flags, { edit: true });
+  await renderMainMenu(ctx, flags, { edit: true, user: u, modeOverride: mode });
   return;
 }
 
@@ -22449,9 +22434,7 @@ if (p.a === 'a:brand_dir_open') {
 
       if (bm.revoked) {
         await disableBrandManagerState(ctx.from.id);
-        const text = `⛔ <b>Доступ менеджера отозван</b>
-
-Если это ошибка — попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
+        const text = bmNoAccessHtml();
         await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }
@@ -22544,9 +22527,7 @@ if (p.a === 'a:brand_dir_open') {
 
       if (!brands.length) {
         await disableBrandManagerState(ctx.from.id);
-        const text = `⛔ <b>Доступ менеджера отозван</b>
-
-Попроси владельца бренда добавить тебя в «👔 Менеджеры бренда».`;
+        const text = bmNoAccessHtml();
         await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
         return;
       }

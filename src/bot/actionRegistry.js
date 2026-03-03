@@ -136,11 +136,13 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:bm_home": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:bm_invite": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:bm_list": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
-  "a:bm_mode_set": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
-  "a:bm_pick_brand": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
+  // Dual-role UX: mode toggles and manager brand picker must remain available even if Redis is degraded.
+  // These actions are safe (navigation / DB-checked screens); Redis is only used for best-effort UI state.
+  "a:bm_mode_set": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
+  "a:bm_pick_brand": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:bm_rm_ok": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:bm_rm_q": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
-  "a:bm_set_brand": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:bm_set_brand": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   // Monetization must not be blocked by Redis degradation: accept/charge is DB-truth and idempotent.
   "a:brand_app_accept": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.QUEUE_FIRST },
   "a:brand_app_accepted_done": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
@@ -475,7 +477,9 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:support_push": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.NONE },
   "a:support_write": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:team": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
-  "a:ui_mode_set": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
+  // UI mode switch must be fail-open in Redis degraded mode.
+  // It only writes Redis hints; all important state is validated in DB on click.
+  "a:ui_mode_set": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:verify_home": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:verify_info": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:verify_kind": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
