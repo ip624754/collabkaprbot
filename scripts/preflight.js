@@ -27,6 +27,18 @@ function runNpm(scriptName) {
   }
 }
 
+function runNodeCheck(relPath) {
+  const abs = path.join(ROOT, relPath);
+  const res = spawnSync(process.execPath, ["--check", abs], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+}
+
 function logHeader(title) {
   // eslint-disable-next-line no-console
   console.log(`\n=== ${title} ===`);
@@ -64,6 +76,45 @@ runNpm("lint:redis-atomic");
 
 logHeader("Preflight: redis.js exports gate");
 runNpm("lint:redis-exports");
+
+logHeader("Preflight: Node syntax check (node --check)");
+const nodeCheckCandidates = [
+  "src/bot/bot.js",
+  "src/bot/cron.js",
+  "src/bot/routes/callbacks.js",
+  "api/webhook.js",
+  "api/cron_router.js",
+  "api/health.js",
+  "migrations/run.js",
+  "scripts/preflight.js",
+  "src/db/queries.js",
+  "src/lib/redis.js",
+  "src/lib/tgApi.js",
+];
+
+const nodeCheckList = [];
+for (const rel of nodeCheckCandidates) {
+  if (fs.existsSync(path.join(ROOT, rel))) nodeCheckList.push(rel);
+}
+
+// Optional: if api/qstash exists, check all .js handlers there too.
+const qstashDir = path.join(ROOT, "api", "qstash");
+if (fs.existsSync(qstashDir) && fs.statSync(qstashDir).isDirectory()) {
+  for (const f of fs.readdirSync(qstashDir)) {
+    if (f.endsWith(".js")) nodeCheckList.push(path.join("api", "qstash", f));
+  }
+}
+
+if (nodeCheckList.length === 0) {
+  // eslint-disable-next-line no-console
+  console.warn("[preflight] No JS entrypoints found for node --check (skipping)");
+} else {
+  for (const rel of nodeCheckList) {
+    // eslint-disable-next-line no-console
+    console.log(`[preflight] node --check ${rel}`);
+    runNodeCheck(rel);
+  }
+}
 
 // eslint-disable-next-line no-console
 console.log("\n✅ Preflight OK");
