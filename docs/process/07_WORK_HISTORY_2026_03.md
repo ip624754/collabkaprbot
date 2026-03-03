@@ -819,3 +819,50 @@ Smoke:
 - Папки owner работают как раньше.
 
 Риск регрессий: **низкий** (папки owner не тронуты; добавлена только защита/флаг и убран лишний DB read в меню по умолчанию).
+
+
+### STEP286 — Hotfix: Vercel cold-start SyntaxError after STEP285 (folders message newline)
+Симптом:
+- На Vercel `SyntaxError: Invalid or unexpected token` при старте (ESM compile).
+
+Причина:
+- В `src/bot/bot.js` в `a:folders_my` в сообщении для режима “Editors выключены” попал literal newline внутри строки `'...'`.
+
+Фикс:
+- `src/bot/bot.js`: сообщение переписано в однострочную строку с `\n\n` (escapes), чтобы модуль корректно компилировался.
+
+Docs:
+- `docs/audit/18_STEP286_HOTFIX_INVALID_TOKEN_2026_03.md` — отчёт.
+- `docs/00_CURRENT_STATE.md` — watchlist + ссылка на audit 18.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — этот шаг.
+
+QA:
+- `node --check src/bot/bot.js` проходит.
+- В боте `📁 Папки` (Editors выключены) показывает корректный текст.
+
+Риск регрессий: **нулевой/минимальный** (фикс синтаксиса в одном сообщении).
+
+
+### STEP287 — Release Preflight: add `node --check` (SyntaxError gate)
+Контекст:
+- На STEP285/286 был реальный прод‑инцидент: Vercel падал на cold start с `SyntaxError: Invalid or unexpected token` из‑за синтаксической мелочи (literal newline внутри строки).
+
+Цель:
+- Ловить такие ошибки **до деплоя** одной командой `npm run preflight`.
+
+Изменения:
+- `scripts/preflight.js`:
+  - добавлен шаг **Node syntax check**: прогон `node --check` по ключевым entrypoint‑ам (bot/cron/api/migrations и т.д.).
+  - если существует `api/qstash/`, проверяются все `api/qstash/*.js` автоматически.
+
+Docs:
+- `docs/process/10_RELEASE_PREFLIGHT.md` — добавлен пункт 8 про `node --check`.
+- `docs/16_RELEASE_CHECKLIST.md` — уточнение, что preflight теперь ловит SyntaxError до Vercel.
+- `docs/audit/19_STEP287_PREFLIGHT_NODE_CHECK_2026_03.md` — короткий отчёт.
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про preflight `node --check`.
+
+QA:
+- `npm run preflight` проходит.
+- (опционально) при синтаксической ошибке в любом entrypoint preflight падает на этапе `node --check`.
+
+Риск регрессий: **нулевой** (dev‑инструмент, runtime не менялся).

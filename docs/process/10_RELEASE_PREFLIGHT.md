@@ -39,6 +39,9 @@ npm run qa:fast
    Защита от build‑regression: гарантирует, что `src/lib/redis.js` экспортирует обязательные helper’ы (`incrWithExpireOnFirst`, `incrWithExpire`, `lpushTrim`).  
    Это предотвращает падение на Vercel при загрузке ESM модулей с ошибкой вида `does not provide an export named ...`.
 
+8) **Node syntax check (`node --check`)**  
+   Запускает `node --check` по ключевым entrypoint‑ам (`src/bot/bot.js`, `api/webhook.js`, `api/cron_router.js`, и т.д.), чтобы ловить **SyntaxError на cold start** (например, случайный literal newline внутри строки `'...'`) ещё **до** деплоя.
+
 ## Если preflight упал
 
 - На `actions:md changed` → закоммить `docs/02_ACTION_KEYS_REGISTRY.md` и повторить.
