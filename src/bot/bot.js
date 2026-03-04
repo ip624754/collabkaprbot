@@ -1921,6 +1921,16 @@ async function invalidateWorkspacesCache(ownerUserId) {
   try { await redis.del(key); } catch {}
 }
 
+
+
+async function invalidateRoleFlagsCache(userId) {
+  // best-effort: role flags are DB-truth; cache is only for hot UI.
+  const k0 = k(['cache', 'role_flags', String(userId), '0']);
+  const k1 = k(['cache', 'role_flags', String(userId), '1']);
+  try { await redis.del(k0); } catch {}
+  try { await redis.del(k1); } catch {}
+}
+
 async function isModerator(userRow, tgId) {
   return isSuperAdminTg(tgId) || (userRow ? await db.isNetworkModerator(userRow.id) : false);
 }
@@ -18536,6 +18546,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
         return;
       }
       await db.addCurator(exp.wsId, curator.id, u.id);
+      try { await invalidateRoleFlagsCache(curator.id); } catch {}
       const ws = await db.getWorkspaceAny(Number(exp.wsId));
       const wsTitle = ws ? wsLabelNice(ws) : `Канал #${exp.wsId}`;
       await renderCuratorManage(ctx, u.id, exp.wsId, { notice: `Куратор @${username} добавлен` });
@@ -18898,6 +18909,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       }
 
       await db.addWorkspaceEditor(wsId, target.id, u.id);
+      try { await invalidateRoleFlagsCache(target.id); } catch {}
       await db.auditWorkspace(wsId, u.id, 'ws.editor_added', { userId: target.id });
 
       const kb = new InlineKeyboard()
@@ -20080,6 +20092,7 @@ if (exp.type === 'brand_deals_search') {
       }
 
       await db.addNetworkModerator(u2.id, u.id);
+      try { await invalidateRoleFlagsCache(u2.id); } catch {}
       await ctx.reply(`✅ Модератор добавлен: @${u2.tg_username || username}`);
       return;
     }
@@ -21107,6 +21120,7 @@ ${list}
 
       const ownerUserId = Number(val.ownerUserId || val.owner_user_id || val.owner || 0);
       await db.addCurator(wsId, u.id, ownerUserId || u.id);
+      try { await invalidateRoleFlagsCache(u.id); } catch {}
 
       const ws = await db.getWorkspaceAny(wsId);
       const wsTitle = ws ? wsLabelNice(ws) : `Канал #${wsId}`;
@@ -21204,6 +21218,7 @@ ${list}
 
       const ownerUserId = Number(val.ownerUserId || val.owner_user_id || val.owner || 0);
       await db.addWorkspaceEditor(payload.wsId, u.id, ownerUserId || u.id);
+      try { await invalidateRoleFlagsCache(u.id); } catch {}
       await redis.del(key);
 
       const kb = new InlineKeyboard()
@@ -23809,7 +23824,7 @@ ${escapeHtml(safeText)}
 
     if (p.a === 'a:main_menu') {
       try { await ctx.answerCallbackQuery(); } catch {}
-      const flags = await getRoleFlags(u, ctx.from.id);
+      const flags = await getRoleFlagsCached(u, ctx.from.id);
       await renderRoleHub(ctx, u, flags);
       return;
     }
@@ -23962,6 +23977,7 @@ ${escapeHtml(safeText)}
       }
 
       await db.removeCurator(wsId, u.id);
+      try { await invalidateRoleFlagsCache(u.id); } catch {}
       await db.auditWorkspace(wsId, u.id, 'ws.curator_left', { curatorUserId: u.id });
       await ctx.answerCallbackQuery({ text: 'Готово' });
 
@@ -30008,6 +30024,7 @@ if (p.a === 'a:admin_outbox_clear_q') {
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery({ text: 'Удалено.' });
       await db.removeNetworkModerator(Number(p.uid));
+      try { await invalidateRoleFlagsCache(Number(p.uid)); } catch {}
       await renderAdminModerators(ctx);
       return;
     }
@@ -32564,6 +32581,7 @@ if (p.a === 'a:bx_publish_hint') {
       const curatorUserId = Number(p.u);
       const ret = String(p.ret || 'list');
       await db.removeCurator(wsId, curatorUserId);
+      try { await invalidateRoleFlagsCache(curatorUserId); } catch {}
       await db.auditWorkspace(wsId, u.id, 'ws.curator_removed', { curatorUserId });
 
       // best-effort notify curator in DM
@@ -32824,6 +32842,7 @@ if (p.a === 'a:bx_publish_hint') {
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await db.removeWorkspaceEditor(wsId, targetUserId);
+      try { await invalidateRoleFlagsCache(targetUserId); } catch {}
       await db.auditWorkspace(wsId, u.id, 'ws.editor_removed', { userId: targetUserId });
       await ctx.answerCallbackQuery({ text: 'Удалено.' });
       await renderWsEditors(ctx, u.id, wsId);
