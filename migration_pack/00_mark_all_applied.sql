@@ -3,6 +3,7 @@
 -- Use ONLY if your DB schema is already up-to-date (e.g. you ran migrations manually before,
 -- or you restored a full DB dump/restore from an already-up-to-date database).
 -- Safe to re-run (idempotent).
+-- NOTE: checksum is normalized (LF + trimEnd) to avoid CRLF/LF and trailing-newline drift.
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id BIGSERIAL PRIMARY KEY,
@@ -11,45 +12,46 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO schema_migrations(name, checksum) VALUES ('001_init.sql', '2e0913e8ddaf69983643d5c5a0c6c9984f37d0bdac2d407d21a5524051a971a0') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('002_barters.sql', 'ce99f9e5e593d9852e1db2bb22a5951816f1da51aebab6a27411f75cdb603c02') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('003_barters_ideal.sql', '26b3316b8fa78c109249d3d38a23d7888137d1e92d72c9009f8ff00d8efd5875') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('004_final_pack.sql', '7e214d45460706a1a66e0977e1c6f113e45223f83b135cb971b5301906b795e4') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('005_brand_pass.sql', '59e13a4c7d21f0edd031574c93945810ca88af610624a8fd671d159dd729cf07') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('006_brand_plan.sql', '857d2c224c9c5e332d0f9ff7dcc80e2c98f60dedbd3ad836a50cf02dd47e0171') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('007_matching.sql', '0034226974621aa85207b5ce0160b143acc82e69ccc8855de645313342b002f7') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('008_featured.sql', 'efd11e88811b11aff18e9aa47bac3d4715205e3c3c613c98ae1d97a3f06669b5') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('009_crm_stage.sql', '8446a1357e56ef3e24dcd968d471af99c7a70ed3f5911c98c29e21faf7452acc') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('010_user_verifications.sql', '5a8d2236639c76d79a7498c5ac6bc4aaa91be84e0d553cdfd084debb50cd9ff9') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('011_stars_payments.sql', 'acfa7ccbdfcb6fd7f85da445534edcc8933ba449ee5535436916354b6a207223') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('012_payments_ledger.sql', 'c749d0d047377d05ef23d4eb23c69084c8fff72fdcc902fc396ed294b65722bc') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('013_payments_extras.sql', '6405254225375609d23a7e69b8cf9535a1626d6b555bbe6f19201b08db504a0b') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('014_intro_trial_daily_limits.sql', 'd2701864ea15bc5ea3b543d0600390773553fcf805638d784260d22a873611bf') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('015_barter_thread_proofs.sql', '97ab38d51350c6348660d5fcc63aae631a6eb3a05472334b8127d1bf239e7e6b') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('016_channel_folders_and_editors.sql', '8895619b272938e3fdfbd806785fb16578ed2cdf2dba23662f72572536b90b98') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('017_analytics_events.sql', 'cd193899d2508dac200fb0e188bba3303220b49dace8bb7c489b53273559613d') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('018_official_channel_posts.sql', '560d50a66313ec122a95b554fc7247ace68658c84fe901c7fb74ba53149995a4') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('019_intro_retry_credits.sql', 'e3a17d890ffb2f82770878f8ca35ec1f4f8eaf3fa3dd07650454ac68b6125ddf') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('020_profile_matrix_ig_tg_deals.sql', '89b49e8dedf438c7c11dd1e99a49f4114c6742cb68d428ad793f18acf9ec0a5d') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('021_brand_leads.sql', '083d997375e209b79cd6108b6eee1392b519387fbe5b20b0544691d61b5bbe9d') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('022_profile_matrix_match_indexes.sql', '7e4b2edb600b25af869b58f419d8981fa23af6fcaca994ae47d6638090a9dde4') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('023_barter_offer_media.sql', '7460110405aac5cb91a4438953adb993bbd5cc33ac1b0e33358d5a07869d5427') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('024_brand_profiles.sql', 'fea11a1d066c6893317ace74f7b70252b53fce8cf73a1e6c7a7c5d9234a889a9') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('025_giveaways_media.sql', '413ec2b9af6d12eecdabfa1a1ca4685dbba406d9fe358c2b8938a78041b58245') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('026_brand_contact_unlocks.sql', 'ced1a6c35f9259d127a1731144d5425987ba75de9556408b013533f3309d4ae1') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('026_brand_managers.sql', '61ecbdb6848206737b1d7935ba5cf95dac2d7d6c87cb117084a01118da877e6d') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('027_brand_applications.sql', '1046ef08d7925a8bae2fd21b90bf6534e02027613055a0cb39a7c1309274d0db') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('028_barter_offers_meta.sql', 'a1f81c3fdeb885693fe47e1b47abafb37050341550dafda1f2c5c3b27fd8564e') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('029_barter_threads_triage_status.sql', 'cff3f1199d89bbf8779232cad7cb6975660e0cf8290adc3ae7ccfa70289ac41b') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('030_broadcasts.sql', '5daffd79a078bce86c20238dd0aa579ca8bdef0ed6c736a21a558857fd6975ce') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('031_brand_leads_assignment.sql', '439b378d246d70f11799aaa350e747bcc774946e80c1dd71f5617149faba6fdf') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('032_soft_delete.sql', 'c105cad1b808962caf3af89058076c6b4f27ff87a571e64382472f83bb531736') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('033_user_ban.sql', '0ad442783d8da3d2b80e18459bc2f6ad718f0507b6668260591e1a4b319d44d5') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('034_SQL Migration Neon Postgres.sql', 'cab0aaf1ec636798398eb5889cd513c39a3efff59e35d67d722f0bd0f847e2d7') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('035_brand_credits_gifted.sql', 'ae64c2338b8432c6cd6968f460f4a99716e874f4d3b72b12eb259a7a7a040a86') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('036_payments_provider_charge_unique.sql', '095731743e88dbfc15baf840941ac4843ca39df9647b4d2cead06bdd91cd7375') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('037_broadcast_sent_log_retry_after.sql', '0976b79f876ed7231c33b8b62995b5f2f4c619bcb42dad6c881ed14e51fdd639') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('038_workspace_profile_contacts.sql', 'cef0e900eb2e69c64ee54d1d0ae924d1713d7a919cdd1f07bbc385f2fe8ff749') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('039_broadcast_cooldown_db_fuse.sql', '9ece465ca51c44d69a6046c48472b1a02cbcf2d427601bb517f26ffd9ccb845f') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('040_broadcast_fanout_qstash.sql', '058feff0a93196d77e580cb463daeed32ed9de7cca3cde01048b9b9c954dbb79') ON CONFLICT (name) DO NOTHING;
-INSERT INTO schema_migrations(name, checksum) VALUES ('041_ig_oauth_accounts.sql', '91f821dc3a351e6f782ea1c810c97866eac5e33cfc692aa8306dc74945b705a5') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('001_init.sql', '672d5f7840d3f5b6eb940eefb054e3ee9e1979c03e04c503fc0454f6b3a323e3') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('002_barters.sql', '20ffaed63900006c199e42cfa72c71626c8d3fd9734d2512e04a687172d7dd48') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('003_barters_ideal.sql', '1e41e76a202c1a9b60466fba8c39df9158c5ced360c5a05d2fd10d7e132afdd4') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('004_final_pack.sql', '51ccf514b77e439e6047474f84ac72c72ab8bb9733c58b6d0e92cfb76bf7b1e5') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('005_brand_pass.sql', 'a4aeb66dc0fcb6444cedcf67d0c41fbee57b3cc8520d08137020e65242c4b81b') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('006_brand_plan.sql', 'bdbf59b725135a9c09334c69f06a70a9fc86d523f1f38b29009f056a7f6efb8c') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('007_matching.sql', 'b064e23934ec4b4397b9c97ea3c337197c472e7bba33be5aa4c9d8ed497dc469') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('008_featured.sql', 'a264b8bf835092ea58b50caa311e492c58b49f0c9b75cd0b94d1fe35323ce55a') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('009_crm_stage.sql', '5f4fe1ef47509154d2fb25c2df4a424f91f3b6959ebedfb24390abbddf021426') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('010_user_verifications.sql', '22519906aee3ee95535815d495516cdad1492b5af5d679b295b6bbeac0a7eecb') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('011_stars_payments.sql', 'ffedb44a218bb781960b8e1d25b83be705c498c349b9762586b263019862cc9a') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('012_payments_ledger.sql', 'eb32514f8e08f623845190d5677ddcfe2866e07b5c896c3ac31d7dd6f80fb6fe') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('013_payments_extras.sql', 'b956347174e41a6afcbfc032f86784dcc69f99344fae49c70a6f940de9046170') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('014_intro_trial_daily_limits.sql', 'd7e076e33fd5a80bdd888b2793997ccbc1dcfbf3288962d2e8a781c23e6d6ba3') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('015_barter_thread_proofs.sql', '378415c1dd769fb1ce683d302db77a2d3767003231fa90047373aa5bb37eda0e') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('016_channel_folders_and_editors.sql', '7af93a4f722a24e20a202f37f4e4094bfeac656561cad6050f85f33b08692068') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('017_analytics_events.sql', '79bbdf7ace67c02d86c84296bfc1b02a781a58fe45f0747518f490f82095288a') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('018_official_channel_posts.sql', 'c1e1d114923013ba6493e5fd32610ef5268434af9a4ea6179cd44e75dc753b47') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('019_intro_retry_credits.sql', 'c73d4b118b40722c306f2dfa763c4f331393842d889c63cb5ca494acfd658e51') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('020_profile_matrix_ig_tg_deals.sql', '8dfec84707f5f2fb411fa8a9da9d2bca6375000b1300e90048dfee84473760c2') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('021_brand_leads.sql', 'c70f5833b0c011eaf31ec0014ff80314bfb01e32266017caab164919d677d4b7') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('022_profile_matrix_match_indexes.sql', '4eeecd5514acc5abc661546933295ab6849599b3c27b1e0cd8e178cd5bc4c835') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('023_barter_offer_media.sql', '0632d91494ab03e9edece38024de027ca5a0dd0b4a9d57dc8e7863debf5ea395') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('024_brand_profiles.sql', '6e94d6be533deaead57b651394e6866000b5a6a29c5838aaf9b3b5ff8f74bf31') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('025_giveaways_media.sql', 'c6c70583ca5229a5d7410099e1af1a1cd67fec4e4d7f14b0bbcd50c9a6bcebfd') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('026_brand_managers.sql', '88090274eb35b60c5a4ee7c082e1b9bf30a5a0c6d00674d74d825ef7b82f5eaf') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('027_brand_applications.sql', '2adc5bd0476ed2a7fef601ab112da48cd231a9dcd072cfaae571a954e68ce393') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('028_barter_offers_meta.sql', 'ba1844c9ac37a3f4b1f463ca60713817379cfdfc8fd69c8435188b6f8fd9256f') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('029_barter_threads_triage_status.sql', '84e56aa3531e80db13ad36aa9ff08d1f66892563ff9ead3598b2e4f9e6dbb2e7') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('030_broadcasts.sql', '5167a88723eef7e90908052133bc7cb5e426f142fa1c665fb97b6895c5adcde6') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('031_brand_leads_assignment.sql', '525c53ff09c2cb484d149ac8aebefc1e045b1688a1cdb247cb63e6640cebc73f') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('032_soft_delete.sql', '25670ee3581d7a3341c554b382ad64aef73577b0b69b36242d82d6294e39f0df') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('033_user_ban.sql', '14dc38f9cb79ed0d80dd224c1906d520dd74e994fed80fc851ec969a134be429') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('034_SQL Migration Neon Postgres.sql', 'a71df95ceaf2797bfe543eb4e73ac7ec7d3bd8f6bcb1b3c82bbdf9e1ea96b3e3') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('035_brand_credits_gifted.sql', '73d67ce3942164fc23290d707d7bc1eb98e95859c323336c774080d795495482') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('036_payments_provider_charge_unique.sql', 'f20efc5b3b356a94daad36e7d14bd96dfe7787abd9343a29a1b731fbd48a20ed') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('037_broadcast_sent_log_retry_after.sql', 'd001af33b2e27e635ef23d6d2e312a810934b648136ea73e0de435ac896ad4dd') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('038_workspace_profile_contacts.sql', '41378fcb815511f65366e78b0979fbbe38119856c37b3612921c211b9c96cfad') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('039_broadcast_cooldown_db_fuse.sql', '7b28e69e3831e14091106662100b99ed953508d96b748face4453fc0bee1d9ad') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('040_broadcast_fanout_qstash.sql', '9ed4e45ace01d0761e74d52813f710536928a32de574a02f7d8741ad280bfe3a') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('041_ig_oauth_accounts.sql', 'ddb6af89d3434bac4df82dcdc673a94238e7ea1bb23c52effa75384c2867c7e1') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('042_payments_fk_hardening.sql', 'e16b3cb4ab116965069a9d7dac4eae6848b6e084d19384696bcd6ecc57c2798a') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('043_users_soft_delete.sql', '15220a406620a82f29cd10f68aec639833174cfb0083ea5268e9281d259da315') ON CONFLICT (name) DO NOTHING;
