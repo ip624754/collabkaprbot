@@ -1336,3 +1336,55 @@ QA:
 - Проверить, что после удаления `tg_username` больше не “возвращается” в БД при последующих апдейтах (важно для приватности).
 
 Риск регрессий: низкий‑средний (затронуты /start и общий callback‑гейт; изменения узкие, DB‑truth, без влияния на деньги).
+
+
+### STEP310 — Role flags cache: main_menu cached + инвалидация при изменении ролей (Neon‑safe)
+Контекст:
+- Audit STEP304 отмечал: `a:main_menu` использует uncached `getRoleFlags` (лишние DB‑reads в навигации) и что role‑cache TTL может давать 5‑минутную “путаницу” после изменений ролей.
+- Хотим: ноль новых SQL в горячих UI путях и предсказуемость после admin/role‑операций.
+
+Изменения:
+- `src/bot/bot.js`:
+  - `a:main_menu` → `getRoleFlagsCached(...)` (best‑effort Redis‑кеш; при Redis degraded fallback на DB‑truth как раньше).
+  - добавлен helper `invalidateRoleFlagsCache(userId)` (удаляет оба варианта ключа `cache:role_flags:<userId>:0/1`, чтобы не зависеть от `WORKSPACE_EDITORS_ENABLED`).
+  - инвалидация кеша вызывается **после** role‑мутаций:
+    - `db.addNetworkModerator` / `db.removeNetworkModerator`
+    - `db.addCurator` / `db.removeCurator` (включая curator invite / curator self‑leave)
+    - `db.addWorkspaceEditor` / `db.removeWorkspaceEditor` (включая editor invite)
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — доп. примечание про STEP310 (main_menu cached + invalidate role_flags on role mutations).
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен этот STEP.
+
+QA:
+- Открыть `📋 Меню` → `🔄 Обновить` (a:main_menu): UI рендерится как раньше.
+- Добавить/удалить модератора через админку: у целевого пользователя “Модератор” должен появляться/исчезать сразу (без ожидания TTL).
+- Добавить/удалить куратора/редактора папок: доступ/кнопки должны обновляться сразу после операции.
+- При Redis degraded: операции ролей продолжают работать (DB‑truth), кеш‑инвалидация best‑effort, без падений.
+
+Риск регрессий: низкий (локальные изменения; только Redis del + замена одного вызова в навигации).
+
+
+### STEP311 — Migrations cleanup: allow 3+ digits + remove dead normalizedSql
+Контекст:
+- В fail-fast правилах миграций был жёсткий regex `^\d{3}_.+\.sql$` → потенциально упираемся в потолок `999_...`.
+- В раннере миграций оставалось “мертвое” поле `normalizedSql` (не используется; только шум в коде).
+
+Изменения:
+- `migrations/run.js`:
+  - regex расширен до `^\d{3,}_.+\.sql$`.
+  - убрано поле `normalizedSql` из `checksumCandidates()` (dead field; checksum по‑прежнему считается от нормализованного `LF + trimEnd`).
+- `scripts/gen-mark-all-applied.js`:
+  - regex расширен до `^\d{3,}_.+\.sql$` (в sync с раннером).
+  - обновлены тексты ошибок (паттерн/regex).
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — добавлен STEP311 + уточнён паттерн миграций.
+- `docs/11_MIGRATIONS_PACK.md` — обновлён паттерн (>=3 digits) и regex.
+- `docs/process/07_WORK_HISTORY_2026_02.md` + `docs/public/07_WORK_HISTORY_2026_02.md` — уточнено описание STEP208 (>=3 digits), чтобы не противоречило текущему раннеру.
+
+QA:
+- `node migrations/run.js --dry-run` не ругается на список миграций.
+- `node scripts/gen-mark-all-applied.js --dry-run` не падает и использует новый regex.
+
+Риск регрессий: низкий (меняем только regex фильтрации имён файлов и убираем dead-code поле).
