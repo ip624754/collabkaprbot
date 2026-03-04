@@ -2603,12 +2603,20 @@ async function renderBmPickBrand(ctx, u, params = {}) {
   const brands = bm.brands || [];
   const active = await getBmActiveBrand(ctx.from.id);
 
+  // Telegram callback_data hard limit is 64 bytes. Keep return-codes compact.
+  const bmRetCode = (retRaw) => {
+    const v = String(retRaw || 'menu');
+    if (v === 'brand_deals') return 'bd';
+    if (v === 'brand_apps') return 'ba';
+    return v;
+  };
+
   const kb = new InlineKeyboard();
   for (const b of brands) {
     const id = Number(b.user_id);
     const label = bmBrandLabelFromRow(b).slice(0, 32);
     const prefix = (id && id === Number(active)) ? '✅ ' : '';
-    kb.text(`${prefix}${label}`, `a:bm_set_brand|bu:${id}|ret:${ret}|ws:${wsId}|p:${page}|h:${h}|r:${r}`).row();
+    kb.text(`${prefix}${label}`, `a:bms|u:${id}|rt:${bmRetCode(ret)}|w:${wsId}|p:${page}|h:${h}|r:${r}`).row();
   }
 
   const bxBack = bxReturnCb(wsId, page, h, r);
@@ -3995,7 +4003,7 @@ function curManageKb(wsId, ws = null) {
     .row();
 
   kb.text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
-    .text('📜 Журнал', `a:cur_audit|ws:${wsId}|u:0|l:0|p:0|all:0|b:cm`)
+    .text('📜 Журнал', `a:ca|w:${wsId}|u:0|l:0|p:0|al:0|b:cm|s:new|g:0`)
     .row();
 
   // Редко, но полезно (техническая история воркспейса).
@@ -4251,7 +4259,8 @@ ${list.length ? list.join('\n') : 'Пока пусто.'}`;
     const s = (patch.s !== undefined) ? patch.s : leadStatusToCb(back.status || 'new');
     const pg = (patch.pg !== undefined) ? patch.pg : Number(back.page || 0);
     const rPart = back.ret ? retPartShort(back.ret) : '';
-    return `a:cur_audit|ws:${wsId}|u:${u}|l:${l}|p:${p}|all:${all}|b:${b}|s:${s}|pg:${pg}${rPart}`;
+     // Use compact callback_data to avoid 64-byte Telegram limit.
+    return `a:ca|w:${wsId}|u:${u}|l:${l}|p:${p}|al:${all}|b:${b}|s:${s}|g:${pg}${rPart}`;
   };
 
   const kb = new InlineKeyboard();
@@ -6886,10 +6895,10 @@ function bxFiltersKb(wsId, f, page = 0, opts = {}) {
 
   const kb = new InlineKeyboard();
 
-  kb.text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|rp:${page}|pg:0|p:0|h:${h}|r:${r}`)
-    .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|rp:${page}|pg:0|p:0|h:${h}|r:${r}`)
+  kb.text(`Категория: ${bxAnyLabel(f.category, 'cat')}`, `a:bx_fpick|ws:${wsId}|k:cat|rp:${page}|pg:0|h:${h}|r:${r}`)
+    .text(`Формат: ${bxAnyLabel(f.offerType, 'type')}`, `a:bx_fpick|ws:${wsId}|k:type|rp:${page}|pg:0|h:${h}|r:${r}`)
     .row()
-    .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|rp:${page}|pg:0|p:0|h:${h}|r:${r}`)
+    .text(`Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`, `a:bx_fpick|ws:${wsId}|k:comp|rp:${page}|pg:0|h:${h}|r:${r}`)
     .text(`🎯 Цели: ${bxTagsLabel(f.goalsTags, 'goals')}`, `a:bx_mpick|ws:${wsId}|k:goals|p:${page}|h:${h}|r:${r}`)
     .row()
     .text(`📎 Требования: ${bxTagsLabel(f.reqTags, 'req')}`, `a:bx_mpick|ws:${wsId}|k:req|p:${page}|h:${h}|r:${r}`)
@@ -6927,26 +6936,26 @@ function bxPickKb(wsId, key, selectedValue, retPage = 0, pickPage = 0, opts = {}
 
   // 'All' option
   const isAll = !selectedValue;
-  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|rp:${safeRetPage}|pg:${safePickPage}|p:${safePickPage}|h:${h}|r:${r}`).row();
+  kb.text(isAll ? '✅ Все' : 'Все', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|rp:${safeRetPage}|pg:${safePickPage}|h:${h}|r:${r}`).row();
 
   // Options
   for (const it of slice) {
     const selected = String(selectedValue || '') === it.value;
     const label = selected ? `✅ ${it.label}` : it.label;
-    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|rp:${safeRetPage}|pg:${safePickPage}|p:${safePickPage}|h:${h}|r:${r}`).row();
+    kb.text(label, `a:bx_fset|ws:${wsNum}|k:${key}|v:${it.value}|rp:${safeRetPage}|pg:${safePickPage}|h:${h}|r:${r}`).row();
   }
 
   // Pagination
   if (list.length > perPage) {
     kb.row();
-    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|rp:${safeRetPage}|pg:${safePickPage - 1}|p:${safePickPage - 1}|h:${h}|r:${r}`);
+    if (start > 0) kb.text('⬅️', `a:bx_fpick|ws:${wsNum}|k:${key}|rp:${safeRetPage}|pg:${safePickPage - 1}|h:${h}|r:${r}`);
     kb.text(`${safePickPage + 1}/${Math.ceil(list.length / perPage)}`, 'a:nop');
-    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|rp:${safeRetPage}|pg:${safePickPage + 1}|p:${safePickPage + 1}|h:${h}|r:${r}`);
+    if (start + perPage < list.length) kb.text('➡️', `a:bx_fpick|ws:${wsNum}|k:${key}|rp:${safeRetPage}|pg:${safePickPage + 1}|h:${h}|r:${r}`);
   }
 
   // Actions
   kb.row();
-  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|rp:${safeRetPage}|pg:${safePickPage}|p:${safePickPage}|h:${h}|r:${r}`);
+  kb.text('🧹 Очистить', `a:bx_fset|ws:${wsNum}|k:${key}|v:all|rp:${safeRetPage}|pg:${safePickPage}|h:${h}|r:${r}`);
   kb.text('✅ Готово', `a:bx_filters|ws:${wsNum}|p:${safeRetPage}|h:${h}|r:${r}`);
 
   kbNavRow(kb, `a:bx_filters|ws:${wsNum}|p:${safeRetPage}|h:${h}|r:${r}`);
@@ -10531,7 +10540,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     ? `a:cur_inbox|s:${leadStatusToCb(back.status)}|p:${back.page}|af:${af}`
     : `a:ws_leads|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`;
 
-  const auditCb = `a:cur_audit|ws:${wsId}|u:0|l:${lead.id}|p:0|all:0|b:lv|s:${leadStatusToCb(back.status)}|pg:${back.page}${rPart}`;
+  const auditCb = `a:ca|w:${wsId}|u:0|l:${lead.id}|p:0|al:0|b:lv|s:${leadStatusToCb(back.status)}|g:${back.page}${rPart}`;
 
   const kb = new InlineKeyboard();
 
@@ -22698,12 +22707,19 @@ if (p.a === 'a:brand_dir_open') {
       return;
     }
 
-    if (p.a === 'a:bm_set_brand') {
+    if (p.a === 'a:bms' || p.a === 'a:bm_set_brand') {
       await ctx.answerCallbackQuery();
-      const brandUserId = Number(p.bu || 0);
+      const brandUserId = Number(p.u || p.bu || 0);
       if (!brandUserId) return;
 
-      const ret = String(p.ret || 'menu');
+      const bmRetDecode = (retRaw) => {
+        const v = String(retRaw || 'menu');
+        if (v === 'bd') return 'brand_deals';
+        if (v === 'ba') return 'brand_apps';
+        return v;
+      };
+
+      const ret = bmRetDecode(p.rt || p.ret || 'menu');
       const wsId = Number(p.w || p.ws || 0);
       const page = Number(p.p || 0); // legacy: used as picker page in old messages
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
@@ -25576,7 +25592,7 @@ if (p.a === 'a:ws_prof_mode') {
     }
     if (p.a === 'a:ws_prof_mode_set') {
       await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
+      const wsId = Number(p.w || p.ws);
       const mode = String(p.m || 'both');
       const allowed = ['channel', 'ugc', 'both'];
       if (!allowed.includes(mode)) return ctx.answerCallbackQuery({ text: 'Неверный режим.' });
@@ -27098,9 +27114,9 @@ if (p.a === 'a:match_home') {
     }
 
     if (p.a === 'a:admin_home') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
 
       // If admin navigated here while we were expecting text input — cancel it.
       try { await clearExpectText(ctx.from.id); } catch {}
@@ -27110,9 +27126,9 @@ if (p.a === 'a:match_home') {
     }
 
     if (p.a === 'a:admin_ops') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       try { await clearDraft(ctx.from.id); } catch {}
       await renderAdminOps(ctx);
@@ -27120,9 +27136,9 @@ if (p.a === 'a:match_home') {
     }
 
     if (p.a === 'a:admin_comms') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       try { await clearDraft(ctx.from.id); } catch {}
       await renderAdminComms(ctx);
@@ -27130,9 +27146,9 @@ if (p.a === 'a:match_home') {
     }
 
     if (p.a === 'a:admin_sys') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       try { await clearDraft(ctx.from.id); } catch {}
       await renderAdminSystem(ctx);
@@ -27643,9 +27659,9 @@ https://collabka.com/status</pre>
     }
 
     if (p.a === 'a:admin_users') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
 
       // Cancel any pending expectText (e.g., users search input) when returning to list.
       try { await clearExpectText(ctx.from.id); } catch {}
@@ -27656,9 +27672,9 @@ https://collabka.com/status</pre>
     }
 
     if (p.a === 'a:admin_users_search') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       const f = String(p.f || 'all').toLowerCase();
       const kb = new InlineKeyboard()
         .text('⬅️ Отмена', `a:admin_users|f:${f}|p:0`)
@@ -27675,9 +27691,9 @@ https://collabka.com/status</pre>
     }
 
     if (p.a === 'a:admin_users_reset') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       const f = String(p.f || 'all').toLowerCase();
       const page = Math.max(0, Number(p.p) || 0);
@@ -27688,9 +27704,9 @@ https://collabka.com/status</pre>
 
     // Admin: User Card
     if (p.a === 'a:adm_ucard') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       const uid = Number(p.id || 0);
       const f = String(p.f || 'all').toLowerCase();
@@ -28842,9 +28858,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
     // =====================================================
 
     if (p.a === 'a:bc_start') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       // Clear any previous broadcast draft
       try { await clearDraft(ctx.from.id); } catch {}
@@ -28866,9 +28882,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
     // Broadcast: pick audience
     if (p.a === 'a:bc_audience') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       const aud = String(p.aud || 'all').toLowerCase();
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
@@ -28885,9 +28901,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
     // Broadcast: add URL buttons step
     if (p.a === 'a:bc_buttons') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
@@ -28915,9 +28931,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
     // Broadcast: button templates (gw/bp/offer)
     if (p.a === 'a:bc_tpl_gw' || p.a === 'a:bc_tpl_bp' || p.a === 'a:bc_tpl_offer') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
@@ -28949,9 +28965,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
     // Broadcast: done adding buttons → go to audience
     if (p.a === 'a:bc_btn_done') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       await renderBroadcastAudiencePicker(ctx);
       return;
@@ -28959,9 +28975,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
     // Broadcast: confirm → create job
     if (p.a === 'a:bc_confirm') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
 
       // Rate-limit: 1 broadcast per 60 sec
       try {
@@ -29022,9 +29038,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
     // Broadcast: cancel
     if (p.a === 'a:bc_cancel') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       try { await clearDraft(ctx.from.id); } catch {}
       await renderAdminHome(ctx);
@@ -29033,18 +29049,18 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
     // Broadcast: list active/recent broadcasts
     if (p.a === 'a:bc_list') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       await renderBroadcastList(ctx, Number(p.p || 0));
       return;
     }
 
     // Broadcast: view progress of specific broadcast
     if (p.a === 'a:bc_view') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       await renderBroadcastView(ctx, Number(p.id || 0));
       return;
     }
@@ -29099,9 +29115,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
     // =====================================================
 
     if (p.a === 'a:aud') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       const h = Number(p.h || 24);
       const page = Math.max(0, Number(p.p) || 0);
@@ -29111,9 +29127,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
     // Audit: search input mode
     if (p.a === 'a:aud_search') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       const h = Number(p.h || 24);
       await safeEditOrReply(ctx,
         `🔎 <b>Поиск по Audit Log</b>\n\nВведи одно из:\n• <code>action:</code> — поиск по типу действия (напр. <code>lead.status_changed</code>)\n• <code>ws:ID</code> — по workspace\n• <code>user:ID</code> — по actor user id\n\nПример: <code>lead.status</code>`,
@@ -29134,9 +29150,9 @@ if (p.a === 'a:admin_outbox_clear_q') {
 
     // Audit: reset search
     if (p.a === 'a:aud_reset') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
       await clearAdminAuditQuery(ctx.from.id);
       const h = Number(p.h || 24);
@@ -29162,17 +29178,17 @@ if (p.a === 'a:admin_outbox_clear_q') {
     }
 
     if (p.a === 'a:admin_metrics') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       const days = Math.max(1, Math.min(90, Number(p.d) || 14));
       await renderAdminMetrics(ctx, days);
       return;
     }
     if (p.a === 'a:admin_mod_list') {
-      await ctx.answerCallbackQuery();
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
       await renderAdminModerators(ctx);
       return;
     }
@@ -31701,15 +31717,15 @@ if (p.a === 'a:bx_publish_hint') {
       return;
     }
 
-    if (p.a === 'a:cur_audit') {
+    if (p.a === 'a:cur_audit' || p.a === 'a:ca') {
       const wsId = Number(p.ws);
       const actorUserId = Math.max(0, Number(p.u || 0));
       const leadId = Math.max(0, Number(p.l || 0));
       const page = Math.max(0, Number(p.p || 0));
-      const allRoles = Number(p.all || 0) === 1;
+      const allRoles = Number((p.al ?? p.all) || 0) === 1;
       const backType = String(p.b || 'cm');
       const backStatus = leadStatusFromCb(String(p.s || 'new'));
-      const backPage = Math.max(0, Number(p.pg || 0));
+      const backPage = Math.max(0, Number((p.g ?? p.pg) || 0));
       const retKey = String(p.ret || retFromCb(p.r) || '').trim();
 
       await ctx.answerCallbackQuery();

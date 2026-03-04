@@ -143,6 +143,7 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:bm_rm_ok": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:bm_rm_q": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:bm_set_brand": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
+  "a:bms": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   // Monetization must not be blocked by Redis degradation: accept/charge is DB-truth and idempotent.
   "a:brand_app_accept": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.QUEUE_FIRST },
   "a:brand_app_accepted_done": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
@@ -297,6 +298,7 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:bx_wtext": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:cur_add_username": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:cur_audit": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
+  "a:ca": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:cur_gw_check_do": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:cur_gw_check_q": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:cur_gw_log": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
