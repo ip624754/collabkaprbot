@@ -60,6 +60,15 @@
 
 ---
 
+
+## Broadcast / QStash (429 защита)
+
+| Key | Prod value | Примечание |
+|---|---:|---|
+| `BROADCAST_QUARANTINE_THRESHOLD` | `3` | Если один получатель ловит 429 N раз подряд — помечаем доставку `blocked` (чтобы рассылка не зависала). |
+| `BROADCAST_QUARANTINE_SEC` | `1200` | Используется в reason/last_error (сколько «кварантин» в секундах). |
+| `BROADCAST_GLOBAL_429_THRESHOLD` | `6` | Distinct получателей с 429 за окно → считаем глобальным лимитом и ставим cooldown. |
+| `BROADCAST_GLOBAL_429_WINDOW_SEC` | `60` | Окно (сек) для distinct 429 получателей. |
 ## Copy/paste block (Production recommended)
 
 > Вставь в Vercel → Environment Variables (Production). Секреты заполни своими значениями.
@@ -122,6 +131,12 @@ AUDIT_BUFFER_REQUEUE_COOLDOWN_SEC=120
 
 # Rate limit (infra)
 RATE_LIMIT_ENABLED=true
+
+# Broadcast 429 protections (QStash fan-out)
+BROADCAST_QUARANTINE_THRESHOLD=3
+BROADCAST_QUARANTINE_SEC=1200
+BROADCAST_GLOBAL_429_THRESHOLD=6
+BROADCAST_GLOBAL_429_WINDOW_SEC=60
 
 # Intro limits
 INTRO_TRIAL_CREDITS=3

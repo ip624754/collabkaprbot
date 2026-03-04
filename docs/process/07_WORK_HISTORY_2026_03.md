@@ -1556,3 +1556,186 @@ QA:
   - В fan-out режиме `/api/qstash/broadcast-deliver` при активной паузе должен republish с delay и без Telegram send.
 
 Риск регрессий: низкий (только broadcast cooldown plumbing; без влияния на меню/хабы).
+
+
+## STEP319 — NotebookLM audit sources pack (text-only, ≤50 files)
+
+Цель:
+- Дать “внешнему аудитору / NotebookLM” **актуальные источники** без перегруза.
+- Уложиться в лимит: **≤50 файлов**, только **текстовые** форматы (md/txt), без .sql.
+
+Изменения:
+- Обновлён `docs/audit/notebooklm_pack/`:
+  - `01_BUNDLE_CORE_RU.md`, `02_BUNDLE_FEATURES_RU.md`, `03_BUNDLE_PROCESS_HISTORY_RU.md` — пересобраны из текущих доков (с актуальным timestamp).
+  - `06_CODE_BUNDLE.txt` — обновлён (включает ключевой код: bot/db/redis/api/qstash/migrations runner).
+  - `07_MIGRATIONS_ALL.sql.txt` — обновлён (включает все `migrations/*.sql` и `migration_pack/*` как текст).
+- Генерация ZIP для загрузки в NotebookLM: `npm run gen:notebooklm-sources` (script `scripts/gen-notebooklm-sources.js`).
+  - Output: `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip`.
+
+QA:
+- `npm run gen:notebooklm-sources` проходит и пишет `OK: N files (<=50)`.
+- В `docs/audit/notebooklm_pack/` нет файлов с расширением `.sql` (только `.md/.txt`).
+- Bundle-файлы содержат актуальные STEP316–STEP318 изменения (official publish outbox, hydration tokens, broadcast cooldown).
+
+Риск регрессий: нулевой (docs-only + audit pack; runtime не затронут).
+
+
+## STEP320 — NotebookLM: короткий “жёсткий” аудит‑промпт (copy/paste)
+
+Цель:
+- Дать один компактный промпт, который можно **прямо вставить** в NotebookLM.
+- Сохранить строгость: только факты из файлов, доказательства, repro, минимальные фиксы.
+
+Изменения:
+- Обновлён канонический файл промпта для NotebookLM пакета:
+  - `docs/audit/notebooklm_pack/04_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+- Синхронизирован “верхний” промпт (чтобы не было расхождений):
+  - `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — обновлён STEP320 и ссылка на канонический prompt.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен STEP320.
+
+QA:
+- Открыть `docs/audit/notebooklm_pack/04_NOTEBOOKLM_AUDIT_PROMPT_RU.txt` и убедиться, что он:
+  - короткий (без простыней),
+  - требует proof (path + фрагмент ≤25 слов + search‑phrase),
+  - задаёт жёсткий формат отчёта и чек‑лист критичных зон.
+- Проверить, что `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt` идентичен каноническому.
+
+Риск регрессий: нулевой (docs-only).
+
+
+## STEP321 — Giveaways: стабилизация seed (order‑independent eligible ids)
+
+Дата: 2026-03-05
+
+Контекст:
+- Детерминированность winners draw нарушалась, если `eligibleUserIds` приходили из БД в разном порядке.
+
+Изменения:
+- `src/bot/prng.js`: `makeSeed()` теперь сортирует копию `eligibleUserIds` перед `join()` → seed/eligibleHash зависят только от набора участников, а не от порядка выдачи.
+
+QA:
+- Запустить локально quick-check: два массива с одинаковыми id в разном порядке должны давать одинаковый `eligibleHash`/`seedHash`.
+- Smoke: `/api/cron/giveaways-tick` (dry run/лог) — winners остаются воспроизводимыми.
+
+Риск регрессий: нулевой/минимальный (изменение влияет только на seed hashing, без UI/DB).
+
+
+## STEP322 — Payments fallback hardening: default‑off + HMAC payload signature
+
+Дата: 2026-03-05
+
+Цель:
+- Убрать риск “auto-apply по payload без сессии” как дефолт.
+- Добавить крипто‑гарантию, что payload “наш” (когда fallback включён).
+
+Изменения:
+- `src/lib/config.js`
+  - `PAYMENTS_FALLBACK_APPLY_ENABLED` теперь **default=0** (строгий режим).
+  - Добавлены ENV:
+    - `PAYMENTS_PAYLOAD_HMAC_KEY`
+    - `PAYMENTS_PAYLOAD_HMAC_LEN` (6..16, default 10)
+    - `PAYMENTS_FALLBACK_ALLOW_UNSIGNED` (default 0)
+- `src/bot/bot.js`
+  - Новые Stars-инвойсы (PRO / Brand Pass / Brand Plan / Founder Sale) подписывают token: `tokenRaw + hmac(payloadNoSig)` (hex, длина по ENV).
+  - Redis `pay_*` сессии сохраняются по **подписанному** token, чтобы match в `successful_payment` не ломался.
+- `src/bot/payments_fallback.js`
+  - При наличии `PAYMENTS_PAYLOAD_HMAC_KEY` fallback требует валидную подпись (иначе reject; legacy можно временно разрешить `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=1`).
+  - Добавлен DB‑чек: payment row принадлежит payer + charge_id совпадает (money path → fail‑closed).
+  - Явно запрещён fallback для `offpub_*` (manual/moderation).
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — обновлены правила fallback + описаны новые ENV для подписи.
+
+QA:
+- `node --check src/bot/bot.js src/bot/payments_fallback.js src/lib/config.js`
+- Инвойс создание:
+  - купить PRO / Brand Pass / Brand Plan / Founder Sale → payload остаётся ASCII/≤128 и проходит `_isSafeInvoicePayload`.
+  - `pay_*` ключ в Redis соответствует token из payload (подписанному).
+- Fallback:
+  - при `PAYMENTS_PAYLOAD_HMAC_KEY` и `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0`: неподписанный payload → `unsigned_payload` (не применяет).
+  - подписанный payload → применяет, пишет note с `...:hmac`.
+- По умолчанию (`PAYMENTS_FALLBACK_APPLY_ENABLED=0`) поведение прод‑безопасное: missing_session → ORPHANED, без авто‑выдачи.
+
+Риск регрессий: низкий (меняет только invoice payload token и fallback путь; основной happy-path по Redis-сессии сохраняется).
+
+
+## STEP323 — IG_TOKEN_ENC_KEY hardening: no weak-key fallback
+
+Дата: 2026-03-05
+
+Цель:
+- Убрать небезопасный режим, когда `IG_TOKEN_ENC_KEY` мог быть “короткой строкой”, а ключ фактически получался через `sha256(строка)`.
+- При неверной конфигурации — **жёстко блокировать IG OAuth**, но не ломать прод (пока UI скрыт).
+
+Изменения:
+- `src/lib/config.js`
+  - Добавлен строгий парсинг `IG_TOKEN_ENC_KEY`: принимаем только `hex64` (32 bytes) или `base64/base64url` (>=32 bytes).
+  - Введены поля: `IG_TOKEN_ENC_KEY_BYTES`, `IG_TOKEN_ENC_KEY_VALID`, `IG_TOKEN_ENC_KEY_KIND`, `IG_OAUTH_READY`.
+  - `assertEnv()` больше не блокирует весь бот из‑за IG, пока UI/routes скрыты; fail-fast только при публичном включении (UI+routes).
+- `src/lib/cryptoBox.js`
+  - Убрана sha256‑деривация из “плохого ключа”. Теперь при невалидном ключе кидаем `IG_TOKEN_ENC_KEY_invalid`.
+- `api/ig/oauth/*`
+  - При невалидном `IG_TOKEN_ENC_KEY` отвечаем `503/500 misconfigured` и отправляем ops‑alert (dedup 6h).
+- `src/bot/bot.js`
+  - В UI-кнопке OAuth добавлено явное сообщение “misconfigured” (без DB-чтений) при невалидном ключе.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — уточнён строгий формат `IG_TOKEN_ENC_KEY`.
+
+QA:
+- `node --check src/lib/config.js src/lib/cryptoBox.js api/ig/oauth/start.js api/ig/oauth/callback.js api/ig/oauth/status.js api/ig/oauth/disconnect.js`
+- (Если IG UI включён) открыть `/api/ig/oauth/start?...`:
+  - при валидном ключе — 302 на Meta authorize
+  - при невалидном — 503 + ops alert в SUPPORT/админам
+
+Риск регрессий: низкий (IG сейчас скрыт; изменения затрагивают только IG oauth + крипто-бокс).
+
+## 2026-03-05
+
+### STEP324 — Ops digest for expensive silent-catch paths
+- Добавлен `src/lib/opsDigest.js`: лёгкий Redis-only буфер для ops-событий без Telegram API (anti-spam dedup через NX key).
+- `src/lib/qstash.js`: при ошибках `publishJSON` теперь пишем digest ops alert `qstash_publish_failed` (и пробрасываем ошибку дальше).
+- `src/lib/redis.js`: при падении Lua `eval` в ключевых helper’ах пишем digest ops alert `redis_lua_failed`:
+  - `consumeOnce` (atomic getdel→eval→GET+DEL fallback),
+  - `releaseLock` (token-lock safety),
+  - `rateLimit` (fail-open),
+  - `incrWithExpireOnFirst` (non-atomic fallback).
+- `/api/qstash/official-publish-deliver`: если не удалось enqueue delayed retry при `locked`, пишем digest ops alert `qstash_reschedule_failed`.
+
+Риск регрессий: **низкий** (код затрагивает только error paths; success-path и UX не меняются).
+
+## STEP325 — Broadcast: per-recipient 429 skip + global burst detection
+
+Дата: 2026-03-05
+
+Цель:
+- Убрать риск, когда один проблемный получатель держит рассылку в статусе `pending` бесконечно (вечные `deferred/quarantined` по 429).
+- При этом не ломать защиту от глобального 429: cooldown нужен, но только если это реально burst по нескольким чатам.
+
+Изменения:
+- `api/qstash/broadcast-deliver.js`
+  - 429 обработка теперь разделяет два сценария:
+    - **per-recipient 429**: считаем повторные 429 на конкретного получателя (`BROADCAST_QUARANTINE_THRESHOLD`). Если достигли порога — помечаем доставку как `blocked` (non‑retryable), чтобы рассылка могла завершиться.
+    - **global 429 burst**: считаем distinct получателей, получивших 429 за короткое окно (`BROADCAST_GLOBAL_429_WINDOW_SEC`). Если достигли `BROADCAST_GLOBAL_429_THRESHOLD` — ставим global cooldown через `setBroadcastCooldown()`.
+  - Добавлены Redis ключи для distinct 429 users (`broadcast:<id>:429users`) с TTL.
+
+ENV (опционально):
+- `BROADCAST_GLOBAL_429_THRESHOLD` (default `6`) — сколько distinct 429 получателей за окно считаем «глобальным» лимитом.
+- `BROADCAST_GLOBAL_429_WINDOW_SEC` (default `60`) — окно для distinct 429 получателей.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — добавлено описание STEP325 (anti‑stall для broadcast 429).
+
+QA:
+- `node --check api/qstash/broadcast-deliver.js`
+- Смоук (ручной):
+  - Запусти рассылку в режиме QStash fan‑out.
+  - (Тестовый режим) Временно выставь `BROADCAST_QUARANTINE_THRESHOLD=2` и воспроизведи 429 на одном chat (например, ограниченный чат/частые отправки).
+    - ожидаемо: запись `broadcast_sent_log` для этого user → `status='blocked'`, рассылка может перейти в `DONE` без вечного `deferred_wait`.
+  - (Burst тест) Временно выставь `BROADCAST_GLOBAL_429_THRESHOLD=2` и добейся 429 на двух разных chat в пределах минуты.
+    - ожидаемо: `setBroadcastCooldown` ставит `broadcast.cooldown_until`, а deliver jobs уходят в delayed retry.
+
+Риск регрессий: низкий (меняется только 429 error-path; success-path рассылки не трогаем).
