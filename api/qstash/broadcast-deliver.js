@@ -198,10 +198,10 @@ export default async function handler(req, res) {
       } catch {}
 
       try {
-        const url = getQStashDeliveryUrl('/api/qstash/broadcast-deliver');
+        const deliverUrl = url; // avoid scope-shadow (url already computed for signature)
         const dedupId = `b:${broadcastId}:u:${userId}:a:${attempt + 1}`;
         await qstashPublishJSON({
-          url,
+          url: deliverUrl,
           body: { ...payload, attempt: attempt + 1 },
           deduplicationId: dedupId,
           delaySec: retryAfterSec,
