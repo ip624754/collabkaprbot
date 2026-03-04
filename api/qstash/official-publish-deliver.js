@@ -50,6 +50,22 @@ function envInt(name, def, opts = {}) {
   return v;
 }
 
+function parseReserveEpoch(payload = {}) {
+  try {
+    const direct = Number(payload.reserveEpoch || payload.reserve_epoch || 0);
+    if (Number.isFinite(direct) && direct > 0) return Math.trunc(direct);
+  } catch {}
+  try {
+    const raw = String(payload.reserveAt || payload.reservedAt || payload.reserve_at || '').trim();
+    if (!raw) return 0;
+    const t = Date.parse(raw);
+    if (!Number.isFinite(t) || t <= 0) return 0;
+    return Math.floor(t / 1000);
+  } catch {
+    return 0;
+  }
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -104,6 +120,8 @@ export default async function handler(req, res) {
     const wsId = Number(payload.wsId || payload.ws_id || 0);
     const attempt = Number(payload.attempt || 0) || 0;
     const prevStatus = String(payload.prevStatus || payload.prev_status || 'PENDING').toUpperCase();
+    const action = String(payload.action || 'publish').slice(0, 16) || 'publish';
+    const reserveEpoch = parseReserveEpoch(payload);
 
     if (!offerId) {
       res.status(400).json({ ok: false, error: 'bad_payload' });
@@ -131,7 +149,11 @@ export default async function handler(req, res) {
       // Reschedule a delayed retry (best-effort). Never fail the current request.
       try {
         const deliverUrl = url;
-        const dedupId = `offpd:${offerId}:a:${attempt + 1}`;
+        const minute = Math.floor(Date.now() / 60000);
+        const base = reserveEpoch
+          ? `offpd:${offerId}:${action}:r:${reserveEpoch}`
+          : `offpd:${offerId}:${action}:m:${minute}`;
+        const dedupId = `${base}:a:${attempt + 1}`;
         await qstashPublishJSON({
           url: deliverUrl,
           body: { ...payload, attempt: attempt + 1 },
