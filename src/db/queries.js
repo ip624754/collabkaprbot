@@ -5916,6 +5916,105 @@ export async function createBroadcast({ createdByUserId, audience, draftType, dr
   return r.rows[0] || null;
 }
 
+/**
+ * Create broadcast with best-effort idempotency for the admin "confirm" click.
+ *
+ * Why:
+ * - When Redis is degraded, double-click on "confirm" could create 2 broadcasts.
+ * - We avoid schema changes by doing a short-window DB dedup guarded by a PG advisory xact lock.
+ *
+ * Properties:
+ * - No waiting queue in Neon: uses pg_try_advisory_xact_lock (fail-fast).
+ * - Dedup window is intentionally short (default 45s) to avoid blocking legitimate repeated sends.
+ */
+export async function createBroadcastIdempotent(
+  { createdByUserId, audience, draftType, draftText, draftFileId, draftCaption, buttonsJson, totalCount },
+  opts = {}
+) {
+  const uid = Number(createdByUserId || 0);
+  if (!uid) return { ok: false, error: 'bad_args' };
+
+  const winSec = Math.max(10, Math.min(300, Math.floor(Number(opts?.dedupWindowSec || 45))));
+  const total = Math.max(0, Math.floor(Number(totalCount || 0)));
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+
+    const stm = Math.floor(Number(opts?.statementTimeoutMs || 0));
+    if (Number.isFinite(stm) && stm > 0) {
+      await client.query(`set local statement_timeout to ${stm}`);
+    }
+
+    // Per-admin confirm guard. Prevents click-storm even when Redis is down.
+    const lockRes = await client.query(
+      `select pg_try_advisory_xact_lock(hashtext($1)) as ok`,
+      [`bc_confirm:${uid}`]
+    );
+    if (!lockRes.rows?.[0]?.ok) {
+      await client.query('rollback');
+      return { ok: false, error: 'busy' };
+    }
+
+    // Short-window dedup: if an identical PENDING broadcast was just created, reuse it.
+    const dedupRes = await client.query(
+      `select *
+         from broadcasts
+        where created_by_user_id = $1
+          and status = 'PENDING'
+          and created_at > now() - ($8::text || ' seconds')::interval
+          and audience = $2
+          and draft_type is not distinct from $3
+          and draft_text is not distinct from $4
+          and draft_file_id is not distinct from $5
+          and draft_caption is not distinct from $6
+          and buttons_json is not distinct from $7
+          and total_count = $9
+        order by id desc
+        limit 1`,
+      [
+        uid,
+        String(audience || 'all'),
+        draftType || null,
+        draftText || null,
+        draftFileId || null,
+        draftCaption || null,
+        buttonsJson || null,
+        String(winSec),
+        total,
+      ]
+    );
+    if (dedupRes.rows?.[0]) {
+      await client.query('commit');
+      return { ok: true, deduped: true, broadcast: dedupRes.rows[0] };
+    }
+
+    const ins = await client.query(
+      `insert into broadcasts (created_by_user_id, status, audience, draft_type, draft_text, draft_file_id, draft_caption, buttons_json, total_count)
+       values ($1, 'PENDING', $2, $3, $4, $5, $6, $7, $8)
+       returning *`,
+      [
+        uid,
+        String(audience || 'all'),
+        draftType || null,
+        draftText || null,
+        draftFileId || null,
+        draftCaption || null,
+        buttonsJson || null,
+        total,
+      ]
+    );
+
+    await client.query('commit');
+    return { ok: true, deduped: false, broadcast: ins.rows?.[0] || null };
+  } catch (e) {
+    try { await client.query('rollback'); } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getBroadcast(id) {
   const r = await pool.query(`select * from broadcasts where id = $1`, [Number(id)]);
   return r.rows[0] || null;
