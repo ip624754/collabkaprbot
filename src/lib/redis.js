@@ -35,8 +35,15 @@ export async function consumeOnce(key) {
       }
     }
     return raw;
-  } catch {
-    // ignore
+  } catch (e) {
+    await queueOpsDigestFromRedis({
+      reason: 'redis_lua_failed',
+      title: 'consumeOnce: eval fallback failed',
+      kind: 'redis',
+      payload: String(key || '').slice(0, 160),
+      extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
+      dedupId: 'redis_eval:consumeOnce',
+    });
   }
 
   // 3) GET + DEL (best effort)
@@ -59,6 +66,97 @@ export function k(parts) {
     ...parts.map((p) => String(p))
   ].join(':');
 }
+
+// =====================================================
+// Ops digest (Redis-only): convert expensive infra failures into a buffered ops alert.
+// - Best-effort: never throws.
+// - Anti-spam: Redis NX dedup per reason/window.
+// - No Telegram API usage here; cron flushes the digest periodically.
+// =====================================================
+
+function dayKey() {
+  // YYYYMMDD UTC
+  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+function hasOpsTargetsConfigured() {
+  try {
+    if (String(CFG.SUPPORT_CHAT_ID || '').trim()) return true;
+  } catch {}
+  try {
+    return Array.isArray(CFG.SUPER_ADMIN_TG_IDS) && CFG.SUPER_ADMIN_TG_IDS.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function opsBufferKey(group) {
+  return k(['ops', 'alerts', String(group || 'ops'), 'd', dayKey()]);
+}
+
+function opsDedupKey(group, dedupId) {
+  return k(['ops', 'alerts', String(group || 'ops'), 'dedup', String(dedupId || '')]);
+}
+
+function isErrorishReason(reason) {
+  const r = String(reason || '').toLowerCase();
+  return r.includes('error') || r.includes('failed') || r.includes('exception') || r.includes('panic') || r.includes('invalid');
+}
+
+function clampDedupTtlSec() {
+  const win = Number(CFG.OPS_ALERT_SUMMARY_SEC || 600);
+  return Math.max(60, Math.min(30 * 60, Number.isFinite(win) ? win : 600));
+}
+
+async function queueOpsDigestFromRedis({
+  group = 'ops',
+  reason = 'error',
+  title = '',
+  kind = 'redis',
+  payload = '',
+  extra = [],
+  dedupId = null,
+} = {}) {
+  try {
+    if (CFG.OPS_ALERT_SILENT && !isErrorishReason(reason)) return;
+  } catch {}
+  if (!hasOpsTargetsConfigured()) return;
+
+  const g = String(group || 'ops');
+  const dId = dedupId || `r:${String(reason || 'error')}|k:${String(kind || '')}`;
+
+  try {
+    const ok = await redis.set(opsDedupKey(g, dId), '1', { nx: true, ex: clampDedupTtlSec() });
+    if (!ok) return;
+  } catch {
+    return;
+  }
+
+  const ev = {
+    ts: new Date().toISOString(),
+    reason: String(reason || 'error'),
+    title: String(title || ''),
+    kind: String(kind || ''),
+    payload: String(payload || '').slice(0, 180),
+    extra: (Array.isArray(extra) ? extra : []).map((s) => String(s || '').slice(0, 300)).filter(Boolean),
+  };
+
+  const bufK = opsBufferKey(g);
+  try {
+    const maxBuf = Math.max(10, Number(CFG.OPS_ALERT_BUFFER_MAX || 200));
+    const ttlSec = 2 * 24 * 60 * 60;
+    const lua = `
+      redis.call('LPUSH', KEYS[1], ARGV[1])
+      redis.call('LTRIM', KEYS[1], 0, tonumber(ARGV[2]) - 1)
+      redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
+      return 1
+    `;
+    await redis.eval(lua, [bufK], [JSON.stringify(ev), String(maxBuf), String(ttlSec)]);
+  } catch {
+    // ignore
+  }
+}
+
 
 // =====================================================
 // Token-based locks (safe unlock after TTL expiry)
@@ -103,7 +201,15 @@ export async function releaseLock(lockKey, token) {
   try {
     const r = await redis.eval(script, [lockKey], [String(token)]);
     return Number(r) === 1;
-  } catch {
+  } catch (e) {
+    await queueOpsDigestFromRedis({
+      reason: 'redis_lua_failed',
+      title: 'releaseLock: eval failed',
+      kind: 'redis',
+      payload: String(lockKey || '').slice(0, 160),
+      extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
+      dedupId: 'redis_eval:releaseLock',
+    });
     return false;
   }
 }
@@ -139,7 +245,15 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
     `;
     const r = await redis.eval(script, [key], [String(win)]);
     current = Number(r || 0);
-  } catch {
+  } catch (e) {
+    await queueOpsDigestFromRedis({
+      reason: 'redis_lua_failed',
+      title: 'rateLimit: eval failed (fail-open)',
+      kind: 'redis',
+      payload: String(key || '').slice(0, 160),
+      extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
+      dedupId: 'redis_eval:rateLimit',
+    });
     // Redis degraded or scripts unavailable: fail-open.
     // IMPORTANT: do NOT fallback to non-atomic INCR+EXPIRE, because it can leave keys without TTL.
     return {
@@ -191,7 +305,15 @@ export async function incrWithExpireOnFirst(key, ttlSec) {
     `;
     const r = await redis.eval(script, [key], [String(ttl)]);
     return Number(r || 0);
-  } catch {
+  } catch (e) {
+    await queueOpsDigestFromRedis({
+      reason: 'redis_lua_failed',
+      title: 'incrWithExpireOnFirst: eval failed (non-atomic fallback)',
+      kind: 'redis',
+      payload: String(key || '').slice(0, 160),
+      extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
+      dedupId: 'redis_eval:incrWithExpireOnFirst',
+    });
     // Fallback: best-effort (non-atomic)
     try {
       const r = await redis.incr(key);

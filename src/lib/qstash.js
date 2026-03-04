@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { CFG } from './config.js';
+import { queueOpsDigestSafe } from './opsDigest.js';
 
 // QStash is an optional dependency. If the package is missing in a given deploy,
 // the bot must NOT crash — QStash features become disabled instead.
@@ -68,15 +69,35 @@ export async function qstashPublishJSON({
   const headers = {};
   if (deduplicationId) headers['Upstash-Deduplication-Id'] = String(deduplicationId);
 
-  const r = await client.publishJSON({
-    url,
-    body,
-    headers,
-    ...(delaySec ? { delay: `${Math.max(1, Math.floor(delaySec))}s` } : {}),
-    ...(typeof retries === 'number' ? { retries } : {}),
-    ...(timeout ? { timeout } : {}),
-    ...(flowControl ? { flowControl } : {}),
-  });
+  let r;
+  try {
+    r = await client.publishJSON({
+      url,
+      body,
+      headers,
+      ...(delaySec ? { delay: `${Math.max(1, Math.floor(delaySec))}s` } : {}),
+      ...(typeof retries === 'number' ? { retries } : {}),
+      ...(timeout ? { timeout } : {}),
+      ...(flowControl ? { flowControl } : {}),
+    });
+  } catch (e) {
+    // Digest ops alert (anti-spam): QStash publish failures are expensive and often indicate misconfig or outage.
+    await queueOpsDigestSafe({
+      group: 'ops',
+      reason: 'qstash_publish_failed',
+      title: 'QStash publishJSON failed',
+      kind: 'qstash',
+      payload: String(url || '').slice(0, 180),
+      extra: [
+        deduplicationId ? `dedup: ${String(deduplicationId).slice(0, 120)}` : '',
+        delaySec ? `delaySec: ${Math.floor(delaySec)}` : '',
+        typeof retries === 'number' ? `retries: ${retries}` : '',
+        String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180),
+      ].filter(Boolean),
+      dedupId: deduplicationId ? `qstash_pub:${String(deduplicationId).slice(0, 140)}` : `qstash_pub:${String(url || '').slice(0, 140)}`,
+    });
+    throw e;
+  }
 
   return r;
 }
