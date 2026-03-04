@@ -1474,3 +1474,85 @@ QA:
 - Reverted `smoke-tests_short.md` to baseline.
 - NOTE: Neon history filename is canonical (`docs/neon/ИСТОРИЯ_НЕОН.txt`); older ZIPs may show mojibake due to archive encoding.
 
+
+## STEP316 — Official publish deliver: reserve-based dedup + no revert after TG success
+
+Контекст:
+- Mini-outbox (QStash) уже убрал синхронный Telegram send из UI, но оставался риск дублей при падении между успешным Telegram send/edit и DB финализацией (`ACTIVE`).
+- При таком падении прежняя логика могла откатить статус обратно в `PENDING`, из-за чего оператор мог повторить публикацию и получить дубль в канале.
+
+Изменения:
+- `src/bot/bot.js`:
+  - enqueue deliver теперь использует deduplicationId, привязанный к DB‑reserve `updated_at` (reserveAt/reserveEpoch) вместо minute-only.
+  - deliver worker читает Redis breadcrumb `official:pub:msgid:<offerId>` и при отсутствии `message_id` предпочитает edit/attach вместо отправки нового сообщения.
+  - перед DB финализацией всегда пишется breadcrumb (`pre_db`).
+  - если Telegram send/edit уже успешен, но DB финализация упала: **не откатываем** в `PENDING` — оставляем `PUBLISHING`, пишем `last_error`, ставим ускоренный verify (delaySec=20) и возвращаем ACK (без QStash retry).
+- `api/qstash/official-publish-deliver.js`:
+  - delayed reschedule на `locked` теперь сохраняет dedup base (offerId+action+reserveKey), чтобы не плодить параллельные deliver задачи.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — уточнён пункт про official publish idempotency после STEP316.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен STEP316.
+
+QA:
+- Смоделировать падение DB на шаге `setOfficialPostActive` (например, временно ломая DB ENV) при рабочем Telegram:
+  - публикация должна оставить `PUBLISHING` (не `PENDING`), а в Redis должен появиться breadcrumb `official:pub:msgid:<offerId>`.
+  - через ~20–90 секунд verify должен попытаться прикрепить `message_id` и перевести в `ACTIVE`.
+- Двойной клик «Опубликовать» / повторный enqueue в течение одного reserve — не должен давать несколько deliver задач (dedup reserve-based).
+
+Риск регрессий: низкий (локальные изменения в official publish; без влияния на меню/хабы и без новых DB‑reads в UI).
+
+## STEP317 — Brand Inbox: accept-only transition + server-side guards (no bypass)
+
+Контекст:
+- В Brand Inbox «✅ Принять» — единственная точка списания и перехода `new → in_progress`.
+- До этого шага в коде оставались “подстраховочные” автопереходы в `in_progress` при отправке сообщений (brand reply / creator chat), которые теоретически могли дать обход (при stale expectText / crafted updates).
+
+Изменения:
+- `src/bot/bot.js`:
+  - `expectText: brand_app_reply` теперь **перед отправкой** заново грузит заявку из DB и **fail-closed**, если `status=new` (просит нажать ✅ Принять; не шлёт и не пишет в тред).
+  - `expectText: brand_app_chat_send` (сообщение бренду от креатора) теперь **fail-closed**, если `status=new` (бренд ещё не принял), и не пишет в тред.
+  - Удалены автопереходы `new → in_progress` из send-flow: статус больше никогда не меняется “по пути” — только через ✅ Принять.
+- `src/db/queries.js`:
+  - `updateBrandApplicationStatus()` усилен guard’ом: `in_progress/closed` нельзя поставить, пока текущий `status=new` (spam можно всегда).
+  - `markBrandApplicationReplied()` теперь обновляет запись только если `status != new`.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — добавлена строка про server-side guards на отправке сообщений.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен STEP317.
+
+QA:
+- Открыть заявку `status=new` и попытаться:
+  - через старую кнопку/подмену callback открыть «✍️ Ответить/⚡ Шаблоны» → должно вернуть в карточку с подсказкой «Сначала ✅ Принять».
+  - отправить сообщение в режиме `brand_app_reply` при `status=new` (симулируя stale expectText) → сообщение **не уходит**, бот требует ✅ Принять.
+  - открыть чат креатора `💬 Написать бренду` при `status=new` → чат не открывается, показывается карточка.
+
+Риск регрессий: низкий (локальные guards в Brand Inbox; без затрагивания меню/хабов и без новых DB‑reads в горячих UI путях).
+
+
+## STEP318 — Broadcast 429 cooldown: Redis cooldown + /api/health pause signal
+
+Цель:
+- При Telegram 429 поставить **Redis cooldown** (с TTL), чтобы рассылка не долбила Telegram.
+- На следующих тиках cron и в QStash deliver — **уважать паузу** (без лишних DB‑пуллов в Neon).
+- `/api/health` должен показывать, что рассылка на паузе (Redis-only).
+
+Изменения:
+- `src/bot/cron.js`:
+  - `setBroadcastCooldown()` переведён на атомарный Lua: выставляет **per‑broadcast** ключ `broadcast:<id>:cooldown_until` и **global** ключи `broadcast:cooldown_until` + `broadcast:cooldown_broadcast_id` консистентно (TTL считается от finalUntil).
+  - `getBroadcastCooldownUntilMs()` теперь имеет fallback: если per‑broadcast ключ отсутствует, но global cooldown активен и принадлежит этому broadcastId — возвращаем global until.
+- `api/health.js`:
+  - broadcast cooldown блок теперь имеет Redis-only fallback: если global `cooldown_until` пуст, но известен `broadcast_id`, читаем per‑broadcast `broadcast:<id>:cooldown_until` и показываем его.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — добавлен STEP318 (broadcast cooldown idempotency + health signal).
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен STEP318.
+
+QA:
+- Запустить рассылку и искусственно словить Telegram 429 (или подставить мок/лимит):
+  - должен выставиться `broadcast:cooldown_until` и `broadcast:<id>:cooldown_until` (TTL > retry_after).
+  - `broadcast_tick` на паузе должен выходить early (до выборки recipients) и писать `reason=cooldown`.
+  - `/api/health` должен показать `broadcast.cooldown_until` и `retry_after_sec>0`.
+  - В fan-out режиме `/api/qstash/broadcast-deliver` при активной паузе должен republish с delay и без Telegram send.
+
+Риск регрессий: низкий (только broadcast cooldown plumbing; без влияния на меню/хабы).
