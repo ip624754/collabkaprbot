@@ -3507,22 +3507,53 @@ function makeUiCtxForMessage(baseCtx, uiMsg) {
 }
 
 // STEP128: Stateless fallback navigation (Redis-degraded safe UI)
-// - No Redis reads/writes
 // - No DB calls
-// - Used only as a minimal "escape hatch" when Redis is down
+// - UI-only escape hatch when Redis is degraded.
+// - Best-effort: silently clear input-mode state (expectText/draft) to avoid "stuck in input" UX.
+//   If Redis is down this is a no-op (errors are swallowed).
 function kbStatelessFallback(kind = 'menu') {
   const kb = new InlineKeyboard();
-  if (kind !== 'menu') kb.text('📋 Меню', 's:menu');
-  if (kind !== 'home') kb.text('🏠 Home', 's:home');
-  if (kind !== 'help') kb.text('🧭 Помощь', 's:help');
+  const showAll = kind === 'all';
+  if (showAll || kind !== 'menu') kb.text('📋 Меню', 's:menu');
+  if (showAll || kind !== 'home') kb.text('🏠 Home', 's:home');
+  if (showAll || kind !== 'help') kb.text('🧭 Помощь', 's:help');
+  kb.row().text('🔄 Сбросить ввод', 's:reset_input');
   return kb;
+}
+
+async function silentClearInputState(tgId) {
+  const uid = Number(tgId || 0);
+  if (!uid) return;
+  try { await redis.del(k(['expectText', uid])); } catch {}
+  try { await redis.del(k(['draft', uid])); } catch {}
 }
 
 async function handleStatelessCallback(ctx, p) {
   const a = String(p?.a || '');
   if (!a.startsWith('s:')) return false;
 
+  const tgId = Number(ctx?.from?.id || 0);
+  await silentClearInputState(tgId);
+
   const key = a.slice(2);
+
+  if (key === 'reset_input') {
+    await safeEditOrReply(
+      ctx,
+      `✅ <b>Ввод сброшен</b>
+
+📋 <b>Меню (безопасный режим)</b>
+
+Сейчас часть функций временно недоступны (кеш/сессии).
+
+Быстрые действия:
+• Нажми <code>/start</code> (перезапуск)
+• Повтори действие чуть позже`,
+      { parse_mode: 'HTML', reply_markup: kbStatelessFallback('menu') }
+    );
+    return true;
+  }
+
   if (key === 'home') {
     await safeEditOrReply(
       ctx,
@@ -22014,7 +22045,9 @@ if (redisOk === false && (_meta?.guard === ACTION_GUARD.DB_TRUTH || _meta?.guard
             .row()
             .text('⬅️ Отмена', 'a:admin_home')
             .text('📋 Меню', 's:menu')
-            .text('🏠 Home', 's:home');
+            .text('🏠 Home', 's:home')
+            .row()
+            .text('🔄 Сбросить ввод', 's:reset_input');
 
           await safeEditOrReply(
             ctx,
@@ -22035,7 +22068,7 @@ Redis сейчас недоступен. Обычно опасные дейст�
             `⛔ Временно недоступно (кеш/сессии). Попробуй чуть позже.
 
 Если ты админ и нужно срочно — открой админку и используй аварийный доступ (break-glass) только по необходимости.`,
-            { reply_markup: new InlineKeyboard().text('📋 Меню', 's:menu').text('🏠 Home', 's:home') }
+            { reply_markup: kbStatelessFallback('all') }
           );
         } catch {}
         return;
