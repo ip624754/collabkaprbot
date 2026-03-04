@@ -5619,12 +5619,19 @@ export async function listBrandApplications(brandUserId, status, limit = 10, off
 }
 
 export async function updateBrandApplicationStatus(appId, status) {
+  const st = String(status || '').trim();
+  // Server-side guard (STEP317): until ✅ Принять we never allow moving to in_progress/closed.
+  // Allowed anytime: spam. Allowed after accept: in_progress/closed.
   const r = await pool.query(
     `update brand_applications
        set status=$2, updated_at=now()
      where id=$1
+       and (
+         ($2 = 'spam')
+         or ($2 in ('in_progress','closed') and coalesce(status,'new') <> 'new')
+       )
      returning *`,
-    [Number(appId), String(status)]
+    [Number(appId), st]
   );
   return r.rows[0] || null;
 }
@@ -5637,6 +5644,7 @@ export async function markBrandApplicationReplied(appId, replyText, repliedByUse
            replied_at=now(),
            updated_at=now()
      where id=$1
+       and coalesce(status,'new') <> 'new'
      returning *`,
     [Number(appId), String(replyText || ''), repliedByUserId ? Number(repliedByUserId) : null]
   );
