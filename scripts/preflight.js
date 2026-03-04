@@ -62,6 +62,21 @@ if (before !== after) {
   process.exit(2);
 }
 
+logHeader("Preflight: migration pack (must be up to date)");
+const packPath = path.join(ROOT, "migration_pack", "00_mark_all_applied.sql");
+const packBefore = readTextSafe(packPath);
+runNpm("gen:migration-pack");
+const packAfter = readTextSafe(packPath);
+
+if (packBefore !== packAfter) {
+  // eslint-disable-next-line no-console
+  console.error(
+    "\n[preflight] migration_pack/00_mark_all_applied.sql changed during generation.\n" +
+      "Commit the updated file (or fix scripts/gen-mark-all-applied.js) and re-run preflight."
+  );
+  process.exit(2);
+}
+
 logHeader("Preflight: navigation lint");
 runNpm("lint:nav");
 
