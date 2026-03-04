@@ -57,9 +57,7 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 
 24) **Broadcast E2E smoke:** держим быстрый end‑to‑end smoke (gate + создание + cooldown), чтобы после деплоя быстро ловить тупики и проверки 429/cooldown в рассылках. См. audit report 21 и секцию 14 в `smoke-tests_short.md`.
 
-25) **Admin E2E smoke:** держим быстрый end‑to‑end smoke по 👑 Админке (Users/Payments/Outbox/System/Broadcast), чтобы после деплоя быстро ловить регрессии админских сценариев и “залипание” input‑mode. См. audit report 25 и секцию 15 в `smoke-tests_short.md`.
-
-26) **Admin UX sweep (input-mode escape hatch):** `📋 Меню` / `🏠 Home` теперь best‑effort сбрасывают `expectText` (не залипаем в режиме ввода), а входы в ключевые админ‑разделы очищают ожидание ввода. См. audit report 22.
+25) **Admin UX sweep (input-mode escape hatch):** `📋 Меню` / `🏠 Home` теперь best‑effort сбрасывают `expectText` (не залипаем в режиме ввода), а входы в ключевые админ‑разделы очищают ожидание ввода. См. audit report 22.
 
 Audit report (one-time scan): `docs/audit/04_CREATOR_UI_BRAND_ACTION_KEYS_AUDIT_2026_03.md`.
 
@@ -97,13 +95,7 @@ Audit report (Giveaways & Offers E2E smoke): `docs/audit/20_GIVEAWAYS_OFFERS_E2E
 
 Audit report (Broadcast E2E smoke): `docs/audit/21_BROADCAST_E2E_SMOKE_2026_03.md`.
 
-Audit report (Admin E2E smoke): `docs/audit/25_ADMIN_E2E_SMOKE_2026_03.md`.
-
 Audit report (Admin UX sweep): `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
-
-Audit report (Broadcast prompt polish): `docs/audit/23_BROADCAST_PROMPT_POLISH_2026_03.md`.
-
-Audit report (Admin Broadcast audit + polish): `docs/audit/24_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md`.
 
 
 ---
@@ -174,6 +166,8 @@ Audit report (Admin Broadcast audit + polish): `docs/audit/24_ADMIN_BROADCAST_AU
 
 
 
+
+26) **Telegram callback_data ≤ 64 bytes:** динамические кнопки могут молча исчезать, если callback_data > 64 байт. Держим callbacks компактными (short ret-коды `bd/ba`, укороченные action keys `a:bms`, `a:ca`, убираем дублирующие параметры). При будущих правках — обязательно проверять длину callback_data на “длинных” ID.
 
 ## 1) Платформа и компоненты
 

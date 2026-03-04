@@ -5,15 +5,15 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **508**
-- Actions in registry: **508**
+- Actions in code: **510**
+- Actions in registry: **510**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
 | admin | 83 |
-| edit | 336 |
+| edit | 338 |
 | ops | 75 |
 | pay | 11 |
 | view | 3 |
@@ -23,7 +23,7 @@
 | Guard | Count |
 |---|---:|
 | db_truth | 2 |
-| none | 152 |
+| none | 154 |
 | queue_first | 2 |
 | require_redis | 352 |
 
@@ -152,6 +152,7 @@
 | `a:bm_rm_ok` | edit | require_redis |
 | `a:bm_rm_q` | edit | none |
 | `a:bm_set_brand` | edit | none |
+| `a:bms` | edit | none |
 | `a:brand_app_accept` | edit | queue_first |
 | `a:brand_app_accepted_done` | edit | none |
 | `a:brand_app_card` | edit | none |
@@ -303,6 +304,7 @@
 | `a:bx_wtags` | edit | require_redis |
 | `a:bx_wtagt` | edit | require_redis |
 | `a:bx_wtext` | edit | require_redis |
+| `a:ca` | edit | none |
 | `a:cur_add_username` | edit | none |
 | `a:cur_audit` | edit | none |
 | `a:cur_gw_check_do` | edit | none |
