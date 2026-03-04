@@ -1466,3 +1466,11 @@ QA:
   - попытка открыть чат заявки (креатор → чат) при Redis down → не тупик, выдаёт safe-mode кнопки.
 
 Риск регрессий: очень низкий (copy/UX в деградации; без изменения DB‑логики).
+
+## STEP315 — Repo sync to STEP314 baseline (docs parity)
+
+- Removed stray files not present in STEP314 (.env.example + extra audit docs).
+- Restored missing `docs/process/07_WORK_HISTORY_2026_02.md`.
+- Reverted `smoke-tests_short.md` to baseline.
+- NOTE: Neon history filename is canonical (`docs/neon/ИСТОРИЯ_НЕОН.txt`); older ZIPs may show mojibake due to archive encoding.
+
