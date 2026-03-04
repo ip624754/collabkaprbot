@@ -953,3 +953,20 @@ QA:
 - Отправить неподдерживаемый тип (стикер/голос): получить понятный отказ + кнопки навигации.
 
 Риск регрессий: **низкий** (тексты/клавиатура + один экран ошибки).
+
+
+### STEP294 — Audit numbering fix (docs-only)
+Цель:
+- Убрать путаницу в `docs/audit/`: файл №22 должен быть про **Admin UX sweep**, а не про Broadcast.
+- Привести нумерацию к тому, что уже указано в `docs/00_CURRENT_STATE.md` (watchlist + список audit report).
+
+Изменения (docs-only):
+- Добавлен отсутствующий файл: `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
+- Файл `docs/audit/22_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md` переименован в `docs/audit/24_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md` (и обновлён заголовок внутри).
+- `docs/00_CURRENT_STATE.md` дополнен ссылками на audit 23 и 24, чтобы список был консистентным.
+
+QA:
+- Убедиться, что `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md` существует и соответствует описанию из watchlist.
+- Убедиться, что `docs/audit/24_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md` существует, а файла `22_ADMIN_BROADCAST...` больше нет.
+
+Риск регрессий: **нулевой** (docs-only).
