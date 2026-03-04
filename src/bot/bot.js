@@ -19509,17 +19509,50 @@ if (exp.type === 'brand_apply') {
 
     if (exp.type === 'brand_app_reply') {
       const appId = Number(exp.appId || 0);
-      const brandUserId = Number(exp.brandUserId || 0);
-      const creatorTgId = Number(exp.creatorTgId || 0);
+      let brandUserId = Number(exp.brandUserId || 0);
       const reply = String(((ctx.message && ctx.message.text) || (ctx.msg && ctx.msg.text) || '')).trim();
 
-      if (!appId || !brandUserId || !creatorTgId) {
+      if (!appId || !brandUserId) {
         await clearExpectText(ctx.from.id);
         return ctx.reply('⚠️ Не удалось отправить ответ: отсутствуют данные заявки.');
       }
 
       if (reply.length < 2) return ctx.reply('⚠️ Ответ слишком короткий.');
       if (reply.length > 2000) return ctx.reply('⚠️ Слишком длинно. Укороти до 2000 символов.');
+
+      // Server-side guard (STEP317): reply is allowed only after ✅ Принять.
+      const app = await getBrandAppForActorSafe(ctx, u.id, appId);
+      if (!app) {
+        await clearExpectText(ctx.from.id);
+        return ctx.reply('⚠️ Заявка не найдена или нет доступа.');
+      }
+      if (normLeadStatus(app.status) === 'new') {
+        await clearExpectText(ctx.from.id);
+        try {
+          const t = BRAND_APP_ACCEPT_COST > 0
+            ? `Сначала ✅ Принять (спишется ${BRAND_APP_ACCEPT_COST} ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')})`
+            : 'Сначала ✅ Принять';
+          await ctx.answerCallbackQuery({ text: t });
+        } catch {}
+        try {
+          await renderBrandAppView(ctx, u.id, appId, {
+            status: String(exp.backStatus || 'new'),
+            page: Math.max(0, Number(exp.backPage || 0))
+          });
+        } catch {
+          const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:new|p:0`);
+          await ctx.reply('⚠️ Бренд ещё не принял заявку. Нажми ✅ Принять в карточке.', { reply_markup: navKb(backCb) });
+        }
+        return;
+      }
+
+      // Trust DB-truth over cached expectText payload.
+      brandUserId = Number(app.brand_user_id || brandUserId || 0);
+      const creatorTgId = Number(app.creator_tg_id || 0);
+      if (!creatorTgId) {
+        await clearExpectText(ctx.from.id);
+        return ctx.reply('⚠️ Не удалось отправить ответ: у креатора нет TG id.');
+      }
 
       // Rate-limit: 5 replies / 5 min per brand per app
       try {
@@ -19576,8 +19609,7 @@ ${escapeHtml(reply)}`;
         } catch {}
       }
 
-      // Persist reply + append to thread + move to "in progress" if still new
-      const app = await getBrandAppForActorSafe(ctx, u.id, appId);
+      // Persist reply + append to thread (never move status here: ✅ Принять is the only spending transition).
       await safeBrandAppsWrite(() => db.markBrandApplicationReplied(appId, reply, u.id), { op: 'brand_app_mark_replied', appId });
       await safeBrandAppsWrite(() => db.appendBrandApplicationThreadMessage(appId, {
         from: 'brand',
@@ -19589,9 +19621,6 @@ ${escapeHtml(reply)}`;
         delivered,
         delivery: { ok: delivered, mode: sendRes?.mode || null, reason: delivered ? null : deliveryReason }
       }), { op: 'brand_app_thread_append', appId });
-      if (app && String(app.status) === 'new') {
-        await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, 'in_progress'), { op: 'brand_app_status', appId, st: 'in_progress' });
-      }
       await clearExpectText(ctx.from.id);
 
       const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:new|p:0`);
@@ -19637,6 +19666,7 @@ ${escapeHtml(reply)}`;
 
       return ctx.reply(failText, { parse_mode: 'HTML', reply_markup: failKb, disable_web_page_preview: true });
     }
+
 
 if (exp.type === 'brand_deals_search') {
   const brandUserId = Number(exp.brandUserId || 0);
@@ -19725,6 +19755,14 @@ if (exp.type === 'brand_deals_search') {
       if (!app) { await clearExpectText(ctx.from.id); return ctx.reply('⚠️ Заявка не найдена.'); }
       if (Number(app.creator_user_id) !== Number(u.id)) { await clearExpectText(ctx.from.id); return ctx.reply('Нет доступа.'); }
 
+      // Server-side guard (STEP317): creator can chat only after brand accepted (status != new).
+      if (normLeadStatus(app.status) === 'new') {
+        await clearExpectText(ctx.from.id);
+        try { await ctx.answerCallbackQuery({ text: 'Бренд ещё не принял заявку.' }); } catch {}
+        await renderBrandAppCardForCreator(ctx, u.id, appId);
+        return;
+      }
+
       const brandUserId = Number(app.brand_user_id);
 
       const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
@@ -19739,10 +19777,6 @@ if (exp.type === 'brand_deals_search') {
         by_tg_id: Number(ctx.from?.id || 0),
         by_username: ctx.from?.username || null
       }), { op: 'brand_app_thread_append', appId });
-
-      if (normLeadStatus(app.status) === 'new') {
-        await safeBrandAppsWrite(() => db.updateBrandApplicationStatus(appId, 'in_progress'), { op: 'brand_app_status', appId, st: 'in_progress' });
-      }
 
       // Notify brand owner + managers
       const managers = await safeBrandManagers(() => db.listBrandManagers(brandUserId), async () => []);
