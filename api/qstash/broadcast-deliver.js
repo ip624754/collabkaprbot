@@ -75,6 +75,33 @@ async function bumpBroadcastQuarantineCount(broadcastId, userId) {
 }
 
 
+function broadcast429DistinctUsersKey(broadcastId) {
+  return k(['broadcast', String(broadcastId), '429users']);
+}
+
+function getGlobal429WindowSec() {
+  const v = Number(process.env.BROADCAST_GLOBAL_429_WINDOW_SEC || 60) || 60;
+  return Math.max(10, Math.min(600, v));
+}
+
+function getGlobal429Threshold() {
+  const v = Number(process.env.BROADCAST_GLOBAL_429_THRESHOLD || 6) || 6;
+  return Math.max(2, Math.min(50, v));
+}
+
+async function bumpBroadcast429DistinctUsers(broadcastId, userId) {
+  try {
+    const key = broadcast429DistinctUsersKey(broadcastId);
+    const ttlSec = getGlobal429WindowSec();
+    await redis.sadd(key, String(userId));
+    await redis.expire(key, ttlSec);
+    const n = await redis.scard(key);
+    return Number(n) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 function getQuarantineThreshold() {
   const v = Number(process.env.BROADCAST_QUARANTINE_THRESHOLD || 3) || 3;
   return Math.max(2, Math.min(10, v));
@@ -360,32 +387,62 @@ export default async function handler(req, res) {
         return;
       }
 
-      // 429 → set cooldown + delay-republish + 2xx
+      // 429 → per-recipient backoff/skip (so one chat can't keep the broadcast pending forever).
+      // We set a GLOBAL cooldown only during bursty 429 across multiple recipients.
       if (Number(code) === 429) {
         const retryAfter = extractRetryAfterSec(err);
         const threshold = getQuarantineThreshold();
         const quarantineSec = getQuarantineSec();
-        let qCount = 0;
-        let delaySec = retryAfter;
-        try {
-          await db.logBroadcastDeferred(broadcastId, userId, retryAfter);
-          qCount = await bumpBroadcastQuarantineCount(broadcastId, userId);
+        const globalThr = getGlobal429Threshold();
 
-          // If the same recipient keeps triggering 429 repeatedly, quarantine it for a longer window.
-          // This avoids burning QStash retries on problematic chats while keeping broadcast progress.
-          if (qCount >= threshold) {
-            await resetBroadcastQuarantineCount(broadcastId, userId);
-            await db.logBroadcastQuarantine(broadcastId, userId, quarantineSec);
-            delaySec = quarantineSec;
+        // Best-effort Redis signals (never fail because Redis is down).
+        const qCount = await bumpBroadcastQuarantineCount(broadcastId, userId);
+        const distinct429Users = await bumpBroadcast429DistinctUsers(broadcastId, userId);
+        const isGlobal429 = distinct429Users >= globalThr;
+
+        // If this looks like a per-recipient issue (NOT a global burst), stop retrying after N hits.
+        if (!isGlobal429 && qCount >= threshold) {
+          try {
+            await db.markBroadcastDeliveryBlocked(
+              broadcastId,
+              userId,
+              `telegram_429_quarantined_${quarantineSec}s`
+            );
+          } catch {
+            // DB down: fail-closed
+            res.status(500).json({ ok: false, error: 'db_unavailable' });
+            return;
           }
 
-          await setBroadcastCooldown(broadcastId, retryAfter, 'telegram_429');
+          await resetBroadcastQuarantineCount(broadcastId, userId);
+          res.status(200).json({
+            ok: true,
+            blocked: true,
+            reason: 'telegram_429_quarantined',
+            qcnt: qCount || 0,
+            d429: distinct429Users || 0,
+          });
+          return;
+        }
+
+        // DB log: must succeed (so cron can compute pending/done correctly).
+        try {
+          await db.logBroadcastDeferred(broadcastId, userId, retryAfter);
+          // In global mode, reset per-recipient counter to avoid accidental quarantine on bursty limits.
+          if (isGlobal429) await resetBroadcastQuarantineCount(broadcastId, userId);
         } catch {
-          // DB down: fail-closed
           res.status(500).json({ ok: false, error: 'db_unavailable' });
           return;
         }
 
+        // Global cooldown is best-effort (Redis-only). If Redis is down, we still delay this job.
+        if (isGlobal429) {
+          try {
+            await setBroadcastCooldown(broadcastId, retryAfter, 'telegram_429');
+          } catch {}
+        }
+
+        const delaySec = Math.max(1, Number(retryAfter || 0) || 1);
         try {
           const dedupId = `b:${broadcastId}:u:${userId}:a:${attempt + 1}`;
           await qstashPublishJSON({
@@ -399,12 +456,19 @@ export default async function handler(req, res) {
           });
         } catch (e) {
           console.error('[QSTASH][BC] republish after 429 failed', String(e?.message || e));
-          // Allow QStash retry, but DB already deferred and cooldown is set.
+          // Allow QStash retry, but DB already deferred and (in global mode) cooldown is set best-effort.
           res.status(500).json({ ok: false, error: 'republish_failed' });
           return;
         }
 
-        res.status(200).json({ ok: true, deferred: true, retry_after_sec: delaySec, qcnt: qCount || 0 });
+        res.status(200).json({
+          ok: true,
+          deferred: true,
+          mode: isGlobal429 ? 'global_429' : 'per_recipient_429',
+          retry_after_sec: delaySec,
+          qcnt: qCount || 0,
+          d429: distinct429Users || 0,
+        });
         return;
       }
 
