@@ -1,5 +1,6 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-04
 
+**STEP315:** repo parity sync (removed stray files, restored missing work history file, reverted smoke-tests_short to baseline).
 ## Staff audit
 
 Для staff‑аудита (и NotebookLM) используем единый стартовый манифест:
