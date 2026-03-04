@@ -1223,3 +1223,116 @@ QA:
 - В pack присутствуют последние миграции (на момент STEP305 — до `043_...`), и нет удалённых/переименованных файлов.
 
 Риск регрессий: минимальный (dev‑tooling + regenerated pack; runtime‑логика не затронута).
+
+
+
+### STEP306 — Degraded UX hardening: честный `s:reset_input` + support-reply без ForceReply
+Контекст:
+- В stateless safe-mode кнопка `s:reset_input` всегда писала «✅ Ввод сброшен», даже если Redis был недоступен и состояние ввода фактически не очищалось.
+- В support-группе промпт для ответа пользователю использовал `force_reply`, а при сбоях Redis мог оставлять “висящие” триггеры и вводить админа в заблуждение.
+
+Изменения:
+- `src/bot/bot.js`:
+  - `s:reset_input` теперь **честный**: пытается очистить `expectText/draft` и показывает «✅» только если операции прошли; при ошибке Redis — предупреждение («сброс не выполнен»).
+  - Reply-to-user в support-группе больше **не использует ForceReply**: промпт обычным сообщением + inline-кнопка `❌ Отмена`.
+  - Fail-closed по UX: если запись reply‑сессии в Redis не удалась, промпт сразу помечается как “не активен” (редактируется), чтобы не было ложного «ответь сюда».
+  - Добавлен `a:adm_support_reply_cancel` для явной отмены reply‑сессии (best-effort; при Redis degraded отмена не подтверждается и это явно показывается).
+
+- `src/bot/actionRegistry.js`:
+  - добавлен `a:adm_support_reply_cancel` (guard: `NONE`, чтобы можно было “прибрать UI” даже при деградации Redis).
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — уточнено поведение safe-mode reset input и support reply prompt.
+- `docs/02_ACTION_KEYS_REGISTRY.md` — регенерирован (включает новый action key).
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен этот STEP.
+
+QA:
+- Degraded safe-mode: нажать «🔄 Сбросить ввод» → при доступном Redis видеть «✅ Ввод сброшен», при недоступном — «⚠️ Сброс не выполнен».
+- Support-группа: `✍️ Ответить` → промпт без ForceReply, кнопка `❌ Отмена` редактирует промпт в «Отменено».
+- При искусственном падении Redis во время старта reply‑сессии: промпт должен редактироваться в «кеш недоступен / сессия не активна».
+
+Риск регрессий: низкий (локальные UX-правки; денег/SQL не затронуто).
+### STEP307 — Official publish mini-outbox: reserve → enqueue → deliver (QStash)
+Контекст:
+- Синхронная публикация в @collabka_offers (DB reserve `PUBLISHING` → Telegram send/edit → DB `ACTIVE`) в serverless может быть прервана (hard-kill), что оставляет зависшие состояния или ведёт к дублям при повторных кликах.
+- Нужна развязка “операторский клик” и “сетевой вызов Telegram” без ломки существующей схемы статусов/lock’ов.
+
+Изменения:
+- `src/bot/bot.js`:
+  - добавлен `queueOfficialPublishToOfficialChannel(...)`: делает **DB reserve** (`atomicReserveOfficialPublish`) + ставит задачу в QStash deliver, без синхронного Telegram send в UI‑пути.
+  - добавлен `enqueueOfficialPublishDeliverJob(...)` (dedup по offerId+минуте) и `deliverOfficialPublishReserved(...)` (реальная отправка в канал + фиксация `ACTIVE`).
+  - места вызова публикации (`a:off_pub`, `a:off_upd`, admin apply `offpub_`) переведены на queue‑путь; при отсутствии QStash — fallback на legacy синхронный publish (чтобы не ломать прод при недонастроенной QStash).
+- `api/qstash/official-publish-deliver.js`:
+  - новый worker‑endpoint: проверка подписи QStash, вызов `deliverOfficialPublishReserved`, best‑effort reschedule при `locked`.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — обновлён пункт про official publish (reserve+enqueue+deliver).
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен этот STEP.
+
+QA:
+- Нажать `✅ Опубликовать` / `♻️ Обновить` в карточке оффера: статус уходит в `PUBLISHING`, UI не ждёт Telegram send.
+- Проверить, что QStash доставляет POST на `/api/qstash/official-publish-deliver` и после выполнения статус становится `ACTIVE` (message_id заполнен).
+- При двойном клике/повторной попытке: вторая попытка не должна создавать дубль (reserve guard + offer lock).
+- При искусственном `locked` (параллельные действия): deliver worker должен перекинуть задачу с задержкой (retry), без спама/ошибок.
+
+Риск регрессий: средний-низкий (затронута только публикация в официальный канал; остальные потоки не менялись).
+
+
+### STEP308 — Hydration tokens для длинной навигации: авто‑fix callback_data > 64 (fail-open)
+Контекст:
+- Telegram жёстко ограничивает `callback_data` до 64 байт. При превышении кнопки могут исчезать или давать `button_data_invalid`.
+- Раньше мы держали callbacks “вручную компактными” (short-коды, сокращение ret и т.п.), но это не гарантирует защиту при росте параметров/ID/фильтров.
+
+Изменения:
+- `src/bot/bot.js`:
+  - добавлен авто‑sanitizer перед любым `editMessageText/reply`: если в inline‑клавиатуре найдено `callback_data` > 64 байт, оно заменяется на короткий `a:h|h:<token>`, а исходный callback сохраняется в Redis (`cbh:<tgId>:<token>`, TTL `CB_HYDRATION_TTL_SEC`).
+  - обработчик callback-query умеет “разгидрировать” `a:h|h:<token>`: достаёт исходный callback из Redis и продолжает обработку как обычно.
+  - fail-open: если Redis недоступен или токен протух — показываем экран «Кнопка устарела» с переходом в меню/home (вместо silent-fail).
+- `src/bot/actionRegistry.js`:
+  - добавлен служебный action `a:h` (guard: `NONE`) — чтобы `npm run actions:check` оставался чистым.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — пункт про `callback_data` дополнен описанием auto‑hydration.
+- `docs/02_ACTION_KEYS_REGISTRY.md` — регенерирован (включает `a:h`).
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен этот STEP.
+
+QA:
+- Сделать кнопку с искусственно длинным `callback_data` (или воспроизвести любой экран, где есть длинные параметры):
+  1) При рендере клавиатуры бот не должен падать; кнопки должны отображаться.
+  2) Нажатие на такую кнопку должно работать (через rehydrate из Redis).
+  3) Если токен протух/Redis down — должна появиться «Кнопка устарела» + кнопки «📋 Меню / 🏠 Home», без ошибок/спиннера.
+
+Риск регрессий: низкий (изменения локальны: только safeEditOrReply и rehydrate branch, без DB и без денег).
+
+
+### STEP309 — Tombstone/anonymize для удаления аккаунта (PII wipe + restore gate)
+Контекст:
+- Софт‑делит (`is_deleted/deleted_at`) сам по себе не решает приватность: если продолжать записывать `tg_username` при каждом /start, PII “возвращается”.
+- При удалении аккаунта нужно удалить/обнулить чувствительные поля (контакты/профили), но сохранить финучёт и историю (платежи/аудит) для отчётности.
+- Решение должно быть serverless‑friendly, DB‑truth, без дополнительных SQL в hot UI.
+
+Изменения:
+- `src/db/queries.js`:
+  - `upsertUser()` обновлён: если `users.is_deleted=true`, **не** перезаписывает `tg_username` из Telegram апдейтов (PII не “воскресает”).
+  - добавлены `tombstoneUser(userId)` и `restoreUser(userId)`:
+    - `tombstoneUser` в транзакции ставит `is_deleted=true`, `deleted_at`, чистит `tg_username`, обнуляет `brand_profiles`, скрывает витрины (wipe `workspace_settings` профиля/контактов + `network_enabled=false`), удаляет IG OAuth accounts для owned workspaces, отзывает edge‑роли (`brand_managers`, `workspace_editors`, `workspace_curators`), чистит `user_verifications.submitted_text`.
+    - `restoreUser` возвращает `is_deleted=false` (без восстановления PII) — пользователь выбирает роль заново.
+- `src/bot/bot.js`:
+  - добавлен экран‑гейт `renderAccountDeletedGate`.
+  - `/start` и callback‑обработчик: если `is_deleted=true` — показываем гейт; разрешены только `♻️ Восстановить` и `💬 Поддержка`.
+  - в `💬 Поддержка` добавлена кнопка `🗑 Удалить аккаунт` → подтверждение → `tombstoneUser`.
+  - `a:acc_restore` восстанавливает аккаунт и сбрасывает role‑hints в Redis (best‑effort).
+- `src/bot/actionRegistry.js`:
+  - добавлены action keys: `a:acc_del_q` (NONE), `a:acc_del_do` (DB_TRUTH), `a:acc_restore` (DB_TRUTH).
+- Docs:
+  - `docs/02_ACTION_KEYS_REGISTRY.md` — регенерирован.
+  - `docs/00_CURRENT_STATE.md` — добавлен пункт про tombstone.
+  - `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен этот STEP.
+
+QA:
+- В `💬 Поддержка` нажать `🗑 Удалить аккаунт` → confirm → видим экран «Аккаунт удалён» с `♻️ Восстановить`.
+- После удаления сделать `/start`: должен показываться экран удалённого аккаунта (без попадания в меню/хаб).
+- Нажать `♻️ Восстановить`: должен открыться выбор роли (без ошибок), `ui_mode/bm_mode/cur_mode` best‑effort очищены.
+- Проверить, что после удаления `tg_username` больше не “возвращается” в БД при последующих апдейтах (важно для приватности).
+
+Риск регрессий: низкий‑средний (затронуты /start и общий callback‑гейт; изменения узкие, DB‑truth, без влияния на деньги).
