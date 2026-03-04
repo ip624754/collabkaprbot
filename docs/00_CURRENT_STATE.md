@@ -62,6 +62,10 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 
 26) **Menu/Home hot UI cache (Neon-saving):** на `📋 Меню` / `🏠 Home` используем best‑effort Redis‑кеш (TTL 5 мин) для role flags (moderator/curator/editor) и списка workspaces креатора. Это убирает 2–3 SQL на каждый клик по меню в нормальном режиме. При деградации Redis — fail‑open: работаем по DB‑truth как раньше. См. audit report 28.
 
+**STEP310:** `a:main_menu` переведён на `getRoleFlagsCached` (без лишних SQL в навигации). Добавлена инвалидация кеша role flags при изменении ролей (модератор/куратор/редактор) — best‑effort `redis.del` (DB остаётся source of truth).
+
+**STEP311:** migrations cleanup — правило имён миграций расширено до `NNN..._name.sql` (>=3 цифры, чтобы не упереться в 999), а из раннера убран/не используется `normalizedSql` (dead field; checksum остаётся нормализованным LF+trimEnd).
+
 27) **Redis TTL hygiene gate:** в `npm run preflight` добавлен grep‑gate `lint:redis-ttl` — запрещаем появление `redis.set(a, b)` без TTL в runtime‑коде. Исключения (намеренно persistent) должны быть явно помечены `TTL-LINT: ...`. См. audit report 30.
 
 28) **STEP301 micro consistency (P3):** в админской рассылке (экран «🔗 Кнопки») шаблоны и действия выровнены в 2×2, добавлен явный admin‑footer (⬅️ Админка / 📋 Меню / 🏠 Home); в `api/qstash/broadcast-deliver.js` убран scope‑shadow `url` в cooldown‑ветке (используем `deliverUrl`); в `redactContactsInText` убран паттерн `.test()+.replace()` на глобальных regex — теперь один проход `replace` + проверка изменения строки (без stateful edge‑кейсов).
@@ -137,7 +141,7 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 - STEP205: Polishing Comms — единые лимиты Telegram по длине текста (emoji-safe), предупреждения в предпросмотре, лимиты для System Notice и CTA (без регрессий).
 - STEP206: закреплён короткий релиз‑протокол “2 минуты”: `npm run preflight` + `/api/health` + 2–3 клика по админ‑экранам (Comms/Outbox/Users). См. `docs/16_RELEASE_CHECKLIST.md`.
 - STEP207: hotfix — исправлен SyntaxError (invalid RegExp) в `normalizeNoticeCtaLabel` (CTA label), который мог ломать запуск на Vercel.
-- STEP208: migrations fail-fast — раннер `migrations/run.js` и генератор pack (`scripts/gen-mark-all-applied.js`) принимают только `NNN_name.sql` и **падают**, если в `migrations/` есть любой “левый” `.sql` (защита от случайного копирования `migration_pack/*.sql`).
+- STEP208: migrations fail-fast — раннер `migrations/run.js` и генератор pack (`scripts/gen-mark-all-applied.js`) принимают только `NNN..._name.sql` (>=3 цифры) и **падают**, если в `migrations/` есть любой “левый” `.sql` (защита от случайного копирования `migration_pack/*.sql`).
 - STEP209: action guards v2 — в `src/bot/actionRegistry.js` добавлены guard-типы `db_truth` / `queue_first` (вместо размытого `none` для критичных DB-truth путей), middleware в `src/bot/bot.js` кэширует `redisOk` для этих guard’ов, доки синхронизированы и перегенерирован `docs/02_ACTION_KEYS_REGISTRY.md`.
 - STEP210: anti-click-storm при Redis down — добавлен локальный in-memory limiter (TTL ~8s) для `✅ Принять` и `🔓 Разлок контактов`, чтобы при деградации Redis избежать “клик‑шторма” и спайков нагрузки на Postgres/Neon.
 - STEP211: payments strict validation — auto-heal/ручной apply не применяют Stars‑платежи с невалидным payload/суммой/валютой; admin auto-heal помечает «manual_required» и останавливает retry‑петли; в строгой валидации поддержаны legacy токены (Brand Pass numeric credits, Brand Plan basic/max).
