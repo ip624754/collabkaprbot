@@ -2267,11 +2267,12 @@ async function trackAcqSource(tgId, src) {
   const totalKey = k(['ref', 'src', s, 'total']);
   const dayKey = k(['ref', 'src', s, 'd', day]);
   const lastKey = k(['ref', 'user', uid, 'last_src']);
+  const totalTtlSec = Math.max(0, Math.trunc(Number(CFG.ACQ_TOTAL_TTL_DAYS || 0) * 86400));
 
   try {
     const [dayN] = await Promise.all([
       incrWithExpireOnFirst(dayKey, 60 * 60 * 24 * 60),
-      redis.incr(totalKey),
+      incrWithExpireOnFirst(totalKey, totalTtlSec),
       redis.set(lastKey, s, { ex: 60 * 60 * 24 * 30 }),
     ]);
     // day bucket TTL is set atomically in incrWithExpireOnFirst
@@ -2311,10 +2312,11 @@ async function trackAcqRole(tgId, role) {
 
   const totalKey = k(["ref", "role", src, r, "total"]);
   const dayKey = k(["ref", "role", src, r, "d", day]);
+  const totalTtlSec = Math.max(0, Math.trunc(Number(CFG.ACQ_TOTAL_TTL_DAYS || 0) * 86400));
   try {
     const [dayN] = await Promise.all([
       incrWithExpireOnFirst(dayKey, 60 * 60 * 24 * 60),
-      redis.incr(totalKey),
+      incrWithExpireOnFirst(totalKey, totalTtlSec),
     ]);
     // day bucket TTL is set atomically in incrWithExpireOnFirst
   } catch {
