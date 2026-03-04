@@ -1441,3 +1441,28 @@ QA:
 - (Опционально) проверить TTL у `ref:*:total` в Redis: при `ACQ_TOTAL_TTL_DAYS=365` у totals должен быть TTL; при `0` — TTL отсутствует.
 
 Риск регрессий: низкий (best‑effort Redis‑трекинг; логика `/start` не блокируется даже при Redis degraded).
+
+
+### STEP314 — Degraded UX copy consistency + fail-open navigation via stateless allowlist
+Контекст:
+- В разных местах при деградации Redis встречались разные формулировки про «кеш/сессии», что путало пользователей и админов.
+- Инвариант: mutating callbacks должны fail-closed при Redis degraded, а навигация должна оставаться доступной (fail-open) через allowlist безопасных действий.
+
+Изменения:
+- `src/bot/bot.js`:
+  - введён единый блок копирайта `DEGRADED_COPY` (line/tips/tipsShort) и переиспользован в safe-mode (`s:*`) экранах.
+  - сообщение fail-closed middleware (для `guard: REQUIRE_REDIS`) теперь HTML‑консистентное и использует тот же copy + кнопки `s:*` (меню/home/help/reset).
+  - при ошибке открытия чата заявки (не удалось `setExpectText` из-за Redis) кнопки выхода переведены на stateless safe-mode (`s:menu/s:home/s:help/s:reset_input`) и сообщение унифицировано.
+  - support-group reply prompt: уточнён текст «кеш/сессии недоступны» и добавлен единый поясняющий line.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — добавлен STEP314 (и синхронизирован блок recent steps).
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен STEP314.
+
+QA:
+- Смоделировать Redis degraded (выключить Upstash ENV/подменить URL) и нажать:
+  - любой `guard: REQUIRE_REDIS` action → должен показывать единый экран «Временно недоступно» + `s:*` кнопки.
+  - `s:menu/s:home/s:help/s:reset_input` → тексты и подсказки консистентны.
+  - попытка открыть чат заявки (креатор → чат) при Redis down → не тупик, выдаёт safe-mode кнопки.
+
+Риск регрессий: очень низкий (copy/UX в деградации; без изменения DB‑логики).
