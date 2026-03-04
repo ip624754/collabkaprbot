@@ -1085,3 +1085,121 @@ QA:
 
 Риск регрессий: **нулевой** (dev‑guardrail + комментарии).
 
+
+
+### STEP301 — P3 micro consistency cleanups (Broadcast UI + QStash + redactContacts)
+Контекст:
+- В P3 части аудита отмечались мелкие места с потенциальной хрупкостью/неконсистентностью (layout кнопок в broadcast, scope-shadow `url` в qstash deliver, `.test()+.replace()` на /g regex в redaction).
+
+Цель:
+- Добить аккуратную консистентность **без изменения бизнес‑логики** и без расширения поверхности.
+
+Изменения:
+- `src/bot/bot.js`:
+  - экран «📣 Рассылка → 🔗 Кнопки»: шаблоны/действия выровнены в **2×2** (две в ряд), добавлена явная навигация **⬅️ Админка / 📋 Меню / 🏠 Home**.
+- `api/qstash/broadcast-deliver.js`:
+  - убран scope‑shadow переменной `url` в cooldown‑ветке (используем `deliverUrl`, не перекрывая handler‑level `url`).
+- `src/bot/redactContacts.js`:
+  - убран паттерн `.test()+.replace()` для global regex: теперь единый `replace` + проверка `next !== s` (избавляемся от stateful `lastIndex` и лишних проходов).
+- Docs:
+  - `docs/00_CURRENT_STATE.md` и `docs/process/07_WORK_HISTORY_2026_03.md` обновлены.
+
+QA:
+- Админка → 📣 Рассылка → 🔗 Кнопки:
+  - шаблоны и «✅ Готово» в 2×2; footer‑кнопки ведут в Админку/Меню/Home.
+- Broadcast delivery:
+  - при cooldown (429) репаблишится как раньше; PAUSED path не ломается.
+- Redaction:
+  - строка с 2+ ссылками/handles → всё скрывается; без пропусков при повторных вызовах.
+
+Риск регрессий: нулевой (UI/layout + микро‑рефакторинг helpers).
+
+
+### STEP302 — Payments FK hardening + users soft-delete flags
+Контекст:
+- NotebookLM audit подсветил риск: `stars_payments.user_id` и `payments.user_id` были созданы с `ON DELETE CASCADE`.
+- При физическом удалении пользователя это может стереть финансовую историю (charge ids / ledger) и нарушить auditability и идемпотентность.
+
+Цель:
+- Сделать так, чтобы финансовые логи **никогда** не удалялись каскадом.
+- Ввести явные флаги soft-delete/deactivate на `users`, чтобы “удаление” делалось безопасно (без `DELETE FROM users`).
+
+Изменения:
+- `migrations/042_payments_fk_hardening.sql`
+  - заменяет FK `user_id` в `stars_payments` и `payments` на `ON DELETE RESTRICT` (idempotent; если уже не cascade — ничего не делает).
+  - operator refs (`applying_by_user_id`, `applied_by_user_id`) остаются `ON DELETE SET NULL`.
+- `migrations/043_users_soft_delete.sql`
+  - добавляет `users.is_deleted`, `users.deleted_at`
+  - добавляет опционально `users.deactivated_at`, `users.deactivated_reason`
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про payments anti-cascade + soft-delete.
+- `docs/audit/31_PAYMENTS_FK_HARDENING_SOFT_DELETE_USERS_2026_03.md` — короткая фиксация причины/решения.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен этот STEP.
+
+QA:
+- `npm run preflight` проходит.
+- `node migrations/run.js`:
+  - повторный запуск идемпотентен.
+  - в DB после применения: hard-delete пользователя с существующими платежами должен быть ограничен FK.
+
+Риск регрессий: низкий (только миграции + docs; бизнес‑логика не менялась).
+
+
+### STEP303 — Stateless fallback: reset input + silent clear (expectText/draft)
+Контекст:
+- NotebookLM audit подсветил UX‑риск: при деградации Redis/стейтлесс‑экранах пользователь может “залипнуть” в режиме ввода (expectText/draft), а safe-mode навигация не всегда даёт гарантированный сброс.
+
+Цель:
+- В degraded safe-mode дать пользователю явную кнопку **«🔄 Сбросить ввод»**.
+- На любых кликах `s:*` делать silent best‑effort очистку `expectText/draft`, не создавая лог‑спам при Redis down.
+
+Изменения:
+- `src/bot/bot.js`:
+  - `kbStatelessFallback()` теперь всегда добавляет кнопку `🔄 Сбросить ввод` (`s:reset_input`).
+  - `handleStatelessCallback()` делает silent best‑effort очистку `expectText/draft` через `redis.del()` (без console.error).
+  - добавлен экран `s:reset_input`: чистит состояние и возвращает в «Меню (безопасный режим)».
+  - в break‑glass confirm клавиатуру добавлена `🔄 Сбросить ввод`.
+  - fail‑closed сообщение при `guard: REQUIRE_REDIS` теперь показывает расширенную safe‑клавиатуру (menu/home/help + reset).
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про stateless reset input.
+- `docs/audit/32_STATELESS_INPUT_RESET_2026_03.md` — фиксация причины/решения.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен этот STEP.
+
+QA:
+- В safe-mode (кнопки `s:*`) нажать `🔄 Сбросить ввод` → показывает меню safe-mode.
+- После восстановления Redis пользователь не должен оставаться “в вводе” из старого контекста.
+- Break-glass confirm экран содержит кнопку `🔄 Сбросить ввод`.
+
+Риск регрессий: низкий (UI‑escape hatch + best‑effort очистка state, без DB/бизнес‑логики).
+
+
+### STEP304 — Migration runner: checksum normalization (LF + trimEnd)
+Контекст:
+- NotebookLM audit подсветил хрупкость checksum: конвертация CRLF/LF или «финальный перевод строки» могут дать checksum mismatch и валить деплой, хотя SQL по смыслу не менялся.
+
+Цель:
+- Устранить ложные checksum mismatch из-за EOL/EOF whitespace.
+- Сохранить fail-closed для реальных правок миграций.
+- Не требовать никаких DB-миграций/ручных правок `schema_migrations`.
+
+Изменения:
+- `migrations/run.js`:
+  - checksum теперь считается по нормализованному SQL: EOL → LF, затем `trimEnd()`.
+  - для обратной совместимости раннер принимает уже записанные checksum (legacy) в нескольких вариантах (raw/lf/crlf/normalized + типовые «final newline» варианты).
+  - при применении новых миграций в `schema_migrations` сохраняется **нормализованный** checksum.
+- `scripts/gen-mark-all-applied.js`:
+  - checksum в generated pack теперь тоже считается по нормализованному SQL (в синке с раннером).
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — пункт про миграции дополнен пояснением про checksum normalization.
+- `docs/audit/33_MIGRATION_RUNNER_CHECKSUM_NORMALIZATION_2026_03.md` — фиксация причины/решения.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен этот STEP.
+
+QA:
+- `node migrations/run.js --dry-run` работает.
+- Повторный `node migrations/run.js` на уже применённой базе не должен падать из-за CRLF/LF или «перевода строки в конце файла».
+- Любая реальная правка текста миграции (не whitespace-only) по-прежнему даёт checksum mismatch (fail-closed).
+
+Риск регрессий: низкий (локальная логика checksum; выполнение SQL не менялось).
