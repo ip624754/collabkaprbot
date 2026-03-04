@@ -24,43 +24,44 @@ export function redactContactsInText(raw) {
 
   // URLs
   const urlRe = /\bhttps?:\/\/[^\s<>()]+/gi;
-  if (urlRe.test(s)) {
-    redacted = true;
-    s = s.replace(urlRe, '🔒 ссылка скрыта');
+  {
+    const next = s.replace(urlRe, '🔒 ссылка скрыта');
+    if (next !== s) { redacted = true; s = next; }
   }
 
   // tg:// deep links
   const tgRe = /\btg:\/\/[^\s<>()]+/gi;
-  if (tgRe.test(s)) {
-    redacted = true;
-    s = s.replace(tgRe, '🔒 ссылка скрыта');
+  {
+    const next = s.replace(tgRe, '🔒 ссылка скрыта');
+    if (next !== s) { redacted = true; s = next; }
   }
 
   // t.me / telegram.me
   const tmeRe = /\b(?:t[.\u2024]me|telegram[.\u2024]me)\/[\w\-./?=&%+#]+/gi;
-  if (tmeRe.test(s)) {
-    redacted = true;
-    s = s.replace(tmeRe, '🔒 ссылка скрыта');
+  {
+    const next = s.replace(tmeRe, '🔒 ссылка скрыта');
+    if (next !== s) { redacted = true; s = next; }
   }
 
   // common social domains without protocol
   const socialRe = /\b(?:instagram[.\u2024]com|instagr[.\u2024]am|vk[.\u2024]com|youtube[.\u2024]com|youtu[.\u2024]be)\/[^\s<>()]+/gi;
-  if (socialRe.test(s)) {
-    redacted = true;
-    s = s.replace(socialRe, '🔒 ссылка скрыта');
+  {
+    const next = s.replace(socialRe, '🔒 ссылка скрыта');
+    if (next !== s) { redacted = true; s = next; }
   }
 
   // emails
   const emailRe = /\b[\w.+\-\.\u2024]+[@＠][\w\-]+(?:[.\u2024][\w\-]+)+\b/gi;
-  if (emailRe.test(s)) {
-    redacted = true;
-    s = s.replace(emailRe, '🔒 email скрыт');
+  {
+    const next = s.replace(emailRe, '🔒 email скрыт');
+    if (next !== s) { redacted = true; s = next; }
   }
 
   // phone numbers (mask only when it really looks like a phone)
   const phoneCandRe = /(?:\+?\d[\d\s().\-]{7,}\d)/g;
-  if (phoneCandRe.test(s)) {
-    s = s.replace(phoneCandRe, (m) => {
+  {
+    let phoneRedacted = false;
+    const next = s.replace(phoneCandRe, (m) => {
       const rawM = String(m || '');
       const digits = rawM.replace(/\D/g, '');
       if (digits.length < 9 || digits.length > 15) return rawM;
@@ -68,9 +69,10 @@ export function redactContactsInText(raw) {
       const looksRuMobile = (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8')));
       const ok = looksRuMobile || rawM.includes('+') || hasSep || rawM.includes('(');
       if (!ok) return rawM;
-      redacted = true;
+      phoneRedacted = true;
       return '🔒 номер скрыт';
     });
+    if (phoneRedacted) { redacted = true; s = next; }
   }
 
   // Phone numbers written in words (anti-bypass).
@@ -222,9 +224,9 @@ export function redactContactsInText(raw) {
 
   // @handles (telegram/instagram-style)
   const atRe = /(^|[^\w@＠])[@＠]([a-z0-9_][a-z0-9_.]{1,30}[a-z0-9_])\b/gi;
-  if (atRe.test(s)) {
-    redacted = true;
-    s = s.replace(atRe, (m, p1) => `${p1}🔒@скрыто`);
+  {
+    const next = s.replace(atRe, (m, p1) => `${p1}🔒@скрыто`);
+    if (next !== s) { redacted = true; s = next; }
   }
 
   // Prevent accidental linkification by Telegram entities.

@@ -17882,9 +17882,13 @@ if (exp.type === 'adm_outbox_tpl_label') {
             .text('🏷 Профиль', 'a:bc_tpl_bp')
             .row()
             .text('🎬 Оффер', 'a:bc_tpl_offer')
-            .row()
             .text('✅ Готово', 'a:bc_btn_done')
+            .row()
             .text('⬅️ Отмена', 'a:bc_cancel')
+            .text('⬅️ Админка', 'a:admin_home')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home')
         }
       );
 
@@ -29009,9 +29013,13 @@ if (p.a === 'a:admin_outbox_clear_q') {
             .text('🏷 Профиль', 'a:bc_tpl_bp')
             .row()
             .text('🎬 Оффер', 'a:bc_tpl_offer')
-            .row()
             .text('✅ Готово', 'a:bc_btn_done')
+            .row()
             .text('⬅️ Отмена', 'a:bc_start')
+            .text('⬅️ Админка', 'a:admin_home')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home')
         }
       );
       await setExpectText(ctx.from.id, { type: 'bc_button_input' }, 30 * 60);
