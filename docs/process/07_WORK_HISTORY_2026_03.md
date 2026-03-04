@@ -1203,3 +1203,23 @@ QA:
 - Любая реальная правка текста миграции (не whitespace-only) по-прежнему даёт checksum mismatch (fail-closed).
 
 Риск регрессий: низкий (локальная логика checksum; выполнение SQL не менялось).
+
+
+### STEP305 — Migration pack sync: preflight enforces `00_mark_all_applied.sql`
+Контекст:
+- После STEP304 checksum normalization важно, чтобы `migration_pack/00_mark_all_applied.sql` не отставал от `migrations/` (иначе mark-all-applied может содержать удалённые миграции или не включать новые).
+
+Изменения:
+- `migration_pack/00_mark_all_applied.sql` регенерирован через `npm run gen:migration-pack` (содержит актуальный список миграций и нормализованные checksum).
+- `scripts/preflight.js`: добавлен guardrail — preflight запускает `gen:migration-pack` и валится, если pack‑файл изменился (аналогично проверке `docs/02_ACTION_KEYS_REGISTRY.md`).
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — добавлен пункт про migration pack preflight gate.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен этот STEP.
+
+QA:
+- `npm run gen:migration-pack` не должен оставлять diff в `migration_pack/00_mark_all_applied.sql`.
+- `npm run preflight` проходит.
+- В pack присутствуют последние миграции (на момент STEP305 — до `043_...`), и нет удалённых/переименованных файлов.
+
+Риск регрессий: минимальный (dev‑tooling + regenerated pack; runtime‑логика не затронута).
