@@ -26402,6 +26402,25 @@ if (p.a === 'a:ws_ig_verify_oauth') {
     await safeEditOrReply(ctx, '⚠️ Instagram OAuth пока отключён администратором (IG_OAUTH_ENABLED=0).', { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) });
     return;
   }
+
+  if (!CFG.IG_TOKEN_ENC_KEY_VALID) {
+    await safeEditOrReply(
+      ctx,
+      `⚠️ Instagram OAuth сейчас недоступен: не настроен <code>IG_TOKEN_ENC_KEY</code> (нужен ключ 32 байта).\n\n` +
+        `Админ: задай hex64 (32 bytes) или base64/base64url (>=32 bytes) и задеплой.`,
+      { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) }
+    );
+    return;
+  }
+
+  if (!CFG.IG_OAUTH_CLIENT_ID || !CFG.IG_OAUTH_CLIENT_SECRET) {
+    await safeEditOrReply(
+      ctx,
+      `⚠️ Instagram OAuth сейчас недоступен: не настроены <code>IG_OAUTH_CLIENT_ID</code>/<code>IG_OAUTH_CLIENT_SECRET</code>.`,
+      { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) }
+    );
+    return;
+  }
   if (!CFG.PUBLIC_BASE_URL) {
     await safeEditOrReply(
       ctx,
