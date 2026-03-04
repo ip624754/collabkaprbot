@@ -824,45 +824,100 @@ async function bumpBroadcastQuarantineCount(broadcastId, userId) {
 }
 
 export async function getBroadcastCooldownUntilMs(broadcastId) {
+  // Fast path: per-broadcast cooldown key
   try {
     const v = await redis.get(broadcastCooldownKey(broadcastId));
     const ms = v ? Number(v) : 0;
-    return Number.isFinite(ms) ? ms : 0;
+    if (Number.isFinite(ms) && ms > 0) return ms;
   } catch {
-    return 0;
+    // ignore
   }
+
+  // Fallback: global cooldown (only if it matches this broadcastId)
+  try {
+    const rawBid = await redis.get(BC_COOLDOWN_BROADCAST_ID_KEY);
+    const bid = Number(rawBid) || 0;
+    if (bid > 0 && Number(broadcastId) === bid) {
+      const rawUntil = await redis.get(BC_COOLDOWN_UNTIL_KEY);
+      const ms = rawUntil ? Number(rawUntil) : 0;
+      if (Number.isFinite(ms) && ms > 0) return ms;
+    }
+  } catch {
+    // ignore
+  }
+
+  return 0;
 }
 
 export async function setBroadcastCooldown(broadcastId, retryAfterSec, reason = 'telegram_429') {
   const now = Date.now();
   const safeSec = Math.max(1, Math.min(3600, Number(retryAfterSec || 0) || 0));
   const proposedUntil = now + safeSec * 1000;
-  const key = broadcastCooldownKey(broadcastId);
+  const perKey = broadcastCooldownKey(broadcastId);
+  const nowIso = new Date(now).toISOString();
 
+  // Prefer atomic Lua: set per-broadcast + global cooldown keys consistently.
+  // If scripts are unavailable, fall back to sequential SETs.
   try {
-    const cur = await redis.get(key);
-    let curMs = cur ? Number(cur) : 0;
-    if (!Number.isFinite(curMs)) curMs = 0;
-    const finalUntil = Math.max(curMs, proposedUntil);
-    const ttlSec = Math.max(
-      5,
-      Math.ceil((finalUntil - now) / 1000) + BROADCAST_COOLDOWN_PAD_SEC
+    const script = `
+      local perKey = KEYS[1]
+      local gUntilKey = KEYS[2]
+      local gBidKey = KEYS[3]
+      local lastAtKey = KEYS[4]
+      local lastReasonKey = KEYS[5]
+
+      local nowMs = tonumber(ARGV[1]) or 0
+      local proposedUntil = tonumber(ARGV[2]) or 0
+      local padSec = tonumber(ARGV[3]) or 0
+      local reason = tostring(ARGV[4] or 'telegram_429')
+      local bid = tostring(ARGV[5] or '')
+      local bcTtlSec = tonumber(ARGV[6]) or 86400
+      local lastAtIso = tostring(ARGV[7] or '')
+
+      local cur = redis.call('GET', perKey)
+      local curMs = tonumber(cur) or 0
+      local finalUntil = proposedUntil
+      if curMs > finalUntil then finalUntil = curMs end
+
+      local ttlSec = 5
+      if finalUntil > nowMs then
+        ttlSec = math.ceil((finalUntil - nowMs) / 1000) + padSec
+        if ttlSec < 5 then ttlSec = 5 end
+      else
+        ttlSec = 5 + padSec
+      end
+
+      redis.call('SET', perKey, tostring(finalUntil), 'EX', ttlSec)
+      redis.call('SET', gUntilKey, tostring(finalUntil), 'EX', ttlSec)
+      if bid ~= '' then redis.call('SET', gBidKey, bid, 'EX', ttlSec) end
+      if lastAtIso ~= '' then redis.call('SET', lastAtKey, lastAtIso, 'EX', bcTtlSec) end
+      if reason ~= '' then redis.call('SET', lastReasonKey, reason, 'EX', bcTtlSec) end
+      return finalUntil
+    `;
+
+    const r = await redis.eval(
+      script,
+      [
+        perKey,
+        BC_COOLDOWN_UNTIL_KEY,
+        BC_COOLDOWN_BROADCAST_ID_KEY,
+        BC_COOLDOWN_LAST_429_AT_KEY,
+        BC_COOLDOWN_LAST_429_REASON_KEY,
+      ],
+      [
+        String(now),
+        String(proposedUntil),
+        String(BROADCAST_COOLDOWN_PAD_SEC),
+        String(reason || 'telegram_429'),
+        String(broadcastId),
+        String(BC_COOLDOWN_TTL_SEC),
+        String(nowIso),
+      ]
     );
-    await redis.set(key, String(finalUntil), { ex: ttlSec });
 
-    // Global cooldown: enables DB-free early exit on next cron ticks.
-    // Keep TTL aligned with the actual cooldown window.
-    await redis.set(BC_COOLDOWN_UNTIL_KEY, String(finalUntil), { ex: ttlSec });
-    await redis.set(BC_COOLDOWN_BROADCAST_ID_KEY, String(broadcastId), { ex: ttlSec });
-    // Ops breadcrumbs (longer TTL).
-    await redis.set(BC_COOLDOWN_LAST_429_AT_KEY, new Date(now).toISOString(), {
-      ex: BC_COOLDOWN_TTL_SEC,
-    });
-    await redis.set(BC_COOLDOWN_LAST_429_REASON_KEY, String(reason || 'telegram_429'), {
-      ex: BC_COOLDOWN_TTL_SEC,
-    });
+    const finalUntil = Number(r) || proposedUntil;
 
-    // Daily counters for /api/health.
+    // Daily counters for /api/health (bounded; best-effort).
     const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     await incrDayCounter(bcCooldownSetDayKey(day));
     if (String(reason) === 'deferred_wait') {
@@ -871,17 +926,43 @@ export async function setBroadcastCooldown(broadcastId, retryAfterSec, reason = 
 
     return finalUntil;
   } catch {
-    // Redis down: persist a DB fuse so next ticks can skip BEFORE polling recipients.
+    // Sequential fallback (still bounded). If Redis is down, persist a DB fuse.
     try {
-      await db.atomicMaxBroadcastCooldownUntil(
-        broadcastId,
-        new Date(proposedUntil).toISOString(),
-        reason
+      const cur = await redis.get(perKey);
+      let curMs = cur ? Number(cur) : 0;
+      if (!Number.isFinite(curMs)) curMs = 0;
+      const finalUntil = Math.max(curMs, proposedUntil);
+      const ttlSec = Math.max(
+        5,
+        Math.ceil((finalUntil - now) / 1000) + BROADCAST_COOLDOWN_PAD_SEC
       );
-    } catch {}
 
-    // Best-effort: even if both Redis and DB fuse fail, we still break the batch on 429.
-    return proposedUntil;
+      await redis.set(perKey, String(finalUntil), { ex: ttlSec });
+      await redis.set(BC_COOLDOWN_UNTIL_KEY, String(finalUntil), { ex: ttlSec });
+      await redis.set(BC_COOLDOWN_BROADCAST_ID_KEY, String(broadcastId), { ex: ttlSec });
+      await redis.set(BC_COOLDOWN_LAST_429_AT_KEY, nowIso, { ex: BC_COOLDOWN_TTL_SEC });
+      await redis.set(BC_COOLDOWN_LAST_429_REASON_KEY, String(reason || 'telegram_429'), { ex: BC_COOLDOWN_TTL_SEC });
+
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      await incrDayCounter(bcCooldownSetDayKey(day));
+      if (String(reason) === 'deferred_wait') {
+        await incrDayCounter(bcDeferWaitDayKey(day));
+      }
+
+      return finalUntil;
+    } catch {
+      // Redis down: persist a DB fuse so next ticks can skip BEFORE polling recipients.
+      try {
+        await db.atomicMaxBroadcastCooldownUntil(
+          broadcastId,
+          new Date(proposedUntil).toISOString(),
+          reason
+        );
+      } catch {}
+
+      // Best-effort: even if both Redis and DB fuse fail, we still break the batch on 429.
+      return proposedUntil;
+    }
   }
 }
 
