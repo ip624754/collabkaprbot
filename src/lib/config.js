@@ -171,6 +171,15 @@ export const CFG = {
   INTRO_RETRY_EXPIRES_DAYS: parseIntSafe(process.env.INTRO_RETRY_EXPIRES_DAYS, 7),
   INTRO_RETRY_NOTIFY: parseBoolSafe(process.env.INTRO_RETRY_NOTIFY, true),
 
+  // Acquisition counters (Redis-only): TTL for "total" buckets.
+  // - Default: 365 days (bounded memory)
+  // - Set to 0 to keep totals forever
+  ACQ_TOTAL_TTL_DAYS: (() => {
+    const n = parseIntSafe(process.env.ACQ_TOTAL_TTL_DAYS, 365);
+    if (!Number.isFinite(n) || n < 0) return 365;
+    return Math.max(0, Math.min(n, 3650)); // 0..10y
+  })(),
+
 
   // Giveaways
   GIVEAWAY_SPONSORS_MAX_FREE: parseIntSafe(process.env.GIVEAWAY_SPONSORS_MAX_FREE, 10),
