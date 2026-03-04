@@ -74,6 +74,9 @@ runNpm("lint:public-contacts");
 logHeader("Preflight: redis atomicity grep gate");
 runNpm("lint:redis-atomic");
 
+logHeader("Preflight: redis TTL hygiene gate");
+runNpm("lint:redis-ttl");
+
 logHeader("Preflight: redis.js exports gate");
 runNpm("lint:redis-exports");
 
