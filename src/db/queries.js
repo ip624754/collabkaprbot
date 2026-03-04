@@ -6360,6 +6360,24 @@ export async function logBroadcastQueued(broadcastId, userId) {
   );
 }
 
+
+// QStash fan-out: mark recipient blocked (idempotent, terminal).
+// Used for hard-skip and permanent Telegram errors.
+export async function logBroadcastBlocked(broadcastId, userId, errorText = '') {
+  await pool.query(
+    `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until, non_retryable, last_error)
+     values ($1, $2, 'blocked', null, true, $3)
+     on conflict (broadcast_id, user_id)
+     do update set
+       status = 'blocked',
+       retry_after_until = null,
+       non_retryable = true,
+       last_error = excluded.last_error,
+       sent_at = now()`,
+    [Number(broadcastId), Number(userId), String(errorText || '').slice(0, 500)]
+  );
+}
+
 // QStash fan-out: atomically claim delivery for sending.
 // Allows reclaim of stale 'sending' rows (serverless hard-kill) after N seconds.
 export async function claimBroadcastDelivery(broadcastId, userId, staleSendingSec = 60) {
@@ -6462,6 +6480,7 @@ export async function countBroadcastDeliveryStats(broadcastId) {
         count(*) filter (where status = 'sent')::int as sent,
         count(*) filter (where status = 'failed')::int as failed,
         count(*) filter (where status = 'blocked')::int as blocked,
+        count(*) filter (where status = 'blocked' and last_error like 'hard_skip:%')::int as hard_skipped,
         count(*) filter (where status in ('queued','sending','retry','deferred','quarantined'))::int as pending
      from broadcast_sent_log
      where broadcast_id = $1`,
@@ -6472,8 +6491,28 @@ export async function countBroadcastDeliveryStats(broadcastId) {
     sent: Number(row.sent || 0) || 0,
     failed: Number(row.failed || 0) || 0,
     blocked: Number(row.blocked || 0) || 0,
+    hard_skipped: Number(row.hard_skipped || 0) || 0,
     pending: Number(row.pending || 0) || 0,
   };
+}
+
+
+export async function listBroadcastBlockedDeliveries(broadcastId, limit = 20, offset = 0, kind = 'all') {
+  const lim = Math.max(1, Math.min(50, Number(limit) || 20));
+  const off = Math.max(0, Number(offset) || 0);
+  const knd = String(kind || 'all').toLowerCase();
+  const where = ["sl.broadcast_id = $1", "sl.status = 'blocked'"];
+  if (knd === 'hard') where.push(`sl.last_error like 'hard_skip:%'`);
+  const r = await pool.query(
+    `select sl.user_id, u.tg_id, sl.last_error, sl.sent_at
+       from broadcast_sent_log sl
+       join users u on u.id = sl.user_id
+      where ${where.join(' and ')}
+      order by sl.sent_at desc nulls last, sl.user_id desc
+      limit $2 offset $3`,
+    [Number(broadcastId), lim, off]
+  );
+  return r.rows || [];
 }
 
 // Broadcast per-recipient 429 deferral (so one heavy recipient doesn't stall the whole job).
