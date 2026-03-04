@@ -25,7 +25,7 @@
 - STEP160: мини-аудит footer‑рядов: везде единый низ (⬅️ Назад / 📋 Меню / 🏠 Home) через `navKb`/`kbNavRow`; выровнены PRO/папки/Brand Team/поиск креаторов/шаги розыгрыша + gw_access + fallback replies.
 - STEP161: добавлен линтер `npm run lint:nav` (scripts/lint-footer-nav.js), который ловит регрессии footer’ов; дополнительно добили несколько мест, где был `📋 Меню` без `🏠 Home`, чтобы lint проходил и UX был консистентным.
 - STEP163: добавлен генератор `npm run gen:migration-pack` для `migration_pack/00_mark_all_applied.sql` (sha256 как в `migrations/run.js`), чтобы pack всегда совпадал с текущими миграциями.
-- STEP208: migrations fail-fast — `migrations/run.js` и `scripts/gen-mark-all-applied.js` принимают только `NNN_name.sql` (ровно 3 цифры) и падают, если в `migrations/` есть “левые” `.sql` (защита от случайного копирования `migration_pack/*.sql`).
+- STEP208: migrations fail-fast — `migrations/run.js` и `scripts/gen-mark-all-applied.js` принимают только `NNN..._name.sql` (>=3 цифры) и падают, если в `migrations/` есть “левые” `.sql` (защита от случайного копирования `migration_pack/*.sql`).
 - STEP209: action guards v2 — в `src/bot/actionRegistry.js` добавлены guard-типы `db_truth`/`queue_first` для критичных DB-truth путей (монетизация/ручной apply), обновлён middleware и доки.
 - STEP210: anti-click-storm при Redis down — локальный in-memory limiter (TTL ~8s) на критичных DB-truth/queue-first кликах (`✅ Принять` / `🔓 Разлок контактов`).
 
