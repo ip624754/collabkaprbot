@@ -37,15 +37,203 @@ async function txSetLocalStatementTimeout(client, ms) {
 
 // Users
 export async function upsertUser(tgId, username) {
-  const r = await pool.query(
-    `insert into users (tg_id, tg_username)
-     values ($1, $2)
-     on conflict (tg_id)
-     do update set tg_username = coalesce(excluded.tg_username, users.tg_username), updated_at = now()
-     returning id, tg_id, tg_username`,
-    [tgId, username || null]
-  );
-  return r.rows[0];
+  // Rolling-upgrade safety: some deployments may not yet have soft-delete columns.
+  // In that case, fall back to the minimal query.
+  try {
+    const r = await pool.query(
+      `insert into users (tg_id, tg_username)
+       values ($1, $2)
+       on conflict (tg_id)
+       do update set
+         -- When user is tombstoned, do not re-introduce tg_username from Telegram updates.
+         tg_username = case
+           when coalesce(users.is_deleted, false) then users.tg_username
+           else coalesce(excluded.tg_username, users.tg_username)
+         end,
+         updated_at = now()
+       returning id, tg_id, tg_username, banned_at, is_deleted, deleted_at`,
+      [tgId, username || null]
+    );
+    return r.rows[0];
+  } catch (e) {
+    // 42703 = undefined_column
+    if (e && e.code === '42703') {
+      const r = await pool.query(
+        `insert into users (tg_id, tg_username)
+         values ($1, $2)
+         on conflict (tg_id)
+         do update set tg_username = coalesce(excluded.tg_username, users.tg_username), updated_at = now()
+         returning id, tg_id, tg_username`,
+        [tgId, username || null]
+      );
+      return r.rows[0];
+    }
+    throw e;
+  }
+}
+
+// Soft delete / tombstone (PII wipe) for the user's own account.
+// Properties:
+// - DB-truth only (works even if Redis is degraded).
+// - Idempotent: repeated calls keep the account deleted.
+// - Does not delete payments/history, only wipes PII and disables discovery.
+export async function tombstoneUser(userId, opts = {}) {
+  const uid = Number(userId || 0);
+  if (!uid) throw new Error('userId required');
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+
+    const stm = Math.floor(Number(opts?.statementTimeoutMs || 8000));
+    if (Number.isFinite(stm) && stm > 0) {
+      await client.query(`set local statement_timeout to ${stm}`);
+    }
+
+    const r = await client.query(
+      `update users
+         set is_deleted = true,
+             deleted_at = coalesce(deleted_at, now()),
+             tg_username = null,
+             updated_at = now()
+       where id = $1
+       returning id, tg_id, is_deleted, deleted_at`,
+      [uid]
+    );
+
+    // Brand profile is optional (brand users only) — wipe if exists.
+    try {
+      await client.query(
+        `update brand_profiles
+            set brand_name=null,
+                brand_link=null,
+                contact=null,
+                niche=null,
+                geo=null,
+                collab_types=null,
+                budget=null,
+                goals=null,
+                requirements=null,
+                meta=null,
+                updated_at=now()
+          where user_id=$1`,
+        [uid]
+      );
+    } catch (e) {
+      // 42P01 = undefined_table (rolling upgrade safety)
+      if (!(e && e.code === '42P01')) throw e;
+    }
+
+    // Revoke team access edges where this user participates.
+    try {
+      await client.query(
+        `delete from brand_managers where brand_user_id=$1 or manager_user_id=$1`,
+        [uid]
+      );
+    } catch (e) {
+      if (!(e && e.code === '42P01')) throw e;
+    }
+
+    // Workspace editors/curators edges.
+    try {
+      await client.query(`delete from workspace_curators where user_id=$1`, [uid]);
+    } catch (e) {
+      if (!(e && e.code === '42P01')) throw e;
+    }
+    try {
+      await client.query(`delete from workspace_editors where user_id=$1`, [uid]);
+    } catch (e) {
+      if (!(e && e.code === '42P01')) throw e;
+    }
+
+    // Wipe creator profile contacts + hide from discovery for owned workspaces.
+    try {
+      await client.query(
+        `update workspace_settings s
+            set network_enabled = false,
+                curator_enabled = false,
+                profile_contact = null,
+                profile_contacts = null,
+                profile_contacts_v = null,
+                profile_ig = null,
+                profile_portfolio_urls = null,
+                profile_about = null,
+                profile_title = null,
+                profile_niche = null,
+                profile_geo = null,
+                profile_verticals = null,
+                profile_formats = null,
+                profile_mode = null,
+                updated_at = now()
+          where s.workspace_id in (select id from workspaces where owner_user_id=$1)`,
+        [uid]
+      );
+    } catch (e) {
+      if (!(e && e.code === '42P01')) throw e;
+    }
+
+    // IG OAuth accounts for owned workspaces (if feature enabled / table exists).
+    try {
+      await client.query(
+        `delete from ig_oauth_accounts where ws_id in (select id from workspaces where owner_user_id=$1)`,
+        [uid]
+      );
+    } catch (e) {
+      if (!(e && e.code === '42P01')) throw e;
+    }
+
+    // Verification requests may contain PII in submitted_text.
+    try {
+      await client.query(
+        `update user_verifications
+            set submitted_text = null,
+                rejection_reason = null,
+                updated_at = now()
+          where user_id=$1`,
+        [uid]
+      );
+    } catch (e) {
+      if (!(e && e.code === '42P01')) throw e;
+    }
+
+    await client.query('commit');
+    return r.rows[0] || null;
+  } catch (e) {
+    try { await client.query('rollback'); } catch {}
+    // 42703 = undefined_column (soft-delete migration missing)
+    if (e && e.code === '42703') {
+      const err = new Error('missing_soft_delete_columns');
+      err.code = 'MISSING_SOFT_DELETE_COLUMNS';
+      throw err;
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+export async function restoreUser(userId, opts = {}) {
+  const uid = Number(userId || 0);
+  if (!uid) throw new Error('userId required');
+  try {
+    const r = await pool.query(
+      `update users
+          set is_deleted = false,
+              deleted_at = null,
+              updated_at = now()
+        where id=$1
+        returning id, tg_id, tg_username, is_deleted, deleted_at`,
+      [uid]
+    );
+    return r.rows[0] || null;
+  } catch (e) {
+    if (e && e.code === '42703') {
+      const err = new Error('missing_soft_delete_columns');
+      err.code = 'MISSING_SOFT_DELETE_COLUMNS';
+      throw err;
+    }
+    throw e;
+  }
 }
 
 
