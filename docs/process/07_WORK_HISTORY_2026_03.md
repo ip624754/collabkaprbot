@@ -970,3 +970,19 @@ QA:
 - Убедиться, что `docs/audit/24_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md` существует, а файла `22_ADMIN_BROADCAST...` больше нет.
 
 Риск регрессий: **нулевой** (docs-only).
+
+
+### STEP295 — Admin E2E smoke pack (docs-only)
+Цель:
+- Закрепить короткий end‑to‑end smoke по 👑 Админке (Users/Payments/Outbox/System/Broadcast), чтобы после деплоя за 10–12 минут ловить регрессии админских сценариев и “залипание” input‑mode.
+
+Изменения (docs-only):
+- Добавлен полный сценарий: `docs/audit/25_ADMIN_E2E_SMOKE_2026_03.md`.
+- `smoke-tests_short.md` дополнен секцией 15 со ссылкой на полный сценарий.
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про Admin E2E smoke + добавлена ссылка в audit report list.
+
+QA:
+- Открыть `smoke-tests_short.md` и убедиться, что появилась секция 15 и ссылка на `docs/audit/25_...` корректна.
+- (Рекомендуется) Прогнать сценарии A–E на prod/staging.
+
+Риск регрессий: **нулевой** (docs-only).
