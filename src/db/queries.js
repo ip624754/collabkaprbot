@@ -28,11 +28,28 @@ function getHeavyTxStatementTimeoutMs(opts = {}) {
   return ms;
 }
 
+function sanitizeStatementTimeoutMs(raw) {
+  const v = Math.floor(Number(raw));
+  if (!Number.isFinite(v) || v <= 0) return null;
+  const MIN = 1000;      // 1s
+  const MAX = 600000;    // 10m
+  if (v < MIN) return MIN;
+  if (v > MAX) return MAX;
+  return v;
+}
+
 async function txSetLocalStatementTimeout(client, ms) {
-  const v = Math.floor(Number(ms));
-  if (!Number.isFinite(v) || v <= 0) return;
-  // NOTE: SET LOCAL is transaction-scoped and affects waits on row locks too.
-  await client.query(`set local statement_timeout to ${v}`);
+  const v = sanitizeStatementTimeoutMs(ms);
+  if (!v) return;
+
+  // Prefer parameterized set_config to avoid interpolation in utility SET.
+  // IMPORTANT: is_local=true makes it transaction-scoped (like SET LOCAL) and also affects lock waits.
+  try {
+    await client.query("select set_config('statement_timeout', $1, true)", [String(v)]);
+  } catch (e) {
+    // Fallback (sanitized integer).
+    await client.query(`set local statement_timeout to ${v}`);
+  }
 }
 
 // Users
@@ -87,7 +104,7 @@ export async function tombstoneUser(userId, opts = {}) {
 
     const stm = Math.floor(Number(opts?.statementTimeoutMs || 8000));
     if (Number.isFinite(stm) && stm > 0) {
-      await client.query(`set local statement_timeout to ${stm}`);
+      await txSetLocalStatementTimeout(client, stm);
     }
 
     const r = await client.query(
@@ -815,7 +832,7 @@ export async function unlockWorkspaceContactsWithCredits(brandUserId, workspaceI
 
     const stm = Math.floor(Number(opts?.statementTimeoutMs || 0));
     if (Number.isFinite(stm) && stm > 0) {
-      await client.query(`set local statement_timeout to ${stm}`);
+      await txSetLocalStatementTimeout(client, stm);
     }
 
     // Per-(brand,workspace) exactly-once guard even with Redis degradation.
@@ -5673,7 +5690,7 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
     const stm = Math.floor(Number(opts?.statementTimeoutMs || 0));
     if (Number.isFinite(stm) && stm > 0) {
       // Transaction-scoped: affects waits on row locks too.
-      await client.query(`set local statement_timeout to ${stm}`);
+      await txSetLocalStatementTimeout(client, stm);
     }
 
     // Fast concurrency guard: if another accept is already in-flight, return quickly (no queue of waiting locks).
@@ -6131,7 +6148,7 @@ export async function createBroadcastIdempotent(
 
     const stm = Math.floor(Number(opts?.statementTimeoutMs || 0));
     if (Number.isFinite(stm) && stm > 0) {
-      await client.query(`set local statement_timeout to ${stm}`);
+      await txSetLocalStatementTimeout(client, stm);
     }
 
     // Per-admin confirm guard. Prevents click-storm even when Redis is down.

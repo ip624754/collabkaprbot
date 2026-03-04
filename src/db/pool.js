@@ -68,17 +68,35 @@ export const pool = new Pool({
 // SET runs once per physical connection, on first real usage (not in connect event).
 // This avoids the pg@8 deprecation warning about concurrent client.query calls.
 
-const _stmtMs = (Number.isFinite(PG_STATEMENT_TIMEOUT_MS) && PG_STATEMENT_TIMEOUT_MS > 0)
-  ? Math.floor(PG_STATEMENT_TIMEOUT_MS)
-  : 0;
+function sanitizeStatementTimeoutMs(raw) {
+  const v = Math.floor(Number(raw));
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  // Guardrails: avoid accidental extreme values (keeps Neon safe).
+  const MIN = 1000;      // 1s
+  const MAX = 600000;    // 10m
+  if (v < MIN) return MIN;
+  if (v > MAX) return MAX;
+  return v;
+}
+
+const _stmtMs = sanitizeStatementTimeoutMs(PG_STATEMENT_TIMEOUT_MS);
 
 async function ensureStatementTimeout(client) {
   if (!_stmtMs || client._stmtTimeoutSet) return;
   try {
-    await client.query(`SET statement_timeout TO ${_stmtMs}`);
+    // Prefer parameterized set_config (no string interpolation in SET utility statements).
+    await client.query("select set_config('statement_timeout', $1, false)", [String(_stmtMs)]);
     client._stmtTimeoutSet = true;
+    client._stmtTimeoutMs = _stmtMs;
   } catch (e) {
-    try { console.warn('[pg] statement_timeout SET failed', { message: String(e?.message || e) }); } catch {}
+    // Fallback for any pooler quirks: safe because _stmtMs is sanitized integer.
+    try {
+      await client.query(`SET statement_timeout TO ${_stmtMs}`);
+      client._stmtTimeoutSet = true;
+      client._stmtTimeoutMs = _stmtMs;
+    } catch (e2) {
+      try { console.warn('[pg] statement_timeout init failed', { message: String(e2?.message || e2) }); } catch {}
+    }
   }
 }
 
