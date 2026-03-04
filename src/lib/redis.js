@@ -140,24 +140,16 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
     const r = await redis.eval(script, [key], [String(win)]);
     current = Number(r || 0);
   } catch {
-    // Fallback: best-effort (non-atomic)
-    try {
-      const r = await redis.incr(key);
-      current = Number(r || 0);
-      if (current == 1) {
-        await redis.expire(key, win);
-      }
-    } catch {
-      // Redis down: fail-open (rate-limit is best-effort)
-      return {
-        ok: true,
-        allowed: true,
-        remaining: Number.POSITIVE_INFINITY,
-        limit: lim,
-        current: 0,
-        resetSec: win
-      };
-    }
+    // Redis degraded or scripts unavailable: fail-open.
+    // IMPORTANT: do NOT fallback to non-atomic INCR+EXPIRE, because it can leave keys without TTL.
+    return {
+      ok: true,
+      allowed: true,
+      remaining: Number.POSITIVE_INFINITY,
+      limit: lim,
+      current: 0,
+      resetSec: win
+    };
   }
 
   let ttl = null;
