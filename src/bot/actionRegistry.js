@@ -29,6 +29,7 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:adm_gift_revoke_input": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:adm_support_qr": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:adm_support_reply": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:adm_support_reply_cancel": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:adm_umsg": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:adm_umsg_free": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:adm_umsg_send": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },

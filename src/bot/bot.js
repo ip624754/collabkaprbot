@@ -3521,11 +3521,14 @@ function kbStatelessFallback(kind = 'menu') {
   return kb;
 }
 
-async function silentClearInputState(tgId) {
+async function clearInputState(tgId) {
   const uid = Number(tgId || 0);
-  if (!uid) return;
-  try { await redis.del(k(['expectText', uid])); } catch {}
-  try { await redis.del(k(['draft', uid])); } catch {}
+  if (!uid) return { ok: true, uid: 0 };
+  let ok1 = true;
+  let ok2 = true;
+  try { await redis.del(k(['expectText', uid])); } catch { ok1 = false; }
+  try { await redis.del(k(['draft', uid])); } catch { ok2 = false; }
+  return { ok: ok1 && ok2, uid, ok1, ok2 };
 }
 
 async function handleStatelessCallback(ctx, p) {
@@ -3533,14 +3536,14 @@ async function handleStatelessCallback(ctx, p) {
   if (!a.startsWith('s:')) return false;
 
   const tgId = Number(ctx?.from?.id || 0);
-  await silentClearInputState(tgId);
+  const clr = await clearInputState(tgId);
 
   const key = a.slice(2);
 
   if (key === 'reset_input') {
-    await safeEditOrReply(
-      ctx,
-      `✅ <b>Ввод сброшен</b>
+    const ok = !!(clr && clr.ok);
+    const msg = ok
+      ? `✅ <b>Ввод сброшен</b>
 
 📋 <b>Меню (безопасный режим)</b>
 
@@ -3548,9 +3551,16 @@ async function handleStatelessCallback(ctx, p) {
 
 Быстрые действия:
 • Нажми <code>/start</code> (перезапуск)
-• Повтори действие чуть позже`,
-      { parse_mode: 'HTML', reply_markup: kbStatelessFallback('menu') }
-    );
+• Повтори действие чуть позже`
+      : `⚠️ <b>Сброс не выполнен</b>
+
+Кеш/сессии сейчас недоступны, поэтому я не могу гарантировать сброс режима ввода.
+
+Что сделать:
+• Нажми <code>/start</code> чуть позже
+• Повтори действие после восстановления`;
+
+    await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kbStatelessFallback('menu') });
     return true;
   }
 
@@ -16914,7 +16924,7 @@ ${escapeHtml(safeCap)}
     // Support: allow super-admins to reply to users прямо из support-группы.
     // Flow:
     // 1) In support chat, press "✍️ Ответить" on a ticket.
-    // 2) Bot posts a prompt with ForceReply.
+    // 2) Bot posts a prompt message (без ForceReply) с кнопкой отмены.
     // 3) Admin replies to that prompt -> bot forwards to user.
     // Works even with Telegram group privacy mode ON (bots receive replies to their own messages).
     // ------------------------------------------------------------
@@ -28676,6 +28686,61 @@ if (p.a === 'a:admin_outbox_clear_q') {
       return;
     }
 
+
+
+    // --- Admin: Cancel reply session in support group ---
+    if (p.a === 'a:adm_support_reply_cancel') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      if (!isSuperAdminTg(ctx.from.id)) return;
+
+      const chatId = Number(ctx.chat?.id || 0);
+      const msgId = Number(ctx.callbackQuery?.message?.message_id || 0);
+      const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
+
+      let sess = null;
+      let redisOk = true;
+      try { sess = await redis.get(sessKey); } catch { redisOk = false; sess = null; }
+
+      // Protect against cancelling a newer session using an old prompt.
+      if (sess && msgId && Number(sess.promptMsgId || 0) && Number(sess.promptMsgId || 0) !== msgId) {
+        try { await ctx.answerCallbackQuery({ text: 'Сессия уже другая.', show_alert: true }); } catch {}
+        return;
+      }
+
+      let delOk = false;
+      if (redisOk) {
+        try { await redis.del(sessKey); delOk = true; } catch { delOk = false; }
+      }
+
+      let textOut = '';
+      if (!redisOk) {
+        textOut = `⚠️ <b>Отмена не подтверждена</b>
+
+Кеш недоступен. Сессия могла остаться активной. Лучше не отвечай на этот промпт и попробуй позже.`;
+      } else if (!sess) {
+        textOut = `⏱ <b>Сессия уже завершена</b>
+
+Если нужно — нажми «✍️ Ответить» ещё раз.`;
+      } else if (delOk) {
+        textOut = `❌ <b>Отменено</b>
+
+Ответ не будет отправлен.`;
+      } else {
+        textOut = `⚠️ <b>Не удалось отменить</b>
+
+Кеш недоступен. Сессия могла остаться активной. Лучше не отвечай на этот промпт и попробуй позже.`;
+      }
+
+      try {
+        await ctx.api.editMessageText(chatId, msgId, textOut, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          reply_markup: new InlineKeyboard(),
+        });
+      } catch {}
+
+      return;
+    }
 // --- Admin: Reply to support message ---
     if (p.a === 'a:adm_support_reply') {
       await ctx.answerCallbackQuery();
@@ -28707,18 +28772,16 @@ if (p.a === 'a:admin_outbox_clear_q') {
       const promptText =
         `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\n` +
         `Отправь текст <b>ответом на это сообщение</b> (reply) — я доставлю его пользователю от имени поддержки.\n\n` +
-        `<i>Отмена:</i> ответь словом <code>/cancel</code>.`;
+        `<i>Отмена:</i> нажми «❌ Отмена» (или ответь <code>/cancel</code>).`;
 
+      const kb = new InlineKeyboard().text('❌ Отмена', 'a:adm_support_reply_cancel');
       const prompt = await ctx.api.sendMessage(ctx.chat.id, promptText, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
-        reply_markup: {
-          force_reply: true,
-          input_field_placeholder: 'Текст ответа…',
-          selective: true,
-        },
+        reply_markup: kb,
       });
 
+      let sessionOk = false;
       try {
         await redis.set(
           sessionKey,
@@ -28731,9 +28794,37 @@ if (p.a === 'a:admin_outbox_clear_q') {
           },
           { ex: exSec }
         );
+        sessionOk = true;
       } catch {
-        // If Redis is unavailable, at least keep UX: admin can still reply in DM using legacy flow.
+        sessionOk = false;
       }
+
+      // Fail-closed: if Redis is degraded, do not leave a misleading "reply here" prompt.
+      if (!sessionOk) {
+        const failText =
+          `⚠️ <b>Сейчас кеш недоступен</b>
+
+` +
+          `Я не могу принять ответ в группе.
+
+` +
+          `Что можно сделать:
+` +
+          `• Используй «Быстрый ответ» (кнопки-шаблоны)
+` +
+          `• Попробуй позже
+
+` +
+          `<i>Эта сессия не активна.</i>`;
+        try {
+          await ctx.api.editMessageText(ctx.chat.id, prompt.message_id, failText, {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+            reply_markup: new InlineKeyboard(),
+          });
+        } catch {}
+      }
+
       return;
     }
 
