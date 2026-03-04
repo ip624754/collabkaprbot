@@ -34,7 +34,7 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 3) **IG Templates anti-bypass:** не вставлять `@username`, “ссылка в профиле”, портфолио/внешние ссылки и любые контакты; только CTA через витрину/заявку в боте.
 4) **Brand Inbox atomics:** до `✅ Принять` доступны только `✅ Принять / ⛔ Спам / 🗑 Удалить`; переход `new → in_progress` строго атомарный (DB‑truth).
 5) **`/api/health` + cron:** новые cron‑задачи — через `api/cron_router.js`, с lock+throttle и отражением в health без лишних DB‑запросов.
-6) **Official publish:** token‑lock + DB‑reserve `PUBLISHING` менять только с мигра‑планом; иначе риск дублей в @collabka_offers.
+6) **Official publish:** token‑lock + DB‑reserve `PUBLISHING` + async deliver через QStash (`/api/qstash/official-publish-deliver`). UI делает reserve+enqueue, воркер отправляет в канал и фиксирует `ACTIVE`. Менять только маленькими патчами (риск дублей в @collabka_offers).
 7) **Hot UI DB‑reads:** в меню/хабах не добавлять новые SQL‑чтения; Redis‑first, DB только на клике/DB‑truth путях.
 8) **Role‑specific UX (Creator vs Brand):** в режиме Creator не показывать brand‑only кнопки ("📰 Лента креаторов", фильтры/подбор) и не писать текст, который выглядит как инструкция открыть brand‑раздел; формулировки должны быть: "бренды увидят в ленте (режим Brand)".
 9) **Brand Manager (команда бренда):** вход в «🧑‍💼 Я менеджер бренда» всегда виден, но доступ проверяется **на клике** (гейт внутри bm‑flow). В меню/🏠 Home не делать дополнительных SQL‑проверок “canManager”; при отсутствии доступа показывать одну консистентную подсказку (не “отозван”, а “не добавили/доступ отозван”).
@@ -179,7 +179,7 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 
 
 
-26) **Telegram callback_data ≤ 64 bytes:** динамические кнопки могут молча исчезать, если callback_data > 64 байт. Держим callbacks компактными (short ret-коды `bd/ba`, укороченные action keys `a:bms`, `a:ca`, убираем дублирующие параметры). При будущих правках — обязательно проверять длину callback_data на “длинных” ID.
+26) **Telegram callback_data ≤ 64 bytes:** динамические кнопки могут молча исчезать, если callback_data > 64 байт. Держим callbacks компактными (short ret-коды `bd/ba`, укороченные action keys `a:bms`, `a:ca`, убираем дублирующие параметры). **STEP308:** добавлен auto‑hydration: если `callback_data` всё же превышает лимит, бот заменяет его на короткий `a:h|h:<token>` и сохраняет исходный callback в Redis (`cbh`, TTL по `CB_HYDRATION_TTL_SEC`). При отсутствии токена/Redis — fail‑open: показываем «кнопка устарела» и даём переход в меню.
 
 27) **Broadcast bc_confirm idempotency (Redis degraded):** подтверждение рассылки (`a:bc_confirm`) должно быть безопасно к двойному клику даже при деградации Redis. Используем fail-fast PG advisory xact lock + короткое DB dedup‑окно (без миграций), чтобы не создавать 2 рассылки из одного draft. См. audit report 27.
 
@@ -190,6 +190,8 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 30) **Stateless degraded: reset input:** в safe-mode (кнопки `s:*`) добавлена кнопка «🔄 Сбросить ввод». Очистка `expectText/draft` — best-effort: если Redis недоступен, `s:reset_input` показывает предупреждение и не пишет «сброшено». См. audit report 32.
 
 31) **Migration pack sync (preflight gate):** `migration_pack/00_mark_all_applied.sql` авто‑генерируется из `migrations/` (checksum нормализован: LF + `trimEnd`) и теперь проверяется в `npm run preflight` (файл не должен меняться при `npm run gen:migration-pack`). Это предотвращает дрейф pack’а и ложные попытки прогнать уже применённые миграции.
+
+32) **Official publish mini-outbox (QStash):** публикация в @collabka_offers теперь идёт через reserve→enqueue→deliver: операторский клик ставит запись в `PUBLISHING` и ставит задачу в QStash; воркер делает Telegram send/edit и переводит в `ACTIVE` (self-heal verify остаётся страховкой на случай serverless hard-kill).
 
 ## 1) Платформа и компоненты
 

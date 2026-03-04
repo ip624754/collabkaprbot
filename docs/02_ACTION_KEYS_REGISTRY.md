@@ -5,8 +5,8 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **511**
-- Actions in registry: **511**
+- Actions in code: **512**
+- Actions in registry: **512**
 
 ## Summary by type
 
@@ -16,14 +16,14 @@
 | edit | 338 |
 | ops | 75 |
 | pay | 11 |
-| view | 3 |
+| view | 4 |
 
 ## Summary by guard
 
 | Guard | Count |
 |---|---:|
 | db_truth | 2 |
-| none | 155 |
+| none | 156 |
 | queue_first | 2 |
 | require_redis | 352 |
 
@@ -414,6 +414,7 @@
 | `a:gw_winners` | ops | require_redis |
 | `a:gw_winners_custom` | ops | require_redis |
 | `a:gw_wv` | ops | require_redis |
+| `a:h` | view | none |
 | `a:home` | edit | none |
 | `a:home_hint_ack` | edit | none |
 | `a:home_hub` | edit | none |
