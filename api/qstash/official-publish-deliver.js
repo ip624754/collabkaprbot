@@ -1,5 +1,6 @@
 import { CFG } from '../../src/lib/config.js';
 import { redis, k } from '../../src/lib/redis.js';
+import { queueOpsDigestSafe } from '../../src/lib/opsDigest.js';
 import { getBot, deliverOfficialPublishReserved } from '../../src/bot/bot.js';
 import {
   qstashPublishJSON,
@@ -164,7 +165,20 @@ export default async function handler(req, res) {
         });
         res.status(200).json({ ok: true, delayed: true, reason: 'locked', retry_after_sec: retryDelaySec });
         return;
-      } catch {
+      } catch (e) {
+        await queueOpsDigestSafe({
+          group: 'ops',
+          reason: 'qstash_reschedule_failed',
+          title: 'Official publish deliver: delayed retry enqueue failed',
+          kind: 'qstash_official',
+          payload: String(offerId || ''),
+          extra: [
+            `attempt: ${attempt}`,
+            `retryDelaySec: ${retryDelaySec}`,
+            String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180),
+          ],
+          dedupId: `offpd_resched:${offerId}:a:${attempt}`,
+        });
         // Fall through: acknowledge without retry (self-heal will unlock).
       }
     }
