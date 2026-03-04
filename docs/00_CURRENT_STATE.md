@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-03
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-04
 
 ## Staff audit
 
@@ -59,6 +59,12 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 
 25) **Admin UX sweep (input-mode escape hatch):** `📋 Меню` / `🏠 Home` теперь best‑effort сбрасывают `expectText` (не залипаем в режиме ввода), а входы в ключевые админ‑разделы очищают ожидание ввода. См. audit report 22.
 
+26) **Menu/Home hot UI cache (Neon-saving):** на `📋 Меню` / `🏠 Home` используем best‑effort Redis‑кеш (TTL 5 мин) для role flags (moderator/curator/editor) и списка workspaces креатора. Это убирает 2–3 SQL на каждый клик по меню в нормальном режиме. При деградации Redis — fail‑open: работаем по DB‑truth как раньше. См. audit report 28.
+
+27) **Redis TTL hygiene gate:** в `npm run preflight` добавлен grep‑gate `lint:redis-ttl` — запрещаем появление `redis.set(a, b)` без TTL в runtime‑коде. Исключения (намеренно persistent) должны быть явно помечены `TTL-LINT: ...`. См. audit report 30.
+
+28) **STEP301 micro consistency (P3):** в админской рассылке (экран «🔗 Кнопки») шаблоны и действия выровнены в 2×2, добавлен явный admin‑footer (⬅️ Админка / 📋 Меню / 🏠 Home); в `api/qstash/broadcast-deliver.js` убран scope‑shadow `url` в cooldown‑ветке (используем `deliverUrl`); в `redactContactsInText` убран паттерн `.test()+.replace()` на глобальных regex — теперь один проход `replace` + проверка изменения строки (без stateful edge‑кейсов).
+
 Audit report (one-time scan): `docs/audit/04_CREATOR_UI_BRAND_ACTION_KEYS_AUDIT_2026_03.md`.
 
 Audit report (Brand Manager system): `docs/audit/05_BRAND_MANAGER_SYSTEM_AUDIT_2026_03.md`.
@@ -96,6 +102,12 @@ Audit report (Giveaways & Offers E2E smoke): `docs/audit/20_GIVEAWAYS_OFFERS_E2E
 Audit report (Broadcast E2E smoke): `docs/audit/21_BROADCAST_E2E_SMOKE_2026_03.md`.
 
 Audit report (Admin UX sweep): `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
+
+Audit report (Broadcast confirm idempotency): `docs/audit/27_BROADCAST_CONFIRM_IDEMPOTENCY_2026_03.md`.
+
+Audit report (Menu/Home hot UI cache): `docs/audit/28_MENU_HOME_HOT_CACHE_2026_03.md`.
+
+Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_REDIS_TTL_HARDENING_2026_03.md`.
 
 
 ---
@@ -168,6 +180,14 @@ Audit report (Admin UX sweep): `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
 
 
 26) **Telegram callback_data ≤ 64 bytes:** динамические кнопки могут молча исчезать, если callback_data > 64 байт. Держим callbacks компактными (short ret-коды `bd/ba`, укороченные action keys `a:bms`, `a:ca`, убираем дублирующие параметры). При будущих правках — обязательно проверять длину callback_data на “длинных” ID.
+
+27) **Broadcast bc_confirm idempotency (Redis degraded):** подтверждение рассылки (`a:bc_confirm`) должно быть безопасно к двойному клику даже при деградации Redis. Используем fail-fast PG advisory xact lock + короткое DB dedup‑окно (без миграций), чтобы не создавать 2 рассылки из одного draft. См. audit report 27.
+
+28) **rateLimit & Redis TTL hardening:** в инфраструктурном `rateLimit()` убран non‑atomic fallback `INCR+EXPIRE` (который может оставлять ключи без TTL). При деградации Redis — fail‑open, без полуприсваиваний. Brand‑manager state (`bm_mode`, `bm_active_brand`) пишется с длинным TTL (365d), чтобы не жить “вечно”. См. audit report 29.
+
+29) **Payments ledger anti-cascade + users soft-delete:** финансовые таблицы (`stars_payments`, `payments`) **не должны** терять историю при удалении пользователя. `user_id` FK переведены на `ON DELETE RESTRICT`, а вместо физического удаления пользователя используем soft-delete (`users.is_deleted/deleted_at`, опционально `deactivated_at`). См. audit report 31.
+
+30) **Stateless degraded: reset input:** в safe-mode (кнопки `s:*`) добавлена кнопка «🔄 Сбросить ввод», а переходы `s:menu/s:home/s:help` делают silent best-effort очистку `expectText/draft`, чтобы не залипать в режиме ввода. См. audit report 32.
 
 ## 1) Платформа и компоненты
 
@@ -269,7 +289,7 @@ Neon hardening:
 - Serverless = только пакетная обработка, никаких “вечных” циклов.
 - Cron: **Redis token-lock** (safe unlock) + где критично **PG advisory lock** + SQL guards на статусных переходах.
 - Winners draw: детерминированно/воспроизводимо, guards по статусам (`winners_drawn_at`, транзакции).
-- Миграции: только `migrations/run.js` (exactly-once + checksum).
+- Миграции: только `migrations/run.js` (exactly-once + checksum). Checksum считается по **нормализованному SQL** (LF + `trimEnd`) для устойчивости к CRLF/LF и «финальному переводу строки», при этом раннер совместим со старыми checksum значениями.
 - Migration pack (Neon move/emergency): `migration_pack/00_mark_all_applied.sql` обновлён под миграции до `041_*.sql`; `migration_pack/01_reconcile.sql` расширен как safety‑net. Pack‑файлы **не** дублируем в `migrations/`.
 - STEP163: добавлен генератор `npm run gen:migration-pack` (скрипт `scripts/gen-mark-all-applied.js`) — пересчитывает sha256 из `migrations/` и обновляет `migration_pack/00_mark_all_applied.sql` детерминированно.
 - Горячие UI-пути: **не добавлять DB-запросы** в рендер меню/кнопок без сильного обоснования.
