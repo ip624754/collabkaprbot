@@ -31,8 +31,35 @@ function parseCsvStr(v) {
     .filter(Boolean);
 }
 
+function parseEncKey32(input) {
+  const s = String(input || '').trim();
+  if (!s) return { key: null, kind: 'missing' };
+
+  // 32 bytes hex (64 chars)
+  if (/^[0-9a-fA-F]{64}$/.test(s)) {
+    return { key: Buffer.from(s, 'hex'), kind: 'hex64' };
+  }
+
+  // base64/base64url (>=32 bytes)
+  try {
+    // Normalize base64url -> base64
+    let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if missing
+    const pad = b64.length % 4;
+    if (pad) b64 = b64 + '='.repeat(4 - pad);
+    const b = Buffer.from(b64, 'base64');
+    if (b.length >= 32) return { key: b.subarray(0, 32), kind: 'base64' };
+  } catch {
+    // ignore
+  }
+
+  return { key: null, kind: 'invalid' };
+}
+
 
 const DEFAULT_SUPER_ADMINS = '';
+
+const IG_ENC = parseEncKey32(process.env.IG_TOKEN_ENC_KEY || '');
 
 const PAYMENT_SESSION_TTL_MIN = (() => {
   const m = parseIntSafe(process.env.PAYMENT_SESSION_TTL_MIN, 360); // default: 6h
@@ -291,6 +318,30 @@ export const CFG = {
   IG_OAUTH_SCOPES: process.env.IG_OAUTH_SCOPES || 'instagram_basic,pages_show_list,pages_read_engagement',
   IG_OAUTH_GRAPH_VERSION: process.env.IG_OAUTH_GRAPH_VERSION || 'v25.0',
   IG_TOKEN_ENC_KEY: process.env.IG_TOKEN_ENC_KEY || '',
+  // Strict: accept only 32-byte key provided as hex64 or base64/base64url (>=32 bytes).
+  // No sha256("weak key") fallback.
+  IG_TOKEN_ENC_KEY_BYTES: IG_ENC.key,
+  IG_TOKEN_ENC_KEY_VALID: Boolean(IG_ENC.key),
+  IG_TOKEN_ENC_KEY_KIND: IG_ENC.kind,
+
+  // Derived: IG OAuth is "ready" only when UI+routes are enabled AND required envs are present.
+  IG_OAUTH_READY: (() => {
+    if (!parseBoolSafe(process.env.IG_OAUTH_ENABLED, false)) return false;
+    if (!parseBoolSafe(process.env.IG_OAUTH_UI_ENABLED, false)) return false;
+    // Kill-switch: if routes are closed, treat as not ready.
+    const routesEnabled = (() => {
+      if (typeof process.env.IG_ROUTES_ENABLED !== 'undefined') {
+        return parseBoolSafe(process.env.IG_ROUTES_ENABLED, false);
+      }
+      return parseBoolSafe(process.env.IG_OAUTH_UI_ENABLED, false);
+    })();
+    if (!routesEnabled) return false;
+    if (!(process.env.PUBLIC_BASE_URL || process.env.VERCEL_URL)) return false;
+    if (!String(process.env.IG_OAUTH_CLIENT_ID || '').trim()) return false;
+    if (!String(process.env.IG_OAUTH_CLIENT_SECRET || '').trim()) return false;
+    if (!IG_ENC.key) return false;
+    return true;
+  })(),
 
 
   // Audit logs (Postgres)
@@ -403,11 +454,14 @@ export function assertEnv() {
     if (!CFG.CRON_SECRET) missing.push('CRON_SECRET');
     if (!CFG.SUPER_ADMIN_TG_IDS?.length) missing.push('SUPER_ADMIN_TG_IDS');
   }
-  if (CFG.IG_OAUTH_ENABLED) {
+  // IG OAuth must not block prod while UI/routes are hidden.
+  // Fail-fast only when IG OAuth is publicly enabled (UI+routes).
+  const igPublicEnabled = Boolean(CFG.IG_OAUTH_ENABLED && CFG.IG_OAUTH_UI_ENABLED && CFG.IG_ROUTES_ENABLED);
+  if (igPublicEnabled) {
     if (!CFG.PUBLIC_BASE_URL) missing.push('PUBLIC_BASE_URL');
     if (!CFG.IG_OAUTH_CLIENT_ID) missing.push('IG_OAUTH_CLIENT_ID');
     if (!CFG.IG_OAUTH_CLIENT_SECRET) missing.push('IG_OAUTH_CLIENT_SECRET');
-    if (!CFG.IG_TOKEN_ENC_KEY) missing.push('IG_TOKEN_ENC_KEY');
+    if (!CFG.IG_TOKEN_ENC_KEY_VALID) missing.push('IG_TOKEN_ENC_KEY (hex64 or base64>=32 bytes)');
   }
 
 
