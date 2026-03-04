@@ -14371,6 +14371,11 @@ async function enqueueOfficialPublishVerifyJob(input = {}) {
     const minute = Math.floor(Date.now() / 60000);
     const dedupId = `offpv:${offerId}:m:${minute}`;
 
+    const delaySec = Math.max(1, Math.min(
+      900,
+      Number(input.delaySec || OFFICIAL_PUBLISH_SELFHEAL_DELAY_SEC) || OFFICIAL_PUBLISH_SELFHEAL_DELAY_SEC
+    ));
+
     await qstashPublishJSON({
       url,
       body: {
@@ -14382,7 +14387,7 @@ async function enqueueOfficialPublishVerifyJob(input = {}) {
         queued_at: new Date().toISOString(),
       },
       deduplicationId: dedupId,
-      delaySec: OFFICIAL_PUBLISH_SELFHEAL_DELAY_SEC,
+      delaySec,
       retries: 3,
       timeout: '20s',
     });
@@ -14390,6 +14395,23 @@ async function enqueueOfficialPublishVerifyJob(input = {}) {
     return { ok: true };
   } catch (e) {
     return { ok: false, error: String(e?.message || e || 'error') };
+  }
+}
+
+
+function parseOfficialPublishReserveEpoch(input = {}) {
+  try {
+    const direct = Number(input.reserveEpoch || input.reserve_epoch || 0);
+    if (Number.isFinite(direct) && direct > 0) return Math.trunc(direct);
+  } catch {}
+  try {
+    const raw = String(input.reserveAt || input.reservedAt || input.reserve_at || '').trim();
+    if (!raw) return 0;
+    const t = Date.parse(raw);
+    if (!Number.isFinite(t) || t <= 0) return 0;
+    return Math.floor(t / 1000);
+  } catch {
+    return 0;
   }
 }
 
@@ -14414,10 +14436,14 @@ async function enqueueOfficialPublishDeliverJob(input = {}) {
     const prevStatus = String(input.prevStatus || '').trim();
     const attempt = Number(input.attempt || 0) || 0;
 
-    // Dedup by (offerId + minute + action) so double-clicks don't fan out.
+    // Prefer a stable reserve key (DB updated_at) for deduplication.
+    // Fallback to minute-bucketed dedup if reserve timestamp is missing.
     const minute = Math.floor(Date.now() / 60000);
     const action = String(input.action || 'publish').slice(0, 16) || 'publish';
-    const dedupId = `offpd:${offerId}:${action}:m:${minute}:a:${attempt}`;
+    const reserveEpoch = parseOfficialPublishReserveEpoch(input);
+    const dedupId = reserveEpoch
+      ? `offpd:${offerId}:${action}:r:${reserveEpoch}:a:${attempt}`
+      : `offpd:${offerId}:${action}:m:${minute}:a:${attempt}`;
 
     await qstashPublishJSON({
       url,
@@ -14429,6 +14455,8 @@ async function enqueueOfficialPublishDeliverJob(input = {}) {
         prevStatus,
         attempt,
         action,
+        ...(reserveEpoch ? { reserveEpoch } : {}),
+        ...(input.reserveAt ? { reserveAt: String(input.reserveAt) } : {}),
         queued_at: new Date().toISOString(),
       },
       deduplicationId: dedupId,
@@ -14574,6 +14602,8 @@ async function queueOfficialPublishToOfficialChannel(api, offerId, opts = {}) {
   );
   if (!reserved) return { ok: false, locked: true, reason: 'publishing' };
 
+  const reserveAt = reserved?.updated_at ? String(reserved.updated_at) : new Date().toISOString();
+
   // Schedule a delayed self-heal check to avoid long "PUBLISHING" stalls.
   try {
     await enqueueOfficialPublishVerifyJob({
@@ -14592,6 +14622,7 @@ async function queueOfficialPublishToOfficialChannel(api, offerId, opts = {}) {
     channelChatId: channelId,
     prevStatus: prevStatus || 'PENDING',
     action: String(opts.placementType || 'publish'),
+    reserveAt,
   });
 
   if (!q || !q.ok) {
@@ -14842,6 +14873,18 @@ export async function deliverOfficialPublishReserved(api, offerId, opts = {}) {
   // If message_id already exists (e.g., UPDATE), prefer edit.
   let messageId = existing?.message_id ? Number(existing.message_id) : null;
 
+  // If DB is still missing message_id but we have a Redis breadcrumb (send succeeded earlier),
+  // prefer editing/attaching instead of sending a duplicate.
+  if (!messageId) {
+    try {
+      const mid = Number(await redis.get(officialPublishMsgIdKey(offerId))) || 0;
+      if (mid > 0) messageId = mid;
+    } catch {}
+  }
+
+  let tgDone = false;
+  let tgSource = '';
+
   async function tryEditExisting() {
     if (!messageId) return false;
     try {
@@ -14856,6 +14899,12 @@ export async function deliverOfficialPublishReserved(api, offerId, opts = {}) {
   }
 
   const edited = await tryEditExisting();
+  if (edited && messageId) {
+    tgDone = true;
+    tgSource = 'edit';
+    // Breadcrumb message_id ASAP (helps self-heal if DB write fails).
+    await writeOfficialPublishMsgIdBreadcrumb(offerId, messageId, 'edit');
+  }
   if (!edited) {
     // Send new message
     let sent;
@@ -14882,12 +14931,19 @@ export async function deliverOfficialPublishReserved(api, offerId, opts = {}) {
     // Breadcrumb message_id in Redis ASAP (helps self-heal if DB write fails).
     await writeOfficialPublishMsgIdBreadcrumb(offerId, newId, 'send');
 
+    tgDone = true;
+    tgSource = 'send';
+
     // Remove old message (best-effort) if it existed.
     if (messageId && newId !== messageId) {
       try { await api.deleteMessage(channelId, messageId, tgTimeoutSignal()); } catch {}
     }
     messageId = newId;
   }
+
+  // Ensure we always have a breadcrumb before the DB finalize step.
+  // (If DB write fails, self-heal can still attach.)
+  await writeOfficialPublishMsgIdBreadcrumb(offerId, messageId, 'pre_db');
 
   // Persist ACTIVE post record
   await safeOfficialPosts(
@@ -14918,10 +14974,39 @@ export async function deliverOfficialPublishReserved(api, offerId, opts = {}) {
   return { ok: true, messageId, placementType, days, slotExpiresAt };
 
   } catch (e) {
-    // Best-effort revert publishing marker (unblock UI).
+    const errMsg = String(e && (e.message || e) || 'publish_failed');
+
+    // If Telegram operation already succeeded (send/edit), do NOT revert to PENDING.
+    // Keep PUBLISHING + breadcrumb, schedule verify, and ACK to avoid QStash immediate retries.
+    if (tgDone && messageId) {
+      try {
+        await writeOfficialPublishMsgIdBreadcrumb(offerId, messageId, `tg_${tgSource || 'done'}_db_error`);
+      } catch {}
+
+      try {
+        await safeOfficialPosts(
+          () => db.setOfficialPostStatus(offerId, 'PUBLISHING', { lastError: `post_sent_db_error:${errMsg}` }),
+          async () => null
+        );
+      } catch {}
+
+      try {
+        await enqueueOfficialPublishVerifyJob({
+          offerId,
+          wsId: offer?.workspace_id || 0,
+          offerTitle: offer?.title || '',
+          channelChatId: channelId,
+          delaySec: 20,
+        });
+      } catch {}
+
+      return { ok: true, partial: true, messageId, reason: 'db_finalize_failed', will_selfheal: true };
+    }
+
+    // Otherwise: best-effort revert publishing marker (unblock UI) and let QStash retry.
     try {
       await safeOfficialPosts(
-        () => db.setOfficialPostStatus(offerId, prevStatus || 'PENDING', { lastError: String(e && (e.message || e) || 'publish_failed') }),
+        () => db.setOfficialPostStatus(offerId, prevStatus || 'PENDING', { lastError: errMsg }),
         async () => null
       );
     } catch {}
