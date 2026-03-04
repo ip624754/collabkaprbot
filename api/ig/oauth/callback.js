@@ -1,9 +1,28 @@
 import { CFG } from '../../../src/lib/config.js';
-import { consumeOnce, k } from '../../../src/lib/redis.js';
+import { consumeOnce, k, redis } from '../../../src/lib/redis.js';
 import { exchangeCodeForShortLivedToken, exchangeForLongLivedToken, listPages, getPageIgBusinessAccount, getIgUser, getMe, listPermissions, listBusinesses, listBusinessPages } from '../../../src/lib/igOAuth.js';
 import { encryptText } from '../../../src/lib/cryptoBox.js';
 import { tgSendMessage } from '../../../src/lib/tgApi.js';
 import * as db from '../../../src/db/queries.js';
+
+function firstOpsTarget() {
+  if (CFG.SUPPORT_CHAT_ID) return CFG.SUPPORT_CHAT_ID;
+  const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
+  return admins.length ? admins[0] : null;
+}
+
+async function opsAlertOnce(dedupId, text) {
+  try {
+    const t = firstOpsTarget();
+    if (!t) return;
+    const dk = k(['ops', 'ig', String(dedupId || 'alert')]);
+    const ok = await redis.set(dk, '1', { nx: true, ex: 6 * 60 * 60 });
+    if (!ok) return;
+    await tgSendMessage(t, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+  } catch {
+    // ignore
+  }
+}
 
 function noStore(res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -46,6 +65,18 @@ export default async function handler(req, res) {
 
     if (!CFG.IG_OAUTH_ENABLED) {
       res.status(503).send(html('IG OAuth disabled', '<h2>Instagram OAuth отключён</h2><p>Администратор ещё не включил IG_OAUTH_ENABLED.</p>'));
+      return;
+    }
+
+    if (!CFG.IG_TOKEN_ENC_KEY_VALID) {
+      await opsAlertOnce(
+        'enc_key_invalid',
+        `⚠️ <b>IG OAuth misconfigured</b>\n\n` +
+          `IG_TOKEN_ENC_KEY invalid (${String(CFG.IG_TOKEN_ENC_KEY_KIND || 'invalid')}).\n` +
+          `Expected: hex64 (32 bytes) or base64/base64url (>=32 bytes).\n\n` +
+          `OAuth callback blocked.`
+      );
+      res.status(500).send(html('Misconfigured', '<h2>Ошибка конфигурации</h2><p>Не настроен <code>IG_TOKEN_ENC_KEY</code> (нужен ключ 32 байта). OAuth временно отключён.</p>'));
       return;
     }
 
