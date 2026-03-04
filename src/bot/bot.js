@@ -3641,6 +3641,15 @@ function makeUiCtxForMessage(baseCtx, uiMsg) {
 // - UI-only escape hatch when Redis is degraded.
 // - Best-effort: silently clear input-mode state (expectText/draft) to avoid "stuck in input" UX.
 //   If Redis is down this is a no-op (errors are swallowed).
+const DEGRADED_COPY = Object.freeze({
+  line: 'Сейчас кеш/сессии временно недоступны.',
+  tips: `Быстрые действия:
+• Нажми <code>/start</code> (перезапуск)
+• Повтори действие через 1–2 минуты`,
+  tipsShort: `Что можно сделать:
+• Нажми <code>/start</code> чуть позже
+• Повтори действие после восстановления`,
+});
 function kbStatelessFallback(kind = 'menu') {
   const kb = new InlineKeyboard();
   const showAll = kind === 'all';
@@ -3677,18 +3686,14 @@ async function handleStatelessCallback(ctx, p) {
 
 📋 <b>Меню (безопасный режим)</b>
 
-Сейчас часть функций временно недоступны (кеш/сессии).
+${DEGRADED_COPY.line}
 
-Быстрые действия:
-• Нажми <code>/start</code> (перезапуск)
-• Повтори действие чуть позже`
+${DEGRADED_COPY.tips}`
       : `⚠️ <b>Сброс не выполнен</b>
 
-Кеш/сессии сейчас недоступны, поэтому я не могу гарантировать сброс режима ввода.
+${DEGRADED_COPY.line}
 
-Что сделать:
-• Нажми <code>/start</code> чуть позже
-• Повтори действие после восстановления`;
+${DEGRADED_COPY.tipsShort}`;
 
     await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kbStatelessFallback('menu') });
     return true;
@@ -3699,12 +3704,12 @@ async function handleStatelessCallback(ctx, p) {
       ctx,
       `🏠 <b>Home (безопасный режим)</b>
 
-Сейчас часть функций может быть временно недоступна (кеш/сессии).
+${DEGRADED_COPY.line}
 
-Что можно сделать прямо сейчас:
-• Открой «Меню (безопасный режим)»
-• Попробуй команду <code>/start</code> чуть позже
-• Если ты уже был в процессе заполнения формы — просто повтори действие, когда всё восстановится`,
+${DEGRADED_COPY.tips}
+
+Навигация:
+• Открой «Меню (безопасный режим)»`,
       { parse_mode: 'HTML', reply_markup: kbStatelessFallback('home') }
     );
     return true;
@@ -3716,7 +3721,7 @@ async function handleStatelessCallback(ctx, p) {
       `🧭 <b>Помощь (безопасный режим)</b>
 
 Почему так:
-• Сейчас кеш/сессии могут быть недоступны, поэтому опасные действия блокируются.
+• ${DEGRADED_COPY.line} Поэтому опасные действия блокируются.
 
 Как вернуться к обычной работе:
 1) Подожди 1–2 минуты
@@ -3734,11 +3739,9 @@ async function handleStatelessCallback(ctx, p) {
     ctx,
     `📋 <b>Меню (безопасный режим)</b>
 
-Сейчас часть функций временно недоступны (кеш/сессии).
+${DEGRADED_COPY.line}
 
-Быстрые действия:
-• Нажми <code>/start</code> (перезапуск)
-• Повтори действие чуть позже`,
+${DEGRADED_COPY.tips}`,
     { parse_mode: 'HTML', reply_markup: kbStatelessFallback('menu') }
   );
   return true;
@@ -12707,13 +12710,20 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
     const kb = new InlineKeyboard()
       .text('📨 Открыть заявку', `a:brand_app_card|id:${app.id}`)
       .row()
-      .text('📋 Меню', 'a:menu')
-      .text('🏠 Home', 'a:home');
-    const msg = '⛔ Сейчас нельзя открыть чат (временная проблема с кешем/сессиями). Попробуй чуть позже.';
+      .text('📋 Меню (безопасный режим)', 's:menu')
+      .text('🏠 Home', 's:home')
+      .row()
+      .text('🧭 Помощь', 's:help')
+      .text('🔄 Сбросить ввод', 's:reset_input');
+    const msg = `⛔ <b>Сейчас нельзя открыть чат</b>
+
+${DEGRADED_COPY.line}
+
+${DEGRADED_COPY.tips}`;
     try {
-      await safeEditOrReply(ctx, msg, { reply_markup: kb });
+      await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb });
     } catch {
-      await ctx.reply(msg, { reply_markup: kb });
+      await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb });
     }
     return;
   }
@@ -22519,7 +22529,7 @@ if (redisOk === false && (_meta?.guard === ACTION_GUARD.DB_TRUTH || _meta?.guard
             ctx,
             `🚨 <b>Аварийный режим</b>
 
-Redis сейчас недоступен. Обычно опасные действия блокируются, чтобы не сломать деньги/сессии.
+${DEGRADED_COPY.line} Обычно опасные действия блокируются, чтобы не сломать деньги/сессии.
 
 Ты суперадмин. Если действие критично — нажми «Продолжить (break-glass)».`,
             { parse_mode: 'HTML', reply_markup: kb }
@@ -22531,10 +22541,16 @@ Redis сейчас недоступен. Обычно опасные дейст�
         try {
           await safeEditOrReply(
             ctx,
-            `⛔ Временно недоступно (кеш/сессии). Попробуй чуть позже.
+            `⛔ <b>Временно недоступно</b>
+
+${DEGRADED_COPY.line}
+
+Это действие требует кеш/сессии, поэтому я его блокирую, чтобы не сломать процесс.
+
+${DEGRADED_COPY.tips}
 
 Если ты админ и нужно срочно — открой админку и используй аварийный доступ (break-glass) только по необходимости.`,
-            { reply_markup: kbStatelessFallback('all') }
+            { parse_mode: 'HTML', reply_markup: kbStatelessFallback('all') }
           );
         } catch {}
         return;
@@ -29364,10 +29380,12 @@ if (p.a === 'a:admin_outbox_clear_q') {
       // Fail-closed: if Redis is degraded, do not leave a misleading "reply here" prompt.
       if (!sessionOk) {
         const failText =
-          `⚠️ <b>Сейчас кеш недоступен</b>
+          `⚠️ <b>Сейчас кеш/сессии недоступны</b>
 
 ` +
           `Я не могу принять ответ в группе.
+
+${DEGRADED_COPY.line}
 
 ` +
           `Что можно сделать:
