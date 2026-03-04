@@ -35,11 +35,15 @@ npm run qa:fast
    Grep‑gate на регрессии: запрещает возвращать в runtime‑код неатомарные связки Redis-команд (например `LPUSH+LTRIM(+EXPIRE)`, `INCR+EXPIRE`, `LRANGE+LTRIM`) вне `src/lib/redis.js`.  
    Это защищает от “immortal keys” и race‑окон, которые мы уже один раз закрывали.
 
-7) `lint:redis-exports`  
+7) `lint:redis-ttl`  
+   Grep‑gate на регрессии: запрещает появление `redis.set(a, b)` без TTL (двухаргументный `set`) в runtime‑коде.  
+   Исключения (намеренно persistent) должны быть явно помечены комментарием `TTL-LINT: ...`.
+
+8) `lint:redis-exports`  
    Защита от build‑regression: гарантирует, что `src/lib/redis.js` экспортирует обязательные helper’ы (`incrWithExpireOnFirst`, `incrWithExpire`, `lpushTrim`).  
    Это предотвращает падение на Vercel при загрузке ESM модулей с ошибкой вида `does not provide an export named ...`.
 
-8) **Node syntax check (`node --check`)**  
+9) **Node syntax check (`node --check`)**  
    Запускает `node --check` по ключевым entrypoint‑ам (`src/bot/bot.js`, `api/webhook.js`, `api/cron_router.js`, и т.д.), чтобы ловить **SyntaxError на cold start** (например, случайный literal newline внутри строки `'...'`) ещё **до** деплоя.
 
 ## Если preflight упал
@@ -49,6 +53,7 @@ npm run qa:fast
 - На `test:redact` → поправить редактирование/маскирование, не допуская “полных” контактов.
 - На `lint:public-contacts` → проверь публичные карточки/витрины: пользовательский текст (описания) должен идти через `redactContactsInText` до unlock.
 - На `lint:redis-atomic` → перенести операции на helpers из `src/lib/redis.js` (или на Lua‑атомарность), не оставлять fallback‑цепочки.
+- На `lint:redis-ttl` → добавь TTL (`{ ex: ... }`) для `redis.set`, либо явно отметь intentional persistence комментарием `TTL-LINT: ...`.
 - На `lint:redis-exports` → проверь `src/lib/redis.js`: в нём должны быть named exports для `incrWithExpireOnFirst`, `incrWithExpire`, `lpushTrim`.
 
 ## Дальше после preflight

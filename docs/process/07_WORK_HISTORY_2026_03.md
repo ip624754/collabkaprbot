@@ -955,34 +955,133 @@ QA:
 Риск регрессий: **низкий** (тексты/клавиатура + один экран ошибки).
 
 
-### STEP294 — Audit numbering fix (docs-only)
+### STEP296 — callback_data hardening (P1) + admin callback UX (P2)
 Цель:
-- Убрать путаницу в `docs/audit/`: файл №22 должен быть про **Admin UX sweep**, а не про Broadcast.
-- Привести нумерацию к тому, что уже указано в `docs/00_CURRENT_STATE.md` (watchlist + список audit report).
+- Убрать риск “тихих” кнопок из‑за лимита Telegram `callback_data <= 64 bytes` (Brand Manager pick brand, Curator audit, Brand filters).
+- Устранить паттерн двойного `answerCallbackQuery()` (чтобы non-admin/deny сообщения не терялись).
 
-Изменения (docs-only):
-- Добавлен отсутствующий файл: `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
-- Файл `docs/audit/22_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md` переименован в `docs/audit/24_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md` (и обновлён заголовок внутри).
-- `docs/00_CURRENT_STATE.md` дополнен ссылками на audit 23 и 24, чтобы список был консистентным.
+Изменения:
+- Brand Manager: кнопки выбора бренда переведены на компактный callback `a:bms` + compact `ret` (`bd/ba`).
+- Curator audit: добавлен компактный callback `a:ca` (короче `a:cur_audit`) + укороченные ключи (без конфликтов с `p.a`).
+- Brand filters: в `a:bx_fpick`/`a:bx_fset` убрано дублирование `pg`/`p` (меньше байт).
+- Admin callbacks: убран паттерн “answerCallbackQuery дважды” для `Нет доступа.` (в admin handlers).
+
+Доки:
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про callback_data лимит.
+- `docs/audit/26_CALLBACK_DATA_HARDENING_2026_03.md` — отчёт и QA.
 
 QA:
-- Убедиться, что `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md` существует и соответствует описанию из watchlist.
-- Убедиться, что `docs/audit/24_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md` существует, а файла `22_ADMIN_BROADCAST...` больше нет.
+- Brand Manager: длинный tg_id (10 цифр) + ret=brand_deals → кнопка выбора бренда должна отображаться и нажиматься.
+- Curator: `📜 Журнал` → переключения/пагинация должны работать, кнопки не исчезают.
+- Brand filters: значения 10+ символов в picker → кнопки должны оставаться кликабельными.
+- Admin: попытка нажать admin action non-admin → должен увидеть “Нет доступа.”.
 
-Риск регрессий: **нулевой** (docs-only).
+Риск регрессий: низкий (изменения точечные, добавлены алиасы для обратной совместимости).
 
 
-### STEP295 — Admin E2E smoke pack (docs-only)
+### STEP297 — Broadcast confirm idempotency (Redis degraded) — DB dedup + advisory lock
+Контекст:
+- В админском контуре рассылок `a:bc_confirm` мог создать **две** рассылки при двойном клике, если Redis деградировал (rateLimit не срабатывал) или два обработчика параллельно прочитали один draft.
+
 Цель:
-- Закрепить короткий end‑to‑end smoke по 👑 Админке (Users/Payments/Outbox/System/Broadcast), чтобы после деплоя за 10–12 минут ловить регрессии админских сценариев и “залипание” input‑mode.
+- Сделать подтверждение рассылки best‑effort идемпотентным **на стороне БД**, без миграций и без ожидания блокировок (fail‑fast в Neon).
 
-Изменения (docs-only):
-- Добавлен полный сценарий: `docs/audit/25_ADMIN_E2E_SMOKE_2026_03.md`.
-- `smoke-tests_short.md` дополнен секцией 15 со ссылкой на полный сценарий.
-- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про Admin E2E smoke + добавлена ссылка в audit report list.
+Изменения:
+- `src/db/queries.js`:
+  - добавлена `createBroadcastIdempotent()`:
+    - `pg_try_advisory_xact_lock(hashtext('bc_confirm:<admin_user_id>'))` (fail‑fast);
+    - dedup‑окно 45 сек: если найден идентичный `PENDING` broadcast, возвращаем его (не создаём новый);
+    - иначе создаём новый broadcast сразу с `total_count`.
+- `src/bot/bot.js`:
+  - `a:bc_confirm`: заменён `createBroadcast + updateBroadcast(total_count)` на `createBroadcastIdempotent(totalCount)`;
+  - добавлен UX для `busy`: «⏳ Уже создаю рассылку…».
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про bc_confirm идемпотентность.
+- `docs/audit/27_BROADCAST_CONFIRM_IDEMPOTENCY_2026_03.md` — отчёт и QA.
 
 QA:
-- Открыть `smoke-tests_short.md` и убедиться, что появилась секция 15 и ссылка на `docs/audit/25_...` корректна.
-- (Рекомендуется) Прогнать сценарии A–E на prod/staging.
+- Double‑click по `✅ Отправить` → создаётся **одна** рассылка.
+- При деградации Redis (rateLimit не срабатывает) double‑click всё равно не создаёт дубль.
 
-Риск регрессий: **нулевой** (docs-only).
+Риск регрессий: низкий (затрагивает только admin confirm‑путь; cron/delivery не менялись).
+
+
+### STEP298 — Menu/Home hot UI cache (Redis TTL 5m) — Neon-saving
+Контекст:
+- В горячих UI путях `📋 Меню` / `🏠 Home` было 2–3 SQL из `getRoleFlags()` + 1 SQL из `db.listWorkspaces()` (creator hub).
+
+Цель:
+- Снизить нагрузку на Neon, не меняя бизнес‑логику: сделать best‑effort Redis‑кеш с TTL 5 минут для role flags и списка workspaces.
+
+Изменения:
+- `src/bot/bot.js`:
+  - добавлены `getRoleFlagsCached()` / `listWorkspacesCached()` / `invalidateWorkspacesCache()`;
+  - `a:menu`, `a:menu_push`, `a:home`, `a:home_hint_ack` используют кешированную версию role flags;
+  - creator hub в `renderRoleHub()` использует кешированный список workspaces;
+  - `renderWsOpen()` принимает `opts.showCurator` и избегает лишнего SQL (используем уже известный флаг);
+  - при `setup_forward` (подключение канала) кеш списка workspaces инвалидируется.
+- Docs:
+  - `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про Menu/Home hot cache.
+  - `docs/audit/28_MENU_HOME_HOT_CACHE_2026_03.md` — отчёт и QA.
+
+QA:
+- Открыть `📋 Меню`/`🏠 Home` много раз подряд: после первого прогрева DB‑запросы должны резко уменьшиться.
+- Подключить новый канал → он должен быть виден сразу (кеш сброшен).
+- При Redis degraded меню должно продолжать работать (DB‑fallback).
+
+Риск регрессий: низкий (кеш влияет только на UI, права/действия остаются DB‑truth).
+
+
+### STEP299 — RateLimit fallback hardening + TTL for bm state
+Контекст:
+- В аудите отмечено, что fallback в `rateLimit()` использует неатомарный `INCR+EXPIRE` и при частичных сбоях может оставлять ключи **без TTL**.
+- Также обнаружены “вечные” ключи состояния brand‑manager режима (`bm_mode`, `bm_active_brand`) без TTL.
+
+Цель:
+- Убрать возможность появления ключей без TTL из-за fallback.
+- Сделать bm state “долгоживущим, но не вечным” (long TTL).
+
+Изменения:
+- `src/lib/redis.js`:
+  - `rateLimit()` использует только атомарный Lua `INCR` + `EXPIRE` on first hit.
+  - при деградации Redis / недоступности скриптов — **fail-open** (без non-atomic fallback).
+- `src/bot/bot.js`:
+  - `bm_mode` и `bm_active_brand` теперь записываются с TTL **365 дней** (refresh на запись).
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про rateLimit/TTL hardening.
+- `docs/audit/29_RATE_LIMIT_AND_REDIS_TTL_HARDENING_2026_03.md` — отчёт и QA.
+
+QA:
+- `npm run preflight` проходит.
+- В нормальном режиме rateLimit работает как раньше.
+- При деградации Redis rateLimit fail-open и не создаёт ключи без TTL.
+- Brand manager state пишет ключи с TTL (можно проверить TTL выборочно через SCAN/TTL).
+
+Риск регрессий: низкий (инфраструктурный helper + TTL на двух ключах).
+
+
+### STEP300 — Redis TTL hygiene gate (preflight)
+Контекст:
+- После P3 замечаний аудита важно не допустить возврата `redis.set(a, b)` без TTL в runtime‑код.
+
+Цель:
+- Добавить dev‑guardrail, который ловит двухаргументный `redis.set` (без `{ ex: ... }`) **до деплоя**.
+
+Изменения:
+- Добавлен `scripts/lint-redis-ttl.js` и `npm run lint:redis-ttl`.
+- `npm run preflight` теперь включает `lint:redis-ttl`.
+- В `src/bot/bot.js` помечены intentional‑persistent точки комментарием `TTL-LINT: ...`.
+
+Docs:
+- `docs/process/10_RELEASE_PREFLIGHT.md` — добавлен пункт `lint:redis-ttl`.
+- `docs/00_CURRENT_STATE.md` — watchlist дополнен пунктом про TTL hygiene gate.
+- `docs/audit/30_REDIS_TTL_HYGIENE_GATE_2026_03.md` — отчёт.
+
+QA:
+- `npm run preflight` проходит.
+- В коде нет новых `redis.set(a, b)` без TTL, кроме помеченных intentional‑persistent точек.
+
+Риск регрессий: **нулевой** (dev‑guardrail + комментарии).
+
