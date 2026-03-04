@@ -5,8 +5,8 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **512**
-- Actions in registry: **512**
+- Actions in code: **515**
+- Actions in registry: **515**
 
 ## Summary by type
 
@@ -14,7 +14,7 @@
 |---|---:|
 | admin | 84 |
 | edit | 338 |
-| ops | 75 |
+| ops | 78 |
 | pay | 11 |
 | view | 4 |
 
@@ -22,8 +22,8 @@
 
 | Guard | Count |
 |---|---:|
-| db_truth | 2 |
-| none | 156 |
+| db_truth | 4 |
+| none | 157 |
 | queue_first | 2 |
 | require_redis | 352 |
 
@@ -31,6 +31,9 @@
 
 | Action | Type | Guard |
 |---|---|---|
+| `a:acc_del_do` | ops | db_truth |
+| `a:acc_del_q` | ops | none |
+| `a:acc_restore` | ops | db_truth |
 | `a:adm_gift` | admin | require_redis |
 | `a:adm_gift_batch` | admin | require_redis |
 | `a:adm_gift_do` | admin | require_redis |
