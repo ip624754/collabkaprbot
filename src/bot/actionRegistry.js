@@ -431,6 +431,7 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:match_inc": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:menu": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:menu_push": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
+  "a:h": { type: ACTION_TYPES.VIEW, guard: ACTION_GUARD.NONE },
   "a:notice": { type: ACTION_TYPES.VIEW, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:push_ack": { type: ACTION_TYPES.VIEW, guard: ACTION_GUARD.NONE },
   "a:usr_ack": { type: ACTION_TYPES.VIEW, guard: ACTION_GUARD.NONE },

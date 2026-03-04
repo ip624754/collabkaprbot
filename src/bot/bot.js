@@ -3454,7 +3454,101 @@ function kbBrandAppAcceptedMore(appId, brandUserId) {
 }
 
 
+
+// STEP308: Hydration tokens for oversized callback_data (>64 bytes).
+// - Some flows build long navigation callbacks (filters/return paths) that can exceed Telegram's 64-byte limit.
+// - We automatically replace oversized callback_data with a short `a:h|h:<token>` and store the full callback in Redis.
+// - Navigation is fail-open: if Redis set/get fails or token is missing, we fall back to Menu/Home and show "Кнопка устарела".
+// - Tokens are per-user scoped (key includes tgId) to reduce cross-user reuse.
+const TG_CB_MAX_BYTES = 64;
+const CB_HYDRATION_TTL_SEC = envInt('CB_HYDRATION_TTL_SEC', 2 * 60 * 60, { min: 60, max: 7 * 24 * 60 * 60 });
+
+function cbByteLen(s) {
+  try { return Buffer.byteLength(String(s || ''), 'utf8'); } catch { return String(s || '').length; }
+}
+
+function cbHydrationKey(tgId, token) {
+  const uid = Number(tgId || 0);
+  const t = String(token || '').trim();
+  return k(['cbh', uid || 0, t]);
+}
+
+function isHydrationToken(token) {
+  const t = String(token || '').trim();
+  // hex tokens from randomToken(nBytes) => 2*nBytes chars
+  return /^[a-f0-9]{8,64}$/i.test(t);
+}
+
+async function getHydratedCallbackData(tgId, token) {
+  const uid = Number(tgId || 0);
+  if (!uid) return null;
+  if (!isHydrationToken(token)) return null;
+  const key = cbHydrationKey(uid, token);
+  try {
+    const v = await redis.get(key);
+    if (!v) return null;
+    return String(v);
+  } catch {
+    return null;
+  }
+}
+
+// Best-effort: mutate reply_markup.inline_keyboard in-place (works for grammy InlineKeyboard objects).
+async function hydrateReplyMarkupCallbacks(ctx, replyMarkup) {
+  const tgId = Number(ctx?.from?.id || 0);
+  if (!tgId || !replyMarkup) return replyMarkup;
+
+  const ik = replyMarkup?.inline_keyboard;
+  if (!Array.isArray(ik)) return replyMarkup;
+
+  let changed = false;
+  for (const row of ik) {
+    if (!Array.isArray(row)) continue;
+    for (const btn of row) {
+      if (!btn || typeof btn !== 'object') continue;
+      const cd = btn.callback_data;
+      if (!cd) continue;
+      const cdStr = String(cd);
+      if (cbByteLen(cdStr) <= TG_CB_MAX_BYTES) continue;
+      if (cdStr.startsWith('a:h|h:')) continue;
+
+      const token = randomToken(6); // 12 hex chars
+      const shortCd = `a:h|h:${token}`;
+
+      // Short cd must always fit.
+      if (cbByteLen(shortCd) > TG_CB_MAX_BYTES) {
+        btn.callback_data = 'a:menu';
+        changed = true;
+        continue;
+      }
+
+      try {
+        await redis.set(cbHydrationKey(tgId, token), cdStr, { ex: CB_HYDRATION_TTL_SEC });
+        btn.callback_data = shortCd;
+        changed = true;
+      } catch {
+        // Fail-open: if we can't hydrate, fall back to menu to avoid "button_data_invalid".
+        btn.callback_data = 'a:menu';
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    try { logger?.info?.({ cid: ctx?.state?.cid, tgId, kind: 'cb_hydrate' }, 'cb_hydrate'); } catch {}
+  }
+
+  return replyMarkup;
+}
+
 async function safeEditOrReply(ctx, text, extra = {}, preferEdit = true) {
+  // STEP308: auto-hydrate oversized callback_data to avoid Telegram 64-byte limit.
+  try {
+    if (extra && extra.reply_markup) {
+      extra = { ...extra, reply_markup: await hydrateReplyMarkupCallbacks(ctx, extra.reply_markup) };
+    }
+  } catch {}
+
   // Telegram sometimes rejects edits (old message, deleted message, not modified, etc.).
   // We never want the UI to "do nothing": fallback to sending a new message.
   if (preferEdit && ctx?.callbackQuery?.message) {
@@ -14254,6 +14348,54 @@ async function enqueueOfficialPublishVerifyJob(input = {}) {
 }
 
 
+async function enqueueOfficialPublishDeliverJob(input = {}) {
+  try {
+    if (!CFG.OFFICIAL_PUBLISH_ENABLED) return { ok: false, skipped: 'disabled' };
+    const offerId = Number(input.offerId || 0);
+    if (!offerId) return { ok: false, skipped: 'no_offer' };
+
+    const url = getQStashDeliveryUrl('/api/qstash/official-publish-deliver');
+    if (!url) return { ok: false, error: 'public_base_url_missing' };
+
+    const health = getQStashLibHealth();
+    if (!health.available) return { ok: false, error: 'qstash_disabled' };
+    if (!process.env.QSTASH_TOKEN || !process.env.QSTASH_CURRENT_SIGNING_KEY) return { ok: false, error: 'qstash_not_configured' };
+
+    const wsId = Number(input.wsId || 0) || 0;
+    const offerTitle = String(input.offerTitle || '').trim();
+    const channelChatId = Number(input.channelChatId || CFG.OFFICIAL_CHANNEL_ID || 0) || 0;
+
+    const prevStatus = String(input.prevStatus || '').trim();
+    const attempt = Number(input.attempt || 0) || 0;
+
+    // Dedup by (offerId + minute + action) so double-clicks don't fan out.
+    const minute = Math.floor(Date.now() / 60000);
+    const action = String(input.action || 'publish').slice(0, 16) || 'publish';
+    const dedupId = `offpd:${offerId}:${action}:m:${minute}:a:${attempt}`;
+
+    await qstashPublishJSON({
+      url,
+      body: {
+        offerId,
+        wsId,
+        offerTitle,
+        channelChatId,
+        prevStatus,
+        attempt,
+        action,
+        queued_at: new Date().toISOString(),
+      },
+      deduplicationId: dedupId,
+      retries: 5,
+      timeout: '20s',
+    });
+
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e || 'error') };
+  }
+}
+
 async function buildOfficialOfferPost(offerRow, opts = {}) {
   const forCaption = Boolean(opts.forCaption);
 
@@ -14310,6 +14452,120 @@ function extractOfferIdFromOfficialPostText(raw) {
   const id = Number(m[1]);
   return Number.isFinite(id) && id > 0 ? id : null;
 }
+
+async function queueOfficialPublishToOfficialChannel(api, offerId, opts = {}) {
+  // If QStash is not configured, fallback to the legacy synchronous publish path.
+  try {
+    const health = getQStashLibHealth();
+    const url = getQStashDeliveryUrl('/api/qstash/official-publish-deliver');
+    const ready = health.available && !!url && !!process.env.QSTASH_TOKEN && !!process.env.QSTASH_CURRENT_SIGNING_KEY;
+    if (!ready) return await publishOfferToOfficialChannel(api, offerId, opts);
+  } catch {
+    // If anything is off, keep working in legacy mode.
+    return await publishOfferToOfficialChannel(api, offerId, opts);
+  }
+
+  if (!CFG.OFFICIAL_PUBLISH_ENABLED) throw new Error('OFFICIAL_PUBLISH_ENABLED=false');
+
+  const channelId = Number(CFG.OFFICIAL_CHANNEL_ID || 0);
+  if (!channelId) throw new Error('OFFICIAL_CHANNEL_ID is missing');
+
+  const lockKey = k(['lock', 'official', String(offerId)]);
+  const lock = await acquireLock(lockKey, OFFICIAL_OFFER_LOCK_TTL_SEC);
+  if (!lock) return { ok: false, locked: true, reason: 'busy' };
+  try {
+
+  // Normalize placement type.
+  const placementRaw = String(opts.placementType || 'MANUAL').toUpperCase();
+  const keepExpiry = !!opts.keepExpiry;
+
+  // Existing DB record (if any).
+  const existing = await safeOfficialPosts(() => db.getOfficialPostByOfferId(offerId), async () => null);
+  let placementType = placementRaw;
+  if (placementType === 'UPDATE') {
+    placementType = existing?.placement_type ? String(existing.placement_type).toUpperCase() : 'MANUAL';
+  }
+  if (!['MANUAL', 'PAID'].includes(placementType)) placementType = 'MANUAL';
+
+  const offer = CFG.VERIFICATION_ENABLED
+    ? await safeUserVerifications(() => db.getBarterOfferPublicWithVerified(offerId), () => db.getBarterOfferPublic(offerId))
+    : await db.getBarterOfferPublic(offerId);
+
+  if (!offer) throw new Error('Offer not found');
+  if (String(offer.status || '').toUpperCase() !== 'ACTIVE') throw new Error('Offer is not active');
+  if (!offer.network_enabled) throw new Error('Offer is not in network');
+
+  // Slot params
+  const defaultDays = Math.max(1, Number(CFG.OFFICIAL_MANUAL_DEFAULT_DAYS || 3));
+  const days = Math.max(
+    1,
+    Number(opts.days || existing?.slot_days || defaultDays)
+  );
+
+  // Expiry: keep existing if asked, otherwise (re)compute.
+  let slotExpiresAt = null;
+  if (keepExpiry && existing?.slot_expires_at) {
+    try { slotExpiresAt = new Date(existing.slot_expires_at).toISOString(); } catch { slotExpiresAt = null; }
+  }
+  if (!slotExpiresAt) slotExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+  const paymentId = opts.paymentId ? Number(opts.paymentId) : (existing?.payment_id ? Number(existing.payment_id) : null);
+  const publishedByUserId = opts.publishedByUserId ? Number(opts.publishedByUserId) : null;
+
+  const prevStatus = existing?.status ? String(existing.status).toUpperCase() : null;
+
+  // DB-level reserve before async delivery (safety if Redis degrades).
+  const reserved = await safeOfficialPosts(
+    () => db.atomicReserveOfficialPublish(offerId, {
+      channelChatId: channelId,
+      placementType,
+      paymentId,
+      slotDays: days,
+      slotExpiresAt,
+      publishedByUserId
+    }),
+    async () => null
+  );
+  if (!reserved) return { ok: false, locked: true, reason: 'publishing' };
+
+  // Schedule a delayed self-heal check to avoid long "PUBLISHING" stalls.
+  try {
+    await enqueueOfficialPublishVerifyJob({
+      offerId,
+      wsId: offer.workspace_id,
+      offerTitle: offer.title,
+      channelChatId: channelId,
+    });
+  } catch {}
+
+  // Enqueue async delivery.
+  const q = await enqueueOfficialPublishDeliverJob({
+    offerId,
+    wsId: offer.workspace_id,
+    offerTitle: offer.title,
+    channelChatId: channelId,
+    prevStatus: prevStatus || 'PENDING',
+    action: String(opts.placementType || 'publish'),
+  });
+
+  if (!q || !q.ok) {
+    // Fail-open for UI: reset to PENDING/prevStatus so operator can retry.
+    try {
+      await safeOfficialPosts(
+        () => db.setOfficialPostStatus(offerId, prevStatus || 'PENDING', { lastError: `enqueue_failed:${String(q?.error || 'error').slice(0, 160)}` }),
+        async () => null
+      );
+    } catch {}
+    return { ok: false, error: 'enqueue_failed' };
+  }
+
+  return { ok: true, queued: true, placementType, days, slotExpiresAt };
+
+  } finally {
+    await releaseLock(lockKey, lock.token);
+  }
+}
+
 
 async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
   if (!CFG.OFFICIAL_PUBLISH_ENABLED) throw new Error('OFFICIAL_PUBLISH_ENABLED=false');
@@ -14491,6 +14747,143 @@ async function publishOfferToOfficialChannel(api, offerId, opts = {}) {
 }
 
 
+
+export async function deliverOfficialPublishReserved(api, offerId, opts = {}) {
+  if (!CFG.OFFICIAL_PUBLISH_ENABLED) throw new Error('OFFICIAL_PUBLISH_ENABLED=false');
+
+  const channelIdFallback = Number(CFG.OFFICIAL_CHANNEL_ID || 0);
+  if (!channelIdFallback) throw new Error('OFFICIAL_CHANNEL_ID is missing');
+
+  const lockKey = k(['lock', 'official', String(offerId)]);
+  const lock = await acquireLock(lockKey, OFFICIAL_OFFER_LOCK_TTL_SEC);
+  if (!lock) return { ok: false, locked: true, reason: 'busy' };
+  try {
+
+  const prevStatus = String(opts.prevStatus || 'PENDING').toUpperCase();
+
+  // Read current post record (DB-truth)
+  const existing = await safeOfficialPosts(() => db.getOfficialPostByOfferId(offerId), async () => null);
+  const st = String(existing?.status || 'NONE').toUpperCase();
+  if (st !== 'PUBLISHING') return { ok: true, skipped: true, reason: 'not_publishing', status: st };
+
+  const channelId = Number(existing?.channel_chat_id || channelIdFallback);
+  const placementType = String(existing?.placement_type || 'MANUAL').toUpperCase();
+  const paymentId = existing?.payment_id ? Number(existing.payment_id) : null;
+  const days = Math.max(1, Number(existing?.slot_days || CFG.OFFICIAL_MANUAL_DEFAULT_DAYS || 3));
+
+  let slotExpiresAt = null;
+  if (existing?.slot_expires_at) {
+    try { slotExpiresAt = new Date(existing.slot_expires_at).toISOString(); } catch { slotExpiresAt = null; }
+  }
+  if (!slotExpiresAt) slotExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+  const publishedByUserId = existing?.published_by_user_id ? Number(existing.published_by_user_id) : null;
+
+  const offer = CFG.VERIFICATION_ENABLED
+    ? await safeUserVerifications(() => db.getBarterOfferPublicWithVerified(offerId), () => db.getBarterOfferPublic(offerId))
+    : await db.getBarterOfferPublic(offerId);
+
+  if (!offer) throw new Error('Offer not found');
+  if (String(offer.status || '').toUpperCase() !== 'ACTIVE') throw new Error('Offer is not active');
+  if (!offer.network_enabled) throw new Error('Offer is not in network');
+
+  // Build message
+  const hasMedia = !!(offer.media_file_id && String(offer.media_type || '').trim());
+  const built = await buildOfficialOfferPost(offer, { forCaption: hasMedia });
+  const text = built.text;
+  const replyMarkup = built.kb;
+
+  // If message_id already exists (e.g., UPDATE), prefer edit.
+  let messageId = existing?.message_id ? Number(existing.message_id) : null;
+
+  async function tryEditExisting() {
+    if (!messageId) return false;
+    try {
+      await api.editMessageText(channelId, messageId, text, { parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
+      return true;
+    } catch {}
+    try {
+      await api.editMessageCaption(channelId, messageId, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
+      return true;
+    } catch {}
+    return false;
+  }
+
+  const edited = await tryEditExisting();
+  if (!edited) {
+    // Send new message
+    let sent;
+    const mt = String(offer.media_type || '').toLowerCase();
+    const fid = String(offer.media_file_id || '').trim();
+
+    if (hasMedia && fid) {
+      if (mt === 'photo') {
+        sent = await api.sendPhoto(channelId, fid, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
+      } else if (mt === 'video') {
+        sent = await api.sendVideo(channelId, fid, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
+      } else if (mt === 'animation' || mt === 'gif') {
+        sent = await api.sendAnimation(channelId, fid, { caption: text, parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
+      } else {
+        sent = await api.sendMessage(channelId, text, { parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
+      }
+    } else {
+      sent = await api.sendMessage(channelId, text, { parse_mode: 'HTML', reply_markup: replyMarkup }, tgTimeoutSignal());
+    }
+
+    const newId = sent?.message_id ? Number(sent.message_id) : null;
+    if (!newId) throw new Error('Failed to publish: missing message_id');
+
+    // Breadcrumb message_id in Redis ASAP (helps self-heal if DB write fails).
+    await writeOfficialPublishMsgIdBreadcrumb(offerId, newId, 'send');
+
+    // Remove old message (best-effort) if it existed.
+    if (messageId && newId !== messageId) {
+      try { await api.deleteMessage(channelId, messageId, tgTimeoutSignal()); } catch {}
+    }
+    messageId = newId;
+  }
+
+  // Persist ACTIVE post record
+  await safeOfficialPosts(
+    () => db.setOfficialPostActive(offerId, {
+      channelChatId: channelId,
+      messageId,
+      placementType,
+      paymentId,
+      slotDays: days,
+      slotExpiresAt,
+      publishedByUserId
+    }),
+    async () => null
+  );
+
+  // Keep breadcrumb even after DB write (helps on webhook/DB glitches).
+  await writeOfficialPublishMsgIdBreadcrumb(offerId, messageId, 'db_active');
+
+  // If this was a paid placement, mark payment as "applied" (best-effort).
+  if (placementType === 'PAID' && paymentId && publishedByUserId) {
+    try {
+      await db.markPaymentApplied(paymentId, publishedByUserId, `official_publish:${offerId}`);
+    } catch {
+      // ignore
+    }
+  }
+
+  return { ok: true, messageId, placementType, days, slotExpiresAt };
+
+  } catch (e) {
+    // Best-effort revert publishing marker (unblock UI).
+    try {
+      await safeOfficialPosts(
+        () => db.setOfficialPostStatus(offerId, prevStatus || 'PENDING', { lastError: String(e && (e.message || e) || 'publish_failed') }),
+        async () => null
+      );
+    } catch {}
+    throw e;
+  } finally {
+    await releaseLock(lockKey, lock.token);
+  }
+}
 
 async function removeOfficialOfferPost(api, offerId, reason = 'REMOVED') {
   const existing = await safeOfficialPosts(() => db.getOfficialPostByOfferId(offerId), async () => null);
@@ -21952,7 +22345,23 @@ bot.on('message:successful_payment', async (ctx) => {
     }
   } catch {}
 
-  const p = parseCb(ctx.callbackQuery.data);
+  let p = parseCb(ctx.callbackQuery.data);
+
+  // STEP308: hydrate oversized callback_data via token (a:h|h:<token>).
+  if (String(p?.a || '') === 'a:h' && p?.h) {
+    const tgId = Number(ctx.from?.id || 0);
+    const token = String(p.h || '').trim();
+    const full = await getHydratedCallbackData(tgId, token);
+    if (!full) {
+      try { await ctx.answerCallbackQuery({ text: 'Кнопка устарела. Открой меню.' }); } catch {}
+      const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+      await safeEditOrReply(ctx, `⚠️ <b>Кнопка устарела</b> (после обновления).
+
+Открой меню и продолжай оттуда.`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+    p = parseCb(full);
+  }
     // MENU ALIASES (no-break): support legacy action names from older messages
     const _aliasA = {
       'a:brand_managers': 'a:brand_team',
@@ -30432,7 +30841,7 @@ if (p.a === 'a:admin_outbox_clear_q') {
       }
 
       try {
-        const pubRes = await publishOfferToOfficialChannel(ctx.api, offerId, {
+        const pubRes = await queueOfficialPublishToOfficialChannel(ctx.api, offerId, {
           placementType,
           days,
           paymentId,
@@ -30469,7 +30878,7 @@ if (p.a === 'a:admin_outbox_clear_q') {
         return;
       }
       try {
-        const pubRes = await publishOfferToOfficialChannel(ctx.api, offerId, {
+        const pubRes = await queueOfficialPublishToOfficialChannel(ctx.api, offerId, {
           placementType: 'UPDATE',
           keepExpiry: true,
           publishedByUserId: u.id
@@ -35907,7 +36316,7 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
       const days = Number(parts[3] || CFG.OFFICIAL_MANUAL_DEFAULT_DAYS);
       if (!CFG.OFFICIAL_PUBLISH_ENABLED) throw new Error('Official publishing disabled');
       if (!offerId) throw new Error('Bad offerId');
-            const pubRes = await publishOfferToOfficialChannel(ctx.api, offerId, {
+            const pubRes = await queueOfficialPublishToOfficialChannel(ctx.api, offerId, {
         placementType: 'PAID',
         paymentId: row.id,
         days,
@@ -35919,8 +36328,11 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
         await renderAdminPaymentView(ctx, row.id, backStatus, page);
         return;
       }
-      await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_official_publish:${offerId}:${days}d`);
-      await ctx.answerCallbackQuery({ text: 'Опубликовано ✅', show_alert: true });
+      if (pubRes && pubRes.queued) {
+        await ctx.answerCallbackQuery({ text: 'Поставлено в очередь ✅', show_alert: true });
+      } else {
+        await ctx.answerCallbackQuery({ text: 'Опубликовано ✅', show_alert: true });
+      }
       await renderAdminPaymentView(ctx, row.id, backStatus, page);
       return;
     }
