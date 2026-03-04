@@ -206,7 +206,18 @@ export const CFG = {
   PAYMENTS_AUTO_APPLY_DEFAULT: parseBoolSafe(process.env.PAYMENTS_AUTO_APPLY_DEFAULT, true),
   // Payments: fulfill based on invoice payload even if Redis pay_* session expired.
   // Helps eliminate ORPHANED: missing_session.
-  PAYMENTS_FALLBACK_APPLY_ENABLED: parseBoolSafe(process.env.PAYMENTS_FALLBACK_APPLY_ENABLED, true),
+  PAYMENTS_FALLBACK_APPLY_ENABLED: parseBoolSafe(process.env.PAYMENTS_FALLBACK_APPLY_ENABLED, false),
+  // Payments: HMAC-sign invoice payload token to prevent forged/foreign payloads in fallback.
+  // If key is set, new invoices include token+sig (hex). Fallback verifies signature.
+  PAYMENTS_PAYLOAD_HMAC_KEY: String(process.env.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim(),
+  PAYMENTS_PAYLOAD_HMAC_LEN: (() => {
+    const n = parseIntSafe(process.env.PAYMENTS_PAYLOAD_HMAC_LEN, 10);
+    return Math.max(6, Math.min(n, 16));
+  })(),
+  // Allow unsigned legacy payloads in fallback when HMAC key is configured.
+  // Keep disabled by default; enable temporarily only if you must process old invoices without signature.
+  PAYMENTS_FALLBACK_ALLOW_UNSIGNED: parseBoolSafe(process.env.PAYMENTS_FALLBACK_ALLOW_UNSIGNED, false),
+
 
   // Payments: auto-heal ORPHANED payments with note=missing_session (cron + admin action).
   PAYMENTS_ORPHANED_AUTOHEAL_ENABLED: parseBoolSafe(process.env.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED, true),
