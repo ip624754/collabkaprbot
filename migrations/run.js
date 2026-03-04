@@ -9,6 +9,8 @@ import { pool } from '../src/db/pool.js';
 // - Deterministic ordering
 // - Exactly-once application (schema_migrations table)
 // - Checksums to prevent "silent edits" of old migrations
+// - SQL checksum normalization (LF + trimEnd) to avoid false mismatches
+//   from CRLF/LF conversions or trailing newline-only edits.
 // - Each migration runs in its own transaction
 // =====================================================
 
@@ -27,6 +29,51 @@ function sha256Hex(s) {
     .createHash('sha256')
     .update(String(s || ''), 'utf8')
     .digest('hex');
+}
+
+function normalizeEolToLf(s) {
+  // Canonicalize Windows/Mac line endings to LF.
+  return String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+function normalizeSqlForChecksum(sql) {
+  // Canonical checksum basis:
+  // 1) normalize EOLs to LF
+  // 2) drop trailing whitespace/newlines at EOF only
+  // NOTE: we do NOT strip whitespace inside the file.
+  return normalizeEolToLf(sql).trimEnd();
+}
+
+function checksumCandidates(sqlRaw) {
+  const raw = String(sqlRaw || '');
+  const lf = normalizeEolToLf(raw);
+  const lfTrim = lf.trimEnd();
+  const crlf = lf.replace(/\n/g, '\r\n');
+  const crlfTrim = lfTrim.replace(/\n/g, '\r\n');
+
+  // Backward-compatible candidates:
+  // - raw current file (whatever EOLs it has now)
+  // - canonical LF / canonical CRLF
+  // - normalized LF (trimEnd)
+  // - normalized LF with 1..3 trailing \n (common "final newline" toggles)
+  // - normalized CRLF with 1..3 trailing \r\n
+  const c = {
+    raw: sha256Hex(raw),
+    lf: sha256Hex(lf),
+    crlf: sha256Hex(crlf),
+    norm: sha256Hex(lfTrim),
+    norm_lf1: sha256Hex(lfTrim + '\n'),
+    norm_lf2: sha256Hex(lfTrim + '\n\n'),
+    norm_lf3: sha256Hex(lfTrim + '\n\n\n'),
+    norm_crlf1: sha256Hex(crlfTrim + '\r\n'),
+    norm_crlf2: sha256Hex(crlfTrim + '\r\n\r\n'),
+    norm_crlf3: sha256Hex(crlfTrim + '\r\n\r\n\r\n')
+  };
+
+  return {
+    normalizedSql: normalizeSqlForChecksum(sqlRaw),
+    candidates: c
+  };
 }
 
 async function ensureMigrationsTable() {
@@ -81,18 +128,28 @@ async function run() {
 
   for (const f of files) {
     const fullPath = path.join(__dirname, f);
-    const sql = fs.readFileSync(fullPath, 'utf8');
-    const checksum = sha256Hex(sql);
+    const sqlRaw = fs.readFileSync(fullPath, 'utf8');
+
+    const { candidates } = checksumCandidates(sqlRaw);
+    const checksumToStore = candidates.norm;
 
     const prev = await getApplied(f);
     if (prev) {
-      if (String(prev.checksum || '') !== checksum) {
+      const expected = String(prev.checksum || '');
+      const ok = Object.values(candidates).includes(expected);
+
+      if (!ok) {
         throw new Error(
           `[MIGRATIONS] Checksum mismatch for ${f}.\n` +
             `This indicates an old migration file was edited.\n` +
-            `Expected: ${prev.checksum}\nActual:   ${checksum}`
+            `Expected: ${expected}\n` +
+            `Actual(raw):  ${candidates.raw}\n` +
+            `Actual(LF):   ${candidates.lf}\n` +
+            `Actual(CRLF): ${candidates.crlf}\n` +
+            `Actual(norm): ${candidates.norm}`
         );
       }
+
       skipped += 1;
       continue;
     }
@@ -106,10 +163,10 @@ async function run() {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query(sql);
+      await client.query(sqlRaw);
       await client.query(
         `INSERT INTO ${MIGRATIONS_TABLE}(name, checksum) VALUES ($1, $2)`,
-        [f, checksum]
+        [f, checksumToStore]
       );
       await client.query('COMMIT');
       applied += 1;
