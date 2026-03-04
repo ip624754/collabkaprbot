@@ -3228,6 +3228,30 @@ async function renderRoleSelection(ctx, u, opts = {}) {
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
+async function renderAccountDeletedGate(ctx, opts = {}) {
+  const edit = opts.edit === true;
+  const text = `🗑 <b>Аккаунт удалён</b>
+
+Мы очистили ваши контакты/профили в Collabka PR и убрали их из каталога.
+
+Что важно:
+• переписка в Telegram у других пользователей останется
+• платежи/служебная история сохраняются для отчётности
+
+Чтобы снова пользоваться ботом — восстанови аккаунт.`;
+
+  const kb = new InlineKeyboard()
+    .text('♻️ Восстановить', 'a:acc_restore')
+    .row()
+    .text('💬 Поддержка', 'a:support')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+
+  if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
 async function renderRoleHub(ctx, u, flags) {
   // Role hub is a navigation home for Back in BX flows
   if (ctx.from?.id) await setUiHome(ctx.from.id, BX_HOME.MENU);
@@ -20978,6 +21002,12 @@ ${list}
         return;
       }
 
+      // Tombstone gate
+      if (u?.is_deleted && !isSuperAdminTg(ctx.from.id)) {
+        await renderAccountDeletedGate(ctx, { edit: false });
+        return;
+      }
+
       db.trackEvent('start', {
         userId: u.id,
         meta: {
@@ -22502,6 +22532,16 @@ Redis сейчас недоступен. Обычно опасные дейст�
       return;
     }
 
+    // Tombstone gate: deleted users can only restore or contact support.
+    if (u?.is_deleted && !isSuperAdminTg(ctx.from.id)) {
+      const a = String(p?.a || '');
+      const allow = (a === 'a:acc_restore' || a === 'a:support' || a === 'a:support_write');
+      if (!allow) {
+        await renderAccountDeletedGate(ctx, { edit: true });
+        return;
+      }
+    }
+
     // Cancel any pending text input step when user clicks an inline button
     try { await clearExpectText(ctx.from.id); } catch {}
 
@@ -22886,6 +22926,97 @@ if (p.a === 'a:support_push') {
   return;
 }
 
+// Account deletion (tombstone/anonymize)
+if (p.a === 'a:acc_del_q') {
+  const text = `🗑 <b>Удалить аккаунт?</b>
+
+Это действие:
+• очистит контакты/профили в Collabka PR
+• отключит показ в каталогах
+• отзовёт роли менеджера/редактора/куратора
+
+В Telegram переписка у других пользователей останется.
+
+⚠️ Подтверждение ниже — необратимо.`;
+
+  const kb = new InlineKeyboard()
+    .text('✅ Да, удалить', 'a:acc_del_do')
+    .row()
+    .text('⬅️ Назад', 'a:support')
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  return;
+}
+
+if (p.a === 'a:acc_del_do') {
+  try { await ctx.answerCallbackQuery({ text: '⏳ Удаляю…' }); } catch {}
+
+  try {
+    await db.tombstoneUser(u.id);
+  } catch (e) {
+    const code = String(e?.code || '');
+    if (code === 'MISSING_SOFT_DELETE_COLUMNS') {
+      const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+      await safeEditOrReply(
+        ctx,
+        `⚠️ <b>Нужна миграция soft-delete</b>
+
+В базе нет колонок <code>is_deleted/deleted_at</code>.
+
+Запусти миграции через <code>migrations/run.js</code>, затем повтори.`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      return;
+    }
+    throw e;
+  }
+
+  // Best-effort: clear UI role/session hints in Redis (does not affect DB-truth).
+  try { await redis.del(k(['ui_mode', ctx.from.id])); } catch {}
+  try { await redis.del(k(['bm_mode', ctx.from.id])); } catch {}
+  try { await redis.del(k(['cur_mode', ctx.from.id])); } catch {}
+  try { await redis.del(bmActiveBrandKey(ctx.from.id)); } catch {}
+
+  try { await ctx.answerCallbackQuery({ text: '🗑 Аккаунт удалён' }); } catch {}
+  await renderAccountDeletedGate(ctx, { edit: true });
+  return;
+}
+
+if (p.a === 'a:acc_restore') {
+  try { await ctx.answerCallbackQuery({ text: '⏳ Восстанавливаю…' }); } catch {}
+
+  try {
+    await db.restoreUser(u.id);
+  } catch (e) {
+    const code = String(e?.code || '');
+    if (code === 'MISSING_SOFT_DELETE_COLUMNS') {
+      const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+      await safeEditOrReply(
+        ctx,
+        `⚠️ <b>Нужна миграция soft-delete</b>
+
+В базе нет колонок <code>is_deleted/deleted_at</code>.
+
+Запусти миграции через <code>migrations/run.js</code>, затем повтори.`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      return;
+    }
+    throw e;
+  }
+
+  // Best-effort: drop persisted UI mode so user can pick a fresh role.
+  try { await redis.del(k(['ui_mode', ctx.from.id])); } catch {}
+  try { await redis.del(k(['bm_mode', ctx.from.id])); } catch {}
+  try { await redis.del(k(['cur_mode', ctx.from.id])); } catch {}
+  try { await redis.del(bmActiveBrandKey(ctx.from.id)); } catch {}
+
+  try { await ctx.answerCallbackQuery({ text: '✅ Аккаунт восстановлен' }); } catch {}
+  await renderRoleSelection(ctx, u, { edit: true });
+  return;
+}
+
 if (p.a === 'a:support') {
   const text = `💬 <b>Поддержка</b>
 
@@ -22908,8 +23039,12 @@ if (p.a === 'a:support') {
 
   const kb = new InlineKeyboard()
     .text('✍️ Написать в поддержку', 'a:support_write')
-    .row()
-    .text('🧭 Быстрый старт', 'a:guide')
+    .row();
+
+  // Show delete option only for active accounts.
+  if (!u?.is_deleted) kb.text('🗑 Удалить аккаунт', 'a:acc_del_q').row();
+
+  kb.text('🧭 Быстрый старт', 'a:guide')
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
 

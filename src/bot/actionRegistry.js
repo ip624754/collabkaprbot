@@ -472,6 +472,10 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:pm_view": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:pro_home": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:role_pick": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
+  // Account privacy: tombstone/anonymize must be DB-truth (works even when Redis is degraded).
+  "a:acc_del_q": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.NONE },
+  "a:acc_del_do": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.DB_TRUTH },
+  "a:acc_restore": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.DB_TRUTH },
   "a:send_request_to_creator": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:setup": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:share": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
