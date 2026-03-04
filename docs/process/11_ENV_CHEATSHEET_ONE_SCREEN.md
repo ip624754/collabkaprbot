@@ -55,6 +55,7 @@
 | `INTRO_TRIAL_CREDITS` | `3` | |
 | `INTRO_DAILY_LIMIT_UNVERIFIED` | `30` | как у тебя сейчас |
 | `INTRO_DAILY_LIMIT` | `50` | как у тебя сейчас |
+| `ACQ_TOTAL_TTL_DAYS` | `365` | TTL для `ref:*:total` (acquisition totals). `0` = хранить навсегда |
 | `RATE_LIMIT_ENABLED` | `true` | infra включаем |
 
 ---
