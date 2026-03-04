@@ -16,6 +16,7 @@
     "actions:dump": "node scripts/actions-registry-check.js",
     "actions:md": "node scripts/actions-registry-export-md.js --out docs/02_ACTION_KEYS_REGISTRY.md",
     "lint:redis-atomic": "node scripts/lint-redis-atomic.js",
+    "lint:redis-ttl": "node scripts/lint-redis-ttl.js",
     "lint:redis-exports": "node scripts/lint-redis-exports.js",
     "lint:public-contacts": "node scripts/lint-public-contacts.js",
     "gen:migration-pack": "node scripts/gen-mark-all-applied.js",
