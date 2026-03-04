@@ -224,11 +224,26 @@ export default async function handler(_req, res) {
         broadcast.qstash_last_delivery_at = null;
       }
 
-      const untilMs = Number(untilRaw) || 0;
+      let untilMs = Number(untilRaw) || 0;
       const bid = Number(bidRaw) || 0;
       broadcast.broadcast_id = bid > 0 ? bid : null;
       broadcast.last_429_at = lastAt || null;
       broadcast.last_429_reason = lastReason || null;
+
+      // Fallback: if global cooldown_until is missing but broadcast_id is known,
+      // try per-broadcast cooldown key (Redis-only; no DB).
+      if (!untilMs && bid > 0) {
+        try {
+          const perRaw = await redis.get(k(['broadcast', String(bid), 'cooldown_until']));
+          const perMs = Number(perRaw) || 0;
+          if (perMs > 0) {
+            untilMs = perMs;
+            broadcast.cooldown_source = 'redis_per_broadcast';
+          }
+        } catch {
+          // ignore
+        }
+      }
 
       // counters written by cron tick
       const [setCnt, skipCnt, deferSetCnt, deferWaitCnt, quarSetCnt] = await readMany([
@@ -249,7 +264,7 @@ export default async function handler(_req, res) {
       };
 
       if (untilMs > 0) {
-        broadcast.cooldown_source = 'redis_global';
+        if (!broadcast.cooldown_source) broadcast.cooldown_source = 'redis_global';
         broadcast.cooldown_until = new Date(untilMs).toISOString();
         if (untilMs > Date.now()) {
           broadcast.retry_after_sec = Math.max(1, Math.ceil((untilMs - Date.now()) / 1000));
