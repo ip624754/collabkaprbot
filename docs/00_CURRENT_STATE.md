@@ -97,6 +97,10 @@ Audit report (Broadcast E2E smoke): `docs/audit/21_BROADCAST_E2E_SMOKE_2026_03.m
 
 Audit report (Admin UX sweep): `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
 
+Audit report (Broadcast prompt polish): `docs/audit/23_BROADCAST_PROMPT_POLISH_2026_03.md`.
+
+Audit report (Admin Broadcast audit + polish): `docs/audit/24_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md`.
+
 
 ---
 
