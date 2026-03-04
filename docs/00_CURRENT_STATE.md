@@ -75,6 +75,8 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 
 **STEP314:** деградация Redis — унифицированы тексты «кеш/сессии недоступны» (единый copy‑блок), fail‑closed middleware для `guard: REQUIRE_REDIS` показывает консистентный HTML‑экран + stateless allowlist (`s:menu/s:home/s:help/s:reset_input`).
 
+**STEP318:** Broadcast 429 cooldown — set cooldown делается атомарно (Lua) для per‑broadcast и global ключей, воркеры (cron + QStash deliver) уважают паузу; `/api/health` показывает `broadcast.cooldown_until` (с Redis fallback на per‑broadcast ключ при частичных ключах).
+
 
 28) **STEP301 micro consistency (P3):** в админской рассылке (экран «🔗 Кнопки») шаблоны и действия выровнены в 2×2, добавлен явный admin‑footer (⬅️ Админка / 📋 Меню / 🏠 Home); в `api/qstash/broadcast-deliver.js` убран scope‑shadow `url` в cooldown‑ветке (используем `deliverUrl`); в `redactContactsInText` убран паттерн `.test()+.replace()` на глобальных regex — теперь один проход `replace` + проверка изменения строки (без stateful edge‑кейсов).
 
@@ -204,7 +206,7 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 
 31) **Migration pack sync (preflight gate):** `migration_pack/00_mark_all_applied.sql` авто‑генерируется из `migrations/` (checksum нормализован: LF + `trimEnd`) и теперь проверяется в `npm run preflight` (файл не должен меняться при `npm run gen:migration-pack`). Это предотвращает дрейф pack’а и ложные попытки прогнать уже применённые миграции.
 
-32) **Official publish mini-outbox (QStash):** публикация в @collabka_offers теперь идёт через reserve→enqueue→deliver: операторский клик ставит запись в `PUBLISHING` и ставит задачу в QStash; воркер делает Telegram send/edit и переводит в `ACTIVE` (self-heal verify остаётся страховкой на случай serverless hard-kill).
+32) **Official publish mini-outbox (QStash):** публикация в @collabka_offers теперь идёт через reserve→enqueue→deliver: операторский клик ставит запись в `PUBLISHING` и ставит задачу в QStash; воркер делает Telegram send/edit и переводит в `ACTIVE` (self-heal verify остаётся страховкой на случай serverless hard-kill). **STEP316:** enqueue/dedup привязан к DB‑reserve (`updated_at`), а при успешном Telegram send/edit и падении на DB‑финализации статус больше не откатываем в `PENDING` — оставляем `PUBLISHING` + Redis breadcrumb + ускоренный verify, чтобы избежать дублей.
 
 33) **PG statement_timeout parameterization:** установка `statement_timeout` теперь делается через `set_config()` с параметром (без интерполяции), с безопасным fallback на `SET/SET LOCAL` при нестандартном поведении pooler’а.
 
@@ -732,6 +734,7 @@ Instagram (текущий режим: **только ссылка в карто�
 - Brand Pass UX: «💳 Купить ещё» из витрины креатора → Brand Pass → кнопка «⬅️ Вернуться к витрине».
 - Creator → заявки брендам: «✍️ Написать заявку» включает явный режим ввода + «❌ Отмена ввода» (без “тишины”).
 - Brand Inbox: «✅ Принять» — точка списания (exactly‑once), до принятия нельзя «Ответить/Шаблоны»; показываем баланс кредитов (Redis-only).
+- Brand Inbox guards (STEP317): при отправке сообщений (brand reply / creator chat) повторно проверяем DB‑status и никогда не двигаем `new → in_progress` без ✅ Принять (без скрытых обходов).
 - Giveaways: «➕ Новый розыгрыш» при отсутствии/проблеме канала показывает gate‑экран (как в офферах), без молчаливых тупиков.
 - UX polish: убрали “legacy/старое” из UI, добавили кнопки `🧹 Очистить` (контакт/IG/портфолио/описание + structured поля); `-` остаётся скрытым шорткатом для совместимости.
 - Sweep: в ключевых местах вместо “тишины” на устаревших кнопках показываем понятный экран + кнопки назад/меню/home.
