@@ -68,6 +68,13 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 
 27) **Redis TTL hygiene gate:** в `npm run preflight` добавлен grep‑gate `lint:redis-ttl` — запрещаем появление `redis.set(a, b)` без TTL в runtime‑коде. Исключения (намеренно persistent) должны быть явно помечены `TTL-LINT: ...`. См. audit report 30.
 
+**STEP312:** `statement_timeout` hardening — установка таймаутов через parameterized `set_config(..., $1, ...)` + безопасный fallback на legacy `SET` (значение санитизируется).
+
+**STEP313:** acquisition totals (`ref:*:total`) теперь bounded: TTL 365 дней по умолчанию (ENV `ACQ_TOTAL_TTL_DAYS`, `0` = хранить навсегда). Day‑buckets остаются с TTL 60 дней.
+
+**STEP314:** деградация Redis — унифицированы тексты «кеш/сессии недоступны» (единый copy‑блок), fail‑closed middleware для `guard: REQUIRE_REDIS` показывает консистентный HTML‑экран + stateless allowlist (`s:menu/s:home/s:help/s:reset_input`).
+
+
 28) **STEP301 micro consistency (P3):** в админской рассылке (экран «🔗 Кнопки») шаблоны и действия выровнены в 2×2, добавлен явный admin‑footer (⬅️ Админка / 📋 Меню / 🏠 Home); в `api/qstash/broadcast-deliver.js` убран scope‑shadow `url` в cooldown‑ветке (используем `deliverUrl`); в `redactContactsInText` убран паттерн `.test()+.replace()` на глобальных regex — теперь один проход `replace` + проверка изменения строки (без stateful edge‑кейсов).
 
 Audit report (one-time scan): `docs/audit/04_CREATOR_UI_BRAND_ACTION_KEYS_AUDIT_2026_03.md`.
@@ -198,6 +205,8 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 
 32) **Official publish mini-outbox (QStash):** публикация в @collabka_offers теперь идёт через reserve→enqueue→deliver: операторский клик ставит запись в `PUBLISHING` и ставит задачу в QStash; воркер делает Telegram send/edit и переводит в `ACTIVE` (self-heal verify остаётся страховкой на случай serverless hard-kill).
 
+33) **PG statement_timeout parameterization:** установка `statement_timeout` теперь делается через `set_config()` с параметром (без интерполяции), с безопасным fallback на `SET/SET LOCAL` при нестандартном поведении pooler’а.
+
 ## 1) Платформа и компоненты
 
 ### Runtime / hosting
@@ -207,7 +216,7 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 - **QStash / cron** → дергает `/api/cron/*` по расписанию (через `vercel.json` rewrites на единый роутер `api/cron_router.js` — это держит нас в лимите Vercel Hobby по кол-ву функций)
 
 Neon hardening:
-- `PG_STATEMENT_TIMEOUT_MS` (default **15000**) — глобальный `statement_timeout` для всех запросов (ставим через `SET statement_timeout` на connect). Для критичных монетизационных транзакций дополнительно используем короткий `SET LOCAL statement_timeout` (circuit breaker).
+- `PG_STATEMENT_TIMEOUT_MS` (default **15000**) — глобальный `statement_timeout` для всех запросов (ставим лениво на connect через **parameterized** `select set_config('statement_timeout', $1, false)`; fallback — `SET statement_timeout TO <ms>`). Для критичных монетизационных транзакций дополнительно используем короткий **transaction-scoped** `select set_config('statement_timeout', $1, true)` (fallback — `SET LOCAL statement_timeout TO <ms>`) как circuit breaker.
 - `PG_HEAVY_TX_STATEMENT_TIMEOUT_MS` (optional) — отдельный таймаут для “тяжёлых” транзакций (giveaways draw/finalize). Если не задан, используется `PG_STATEMENT_TIMEOUT_MS`.
 
 ### Control Plane (cron endpoints)
@@ -249,6 +258,10 @@ Neon hardening:
 - Instagram: `https://t.me/<bot>?start=src_ig`
 
 Счётчики видны в `/api/health.ref` (и разрез по роли — в `ref.by_role`) и хранятся **только в Redis**.
+
+Политика TTL:
+- `ref:*:d:<YYYYMMDD>` (day buckets) — TTL 60 дней.
+- `ref:*:total` (totals) — TTL по умолчанию **365 дней** (bounded memory). Можно отключить TTL и хранить totals “навсегда”: `ACQ_TOTAL_TTL_DAYS=0`.
 
 #### Monetization retry breadcrumbs
 После STEP171 воркер `POST /api/qstash/monetization-retry` пишет в Redis “следы” для ops‑наблюдаемости:
