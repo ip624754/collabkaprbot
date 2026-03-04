@@ -17,6 +17,15 @@ function sha256Hex(s) {
     .digest('hex');
 }
 
+function normalizeEolToLf(s) {
+  return String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+function normalizeSqlForChecksum(sql) {
+  // Must match migrations/run.js
+  return normalizeEolToLf(sql).trimEnd();
+}
+
 function escapeSqlLiteral(s) {
   return String(s || '').replace(/'/g, "''");
 }
@@ -94,6 +103,7 @@ function main() {
   lines.push('-- Use ONLY if your DB schema is already up-to-date (e.g. you ran migrations manually before,');
   lines.push('-- or you restored a full DB dump/restore from an already-up-to-date database).');
   lines.push('-- Safe to re-run (idempotent).');
+  lines.push('-- NOTE: checksum is normalized (LF + trimEnd) to avoid CRLF/LF and trailing-newline drift.');
   lines.push('');
   lines.push('CREATE TABLE IF NOT EXISTS schema_migrations (');
   lines.push('  id BIGSERIAL PRIMARY KEY,');
@@ -106,7 +116,7 @@ function main() {
   for (const f of files) {
     const fullPath = path.join(migrationsDir, f);
     const sql = fs.readFileSync(fullPath, 'utf8');
-    const checksum = sha256Hex(sql);
+    const checksum = sha256Hex(normalizeSqlForChecksum(sql));
     lines.push(
       `INSERT INTO schema_migrations(name, checksum) VALUES ('${escapeSqlLiteral(
         f
