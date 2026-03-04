@@ -734,6 +734,7 @@ async function getSysBool(key, defaultValue = false) {
 
 async function setSysBool(key, value) {
   try {
+    // TTL-LINT: allow-persistent — runtime system flags are intentionally stored without TTL.
     await redis.set(key, value ? '1' : '0');
     return true;
   } catch {
@@ -754,6 +755,7 @@ async function getSysObj(key) {
 async function setSysObj(key, obj) {
   try {
     if (!obj || typeof obj !== 'object') return false;
+    // TTL-LINT: allow-persistent — runtime system objects are intentionally stored without TTL.
     await redis.set(key, obj);
     return true;
   } catch {
@@ -1371,6 +1373,7 @@ async function upsertAdminUserNote(userId, patch = {}, meta = {}) {
   };
 
   try {
+    // TTL-LINT: allow-persistent — admin user notes are intended to persist (manual clear).
     await redis.set(adminUserNoteKey(uid), obj);
     return true;
   } catch {
@@ -1830,6 +1833,7 @@ async function renderGwNewGate(ctx, { backCb = 'a:gw_list', reason = '' } = {}) 
 
 
 async function getRoleFlags(userRow, tgId) {
+  // NOTE: keep this function DB-accurate (no caching) for non-hot paths.
   const isAdmin = isSuperAdminTg(tgId);
   const isModerator = isAdmin || (userRow ? await db.isNetworkModerator(userRow.id) : false);
 
@@ -1840,6 +1844,81 @@ async function getRoleFlags(userRow, tgId) {
 
   const isCurator = userRow ? await db.hasAnyCuratorRole(userRow.id) : false;
   return { isAdmin, isModerator, isFolderEditor, isCurator };
+}
+
+// STEP298: Redis cache for hot Menu/Home renders (Neon-saving)
+// - getRoleFlagsCached: caches role flags for 5 minutes
+// - listWorkspacesCached: caches creator workspaces list for 5 minutes
+// Both are best-effort: if Redis is degraded, we fall back to DB.
+const HOT_UI_CACHE_TTL_SEC = 5 * 60;
+
+async function getRoleFlagsCached(userRow, tgId) {
+  const isAdmin = isSuperAdminTg(tgId);
+  const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
+  if (!userRow) {
+    return { isAdmin, isModerator: isAdmin, isFolderEditor: false, isCurator: false };
+  }
+
+  const key = k(['cache', 'role_flags', String(userRow.id), editorsEnabled ? '1' : '0']);
+
+  // Read cache
+  try {
+    const cached = await redis.get(key);
+    if (cached && typeof cached === 'object') {
+      const mod = !!cached.mod;
+      const fed = !!cached.fed;
+      const cur = !!cached.cur;
+      return {
+        isAdmin,
+        isModerator: isAdmin || mod,
+        isFolderEditor: !!fed,
+        isCurator: !!cur,
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  // Compute (DB-truth)
+  const isModerator = isAdmin || (await db.isNetworkModerator(userRow.id));
+  const isFolderEditor = (editorsEnabled) ? await db.hasAnyWorkspaceEditorRole(userRow.id) : false;
+  const isCurator = await db.hasAnyCuratorRole(userRow.id);
+
+  // Store cache
+  try {
+    await redis.set(
+      key,
+      { mod: isModerator ? 1 : 0, fed: isFolderEditor ? 1 : 0, cur: isCurator ? 1 : 0 },
+      { ex: HOT_UI_CACHE_TTL_SEC }
+    );
+  } catch {
+    // ignore
+  }
+
+  return { isAdmin, isModerator, isFolderEditor, isCurator };
+}
+
+async function listWorkspacesCached(ownerUserId) {
+  const key = k(['cache', 'ws_list', String(ownerUserId)]);
+  try {
+    const cached = await redis.get(key);
+    if (Array.isArray(cached)) return cached;
+  } catch {
+    // ignore
+  }
+
+  const list = await db.listWorkspaces(ownerUserId);
+  try {
+    await redis.set(key, list, { ex: HOT_UI_CACHE_TTL_SEC });
+  } catch {
+    // ignore
+  }
+  return list;
+}
+
+async function invalidateWorkspacesCache(ownerUserId) {
+  const key = k(['cache', 'ws_list', String(ownerUserId)]);
+  try { await redis.del(key); } catch {}
 }
 
 async function isModerator(userRow, tgId) {
@@ -2244,6 +2323,7 @@ async function redisGetSafe(key, ms = 1500) {
 
 async function redisSetSafe(key, value, opts = undefined, ms = 1500) {
   try {
+    // TTL-LINT: allow-no-ttl-wrapper — internal helper may be used with opts; callers should pass {ex}.
     const p = (opts === undefined) ? redis.set(key, value) : redis.set(key, value, opts);
     return await withTimeout(p, ms, `redis.set:${String(key).slice(0, 40)}`);
   } catch {
@@ -2503,6 +2583,10 @@ function bmModeKey(tgId) {
 function bmActiveBrandKey(tgId) {
   return k(['bm_active_brand', Number(tgId || 0)]);
 }
+
+// Brand-manager state is Redis-only and must not live forever.
+// Keep a long TTL (similar to ui_mode/cur_mode), and refresh it on writes.
+const BM_STATE_TTL_SEC = 365 * 24 * 3600;
 async function getBrandManagerMode(tgId) {
   try {
     const v = await redis.get(bmModeKey(tgId));
@@ -2514,7 +2598,7 @@ async function getBrandManagerMode(tgId) {
 }
 async function setBrandManagerMode(tgId, enabled) {
   try {
-    if (enabled) await redis.set(bmModeKey(tgId), '1');
+    if (enabled) await redis.set(bmModeKey(tgId), '1', { ex: BM_STATE_TTL_SEC });
     else await redis.del(bmModeKey(tgId));
   } catch {
     // ignore
@@ -2533,7 +2617,7 @@ async function setBmActiveBrand(tgId, brandUserId) {
   const n = Number(brandUserId || 0);
   if (!n) return;
   try {
-    await redis.set(bmActiveBrandKey(tgId), String(n));
+    await redis.set(bmActiveBrandKey(tgId), String(n), { ex: BM_STATE_TTL_SEC });
   } catch {
     // ignore
   }
@@ -3191,8 +3275,8 @@ async function renderRoleHub(ctx, u, flags) {
     return;
   }
 
-  // Creator hub
-  const wsList = await db.listWorkspaces(u.id);
+  // Creator hub (STEP298: cache listWorkspaces in Redis to avoid Neon hits on each Menu open)
+  const wsList = await listWorkspacesCached(u.id);
   if (!wsList.length) {
     await renderMainMenu(ctx, flags, { edit: true, user: u });
     return;
@@ -3205,7 +3289,7 @@ async function renderRoleHub(ctx, u, flags) {
     if (a) wsId = a.id;
   }
 
-  await renderWsOpen(ctx, u.id, wsId);
+  await renderWsOpen(ctx, u.id, wsId, { showCurator: !!flags.isCurator });
 }
 
 
@@ -7546,7 +7630,7 @@ async function renderWsList(ctx, ownerUserId) {
 💡 Хочешь добавить ещё канал — жми «🚀 Подключить ещё».`, { parse_mode: 'HTML', reply_markup: kb });
 }
 
-async function renderWsOpen(ctx, ownerUserId, wsId) {
+async function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {
   const ws = await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
     await renderStaleButton(ctx, {
@@ -7557,12 +7641,14 @@ async function renderWsOpen(ctx, ownerUserId, wsId) {
   }
   await setActiveWorkspace(ctx.from.id, wsId);
   const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
-  const isCurator = await db.hasAnyCuratorRole(ownerUserId);
+  const showCurator = (opts && typeof opts.showCurator === 'boolean')
+    ? !!opts.showCurator
+    : await db.hasAnyCuratorRole(ownerUserId);
   await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
 
 Выбери действие:
 <i>Подсказка: 🎬 офферы → ➕ Создать / 📦 Мои / 📥 Inbox. 📨 заявки брендов → входящие.</i>
-<i>Сменить канал: ⬅️ 📣 Мои каналы</i>`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator: isCurator }) });
+<i>Сменить канал: ⬅️ 📣 Мои каналы</i>`, { parse_mode: 'HTML', reply_markup: wsMenuKb(wsId, { showCurator }) });
 }
 
 async function renderWsSettings(ctx, ownerUserId, wsId) {
@@ -16505,6 +16591,9 @@ export function getBot() {
     const ws = await db.createWorkspace({ ownerUserId: u.id, title, channelId: f.id, channelUsername });
     await db.ensureWorkspaceSettings(ws.id);
 
+    // STEP298: invalidate cached workspaces list (Menu/Home hot cache)
+    try { await invalidateWorkspacesCache(u.id); } catch {}
+
     db.trackEvent('ws_created', { userId: u.id, wsId: ws.id, meta: { channelId: f.id, channelUsername } });
     await db.auditWorkspace(ws.id, u.id, 'ws.created', { title, channelId: f.id, channelUsername });
 
@@ -22826,7 +22915,7 @@ if (p.a === 'a:menu_push') {
 
   // Fallback: if we cannot send a new message, fall back to the regular Menu behavior (edit current message).
   if (!uiMsg) {
-    const flags = await getRoleFlags(u, ctx.from.id);
+    const flags = await getRoleFlagsCached(u, ctx.from.id);
     await renderRoleHub(ctx, u, flags);
     return;
   }
@@ -22834,7 +22923,7 @@ if (p.a === 'a:menu_push') {
   const ctxPush = makeUiCtxForMessage(ctx, uiMsg);
 
   try {
-    const flags = await getRoleFlags(u, ctx.from.id);
+    const flags = await getRoleFlagsCached(u, ctx.from.id);
     await renderRoleHub(ctxPush, u, flags);
   } catch (e) {
     console.error('menu_push_failed', {
@@ -22855,7 +22944,7 @@ if (p.a === 'a:menu') {
       // If user opens Menu while we were expecting text input — cancel it.
       // Menu is the canonical escape hatch for input-mode keyboards.
       try { await clearExpectText(ctx.from.id); } catch {}
-      const flags = await getRoleFlags(u, ctx.from.id);
+      const flags = await getRoleFlagsCached(u, ctx.from.id);
       await renderRoleHub(ctx, u, flags);
       return;
     }
@@ -23032,7 +23121,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       // If user navigates to Home while we were expecting text input — cancel it.
       try { await clearExpectText(ctx.from.id); } catch {}
-      const flags2 = await getRoleFlags(u, ctx.from.id);
+      const flags2 = await getRoleFlagsCached(u, ctx.from.id);
       await renderHomeHub(ctx, u, flags2, { edit: true });
       return;
     }
@@ -23040,7 +23129,7 @@ ${escapeHtml(safeText)}
     if (p.a === 'a:home_hint_ack') {
       try { await ctx.answerCallbackQuery(); } catch {}
       try { await markHomeHubHintSeen(ctx.from.id); } catch {}
-      const flags2 = await getRoleFlags(u, ctx.from.id);
+      const flags2 = await getRoleFlagsCached(u, ctx.from.id);
       await renderHomeHub(ctx, u, flags2, { edit: true, noHint: true });
       return;
     }
@@ -29004,24 +29093,61 @@ if (p.a === 'a:admin_outbox_clear_q') {
       }
       try {
         const total = await db.countBroadcastAudience(draft.audience || 'all');
-        const bc = await db.createBroadcast({
-          createdByUserId: u2.id,
-          audience: draft.audience || 'all',
-          draftType: draft.type || 'text',
-          draftText: draft.text || null,
-          draftFileId: draft.fileId || null,
-          draftCaption: draft.caption || null,
-          buttonsJson: draft.buttons && draft.buttons.length ? JSON.stringify(draft.buttons) : null,
-        });
-        await db.updateBroadcast(bc.id, { total_count: total });
+        const res = await db.createBroadcastIdempotent(
+          {
+            createdByUserId: u2.id,
+            audience: draft.audience || 'all',
+            draftType: draft.type || 'text',
+            draftText: draft.text || null,
+            draftFileId: draft.fileId || null,
+            draftCaption: draft.caption || null,
+            buttonsJson: draft.buttons && draft.buttons.length ? JSON.stringify(draft.buttons) : null,
+            totalCount: total,
+          },
+          {
+            // Keep it snappy in serverless, and avoid queuing waiting connections in Neon.
+            statementTimeoutMs: 8000,
+            // Short window to prevent accidental double-click duplicates.
+            dedupWindowSec: 45,
+          }
+        );
+
+        if (!res?.ok) {
+          const busy = res?.error === 'busy';
+          await safeEditOrReply(ctx, busy ? '⏳ Уже создаю рассылку…' : '⚠️ Не удалось создать рассылку.', {
+            reply_markup: (() => {
+              const kb = new InlineKeyboard();
+              kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+              return kb;
+            })(),
+          });
+          return;
+        }
+
+        const bc = res?.broadcast;
+        if (!bc) {
+          await safeEditOrReply(ctx, '⚠️ Ошибка при создании рассылки.', {
+            reply_markup: (() => {
+              const kb = new InlineKeyboard();
+              kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+              return kb;
+            })(),
+          });
+          return;
+        }
+
         try { await clearDraft(ctx.from.id); } catch {}
-        await safeEditOrReply(ctx,
-          `✅ <b>Рассылка #${bc.id} создана</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n⏳ Рассылка будет запущена при следующем тике cron.\nПрогресс можно отслеживать в Админке.`,
-          { parse_mode: 'HTML', reply_markup: (() => {
-          const kb = new InlineKeyboard();
-          kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-          return kb;
-        })() }
+        await safeEditOrReply(
+          ctx,
+          `✅ <b>Рассылка #${bc.id} ${res?.deduped ? 'уже создана' : 'создана'}</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n⏳ Рассылка будет запущена при следующем тике cron.\nПрогресс можно отслеживать в Админке.`,
+          {
+            parse_mode: 'HTML',
+            reply_markup: (() => {
+              const kb = new InlineKeyboard();
+              kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+              return kb;
+            })(),
+          }
         );
       } catch (err) {
         console.error('[ADMIN] broadcast confirm error', err);
