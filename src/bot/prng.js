@@ -5,7 +5,10 @@ export function sha256Hex(s) {
 }
 
 export function makeSeed({ giveawayId, endsAtIso, eligibleUserIds }) {
-  const eligibleCsv = eligibleUserIds.join(',');
+  // IMPORTANT: seed must be stable for the same set of eligible users.
+  // DB result ordering is not guaranteed, so we sort a copy before hashing.
+  const sortedIds = [...eligibleUserIds].sort((a, b) => Number(a) - Number(b));
+  const eligibleCsv = sortedIds.join(',');
   const eligibleHash = sha256Hex(eligibleCsv);
   const seed = sha256Hex(`gw:${giveawayId}|ends:${endsAtIso}|eligible:${eligibleHash}`);
   const seedHash = sha256Hex(seed);
