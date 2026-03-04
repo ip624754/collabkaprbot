@@ -30072,6 +30072,18 @@ ${DEGRADED_COPY.line}
       return;
     }
 
+
+    // Broadcast: blocked / hard-skip recipients (report)
+    if (p.a === 'a:bc_blocked') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      const page = Math.max(0, Number(p.p || 0) || 0);
+      const tab = String(p.t || 'hard');
+      await renderBroadcastBlocked(ctx, Number(p.id || 0), page, tab);
+      return;
+    }
+
     // Broadcast: pause
     if (p.a === 'a:bc_pause') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -34704,8 +34716,10 @@ async function renderBroadcastView(ctx, broadcastId) {
   // For the admin view, compute from broadcast_sent_log (DB-truth).
   let st = null;
   try { st = await db.countBroadcastDeliveryStats(Number(bc.id)); } catch { st = null; }
-  const sent = st ? Number(st.sent || 0) : Number(bc.sent_count || 0);
-  const failed = st ? (Number(st.failed || 0) + Number(st.blocked || 0)) : Number(bc.failed_count || 0);
+    const sent = st ? Number(st.sent || 0) : Number(bc.sent_count || 0);
+  const blocked = st ? Number(st.blocked || 0) : 0;
+  const hardSkipped = st ? Number(st.hard_skipped || 0) : 0;
+  const failed = st ? (Number(st.failed || 0) + blocked) : Number(bc.failed_count || 0);
   const pending = st ? Number(st.pending || 0) : 0;
   const pct = total > 0 ? Math.round((sent + failed) / total * 100) : 0;
 
@@ -34723,6 +34737,11 @@ async function renderBroadcastView(ctx, broadcastId) {
   text += `\n<b>Прогресс:</b> [${bar}] ${pct}%\n`;
   text += `✅ Отправлено: <b>${sent}</b> / ${total}\n`;
   text += `❌ Ошибок: <b>${failed}</b>\n`;
+  if (blocked > 0) {
+    text += `⛔ Blocked: <b>${blocked}</b>`;
+    if (hardSkipped > 0) text += ` · 🧱 hard-skip: <b>${hardSkipped}</b>`;
+    text += `\n`;
+  }
   if (pending > 0) text += `⏳ В очереди/повторы: <b>${pending}</b>\n`;
 
   const kb = new InlineKeyboard();
@@ -34731,11 +34750,13 @@ async function renderBroadcastView(ctx, broadcastId) {
     kb.text('⏸ Пауза', `a:bc_pause|id:${bc.id}`)
       .text('🛑 Стоп', `a:bc_stop|id:${bc.id}`)
       .row();
+    if (blocked > 0) kb.text('🧱 Пропуски/ошибки', `a:bc_blocked|id:${bc.id}|t:hard|p:0`).row();
     kb.text('🔄 Обновить', `a:bc_view|id:${bc.id}`).row();
   } else if (bc.status === 'PAUSED') {
     kb.text('▶️ Продолжить', `a:bc_resume|id:${bc.id}`)
       .text('🛑 Стоп', `a:bc_stop|id:${bc.id}`)
       .row();
+    if (blocked > 0) kb.text('🧱 Пропуски/ошибки', `a:bc_blocked|id:${bc.id}|t:hard|p:0`).row();
     kb.text('🔄 Обновить', `a:bc_view|id:${bc.id}`).row();
   }
 
@@ -34744,6 +34765,61 @@ async function renderBroadcastView(ctx, broadcastId) {
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
+
+
+async function renderBroadcastBlocked(ctx, broadcastId, page = 0, tab = 'hard') {
+  const bc = await db.getBroadcast(Number(broadcastId));
+  if (!bc) {
+    await safeEditOrReply(ctx, '⚠️ Рассылка не найдена.', {
+      reply_markup: new InlineKeyboard().text('⬅️ К списку', 'a:bc_list|p:0'),
+    });
+    return;
+  }
+
+  const PAGE = 12;
+  const p = Math.max(0, Number(page) || 0);
+  const t = String(tab || 'hard').toLowerCase();
+  const kind = t === 'all' ? 'all' : 'hard';
+
+  let items = [];
+  try {
+    items = await db.listBroadcastBlockedDeliveries(Number(bc.id), PAGE, p * PAGE, kind);
+  } catch {
+    items = [];
+  }
+
+  const msk = (d) => d ? new Date(d).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
+  let text = `🧱 <b>Пропуски/blocked</b> · #${bc.id}\n`;
+  text += `<b>Таб:</b> ${kind === 'hard' ? 'hard-skip' : 'all blocked'}\n\n`;
+
+  if (!items.length) {
+    text += 'Нет записей на этой странице.';
+  } else {
+    for (const r of items) {
+      const uid = Number(r.user_id || 0);
+      const tg = Number(r.tg_id || 0);
+      const err = String(r.last_error || '').slice(0, 180);
+      const reason = err.startsWith('hard_skip:') ? err : (err ? err : '—');
+      text += `• u#${uid} · tg:${tg} · <code>${escapeHtml(reason)}</code> · ${msk(r.sent_at)}\n`;
+    }
+  }
+
+  const kb = new InlineKeyboard();
+  kb.text(kind === 'hard' ? '✅ hard-skip' : 'hard-skip', `a:bc_blocked|id:${bc.id}|t:hard|p:0`);
+  kb.text(kind === 'all' ? '✅ all' : 'all', `a:bc_blocked|id:${bc.id}|t:all|p:0`).row();
+
+  if (p > 0) kb.text('⬅️', `a:bc_blocked|id:${bc.id}|t:${kind}|p:${p - 1}`);
+  if (items.length === PAGE) kb.text('➡️', `a:bc_blocked|id:${bc.id}|t:${kind}|p:${p + 1}`);
+  if (p > 0 || items.length === PAGE) kb.row();
+
+  kb.text(`⬅️ #${bc.id}`, `a:bc_view|id:${bc.id}`).row();
+  kb.text('⬅️ К списку', 'a:bc_list|p:0').row();
+  kb.text('⬅️ Админка', 'a:admin_home').row();
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
 
 async function renderAdminHome(ctx) {
   // Access is checked in the callback handler via isSuperAdminTg().

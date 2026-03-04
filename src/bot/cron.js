@@ -68,6 +68,89 @@ const BC_COOLDOWN_LAST_429_REASON_KEY = k(['broadcast', 'last_429_reason']);
 // Default OFF. When ON, cron only enqueues delivery jobs; actual sends happen via QStash worker endpoint.
 const SYS_BC_QSTASH_FANOUT_KEY = k(['sys', 'broadcast_qstash_fanout']);
 
+
+// Broadcast hard-skip list (Redis-only, per tg_id).
+// Purpose: permanently dead chats (blocked/chat not found/deactivated) shouldn't waste QStash/Telegram work.
+// Stored as JSON: { r: "<reason>", at: "<iso>" } with bounded TTL.
+function clampHardSkipTtlSec() {
+  const days = Number(process.env.BROADCAST_HARD_SKIP_TTL_DAYS || 90) || 90;
+  const d = Math.max(7, Math.min(365, days));
+  return d * 24 * 60 * 60;
+}
+
+function broadcastHardSkipKey(tgId) {
+  return k(['broadcast', 'hard_skip', 'tg', String(tgId)]);
+}
+
+function parseHardSkipVal(v) {
+  if (!v) return null;
+  if (typeof v === 'object') {
+    if (v.r) return String(v.r);
+    if (v.reason) return String(v.reason);
+  }
+  if (typeof v === 'string') {
+    try {
+      const o = JSON.parse(v);
+      if (o && typeof o === 'object' && (o.r || o.reason)) return String(o.r || o.reason);
+    } catch {}
+    const s = v.split('|')[0];
+    return s ? String(s) : null;
+  }
+  return String(v);
+}
+
+export function normalizeBroadcastDeadChatReason(code, desc) {
+  const d = String(desc || '').toLowerCase();
+  if (d.includes('bot was blocked')) return 'bot_blocked';
+  if (d.includes('chat not found')) return 'chat_not_found';
+  if (d.includes('user is deactivated')) return 'user_deactivated';
+  // Keep conservative: do NOT hard-skip generic 400/403 without a known permanent description.
+  return null;
+}
+
+export async function getBroadcastHardSkipReason(tgId) {
+  try {
+    const v = await redis.get(broadcastHardSkipKey(tgId));
+    return parseHardSkipVal(v);
+  } catch {
+    return null;
+  }
+}
+
+export async function setBroadcastHardSkip(tgId, reason) {
+  const r = String(reason || 'unknown').slice(0, 60);
+  const ttlSec = clampHardSkipTtlSec();
+  try {
+    await redis.set(
+      broadcastHardSkipKey(tgId),
+      { r, at: new Date().toISOString() },
+      { ex: ttlSec }
+    );
+  } catch {}
+}
+
+async function getBroadcastHardSkipMap(tgIds) {
+  try {
+    const ids = (Array.isArray(tgIds) ? tgIds : [])
+      .map((x) => Number(x))
+      .filter((x) => Number.isFinite(x) && x > 0);
+    if (!ids.length) return new Map();
+    const uniq = Array.from(new Set(ids));
+    const keys = uniq.map((id) => broadcastHardSkipKey(id));
+    if (typeof redis.mget !== 'function') return new Map();
+    const vals = await redis.mget(keys);
+    const map = new Map();
+    for (let i = 0; i < uniq.length; i++) {
+      const r = parseHardSkipVal(vals?.[i]);
+      if (r) map.set(uniq[i], r);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+
 function bcCooldownSetDayKey(day) {
   return k(['broadcast', 'cooldown_set', 'd', String(day || 'na')]);
 }
@@ -1448,6 +1531,9 @@ export async function broadcastTick() {
       const deadlineAt = startedAt + BROADCAST_TIME_BUDGET_MS;
       let timeBudgetHit = false;
       let queued = 0;
+      let hardSkipped = 0;
+      const hardSkipMap = await getBroadcastHardSkipMap(recipients.map((r) => Number(r.tg_id)));
+
       let lastId = lastUserId;
       let enqueueError = '';
 
@@ -1459,6 +1545,22 @@ export async function broadcastTick() {
 
         const uid = Number(recipient.user_id);
         const tgId = Number(recipient.tg_id);
+
+        const hs = hardSkipMap.get(tgId);
+        if (hs) {
+          try {
+            await db.logBroadcastBlocked(bc.id, uid, `hard_skip:${hs}`);
+            await resetBroadcastQuarantineCount(bc.id, uid);
+            hardSkipped++;
+            lastId = Math.max(lastId, uid);
+            continue;
+          } catch (e) {
+            const em = String(e?.message || e).slice(0, 200);
+            console.error('[BROADCAST] hard-skip log failed', { broadcast_id: bc.id, uid, error: em });
+            enqueueError = em || 'hard_skip_log_failed';
+            break;
+          }
+        }
 
         try {
           const dedupId = `b:${bc.id}:u:${uid}`;
@@ -1509,6 +1611,7 @@ export async function broadcastTick() {
         mode: 'qstash_fanout',
         broadcast_id: bc.id,
         batch_queued: queued,
+        ...(hardSkipped ? { batch_hard_skipped: hardSkipped } : {}),
         ...(enqueueError ? { enqueue_error: enqueueError } : {}),
         ...(timeBudgetHit
           ? {
@@ -1537,6 +1640,10 @@ export async function broadcastTick() {
     let lastId = lastUserId;
     let cooldownSetSec = 0;
 
+    let hardSkipped = 0;
+    const hardSkipMap2 = await getBroadcastHardSkipMap(recipients.map((r) => Number(r.tg_id)));
+
+
     for (const recipient of recipients) {
       // Global budget: stop early to avoid Vercel hard-kill mid-loop and to
       // always have time to persist cursor/counters.
@@ -1547,6 +1654,16 @@ export async function broadcastTick() {
 
       const uid = Number(recipient.user_id);
       const tgId = Number(recipient.tg_id);
+
+      const hs = hardSkipMap2.get(tgId);
+      if (hs) {
+        await db.logBroadcastBlocked(bc.id, uid, `hard_skip:${hs}`);
+        await resetBroadcastQuarantineCount(bc.id, uid);
+        failed++;
+        hardSkipped++;
+        lastId = Math.max(lastId, uid);
+        continue;
+      }
 
       // Advance cursor only after we have *logged* an outcome for this uid.
       // Important for 429: if rate-limited, we must NOT advance or the uid can be skipped forever.
@@ -1570,7 +1687,9 @@ export async function broadcastTick() {
           desc.includes('chat not found') ||
           desc.includes('user is deactivated')
         ) {
-          await db.logBroadcastSent(bc.id, uid, 'blocked');
+          const hsReason = normalizeBroadcastDeadChatReason(code, desc);
+          if (hsReason) await setBroadcastHardSkip(tgId, hsReason);
+          await db.logBroadcastBlocked(bc.id, uid, desc || `telegram_${code}`);
           await resetBroadcastQuarantineCount(bc.id, uid);
           failed++;
           advanced = true;
@@ -1649,6 +1768,7 @@ export async function broadcastTick() {
       batch_sent: sent,
       batch_failed: failed,
       ...(deferred ? { batch_deferred: deferred } : {}),
+      ...(hardSkipped ? { batch_hard_skipped: hardSkipped } : {}),
       total_sent: Number(bc.sent_count || 0) + sent,
       total_count: bc.total_count,
       ...(cooldownSetSec ? { cooldown_sec: cooldownSetSec } : {}),
