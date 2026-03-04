@@ -1739,3 +1739,41 @@ QA:
     - ожидаемо: `setBroadcastCooldown` ставит `broadcast.cooldown_until`, а deliver jobs уходят в delayed retry.
 
 Риск регрессий: низкий (меняется только 429 error-path; success-path рассылки не трогаем).
+
+
+## STEP326 — Broadcast: hard skip list for dead chats + admin report
+
+Дата: 2026-03-05
+
+Цель:
+- Не тратить QStash/Telegram попытки на заведомо «мёртвые» чаты (bot blocked / chat not found / user deactivated).
+- Дать в админке отчёт «кого и почему пропустили» (по конкретной рассылке).
+
+Изменения:
+- `src/bot/cron.js`
+  - Добавлен Redis-only hard-skip список по `tg_id` с TTL (`BROADCAST_HARD_SKIP_TTL_DAYS`, default 90).
+  - При enqueue (QStash fan-out) и при legacy direct-send: получатели из hard-skip **не отправляются**, вместо этого сразу логируются как `blocked` с `last_error=hard_skip:<reason>`.
+  - При permanent Telegram errors (по desc: blocked/chat not found/deactivated) — автоматически добавляем `tg_id` в hard-skip.
+- `api/qstash/broadcast-deliver.js`
+  - Перед claim/send проверяем hard-skip; если есть — логируем `blocked` и завершаем job `200 OK`.
+  - При non-retryable Telegram errors — добавляем `tg_id` в hard-skip (только для известных permanent причин).
+- `src/db/queries.js`
+  - `logBroadcastBlocked()` (upsert) — терминальная фиксация blocked c `non_retryable=true` и `last_error`.
+  - `countBroadcastDeliveryStats()` теперь возвращает `hard_skipped` (subset blocked, `last_error like 'hard_skip:%'`).
+  - `listBroadcastBlockedDeliveries()` — список blocked получателей для админ-отчёта.
+- `src/bot/bot.js`
+  - В карточке рассылки показываем `blocked` и `hard-skip` счётчики.
+  - Добавлена кнопка `🧱 Пропуски/ошибки` → экран отчёта по blocked/hard-skip (пагинация + табы).
+
+ENV:
+- `BROADCAST_HARD_SKIP_TTL_DAYS` (default `90`) — сколько дней держим hard-skip запись по tg_id.
+
+QA:
+- `node --check src/bot/cron.js api/qstash/broadcast-deliver.js src/bot/bot.js src/db/queries.js`
+- Ручной smoke:
+  - На активной рассылке зайти в `Админка → Операции → 📣 Рассылка → #id` и открыть `🧱 Пропуски/ошибки`.
+  - Имитировать permanent ошибку (заблокированный чат) и убедиться:
+    - запись в `broadcast_sent_log` становится `blocked` с `last_error` (а для hard-skip: `hard_skip:<reason>`),
+    - последующие рассылки для этого tg_id пропускают отправку и сразу логируют `hard_skip:*` без попытки Telegram send.
+
+Риск регрессий: низкий (изменения только в broadcast error-path + admin-экраны; success-path рассылки не трогаем).
