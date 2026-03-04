@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Keep in sync with migrations/run.js
-const MIGRATION_FILE_RE = /^\d{3}_.+\.sql$/i;
+const MIGRATION_FILE_RE = /^\d{3,}_.+\.sql$/i;
 
 function sha256Hex(s) {
   return crypto
@@ -83,7 +83,7 @@ function main() {
   if (rogueSql.length) {
     console.error(
       `[gen-mark-all-applied] Unsafe .sql files detected in migrations/ (refusing to run).\n` +
-        `Allowed pattern: NNN_name.sql (e.g. 041_example.sql).\n` +
+        `Allowed pattern: NNN..._name.sql (>=3 digits, e.g. 041_example.sql).\n` +
         `Move these files out of migrations/ (usually to migration_pack/):\n` +
         rogueSql.map((x) => `- ${x}`).join('\n')
     );
@@ -93,7 +93,7 @@ function main() {
   const files = dirEntries.filter((f) => MIGRATION_FILE_RE.test(f)).sort();
 
   if (!files.length) {
-    console.error('[gen-mark-all-applied] No migration files found matching /^\\d{3}_.+\\.sql$/');
+    console.error('[gen-mark-all-applied] No migration files found matching /^\\d{3,}_.+\\.sql$/');
     process.exit(1);
   }
 
