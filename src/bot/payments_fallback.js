@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { CFG } from '../lib/config.js';
 import * as db from '../db/queries.js';
 
@@ -8,6 +9,54 @@ function safeUpper(s) {
 function safeLower(s) {
   return String(s || '').trim().toLowerCase();
 }
+
+function isHexLower(s) {
+  return /^[0-9a-f]+$/.test(String(s || ''));
+}
+
+function clampSigLen() {
+  const n = Number(CFG.PAYMENTS_PAYLOAD_HMAC_LEN || 10) || 10;
+  return Math.max(6, Math.min(n, 16));
+}
+
+function verifyPayloadHmac(payload) {
+  const key = String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim();
+  const p = String(payload || '');
+  if (!key) return { ok: true, signed: false, payloadNoSig: p, mode: 'no_key' };
+
+  const sigLen = clampSigLen();
+  const last = p.lastIndexOf('_');
+  if (last < 0) return { ok: false, reason: 'bad_payload_format' };
+
+  const prefix = p.slice(0, last + 1);
+  const tokenWithSig = p.slice(last + 1);
+
+  // Unsigned / legacy payload
+  if (!tokenWithSig || tokenWithSig.length <= sigLen) {
+    if (CFG.PAYMENTS_FALLBACK_ALLOW_UNSIGNED) return { ok: true, signed: false, payloadNoSig: p, mode: 'unsigned_allowed' };
+    return { ok: false, reason: 'unsigned_payload' };
+  }
+
+  const sig = tokenWithSig.slice(-sigLen).toLowerCase();
+  const token = tokenWithSig.slice(0, -sigLen);
+
+  if (!token || !isHexLower(sig)) {
+    if (CFG.PAYMENTS_FALLBACK_ALLOW_UNSIGNED) return { ok: true, signed: false, payloadNoSig: p, mode: 'unsigned_allowed' };
+    return { ok: false, reason: 'unsigned_payload' };
+  }
+
+  let expected = '';
+  try {
+    expected = crypto.createHmac('sha256', key).update(`${prefix}${token}`).digest('hex').slice(0, sigLen).toLowerCase();
+  } catch {
+    return { ok: false, reason: 'hmac_error' };
+  }
+
+  if (expected !== sig) return { ok: false, reason: 'bad_sig' };
+
+  return { ok: true, signed: true, payloadNoSig: `${prefix}${token}`, mode: 'signed_ok' };
+}
+
 
 function parseProPayload(payload) {
   // New format: pro_<wsId>_<userId>_<token>
@@ -152,8 +201,31 @@ export async function applyPaymentFallbackNoSession({
   currency = 'XTR',
   telegramPaymentChargeId = '',
 }) {
-  const payload = String(invoicePayload || '');
-  if (!paymentId || !paymentUserId || !payload) return { applied: false, reason: 'bad_input' };
+  const payloadRaw = String(invoicePayload || '');
+  if (!paymentId || !paymentUserId || !payloadRaw) return { applied: false, reason: 'bad_input' };
+
+  // Manual / moderation flows: never auto-apply by payload.
+  if (payloadRaw.startsWith('offpub_')) return { applied: false, reason: 'manual_only' };
+
+  // HMAC hardening: if key is configured, require signed payload (unless explicitly allowed).
+  const hv = verifyPayloadHmac(payloadRaw);
+  if (!hv.ok) return { applied: false, reason: hv.reason || 'bad_sig' };
+  const payload = String(hv.payloadNoSig || payloadRaw);
+  const sigTag = hv.signed ? 'hmac' : 'unsigned';
+
+  // DB-truth hardening: confirm payment row belongs to payer and matches charge id.
+  try {
+    const row = await db.getPaymentById(paymentId);
+    if (!row) return { applied: false, reason: 'no_payment_row' };
+    if (Number(row.user_id) !== Number(paymentUserId)) return { applied: false, reason: 'payment_user_mismatch' };
+    if (String(row.status || '').toUpperCase() === 'APPLIED') return { applied: false, reason: 'already_applied' };
+    const cidDb = String(row.telegram_payment_charge_id || '');
+    const cidIn = String(telegramPaymentChargeId || '');
+    if (cidDb && cidIn && cidDb !== cidIn) return { applied: false, reason: 'charge_id_mismatch' };
+  } catch {
+    // If DB read fails, fail-closed (money path).
+    return { applied: false, reason: 'db_check_failed' };
+  }
 
   // PRO
   if (payload.startsWith('pro_')) {
@@ -178,7 +250,7 @@ export async function applyPaymentFallbackNoSession({
       });
     } catch {}
 
-    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, 'fallback_apply_pro_no_session');
+    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_pro_no_session:${sigTag}`);
     return { applied: true, kind: 'pro', wsId };
   }
 
@@ -197,7 +269,7 @@ export async function applyPaymentFallbackNoSession({
     if (!credits || credits <= 0) return { applied: false, reason: 'bad_pack' };
 
     await db.addBrandCredits(paymentUserId, credits);
-    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_brand_pass_no_session:+${credits}`);
+    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_brand_pass_no_session:${sigTag}:+${credits}`);
     return { applied: true, kind: 'brand_pass', credits };
   }
 
@@ -218,7 +290,7 @@ export async function applyPaymentFallbackNoSession({
     const credits = brandPlanCredits(planId);
     if (credits > 0) await db.addBrandCredits(paymentUserId, credits);
 
-    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_brand_plan_no_session:${planId}${credits ? `:+${credits}cr` : ''}`);
+    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_brand_plan_no_session:${sigTag}:${planId}${credits ? `:+${credits}cr` : ''}`);
     return { applied: true, kind: 'brand_plan', plan: planId, credits };
   }
 
@@ -244,7 +316,7 @@ export async function applyPaymentFallbackNoSession({
     const credits = founderBrandCredits(productId);
     if (credits > 0) await db.addBrandCredits(paymentUserId, credits);
 
-    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_founder_brand_no_session:${productId}${credits ? `:+${credits}cr` : ''}`);
+    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_founder_brand_no_session:${sigTag}:${productId}${credits ? `:+${credits}cr` : ''}`);
     return { applied: true, kind: 'founder_brand', productId, days, credits };
   }
 

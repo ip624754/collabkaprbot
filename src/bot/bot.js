@@ -1600,6 +1600,29 @@ function _isSafeInvoicePayload(payload) {
   return /^[A-Za-z0-9_]+$/.test(s);
 }
 
+function _paymentsPayloadHmacSigHex(payloadNoSig) {
+  const key = String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim();
+  if (!key) return '';
+  try {
+    return crypto.createHmac('sha256', key).update(String(payloadNoSig || '')).digest('hex');
+  } catch {
+    return '';
+  }
+}
+
+function _signStarsInvoiceToken(payloadPrefix, tokenRaw) {
+  const key = String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim();
+  if (!key) return String(tokenRaw || '');
+  const sigLen = Math.max(6, Math.min(Number(CFG.PAYMENTS_PAYLOAD_HMAC_LEN || 10) || 10, 16));
+  const token = String(tokenRaw || '');
+  const payloadNoSig = `${String(payloadPrefix || '')}${token}`;
+  const hex = _paymentsPayloadHmacSigHex(payloadNoSig);
+  const sig = String(hex || '').slice(0, sigLen);
+  if (!sig) return token;
+  return `${token}${sig}`;
+}
+
+
 function _parseIntStrict(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
@@ -23814,7 +23837,9 @@ ${escapeHtml(safeText)}
         wsId = Number(ws.id || 0);
       }
 
-      const token = randomToken(10);
+      const tokenRaw = randomToken(10);
+      const payloadPrefix = `${prod.id}_${u.id}_`;
+      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
       await redis.set(
         k(['pay_founder', token]),
         {
@@ -23828,7 +23853,7 @@ ${escapeHtml(safeText)}
         { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
 
-      const payload = `${prod.id}_${u.id}_${token}`;
+      const payload = `${payloadPrefix}${token}`;
 
       const dur = Number(prod.durationDays || 0);
       const credits = Number(prod.credits || 0);
@@ -26759,9 +26784,11 @@ if (p.a === 'a:ws_prof_mode') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const token = randomToken(10);
+      const tokenRaw = randomToken(10);
+      const payloadPrefix = `pro_${wsId}_${u.id}_`;
+      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
       await redis.set(k(['pay_pro', token]), { wsId, ownerUserId: u.id, tgId: ctx.from.id }, { ex: CFG.PAYMENT_SESSION_TTL_SEC });
-      const payload = `pro_${wsId}_${u.id}_${token}`;
+      const payload = `${payloadPrefix}${token}`;
       await sendStarsInvoice(ctx, {
         title: 'MicroGiveaways PRO',
         description: 'PRO на 30 дней: чаще bump, больше офферов, пин в ленте, расширенная аналитика.',
@@ -26788,14 +26815,16 @@ if (p.a === 'a:ws_prof_mode') {
       const pack = getBrandPack(packId);
       if (!pack) return ctx.answerCallbackQuery({ text: 'Пакет не найден.' });
 
-      const token = randomToken(10);
+      const tokenRaw = randomToken(10);
+      const payloadPrefix = `brand_${u.id}_${pack.id}_`;
+      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
       await redis.set(
         k(['pay_brand', token]),
         { tgId: ctx.from.id, userId: u.id, packId: pack.id, credits: pack.credits, wsId, offerId, page },
         { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
 
-      const payload = `brand_${u.id}_${pack.id}_${token}`;
+      const payload = `${payloadPrefix}${token}`;
       const back = offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}` : `a:brand_pass|ws:${wsId}`;
       await sendStarsInvoice(ctx, {
         title: `Кредиты · ${pack.credits} шт`,
@@ -27601,13 +27630,15 @@ ${link}`;
         return ctx.answerCallbackQuery({ text: 'План не найден.' });
       }
       const stars = planDef.stars;
-      const token = randomToken(10);
+      const tokenRaw = randomToken(10);
+      const payloadPrefix = `bplan_${u.id}_${plan}_`;
+      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
       await redis.set(
         k(['pay_bplan', token]),
         { tgId: ctx.from.id, userId: u.id, wsId, plan, stars, credits: planDef.credits || 0, ret },
         { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
-      const payload = `bplan_${u.id}_${plan}_${token}`;
+      const payload = `${payloadPrefix}${token}`;
       const label = planDef.title;
       await sendStarsInvoice(ctx, {
         title: `Brand Plan · ${label} · ${CFG.BRAND_PLAN_DURATION_DAYS} дней`,
