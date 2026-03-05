@@ -14,7 +14,7 @@
 - `91_PROD_LAUNCH_30MIN.md` — one‑pager: запуск продакшена за 30 минут
 - `10_QSTASH_RUNBOOK.md` — QStash: ключи/env, rollout/rollback, типовые задачи
 - `11_MIGRATIONS_PACK.md` — как безопасно поднять/чинить БД на Neon (exactly‑once runner)
-- `neon/README.md` + `neon/ИСТОРИЯ_НЕОН.txt` — исторический контекст по Neon (для аудита/разбора; не source of truth)
+- `neon/README.md` + `neon/NEON_HISTORY_RAW.txt` — исторический контекст по Neon (для аудита/разбора; не source of truth)
 - `12_INFRA_CONTROL_PLANE.md` — Cron/Locks/Outbox/гарантии (Control Plane)
 - `13_RUNBOOK_RELEASE.md` + `16_RELEASE_CHECKLIST.md` — релизы/проверки
 - `14_BRAND_TEAM_UX_V4.md` — UX “Менеджеры бренда” (кнопка всегда видна, гейт внутри)
@@ -73,9 +73,13 @@
 ## Как использовать в новом чате
 Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.
 
-## Что нового в текущем snapshot (2026-02-27)
-- IG OAuth/verify: UI **скрыт** (launch‑safe). Документы и код оставлены, чтобы вернуться позже без потери контекста.
-- One‑pager запуска: `91_PROD_LAUNCH_30MIN.md`.
+## Что нового в текущем snapshot (2026-03-05)
+- Платежи: fallback apply exactly‑once (DB lock) + safety visibility (HMAC minlen + баннеры в Admin→Ops).
+- Giveaways: winners draw в REPEATABLE READ + audit метаданные воспроизводимости.
+- Broadcast: DB overload load‑shedding (429+Retry‑After) + метрики в health + баннеры в админке; tick fail‑closed при Redis degraded.
+- Ops: health/admin баннеры по `qstash_reschedule_failed` и `official_publish_stuck`.
+- RateLimit: деградация Redis больше не даёт unlimited fail‑open; degraded режим стал строже.
+- Новый операторский пакет: `94_PROD_READINESS_PACK.md`.
 
 
 ## Аудит (NotebookLM / внешняя проверка)
@@ -87,3 +91,4 @@
 - `docs/91_PROD_LAUNCH_30MIN.md` — запуск продакшена за 30 минут (one‑pager)
 - `docs/92_PROD_ENV_BASELINE.md` — baseline ENV для prod (без секретов) + проверка через /api/health
 - `docs/93_PROD_DEPLOY_CHECKLIST.md` — операторский чеклист деплоя (health/admin)
+- `docs/94_PROD_READINESS_PACK.md` — GO/NO‑GO + incident cookbook

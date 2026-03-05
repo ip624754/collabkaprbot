@@ -1,5 +1,8 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-05
 
+**STEP358:** Prod readiness docs pack — добавлен `docs/94_PROD_READINESS_PACK.md` (GO/NO‑GO + incident cookbook) и обновлены прод-доки (91/93/90/README) под текущее поведение health/admin ops.
+
+
 
 **STEP357:** Payments safety visibility — `/api/health` now exposes `payload_hmac_minlen_ok` + key length; Admin→Ops shows banners for missing/short HMAC key and for `fallback apply ENABLED` (env/runtime).
 
@@ -1107,13 +1110,13 @@ Auto-heal safeguards + ops alerts:
 ### STEP165 — NotebookLM: workaround для .sql + генератор sources
 - Добавлен генератор `npm run gen:notebooklm-sources`, который готовит папку/ZIP `dist/notebooklm_sources/`.
 - В sources SQL миграции и migration_pack кладутся как `.txt` копии (`migrations_txt/*.sql.txt`), чтобы NotebookLM принимал файлы.
-- Добавлен исторический контекст Neon: `docs/neon/ИСТОРИЯ_НЕОН.txt`.
+- Добавлен исторический контекст Neon: `docs/neon/NEON_HISTORY_RAW.txt`.
 
 ---
 
 ## Repo sync note
 - **STEP184:** архив репозитория и NotebookLM audit-pack синхронизированы с состоянием **STEP183** (без изменения поведения).
-- **STEP185:** исправлено битое имя файла в `docs/neon/` (теперь реально `ИСТОРИЯ_НЕОН.txt`, как и указано в доках/аудит-паке).
+- **STEP185:** исправлено битое имя файла в `docs/neon/` (переименовано в `NEON_HISTORY_RAW.txt` для переносимости архивов), как и указано в доках/аудит-паке).
 
 ### STEP186 — NotebookLM pack ≤50 files (NotebookLM50)
 - NotebookLM лимит: максимум 50 файлов; .sql часто не загружается.
@@ -1201,4 +1204,3 @@ Auto-heal safeguards + ops alerts:
 
 - `docs/92_PROD_ENV_BASELINE.md` — baseline ENV for prod (no secrets)
 - `docs/93_PROD_DEPLOY_CHECKLIST.md` — deploy/runbook checklist (health + admin)
-

@@ -36,6 +36,15 @@
 ## 3) Ежедневная проверка “всё ок”
 
 ### 3.1 `/api/health`
+
+#### Что смотреть в health (сигналы деградации)
+- Redis: `redis.read_ok` / `redis.write_ok` + `last_error`
+- Payments: `payments.payload_hmac_minlen_ok`, `payments.fallback_apply_effective`
+- Broadcast: `broadcast.db_overload`, `broadcast.tick_deferred_redis`
+- QStash: `qstash.reschedule_failed`, `qstash.official_publish_stuck`
+
+Cookbook: `docs/94_PROD_READINESS_PACK.md`.
+
 Открываешь раз в день (или после деплоя):
 - `ok:true`
 - `cron.*.last_run` (giveaways/broadcast)

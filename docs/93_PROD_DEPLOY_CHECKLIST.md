@@ -41,8 +41,13 @@
 
 Ожидаемое “зелёное” состояние:
 
+### Redis
+- `redis.read_ok == true`
+- `redis.write_ok == true`
+
 ### Payments
 - `payments.payload_hmac_key_configured == true`
+- `payments.payload_hmac_minlen_ok == true`
 - `payments.fallback_apply_effective == false` (baseline)
 - `payments.payload_allow_unsigned == false`
 
@@ -106,3 +111,12 @@
 3) Убедись, что начисление произошло.
 4) Сразу выключи runtime fallback.
 5) Проверь `/api/health` и ops digest.
+
+
+### Ops signals (degradation)
+- `broadcast.db_overload.today_count` не растёт
+- `broadcast.tick_deferred_redis.today_count == 0` (в норме)
+- `qstash.reschedule_failed.today_count == 0`
+- `qstash.official_publish_stuck.today_count == 0`
+
+См. incident cookbook: `docs/94_PROD_READINESS_PACK.md`.

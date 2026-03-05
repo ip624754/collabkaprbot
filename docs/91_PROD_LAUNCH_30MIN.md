@@ -3,6 +3,8 @@
 > Дополнительно:
 > - `docs/92_PROD_ENV_BASELINE.md` — baseline ENV для prod (без секретов)
 > - `docs/93_PROD_DEPLOY_CHECKLIST.md` — операторский чеклист деплоя (health/admin)
+
+> - `docs/94_PROD_READINESS_PACK.md` — GO/NO‑GO + incident cookbook (Redis/Neon/QStash/Payments)
 Цель: безопасно выкатить **текущую версию бота** в прод и убедиться, что критические контуры (платежи/кредиты/разлок/диалоги/cron) работают.
 
 > Важно: **IG OAuth сейчас временно скрыт** (см. `23_IG_CONNECT_WORKLOG_AND_RESUME.md`). На запуск продакшена это не влияет.
@@ -66,7 +68,8 @@
 
 Ожидаем:
 - `ok=true`
-- видны статусы **DB/Redis**
+- видны статусы **DB/Redis** (`redis.read_ok/write_ok`)
+- payments safety: `payments.payload_hmac_minlen_ok` и `payments.fallback_apply_effective`
 - нет ошибок по “critical path”
 
 Если health красный — **стоп**, не зовём пользователей.
@@ -134,7 +137,7 @@
 ## 9) Где смотреть проблемы
 
 - Vercel logs (runtime errors)
-- `/api/health` (метрики/DB/Redis): смотри `redis.read_ok/write_ok/latency_ms` и `last_error` при деградации
+- `/api/health` (метрики/DB/Redis)
 - admin/support чат (если есть)
 - документы:
   - `13_RUNBOOK_RELEASE.md`
