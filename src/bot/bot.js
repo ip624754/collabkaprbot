@@ -4074,45 +4074,6 @@ async function redisHealthOkQuick() {
   }
 }
 
-// STEP347: Redis probe for admin screens (read + write). Use ONLY in admin/ops screens (non-hot).
-async function redisProbeStatus() {
-  const st = {
-    configured: !!(CFG.UPSTASH_REDIS_REST_URL && CFG.UPSTASH_REDIS_REST_TOKEN),
-    read_ok: null,
-    write_ok: null,
-    latency_ms: null,
-    last_error: null,
-  };
-
-  if (!st.configured) {
-    st.read_ok = false;
-    st.write_ok = false;
-    return st;
-  }
-
-  const t0 = Date.now();
-  const probeKey = k(['health', 'redis_admin_probe']);
-
-  try {
-    await redis.get(probeKey);
-    st.read_ok = true;
-  } catch (e) {
-    st.read_ok = false;
-    st.last_error = String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180);
-  }
-
-  try {
-    await redis.set(probeKey, String(Date.now()), { ex: 60 });
-    st.write_ok = true;
-  } catch (e) {
-    st.write_ok = false;
-    if (!st.last_error) st.last_error = String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180);
-  }
-
-  st.latency_ms = Math.max(0, Date.now() - t0);
-  return st;
-}
-
 // UI mode: Creator vs Brand (reduce main menu overload)
 const UI_MODES = { CREATOR: 'creator', BRAND: 'brand' };
 
@@ -35176,23 +35137,67 @@ async function renderAdminHome(ctx) {
 
 async function renderAdminOps(ctx) {
   // Access is checked in the callback handler via isSuperAdminTg().
-  const st = await redisProbeStatus();
-
   let text = '🧰 Админка → Операции\n\n';
 
-  // Banner: make Redis degradation visible to the operator.
-  const degraded = (st.configured && (st.read_ok === false || st.write_ok === false));
-  const notConfigured = (!st.configured);
+  // Redis status banner (best-effort). This screen must stay reachable even when Redis is degraded.
+  try {
+    if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
+      text += '⚠️ <b>Redis не настроен</b> — часть системных тумблеров/кешей отключена.\n\n';
+    } else {
+      const { redis, k } = await import('../lib/redis.js');
+      const t0 = Date.now();
+      const probeKey = k(['health', 'redis_probe']);
+      let writeOk = false;
+      let readOk = false;
+      let lastErr = null;
 
-  if (notConfigured) {
-    text += '⚠️ Redis не настроен (UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN).\n';
-    text += 'Часть функций админки/лимитов/кэшей будет недоступна или работать нестабильно.\n\n';
-  } else if (degraded) {
-    const r = st.read_ok ? 'OK' : 'FAIL';
-    const w = st.write_ok ? 'OK' : 'FAIL';
-    const ms = Number.isFinite(st.latency_ms) ? String(st.latency_ms) : '—';
-    text += `⚠️ Redis degraded: read ${r} / write ${w} (latency ~${ms}ms)\n`;
-    text += 'Симптомы: тумблеры/сессии/кэши могут не сохраняться; часть действий будет fail-closed.\n\n';
+      try {
+        await redis.set(probeKey, new Date().toISOString(), { ex: 60 });
+        writeOk = true;
+      } catch (e) {
+        lastErr = String(e?.message || e);
+      }
+
+      try {
+        const v = await redis.get(probeKey);
+        readOk = v !== null && v !== undefined;
+      } catch (e) {
+        lastErr = lastErr || String(e?.message || e);
+      }
+
+      const ms = Math.max(0, Date.now() - t0);
+
+      if (writeOk && readOk) {
+        text += `✅ <b>Redis OK</b> (${ms}ms)\n\n`;
+      } else {
+        const tail = lastErr ? `\n<code>${escapeHtml(String(lastErr).slice(0, 120))}</code>` : '';
+        text += '⚠️ <b>Redis degraded</b> — возможны сбои в тумблерах/кешах/троттлах.' + tail + '\n\n';
+      }
+    }
+
+      // Broadcast DB overload banner (best-effort; Redis-only metrics emitted by QStash delivery load-shedding).
+      try {
+        const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
+        const [cntRaw, lastAt, lastWhere] = await Promise.all([
+          redis.get(k(['ops', 'reasons', 'broadcast_db_overload', 'd', day])),
+          redis.get(k(['ops', 'reasons', 'broadcast_db_overload', 'last_at'])),
+          redis.get(k(['ops', 'reasons', 'broadcast_db_overload', 'last_where'])),
+        ]);
+
+        const cnt = Number(cntRaw) || 0;
+        const last = lastAt ? String(lastAt) : '';
+        const where = lastWhere ? String(lastWhere) : '';
+
+        if (cnt > 0 || last) {
+          const whereTail = where ? `; <code>${escapeHtml(where)}</code>` : '';
+          const lastTail = last ? `<code>${escapeHtml(last)}</code>` : '—';
+          text += `⚠️ <b>Broadcast: DB overload</b> — сегодня: <b>${cnt}</b>; last: ${lastTail}${whereTail}\n\n`;
+        }
+      } catch {
+        // ignore
+      }
+  } catch {
+    text += '⚠️ <b>Redis degraded</b> — не удалось выполнить probe.\n\n';
   }
 
   text += '• 👥 Пользователи — каталог, фильтры, карточка\n';
@@ -35208,21 +35213,25 @@ async function renderAdminOps(ctx) {
     .text('📣 Рассылка', 'a:bc_list|p:0')
     .text('📜 Аудит', 'a:aud|h:24|p:0')
     .row()
-    .text('📈 Метрики', 'a:admin_metrics|d:14');
+    .text('📈 Метрики', 'a:admin_metrics|d:14')
+    .row();
 
-  if ((notConfigured || degraded) && String(CFG.PUBLIC_BASE_URL || '').trim()) {
-    kb.row().url('🩺 /api/health', String(CFG.PUBLIC_BASE_URL).replace(/\/$/, '') + '/api/health');
+  // Quick health link (if PUBLIC_BASE_URL is configured)
+  if (CFG.PUBLIC_BASE_URL) {
+    try {
+      kb.url('🩺 /api/health', `${CFG.PUBLIC_BASE_URL}/api/health`).row();
+    } catch {}
   }
 
   kb
-    .row()
     .text('⬅️ Админка', 'a:admin_home')
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
 
-  await safeEditOrReply(ctx, text, { reply_markup: kb });
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
+
 
 
 async function renderAdminComms(ctx) {
