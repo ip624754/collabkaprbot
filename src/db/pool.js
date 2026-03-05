@@ -1,5 +1,6 @@
 import pg from 'pg'; 
 import { CFG } from '../lib/config.js';
+import { queueOpsDigestSafe } from '../lib/opsDigest.js';
 
 const { Pool } = pg;
 
@@ -49,6 +50,43 @@ function logStatementTimeout(err, ctx = {}) {
   } catch {}
 }
 
+function notifyOpsStmtTimeout(err, ctx = {}) {
+  try {
+    const code = String(err?.code || '');
+    const msg = String(err?.message || err).slice(0, 160);
+    // Best-effort, dedup within ops window.
+    queueOpsDigestSafe({
+      group: 'ops',
+      reason: 'pg_statement_timeout',
+      title: 'Postgres statement_timeout hit',
+      kind: 'db',
+      payload: (code ? `code=${code} ` : '') + (ctx?.scope ? `scope=${ctx.scope}` : ''),
+      extra: [msg],
+      dedupId: 'pg_stmt_timeout',
+    });
+  } catch {
+    // ignore
+  }
+}
+
+function notifyOpsPoolError(err) {
+  try {
+    const code = String(err?.code || '');
+    const msg = String(err?.message || err).slice(0, 180);
+    queueOpsDigestSafe({
+      group: 'ops',
+      reason: 'pg_pool_error',
+      title: 'Postgres pool error',
+      kind: 'db',
+      payload: code ? `code=${code}` : '',
+      extra: [msg],
+      dedupId: 'pg_pool_error',
+    });
+  } catch {
+    // ignore
+  }
+}
+
 // ── Pool ─────────────────────────────────────────────────────────────
 
 export const pool = new Pool({
@@ -96,6 +134,19 @@ async function ensureStatementTimeout(client) {
       client._stmtTimeoutMs = _stmtMs;
     } catch (e2) {
       try { console.warn('[pg] statement_timeout init failed', { message: String(e2?.message || e2) }); } catch {}
+      try {
+        await queueOpsDigestSafe({
+          group: 'ops',
+          reason: 'pg_stmt_timeout_init_failed',
+          title: 'Postgres statement_timeout init failed',
+          kind: 'db',
+          payload: `ms=${_stmtMs}`,
+          extra: [String(e2?.name || 'Error') + ': ' + String(e2?.message || e2).slice(0, 180)],
+          dedupId: 'pg_stmt_init_failed',
+        });
+      } catch {
+        // ignore
+      }
     }
   }
 }
@@ -109,7 +160,10 @@ function wrapClientQuery(client) {
     const p = _cq(...args);
     if (p && typeof p.then === 'function') {
       return p.catch((e) => {
-        if (isStatementTimeoutErr(e)) logStatementTimeout(e, { scope: 'client.query' });
+        if (isStatementTimeoutErr(e)) {
+          logStatementTimeout(e, { scope: 'client.query' });
+          notifyOpsStmtTimeout(e, { scope: 'client.query' });
+        }
         throw e;
       });
     }
@@ -148,6 +202,12 @@ pool.on('error', (err) => {
   try {
     console.error('[pg.pool.error]', { message: String(err?.message || err), code: err?.code || null });
   } catch {}
+  // Best-effort ops digest (Redis-only, anti-spam).
+  try {
+    notifyOpsPoolError(err);
+  } catch {
+    // ignore
+  }
 });
 
 // ── Ping ─────────────────────────────────────────────────────────────
