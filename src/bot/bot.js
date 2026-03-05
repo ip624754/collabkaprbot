@@ -1874,6 +1874,9 @@ async function getRoleFlags(userRow, tgId) {
 // - listWorkspacesCached: caches creator workspaces list for 5 minutes
 // Both are best-effort: if Redis is degraded, we fall back to DB.
 const HOT_UI_CACHE_TTL_SEC = 5 * 60;
+// STEP334: Barter feed can be opened and paged frequently; COUNT(*) on every page is expensive.
+// We cache only the COUNT result (best-effort) to reduce Neon CU burn without changing UX.
+const BX_FEED_COUNT_CACHE_TTL_SEC = 60;
 
 async function getRoleFlagsCached(userRow, tgId) {
   const isAdmin = isSuperAdminTg(tgId);
@@ -1942,6 +1945,50 @@ async function listWorkspacesCached(ownerUserId) {
 async function invalidateWorkspacesCache(ownerUserId) {
   const key = k(['cache', 'ws_list', String(ownerUserId)]);
   try { await redis.del(key); } catch {}
+}
+
+function stableTagList(xs) {
+  if (!Array.isArray(xs) || !xs.length) return [];
+  return xs.map((v) => String(v || '').trim()).filter(Boolean).sort();
+}
+
+function bxFeedCountCacheKey(filter) {
+  // Keep the key short: hash a normalized subset of filter fields.
+  const obj = {
+    c: filter?.category ?? null,
+    ot: filter?.offerType ?? null,
+    ct: filter?.compensationType ?? null,
+    g: stableTagList(filter?.goalsTags),
+    r: stableTagList(filter?.reqTags),
+  };
+  const hash = crypto.createHash('sha1').update(JSON.stringify(obj)).digest('hex').slice(0, 12);
+  return k(['cache', 'bx', 'feed_count', hash]);
+}
+
+async function countNetworkBarterOffersCached(filter) {
+  const cacheKey = bxFeedCountCacheKey(filter);
+  try {
+    const cached = await redis.get(cacheKey);
+    if (typeof cached === 'number' && Number.isFinite(cached)) return cached;
+    if (typeof cached === 'string' && cached && /^[0-9]+$/.test(cached)) return Number(cached);
+  } catch {
+    // ignore
+  }
+
+  const total = await db.countNetworkBarterOffers({
+    category: filter?.category,
+    offerType: filter?.offerType,
+    compensationType: filter?.compensationType,
+    goalsTags: filter?.goalsTags,
+    reqTags: filter?.reqTags,
+  });
+
+  try {
+    await redis.set(cacheKey, String(total), { ex: BX_FEED_COUNT_CACHE_TTL_SEC });
+  } catch {
+    // ignore
+  }
+  return total;
 }
 
 
@@ -7767,7 +7814,16 @@ function renderParticipantScreen(g, entry, opts = {}) {
 
 
 async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
-  const wsList = await db.listWorkspaces(ownerUserId);
+  // STEP333: avoid extra DB read on hot flows (best-effort Redis cache).
+  // Safety: if cache says "empty", double-check DB once to avoid a stale-empty UX gate.
+  let wsList = await listWorkspacesCached(ownerUserId);
+  if (!wsList.length) {
+    try {
+      wsList = await db.listWorkspaces(ownerUserId);
+    } catch {
+      // keep cached/empty
+    }
+  }
   if (!wsList.length) {
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     try { await clearExpectText(ctx.from.id); } catch {}
@@ -7800,7 +7856,16 @@ async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
 }
 
 async function renderWsList(ctx, ownerUserId) {
-  const items = await db.listWorkspaces(ownerUserId);
+  // STEP333: best-effort cache (Menu entry can be hit frequently).
+  // Safety: if cache says "empty", double-check DB once to avoid stale-empty UI.
+  let items = await listWorkspacesCached(ownerUserId);
+  if (!items.length) {
+    try {
+      items = await db.listWorkspaces(ownerUserId);
+    } catch {
+      // keep cached/empty
+    }
+  }
   if (!items.length) {
     await safeEditOrReply(ctx, `⚠️ У тебя пока нет подключённых каналов.
 
@@ -13544,13 +13609,7 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
 
   const limit = CFG.BARTER_FEED_PAGE_SIZE;
   const offset = page * limit;
-  const total = await db.countNetworkBarterOffers({
-    category: filter.category,
-    offerType: filter.offerType,
-    compensationType: filter.compensationType,
-    goalsTags: filter.goalsTags,
-    reqTags: filter.reqTags,
-  });
+  const total = await countNetworkBarterOffersCached(filter);
   let rows;
   if (CFG.VERIFICATION_ENABLED) {
     rows = await safeUserVerifications(
