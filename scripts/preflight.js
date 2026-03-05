@@ -103,11 +103,13 @@ const nodeCheckCandidates = [
   "src/bot/bot.js",
   "src/bot/cron.js",
   "src/bot/routes/callbacks.js",
+  "src/bot/payments/starsHandlers.js",
   "api/webhook.js",
   "api/cron_router.js",
   "api/health.js",
   "migrations/run.js",
   "scripts/preflight.js",
+  "scripts/smoke-degraded-rate-limit.js",
   "src/db/queries.js",
   "src/lib/redis.js",
   "src/lib/tgApi.js",
@@ -135,6 +137,22 @@ if (nodeCheckList.length === 0) {
     console.log(`[preflight] node --check ${rel}`);
     runNodeCheck(rel);
   }
+}
+
+logHeader("Preflight: smoke degraded rate-limit");
+const smokePath = path.join(ROOT, "scripts", "smoke-degraded-rate-limit.js");
+if (fs.existsSync(smokePath)) {
+  const res = spawnSync(process.execPath, [smokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  // eslint-disable-next-line no-console
+  console.warn("[preflight] scripts/smoke-degraded-rate-limit.js not found (skipping)");
 }
 
 // eslint-disable-next-line no-console
