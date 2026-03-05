@@ -45,7 +45,7 @@
 Если NotebookLM блокирует `.sql`, вместо пункта 12 загрузить:
 - `migrations_txt/*` и `migration_pack_txt/*` (это те же SQL, но в формате `.txt`).
 
-Опционально (контекст Neon): `ИСТОРИЯ НЕОН.txt`.
+Опционально (контекст Neon): `docs/neon/NEON_HISTORY_RAW.txt`.
 
 ## 2) Какой промпт использовать
 - Основной жёсткий аудит: `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
