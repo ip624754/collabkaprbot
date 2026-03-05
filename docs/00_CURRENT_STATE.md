@@ -8,6 +8,8 @@
 
 **STEP362:** Reserve incident logs to stdout — при деградации Redis ключевые ops‑события (ops digest) пишутся в stdout в JSON (fallback), чтобы не терять диагностический контекст при падении кэша.
 
+**STEP372:** Hard-skip HIT report (кто и почему пропущен) — при пропуске отправки из‑за hard-skip (dead chats) теперь пишется Redis‑лог HIT в список `broadcast:hard_skip:hit_recent` (trim, TTL 14d) с `{tgId, reason, at, broadcastId?, userId?, via}`. В Admin→System→🧱 Hard-skip добавлена кнопка `🧾 Последние пропуски`, которая показывает недавние HITs (кого/почему пропустили, с привязкой к broadcast/user где доступно).
+
 **STEP364:** Broadcast pending deliveries в `/api/health` — cron `broadcastTick()` пишет Redis‑снимок `{ts,broadcast_id,pending_count}` в ключ `broadcast:pending_deliveries` (TTL 30 мин); `/api/health` показывает `broadcast.pending_deliveries` (строго Redis‑only, без DB) для раннего обнаружения "залипов" доставок.
 
 **STEP365:** Admin→Ops “Flush ops digest now” — в экране `🧰 Админка → Операции` добавлена кнопка `🧾 Flush ops digest`, которая принудительно вызывает `flushOpsAlerts(..., { force: true })` и показывает результат (sent/skipped) прямо на экране. Путь admin-only, без DB-чтений; при Redis degraded — graceful message.
@@ -19,6 +21,13 @@
 **STEP368:** Contacts redaction anti-bypass — усилены тесты `scripts/test-redactContactsInText.js` (t . me /, zero‑width, `instagram (dot) com`, `@ handle` с пробелом, obfuscated email `(... at ...) (... dot ...)` / `Email: ... at ... dot ...`, `+7 (999) ...`). Минимально подтянут `src/bot/redactContacts.js`: нормализация zero‑width, `t.me` regex допускает пробелы/невидимые разделители, `instagram (dot)` поддержан, `@` допускает пробелы, obfuscated email ловится консервативно (word‑pattern только при `email:`/`почта:`).
 
 **STEP369:** Prod readiness docs armor — обновлён `docs/94_PROD_READINESS_PACK.md`: добавлена “матрица микрофиксов” (Symptom→Microfix→Verify→Rollback) и короткий runbook **runtime payments fallback apply** (preconditions, включение через админку, мониторинг, обязательное выключение). Также в `docs/90_OWNER_RUNBOOK.md` добавлена явная ссылка на эти разделы для оператора.
+
+
+**STEP371:** Staging fault-injection (Redis down) — добавлен флаг `SIMULATE_REDIS_DOWN=1` (только staging/dev; в prod игнорируется). При включении все вызовы Redis принудительно падают с `code=SIMULATED_REDIS_DOWN`, чтобы руками проверить fail-open/fail-closed поведение. Добавлен ручной smoke `scripts/smoke-fault-injection.js` (не входит в preflight).
+
+
+
+**STEP370:** /api/health GO/NO_GO агрегатор — добавлены поля `system_status: GO|NO_GO` и `no_go_reasons[]` (строго Redis-only). Правило: NO_GO при `redis.read_ok/write_ok=false`, `payments.payload_hmac_minlen_ok=false`, `payments.fallback_apply_effective=true`, а также при выходе за пороги: `broadcast.tick_deferred_redis.today_count>50`, `qstash.reschedule_failed.today_count>10`, `qstash.official_publish_stuck.today_count>5`.
 
 
 **STEP363:** Payments handlers extracted — Stars payments (`/paysupport`, `pre_checkout_query`, `successful_payment`) вынесены из `src/bot/bot.js` в `src/bot/payments/starsHandlers.js` без изменения логики (только декомпозиция, меньше риск регрессий при будущих правках).

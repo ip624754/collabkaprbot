@@ -429,6 +429,7 @@
 | `a:home_mode` | edit | none |
 | `a:hs_find` | admin | none |
 | `a:hs_home` | admin | none |
+| `a:hs_hits` | admin | none |
 | `a:hs_unskip` | admin | none |
 | `a:hs_view` | admin | none |
 | `a:lead_assign` | edit | require_redis |
