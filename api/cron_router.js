@@ -1,4 +1,5 @@
 import { broadcastTick, giveawaysTick, igVerifyTick, auditFlushTick } from '../src/bot/cron.js';
+import { queueOpsDigestSafe } from '../src/lib/opsDigest.js';
 import { CFG, assertEnv } from '../src/lib/config.js';
 
 function getBearerToken(req) {
@@ -82,6 +83,23 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, job, ...r });
   } catch (e) {
     console.error('[CRON-ROUTER] error', e);
+
+    // Best-effort ops digest (Redis-only, anti-spam). Never blocks the response.
+    try {
+      const job = getJob(req) || '';
+      await queueOpsDigestSafe({
+        group: 'ops',
+        reason: 'cron_router_failed',
+        title: 'cron_router crashed',
+        kind: 'cron',
+        payload: job ? `job=${job}` : '',
+        extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
+        dedupId: job ? `cron_router:${job}` : 'cron_router',
+      });
+    } catch {
+      // ignore
+    }
+
     res.status(500).json({ ok: false, error: 'internal_error' });
   }
 }
