@@ -42,9 +42,24 @@ const cases = [
     opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['t.me/'] }
   },
   {
+    name: 't.me with spaces around dot and slash redacted',
+    input: 'Пиши сюда: t . me / some_channel',
+    opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['t . me', 'some_channel'] }
+  },
+  {
+    name: 't.me with zero-width chars redacted',
+    input: 'Пиши сюда: t\u200B.\u200Cme/some_channel',
+    opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['t\u200B.', 'some_channel'] }
+  },
+  {
     name: 'instagram without protocol redacted',
     input: 'Инста: instagram.com/myprofile',
     opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['instagram.com'] }
+  },
+  {
+    name: 'instagram obfuscated (dot) redacted',
+    input: 'Инста: instagram (dot) com/myprofile',
+    opts: { redacted: true, contains: ['🔒 ссылка скрыта'], notContains: ['instagram (dot) com', 'myprofile'] }
   },
   {
     name: 'instagram with dot leader redacted',
@@ -62,10 +77,30 @@ const cases = [
     opts: { redacted: true, contains: ['🔒 email скрыт'], notContains: ['＠example', '․co'] }
   },
   {
+    name: 'email obfuscated (at)/(dot) redacted',
+    input: 'Почта: test.user (at) example (dot) com',
+    opts: { redacted: true, contains: ['🔒 email скрыт'], notContains: ['test.user', '(at)', '(dot)', 'example'] }
+  },
+  {
+    name: 'email obfuscated with words redacted (triggered)',
+    input: 'Email: test.user at example dot com',
+    opts: { redacted: true, contains: ['🔒 email скрыт'], notContains: ['test.user', ' at ', ' dot ', 'example'] }
+  },
+  {
+    name: 'email word not a contact (no colon) not redacted',
+    input: 'Email marketing at scale dot product — это не контакт.',
+    opts: { redacted: false, contains: ['Email marketing at scale dot product'] }
+  },
+  {
     name: '@handle redacted and delinkified',
     input: 'TG: @my_handle',
     // deLinkifyText turns @ into fullwidth ＠
     opts: { redacted: true, contains: ['🔒＠скрыто'], notContains: ['@my_handle'] }
+  },
+  {
+    name: '@handle with spaces redacted and delinkified',
+    input: 'TG: @ my_handle',
+    opts: { redacted: true, contains: ['🔒＠скрыто'], notContains: ['@ my_handle', '@my_handle'] }
   },
   {
     name: 'fullwidth @handle redacted and delinkified',
@@ -86,6 +121,11 @@ const cases = [
     name: 'international phone with + and separators redacted',
     input: 'Call +1 (415) 555-1212',
     opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['415'] }
+  },
+  {
+    name: 'ru phone +7 with separators redacted',
+    input: 'WhatsApp: +7 (999) 123 45 67',
+    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['999'] }
   },
   {
     name: 'phone in words (plus + russian digits) redacted',
