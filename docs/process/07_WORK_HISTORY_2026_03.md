@@ -2173,4 +2173,19 @@ QA:
 
 QA:
 - Follow `docs/93_PROD_DEPLOY_CHECKLIST.md` and confirm /api/health + admin checks.
+## STEP344 — Portable paths gate + Neon history filename fix (docs-only)
 
+Дата: 2026-03-05
+
+Проблема:
+- Один файл в `docs/neon` имел не-UTF8/битый заголовок внутри ZIP и из-за этого FULL ZIP мог не распаковываться (“File name too long”, особенно на Windows).
+
+Что сделано:
+- Переименован исторический файл в ASCII: `docs/neon/NEON_HISTORY_RAW.txt`
+- Обновлён `docs/neon/README.md`
+- Добавлен `scripts/lint-portable-paths.js` и подключён в `npm run preflight` как gate `lint:portable-paths`
+- Обновлён `docs/00_CURRENT_STATE.md` (ops note про ZIP/Windows-safe)
+
+QA:
+1) `npm run preflight` проходит (включая portable-paths gate).
+2) FULL ZIP распаковывается на Windows (без “File name too long”).
