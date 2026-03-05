@@ -2456,3 +2456,34 @@ QA:
 
 ## STEP359 (docs consistency sweep) — 2026-03-05
 - Привели ссылки/нумерацию документации к консистентному виду (public/, neon/, smoke-tests), добавили compat placeholders (audit 22/24/25, audit_staff manifest).
+
+
+## STEP360 (broadcast db_overload jitter) — 2026-03-06
+- При `db_overload` в `broadcast-deliver` возвращаем 429 + `Retry-After` **с джиттером** (по умолчанию 0–15с; ENV `BROADCAST_DB_BACKOFF_JITTER_SEC`).
+- Зачем: при восстановлении Neon/DB и массовых ретраях QStash избегаем “громового стада” (thundering herd) и распределяем нагрузку.
+
+Риск регрессий: **минимальный** (меняется только задержка ретрая при DB overload; основной happy-path не трогаем).
+
+
+## STEP361 (broadcast db_overload fuse) — 2026-03-06
+- При детекте `db_overload` ставим Redis‑ключ‑предохранитель `ops:fuse:db_overload` (TTL ~50с; ENV `BROADCAST_DB_OVERLOAD_FUSE_TTL_SEC`).
+- При наличии fuse в начале `broadcast-deliver` сразу отвечаем 429 + Retry‑After (с jitter) **до любых DB обращений**.
+- Зачем: защитить Neon/pool от повторных попыток подключения во время частичной деградации и быстрее стабилизировать систему.
+
+Риск регрессий: **минимальный** (меняется только поведение при DB overload; в нормальном режиме fuse не активен).
+
+
+## STEP362 (stdout fallback for ops events) — 2026-03-06
+- В `queueOpsDigest` добавлен резервный канал: если Redis недоступен (dedup/buffer), событие пишется в stdout как JSON (`t=ops_event`).
+- Дополнительно: при падении Redis в `broadcast_db_overload` метриках пишем компактный JSON breadcrumb в stdout.
+- Зачем: при полном outage Redis не теряем “почему/где” для инцидента — это облегчает разбор по логам Vercel.
+
+Риск регрессий: **минимальный** (только логирование в degraded путях; бизнес‑логика не меняется).
+
+
+## STEP363 (payments handlers extracted) — 2026-03-06
+- Декомпозиция: Stars payments обработчики вынесены из монолита `src/bot/bot.js` в модуль `src/bot/payments/starsHandlers.js`.
+- Вынесено без изменения логики: `/paysupport`, `pre_checkout_query`, `message:successful_payment`.
+- Зачем: уменьшить “площадь” монолита и снизить риск регрессий при будущих правках платежей/бота.
+
+Риск регрессий: **низкий** (перемещение кода + dependency injection; поведение не меняется).
