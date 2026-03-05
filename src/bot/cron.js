@@ -712,31 +712,13 @@ async function autoHealOrphanedPayments() {
   const manualRequiredReasons = [];
 
 
-  // Fetch a slightly larger window; then filter missing_session.
+  // Claim a batch in DB (SKIP LOCKED) to avoid duplicate work when cron overlaps / retries.
   // Safety: ignore very fresh payments to avoid races with late webhook/session reconciliation.
-  const rows = await db.listPaymentsByStatus('ORPHANED', 50, 0);
   const minAgeSec = Math.max(0, Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 0) || 0);
-  const nowMs = Date.now();
+  const cand = await db.claimOrphanedMissingSessionPaymentsForAutoheal(batch, minAgeSec);
 
-  const miss = (rows || []).filter(r => String(r.note || '').includes('missing_session'));
-  const young = minAgeSec > 0 ? miss.filter(r => {
-    try {
-      const t = new Date(r.created_at).getTime();
-      if (!t) return false;
-      return (nowMs - t) / 1000 < minAgeSec;
-    } catch { return false; }
-  }) : [];
-
-  const cand = miss.filter(r => {
-    if (minAgeSec <= 0) return true;
-    try {
-      const t = new Date(r.created_at).getTime();
-      if (!t) return true;
-      return (nowMs - t) / 1000 >= minAgeSec;
-    } catch { return true; }
-  }).slice(0, batch);
-
-  const skippedYoung = young.length;
+  // We no longer compute a separate "young" count here (would require an extra DB query).
+  const skippedYoung = 0;
 
   const api = getBot().api;
 
@@ -758,13 +740,6 @@ async function autoHealOrphanedPayments() {
         try {
           await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`);
         } catch {}
-        skipped += 1;
-        continue;
-      }
-
-      // Claim fulfillment in DB to prevent double-apply (cron parallelism / retries).
-      const claimed = await db.claimPaymentApplying(Number(r.id), Number(r.user_id));
-      if (!claimed) {
         skipped += 1;
         continue;
       }
