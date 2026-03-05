@@ -35175,10 +35175,14 @@ async function renderAdminOps(ctx) {
 
   // Redis status banner (best-effort). This screen must stay reachable even when Redis is degraded.
   try {
+    let r = null;
+    let key = null;
     if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
       text += '⚠️ <b>Redis не настроен</b> — часть системных тумблеров/кешей отключена.\n\n';
     } else {
       const { redis, k } = await import('../lib/redis.js');
+      r = redis;
+      key = k;
       const t0 = Date.now();
       const probeKey = k(['health', 'redis_probe']);
       let writeOk = false;
@@ -35209,13 +35213,15 @@ async function renderAdminOps(ctx) {
       }
     }
 
-      // Broadcast DB overload banner (best-effort; Redis-only metrics emitted by QStash delivery load-shedding).
+    // Extra ops banners (best-effort; Redis-only)
+    if (r && key) {
+      // Broadcast DB overload banner (metrics emitted by QStash delivery load-shedding).
       try {
         const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
         const [cntRaw, lastAt, lastWhere] = await Promise.all([
-          redis.get(k(['ops', 'reasons', 'broadcast_db_overload', 'd', day])),
-          redis.get(k(['ops', 'reasons', 'broadcast_db_overload', 'last_at'])),
-          redis.get(k(['ops', 'reasons', 'broadcast_db_overload', 'last_where'])),
+          r.get(key(['ops', 'reasons', 'broadcast_db_overload', 'd', day])),
+          r.get(key(['ops', 'reasons', 'broadcast_db_overload', 'last_at'])),
+          r.get(key(['ops', 'reasons', 'broadcast_db_overload', 'last_where'])),
         ]);
 
         const cnt = Number(cntRaw) || 0;
@@ -35230,6 +35236,56 @@ async function renderAdminOps(ctx) {
       } catch {
         // ignore
       }
+
+      // QStash reschedule failures (when delayed retries failed to enqueue).
+      try {
+        const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
+        const [cntRaw, lastAt, lastWhere, lastPayload] = await Promise.all([
+          r.get(key(['ops', 'reasons', 'qstash_reschedule_failed', 'd', day])),
+          r.get(key(['ops', 'reasons', 'qstash_reschedule_failed', 'last_at'])),
+          r.get(key(['ops', 'reasons', 'qstash_reschedule_failed', 'last_where'])),
+          r.get(key(['ops', 'reasons', 'qstash_reschedule_failed', 'last_payload'])),
+        ]);
+        const cnt = Number(cntRaw) || 0;
+        const last = lastAt ? String(lastAt) : '';
+        const where = lastWhere ? String(lastWhere) : '';
+        const payload = lastPayload ? String(lastPayload) : '';
+        if (cnt > 0 || last) {
+          const lastTail = last ? `<code>${escapeHtml(last)}</code>` : '—';
+          const whereTail = where ? `; <code>${escapeHtml(where)}</code>` : '';
+          const payloadTail = payload ? `; last: <code>${escapeHtml(payload)}</code>` : '';
+          text += `⚠️ <b>QStash: reschedule failed</b> — сегодня: <b>${cnt}</b>; at: ${lastTail}${whereTail}${payloadTail}\n\n`;
+        }
+      } catch {
+        // ignore
+      }
+
+      // OFFICIAL publish stuck (self-heal was triggered).
+      try {
+        const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
+        const [cntRaw, lastAt, lastOfferId, lastAgeSec, lastVia] = await Promise.all([
+          r.get(key(['ops', 'reasons', 'official_publish_stuck', 'd', day])),
+          r.get(key(['ops', 'reasons', 'official_publish_stuck', 'last_at'])),
+          r.get(key(['ops', 'reasons', 'official_publish_stuck', 'last_offer_id'])),
+          r.get(key(['ops', 'reasons', 'official_publish_stuck', 'last_age_sec'])),
+          r.get(key(['ops', 'reasons', 'official_publish_stuck', 'last_via'])),
+        ]);
+        const cnt = Number(cntRaw) || 0;
+        const last = lastAt ? String(lastAt) : '';
+        const offerId = lastOfferId ? String(lastOfferId) : '';
+        const age = Number(lastAgeSec) || 0;
+        const via = lastVia ? String(lastVia) : '';
+        if (cnt > 0 || last) {
+          const lastTail = last ? `<code>${escapeHtml(last)}</code>` : '—';
+          const offerTail = offerId ? `; offer: <b>#${escapeHtml(offerId)}</b>` : '';
+          const ageTail = age > 0 ? `; age: ~<b>${escapeHtml(String(age))}</b>s` : '';
+          const viaTail = via ? `; via: <code>${escapeHtml(via)}</code>` : '';
+          text += `⚠️ <b>OFFICIAL: publish stuck</b> — сегодня: <b>${cnt}</b>; at: ${lastTail}${offerTail}${ageTail}${viaTail}\n\n`;
+        }
+      } catch {
+        // ignore
+      }
+    }
   } catch {
     text += '⚠️ <b>Redis degraded</b> — не удалось выполнить probe.\n\n';
   }
