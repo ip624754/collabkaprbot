@@ -135,6 +135,10 @@ Cookbook: `docs/94_PROD_READINESS_PACK.md`.
 
 ## 8) Если “что-то сломалось”
 
+> Операторская “шпаргалка” по симптомам: `docs/94_PROD_READINESS_PACK.md` → **3.0 Матрица микрофиксов**.
+> Payments хвосты (missing session): там же → **3.5 runtime fallback apply** (включать только временно).
+
+
 ### 8.1 Redis down
 - UI может частично работать.
 - Любые опасные действия должны fail‑closed.
@@ -156,4 +160,3 @@ Cookbook: `docs/94_PROD_READINESS_PACK.md`.
 Когда вернёшься:
 - см. `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`
 - см. `docs/22_IG_GRAPH_OAUTH_2026.md`
-

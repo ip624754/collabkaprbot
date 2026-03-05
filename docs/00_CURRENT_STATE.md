@@ -1,4 +1,4 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-05
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-06
 
 **STEP358:** Prod readiness docs pack — добавлен `docs/94_PROD_READINESS_PACK.md` (GO/NO‑GO + incident cookbook) и обновлены прод-доки (91/93/90/README) под текущее поведение health/admin ops.
 
@@ -17,6 +17,9 @@
 **STEP367:** Preflight: broadcast overload invariants — добавлен `scripts/test-broadcast-overload-invariants.js` и подключён в `scripts/preflight.js`. Скрипт проверяет инварианты overload‑веток в `api/qstash/broadcast-deliver.js`: ответ 429 + выставление `Retry-After`/`Upstash-Retry-After` + наличие jitter/base/retry_after полей (регресс‑страховка, dev/CI only).
 
 **STEP368:** Contacts redaction anti-bypass — усилены тесты `scripts/test-redactContactsInText.js` (t . me /, zero‑width, `instagram (dot) com`, `@ handle` с пробелом, obfuscated email `(... at ...) (... dot ...)` / `Email: ... at ... dot ...`, `+7 (999) ...`). Минимально подтянут `src/bot/redactContacts.js`: нормализация zero‑width, `t.me` regex допускает пробелы/невидимые разделители, `instagram (dot)` поддержан, `@` допускает пробелы, obfuscated email ловится консервативно (word‑pattern только при `email:`/`почта:`).
+
+**STEP369:** Prod readiness docs armor — обновлён `docs/94_PROD_READINESS_PACK.md`: добавлена “матрица микрофиксов” (Symptom→Microfix→Verify→Rollback) и короткий runbook **runtime payments fallback apply** (preconditions, включение через админку, мониторинг, обязательное выключение). Также в `docs/90_OWNER_RUNBOOK.md` добавлена явная ссылка на эти разделы для оператора.
+
 
 **STEP363:** Payments handlers extracted — Stars payments (`/paysupport`, `pre_checkout_query`, `successful_payment`) вынесены из `src/bot/bot.js` в `src/bot/payments/starsHandlers.js` без изменения логики (только декомпозиция, меньше риск регрессий при будущих правках).
 

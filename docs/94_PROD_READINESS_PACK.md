@@ -58,6 +58,23 @@
 
 ## 3) Incident Cookbook (что делать по симптомам)
 
+### 3.0 Матрица микрофиксов (Symptom → Microfix → Verify → Rollback)
+
+> Идея: **не думать в инцидент**. Открыл `/api/health` или Admin→Ops → нашёл симптом → сделал ровно один микрошаг → проверил → откатил/зафиксировал.
+
+| Symptom (health / Ops) | Microfix (без ломки) | Verify (что стало лучше) | Rollback |
+|---|---|---|---|
+| **Redis degraded**: `redis.write_ok=false` / баннер “Redis degraded” | 1) **Не запускать массовое** (broadcast/фан-аут).<br>2) Проверить Upstash (лимиты/токен/latency).<br>3) Дождаться восстановления (не “лечить деньгами”). | `redis.read_ok/write_ok=true`, `redis.last_error=null` и перестаёт расти `broadcast.tick_deferred_redis.today_count`. | Ничего “особого” не откатываем — просто возвращаемся к штатному режиму после восстановления Redis. |
+| **Broadcast tick deferred** растёт | Это следствие Redis degraded → см. строку выше. Дополнительно: временно **не стартовать новые рассылки**. | Счётчик перестал расти; новые тики идут штатно. | — |
+| **DB overload**: рост `broadcast.db_overload.today_count` / таймауты Neon | 1) Дать системе “остыть” (delivery уже делает `429 + Retry-After + jitter`).<br>2) На время инцидента **не запускать большие рассылки**.<br>3) Проверить Neon compute/коннекты/pool. | Перестаёт расти `broadcast.db_overload.today_count`, исчезают DB timeout в логах. | При необходимости: временно выключить/уменьшить fan-out (runtime), отменить/отложить рассылку. |
+| **QStash reschedule failed**: `qstash.reschedule_failed.today_count>0` | 1) Проверить QStash токен/подпись/HMAC.<br>2) Если растёт — считать риск “задачи могут не перепланироваться” и снижать активность (рассылки/паблиш). | Счётчик перестаёт расти; новые reschedule успешны. | Переключить контуры на “ручной режим” (минимальная активность) до восстановления QStash. |
+| **Official publish stuck**: `qstash.official_publish_stuck.today_count>0` | Следовать `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`.<br>Правило: **лучше подвиснуть, чем задублировать**. Не менять статусы руками. | `official_publish_stuck` не растёт; очередь уходит; verify “самовосстановил”. | Откат: отключить публикации (`OFFICIAL_PUBLISH_ENABLED=false`) до разбирательства. |
+| **Payments HMAC missing/short**: `payments.payload_hmac_minlen_ok=false` | **NO‑GO.** Исправить ENV `PAYMENTS_PAYLOAD_HMAC_KEY` (≥32 байт) и redeploy. Не включать fallback. | `/api/health.payments.payload_hmac_minlen_ok=true` + `payload_issues_today.bad_sig=0`. | Вернуться к предыдущему деплою / исправить ENV и повторить. |
+| **Оплата прошла, но “не применилось”** (missing Redis pay_* session) | Включить **runtime fallback apply** **временно** через админку (см. 3.5). | `payments.fallback_apply_runtime_enabled=true` (на окно), хвосты применяются; затем вернуть OFF. | Нажать **Disable** в админке (и убедиться что `fallback_apply_effective=false`, если ENV=OFF). |
+| **Payload issues** растут: `payments.payload_issues_today.bad_sig/unsigned/bad_format` | Остановить эксперименты/маркетинг-пейлоады, проверить сигнатуру/HMAC и формат payload. Это **не лечится fallback’ом**. | Счётчики перестают расти; новые оплаты проходят без ошибок. | Откатить последние изменения payload/каталога; вернуть базовый каталог. |
+| **Audit buffer** растёт: `audit.buffer.len` ↑ | Если Redis OK: дать буферу догрузиться (он batch). Если DB перегружен: сначала лечить DB overload. | `audit.buffer.len` падает к 0; нет новых `audit.buffer.on_db_error`. | Временно снизить активность/рассылки; если нужно — усилить throttle (см. `docs/18_...`). |
+
+
 ### 3.1 Redis degraded (read/write fail)
 **Симптомы:**
 - `/api/health.redis.write_ok=false` или баннер “Redis degraded”
@@ -118,19 +135,39 @@
 
 ---
 
-### 3.5 Payments incident (fallback apply)
-**Симптомы:**
-- платеж пришёл (TG), а в DB/плане не отразился
-- оператор хочет включить fallback apply
+### 3.5 Payments incident (runtime fallback apply) — короткий runbook
 
-**Тактика:**
-1) Проверить `/api/health.payments`:
-   - `payload_hmac_minlen_ok=true`
-   - `fallback_apply_effective=false` (baseline)
-2) Включать fallback **только осознанно и временно** (например “Enable 2h” из админки).
-3) После применения:
-   - убедиться, что `fallback_apply_effective` вернулся в false
-   - проверить, что нет дублей (apply exactly‑once в DB).
+**Когда это нужно:** Stars‑платёж успешно пришёл, но Redis `pay_*` session отсутствует/истекла (редкий хвост при деградации/таймаутах).
+**Что это НЕ делает:** не “разрешает” неподписанные/битые payload’ы и не обходит DB‑guards.
+
+#### Preconditions (перед включением)
+1) `/api/health.payments.payload_hmac_minlen_ok == true` (иначе **NO‑GO**).
+2) `payments.payload_issues_today.bad_sig == 0` и `unsigned == 0` (если растут — сначала лечим подпись/формат).
+3) Убедись, что ENV baseline **OFF**: `PAYMENTS_FALLBACK_APPLY_ENABLED=0` (иначе runtime‑Disable не выключит effective).
+
+#### Включение (строго time‑boxed)
+1) Админка → **⚙️ Система** → **🧯 Fallback** (Payments fallback apply).
+2) Нажми:
+   - `🟢 2h (incident)` — для короткого хвоста (рекомендовано по умолчанию),
+   - `🟢 12h (backlog)` — если накопились хвосты,
+   - `🟢 24h (migration)` — только под миграции/долгую чистку.
+3) Проверь `/api/health`:
+   - `payments.fallback_apply_runtime_enabled == true`
+   - `payments.fallback_apply_effective == true`
+
+#### Мониторинг (пока включено)
+- В Admin→Ops появится баннер “Payments: fallback apply ENABLED”.
+- Смотри `payments.payload_issues_today.*` — они не должны расти.
+
+#### Выключение (обязательно)
+1) Админка → **⚙️ Система** → **🧯 Fallback** → `🧹 Disable`
+2) Проверь `/api/health`:
+   - `payments.fallback_apply_runtime_enabled == false`
+   - `payments.fallback_apply_effective == false` (если ENV=OFF)
+
+#### Если стало хуже
+- Немедленно `Disable`, и разбираем причину: подпись payload, каталог/amount/currency, Redis деградация или DB overload.
+
 
 ---
 
