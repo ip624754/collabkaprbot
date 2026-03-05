@@ -140,7 +140,15 @@ export async function setBroadcastHardSkip(tgId, reason) {
     const payload = JSON.stringify({ tgId: Number(tgId) || 0, r, at: new Date().toISOString() });
     await lpushTrim(BROADCAST_HARD_SKIP_RECENT_KEY, payload, BROADCAST_HARD_SKIP_RECENT_MAX, ttlSec);
   } catch {}
+
+
+  // Best-effort: counters for /api/health (bounded; Redis-only).
+  try {
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    await incrDayCounter(bcHardSkipSetDayKey(day));
+  } catch {}
 }
+
 
 async function getBroadcastHardSkipMap(tgIds) {
   try {
@@ -178,6 +186,16 @@ function bcDeferWaitDayKey(day) {
 }
 function bcQuarantineSetDayKey(day) {
   return k(['broadcast', 'quarantine_set', 'd', String(day || 'na')]);
+}
+
+function bcHardSkipSetDayKey(day) {
+  return k(['broadcast', 'hard_skip', 'set', 'd', String(day || 'na')]);
+}
+function bcHardSkipHitDayKey(day) {
+  return k(['broadcast', 'hard_skip', 'hit', 'd', String(day || 'na')]);
+}
+function bcHardSkipUnskipDayKey(day) {
+  return k(['broadcast', 'hard_skip', 'unskip', 'd', String(day || 'na')]);
 }
 
 async function incrDayCounter(key, ttlSec = CRON_LAST_RUN_TTL_SEC) {
@@ -1633,6 +1651,10 @@ export async function broadcastTick() {
             await db.logBroadcastBlocked(bc.id, uid, `hard_skip:${hs}`);
             await resetBroadcastQuarantineCount(bc.id, uid);
             hardSkipped++;
+            try {
+              const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+              await incrDayCounter(bcHardSkipHitDayKey(day));
+            } catch {}
             lastId = Math.max(lastId, uid);
             continue;
           } catch (e) {
@@ -1742,6 +1764,10 @@ export async function broadcastTick() {
         await resetBroadcastQuarantineCount(bc.id, uid);
         failed++;
         hardSkipped++;
+        try {
+          const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+          await incrDayCounter(bcHardSkipHitDayKey(day));
+        } catch {}
         lastId = Math.max(lastId, uid);
         continue;
       }

@@ -15,6 +15,7 @@ const releaseLock = R.releaseLock;
 const lpushTrim = typeof R.lpushTrim === 'function' ? R.lpushTrim : async () => false;
 const incrWithExpireOnFirst =
   typeof R.incrWithExpireOnFirst === 'function' ? R.incrWithExpireOnFirst : async () => 0;
+const incrWithExpire = typeof R.incrWithExpire === 'function' ? R.incrWithExpire : async () => 0;
 import { setMonIntroDiag, setMonAcceptDiag, setMonUnlockDiag } from '../lib/monDiag.js';
 import * as db from '../db/queries.js';
 import { pool } from '../db/pool.js';
@@ -35368,6 +35369,11 @@ async function adminHardSkipUnskip(tgId) {
   if (!id) return false;
   try {
     await redis.del(adminHardSkipTgKey(id));
+    // Best-effort: operator counter for /api/health
+    try {
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      await incrWithExpire(k(['broadcast', 'hard_skip', 'unskip', 'd', day]), 14 * 24 * 60 * 60);
+    } catch {}
     return true;
   } catch {
     return false;
