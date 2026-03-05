@@ -12,6 +12,13 @@ export default async function handler(_req, res) {
     ok: true,
     ts: now.toISOString(),
     env: CFG.APP_ENV,
+    redis: {
+      configured: !!(CFG.UPSTASH_REDIS_REST_URL && CFG.UPSTASH_REDIS_REST_TOKEN),
+      read_ok: null,
+      write_ok: null,
+      latency_ms: null,
+      last_error: null,
+    },
     support: {
       configured:
         (!!String(CFG.SUPPORT_CHAT_ID || '').trim()) ||
@@ -96,6 +103,7 @@ export default async function handler(_req, res) {
 
   // Redis is optional for /api/health (so it stays useful in minimal envs).
   if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
+    try { base.redis.read_ok = false; base.redis.write_ok = false; } catch {}
     res.status(200).json({ ...base, cron: { enabled: false }, audit: auditBase });
     return;
   }
@@ -110,6 +118,36 @@ export default async function handler(_req, res) {
 
   try {
     const { redis, k } = await import('../src/lib/redis.js');
+
+    // STEP347: Redis read/write probe (best-effort). Helps ops see degraded Redis fast.
+    try {
+      const probeKey = k(['health', 'redis_probe']);
+      const t0 = Date.now();
+      let readOk = false;
+      let writeOk = false;
+      let lastErr = null;
+
+      try {
+        await redis.get(probeKey);
+        readOk = true;
+      } catch (e) {
+        lastErr = String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180);
+      }
+
+      try {
+        await redis.set(probeKey, now.toISOString(), { ex: 60 });
+        writeOk = true;
+      } catch (e) {
+        if (!lastErr) lastErr = String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180);
+      }
+
+      base.redis.read_ok = readOk;
+      base.redis.write_ok = writeOk;
+      base.redis.latency_ms = Math.max(0, Date.now() - t0);
+      base.redis.last_error = lastErr;
+    } catch {
+      // ignore
+    }
 
     // Ops alert buffer status (Redis-only).
     try {
@@ -548,6 +586,12 @@ try {
   } catch {
     res.status(200).json({
       ...base,
+      redis: {
+        ...(base.redis || { configured: true }),
+        read_ok: false,
+        write_ok: false,
+        last_error: (base.redis && base.redis.last_error) ? base.redis.last_error : 'redis_unavailable',
+      },
       cron: { enabled: true, error: 'redis_unavailable' },
       broadcast: { cooldown_until: null, retry_after_sec: null, broadcast_id: null },
       ref: { day: null, today: { ig: 0, tg: 0 }, total: { ig: 0, tg: 0 } },
