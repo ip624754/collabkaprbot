@@ -98,7 +98,8 @@ async function safeReleaseMonLock(lockKey, lockToken) {
 function contactPackFromWorkspace(ws, ttlDays) {
   const ws2 = ws || {};
   const ig = ws2.profile_ig ? String(ws2.profile_ig) : '';
-  const ports = Array.isArray(ws2.profile_portfolio_urls) ? ws2.profile_portfolio_urls : [];
+  const portsRaw = Array.isArray(ws2.profile_portfolio_urls) ? ws2.profile_portfolio_urls : [];
+  const ports = portsRaw.map((x) => String(x || '').trim()).filter(Boolean);
   const contactRaw = ws2.profile_contact ? String(ws2.profile_contact).trim() : '';
   const contactsObj = (ws2.profile_contacts && typeof ws2.profile_contacts === 'object') ? ws2.profile_contacts : null;
 
@@ -364,6 +365,43 @@ export default async function handler(req, res) {
       const r = await db.unlockWorkspaceContactsWithCredits(brandUserId, wsId, cost, ttlSec);
 
       if (!r?.ok) {
+        if (r?.error === 'no_contacts' || r?.error === 'missing_ws') {
+          const code = r?.error === 'missing_ws' ? 'missing_ws' : 'no_contacts';
+
+          if (actorTgId) {
+            const kb = {
+              inline_keyboard: [
+                [
+                  { text: '🪟 Витрина', callback_data: `a:wsp_open|ws:${wsId}` },
+                  { text: '📋 Меню', callback_data: 'a:menu' },
+                ],
+                [
+                  { text: '🏠 Home', callback_data: 'a:home' },
+                ],
+              ],
+            };
+
+            const msg = (code === 'missing_ws')
+              ? `⚠️ <b>Витрина не найдена</b>
+
+Похоже, кнопка устарела или профиль удалён.
+<b>Списания не было.</b>`
+              : `⚠️ <b>Контактов пока нет</b>
+
+У креатора нет контактов/ссылок для разлока.
+<b>Списания не было.</b>
+
+Попроси креатора добавить контакты и попробуй позже.`;
+
+            await safeTgSend(actorTgId, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+          }
+
+          await setMonUnlockDiag({ source: 'worker',  atIso: nowIso, status: 'skipped', errorCode: code, wsId });
+          await setMonRetryDiag({ status: 'ok' });
+          res.status(200).json({ ok: true, action, status: code });
+          return;
+        }
+
         if (r?.needPaywall && actorTgId) {
           const kb = {
             inline_keyboard: [
