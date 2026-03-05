@@ -175,6 +175,16 @@ function randIntInclusive(min, max) {
   return lo + Math.floor(Math.random() * (hi - lo + 1));
 }
 
+function dbOverloadFuseKey() {
+  return k(['ops', 'fuse', 'db_overload']);
+}
+
+function getDbOverloadFuseTtlSec() {
+  const v = Number(process.env.BROADCAST_DB_OVERLOAD_FUSE_TTL_SEC || 50);
+  if (!Number.isFinite(v)) return 50;
+  return Math.max(10, Math.min(300, Math.trunc(v)));
+}
+
 function isDbOverloadError(err) {
   if (!err) return false;
   const code = String(err?.code || err?.errno || '').toUpperCase();
@@ -214,6 +224,12 @@ async function respondDbOverload({ res, broadcastId, userId, tgId, attempt, wher
   const sec = Math.max(1, Number(baseSec) + Number(jitterSec));
   setQStashRetryAfterHeaders(res, sec);
 
+  // DB overload fuse (Redis): short-circuit retries BEFORE touching Neon/pool on the next calls.
+  // Best-effort only.
+  try {
+    await redis.set(dbOverloadFuseKey(), new Date().toISOString(), { ex: getDbOverloadFuseTtlSec() });
+  } catch {}
+
   // Redis-only metrics for operators: count today + last timestamp.
   // Best-effort and must never throw (we're already in a degraded path).
   try {
@@ -228,7 +244,24 @@ async function respondDbOverload({ res, broadcastId, userId, tgId, attempt, wher
         { ex: ttlSec }
       );
     }
-  } catch {}
+  } catch (e) {
+    // Reserve breadcrumb in stdout when Redis is down.
+    try {
+      console.warn(
+        JSON.stringify({
+          t: 'ops_event',
+          ts: new Date().toISOString(),
+          stage: 'redis_metrics',
+          reason: 'broadcast_db_overload',
+          where: String(where || '').slice(0, 80),
+          broadcastId: Number(broadcastId || 0) || 0,
+          userId: Number(userId || 0) || 0,
+          tgId: Number(tgId || 0) || 0,
+          err: String(e?.message || e).slice(0, 180),
+        })
+      );
+    } catch {}
+  }
 
   // Best-effort ops digest (Redis-only). Dedup per broadcast to avoid spam.
   try {
@@ -258,6 +291,43 @@ async function respondDbOverload({ res, broadcastId, userId, tgId, attempt, wher
     base_backoff_sec: baseSec,
     jitter_sec: jitterSec,
     where: where || null,
+  });
+}
+
+async function respondDbOverloadFuse({ res, broadcastId, userId, tgId, attempt, where }) {
+  const baseSec = getDbBackoffSec();
+  const jitterMax = getDbBackoffJitterSec();
+  const jitterSec = jitterMax > 0 ? randIntInclusive(0, jitterMax) : 0;
+  const sec = Math.max(1, Number(baseSec) + Number(jitterSec));
+  setQStashRetryAfterHeaders(res, sec);
+
+  // Best-effort ops digest (deduped) so operators can see that the fuse is active.
+  try {
+    const bid = Number(broadcastId || 0) || 0;
+    await queueOpsDigestSafe({
+      group: 'ops',
+      reason: 'broadcast_db_overload_fuse',
+      title: 'Broadcast delivery: DB overload fuse active',
+      kind: 'db',
+      payload: bid ? `broadcast=${bid}` : '',
+      extra: [
+        where ? `where=${where}` : '',
+        userId ? `user=${userId}` : '',
+        tgId ? `tg=${tgId}` : '',
+        Number.isFinite(attempt) ? `attempt=${attempt}` : '',
+      ].filter(Boolean),
+      dedupId: 'broadcast_db_overload_fuse',
+    });
+  } catch {}
+
+  res.status(429).json({
+    ok: false,
+    error: 'db_overloaded',
+    retry_after_sec: sec,
+    base_backoff_sec: baseSec,
+    jitter_sec: jitterSec,
+    where: where || 'fuse',
+    fuse: true,
   });
 }
 
@@ -326,6 +396,16 @@ export default async function handler(req, res) {
       res.status(400).json({ ok: false, error: 'bad_payload' });
       return;
     }
+
+    // DB overload fuse (Redis-only): if recent DB overload was detected, short-circuit BEFORE any DB access.
+    // Best-effort: if Redis is down, continue normally.
+    try {
+      const v = await redis.get(dbOverloadFuseKey());
+      if (v) {
+        await respondDbOverloadFuse({ res, broadcastId, userId, tgId, attempt, where: 'fuse_precheck' });
+        return;
+      }
+    } catch {}
 
     // Cooldown (Redis-only fast path).
     // Important: check BEFORE any DB reads to avoid burning Neon CU during 429 bursts.
