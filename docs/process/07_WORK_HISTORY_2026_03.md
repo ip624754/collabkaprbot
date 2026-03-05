@@ -2009,3 +2009,146 @@ QA:
 
 Риск регрессий: низкий (только админская часть + best-effort индекс; core broadcast/send логика не меняется).
 
+
+## STEP337 — Payments ops: runtime TTL control for fallback apply
+
+Дата: 2026-03-05
+
+Контекст:
+- `PAYMENTS_FALLBACK_APPLY_ENABLED` по умолчанию должен быть `0` (строгий режим), но иногда при инцидентах нужно временно включить fallback apply (без redeploy).
+- Требование: управлять через админку, Redis-only, с TTL и без DB.
+
+Цель:
+- Добавить runtime override: включать/выключать fallback apply на время (2h/12h/24h) из админки.
+- Эффективное состояние: `ENV OR runtime`.
+- Использовать в bot + cron + admin auto-heal, чтобы поведение было единым.
+
+Изменения:
+- `src/lib/paymentsOps.js`
+  - Добавлен Redis TTL flag `mg:<env>:sys:pay_fallback_apply` (object + EX).
+  - Экспорт: `isPaymentsFallbackApplyEnabled()`, `getPaymentsFallbackApplyState()`, `setPaymentsFallbackRuntime()`.
+- `src/bot/bot.js`
+  - `Admin → System`: добавлена строка статуса и кнопка `🧯 Fallback: ON/OFF`.
+  - Новый экран `🧯 Payments fallback apply` с кнопками включения на TTL и отключения.
+  - Все проверки `CFG.PAYMENTS_FALLBACK_APPLY_ENABLED` в money paths заменены на effective (`env OR runtime`).
+  - Admin auto-heal теперь доступен при runtime enable (без ENV=1).
+- `src/bot/cron.js`
+  - `autoHealOrphanedPayments` теперь запускается, если effective fallback apply включен (env OR runtime).
+- `docs/00_CURRENT_STATE.md`
+  - Добавлено описание runtime override из админки.
+
+ENV:
+- нет (runtime хранится в Redis)
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Админка → Система → `🧯 Fallback: OFF` → открыть экран → включить на 2h.
+  2) Вернуться в `⚙️ Система` → статус должен стать `ON (runtime)`.
+  3) Нажать `Disable` → статус возвращается в `OFF`.
+  4) (Опционально) На тестовом платеже с истекшей `pay_*` сессией убедиться, что fallback применяется только когда runtime включён.
+
+Риск регрессий: низкий (меняется только gating на effective flag + админский control-plane; DB-truth пути не меняются).
+
+
+## STEP338 — Payments ops: observability for unsigned/invalid payload (digest + /api/health)
+
+Дата: 2026-03-05
+
+Контекст:
+- После STEP322 payload подписывается HMAC (опционально), а fallback может отклонять неподписанные/невалидные payload.
+- Нужно видеть это в режиме оператора: сколько таких случаев, и понимать, это “старые инвойсы” или потенциальная атака/мисконфиг.
+
+Цель:
+- Добавить Redis-only счётчики по проблемам подписи payload.
+- Добавить ops-digest для потенциально опасных кейсов (bad_sig/hmac_error/bad_format).
+- Вывести всё в `/api/health` (без DB).
+
+Изменения:
+- `src/lib/paymentsOps.js`
+  - Добавлены счётчики `mg:<env>:ops:payments:payload:<bucket>:d:<YYYYMMDD>` с TTL 14 дней.
+  - Экспорт: `recordPaymentsPayloadIssue()` + `getPaymentsPayloadIssueCounts()`.
+- `src/bot/payments_fallback.js`
+  - При reject по подписи/формату payload пишет `recordPaymentsPayloadIssue()` (best-effort).
+  - Если разрешены unsigned legacy payload — тоже пишет в счётчик (без спама).
+- `api/health.js`
+  - Добавлено: `payments.fallback_apply_runtime_*` + `payments.fallback_apply_effective`.
+  - Добавлено: `payments.payload_issues_today` (unsigned/bad_sig/bad_format/hmac_error/other).
+- `docs/00_CURRENT_STATE.md`
+  - Описана observability секция.
+
+ENV:
+- нет
+
+QA:
+- `node --check api/health.js`
+- `node --check src/bot/payments_fallback.js`
+- Ручной smoke:
+  1) Если `PAYMENTS_PAYLOAD_HMAC_KEY` задан и `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0`: подать в fallback неподписанный payload → он отклоняется, а `/api/health` увеличивает `payments.payload_issues_today.unsigned`.
+  2) Подать payload с неверной подписью → увеличивается `bad_sig`, и появляется событие в ops-digest.
+
+Риск регрессий: низкий (только best-effort метрики/алерты; money-path остаётся fail-closed).
+
+## STEP339 — Ops digest: расширение на “дорогие” падения (PG/cron_router/QStash)
+
+Цель: убрать “тихие” провалы в местах, где оператору важно видеть причину (без спама, Redis-only буфер, отправка дайджестом).
+
+Что сделано
+- `api/cron_router.js`: при падении роутера крона — пишем событие в ops digest (`cron_router_failed`, dedup по job).
+- `src/db/pool.js`: при `statement_timeout` и при `pool.on('error')` — пишем в ops digest (`pg_statement_timeout`, `pg_pool_error`).
+  Также алертим, если не удалось установить `statement_timeout` на соединении (`pg_stmt_timeout_init_failed`).
+- `api/qstash/broadcast-deliver.js`: в top-level catch добавлен ops digest (`qstash_bc_deliver_failed`, dedup по broadcastId).
+
+QA
+- Принудительно вызвать ошибку в cron (невалидный job / throw внутри tick) → /api/health показывает рост ops.pending, а cron tick отправляет дайджест в OPS.
+- Смоделировать `statement_timeout` (уменьшить PG_STATEMENT_TIMEOUT_MS и выполнить тяжёлый запрос в админке) → появляется digest `pg_statement_timeout`.
+- Смоделировать crash в broadcast-deliver (искусственно бросить exception) → digest `qstash_bc_deliver_failed` появляется и дедупится.
+
+## STEP340 — /api/health: operator-friendly (Redis-only) + hard-skip counters
+
+Цель: сделать health более “операторским”, без DB и без риска падений, чтобы быстрее понимать: что происходит с ops digest, broadcast cooldown и hard-skip.
+
+Что сделано
+- `/api/health`:
+  - добавлены `ops.last_sent_at`, `ops.targets_count`, `ops.top_reasons` (sample), `ops.window_sec`.
+  - добавлен блок `broadcast.hard_skip` (TTL, recent_len, counters: set/hit/unskip for today).
+- Broadcast hard-skip counters (Redis-only):
+  - `setBroadcastHardSkip()` инкрементит `broadcast:hard_skip:set:d:<day>`.
+  - при пропуске доставки из hard-skip инкрементим `broadcast:hard_skip:hit:d:<day>` (cron + qstash worker).
+  - при снятии hard-skip из админки инкрементим `broadcast:hard_skip:unskip:d:<day>`.
+
+QA
+- `GET /api/health` → видны новые поля `ops.*` и `broadcast.hard_skip.*`.
+- Сделать hard-skip (blocked/chat not found/deactivated) → растёт `broadcast.hard_skip.counters.set`.
+- Запустить рассылку на hard-skip tg_id → растёт `broadcast.hard_skip.counters.hit`.
+- Снять hard-skip из админки → растёт `broadcast.hard_skip.counters.unskip`.
+
+
+## STEP341 — Giveaway winners reproducibility pack (audit metadata)
+
+Дата: 2026-03-05
+
+Цель: чтобы любой розыгрыш можно было воспроизвести/проверить “на бумаге” без догадок.
+
+Что сделано
+- Добавлен единый набор версий/лейблов (`src/lib/gwRepro.js`) для audit payload:
+  - `algo_version`, `seed_version`
+  - методы хеширования `pool_hash_method`, `winners_hash_method`
+- Auto-draw (SQL tx) `drawAndFinalizeGiveawayWinnersAtomic`:
+  - в `gw.winners_drawn` добавлены `algo_version`, `seed_version`, `ends_at_iso_used`
+  - добавлены `pool_hash` (и отдельно `eligible_pool_hash`, `entries_pool_hash`) + counts
+  - добавлен `winners_hash` (place-order)
+  - для `gw.winners_drawn_skipped` (no_entries) тоже пишем версии/ends_at_iso_used
+- Manual draw (JS PRNG) `a:gw_draw_do`:
+  - в `gw.winners_drawn` добавлены `algo_version`, `seed_version`, `ends_at_iso_used`
+  - добавлены `pool_hash` + `winners_hash` (sha256)
+
+Важно
+- Никаких миграций: всё хранится в `giveaway_audit.payload`.
+- Никаких новых DB-reads в hot UI путях (изменения только в draw path).
+
+QA
+1) Авто-розыгрыш (cron): довести giveaway до `ENDED` с `auto_draw=true` → после draw в `giveaway_audit` для action=`gw.winners_drawn` должны появиться поля:
+   - `algo_version`, `seed_version`, `ends_at_iso_used`, `pool_hash`, `winners_hash`.
+2) Ручной draw (кнопка): тот же набор полей появляется в audit.
+3) Повторный draw не создаёт второй `gw.winners_drawn` (idempotency сохраняется).
