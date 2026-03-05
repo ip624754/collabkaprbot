@@ -9,6 +9,7 @@ const releaseLock = R.releaseLock;
 const incrWithExpire = typeof R.incrWithExpire === 'function' ? R.incrWithExpire : async () => 0;
 const incrWithExpireOnFirst =
   typeof R.incrWithExpireOnFirst === 'function' ? R.incrWithExpireOnFirst : async () => 0;
+const lpushTrim = typeof R.lpushTrim === 'function' ? R.lpushTrim : async () => false;
 
 import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
@@ -82,6 +83,11 @@ function broadcastHardSkipKey(tgId) {
   return k(['broadcast', 'hard_skip', 'tg', String(tgId)]);
 }
 
+// Keep a small "recent" index for admin visibility (no SCAN/KEYS).
+// Each entry is a JSON string: { tgId, r, at }.
+const BROADCAST_HARD_SKIP_RECENT_KEY = k(['broadcast', 'hard_skip', 'recent']);
+const BROADCAST_HARD_SKIP_RECENT_MAX = 1000;
+
 function parseHardSkipVal(v) {
   if (!v) return null;
   if (typeof v === 'object') {
@@ -126,6 +132,12 @@ export async function setBroadcastHardSkip(tgId, reason) {
       { r, at: new Date().toISOString() },
       { ex: ttlSec }
     );
+  } catch {}
+
+  // Best-effort: write into the "recent" list for admin browsing.
+  try {
+    const payload = JSON.stringify({ tgId: Number(tgId) || 0, r, at: new Date().toISOString() });
+    await lpushTrim(BROADCAST_HARD_SKIP_RECENT_KEY, payload, BROADCAST_HARD_SKIP_RECENT_MAX, ttlSec);
   } catch {}
 }
 

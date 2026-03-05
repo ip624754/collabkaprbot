@@ -6703,7 +6703,8 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
   }
 
   // Rate limit (consume only on confirmed send)
-  const rlPairKey = `brand_apply:${u.id}:${brandUserId}`;
+  // Namespaced rate-limit keys (avoid cross-env collisions if Redis is shared).
+  const rlPairKey = k(['rl', 'brand_apply', String(u.id), String(brandUserId)]);
   let okPair = { allowed: true, resetSec: 0 };
   try { okPair = await rateLimit(rlPairKey, { limit: 3, windowSec: 6 * 60 * 60 }); } catch {}
   if (!okPair.allowed) {
@@ -6713,7 +6714,7 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
     return;
   }
 
-  const rlWsKey = `brand_apply_ws:${wsId}:${brandUserId}`;
+  const rlWsKey = k(['rl', 'brand_apply_ws', String(wsId), String(brandUserId)]);
   let okWs = { allowed: true, resetSec: 0 };
   try { okWs = await rateLimit(rlWsKey, { limit: 5, windowSec: 6 * 60 * 60 }); } catch {}
   if (!okWs.allowed) {
@@ -17835,6 +17836,20 @@ ${escapeHtml(safe)}`;
 
     // Admin: Users directory search (owner-only)
     // --- Admin: Gift subscription — parse usernames ---
+    if (exp.type === 'hs_find') {
+      if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
+      const raw = String(ctx.message?.text || '').trim();
+      const m = raw.match(/(\d{5,})/);
+      const id = m ? Number(m[1]) : 0;
+      if (!id) {
+        await ctx.reply('Нужен TG ID цифрами. Пример: 222047659');
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+        return;
+      }
+      await renderAdminHardSkipView(ctx, id);
+      return;
+    }
+
     if (exp.type === 'adm_gift_users') {
       if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
       const raw = String(ctx.message?.text || '').trim();
@@ -28130,6 +28145,44 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    // --- Admin: Broadcast hard-skip list (Redis-only, manage dead chats) ---
+    if (p.a === 'a:hs_home') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminHardSkipHome(ctx, Math.max(0, Number(p.p || 0) || 0));
+      return;
+    }
+    if (p.a === 'a:hs_find') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      const page = Math.max(0, Number(p.p || 0) || 0);
+      await safeEditOrReply(ctx, '🔎 Введи TG ID (число), чтобы проверить hard-skip статус.\n\nПример: <code>222047659</code>', {
+        parse_mode: 'HTML',
+        reply_markup: navKb('a:hs_home|p:' + page)
+      });
+      try { await setExpectText(ctx.from.id, { type: 'hs_find', backCb: `a:hs_home|p:${page}` }, 10 * 60); } catch {}
+      return;
+    }
+    if (p.a === 'a:hs_view') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      await renderAdminHardSkipView(ctx, Number(p.tg || 0));
+      return;
+    }
+    if (p.a === 'a:hs_unskip') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      const tgId = Number(p.tg || 0);
+      await adminHardSkipUnskip(tgId);
+      await renderAdminHardSkipView(ctx, tgId, { toast: '✅ Снято' });
+      return;
+    }
+
 
     // --- Admin: System Notice (Redis-only, no broadcast) ---
     if (p.a === 'a:admin_notice') {
@@ -35116,6 +35169,8 @@ async function renderAdminSystem(ctx) {
     .text(`📣 QStash fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
     .text('🛰 QStash статус', 'a:admin_qstash_status')
     .row()
+    .text('🧱 Hard-skip (dead chats)', 'a:hs_home|p:0')
+    .row()
     .text('🔥 Founder Sale', 'a:admin_founder')
     .row()
     .text('➕ Модератор', 'a:admin_mod_add')
@@ -35129,6 +35184,155 @@ async function renderAdminSystem(ctx) {
     .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { reply_markup: kb });
+}
+
+
+// =====================================================
+// Admin tool: Broadcast hard-skip list (dead chats)
+// - Redis-only storage: k(['broadcast','hard_skip','tg', tgId]) -> { r, at }
+// - Recent index (no SCAN/KEYS): k(['broadcast','hard_skip','recent']) as an LPUSH list of JSON lines.
+// =====================================================
+
+const ADMIN_HS_RECENT_KEY = k(['broadcast', 'hard_skip', 'recent']);
+const ADMIN_HS_PAGE_SIZE = 8;
+
+function adminHardSkipTgKey(tgId) {
+  return k(['broadcast', 'hard_skip', 'tg', String(tgId)]);
+}
+
+function parseHardSkipObj(v) {
+  if (!v) return null;
+  if (typeof v === 'object') {
+    const r = v.r || v.reason;
+    const at = v.at || v.ts || v.time;
+    return { r: r ? String(r) : 'unknown', at: at ? String(at) : null };
+  }
+  if (typeof v === 'string') {
+    try {
+      const o = JSON.parse(v);
+      if (o && typeof o === 'object') return parseHardSkipObj(o);
+    } catch {}
+    const s = v.split('|')[0];
+    return { r: s ? String(s) : 'unknown', at: null };
+  }
+  return { r: String(v), at: null };
+}
+
+async function adminHardSkipGet(tgId) {
+  const id = Number(tgId || 0);
+  if (!id) return { exists: false };
+  try {
+    const key = adminHardSkipTgKey(id);
+    const v = await redis.get(key);
+    if (!v) return { exists: false };
+    const o = parseHardSkipObj(v);
+    let ttlSec = null;
+    try {
+      if (typeof redis.ttl === 'function') ttlSec = Number(await redis.ttl(key));
+    } catch {}
+    return { exists: true, tgId: id, reason: o?.r || 'unknown', at: o?.at || null, ttlSec: Number.isFinite(ttlSec) ? ttlSec : null };
+  } catch {
+    return { exists: false, error: 'redis_unavailable' };
+  }
+}
+
+async function adminHardSkipUnskip(tgId) {
+  const id = Number(tgId || 0);
+  if (!id) return false;
+  try {
+    await redis.del(adminHardSkipTgKey(id));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function adminHardSkipRecent(page = 0) {
+  const p = Math.max(0, Number(page || 0) || 0);
+  const start = p * ADMIN_HS_PAGE_SIZE;
+  const stop = start + ADMIN_HS_PAGE_SIZE - 1;
+  try {
+    const raw = await redis.lrange(ADMIN_HS_RECENT_KEY, start, stop);
+    const items = Array.isArray(raw) ? raw : [];
+    const parsed = [];
+    for (const it of items) {
+      try {
+        const s = typeof it === 'string' ? it : JSON.stringify(it);
+        const o = JSON.parse(s);
+        const tgId = Number(o?.tgId || 0);
+        const r = String(o?.r || 'unknown').slice(0, 60);
+        const at = o?.at ? String(o.at) : null;
+        if (tgId) parsed.push({ tgId, r, at });
+      } catch {
+        // ignore
+      }
+    }
+    return { ok: true, page: p, items: parsed };
+  } catch {
+    return { ok: false, page: p, items: [] };
+  }
+}
+
+async function renderAdminHardSkipHome(ctx, page = 0) {
+  const p = Math.max(0, Number(page || 0) || 0);
+  const recent = await adminHardSkipRecent(p);
+  let text = '🧱 <b>Hard-skip (dead chats)</b>\n\n';
+  text += 'Это список TG ID, для которых рассылка пропускает отправку (permanent errors: blocked / chat not found / deactivated).\n\n';
+  if (!recent.ok) {
+    text += '⚠️ Redis недоступен — список временно недоступен.\n';
+  } else if (!recent.items.length) {
+    text += 'Пока пусто.\n';
+  } else {
+    text += `<b>Недавние (стр. ${p + 1}):</b>\n`;
+    for (const it of recent.items) {
+      const when = it.at ? ` · <code>${escapeHtml(String(it.at).slice(0, 19))}</code>` : '';
+      text += `• <code>${it.tgId}</code> — <b>${escapeHtml(it.r)}</b>${when}\n`;
+    }
+  }
+
+  const kb = new InlineKeyboard();
+  kb.text('🔎 Найти TG ID', `a:hs_find|p:${p}`).row();
+  if (recent.ok && recent.items.length) {
+    for (const it of recent.items) {
+      kb.text(`tg:${it.tgId}`, `a:hs_view|tg:${it.tgId}`).row();
+    }
+  }
+  kb.row();
+  if (p > 0) kb.text('⬅️', `a:hs_home|p:${p - 1}`);
+  kb.text('➡️', `a:hs_home|p:${p + 1}`);
+  kb.row().text('⬅️ Система', 'a:admin_sys').row().text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function renderAdminHardSkipView(ctx, tgId, opts = {}) {
+  const id = Number(tgId || 0);
+  let text = `🧱 <b>Hard-skip status</b>\n\nTG ID: <code>${id || 0}</code>\n`;
+  if (opts && opts.toast) {
+    text += `\n<b>${escapeHtml(String(opts.toast))}</b>\n`;
+  }
+
+  const st = await adminHardSkipGet(id);
+  if (st.error === 'redis_unavailable') {
+    text += '\n⚠️ Redis недоступен.\n';
+  } else if (!st.exists) {
+    text += '\nСтатус: ✅ <b>нет hard-skip</b>\n';
+  } else {
+    text += `\nСтатус: 🧱 <b>hard-skip</b>\n`;
+    text += `Причина: <b>${escapeHtml(st.reason || 'unknown')}</b>\n`;
+    if (st.at) text += `Время: <code>${escapeHtml(String(st.at).slice(0, 19))}</code>\n`;
+    if (Number.isFinite(st.ttlSec) && st.ttlSec !== null) {
+      const days = Math.max(0, Math.round((st.ttlSec || 0) / 86400));
+      text += `TTL: ~${days}d\n`;
+    }
+  }
+
+  const kb = new InlineKeyboard();
+  if (st.exists) kb.text('🧹 Снять hard-skip', `a:hs_unskip|tg:${id}`).row();
+  kb.text('⬅️ Назад', 'a:hs_home|p:0').row();
+  kb.text('⬅️ Система', 'a:admin_sys').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderAdminSysNotice(ctx) {
