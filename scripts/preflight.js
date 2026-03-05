@@ -110,6 +110,7 @@ const nodeCheckCandidates = [
   "migrations/run.js",
   "scripts/preflight.js",
   "scripts/smoke-degraded-rate-limit.js",
+  "scripts/test-broadcast-overload-invariants.js",
   "src/db/queries.js",
   "src/lib/redis.js",
   "src/lib/tgApi.js",
@@ -153,6 +154,22 @@ if (fs.existsSync(smokePath)) {
 } else {
   // eslint-disable-next-line no-console
   console.warn("[preflight] scripts/smoke-degraded-rate-limit.js not found (skipping)");
+}
+
+logHeader("Preflight: broadcast overload invariants");
+const invPath = path.join(ROOT, "scripts", "test-broadcast-overload-invariants.js");
+if (fs.existsSync(invPath)) {
+  const res = spawnSync(process.execPath, [invPath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  // eslint-disable-next-line no-console
+  console.warn("[preflight] scripts/test-broadcast-overload-invariants.js not found (skipping)");
 }
 
 // eslint-disable-next-line no-console
