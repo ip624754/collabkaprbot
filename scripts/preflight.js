@@ -95,6 +95,9 @@ runNpm("lint:redis-ttl");
 logHeader("Preflight: redis.js exports gate");
 runNpm("lint:redis-exports");
 
+logHeader("Preflight: portable paths gate (ZIP/Windows-safe)");
+runNpm("lint:portable-paths");
+
 logHeader("Preflight: Node syntax check (node --check)");
 const nodeCheckCandidates = [
   "src/bot/bot.js",
