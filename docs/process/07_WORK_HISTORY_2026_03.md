@@ -1472,7 +1472,7 @@ QA:
 - Removed stray files not present in STEP314 (.env.example + extra audit docs).
 - Restored missing `docs/process/07_WORK_HISTORY_2026_02.md`.
 - Reverted `smoke-tests_short.md` to baseline.
-- NOTE: Neon history filename is canonical (`docs/neon/ИСТОРИЯ_НЕОН.txt`); older ZIPs may show mojibake due to archive encoding.
+- NOTE: Neon history filename is canonical (`docs/neon/NEON_HISTORY_RAW.txt`); older ZIPs may show mojibake due to archive encoding.
 
 
 ## STEP316 — Official publish deliver: reserve-based dedup + no revert after TG success
@@ -2433,3 +2433,22 @@ QA:
 - Зачем: минимизировать человеческие ошибки в ENV и ускорить диагностику перед запуском.
 
 Риск регрессий: **минимальный** (health/admin-only; без DB reads).
+
+
+## 2026-03-05
+- STEP345: Payments fallback apply made exactly-once (row-lock + one TX); HMAC/amount checks tightened.
+- STEP346: Giveaways winners draw moved to REPEATABLE READ snapshot + audit reproducibility fields.
+- STEP347: `/api/health` redis read/write probes + Admin→Ops Redis degraded banner.
+- STEP348: Broadcast delivery load-shedding: 429 + Retry-After on DB overload.
+- STEP349: Ops metrics for broadcast DB overload surfaced in health + Admin→Ops banner.
+- STEP350: Support “free text reply” fixed for forum topics; reply accepted to ticket or prompt; no dump to main menu.
+- STEP351: RateLimit hardening — bounded in-memory fallback + circuit-breaker when Redis EVAL fails.
+- STEP352: Ops visibility — `qstash_reschedule_failed` + `official_publish_stuck` in health + Admin→Ops banners.
+- STEP353: Contacts unlock safety — do not charge credits if contact pack is empty; portfolio URLs normalized.
+- STEP354: Broadcast tick fail-closed when Redis degraded; emits `broadcast_tick_deferred_redis` (health + Admin→Ops).
+- STEP355: Payments orphaned auto-heal batching via `FOR UPDATE SKIP LOCKED` to avoid duplicate work.
+- STEP356: Degraded rate-limit stricter (default ÷5 via `RATE_LIMIT_FALLBACK_LIMIT_DIV`).
+- STEP357: Payments safety visibility — health exposes HMAC minlen + key length; Admin→Ops banners for missing/short HMAC key and fallback enabled.
+- STEP358: Prod readiness pack — new `94_PROD_READINESS_PACK.md` (GO/NO‑GO + incident cookbook) + prod docs updated.
+
+Риск регрессий: **нет** (docs-only в STEP358).
