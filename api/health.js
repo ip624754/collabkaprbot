@@ -103,7 +103,11 @@ export default async function handler(_req, res) {
 
   // Redis is optional for /api/health (so it stays useful in minimal envs).
   if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
-    try { base.redis.read_ok = false; base.redis.write_ok = false; } catch {}
+    base.redis.configured = false;
+    base.redis.read_ok = false;
+    base.redis.write_ok = false;
+    base.redis.latency_ms = null;
+    base.redis.last_error = 'not_configured';
     res.status(200).json({ ...base, cron: { enabled: false }, audit: auditBase });
     return;
   }
@@ -119,35 +123,41 @@ export default async function handler(_req, res) {
   try {
     const { redis, k } = await import('../src/lib/redis.js');
 
-    // STEP347: Redis read/write probe (best-effort). Helps ops see degraded Redis fast.
+    // Redis probe (best-effort): helps operators distinguish "Redis not configured" vs "Redis degraded".
     try {
-      const probeKey = k(['health', 'redis_probe']);
       const t0 = Date.now();
-      let readOk = false;
+      const probeKey = k(['health', 'redis_probe']);
       let writeOk = false;
+      let readOk = false;
       let lastErr = null;
-
-      try {
-        await redis.get(probeKey);
-        readOk = true;
-      } catch (e) {
-        lastErr = String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180);
-      }
 
       try {
         await redis.set(probeKey, now.toISOString(), { ex: 60 });
         writeOk = true;
       } catch (e) {
-        if (!lastErr) lastErr = String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180);
+        lastErr = String(e?.message || e);
       }
 
-      base.redis.read_ok = readOk;
-      base.redis.write_ok = writeOk;
+      try {
+        const v = await redis.get(probeKey);
+        readOk = v !== null && v !== undefined;
+      } catch (e) {
+        lastErr = lastErr || String(e?.message || e);
+      }
+
+      base.redis.configured = true;
+      base.redis.write_ok = !!writeOk;
+      base.redis.read_ok = !!readOk;
       base.redis.latency_ms = Math.max(0, Date.now() - t0);
-      base.redis.last_error = lastErr;
+      base.redis.last_error = lastErr ? String(lastErr).slice(0, 160) : null;
     } catch {
-      // ignore
+      base.redis.configured = true;
+      base.redis.read_ok = false;
+      base.redis.write_ok = false;
+      base.redis.latency_ms = null;
+      base.redis.last_error = 'probe_failed';
     }
+
 
     // Ops alert buffer status (Redis-only).
     try {
@@ -356,6 +366,7 @@ try {
       qstash_last_delivery_at: null,
       counters: null,
       hard_skip: null,
+      db_overload: { day, today_count: null, last_at: null, last_where: null },
     };
 
     try {
@@ -430,6 +441,24 @@ try {
       hit: Number(hsHitCnt) || 0,
       unskip: Number(hsUnskipCnt) || 0,
     },
+  };
+} catch {
+  // ignore
+}
+
+
+// Broadcast DB overload metrics (Redis-only; emitted by qstash/broadcast-deliver.js on load-shedding).
+try {
+  const [cntRaw, lastAt, lastWhere] = await readMany([
+    k(['ops', 'reasons', 'broadcast_db_overload', 'd', day]),
+    k(['ops', 'reasons', 'broadcast_db_overload', 'last_at']),
+    k(['ops', 'reasons', 'broadcast_db_overload', 'last_where']),
+  ]);
+  broadcast.db_overload = {
+    day,
+    today_count: Number(cntRaw) || 0,
+    last_at: lastAt || null,
+    last_where: lastWhere || null,
   };
 } catch {
   // ignore
@@ -584,14 +613,13 @@ try {
       audit,
     });
   } catch {
+    base.redis.configured = true;
+    base.redis.read_ok = false;
+    base.redis.write_ok = false;
+    base.redis.latency_ms = null;
+    base.redis.last_error = 'redis_unavailable';
     res.status(200).json({
       ...base,
-      redis: {
-        ...(base.redis || { configured: true }),
-        read_ok: false,
-        write_ok: false,
-        last_error: (base.redis && base.redis.last_error) ? base.redis.last_error : 'redis_unavailable',
-      },
       cron: { enabled: true, error: 'redis_unavailable' },
       broadcast: { cooldown_until: null, retry_after_sec: null, broadcast_id: null },
       ref: { day: null, today: { ig: 0, tg: 0 }, total: { ig: 0, tg: 0 } },
