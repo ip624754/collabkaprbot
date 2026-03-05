@@ -380,6 +380,7 @@ try {
       last_429_at: null,
       last_429_reason: null,
       qstash_last_delivery_at: null,
+      pending_deliveries: null,
       counters: null,
       hard_skip: null,
       db_overload: { day, today_count: null, last_at: null, last_where: null },
@@ -398,6 +399,36 @@ try {
         broadcast.qstash_last_delivery_at = (await redis.get(k(['qstash', 'broadcast_deliver', 'last_at']))) || null;
       } catch {
         broadcast.qstash_last_delivery_at = null;
+      }
+
+      // Pending deliveries snapshot (Redis-only; written by cron broadcastTick)
+      try {
+        const snapRaw = await redis.get(k(['broadcast', 'pending_deliveries']));
+        if (!snapRaw) {
+          broadcast.pending_deliveries = null;
+        } else {
+          let snap = snapRaw;
+          if (typeof snapRaw === 'string') {
+            try {
+              snap = JSON.parse(snapRaw);
+            } catch {
+              snap = null;
+            }
+          }
+          if (snap && typeof snap === 'object') {
+            const bid = Number(snap.broadcast_id ?? snap.broadcastId) || null;
+            const pc = Number(snap.pending_count ?? snap.pendingCount ?? snap.pending) || 0;
+            broadcast.pending_deliveries = {
+              ts: snap.ts || null,
+              broadcast_id: bid,
+              pending_count: pc,
+            };
+          } else {
+            broadcast.pending_deliveries = null;
+          }
+        }
+      } catch {
+        // ignore
       }
 
       let untilMs = Number(untilRaw) || 0;
