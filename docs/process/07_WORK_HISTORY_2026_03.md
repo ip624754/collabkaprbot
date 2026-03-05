@@ -1701,7 +1701,7 @@ QA:
 - `src/lib/redis.js`: при падении Lua `eval` в ключевых helper’ах пишем digest ops alert `redis_lua_failed`:
   - `consumeOnce` (atomic getdel→eval→GET+DEL fallback),
   - `releaseLock` (token-lock safety),
-  - `rateLimit` (fail-open),
+  - `rateLimit` (fallback=memory when Redis degraded),
   - `incrWithExpireOnFirst` (non-atomic fallback).
 - `/api/qstash/official-publish-deliver`: если не удалось enqueue delayed retry при `locked`, пишем digest ops alert `qstash_reschedule_failed`.
 
@@ -2189,3 +2189,213 @@ QA:
 QA:
 1) `npm run preflight` проходит (включая portable-paths gate).
 2) FULL ZIP распаковывается на Windows (без “File name too long”).
+
+## STEP345 — Payments fallback exactly-once (atomic tx)
+
+Дата: 2026-03-05
+
+Проблема:
+- Fallback apply (когда истекла `pay_*` сессия) выполнял: DB-check → apply сайд‑эффектов → `markPaymentApplied()`.
+- В serverless (ретраи Telegram / параллельный раннер) возможна гонка: двойное начисление или “частично применили → упали → применили ещё раз”.
+
+Что сделано:
+- `src/bot/payments_fallback.js`: fallback apply переведён на **одну** DB‑транзакцию:
+  - `SELECT payments ... FOR UPDATE NOWAIT` (если строка занята — `reason=locked`, без ожидания).
+  - строгая валидация: `user_id`, `telegram_payment_charge_id` (если передан), и `invoice_payload` (нормализованно, с учётом подписи).
+  - apply сайд‑эффектов (credits/plan/PRO) выполняется **внутри** tx.
+  - `status='APPLIED'` выставляется **в том же tx** (note сохраняется).
+- Для PRO добавлен безопасный upsert в `workspace_settings` (на случай отсутствующей строки).
+- `docs/00_CURRENT_STATE.md`: отражена атомарность fallback apply.
+
+QA:
+1) Два параллельных вызова fallback по одному `paymentId` → один применяет, второй возвращает `locked`, double‑apply нет.
+2) Несовпадение `invoice_payload` или charge id → `payload_mismatch` / `charge_id_mismatch`, ничего не применено.
+3) PRO fallback: без ownership на workspace → `no_ws_access`.
+4) Brand topup / plan / founder: сумма должна совпасть с каталогом (amount_mismatch → fail‑closed).
+
+
+## STEP346 — Giveaways winners draw: REPEATABLE READ snapshot + audit cutoff
+
+Дата: 2026-03-05
+
+Проблема:
+- В `READ COMMITTED` внутри draw‑транзакции пул `giveaway_entries` мог измениться между выборкой победителей и вычислением метрик воспроизводимости (pool hash/count).
+- Это ухудшает “аудитопригодность”: победители остаются детерминированными, но метаданные пула могут выглядеть как будто “не совпали”.
+
+Что сделано:
+- `src/db/queries.js`: `drawAndFinalizeGiveawayWinnersAtomic()` теперь стартует транзакцию как `BEGIN ISOLATION LEVEL REPEATABLE READ` → весь draw видит **один** snapshot.
+- В audit payload (`gw.winners_drawn` и `gw.winners_drawn_skipped`) добавлены: `tx_isolation` и `snapshot_ts` (UTC).
+- `computePoolHash()` расширен: добавлен `max(joined_at)` (UTC ISO). В audit добавлены `pool_cutoff_joined_at`, `eligible_max_joined_at`, `entries_max_joined_at`.
+
+QA:
+1) Во время draw добавить entry/поменять eligibility (параллельным действием) → победители и pool‑метаданные остаются согласованными (один snapshot).
+2) Повторный draw: возвращается `already_drawn` или `locked`, дублей нет.
+
+
+## STEP347 — /api/health redis probe + баннер в админке (ops)
+
+Дата: 2026-03-05
+
+Проблема:
+- При деградации/отключении Redis админ видел «странности» (тумблеры/кеши/троттлы), но было трудно понять причину быстро.
+- `a:admin_ops` был `REQUIRE_REDIS`, что делало диагностику хуже именно в момент деградации.
+
+Что сделано:
+- `api/health.js`: добавлен блок `redis` (configured/read_ok/write_ok/latency_ms/last_error) через лёгкий probe `SET+GET` (TTL 60s), endpoint остаётся fail-open.
+- `src/bot/actionRegistry.js`: `a:admin_ops` переведён в guard `NONE`.
+- `src/bot/bot.js`: экран «🧰 Админка → Операции» показывает баннер статуса Redis (OK/degraded/not configured) и (если есть `PUBLIC_BASE_URL`) добавляет кнопку `🩺 /api/health`.
+
+Риск регрессий:
+- Низкий: изменения затрагивают только ops-диагностику. Все probe операции — best-effort и не блокируют UI.
+
+QA:
+1) При нормальном Redis — баннер «Redis OK».
+2) При неверном токене Redis — баннер «Redis degraded», `/api/health` отдаёт `redis.write_ok=false`.
+3) При отсутствии Redis env — `/api/health` показывает `not_configured`, админка показывает «Redis не настроен».
+
+
+## STEP348 — Broadcast deliver load-shedding при деградации DB (429 + Retry-After)
+
+Дата: 2026-03-05
+
+Проблема:
+- При проблемах Neon/DB (таймауты/коннекты/лимиты) `/api/qstash/broadcast-deliver` падал 500 и QStash мог быстро ретраить, создавая «шторм» и ещё сильнее нагружая DB.
+
+Что сделано:
+- `api/qstash/broadcast-deliver.js`: добавлен детектор `isDbOverloadError()` (сетевые ошибки + типовые PG коды/сообщения).
+- На DB overload мы отвечаем `HTTP 429` и выставляем `Retry-After` + `Upstash-Retry-After` (в секундах), чтобы QStash корректно бэк‑оффился.
+- Добавлен ops-digest breadcrumb `broadcast_db_overload` (Redis-only, dedup per broadcast), чтобы видеть проблему в алертах без спама.
+- Критичные DB-reads (`getBroadcast`, `claimBroadcastDelivery`) теперь обёрнуты: при overload — 429 вместо crash.
+
+Риск регрессий:
+- Низкий/средний: логика трогает только QStash delivery endpoint. При нормальной DB поведение не меняется.
+
+QA:
+1) Смоделировать DB outage (невалидный DATABASE_URL на preview): endpoint возвращает 429 и `Retry-After`.
+2) При восстановлении DB — рассылка продолжает доставку.
+3) Нет дублей: мы не делаем self-republish на DB overload, а полагаемся на retry policy QStash.
+
+---
+
+## STEP349 — Ops polish: expose broadcast DB overload metrics in /api/health + Admin→Ops
+
+Что сделано:
+- В `api/qstash/broadcast-deliver.js` при DB overload (load‑shedding) записываем Redis‑метрики: счётчик за день и `last_at/last_where`.
+- В `/api/health` добавлен блок `broadcast.db_overload` (Redis-only): `today_count`, `last_at`, `last_where`.
+- В «🧰 Админка → Операции» добавлен баннер “Broadcast: DB overload” рядом со статусом Redis (best-effort).
+
+Риск регрессий:
+- Низкий: изменения затрагивают только qstash endpoint (degraded path) и ops‑экраны/health (read-only).
+
+QA:
+1) На preview с неверным `DATABASE_URL` дернуть `api/qstash/broadcast-deliver` с валидным payload → получаем 429 + Retry‑After.
+2) Открыть `/api/health` → увидеть `broadcast.db_overload.today_count >= 1` и `last_at`.
+3) Открыть «🧰 Админка → Операции» → увидеть баннер “Broadcast: DB overload”.
+
+
+## STEP350 — Fix: свободный ответ в SUPPORT-группе (adm_support_reply) не должен падать в главное меню
+
+Дата: 2026-03-05
+
+Проблема:
+- В SUPPORT-группе «✍️ Ответить» запускал сессию, но свободный текст часто не доходил до пользователя:
+  - админ отвечал reply на сам тикет (а не на подсказку) → сессия не матчилась,
+  - в forum-группах подсказка могла отправиться не в тот топик,
+  - при любом “неправильном” сообщении бот падал в дефолтный путь и постил «главное меню» в группу.
+
+Что сделано:
+- `src/bot/bot.js`:
+  - при старте `a:adm_support_reply` сохраняем `originMsgId` (id тикета) и `threadId` (topic id),
+  - подсказка отправляется в тот же topic (`message_thread_id`) при наличии,
+  - в обработчике текста принимаем reply <b>и на тикет</b>, и на подсказку (`promptMsgId`),
+  - если сессия активна, но сообщение не reply на нужное — показываем короткую подсказку и не постим «главное меню».
+
+Риск регрессий:
+- Низкий: изменения касаются только support-группы и только для супер-админов при активной reply-сессии.
+
+QA:
+1) В SUPPORT-группе открыть тикет → нажать «✍️ Ответить» → сделать Reply прямо на тикет и отправить текст → пользователь получает DM «Ответ поддержки», в группе приходит подтверждение.
+2) В forum/supergroup с топиками: тикет в topic → «✍️ Ответить» → подсказка появляется в том же topic; reply на тикет работает.
+3) При активной сессии отправить обычное сообщение <i>без Reply</i> → бот выдаёт подсказку (не меню) и предлагает «❌ Отмена».
+## STEP351 — RateLimit: in-memory fallback + circuit breaker при деградации Redis (anti-Neon-exhaust)
+
+Дата: 2026-03-05
+
+Проблема:
+- Ранее `rateLimit()` при падении Redis/Lua `EVAL` работал в режиме unlimited **fail-open**.
+- Это безопасно с точки зрения TTL (не создаём “вечные” ключи), но опасно по нагрузке: при Redis outage спам/шторм может ударить в Neon (connection exhaustion / CU burn).
+
+Что сделано:
+- `src/lib/redis.js`:
+  - добавлен короткий circuit‑breaker: если Redis rateLimit EVAL падает, на `RATE_LIMIT_FALLBACK_DEGRADED_MS` пропускаем попытки EVAL и используем fallback,
+  - fallback — best‑effort **in‑memory limiter** (bounded LRU-ish Map), только на деградации Redis,
+  - по‑прежнему **не используем** non‑atomic `INCR+EXPIRE` fallback (не создаём ключи без TTL).
+
+ENV (опционально):
+- `RATE_LIMIT_FALLBACK_DEGRADED_MS` (default 10000)
+- `RATE_LIMIT_FALLBACK_MAX_KEYS` (default 2000)
+
+Риск регрессий:
+- Низкий: изменения активируются только при Redis деградации; в нормальном режиме всё работает как раньше.
+
+QA:
+1) Нормальный Redis: rateLimit ограничивает как раньше.
+2) Эмулировать Redis EVAL error (невалидный UPSTASH токен / отключить Redis): первые вызовы логируют `redis_lua_failed`, дальше в течение окна деградации rateLimit обслуживается из памяти.
+3) Убедиться, что при деградации Redis нет unlimited fail-open: после превышения `limit` получаем `allowed=false` (best-effort, per-warm-instance).
+
+## STEP352 — Ops visibility: QStash reschedule failures + OFFICIAL publish stuck (health + admin banners)
+
+Дата: 2026-03-05
+
+Проблема:
+- `qstashPublishJSON()` при enqueue delayed retry может падать (например, из-за неверного токена/сетевых ошибок). Ранее это было видно только в digest (и не всегда), а в `/api/health` и Admin→Ops это не отражалось.
+- “OFFICIAL publish stuck” (self-heal в `/api/qstash/official-publish-verify`) может происходить, но оператору нужен быстрый сигнал в health/admin.
+
+Что сделано:
+- `api/qstash/official-publish-deliver.js`:
+  - при `qstash_reschedule_failed` добавлены Redis-only счётчики/last_* (`ops:reasons:qstash_reschedule_failed:*`).
+- `api/qstash/official-publish-verify.js`:
+  - если reschedule verify-ретрая не удалось — пишем те же метрики + `queueOpsDigestSafe(reason=qstash_reschedule_failed)`.
+  - при self-heal “publish stuck” пишем Redis-only метрики `ops:reasons:official_publish_stuck:*` (last_offer_id, last_age_sec, last_via).
+- `api/health.js`:
+  - добавлен блок `qstash.*` (breadcrumbs deliver/verify + `reschedule_failed` + `official_publish_stuck`).
+- `src/bot/bot.js`:
+  - Admin→Ops теперь показывает баннеры для `QStash: reschedule failed` и `OFFICIAL: publish stuck`.
+  - заодно исправлен баг области видимости (`redis/k`), из-за которого Admin→Ops мог падать в общий catch и всегда писать “probe failed”.
+
+Риск регрессий:
+- Низкий: изменения Redis-only, `/api/health` по-прежнему без DB чтений, логика публикации не менялась.
+
+QA:
+1) Открыть «🧰 Админка → Операции» — экран должен грузиться и показывать реальный статус Redis (не “probe failed”).
+2) Открыть `/api/health` — в JSON есть блок `qstash.reschedule_failed` и `qstash.official_publish_stuck`.
+3) (Preview) Поставить неверный `UPSTASH_QSTASH_TOKEN`, инициировать OFFICIAL publish (или verify retry) → `/api/health.qstash.reschedule_failed.today_count` растёт; в Admin→Ops появляется баннер.
+4) Если был случай stuck: после self-heal `/api/health.qstash.official_publish_stuck.*` заполнен (offer_id/age/via) и баннер виден в Admin→Ops.
+
+## STEP353 — Contacts unlock: no-charge when contact pack empty (anti “sell air”)
+
+Дата: 2026-03-05
+
+Проблема:
+- Разлок контактов мог списать кредиты Brand Pass, даже если у креатора реально нет контактов/ссылок (например, портфолио-массив содержит пустые строки, или профиль был очищен после того, как бренд открыл экран).
+- Это создаёт риск жалоб (“списали, а контактов нет”) и потенциальных чарджбеков.
+
+Что сделано:
+- `src/db/queries.js`:
+  - `unlockWorkspaceContactsWithCredits()` перед активацией unlock в одной транзакции проверяет, что в workspace есть хотя бы 1 revealable поле: `channel_username` / `profile_contact` / `profile_ig` / непустой `profile_portfolio_urls[]` / структурные контакты (`profile_contacts.tg/email/phone/site/other`).
+  - если контактов нет → возврат `{ ok:false, error:'no_contacts' }` (без списания и без unlock записи).
+  - если витрина удалена/не найдена → `{ ok:false, error:'missing_ws' }`.
+- `src/bot/bot.js`:
+  - обработка `no_contacts`/`missing_ws` в `a:wsp_contact_unlock`: показываем понятный экран и подтверждаем, что **списания не было**.
+  - доп.: нормализуем `profile_portfolio_urls` (фильтруем пустые строки), чтобы не показывать разлок “ради пустого портфолио”.
+- `api/qstash/monetization-retry.js`:
+  - воркер `wsp_contact_unlock` обрабатывает `no_contacts`/`missing_ws` и уведомляет бренд-актора (списаний нет), освобождает token-lock как обычно.
+
+Риск регрессий:
+- Низкий: изменения затрагивают только путь “🔓 Разлок контактов” (money-path) и улучшают UX при неконсистентных данных.
+
+QA:
+1) Workspace без контактов/IG/портфолио/канала: нажатие «🔓 Разлок» → сообщение “Контактов пока нет, списания не было”, баланс не меняется.
+2) Workspace с портфолио, но массив содержит пустые строки: unlock CTA не должен появляться только из-за пустых значений; при клике списания нет (no_contacts).
+3) Нормальный workspace с контактами: разлок списывает 1 кредит (если нужно), ставит unlock, витрина показывает контакт‑пакет.
+4) Async retry включен: при no_contacts воркер шлёт бренд-актору сообщение “списания не было”, и unlock не активируется.
