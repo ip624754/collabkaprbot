@@ -4074,6 +4074,45 @@ async function redisHealthOkQuick() {
   }
 }
 
+// STEP347: Redis probe for admin screens (read + write). Use ONLY in admin/ops screens (non-hot).
+async function redisProbeStatus() {
+  const st = {
+    configured: !!(CFG.UPSTASH_REDIS_REST_URL && CFG.UPSTASH_REDIS_REST_TOKEN),
+    read_ok: null,
+    write_ok: null,
+    latency_ms: null,
+    last_error: null,
+  };
+
+  if (!st.configured) {
+    st.read_ok = false;
+    st.write_ok = false;
+    return st;
+  }
+
+  const t0 = Date.now();
+  const probeKey = k(['health', 'redis_admin_probe']);
+
+  try {
+    await redis.get(probeKey);
+    st.read_ok = true;
+  } catch (e) {
+    st.read_ok = false;
+    st.last_error = String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180);
+  }
+
+  try {
+    await redis.set(probeKey, String(Date.now()), { ex: 60 });
+    st.write_ok = true;
+  } catch (e) {
+    st.write_ok = false;
+    if (!st.last_error) st.last_error = String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180);
+  }
+
+  st.latency_ms = Math.max(0, Date.now() - t0);
+  return st;
+}
+
 // UI mode: Creator vs Brand (reduce main menu overload)
 const UI_MODES = { CREATOR: 'creator', BRAND: 'brand' };
 
@@ -35137,7 +35176,25 @@ async function renderAdminHome(ctx) {
 
 async function renderAdminOps(ctx) {
   // Access is checked in the callback handler via isSuperAdminTg().
+  const st = await redisProbeStatus();
+
   let text = '🧰 Админка → Операции\n\n';
+
+  // Banner: make Redis degradation visible to the operator.
+  const degraded = (st.configured && (st.read_ok === false || st.write_ok === false));
+  const notConfigured = (!st.configured);
+
+  if (notConfigured) {
+    text += '⚠️ Redis не настроен (UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN).\n';
+    text += 'Часть функций админки/лимитов/кэшей будет недоступна или работать нестабильно.\n\n';
+  } else if (degraded) {
+    const r = st.read_ok ? 'OK' : 'FAIL';
+    const w = st.write_ok ? 'OK' : 'FAIL';
+    const ms = Number.isFinite(st.latency_ms) ? String(st.latency_ms) : '—';
+    text += `⚠️ Redis degraded: read ${r} / write ${w} (latency ~${ms}ms)\n`;
+    text += 'Симптомы: тумблеры/сессии/кэши могут не сохраняться; часть действий будет fail-closed.\n\n';
+  }
+
   text += '• 👥 Пользователи — каталог, фильтры, карточка\n';
   text += '• 💰 Платежи — manual/apply\n';
   text += '• 📣 Рассылка — broadcast по аудитории\n';
@@ -35151,7 +35208,13 @@ async function renderAdminOps(ctx) {
     .text('📣 Рассылка', 'a:bc_list|p:0')
     .text('📜 Аудит', 'a:aud|h:24|p:0')
     .row()
-    .text('📈 Метрики', 'a:admin_metrics|d:14')
+    .text('📈 Метрики', 'a:admin_metrics|d:14');
+
+  if ((notConfigured || degraded) && String(CFG.PUBLIC_BASE_URL || '').trim()) {
+    kb.row().url('🩺 /api/health', String(CFG.PUBLIC_BASE_URL).replace(/\/$/, '') + '/api/health');
+  }
+
+  kb
     .row()
     .text('⬅️ Админка', 'a:admin_home')
     .row()

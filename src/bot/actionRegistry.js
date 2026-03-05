@@ -67,7 +67,8 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:admin_founder_texts": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:admin_founder_toggle": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:admin_home": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
-  "a:admin_ops": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
+  // Admin ops hub: keep guard NONE so it stays accessible when Redis is degraded (shows status/banner).
+  "a:admin_ops": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:admin_comms": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:admin_sys": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   // Broadcast hard-skip admin tool (Redis-only). Keep guard NONE to allow graceful UX when Redis is degraded.
