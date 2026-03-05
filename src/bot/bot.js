@@ -23,7 +23,7 @@ import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, countCodepo
 import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import { registerStarsPaymentsHandlers } from './payments/starsHandlers.js';
-import { queueOpsAlert } from './opsAlerts.js';
+import { queueOpsAlert, flushOpsAlerts } from './opsAlerts.js';
 import { getPaymentsFallbackApplyState, isPaymentsFallbackApplyEnabled, setPaymentsFallbackRuntime } from '../lib/paymentsOps.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
@@ -27511,6 +27511,47 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    if (p.a === 'a:admin_ops_flush') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
+      try { await clearDraft(ctx.from.id); } catch {}
+
+      let res = null;
+      try {
+        // Force=true: operator explicitly requests an immediate digest flush.
+        res = await flushOpsAlerts(getBot().api, 'ops', { force: true });
+      } catch (e) {
+        res = { sent: 0, skipped: 'redis_error', error: String(e?.message || e) };
+      }
+
+      const skipped = res && res.skipped ? String(res.skipped) : '';
+      const map = {
+        locked: 'уже выполняется (locked)',
+        window: 'слишком рано (window)',
+        empty: 'нет событий (empty)',
+        no_targets: 'не настроены targets (no_targets)',
+        redis_error: 'Redis недоступен (redis_error)',
+      };
+
+      let banner = '';
+      if (res && res.flushed) {
+        const sent = Number(res.sent) || 0;
+        const ev = Number(res.events) || 0;
+        banner = `✅ OPS digest: sent ${sent} • events ${ev}`;
+      } else {
+        const reason = map[skipped] || (skipped ? skipped : 'failed');
+        banner = `⚠️ OPS digest: ${reason}`;
+        if (res && res.error && skipped === 'redis_error') {
+          banner += ` — ${String(res.error).slice(0, 90)}`;
+        }
+      }
+
+      await renderAdminOps(ctx, { banner });
+      return;
+    }
+
     if (p.a === 'a:admin_comms') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
@@ -34516,9 +34557,18 @@ async function renderAdminHome(ctx) {
 }
 
 
-async function renderAdminOps(ctx) {
+async function renderAdminOps(ctx, { banner = '' } = {}) {
   // Access is checked in the callback handler via isSuperAdminTg().
   let text = '🧰 Админка → Операции\n\n';
+
+  if (banner) {
+    try {
+      const b = String(banner || '').trim();
+      if (b) text = `${escapeHtml(b)}\n\n` + text;
+    } catch {
+      // ignore
+    }
+  }
 
   // Redis status banner (best-effort). This screen must stay reachable even when Redis is degraded.
   try {
@@ -34713,6 +34763,8 @@ async function renderAdminOps(ctx) {
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
     .row();
+
+  kb.text('🧾 Flush ops digest', 'a:admin_ops_flush').row();
 
   // Quick health link (if PUBLIC_BASE_URL is configured)
   if (CFG.PUBLIC_BASE_URL) {
