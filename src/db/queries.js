@@ -852,6 +852,46 @@ export async function unlockWorkspaceContactsWithCredits(brandUserId, workspaceI
       return { ok: false, error: 'busy' };
     }
 
+    // STEP353: prevent charging for empty contact packs ("selling air").
+    // If the creator has no revealable contacts/links at the moment of unlock, skip without charging.
+    const requireNonEmpty = opts?.requireNonEmptyContacts !== false;
+    if (requireNonEmpty) {
+      const rWs = await client.query(
+        `select channel_username, profile_contact, profile_ig, profile_portfolio_urls, profile_contacts
+         from workspaces
+         where id=$1
+         limit 1`,
+        [wsId]
+      );
+
+      if (!rWs.rowCount) {
+        await client.query('rollback');
+        return { ok: false, error: 'missing_ws' };
+      }
+
+      const w = rWs.rows[0] || {};
+      const channel = String(w.channel_username || '').trim();
+      const contact = String(w.profile_contact || '').trim();
+      const ig = String(w.profile_ig || '').trim();
+      const ports = Array.isArray(w.profile_portfolio_urls) ? w.profile_portfolio_urls : [];
+      const hasPorts = ports.some((x) => String(x || '').trim().length > 0);
+
+      const cObj = (w.profile_contacts && typeof w.profile_contacts === 'object') ? w.profile_contacts : null;
+      const cTgRaw = cObj?.tg ? String(cObj.tg).trim() : '';
+      const cTg = cTgRaw.replace(/^@/, '');
+      const cEmail = cObj?.email ? String(cObj.email).trim() : '';
+      const cPhone = cObj?.phone ? String(cObj.phone).trim() : '';
+      const cSite = cObj?.site ? String(cObj.site).trim() : '';
+      const cOther = cObj?.other ? String(cObj.other).trim() : '';
+      const hasStructured = !!(cTg || cEmail || cPhone || cSite || cOther);
+
+      const hasAny = !!(channel || contact || ig || hasPorts || hasStructured);
+      if (!hasAny) {
+        await client.query('rollback');
+        return { ok: false, error: 'no_contacts' };
+      }
+    }
+
     // Activate unlock only if it is missing/expired. If still active => no-op (0 rows).
     let activated = false;
     let unlockedUntil = null;
