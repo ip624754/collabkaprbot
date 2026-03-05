@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { CFG } from '../lib/config.js';
 import * as db from '../db/queries.js';
+import { pool } from '../db/pool.js';
 import { recordPaymentsPayloadIssue } from '../lib/paymentsOps.js';
 
 function safeUpper(s) {
@@ -56,6 +57,118 @@ function verifyPayloadHmac(payload) {
   if (expected !== sig) return { ok: false, reason: 'bad_sig' };
 
   return { ok: true, signed: true, payloadNoSig: `${prefix}${token}`, mode: 'signed_ok' };
+}
+
+
+function isPgLockNotAvailable(err) {
+  return String(err?.code || '') === '55P03'; // lock_not_available
+}
+
+function normalizePayloadNoSigForCompare(rawPayload) {
+  const p = String(rawPayload || '');
+  if (!p) return '';
+  try {
+    const hv = verifyPayloadHmac(p);
+    if (hv && hv.ok) return String(hv.payloadNoSig || p);
+  } catch {
+    // ignore
+  }
+  return p;
+}
+
+async function applyPaymentFallbackAtomicTx({
+  paymentId,
+  paymentUserId,
+  appliedByUserId,
+  telegramPaymentChargeId,
+  payloadNoSig,
+  payloadRaw,
+  note,
+  applyTx
+}) {
+  const pid = Number(paymentId);
+  const uid = Number(paymentUserId);
+  const appliedBy = Number(appliedByUserId || paymentUserId);
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+
+    let payRow = null;
+    try {
+      const r = await client.query(`select * from payments where id=$1 for update nowait`, [pid]);
+      payRow = r.rows[0] || null;
+    } catch (e) {
+      if (isPgLockNotAvailable(e)) {
+        try { await client.query('rollback'); } catch {}
+        return { applied: false, reason: 'locked' };
+      }
+      throw e;
+    }
+
+    if (!payRow) {
+      await client.query('rollback');
+      return { applied: false, reason: 'no_payment_row' };
+    }
+
+    if (Number(payRow.user_id) !== uid) {
+      await client.query('rollback');
+      return { applied: false, reason: 'payment_user_mismatch' };
+    }
+
+    if (String(payRow.status || '').toUpperCase() === 'APPLIED') {
+      await client.query('rollback');
+      return { applied: false, reason: 'already_applied' };
+    }
+
+    const cidDb = String(payRow.telegram_payment_charge_id || '');
+    const cidIn = String(telegramPaymentChargeId || '');
+    if (cidDb && cidIn && cidDb !== cidIn) {
+      await client.query('rollback');
+      return { applied: false, reason: 'charge_id_mismatch' };
+    }
+
+    // Strong safety: payload must match DB record (normalized: with signature stripped if present).
+    const dbPayload = normalizePayloadNoSigForCompare(payRow.invoice_payload);
+    if (dbPayload && payloadNoSig && String(dbPayload) !== String(payloadNoSig)) {
+      await client.query('rollback');
+      return { applied: false, reason: 'payload_mismatch' };
+    }
+
+    const rApply = await applyTx(client, payRow);
+    if (!rApply || rApply.ok === false) {
+      await client.query('rollback');
+      return { applied: false, reason: rApply?.reason || 'apply_rejected' };
+    }
+
+    const rMark = await client.query(
+      `update payments
+          set status='APPLIED',
+              applied_by_user_id=$2,
+              applied_at=now(),
+              note=coalesce($3, note),
+              updated_at=now()
+        where id=$1
+        returning id`,
+      [pid, appliedBy, note || null]
+    );
+    if (rMark.rowCount <= 0) throw new Error('mark_applied_failed');
+
+    await client.query('commit');
+    const out = { applied: true };
+    if (rApply && typeof rApply === 'object') {
+      for (const [k, v] of Object.entries(rApply)) {
+        if (k === 'ok') continue;
+        out[k] = v;
+      }
+    }
+    return out;
+  } catch (e) {
+    try { await client.query('rollback'); } catch {}
+    return { applied: false, reason: 'db_tx_failed' };
+  } finally {
+    try { client.release(); } catch {}
+  }
 }
 
 
@@ -246,19 +359,7 @@ export async function applyPaymentFallbackNoSession({
     }
   }
 
-  // DB-truth hardening: confirm payment row belongs to payer and matches charge id.
-  try {
-    const row = await db.getPaymentById(paymentId);
-    if (!row) return { applied: false, reason: 'no_payment_row' };
-    if (Number(row.user_id) !== Number(paymentUserId)) return { applied: false, reason: 'payment_user_mismatch' };
-    if (String(row.status || '').toUpperCase() === 'APPLIED') return { applied: false, reason: 'already_applied' };
-    const cidDb = String(row.telegram_payment_charge_id || '');
-    const cidIn = String(telegramPaymentChargeId || '');
-    if (cidDb && cidIn && cidDb !== cidIn) return { applied: false, reason: 'charge_id_mismatch' };
-  } catch {
-    // If DB read fails, fail-closed (money path).
-    return { applied: false, reason: 'db_check_failed' };
-  }
+  const appliedBy = Number(appliedByUserId || paymentUserId);
 
   // PRO
   if (payload.startsWith('pro_')) {
@@ -270,21 +371,50 @@ export async function applyPaymentFallbackNoSession({
       return { applied: false, reason: 'amount_mismatch' };
     }
 
-    const ws = await db.getWorkspace(paymentUserId, wsId);
-    if (!ws) return { applied: false, reason: 'no_ws_access' };
+    const days = Number(CFG.PRO_DURATION_DAYS || 30) || 30;
+    const note = `fallback_apply_pro_no_session:${sigTag}`;
 
-    await db.activateWorkspacePro(wsId, CFG.PRO_DURATION_DAYS);
-    try {
-      await db.auditWorkspace(wsId, appliedByUserId || paymentUserId, 'pro.activated.fallback', {
-        payment_id: paymentId,
-        total_amount: Number(totalAmount || 0),
-        currency: String(currency || 'XTR'),
-        telegram_payment_charge_id: telegramPaymentChargeId,
-      });
-    } catch {}
+    const tx = await applyPaymentFallbackAtomicTx({
+      paymentId,
+      paymentUserId,
+      appliedByUserId: appliedBy,
+      telegramPaymentChargeId,
+      payloadNoSig: payload,
+      payloadRaw,
+      note,
+      applyTx: async (client) => {
+        const okWs = await client.query(
+          `select 1 from workspaces where id=$1 and owner_user_id=$2 limit 1`,
+          [Number(wsId), Number(paymentUserId)]
+        );
+        if (okWs.rowCount <= 0) return { ok: false, reason: 'no_ws_access' };
 
-    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_pro_no_session:${sigTag}`);
-    return { applied: true, kind: 'pro', wsId };
+        await client.query(
+          `insert into workspace_settings (workspace_id, plan, pro_until, updated_at)
+             values ($1, 'pro', now() + ($2::int || ' days')::interval, now())
+           on conflict (workspace_id) do update
+              set plan='pro',
+                  pro_until = coalesce(workspace_settings.pro_until, now()) + ($2::int || ' days')::interval,
+                  updated_at=now()`,
+          [Number(wsId), Number(days)]
+        );
+
+        return { ok: true, kind: 'pro', wsId: Number(wsId) };
+      }
+    });
+
+    if (tx.applied) {
+      try {
+        await db.auditWorkspace(wsId, appliedBy, 'pro.activated.fallback', {
+          payment_id: paymentId,
+          total_amount: Number(totalAmount || 0),
+          currency: String(currency || 'XTR'),
+          telegram_payment_charge_id: telegramPaymentChargeId,
+        });
+      } catch {}
+    }
+
+    return tx;
   }
 
   // Brand credits top-up
@@ -301,9 +431,29 @@ export async function applyPaymentFallbackNoSession({
     const credits = brandPackCredits(packId, packIdRaw);
     if (!credits || credits <= 0) return { applied: false, reason: 'bad_pack' };
 
-    await db.addBrandCredits(paymentUserId, credits);
-    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_brand_pass_no_session:${sigTag}:+${credits}`);
-    return { applied: true, kind: 'brand_pass', credits };
+    const note = `fallback_apply_brand_pass_no_session:${sigTag}:+${credits}`;
+
+    return await applyPaymentFallbackAtomicTx({
+      paymentId,
+      paymentUserId,
+      appliedByUserId: appliedBy,
+      telegramPaymentChargeId,
+      payloadNoSig: payload,
+      payloadRaw,
+      note,
+      applyTx: async (client) => {
+        const r = await client.query(
+          `update users
+              set brand_credits = brand_credits + $2,
+                  brand_credits_updated_at = now()
+            where id=$1
+            returning brand_credits`,
+          [Number(paymentUserId), Number(credits)]
+        );
+        if (r.rowCount <= 0) return { ok: false, reason: 'no_user_row' };
+        return { ok: true, kind: 'brand_pass', credits: Number(credits) };
+      }
+    });
   }
 
   // Brand Plan subscription
@@ -318,13 +468,52 @@ export async function applyPaymentFallbackNoSession({
       return { applied: false, reason: 'amount_mismatch' };
     }
 
-    await db.activateBrandPlan(paymentUserId, planId, CFG.BRAND_PLAN_DURATION_DAYS);
+    const days = Number(CFG.BRAND_PLAN_DURATION_DAYS || 30) || 30;
+    const credits = Math.max(0, Number(brandPlanCredits(planId) || 0) || 0);
 
-    const credits = brandPlanCredits(planId);
-    if (credits > 0) await db.addBrandCredits(paymentUserId, credits);
+    const note = `fallback_apply_brand_plan_no_session:${sigTag}:${planId}${credits ? `:+${credits}cr` : ''}`;
 
-    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_brand_plan_no_session:${sigTag}:${planId}${credits ? `:+${credits}cr` : ''}`);
-    return { applied: true, kind: 'brand_plan', plan: planId, credits };
+    return await applyPaymentFallbackAtomicTx({
+      paymentId,
+      paymentUserId,
+      appliedByUserId: appliedBy,
+      telegramPaymentChargeId,
+      payloadNoSig: payload,
+      payloadRaw,
+      note,
+      applyTx: async (client) => {
+        const rPlan = await client.query(
+          `update users
+              set brand_plan = $2,
+                  brand_plan_until = (
+                    case
+                      when brand_plan_until is null or brand_plan_until < now() then now()
+                      else brand_plan_until
+                    end
+                  ) + ($3::int || ' days')::interval,
+                  brand_plan_updated_at = now(),
+                  updated_at = now()
+            where id = $1
+            returning brand_plan, brand_plan_until`,
+          [Number(paymentUserId), String(planId || 'start'), Number(days)]
+        );
+        if (rPlan.rowCount <= 0) return { ok: false, reason: 'no_user_row' };
+
+        if (credits > 0) {
+          const rCr = await client.query(
+            `update users
+                set brand_credits = brand_credits + $2,
+                    brand_credits_updated_at = now()
+              where id=$1
+              returning brand_credits`,
+            [Number(paymentUserId), Number(credits)]
+          );
+          if (rCr.rowCount <= 0) return { ok: false, reason: 'no_user_row' };
+        }
+
+        return { ok: true, kind: 'brand_plan', plan: String(planId), credits: Number(credits) };
+      }
+    });
   }
 
   // Founder Sale (brand only — creator requires wsId stored in session)
@@ -345,12 +534,50 @@ export async function applyPaymentFallbackNoSession({
     const days = founderBrandDurationDays(productId);
     if (!days) return { applied: false, reason: 'bad_duration' };
 
-    await db.activateBrandPlan(paymentUserId, 'pro', days);
-    const credits = founderBrandCredits(productId);
-    if (credits > 0) await db.addBrandCredits(paymentUserId, credits);
+    const credits = Math.max(0, Number(founderBrandCredits(productId) || 0) || 0);
+    const note = `fallback_apply_founder_brand_no_session:${sigTag}:${productId}${credits ? `:+${credits}cr` : ''}`;
 
-    await db.markPaymentApplied(paymentId, appliedByUserId || paymentUserId, `fallback_apply_founder_brand_no_session:${sigTag}:${productId}${credits ? `:+${credits}cr` : ''}`);
-    return { applied: true, kind: 'founder_brand', productId, days, credits };
+    return await applyPaymentFallbackAtomicTx({
+      paymentId,
+      paymentUserId,
+      appliedByUserId: appliedBy,
+      telegramPaymentChargeId,
+      payloadNoSig: payload,
+      payloadRaw,
+      note,
+      applyTx: async (client) => {
+        const rPlan = await client.query(
+          `update users
+              set brand_plan = 'pro',
+                  brand_plan_until = (
+                    case
+                      when brand_plan_until is null or brand_plan_until < now() then now()
+                      else brand_plan_until
+                    end
+                  ) + ($2::int || ' days')::interval,
+                  brand_plan_updated_at = now(),
+                  updated_at = now()
+            where id = $1
+            returning brand_plan, brand_plan_until`,
+          [Number(paymentUserId), Number(days)]
+        );
+        if (rPlan.rowCount <= 0) return { ok: false, reason: 'no_user_row' };
+
+        if (credits > 0) {
+          const rCr = await client.query(
+            `update users
+                set brand_credits = brand_credits + $2,
+                    brand_credits_updated_at = now()
+              where id=$1
+              returning brand_credits`,
+            [Number(paymentUserId), Number(credits)]
+          );
+          if (rCr.rowCount <= 0) return { ok: false, reason: 'no_user_row' };
+        }
+
+        return { ok: true, kind: 'founder_brand', productId: String(productId), days: Number(days), credits: Number(credits) };
+      }
+    });
   }
 
   return { applied: false, reason: 'unsupported_payload' };
