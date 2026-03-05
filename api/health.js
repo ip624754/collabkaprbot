@@ -76,6 +76,19 @@ export default async function handler(_req, res) {
       },
       official: { last_at: null, last_offer_id: null, last_source: null },
           },
+    qstash: {
+      official_publish_deliver_last_at: null,
+      official_publish_verify_last_at: null,
+      reschedule_failed: { day, today_count: null, last_at: null, last_where: null, last_payload: null },
+      official_publish_stuck: {
+        day,
+        today_count: null,
+        last_at: null,
+        last_offer_id: null,
+        last_age_sec: null,
+        last_via: null,
+      },
+          },
         };
 
   const auditBase = {
@@ -473,6 +486,56 @@ try {
           broadcast.retry_after_sec = 0;
         }
       }
+    } catch {
+      // ignore
+    }
+
+    // QStash: breadcrumbs + reschedule/stuck metrics (Redis-only; no DB)
+    try {
+      base.qstash.official_publish_deliver_last_at = (await redis.get(k(['qstash', 'official_publish_deliver', 'last_at']))) || null;
+    } catch {
+      // ignore
+    }
+    try {
+      base.qstash.official_publish_verify_last_at = (await redis.get(k(['qstash', 'official_publish_verify', 'last_at']))) || null;
+    } catch {
+      // ignore
+    }
+
+    try {
+      const [cntRaw, lastAt, lastWhere, lastPayload] = await readMany([
+        k(['ops', 'reasons', 'qstash_reschedule_failed', 'd', day]),
+        k(['ops', 'reasons', 'qstash_reschedule_failed', 'last_at']),
+        k(['ops', 'reasons', 'qstash_reschedule_failed', 'last_where']),
+        k(['ops', 'reasons', 'qstash_reschedule_failed', 'last_payload']),
+      ]);
+      base.qstash.reschedule_failed = {
+        day,
+        today_count: Number(cntRaw) || 0,
+        last_at: lastAt || null,
+        last_where: lastWhere || null,
+        last_payload: lastPayload || null,
+      };
+    } catch {
+      // ignore
+    }
+
+    try {
+      const [cntRaw, lastAt, lastOfferId, lastAgeSec, lastVia] = await readMany([
+        k(['ops', 'reasons', 'official_publish_stuck', 'd', day]),
+        k(['ops', 'reasons', 'official_publish_stuck', 'last_at']),
+        k(['ops', 'reasons', 'official_publish_stuck', 'last_offer_id']),
+        k(['ops', 'reasons', 'official_publish_stuck', 'last_age_sec']),
+        k(['ops', 'reasons', 'official_publish_stuck', 'last_via']),
+      ]);
+      base.qstash.official_publish_stuck = {
+        day,
+        today_count: Number(cntRaw) || 0,
+        last_at: lastAt || null,
+        last_offer_id: lastOfferId || null,
+        last_age_sec: lastAgeSec !== null && lastAgeSec !== undefined ? Number(lastAgeSec) || 0 : null,
+        last_via: lastVia || null,
+      };
     } catch {
       // ignore
     }
