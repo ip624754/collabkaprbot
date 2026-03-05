@@ -365,6 +365,10 @@ async function autoPublishDrawn() {
 
     // Per-giveaway Redis lock: prevents double-post if global lock expires
     await withGiveawayLock(g.id, async () => {
+      const chatId = Number(g.published_chat_id);
+      const bcKey = k(['gw', 'results', 'sent', g.id]);
+      const isClaimed = Number(g.results_message_id || 0) === 0;
+
       try {
         const winners = await db.getWinnersWithTgId(g.id);
         if (!winners.length) return;
@@ -378,12 +382,62 @@ async function autoPublishDrawn() {
 
         const body = `🏁 <b>Итоги конкурса</b>\n\n🏆 Победители:\n${winnerLines}`;
 
-        const chatId = Number(g.published_chat_id);
+        // Recovery path: we already claimed (results_message_id=0) and should never send a new message again.
+        if (isClaimed) {
+          let bc = null;
+          try { bc = await redis.get(bcKey); } catch {}
+          const bcMsgId = bc && bc.message_id ? Number(bc.message_id) : null;
 
-        // Prefer editing the original announcement message (idempotent), fallback to sending a new one.
-        const origMsgId = g.results_message_id ? null : g.published_message_id || null;
+          if (bcMsgId) {
+            const ok = await db.atomicFinalizeGiveawayResultsPublish(g.id, bcMsgId);
+            if (!ok) return;
+            try {
+              await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.results_auto_published', {
+                message_id: bcMsgId,
+                recovered: true,
+              });
+            } catch {}
+            published.push(g.id);
+            return;
+          }
+
+          // Best-effort: try to edit the original announcement (idempotent). Do NOT send a new message here.
+          const origMsgId = g.published_message_id ? Number(g.published_message_id) : null;
+          if (!origMsgId) return;
+
+          try {
+            await bot.api.editMessageText(chatId, origMsgId, body, { parse_mode: 'HTML' });
+          } catch {
+            return;
+          }
+
+          try {
+            const ttlSec = 7 * 24 * 60 * 60;
+            await redis.set(bcKey, { chat_id: chatId, message_id: origMsgId }, { ex: ttlSec });
+          } catch {}
+
+          const ok = await db.atomicFinalizeGiveawayResultsPublish(g.id, origMsgId);
+          if (!ok) return;
+
+          try {
+            await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.results_auto_published', {
+              message_id: origMsgId,
+              recovered: true,
+              method: 'edit',
+            });
+          } catch {}
+          published.push(g.id);
+          return;
+        }
+
+        // Normal path: reserve-before-send (claim), then edit-or-send, then finalize.
+        const claimed = await db.atomicClaimGiveawayResultsPublishing(g.id);
+        if (!claimed) return;
 
         let publishedId = null;
+
+        // Prefer editing the original announcement message (idempotent), fallback to sending a new one.
+        const origMsgId = g.published_message_id ? Number(g.published_message_id) : null;
 
         if (origMsgId) {
           try {
@@ -406,22 +460,35 @@ async function autoPublishDrawn() {
               }
             : {};
 
-          const sent = await bot.api.sendMessage(chatId, body, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: true,
-            ...replyParams,
-          });
-
-          publishedId = sent.message_id;
+          try {
+            const sent = await bot.api.sendMessage(chatId, body, {
+              parse_mode: 'HTML',
+              disable_web_page_preview: true,
+              ...replyParams,
+            });
+            publishedId = sent.message_id;
+          } catch {
+            // send failed: release claim to allow retry
+            try { await db.atomicReleaseGiveawayResultsClaim(g.id); } catch {}
+            return;
+          }
         }
 
-        // Atomic: claim publish only if still WINNERS_DRAWN (prevents double-post)
-        const claimed = await db.atomicPublishGiveawayResults(g.id, publishedId);
-        if (!claimed) return; // another tick already published
+        // Breadcrumb BEFORE DB finalize: prevents duplicate sends on DB failures.
+        try {
+          const ttlSec = 7 * 24 * 60 * 60;
+          await redis.set(bcKey, { chat_id: chatId, message_id: Number(publishedId) }, { ex: ttlSec });
+        } catch {}
 
-        await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.results_auto_published', {
-          message_id: publishedId,
-        });
+        // Finalize from claimed state (results_message_id=0)
+        const ok = await db.atomicFinalizeGiveawayResultsPublish(g.id, publishedId);
+        if (!ok) return;
+
+        try {
+          await db.auditGiveaway(g.id, g.workspace_id, null, 'gw.results_auto_published', {
+            message_id: publishedId,
+          });
+        } catch {}
         published.push(g.id);
       } catch {
         // skip individual failures
