@@ -1,4 +1,5 @@
 import { CFG } from '../../src/lib/config.js';
+import { queueOpsDigestSafe } from '../../src/lib/opsDigest.js';
 import { redis, k, incrWithExpireOnFirst } from '../../src/lib/redis.js';
 import * as db from '../../src/db/queries.js';
 import { getBot } from '../../src/bot/bot.js';
@@ -153,6 +154,7 @@ function isNonRetryableTelegramError(code, desc) {
 
 export default async function handler(req, res) {
   const startedAt = Date.now();
+  let ctxInfo = { broadcastId: null, userId: null, tgId: null, attempt: null };
   try {
     if (req.method !== 'POST') {
       res.status(405).end('Method Not Allowed');
@@ -207,6 +209,8 @@ export default async function handler(req, res) {
     const userId = Number(payload.userId || payload.user_id || 0);
     const tgId = Number(payload.tgId || payload.tg_id || 0);
     const attempt = Number(payload.attempt || 0) || 0;
+
+    ctxInfo = { broadcastId, userId, tgId, attempt };
     const bcPayload = payload.bc || null;
 
     if (!broadcastId || !userId || !tgId || !bcPayload) {
@@ -506,6 +510,29 @@ export default async function handler(req, res) {
     }
   } catch (e) {
     console.error('[QSTASH][BC] handler error', e);
+
+    // Best-effort ops digest (Redis-only, anti-spam). One per broadcast per window.
+    try {
+      const bid = Number(ctxInfo?.broadcastId || 0) || 0;
+      const uid = Number(ctxInfo?.userId || 0) || 0;
+      await queueOpsDigestSafe({
+        group: 'ops',
+        reason: 'qstash_bc_deliver_failed',
+        title: 'QStash broadcast deliver crashed',
+        kind: 'qstash',
+        payload: bid ? `broadcast=${bid}` : '',
+        extra: [
+          uid ? `user=${uid}` : '',
+          ctxInfo?.tgId ? `tg=${ctxInfo.tgId}` : '',
+          Number.isFinite(ctxInfo?.attempt) ? `attempt=${ctxInfo.attempt}` : '',
+          String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180),
+        ].filter(Boolean),
+        dedupId: bid ? `qstash_bc_deliver:${bid}` : 'qstash_bc_deliver',
+      });
+    } catch {
+      // ignore
+    }
+
     res.status(500).json({ ok: false, error: 'internal_error' });
   }
 }
