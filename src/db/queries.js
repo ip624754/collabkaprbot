@@ -5698,7 +5698,7 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
 
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
 
     // Degradation hardening: keep Neon safe when Redis is down / click storms happen.
     const stm = Math.floor(Number(opts?.statementTimeoutMs || 0));
@@ -6688,6 +6688,9 @@ export async function drawWinnersDeterministic(
   const gid = Number(giveawayId);
   const cnt = Math.max(1, Number(winnersCount || 1));
   const seed = `${gid}:${String(endsAtIso || '')}`;
+
+  const txIsolation = 'repeatable_read';
+  let snapshotTs = null;
   const eligibilityClause = onlyEligible ? 'AND is_eligible = TRUE' : '';
 
   // Primary (sha256)
@@ -6791,6 +6794,16 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
       return { status: 'wrong_status', status_value: gw.status };
     }
 
+    // Snapshot timestamp (UTC) for reproducible audits.
+    try {
+      const tsr = await client.query(
+        `SELECT to_char((transaction_timestamp() at time zone 'utc'), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ts`
+      );
+      snapshotTs = tsr.rows?.[0]?.ts || null;
+    } catch {
+      snapshotTs = null;
+    }
+
     // Helper to pick winners deterministically with sha256 (fallback: md5)
     async function pick({ onlyEligible, excludeIds, limit }) {
       const eligibilityClause = onlyEligible ? 'AND is_eligible = TRUE' : '';
@@ -6842,14 +6855,22 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
         `
         SELECT
           md5(string_agg(md5(user_id::text), '' ORDER BY user_id)) AS h,
-          count(*)::int AS cnt
+          count(*)::int AS cnt,
+          max(joined_at) AS max_joined_at
         FROM giveaway_entries
         WHERE giveaway_id = $1
           ${eligibilityClause}
         `,
         [gid]
       );
-      return { h: r.rows?.[0]?.h || null, cnt: Number(r.rows?.[0]?.cnt || 0) };
+      const row = r.rows?.[0] || {};
+      let mj = row.max_joined_at || null;
+      try {
+        if (mj) mj = new Date(mj).toISOString();
+      } catch {
+        // keep raw value
+      }
+      return { h: row.h || null, cnt: Number(row.cnt || 0), max_joined_at: mj };
     }
 
     async function computeWinnersHash() {
@@ -6918,6 +6939,8 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
           'gw.winners_drawn_skipped',
           JSON.stringify({
             reason: 'no_entries',
+            tx_isolation: txIsolation,
+            snapshot_ts: snapshotTs,
             seed,
             seed_version: GW_DRAW_SEED_VERSION_SQL,
             algo_version: GW_DRAW_ALGO_VERSION_SQL,
@@ -6961,8 +6984,8 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
     }
 
     // Reproducibility metadata (best-effort).
-    let eligiblePool = { h: null, cnt: 0 };
-    let entriesPool = { h: null, cnt: 0 };
+    let eligiblePool = { h: null, cnt: 0, max_joined_at: null };
+    let entriesPool = { h: null, cnt: 0, max_joined_at: null };
     try {
       eligiblePool = await computePoolHash(true);
       entriesPool = await computePoolHash(false);
@@ -6975,6 +6998,8 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
     const poolHashValue = (usedPool === 'eligible') ? eligiblePool.h : entriesPool.h;
     const poolCountValue = (usedPool === 'eligible') ? eligiblePool.cnt : entriesPool.cnt;
 
+    const poolCutoffJoinedAt = (usedPool === 'eligible') ? eligiblePool.max_joined_at : entriesPool.max_joined_at;
+
     // Audit draw
     await client.query(
       `
@@ -6986,6 +7011,8 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
         wsid,
         'gw.winners_drawn',
         JSON.stringify({
+          tx_isolation: txIsolation,
+          snapshot_ts: snapshotTs,
           seed,
           seed_version: GW_DRAW_SEED_VERSION_SQL,
           algo_version: GW_DRAW_ALGO_VERSION_SQL,
@@ -6998,6 +7025,9 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
           pool_hash: poolHashValue,
           pool_hash_method: GW_POOL_HASH_METHOD_SQL,
           pool_count: poolCountValue,
+          pool_cutoff_joined_at: poolCutoffJoinedAt,
+          eligible_max_joined_at: eligiblePool.max_joined_at,
+          entries_max_joined_at: entriesPool.max_joined_at,
           eligible_pool_hash: eligiblePool.h,
           eligible_count: eligiblePool.cnt,
           entries_pool_hash: entriesPool.h,
