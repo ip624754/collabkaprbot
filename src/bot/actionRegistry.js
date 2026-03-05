@@ -122,6 +122,7 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:bc_tpl_gw": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:bc_tpl_offer": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:bc_view": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.NONE },
+  "a:bc_blocked": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.NONE },
   "a:bd_fpick": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:bd_freset": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:bd_fset": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },

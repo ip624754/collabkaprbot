@@ -13606,8 +13606,19 @@ ${escapeHtml(blurb)}${body.length > 90 ? '…' : ''}` : ''}${c}`;
     const ch = safeCreatorDisplayName({ title: o.ws_title, channel_username: o.channel_username });
     const metaCounts = offerMetaCountsInline(o.meta);
     const metaSuffix = metaCounts ? ` · ${metaCounts}` : '';
+
+    // Anti-bypass: the feed is public for brands; title must never leak contacts.
+    let safeTitleTxt = String(o.title || '');
+    if (safeTitleTxt) {
+      try {
+        const r = redactContactsInText(safeTitleTxt);
+        safeTitleTxt = r.text;
+      } catch {
+        // keep raw title
+      }
+    }
     return `#${o.id} · ${escapeHtml(bxCategoryLabel(o.category))}
-<b>${escapeHtml(o.title)}</b>
+<b>${escapeHtml(safeTitleTxt)}</b>
 ${escapeHtml(bxTypeLabel(o.offer_type))} · ${escapeHtml(bxCompLabel(o.compensation_type))}${metaSuffix}
 Канал: ${escapeHtml(ch)}${o.creator_verified ? ' ✅' : ''}`;
   });
@@ -14133,6 +14144,19 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
     }
   }
 
+  // Anti-bypass: offer title/description must not leak contacts to non-owners before unlock.
+  // Title redaction is conditional (unlocked => show raw); description redaction is also conditional.
+  let titleTxt = String(o.title || '');
+  if (!isOwner && !unlocked && titleTxt) {
+    try {
+      const r = redactContactsInText(titleTxt);
+      titleTxt = r.text;
+    } catch {
+      // keep raw title
+    }
+  }
+  const titleHtml = escapeHtml(titleTxt);
+
   let descTxt = String(o.description || '');
   if (!isOwner && !unlocked && descTxt) {
     try {
@@ -14170,7 +14194,7 @@ async function renderBxPublicView(ctx, userId, wsId, offerId, page = 0, opts = {
     `Формат: <b>${escapeHtml(bxTypeLabel(o.offer_type))}</b>\n` +
     `Оплата: <b>${escapeHtml(bxCompLabel(o.compensation_type))}</b>\n\n` +
     `${metaLines ? `${metaLines}\n\n` : ''}` +
-    `<b>${escapeHtml(o.title)}</b>\n\n` +
+    `<b>${titleHtml}</b>\n\n` +
     `${descHtml}${partnerBlock}\n\n` +
     `Канал: <b>${escapeHtml(ch)}${o.creator_verified ? ' ✅' : ''}</b>\n` +
     `${isOwner ? (contact ? `Контакт: <b>${escapeHtml(contact)}</b>\n` : '') : (hasContact ? `Контакты: <b>🔒 скрыты</b>\n` : '')}` +
@@ -14234,7 +14258,16 @@ function offerDeepLink(offerId) {
 function offerShareUrl(offerId, title = '', description = '') {
   const link = offerDeepLink(offerId);
   if (!link) return '';
-  const t = String(title || '').trim();
+  let t = String(title || '').trim();
+  // Anti-bypass: share text must never contain contacts (title might include them).
+  if (t) {
+    try {
+      const r = redactContactsInText(t);
+      t = r.text;
+    } catch {
+      // keep raw title
+    }
+  }
   // Anti-bypass: share only title + bot link. No description (may contain contacts).
   const text = t ? `🎬 ${t}` : 'Оффер';
   return `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
@@ -33996,22 +34029,53 @@ ${sponsorsLine}
       await renderGwConfirm(ctx, wsId, { edit: false });
       return;
     }
+if (p.a === 'a:gw_publish') {
+  const wsId = Number(p.ws);
+  const ws = await db.getWorkspace(u.id, wsId);
+  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  const draft = (await getDraft(ctx.from.id)) || {};
+  if (!draft.prize_value_text || !draft.winners_count || !draft.sponsors || !draft.ends_at) {
+    await ctx.answerCallbackQuery({ text: 'Черновик не полный.' });
+    return;
+  }
+  if (!ws.channel_id) {
+    await ctx.answerCallbackQuery({ text: 'Не найден канал.' });
+    await safeEditOrReply(ctx, '⚠️ Канал не подключён. Открой карточку канала и подключи @username / channel_id.', {
+      reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`)
+    });
+    return;
+  }
 
+  // STEP330: Giveaway publish idempotency (reserve → send → commit).
+  // Protect against double-clicks and serverless crashes between "send to TG" and "commit to DB".
+  const lockKey = k(['lock', 'gw_publish', wsId, ctx.from.id]);
+  const lock = await acquireLock(lockKey, 30);
+  if (!lock) {
+    await ctx.answerCallbackQuery({ text: '⏳ Уже публикуется…' });
+    return;
+  }
 
+  try {
+    db.trackEvent('gw_publish_attempt', { userId: u.id, wsId, meta: { winners: Number(draft.winners_count || 0) } });
 
-    if (p.a === 'a:gw_publish') {
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const draft = (await getDraft(ctx.from.id)) || {};
-      if (!draft.prize_value_text || !draft.winners_count || !draft.sponsors || !draft.ends_at) {
-        await ctx.answerCallbackQuery({ text: 'Черновик не полный.' });
-        return;
-      }
+    // Reuse already created giveaway (stored in draft) to avoid duplicates on retry.
+    let gwId = Number(draft.gw_id || 0);
+    let gExisting = null;
+    if (gwId) {
+      try { gExisting = await db.getGiveawayForOwner(gwId, u.id); } catch {}
+      if (!gExisting) gwId = 0;
+    }
 
-      db.trackEvent('gw_publish_attempt', { userId: u.id, wsId, meta: { winners: Number(draft.winners_count || 0) } });
+    // If already published — just open it (no re-send).
+    if (gExisting && gExisting.published_message_id && gExisting.published_chat_id) {
+      try { await clearDraft(ctx.from.id); } catch {}
+      await ctx.answerCallbackQuery({ text: 'Уже опубликовано ✅' });
+      await renderGwOpen(ctx, u.id, gExisting.id);
+      return;
+    }
 
-      // create in DB
+    // Create once (or keep existing) and mark as PUBLISHING before send.
+    if (!gwId) {
       const created = await db.createGiveaway({
         workspaceId: wsId,
         prizeValueText: draft.prize_value_text,
@@ -34020,23 +34084,58 @@ ${sponsorsLine}
         autoDraw: false,
         autoPublish: false
       });
-      await db.replaceGiveawaySponsors(created.id, draft.sponsors);
+      gwId = created.id;
+      draft.gw_id = gwId;
+      // Keep draft so "retry" can finish commit without creating a new giveaway.
+      await setDraft(ctx.from.id, draft, 60 * 60);
+    } else {
+      // Ensure DB row reflects the latest draft (only if not published yet).
+      try {
+        await db.updateGiveaway(gwId, {
+          prize_value_text: draft.prize_value_text,
+          winners_count: Number(draft.winners_count),
+          ends_at: draft.ends_at
+        });
+      } catch {}
+    }
 
-      // publish post
-      const botUsername = CFG.BOT_USERNAME;
-      const deepLinkOpen = `https://t.me/${botUsername}?start=gw_${created.id}`;
+    try { await db.updateGiveaway(gwId, { status: 'PUBLISHING' }); } catch {}
+    try { await db.replaceGiveawaySponsors(gwId, draft.sponsors); } catch {}
 
-      const sponsorsCount = normalizeSponsorsList(draft.sponsors).map(fmtSponsorHandle).filter(Boolean).length;
-      const sponsorsLine = sponsorsCount
-        ? `
-👥 Условие: ${sponsorsCountText(draft.sponsors)}
-${sponsorsBulletText(draft.sponsors, 5)}`
-        : '';
-      const actionHint = sponsorsCount
-        ? '🤖 Открой бота → подпишись → 🔄 Проверить.'
-        : '🤖 Открой бота → 🎟 Участвовать → 🔄 Проверить.';
+    // Recovery path: if a previous attempt already sent the TG message but failed to commit to DB,
+    // we store a short breadcrumb in Redis and only "finalize" here.
+    const bcKey = k(['gw', 'publish', 'sent', gwId]);
+    let bc = null;
+    try { bc = await redis.get(bcKey); } catch {}
+    if (bc && bc.chat_id && bc.message_id) {
+      try {
+        await db.updateGiveaway(gwId, {
+          status: 'ACTIVE',
+          published_chat_id: Number(bc.chat_id),
+          published_message_id: Number(bc.message_id)
+        });
+      } catch {}
+      try { await db.auditGiveaway(gwId, wsId, u.id, 'gw.published', { chat_id: Number(bc.chat_id), message_id: Number(bc.message_id), recovered: true }); } catch {}
+      try { db.trackEvent('gw_published', { userId: u.id, wsId, meta: { giveawayId: gwId, chatId: Number(bc.chat_id), messageId: Number(bc.message_id), recovered: true } }); } catch {}
+      try { await clearDraft(ctx.from.id); } catch {}
+      await ctx.answerCallbackQuery({ text: 'Опубликовано ✅' });
+      await renderGwOpen(ctx, u.id, gwId);
+      return;
+    }
 
-      const text =
+    // publish post
+    const botUsername = CFG.BOT_USERNAME;
+    const deepLinkOpen = `https://t.me/${botUsername}?start=gw_${gwId}`;
+
+    const sponsorsCount = normalizeSponsorsList(draft.sponsors).map(fmtSponsorHandle).filter(Boolean).length;
+    const sponsorsLine = sponsorsCount
+      ? `\n\n👥 Условие: ${sponsorsCountText(draft.sponsors)}\n${sponsorsBulletText(draft.sponsors, 5)}`
+      : '';
+    const actionHint = sponsorsCount
+      ? '🤖 Открой бота → подпишись → 🔄 Проверить.'
+      : '🤖 Открой бота → 🎟 Участвовать → 🔄 Проверить.';
+
+    const text =
 `🎀 <b>РОЗЫГРЫШ</b>
 
 🎁 Приз: <b>${escapeHtml(draft.prize_value_text)}</b>
@@ -34045,60 +34144,84 @@ ${sponsorsBulletText(draft.sponsors, 5)}`
 
 ${actionHint}`;
 
-      const kb = {
-        inline_keyboard: [
-          [{ text: '🤖 Открыть бота', url: deepLinkOpen }]
-        ]
-      };
+    const kb = {
+      inline_keyboard: [
+        [{ text: '🤖 Открыть бота', url: deepLinkOpen }]
+      ]
+    };
 
-      try {
-        let sent;
-        if (draft.media_file_id && String(draft.media_type) === 'photo') {
-          sent = await ctx.api.sendPhoto(ws.channel_id, draft.media_file_id, {
-            caption: text,
-            parse_mode: 'HTML',
-            reply_markup: kb
-          });
-        } else if (draft.media_file_id && String(draft.media_type) === 'animation') {
-          sent = await ctx.api.sendAnimation(ws.channel_id, draft.media_file_id, {
-            caption: text,
-            parse_mode: 'HTML',
-            reply_markup: kb
-          });
-        } else if (draft.media_file_id && String(draft.media_type) === 'video') {
-          sent = await ctx.api.sendVideo(ws.channel_id, draft.media_file_id, {
-            caption: text,
-            parse_mode: 'HTML',
-            reply_markup: kb
-          });
-        } else {
-          sent = await ctx.api.sendMessage(ws.channel_id, text, {
-            parse_mode: 'HTML',
-            reply_markup: kb,
-            disable_web_page_preview: true
-          });
-        }
-
-        await db.updateGiveaway(created.id, {
-          status: 'ACTIVE',
-          published_chat_id: ws.channel_id,
-          published_message_id: sent.message_id
+    let sent;
+    try {
+      if (draft.media_file_id && String(draft.media_type) === 'photo') {
+        sent = await ctx.api.sendPhoto(ws.channel_id, draft.media_file_id, {
+          caption: text,
+          parse_mode: 'HTML',
+          reply_markup: kb
         });
-        await db.auditGiveaway(created.id, wsId, u.id, 'gw.published', { chat_id: ws.channel_id, message_id: sent.message_id });
-        db.trackEvent('gw_published', { userId: u.id, wsId, meta: { giveawayId: created.id, chatId: ws.channel_id, messageId: sent.message_id } });
-
-        await clearDraft(ctx.from.id);
-        await ctx.answerCallbackQuery({ text: 'Опубликовано ✅' });
-        await renderGwOpen(ctx, u.id, created.id);
-      } catch (e) {
-        await ctx.answerCallbackQuery({ text: 'Не удалось опубликовать.' });
-        await safeEditOrReply(ctx, 
-          `⚠️ Не удалось отправить пост в канал.\n\nПроверь: бот админ в канале, есть право писать.\n\nОшибка: ${escapeHtml(String(e?.message || e))}`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) }
-        );
+      } else if (draft.media_file_id && String(draft.media_type) === 'animation') {
+        sent = await ctx.api.sendAnimation(ws.channel_id, draft.media_file_id, {
+          caption: text,
+          parse_mode: 'HTML',
+          reply_markup: kb
+        });
+      } else if (draft.media_file_id && String(draft.media_type) === 'video') {
+        sent = await ctx.api.sendVideo(ws.channel_id, draft.media_file_id, {
+          caption: text,
+          parse_mode: 'HTML',
+          reply_markup: kb
+        });
+      } else {
+        sent = await ctx.api.sendMessage(ws.channel_id, text, {
+          parse_mode: 'HTML',
+          reply_markup: kb,
+          disable_web_page_preview: true
+        });
       }
+    } catch (e) {
+      // Unblock future retries.
+      try { await db.updateGiveaway(gwId, { status: 'DRAFT' }); } catch {}
+      await ctx.answerCallbackQuery({ text: 'Не удалось опубликовать.' });
+      await safeEditOrReply(ctx,
+        `⚠️ Не удалось отправить пост в канал.\n\nПроверь: бот админ в канале, есть право писать.\n\nОшибка: ${escapeHtml(String(e?.message || e))}`,
+        { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) }
+      );
       return;
     }
+
+    // Store breadcrumb BEFORE DB commit to avoid duplicates if the function dies mid-flight.
+    try {
+      const ttlSec = 7 * 24 * 60 * 60;
+      await redis.set(bcKey, { chat_id: Number(ws.channel_id), message_id: Number(sent.message_id) }, { ex: ttlSec });
+    } catch {}
+
+    try {
+      await db.updateGiveaway(gwId, {
+        status: 'ACTIVE',
+        published_chat_id: ws.channel_id,
+        published_message_id: sent.message_id
+      });
+    } catch (e) {
+      // The post is already sent; keep breadcrumb and let the user retry to finalize.
+      try { console.warn('[gw_publish] post sent but DB commit failed', { err: errInfo(e), wsId, gwId, uid: u.id }); } catch {}
+      await ctx.answerCallbackQuery({ text: 'Пост отправлен, но не сохранён. Нажми ещё раз.' });
+      await safeEditOrReply(ctx,
+        '⚠️ Пост в канал отправлен, но бот не смог сохранить результат в базе (временная ошибка).\n\nНажми «📣 Опубликовать» ещё раз — бот дожмёт без повторной отправки.',
+        { reply_markup: new InlineKeyboard().text('📣 Опубликовать ещё раз', `a:gw_publish|ws:${wsId}`).row().text('⬅️ Назад', `a:ws_open|ws:${wsId}`) }
+      );
+      return;
+    }
+
+    try { await db.auditGiveaway(gwId, wsId, u.id, 'gw.published', { chat_id: ws.channel_id, message_id: sent.message_id }); } catch {}
+    try { db.trackEvent('gw_published', { userId: u.id, wsId, meta: { giveawayId: gwId, chatId: ws.channel_id, messageId: sent.message_id } }); } catch {}
+
+    await clearDraft(ctx.from.id);
+    await ctx.answerCallbackQuery({ text: 'Опубликовано ✅' });
+    await renderGwOpen(ctx, u.id, gwId);
+    return;
+  } finally {
+    try { await releaseLock(lockKey, lock.token); } catch {}
+  }
+}
 
     // Join / Check
     if (p.a === 'a:gw_join') {
