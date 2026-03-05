@@ -9355,7 +9355,8 @@ function calcWsProfileProgress(ws) {
   const contactOk = structuredOk || hasText(ws.profile_contact);
   const verticalsOk = Array.isArray(ws.profile_verticals) && ws.profile_verticals.length > 0;
   const formatsOk = Array.isArray(ws.profile_formats) && ws.profile_formats.length > 0;
-  const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
+  const portsRaw = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
+  const ports = portsRaw.map((x) => String(x || '').trim()).filter(Boolean);
   const portfolioOk = ports.length > 0;
   const aboutOk = hasText(ws.profile_about);
 
@@ -9431,7 +9432,8 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   }
 
   let portLine = '—';
-  const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
+  const portsRaw = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
+  const ports = portsRaw.map((x) => String(x || '').trim()).filter(Boolean);
   if (ports.length) {
     portLine = ports
       .slice(0, 3)
@@ -10170,7 +10172,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     aboutTxt = deLinkifyText(aboutRaw);
   }
 
-  const ports = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
+  const portsRaw = Array.isArray(ws.profile_portfolio_urls) ? ws.profile_portfolio_urls : [];
+  const ports = portsRaw.map((x) => String(x || '').trim()).filter(Boolean);
 
   // Contacts unlock also gates any external links (IG/portfolio) to prevent bypassing monetization.
   const canUnlockContacts = hasStructuredContacts || !!contactRawTxt || !!ws.channel_username || !!ig || (ports && ports.length);
@@ -24825,6 +24828,43 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
         return;
       }
       if (!rUnlock?.ok) {
+        if (rUnlock?.error === 'no_contacts' || rUnlock?.error === 'missing_ws') {
+          const code = rUnlock?.error === 'missing_ws' ? 'missing_ws' : 'no_contacts';
+          await setMonUnlockDiag({ source: 'click',  status: 'skipped', errorCode: code, wsId });
+
+          try {
+            const msg = (code === 'missing_ws')
+              ? 'Витрина не найдена — списания не было.'
+              : 'Контактов нет — списания не было.';
+            await ctx.answerCallbackQuery({ text: msg, show_alert: true });
+          } catch {}
+
+          const kb = new InlineKeyboard()
+            .text('🪟 Витрина', openCb)
+            .text('📥 Inbox', inboxCb)
+            .row()
+            .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb)
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home');
+
+          const text = (code === 'missing_ws')
+            ? `⚠️ <b>Витрина не найдена</b>
+
+Похоже, кнопка устарела или профиль удалён.
+<b>Списания не было.</b>
+
+Открой витрину заново через меню и повтори.`
+            : `⚠️ <b>Контактов пока нет</b>
+
+У креатора не заполнены контакты/ссылки для разлока.
+<b>Списания не было.</b>
+
+Попроси креатора добавить контакты (TG/Email/Website/IG/портфолио) и попробуй позже.`;
+
+          await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+          return;
+        }
+
         if (rUnlock?.error === 'busy') {
           await setMonUnlockDiag({ source: 'click',  status: 'skipped', errorCode: 'busy', wsId });
           await renderUnlockPending({ alreadyQueued: true });
@@ -24873,7 +24913,8 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
         const ws2 = await db.getWorkspaceAny(wsId);
         if (ws2) {
           const ig2 = ws2.profile_ig ? String(ws2.profile_ig) : '';
-          const ports2 = Array.isArray(ws2.profile_portfolio_urls) ? ws2.profile_portfolio_urls : [];
+          const ports2Raw = Array.isArray(ws2.profile_portfolio_urls) ? ws2.profile_portfolio_urls : [];
+          const ports2 = ports2Raw.map((x) => String(x || '').trim()).filter(Boolean);
           const contactRaw2 = ws2.profile_contact ? String(ws2.profile_contact).trim() : '';
           const contactsObj2 = (ws2.profile_contacts && typeof ws2.profile_contacts === 'object') ? ws2.profile_contacts : null;
           const cTgRaw2 = contactsObj2?.tg ? String(contactsObj2.tg).trim() : '';
