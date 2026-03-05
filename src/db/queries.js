@@ -4492,6 +4492,43 @@ export async function listPaymentsByStatus(status, limit = 10, offset = 0) {
   return r.rows;
 }
 
+
+export async function claimOrphanedMissingSessionPaymentsForAutoheal(limit = 20, minAgeSec = 0) {
+  // Claim a batch of ORPHANED (or stale APPLYING) payments that are marked missing_session.
+  // Uses SKIP LOCKED to avoid duplicate work when cron overlaps / retries.
+  const lim = Number(limit) || 0;
+  const age = Number(minAgeSec) || 0;
+  if (lim <= 0) return [];
+
+  const r = await pool.query(
+    `with cand as (
+       select p.id, u.tg_id, u.tg_username
+       from payments p
+       left join users u on u.id = p.user_id
+       where (
+              p.status = 'ORPHANED'
+           or (p.status = 'APPLYING' and p.applying_at is not null and p.applying_at < now() - interval '20 minutes')
+         )
+         and coalesce(p.note, '') ilike '%missing_session%'
+         and ($2::int <= 0 or p.created_at < now() - ($2::int * interval '1 second'))
+       order by p.created_at desc
+       for update skip locked
+       limit $1
+     )
+     update payments p
+        set status = 'APPLYING',
+            applying_by_user_id = null,
+            applying_at = now(),
+            updated_at = now()
+       from cand
+      where p.id = cand.id
+      returning p.*, cand.tg_id, cand.tg_username`,
+    [lim, age]
+  );
+
+  return r.rows;
+}
+
 export async function getUserVerification(userId) {
   const r = await pool.query(
     `select uv.*, u.tg_id, u.tg_username
