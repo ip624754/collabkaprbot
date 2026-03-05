@@ -17,13 +17,17 @@ export default async function handler(_req, res) {
         (!!String(CFG.SUPPORT_CHAT_ID || '').trim()) ||
         (Array.isArray(CFG.SUPER_ADMIN_TG_IDS) && CFG.SUPER_ADMIN_TG_IDS.length > 0),
       chat_configured: !!String(CFG.SUPPORT_CHAT_ID || '').trim(),
-    },
+          },
     ops: {
       alert_summary_min: Number(CFG.OPS_ALERT_SUMMARY_MIN || 0),
+      window_sec: Number(CFG.OPS_ALERT_SUMMARY_SEC || 0),
+      targets_count: null,
+      last_sent_at: null,
+      top_reasons: null,
       alert_buffer_max: Number(CFG.OPS_ALERT_BUFFER_MAX || 0),
       silent: !!CFG.OPS_ALERT_SILENT,
       pending: null,
-    },
+          },
     payments: {
       accept_default: !!CFG.PAYMENTS_ACCEPT_DEFAULT,
       auto_apply_default: !!CFG.PAYMENTS_AUTO_APPLY_DEFAULT,
@@ -45,7 +49,7 @@ export default async function handler(_req, res) {
       ),
       session_ttl_min: Number(CFG.PAYMENT_SESSION_TTL_MIN || 0),
       session_ttl_sec: Number(CFG.PAYMENT_SESSION_TTL_SEC || 0),
-    },
+          },
     mon: {
       retry: { last_at: null, last_action: null, last_status: null, last_error: null },
       intro: { last_at: null, last_status: null, last_error: null, last_offer_id: null },
@@ -64,8 +68,8 @@ export default async function handler(_req, res) {
         last_source: null,
       },
       official: { last_at: null, last_offer_id: null, last_source: null },
-    },
-  };
+          },
+        };
 
   const auditBase = {
     enabled: !!CFG.AUDIT_DB_ENABLED,
@@ -74,7 +78,7 @@ export default async function handler(_req, res) {
       day: null,
       suppressed_today_total: null,
       suppressed_today_by_prefix: null,
-    },
+          },
     buffer: {
       enabled: !!CFG.AUDIT_BUFFER_ENABLED,
       day: null,
@@ -87,8 +91,8 @@ export default async function handler(_req, res) {
       flushed_today_total: null,
       requeued_today_total: null,
       last_flush: null,
-    },
-  };
+          },
+        };
 
   // Redis is optional for /api/health (so it stays useful in minimal envs).
   if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
@@ -115,7 +119,46 @@ export default async function handler(_req, res) {
       // ignore
     }
 
-    // Payments ops (Redis-only): runtime fallback flag + payload signature issue counters.
+// Ops digest: targets + last flush time + top reasons (sample).
+try {
+  const targets = base.support.chat_configured
+    ? 1
+    : (Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS.length : 0);
+  base.ops.targets_count = Number(targets) || 0;
+} catch {
+  // ignore
+}
+
+try {
+  const lastRaw = await redis.get(k(['ops', 'alerts', 'ops', 'last_sent']));
+  const sec = Number(lastRaw) || 0;
+  if (sec > 0) base.ops.last_sent_at = new Date(sec * 1000).toISOString();
+} catch {
+  // ignore
+}
+
+try {
+  // Sample a small tail to avoid heavy parsing.
+  const raw = await redis.lrange(k(['ops', 'alerts', 'ops', 'd', day]), 0, 30);
+  const by = {};
+  for (const it of raw || []) {
+    try {
+      const o = typeof it === 'string' ? JSON.parse(it) : it;
+      const rr = String(o?.reason || 'error');
+      by[rr] = (by[rr] || 0) + 1;
+    } catch {
+      // ignore
+    }
+  }
+  const top = Object.entries(by)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, 5);
+  base.ops.top_reasons = top.length ? Object.fromEntries(top) : null;
+} catch {
+  // ignore
+}
+
+// Payments ops (Redis-only): runtime fallback flag + payload signature issue counters.
     try {
       const rtKey = k(['sys', 'pay_fallback_apply']);
       const v = await redis.get(rtKey);
@@ -274,6 +317,7 @@ export default async function handler(_req, res) {
       last_429_reason: null,
       qstash_last_delivery_at: null,
       counters: null,
+      hard_skip: null,
     };
 
     try {
@@ -328,6 +372,30 @@ export default async function handler(_req, res) {
         defer_wait: Number(deferWaitCnt) || 0,
         quarantine_set: Number(quarSetCnt) || 0,
       };
+
+// Hard-skip metrics (Redis-only; no DB).
+try {
+  const ttlDays = Number(process.env.BROADCAST_HARD_SKIP_TTL_DAYS || 90) || 90;
+  const recentKey = k(['broadcast', 'hard_skip', 'recent']);
+  const recentLen = Number(await redis.llen(recentKey)) || 0;
+  const [hsSetCnt, hsHitCnt, hsUnskipCnt] = await readMany([
+    k(['broadcast', 'hard_skip', 'set', 'd', day]),
+    k(['broadcast', 'hard_skip', 'hit', 'd', day]),
+    k(['broadcast', 'hard_skip', 'unskip', 'd', day]),
+  ]);
+  broadcast.hard_skip = {
+    ttl_days: ttlDays,
+    recent_len: recentLen,
+    counters: {
+      day,
+      set: Number(hsSetCnt) || 0,
+      hit: Number(hsHitCnt) || 0,
+      unskip: Number(hsUnskipCnt) || 0,
+    },
+  };
+} catch {
+  // ignore
+}
 
       if (untilMs > 0) {
         if (!broadcast.cooldown_source) broadcast.cooldown_source = 'redis_global';
