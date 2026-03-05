@@ -1,5 +1,6 @@
 import { CFG } from './config.js';
 import * as R from './redis.js';
+import { queueOpsDigestSafe } from './opsDigest.js';
 
 // Payments operator controls & observability (Redis-only, best-effort).
 //
@@ -10,10 +11,96 @@ import * as R from './redis.js';
 
 const redis = R.redis;
 const k = R.k;
+const incrWithExpire = typeof R.incrWithExpire === 'function' ? R.incrWithExpire : async () => 0;
 
 // Redis key: short-lived runtime override for fallback apply.
 // Value is an object; TTL is set via EX.
 const PAY_FALLBACK_RT_KEY = k(['sys', 'pay_fallback_apply']);
+
+// Observability: payload signature issues (Redis-only counters; shown in /api/health)
+const PAY_PAYLOAD_ISSUE_TTL_SEC = 14 * 24 * 60 * 60; // 14 days
+
+function dayKey() {
+  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+function issueKey(bucket, day = dayKey()) {
+  return k(['ops', 'payments', 'payload', String(bucket || 'unknown'), 'd', String(day || dayKey())]);
+}
+
+function normalizeIssueBucket(issue) {
+  const r = String(issue || '').toLowerCase();
+  if (r.includes('unsigned')) return 'unsigned';
+  if (r.includes('bad_sig') || r.includes('sig')) return 'bad_sig';
+  if (r.includes('bad_payload') || r.includes('format')) return 'bad_format';
+  if (r.includes('hmac')) return 'hmac_error';
+  return 'other';
+}
+
+export async function recordPaymentsPayloadIssue({
+  issue,
+  paymentId = null,
+  userId = null,
+  tgId = null,
+  kind = null,
+  payload = '',
+  extra = [],
+  day = null,
+} = {}) {
+  const bucket = normalizeIssueBucket(issue);
+  const d = String(day || dayKey());
+  const key = issueKey(bucket, d);
+
+  // Counter: best-effort.
+  try {
+    await incrWithExpire(key, PAY_PAYLOAD_ISSUE_TTL_SEC);
+  } catch {
+    // ignore
+  }
+
+  // Ops digest: only for potentially dangerous / misconfig issues (avoid noise).
+  const b = String(bucket);
+  if (b === 'bad_sig' || b === 'hmac_error' || b === 'bad_format') {
+    try {
+      await queueOpsDigestSafe({
+        group: 'ops',
+        reason: `payments_payload_${b}`,
+        title: 'Payments payload signature issue',
+        paymentId: paymentId ? Number(paymentId) : null,
+        userId: userId ? Number(userId) : null,
+        tgId: tgId ? Number(tgId) : null,
+        kind: 'payments',
+        payload: String(payload || '').slice(0, 180),
+        extra: [
+          `bucket=${b}`,
+          kind ? `kind=${String(kind).slice(0, 40)}` : '',
+          issue ? `issue=${String(issue).slice(0, 80)}` : '',
+          ...(Array.isArray(extra) ? extra : []).map((x) => String(x || '').slice(0, 120)),
+        ].filter(Boolean),
+        dedupId: `pay_payload:${b}:${d}`,
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  return { ok: true, bucket, day: d };
+}
+
+export async function getPaymentsPayloadIssueCounts(day = null) {
+  const d = String(day || dayKey());
+  const buckets = ['unsigned', 'bad_sig', 'bad_format', 'hmac_error', 'other'];
+  try {
+    const vals = await Promise.all(buckets.map((b) => redis.get(issueKey(b, d))));
+    const out = {};
+    for (let i = 0; i < buckets.length; i++) {
+      out[buckets[i]] = Number(vals[i] || 0) || 0;
+    }
+    return { ok: true, day: d, counts: out };
+  } catch {
+    return { ok: false, day: d, counts: null };
+  }
+}
 
 function nowIso() {
   return new Date().toISOString();
