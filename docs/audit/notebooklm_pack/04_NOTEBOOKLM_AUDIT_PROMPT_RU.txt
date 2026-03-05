@@ -1,277 +1,77 @@
-PROMPT: FULL PROJECT HARDCORE AUDIT — Collabka PR (@collabkaprbot)
-Protocol ON: Jobs / Vitalik / Woz. Zero regressions.
+АУДИТ-ПРОМПТ (RU) — Collabka PR (@collabkaprbot)
 
-Ты — независимый аудитор уровня Staff Backend + Product/SRE + Security. 
-Сделай максимально строгий аудит ВСЕГО проекта по загруженным материалам: FULL ZIP + docs + migrations.
-Если NotebookLM не принимает `.sql`, используй txt-копии: `migrations_txt/*.sql.txt` и `migration_pack_txt/*.sql.txt`.
-Запрещено фантазировать: ТОЛЬКО факты из файлов. Если данных нет — прямо пишешь "нет данных в файлах".
+Роль: ты — независимый senior/audit engineer (Backend + SRE + Security + Product).
+Цель: найти уязвимости, регресс‑риски, UX‑тупики и ошибки в admin/broadcast/monetization/cron.
+Ограничение: отвечай ТОЛЬКО фактами из загруженных файлов. Если данных нет — так и пиши.
 
-========================================================
-A) ОБЯЗАТЕЛЬНО В НАЧАЛЕ (иначе отчёт недействителен)
-========================================================
+Жёсткие инварианты проекта (нельзя предлагать решения, которые их ломают):
+1) Vercel/serverless: никаких долгих процессов; всё пакетно; таймауты.
+2) Neon дорогой: не добавляй новые DB‑reads в горячих UI путях (меню/хабы/рендер).
+3) Монетизация/разлок/списания — только DB‑truth и атомарные guards; никаких «поверим Redis».
+4) Redis может деградировать: мутации fail‑closed, навигация fail‑open по allowlist.
+5) Telegram callback_data ≤ 64 байта.
 
-A1) Входные данные (source of truth)
-- FULL ZIP: <ТОЧНОЕ_ИМЯ_ФАЙЛА_ИЗ_ЗАГРУЗКИ>
-- AUDIT DOCS PACK (если отдельным архивом): <ИМЯ_ФАЙЛА>
-- NEON HISTORY (опционально): ИСТОРИЯ НЕОН.txt
-- Версия/снапшот/STEP (если есть в доках): <...>
-- Дата/время аудита (UTC): <YYYY-MM-DD HH:MM>
-- Среда: Vercel serverless + Neon (Postgres) + Redis.
+ФОРМАТ ОТЧЁТА (строго):
 
-A2) P0 “Build/Runtime blockers” — проверь первым делом
-Цель: найти причины, из-за которых бот может НЕ СТАРТОВАТЬ после деплоя.
-Обязательно проверь:
-- package.json / lockfile: зависимости, ESM/CJS импорты, optional deps.
-- entrypoints Vercel (api/*), bot init, webhook handler.
-- любые импорты внешних пакетов в src/lib/*, которые могут ронять runtime.
-Формат:
-- Blocker → точный stack/место → repro → impact → точечный фикс (минимальный).
-Если P0 найден — он идёт первым в отчёте и в "Fixes" как Fix #1.
+0) Входные данные
+- Перечисли ключевые файлы/папки, на которые ты опирался (paths).
+- Если есть STEP/версия в доках — укажи её.
 
-A3) Жёсткие правила доказательств (обязательные)
-1) Каждое утверждение = ссылка на источник:
-   [path/to/file] → (функция/класс/экспорт) → line-range (если доступно) → краткая цитата/фрагмент ≤25 слов.
-2) Любой риск/уязвимость = repro steps + impact + actor (роль) + что утечёт/сломается.
-3) Запрещены общие слова "возможно/скорее всего" без доказательства из кода/доков.
-4) Фиксы: максимум 5. Только минимальные и обратимые. Без увеличения DB нагрузки в hot paths.
+1) P0: Blockers (если есть)
+- Любая причина «бот не стартует после деплоя» или «endpoint падает».
+- Для каждого: доказательство (path + фрагмент ≤25 слов + search‑phrase) → как воспроизвести → минимальный фикс.
 
-A3.1) Если line-range недоступен
-- Укажи точный путь файла + имя функции/хэндлера + 1–2 коротких цитаты ≤25 слов.
-- Добавь "поиск-фразу" (уникальный фрагмент строки), чтобы её можно было найти grep'ом.
+2) Карта входов (коротко)
+- /start payload префиксы
+- основные callback actions (a:*)
+- api/cron endpoints
+- support/admin entrypoints
+(Не надо простыню: 20–40 строк максимум, но покрыть всё ядро.)
 
-A3.2) Если ответ не помещается
-- Делай отчёт частями (Part 1/Part 2/…), пока не будут заполнены ВСЕ разделы J.
+3) Top‑15 проблем (P0–P2)
+Для каждого пункта ОБЯЗАТЕЛЬНО:
+- Severity: CRITICAL/HIGH/MED/LOW
+- Где: path + функция/handler + search‑phrase
+- Repro steps (конкретно)
+- Impact (что ломается/утекает/сколько денег/какой актор)
+- Fix (минимальный, обратимый; не более 1–3 изменения)
+- Риск фикса (Low/Med/High)
 
+4) Мини‑патчи (макс 5)
+- Список 3–5 самых выгодных фиксов «малой кровью».
+- Каждый фикс: какие файлы трогаем + почему это не добавляет DB‑reads в hot UI.
 
-A4) Модель серьёзности (везде используй)
-Для каждого риска/уязвимости укажи:
-- Severity: CRITICAL / HIGH / MEDIUM / LOW
-- Likelihood: High/Medium/Low
-- Blast radius: Single user / Workspace / Global
-- Regression risk (fix): Low/Med/High
-- Ownership: какая команда/модуль
+ЧЕК‑ЛИСТ: что ты обязан проверить в коде (не пропускай)
+A) Official publish (в @collabka_offers)
+- reserve/lock/idempotency: не должно быть дублей при ретраях/таймаутах.
+- сценарий «TG send успешен, DB финализация упала» — что происходит.
 
-========================================================
-B) ИНВАРИАНТЫ ПРОЕКТА (нельзя нарушать)
-========================================================
-- Среда: Vercel serverless + Neon. Любые лишние DB чтения в hot UI путях (меню/хабы/витрины) ЗАПРЕЩЕНЫ.
-- Монетизация: fail-safe, exactly-once, DB truth. Redis = кеш/локи/TTL/counters.
-- Zero regressions: никакой “революции архитектуры”. Только surgical.
-- Любая платная граница защищена от replay/old buttons/forward/saved.
-- Деградации:
-  - Redis down → fail-open где допустимо (безопасность держит DB), не должно быть “петли недоступности”.
-  - DB down → fail-closed для операций, где DB-guard обязателен (доставка/списания/переходы статусов).
-- /api/health: Redis-only (без DB).
+B) Broadcast
+- 429 rate‑limit: Redis cooldown + уважение паузы воркером.
+- /api/health показывает паузу (Redis‑only).
+- URL‑кнопки (до 3), HTML entities → корректный рендер.
 
-========================================================
-C) ОБЯЗАТЕЛЬНЫЕ MACHINE LISTS (без них отчёт недействителен)
-========================================================
+C) Brand Inbox (точка списания)
+- До «✅ Принять» доступны только «Принять/Спам/Удалить».
+- Никаких reply/templates/work/close при status=new (даже через старые кнопки).
+- Списание кредитов exactly‑once на new→in_progress (атомарно), без минуса.
 
-C1) Machine list #1 — ALL ENTRYPOINTS
-Собери полный список входов:
-- /start payload варианты: все префиксы/deep-links (gw_/bp_/offer_/fs_/wsp_/igv_/…)
-- slash-команды
-- api endpoints / cron endpoints
-- webhook update types (message/callback_query/channel_post/etc.)
-- callback actions (a:*)
-Для каждого entrypoint:
-- key/endpoint
-- где обрабатывается (file + handler)
-- кто может вызвать (роль/условия)
-- тип (view/edit/pay/admin/support/ops)
-- идемпотентность/защита от replay
-- зависимость от Redis/DB (fail-open/fail-closed)
+D) Payments/credits
+- pre_checkout/successful_payment: идемпотентность apply, повторные апдейты не должны списывать/открывать дважды.
 
-C2) Machine list #2 — ALL ACTION KEYS (a:*) A→Z
-Полный список action keys:
-- сортировка A→Z
-- file + handler
-- тип (view/edit/pay/admin/support/ops)
-- guards (роль/ownership/plan/credits/require_redis) и где
-- где генерируется callback_data (кнопка/экран)
-- поведение при degraded mode (Redis down)
+E) Contacts / anti‑bypass
+- редактирование/шаблоны/IG verify: нельзя протащить @username/ссылки до unlock.
+- structured контакты (JSONB) vs legacy text: приоритет и redaction.
 
-C3) Machine list #3 — ALL LINK/CONTACT SURFACES
-Найди ВСЕ места, где встречаются/генерятся:
-- t.me, tg://, http/https, mailto
-- @username (в т.ч. “в слове” / entities→HTML)
-- contact/username/link/url/portfolio/instagram/site/telegram/phone/email
-- URL-кнопки (inline keyboard url buttons)
-Для каждого:
-- file:lines
-- контекст (текст/кнопка/url/шаблон/лог)
-- кто видит (brand/creator/support/admin)
-- gating (до/после unlock) и где
-- риск утечки через forward/saved/old buttons/back
+F) Redis degraded mode
+- мутации fail‑closed (никаких «✅ сделано», если Redis/DB не подтвердили).
+- навигация fail‑open (кнопки меню/home), без петли «всё недоступно».
 
-C4) Machine list #4 — ALL PAYWALL / GATING / OWNERSHIP CHECKS
-Список всех мест “показать/скрыть/разрешить”:
-- контакты/ссылки/“написать”
-- accept/reply flows, статусные переходы
-- планы/кредиты/триалы
-- поведение при Redis down (fail-open/fail-closed)
-Формат:
-- file:lines
-- условие (guard)
-- какие Redis keys / DB columns / ENV участвуют
-- есть ли защита от replay/старых кнопок
+G) Migrations
+- runner exactly‑once, checksum normalization, pack синхронизирован.
 
-C5) Machine list #5 — ALL REDIS KEYS / PREFIXES / TTL
-Собери список ключей Redis:
-- locks, cooldowns (429), caches (credits/reveal), throttles/health counters
-- где ставится TTL
-- что происходит если Redis пуст/недоступен
-Формат:
-- key/prefix → где → зачем → TTL → риск (дубли/утечки/минус кредиты/UX dead-end)
+Важно про доказательства:
+- Каждое утверждение — с указанием пути файла и коротким фрагментом ≤25 слов.
+- Если line numbers недоступны — добавь search‑phrase (уникальная строка для grep).
 
-C6) Machine list #6 — DB DATA MODEL MAP (security/monetization critical)
-Карта таблиц/полей, влияющих на:
-- inbox/заявки/диалоги/статусы
-- кредиты/платежи/apply/spend
-- контакты (structured jsonb, legacy text)
-- broadcast/cron/cooldown fuse
-- official publish reserve/status/message_id
-Формат:
-- table.column → где читается/пишется → критичность → риск
-
-========================================================
-D) ДОКИ ↔ КОД (source of truth)
-========================================================
-Прочитай baseline:
-- docs/00_BOOT.md
-- docs/00_CURRENT_STATE.md
-- docs/01_SECURITY_INVARIANTS.md
-- docs/12_INFRA_CONTROL_PLANE.md
-- docs/15_NEW_CHAT_HANDOFF.md
-- docs/16_RELEASE_CHECKLIST.md + smoke-tests_short.md
-- docs/spec/* (каноничные спеки)
-Сверь доки ↔ код:
-- роли/ownership
-- inbox/заявки/диалоги
-- монетизация: точки списания и что открывается
-- контакты: structured vs text priority, unlock gating, anti-bypass
-- broadcast 429 cooldown + деградация Redis
-- QStash / fan-out / signature verify / degraded rules (если есть)
-Выведи список несоответствий: (док) vs (код) с ссылками на оба.
-
-========================================================
-E) SECURITY / ROLES / OWNERSHIP (ядро)
-========================================================
-
-E1) Role/Permission Matrix (таблица)
-Actor → Capabilities → Где проверяется → Entrypoints → Action keys
-Акторы: Brand owner, Brand manager (если есть), Creator owner, Admin, Support, End-user.
-
-E2) Ownership-in-SQL review
-Найди unsafe паттерны:
-- "getById → check позже"
-и safe:
-- ownership в SQL (WHERE workspace_id=… AND owner_id=…)
-Список top-risk мест + минимальный план перевода на safe getter (surgical).
-
-E3) Replay/old buttons/forward/saved
-Проверь:
-- callback replay (старые сообщения)
-- forward/saved с кнопками
-- /start payload повторно
-Требование: платные/изменяющие действия устойчивы (guards + idempotency).
-
-========================================================
-F) MONETIZATION / PAYMENTS / CREDITS (ядро)
-========================================================
-F1) Payments (если есть)
-- invoice payload schema
-- pre_checkout_query: строгая валидация payload/amount/currency
-- successful_payment: повторная валидация + идемпотентность apply
-Таблица: Product/Action → amount/currency → payload → проверки → риски.
-
-F2) Credits / Spend / Unlock
-Проверь:
-- нельзя списать дважды (retry/replay/old buttons)
-- нельзя уйти в минус
-- доступ открывается строго после успешного spend
-- revoke/off не оставляет дыр
-Таблица: Action → Cost → Что открывает → Защиты → Redis degradation behavior.
-
-F3) Inbox acceptance gate (критично)
-Проверь:
-- до “✅ Принять” недоступны reply/templates/work/close (и через replay тоже)
-- списание на “✅ Принять” exactly-once
-- “контакт-пакет после accept” не раскрывает paywalled данные до списания
-Репро + доказательства.
-
-========================================================
-G) CONTACTS / LINKS ANTI-BYPASS (обязательно)
-========================================================
-Проверь:
-- structured contacts (jsonb) приоритет над legacy text
-- до unlock не утечёт ни текстом, ни url-кнопкой, ни entities→HTML
-- anti-bypass: tg://, t.me, unicode, “в слове”, переносы строк, zero-width
-- телефоны цифрами и “словами”
-Список top bypass vectors (10+) с repro.
-
-========================================================
-H) CRON / LOCKS / INFRA (serverless)
-========================================================
-H1) Locks & exactly-once
-- Redis locks + PG advisory locks (где/зачем)
-- outbox/exactly-once runner / migrations runner
-- time-budget для long loops (broadcast tick, draws)
-- /api/health: Redis-only
-
-H2) Broadcast
-- 429 cooldown (Redis + DB fuse)
-- прекращение polling recipients во время cooldown
-- fan-out (если есть): QStash dedup + DB guard, flow control, retry semantics
-- гарантия “не более 1 сообщения на (broadcast_id, user_id)”
-
-H3) QStash security & ops (если есть)
-- signature verify обязателен на всех qstash endpoints
-- отсутствие утечек токенов в логах
-- degraded behavior:
-  - Redis down → fail-open (без cooldown)
-  - DB down → fail-closed (без delivery)
-  - non-retryable → 2xx + mark failed
-- anti-downtime: отсутствие hard import, если пакет отсутствует (optional)
-
-========================================================
-I) “SILENT DEAD ENDS” (новичок UX)
-========================================================
-Найди места тупиков:
-- “Новый розыгрыш” без канала
-- “Написать заявку” без режима ввода
-- устаревшие кнопки
-Требование: gate-экраны с Menu/Home/Back, без тишины.
-
-========================================================
-J) DELIVERABLE: ОТЧЁТ (строго по форме)
-========================================================
-1) Executive Summary (≤15 строк)
-2) P0 Build/Runtime blockers (если есть)
-3) Machine list #1: ALL entrypoints
-4) Machine list #2: ALL action keys (A→Z)
-5) Machine list #3: ALL link/contact surfaces
-6) Machine list #4: ALL paywall/gating/ownership checks
-7) Machine list #5: ALL Redis keys/prefixes/TTL
-8) Machine list #6: DB data model map
-9) Docs ↔ Code mismatches (ссылки на оба)
-10) Role/Permission Matrix (таблица)
-11) Dialog System Map
-12) Monetization Gates (таблица)
-13) Top 10 bypass vectors (repro + impact + место в коде + severity scoring)
-14) Fixes (до 5 минимальных) — mini-diff/pseudocode + regression risk + QA
-15) Full QA Test Matrix (30+ сценариев), включая:
-   - callback replay / old buttons
-   - forward/saved messages
-   - Redis down
-   - DB down
-   - 429 broadcast
-   - unlock contacts
-   - accept gate + reply
-   - QStash signature + retry/dedup (если есть)
-
-ОТЧЁТ СЧИТАЕТСЯ ЗАВЕРШЁННЫМ ТОЛЬКО если присутствуют ВСЕ machine lists (C1–C6) полностью и без пропусков.
-
----
-
-Примечание: источники в этом наборе — только .md/.txt (NotebookLM лимит 50 файлов; .sql не загружается). Миграции и код даны в текстовых бандлах.
+Выход должен быть практичным: без философии, без общих слов, только проверяемые находки.
