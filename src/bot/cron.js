@@ -71,6 +71,45 @@ const BC_COOLDOWN_LAST_429_REASON_KEY = k(['broadcast', 'last_429_reason']);
 const SYS_BC_QSTASH_FANOUT_KEY = k(['sys', 'broadcast_qstash_fanout']);
 
 
+// Ops: broadcast tick deferred due to Redis degraded (Redis-only; best-effort).
+// Purpose: avoid running mass broadcast logic when Redis is unavailable (locks/cooldowns/fanout flags become unknown).
+function bcTickDeferredRedisDayKey(day) {
+  return k(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'd', String(day || 'na')]);
+}
+const BC_TICK_DEFERRED_REDIS_LAST_AT_KEY = k(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'last_at']);
+const BC_TICK_DEFERRED_REDIS_LAST_WHERE_KEY = k(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'last_where']);
+
+async function emitBroadcastTickDeferredRedis(where) {
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  try {
+    await incrDayCounter(bcTickDeferredRedisDayKey(day));
+  } catch {}
+  const ttlSec = 2 * 24 * 60 * 60;
+  try {
+    await redis.set(BC_TICK_DEFERRED_REDIS_LAST_AT_KEY, new Date().toISOString(), { ex: ttlSec });
+  } catch {}
+  try {
+    await redis.set(
+      BC_TICK_DEFERRED_REDIS_LAST_WHERE_KEY,
+      String(where || 'broadcast_tick').slice(0, 120),
+      { ex: ttlSec }
+    );
+  } catch {}
+}
+
+async function isRedisOperationalForBroadcastTick() {
+  // Mass operations must fail-closed when Redis is unavailable.
+  if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) return false;
+  try {
+    // Key may not exist — we only care that Redis responds.
+    await redis.get(k(['health', 'redis_probe']));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+
 // Broadcast hard-skip list (Redis-only, per tg_id).
 // Purpose: permanently dead chats (blocked/chat not found/deactivated) shouldn't waste QStash/Telegram work.
 // Stored as JSON: { r: "<reason>", at: "<iso>" } with bounded TTL.
@@ -205,19 +244,21 @@ async function incrDayCounter(key, ttlSec = CRON_LAST_RUN_TTL_SEC) {
   return Number(v) || 0;
 }
 
-async function getBroadcastQStashFanoutEnabled() {
+
+async function getBroadcastQStashFanoutStatus() {
   // Hard safety: if QStash lib/token is missing, fan-out must be OFF
-  // (and cron falls back to the legacy direct-send path).
-  if (!isQStashLibAvailable()) return false;
-  if (!(process.env.QSTASH_TOKEN || '')) return false;
+  // (and cron would normally fall back to the legacy direct-send path).
+  // IMPORTANT: if Redis is degraded, we treat fanout as UNKNOWN and the tick will be deferred (fail-closed for mass ops).
+  if (!isQStashLibAvailable()) return { enabled: false, redis_ok: true, forced_off: true, reason: 'qstash_lib_missing' };
+  if (!(process.env.QSTASH_TOKEN || '')) return { enabled: false, redis_ok: true, forced_off: true, reason: 'qstash_token_missing' };
   try {
     const v = await redis.get(SYS_BC_QSTASH_FANOUT_KEY);
-    if (v === null || v === undefined) return false;
+    if (v === null || v === undefined) return { enabled: false, redis_ok: true, forced_off: false, reason: 'flag_missing' };
     const s = String(v).trim().toLowerCase();
-    return s === '1' || s === 'true' || s === 'on' || s === 'yes';
-  } catch {
-    // Redis down: default OFF (safe)
-    return false;
+    const enabled = s === '1' || s === 'true' || s === 'on' || s === 'yes';
+    return { enabled, redis_ok: true, forced_off: false, reason: enabled ? 'enabled' : 'disabled' };
+  } catch (e) {
+    return { enabled: false, redis_ok: false, forced_off: false, reason: 'redis_error' };
   }
 }
 
@@ -1407,6 +1448,19 @@ export async function broadcastTick() {
       return out;
     }
 
+
+
+// Fail-closed for mass broadcast work when Redis is degraded.
+// Rationale: when Redis is down we lose locks/cooldowns/fanout runtime flags, and falling back to sync send can overload Neon.
+const redisOk = await isRedisOperationalForBroadcastTick();
+if (!redisOk) {
+  const out = { status: 'skip', reason: 'redis_degraded', deferred: true };
+  try {
+    await emitBroadcastTickDeferredRedis('broadcast_tick');
+  } catch {}
+  await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+  return out;
+}
     const bc = await db.getActiveBroadcast();
     if (!bc) {
       const out = { status: 'idle', reason: 'no_active_broadcast' };
@@ -1469,7 +1523,18 @@ export async function broadcastTick() {
       bc.status = 'RUNNING';
     }
 
-    const fanoutEnabled = await getBroadcastQStashFanoutEnabled();
+
+const fanoutStatus = await getBroadcastQStashFanoutStatus();
+if (!fanoutStatus.redis_ok) {
+  const out = { status: 'skip', reason: 'redis_degraded', deferred: true, broadcast_id: bc.id };
+  try {
+    await emitBroadcastTickDeferredRedis('broadcast_fanout_flag');
+  } catch {}
+  await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
+  return out;
+}
+const fanoutEnabled = !!fanoutStatus.enabled;
+
 
     const lastUserId = Number(bc.last_sent_user_id || 0);
     const recipients = await db.listBroadcastUnsentRecipients(
