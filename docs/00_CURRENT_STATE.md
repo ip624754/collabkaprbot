@@ -1,5 +1,15 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-05
 
+**STEP335:** Infra correctness — creator→brand apply rate-limit Redis keys are now fully namespaced via `k([...])` (prevents cross‑env collisions if Redis is shared across preview/prod).
+
+**STEP336:** Admin control plane — added an Admin→System screen to browse recent broadcast hard-skip entries (dead chats) and unskip a specific TG ID (Redis-only, no SCAN/KEYS).
+
+**STEP334:** Neon-cost hardening (barter feed) — `renderBxFeed` caches `countNetworkBarterOffers()` in Redis (TTL 60s, best‑effort) keyed by normalized filters, to avoid expensive COUNT(*) on every page.
+
+**STEP333:** Neon-cost hardening (hot UI) — `ensureWorkspaceForOwner` and «📣 Мои каналы» now use `listWorkspacesCached` (TTL 5m, best‑effort) to avoid extra `listWorkspaces()` DB reads. Safety: if cache says "empty" we double-check DB once to avoid stale‑empty UX gates.
+
+**STEP331:** Giveaways results auto-publish idempotency — cron now does DB claim (results_message_id=0) **before** TG edit/send + Redis breadcrumb for sent results message. If DB finalize fails, the next tick finalizes without duplicate post.
+
 **STEP330:** Giveaway publish idempotency — `a:gw_publish` now does reserve→send→commit with Redis token-lock + Redis breadcrumb for the sent channel message. If the post is sent but DB commit fails, retry finalizes **without** sending again (no duplicates). Intermediate status: `PUBLISHING`.
 
 **STEP327:** Anti-bypass offer title — for brands before unlock, offer **title** is redacted via `redactContactsInText` (same as description). Feed titles and share-text are also redacted to prevent contact leakage.
@@ -73,7 +83,12 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 
 25) **Admin UX sweep (input-mode escape hatch):** `📋 Меню` / `🏠 Home` теперь best‑effort сбрасывают `expectText` (не залипаем в режиме ввода), а входы в ключевые админ‑разделы очищают ожидание ввода. См. audit report 22.
 
-26) **Menu/Home hot UI cache (Neon-saving):** на `📋 Меню` / `🏠 Home` используем best‑effort Redis‑кеш (TTL 5 мин) для role flags (moderator/curator/editor) и списка workspaces креатора. Это убирает 2–3 SQL на каждый клик по меню в нормальном режиме. При деградации Redis — fail‑open: работаем по DB‑truth как раньше. См. audit report 28.
+26) **Neon-saving Redis caches (UI):**
+- На `📋 Меню` / `🏠 Home` используем best‑effort Redis‑кеш (TTL 5 мин) для role flags (moderator/curator/editor) и списка workspaces креатора. Это убирает 2–3 SQL на каждый клик по меню в нормальном режиме.
+- **STEP333:** эти же кеши используются в `ensureWorkspaceForOwner` и экране «📣 Мои каналы», чтобы избежать лишних `listWorkspaces()` в частых переходах. Safety: если кеш вернул пустой список, один раз перепроверяем DB (чтобы не получить stale‑empty gate).
+- **STEP334:** в `renderBxFeed` кешируем COUNT(*) (`countNetworkBarterOffers`) на 60 секунд по нормализованным фильтрам, чтобы не считать total на каждой странице ленты.
+
+При деградации Redis — fail‑open: работаем по DB‑truth как раньше. См. audit report 28.
 
 **STEP310:** `a:main_menu` переведён на `getRoleFlagsCached` (без лишних SQL в навигации). Добавлена инвалидация кеша role flags при изменении ролей (модератор/куратор/редактор) — best‑effort `redis.del` (DB остаётся source of truth).
 

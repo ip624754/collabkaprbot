@@ -107,6 +107,10 @@
 | `a:admin_qstash_ping` | admin | require_redis |
 | `a:admin_qstash_status` | admin | require_redis |
 | `a:admin_sys` | admin | require_redis |
+| `a:hs_home` | admin | none |
+| `a:hs_find` | admin | none |
+| `a:hs_view` | admin | none |
+| `a:hs_unskip` | admin | none |
 | `a:admin_umsg_tpl_add` | admin | require_redis |
 | `a:admin_umsg_tpl_del` | admin | require_redis |
 | `a:admin_umsg_tpl_del_q` | admin | require_redis |
