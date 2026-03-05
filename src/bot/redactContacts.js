@@ -19,7 +19,11 @@ export function redactContactsInText(raw) {
   const s0 = String(raw || '');
   if (!s0) return { text: s0, redacted: false };
 
-  let s = s0;
+  // Normalize common invisible separators used for bypass.
+  // NOTE: this may change the returned text even if no contacts are found (invisible-only change).
+  const ZERO_WIDTH_RE = /[\u200B\u200C\u200D\u2060\uFEFF]/g;
+
+  let s = s0.replace(ZERO_WIDTH_RE, '');
   let redacted = false;
 
   // URLs
@@ -36,17 +40,41 @@ export function redactContactsInText(raw) {
     if (next !== s) { redacted = true; s = next; }
   }
 
-  // t.me / telegram.me
-  const tmeRe = /\b(?:t[.\u2024]me|telegram[.\u2024]me)\/[\w\-./?=&%+#]+/gi;
+  // t.me / telegram.me (anti-bypass: allow spaces and invisible separators)
+  const zw = '[\\s\\u200B\\u200C\\u200D\\u2060\\uFEFF]*';
+  const dot = '(?:[.\\u2024])';
+  const tmeRe = new RegExp(
+    `(^|[^a-z0-9_])((?:t${zw}${dot}${zw}me|telegram${zw}${dot}${zw}me)${zw}\\/${zw}[\\w\\-./?=&%+#]+)`,
+    'gi'
+  );
   {
-    const next = s.replace(tmeRe, '🔒 ссылка скрыта');
+    const next = s.replace(tmeRe, (_m, p1) => `${p1}🔒 ссылка скрыта`);
     if (next !== s) { redacted = true; s = next; }
   }
 
   // common social domains without protocol
-  const socialRe = /\b(?:instagram[.\u2024]com|instagr[.\u2024]am|vk[.\u2024]com|youtube[.\u2024]com|youtu[.\u2024]be)\/[^\s<>()]+/gi;
+  // (anti-bypass: allow "instagram (dot) com/...")
+  const dotObf = '(?:[.\\u2024]|\\(\\s*dot\\s*\\)|\\[\\s*dot\\s*\\]|\\{\\s*dot\\s*\\})';
+  const socialRe = new RegExp(
+    `\\b(?:instagram${zw}${dotObf}${zw}com|instagram[.\\u2024]com|instagr[.\\u2024]am|vk[.\\u2024]com|youtube[.\\u2024]com|youtu[.\\u2024]be)${zw}\\/${zw}[^\\s<>()]+`,
+    'gi'
+  );
   {
     const next = s.replace(socialRe, '🔒 ссылка скрыта');
+    if (next !== s) { redacted = true; s = next; }
+  }
+
+  // Obfuscated emails like: "user (at) example (dot) com" or "Email: user at example dot com".
+  // Keep conservative: word-based pattern runs only when an explicit "email:" / "почта:" trigger exists.
+  const emailTriggerRe = /(^|[^a-zа-я0-9_])(?:email|e-mail|почта|mail)\s*[:\-]/i;
+  const emailObfBracketRe = /\b[\w.+\-]+\s*(?:\(|\[|\{)\s*(?:at|собака)\s*(?:\)|\]|\})\s*[\w\-]+\s*(?:\(|\[|\{)\s*(?:dot|точка)\s*(?:\)|\]|\})\s*[\w\-]+(?:\s*(?:\(|\[|\{)\s*(?:dot|точка)\s*(?:\)|\]|\})\s*[\w\-]+)*\b/gi;
+  {
+    const next = s.replace(emailObfBracketRe, '🔒 email скрыт');
+    if (next !== s) { redacted = true; s = next; }
+  }
+  if (emailTriggerRe.test(s.toLowerCase())) {
+    const emailObfWordRe = /\b[\w.+\-]+\s+(?:at|собака)\s+[\w\-]+\s+(?:dot|точка)\s+[\w\-]+(?:\s+(?:dot|точка)\s+[\w\-]+)*\b/gi;
+    const next = s.replace(emailObfWordRe, '🔒 email скрыт');
     if (next !== s) { redacted = true; s = next; }
   }
 
@@ -223,7 +251,7 @@ export function redactContactsInText(raw) {
   }
 
   // @handles (telegram/instagram-style)
-  const atRe = /(^|[^\w@＠])[@＠]([a-z0-9_][a-z0-9_.]{1,30}[a-z0-9_])\b/gi;
+  const atRe = /(^|[^\w@＠])[@＠][\s\u200B\u200C\u200D\u2060\uFEFF]*([a-z0-9_][a-z0-9_.]{1,30}[a-z0-9_])\b/gi;
   {
     const next = s.replace(atRe, (m, p1) => `${p1}🔒@скрыто`);
     if (next !== s) { redacted = true; s = next; }
