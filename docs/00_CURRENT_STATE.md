@@ -1,5 +1,14 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-05
 
+
+**STEP357:** Payments safety visibility — `/api/health` now exposes `payload_hmac_minlen_ok` + key length; Admin→Ops shows banners for missing/short HMAC key and for `fallback apply ENABLED` (env/runtime).
+
+**STEP356:** Degraded rate-limit stricter — when Redis `rateLimit` falls back to in-memory mode, limits are reduced (default ÷5 via `RATE_LIMIT_FALLBACK_LIMIT_DIV`) to protect Neon during Redis outages.
+
+**STEP355:** Payments auto-heal batching — ORPHANED `missing_session` selection now uses `FOR UPDATE SKIP LOCKED` + DB-claim in one statement to avoid duplicate work when cron overlaps.
+
+**STEP354:** Broadcast tick fail‑closed on Redis degraded — cron `broadcastTick()` now defers *before any DB polling* when Redis is unavailable; emits ops reason `broadcast_tick_deferred_redis` and surfaces it in `/api/health` + Admin→Ops.
+
 **STEP352:** Ops visibility — `/api/health` now exposes `qstash.reschedule_failed` (today_count + last_*) and `qstash.official_publish_stuck` (today_count + last_offer_id/age/via). Admin→Ops shows banners for both; no DB reads were added to health.
 
 **STEP351:** RateLimit hardening — when Redis Lua `EVAL` degrades, `rateLimit()` no longer goes unlimited fail‑open: it uses a bounded in‑memory fallback + short circuit‑breaker window (per warm instance).
