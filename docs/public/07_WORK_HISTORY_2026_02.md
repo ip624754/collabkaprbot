@@ -773,7 +773,7 @@ docs/01_SECURITY_INVARIANTS.md
 ## STEP165 — NotebookLM: SQL workaround + sources generator (docs-only + tooling)
 - NotebookLM часто блокирует `.sql` → добавили txt-копии для загрузки: `migrations_txt/*.sql.txt` и `migration_pack_txt/*.sql.txt`.
 - Добавили команду `npm run gen:notebooklm-sources`: генерит `dist/notebooklm_sources/` и (best-effort) `dist/NOTEBOOKLM_AUDIT_SOURCES.zip`.
-- Добавили `docs/neon/ИСТОРИЯ_НЕОН.txt` как доп. контекст по Neon (не миграция).
+- Добавили `docs/neon/NEON_HISTORY_RAW.txt` как доп. контекст по Neon (не миграция).
 
 ## STEP166 — P0: Monetization CTAs survive Redis degradation
 - **Не прячем CTA из‑за “💳 Кредиты: —”**: действия списания (✅ Принять / 🔓 Разлок) доступны всегда.
@@ -979,7 +979,7 @@ docs/01_SECURITY_INVARIANTS.md
 - Этот шаг **не меняет поведение** по сравнению с STEP183; это чисто синхронизация артефактов/доков.
 
 ## STEP185 — docs/neon: fix broken filename (mojibake)
-- Исправили битое имя файла в `docs/neon/`: теперь файл называется `ИСТОРИЯ_НЕОН.txt` (UTF‑8), как и указано в `docs/neon/README.md`.
+- Исправили битое имя файла в `docs/neon/`: теперь файл называется `NEON_HISTORY_RAW.txt` (ASCII, чтобы ZIP не ломался на Windows) (UTF‑8), как и указано в `docs/neon/README.md`.
 - Обновили audit-pack (NotebookLM sources), чтобы туда тоже попал файл с правильным именем.
 - Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
 
