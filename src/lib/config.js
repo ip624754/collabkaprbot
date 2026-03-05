@@ -426,6 +426,10 @@ export const CFG = {
   UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL || '',
   UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN || '',
 
+  // Fault injection (staging/dev only)
+  SIMULATE_REDIS_DOWN: parseBoolSafe(process.env.SIMULATE_REDIS_DOWN, false),
+
+
 
   // UI banners (optional)
   MENU_BANNER_FILE_ID: process.env.MENU_BANNER_FILE_ID || '',

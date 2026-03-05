@@ -1,10 +1,46 @@
 import { Redis } from '@upstash/redis';
 import { CFG } from './config.js';
 
-export const redis = new Redis({
+const baseRedis = new Redis({
   url: CFG.UPSTASH_REDIS_REST_URL,
   token: CFG.UPSTASH_REDIS_REST_TOKEN
 });
+
+function isProdEnv() {
+  const s = String(CFG.APP_ENV || '').trim().toLowerCase();
+  return s === 'prod' || s === 'production';
+}
+
+function makeSimulatedRedisDownError(op) {
+  const e = new Error(`SIMULATED_REDIS_DOWN:${op}`);
+  e.code = 'SIMULATED_REDIS_DOWN';
+  e.name = 'SimulatedRedisDown';
+  return e;
+}
+
+function wrapSimulatedRedisDown(client) {
+  return new Proxy(client, {
+    get(target, prop) {
+      if (prop === '__simulated_down') return true;
+      if (prop === '__raw') return target;
+      const v = target[prop];
+      if (typeof v === 'function') {
+        return (..._args) => Promise.reject(makeSimulatedRedisDownError(String(prop)));
+      }
+      return v;
+    }
+  });
+}
+
+export const redis = (!isProdEnv() && CFG.SIMULATE_REDIS_DOWN)
+  ? wrapSimulatedRedisDown(baseRedis)
+  : baseRedis;
+
+if (isProdEnv() && CFG.SIMULATE_REDIS_DOWN) {
+  // Safety: never allow fault injection in prod.
+  // (Also prevents accidental ops mistakes when copying env vars.)
+  console.warn('[safety] SIMULATE_REDIS_DOWN is set but ignored in prod');
+}
 
 // Consume a one-time key (invites, etc.): return the value and delete the key.
 // - Prefer atomic GETDEL (Redis >= 6.2)
