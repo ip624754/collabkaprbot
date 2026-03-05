@@ -2164,3 +2164,13 @@ QA:
 - Open `/api/health` and confirm payments fallback shows `fallback_apply_effective=false` when `PAYMENTS_FALLBACK_APPLY_ENABLED=0`.
 - Toggle fallback in admin for 2h and confirm `/api/health` shows `fallback_apply_runtime_enabled=true` and `fallback_apply_effective=true`.
 
+## STEP343 — Prod docs pack (deploy checklist)
+
+- Added `docs/93_PROD_DEPLOY_CHECKLIST.md` (operator checklist: /api/health + admin runtime controls)
+- Updated `docs/README.md` (Production section)
+- Updated `docs/91_PROD_LAUNCH_30MIN.md` (links to env baseline + deploy checklist)
+- Updated `docs/15_NEW_CHAT_HANDOFF.md` (include prod docs section)
+
+QA:
+- Follow `docs/93_PROD_DEPLOY_CHECKLIST.md` and confirm /api/health + admin checks.
+
