@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { CFG } from '../lib/config.js';
 import * as db from '../db/queries.js';
+import { recordPaymentsPayloadIssue } from '../lib/paymentsOps.js';
 
 function safeUpper(s) {
   return String(s || '').trim().toUpperCase();
@@ -209,9 +210,41 @@ export async function applyPaymentFallbackNoSession({
 
   // HMAC hardening: if key is configured, require signed payload (unless explicitly allowed).
   const hv = verifyPayloadHmac(payloadRaw);
-  if (!hv.ok) return { applied: false, reason: hv.reason || 'bad_sig' };
+  if (!hv.ok) {
+    // Observability (best-effort): track unsigned/invalid payloads.
+    try {
+      await recordPaymentsPayloadIssue({
+        issue: hv.reason || 'bad_sig',
+        paymentId,
+        userId: paymentUserId,
+        tgId: appliedByUserId,
+        kind: 'fallback',
+        payload: payloadRaw,
+      });
+    } catch {
+      // ignore
+    }
+    return { applied: false, reason: hv.reason || 'bad_sig' };
+  }
   const payload = String(hv.payloadNoSig || payloadRaw);
   const sigTag = hv.signed ? 'hmac' : 'unsigned';
+
+  // If unsigned payload is allowed (legacy mode), still record it (no digest spam).
+  if (!hv.signed) {
+    try {
+      await recordPaymentsPayloadIssue({
+        issue: 'unsigned_payload',
+        paymentId,
+        userId: paymentUserId,
+        tgId: appliedByUserId,
+        kind: 'fallback',
+        payload: payloadRaw,
+        extra: [String(hv.mode || 'unsigned')],
+      });
+    } catch {
+      // ignore
+    }
+  }
 
   // DB-truth hardening: confirm payment row belongs to payer and matches charge id.
   try {
