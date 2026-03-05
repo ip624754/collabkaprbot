@@ -124,7 +124,11 @@ export default async function handler(_req, res) {
     base.redis.write_ok = false;
     base.redis.latency_ms = null;
     base.redis.last_error = 'not_configured';
-    res.status(200).json({ ...base, cron: { enabled: false }, audit: auditBase });
+    const out = { ...base, cron: { enabled: false }, audit: auditBase };
+    const st = computeSystemStatus(out);
+    out.system_status = st.system_status;
+    out.no_go_reasons = st.no_go_reasons;
+    res.status(200).json(out);
     return;
   }
 
@@ -134,6 +138,62 @@ export default async function handler(_req, res) {
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
       .slice(0, 48);
+  }
+
+
+  function computeSystemStatus(out) {
+    try {
+      const reasons = [];
+
+      const redisReadOk = out?.redis?.read_ok;
+      const redisWriteOk = out?.redis?.write_ok;
+
+      if (redisReadOk === false) {
+        reasons.push({ code: 'redis_read_not_ok', value: redisReadOk });
+      }
+      if (redisWriteOk === false) {
+        reasons.push({ code: 'redis_write_not_ok', value: redisWriteOk });
+      }
+
+      const hmacOk = out?.payments?.payload_hmac_minlen_ok;
+      if (hmacOk === false) {
+        reasons.push({
+          code: 'payments_payload_hmac_minlen_not_ok',
+          value: out?.payments?.payload_hmac_key_len ?? null,
+          threshold: out?.payments?.payload_hmac_minlen ?? 32,
+        });
+      }
+
+      // Payments fallback apply should remain OFF in normal ops; if effective, treat as NO_GO.
+      const fbEffective = out?.payments?.fallback_apply_effective;
+      const fbEnv = out?.payments?.fallback_apply_env_enabled;
+      if (fbEffective === true || fbEnv === true) {
+        reasons.push({ code: 'payments_fallback_apply_effective', value: true });
+      }
+
+      // P1/P2 operational thresholds (from readiness guidance)
+      const deferred = Number(out?.broadcast?.tick_deferred_redis?.today_count ?? NaN);
+      if (Number.isFinite(deferred) && deferred > 50) {
+        reasons.push({ code: 'broadcast_tick_deferred_redis_high', value: deferred, threshold: 50 });
+      }
+
+      const resched = Number(out?.qstash?.reschedule_failed?.today_count ?? NaN);
+      if (Number.isFinite(resched) && resched > 10) {
+        reasons.push({ code: 'qstash_reschedule_failed_high', value: resched, threshold: 10 });
+      }
+
+      const stuck = Number(out?.qstash?.official_publish_stuck?.today_count ?? NaN);
+      if (Number.isFinite(stuck) && stuck > 5) {
+        reasons.push({ code: 'qstash_official_publish_stuck_high', value: stuck, threshold: 5 });
+      }
+
+      return {
+        system_status: reasons.length ? 'NO_GO' : 'GO',
+        no_go_reasons: reasons,
+      };
+    } catch {
+      return { system_status: 'NO_GO', no_go_reasons: [{ code: 'health_compute_failed' }] };
+    }
   }
 
   try {
@@ -714,7 +774,8 @@ try {
       // ignore
     }
 
-    res.status(200).json({
+    const out = {
+
       ...base,
       cron: {
         enabled: true,
@@ -726,19 +787,31 @@ try {
       broadcast,
       ref,
       audit,
-    });
+
+    };
+    const st = computeSystemStatus(out);
+    out.system_status = st.system_status;
+    out.no_go_reasons = st.no_go_reasons;
+    res.status(200).json(out);
   } catch {
     base.redis.configured = true;
     base.redis.read_ok = false;
     base.redis.write_ok = false;
     base.redis.latency_ms = null;
     base.redis.last_error = 'redis_unavailable';
-    res.status(200).json({
+
+    const out = {
+
       ...base,
       cron: { enabled: true, error: 'redis_unavailable' },
       broadcast: { cooldown_until: null, retry_after_sec: null, broadcast_id: null },
       ref: { day: null, today: { ig: 0, tg: 0 }, total: { ig: 0, tg: 0 } },
       audit: auditBase,
-    });
+
+    };
+    const st = computeSystemStatus(out);
+    out.system_status = st.system_status;
+    out.no_go_reasons = st.no_go_reasons;
+    res.status(200).json(out);
   }
 }
