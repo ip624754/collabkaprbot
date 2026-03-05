@@ -310,24 +310,30 @@ export default async function handler(req, res) {
       return;
     }
 
-    
-    // Hard-skip (Redis-only): do not waste Telegram/QStash on permanently dead chats.
-    // Note: keep DB guard (broadcast must exist) before writing to broadcast_sent_log (FK).
-    const hardSkip = await getBroadcastHardSkipReason(tgId);
-    if (hardSkip) {
-      try {
-        await db.logBroadcastBlocked(broadcastId, userId, `hard_skip:${hardSkip}`);
-        await resetBroadcastQuarantineCount(broadcastId, userId);
-      } catch {
-        // DB down: fail-closed
-        res.status(500).json({ ok: false, error: 'db_unavailable' });
-        return;
-      }
-      res.status(200).json({ ok: true, skipped: true, reason: 'hard_skip' });
-      return;
-    }
+// Hard-skip (Redis-only): do not waste Telegram/QStash on permanently dead chats.
+// Note: keep DB guard (broadcast must exist) before writing to broadcast_sent_log (FK).
+const hardSkip = await getBroadcastHardSkipReason(tgId);
+if (hardSkip) {
+  try {
+    await db.logBroadcastBlocked(broadcastId, userId, `hard_skip:${hardSkip}`);
+    await resetBroadcastQuarantineCount(broadcastId, userId);
+  } catch {
+    // DB down: fail-closed
+    res.status(500).json({ ok: false, error: 'db_unavailable' });
+    return;
+  }
 
-    // Cooldown (Redis best-effort). Redis down → fail-open.
+  // Best-effort: counter for /api/health (bounded).
+  try {
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    await incrWithExpireOnFirst(k(['broadcast', 'hard_skip', 'hit', 'd', day]), 14 * 24 * 60 * 60);
+  } catch {}
+
+  res.status(200).json({ ok: true, skipped: true, reason: 'hard_skip' });
+  return;
+}
+
+// Cooldown (Redis best-effort). Redis down → fail-open.
     // Second check (race-friendly): cooldown could be set by a parallel delivery.
     const nowMs = Date.now();
     const cdMs = await getCooldownUntilFast(broadcastId);
