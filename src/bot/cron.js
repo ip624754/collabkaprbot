@@ -61,6 +61,7 @@ const NOTIFY_TIMEOUT_MS = 5000; // best-effort Telegram notifications in cron
 // Goal: when cooldown is active, exit BEFORE any DB polling.
 // If Redis is unavailable, we fall back to a DB fuse stored on the broadcast row.
 const BC_COOLDOWN_TTL_SEC = 24 * 60 * 60; // keep state for ops visibility (bounded)
+const BC_PENDING_SNAPSHOT_TTL_SEC = 30 * 60; // 30 min snapshot for /api/health (Redis-only)
 const BC_COOLDOWN_UNTIL_KEY = k(['broadcast', 'cooldown_until']);
 const BC_COOLDOWN_BROADCAST_ID_KEY = k(['broadcast', 'cooldown_broadcast_id']);
 const BC_COOLDOWN_LAST_429_AT_KEY = k(['broadcast', 'last_429_at']);
@@ -225,6 +226,31 @@ function bcDeferWaitDayKey(day) {
 }
 function bcQuarantineSetDayKey(day) {
   return k(['broadcast', 'quarantine_set', 'd', String(day || 'na')]);
+}
+
+function bcPendingDeliveriesKey() {
+  return k(['broadcast', 'pending_deliveries']);
+}
+
+async function writeBroadcastPendingSnapshot(broadcastId, pendingCount) {
+  // Best-effort Redis-only visibility for operators via /api/health.
+  try {
+    await redis.set(
+      bcPendingDeliveriesKey(),
+      {
+        ts: new Date().toISOString(),
+        broadcast_id: Number(broadcastId) || null,
+        pending_count: Number(pendingCount) || 0,
+      },
+      { ex: BC_PENDING_SNAPSHOT_TTL_SEC }
+    );
+  } catch {}
+}
+
+async function clearBroadcastPendingSnapshot() {
+  try {
+    await redis.del(bcPendingDeliveriesKey());
+  } catch {}
 }
 
 function bcHardSkipSetDayKey(day) {
@@ -1439,6 +1465,8 @@ if (!redisOk) {
     const bc = await db.getActiveBroadcast();
     if (!bc) {
       const out = { status: 'idle', reason: 'no_active_broadcast' };
+      await clearBroadcastPendingSnapshot();
+
       await writeCronLastRun('broadcast_tick', { ts: new Date().toISOString(), ...out });
       return out;
     }
@@ -1525,6 +1553,7 @@ const fanoutEnabled = !!fanoutStatus.enabled;
       if (fanoutEnabled) {
         try {
           const pending = await db.countBroadcastPendingDeliveries(bc.id);
+          await writeBroadcastPendingSnapshot(bc.id, pending);
           if (pending > 0) {
             // If we have deferred/quarantined recipients, set cooldown until the earliest window.
             try {
