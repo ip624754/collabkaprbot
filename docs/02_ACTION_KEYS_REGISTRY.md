@@ -5,14 +5,14 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **516**
-- Actions in registry: **516**
+- Actions in code: **523**
+- Actions in registry: **523**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
-| admin | 84 |
+| admin | 91 |
 | edit | 338 |
 | ops | 79 |
 | pay | 11 |
@@ -23,9 +23,9 @@
 | Guard | Count |
 |---|---:|
 | db_truth | 4 |
-| none | 158 |
+| none | 163 |
 | queue_first | 2 |
-| require_redis | 352 |
+| require_redis | 354 |
 
 ## Actions table
 
@@ -90,7 +90,7 @@
 | `a:admin_notice_target` | admin | require_redis |
 | `a:admin_notice_text` | admin | require_redis |
 | `a:admin_notice_toggle` | admin | require_redis |
-| `a:admin_ops` | admin | require_redis |
+| `a:admin_ops` | admin | none |
 | `a:admin_outbox` | admin | require_redis |
 | `a:admin_outbox_clear` | admin | require_redis |
 | `a:admin_outbox_clear_q` | admin | require_redis |
@@ -102,15 +102,14 @@
 | `a:admin_pay_apply` | admin | db_truth |
 | `a:admin_pay_auto_toggle` | admin | require_redis |
 | `a:admin_pay_autoheal` | admin | db_truth |
+| `a:admin_pay_fb` | admin | require_redis |
+| `a:admin_pay_fb_off` | admin | require_redis |
+| `a:admin_pay_fb_set` | admin | require_redis |
 | `a:admin_pay_view` | admin | none |
 | `a:admin_payments` | admin | require_redis |
 | `a:admin_qstash_ping` | admin | require_redis |
 | `a:admin_qstash_status` | admin | require_redis |
 | `a:admin_sys` | admin | require_redis |
-| `a:hs_home` | admin | none |
-| `a:hs_find` | admin | none |
-| `a:hs_view` | admin | none |
-| `a:hs_unskip` | admin | none |
 | `a:admin_umsg_tpl_add` | admin | require_redis |
 | `a:admin_umsg_tpl_del` | admin | require_redis |
 | `a:admin_umsg_tpl_del_q` | admin | require_redis |
@@ -427,6 +426,10 @@
 | `a:home_hint_ack` | edit | none |
 | `a:home_hub` | edit | none |
 | `a:home_mode` | edit | none |
+| `a:hs_find` | admin | none |
+| `a:hs_home` | admin | none |
+| `a:hs_unskip` | admin | none |
+| `a:hs_view` | admin | none |
 | `a:lead_assign` | edit | require_redis |
 | `a:lead_del_do` | edit | require_redis |
 | `a:lead_del_q` | edit | none |

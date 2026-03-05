@@ -1,5 +1,13 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-05
 
+**STEP352:** Ops visibility — `/api/health` now exposes `qstash.reschedule_failed` (today_count + last_*) and `qstash.official_publish_stuck` (today_count + last_offer_id/age/via). Admin→Ops shows banners for both; no DB reads were added to health.
+
+**STEP351:** RateLimit hardening — when Redis Lua `EVAL` degrades, `rateLimit()` no longer goes unlimited fail‑open: it uses a bounded in‑memory fallback + short circuit‑breaker window (per warm instance).
+
+**STEP350:** Support free‑text reply fix — “✍️ Ответить” in SUPPORT group now accepts Reply both to the ticket and to the prompt message (forum topics supported), and does not dump admins back to main menu on send.
+
+**STEP349:** Ops polish — `/api/health` now exposes broadcast DB overload metrics (`broadcast.db_overload`: today_count + last_at) and Admin→Ops shows a banner when load‑shedding happened recently.
+
 **STEP335:** Infra correctness — creator→brand apply rate-limit Redis keys are now fully namespaced via `k([...])` (prevents cross‑env collisions if Redis is shared across preview/prod).
 
 **STEP336:** Admin control plane — added an Admin→System screen to browse recent broadcast hard-skip entries (dead chats) and unskip a specific TG ID (Redis-only, no SCAN/KEYS).
@@ -53,10 +61,11 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 
 Рисковые зоны (если трогаешь — обязателен `npm run preflight` + ручной smoke):
 1) **Share-URL workaround:** не убирать формат `t.me/share/url?url=<U+2060>&text=...` — иначе часть Telegram‑клиентов снова “молчит” на кнопках шаринга.
-2) **Support при Redis degraded:** `a:support` / `a:support_push` должны оставаться `guard: NONE` (поток ввода `a:support_write` может быть `REQUIRE_REDIS`). Reply-to-user из support-группы: промпт без ForceReply + «❌ Отмена»; при Redis degraded не оставляем активные «reply сюда» промпты.
+2) **Support при Redis degraded:** `a:support` / `a:support_push` должны оставаться `guard: NONE` (поток ввода `a:support_write` может быть `REQUIRE_REDIS`).
+3) **Админка при Redis degraded:** экран «🧰 Админка → Операции» должен быть доступен (guard `NONE`) и показывать баннер состояния Redis + ссылку на `/api/health` (если `PUBLIC_BASE_URL` задан). Reply-to-user из support-группы: промпт без ForceReply + «❌ Отмена»; при Redis degraded не оставляем активные «reply сюда» промпты.
 3) **IG Templates anti-bypass:** не вставлять `@username`, “ссылка в профиле”, портфолио/внешние ссылки и любые контакты; только CTA через витрину/заявку в боте.
 4) **Brand Inbox atomics:** до `✅ Принять` доступны только `✅ Принять / ⛔ Спам / 🗑 Удалить`; переход `new → in_progress` строго атомарный (DB‑truth).
-5) **`/api/health` + cron:** новые cron‑задачи — через `api/cron_router.js`, с lock+throttle и отражением в health без лишних DB‑запросов.
+5) **`/api/health` + cron:** новые cron‑задачи — через `api/cron_router.js`, с lock+throttle и отражением в health без лишних DB‑запросов. Health также показывает состояние Redis (read/write probe) для быстрой диагностики деградации.
 6) **Official publish:** token‑lock + DB‑reserve `PUBLISHING` + async deliver через QStash (`/api/qstash/official-publish-deliver`). UI делает reserve+enqueue, воркер отправляет в канал и фиксирует `ACTIVE`. Менять только маленькими патчами (риск дублей в @collabka_offers).
 7) **Account tombstone/anonymize:** удаление аккаунта (`a:acc_del_do`) — DB‑truth, чистит PII (users/brand_profiles/workspace_settings), скрывает витрины из каталога и отзывает роли (manager/editor/curator). Важно: `upsertUser()` не должен снова записать `tg_username`, если `is_deleted=true`. Доступ для удалённых пользователей: только `♻️ Восстановить` / `💬 Поддержка`.
 8) **Hot UI DB‑reads:** в меню/хабах не добавлять новые SQL‑чтения; Redis‑first, DB только на клике/DB‑truth путях.
@@ -84,7 +93,7 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 22) **STEP287 preflight: node --check:** `npm run preflight` теперь прогоняет `node --check` по ключевым entrypoint‑ам и ловит SyntaxError ещё до деплоя (страховка от регрессий типа STEP286).
 23) **Giveaways & Offers E2E smoke:** держим быстрый end-to-end smoke (gate + wizard + финальные экраны), чтобы после деплоя быстро поймать тупики/возвраты в розыгрышах и офферах. См. audit report 20 и секцию 13 в `smoke-tests_short.md`.
 
-24) **Broadcast E2E smoke:** держим быстрый end‑to‑end smoke (gate + создание + cooldown), чтобы после деплоя быстро ловить тупики и проверки 429/cooldown в рассылках. См. audit report 21 и секцию 14 в `smoke-tests_short.md`.
+24) **Broadcast E2E smoke:** держим быстрый end‑to‑end smoke (gate + создание + cooldown), чтобы после деплоя быстро ловить тупики и проверки 429/cooldown в рассылках. При деградации Neon/DB delivery использует load-shedding: отдаём 429 + Retry-After для QStash (без шторм-ретраев). См. audit report 21 и секцию 14 в `smoke-tests_short.md`.
 
 25) **Admin UX sweep (input-mode escape hatch):** `📋 Меню` / `🏠 Home` теперь best‑effort сбрасывают `expectText` (не залипаем в режиме ввода), а входы в ключевые админ‑разделы очищают ожидание ввода. См. audit report 22.
 
@@ -232,7 +241,7 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 
 27) **Broadcast bc_confirm idempotency (Redis degraded):** подтверждение рассылки (`a:bc_confirm`) должно быть безопасно к двойному клику даже при деградации Redis. Используем fail-fast PG advisory xact lock + короткое DB dedup‑окно (без миграций), чтобы не создавать 2 рассылки из одного draft. См. audit report 27.
 
-28) **rateLimit & Redis TTL hardening:** в инфраструктурном `rateLimit()` убран non‑atomic fallback `INCR+EXPIRE` (который может оставлять ключи без TTL). При деградации Redis — fail‑open, без полуприсваиваний. Brand‑manager state (`bm_mode`, `bm_active_brand`) пишется с длинным TTL (365d), чтобы не жить “вечно”. См. audit report 29.
+28) **rateLimit & Redis TTL hardening:** в инфраструктурном `rateLimit()` убран non‑atomic fallback `INCR+EXPIRE` (который может оставлять ключи без TTL). При деградации Redis / EVAL‑ошибках — включается короткий circuit‑breaker и используется best‑effort **in‑memory fallback** (bounded, per‑warm‑instance) вместо unlimited fail‑open; при этом мы по‑прежнему **не создаём** ключи без TTL. ENV (опционально): `RATE_LIMIT_FALLBACK_DEGRADED_MS`, `RATE_LIMIT_FALLBACK_MAX_KEYS`. См. audit report 29.
 
 29) **Payments ledger anti-cascade + users soft-delete:** финансовые таблицы (`stars_payments`, `payments`) **не должны** терять историю при удалении пользователя. `user_id` FK переведены на `ON DELETE RESTRICT`, а вместо физического удаления пользователя используем soft-delete (`users.is_deleted/deleted_at`, опционально `deactivated_at`). См. audit report 31.
 
@@ -270,19 +279,18 @@ Neon hardening:
 ### `/api/health`
 Возвращает JSON и **не падает**, даже если Redis недоступен (fail-open).
 
-Дополнительно: в админке «🧰 Операции» показываем баннер, если Redis degraded/не настроен (и даём кнопку на `/api/health`).
-
 Что показываем:
 - `cron.giveaways_tick` и `cron.broadcast_tick`: последний run (ts + summary)
 - `audit.throttle`: метрики подавления audit-записей (если включено)
 - `broadcast.cooldown`: активная пауза после `429 Too Many Requests` (если есть)
+- `qstash.reschedule_failed`: счётчик/последний момент, когда worker не смог enqueue delayed retry (видно где и по какому payload)
+- `qstash.official_publish_stuck`: счётчик/последний момент self-heal “публикация зависла” (offer_id + возраст + via)
 - `mon.retry`: breadcrumbs по воркеру монетизации (последний запуск ретрая)
 - `mon.intro`: breadcrumbs по интро (💬 Написать) — последний attempt/результат
 - `mon.accept`: breadcrumbs по ✅ Принять (Brand Inbox) — последний attempt/результат
 - `mon.unlock`: breadcrumbs по 🔓 Разлок контактов — последний attempt/результат
 - `ref`: лёгкие счётчики источников входа (`/start src_tg` / `/start src_ig`) — today/total
 - `ref.by_role`: разрез источника × роли (tg/ig/direct × brand/creator) — today/total
-- `redis`: статус Redis (configured/read_ok/write_ok/latency_ms/last_error) — видно degraded/не настроен
 
 
 #### Audit throttle counters
@@ -797,15 +805,15 @@ Instagram (текущий режим: **только ссылка в карто�
 
 Поддержка «по-человечески» прямо из группы:
 - В тикете есть кнопка <b>✍️ Ответить</b>.
-- Бот пришлёт подсказку. Просто ответь (reply) на сообщение бота одним текстом — бот доставит пользователю.
-- Отмена: ответь <code>/cancel</code>.
+- Бот пришлёт подсказку. Чтобы работало стабильно (даже при privacy mode ON), отправляй текст <b>Reply</b> на <b>тикет</b> (сообщение с кнопками) или на <b>подсказку</b> бота — бот доставит пользователю.
+- Отмена: <code>/cancel</code> (или кнопка «❌ Отмена»).
 
 Быстрые шаблоны ответов (1 клик):
 - В тикете рядом с «✍️ Ответить» есть кнопки: ✅ Принято / ❓ Нужны детали / ✅ Сделали / ⏳ В работе.
 - Нажимаешь — бот сразу отправляет пользователю готовый ответ и пишет подтверждение в группу.
 
-Важно про права в SUPPORT-чате:
-- Бот должен быть <b>админом</b> в группе (или privacy mode у бота должен быть выключен), иначе Telegram может не присылать боту reply-сообщения админов, и «✍️ Ответить» работать не будет.
+Важно:
+- Если админ пишет <i>не Reply</i> (обычным сообщением в группу), бот может не увидеть его при включённом privacy mode — поэтому всегда отвечай через <b>Reply</b> на тикет/подсказку.
 
 
 ### Smart Matching / Featured — авто-обработка оплат (Stars)
