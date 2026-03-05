@@ -1,6 +1,23 @@
 import { CFG } from './config.js';
 import { redis, k, lpushTrim } from './redis.js';
 
+function stdoutOpsFallback(event) {
+  // Reserve channel when Redis is down: keep minimal incident context in stdout logs.
+  // Must never throw.
+  try {
+    const e = event && typeof event === 'object' ? event : { msg: String(event || '') };
+    // Keep payloads small and safe.
+    const out = {
+      t: 'ops_event',
+      ts: new Date().toISOString(),
+      ...e,
+    };
+    console.warn(JSON.stringify(out));
+  } catch {
+    // ignore
+  }
+}
+
 function dayKey() {
   // YYYYMMDD UTC
   return new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -78,8 +95,20 @@ export async function queueOpsDigest({
   try {
     const ok = await redis.set(dedupKey(g, dId), '1', { nx: true, ex: clampDedupTtlSec() });
     if (!ok) return { queued: false, skipped: 'dedup' };
-  } catch {
+  } catch (e) {
     // If Redis is degraded, do not block the caller.
+    stdoutOpsFallback({
+      stage: 'dedup',
+      group: g,
+      reason: String(reason || 'error').slice(0, 64),
+      title: String(title || '').slice(0, 120),
+      kind: String(kind || '').slice(0, 64),
+      paymentId: paymentId ? Number(paymentId) : null,
+      userId: userId ? Number(userId) : null,
+      tgId: tgId ? Number(tgId) : null,
+      payload: String(payload || '').slice(0, 80),
+      err: String(e?.message || e).slice(0, 160),
+    });
     return { queued: false, skipped: 'redis_down' };
   }
 
@@ -102,8 +131,20 @@ export async function queueOpsDigest({
     const maxBuf = Math.max(10, Number(CFG.OPS_ALERT_BUFFER_MAX || 200));
     const ttlSec = 2 * 24 * 60 * 60;
     await lpushTrim(bufK, JSON.stringify(ev), maxBuf, ttlSec);
-  } catch {
-    // ignore (best-effort)
+  } catch (e) {
+    // ignore (best-effort), but keep a reserve breadcrumb.
+    stdoutOpsFallback({
+      stage: 'buffer',
+      group: g,
+      reason: String(ev.reason || 'error').slice(0, 64),
+      title: String(ev.title || '').slice(0, 120),
+      kind: String(ev.kind || '').slice(0, 64),
+      paymentId: ev.paymentId,
+      userId: ev.userId,
+      tgId: ev.tgId,
+      payload: String(ev.payload || '').slice(0, 80),
+      err: String(e?.message || e).slice(0, 160),
+    });
   }
 
   return { queued: true };
@@ -113,7 +154,14 @@ export async function queueOpsDigest({
 export async function queueOpsDigestSafe(args) {
   try {
     return await queueOpsDigest(args);
-  } catch {
+  } catch (e) {
+    stdoutOpsFallback({
+      stage: 'safe_wrapper',
+      reason: String(args?.reason || 'error').slice(0, 64),
+      title: String(args?.title || '').slice(0, 120),
+      kind: String(args?.kind || '').slice(0, 64),
+      err: String(e?.message || e).slice(0, 160),
+    });
     return { queued: false, error: 'queue_failed' };
   }
 }
