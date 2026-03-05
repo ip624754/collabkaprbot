@@ -26,7 +26,13 @@ import { queueOpsAlert } from './opsAlerts.js';
 import { getPaymentsFallbackApplyState, isPaymentsFallbackApplyEnabled, setPaymentsFallbackRuntime } from '../lib/paymentsOps.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
-import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
+import { makeSeed, makeXorShift32, sampleWithoutReplacement, sha256Hex } from './prng.js';
+import {
+  GW_DRAW_ALGO_VERSION_JS,
+  GW_DRAW_SEED_VERSION_JS,
+  GW_POOL_HASH_METHOD_JS,
+  GW_WINNERS_HASH_METHOD_JS,
+} from '../lib/gwRepro.js';
 import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
@@ -34706,11 +34712,22 @@ ${actionHint}`;
 
         await db.setWinners(gwId, winnersUserIds.map((uid, idx) => ({ userId: uid, place: idx + 1 })));
         await db.updateGiveaway(gwId, { status: 'WINNERS_DRAWN', winners_drawn_at: new Date().toISOString() });
+        // Reproducibility pack: log seed/algo versions + pool/winners hashes.
+        const poolHash = sha256Hex([...poolIds].sort((a, b) => Number(a) - Number(b)).join(','));
+        const winnersHash = sha256Hex(winnersUserIds.map((uid, idx) => `${idx + 1}:${uid}`).join(','));
+
         await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.winners_drawn', {
           manual: true,
+          algo_version: GW_DRAW_ALGO_VERSION_JS,
+          seed_version: GW_DRAW_SEED_VERSION_JS,
+          ends_at_iso_used: endsAtIso,
           seedHash,
           eligibleHash,
           seed_mode: seedMode,
+          pool_hash: poolHash,
+          pool_hash_method: GW_POOL_HASH_METHOD_JS,
+          winners_hash: winnersHash,
+          winners_hash_method: GW_WINNERS_HASH_METHOD_JS,
           winners: winnersUserIds.length,
           used_pool: fallback ? 'all_entries' : 'eligible',
           eligible_count: eligibleIds?.length || 0,
