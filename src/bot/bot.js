@@ -22,6 +22,7 @@ import { escapeHtml, fmtTs, parseCb, parseStartPayload, randomToken, countCodepo
 import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import { queueOpsAlert } from './opsAlerts.js';
+import { getPaymentsFallbackApplyState, isPaymentsFallbackApplyEnabled, setPaymentsFallbackRuntime } from '../lib/paymentsOps.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement } from './prng.js';
@@ -22013,6 +22014,9 @@ bot.on('message:successful_payment', async (ctx) => {
   const isFeatPay = invoicePayload.startsWith('feat_');
   const isOffpubPay = invoicePayload.startsWith('offpub_');
 
+  // Runtime override: payments fallback apply (env OR Redis TTL flag).
+  const payFbApplyEnabled = await isPaymentsFallbackApplyEnabled();
+
   // Hardening: validate Stars amount/currency/payload before any fulfillment.
   // Pre-checkout already rejects invalid invoices, but this covers retries/edge cases.
   {
@@ -22257,7 +22261,7 @@ bot.on('message:successful_payment', async (ctx) => {
       if (!ok) {
         // Fallback: apply by payload even if Redis pay_* session expired.
         // Safe for founder_brand_* (no ws context needed). founder_creator_* still requires wsId from session.
-        if (CFG.PAYMENTS_FALLBACK_APPLY_ENABLED && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
+        if (payFbApplyEnabled && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
           try {
             const fb = await applyPaymentFallbackNoSession({
               paymentId,
@@ -22290,7 +22294,7 @@ bot.on('message:successful_payment', async (ctx) => {
         }
 
         await markStatus('ORPHANED', 'missing_session');
-        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
+        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && payFbApplyEnabled;
         const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
         await ctx.reply(
           `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и нажми «💬 Поддержка».`
@@ -22369,7 +22373,7 @@ bot.on('message:successful_payment', async (ctx) => {
 
       if (!data || Number(data.wsId) != wsId || !tgOk || !userOk) {
         // Fallback: apply by payload even if Redis pay_* session expired.
-        if (CFG.PAYMENTS_FALLBACK_APPLY_ENABLED && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
+        if (payFbApplyEnabled && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
           try {
             const fb = await applyPaymentFallbackNoSession({
               paymentId,
@@ -22388,7 +22392,7 @@ bot.on('message:successful_payment', async (ctx) => {
         }
 
         await markStatus('ORPHANED', 'missing_session');
-        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
+        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && payFbApplyEnabled;
         const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
         await ctx.reply(
           `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и открой ⭐️ PRO — помогу разобраться.`
@@ -22425,7 +22429,7 @@ bot.on('message:successful_payment', async (ctx) => {
       const data = await redis.get(k(['pay_brand', token]));
       if (!data || Number(data.userId) !== payUserId || Number(data.tgId) !== Number(ctx.from.id)) {
         // Fallback: apply by payload even if Redis pay_* session expired.
-        if (CFG.PAYMENTS_FALLBACK_APPLY_ENABLED && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
+        if (payFbApplyEnabled && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
           try {
             const fb = await applyPaymentFallbackNoSession({
               paymentId,
@@ -22444,7 +22448,7 @@ bot.on('message:successful_payment', async (ctx) => {
         }
 
         await markStatus('ORPHANED', 'missing_session');
-        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
+        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && payFbApplyEnabled;
         const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
         await ctx.reply(
           `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и нажми «💬 Поддержка».`
@@ -22502,7 +22506,7 @@ bot.on('message:successful_payment', async (ctx) => {
       const data = await redis.get(k(['pay_bplan', token]));
       if (!data || Number(data.userId) !== payUserId || Number(data.tgId) !== Number(ctx.from.id)) {
         // Fallback: apply by payload even if Redis pay_* session expired.
-        if (CFG.PAYMENTS_FALLBACK_APPLY_ENABLED && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
+        if (payFbApplyEnabled && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
           try {
             const fb = await applyPaymentFallbackNoSession({
               paymentId,
@@ -22521,7 +22525,7 @@ bot.on('message:successful_payment', async (ctx) => {
         }
 
         await markStatus('ORPHANED', 'missing_session');
-        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
+        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && payFbApplyEnabled;
         const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
         await ctx.reply(
           `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и нажми «💬 Поддержка».`
@@ -30395,6 +30399,42 @@ ${DEGRADED_COPY.line}
       return;
     }
 
+    // Admin: Payments fallback apply (runtime TTL override)
+    if (p.a === 'a:admin_pay_fb') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      await renderAdminPaymentsFallback(ctx);
+      return;
+    }
+    if (p.a === 'a:admin_pay_fb_set') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery({ text: '⏳ Ставлю…' });
+      const ttl = Number(p.ttl || 0) || 0;
+      const reason = String(p.r || '').slice(0, 40) || 'incident';
+      const byUser = ctx.from?.username ? `@${ctx.from.username}` : null;
+      const r = await setPaymentsFallbackRuntime({ enabled: true, ttlSec: ttl, byTgId: Number(ctx.from.id || 0) || null, byUser, reason });
+      if (!r.ok) {
+        await renderAdminPaymentsFallback(ctx, '⚠️ Redis недоступен — не удалось включить.');
+        return;
+      }
+      await renderAdminPaymentsFallback(ctx, `✅ Включено на ~${fmtWait(Number(r.ttlSec || ttl) || ttl)}.`);
+      return;
+    }
+    if (p.a === 'a:admin_pay_fb_off') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery({ text: '⏳ Выключаю…' });
+      const r = await setPaymentsFallbackRuntime({ enabled: false });
+      if (!r.ok && r.error) {
+        await renderAdminPaymentsFallback(ctx, '⚠️ Redis недоступен — не удалось выключить.');
+        return;
+      }
+      await renderAdminPaymentsFallback(ctx, '🧹 Выключено.');
+      return;
+    }
+
     if (p.a === 'a:admin_matchfeat_auto_toggle') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
@@ -35149,6 +35189,25 @@ async function renderAdminSystem(ctx) {
   const mfAutoApply = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
   const bcFanout = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
 
+  const payFb = await getPaymentsFallbackApplyState();
+  const fbEnv = !!payFb.envEnabled;
+  const fbRt = payFb.runtime || {};
+  const fbRtOn = !!payFb.runtimeEnabled;
+  const fbEff = !!payFb.effective;
+
+  let fbRtLabel = 'OFF';
+  if (fbRtOn) {
+    let leftSec = null;
+    if (Number.isFinite(fbRt.ttlSec) && fbRt.ttlSec !== null) leftSec = Number(fbRt.ttlSec);
+    if (leftSec === null && fbRt.expAt) {
+      try {
+        const ms = Date.parse(String(fbRt.expAt));
+        if (Number.isFinite(ms) && ms > 0) leftSec = Math.max(0, Math.round((ms - Date.now()) / 1000));
+      } catch {}
+    }
+    fbRtLabel = leftSec === null ? 'ON' : `ON (~${fmtWait(leftSec)})`;
+  }
+
   const founderState = await getFounderSaleState();
   const founderOn = !!founderState.effective?.enabled;
   const founderActive = !!founderState.active;
@@ -35157,6 +35216,7 @@ async function renderAdminSystem(ctx) {
   let text = '⚙️ Админка → Система\n\n';
   text += `Платежи: прием ${payAccept ? 'ON' : 'OFF'} • автовыдача ${payAutoApply ? 'ON' : 'OFF'}\n`;
   text += `Match/Feat auto-apply: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
+  text += `Payments fallback apply: ${fbEff ? 'ON' : 'OFF'} (env ${fbEnv ? 'ON' : 'OFF'} • runtime ${fbRtLabel})\n`;
   text += `Broadcast fan-out (QStash): ${bcFanout ? 'ON' : 'OFF'}\n`;
   text += `Founder Sale: ${founderOn ? 'ON' : 'OFF'} • ${founderActive ? 'ACTIVE' : 'INACTIVE'} • до ${founderUntil}${founderState.hasOverride ? ' (ADMIN)' : ''}\n`;
 
@@ -35165,6 +35225,7 @@ async function renderAdminSystem(ctx) {
     .text(`⚙️ Автовыдача: ${payAutoApply ? 'ON' : 'OFF'}`, 'a:admin_pay_auto_toggle')
     .row()
     .text(`🎯🔥 Match/Feat: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
+    .text(`🧯 Fallback: ${fbEff ? 'ON' : 'OFF'}`, 'a:admin_pay_fb')
     .row()
     .text(`📣 QStash fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
     .text('🛰 QStash статус', 'a:admin_qstash_status')
@@ -35184,6 +35245,72 @@ async function renderAdminSystem(ctx) {
     .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { reply_markup: kb });
+}
+
+
+// =====================================================
+// Admin tool: Payments fallback apply (runtime TTL override)
+// - Goal: allow temporary recovery when Redis pay_* sessions are missing/expired.
+// - Storage: Redis-only key with TTL (see src/lib/paymentsOps.js).
+// - Effective: ENV OR runtime.
+// =====================================================
+
+async function renderAdminPaymentsFallback(ctx, toast = '') {
+  const st = await getPaymentsFallbackApplyState();
+  const envOn = !!st.envEnabled;
+  const rt = st.runtime || {};
+  const rtOn = !!st.runtimeEnabled;
+  const eff = !!st.effective;
+
+  let leftSec = null;
+  if (rtOn) {
+    if (Number.isFinite(rt.ttlSec) && rt.ttlSec !== null) leftSec = Number(rt.ttlSec);
+    if (leftSec === null && rt.expAt) {
+      try {
+        const ms = Date.parse(String(rt.expAt));
+        if (Number.isFinite(ms) && ms > 0) leftSec = Math.max(0, Math.round((ms - Date.now()) / 1000));
+      } catch {}
+    }
+  }
+
+  let text = `🧯 <b>Payments fallback apply</b>\n\n`;
+  if (toast) text += `<b>${escapeHtml(String(toast))}</b>\n\n`;
+
+  text += `EFFECTIVE: <b>${eff ? 'ON' : 'OFF'}</b>\n`;
+  text += `ENV: <b>${envOn ? 'ON' : 'OFF'}</b>\n`;
+  text += `RUNTIME: <b>${rtOn ? 'ON' : 'OFF'}</b>`;
+  if (rtOn && leftSec !== null) text += ` (ещё ~${escapeHtml(fmtWait(leftSec))})`;
+  text += `\n\n`;
+
+  text += `Когда включено: при успешном Stars-платеже, если Redis pay_* сессия истекла, бот может применить оплату по invoice payload (строго по правилам безопасности).\n\n`;
+  text += `Рекомендация: держать <b>OFF</b> и включать <b>временно</b> только при инциденте.\n\n`;
+
+  if (rtOn) {
+    const by = rt.byUser ? String(rt.byUser) : (rt.byTgId ? `tg:${rt.byTgId}` : '—');
+    const at = rt.at ? String(rt.at).slice(0, 19) : '—';
+    const exp = rt.expAt ? String(rt.expAt).slice(0, 19) : '—';
+    const reason = rt.reason ? String(rt.reason) : '—';
+    text += `Enabled by: <b>${escapeHtml(by)}</b>\n`;
+    text += `At: <code>${escapeHtml(at)}</code>\n`;
+    text += `Until: <code>${escapeHtml(exp)}</code>\n`;
+    text += `Reason: <b>${escapeHtml(reason)}</b>\n`;
+  }
+
+  const kb = new InlineKeyboard();
+  kb.text('🟢 2h (incident)', 'a:admin_pay_fb_set|ttl:7200|r:incident')
+    .text('🟢 12h (backlog)', 'a:admin_pay_fb_set|ttl:43200|r:backlog')
+    .row()
+    .text('🟢 24h (migration)', 'a:admin_pay_fb_set|ttl:86400|r:migration');
+  if (rtOn) kb.text('🧹 Disable', 'a:admin_pay_fb_off');
+  kb.row()
+    .text('⬅️ Система', 'a:admin_sys')
+    .row()
+    .text('⬅️ Админка', 'a:admin_home')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 
@@ -36942,6 +37069,8 @@ async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
   const limit = 10;
   const offset = Math.max(0, Number(page) || 0) * limit;
 
+  const fbOn = await isPaymentsFallbackApplyEnabled();
+
   const rows = await db.listPaymentsByStatus(status, limit, offset);
   const lines = rows
     .map((r) => {
@@ -36952,7 +37081,7 @@ async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
     .join('\n') || 'Платежей нет.';
 
   const kb = new InlineKeyboard();
-  if (status === 'ORPHANED' && CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED) {
+  if (status === 'ORPHANED' && CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && fbOn) {
     kb.text('🔁 Auto-heal missing_session', `a:admin_pay_autoheal|st:${status}|p:${Math.max(0, Number(page) || 0)}`).row();
   }
   for (const r of rows) {
@@ -37160,8 +37289,9 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
 
 
 async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED', page = 0) {
-  if (!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED || !CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED) {
-    try { await ctx.answerCallbackQuery({ text: 'Auto-heal отключён в ENV.', show_alert: true }); } catch {}
+  const fbOn = await isPaymentsFallbackApplyEnabled();
+  if (!fbOn || !CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED) {
+    try { await ctx.answerCallbackQuery({ text: 'Auto-heal отключён (fallback apply OFF).', show_alert: true }); } catch {}
     await renderAdminPayments(ctx, backStatus, page);
     return;
   }

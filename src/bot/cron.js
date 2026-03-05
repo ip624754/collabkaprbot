@@ -15,6 +15,7 @@ import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
+import { isPaymentsFallbackApplyEnabled } from '../lib/paymentsOps.js';
 import {
   qstashPublishJSON,
   getQStashDeliveryUrl,
@@ -627,7 +628,8 @@ async function autoHealOrphanedPayments() {
   // Goal: eliminate manual tail for ORPHANED missing_session (late Stars payments).
   // Safe: only applies fallbacks based on invoice_payload; skips offpub_* and any non-supported payload.
 
-  if (!CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED || !CFG.PAYMENTS_FALLBACK_APPLY_ENABLED) {
+  const fbOn = await isPaymentsFallbackApplyEnabled();
+  if (!CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED || !fbOn) {
     return { enabled: false, checked: 0, applied: 0, failed: 0, skipped: 0 };
   }
 
