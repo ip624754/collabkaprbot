@@ -1,0 +1,105 @@
+# Production ENV baseline
+
+Этот документ фиксирует **рекомендованный baseline ENV для продакшена** и то, как быстро проверить, что всё применилось.
+
+> Секреты (TOKEN/URL/KEY) никогда не коммитим в репо. Здесь только имена переменных и рекомендуемые значения.
+
+---
+
+## 1) Главное
+
+- Payments fallback по умолчанию OFF.
+- Включение fallback — только **временно** из админки (runtime TTL).
+- HMAC подпись payload обязательна.
+- Broadcast защищён: quarantine + global threshold + hard-skip.
+- Neon защищён: statement_timeout + conn_timeout.
+- Audit не теряется: Redis buffer + flush.
+
+---
+
+## 2) Recommended ENV (без секретов)
+
+### Core
+- `NODE_ENV=production`
+- `LOG_LEVEL=info`
+- `BOT_TOKEN=<set>`
+- `BOT_WEBHOOK_URL=<set>`
+- `WEBHOOK_SECRET_TOKEN=<set>`
+- `CRON_SECRET=<set>`
+- `SUPPORT_CHAT_ID=<set>`
+- `SUPER_ADMIN_IDS=<set>`
+
+### Neon / Postgres
+- `DATABASE_URL=<set>`
+- `PG_POOL_MAX=10`
+- `PG_IDLE_TIMEOUT_MS=10000`
+- `PG_CONN_TIMEOUT_MS=10000`
+- `PG_STATEMENT_TIMEOUT_MS=15000`
+
+### Upstash Redis
+- `UPSTASH_REDIS_REST_URL=<set>`
+- `UPSTASH_REDIS_REST_TOKEN=<set>`
+
+### Upstash QStash
+- `QSTASH_TOKEN=<set>`
+- `QSTASH_CURRENT_SIGNING_KEY=<set>`
+- `QSTASH_NEXT_SIGNING_KEY=<set>`
+- `QSTASH_RETRY_MAX=5`
+
+### Payments (Stars)
+- `PAYMENTS_PROVIDER_TOKEN=<set>`
+- `PAYMENTS_PAYLOAD_HMAC_KEY=<32+ bytes secret>`
+- `PAYMENTS_PAYLOAD_HMAC_LEN=10`
+- `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0`
+- `PAYMENTS_FALLBACK_APPLY_ENABLED=0`
+
+### Broadcast
+- `BROADCAST_QUARANTINE_THRESHOLD=3`
+- `BROADCAST_QUARANTINE_SEC=1200`
+- `BROADCAST_GLOBAL_429_THRESHOLD=6`
+- `BROADCAST_GLOBAL_429_WINDOW_SEC=60`
+- `BROADCAST_HARD_SKIP_TTL_DAYS=90`
+
+### Audit buffer
+- `AUDIT_DB_ENABLED=true`
+- `AUDIT_BUFFER_ENABLED=true`
+- `AUDIT_BUFFER_ON_DB_ERROR=true`
+- `AUDIT_BUFFER_MAX_LEN=5000`
+- `AUDIT_BUFFER_TTL_SEC=604800`
+- `AUDIT_BUFFER_FLUSH_BATCH=250`
+- `AUDIT_BUFFER_FLUSH_MAX_MS=4500`
+
+### Instagram (явно выключено в проде)
+- `IG_OAUTH_ENABLED=false`
+- `IG_ROUTES_ENABLED=false`
+- `IG_OAUTH_UI_ENABLED=false`
+- `IG_VERIFY_TICK_ENABLED=false`
+
+---
+
+## 3) Как работает управление fallback (ENV vs Admin runtime)
+
+Итоговый флаг:
+- `fallback_apply_effective = (fallback_apply_env_enabled) OR (fallback_apply_runtime_enabled)`
+
+Правильный дефолт:
+- ENV=OFF (`PAYMENTS_FALLBACK_APPLY_ENABLED=0`)
+- runtime=OFF
+- effective=OFF
+
+Включение из админки:
+- включаешь на 2h/12h/24h → runtime становится ON → effective ON
+- TTL истекает → runtime снова OFF
+
+---
+
+## 4) Проверка после изменения ENV
+
+1) Сделай redeploy Production.
+2) Открой `/api/health` и проверь:
+   - `payments.payload_hmac_key_configured: true`
+   - `payments.fallback_apply_effective: false` (в норме)
+3) Для проверки админки:
+   - включи fallback на 2h
+   - `/api/health` должен показать `fallback_apply_runtime_enabled: true` и `fallback_apply_effective: true`
+   - выключи fallback → оба снова false

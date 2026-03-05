@@ -1157,3 +1157,14 @@ Auto-heal safeguards + ops alerts:
 - В меню `📌 Шаблоны для Instagram` больше не показываем строки `Канал:` и `Профиль:` (не подсказываем обход через @handles).
 - Оставляем только безопасную ссылку на витрину/заявку: `Ссылка на витрину → Открыть витрину`.
 - Шаблоны (Stories/Пост/DM/Bio) по‑прежнему anti‑bypass: без `@...`, без «ссылка в профиле», контакт только через витрину.
+
+### Payments fallback (ops control)
+
+- **Production baseline:** `PAYMENTS_FALLBACK_APPLY_ENABLED=0` (по умолчанию OFF).
+- Включать fallback следует **только временно** через админку (runtime flag с TTL, STEP337).
+- `/api/health` показывает:
+  - `payments.fallback_apply_env_enabled` (ENV)
+  - `payments.fallback_apply_runtime_enabled` (admin runtime)
+  - `payments.fallback_apply_effective` (итог)
+
+
