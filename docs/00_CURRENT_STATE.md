@@ -171,7 +171,7 @@ Audit report (Giveaways & Offers E2E smoke): `docs/audit/20_GIVEAWAYS_OFFERS_E2E
 
 Audit report (Broadcast E2E smoke): `docs/audit/21_BROADCAST_E2E_SMOKE_2026_03.md`.
 
-Audit report (Admin UX sweep): `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
+Audit report (Admin UX sweep): `docs/audit/22_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md`.
 
 Audit report (Broadcast confirm idempotency): `docs/audit/27_BROADCAST_CONFIRM_IDEMPOTENCY_2026_03.md`.
 
@@ -215,8 +215,8 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 - STEP214: Official publish anti-stuck — после DB-reserve (`PUBLISHING`) ставим отложенную QStash‑проверку `/api/qstash/official-publish-verify`: если известен `message_id` (Redis breadcrumb) — прикрепляем и переводим в `ACTIVE`, иначе сбрасываем статус обратно в `PENDING` + логируем `last_error` (разблокируем UI/очередь). См. `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`.
 - STEP215: Audit buffer flush — suppressed workspace audit события (AUDIT_DB_THROTTLE) больше не теряются: складываем в Redis list и батчим в Postgres через cron `/api/cron/audit-flush-tick`. В `/api/health` добавлен `audit.buffer.*` (len/enqueued/flushed/last_flush).
 - STEP216: expectText TTL + escape hatch — режим ввода текста больше не может “залипнуть навсегда”: `expectText` получает `_startedAt` и общий лимит жизни (ENV `EXPECT_TEXT_MAX_LIFETIME_SEC`, default 2h). В text-input футере добавлен явный выход «❌ Отмена» (в `📋 Меню`), а в приватном чате можно набрать `отмена/cancel/стоп/stop`.
-- STEP217: post-deploy hardening — канонизировали короткий smoke после деплоя: обновлён `./smoke-tests_short.md` (добавлен input-mode `❌ Отмена/отмена` + audit flush tick + акцент на Redis degraded/монетизацию). В `docs/16_RELEASE_CHECKLIST.md` и `docs/13_RUNBOOK_RELEASE.md` добавлены ссылки на этот smoke.
-- STEP218: `npm run smoke:short` — микро-команда для релиза: печатает `./smoke-tests_short.md` + 4 ключевые проверки и ссылки на релизные доки (без влияния на прод-логику).
+- STEP217: post-deploy hardening — канонизировали короткий smoke после деплоя: обновлён `smoke-tests_short.md` (добавлен input-mode `❌ Отмена/отмена` + audit flush tick + акцент на Redis degraded/монетизацию). В `docs/16_RELEASE_CHECKLIST.md` и `docs/13_RUNBOOK_RELEASE.md` добавлены ссылки на этот smoke.
+- STEP218: `npm run smoke:short` — микро-команда для релиза: печатает `smoke-tests_short.md` + 4 ключевые проверки и ссылки на релизные доки (без влияния на прод-логику).
 - STEP220: Vercel Hobby лимит по функциям (≤12) — cron endpoints агрегированы через один роутер `api/cron_router.js`, а старые URL `/api/cron/*` продолжают работать через `vercel.json` rewrites. Новые cron‑тики добавляем как `job=...` внутри роутера, а не как новый файл в `api/`.
 
 - STEP221: Admin DM UX — в системных/админских сообщениях пользователю кнопки `📋 Открыть меню` и `💬 Поддержка` открывают экраны **новым сообщением** (не затирают текст‑квитанцию). В админке (`a:adm_umsg`) кнопки уложены сеткой 2×N. Также починен путь cron router под rewrites.
@@ -1116,7 +1116,7 @@ Auto-heal safeguards + ops alerts:
 
 ## Repo sync note
 - **STEP184:** архив репозитория и NotebookLM audit-pack синхронизированы с состоянием **STEP183** (без изменения поведения).
-- **STEP185:** исправлено битое имя файла в `docs/neon/` (переименовано в `NEON_HISTORY_RAW.txt` для переносимости архивов), как и указано в доках/аудит-паке).
+- **STEP185:** исправлено битое имя файла в `docs/neon/` (переименовано в `docs/neon/NEON_HISTORY_RAW.txt` для переносимости архивов), как и указано в доках/аудит-паке).
 
 ### STEP186 — NotebookLM pack ≤50 files (NotebookLM50)
 - NotebookLM лимит: максимум 50 файлов; .sql часто не загружается.

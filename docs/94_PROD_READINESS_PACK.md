@@ -7,7 +7,7 @@
 - ENV baseline: `docs/92_PROD_ENV_BASELINE.md`
 - Deploy checklist: `docs/93_PROD_DEPLOY_CHECKLIST.md`
 - Owner runbook: `docs/90_OWNER_RUNBOOK.md`
-- QStash runbooks: `docs/17_QSTASH_RUNBOOK.md`, `docs/10_QSTASH_RUNBOOK.md`
+- QStash runbooks: `docs/10_QSTASH_RUNBOOK.md`, `docs/10_QSTASH_RUNBOOK.md`
 - Official publish: `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`
 - Security invariants: `docs/01_SECURITY_INVARIANTS.md`
 

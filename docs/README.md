@@ -12,9 +12,10 @@
 ## 1) Текущее состояние (source of truth)
 - `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (**source of truth**)
 - `91_PROD_LAUNCH_30MIN.md` — one‑pager: запуск продакшена за 30 минут
-- `10_QSTASH_RUNBOOK.md` — QStash: ключи/env, rollout/rollback, типовые задачи
+- `10_QSTASH_RUNBOOK.md` — QStash: ключи/env, rollout/rollback, типовые задачи (canonical)
+- `17_QSTASH_RUNBOOK.md` — compat mirror (старые ссылки)
 - `11_MIGRATIONS_PACK.md` — как безопасно поднять/чинить БД на Neon (exactly‑once runner)
-- `neon/README.md` + `neon/NEON_HISTORY_RAW.txt` — исторический контекст по Neon (для аудита/разбора; не source of truth)
+- `neon/README.md` + `docs/neon/NEON_HISTORY_RAW.txt` — исторический контекст по Neon (для аудита/разбора; не source of truth)
 - `12_INFRA_CONTROL_PLANE.md` — Cron/Locks/Outbox/гарантии (Control Plane)
 - `13_RUNBOOK_RELEASE.md` + `16_RELEASE_CHECKLIST.md` — релизы/проверки
 - `14_BRAND_TEAM_UX_V4.md` — UX “Менеджеры бренда” (кнопка всегда видна, гейт внутри)
@@ -31,27 +32,32 @@
 
 ## 1.5) Публичные документы (для публикаций и объяснения пользователям)
 Папка: `docs/public/`
-- `README_PUBLIC.md` — индекс: что публиковать и куда
-- `00_product_overview_ru.md` — что такое бот и зачем (маркетинг + “по‑человечески”)
-- `01_for_creators_ru.md` — гайд для креаторов
-- `02_for_brands_ru.md` — гайд для брендов/агентств
-- `03_faq_ru.md` — FAQ
-- `04_tech_overview_ru.md` — лёгкий тех‑обзор (для партнёров)
-- `05_publication_templates_ru.md` — шаблоны постов/Telegraph
-- `06_telegraph_article_ru.md` — большая Telegraph‑статья “под ключ”
-- `07_press_kit_ru.md` — пресс‑кит/медиакит (готовые формулировки)
-- `08_privacy_security_ru.md` — публичное объяснение приватности и безопасности
-- `09_use_cases_ru.md` — сценарии/кейсы применения
-- `10_brand_plan_explainer_ru.md` — простое объяснение Brand Plan/кредитов
-- `11_feeds_and_discovery_ru.md` — где “лента/витрина/каталог” (простое объяснение)
+- `docs/public/README_PUBLIC.md` — индекс: что публиковать и куда
+- `docs/public/00_product_overview_ru.md` — что такое бот и зачем (маркетинг + “по‑человечески”)
+- `docs/public/01_for_creators_ru.md` — гайд для креаторов
+- `docs/public/02_for_brands_ru.md` — гайд для брендов/агентств
+- `docs/public/03_faq_ru.md` — FAQ
+- `docs/public/04_tech_overview_ru.md` — лёгкий тех‑обзор (для партнёров)
+- `docs/public/05_publication_templates_ru.md` — шаблоны постов/Telegraph
+- `docs/public/06_telegraph_article_ru.md` — большая Telegraph‑статья “под ключ”
+- `docs/public/07_press_kit_ru.md` — пресс‑кит/медиакит (готовые формулировки)
+- `docs/public/08_privacy_security_ru.md` — публичное объяснение приватности и безопасности
+- `docs/public/09_use_cases_ru.md` — сценарии/кейсы применения
+- `docs/public/10_brand_plan_explainer_ru.md` — простое объяснение Brand Plan/кредитов
+- `docs/public/11_feeds_and_discovery_ru.md` — где “лента/витрина/каталог” (простое объяснение)
+
+
+## 1.7) Smoke tests (в корне репо)
+- `smoke-tests_short.md` — короткий smoke (ручной прогон)
+- `smoke-tests_full.md` — полный smoke
 
 ## 2) SPEC / UX reference (актуально, но не является source of truth)
 Папка: `docs/spec/`
-- `20_HOME_HUB_SPEC.md` — HOME HUB + `/start` role‑gate (`ui_mode`, payload priority, fail‑open)
-- `21_MENU_SPEC.md` — контракт навигации (Back/Menu/Home, `ret`)
-- `22_OFFER_WIZARD_SPEC.md` — визард оффера (финальный экран без тупиков)
-- `23_LEAD_NOTES_SPEC.md` — Curator Notes по заявкам брендов
-- `24_IG_INTEGRATION_SPEC.md` — Instagram integration (OAuth‑only): trust badge + paywall (Level B комментарии не используем)
+- `docs/spec/20_HOME_HUB_SPEC.md` — HOME HUB + `/start` role‑gate (`ui_mode`, payload priority, fail‑open)
+- `docs/spec/21_MENU_SPEC.md` — контракт навигации (Back/Menu/Home, `ret`)
+- `docs/spec/22_OFFER_WIZARD_SPEC.md` — визард оффера (финальный экран без тупиков)
+- `docs/spec/23_LEAD_NOTES_SPEC.md` — Curator Notes по заявкам брендов
+- `docs/spec/24_IG_INTEGRATION_SPEC.md` — Instagram integration (OAuth‑only): trust badge + paywall (Level B комментарии не используем)
 
 > Старые файлы‑зеркала в корне `docs/` (HOME_HUB_SPEC_V1.md, MENU_SPEC_V1.md и т.п.) оставлены как compat mirrors, чтобы старые ссылки не ломались.
 
@@ -60,15 +66,16 @@
 
 ## 3) Protocol / Process (как работаем)
 Папка: `docs/process/`
-- `01_HOW_TO_WORK_LIKE_SENIOR.md` — дисциплина артефактов/DoD/анти‑грабли
-- `02_jobs_vitalik_woz_protocol.md` — Jobs/Vitalik/Woz: high‑signal протокол
+- `docs/process/01_HOW_TO_WORK_LIKE_SENIOR.md` — дисциплина артефактов/DoD/анти‑грабли
+- `docs/process/02_jobs_vitalik_woz_protocol.md` — Jobs/Vitalik/Woz: high‑signal протокол
 - `scripts/lint-footer-nav.js` — авто‑проверка footer‑навигации (запуск: `npm run lint:nav`)
-- `06_AUDIT_STEP94_HARDCORE.md` — reference аудит (не source of truth)
-- `07_WORK_HISTORY_2026_02.md` — timeline по шагам/решениям (для восстановления контекста)
-- `08_AUDIT_CLOSEOUT_2026_02.md` — закрытие внешнего аудита (findings→fixes + мини‑QA)
-- `03_legacy_tech_spec_collabka_v1_0_3.md` — базовая техспека (legacy reference)
-- `04_legacy_techpassport_collabka_v1_0_3_telegra.md` — техпаспорт (legacy reference)
-- `05_legacy_telegraph_article_and_manual.md` — telegraph‑статья/мануал (legacy reference)
+- `docs/process/06_AUDIT_STEP94_HARDCORE.md` — reference аудит (не source of truth)
+- `docs/process/07_WORK_HISTORY_2026_03.md` — timeline по шагам/решениям (актуально)
+- `docs/process/07_WORK_HISTORY_2026_02.md` — архив (предыдущий период)
+- `docs/process/08_AUDIT_CLOSEOUT_2026_02.md` — закрытие внешнего аудита (findings→fixes + мини‑QA)
+- `docs/process/03_legacy_tech_spec_collabka_v1_0_3.md` — базовая техспека (legacy reference)
+- `docs/process/04_legacy_techpassport_collabka_v1_0_3_telegra.md` — техпаспорт (legacy reference)
+- `docs/process/05_legacy_telegraph_article_and_manual.md` — telegraph‑статья/мануал (legacy reference)
 
 ## Как использовать в новом чате
 Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.

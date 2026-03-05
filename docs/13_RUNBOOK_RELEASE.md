@@ -23,7 +23,7 @@ node migrations/run.js
 
 
 ## Smoke tests (short)
-Каноничный чек: `./smoke-tests_short.md` (10–15 минут).
+Каноничный чек: `smoke-tests_short.md` (10–15 минут).
 
 Удобная команда (печатает чеклист + короткие напоминания):
 ```bash

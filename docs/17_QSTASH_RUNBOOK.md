@@ -1,4 +1,9 @@
-# 17 — QSTASH RUNBOOK (Setup / Rollout / Troubleshooting) — 2026-02-25
+# 17 — QStash Runbook (compat mirror)
+
+> Canonical: `10_QSTASH_RUNBOOK.md`.
+> Этот файл оставлен для старых ссылок.
+
+17 — QSTASH RUNBOOK (Setup / Rollout / Troubleshooting) — 2026-02-25
 
 Назначение: документ «как включать и обслуживать QStash» без сюрпризов.
 

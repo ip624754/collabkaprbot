@@ -41,7 +41,7 @@ node migrations/run.js --dry-run
 
 3) Быстрый smoke (10–15 минут, рекомендовано)
 - Запусти `npm run smoke:short` (печатает чеклист + 4 ключевые проверки).
-- Пройди `./smoke-tests_short.md` (особенно: Redis degraded UX + input-mode `❌ Отмена/отмена` + монетизационные кнопки).
+- Пройди `smoke-tests_short.md` (особенно: Redis degraded UX + input-mode `❌ Отмена/отмена` + монетизационные кнопки).
 
 ## C) Если что-то пошло не так
 
