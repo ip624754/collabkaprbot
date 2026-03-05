@@ -2,6 +2,14 @@
 
 **STEP358:** Prod readiness docs pack — добавлен `docs/94_PROD_READINESS_PACK.md` (GO/NO‑GO + incident cookbook) и обновлены прод-доки (91/93/90/README) под текущее поведение health/admin ops.
 
+**STEP360:** Broadcast deliver DB overload jitter — при деградации Neon/DB delivery отдаёт 429 + Retry‑After **с джиттером** (по умолчанию 0–15с) чтобы избежать thundering herd при массовых ретраях QStash.
+
+**STEP361:** Broadcast deliver DB overload fuse — при `db_overload` ставим короткий Redis‑предохранитель (`ops:fuse:db_overload`, TTL ~50с) и на следующих доставках **сразу** отвечаем 429 до любых обращений к Neon/pool.
+
+**STEP362:** Reserve incident logs to stdout — при деградации Redis ключевые ops‑события (ops digest) пишутся в stdout в JSON (fallback), чтобы не терять диагностический контекст при падении кэша.
+
+**STEP363:** Payments handlers extracted — Stars payments (`/paysupport`, `pre_checkout_query`, `successful_payment`) вынесены из `src/bot/bot.js` в `src/bot/payments/starsHandlers.js` без изменения логики (только декомпозиция, меньше риск регрессий при будущих правках).
+
 
 
 **STEP357:** Payments safety visibility — `/api/health` now exposes `payload_hmac_minlen_ok` + key length; Admin→Ops shows banners for missing/short HMAC key and for `fallback apply ENABLED` (env/runtime).
@@ -105,7 +113,7 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 22) **STEP287 preflight: node --check:** `npm run preflight` теперь прогоняет `node --check` по ключевым entrypoint‑ам и ловит SyntaxError ещё до деплоя (страховка от регрессий типа STEP286).
 23) **Giveaways & Offers E2E smoke:** держим быстрый end-to-end smoke (gate + wizard + финальные экраны), чтобы после деплоя быстро поймать тупики/возвраты в розыгрышах и офферах. См. audit report 20 и секцию 13 в `smoke-tests_short.md`.
 
-24) **Broadcast E2E smoke:** держим быстрый end‑to‑end smoke (gate + создание + cooldown), чтобы после деплоя быстро ловить тупики и проверки 429/cooldown в рассылках. При деградации Neon/DB delivery использует load-shedding: отдаём 429 + Retry-After для QStash (без шторм-ретраев). См. audit report 21 и секцию 14 в `smoke-tests_short.md`.
+24) **Broadcast E2E smoke:** держим быстрый end‑to‑end smoke (gate + создание + cooldown), чтобы после деплоя быстро ловить тупики и проверки 429/cooldown в рассылках. При деградации Neon/DB delivery использует load-shedding: отдаём 429 + Retry-After (+ jitter) для QStash (без шторм-ретраев). См. audit report 21 и секцию 14 в `smoke-tests_short.md`.
 
 25) **Admin UX sweep (input-mode escape hatch):** `📋 Меню` / `🏠 Home` теперь best‑effort сбрасывают `expectText` (не залипаем в режиме ввода), а входы в ключевые админ‑разделы очищают ожидание ввода. См. audit report 22.
 
