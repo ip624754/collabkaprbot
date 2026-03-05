@@ -82,3 +82,8 @@
 - `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md` — что загрузить, в каком порядке
 - `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt` — жёсткий промпт аудита
 - `docs/audit/02_NOTEBOOKLM_AUDIO_RECAP_FOCUS_RU.md` — короткий текст для аудиопересказа
+
+## Production
+- `docs/91_PROD_LAUNCH_30MIN.md` — запуск продакшена за 30 минут (one‑pager)
+- `docs/92_PROD_ENV_BASELINE.md` — baseline ENV для prod (без секретов) + проверка через /api/health
+- `docs/93_PROD_DEPLOY_CHECKLIST.md` — операторский чеклист деплоя (health/admin)

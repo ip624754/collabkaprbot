@@ -67,3 +67,9 @@
 ## 4) Быстрый шаблон промпта
 Если хочется прям “как надо” — используй файл:
 `docs/17_START_NEW_CHAT_PROMPT.md`
+
+## Production docs (read before going live)
+
+- `docs/92_PROD_ENV_BASELINE.md` — baseline ENV для продакшена (без секретов)
+- `docs/93_PROD_DEPLOY_CHECKLIST.md` — чеклист деплоя/проверок (health + админка)
+

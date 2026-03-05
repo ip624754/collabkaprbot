@@ -1167,4 +1167,8 @@ Auto-heal safeguards + ops alerts:
   - `payments.fallback_apply_runtime_enabled` (admin runtime)
   - `payments.fallback_apply_effective` (итог)
 
+## Production ops docs
+
+- `docs/92_PROD_ENV_BASELINE.md` — baseline ENV for prod (no secrets)
+- `docs/93_PROD_DEPLOY_CHECKLIST.md` — deploy/runbook checklist (health + admin)
 
