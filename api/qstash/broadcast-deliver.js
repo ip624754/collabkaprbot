@@ -194,6 +194,22 @@ async function respondDbOverload({ res, broadcastId, userId, tgId, attempt, wher
   const sec = getDbBackoffSec();
   setQStashRetryAfterHeaders(res, sec);
 
+  // Redis-only metrics for operators: count today + last timestamp.
+  // Best-effort and must never throw (we're already in a degraded path).
+  try {
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
+    const ttlSec = 2 * 24 * 60 * 60;
+    await incrWithExpireOnFirst(k(['ops', 'reasons', 'broadcast_db_overload', 'd', day]), ttlSec);
+    await redis.set(k(['ops', 'reasons', 'broadcast_db_overload', 'last_at']), new Date().toISOString(), { ex: ttlSec });
+    if (where) {
+      await redis.set(
+        k(['ops', 'reasons', 'broadcast_db_overload', 'last_where']),
+        String(where).slice(0, 80),
+        { ex: ttlSec }
+      );
+    }
+  } catch {}
+
   // Best-effort ops digest (Redis-only). Dedup per broadcast to avoid spam.
   try {
     const bid = Number(broadcastId || 0) || 0;
