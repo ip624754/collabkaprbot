@@ -12,6 +12,12 @@
 
 **STEP365:** Admin→Ops “Flush ops digest now” — в экране `🧰 Админка → Операции` добавлена кнопка `🧾 Flush ops digest`, которая принудительно вызывает `flushOpsAlerts(..., { force: true })` и показывает результат (sent/skipped) прямо на экране. Путь admin-only, без DB-чтений; при Redis degraded — graceful message.
 
+**STEP366:** Preflight: smoke degraded rate-limit + extra node-check — `scripts/preflight.js` теперь делает `node --check` для `src/bot/payments/starsHandlers.js` и запускает `scripts/smoke-degraded-rate-limit.js`, который симулирует Redis down (fetch throws) и проверяет, что `rateLimit()` уходит в in-memory fallback со stricter лимитом (default ÷5). Прод‑runtime не меняется (dev/CI only).
+
+**STEP367:** Preflight: broadcast overload invariants — добавлен `scripts/test-broadcast-overload-invariants.js` и подключён в `scripts/preflight.js`. Скрипт проверяет инварианты overload‑веток в `api/qstash/broadcast-deliver.js`: ответ 429 + выставление `Retry-After`/`Upstash-Retry-After` + наличие jitter/base/retry_after полей (регресс‑страховка, dev/CI only).
+
+**STEP368:** Contacts redaction anti-bypass — усилены тесты `scripts/test-redactContactsInText.js` (t . me /, zero‑width, `instagram (dot) com`, `@ handle` с пробелом, obfuscated email `(... at ...) (... dot ...)` / `Email: ... at ... dot ...`, `+7 (999) ...`). Минимально подтянут `src/bot/redactContacts.js`: нормализация zero‑width, `t.me` regex допускает пробелы/невидимые разделители, `instagram (dot)` поддержан, `@` допускает пробелы, obfuscated email ловится консервативно (word‑pattern только при `email:`/`почта:`).
+
 **STEP363:** Payments handlers extracted — Stars payments (`/paysupport`, `pre_checkout_query`, `successful_payment`) вынесены из `src/bot/bot.js` в `src/bot/payments/starsHandlers.js` без изменения логики (только декомпозиция, меньше риск регрессий при будущих правках).
 
 
