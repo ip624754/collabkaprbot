@@ -91,6 +91,7 @@
 | `a:admin_notice_text` | admin | require_redis |
 | `a:admin_notice_toggle` | admin | require_redis |
 | `a:admin_ops` | admin | none |
+| `a:admin_ops_flush` | admin | none |
 | `a:admin_outbox` | admin | require_redis |
 | `a:admin_outbox_clear` | admin | require_redis |
 | `a:admin_outbox_clear_q` | admin | require_redis |

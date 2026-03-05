@@ -8,6 +8,10 @@
 
 **STEP362:** Reserve incident logs to stdout — при деградации Redis ключевые ops‑события (ops digest) пишутся в stdout в JSON (fallback), чтобы не терять диагностический контекст при падении кэша.
 
+**STEP364:** Broadcast pending deliveries в `/api/health` — cron `broadcastTick()` пишет Redis‑снимок `{ts,broadcast_id,pending_count}` в ключ `broadcast:pending_deliveries` (TTL 30 мин); `/api/health` показывает `broadcast.pending_deliveries` (строго Redis‑only, без DB) для раннего обнаружения "залипов" доставок.
+
+**STEP365:** Admin→Ops “Flush ops digest now” — в экране `🧰 Админка → Операции` добавлена кнопка `🧾 Flush ops digest`, которая принудительно вызывает `flushOpsAlerts(..., { force: true })` и показывает результат (sent/skipped) прямо на экране. Путь admin-only, без DB-чтений; при Redis degraded — graceful message.
+
 **STEP363:** Payments handlers extracted — Stars payments (`/paysupport`, `pre_checkout_query`, `successful_payment`) вынесены из `src/bot/bot.js` в `src/bot/payments/starsHandlers.js` без изменения логики (только декомпозиция, меньше риск регрессий при будущих правках).
 
 
