@@ -9,6 +9,7 @@ import {
   getBroadcastCooldownUntilMs,
   setBroadcastCooldown,
   getBroadcastHardSkipReason,
+  logBroadcastHardSkipHit,
   setBroadcastHardSkip,
   normalizeBroadcastDeadChatReason,
 } from '../../src/bot/cron.js';
@@ -537,6 +538,9 @@ if (hardSkip) {
     const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     await incrWithExpireOnFirst(k(['broadcast', 'hard_skip', 'hit', 'd', day]), 14 * 24 * 60 * 60);
   } catch {}
+
+  // Best-effort: record HIT for admin report (Redis-only).
+  try { await logBroadcastHardSkipHit(tgId, hardSkip, { broadcastId, userId, via: 'qstash' }); } catch {}
 
   res.status(200).json({ ok: true, skipped: true, reason: 'hard_skip' });
   return;
