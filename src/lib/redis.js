@@ -214,6 +214,60 @@ export async function releaseLock(lockKey, token) {
   }
 }
 
+// =====================================================
+// In-memory fallback for rateLimit when Redis is degraded
+// - Best-effort, per-warm-instance (serverless friendly)
+// - Bounded memory (LRU-ish)
+// - Used ONLY when Redis rateLimit Lua/EVAL fails or shortly after (circuit breaker)
+// =====================================================
+const _rlFallback = {
+  degradedUntilMs: 0,
+  store: new Map(),
+  maxKeys: Number(process.env.RATE_LIMIT_FALLBACK_MAX_KEYS || 2000),
+  degradedMs: Number(process.env.RATE_LIMIT_FALLBACK_DEGRADED_MS || 10_000),
+};
+
+function _rlFallbackPrune() {
+  const maxKeys =
+    Number.isFinite(_rlFallback.maxKeys) && _rlFallback.maxKeys > 0 ? _rlFallback.maxKeys : 2000;
+  while (_rlFallback.store.size > maxKeys) {
+    const firstKey = _rlFallback.store.keys().next().value;
+    if (firstKey === undefined) break;
+    _rlFallback.store.delete(firstKey);
+  }
+}
+
+function _rlFallbackConsume(key, lim, winSec) {
+  const now = Date.now();
+  const k = String(key || '').slice(0, 512); // keys are structured; keep bounded just in case
+  const winMs = Math.max(1, Number(winSec) * 1000);
+  let entry = _rlFallback.store.get(k);
+
+  if (!entry || now >= entry.resetAtMs) {
+    entry = { count: 0, resetAtMs: now + winMs, lastSeenMs: now };
+  }
+
+  // LRU-ish: reinsert to move to the end.
+  _rlFallback.store.delete(k);
+  entry.count += 1;
+  entry.lastSeenMs = now;
+  _rlFallback.store.set(k, entry);
+  _rlFallbackPrune();
+
+  const allowed = entry.count <= lim;
+  const remaining = Math.max(0, lim - entry.count);
+  const resetSec = Math.max(1, Math.ceil((entry.resetAtMs - now) / 1000));
+  return {
+    ok: allowed,
+    allowed,
+    remaining,
+    limit: lim,
+    current: entry.count,
+    resetSec,
+    fallback: 'memory',
+  };
+}
+
 // Simple rate limiter (good enough for Upstash REST Redis in our use-cases):
 // - INCR key
 // - if first hit => EXPIRE key
@@ -231,8 +285,15 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
       remaining: Number.POSITIVE_INFINITY,
       limit: lim,
       current: 0,
-      resetSec: win
+      resetSec: win,
     };
+  }
+
+  // Circuit breaker: if Redis has recently failed for rateLimit, avoid hammering it
+  // and use a best-effort in-memory limiter to protect Neon/hot paths.
+  const nowMs = Date.now();
+  if (nowMs < _rlFallback.degradedUntilMs) {
+    return _rlFallbackConsume(key, lim, win);
   }
 
   let current = 0;
@@ -245,25 +306,25 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
     `;
     const r = await redis.eval(script, [key], [String(win)]);
     current = Number(r || 0);
+    _rlFallback.degradedUntilMs = 0;
   } catch (e) {
+    // Mark Redis as degraded for a short window so we don't repeatedly EVAL on every request.
+    const ms =
+      Number.isFinite(_rlFallback.degradedMs) && _rlFallback.degradedMs > 0 ? _rlFallback.degradedMs : 10_000;
+    _rlFallback.degradedUntilMs = Date.now() + ms;
+
     await queueOpsDigestFromRedis({
       reason: 'redis_lua_failed',
-      title: 'rateLimit: eval failed (fail-open)',
+      title: 'rateLimit: eval failed (fallback=memory)',
       kind: 'redis',
       payload: String(key || '').slice(0, 160),
       extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
       dedupId: 'redis_eval:rateLimit',
     });
-    // Redis degraded or scripts unavailable: fail-open.
+
+    // Redis degraded or scripts unavailable: best-effort in-memory fallback.
     // IMPORTANT: do NOT fallback to non-atomic INCR+EXPIRE, because it can leave keys without TTL.
-    return {
-      ok: true,
-      allowed: true,
-      remaining: Number.POSITIVE_INFINITY,
-      limit: lim,
-      current: 0,
-      resetSec: win
-    };
+    return _rlFallbackConsume(key, lim, win);
   }
 
   let ttl = null;
@@ -282,7 +343,7 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
     remaining,
     limit: lim,
     current,
-    resetSec: ttl ?? win
+    resetSec: ttl ?? win,
   };
 }
 // =====================================================
