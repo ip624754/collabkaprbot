@@ -1,5 +1,6 @@
 import { CFG } from '../../src/lib/config.js'; 
-import { redis, k } from '../../src/lib/redis.js';
+import { redis, k, incrWithExpireOnFirst } from '../../src/lib/redis.js';
+import { queueOpsDigestSafe } from '../../src/lib/opsDigest.js';
 import * as db from '../../src/db/queries.js';
 import { getBot } from '../../src/bot/bot.js';
 import {
@@ -211,8 +212,34 @@ export default async function handler(req, res) {
           retries: 3,
           timeout: '20s',
         });
-      } catch {
-        // ignore reschedule failures
+      } catch (e) {
+        // Visibility for operators: reschedule to QStash failed.
+        try {
+          const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
+          const ttlSec = 2 * 24 * 60 * 60;
+          await incrWithExpireOnFirst(k(['ops', 'reasons', 'qstash_reschedule_failed', 'd', day]), ttlSec);
+          await redis.set(k(['ops', 'reasons', 'qstash_reschedule_failed', 'last_at']), new Date().toISOString(), { ex: ttlSec });
+          await redis.set(k(['ops', 'reasons', 'qstash_reschedule_failed', 'last_where']), 'official-publish-verify', { ex: ttlSec });
+          await redis.set(k(['ops', 'reasons', 'qstash_reschedule_failed', 'last_payload']), String(offerId || '').slice(0, 64), { ex: ttlSec });
+        } catch {}
+
+        try {
+          await queueOpsDigestSafe({
+            group: 'ops',
+            reason: 'qstash_reschedule_failed',
+            title: 'Official publish verify: retry enqueue failed',
+            kind: 'qstash_official_verify',
+            payload: String(offerId || ''),
+            extra: [
+              `attempt: ${attempt}`,
+              `retryDelaySec: ${retryDelaySec}`,
+              String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180),
+            ],
+            dedupId: `offpv_resched:${offerId}:a:${attempt}`,
+          });
+        } catch {
+          // ignore
+        }
       }
       res.status(200).json({ ok: true, delayed: true, age_sec: ageSec, min_age_sec: minAgeSec });
       return;
@@ -233,6 +260,16 @@ export default async function handler(req, res) {
           messageId: msgId,
         });
         if (updated) {
+          // Visibility for operators: we hit a stuck publish path (healed via redis_msgid).
+          try {
+            const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
+            const ttlSec = 2 * 24 * 60 * 60;
+            await incrWithExpireOnFirst(k(['ops', 'reasons', 'official_publish_stuck', 'd', day]), ttlSec);
+            await redis.set(k(['ops', 'reasons', 'official_publish_stuck', 'last_at']), new Date().toISOString(), { ex: ttlSec });
+            await redis.set(k(['ops', 'reasons', 'official_publish_stuck', 'last_offer_id']), String(offerId), { ex: ttlSec });
+            await redis.set(k(['ops', 'reasons', 'official_publish_stuck', 'last_age_sec']), String(Math.round(ageSec)), { ex: ttlSec });
+            await redis.set(k(['ops', 'reasons', 'official_publish_stuck', 'last_via']), 'redis_msgid', { ex: ttlSec });
+          } catch {}
           res.status(200).json({ ok: true, healed: true, via: 'redis_msgid', message_id: msgId });
           return;
         }
@@ -249,6 +286,17 @@ export default async function handler(req, res) {
     } catch {
       // ignore
     }
+
+    // Visibility for operators: stuck publish detected (healed via reset_pending).
+    try {
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
+      const ttlSec = 2 * 24 * 60 * 60;
+      await incrWithExpireOnFirst(k(['ops', 'reasons', 'official_publish_stuck', 'd', day]), ttlSec);
+      await redis.set(k(['ops', 'reasons', 'official_publish_stuck', 'last_at']), new Date().toISOString(), { ex: ttlSec });
+      await redis.set(k(['ops', 'reasons', 'official_publish_stuck', 'last_offer_id']), String(offerId), { ex: ttlSec });
+      await redis.set(k(['ops', 'reasons', 'official_publish_stuck', 'last_age_sec']), String(Math.round(ageSec)), { ex: ttlSec });
+      await redis.set(k(['ops', 'reasons', 'official_publish_stuck', 'last_via']), 'reset_pending', { ex: ttlSec });
+    } catch {}
 
     await maybeNotifyAdmins({ offerId, wsId, offerTitle, ageSec, reason: 'selfheal_publish_stuck' });
 

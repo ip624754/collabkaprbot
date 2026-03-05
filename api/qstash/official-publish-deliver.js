@@ -1,5 +1,5 @@
 import { CFG } from '../../src/lib/config.js';
-import { redis, k } from '../../src/lib/redis.js';
+import { redis, k, incrWithExpireOnFirst } from '../../src/lib/redis.js';
 import { queueOpsDigestSafe } from '../../src/lib/opsDigest.js';
 import { getBot, deliverOfficialPublishReserved } from '../../src/bot/bot.js';
 import {
@@ -166,6 +166,24 @@ export default async function handler(req, res) {
         res.status(200).json({ ok: true, delayed: true, reason: 'locked', retry_after_sec: retryDelaySec });
         return;
       } catch (e) {
+        // Redis-only visibility for operators (/api/health + admin banners).
+        try {
+          const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
+          const ttlSec = 2 * 24 * 60 * 60;
+          await incrWithExpireOnFirst(k(['ops', 'reasons', 'qstash_reschedule_failed', 'd', day]), ttlSec);
+          await redis.set(k(['ops', 'reasons', 'qstash_reschedule_failed', 'last_at']), new Date().toISOString(), { ex: ttlSec });
+          await redis.set(
+            k(['ops', 'reasons', 'qstash_reschedule_failed', 'last_where']),
+            'official-publish-deliver',
+            { ex: ttlSec }
+          );
+          await redis.set(
+            k(['ops', 'reasons', 'qstash_reschedule_failed', 'last_payload']),
+            String(offerId || '').slice(0, 64),
+            { ex: ttlSec }
+          );
+        } catch {}
+
         await queueOpsDigestSafe({
           group: 'ops',
           reason: 'qstash_reschedule_failed',
