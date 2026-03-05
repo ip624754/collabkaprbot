@@ -74,6 +74,11 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 19) **«Что дальше» copy consistency:** новые тексты с блоком «Что дальше» делать по единому гайду, чтобы не разъезжались формулировки и не появлялись намёки на контакты/обход unlock. См. `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md` и smoke `docs/audit/16_...`.
 20) **Folders: Editors disabled by default:** чтобы не плодить лишние роли/вопросы и не добавлять DB‑чтения в hot Menu, UI/роль `👥 Editors` выключены по умолчанию. Включение только через `WORKSPACE_EDITORS_ENABLED=1`. См. audit report 17.
 
+### Ops: портативность артефактов (ZIP/Windows)
+
+- В репозитории запрещены не-ASCII/слишком длинные имена файлов (часто ломают распаковку ZIP на Windows).
+- `npm run preflight` включает gate `lint:portable-paths` (проверяет basename <= 200 bytes + только printable ASCII).
+
 21) **STEP286 hotfix:** исправлен `SyntaxError: Invalid or unexpected token` на cold start (newline внутри `'...'` в сообщении `a:folders_my`). Теперь используется экранирование \n\n.
 
 22) **STEP287 preflight: node --check:** `npm run preflight` теперь прогоняет `node --check` по ключевым entrypoint‑ам и ловит SyntaxError ещё до деплоя (страховка от регрессий типа STEP286).
