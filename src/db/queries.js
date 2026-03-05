@@ -1,6 +1,12 @@
 import { pool } from './pool.js'; 
 import { CFG } from '../lib/config.js';
 import * as R from '../lib/redis.js';
+import {
+  GW_DRAW_ALGO_VERSION_SQL,
+  GW_DRAW_SEED_VERSION_SQL,
+  GW_POOL_HASH_METHOD_SQL,
+  GW_WINNERS_HASH_METHOD_SQL,
+} from '../lib/gwRepro.js';
 
 // Build-compat: avoid hard ESM named-import crashes if a partial cherry-pick updates
 // call-sites but not `src/lib/redis.js`. Fallbacks are atomic-only / no-op.
@@ -6828,6 +6834,36 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
       }
     }
 
+    // Reproducibility helpers (best-effort; must NOT block a successful draw).
+    // Pool hash is deterministic and extension-free (md5 built-in).
+    async function computePoolHash(onlyEligible) {
+      const eligibilityClause = onlyEligible ? 'AND is_eligible = TRUE' : '';
+      const r = await client.query(
+        `
+        SELECT
+          md5(string_agg(md5(user_id::text), '' ORDER BY user_id)) AS h,
+          count(*)::int AS cnt
+        FROM giveaway_entries
+        WHERE giveaway_id = $1
+          ${eligibilityClause}
+        `,
+        [gid]
+      );
+      return { h: r.rows?.[0]?.h || null, cnt: Number(r.rows?.[0]?.cnt || 0) };
+    }
+
+    async function computeWinnersHash() {
+      const r = await client.query(
+        `
+        SELECT md5(string_agg((place::text || ':' || user_id::text), ',' ORDER BY place)) AS h
+        FROM giveaway_winners
+        WHERE giveaway_id = $1
+        `,
+        [gid]
+      );
+      return r.rows?.[0]?.h || null;
+    }
+
     // 1) Prefer eligible
     let usedPool = 'eligible';
     const winnersUserIds = [];
@@ -6880,7 +6916,14 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
           gid,
           wsid,
           'gw.winners_drawn_skipped',
-          JSON.stringify({ reason: 'no_entries', seed, method }),
+          JSON.stringify({
+            reason: 'no_entries',
+            seed,
+            seed_version: GW_DRAW_SEED_VERSION_SQL,
+            algo_version: GW_DRAW_ALGO_VERSION_SQL,
+            ends_at_iso_used: String(endsAtIso || ''),
+            method,
+          }),
         ]
       );
       await client.query('COMMIT');
@@ -6917,6 +6960,21 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
       return { status: 'already_drawn' };
     }
 
+    // Reproducibility metadata (best-effort).
+    let eligiblePool = { h: null, cnt: 0 };
+    let entriesPool = { h: null, cnt: 0 };
+    try {
+      eligiblePool = await computePoolHash(true);
+      entriesPool = await computePoolHash(false);
+    } catch {
+      // ignore
+    }
+    let wh = null;
+    try { wh = await computeWinnersHash(); } catch {}
+
+    const poolHashValue = (usedPool === 'eligible') ? eligiblePool.h : entriesPool.h;
+    const poolCountValue = (usedPool === 'eligible') ? eligiblePool.cnt : entriesPool.cnt;
+
     // Audit draw
     await client.query(
       `
@@ -6929,10 +6987,24 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
         'gw.winners_drawn',
         JSON.stringify({
           seed,
+          seed_version: GW_DRAW_SEED_VERSION_SQL,
+          algo_version: GW_DRAW_ALGO_VERSION_SQL,
+          ends_at_iso_used: String(endsAtIso || ''),
           method,
           winners: winnersUserIds.length,
           used_pool: usedPool,
           requested_winners: requested,
+          // Pool reproducibility
+          pool_hash: poolHashValue,
+          pool_hash_method: GW_POOL_HASH_METHOD_SQL,
+          pool_count: poolCountValue,
+          eligible_pool_hash: eligiblePool.h,
+          eligible_count: eligiblePool.cnt,
+          entries_pool_hash: entriesPool.h,
+          entries_pool_count: entriesPool.cnt,
+          // Winners reproducibility
+          winners_hash: wh,
+          winners_hash_method: GW_WINNERS_HASH_METHOD_SQL,
         }),
       ]
     );
