@@ -28,7 +28,15 @@ export default async function handler(_req, res) {
       accept_default: !!CFG.PAYMENTS_ACCEPT_DEFAULT,
       auto_apply_default: !!CFG.PAYMENTS_AUTO_APPLY_DEFAULT,
       match_feat_auto_apply_enabled: !!CFG.MATCH_FEAT_AUTO_APPLY_ENABLED,
+      // Keep legacy field for backwards-compat.
       fallback_apply_enabled: !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED,
+      fallback_apply_env_enabled: !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED,
+      fallback_apply_runtime_enabled: null,
+      fallback_apply_effective: null,
+      fallback_apply_runtime: null,
+      payload_hmac_key_configured: !!String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim(),
+      payload_allow_unsigned: !!CFG.PAYMENTS_FALLBACK_ALLOW_UNSIGNED,
+      payload_issues_today: null,
       orphaned_autoheal_enabled: !!CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED,
       orphaned_autoheal_batch: Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_BATCH || 0),
       orphaned_autoheal_min_age_sec: Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 0),
@@ -103,6 +111,64 @@ export default async function handler(_req, res) {
     try {
       const pendingOps = Number(await redis.llen(k(['ops', 'alerts', 'ops', 'd', day]))) || 0;
       base.ops.pending = { ops: pendingOps };
+    } catch {
+      // ignore
+    }
+
+    // Payments ops (Redis-only): runtime fallback flag + payload signature issue counters.
+    try {
+      const rtKey = k(['sys', 'pay_fallback_apply']);
+      const v = await redis.get(rtKey);
+      let obj = (v && typeof v === 'object' && !Array.isArray(v)) ? v : null;
+      if (!obj && typeof v === 'string') {
+        try {
+          const o2 = JSON.parse(v);
+          if (o2 && typeof o2 === 'object' && !Array.isArray(o2)) obj = o2;
+        } catch {
+          // ignore
+        }
+      }
+
+      let ttlSec = null;
+      try {
+        if (typeof redis.ttl === 'function') ttlSec = Number(await redis.ttl(rtKey));
+      } catch {
+        ttlSec = null;
+      }
+
+      const runtimeEnabled = !!(obj && obj.enabled);
+      base.payments.fallback_apply_runtime_enabled = runtimeEnabled;
+      base.payments.fallback_apply_effective = !!(base.payments.fallback_apply_env_enabled || runtimeEnabled);
+      // For convenience, reflect effective state in legacy field too.
+      base.payments.fallback_apply_enabled = base.payments.fallback_apply_effective;
+
+      base.payments.orphaned_autoheal_effective = !!(
+        CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && base.payments.fallback_apply_effective
+      );
+
+      if (runtimeEnabled) {
+        base.payments.fallback_apply_runtime = {
+          at: obj?.at || null,
+          expAt: obj?.expAt || null,
+          ttlSec: Number.isFinite(ttlSec) ? ttlSec : (obj?.ttlSec || null),
+          byTgId: obj?.byTgId || null,
+          byUser: obj?.byUser || null,
+          reason: obj?.reason || null,
+        };
+      } else {
+        base.payments.fallback_apply_runtime = null;
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const buckets = ['unsigned', 'bad_sig', 'bad_format', 'hmac_error', 'other'];
+      const keys = buckets.map((b) => k(['ops', 'payments', 'payload', b, 'd', day]));
+      const vals = await Promise.all(keys.map((kk) => redis.get(kk)));
+      const out = {};
+      for (let i = 0; i < buckets.length; i++) out[buckets[i]] = Number(vals[i] || 0) || 0;
+      base.payments.payload_issues_today = out;
     } catch {
       // ignore
     }
