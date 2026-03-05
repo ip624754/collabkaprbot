@@ -1,12 +1,24 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-04
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-05
 
-**STEP315:** repo parity sync (removed stray files, restored missing work history file, reverted smoke-tests_short to baseline).
+**STEP330:** Giveaway publish idempotency — `a:gw_publish` now does reserve→send→commit with Redis token-lock + Redis breadcrumb for the sent channel message. If the post is sent but DB commit fails, retry finalizes **without** sending again (no duplicates). Intermediate status: `PUBLISHING`.
+
+**STEP327:** Anti-bypass offer title — for brands before unlock, offer **title** is redacted via `redactContactsInText` (same as description). Feed titles and share-text are also redacted to prevent contact leakage.
+
+**STEP326:** Broadcast hard-skip list for permanently dead chats (blocked/chat not found/deactivated) + admin report screen «🧱 Пропуски/ошибки» in broadcast view.
+
+**STEP324:** Silent-catch hardening → digest ops alerts in the most expensive infra paths (Redis Lua eval failures + QStash publish failures + official publish reschedule enqueue failure).
+
+**STEP320:** NotebookLM audit prompt condensed (strict, copy/+paste) and synced in `docs/audit/notebooklm_pack/04_NOTEBOOKLM_AUDIT_PROMPT_RU.txt` (canonical) and `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`.
 ## Staff audit
 
 Для staff‑аудита (и NotebookLM) используем единый стартовый манифест:
 - `docs/audit_staff/00_AUDIT_START_MANIFEST.md`
 
 Он фиксирует **текущее**: Instagram OAuth/verify выключены, Instagram — только ссылка/контакт (скрыт до unlock), верификация — только ручная через заявку.
+
+NotebookLM pack (≤50 текстовых файлов):
+- Источники: `docs/audit/notebooklm_pack/` (00–07: md/txt, код и миграции в бандлах).
+- Генерация ZIP: `npm run gen:notebooklm-sources` → `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip`.
 
 ---
 
@@ -77,6 +89,8 @@ Snapshot: **2026-03-03** (STEP274 Dual-role mode hardening) — P0 не найд
 
 **STEP318:** Broadcast 429 cooldown — set cooldown делается атомарно (Lua) для per‑broadcast и global ключей, воркеры (cron + QStash deliver) уважают паузу; `/api/health` показывает `broadcast.cooldown_until` (с Redis fallback на per‑broadcast ключ при частичных ключах).
 
+**STEP325:** Broadcast 429 anti-stall — если один получатель повторно ловит 429 (по счётчику `BROADCAST_QUARANTINE_THRESHOLD`), его доставка помечается `blocked` (non‑retryable), чтобы рассылка не зависала в `pending` навсегда. Глобальный cooldown ставится только при burst 429 по нескольким получателям: считаем distinct получателей за окно `BROADCAST_GLOBAL_429_WINDOW_SEC`, порог `BROADCAST_GLOBAL_429_THRESHOLD`.
+
 
 28) **STEP301 micro consistency (P3):** в админской рассылке (экран «🔗 Кнопки») шаблоны и действия выровнены в 2×2, добавлен явный admin‑footer (⬅️ Админка / 📋 Меню / 🏠 Home); в `api/qstash/broadcast-deliver.js` убран scope‑shadow `url` в cooldown‑ветке (используем `deliverUrl`); в `redactContactsInText` убран паттерн `.test()+.replace()` на глобальных regex — теперь один проход `replace` + проверка изменения строки (без stateful edge‑кейсов).
 
@@ -145,7 +159,7 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 - STEP235: Neon timeout hardening — Postgres pool задаёт `statement_timeout` для сессии через `SET statement_timeout` в connect hook (ENV `PG_STATEMENT_TIMEOUT_MS`, default 15000) + добавляет явный лог‑маркер `db.statement_timeout` при отмене запроса по таймауту (помогает ops/support). Важно: в Neon pooler нельзя передавать `statement_timeout` через startup options.
 - STEP242: Heavy TX hardening — в “тяжёлых” транзакциях (например, draw+finalize победителей розыгрыша) дополнительно ставим `SET LOCAL statement_timeout` сразу после `BEGIN` (defense-in-depth против частичных деплоев/нестандартных пулов). По умолчанию берём `PG_STATEMENT_TIMEOUT_MS` (опционально можно переопределить `PG_HEAVY_TX_STATEMENT_TIMEOUT_MS`).
 - STEP236: Audit flush cooldown — при DB outage audit-flush больше не “долбит” Postgres каждую минуту: после requeue или DB‑ошибки ставим короткий cooldown (ENV `AUDIT_BUFFER_REQUEUE_COOLDOWN_SEC`, default 120) и cron временно возвращает `skipped: requeue_cooldown`. В `/api/health` добавлен `audit.buffer.requeue_cooldown_ttl_sec`.
-- STEP239: Anti-bypass offer description — для бренда до unlock описание оффера проходит через `redactContactsInText` (скрываем ссылки/почту/телефоны/@handles). `redactContactsInText` усилен против обхода через `＠` (U+FF20) и `․` (U+2024).
+- STEP239: Anti-bypass offer text — для бренда до unlock **заголовок и описание** оффера проходят через `redactContactsInText` (скрываем ссылки/почту/телефоны/@handles). `redactContactsInText` усилен против обхода через `＠` (U+FF20) и `․` (U+2024).
 - STEP240: Lead notes tags persist — теги `#brief/#urgent/...` в curator notes теперь извлекаются и сохраняются в БД: `brand_leads.meta.curator_notes[].tags` (и агрегируются в `brand_leads.meta.tags` для будущей фильтрации). UI больше не обязан парсить текст.
 - STEP241: Hotfix build-compat — импорты из `src/lib/redis.js` переведены на namespace (`import * as R`) с безопасными fallback для опциональных helper’ов (`incrWithExpireOnFirst`, `incrWithExpire`, `lpushTrim`), чтобы частичные деплои/слияния не падали на Vercel с ошибкой «does not provide an export named ...». Поведение прод-логики не меняем, только устраняем crash при загрузке модулей.
 - STEP205: Polishing Comms — единые лимиты Telegram по длине текста (emoji-safe), предупреждения в предпросмотре, лимиты для System Notice и CTA (без регрессий).
@@ -313,7 +327,7 @@ Neon hardening:
 
 - Serverless = только пакетная обработка, никаких “вечных” циклов.
 - Cron: **Redis token-lock** (safe unlock) + где критично **PG advisory lock** + SQL guards на статусных переходах.
-- Winners draw: детерминированно/воспроизводимо, guards по статусам (`winners_drawn_at`, транзакции).
+- Winners draw: детерминированно/воспроизводимо, guards по статусам (`winners_drawn_at`, транзакции). Seed считается по **отсортированным eligible user ids** (order‑independent).
 - Миграции: только `migrations/run.js` (exactly-once + checksum). Checksum считается по **нормализованному SQL** (LF + `trimEnd`) для устойчивости к CRLF/LF и «финальному переводу строки», при этом раннер совместим со старыми checksum значениями.
 - Migration pack (Neon move/emergency): `migration_pack/00_mark_all_applied.sql` обновлён под миграции до `041_*.sql`; `migration_pack/01_reconcile.sql` расширен как safety‑net. Pack‑файлы **не** дублируем в `migrations/`.
 - STEP163: добавлен генератор `npm run gen:migration-pack` (скрипт `scripts/gen-mark-all-applied.js`) — пересчитывает sha256 из `migrations/` и обновляет `migration_pack/00_mark_all_applied.sql` детерминированно.
@@ -576,7 +590,8 @@ Instagram (текущий режим: **только ссылка в карто�
 - `IG_OAUTH_ENABLED=0` — OAuth не стартует даже при случайном доступе к UI.
 - `IG_ROUTES_ENABLED=0` — kill‑switch: закрывает весь `/api/ig/*` и IG cron.
 - `IG_VERIFY_TICK_ENABLED=0` — выключает legacy verify‑cron по комментариям.
-- `IG_OAUTH_CLIENT_ID/SECRET`, `IG_TOKEN_ENC_KEY`, `IG_VERIFY_ACCESS_TOKEN`, `IG_VERIFY_MEDIA_ID` — можно оставить пустыми.
+- `IG_OAUTH_CLIENT_ID/SECRET`, `IG_VERIFY_ACCESS_TOKEN`, `IG_VERIFY_MEDIA_ID` — можно оставить пустыми, пока UI скрыт.
+- `IG_TOKEN_ENC_KEY` — <b>строгий</b>: только <code>hex64</code> (32 bytes) или <code>base64/base64url</code> (>=32 bytes). Если включишь IG OAuth (UI+routes) без валидного ключа — OAuth будет заблокирован как misconfigured.
 > Instagram как ссылка/поле профиля остаётся; показывается брендам только после unlock (контакты скрыты до оплаты).
 
 
@@ -590,7 +605,7 @@ Instagram (текущий режим: **только ссылка в карто�
 - **OPS**: `OPS_ALERT_BUFFER_MAX` `OPS_ALERT_SILENT` `OPS_ALERT_SUMMARY_MIN`
 - **PAYMENT**: `PAYMENT_SESSION_TTL_MIN`
 - **CONTACTS**: `CONTACT_UNLOCK_COST` `CONTACT_UNLOCK_TTL_DAYS` `BRAND_CREDITS_CACHE_TTL_SEC` `BRAND_CREDITS_SNAP_TTL_SEC`
-- **PAYMENTS**: `PAYMENTS_ACCEPT_DEFAULT` `PAYMENTS_AUTO_APPLY_DEFAULT` `PAYMENTS_FALLBACK_APPLY_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_BATCH` `PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC`
+- **PAYMENTS**: `PAYMENTS_ACCEPT_DEFAULT` `PAYMENTS_AUTO_APPLY_DEFAULT` `PAYMENTS_FALLBACK_APPLY_ENABLED` `PAYMENTS_PAYLOAD_HMAC_KEY` `PAYMENTS_PAYLOAD_HMAC_LEN` `PAYMENTS_FALLBACK_ALLOW_UNSIGNED` `PAYMENTS_ORPHANED_AUTOHEAL_ENABLED` `PAYMENTS_ORPHANED_AUTOHEAL_BATCH` `PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC`
 - **FOUNDER**: `FOUNDER_BRAND_12M_CREDITS` `FOUNDER_BRAND_12M_PRICE` `FOUNDER_BRAND_3M_CREDITS` `FOUNDER_BRAND_3M_PRICE` `FOUNDER_CREATOR_12M_PRICE` `FOUNDER_SALE_DEADLINE` `FOUNDER_SALE_ENABLED`
 - **INTRO**: `INTRO_COST_PER_INTRO` `INTRO_DAILY_LIMIT` `INTRO_DAILY_LIMIT_UNVERIFIED` `INTRO_RATE_LIMIT` `INTRO_RATE_WINDOW_SEC` `INTRO_RETRY_AFTER_HOURS` `INTRO_RETRY_ENABLED` `INTRO_RETRY_EXPIRES_DAYS` `INTRO_RETRY_NOTIFY` `INTRO_TRIAL_CREDITS`
 - **AUDIT**: `AUDIT_DB_ENABLED` `AUDIT_DB_THROTTLE_ENABLED` `AUDIT_DB_THROTTLE_LIMIT` `AUDIT_DB_THROTTLE_PREFIXES` `AUDIT_DB_THROTTLE_WINDOW_SEC` `AUDIT_BUFFER_ENABLED` `AUDIT_BUFFER_ON_DB_ERROR` `AUDIT_BUFFER_MAX_LEN` `AUDIT_BUFFER_TTL_SEC` `AUDIT_BUFFER_FLUSH_BATCH` `AUDIT_BUFFER_FLUSH_MAX_MS` `AUDIT_BUFFER_FLUSH_LOCK_TTL_SEC` `AUDIT_BUFFER_INFLIGHT_TIMEOUT_SEC` `AUDIT_BUFFER_REQUEUE_COOLDOWN_SEC`
@@ -916,8 +931,13 @@ Instagram (текущий режим: **только ссылка в карто�
 
 ### Payments: fallback apply без pay_* сессии (anti-ORPHANED)
 
-- `PAYMENTS_FALLBACK_APPLY_ENABLED=1` — если Redis-сессия оплаты `pay_*` истекла, бот всё равно применит оплату по `invoice_payload` (без ручной очереди).
-- `PAYMENTS_FALLBACK_APPLY_ENABLED=0` — строгий режим: без `pay_*` сессии оплата станет ORPHANED `missing_session`.
+- `PAYMENTS_FALLBACK_APPLY_ENABLED=0` (default) — строгий режим: без `pay_*` сессии оплата станет ORPHANED `missing_session` (дальше — поддержка/ручная обработка).
+- `PAYMENTS_FALLBACK_APPLY_ENABLED=1` — разрешить auto-apply по `invoice_payload`, если `pay_*` сессия истекла (использовать осознанно, обычно только при инцидентах).
+
+**HMAC hardening (рекомендуется):**
+- `PAYMENTS_PAYLOAD_HMAC_KEY=...` — секрет для подписи payload (HMAC-SHA256). Если задан, новые Stars-инвойсы подписываются (token+sig).
+- `PAYMENTS_PAYLOAD_HMAC_LEN=10` — длина hex-подписи (6..16).
+- `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0` (default) — не применять fallback для старых/неподписанных payload, если HMAC включён. Временно можно поставить `1`, чтобы “дожать” старые инвойсы.
 
 ### Payments hardening: защита от неверных счетов/сумм
 
