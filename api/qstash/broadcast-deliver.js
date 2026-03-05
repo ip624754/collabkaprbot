@@ -152,6 +152,77 @@ function isNonRetryableTelegramError(code, desc) {
   );
 }
 
+
+function getDbBackoffSec() {
+  const v = Number(process.env.BROADCAST_DB_BACKOFF_SEC || 60) || 60;
+  return Math.max(10, Math.min(600, v));
+}
+
+function isDbOverloadError(err) {
+  if (!err) return false;
+  const code = String(err?.code || err?.errno || '').toUpperCase();
+  const msg = String(err?.message || err).toLowerCase();
+
+  // Common network / pool failures (pg/neon/serverless)
+  if (['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH'].includes(code)) return true;
+
+  // Postgres / pool saturation and transient disconnects
+  if (['53300', '57P01', '57P02', '57P03', '08000', '08001', '08003', '08006', '08004'].includes(code)) return true;
+
+  return (
+    msg.includes('too many clients') ||
+    msg.includes('remaining connection slots') ||
+    msg.includes('connection terminated') ||
+    msg.includes('terminating connection') ||
+    msg.includes('timeout') ||
+    msg.includes('timed out') ||
+    msg.includes('connect econnrefused') ||
+    msg.includes('could not connect') ||
+    msg.includes('connection ended unexpectedly') ||
+    msg.includes('no pg_hba.conf entry') // often shows up during misconfig / transient env
+  );
+}
+
+function setQStashRetryAfterHeaders(res, sec) {
+  const s = Math.max(1, Number(sec || 0) || 1);
+  // QStash supports standard Retry-After (seconds) + Upstash-Retry-After (duration format).
+  try { res.setHeader('Retry-After', String(s)); } catch {}
+  try { res.setHeader('Upstash-Retry-After', `${s}s`); } catch {}
+}
+
+async function respondDbOverload({ res, broadcastId, userId, tgId, attempt, where, err }) {
+  const sec = getDbBackoffSec();
+  setQStashRetryAfterHeaders(res, sec);
+
+  // Best-effort ops digest (Redis-only). Dedup per broadcast to avoid spam.
+  try {
+    const bid = Number(broadcastId || 0) || 0;
+    await queueOpsDigestSafe({
+      group: 'ops',
+      reason: 'broadcast_db_overload',
+      title: 'Broadcast delivery: DB overloaded',
+      kind: 'db',
+      payload: bid ? `broadcast=${bid}` : '',
+      extra: [
+        where ? `where=${where}` : '',
+        userId ? `user=${userId}` : '',
+        tgId ? `tg=${tgId}` : '',
+        Number.isFinite(attempt) ? `attempt=${attempt}` : '',
+        String(err?.code || '').trim() ? `code=${String(err.code).trim()}` : '',
+        String(err?.message || err).slice(0, 180),
+      ].filter(Boolean),
+      dedupId: bid ? `broadcast_db_overload:${bid}` : 'broadcast_db_overload',
+    });
+  } catch {}
+
+  res.status(429).json({
+    ok: false,
+    error: 'db_overloaded',
+    retry_after_sec: sec,
+    where: where || null,
+  });
+}
+
 export default async function handler(req, res) {
   const startedAt = Date.now();
   let ctxInfo = { broadcastId: null, userId: null, tgId: null, attempt: null };
@@ -254,7 +325,16 @@ export default async function handler(req, res) {
     }
 
     // DB down → fail-closed (never send without DB guard).
-    const bcRow = await db.getBroadcast(broadcastId);
+    let bcRow;
+    try {
+      bcRow = await db.getBroadcast(broadcastId);
+    } catch (e) {
+      if (isDbOverloadError(e)) {
+        await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'getBroadcast', err: e });
+        return;
+      }
+      throw e;
+    }
     if (!bcRow) {
       // Non-retryable: broadcast removed.
       res.status(200).json({ ok: true, skipped: 'broadcast_missing' });
@@ -269,8 +349,11 @@ export default async function handler(req, res) {
       try {
         await db.logBroadcastQueued(broadcastId, userId);
         await db.markBroadcastDeliveryRetry(broadcastId, userId, delaySec, 'paused');
-      } catch {
-        // If DB unstable, return 500 to retry later.
+      } catch (e) {
+        if (isDbOverloadError(e)) {
+          await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'paused_log', err: e });
+          return;
+        }
         res.status(500).json({ ok: false, error: 'db_unavailable' });
         return;
       }
@@ -302,7 +385,11 @@ export default async function handler(req, res) {
       try {
         await db.logBroadcastQueued(broadcastId, userId);
         await db.markBroadcastDeliveryFailedNonRetryable(broadcastId, userId, `broadcast_${st.toLowerCase()}`);
-      } catch {
+      } catch (e) {
+        if (isDbOverloadError(e)) {
+          await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
+          return;
+        }
         res.status(500).json({ ok: false, error: 'db_unavailable' });
         return;
       }
@@ -317,11 +404,15 @@ if (hardSkip) {
   try {
     await db.logBroadcastBlocked(broadcastId, userId, `hard_skip:${hardSkip}`);
     await resetBroadcastQuarantineCount(broadcastId, userId);
-  } catch {
-    // DB down: fail-closed
-    res.status(500).json({ ok: false, error: 'db_unavailable' });
-    return;
-  }
+  } catch (e) {
+          if (isDbOverloadError(e)) {
+            await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
+            return;
+          }
+          // DB down: fail-closed
+          res.status(500).json({ ok: false, error: 'db_unavailable' });
+          return;
+        }
 
   // Best-effort: counter for /api/health (bounded).
   try {
@@ -342,7 +433,11 @@ if (hardSkip) {
       try {
         await db.logBroadcastQueued(broadcastId, userId);
         await db.markBroadcastDeliveryRetry(broadcastId, userId, retryAfterSec, 'cooldown');
-      } catch {
+      } catch (e) {
+        if (isDbOverloadError(e)) {
+          await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
+          return;
+        }
         res.status(500).json({ ok: false, error: 'db_unavailable' });
         return;
       }
@@ -369,7 +464,16 @@ if (hardSkip) {
     }
 
     // Claim delivery (DB guard). If already processed / not due, return 200.
-    const claim = await db.claimBroadcastDelivery(broadcastId, userId, 60);
+    let claim;
+    try {
+      claim = await db.claimBroadcastDelivery(broadcastId, userId, 60);
+    } catch (e) {
+      if (isDbOverloadError(e)) {
+        await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'claimDelivery', err: e });
+        return;
+      }
+      throw e;
+    }
     if (!claim) {
       res.status(200).json({ ok: true, skipped: 'not_claimable' });
       return;
@@ -410,7 +514,11 @@ if (hardSkip) {
         try {
           await db.markBroadcastDeliveryBlocked(broadcastId, userId, desc || `telegram_${code}`);
           await resetBroadcastQuarantineCount(broadcastId, userId);
-        } catch {
+        } catch (e) {
+          if (isDbOverloadError(e)) {
+            await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
+            return;
+          }
           // DB down: fail-closed
           res.status(500).json({ ok: false, error: 'db_unavailable' });
           return;
@@ -440,11 +548,15 @@ if (hardSkip) {
               userId,
               `telegram_429_quarantined_${quarantineSec}s`
             );
-          } catch {
-            // DB down: fail-closed
-            res.status(500).json({ ok: false, error: 'db_unavailable' });
+          } catch (e) {
+          if (isDbOverloadError(e)) {
+            await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
             return;
           }
+          // DB down: fail-closed
+          res.status(500).json({ ok: false, error: 'db_unavailable' });
+          return;
+        }
 
           await resetBroadcastQuarantineCount(broadcastId, userId);
           res.status(200).json({
@@ -462,10 +574,14 @@ if (hardSkip) {
           await db.logBroadcastDeferred(broadcastId, userId, retryAfter);
           // In global mode, reset per-recipient counter to avoid accidental quarantine on bursty limits.
           if (isGlobal429) await resetBroadcastQuarantineCount(broadcastId, userId);
-        } catch {
-          res.status(500).json({ ok: false, error: 'db_unavailable' });
+        } catch (e) {
+        if (isDbOverloadError(e)) {
+          await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
           return;
         }
+        res.status(500).json({ ok: false, error: 'db_unavailable' });
+        return;
+      }
 
         // Global cooldown is best-effort (Redis-only). If Redis is down, we still delay this job.
         if (isGlobal429) {
@@ -507,7 +623,11 @@ if (hardSkip) {
       // Other errors → retryable. Mark retry window and return 500 so QStash retries.
       try {
         await db.markBroadcastDeliveryRetry(broadcastId, userId, 60, desc || `telegram_${code}`);
-      } catch {
+      } catch (e) {
+        if (isDbOverloadError(e)) {
+          await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
+          return;
+        }
         res.status(500).json({ ok: false, error: 'db_unavailable' });
         return;
       }
