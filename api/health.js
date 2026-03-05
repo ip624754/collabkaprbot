@@ -380,6 +380,7 @@ try {
       counters: null,
       hard_skip: null,
       db_overload: { day, today_count: null, last_at: null, last_where: null },
+      tick_deferred_redis: { day, today_count: null, last_at: null, last_where: null },
     };
 
     try {
@@ -468,6 +469,23 @@ try {
     k(['ops', 'reasons', 'broadcast_db_overload', 'last_where']),
   ]);
   broadcast.db_overload = {
+    day,
+    today_count: Number(cntRaw) || 0,
+    last_at: lastAt || null,
+    last_where: lastWhere || null,
+  };
+} catch {
+  // ignore
+}
+
+// Broadcast tick deferred due to Redis degraded (Redis-only; emitted by cron broadcastTick fail-closed).
+try {
+  const [cntRaw, lastAt, lastWhere] = await readMany([
+    k(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'd', day]),
+    k(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'last_at']),
+    k(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'last_where']),
+  ]);
+  broadcast.tick_deferred_redis = {
     day,
     today_count: Number(cntRaw) || 0,
     last_at: lastAt || null,
