@@ -2399,3 +2399,37 @@ QA:
 2) Workspace с портфолио, но массив содержит пустые строки: unlock CTA не должен появляться только из-за пустых значений; при клике списания нет (no_contacts).
 3) Нормальный workspace с контактами: разлок списывает 1 кредит (если нужно), ставит unlock, витрина показывает контакт‑пакет.
 4) Async retry включен: при no_contacts воркер шлёт бренд-актору сообщение “списания не было”, и unlock не активируется.
+
+
+### STEP354 — Broadcast tick fail-closed when Redis is degraded
+- Cron `broadcastTick()` теперь **не делает DB polling**, если Redis недоступен: возвращает `skip/deferred` и пишет ops-метрики `broadcast_tick_deferred_redis` (today_count + last_*).
+- Зачем: при Redis down мы теряем lock/cooldown/runtime flags; падение в legacy sync-send может перегрузить Neon и упереться в таймауты Vercel.
+- Наблюдаемость: `/api/health.broadcast.tick_deferred_redis` + баннер в «🧰 Админка → Операции».
+
+Риск регрессий: **низкий** (затрагивает только cron broadcast tick и только при деградации Redis; в нормальном режиме поведение не меняется).
+
+
+### STEP355 — Auto-heal ORPHANED payments: batch claim via SKIP LOCKED
+- Выборка платежей для auto-heal (только `missing_session`) теперь делается через один SQL: `FOR UPDATE SKIP LOCKED` + перевод в `APPLYING` + `RETURNING`.
+- Зачем: при перекрытии крона/ретраях не тратить ресурсы на одни и те же записи и не нагружать Neon лишними read+claim циклами.
+- Семантика денег не меняется: apply по‑прежнему exactly-once (STEP345), здесь только конкурентность/экономия.
+
+Риск регрессий: **низкий** (затрагивает только cron auto-heal; горячие UI пути не меняются).
+
+
+### STEP356 — Degraded rate-limit becomes stricter (Redis down protection)
+- Когда `rateLimit()` переходит в in-memory fallback (Redis Lua/EVAL сломан), лимит в degraded‑режиме режется (по умолчанию ÷5; ENV `RATE_LIMIT_FALLBACK_LIMIT_DIV`).
+- Зачем: в serverless много инстансов → суммарная пропускная способность in-memory limiter может стать слишком большой; в degraded режиме лучше защитить Neon/DB.
+
+Риск регрессий: **низкий/средний** (влияет только при деградации Redis; может стать больше 429/лимитов в плохие минуты — это ожидаемо и лучше, чем перегруз БД).
+
+
+### STEP357 — Payments safety banners (HMAC + fallback apply)
+- `/api/health.payments` теперь показывает длину HMAC ключа и флаг `payload_hmac_minlen_ok` (рекомендуемый минимум 32 символа).
+- В «🧰 Админка → Операции» добавлены баннеры:
+  - 🚨 если HMAC ключ отсутствует,
+  - ⚠️ если ключ слишком короткий,
+  - 🚨 если включён `fallback apply` (env/runtime).
+- Зачем: минимизировать человеческие ошибки в ENV и ускорить диагностику перед запуском.
+
+Риск регрессий: **минимальный** (health/admin-only; без DB reads).
