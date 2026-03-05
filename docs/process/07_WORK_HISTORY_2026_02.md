@@ -982,7 +982,7 @@ docs/01_SECURITY_INVARIANTS.md
 - Этот шаг **не меняет поведение** по сравнению с STEP183; это чисто синхронизация артефактов/доков.
 
 ## STEP185 — docs/neon: fix broken filename (mojibake)
-- Исправили битое имя файла в `docs/neon/`: теперь файл называется `NEON_HISTORY_RAW.txt` (ASCII, чтобы ZIP не ломался на Windows) (UTF‑8), как и указано в `docs/neon/README.md`.
+- Исправили битое имя файла в `docs/neon/`: теперь файл называется `docs/neon/NEON_HISTORY_RAW.txt` (ASCII, чтобы ZIP не ломался на Windows) (UTF‑8), как и указано в `docs/neon/README.md`.
 - Обновили audit-pack (NotebookLM sources), чтобы туда тоже попал файл с правильным именем.
 - Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
 
@@ -1288,19 +1288,19 @@ docs/01_SECURITY_INVARIANTS.md
 
 
 ## STEP217 — Post-deploy hardening: каноничный smoke-tests_short (input-mode + redis degraded)
-- Обновлён `./smoke-tests_short.md`:
+- Обновлён `smoke-tests_short.md`:
   - добавлен явный чек по input-mode (`expectText`): `❌ Отмена` и текстовый escape hatch `отмена/cancel/стоп/stop`;
   - добавлен чек для audit buffer flush (STEP215): `audit_flush_tick.last_run`, `audit.buffer.*`;
   - акцентировано, что при Redis degraded ключевые монетизационные CTA и навигация остаются “живыми” (нет тупика).
-- `docs/16_RELEASE_CHECKLIST.md` теперь явно рекомендует пройти `./smoke-tests_short.md` сразу после деплоя (10–15 минут).
-- `docs/13_RUNBOOK_RELEASE.md` ссылается на `./smoke-tests_short.md` как на каноничный короткий прогон.
+- `docs/16_RELEASE_CHECKLIST.md` теперь явно рекомендует пройти `smoke-tests_short.md` сразу после деплоя (10–15 минут).
+- `docs/13_RUNBOOK_RELEASE.md` ссылается на `smoke-tests_short.md` как на каноничный короткий прогон.
 - Без миграций. Zero regressions.
 - Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
 
 
 ## STEP218 — Release UX: `npm run smoke:short` (печать короткого smoke-чека)
 - Добавлена микро-команда `npm run smoke:short` → `node scripts/smoke-short.js`.
-  - Скрипт печатает `./smoke-tests_short.md`, добавляет 4 ключевых напоминания (health/admin UI/redis degraded/expectText escape) и ссылки на релизные доки.
+  - Скрипт печатает `smoke-tests_short.md`, добавляет 4 ключевых напоминания (health/admin UI/redis degraded/expectText escape) и ссылки на релизные доки.
 - Обновлены релизные документы:
   - `docs/16_RELEASE_CHECKLIST.md` — добавлена рекомендация запускать `npm run smoke:short` после деплоя.
   - `docs/13_RUNBOOK_RELEASE.md` — добавлен блок с командой.

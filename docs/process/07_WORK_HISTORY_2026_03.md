@@ -14,11 +14,11 @@
 ### STEP233 — NotebookLM DOCS‑ONLY pack
 - Подготовили отдельный docs‑only пакет для NotebookLM (только .md/.txt), чтобы аудитору было проще и он не путался.
 - Добавлены документы:
-  - `docs/24_VERIFICATION_MANUAL_ONLY.md`
-  - `docs/25_INSTAGRAM_CONTACTS_ONLY.md`
+  - `docs/21_IG_VERIFY_RUNBOOK.md`
+  - `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`
   - `docs/audit/05_NOTEBOOKLM_DOCS_ONLY_ENTRYPOINT_2026_03.md`
-  - `docs/audit/07_NOTEBOOKLM_AUDIT_PROMPT_DOCS_ONLY_RU.txt`
-- Обновлён `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md` и индекс `docs/audit/04_AUDIT_PACK_INDEX_2026_03.md`.
+  - `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+- Обновлён `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md` и индекс `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md`.
 
 Риск регрессий: **нет** (docs‑only).
 
@@ -406,7 +406,7 @@
 - Экран ввода заметки админа (`a:adm_unote`) приведён к admin‑стандарту навигации (footer `⬅️ Пользователи` + `📋 Меню` + `🏠 Home`).
 
 Docs:
-- Добавлен audit report: `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
+- Добавлен audit report: `docs/audit/22_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md`.
 - `docs/00_CURRENT_STATE.md` обновлён (watchlist + ссылки на audit 21/22).
 
 QA:
@@ -1381,7 +1381,7 @@ QA:
 Docs:
 - `docs/00_CURRENT_STATE.md` — добавлен STEP311 + уточнён паттерн миграций.
 - `docs/11_MIGRATIONS_PACK.md` — обновлён паттерн (>=3 digits) и regex.
-- `docs/process/07_WORK_HISTORY_2026_02.md` + `docs/public/07_WORK_HISTORY_2026_02.md` — уточнено описание STEP208 (>=3 digits), чтобы не противоречило текущему раннеру.
+- `docs/process/07_WORK_HISTORY_2026_02.md` + `docs/process/07_WORK_HISTORY_2026_02.md` — уточнено описание STEP208 (>=3 digits), чтобы не противоречило текущему раннеру.
 
 QA:
 - `node migrations/run.js --dry-run` не ругается на список миграций.
@@ -1566,15 +1566,15 @@ QA:
 
 Изменения:
 - Обновлён `docs/audit/notebooklm_pack/`:
-  - `01_BUNDLE_CORE_RU.md`, `02_BUNDLE_FEATURES_RU.md`, `03_BUNDLE_PROCESS_HISTORY_RU.md` — пересобраны из текущих доков (с актуальным timestamp).
-  - `06_CODE_BUNDLE.txt` — обновлён (включает ключевой код: bot/db/redis/api/qstash/migrations runner).
-  - `07_MIGRATIONS_ALL.sql.txt` — обновлён (включает все `migrations/*.sql` и `migration_pack/*` как текст).
+  - `docs/audit/notebooklm_pack/01_BUNDLE_CORE_RU.md`, `docs/audit/notebooklm_pack/02_BUNDLE_FEATURES_RU.md`, `docs/audit/notebooklm_pack/03_BUNDLE_PROCESS_HISTORY_RU.md` — пересобраны из текущих доков (с актуальным timestamp).
+  - `docs/audit/notebooklm_pack/06_CODE_BUNDLE.txt` — обновлён (включает ключевой код: bot/db/redis/api/qstash/migrations runner).
+  - `docs/audit/notebooklm_pack/07_MIGRATIONS_ALL.sql.txt` — обновлён (включает все `migrations/*.sql` и `migration_pack/*` как текст).
 - Генерация ZIP для загрузки в NotebookLM: `npm run gen:notebooklm-sources` (script `scripts/gen-notebooklm-sources.js`).
   - Output: `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip`.
 
 QA:
 - `npm run gen:notebooklm-sources` проходит и пишет `OK: N files (<=50)`.
-- В `docs/audit/notebooklm_pack/` нет файлов с расширением `.sql` (только `.md/.txt`).
+- В `docs/audit/notebooklm_pack/` нет файлов с расширением `.sql` (только .md / .txt).
 - Bundle-файлы содержат актуальные STEP316–STEP318 изменения (official publish outbox, hydration tokens, broadcast cooldown).
 
 Риск регрессий: нулевой (docs-only + audit pack; runtime не затронут).
@@ -2452,3 +2452,7 @@ QA:
 - STEP358: Prod readiness pack — new `94_PROD_READINESS_PACK.md` (GO/NO‑GO + incident cookbook) + prod docs updated.
 
 Риск регрессий: **нет** (docs-only в STEP358).
+
+
+## STEP359 (docs consistency sweep) — 2026-03-05
+- Привели ссылки/нумерацию документации к консистентному виду (public/, neon/, smoke-tests), добавили compat placeholders (audit 22/24/25, audit_staff manifest).
