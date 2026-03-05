@@ -1777,3 +1777,235 @@ QA:
     - последующие рассылки для этого tg_id пропускают отправку и сразу логируют `hard_skip:*` без попытки Telegram send.
 
 Риск регрессий: низкий (изменения только в broadcast error-path + admin-экраны; success-path рассылки не трогаем).
+
+
+
+## STEP331 — Giveaways: results auto-publish idempotency (reserve-before-send)
+
+Дата: 2026-03-05
+
+Контекст:
+- Auto publish результатов (cron `autoPublishDrawn`) мог отправить новый пост в канал, а затем упасть на DB commit → следующий тик мог отправить ещё один (дубли), особенно когда edit оригинального анонса невозможен и используется send.
+
+Цель:
+- Сделать auto-publish результатов идемпотентным: **сначала** DB-claim, потом TG edit/send, потом DB-finalize. При падении после TG — повторные тики не отправляют снова, а только завершают commit.
+
+Изменения:
+- `src/db/queries.js`
+  - `listDrawnGiveawaysToPublish`: берём и claimed записи (`results_message_id=0`) для recovery.
+  - `atomicClaimGiveawayResultsPublishing`: claim `results_message_id=0` только если ещё `WINNERS_DRAWN` и `results_message_id IS NULL`.
+  - `atomicReleaseGiveawayResultsClaim`: release claim обратно в NULL, если send не удалось.
+  - `atomicFinalizeGiveawayResultsPublish`: finalize только если claim удержан (`results_message_id=0`).
+- `src/bot/cron.js`
+  - `autoPublishDrawn`: reserve-before-send + Redis breadcrumb `gw:results:sent:<gwId>` (TTL 7 дней).
+  - Recovery: если `results_message_id=0`, сначала пытаемся finalize по breadcrumb; если breadcrumb нет — делаем безопасный edit оригинального анонса (без нового send).
+
+ENV:
+- нет
+
+QA:
+- `npm run preflight`
+- Ручной smoke (по возможности):
+  1) Завести розыгрыш с `auto_publish=true`, довести до `WINNERS_DRAWN`.
+  2) Дождаться крона: результаты публикуются (edit или send).
+  3) При временных DB сбоях: повторные тики не должны создавать дубли, а должны дожимать finalize.
+
+Риск регрессий: низкий (cron-only path; UI/монетизация не меняются).
+
+## STEP330 — Giveaways: publish idempotency (reserve → send → commit)
+
+Дата: 2026-03-05
+
+Контекст:
+- `a:gw_publish` раньше делал create→send→update. Если функция умирала после `send*` (или падал DB update), повтор мог создать дубль или оставить запись в `DRAFT`.
+
+Цель:
+- Сделать публикацию идемпотентной: повторный клик не отправляет второй пост, а **дожимает** фиксацию в DB.
+
+Изменения:
+- `src/bot/bot.js`
+  - Token-lock `lock:gw_publish:<wsId>:<tgId>` (30s) против двойных кликов.
+  - В черновик пишем `draft.gw_id` при первом create → все ретраи используют один giveaway.
+  - Перед отправкой ставим `status='PUBLISHING'`.
+  - После успешного отправления в канал пишем Redis breadcrumb `gw:publish:sent:<gwId>` = `{ chat_id, message_id }` с TTL 7 дней.
+  - Если DB commit упал после отправки — показываем кнопку «📣 Опубликовать ещё раз». Повторная попытка увидит breadcrumb и завершит DB update + audit **без** повторного отправления в канал.
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Нажать «📣 Опубликовать» дважды быстро → второй клик должен ответить «⏳ Уже публикуется…», в канал уходит **один** пост.
+  2) Если поймал сообщение «Пост отправлен, но не сохранён. Нажми ещё раз.» → нажать «📣 Опубликовать ещё раз»:
+     - ожидаемо: второй пост **не** отправляется,
+     - giveaway открывается как опубликованный.
+
+Риск регрессий: низкий (меняется только publish-path розыгрышей; success-path участника/проверок не трогаем).
+
+## STEP327 — Anti-bypass: offer title redaction (monetization safety)
+
+Дата: 2026-03-05
+
+Контекст:
+- До unlock (Brand Pass) контакты должны быть скрыты. Раньше редактировалось только `description`, но контакт мог утечь через `title` (например, `@username` или ссылка в заголовке).
+
+Цель:
+- Закрыть утечку контактов через заголовок оффера в публичной карточке и ленте, без DB-reads в hot UI.
+
+Изменения:
+- `src/bot/bot.js`
+  - `renderBxPublicView`: для non-owner до unlock прогоняем `o.title` через `redactContactsInText` (аналогично `description`).
+  - `renderBxFeed`: заголовок в ленте креаторов всегда проходит через `redactContactsInText` (feed не знает unlock per-offer и не должен показывать контакты в title вообще).
+  - `offerShareUrl`: share-text также редактирует title через `redactContactsInText`, чтобы контакты не утекали через share-url.
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP327 в шапку и уточнено, что анти-bypass применяется к title+description.
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Создай оффер с `@username` / ссылкой / email в **title** и любой description.
+  2) Открой этот оффер в brand-mode **до unlock**:
+     - ожидаемо: в карточке и в ленте заголовок показывает «🔒 … скрыто»/маскировку, контактов нет.
+  3) Сделай unlock (Brand Pass) и открой карточку снова:
+     - ожидаемо: title в карточке показывается как есть (контакты допустимы после unlock), контакты отображаются по правилам unlock.
+  4) Нажми “поделиться”/share:
+     - ожидаемо: share-text не содержит контактов, даже если они были в title.
+
+Риск регрессий: низкий (только отображение текста; success-path и монетизация не меняются).
+
+## STEP333 — Neon cost: cached workspaces list in `ensureWorkspaceForOwner` and «📣 Мои каналы»
+
+Дата: 2026-03-05
+
+Контекст:
+- В проекте уже есть `listWorkspacesCached()` (TTL 5 мин) для Menu/Home hot path (Neon-saving), но ряд частых переходов всё ещё делал прямой `db.listWorkspaces()`.
+
+Цель:
+- Убрать лишние DB‑reads в частых UI переходах, без изменения бизнес-логики и без риска деградации при Redis down.
+
+Изменения:
+- `src/bot/bot.js`
+  - `ensureWorkspaceForOwner`: используем `listWorkspacesCached(ownerUserId)`.
+  - Safety: если кеш вернул пустой список — один раз перепроверяем `db.listWorkspaces()` (чтобы избежать stale‑empty UX gate при частичных сбоях/неуспешной инвалидации).
+  - `renderWsList` («📣 Мои каналы»): аналогично — кеш + DB double-check на пустом результате.
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP333 (Neon cost hardening) и уточнён пункт про hot UI кеш workspaces.
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Открыть `📋 Меню` → «📣 Мои каналы» → убедиться, что список рендерится.
+  2) Подключить новый канал через `🚀 Подключить канал` → открыть «📣 Мои каналы» и убедиться, что канал появился (инвалидация кеша срабатывает).
+
+Риск регрессий: низкий (read-only path + best-effort кеш; при Redis degraded всё работает по DB‑truth).
+
+## STEP334 — Neon cost: cache Barter feed COUNT(*) per filter (Redis, TTL 60s)
+
+Дата: 2026-03-05
+
+Контекст:
+- `renderBxFeed` делал `db.countNetworkBarterOffers()` на каждый рендер страницы (включая пагинацию). По мере роста таблицы это начинает ощутимо жечь Neon CU.
+
+Цель:
+- Сохранить текущий UX (точная пагинация по total), но убрать повторяющиеся COUNT(*) запросы на каждом переходе страниц.
+
+Изменения:
+- `src/bot/bot.js`
+  - Добавлен best‑effort Redis cache для total count в ленте:
+    - ключ: `cache:bx:feed_count:<sha1>` (sha1 от нормализованных фильтров)
+    - TTL: 60 секунд (`BX_FEED_COUNT_CACHE_TTL_SEC`)
+  - `renderBxFeed`: total берём через `countNetworkBarterOffersCached(filter)`.
+  - При Redis degraded/ошибках кеша: fail‑open — считаем через DB-truth как раньше.
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP334 в шапку и уточнено, что COUNT(*) в bx_feed кешируется (Neon-saving).
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Открыть «📰 Лента креаторов» с дефолтными фильтрами.
+  2) Переходить страницами (⬅️/➡️) — навигация работает как раньше.
+  3) Поменять фильтр → пагинация пересчитывается (другой cache key).
+  4) (Опционально) при Redis degraded: лента всё равно открывается (fallback на DB).
+
+Риск регрессий: низкий (best-effort кеш; DB-truth fallback; бизнес-логика не меняется).
+
+## STEP335 — Infra: namespace brand_apply rate-limit Redis keys
+
+Дата: 2026-03-05
+
+Контекст:
+- В `sendBrandApplyDraft()` rate-limit ключи (`brand_apply:*`, `brand_apply_ws:*`) были “сырыми” строками и обходили общий namespace через `k([...])`.
+- Если окружения (prod/preview) когда-то делят один Redis — возможны коллизии лимитов и неочевидные блокировки.
+
+Цель:
+- Привести rate-limit ключи к единому неймспейсу проекта (`mg:<APP_ENV>:...`), без изменения логики/лимитов.
+
+Изменения:
+- `src/bot/bot.js`
+  - `rlPairKey` → `k(['rl','brand_apply', userId, brandUserId])`
+  - `rlWsKey` → `k(['rl','brand_apply_ws', wsId, brandUserId])`
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP335 в шапку.
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) От креатора открыть карточку бренда → «📝 Оставить заявку» → написать текст → «✅ Отправить».
+  2) Повторить отправку 4 раза подряд → должен сработать лимит “3 заявки / 6 часов” (как раньше).
+  3) Для одного и того же канала (`wsId`) повторить много раз → лимит “5 / 6 часов” (как раньше).
+
+Риск регрессий: низкий (меняются только ключи Redis, лимиты/UX прежние).
+
+## STEP336 — Admin: manage Broadcast hard-skip list (browse recent + unskip)
+
+Дата: 2026-03-05
+
+Контекст:
+- STEP326 добавил hard-skip список “мёртвых” чатов (Redis-only, per tg_id) + отчёт внутри конкретной рассылки.
+- Нужно управлять этим списком как оператор: быстро проверить tg_id и снять hard-skip, если пользователь “ожил” или ошибка была ложной.
+
+Цель:
+- Добавить в админке (Admin → System) простой control-plane:
+  - посмотреть последние hard-skip записи,
+  - найти запись по tg_id,
+  - снять hard-skip одной кнопкой.
+- Без SCAN/KEYS (serverless/Upstash-safe) и без DB-запросов.
+
+Изменения:
+- `src/bot/cron.js`
+  - `setBroadcastHardSkip()` теперь дополнительно пишет запись в Redis list `mg:<env>:broadcast:hard_skip:recent` (LPUSH+LTRIM, max 1000, TTL такой же как у hard-skip).
+  - Это даёт “recent index” для админского просмотра без тяжёлых операций по Redis.
+- `src/bot/bot.js`
+  - Admin → System: добавлена кнопка `🧱 Hard-skip (dead chats)`.
+  - Экран `a:hs_home`: показывает recent list (страницы) + быстрые кнопки `tg:<id>`.
+  - `a:hs_find`: ввод tg_id через expectText → переход в `a:hs_view`.
+  - `a:hs_view`: показывает статус hard-skip + reason + TTL.
+  - `a:hs_unskip`: удаляет key hard-skip (Redis DEL) и возвращает в карточку.
+- `src/bot/actionRegistry.js`
+  - Добавлены новые action keys: `a:hs_home`, `a:hs_find`, `a:hs_view`, `a:hs_unskip`.
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP336 в шапку.
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Админка → Система → `🧱 Hard-skip (dead chats)` → открыть список (стр.1).
+  2) Нажать `🔎 Найти TG ID` → ввести tg_id → убедиться, что виден статус.
+  3) Если статус hard-skip активен → нажать `🧹 Снять hard-skip` → статус становится “нет hard-skip”.
+  4) (Опционально) Запустить рассылку/доставку на tg_id: убеждаемся, что после unskip он больше не пропускается по hard-skip.
+
+Риск регрессий: низкий (только админская часть + best-effort индекс; core broadcast/send логика не меняется).
+
