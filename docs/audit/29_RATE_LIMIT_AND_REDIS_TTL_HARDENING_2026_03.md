@@ -11,7 +11,7 @@
 ### A) `src/lib/redis.js` — `rateLimit()`
 
 - Оставили единственный безопасный путь: **Lua EVAL** (`INCR` + `EXPIRE` на первом хите) — атомарно.
-- Если Redis деградирует или скрипты недоступны, **fail-open** (без попытки INCR+EXPIRE), чтобы не оставлять ключи без TTL.
+- Если Redis деградирует или скрипты недоступны, включаем короткий circuit‑breaker и используем best‑effort **in‑memory fallback** (bounded, per‑warm‑instance). Это снижает риск “штормов” в Neon и при этом не создаёт ключи без TTL (мы всё равно не делаем non‑atomic INCR+EXPIRE).
 
 Почему это ок:
 - rateLimit в проекте — best-effort защита от спама/штормов.
@@ -26,7 +26,7 @@
 
 - `npm run preflight` проходит.
 - При нормальном Redis rateLimit продолжает ограничивать как раньше (ключи с TTL).
-- При деградации Redis rateLimit fail-open и не создаёт ключи без TTL.
+- При деградации Redis rateLimit работает через best‑effort in‑memory fallback (bounded) и не создаёт ключи без TTL.
 - В brand manager режиме после включения/смены бренда ключи записываются с TTL (проверка через `SCAN`/`TTL` при необходимости).
 
 Риск регрессий: **низкий** (локальные изменения в инфраструктурном helper + TTL на двух ключах состояния).
