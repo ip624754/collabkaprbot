@@ -11,18 +11,18 @@
 Это актуальный комплект документации по проекту **Collabka PR**.
 
 ## 0) BOOT (всегда читаем сначала)
-- `00_BOOT.md` — 10–15 строк, что нельзя забывать
-- `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
+- `docs/00_BOOT.md` — 10–15 строк, что нельзя забывать
+- `docs/01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
 - `15_NEW_CHAT_HANDOFF.md` — copy‑paste для старта нового чата
 - `17_START_NEW_CHAT_PROMPT.md` — готовый промпт для старта нового чата
 
 ## 1) Текущее состояние (source of truth)
-- `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (**source of truth**)
+- `docs/00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (**source of truth**)
 - `91_PROD_LAUNCH_30MIN.md` — one‑pager: запуск продакшена за 30 минут
 - `10_QSTASH_RUNBOOK.md` — QStash: ключи/env, rollout/rollback, типовые задачи
 - `11_MIGRATIONS_PACK.md` — как безопасно поднять/чинить БД на Neon (exactly‑once runner)
-- `neon/README.md` + `neon/NEON_HISTORY_RAW.txt` — исторический контекст по Neon (для аудита/разбора; не source of truth)
+- `docs/neon/README.md` + `docs/neon/NEON_HISTORY_RAW.txt` — исторический контекст по Neon (для аудита/разбора; не source of truth)
 - `12_INFRA_CONTROL_PLANE.md` — Cron/Locks/Outbox/гарантии (Control Plane)
 - `13_RUNBOOK_RELEASE.md` + `16_RELEASE_CHECKLIST.md` — релизы/проверки
 - `14_BRAND_TEAM_UX_V4.md` — UX “Менеджеры бренда” (кнопка всегда видна, гейт внутри)
@@ -39,27 +39,27 @@
 
 ## 1.5) Публичные документы (для публикаций и объяснения пользователям)
 Папка: `docs/public/`
-- `README_PUBLIC.md` — индекс: что публиковать и куда
-- `00_product_overview_ru.md` — что такое бот и зачем (маркетинг + “по‑человечески”)
-- `01_for_creators_ru.md` — гайд для креаторов
-- `02_for_brands_ru.md` — гайд для брендов/агентств
-- `03_faq_ru.md` — FAQ
-- `04_tech_overview_ru.md` — лёгкий тех‑обзор (для партнёров)
-- `05_publication_templates_ru.md` — шаблоны постов/Telegraph
-- `06_telegraph_article_ru.md` — большая Telegraph‑статья “под ключ”
-- `07_press_kit_ru.md` — пресс‑кит/медиакит (готовые формулировки)
-- `08_privacy_security_ru.md` — публичное объяснение приватности и безопасности
-- `09_use_cases_ru.md` — сценарии/кейсы применения
-- `10_brand_plan_explainer_ru.md` — простое объяснение Brand Plan/кредитов
-- `11_feeds_and_discovery_ru.md` — где “лента/витрина/каталог” (простое объяснение)
+- `docs/public/README_PUBLIC.md` — индекс: что публиковать и куда
+- `docs/public/00_product_overview_ru.md` — что такое бот и зачем (маркетинг + “по‑человечески”)
+- `docs/public/01_for_creators_ru.md` — гайд для креаторов
+- `docs/public/02_for_brands_ru.md` — гайд для брендов/агентств
+- `docs/public/03_faq_ru.md` — FAQ
+- `docs/public/04_tech_overview_ru.md` — лёгкий тех‑обзор (для партнёров)
+- `docs/public/05_publication_templates_ru.md` — шаблоны постов/Telegraph
+- `docs/public/06_telegraph_article_ru.md` — большая Telegraph‑статья “под ключ”
+- `docs/public/07_press_kit_ru.md` — пресс‑кит/медиакит (готовые формулировки)
+- `docs/public/08_privacy_security_ru.md` — публичное объяснение приватности и безопасности
+- `docs/public/09_use_cases_ru.md` — сценарии/кейсы применения
+- `docs/public/10_brand_plan_explainer_ru.md` — простое объяснение Brand Plan/кредитов
+- `docs/public/11_feeds_and_discovery_ru.md` — где “лента/витрина/каталог” (простое объяснение)
 
 ## 2) SPEC / UX reference (актуально, но не является source of truth)
 Папка: `docs/spec/`
-- `20_HOME_HUB_SPEC.md` — HOME HUB + `/start` role‑gate (`ui_mode`, payload priority, fail‑open)
-- `21_MENU_SPEC.md` — контракт навигации (Back/Menu/Home, `ret`)
-- `22_OFFER_WIZARD_SPEC.md` — визард оффера (финальный экран без тупиков)
-- `23_LEAD_NOTES_SPEC.md` — Curator Notes по заявкам брендов
-- `24_IG_INTEGRATION_SPEC.md` — Instagram integration (OAuth‑only): trust badge + paywall (Level B комментарии не используем)
+- `docs/spec/20_HOME_HUB_SPEC.md` — HOME HUB + `/start` role‑gate (`ui_mode`, payload priority, fail‑open)
+- `docs/spec/21_MENU_SPEC.md` — контракт навигации (Back/Menu/Home, `ret`)
+- `docs/spec/22_OFFER_WIZARD_SPEC.md` — визард оффера (финальный экран без тупиков)
+- `docs/spec/23_LEAD_NOTES_SPEC.md` — Curator Notes по заявкам брендов
+- `docs/spec/24_IG_INTEGRATION_SPEC.md` — Instagram integration (OAuth‑only): trust badge + paywall (Level B комментарии не используем)
 
 > Старые файлы‑зеркала в корне `docs/` (HOME_HUB_SPEC_V1.md, MENU_SPEC_V1.md и т.п.) оставлены как compat mirrors, чтобы старые ссылки не ломались.
 
@@ -68,15 +68,15 @@
 
 ## 3) Protocol / Process (как работаем)
 Папка: `docs/process/`
-- `01_HOW_TO_WORK_LIKE_SENIOR.md` — дисциплина артефактов/DoD/анти‑грабли
-- `02_jobs_vitalik_woz_protocol.md` — Jobs/Vitalik/Woz: high‑signal протокол
+- `docs/process/01_HOW_TO_WORK_LIKE_SENIOR.md` — дисциплина артефактов/DoD/анти‑грабли
+- `docs/process/02_jobs_vitalik_woz_protocol.md` — Jobs/Vitalik/Woz: high‑signal протокол
 - `scripts/lint-footer-nav.js` — авто‑проверка footer‑навигации (запуск: `npm run lint:nav`)
-- `06_AUDIT_STEP94_HARDCORE.md` — reference аудит (не source of truth)
-- `07_WORK_HISTORY_2026_02.md` — timeline по шагам/решениям (для восстановления контекста)
-- `08_AUDIT_CLOSEOUT_2026_02.md` — закрытие внешнего аудита (findings→fixes + мини‑QA)
-- `03_legacy_tech_spec_collabka_v1_0_3.md` — базовая техспека (legacy reference)
-- `04_legacy_techpassport_collabka_v1_0_3_telegra.md` — техпаспорт (legacy reference)
-- `05_legacy_telegraph_article_and_manual.md` — telegraph‑статья/мануал (legacy reference)
+- `docs/process/06_AUDIT_STEP94_HARDCORE.md` — reference аудит (не source of truth)
+- `docs/process/07_WORK_HISTORY_2026_02.md` — timeline по шагам/решениям (для восстановления контекста)
+- `docs/process/08_AUDIT_CLOSEOUT_2026_02.md` — закрытие внешнего аудита (findings→fixes + мини‑QA)
+- `docs/process/03_legacy_tech_spec_collabka_v1_0_3.md` — базовая техспека (legacy reference)
+- `docs/process/04_legacy_techpassport_collabka_v1_0_3_telegra.md` — техпаспорт (legacy reference)
+- `docs/process/05_legacy_telegraph_article_and_manual.md` — telegraph‑статья/мануал (legacy reference)
 
 ## Как использовать в новом чате
 Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.
@@ -121,7 +121,7 @@
 19) Watchlist регрессий: см. `docs/00_CURRENT_STATE.md` → раздел «Выводы последнего регресс-аудита + watchlist».
 
 ## См. также
-- `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (payments, кредиты/разлок, ownership-in-SQL, deep-links, cron).
+- `docs/01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (payments, кредиты/разлок, ownership-in-SQL, deep-links, cron).
 
 
 ---
@@ -388,7 +388,7 @@ Audit report (Giveaways & Offers E2E smoke): `docs/audit/20_GIVEAWAYS_OFFERS_E2E
 
 Audit report (Broadcast E2E smoke): `docs/audit/21_BROADCAST_E2E_SMOKE_2026_03.md`.
 
-Audit report (Admin UX sweep): `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
+Audit report (Admin UX sweep): `docs/audit/22_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md`.
 
 Audit report (Broadcast confirm idempotency): `docs/audit/27_BROADCAST_CONFIRM_IDEMPOTENCY_2026_03.md`.
 
@@ -400,7 +400,7 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 ---
 
 ## 0) Security invariants (must-not-break)
-См. `01_SECURITY_INVARIANTS.md`. Ключевое на текущий момент:
+См. `docs/01_SECURITY_INVARIANTS.md`. Ключевое на текущий момент:
 - Payments: валидация payload/amount/currency в `pre_checkout` и `successful_payment` (fail-safe apply).
 - Contacts unlock: DB truth + advisory lock (exactly-once), Redis только кеш/TTL.
 - Ownership: safe-getters с ownership внутри SQL для лидов/заявок и опасных действий.
@@ -432,8 +432,8 @@ Audit report (RateLimit & Redis TTL hardening): `docs/audit/29_RATE_LIMIT_AND_RE
 - STEP214: Official publish anti-stuck — после DB-reserve (`PUBLISHING`) ставим отложенную QStash‑проверку `/api/qstash/official-publish-verify`: если известен `message_id` (Redis breadcrumb) — прикрепляем и переводим в `ACTIVE`, иначе сбрасываем статус обратно в `PENDING` + логируем `last_error` (разблокируем UI/очередь). См. `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`.
 - STEP215: Audit buffer flush — suppressed workspace audit события (AUDIT_DB_THROTTLE) больше не теряются: складываем в Redis list и батчим в Postgres через cron `/api/cron/audit-flush-tick`. В `/api/health` добавлен `audit.buffer.*` (len/enqueued/flushed/last_flush).
 - STEP216: expectText TTL + escape hatch — режим ввода текста больше не может “залипнуть навсегда”: `expectText` получает `_startedAt` и общий лимит жизни (ENV `EXPECT_TEXT_MAX_LIFETIME_SEC`, default 2h). В text-input футере добавлен явный выход «❌ Отмена» (в `📋 Меню`), а в приватном чате можно набрать `отмена/cancel/стоп/stop`.
-- STEP217: post-deploy hardening — канонизировали короткий smoke после деплоя: обновлён `./smoke-tests_short.md` (добавлен input-mode `❌ Отмена/отмена` + audit flush tick + акцент на Redis degraded/монетизацию). В `docs/16_RELEASE_CHECKLIST.md` и `docs/13_RUNBOOK_RELEASE.md` добавлены ссылки на этот smoke.
-- STEP218: `npm run smoke:short` — микро-команда для релиза: печатает `./smoke-tests_short.md` + 4 ключевые проверки и ссылки на релизные доки (без влияния на прод-логику).
+- STEP217: post-deploy hardening — канонизировали короткий smoke после деплоя: обновлён `smoke-tests_short.md` (добавлен input-mode `❌ Отмена/отмена` + audit flush tick + акцент на Redis degraded/монетизацию). В `docs/16_RELEASE_CHECKLIST.md` и `docs/13_RUNBOOK_RELEASE.md` добавлены ссылки на этот smoke.
+- STEP218: `npm run smoke:short` — микро-команда для релиза: печатает `smoke-tests_short.md` + 4 ключевые проверки и ссылки на релизные доки (без влияния на прод-логику).
 - STEP220: Vercel Hobby лимит по функциям (≤12) — cron endpoints агрегированы через один роутер `api/cron_router.js`, а старые URL `/api/cron/*` продолжают работать через `vercel.json` rewrites. Новые cron‑тики добавляем как `job=...` внутри роутера, а не как новый файл в `api/`.
 
 - STEP221: Admin DM UX — в системных/админских сообщениях пользователю кнопки `📋 Открыть меню` и `💬 Поддержка` открывают экраны **новым сообщением** (не затирают текст‑квитанцию). В админке (`a:adm_umsg`) кнопки уложены сеткой 2×N. Также починен путь cron router под rewrites.
@@ -1310,7 +1310,7 @@ Auto-heal safeguards + ops alerts:
 
 ## Repo sync note
 - **STEP184:** архив репозитория и NotebookLM audit-pack синхронизированы с состоянием **STEP183** (без изменения поведения).
-- **STEP185:** исправлено битое имя файла в `docs/neon/` (переименовано в `NEON_HISTORY_RAW.txt` для переносимости архивов), как и указано в доках/аудит-паке).
+- **STEP185:** исправлено битое имя файла в `docs/neon/` (переименовано в `docs/neon/NEON_HISTORY_RAW.txt` для переносимости архивов), как и указано в доках/аудит-паке).
 
 ### STEP186 — NotebookLM pack ≤50 files (NotebookLM50)
 - NotebookLM лимит: максимум 50 файлов; .sql часто не загружается.

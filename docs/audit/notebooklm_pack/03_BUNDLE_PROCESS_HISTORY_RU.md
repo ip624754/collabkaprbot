@@ -990,7 +990,7 @@ docs/01_SECURITY_INVARIANTS.md
 - Этот шаг **не меняет поведение** по сравнению с STEP183; это чисто синхронизация артефактов/доков.
 
 ## STEP185 — docs/neon: fix broken filename (mojibake)
-- Исправили битое имя файла в `docs/neon/`: теперь файл называется `NEON_HISTORY_RAW.txt` (ASCII, чтобы ZIP не ломался на Windows) (UTF‑8), как и указано в `docs/neon/README.md`.
+- Исправили битое имя файла в `docs/neon/`: теперь файл называется `docs/neon/NEON_HISTORY_RAW.txt` (ASCII, чтобы ZIP не ломался на Windows) (UTF‑8), как и указано в `docs/neon/README.md`.
 - Обновили audit-pack (NotebookLM sources), чтобы туда тоже попал файл с правильным именем.
 - Доки синхронизированы: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
 
@@ -1296,19 +1296,19 @@ docs/01_SECURITY_INVARIANTS.md
 
 
 ## STEP217 — Post-deploy hardening: каноничный smoke-tests_short (input-mode + redis degraded)
-- Обновлён `./smoke-tests_short.md`:
+- Обновлён `smoke-tests_short.md`:
   - добавлен явный чек по input-mode (`expectText`): `❌ Отмена` и текстовый escape hatch `отмена/cancel/стоп/stop`;
   - добавлен чек для audit buffer flush (STEP215): `audit_flush_tick.last_run`, `audit.buffer.*`;
   - акцентировано, что при Redis degraded ключевые монетизационные CTA и навигация остаются “живыми” (нет тупика).
-- `docs/16_RELEASE_CHECKLIST.md` теперь явно рекомендует пройти `./smoke-tests_short.md` сразу после деплоя (10–15 минут).
-- `docs/13_RUNBOOK_RELEASE.md` ссылается на `./smoke-tests_short.md` как на каноничный короткий прогон.
+- `docs/16_RELEASE_CHECKLIST.md` теперь явно рекомендует пройти `smoke-tests_short.md` сразу после деплоя (10–15 минут).
+- `docs/13_RUNBOOK_RELEASE.md` ссылается на `smoke-tests_short.md` как на каноничный короткий прогон.
 - Без миграций. Zero regressions.
 - Docs sync: `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_02.md`.
 
 
 ## STEP218 — Release UX: `npm run smoke:short` (печать короткого smoke-чека)
 - Добавлена микро-команда `npm run smoke:short` → `node scripts/smoke-short.js`.
-  - Скрипт печатает `./smoke-tests_short.md`, добавляет 4 ключевых напоминания (health/admin UI/redis degraded/expectText escape) и ссылки на релизные доки.
+  - Скрипт печатает `smoke-tests_short.md`, добавляет 4 ключевых напоминания (health/admin UI/redis degraded/expectText escape) и ссылки на релизные доки.
 - Обновлены релизные документы:
   - `docs/16_RELEASE_CHECKLIST.md` — добавлена рекомендация запускать `npm run smoke:short` после деплоя.
   - `docs/13_RUNBOOK_RELEASE.md` — добавлен блок с командой.
@@ -1480,11 +1480,11 @@ docs/01_SECURITY_INVARIANTS.md
 ### STEP233 — NotebookLM DOCS‑ONLY pack
 - Подготовили отдельный docs‑only пакет для NotebookLM (только .md/.txt), чтобы аудитору было проще и он не путался.
 - Добавлены документы:
-  - `docs/24_VERIFICATION_MANUAL_ONLY.md`
-  - `docs/25_INSTAGRAM_CONTACTS_ONLY.md`
+  - `docs/21_IG_VERIFY_RUNBOOK.md`
+  - `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`
   - `docs/audit/05_NOTEBOOKLM_DOCS_ONLY_ENTRYPOINT_2026_03.md`
-  - `docs/audit/07_NOTEBOOKLM_AUDIT_PROMPT_DOCS_ONLY_RU.txt`
-- Обновлён `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md` и индекс `docs/audit/04_AUDIT_PACK_INDEX_2026_03.md`.
+  - `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+- Обновлён `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md` и индекс `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md`.
 
 Риск регрессий: **нет** (docs‑only).
 
@@ -1872,7 +1872,7 @@ docs/01_SECURITY_INVARIANTS.md
 - Экран ввода заметки админа (`a:adm_unote`) приведён к admin‑стандарту навигации (footer `⬅️ Пользователи` + `📋 Меню` + `🏠 Home`).
 
 Docs:
-- Добавлен audit report: `docs/audit/22_ADMIN_UX_SWEEP_2026_03.md`.
+- Добавлен audit report: `docs/audit/22_ADMIN_BROADCAST_AUDIT_AND_POLISH_2026_03.md`.
 - `docs/00_CURRENT_STATE.md` обновлён (watchlist + ссылки на audit 21/22).
 
 QA:
@@ -2847,7 +2847,7 @@ QA:
 Docs:
 - `docs/00_CURRENT_STATE.md` — добавлен STEP311 + уточнён паттерн миграций.
 - `docs/11_MIGRATIONS_PACK.md` — обновлён паттерн (>=3 digits) и regex.
-- `docs/process/07_WORK_HISTORY_2026_02.md` + `docs/public/07_WORK_HISTORY_2026_02.md` — уточнено описание STEP208 (>=3 digits), чтобы не противоречило текущему раннеру.
+- `docs/process/07_WORK_HISTORY_2026_02.md` + `docs/process/07_WORK_HISTORY_2026_02.md` — уточнено описание STEP208 (>=3 digits), чтобы не противоречило текущему раннеру.
 
 QA:
 - `node migrations/run.js --dry-run` не ругается на список миграций.
