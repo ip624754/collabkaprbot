@@ -342,7 +342,7 @@ Neon hardening:
 
 - Serverless = только пакетная обработка, никаких “вечных” циклов.
 - Cron: **Redis token-lock** (safe unlock) + где критично **PG advisory lock** + SQL guards на статусных переходах.
-- Winners draw: детерминированно/воспроизводимо, guards по статусам (`winners_drawn_at`, транзакции). Seed считается по **отсортированным eligible user ids** (order‑independent).
+- Winners draw: детерминированно/воспроизводимо, guards по статусам (`winners_drawn_at`, транзакции). Seed считается по **отсортированным eligible user ids** (order‑independent). В audit (`gw.winners_drawn`) пишем версии алгоритма/seed + `ends_at_iso_used` + `pool_hash` + `winners_hash` (repro pack).
 - Миграции: только `migrations/run.js` (exactly-once + checksum). Checksum считается по **нормализованному SQL** (LF + `trimEnd`) для устойчивости к CRLF/LF и «финальному переводу строки», при этом раннер совместим со старыми checksum значениями.
 - Migration pack (Neon move/emergency): `migration_pack/00_mark_all_applied.sql` обновлён под миграции до `041_*.sql`; `migration_pack/01_reconcile.sql` расширен как safety‑net. Pack‑файлы **не** дублируем в `migrations/`.
 - STEP163: добавлен генератор `npm run gen:migration-pack` (скрипт `scripts/gen-mark-all-applied.js`) — пересчитывает sha256 из `migrations/` и обновляет `migration_pack/00_mark_all_applied.sql` детерминированно.
@@ -741,10 +741,11 @@ Instagram (текущий режим: **только ссылка в карто�
 - **Ручная верификация — единственная активная** (заявка → очередь модерации → approve/reject). ✅-бейдж — внутри бота (не Telegram-эмоджи) и влияет на UX/лимиты.
 - **Admin → User сообщения (DM) приведены к канону “квитанция без тупиков”**: `🏠 Главное меню` / `💬 Поддержка` всегда остаются, `✅ Принято` убирает только себя.
 - **Audit hardening:** SSL verify для Neon, rate limiter атомарный Lua (fail-open при деградации), ops alerts атомарный Lua.
+- **Ops digest расширен (STEP339):** буферим дорогие сбои (PG pool/statement_timeout, cron_router crash, QStash broadcast-deliver crash) → один дайджест в OPS без спама.
 - **Audit flush lossless:** очередь `audit:*` теперь двухфазная `queue → inflight → ack` с auto‑requeue при “залипании”.
 - **Финальный sweep Redis TTL:** убраны остатки неатомарных связок (`INCR+EXPIRE`, `LPUSH+LTRIM`) и добавлен preflight “Redis TTL smoke check” (docs/process/10_RELEASE_PREFLIGHT.md).
 
-- `/api/health`: cron last_run + безопасные Redis-метрики
+- `/api/health`: cron last_run + безопасные Redis-метрики (операторские поля расширены в STEP340: ops last_sent/top reasons, hard-skip counters).
 - Audit write-shedding (ENV-гейт) + счётчики suppressed в health
 - Broadcast: URL-кнопки до 3, deep-link shortcuts, шаблоны кнопок, ссылки “в слово”, финальный экран с кнопками
 - Role gate на `/start` (Redis `ui_mode`, payload priority, fail-open)
@@ -949,10 +950,19 @@ Instagram (текущий режим: **только ссылка в карто�
 - `PAYMENTS_FALLBACK_APPLY_ENABLED=0` (default) — строгий режим: без `pay_*` сессии оплата станет ORPHANED `missing_session` (дальше — поддержка/ручная обработка).
 - `PAYMENTS_FALLBACK_APPLY_ENABLED=1` — разрешить auto-apply по `invoice_payload`, если `pay_*` сессия истекла (использовать осознанно, обычно только при инцидентах).
 
+**Runtime override (рекомендуется вместо ENV=1):**
+- В админке: `⚙️ Система → 🧯 Payments fallback apply` можно включить fallback **временно** (2h/12h/24h). Хранится в Redis с TTL.
+- Эффективное состояние: `ENV OR runtime`.
+- Никаких DB-reads и миграций.
+
 **HMAC hardening (рекомендуется):**
 - `PAYMENTS_PAYLOAD_HMAC_KEY=...` — секрет для подписи payload (HMAC-SHA256). Если задан, новые Stars-инвойсы подписываются (token+sig).
 - `PAYMENTS_PAYLOAD_HMAC_LEN=10` — длина hex-подписи (6..16).
 - `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0` (default) — не применять fallback для старых/неподписанных payload, если HMAC включён. Временно можно поставить `1`, чтобы “дожать” старые инвойсы.
+
+**Observability (Redis-only):**
+- `/api/health` показывает `payments.payload_issues_today` (unsigned / bad_sig / bad_format / hmac_error).
+- Для `bad_sig/hmac_error/bad_format` дополнительно пишется событие в ops-digest (anti-spam).
 
 ### Payments hardening: защита от неверных счетов/сумм
 
