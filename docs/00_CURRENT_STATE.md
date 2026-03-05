@@ -270,6 +270,8 @@ Neon hardening:
 ### `/api/health`
 Возвращает JSON и **не падает**, даже если Redis недоступен (fail-open).
 
+Дополнительно: в админке «🧰 Операции» показываем баннер, если Redis degraded/не настроен (и даём кнопку на `/api/health`).
+
 Что показываем:
 - `cron.giveaways_tick` и `cron.broadcast_tick`: последний run (ts + summary)
 - `audit.throttle`: метрики подавления audit-записей (если включено)
@@ -280,6 +282,7 @@ Neon hardening:
 - `mon.unlock`: breadcrumbs по 🔓 Разлок контактов — последний attempt/результат
 - `ref`: лёгкие счётчики источников входа (`/start src_tg` / `/start src_ig`) — today/total
 - `ref.by_role`: разрез источника × роли (tg/ig/direct × brand/creator) — today/total
+- `redis`: статус Redis (configured/read_ok/write_ok/latency_ms/last_error) — видно degraded/не настроен
 
 
 #### Audit throttle counters
@@ -690,6 +693,9 @@ Instagram (текущий режим: **только ссылка в карто�
 #### Giveaways (розыгрыши)
 - «🎁 Розыгрыши → ➕ Новый розыгрыш» требует активный подключённый канал (витрину).
 - Если `active_ws` устарел/канал недоступен — показываем **gate‑экран** с понятными CTA (подключить/выбрать канал) и корректным back; stale `active_ws` чистим в Redis.
+- Draw winners (cron): детерминированная выборка победителей в SQL по seed (`giveawayId:endsAtIso`).
+- Atomic draw выполняется в транзакции **REPEATABLE READ** (фиксированный snapshot пула участников) + `pg_try_advisory_xact_lock(giveawayId)` + `FOR UPDATE` на `giveaways`.
+- В `giveaway_audit` пишем метаданные воспроизводимости: `tx_isolation`, `snapshot_ts` (UTC), `pool_hash/pool_count` и `pool_cutoff_joined_at`.
 
 ### Founder Sale (promo)
 - `FOUNDER_SALE_ENABLED=true|false`
@@ -979,6 +985,7 @@ Instagram (текущий режим: **только ссылка в карто�
 
 - В payments ledger используется уникальный `telegram_payment_charge_id` (и дополнительный unique для `provider_payment_charge_id`).
 - Перед любыми сайд‑эффектами (начисления/активации) payment **claim**-ится в DB статусом `APPLYING` (atomic update). Это защищает от Telegram retries и параллельного apply (cron/admin/user).
+- Fallback apply (когда `pay_*` сессия истекла) выполняется **атомарно** в одной DB‑транзакции: row‑lock `payments` (`FOR UPDATE NOWAIT`) → apply сайд‑эффектов → `status='APPLIED'`. При параллельном вызове второй раннер получает `locked` и ничего не применяет.
 
 ### Ownership-in-SQL (anti-bypass) для чувствительных сущностей
 

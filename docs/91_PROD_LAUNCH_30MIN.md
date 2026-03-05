@@ -134,7 +134,7 @@
 ## 9) Где смотреть проблемы
 
 - Vercel logs (runtime errors)
-- `/api/health` (метрики/DB/Redis)
+- `/api/health` (метрики/DB/Redis): смотри `redis.read_ok/write_ok/latency_ms` и `last_error` при деградации
 - admin/support чат (если есть)
 - документы:
   - `13_RUNBOOK_RELEASE.md`
