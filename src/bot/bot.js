@@ -35254,7 +35254,44 @@ async function renderAdminOps(ctx) {
       }
     }
 
+
+    // Payments safety banners (ENV + runtime). No DB reads.
+    try {
+      const hkey = String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim();
+      const minLen = 32;
+      if (!hkey) {
+        text += `🚨 <b>Payments: HMAC key отсутствует</b> — подпись invoice_payload не проверяется (высокий риск).
+
+`;
+      } else if (hkey.length < minLen) {
+        text += `⚠️ <b>Payments: HMAC key слишком короткий</b> (${hkey.length} < ${minLen}) — рекомендуется ключ ≥ ${minLen} символов.\n\n`;
+      }
+
+      let rt = null;
+      if (r && key) {
+        try {
+          const raw = await r.get(key(['sys', 'pay_fallback_apply']));
+          if (raw !== null && raw !== undefined) {
+            const s = String(raw).trim().toLowerCase();
+            rt = s === '1' || s === 'true' || s === 'on' || s === 'yes';
+          }
+        } catch {
+          rt = null;
+        }
+      }
+
+      const envOn = !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
+      const effective = !!(envOn || rt);
+      if (effective) {
+        const src = rt ? (envOn ? 'env+runtime' : 'runtime') : 'env';
+        text += `🚨 <b>Payments: fallback apply ENABLED</b> (<code>${escapeHtml(src)}</code>) — включай только на инцидент/хвосты, затем выключай.\n\n`;
+      }
+    } catch {
+      // ignore
+    }
+
     // Extra ops banners (best-effort; Redis-only)
+
     if (r && key) {
       // Broadcast DB overload banner (metrics emitted by QStash delivery load-shedding).
       try {
@@ -35273,6 +35310,30 @@ async function renderAdminOps(ctx) {
           const whereTail = where ? `; <code>${escapeHtml(where)}</code>` : '';
           const lastTail = last ? `<code>${escapeHtml(last)}</code>` : '—';
           text += `⚠️ <b>Broadcast: DB overload</b> — сегодня: <b>${cnt}</b>; last: ${lastTail}${whereTail}\n\n`;
+        }
+      } catch {
+        // ignore
+      }
+
+      // Broadcast tick deferred due to Redis degraded (cron fail-closed for mass ops).
+      try {
+        const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
+        const [cntRaw, lastAt, lastWhere] = await Promise.all([
+          r.get(key(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'd', day])),
+          r.get(key(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'last_at'])),
+          r.get(key(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'last_where'])),
+        ]);
+
+        const cnt = Number(cntRaw) || 0;
+        const last = lastAt ? String(lastAt) : '';
+        const where = lastWhere ? String(lastWhere) : '';
+
+        if (cnt > 0 || last) {
+          const whereTail = where ? `; <code>${escapeHtml(where)}</code>` : '';
+          const lastTail = last ? `<code>${escapeHtml(last)}</code>` : '—';
+          text += `⚠️ <b>Broadcast: tick deferred (Redis)</b> — сегодня: <b>${cnt}</b>; last: ${lastTail}${whereTail}
+
+`;
         }
       } catch {
         // ignore
