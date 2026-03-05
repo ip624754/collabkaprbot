@@ -129,6 +129,41 @@ function broadcastHardSkipKey(tgId) {
 const BROADCAST_HARD_SKIP_RECENT_KEY = k(['broadcast', 'hard_skip', 'recent']);
 const BROADCAST_HARD_SKIP_RECENT_MAX = 1000;
 
+// Recent HITs: when a recipient is skipped due to an existing hard-skip entry.
+// This is the operator-facing “who/why was skipped” log (no DB, no SCAN).
+const BROADCAST_HARD_SKIP_HIT_RECENT_KEY = k(['broadcast', 'hard_skip', 'hit_recent']);
+const BROADCAST_HARD_SKIP_HIT_RECENT_MAX = 2000;
+const BROADCAST_HARD_SKIP_HIT_RECENT_TTL_SEC = 14 * 24 * 60 * 60;
+
+export async function logBroadcastHardSkipHit(tgId, reason, meta = {}) {
+  const id = Number(tgId || 0);
+  if (!id) return false;
+  const r = String(reason || 'unknown').slice(0, 60);
+  const bid = Number(meta?.broadcastId || meta?.broadcast_id || 0) || 0;
+  const uid = Number(meta?.userId || meta?.user_id || 0) || 0;
+  const via = meta?.via ? String(meta.via).slice(0, 40) : '';
+  try {
+    const payload = JSON.stringify({
+      tgId: id,
+      r,
+      at: new Date().toISOString(),
+      ...(bid ? { broadcastId: bid } : {}),
+      ...(uid ? { userId: uid } : {}),
+      ...(via ? { via } : {}),
+    });
+    await lpushTrim(
+      BROADCAST_HARD_SKIP_HIT_RECENT_KEY,
+      payload,
+      BROADCAST_HARD_SKIP_HIT_RECENT_MAX,
+      BROADCAST_HARD_SKIP_HIT_RECENT_TTL_SEC
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+
 function parseHardSkipVal(v) {
   if (!v) return null;
   if (typeof v === 'object') {
@@ -1724,6 +1759,7 @@ const fanoutEnabled = !!fanoutStatus.enabled;
               const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
               await incrDayCounter(bcHardSkipHitDayKey(day));
             } catch {}
+            try { await logBroadcastHardSkipHit(tgId, hs, { broadcastId: bc.id, userId: uid, via: 'cron_fanout' }); } catch {}
             lastId = Math.max(lastId, uid);
             continue;
           } catch (e) {
@@ -1837,6 +1873,7 @@ const fanoutEnabled = !!fanoutStatus.enabled;
           const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
           await incrDayCounter(bcHardSkipHitDayKey(day));
         } catch {}
+        try { await logBroadcastHardSkipHit(tgId, hs, { broadcastId: bc.id, userId: uid, via: 'cron' }); } catch {}
         lastId = Math.max(lastId, uid);
         continue;
       }

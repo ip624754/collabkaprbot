@@ -27581,6 +27581,16 @@ if (p.a === 'a:match_home') {
       await renderAdminHardSkipHome(ctx, Math.max(0, Number(p.p || 0) || 0));
       return;
     }
+
+if (p.a === 'a:hs_hits') {
+  const isAdmin = isSuperAdminTg(ctx.from.id);
+  if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+  await ctx.answerCallbackQuery();
+  try { await clearExpectText(ctx.from.id); } catch {}
+  await renderAdminHardSkipHits(ctx, Math.max(0, Number(p.p || 0) || 0));
+  return;
+}
+
     if (p.a === 'a:hs_find') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
@@ -34961,6 +34971,7 @@ async function renderAdminPaymentsFallback(ctx, toast = '') {
 // =====================================================
 
 const ADMIN_HS_RECENT_KEY = k(['broadcast', 'hard_skip', 'recent']);
+const ADMIN_HS_HIT_RECENT_KEY = k(['broadcast', 'hard_skip', 'hit_recent']);
 const ADMIN_HS_PAGE_SIZE = 8;
 
 function adminHardSkipTgKey(tgId) {
@@ -35045,6 +35056,37 @@ async function adminHardSkipRecent(page = 0) {
   }
 }
 
+
+async function adminHardSkipHits(page = 0) {
+  const p = Math.max(0, Number(page || 0) || 0);
+  const start = p * ADMIN_HS_PAGE_SIZE;
+  const stop = start + ADMIN_HS_PAGE_SIZE - 1;
+  try {
+    const raw = await redis.lrange(ADMIN_HS_HIT_RECENT_KEY, start, stop);
+    const items = Array.isArray(raw) ? raw : [];
+    const parsed = [];
+    for (const it of items) {
+      try {
+        const s = typeof it === 'string' ? it : JSON.stringify(it);
+        const o = JSON.parse(s);
+        const tgId = Number(o?.tgId || 0);
+        const r = String(o?.r || 'unknown').slice(0, 60);
+        const at = o?.at ? String(o.at) : null;
+        const broadcastId = Number(o?.broadcastId || 0) || 0;
+        const userId = Number(o?.userId || 0) || 0;
+        const via = o?.via ? String(o.via).slice(0, 40) : '';
+        if (tgId) parsed.push({ tgId, r, at, broadcastId, userId, via });
+      } catch {
+        // ignore
+      }
+    }
+    return { ok: true, page: p, items: parsed };
+  } catch {
+    return { ok: false, page: p, items: [] };
+  }
+}
+
+
 async function renderAdminHardSkipHome(ctx, page = 0) {
   const p = Math.max(0, Number(page || 0) || 0);
   const recent = await adminHardSkipRecent(p);
@@ -35064,6 +35106,7 @@ async function renderAdminHardSkipHome(ctx, page = 0) {
 
   const kb = new InlineKeyboard();
   kb.text('🔎 Найти TG ID', `a:hs_find|p:${p}`).row();
+  kb.text('🧾 Последние пропуски', `a:hs_hits|p:${p}`).row();
   if (recent.ok && recent.items.length) {
     for (const it of recent.items) {
       kb.text(`tg:${it.tgId}`, `a:hs_view|tg:${it.tgId}`).row();
@@ -35076,6 +35119,48 @@ async function renderAdminHardSkipHome(ctx, page = 0) {
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
+
+
+async function renderAdminHardSkipHits(ctx, page = 0) {
+  const p = Math.max(0, Number(page || 0) || 0);
+  const hits = await adminHardSkipHits(p);
+  let text = '🧾 <b>Hard-skip HITs (пропуски)</b>\n\n';
+  text += 'Показывает последние случаи, когда рассылка <b>пропустила</b> отправку из‑за hard-skip (dead chats).\n\n';
+  if (!hits.ok) {
+    text += '⚠️ Redis недоступен — список временно недоступен.\n';
+  } else if (!hits.items.length) {
+    text += 'Пока пусто.\n';
+  } else {
+    text += `<b>Недавние (стр. ${p + 1}):</b>\n`;
+    for (const it of hits.items) {
+      const when = it.at ? ` · <code>${escapeHtml(String(it.at).slice(0, 19))}</code>` : '';
+      const bc = it.broadcastId ? ` · bc:<b>#${escapeHtml(String(it.broadcastId))}</b>` : '';
+      const uid = it.userId ? ` · uid:<code>${escapeHtml(String(it.userId))}</code>` : '';
+      const via = it.via ? ` · <code>${escapeHtml(String(it.via))}</code>` : '';
+      text += `• <code>${it.tgId}</code> — <b>${escapeHtml(it.r)}</b>${bc}${uid}${via}${when}\n`;
+    }
+  }
+
+  const kb = new InlineKeyboard();
+  kb.text('🧱 Список (set)', `a:hs_home|p:${p}`).row();
+  kb.text('🔎 Найти TG ID', `a:hs_find|p:${p}`).row();
+  if (hits.ok && hits.items.length) {
+    const seen = new Set();
+    for (const it of hits.items) {
+      if (seen.has(it.tgId)) continue;
+      seen.add(it.tgId);
+      kb.text(`tg:${it.tgId}`, `a:hs_view|tg:${it.tgId}`).row();
+      if (seen.size >= 6) break;
+    }
+  }
+  kb.row();
+  if (p > 0) kb.text('⬅️', `a:hs_hits|p:${p - 1}`);
+  kb.text('➡️', `a:hs_hits|p:${p + 1}`);
+  kb.row().text('⬅️ Система', 'a:admin_sys').row().text('⬅️ Админка', 'a:admin_home');
+
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
 
 async function renderAdminHardSkipView(ctx, tgId, opts = {}) {
   const id = Number(tgId || 0);
