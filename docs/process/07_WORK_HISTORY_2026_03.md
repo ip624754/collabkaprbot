@@ -2152,3 +2152,15 @@ QA
    - `algo_version`, `seed_version`, `ends_at_iso_used`, `pool_hash`, `winners_hash`.
 2) Ручной draw (кнопка): тот же набор полей появляется в audit.
 3) Повторный draw не создаёт второй `gw.winners_drawn` (idempotency сохраняется).
+
+## STEP342 — Prod ENV baseline + payments ops semantics (docs)
+
+- Added `docs/92_PROD_ENV_BASELINE.md` (recommended prod env checklist, no secrets)
+- Updated `docs/process/11_ENV_CHEATSHEET_ONE_SCREEN.md` with production baseline values + semantics (ENV vs runtime)
+- Updated `docs/00_CURRENT_STATE.md` with payments fallback ops control semantics
+- No code changes.
+
+QA:
+- Open `/api/health` and confirm payments fallback shows `fallback_apply_effective=false` when `PAYMENTS_FALLBACK_APPLY_ENABLED=0`.
+- Toggle fallback in admin for 2h and confirm `/api/health` shows `fallback_apply_runtime_enabled=true` and `fallback_apply_effective=true`.
+

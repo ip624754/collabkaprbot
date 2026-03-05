@@ -145,3 +145,36 @@ INTRO_TRIAL_CREDITS=3
 INTRO_DAILY_LIMIT_UNVERIFIED=30
 INTRO_DAILY_LIMIT=50
 ```
+
+## Production baseline (recommended)
+
+> Эти значения безопасны для продакшена (Vercel serverless + Neon + Upstash).  
+> Секреты (TOKEN/URL/KEY) сюда не вставляем — только имена и “должно быть выставлено”.
+
+### Payments (Stars) — безопасный дефолт
+- `PAYMENTS_FALLBACK_APPLY_ENABLED=0` (**по умолчанию OFF**; включать только временно через админку при инцидентах)
+- `PAYMENTS_PAYLOAD_HMAC_KEY=<32+ bytes secret>` (**обязательно** для подписи payload)
+- `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0` (legacy-инвойсы без подписи не принимаем)
+- Проверка: `/api/health` → `payments.fallback_apply_effective=false`
+
+### Payments: как работает управление (ENV vs Admin runtime)
+- `fallback_apply_effective = (ENV enabled) OR (runtime enabled)`
+- Рекомендуемый прод-режим: ENV=OFF, runtime=OFF; включать runtime на 2h/12h/24h только при инцидентах.
+
+### Broadcast (429 / hard-skip)
+- `BROADCAST_QUARANTINE_THRESHOLD=3`
+- `BROADCAST_QUARANTINE_SEC=1200`
+- `BROADCAST_GLOBAL_429_THRESHOLD=6`
+- `BROADCAST_GLOBAL_429_WINDOW_SEC=60`
+- `BROADCAST_HARD_SKIP_TTL_DAYS=90`
+
+### Postgres safety (Neon CU защита)
+- `PG_CONN_TIMEOUT_MS=10000`
+- `PG_STATEMENT_TIMEOUT_MS=15000`
+
+### Audit buffering (Redis)
+- `AUDIT_BUFFER_ENABLED=true`
+- `AUDIT_BUFFER_ON_DB_ERROR=true`
+- `AUDIT_BUFFER_MAX_LEN=5000`
+- `AUDIT_BUFFER_TTL_SEC=604800`
+
