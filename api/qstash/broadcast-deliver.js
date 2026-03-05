@@ -158,6 +158,23 @@ function getDbBackoffSec() {
   return Math.max(10, Math.min(600, v));
 }
 
+function getDbBackoffJitterSec() {
+  const v = Number(process.env.BROADCAST_DB_BACKOFF_JITTER_SEC || 15);
+  if (!Number.isFinite(v)) return 15;
+  return Math.max(0, Math.min(60, Math.trunc(v)));
+}
+
+function randIntInclusive(min, max) {
+  const a = Math.trunc(Number(min));
+  const b = Math.trunc(Number(max));
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  if (hi <= lo) return lo;
+  // NOTE: Math.random is fine here: we only need jitter against thundering herd.
+  return lo + Math.floor(Math.random() * (hi - lo + 1));
+}
+
 function isDbOverloadError(err) {
   if (!err) return false;
   const code = String(err?.code || err?.errno || '').toUpperCase();
@@ -191,7 +208,10 @@ function setQStashRetryAfterHeaders(res, sec) {
 }
 
 async function respondDbOverload({ res, broadcastId, userId, tgId, attempt, where, err }) {
-  const sec = getDbBackoffSec();
+  const baseSec = getDbBackoffSec();
+  const jitterMax = getDbBackoffJitterSec();
+  const jitterSec = jitterMax > 0 ? randIntInclusive(0, jitterMax) : 0;
+  const sec = Math.max(1, Number(baseSec) + Number(jitterSec));
   setQStashRetryAfterHeaders(res, sec);
 
   // Redis-only metrics for operators: count today + last timestamp.
@@ -235,6 +255,8 @@ async function respondDbOverload({ res, broadcastId, userId, tgId, attempt, wher
     ok: false,
     error: 'db_overloaded',
     retry_after_sec: sec,
+    base_backoff_sec: baseSec,
+    jitter_sec: jitterSec,
     where: where || null,
   });
 }
