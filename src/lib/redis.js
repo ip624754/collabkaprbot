@@ -225,7 +225,16 @@ const _rlFallback = {
   store: new Map(),
   maxKeys: Number(process.env.RATE_LIMIT_FALLBACK_MAX_KEYS || 2000),
   degradedMs: Number(process.env.RATE_LIMIT_FALLBACK_DEGRADED_MS || 10_000),
+  fallbackLimitDiv: Number(process.env.RATE_LIMIT_FALLBACK_LIMIT_DIV || 5),
 };
+
+function _rlDegradedLimit(lim) {
+  const dRaw = Number(_rlFallback.fallbackLimitDiv || 5);
+  const div = (Number.isFinite(dRaw) && dRaw > 0) ? dRaw : 5;
+  const clamped = Math.max(2, Math.min(20, Math.floor(div)));
+  const v = Math.max(1, Math.floor(Number(lim) / clamped));
+  return { limit: v, div: clamped };
+}
 
 function _rlFallbackPrune() {
   const maxKeys =
@@ -293,7 +302,8 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
   // and use a best-effort in-memory limiter to protect Neon/hot paths.
   const nowMs = Date.now();
   if (nowMs < _rlFallback.degradedUntilMs) {
-    return _rlFallbackConsume(key, lim, win);
+    const dl = _rlDegradedLimit(lim);
+    return _rlFallbackConsume(key, dl.limit, win);
   }
 
   let current = 0;
@@ -324,7 +334,8 @@ export async function rateLimit(key, { limit = 0, windowSec = 60 } = {}) {
 
     // Redis degraded or scripts unavailable: best-effort in-memory fallback.
     // IMPORTANT: do NOT fallback to non-atomic INCR+EXPIRE, because it can leave keys without TTL.
-    return _rlFallbackConsume(key, lim, win);
+    const dl = _rlDegradedLimit(lim);
+    return _rlFallbackConsume(key, dl.limit, win);
   }
 
   let ttl = null;
