@@ -2437,7 +2437,7 @@ export async function listDrawnGiveawaysToPublish(limit = 50) {
      from giveaways
      where status='WINNERS_DRAWN'
        and auto_publish=true
-       and results_message_id is null
+       and (results_message_id is null or results_message_id = 0)
      order by updated_at asc
      limit $1`,
     [limit]
@@ -6996,6 +6996,64 @@ export async function atomicEndGiveaway(giveawayId) {
  * Sets status + results_message_id only if still WINNERS_DRAWN with no results yet.
  * Returns true if claimed; false means another tick already published.
  */
+
+
+/**
+ * Atomically claim a giveaway for results publishing (reserve-before-send).
+ * We mark the row as "claimed" by setting results_message_id=0 while still WINNERS_DRAWN.
+ * This prevents repeated sends if the function dies after TG-send but before DB finalize.
+ */
+export async function atomicClaimGiveawayResultsPublishing(giveawayId) {
+  const r = await pool.query(
+    `UPDATE giveaways
+     SET results_message_id = 0,
+         updated_at = now()
+     WHERE id = $1
+       AND status = 'WINNERS_DRAWN'
+       AND results_message_id IS NULL
+     RETURNING id`,
+    [Number(giveawayId)]
+  );
+  return r.rowCount > 0;
+}
+
+/**
+ * Release a claim (allow retry) if publish attempt failed before a message was produced.
+ */
+export async function atomicReleaseGiveawayResultsClaim(giveawayId) {
+  const r = await pool.query(
+    `UPDATE giveaways
+     SET results_message_id = NULL,
+         updated_at = now()
+     WHERE id = $1
+       AND status = 'WINNERS_DRAWN'
+       AND results_message_id = 0
+     RETURNING id`,
+    [Number(giveawayId)]
+  );
+  return r.rowCount > 0;
+}
+
+/**
+ * Finalize results publishing from a claimed state (results_message_id=0).
+ * Sets status + message id only if still WINNERS_DRAWN and claim is held.
+ */
+export async function atomicFinalizeGiveawayResultsPublish(giveawayId, messageId) {
+  const r = await pool.query(
+    `UPDATE giveaways
+     SET status = 'RESULTS_PUBLISHED',
+         results_message_id = $2,
+         results_published_at = now(),
+         updated_at = now()
+     WHERE id = $1
+       AND status = 'WINNERS_DRAWN'
+       AND results_message_id = 0
+     RETURNING id`,
+    [Number(giveawayId), Number(messageId)]
+  );
+  return r.rowCount > 0;
+}
+
 export async function atomicPublishGiveawayResults(giveawayId, messageId) {
   const r = await pool.query(
     `UPDATE giveaways
