@@ -1,5 +1,5 @@
 import { CFG } from './config.js';
-import { redis, k } from './redis.js';
+import { redis, k, lpushTrim } from './redis.js';
 
 function dayKey() {
   // YYYYMMDD UTC
@@ -97,27 +97,13 @@ export async function queueOpsDigest({
       .filter(Boolean),
   };
 
-  // Atomic LPUSH + LTRIM + EXPIRE. Fallback is best-effort.
+  // Atomic LPUSH + LTRIM (+ optional EXPIRE). Best-effort: never throws.
   try {
     const maxBuf = Math.max(10, Number(CFG.OPS_ALERT_BUFFER_MAX || 200));
     const ttlSec = 2 * 24 * 60 * 60;
-    const lua = `
-      redis.call('LPUSH', KEYS[1], ARGV[1])
-      redis.call('LTRIM', KEYS[1], 0, tonumber(ARGV[2]) - 1)
-      redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
-      return 1
-    `;
-    await redis.eval(lua, [bufK], [JSON.stringify(ev), String(maxBuf), String(ttlSec)]);
+    await lpushTrim(bufK, JSON.stringify(ev), maxBuf, ttlSec);
   } catch {
-    try {
-      const maxBuf = Math.max(10, Number(CFG.OPS_ALERT_BUFFER_MAX || 200));
-      const ttlSec = 2 * 24 * 60 * 60;
-      await redis.lpush(bufK, JSON.stringify(ev));
-      await redis.ltrim(bufK, 0, maxBuf - 1);
-      await redis.expire(bufK, ttlSec);
-    } catch {
-      // ignore (best-effort)
-    }
+    // ignore (best-effort)
   }
 
   return { queued: true };
