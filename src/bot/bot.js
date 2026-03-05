@@ -17579,21 +17579,48 @@ ${escapeHtml(safeCap)}
     try {
       const chatType = String(ctx.chat?.type || '');
       if ((chatType === 'group' || chatType === 'supergroup') && isSuperAdminTg(ctx.from.id)) {
-        const rep = ctx.message?.reply_to_message;
-        const meId = Number(ctx.me?.id || CFG.BOT_ID || 0);
-        if (rep && rep.from && meId && Number(rep.from.id) === meId) {
-          const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
-          const sess = await redis.get(sessKey);
-          if (
-            sess &&
-            Number(sess.chatId || 0) === Number(ctx.chat?.id || 0) &&
-            Number(sess.promptMsgId || 0) === Number(rep.message_id || 0)
-          ) {
+        const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
+        let sess = null;
+        try { sess = await redis.get(sessKey); } catch { sess = null; }
+
+        // If admin started a reply-session in this group/topic, do not "fall through" into main-menu rendering.
+        if (sess && Number(sess.chatId || 0) === Number(ctx.chat?.id || 0)) {
+          const curThreadId = Number(ctx.message?.message_thread_id || 0);
+          const sessThreadId = Number(sess.threadId || 0);
+          if (sessThreadId && curThreadId && sessThreadId !== curThreadId) {
+            // Different forum topic — ignore.
+          } else {
             const raw = String(ctx.message?.text || '').trim();
             const low = raw.toLowerCase();
+
+            // Allow cancelling without forcing a reply.
             if (low === '/cancel' || low === 'cancel' || low === 'отмена' || low === 'стоп') {
               try { await redis.del(sessKey); } catch {}
               await ctx.reply('❌ Отменено.');
+              return;
+            }
+
+            const rep = ctx.message?.reply_to_message;
+            const meId = Number(ctx.me?.id || CFG.BOT_ID || 0);
+            const repOk = !!(
+              rep &&
+              rep.from &&
+              meId &&
+              Number(rep.from.id) === meId &&
+              (
+                Number(sess.promptMsgId || 0) === Number(rep.message_id || 0) ||
+                Number(sess.originMsgId || 0) === Number(rep.message_id || 0)
+              )
+            );
+
+            if (!repOk) {
+              // Session exists, but admin didn't reply to the correct bot message.
+              // Show a short hint and keep the session alive (avoid sending main menu to the group).
+              const kb = new InlineKeyboard().text('❌ Отмена', 'a:adm_support_reply_cancel');
+              await ctx.reply(
+                '✍️ Чтобы отправить <b>свободный ответ</b>, сделай <b>Reply</b> на тикет (сообщение с кнопками) или на подсказку бота — и отправь текст.',
+                { parse_mode: 'HTML', reply_markup: kb }
+              );
               return;
             }
 
@@ -17609,7 +17636,8 @@ ${escapeHtml(safeCap)}
               await ctx.reply('⚠️ Не найден TG ID получателя.');
               return;
             }
-      const safe = clipCodepoints(raw, TG_SAFE_BODY_MAX).text;
+
+            const safe = clipCodepoints(raw, TG_SAFE_BODY_MAX).text;
             const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
 
             let ok = false;
@@ -29672,17 +29700,21 @@ if (p.a === 'a:admin_outbox_clear_q') {
       // Even with Telegram group privacy mode ON, bots receive replies to their own messages.
       const exSec = 20 * 60;
       const sessionKey = k(['adm_support_reply', String(ctx.from.id)]);
+      const originMsgId = Number(ctx.callbackQuery?.message?.message_id || 0);
+      const originThreadId = Number(ctx.callbackQuery?.message?.message_thread_id || 0);
       const promptText =
         `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\n` +
-        `Отправь текст <b>ответом на это сообщение</b> (reply) — я доставлю его пользователю от имени поддержки.\n\n` +
+        `Отправь текст <b>Reply</b> на <b>тикет</b> (сообщение с кнопками) или на <b>эту подсказку</b> — я доставлю его пользователю от имени поддержки.\n\n` +
         `<i>Отмена:</i> нажми «❌ Отмена» (или ответь <code>/cancel</code>).`;
 
       const kb = new InlineKeyboard().text('❌ Отмена', 'a:adm_support_reply_cancel');
-      const prompt = await ctx.api.sendMessage(ctx.chat.id, promptText, {
+      const sendOpts = {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
         reply_markup: kb,
-      });
+      };
+      if (originThreadId) sendOpts.message_thread_id = originThreadId;
+      const prompt = await ctx.api.sendMessage(ctx.chat.id, promptText, sendOpts);
 
       let sessionOk = false;
       try {
@@ -29693,6 +29725,8 @@ if (p.a === 'a:admin_outbox_clear_q') {
             targetUserId,
             chatId: ctx.chat.id,
             promptMsgId: prompt.message_id,
+            originMsgId,
+            threadId: originThreadId,
             createdAt: new Date().toISOString(),
           },
           { ex: exSec }
