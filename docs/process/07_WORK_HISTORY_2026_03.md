@@ -2487,3 +2487,113 @@ QA:
 - Зачем: уменьшить “площадь” монолита и снизить риск регрессий при будущих правках платежей/бота.
 
 Риск регрессий: **низкий** (перемещение кода + dependency injection; поведение не меняется).
+
+
+## STEP364 (broadcast pending deliveries in /api/health) — 2026-03-06
+- Cron `broadcastTick()` writes a Redis-only snapshot of pending deliveries (`broadcast:pending_deliveries`, TTL 30 min) when it already computes `countBroadcastPendingDeliveries()`.
+- `/api/health` now exposes `broadcast.pending_deliveries` (Redis-only) so operators can spot "stuck" deliveries early without any DB reads in health.
+- When there is no active broadcast, the snapshot key is cleared (best-effort) to avoid stale data.
+
+Риск регрессий: **минимальный** (только Redis-visibility; бизнес‑логика broadcast не меняется).
+
+
+## STEP365 (Admin→Ops: flush ops digest button) — 2026-03-06
+- В `🧰 Админка → Операции` добавлена кнопка `🧾 Flush ops digest` (`a:admin_ops_flush`).
+- Action имеет guard `NONE` (экран Ops должен оставаться доступным при Redis degraded) и работает best-effort.
+- При нажатии вызываем `flushOpsAlerts(getBot().api, 'ops', { force: true })` и показываем результат (sent/events или skipped+reason) прямо на экране Ops.
+- Без DB-чтений: только Redis lock/buffer + отправка сообщения в ops targets.
+
+Риск регрессий: **минимальный** (admin-only UX; нет изменений в продуктовых потоках; при Redis outage — корректный soft-fail).
+
+
+## STEP366 (Preflight: smoke degraded rate-limit + extra node-check) — 2026-03-06
+- `scripts/preflight.js` расширен:
+  - добавлен `node --check` для `src/bot/payments/starsHandlers.js` (страховка против ESM/syntax регрессий после вынесения обработчиков платежей).
+  - добавлен запуск `scripts/smoke-degraded-rate-limit.js`.
+- Новый smoke `scripts/smoke-degraded-rate-limit.js`:
+  - не требует реальных Upstash ключей;
+  - симулирует Redis HTTP failure через `globalThis.fetch = () => throw`;
+  - вызывает `rateLimit()` и проверяет, что включается **in-memory fallback** и лимит становится **строже** (default ÷5 через `RATE_LIMIT_FALLBACK_LIMIT_DIV`).
+
+Риск регрессий: **нулевой** для прод‑runtime (dev/CI only); добавляет только проверки перед деплоем.
+
+
+## STEP367 (Preflight: broadcast overload invariants) — 2026-03-06
+- Добавлен `scripts/test-broadcast-overload-invariants.js` и подключён в `scripts/preflight.js`.
+- Скрипт проверяет инварианты overload‑веток в `api/qstash/broadcast-deliver.js`:
+  - ответ **429** при `db_overload` и при активном fuse;
+  - выставление `Retry-After` + `Upstash-Retry-After` (через `setQStashRetryAfterHeaders`);
+  - наличие полей `retry_after_sec`, `base_backoff_sec`, `jitter_sec` в JSON;
+  - jitter считается через `randIntInclusive(0, jitterMax)`.
+
+Риск регрессий: **нулевой** (dev/CI only); прод‑поведение broadcast не меняется.
+
+
+## STEP368 (Contacts redaction anti-bypass) — 2026-03-06
+- Усилены тесты `scripts/test-redactContactsInText.js` (расширено покрытие bypass-паттернов):
+  - `t . me / ...` (пробелы вокруг точки/слэша)
+  - zero‑width символы внутри `t.me` (например `t\u200B.\u200Cme/...`)
+  - `instagram (dot) com/...`
+  - `@ handle` с пробелом
+  - obfuscated email: `user (at) example (dot) com` и `Email: user at example dot com`
+  - `+7 (999) 123 45 67`
+  - добавлен негативный кейс против ложноположительных: `Email marketing ...` без `email:`
+- Минимально усилен `src/bot/redactContacts.js` (без изменения общей архитектуры):
+  - нормализация zero‑width (`\u200B/\u200C/\u200D/\u2060/\uFEFF`) для анти‑bypass
+  - `t.me` regex допускает пробелы/невидимые разделители вокруг точки и слэша
+  - `instagram (dot) com/...` ловится как social link
+  - `@`-handle regex допускает пробелы/невидимые разделители после `@`
+  - obfuscated email ловится:
+    - bracket‑вариант всегда (`(at)/(dot)`/`[at]/[dot]`/`{at}/{dot}`)
+    - word‑вариант только при явном триггере `email:`/`почта:` (уменьшаем риск ложноположительных)
+
+Риск регрессий: **низкий** (regex‑усиление в redaction‑хелпере + расширение тестов). Горячие UI пути и DB не затронуты.
+
+
+## STEP369 (Docs armor: runtime fallback runbook + microfix matrix) — 2026-03-06
+- Обновлён `docs/94_PROD_READINESS_PACK.md`:
+  - добавлена секция **3.0 Матрица микрофиксов** (Symptom → Microfix → Verify → Rollback) для основных деградаций (Redis/DB/QStash/Official publish/Payments/Audit).
+  - переписан payments-инцидент как короткий runbook **runtime fallback apply** (preconditions по HMAC/payload issues, включение через Admin→System→🧯 Fallback, мониторинг, обязательное выключение, rollback).
+- Обновлён `docs/90_OWNER_RUNBOOK.md`: добавлена явная ссылка на `94` (матрица + runbook) в разделе “если что-то сломалось”.
+- Обновлён `docs/README.md`: в “Что нового” уточнено, что readiness pack включает матрицу микрофиксов и runbook fallback apply.
+- Обновлён `docs/00_CURRENT_STATE.md`: добавлен STEP369 (docs-only).
+
+Риск регрессий: **нулевой** (docs-only; поведение продакшена не изменено).
+
+
+## STEP370 (Health GO/NO_GO aggregator) — 2026-03-06
+- Обновлён `/api/health`: добавлены поля:
+  - `system_status: "GO" | "NO_GO"`
+  - `no_go_reasons[]` (массив объектов `{code,value,threshold}` для операторского разбора)
+- Правило NO_GO (строго Redis-only; без DB):
+  - `redis.read_ok === false` или `redis.write_ok === false`
+  - `payments.payload_hmac_minlen_ok === false`
+  - `payments.fallback_apply_effective === true` (или env-enabled)
+  - пороги: `broadcast.tick_deferred_redis.today_count > 50`, `qstash.reschedule_failed.today_count > 10`, `qstash.official_publish_stuck.today_count > 5`
+
+Риск регрессий: **нулевой** (только добавлены новые поля в health; existing поля не менялись).
+## STEP371 (Staging fault-injection: simulate Redis down) — 2026-03-06
+- Добавлен флаг ENV `SIMULATE_REDIS_DOWN=1` (только staging/dev; **в prod игнорируется**).
+- `src/lib/redis.js`: при включённом флаге все методы Redis принудительно возвращают ошибку `code=SIMULATED_REDIS_DOWN` (через Proxy), чтобы проверять fail-open/fail-closed поведение без реального падения Upstash.
+- Добавлен ручной smoke `scripts/smoke-fault-injection.js`:
+  - валидирует, что fault injection реально включён (`redis.__simulated_down === true`)
+  - проверяет, что Redis вызовы падают с `SIMULATED_REDIS_DOWN`
+  - проверяет, что `/api/health` **не падает** и отдаёт `system_status=NO_GO` + причины
+- `.env.example`: добавлена подсказка для staging.
+
+Риск регрессий: **нулевой в prod** (флаг не может сработать в `APP_ENV=prod/production`). На staging/preview — включается только вручную для тестов.
+
+
+
+## STEP372 (Broadcast hard-skip HIT log + admin report) — 2026-03-06
+- Расширена наблюдаемость hard-skip (dead chats): теперь фиксируем не только SET (когда добавили TG ID в hard-skip), но и HIT — когда рассылка реально пропускает отправку из-за существующего hard-skip.
+- `src/bot/cron.js`:
+  - добавлен Redis список `broadcast:hard_skip:hit_recent` (trim до 2000, TTL 14d)
+  - добавлен helper `logBroadcastHardSkipHit(tgId, reason, {broadcastId,userId,via})`
+  - cron `broadcastTick()` логирует HIT при пропуске в fanout и non-fanout режимах.
+- `api/qstash/broadcast-deliver.js`: при раннем hard-skip (race-friendly) логируем HIT (via `qstash`).
+- Админский отчёт:
+  - `src/bot/bot.js`: добавлен экран `🧾 Hard-skip HITs (пропуски)` (`a:hs_hits|p:*`) и кнопка `🧾 Последние пропуски` в `a:hs_home`.
+  - `src/bot/actionRegistry.js` + `docs/02_ACTION_KEYS_REGISTRY.md`: добавлен action `a:hs_hits` (admin, guard none).
+
+Риск регрессий: **низкий** (Redis-only логирование + новый admin-экран; прод бизнес-логика не менялась, DB в hot UI не затрагивалась).
