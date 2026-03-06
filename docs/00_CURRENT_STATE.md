@@ -21,6 +21,8 @@
 **STEP377:** Preflight node-check расширен по entrypoints — `scripts/preflight.js` теперь делает `node --check` не только по статическому списку, но и по безопасным сканам директории: все `api/**/*.js`, `migrations/*.js`, `src/lib/*.js`, `src/bot/routes/*.js`, `src/bot/payments/*.js`, а также `scripts/test-*.js` и `scripts/smoke-*.js`. Это ловит ESM/export синтакс-ошибки и “битые entrypoints” до деплоя.
 
 
+**STEP378:** Hard-skip HITs: фильтры/экспорт + top reasons today — в экране HITs (`Admin → System → 🧱 Hard-skip → 🧾 Последние пропуски`) добавлены фильтры по причине (кнопки с today‑счётчиками), кнопка `🗒 Export last 200` (чанкуется по лимиту Telegram), а при каждом HIT теперь инкрементятся per‑reason day counters `broadcast:hard_skip:hit_reason:d:<YYYYMMDD>:<reason>` (TTL 14d) для быстрой сводки.
+
 **STEP364:** Broadcast pending deliveries в `/api/health` — cron `broadcastTick()` пишет Redis‑снимок `{ts,broadcast_id,pending_count}` в ключ `broadcast:pending_deliveries` (TTL 30 мин); `/api/health` показывает `broadcast.pending_deliveries` (строго Redis‑only, без DB) для раннего обнаружения "залипов" доставок.
 
 **STEP365:** Admin→Ops “Flush ops digest now” — в экране `🧰 Админка → Операции` добавлена кнопка `🧾 Flush ops digest`, которая принудительно вызывает `flushOpsAlerts(..., { force: true })` и показывает результат (sent/skipped) прямо на экране. Путь admin-only, без DB-чтений; при Redis degraded — graceful message.
