@@ -133,6 +133,11 @@ const cases = [
     opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['девятьсот'] }
   },
   {
+    name: 'phone in words (plus + digits, no explicit phone keyword) redacted (strict RU mobile)',
+    input: 'плюс семь девять девять девять один два три четыре пять шесть семь',
+    opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['девять девять'] }
+  },
+  {
     name: 'phone in words (ru mobile start with 8) redacted',
     input: 'Телефон: восемь девять ноль ноль один один два три четыре пять шесть',
     opts: { redacted: true, contains: ['🔒 номер скрыт'], notContains: ['восемь девять ноль'] }
@@ -146,6 +151,11 @@ const cases = [
     name: 'non-phone plus math not redacted',
     input: 'Плюс пять минут к дедлайну, плюс шесть идей — и всё.',
     opts: { redacted: false, contains: ['Плюс пять минут'] }
+  },
+  {
+    name: 'non-phone plus digits list not redacted (math/example)',
+    input: 'Плюс семь восемь девять ноль один два три четыре пять шесть — пример, не контакт.',
+    opts: { redacted: false, contains: ['Плюс семь восемь девять'] }
   },
   {
     name: 'credit card like 16 digits not redacted',
