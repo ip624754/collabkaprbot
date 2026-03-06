@@ -1,4 +1,4 @@
-import { CFG } from '../src/lib/config.js';
+import { CFG } from '../src/lib/config.js'; 
 
 // Simple health endpoint (no secrets).
 // Must never throw (fail-open), even if Redis is unavailable.
