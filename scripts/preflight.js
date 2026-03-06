@@ -172,5 +172,22 @@ if (fs.existsSync(invPath)) {
   console.warn("[preflight] scripts/test-broadcast-overload-invariants.js not found (skipping)");
 }
 
+logHeader("Preflight: IG templates leak invariants");
+const igInvPath = path.join(ROOT, "scripts", "test-ig-templates-no-contacts.js");
+if (fs.existsSync(igInvPath)) {
+  const res = spawnSync(process.execPath, [igInvPath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  // eslint-disable-next-line no-console
+  console.warn("[preflight] scripts/test-ig-templates-no-contacts.js not found (skipping)");
+}
+
+
 // eslint-disable-next-line no-console
 console.log("\n✅ Preflight OK");
