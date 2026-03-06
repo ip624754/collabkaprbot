@@ -23,6 +23,8 @@
 
 **STEP378:** Hard-skip HITs: фильтры/экспорт + top reasons today — в экране HITs (`Admin → System → 🧱 Hard-skip → 🧾 Последние пропуски`) добавлены фильтры по причине (кнопки с today‑счётчиками), кнопка `🗒 Export last 200` (чанкуется по лимиту Telegram), а при каждом HIT теперь инкрементятся per‑reason day counters `broadcast:hard_skip:hit_reason:d:<YYYYMMDD>:<reason>` (TTL 14d) для быстрой сводки.
 
+
+**STEP379:** /api/health: ops digest preview — добавлено поле `ops.digest_preview` (Redis‑only) для дашбордов/оператора: `{day,pending,last_sent_at,top:[{reason,count}],last:[{ts,reason,kind,title}]}`. Содержимое берётся из буфера ops alerts (`ops:alerts:ops:d:<day>`) коротким `LRANGE 0..30`, endpoint остаётся “never throw”.
 **STEP364:** Broadcast pending deliveries в `/api/health` — cron `broadcastTick()` пишет Redis‑снимок `{ts,broadcast_id,pending_count}` в ключ `broadcast:pending_deliveries` (TTL 30 мин); `/api/health` показывает `broadcast.pending_deliveries` (строго Redis‑only, без DB) для раннего обнаружения "залипов" доставок.
 
 **STEP365:** Admin→Ops “Flush ops digest now” — в экране `🧰 Админка → Операции` добавлена кнопка `🧾 Flush ops digest`, которая принудительно вызывает `flushOpsAlerts(..., { force: true })` и показывает результат (sent/skipped) прямо на экране. Путь admin-only, без DB-чтений; при Redis degraded — graceful message.
