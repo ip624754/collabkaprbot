@@ -6,11 +6,16 @@
 
 ✅ Поэтому основной способ: использовать готовый pack:
 - `docs/audit/notebooklm_pack/` (файлы 00–07)
-- и/или архив `NOTEBOOKLM_AUDIT_SOURCES_STEP###_NOTEBOOKLM50.zip` (≤50 файлов, только .md/.txt)
+- и/или архив `NOTEBOOKLM_FULL_PROJECT_AUDIT_STEP###_50FILES_TXT.zip` (≤50 файлов, только .txt/.md)
 
 В pack миграции и код уже конвертированы в текстовые бандлы.
 Эта папка — "комплект для стороннего аудита" (NotebookLM / люди).  
 Цель: чтобы аудитор видел **актуальный source of truth** и не тратил время на поиск.
+
+### Текущий baseline
+- Актуальный baseline фиксируем по STEP (на сегодня: **STEP380**).
+- К каждому ZIP идёт `..._list.txt` (маппинг: исходный путь → txt-файл в паке).
+- В baseline обязательно присутствуют: `docs/94_PROD_READINESS_PACK.md`, `docs/00_CURRENT_STATE.md`, `api/health.js`, ключевые контуры broadcast/payments/publish + preflight/smoke/tests.
 
 ## 1) Что загружать в NotebookLM (рекомендуемый порядок)
 
