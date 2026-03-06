@@ -2597,3 +2597,109 @@ QA:
   - `src/bot/actionRegistry.js` + `docs/02_ACTION_KEYS_REGISTRY.md`: добавлен action `a:hs_hits` (admin, guard none).
 
 Риск регрессий: **низкий** (Redis-only логирование + новый admin-экран; прод бизнес-логика не менялась, DB в hot UI не затрагивалась).
+
+
+## STEP373 (Admin→Ops: payments fallback runtime banner details) — 2026-03-06
+- Усилен баннер `Payments: fallback apply ENABLED` в `🧰 Админка → Операции`:
+  - при runtime-включении fallback (через админку) показываем детали: `since`, `until`, `by` (tgId/user), `reason`.
+  - добавлена явная подсказка “как выключить” (через `⚙️ Админка → Система → Payments fallback apply → runtime OFF`).
+- Инварианты: **без DB** (Redis-only), экран Ops остаётся доступным при деградации Redis (best-effort banners).
+
+Риск регрессий: **низкий** (UI/текстовые баннеры на admin-экране; бизнес-логика payments не менялась).
+
+
+## STEP374 (/api/health: NO_GO reasons normalized + hints) — 2026-03-06
+- Усилен агрегатор GO/NO_GO в `/api/health`:
+  - `no_go_reasons[]` теперь содержит операторские объекты `{code,severity,value,threshold?,hint}`.
+  - добавлен отдельный P0‑reason `payments_payload_hmac_key_missing`, если `PAYMENTS_PAYLOAD_HMAC_KEY` не задан.
+  - для ключевых причин добавлены короткие подсказки (hint), включая проверки Redis и пороговые метрики.
+- Инварианты: endpoint по‑прежнему **never throw** и остаётся **Redis-only** (без DB).
+
+Риск регрессий: **нулевой** (добавлены/расширены поля в health; прод‑логика не менялась).
+
+
+## STEP375 (Redaction: reduce math-like false positives for phone-in-words) — 2026-03-06
+- `src/bot/redactContacts.js`: word-phone детектор стал строже, если **нет явных phone‑триггеров** (`тел/номер/whatsapp/...`) и мы сработали только по `плюс`:
+  - редактируем только типичную RU mobile форму с префиксом страны: `+7 9xx...` / `8 9xx...` (в виде слов, например `плюс семь девять ...`).
+  - при наличии phone‑триггеров сохраняем более широкий режим (10–15 цифр), чтобы не ослаблять защиту в явном “телефонном” контексте.
+- `scripts/test-redactContactsInText.js`: добавлены тесты:
+  - строгий кейс без phone‑триггера должен редактироваться;
+  - “плюс семь восемь…” как пример/математика не должен редактироваться.
+
+Риск регрессий: **низкий** (изменения изолированы в redaction‑хелпере + тесты; DB/hot UI не затронуты).
+
+
+## STEP376 (IG templates: no-contact-leak invariants) — 2026-03-06
+- Добавлен тест `scripts/test-ig-templates-no-contacts.js`:
+  - извлекает из `src/bot/bot.js` функции `buildWsIgTemplate` и `buildWsIgDmRaw` (без импорта всего bot.js, чтобы избежать побочных эффектов).
+  - прогоняет шаблоны на “опасных” данных (email/phone/@handle/portfolio) и валидирует, что шаблоны не содержат контактов и внешних ссылок (кроме bot deep-link `t.me/...start=wsp_...`).
+- `scripts/preflight.js`: подключён новый тест как обязательный preflight guard.
+
+Риск регрессий: **нулевой** (dev/CI only; прод‑runtime не менялся).
+
+
+## STEP377 (Preflight: expanded node-check coverage for entrypoints) — 2026-03-06
+- `scripts/preflight.js`: расширено покрытие `node --check`:
+  - добавлен безопасный скан всех `api/**/*.js` (включая `api/qstash/*`)
+  - добавлен скан `migrations/*.js`
+  - добавлен скан `src/lib/*.js` (частая зона экспорт/ESM регрессий)
+  - добавлен скан `src/bot/routes/*.js` и `src/bot/payments/*.js`
+  - добавлен скан `scripts/test-*.js` и `scripts/smoke-*.js`
+- Цель: ловить синтакс/ESM-export проблемы **до** деплоя (dev/CI only).
+
+Риск регрессий: **нулевой** (dev/CI only; прод‑runtime не менялся).
+
+
+## STEP378 (Hard-skip HITs: filters/export + top reasons today) — 2026-03-06
+
+### Зачем
+- Оператору нужно быстро понимать **кого/почему** пропускаем из‑за dead chats, и иметь быстрый экспорт для разборов.
+- В инциденте/массовой рассылке важно видеть “top reasons today” без тяжёлых сканов.
+
+### Что сделано
+- Добавлены per‑reason day counters для hard-skip HITs (Redis-only, TTL 14d):
+  - `mg:<env>:broadcast:hard_skip:hit_reason:d:<YYYYMMDD>:bot_blocked`
+  - `...:chat_not_found`
+  - `...:user_deactivated`
+  - `...:unknown` / `...:other`
+- Экран `Admin → System → 🧱 Hard-skip → 🧾 Последние пропуски`:
+  - фильтры по причине (кнопки с today‑счётчиками),
+  - `🗒 Export last 200` (отправляет таблицу в этот чат, чанкуется до лимита сообщений),
+  - отображение “Сегодня: …” (top reasons today).
+- Добавлен action key: `a:hs_hits_export` (admin-only, guard none).
+
+### Файлы
+- `src/bot/cron.js`
+- `src/bot/bot.js`
+- `src/bot/actionRegistry.js`
+- `docs/02_ACTION_KEYS_REGISTRY.md`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- В админке открыть `🧱 Hard-skip` → `🧾 Последние пропуски`: фильтры переключаются, список меняется.
+- Нажать `🗒 Export last 200` → приходит таблица(ы) в чат админа, затем UI возвращается на экран HITs.
+- При Redis degraded экран даёт понятное сообщение, не падает.
+
+
+## STEP379 (/api/health: ops digest preview for dashboards) — 2026-03-06
+
+### Зачем
+- Быстрый “human preview” прямо в `/api/health`, чтобы мониторинг/дашборды видели не только counters, но и короткий сэмпл последних ops-событий.
+
+### Что сделано
+- В `/api/health` добавлено `ops.digest_preview` (Redis-only; bounded):
+  - `day`, `pending`, `last_sent_at`
+  - `top`: top-3 reasons из буфера `ops:alerts:ops:d:<day>`
+  - `last`: последние 5 событий (ts/reason/kind/title), с жёсткими лимитами по длинам
+- Для извлечения используется короткий `LRANGE 0..30`; endpoint остаётся “never throw”.
+
+### Файлы
+- `api/health.js`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `/api/health` отдаёт `ops.digest_preview` при наличии событий в ops-буфере.
+- При пустом буфере `ops.digest_preview.top=[]` и `last=[]` (или null), без ошибок.
+- При Redis degraded endpoint остаётся доступным и не бросает исключения.
