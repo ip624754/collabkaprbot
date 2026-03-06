@@ -135,6 +135,27 @@ const BROADCAST_HARD_SKIP_HIT_RECENT_KEY = k(['broadcast', 'hard_skip', 'hit_rec
 const BROADCAST_HARD_SKIP_HIT_RECENT_MAX = 2000;
 const BROADCAST_HARD_SKIP_HIT_RECENT_TTL_SEC = 14 * 24 * 60 * 60;
 
+function normalizeHardSkipReasonKey(reason) {
+  const raw = String(reason || 'unknown').toLowerCase();
+  // Known canonical reasons (see normalizeBroadcastDeadChatReason).
+  if (raw.includes('bot_blocked') || raw.includes('bot was blocked') || raw.includes('blocked')) return 'bot_blocked';
+  if (raw.includes('chat_not_found') || raw.includes('chat not found') || raw.includes('not found')) return 'chat_not_found';
+  if (raw.includes('user_deactivated') || raw.includes('deactivated')) return 'user_deactivated';
+
+  const slug = raw
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+  if (!slug) return 'unknown';
+  if (slug === 'unknown') return 'unknown';
+  return 'other';
+}
+
+function bcHardSkipHitReasonDayKey(day, reasonKey) {
+  return k(['broadcast', 'hard_skip', 'hit_reason', 'd', String(day || 'na'), String(reasonKey || 'unknown')]);
+}
+
+
 export async function logBroadcastHardSkipHit(tgId, reason, meta = {}) {
   const id = Number(tgId || 0);
   if (!id) return false;
@@ -157,6 +178,13 @@ export async function logBroadcastHardSkipHit(tgId, reason, meta = {}) {
       BROADCAST_HARD_SKIP_HIT_RECENT_MAX,
       BROADCAST_HARD_SKIP_HIT_RECENT_TTL_SEC
     );
+
+    // Best-effort: per-reason daily counters (operator visibility; bounded).
+    try {
+      const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const rk = normalizeHardSkipReasonKey(r);
+      await incrWithExpireOnFirst(bcHardSkipHitReasonDayKey(day, rk), BROADCAST_HARD_SKIP_HIT_RECENT_TTL_SEC);
+    } catch {}
     return true;
   } catch {
     return false;

@@ -27587,7 +27587,7 @@ if (p.a === 'a:hs_hits') {
   if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
   await ctx.answerCallbackQuery();
   try { await clearExpectText(ctx.from.id); } catch {}
-  await renderAdminHardSkipHits(ctx, Math.max(0, Number(p.p || 0) || 0));
+  await renderAdminHardSkipHits(ctx, Math.max(0, Number(p.p || 0) || 0), p.r || 'all');
   return;
 }
 
@@ -34974,6 +34974,54 @@ const ADMIN_HS_RECENT_KEY = k(['broadcast', 'hard_skip', 'recent']);
 const ADMIN_HS_HIT_RECENT_KEY = k(['broadcast', 'hard_skip', 'hit_recent']);
 const ADMIN_HS_PAGE_SIZE = 8;
 
+const ADMIN_HS_HITS_SAMPLE_LIMIT = 800; // bounded scan window for filters/pagination (Redis-only)
+const ADMIN_HS_HITS_EXPORT_LIMIT = 200;
+
+function normalizeHardSkipReasonKey(reason) {
+  const raw = String(reason || 'unknown').toLowerCase();
+  if (raw.includes('bot_blocked') || raw.includes('bot was blocked') || raw.includes('blocked')) return 'bot_blocked';
+  if (raw.includes('chat_not_found') || raw.includes('chat not found') || raw.includes('not found')) return 'chat_not_found';
+  if (raw.includes('user_deactivated') || raw.includes('deactivated')) return 'user_deactivated';
+  const slug = raw.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+  if (!slug) return 'unknown';
+  if (slug === 'unknown') return 'unknown';
+  return 'other';
+}
+
+function adminHardSkipHitReasonDayKey(day, reasonKey) {
+  return k(['broadcast', 'hard_skip', 'hit_reason', 'd', String(day || 'na'), String(reasonKey || 'unknown')]);
+}
+
+async function adminHardSkipHitReasonStatsToday() {
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const reasons = ['bot_blocked', 'chat_not_found', 'user_deactivated', 'unknown', 'other'];
+  const keys = reasons.map((r) => adminHardSkipHitReasonDayKey(day, r));
+
+  try {
+    let vals = null;
+    if (typeof redis.mget === 'function') {
+      vals = await redis.mget(keys);
+    } else {
+      vals = [];
+      for (const kk of keys) {
+        // eslint-disable-next-line no-await-in-loop
+        vals.push(await redis.get(kk));
+      }
+    }
+    const out = [];
+    for (let i = 0; i < reasons.length; i++) {
+      const c = Number(vals?.[i] || 0) || 0;
+      if (c > 0) out.push([reasons[i], c]);
+    }
+    out.sort((a, b) => Number(b[1]) - Number(a[1]));
+    const total = out.reduce((s, x) => s + Number(x[1] || 0), 0);
+    return { ok: true, day, total, by_reason: out };
+  } catch {
+    return { ok: false, day, total: 0, by_reason: [] };
+  }
+}
+
+
 function adminHardSkipTgKey(tgId) {
   return k(['broadcast', 'hard_skip', 'tg', String(tgId)]);
 }
@@ -35057,12 +35105,17 @@ async function adminHardSkipRecent(page = 0) {
 }
 
 
-async function adminHardSkipHits(page = 0) {
+
+async function adminHardSkipHits(page = 0, reasonFilter = 'all') {
   const p = Math.max(0, Number(page || 0) || 0);
-  const start = p * ADMIN_HS_PAGE_SIZE;
-  const stop = start + ADMIN_HS_PAGE_SIZE - 1;
+  const rf = String(reasonFilter || 'all').trim().toLowerCase();
+
+  // Bounded window: we intentionally scan only the latest N hits (Redis-only).
+  // This keeps the endpoint fast and avoids SCAN/KEYS.
+  const scanN = ADMIN_HS_HITS_SAMPLE_LIMIT;
+
   try {
-    const raw = await redis.lrange(ADMIN_HS_HIT_RECENT_KEY, start, stop);
+    const raw = await redis.lrange(ADMIN_HS_HIT_RECENT_KEY, 0, scanN - 1);
     const items = Array.isArray(raw) ? raw : [];
     const parsed = [];
     for (const it of items) {
@@ -35080,9 +35133,61 @@ async function adminHardSkipHits(page = 0) {
         // ignore
       }
     }
-    return { ok: true, page: p, items: parsed };
+
+    let filtered = parsed;
+    if (rf && rf !== 'all') {
+      filtered = parsed.filter((x) => normalizeHardSkipReasonKey(x.r) === normalizeHardSkipReasonKey(rf));
+    }
+
+    const start = p * ADMIN_HS_PAGE_SIZE;
+    const slice = filtered.slice(start, start + ADMIN_HS_PAGE_SIZE);
+    const hasNext = (start + ADMIN_HS_PAGE_SIZE) < filtered.length;
+
+    return {
+      ok: true,
+      page: p,
+      reason: rf || 'all',
+      scanN,
+      total: filtered.length,
+      hasNext,
+      items: slice,
+    };
   } catch {
-    return { ok: false, page: p, items: [] };
+    return { ok: false, page: p, reason: rf || 'all', scanN: ADMIN_HS_HITS_SAMPLE_LIMIT, total: 0, hasNext: false, items: [] };
+  }
+}
+
+async function adminHardSkipHitsExport(reasonFilter = 'all', limit = ADMIN_HS_HITS_EXPORT_LIMIT) {
+  const rf = String(reasonFilter || 'all').trim().toLowerCase();
+  const scanN = Math.max(200, Math.min(2000, ADMIN_HS_HITS_SAMPLE_LIMIT));
+  try {
+    const raw = await redis.lrange(ADMIN_HS_HIT_RECENT_KEY, 0, scanN - 1);
+    const items = Array.isArray(raw) ? raw : [];
+    const parsed = [];
+    for (const it of items) {
+      try {
+        const s = typeof it === 'string' ? it : JSON.stringify(it);
+        const o = JSON.parse(s);
+        const tgId = Number(o?.tgId || 0);
+        const r = String(o?.r || 'unknown').slice(0, 60);
+        const at = o?.at ? String(o.at) : null;
+        const broadcastId = Number(o?.broadcastId || 0) || 0;
+        const userId = Number(o?.userId || 0) || 0;
+        const via = o?.via ? String(o.via).slice(0, 40) : '';
+        if (tgId) parsed.push({ tgId, r, at, broadcastId, userId, via });
+      } catch {
+        // ignore
+      }
+    }
+
+    let filtered = parsed;
+    if (rf && rf !== 'all') {
+      filtered = parsed.filter((x) => normalizeHardSkipReasonKey(x.r) === normalizeHardSkipReasonKey(rf));
+    }
+    const out = filtered.slice(0, Math.max(1, Number(limit || 200) || 200));
+    return { ok: true, reason: rf || 'all', scanN, total: filtered.length, items: out };
+  } catch {
+    return { ok: false, reason: rf || 'all', scanN: ADMIN_HS_HITS_SAMPLE_LIMIT, total: 0, items: [] };
   }
 }
 
@@ -35106,7 +35211,7 @@ async function renderAdminHardSkipHome(ctx, page = 0) {
 
   const kb = new InlineKeyboard();
   kb.text('🔎 Найти TG ID', `a:hs_find|p:${p}`).row();
-  kb.text('🧾 Последние пропуски', `a:hs_hits|p:${p}`).row();
+  kb.text('🧾 Последние пропуски', `a:hs_hits|p:${p}|r:all`).row();
   if (recent.ok && recent.items.length) {
     for (const it of recent.items) {
       kb.text(`tg:${it.tgId}`, `a:hs_view|tg:${it.tgId}`).row();
@@ -35121,29 +35226,77 @@ async function renderAdminHardSkipHome(ctx, page = 0) {
 }
 
 
-async function renderAdminHardSkipHits(ctx, page = 0) {
+
+async function renderAdminHardSkipHits(ctx, page = 0, reasonFilter = 'all', opts = {}) {
   const p = Math.max(0, Number(page || 0) || 0);
-  const hits = await adminHardSkipHits(p);
-  let text = '🧾 <b>Hard-skip HITs (пропуски)</b>\n\n';
-  text += 'Показывает последние случаи, когда рассылка <b>пропустила</b> отправку из‑за hard-skip (dead chats).\n\n';
+  const rf = String(reasonFilter || 'all').trim().toLowerCase() || 'all';
+  const toast = opts?.toast ? String(opts.toast) : '';
+
+  const hits = await adminHardSkipHits(p, rf);
+  const stats = await adminHardSkipHitReasonStatsToday();
+
+  let text = `🧾 <b>Hard-skip HITs (пропуски)</b>
+
+`;
+  text += `Показывает последние случаи, когда рассылка <b>пропустила</b> отправку из‑за hard-skip (dead chats).
+
+`;
+  if (toast) text += `<b>${escapeHtml(toast)}</b>
+
+`;
+const filterLabel = rf === 'all' ? 'ALL' : escapeHtml(rf);
+  text += `Фильтр: <b>${filterLabel}</b> · окно: последние <code>${hits.scanN || ADMIN_HS_HITS_SAMPLE_LIMIT}</code> HITs
+
+`;
+
+  if (stats.ok && stats.by_reason.length) {
+    const top = stats.by_reason.slice(0, 4).map(([r, c]) => `${escapeHtml(r)}:<code>${c}</code>`).join(' · ');
+    text += `Сегодня: ${top}
+
+`;
+  }
+
   if (!hits.ok) {
     text += '⚠️ Redis недоступен — список временно недоступен.\n';
   } else if (!hits.items.length) {
-    text += 'Пока пусто.\n';
+    text += 'Пока пусто (по текущему фильтру/окну).\n';
   } else {
-    text += `<b>Недавние (стр. ${p + 1}):</b>\n`;
+    const pageLabel = hits.total ? `${p + 1}` : `${p + 1}`;
+    text += `<b>Недавние (стр. ${pageLabel}):</b>
+`;
     for (const it of hits.items) {
       const when = it.at ? ` · <code>${escapeHtml(String(it.at).slice(0, 19))}</code>` : '';
       const bc = it.broadcastId ? ` · bc:<b>#${escapeHtml(String(it.broadcastId))}</b>` : '';
       const uid = it.userId ? ` · uid:<code>${escapeHtml(String(it.userId))}</code>` : '';
       const via = it.via ? ` · <code>${escapeHtml(String(it.via))}</code>` : '';
-      text += `• <code>${it.tgId}</code> — <b>${escapeHtml(it.r)}</b>${bc}${uid}${via}${when}\n`;
+      text += `• <code>${it.tgId}</code> — <b>${escapeHtml(it.r)}</b>${bc}${uid}${via}${when}
+`;
     }
   }
 
   const kb = new InlineKeyboard();
-  kb.text('🧱 Список (set)', `a:hs_home|p:${p}`).row();
-  kb.text('🔎 Найти TG ID', `a:hs_find|p:${p}`).row();
+  kb.text('🧱 Список (set)', `a:hs_home|p:0`).text('🔎 Найти TG ID', `a:hs_find|p:0`).row();
+
+  // Filters with today counters (best-effort).
+  const reasonCounts = new Map();
+  if (stats.ok) {
+    for (const [r, c] of stats.by_reason) reasonCounts.set(String(r), Number(c) || 0);
+  }
+
+  const fAll = rf === 'all' ? '✅ ALL' : 'ALL';
+  kb.text(fAll, `a:hs_hits|p:0|r:all`);
+  const filters = ['bot_blocked', 'chat_not_found', 'user_deactivated', 'unknown', 'other'];
+  for (const f of filters) {
+    const labelBase = f.replace(/_/g, ' ');
+    const c = reasonCounts.get(f) || 0;
+    const label = (rf === f ? '✅ ' : '') + (c > 0 ? `${labelBase}(${c})` : labelBase);
+    kb.text(label.slice(0, 20), `a:hs_hits|p:0|r:${f}`);
+    if (['chat_not_found', 'unknown', 'other'].includes(f)) kb.row();
+  }
+  kb.row();
+
+  kb.text('🗒 Export last 200', `a:hs_hits_export|p:${p}|r:${rf}`).row();
+
   if (hits.ok && hits.items.length) {
     const seen = new Set();
     for (const it of hits.items) {
@@ -35154,8 +35307,8 @@ async function renderAdminHardSkipHits(ctx, page = 0) {
     }
   }
   kb.row();
-  if (p > 0) kb.text('⬅️', `a:hs_hits|p:${p - 1}`);
-  kb.text('➡️', `a:hs_hits|p:${p + 1}`);
+  if (p > 0) kb.text('⬅️', `a:hs_hits|p:${p - 1}|r:${rf}`);
+  kb.text('➡️', `a:hs_hits|p:${p + 1}|r:${rf}`);
   kb.row().text('⬅️ Система', 'a:admin_sys').row().text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
