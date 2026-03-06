@@ -145,46 +145,109 @@ export default async function handler(_req, res) {
     try {
       const reasons = [];
 
+      const add = (code, severity, value = null, threshold = null, hint = '') => {
+        const o = {
+          code: String(code || 'unknown'),
+          severity: String(severity || 'P2'),
+          value: value === undefined ? null : value,
+        };
+        if (threshold !== null && threshold !== undefined) o.threshold = threshold;
+        if (hint) o.hint = String(hint).slice(0, 220);
+        reasons.push(o);
+      };
+
       const redisReadOk = out?.redis?.read_ok;
       const redisWriteOk = out?.redis?.write_ok;
 
       if (redisReadOk === false) {
-        reasons.push({ code: 'redis_read_not_ok', value: redisReadOk });
+        add(
+          'redis_read_not_ok',
+          'P0',
+          false,
+          null,
+          'Redis read failed. Проверь UPSTASH_REDIS_REST_URL/TOKEN, лимиты/квоты и доступность Upstash.'
+        );
       }
       if (redisWriteOk === false) {
-        reasons.push({ code: 'redis_write_not_ok', value: redisWriteOk });
+        add(
+          'redis_write_not_ok',
+          'P0',
+          false,
+          null,
+          'Redis write failed. В проде мутации должны fail-closed — сначала восстановить Redis/токен/квоты.'
+        );
       }
 
+      // Payments: HMAC key config is a hard precondition for safe payload verification.
+      const hmacConfigured = out?.payments?.payload_hmac_key_configured;
+      const hmacLen = out?.payments?.payload_hmac_key_len ?? null;
+      const hmacMin = out?.payments?.payload_hmac_minlen ?? 32;
       const hmacOk = out?.payments?.payload_hmac_minlen_ok;
-      if (hmacOk === false) {
-        reasons.push({
-          code: 'payments_payload_hmac_minlen_not_ok',
-          value: out?.payments?.payload_hmac_key_len ?? null,
-          threshold: out?.payments?.payload_hmac_minlen ?? 32,
-        });
+
+      if (hmacConfigured === false) {
+        add(
+          'payments_payload_hmac_key_missing',
+          'P0',
+          false,
+          null,
+          'PAYMENTS_PAYLOAD_HMAC_KEY не задан. Задай ключ ≥ 32 символов и перезапусти деплой.'
+        );
+      } else if (hmacOk === false) {
+        add(
+          'payments_payload_hmac_minlen_not_ok',
+          'P0',
+          hmacLen,
+          hmacMin,
+          'PAYMENTS_PAYLOAD_HMAC_KEY слишком короткий. Рекомендуется ключ ≥ 32 символов.'
+        );
       }
 
       // Payments fallback apply should remain OFF in normal ops; if effective, treat as NO_GO.
       const fbEffective = out?.payments?.fallback_apply_effective;
       const fbEnv = out?.payments?.fallback_apply_env_enabled;
+      const fbRt = out?.payments?.fallback_apply_runtime_enabled;
       if (fbEffective === true || fbEnv === true) {
-        reasons.push({ code: 'payments_fallback_apply_effective', value: true });
+        add(
+          'payments_fallback_apply_effective',
+          'P1',
+          { effective: true, env: !!fbEnv, runtime: !!fbRt },
+          null,
+          'Fallback apply должен быть OFF по умолчанию. Используй только на инцидент/хвосты и обязательно выключай.'
+        );
       }
 
       // P1/P2 operational thresholds (from readiness guidance)
       const deferred = Number(out?.broadcast?.tick_deferred_redis?.today_count ?? NaN);
       if (Number.isFinite(deferred) && deferred > 50) {
-        reasons.push({ code: 'broadcast_tick_deferred_redis_high', value: deferred, threshold: 50 });
+        add(
+          'broadcast_tick_deferred_redis_high',
+          'P2',
+          deferred,
+          50,
+          'Много defer при Redis-down. Проверь Redis, затем перезапусти broadcast tick (или дождись восстановления).'
+        );
       }
 
       const resched = Number(out?.qstash?.reschedule_failed?.today_count ?? NaN);
       if (Number.isFinite(resched) && resched > 10) {
-        reasons.push({ code: 'qstash_reschedule_failed_high', value: resched, threshold: 10 });
+        add(
+          'qstash_reschedule_failed_high',
+          'P2',
+          resched,
+          10,
+          'QStash reschedule падает: проверь ключи QStash/лимиты, а также DB overload и retry headers.'
+        );
       }
 
       const stuck = Number(out?.qstash?.official_publish_stuck?.today_count ?? NaN);
       if (Number.isFinite(stuck) && stuck > 5) {
-        reasons.push({ code: 'qstash_official_publish_stuck_high', value: stuck, threshold: 5 });
+        add(
+          'qstash_official_publish_stuck_high',
+          'P2',
+          stuck,
+          5,
+          'OFFICIAL publish часто застревает. Проверь права канала/IDEMPOTENCY token-lock и очередь публикаций.'
+        );
       }
 
       return {
@@ -192,7 +255,16 @@ export default async function handler(_req, res) {
         no_go_reasons: reasons,
       };
     } catch {
-      return { system_status: 'NO_GO', no_go_reasons: [{ code: 'health_compute_failed' }] };
+      return {
+        system_status: 'NO_GO',
+        no_go_reasons: [
+          {
+            code: 'health_compute_failed',
+            severity: 'P0',
+            hint: 'Ошибка вычисления GO/NO_GO. Проверь /api/health на исключения и совместимость полей.',
+          },
+        ],
+      };
     }
   }
 
