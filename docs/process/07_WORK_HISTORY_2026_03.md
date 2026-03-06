@@ -2703,3 +2703,31 @@ QA:
 - `/api/health` отдаёт `ops.digest_preview` при наличии событий в ops-буфере.
 - При пустом буфере `ops.digest_preview.top=[]` и `last=[]` (или null), без ошибок.
 - При Redis degraded endpoint остаётся доступным и не бросает исключения.
+## STEP380 (Readiness pack + NotebookLM audit baseline refresh) — 2026-03-06
+
+### Зачем
+После серии укреплений (STEP364–379) нужен “единый операторский источник правды” и актуальный audit baseline для NotebookLM.
+
+### Что сделано
+- Обновлён `docs/94_PROD_READINESS_PACK.md`:
+  - GO/NO‑GO через `system_status` + `no_go_reasons[].hint`
+  - добавлены новые сигналы: `broadcast.pending_deliveries`, `ops.digest_preview`
+  - расширена матрица микрофиксов (pending stuck / hard-skip spike / fallback enabled)
+  - добавлены ссылки на операторские кнопки/экраны: `🧾 Flush ops digest`, Hard-skip HITs report
+- Обновлён `docs/90_OWNER_RUNBOOK.md` — короткий блок “что смотреть ежедневно” под новые поля health/ops.
+- Обновлены audit-доки: `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md` и `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt` (baseline STEP380, новые поля health/ops).
+- Обновлены `docs/README.md`, `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_03.md`.
+
+### Файлы
+- `docs/94_PROD_READINESS_PACK.md`
+- `docs/90_OWNER_RUNBOOK.md`
+- `docs/README.md`
+- `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md`
+- `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+- `docs/audit/notebooklm_pack/04_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `docs/94_PROD_READINESS_PACK.md` упоминает все новые поля health (system_status/no_go_reasons/pending_deliveries/digest_preview) и операторские экраны.
+- `docs/audit/*` содержит актуальный промпт и актуальные правила для pack (≤50 файлов).
