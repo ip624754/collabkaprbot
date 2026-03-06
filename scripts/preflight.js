@@ -99,7 +99,9 @@ logHeader("Preflight: portable paths gate (ZIP/Windows-safe)");
 runNpm("lint:portable-paths");
 
 logHeader("Preflight: Node syntax check (node --check)");
-const nodeCheckCandidates = [
+
+// Keep a small explicit base list, then expand via safe directory scans for entrypoints.
+const baseCandidates = [
   "src/bot/bot.js",
   "src/bot/cron.js",
   "src/bot/routes/callbacks.js",
@@ -109,25 +111,67 @@ const nodeCheckCandidates = [
   "api/health.js",
   "migrations/run.js",
   "scripts/preflight.js",
-  "scripts/smoke-degraded-rate-limit.js",
-  "scripts/test-broadcast-overload-invariants.js",
   "src/db/queries.js",
-  "src/lib/redis.js",
-  "src/lib/tgApi.js",
 ];
 
-const nodeCheckList = [];
-for (const rel of nodeCheckCandidates) {
-  if (fs.existsSync(path.join(ROOT, rel))) nodeCheckList.push(rel);
+const nodeCheckSet = new Set();
+
+function addCandidate(rel) {
+  const abs = path.join(ROOT, rel);
+  if (fs.existsSync(abs) && fs.statSync(abs).isFile()) nodeCheckSet.add(rel);
 }
 
-// Optional: if api/qstash exists, check all .js handlers there too.
-const qstashDir = path.join(ROOT, "api", "qstash");
-if (fs.existsSync(qstashDir) && fs.statSync(qstashDir).isDirectory()) {
-  for (const f of fs.readdirSync(qstashDir)) {
-    if (f.endsWith(".js")) nodeCheckList.push(path.join("api", "qstash", f));
-  }
+function scanDir(relDir, { maxDepth = 2, include = () => true } = {}) {
+  const absDir = path.join(ROOT, relDir);
+  if (!fs.existsSync(absDir)) return;
+  if (!fs.statSync(absDir).isDirectory()) return;
+
+  const walk = (curRel, depth) => {
+    const curAbs = path.join(ROOT, curRel);
+    for (const name of fs.readdirSync(curAbs)) {
+      const nextRel = path.join(curRel, name);
+      const nextAbs = path.join(ROOT, nextRel);
+      const st = fs.statSync(nextAbs);
+      if (st.isDirectory()) {
+        if (depth < maxDepth) walk(nextRel, depth + 1);
+        continue;
+      }
+      if (!st.isFile()) continue;
+      if (!nextRel.endsWith(".js")) continue;
+      if (!include(nextRel)) continue;
+      nodeCheckSet.add(nextRel);
+    }
+  };
+
+  walk(relDir, 0);
 }
+
+// base candidates
+for (const rel of baseCandidates) addCandidate(rel);
+
+// All API routes (including api/qstash/*)
+scanDir("api", { maxDepth: 2 });
+
+// Migrations (all .js)
+scanDir("migrations", { maxDepth: 1 });
+
+// Bot sub-entrypoints
+scanDir(path.join("src", "bot", "routes"), { maxDepth: 2 });
+scanDir(path.join("src", "bot", "payments"), { maxDepth: 2 });
+
+// lib (small and high-risk for export regressions)
+scanDir(path.join("src", "lib"), { maxDepth: 1 });
+
+// scripts: only smoke/test helpers (avoid checking every helper script)
+scanDir("scripts", {
+  maxDepth: 1,
+  include: (rel) => {
+    const base = path.basename(rel);
+    return base.startsWith("smoke-") || base.startsWith("test-");
+  },
+});
+
+const nodeCheckList = Array.from(nodeCheckSet).sort();
 
 if (nodeCheckList.length === 0) {
   // eslint-disable-next-line no-console
