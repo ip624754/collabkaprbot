@@ -177,7 +177,10 @@ export function redactContactsInText(raw) {
     const phoneTriggerRe = /(^|[^a-zа-я0-9_])(тел(?:ефон)?|номер|ватсап|вотсап|whats?app|wa|вайбер|viber|phone|call|звон|позвони)(?=$|[^a-zа-я0-9_])/i;
     const plusStartRe = /(^|[^a-zа-я0-9_])плюс(?=$|[^a-zа-я0-9_])(?=[\s\-–—]*?(?:7|8|9|семь|восемь|девять))/i;
 
-    if (phoneTriggerRe.test(sLower) || plusStartRe.test(sLower)) {
+    const hasPhoneTrigger = phoneTriggerRe.test(sLower);
+    const hasPlusStart = plusStartRe.test(sLower);
+
+    if (hasPhoneTrigger || hasPlusStart) {
       const tokens = [];
       let m;
       while ((m = tokenRe.exec(sLower)) !== null) {
@@ -195,9 +198,17 @@ export function redactContactsInText(raw) {
         if (runStart === null) return;
         const digits = runDigits;
         const len = digits.length;
-        const startsOk = /^[789]/.test(digits) || (len === 11 && /^[78]/.test(digits));
-        const okLen = len >= 10 && len <= 15;
-        const ok = okLen && startsOk && (plusSeen || phoneTriggerRe.test(sLower)) && runTokenCount >= 6;
+
+        // When explicit phone keywords exist, we allow a wider range (10–15 digits).
+        // When there is no phone keyword and we triggered only via "плюс", keep it stricter to reduce math-like false positives.
+        const okLenWide = len >= 10 && len <= 15;
+        const startsOkWide = /^[789]/.test(digits) || (len === 11 && /^[78]/.test(digits));
+        const okWide = okLenWide && startsOkWide && runTokenCount >= 6 && (plusSeen || hasPhoneTrigger);
+
+        // Strict mode (no phone keywords): only redact typical RU mobile form with country prefix, e.g. +7 9xx...
+        const okStrict = plusSeen && len === 11 && /^(7|8)9\d{9}$/.test(digits) && runTokenCount >= 6;
+
+        const ok = hasPhoneTrigger ? okWide : okStrict;
         if (ok) spans.push({ start: runStart, end: runEnd });
         runStart = null;
         runEnd = null;
