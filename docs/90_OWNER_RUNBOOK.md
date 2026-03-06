@@ -46,10 +46,20 @@
 Cookbook: `docs/94_PROD_READINESS_PACK.md`.
 
 Открываешь раз в день (или после деплоя):
-- `ok:true`
+- `system_status` + `no_go_reasons[]` (если NO_GO — делай то, что написано в `hint`)
+- `ok:true`, `redis.read_ok/write_ok:true`
 - `cron.*.last_run` (giveaways/broadcast)
+- `ops.digest_preview` (быстро понять, “что болит” без захода в логи)
+- если была рассылка — `broadcast.pending_deliveries` + counters (deferred/db_overload)
 - если включён audit throttle — `audit.throttle.*` на месте
-- если была рассылка — смотри `broadcast.cooldown` и counters
+
+Полезные кнопки:
+- Admin → 🧰 Операции → `🧾 Flush ops digest` (принудительно отправить сводку)
+- Admin → ⚙️ Система → 🧱 Hard-skip → `🧾 Последние пропуски` (+ фильтры/экспорт)
+
+Staging проверка деградаций:
+- `SIMULATE_REDIS_DOWN=1` (только staging/dev) — быстро проверить fail-open/fail-closed (см. readiness pack).
+
 
 ### 3.2 Support chat (OPS)
 Если подключён `SUPPORT_CHAT_ID`, то туда приходят:

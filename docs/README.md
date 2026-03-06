@@ -86,7 +86,7 @@
 - Broadcast: DB overload load‑shedding (429+Retry‑After) + метрики в health + баннеры в админке; tick fail‑closed при Redis degraded.
 - Ops: health/admin баннеры по `qstash_reschedule_failed` и `official_publish_stuck`.
 - RateLimit: деградация Redis больше не даёт unlimited fail‑open; degraded режим стал строже.
-- Новый операторский пакет: `94_PROD_READINESS_PACK.md` (GO/NO‑GO + матрица микрофиксов + runbook runtime fallback apply).
+- Новый операторский пакет: `94_PROD_READINESS_PACK.md` (GO/NO‑GO через `system_status/no_go_reasons` + матрица микрофиксов + runtime fallback runbook + `pending_deliveries`/`ops.digest_preview` + hard-skip отчёт + staging fault‑injection).
 
 
 ## Аудит (NotebookLM / внешняя проверка)

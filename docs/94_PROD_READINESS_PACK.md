@@ -18,41 +18,54 @@
 ### GO (можно звать пользователей), если:
 1) `/api/health`:
    - `ok=true`
+   - `system_status="GO"` и `no_go_reasons.length == 0`  ← **главный агрегат**
    - `redis.read_ok=true` и `redis.write_ok=true`
-   - `payments.payload_hmac_minlen_ok=true`
+   - `payments.payload_hmac_key_configured=true` и `payments.payload_hmac_minlen_ok=true`
    - `payments.fallback_apply_effective=false` (baseline)
-   - `broadcast.db_overload.today_count == 0` (или редкие единичные всплески без роста)
+   - `broadcast.db_overload.today_count` не растёт (единичные всплески ок)
    - `qstash.reschedule_failed.today_count == 0`
    - `qstash.official_publish_stuck.today_count == 0`
+   - `broadcast.pending_deliveries` либо отсутствует, либо `pending_count` небольшой и **снижается**
 2) В админке → **🧰 Операции**:
-   - нет красных баннеров “Redis degraded”, “Payments HMAC missing/short”, “fallback apply ENABLED”
-   - нет баннеров “QStash reschedule failed” / “Official publish stuck” / “Broadcast DB overload” (или они старые и не растут)
+   - нет красных баннеров (если есть — действовать по подсказке)
+   - если показан баннер “Payments fallback apply ENABLED” — это должно быть осознанно и временно
+   - при сомнениях нажать **`🧾 Flush ops digest`** (получить актуальную сводку)
 3) Мини‑смоук (5–10 минут): “креатор + бренд” (см. `91_PROD_LAUNCH_30MIN.md`).
 
 ### NO‑GO (не зовём пользователей), если:
-- `redis.write_ok=false` **и** при этом планируется массовая операция (broadcast/cron fan‑out).
-- `payments.payload_hmac_minlen_ok=false` (ключ отсутствует/короткий).
-- `payments.fallback_apply_effective=true` без осознанного инцидента (случайно включили).
-- `broadcast.db_overload.today_count` быстро растёт, или видишь системные таймауты DB.
-- `qstash.reschedule_failed.today_count` растёт (потеря очереди возможна).
-
----
+- `/api/health.system_status="NO_GO"` → смотри `no_go_reasons[].hint` (что делать)
+- `redis.write_ok=false` и планируется массовая операция (broadcast/cron fan‑out)
+- `payments.payload_hmac_key_configured=false` или `payments.payload_hmac_minlen_ok=false`
+- `payments.fallback_apply_effective=true` **без осознанного инцидента** (случайно включили)
+- быстро растут counters: `broadcast.db_overload.today_count`, `qstash.reschedule_failed.today_count`, `qstash.official_publish_stuck.today_count`
+- `broadcast.pending_deliveries.pending_count` долго не снижается (и/или snapshot старый) → сначала разобраться, потом трафик
 
 ## 2) Что мониторить каждый день (коротко)
 
 ### 2.1 `/api/health` (главный индикатор)
-Смотри блоки:
+Начинай с агрегатов:
+- `system_status` + `no_go_reasons[]` — готовность и **подсказки действий**
+- `ops.digest_preview` — короткая “человеческая” сводка (последние причины/события)
+
+Дальше — по блокам:
 - `redis.*` — read/write/latency/last_error
-- `payments.*` — HMAC key ok + fallback effective
+- `payments.*` — HMAC ok + fallback effective + payload issues
+- `broadcast.pending_deliveries` — snapshot pending доставок (раннее обнаружение “залипов”)
 - `broadcast.db_overload` — load‑shedding (429) по DB overload
-- `broadcast.tick_deferred_redis` — broadcast tick был отложен из‑за Redis degraded
-- `qstash.reschedule_failed` — были случаи, когда reschedule не удался
+- `broadcast.tick_deferred_redis` — tick был отложен из‑за Redis degraded
+- `qstash.reschedule_failed` — случаи, когда reschedule не удался
 - `qstash.official_publish_stuck` — verify обнаружил stuck в `PUBLISHING`
 
 ### 2.2 Админка → 🧰 Операции
-Это “человеческая” витрина для `/api/health`:
+Это “человеческая витрина” для health + ops:
 - красные баннеры = **действовать**
 - жёлтые/информ = **наблюдать**
+- кнопка **`🧾 Flush ops digest`** — принудительно отправить сводку сейчас (полезно после инцидента/деплоя)
+
+### 2.3 Админка → ⚙️ Система → 🧱 Hard-skip
+Если delivery “жрёт” попытки на мёртвых чатах:
+- `🧾 Последние пропуски` → фильтры по reason + `🗒 Export last 200`
+- ориентир: всплеск `bot_blocked/chat_not_found/user_deactivated` объясняет “почему доставка не идёт”
 
 ---
 
@@ -71,6 +84,9 @@
 | **Official publish stuck**: `qstash.official_publish_stuck.today_count>0` | Следовать `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`.<br>Правило: **лучше подвиснуть, чем задублировать**. Не менять статусы руками. | `official_publish_stuck` не растёт; очередь уходит; verify “самовосстановил”. | Откат: отключить публикации (`OFFICIAL_PUBLISH_ENABLED=false`) до разбирательства. |
 | **Payments HMAC missing/short**: `payments.payload_hmac_minlen_ok=false` | **NO‑GO.** Исправить ENV `PAYMENTS_PAYLOAD_HMAC_KEY` (≥32 байт) и redeploy. Не включать fallback. | `/api/health.payments.payload_hmac_minlen_ok=true` + `payload_issues_today.bad_sig=0`. | Вернуться к предыдущему деплою / исправить ENV и повторить. |
 | **Оплата прошла, но “не применилось”** (missing Redis pay_* session) | Включить **runtime fallback apply** **временно** через админку (см. 3.5). | `payments.fallback_apply_runtime_enabled=true` (на окно), хвосты применяются; затем вернуть OFF. | Нажать **Disable** в админке (и убедиться что `fallback_apply_effective=false`, если ENV=OFF). |
+| **Payments fallback apply ENABLED**: `payments.fallback_apply_effective=true` / баннер в Ops | 1) Если это **не инцидент** — сразу выключить runtime fallback в админке.<br>2) Если инцидент — убедиться, что есть `reason` + TTL/окно и после окна вернуть OFF. | В Ops исчезает баннер (или становится “OK”), `/api/health.payments.fallback_apply_effective=false`. | Disable runtime fallback; при необходимости откатить к baseline env (ENV=0). |
+| **Broadcast pending “залип”**: `broadcast.pending_deliveries.pending_count>0` и не падает | 1) Открыть `/api/health.ops.digest_preview` и Admin→Ops (при необходимости нажать `🧾 Flush ops digest`).<br>2) Проверить Hard-skip HITs (всплеск мёртвых чатов) + DB overload counters.<br>3) Не стартовать новые большие рассылки до стабилизации. | `pending_count` начинает снижаться; не растёт `db_overload`; нет лавины reschedule failed. | Откат: остановить/отложить рассылку; после стабилизации повторить меньшими батчами. |
+| **Hard-skip HITs spike**: резкий рост пропусков (бот блокируют/чаты мёртвые) | 1) Admin→System→Hard-skip → `🧾 Последние пропуски` + фильтры по reason.<br>2) Если причина `bot_blocked` — это ожидаемо; не “лечится”.<br>3) Если `unknown/other` растёт — смотреть delivery ошибки и лимиты. | Рост стабилизируется; понятно, почему доставка не проходит; новые попытки не жрут ресурсы. | При необходимости: вручную снять skip для конкретного tgId (точечно) или сократить TTL только для теста. |
 | **Payload issues** растут: `payments.payload_issues_today.bad_sig/unsigned/bad_format` | Остановить эксперименты/маркетинг-пейлоады, проверить сигнатуру/HMAC и формат payload. Это **не лечится fallback’ом**. | Счётчики перестают расти; новые оплаты проходят без ошибок. | Откатить последние изменения payload/каталога; вернуть базовый каталог. |
 | **Audit buffer** растёт: `audit.buffer.len` ↑ | Если Redis OK: дать буферу догрузиться (он batch). Если DB перегружен: сначала лечить DB overload. | `audit.buffer.len` падает к 0; нет новых `audit.buffer.on_db_error`. | Временно снизить активность/рассылки; если нужно — усилить throttle (см. `docs/18_...`). |
 

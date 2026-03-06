@@ -1,5 +1,7 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-06
 
+**STEP380:** Audit baseline refresh — обновлён `docs/94_PROD_READINESS_PACK.md` под STEP379+ (GO/NO‑GO через `system_status/no_go_reasons` + `ops.digest_preview` + `broadcast.pending_deliveries` + hard‑skip отчёт + `🧾 Flush ops digest` + staging fault‑injection) и обновлены audit-доки (`docs/audit/*`) под новый NotebookLM baseline.
+
 **STEP358:** Prod readiness docs pack — добавлен `docs/94_PROD_READINESS_PACK.md` (GO/NO‑GO + incident cookbook) и обновлены прод-доки (91/93/90/README) под текущее поведение health/admin ops.
 
 **STEP360:** Broadcast deliver DB overload jitter — при деградации Neon/DB delivery отдаёт 429 + Retry‑After **с джиттером** (по умолчанию 0–15с) чтобы избежать thundering herd при массовых ретраях QStash.
