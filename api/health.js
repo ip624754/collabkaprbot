@@ -31,6 +31,7 @@ export default async function handler(_req, res) {
       targets_count: null,
       last_sent_at: null,
       top_reasons: null,
+      digest_preview: null,
       alert_buffer_max: Number(CFG.OPS_ALERT_BUFFER_MAX || 0),
       silent: !!CFG.OPS_ALERT_SILENT,
       pending: null,
@@ -337,11 +338,21 @@ try {
   // Sample a small tail to avoid heavy parsing.
   const raw = await redis.lrange(k(['ops', 'alerts', 'ops', 'd', day]), 0, 30);
   const by = {};
+  const tail = [];
   for (const it of raw || []) {
     try {
       const o = typeof it === 'string' ? JSON.parse(it) : it;
       const rr = String(o?.reason || 'error');
       by[rr] = (by[rr] || 0) + 1;
+
+      if (tail.length < 5) {
+        tail.push({
+          ts: o?.ts ? String(o.ts).slice(0, 19) : null,
+          reason: rr.slice(0, 64),
+          kind: o?.kind ? String(o.kind).slice(0, 32) : null,
+          title: o?.title ? String(o.title).slice(0, 90) : null,
+        });
+      }
     } catch {
       // ignore
     }
@@ -350,6 +361,16 @@ try {
     .sort((a, b) => Number(b[1]) - Number(a[1]))
     .slice(0, 5);
   base.ops.top_reasons = top.length ? Object.fromEntries(top) : null;
+
+  // Human-friendly preview for dashboards (Redis-only).
+  // Keep it small and stable: top reasons + last few events.
+  base.ops.digest_preview = {
+    day,
+    pending: base.ops?.pending?.ops ?? null,
+    last_sent_at: base.ops?.last_sent_at ?? null,
+    top: top.slice(0, 3).map(([r, c]) => ({ reason: String(r).slice(0, 64), count: Number(c) || 0 })),
+    last: tail,
+  };
 } catch {
   // ignore
 }
