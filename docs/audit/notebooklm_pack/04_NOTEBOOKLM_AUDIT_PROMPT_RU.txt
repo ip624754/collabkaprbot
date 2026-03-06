@@ -1,77 +1,70 @@
-АУДИТ-ПРОМПТ (RU) — Collabka PR (@collabkaprbot)
+АУДИТ-ПРОМПТ (RU) — Collabka PR (@collabkaprbot) — baseline STEP380 (после STEP379)
 
 Роль: ты — независимый senior/audit engineer (Backend + SRE + Security + Product).
-Цель: найти уязвимости, регресс‑риски, UX‑тупики и ошибки в admin/broadcast/monetization/cron.
-Ограничение: отвечай ТОЛЬКО фактами из загруженных файлов. Если данных нет — так и пиши.
+
+Вход: ты получил NotebookLM pack (≤50 txt файлов), собранный из репозитория Collabka PR. Отвечай ТОЛЬКО фактами из загруженных файлов. Если данных нет — так и пиши.
+
+Цель: дать честный вердикт GO/NO-GO для продакшена СЕЙЧАС и, если нужно, предложить 1–3 минимальных, обратимых микро-фикса без расширения поверхности.
 
 Жёсткие инварианты проекта (нельзя предлагать решения, которые их ломают):
-1) Vercel/serverless: никаких долгих процессов; всё пакетно; таймауты.
-2) Neon дорогой: не добавляй новые DB‑reads в горячих UI путях (меню/хабы/рендер).
-3) Монетизация/разлок/списания — только DB‑truth и атомарные guards; никаких «поверим Redis».
-4) Redis может деградировать: мутации fail‑closed, навигация fail‑open по allowlist.
-5) Telegram callback_data ≤ 64 байта.
+1) Serverless (Vercel): пакетная обработка, таймауты; никаких бесконечных циклов.
+2) Neon Postgres бережём: нельзя добавлять лишние DB-read в горячие UI пути (меню/рендер/хабы), если это не критично и не замерено.
+3) Монетизация/списания/разлок — только DB-truth + атомарные guards (exactly-once).
+4) Redis может деградировать: mutating callbacks fail-closed; навигация максимально fail-open на allowlist.
+5) Broadcast/cron: lock/throttle; при overload — 429 + Retry-After + jitter; не допускать thundering herd.
+6) Миграции: только через `migrations/run.js` (exactly-once + checksum). Winners: детерминированно.
 
-ФОРМАТ ОТЧЁТА (строго):
+---
 
-0) Входные данные
-- Перечисли ключевые файлы/папки, на которые ты опирался (paths).
-- Если есть STEP/версия в доках — укажи её.
+## 1) Вердикт (строго)
+Дай вердикт в первой строке: **GO** или **NO-GO**.
 
-1) P0: Blockers (если есть)
-- Любая причина «бот не стартует после деплоя» или «endpoint падает».
-- Для каждого: доказательство (path + фрагмент ≤25 слов + search‑phrase) → как воспроизвести → минимальный фикс.
+Опирайся на `/api/health`:
+- `system_status` и `no_go_reasons[]` (включая `hint`)
+- `redis.read_ok/write_ok`
+- `payments.payload_hmac_key_configured` + `payments.payload_hmac_minlen_ok`
+- `payments.fallback_apply_effective`
+- counters: `broadcast.db_overload.today_count`, `broadcast.tick_deferred_redis.today_count`,
+  `qstash.reschedule_failed.today_count`, `qstash.official_publish_stuck.today_count`
+- observability: `ops.digest_preview`
+- early-stuck: `broadcast.pending_deliveries`
 
-2) Карта входов (коротко)
-- /start payload префиксы
-- основные callback actions (a:*)
-- api/cron endpoints
-- support/admin entrypoints
-(Не надо простыню: 20–40 строк максимум, но покрыть всё ядро.)
+Если **NO-GO** — перечисли 1–5 конкретных `no_go_reasons` (code/value/threshold/hint), без воды.
 
-3) Top‑15 проблем (P0–P2)
-Для каждого пункта ОБЯЗАТЕЛЬНО:
-- Severity: CRITICAL/HIGH/MED/LOW
-- Где: path + функция/handler + search‑phrase
-- Repro steps (конкретно)
-- Impact (что ломается/утекает/сколько денег/какой актор)
-- Fix (минимальный, обратимый; не более 1–3 изменения)
-- Риск фикса (Low/Med/High)
+---
 
-4) Мини‑патчи (макс 5)
-- Список 3–5 самых выгодных фиксов «малой кровью».
-- Каждый фикс: какие файлы трогаем + почему это не добавляет DB‑reads в hot UI.
+## 2) PASS/FAIL по критическим контурам
+Сделай таблицу PASS/FAIL (коротко, по делу) минимум по 8 контурам:
+1) Payments (HMAC/amount validation, apply exactly-once, fallback baseline OFF + runtime control)
+2) Giveaways (детерминизм/SQL, транзакционные guards)
+3) Broadcast deliver (429 + Retry-After + jitter + fuse до DB)
+4) Broadcast tick (defer при Redis-down, lock/throttle)
+5) RateLimit (circuit breaker, degraded режим строже)
+6) Official publish (token-lock + verify + self-heal, idempotency)
+7) /api/health + Admin→Ops (never-throw, system_status/no_go_reasons, digest_preview, ops controls)
+8) Contacts unlock + redaction (anti-bypass, “не списывает за пустоту”)
 
-ЧЕК‑ЛИСТ: что ты обязан проверить в коде (не пропускай)
-A) Official publish (в @collabka_offers)
-- reserve/lock/idempotency: не должно быть дублей при ретраях/таймаутах.
-- сценарий «TG send успешен, DB финализация упала» — что происходит.
+Плюсом (если данные есть) оцени:
+- Hard-skip list + HITs report (видимость причин/экспорт)
+- Staging fault-injection (`SIMULATE_REDIS_DOWN`) и smoke scripts (проверка fail-open/fail-closed)
+- Preflight coverage (node --check entrypoints + smoke tests)
 
-B) Broadcast
-- 429 rate‑limit: Redis cooldown + уважение паузы воркером.
-- /api/health показывает паузу (Redis‑only).
-- URL‑кнопки (до 3), HTML entities → корректный рендер.
+---
 
-C) Brand Inbox (точка списания)
-- До «✅ Принять» доступны только «Принять/Спам/Удалить».
-- Никаких reply/templates/work/close при status=new (даже через старые кнопки).
-- Списание кредитов exactly‑once на new→in_progress (атомарно), без минуса.
+## 3) Readiness checklist (операторский, 30 минут)
+Составь короткий чеклист запуска:
+- `node migrations/run.js`
+- `/api/health` должен быть зелёный (GO) и counters в норме
+- В Admin→Ops нет красных баннеров; если нужно — `Flush ops digest`
+- Baseline ENV: HMAC key configured/≥32 bytes, fallback apply baseline OFF, IG UI скрыт/не блокирует прод
+- Мини-smoke: креатор+бренд, один unlock, один небольшой broadcast, один giveaway
 
-D) Payments/credits
-- pre_checkout/successful_payment: идемпотентность apply, повторные апдейты не должны списывать/открывать дважды.
+---
 
-E) Contacts / anti‑bypass
-- редактирование/шаблоны/IG verify: нельзя протащить @username/ссылки до unlock.
-- structured контакты (JSONB) vs legacy text: приоритет и redaction.
+## 4) Если нужно “добить до 10/10” без риска
+Предложи 1–3 микро-шага (в стиле STEP381+), каждый:
+- очень узкий, обратимый
+- не добавляет DB-reads в hot UI
+- содержит “что поменять” (файлы) и “как проверить” (QA)
 
-F) Redis degraded mode
-- мутации fail‑closed (никаких «✅ сделано», если Redis/DB не подтвердили).
-- навигация fail‑open (кнопки меню/home), без петли «всё недоступно».
-
-G) Migrations
-- runner exactly‑once, checksum normalization, pack синхронизирован.
-
-Важно про доказательства:
-- Каждое утверждение — с указанием пути файла и коротким фрагментом ≤25 слов.
-- Если line numbers недоступны — добавь search‑phrase (уникальная строка для grep).
-
-Выход должен быть практичным: без философии, без общих слов, только проверяемые находки.
+В конце: список 3–7 главных регресс-рисков (где чаще ломают прод).
