@@ -5,14 +5,14 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **524**
-- Actions in registry: **524**
+- Actions in code: **525**
+- Actions in registry: **525**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
-| admin | 92 |
+| admin | 93 |
 | edit | 338 |
 | ops | 79 |
 | pay | 11 |
@@ -23,7 +23,7 @@
 | Guard | Count |
 |---|---:|
 | db_truth | 4 |
-| none | 164 |
+| none | 165 |
 | queue_first | 2 |
 | require_redis | 354 |
 
@@ -428,8 +428,8 @@
 | `a:home_hub` | edit | none |
 | `a:home_mode` | edit | none |
 | `a:hs_find` | admin | none |
-| `a:hs_home` | admin | none |
 | `a:hs_hits` | admin | none |
+| `a:hs_home` | admin | none |
 | `a:hs_unskip` | admin | none |
 | `a:hs_view` | admin | none |
 | `a:lead_assign` | edit | require_redis |

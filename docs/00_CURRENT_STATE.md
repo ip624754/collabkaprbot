@@ -10,6 +10,17 @@
 
 **STEP372:** Hard-skip HIT report (кто и почему пропущен) — при пропуске отправки из‑за hard-skip (dead chats) теперь пишется Redis‑лог HIT в список `broadcast:hard_skip:hit_recent` (trim, TTL 14d) с `{tgId, reason, at, broadcastId?, userId?, via}`. В Admin→System→🧱 Hard-skip добавлена кнопка `🧾 Последние пропуски`, которая показывает недавние HITs (кого/почему пропустили, с привязкой к broadcast/user где доступно).
 
+**STEP373:** Admin→Ops banner: payments fallback runtime (who/when/why) — в `🧰 Админка → Операции` баннер `Payments: fallback apply ENABLED` теперь показывает runtime‑детали (если включено через админку): `since`, `until`, `by` (tgId/user) и `reason`. Добавлена явная подсказка “как выключить” (через `⚙️ Админка → Система → Payments fallback apply → runtime OFF`).
+
+**STEP374:** /api/health NO_GO reasons: нормализация + подсказки — `no_go_reasons[]` расширен до операторских объектов `{code,severity,value,threshold?,hint}`. Добавлен отдельный P0‑reason, если `PAYMENTS_PAYLOAD_HMAC_KEY` не задан (а не только “len<min”). Для ключевых причин добавлены короткие подсказки “что делать”.
+
+**STEP375:** Redaction: меньше ложноположительных “как математика” — для phone-in-words без явных phone‑триггеров (`тел/номер/whatsapp/...`) включён более строгий режим: редактируем только типичную RU mobile форму `+7 9xx...` (в виде `плюс семь девять ...`). Добавлены тесты на строгий кейс (должен редактироваться) и на “плюс семь восемь…” как пример/математика (не должен редактироваться).
+
+**STEP376:** IG templates leak guard — добавлен тест `scripts/test-ig-templates-no-contacts.js` и подключён в `scripts/preflight.js`. Скрипт извлекает `buildWsIgTemplate` и `buildWsIgDmRaw` из `src/bot/bot.js`, прогоняет на “опасных” данных (email/phone/@handle/портфолио) и валидирует, что IG-шаблоны **не содержат контактов** и не включают внешние ссылки (кроме deep-link `t.me/...start=wsp_...`).
+
+**STEP377:** Preflight node-check расширен по entrypoints — `scripts/preflight.js` теперь делает `node --check` не только по статическому списку, но и по безопасным сканам директории: все `api/**/*.js`, `migrations/*.js`, `src/lib/*.js`, `src/bot/routes/*.js`, `src/bot/payments/*.js`, а также `scripts/test-*.js` и `scripts/smoke-*.js`. Это ловит ESM/export синтакс-ошибки и “битые entrypoints” до деплоя.
+
+
 **STEP364:** Broadcast pending deliveries в `/api/health` — cron `broadcastTick()` пишет Redis‑снимок `{ts,broadcast_id,pending_count}` в ключ `broadcast:pending_deliveries` (TTL 30 мин); `/api/health` показывает `broadcast.pending_deliveries` (строго Redis‑only, без DB) для раннего обнаружения "залипов" доставок.
 
 **STEP365:** Admin→Ops “Flush ops digest now” — в экране `🧰 Админка → Операции` добавлена кнопка `🧾 Flush ops digest`, которая принудительно вызывает `flushOpsAlerts(..., { force: true })` и показывает результат (sent/skipped) прямо на экране. Путь admin-only, без DB-чтений; при Redis degraded — graceful message.
