@@ -34626,31 +34626,31 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
       const hkey = String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim();
       const minLen = 32;
       if (!hkey) {
-        text += `🚨 <b>Payments: HMAC key отсутствует</b> — подпись invoice_payload не проверяется (высокий риск).
-
-`;
+        text += `🚨 <b>Payments: HMAC key отсутствует</b> — подпись invoice_payload не проверяется (высокий риск).\n\n`;
       } else if (hkey.length < minLen) {
         text += `⚠️ <b>Payments: HMAC key слишком короткий</b> (${hkey.length} < ${minLen}) — рекомендуется ключ ≥ ${minLen} символов.\n\n`;
       }
 
-      let rt = null;
-      if (r && key) {
-        try {
-          const raw = await r.get(key(['sys', 'pay_fallback_apply']));
-          if (raw !== null && raw !== undefined) {
-            const s = String(raw).trim().toLowerCase();
-            rt = s === '1' || s === 'true' || s === 'on' || s === 'yes';
-          }
-        } catch {
-          rt = null;
-        }
-      }
+      // Runtime state carries: who/when/why + TTL. This is Redis-only and safe.
+      const payFb = await getPaymentsFallbackApplyState();
+      const envOn = !!payFb?.envEnabled;
+      const rtOn = !!payFb?.runtimeEnabled;
+      const rt = payFb?.runtime || {};
+      const effective = !!payFb?.effective;
 
-      const envOn = !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
-      const effective = !!(envOn || rt);
       if (effective) {
-        const src = rt ? (envOn ? 'env+runtime' : 'runtime') : 'env';
-        text += `🚨 <b>Payments: fallback apply ENABLED</b> (<code>${escapeHtml(src)}</code>) — включай только на инцидент/хвосты, затем выключай.\n\n`;
+        const src = rtOn ? (envOn ? 'env+runtime' : 'runtime') : 'env';
+        text += `🚨 <b>Payments: fallback apply ENABLED</b> (<code>${escapeHtml(src)}</code>) — включай только на инцидент/хвосты, затем выключай.\n`;
+
+        if (rtOn) {
+          const by = rt.byTgId ? `tg:${escapeHtml(String(rt.byTgId))}` : (rt.byUser ? escapeHtml(String(rt.byUser)) : '—');
+          const reason = rt.reason ? escapeHtml(String(rt.reason).slice(0, 120)) : '—';
+          const at = fmtTs(rt.at);
+          const until = rt.expAt ? fmtTs(rt.expAt) : '—';
+          text += `• runtime: since <b>${escapeHtml(at)}</b>; until <b>${escapeHtml(until)}</b>; by <b>${by}</b>; reason: <i>${reason}</i>\n`;
+        }
+
+        text += `• выключить: ⚙️ <b>Админка → Система</b> → <b>Payments fallback apply</b> → runtime OFF\n\n`;
       }
     } catch {
       // ignore
