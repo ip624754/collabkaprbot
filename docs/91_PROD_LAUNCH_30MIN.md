@@ -7,7 +7,7 @@
 > - `docs/94_PROD_READINESS_PACK.md` — GO/NO‑GO + incident cookbook (Redis/Neon/QStash/Payments)
 Цель: безопасно выкатить **текущую версию бота** в прод и убедиться, что критические контуры (платежи/кредиты/разлок/диалоги/cron) работают.
 
-> Важно: **IG OAuth сейчас временно скрыт** (см. `23_IG_CONNECT_WORKLOG_AND_RESUME.md`). На запуск продакшена это не влияет.
+> Важно: **IG OAuth сейчас parked и не деплоится** (см. `23_IG_CONNECT_WORKLOG_AND_RESUME.md`). На запуск продакшена это не влияет и помогает уложиться в лимит Vercel Hobby по функциям.
 
 ---
 

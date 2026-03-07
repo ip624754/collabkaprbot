@@ -56,7 +56,7 @@ node migrations/run.js --dry-run
 ---
 
 ### Примечания
-- Vercel Hobby: лимит **≤12 serverless functions**. Если деплой вдруг падает по лимиту — проверь, не добавили ли новый файл в `api/`. Cron задачи добавляем через `api/cron_router.js` + `vercel.json` rewrites.
+- Vercel Hobby: лимит **≤12 serverless functions**. В baseline STEP383 IG OAuth entrypoints убраны из deploy surface; если деплой снова падает по лимиту — первым делом проверь, не добавили ли новый файл в `api/`. Cron задачи добавляем через `api/cron_router.js` + `vercel.json` rewrites.
 
 - `preflight` покрывает: action registry, автоген docs реестра, nav-lint, redact-тесты, `package-lock` drift gate, **node --check (ловит SyntaxError до Vercel)**.
 - Эта страница — **каноничный короткий чек**. Подробности — в `docs/13_RUNBOOK_RELEASE.md`.

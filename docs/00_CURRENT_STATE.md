@@ -105,7 +105,7 @@ NotebookLM pack (≤50 текстовых файлов):
 **Purpose:** единый *source of truth* snapshot, чтобы продолжать работу в новом чате без потери контекста.
 
 ### Snapshot: верификация / Instagram (сейчас)
-- **Instagram OAuth / IG verification:** выключено через ENV (routes/UI/cron). Instagram остаётся только как **обычная ссылка/контакт** в карточке креатора.
+- **Instagram OAuth / IG verification:** выведено из активного baseline. UI скрыт, OAuth API **убран из deploy surface** (нет `api/ig/oauth/*` в прод-сборке), Instagram остаётся только как **обычная ссылка/контакт** в карточке креатора.
 - **Единственная “верификация” в продукте:** ручная (заявка → модерация → approve/reject).
 - Контакты (в т.ч. Instagram) **не раскрываются бренду до unlock**.
 
@@ -642,11 +642,11 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 - **@handle/ссылка** = контакт и выдаётся только **после unlock**
 
 Но на практике Meta начала возвращать `pages=0` и местами блокировать доступ к Pages/приложению.
-Чтобы не ломать UX и не тормозить запуск, мы:
+Чтобы не ломать UX, не тратить время на нестабильный контур и уложиться в лимит **Vercel Hobby ≤12 serverless functions**, мы:
 - **скрыли кнопку IG подключения в профиле** (пользователь видит “функция пока недоступна”)
-- **оставили код/миграции**, чтобы вернуться позже, но **закрыли OAuth API при скрытом UI**:
-  - если `IG_OAUTH_UI_ENABLED=0` → `/api/ig/oauth/*` возвращает **404** (нет “теневого API”)
-  - master kill‑switch: `IG_ROUTES_ENABLED=0` → **весь** `/api/ig/*` (включая cron) возвращает **404** (даже если роуты физически есть)
+- **оставили миграции/доки/контекст**, чтобы вернуться позже,
+- **убрали `api/ig/oauth/*` из deploy surface** (в baseline STEP383 этих entrypoint-ов физически нет),
+- оставили ENV-флаги (`IG_OAUTH_*`, `IG_ROUTES_ENABLED`) как legacy guardrails/документацию на случай будущего возврата.
 
 Доки:
 - Runbook: `docs/22_IG_GRAPH_OAUTH_2026.md`
@@ -678,13 +678,13 @@ STEP181 (P1): **Pending UX standardization (Redis-only)**
 > Примечание: `CONTACT_UNLOCK_COST`, `CONTACT_UNLOCK_TTL_DAYS`, `BRAND_CREDITS_CACHE_TTL_SEC`, `BRAND_CREDITS_SNAP_TTL_SEC`, `BRAND_APP_ACCEPT_COST` читаются напрямую в `src/bot/bot.js` (не через `CFG`).
 
 Instagram (текущий режим: **только ссылка в карточке**, OAuth/верификация выключены):
-- `IG_OAUTH_UI_ENABLED=0` — прячет UI подключения и закрывает `/api/ig/oauth/*`.
+- `IG_OAUTH_UI_ENABLED=0` — прячет UI подключения. В baseline STEP383 OAuth API ещё и физически убран из deploy surface.
 - `IG_OAUTH_ENABLED=0` — OAuth не стартует даже при случайном доступе к UI.
 - `IG_ROUTES_ENABLED=0` — kill‑switch: закрывает весь `/api/ig/*` и IG cron.
 - `IG_VERIFY_TICK_ENABLED=0` — выключает legacy verify‑cron по комментариям.
 - `IG_OAUTH_CLIENT_ID/SECRET`, `IG_VERIFY_ACCESS_TOKEN`, `IG_VERIFY_MEDIA_ID` — можно оставить пустыми, пока UI скрыт.
 - `IG_TOKEN_ENC_KEY` — <b>строгий</b>: только <code>hex64</code> (32 bytes) или <code>base64/base64url</code> (>=32 bytes). Если включишь IG OAuth (UI+routes) без валидного ключа — OAuth будет заблокирован как misconfigured.
-> Instagram как ссылка/поле профиля остаётся; показывается брендам только после unlock (контакты скрыты до оплаты).
+> Instagram как ссылка/поле профиля остаётся; показывается брендам только после unlock (контакты скрыты до оплаты). OAuth API в baseline STEP383 не деплоится.
 
 
 - **BOT**: `BOT_ID` `BOT_TOKEN` `BOT_USERNAME` `BOT_VARIANT`
@@ -818,7 +818,7 @@ Instagram (текущий режим: **только ссылка в карто�
 
 
 ### Последние критичные изменения (2026-03-01)
-- **Instagram OAuth/верификация отключены** (сейчас Instagram — только ссылка в карточке креатора, без OAuth). Для полной “заморозки” IG выставить: `IG_OAUTH_UI_ENABLED=0`, `IG_OAUTH_ENABLED=0`, `IG_ROUTES_ENABLED=0`, `IG_VERIFY_TICK_ENABLED=0`.
+- **Instagram OAuth/верификация выведены из активного baseline**: сейчас Instagram — только ссылка в карточке креатора, без OAuth. В STEP383 `api/ig/oauth/*` убраны из deploy surface, чтобы не тратить serverless-function budget на Hobby. Legacy ENV для полной заморозки: `IG_OAUTH_UI_ENABLED=0`, `IG_OAUTH_ENABLED=0`, `IG_ROUTES_ENABLED=0`, `IG_VERIFY_TICK_ENABLED=0`.
 - **Ручная верификация — единственная активная** (заявка → очередь модерации → approve/reject). ✅-бейдж — внутри бота (не Telegram-эмоджи) и влияет на UX/лимиты.
 - **Admin → User сообщения (DM) приведены к канону “квитанция без тупиков”**: `🏠 Главное меню` / `💬 Поддержка` всегда остаются, `✅ Принято` убирает только себя.
 - **Audit hardening:** SSL verify для Neon, rate limiter атомарный Lua (fail-open при деградации), ops alerts атомарный Lua.
@@ -827,6 +827,7 @@ Instagram (текущий режим: **только ссылка в карто�
 - **Финальный sweep Redis TTL:** убраны остатки неатомарных связок (`INCR+EXPIRE`, `LPUSH+LTRIM`) и добавлен preflight “Redis TTL smoke check” (docs/process/10_RELEASE_PREFLIGHT.md).
 
 - `/api/health`: cron last_run + безопасные Redis-метрики (операторские поля расширены в STEP340: ops last_sent/top reasons, hard-skip counters).
+- STEP383: IG OAuth parked from deploy surface — удалены `api/ig/oauth/*` entrypoints, чтобы уложиться в лимит Vercel Hobby по serverless functions; UI уже скрыт, Instagram остаётся обычной ссылкой/контактом, docs/worklog обновлены под parked-state.
 - Audit write-shedding (ENV-гейт) + счётчики suppressed в health
 - Broadcast: URL-кнопки до 3, deep-link shortcuts, шаблоны кнопок, ссылки “в слово”, финальный экран с кнопками
 - Role gate на `/start` (Redis `ui_mode`, payload priority, fail-open)

@@ -24,9 +24,9 @@
 - `20_CONTACTS_MODEL.md` — контакты/монетизация (Brand Pass) + structured contacts + приоритеты/UX
 - `31_FEEDS_VITRINES_CATALOGS.md` — как устроены витрина/лента/каталог и пагинация (без бесконечного скролла)
 
-### Instagram (временно скрыто в UI)
-- `22_IG_GRAPH_OAUTH_2026.md` — IG Graph OAuth (Business/Creator): официальный OAuth через Meta (runbook)
-- `23_IG_CONNECT_WORKLOG_AND_RESUME.md` — что уже сделали, что сломалось у Meta и как вернуться
+### Instagram (parked / не деплоится в baseline)
+- `22_IG_GRAPH_OAUTH_2026.md` — IG Graph OAuth (Business/Creator): runbook/архив для возможного возврата
+- `23_IG_CONNECT_WORKLOG_AND_RESUME.md` — почему IG OAuth parked, как сняли его из deploy surface и как вернуться позже
 - `docs/spec/24_IG_INTEGRATION_SPEC.md` — текущая спека (OAuth‑only, UI скрыт флагом)
 - `21_IG_VERIFY_RUNBOOK.md` — IG verify (Level B): legacy reference (не рекомендуем включать)
 

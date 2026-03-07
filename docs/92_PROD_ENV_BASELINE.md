@@ -69,11 +69,13 @@
 - `AUDIT_BUFFER_FLUSH_BATCH=250`
 - `AUDIT_BUFFER_FLUSH_MAX_MS=4500`
 
-### Instagram (явно выключено в проде)
+### Instagram (parked / не используем в prod baseline)
 - `IG_OAUTH_ENABLED=false`
 - `IG_ROUTES_ENABLED=false`
 - `IG_OAUTH_UI_ENABLED=false`
 - `IG_VERIFY_TICK_ENABLED=false`
+
+> В STEP383 `api/ig/oauth/*` убраны из deploy surface. Эти ENV оставляем как legacy baseline / на случай будущего возврата.
 
 ---
 

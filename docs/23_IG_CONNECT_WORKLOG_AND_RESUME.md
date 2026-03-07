@@ -7,7 +7,7 @@
 - объяснить, **почему сейчас IG‑интеграция скрыта**,
 - дать **чёткий план возврата**, когда появится время/доступы.
 
-> TL;DR: Comment‑верификацию (Level B) решили не использовать из‑за утечек username. Перешли на OAuth‑only (Level A), но Meta начала возвращать `pages=0` и местами блокировать доступ. Поэтому **UI скрыли** и **закрыли OAuth API (404)**, код/миграции оставили.
+> TL;DR: Comment‑верификацию (Level B) решили не использовать из‑за утечек username. Перешли на OAuth‑only (Level A), но Meta начала возвращать `pages=0` и местами блокировать доступ. Поэтому **UI скрыли**, а в STEP383 ещё и **убрали `api/ig/oauth/*` из deploy surface** (чтобы не тратить лимит Vercel Hobby). Код/миграции/доки оставили как parked-context.
 
 ---
 
@@ -32,7 +32,8 @@
   - `GET /api/ig/oauth/callback?code=...&state=...`
   - `GET /api/ig/oauth/status` (диагностика)
   - `POST /api/ig/oauth/disconnect` (отвязка)
-  - ⚠️ если `IG_OAUTH_UI_ENABLED=0` → все эти роуты **закрыты (404)**
+  - ⚠️ baseline до STEP382: если `IG_OAUTH_UI_ENABLED=0` → все эти роуты закрывались (404)
+  - ✅ baseline STEP383: `api/ig/oauth/*` вообще не деплоятся на Vercel Hobby
 - шифрование токена через `IG_TOKEN_ENC_KEY`
 
 Док/спека:
@@ -54,6 +55,8 @@
 ## 2) Что сейчас (текущее состояние)
 
 ### 2.1 Почему скрыли кнопку в боте
+Дополнительно в STEP383 убрали сами `api/ig/oauth/*` entrypoint-ы из deploy surface: это сняло 4 serverless function из бюджета Hobby и убрало ненужный публичный API-контур.
+
 Meta начала:
 - возвращать `pages=0` на `GET /me/accounts` даже при `pages_show_list` и `pages_read_engagement`,
 - иногда показывать “У вас нет доступа” и блокировать доступ к страницам/приложению.
@@ -148,3 +151,14 @@ Meta начала:
 - bot UI: `src/bot/bot.js` (экраны профиля)
 - модель контактов/paywall: `docs/20_CONTACTS_MODEL.md`
 
+
+
+## 4) Что нужно, чтобы вернуть IG OAuth
+
+Минимальный план возврата:
+- вернуть `api/ig/oauth/start|callback|status|disconnect` в deploy surface,
+- убедиться, что укладываемся в лимит функций (или перейти на Pro / объединить роуты),
+- заново проверить `IG_OAUTH_*`, `IG_TOKEN_ENC_KEY`, `PUBLIC_BASE_URL`,
+- прогнать ручной smoke Meta flow.
+
+Пока это не сделано, продуктовый baseline такой: **Instagram = обычная ссылка/контакт после unlock, без OAuth**.

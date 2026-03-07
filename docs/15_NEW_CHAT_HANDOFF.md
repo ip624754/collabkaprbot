@@ -40,6 +40,7 @@
 - Giveaways: «➕ Новый розыгрыш» без подключённого канала показывает gate‑экран (подключить/выбрать канал) + корректный back
 - UX polish: очистка полей через кнопки `🧹 Очистить` (без упоминания “-”), “legacy/старое” не показываем пользователю
 - /start role gate: если нет ui_mode (Redis) и нет payload → короткая развилка (Бренд/Креатор), fail‑open
+- Instagram OAuth parked: `api/ig/oauth/*` убраны из deploy surface (Hobby function budget), UI скрыт, Instagram остаётся обычной ссылкой/контактом после unlock
 - Official publish (@collabka_offers): анти‑дубли token-lock + DB-reserve PUBLISHING (stale rescue) + runbook doc 19
 - Founder Sale: экран акции + Stars purchase + runtime управление из админки + deep-link fs_* + маркетинг шаблоны
 - Cron safety: token-based Redis locks + SQL atomic guards на статусных переходах; notify ограничены по времени (withTimeout ~5s)
