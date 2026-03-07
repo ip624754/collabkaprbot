@@ -1,5 +1,6 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-06
 
+**STEP384:** Vercel Function Budget Guardrail — добавлен preflight-gate `scripts/check-function-budget.js`, который считает deployable `api/*` entrypoints и заранее предупреждает/валит релиз при опасном приближении к лимиту Vercel Hobby; baseline бюджеты по умолчанию: `warn>=9`, `fail>=11`, текущий baseline STEP384 = **8** entrypoint-ов. Скрипт подключён в `scripts/preflight.js`, добавлен npm-script `check:function-budget`, parked/legacy директории вне `api/` не считаются в бюджет.
 **STEP382:** Ops clarity + media timeout — добавлены Telegram guardrails `TG_HTTP_TIMEOUT_MS` + `TG_HTTP_MEDIA_TIMEOUT_MS`: raw Telegram fetch и broadcast/official publish media‑calls теперь идут с AbortSignal timeout; в Admin→Ops добавлен блок `Broadcast pending snapshot` с явной пометкой <i>Redis snapshot only</i> и confirm‑flow для `🧹 Clear pending snapshot`; в Hard‑skip экранах показывается configured TTL; preflight теперь включает `package-lock` drift gate (`scripts/check-package-lock.js`) и в репо добавлен `package-lock.json`.
 
 **STEP380:** Audit baseline refresh — обновлён `docs/94_PROD_READINESS_PACK.md` под STEP379+ (GO/NO‑GO через `system_status/no_go_reasons` + `ops.digest_preview` + `broadcast.pending_deliveries` + hard‑skip отчёт + `🧾 Flush ops digest` + staging fault‑injection) и обновлены audit-доки (`docs/audit/*`) под новый NotebookLM baseline.
@@ -685,6 +686,7 @@ Instagram (текущий режим: **только ссылка в карто�
 - `IG_OAUTH_CLIENT_ID/SECRET`, `IG_VERIFY_ACCESS_TOKEN`, `IG_VERIFY_MEDIA_ID` — можно оставить пустыми, пока UI скрыт.
 - `IG_TOKEN_ENC_KEY` — <b>строгий</b>: только <code>hex64</code> (32 bytes) или <code>base64/base64url</code> (>=32 bytes). Если включишь IG OAuth (UI+routes) без валидного ключа — OAuth будет заблокирован как misconfigured.
 > Instagram как ссылка/поле профиля остаётся; показывается брендам только после unlock (контакты скрыты до оплаты). OAuth API в baseline STEP383 не деплоится.
+> Function budget guardrail (STEP384): `npm run check:function-budget` / `npm run preflight` заранее считают deployable `api/*` entrypoints. Для Hobby держим запас: warning с 9, fail с 11, baseline сейчас = 8.
 
 
 - **BOT**: `BOT_ID` `BOT_TOKEN` `BOT_USERNAME` `BOT_VARIANT`
