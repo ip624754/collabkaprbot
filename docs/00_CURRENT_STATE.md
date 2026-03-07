@@ -1,4 +1,6 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-06
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-07
+
+**STEP386:** Admin Ops regression smoke — `renderAdminOps()` вынесен на pure builder `src/bot/adminOpsText.js` без изменений operator UX/DB-логики; добавлен preflight smoke `scripts/smoke-admin-ops-render.js`, который проверяет OK/degraded текст экрана `Админка → Операции` и держит guard на scope `r/key`, чтобы не вернуть crash уровня STEP385.
 
 **STEP382:** Ops clarity + media timeout — добавлены Telegram guardrails `TG_HTTP_TIMEOUT_MS` + `TG_HTTP_MEDIA_TIMEOUT_MS`: raw Telegram fetch и broadcast/official publish media‑calls теперь идут с AbortSignal timeout; в Admin→Ops добавлен блок `Broadcast pending snapshot` с явной пометкой <i>Redis snapshot only</i> и confirm‑flow для `🧹 Clear pending snapshot`; в Hard‑skip экранах показывается configured TTL; preflight теперь включает `package-lock` drift gate (`scripts/check-package-lock.js`) и в репо добавлен `package-lock.json`.
 
