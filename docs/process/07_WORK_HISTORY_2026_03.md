@@ -2766,3 +2766,35 @@ QA:
 ### QA
 - `docs/94_PROD_READINESS_PACK.md` упоминает все новые поля health (system_status/no_go_reasons/pending_deliveries/digest_preview) и операторские экраны.
 - `docs/audit/*` содержит актуальный промпт и актуальные правила для pack (≤50 файлов).
+
+
+## STEP384 (Vercel Function Budget Guardrail) — 2026-03-07
+
+### Зачем
+- Мы уже упирались в лимит Vercel Hobby по serverless/functions, хотя код собирался успешно.
+- Нужен ранний preflight-gate, который валит релиз до деплоя, а не после успешного build.
+
+### Что сделано
+- Добавлен `scripts/check-function-budget.js`:
+  - считает deployable `api/*` entrypoints,
+  - не считает parked/disabled директории вне `api/`,
+  - бюджеты по умолчанию: `warn>=9`, `fail>=11`,
+  - печатает полный список entrypoint-ов для оператора.
+- Добавлен npm-script: `check:function-budget`.
+- `scripts/preflight.js` теперь включает gate `deployable function budget`.
+- Обновлены docs (`BOOT`, `CURRENT_STATE`, `16_RELEASE_CHECKLIST`, `91_PROD_LAUNCH_30MIN`).
+
+### Файлы
+- `scripts/check-function-budget.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_BOOT.md`
+- `docs/00_CURRENT_STATE.md`
+- `docs/16_RELEASE_CHECKLIST.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `npm run check:function-budget` показывает текущие deployable `api/*` entrypoints и завершается успешно на baseline STEP384.
+- При искусственном добавлении лишних `api/*.js` gate должен перейти в warning/fail до деплоя.
+- `npm run preflight` включает новый budget gate до syntax/smoke.
