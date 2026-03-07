@@ -1,4 +1,4 @@
-// STEP100: Action registry for Collabka PR (@collabkaprbot)
+// STEP100: Action registry for Collabka PR (@collabkaprbot) 
 // Central source of truth for callback action types and fail-closed guard behavior.
 // If you add/remove `a:*` actions, run `npm run actions:check` and update this file as needed.
 
