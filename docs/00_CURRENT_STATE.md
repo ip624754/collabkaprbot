@@ -1,6 +1,6 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-06
 
-**STEP381:** Production guardrails — Telegram raw HTTP helpers now use abort timeout (`TG_HTTP_TIMEOUT_MS`, default 5500ms); broadcast deliver sends use grammY `AbortSignal`; Admin→Ops gained Redis-only button `🧹 Clear pending snapshot` + pending snapshot visibility; Admin→System→🧱 Hard-skip now shows configured TTL; preflight now enforces `package-lock.json` drift via `scripts/check-package-lock.js`.
+**STEP382:** Ops clarity + media timeout — добавлены Telegram guardrails `TG_HTTP_TIMEOUT_MS` + `TG_HTTP_MEDIA_TIMEOUT_MS`: raw Telegram fetch и broadcast/official publish media‑calls теперь идут с AbortSignal timeout; в Admin→Ops добавлен блок `Broadcast pending snapshot` с явной пометкой <i>Redis snapshot only</i> и confirm‑flow для `🧹 Clear pending snapshot`; в Hard‑skip экранах показывается configured TTL; preflight теперь включает `package-lock` drift gate (`scripts/check-package-lock.js`) и в репо добавлен `package-lock.json`.
 
 **STEP380:** Audit baseline refresh — обновлён `docs/94_PROD_READINESS_PACK.md` под STEP379+ (GO/NO‑GO через `system_status/no_go_reasons` + `ops.digest_preview` + `broadcast.pending_deliveries` + hard‑skip отчёт + `🧾 Flush ops digest` + staging fault‑injection) и обновлены audit-доки (`docs/audit/*`) под новый NotebookLM baseline.
 

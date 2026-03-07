@@ -5,14 +5,14 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **527**
-- Actions in registry: **527**
+- Actions in code: **528**
+- Actions in registry: **528**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
-| admin | 95 |
+| admin | 96 |
 | edit | 338 |
 | ops | 79 |
 | pay | 11 |
@@ -23,7 +23,7 @@
 | Guard | Count |
 |---|---:|
 | db_truth | 4 |
-| none | 167 |
+| none | 168 |
 | queue_first | 2 |
 | require_redis | 354 |
 
@@ -91,8 +91,9 @@
 | `a:admin_notice_text` | admin | require_redis |
 | `a:admin_notice_toggle` | admin | require_redis |
 | `a:admin_ops` | admin | none |
-| `a:admin_ops_clear_pending` | admin | none |
 | `a:admin_ops_flush` | admin | none |
+| `a:admin_ops_pending_clear` | admin | none |
+| `a:admin_ops_pending_clear_do` | admin | none |
 | `a:admin_outbox` | admin | require_redis |
 | `a:admin_outbox_clear` | admin | require_redis |
 | `a:admin_outbox_clear_q` | admin | require_redis |
