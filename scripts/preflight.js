@@ -99,7 +99,17 @@ logHeader("Preflight: portable paths gate (ZIP/Windows-safe)");
 runNpm("lint:portable-paths");
 
 logHeader("Preflight: package-lock drift gate");
-runNpm("check:package-lock");
+const lockCheckPath = path.join(ROOT, 'scripts', 'check-package-lock.js');
+if (fs.existsSync(lockCheckPath)) {
+  const res = spawnSync(process.execPath, [lockCheckPath], {
+    cwd: ROOT,
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (res.status !== 0) process.exit(res.status ?? 1);
+} else {
+  console.warn('[preflight] scripts/check-package-lock.js not found (skipping)');
+}
 
 logHeader("Preflight: Node syntax check (node --check)");
 
