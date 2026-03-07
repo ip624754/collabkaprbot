@@ -1,3 +1,18 @@
+## 2026-03-07
+
+### STEP382 — Ops clarity + media timeout
+- Добавлены ENV guardrails `TG_HTTP_TIMEOUT_MS` (default 5500ms) и `TG_HTTP_MEDIA_TIMEOUT_MS` (default 15000ms).
+- `src/lib/tgApi.js`: общий AbortSignal timeout helper для raw Telegram fetch.
+- `src/bot/cron.js`: broadcast text/media sends теперь идут с timeout; для media используется отдельный, более длинный timeout.
+- `src/bot/bot.js`: official publish media sends переведены на `TG_HTTP_MEDIA_TIMEOUT_MS`, текстовые send/edit оставлены на базовом timeout.
+- Admin → `🧰 Операции`: добавлен блок `Broadcast pending snapshot` с явной подписью `Redis snapshot only; не DB truth`.
+- `🧹 Clear pending snapshot` теперь идёт через confirm-screen и очищает только Redis snapshot `broadcast.pending_deliveries`.
+- Admin → `🧱 Hard-skip`: на home/view экранах показывается configured TTL (`BROADCAST_HARD_SKIP_TTL_DAYS`).
+- `scripts/check-package-lock.js` + `package-lock.json`: preflight теперь валится при drift между `package.json` и `package-lock.json`.
+
+Риск регрессий: **низкий** (без новых DB-read в hot UI; изменения ограничены timeout guardrails, Redis-only ops visibility и preflight/docs).
+
+
 # Work History — 2026-03
 
 Формат: дата → STEP → что изменили → зачем → риски/регрессии.
