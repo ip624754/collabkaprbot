@@ -34646,6 +34646,8 @@ async function adminClearBroadcastPendingSnapshot() {
 async function renderAdminOps(ctx, { banner = '' } = {}) {
   // Access is checked in the callback handler via isSuperAdminTg().
   let text = '🧰 Админка → Операции\n\n';
+  let r = null;
+  let key = null;
 
   if (banner) {
     try {
@@ -34658,8 +34660,6 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
 
   // Redis status banner (best-effort). This screen must stay reachable even when Redis is degraded.
   try {
-    let r = null;
-    let key = null;
     if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
       text += '⚠️ <b>Redis не настроен</b> — часть системных тумблеров/кешей отключена.\n\n';
     } else {
