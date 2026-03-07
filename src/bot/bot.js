@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, InputFile } from 'grammy'; 
+import { Bot, InlineKeyboard, InputFile } from 'grammy';  
 import crypto from 'crypto';
 import { CFG, assertEnv } from '../lib/config.js';
 import logger from '../lib/logger.js';
