@@ -39,6 +39,7 @@ import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
+import { buildAdminOpsText } from './adminOpsText.js';
 import { qstashPublishJSON, getQStashDeliveryUrl, getQStashLibHealth } from '../lib/qstash.js';
 
 let BOT;
@@ -34645,25 +34646,18 @@ async function adminClearBroadcastPendingSnapshot() {
 
 async function renderAdminOps(ctx, { banner = '' } = {}) {
   // Access is checked in the callback handler via isSuperAdminTg().
-  let text = '🧰 Админка → Операции\n\n';
   let r = null;
   let key = null;
-
-  if (banner) {
-    try {
-      const b = String(banner || '').trim();
-      if (b) text = `${escapeHtml(b)}\n\n` + text;
-    } catch {
-      // ignore
-    }
-  }
+  let redisState = null;
+  let paymentsState = null;
+  const opsState = { items: [] };
+  let pendingSnapshot = { visible: false };
 
   // Redis status banner (best-effort). This screen must stay reachable even when Redis is degraded.
   try {
     if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
-      text += '⚠️ <b>Redis не настроен</b> — часть системных тумблеров/кешей отключена.\n\n';
+      redisState = { configured: false };
     } else {
-      const { redis, k } = await import('../lib/redis.js');
       r = redis;
       key = k;
       const t0 = Date.now();
@@ -34686,54 +34680,25 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
         lastErr = lastErr || String(e?.message || e);
       }
 
-      const ms = Math.max(0, Date.now() - t0);
-
-      if (writeOk && readOk) {
-        text += `✅ <b>Redis OK</b> (${ms}ms)\n\n`;
-      } else {
-        const tail = lastErr ? `\n<code>${escapeHtml(String(lastErr).slice(0, 120))}</code>` : '';
-        text += '⚠️ <b>Redis degraded</b> — возможны сбои в тумблерах/кешах/троттлах.' + tail + '\n\n';
-      }
+      redisState = {
+        configured: true,
+        ok: writeOk && readOk,
+        latencyMs: Math.max(0, Date.now() - t0),
+        error: lastErr,
+      };
     }
-
 
     // Payments safety banners (ENV + runtime). No DB reads.
     try {
-      const hkey = String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim();
-      const minLen = 32;
-      if (!hkey) {
-        text += `🚨 <b>Payments: HMAC key отсутствует</b> — подпись invoice_payload не проверяется (высокий риск).\n\n`;
-      } else if (hkey.length < minLen) {
-        text += `⚠️ <b>Payments: HMAC key слишком короткий</b> (${hkey.length} < ${minLen}) — рекомендуется ключ ≥ ${minLen} символов.\n\n`;
-      }
-
-      // Runtime state carries: who/when/why + TTL. This is Redis-only and safe.
-      const payFb = await getPaymentsFallbackApplyState();
-      const envOn = !!payFb?.envEnabled;
-      const rtOn = !!payFb?.runtimeEnabled;
-      const rt = payFb?.runtime || {};
-      const effective = !!payFb?.effective;
-
-      if (effective) {
-        const src = rtOn ? (envOn ? 'env+runtime' : 'runtime') : 'env';
-        text += `🚨 <b>Payments: fallback apply ENABLED</b> (<code>${escapeHtml(src)}</code>) — включай только на инцидент/хвосты, затем выключай.\n`;
-
-        if (rtOn) {
-          const by = rt.byTgId ? `tg:${escapeHtml(String(rt.byTgId))}` : (rt.byUser ? escapeHtml(String(rt.byUser)) : '—');
-          const reason = rt.reason ? escapeHtml(String(rt.reason).slice(0, 120)) : '—';
-          const at = fmtTs(rt.at);
-          const until = rt.expAt ? fmtTs(rt.expAt) : '—';
-          text += `• runtime: since <b>${escapeHtml(at)}</b>; until <b>${escapeHtml(until)}</b>; by <b>${by}</b>; reason: <i>${reason}</i>\n`;
-        }
-
-        text += `• выключить: ⚙️ <b>Админка → Система</b> → <b>Payments fallback apply</b> → runtime OFF\n\n`;
-      }
+      paymentsState = {
+        hmacKey: String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim(),
+        fallbackState: await getPaymentsFallbackApplyState(),
+      };
     } catch {
       // ignore
     }
 
     // Extra ops banners (best-effort; Redis-only)
-
     if (r && key) {
       // Broadcast DB overload banner (metrics emitted by QStash delivery load-shedding).
       try {
@@ -34743,16 +34708,12 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
           r.get(key(['ops', 'reasons', 'broadcast_db_overload', 'last_at'])),
           r.get(key(['ops', 'reasons', 'broadcast_db_overload', 'last_where'])),
         ]);
-
-        const cnt = Number(cntRaw) || 0;
-        const last = lastAt ? String(lastAt) : '';
-        const where = lastWhere ? String(lastWhere) : '';
-
-        if (cnt > 0 || last) {
-          const whereTail = where ? `; <code>${escapeHtml(where)}</code>` : '';
-          const lastTail = last ? `<code>${escapeHtml(last)}</code>` : '—';
-          text += `⚠️ <b>Broadcast: DB overload</b> — сегодня: <b>${cnt}</b>; last: ${lastTail}${whereTail}\n\n`;
-        }
+        opsState.items.push({
+          kind: 'broadcast_db_overload',
+          count: Number(cntRaw) || 0,
+          lastAt: lastAt ? String(lastAt) : '',
+          lastWhere: lastWhere ? String(lastWhere) : '',
+        });
       } catch {
         // ignore
       }
@@ -34765,18 +34726,12 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
           r.get(key(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'last_at'])),
           r.get(key(['ops', 'reasons', 'broadcast_tick_deferred_redis', 'last_where'])),
         ]);
-
-        const cnt = Number(cntRaw) || 0;
-        const last = lastAt ? String(lastAt) : '';
-        const where = lastWhere ? String(lastWhere) : '';
-
-        if (cnt > 0 || last) {
-          const whereTail = where ? `; <code>${escapeHtml(where)}</code>` : '';
-          const lastTail = last ? `<code>${escapeHtml(last)}</code>` : '—';
-          text += `⚠️ <b>Broadcast: tick deferred (Redis)</b> — сегодня: <b>${cnt}</b>; last: ${lastTail}${whereTail}
-
-`;
-        }
+        opsState.items.push({
+          kind: 'broadcast_tick_deferred_redis',
+          count: Number(cntRaw) || 0,
+          lastAt: lastAt ? String(lastAt) : '',
+          lastWhere: lastWhere ? String(lastWhere) : '',
+        });
       } catch {
         // ignore
       }
@@ -34790,16 +34745,13 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
           r.get(key(['ops', 'reasons', 'qstash_reschedule_failed', 'last_where'])),
           r.get(key(['ops', 'reasons', 'qstash_reschedule_failed', 'last_payload'])),
         ]);
-        const cnt = Number(cntRaw) || 0;
-        const last = lastAt ? String(lastAt) : '';
-        const where = lastWhere ? String(lastWhere) : '';
-        const payload = lastPayload ? String(lastPayload) : '';
-        if (cnt > 0 || last) {
-          const lastTail = last ? `<code>${escapeHtml(last)}</code>` : '—';
-          const whereTail = where ? `; <code>${escapeHtml(where)}</code>` : '';
-          const payloadTail = payload ? `; last: <code>${escapeHtml(payload)}</code>` : '';
-          text += `⚠️ <b>QStash: reschedule failed</b> — сегодня: <b>${cnt}</b>; at: ${lastTail}${whereTail}${payloadTail}\n\n`;
-        }
+        opsState.items.push({
+          kind: 'qstash_reschedule_failed',
+          count: Number(cntRaw) || 0,
+          lastAt: lastAt ? String(lastAt) : '',
+          lastWhere: lastWhere ? String(lastWhere) : '',
+          lastPayload: lastPayload ? String(lastPayload) : '',
+        });
       } catch {
         // ignore
       }
@@ -34814,50 +34766,45 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
           r.get(key(['ops', 'reasons', 'official_publish_stuck', 'last_age_sec'])),
           r.get(key(['ops', 'reasons', 'official_publish_stuck', 'last_via'])),
         ]);
-        const cnt = Number(cntRaw) || 0;
-        const last = lastAt ? String(lastAt) : '';
-        const offerId = lastOfferId ? String(lastOfferId) : '';
-        const age = Number(lastAgeSec) || 0;
-        const via = lastVia ? String(lastVia) : '';
-        if (cnt > 0 || last) {
-          const lastTail = last ? `<code>${escapeHtml(last)}</code>` : '—';
-          const offerTail = offerId ? `; offer: <b>#${escapeHtml(offerId)}</b>` : '';
-          const ageTail = age > 0 ? `; age: ~<b>${escapeHtml(String(age))}</b>s` : '';
-          const viaTail = via ? `; via: <code>${escapeHtml(via)}</code>` : '';
-          text += `⚠️ <b>OFFICIAL: publish stuck</b> — сегодня: <b>${cnt}</b>; at: ${lastTail}${offerTail}${ageTail}${viaTail}\n\n`;
-        }
+        opsState.items.push({
+          kind: 'official_publish_stuck',
+          count: Number(cntRaw) || 0,
+          lastAt: lastAt ? String(lastAt) : '',
+          lastOfferId: lastOfferId ? String(lastOfferId) : '',
+          lastAgeSec: Number(lastAgeSec) || 0,
+          lastVia: lastVia ? String(lastVia) : '',
+        });
       } catch {
         // ignore
       }
     }
   } catch {
-    text += '⚠️ <b>Redis degraded</b> — не удалось выполнить probe.\n\n';
+    redisState = { configured: true, ok: false, probeFailed: true };
   }
 
-
-    if (r && key) {
-      try {
-        const pending = await adminGetBroadcastPendingSnapshot();
-        text += '📦 <b>Broadcast pending snapshot</b> <i>(Redis snapshot only; не DB truth)</i>\n';
-        if (!pending.ok) {
-          text += '• ⚠️ недоступно (Redis degraded)\n\n';
-        } else if (!pending.snap) {
-          text += '• пусто\n\n';
-        } else {
-          const ts = pending.snap.ts ? `<code>${escapeHtml(String(pending.snap.ts).slice(0, 19))}</code>` : '—';
-          const bid = pending.snap.broadcast_id ? `<b>#${pending.snap.broadcast_id}</b>` : '—';
-          text += `• broadcast: ${bid}; pending: <b>${pending.snap.pending_count}</b>; ts: ${ts}\n\n`;
-        }
-      } catch {
-        text += '📦 <b>Broadcast pending snapshot</b> <i>(Redis snapshot only)</i>\n• недоступно\n\n';
+  if (r && key) {
+    pendingSnapshot = { visible: true };
+    try {
+      const pending = await adminGetBroadcastPendingSnapshot();
+      if (!pending.ok) {
+        pendingSnapshot = { visible: true, ok: false };
+      } else if (!pending.snap) {
+        pendingSnapshot = { visible: true, ok: true, snap: null };
+      } else {
+        pendingSnapshot = { visible: true, ok: true, snap: pending.snap };
       }
+    } catch {
+      pendingSnapshot = { visible: true, ok: false };
     }
+  }
 
-  text += '• 👥 Пользователи — каталог, фильтры, карточка\n';
-  text += '• 💰 Платежи — manual/apply\n';
-  text += '• 📣 Рассылка — broadcast по аудитории\n';
-  text += '• 📜 Аудит — поиск/экспорт событий\n';
-  text += '• 📈 Метрики — DAU/MAU, конверсии\n';
+  const text = buildAdminOpsText({
+    banner,
+    redisState,
+    paymentsState,
+    opsState,
+    pendingSnapshot,
+  });
 
   const kb = new InlineKeyboard()
     .text('👥 Пользователи', 'a:admin_users|f:all|p:0')
