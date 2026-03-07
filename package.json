@@ -10,6 +10,7 @@
     "actions:check": "node scripts/actions-registry-check.js",
     "actions:dump": "node scripts/actions-registry-check.js",
     "actions:md": "node scripts/actions-registry-export-md.js --out docs/02_ACTION_KEYS_REGISTRY.md",
+    "check:package-lock": "node scripts/check-package-lock.js",
     "dev": "node scripts/dev-polling.js",
     "gen:mark-all-applied": "node scripts/gen-mark-all-applied.js",
     "gen:migration-pack": "node scripts/gen-mark-all-applied.js",
