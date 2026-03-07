@@ -98,6 +98,9 @@ runNpm("lint:redis-exports");
 logHeader("Preflight: portable paths gate (ZIP/Windows-safe)");
 runNpm("lint:portable-paths");
 
+logHeader("Preflight: package-lock drift gate");
+runNpm("check:package-lock");
+
 logHeader("Preflight: Node syntax check (node --check)");
 
 // Keep a small explicit base list, then expand via safe directory scans for entrypoints.
