@@ -1,6 +1,7 @@
 import { redis, k, releaseLock } from '../../src/lib/redis.js';
 import { setMonRetryMeta, setMonRetryDiag, setMonIntroDiag, setMonAcceptDiag, setMonUnlockDiag } from '../../src/lib/monDiag.js';
 import { CFG } from '../../src/lib/config.js';
+import { tgSendMessage } from '../../src/lib/tgApi.js';
 import * as db from '../../src/db/queries.js';
 import { getQStashDeliveryUrl, qstashVerifySignature } from '../../src/lib/qstash.js';
 
@@ -45,27 +46,6 @@ function envInt(name, def, opts = {}) {
   if (opts.min !== undefined && v < opts.min) v = opts.min;
   if (opts.max !== undefined && v > opts.max) v = opts.max;
   return v;
-}
-
-async function tgSendMessage(chatId, text, opts = {}) {
-  const token = String(CFG.BOT_TOKEN || '').trim();
-  if (!token) throw new Error('bot_token_missing');
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
-
-  const payload = {
-    chat_id: chatId,
-    text: String(text || ''),
-    ...opts,
-  };
-
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  const j = await r.json().catch(() => null);
-  return { ok: r.ok && !!j?.ok, status: r.status, body: j };
 }
 
 async function safeTgSend(chatId, text, opts = {}) {
