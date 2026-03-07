@@ -1,3 +1,23 @@
+
+## STEP383 — IG OAuth parked from deploy surface (Vercel Hobby function budget)
+Date: 2026-03-07
+
+Scope:
+- removed `api/ig/oauth/start|callback|status|disconnect` from deploy surface
+- kept IG OAuth context as parked docs/migrations only
+- synced docs/boot/current-state/release/env/handoff with parked baseline
+
+Why:
+- deploy was blocked by Vercel Hobby `<=12 serverless functions` limit
+- IG OAuth is not used in current product baseline and UI was already hidden
+- smallest safe fix is to stop deploying unused IG OAuth entrypoints instead of touching core flows
+
+Impact:
+- frees 4 function entrypoints from `api/`
+- no change to payments/broadcast/official publish/brand inbox flows
+- Instagram remains a normal profile link/contact after unlock
+- restoring OAuth later will require reintroducing the routes (or consolidating them) and re-running Meta smoke
+
 ## 2026-03-07
 
 ### STEP382 — Ops clarity + media timeout
