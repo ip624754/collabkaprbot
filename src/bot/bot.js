@@ -97,6 +97,7 @@ function envInt(name, def, opts = {}) {
 const CONTACT_UNLOCK_COST = envInt('CONTACT_UNLOCK_COST', 1, { min: 0, max: 10 });
 const CONTACT_UNLOCK_TTL_DAYS = envInt('CONTACT_UNLOCK_TTL_DAYS', 30, { min: 1, max: 365 });
 const CONTACT_UNLOCK_TTL_SEC = CONTACT_UNLOCK_TTL_DAYS * 24 * 60 * 60;
+const BROADCAST_HARD_SKIP_TTL_DAYS = envInt('BROADCAST_HARD_SKIP_TTL_DAYS', 90, { min: 1, max: 365 });
 
 // IG Verification (Level B comment-code / Level A OAuth)
 // TTL for pending codes (seconds). No IG API calls in hot paths; verification is async (cron/manual check).
@@ -27552,6 +27553,25 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    if (p.a === 'a:admin_ops_clear_pending') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
+      try { await clearDraft(ctx.from.id); } catch {}
+
+      let banner = '';
+      try {
+        await redis.del(k(['broadcast', 'pending_deliveries']));
+        banner = '✅ Broadcast pending snapshot cleared';
+      } catch (e) {
+        banner = `⚠️ Pending snapshot clear failed — ${String(e?.message || e).slice(0, 90)}`;
+      }
+
+      await renderAdminOps(ctx, { banner });
+      return;
+    }
+
     if (p.a === 'a:admin_comms') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
@@ -34728,6 +34748,20 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
         // ignore
       }
 
+      // Broadcast pending deliveries snapshot (Redis-only; early operator signal for stuck deliveries).
+      try {
+        const snapRaw = await r.get(key(['broadcast', 'pending_deliveries']));
+        if (snapRaw && typeof snapRaw === 'object') {
+          const pending = Number(snapRaw.pending_count) || 0;
+          const bcId = Number(snapRaw.broadcast_id) || 0;
+          const ts = snapRaw.ts ? `<code>${escapeHtml(String(snapRaw.ts).slice(0, 19))}</code>` : '—';
+          const bcTail = bcId > 0 ? `; bc: <b>#${bcId}</b>` : '';
+          text += `📦 <b>Broadcast pending snapshot</b> — pending: <b>${pending}</b>${bcTail}; ts: ${ts}\n\n`;
+        }
+      } catch {
+        // ignore
+      }
+
       // OFFICIAL publish stuck (self-heal was triggered).
       try {
         const day = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD UTC
@@ -34775,6 +34809,7 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
     .row();
 
   kb.text('🧾 Flush ops digest', 'a:admin_ops_flush').row();
+  kb.text('🧹 Clear pending snapshot', 'a:admin_ops_clear_pending').row();
 
   // Quick health link (if PUBLIC_BASE_URL is configured)
   if (CFG.PUBLIC_BASE_URL) {
@@ -35196,7 +35231,8 @@ async function renderAdminHardSkipHome(ctx, page = 0) {
   const p = Math.max(0, Number(page || 0) || 0);
   const recent = await adminHardSkipRecent(p);
   let text = '🧱 <b>Hard-skip (dead chats)</b>\n\n';
-  text += 'Это список TG ID, для которых рассылка пропускает отправку (permanent errors: blocked / chat not found / deactivated).\n\n';
+  text += 'Это список TG ID, для которых рассылка пропускает отправку (permanent errors: blocked / chat not found / deactivated).\n';
+  text += `Configured TTL: <b>${BROADCAST_HARD_SKIP_TTL_DAYS}</b> d\n\n`;
   if (!recent.ok) {
     text += '⚠️ Redis недоступен — список временно недоступен.\n';
   } else if (!recent.items.length) {
@@ -35318,6 +35354,7 @@ const filterLabel = rf === 'all' ? 'ALL' : escapeHtml(rf);
 async function renderAdminHardSkipView(ctx, tgId, opts = {}) {
   const id = Number(tgId || 0);
   let text = `🧱 <b>Hard-skip status</b>\n\nTG ID: <code>${id || 0}</code>\n`;
+  text += `Configured TTL: <b>${BROADCAST_HARD_SKIP_TTL_DAYS}</b> d\n`;
   if (opts && opts.toast) {
     text += `\n<b>${escapeHtml(String(opts.toast))}</b>\n`;
   }

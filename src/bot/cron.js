@@ -15,6 +15,7 @@ import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
+import { tgTimeoutSignal } from '../lib/tgApi.js';
 import { isPaymentsFallbackApplyEnabled } from '../lib/paymentsOps.js';
 import {
   qstashPublishJSON,
@@ -1293,7 +1294,7 @@ export async function sendBroadcastMessage(api, tgId, bc) {
 
   if (type === 'text') {
     opts.parse_mode = 'HTML';
-    await api.sendMessage(Number(tgId), bc.draft_text || '', opts);
+    await api.sendMessage(Number(tgId), bc.draft_text || '', opts, tgTimeoutSignal());
     return;
   }
 
@@ -1303,20 +1304,21 @@ export async function sendBroadcastMessage(api, tgId, bc) {
   }
 
   if (type === 'photo') {
-    await api.sendPhoto(Number(tgId), bc.draft_file_id, opts);
+    await api.sendPhoto(Number(tgId), bc.draft_file_id, opts, tgTimeoutSignal());
   } else if (type === 'video') {
-    await api.sendVideo(Number(tgId), bc.draft_file_id, opts);
+    await api.sendVideo(Number(tgId), bc.draft_file_id, opts, tgTimeoutSignal());
   } else if (type === 'animation') {
-    await api.sendAnimation(Number(tgId), bc.draft_file_id, opts);
+    await api.sendAnimation(Number(tgId), bc.draft_file_id, opts, tgTimeoutSignal());
   } else if (type === 'document') {
-    await api.sendDocument(Number(tgId), bc.draft_file_id, opts);
+    await api.sendDocument(Number(tgId), bc.draft_file_id, opts, tgTimeoutSignal());
   } else {
     // Fallback: text
     opts.parse_mode = 'HTML';
     await api.sendMessage(
       Number(tgId),
       bc.draft_text || bc.draft_caption || '(empty)',
-      opts
+      opts,
+      tgTimeoutSignal()
     );
   }
 }
