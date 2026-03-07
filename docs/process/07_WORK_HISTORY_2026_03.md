@@ -1,3 +1,25 @@
+## STEP386 — Admin Ops regression smoke
+
+Дата: 2026-03-07
+
+Что сделано
+- Вынесен pure text builder `src/bot/adminOpsText.js` для экрана `Админка → Операции`; сам `renderAdminOps()` продолжает только собирать Redis-only данные и клавиатуру.
+- Добавлен `scripts/smoke-admin-ops-render.js`:
+  - проверяет рендер OK/degraded/probe-failed вариантов без Telegram/Redis/DB;
+  - проверяет guard по исходнику `renderAdminOps()` (переменные `r/key` остаются в scope функции, а pending snapshot остаётся под `if (r && key)`).
+- `scripts/preflight.js` теперь запускает этот smoke; `scripts/smoke-short.js` напоминает проверить `Ops` вместе с остальными admin-экранами.
+
+Почему это безопасно
+- Нет новых DB-read и нет новых callback/action keys.
+- Продуктовый UX не меняется: тот же текст/баннеры/кнопки, только собраны через тестируемый helper.
+- Ловим повторный регресс до деплоя, а не после открытия `a:admin_ops` на проде.
+
+QA
+- `node scripts/smoke-admin-ops-render.js`
+- `npm run preflight`
+- ручная проверка: `👑 Админка → 🧰 Операции` открывается и при Redis OK, и при degraded path без error-screen.
+
+
 ## STEP385 — Admin Ops scope hotfix
 
 Дата: 2026-03-07
