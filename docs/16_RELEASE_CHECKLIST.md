@@ -33,6 +33,8 @@ node migrations/run.js --dry-run
   - есть блок `cron.*`
 
 2) 2–3 клика в админке (быстрый sanity UI)
+- **Ops**: открыть `🧰 Операции`, проверить `Broadcast pending snapshot` (если есть) и кнопку `🧹 Clear pending snapshot` — только как операторский guardrail, без запуска новой рассылки.
+- **System → Hard-skip**: открыть экран и убедиться, что виден configured TTL.
 - **Comms / Support**: открыть экран, убедиться что рендерится и навигация не “тупик”.
 - **Outbox**: открыть список → открыть одну запись (просмотр).
 - **Users**: открыть карточку пользователя → открыть “Заметка/Теги” (если есть).
@@ -54,5 +56,5 @@ node migrations/run.js --dry-run
 ### Примечания
 - Vercel Hobby: лимит **≤12 serverless functions**. Если деплой вдруг падает по лимиту — проверь, не добавили ли новый файл в `api/`. Cron задачи добавляем через `api/cron_router.js` + `vercel.json` rewrites.
 
-- `preflight` покрывает: action registry, автоген docs реестра, nav-lint, redact-тесты, **node --check (ловит SyntaxError до Vercel)**.
+- `preflight` покрывает: action registry, автоген docs реестра, nav-lint, redact-тесты, **package-lock drift gate**, **node --check (ловит SyntaxError до Vercel)**.
 - Эта страница — **каноничный короткий чек**. Подробности — в `docs/13_RUNBOOK_RELEASE.md`.

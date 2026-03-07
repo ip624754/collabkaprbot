@@ -31,6 +31,7 @@
 ### Telegram
 - `BOT_TOKEN`
 - `ADMIN_IDS` (через запятую)
+- `TG_HTTP_TIMEOUT_MS` (опционально; default `5500`) — abort timeout для raw Telegram HTTP / broadcast sends до Vercel hard-kill
 
 ### Монетизация/лимиты (примерно)
 - `INTRO_DAILY_LIMIT_UNVERIFIED`
@@ -71,6 +72,7 @@
 - видны статусы **DB/Redis** (`redis.read_ok/write_ok`)
 - payments safety: `payments.payload_hmac_minlen_ok` и `payments.fallback_apply_effective`
 - нет ошибок по “critical path”
+- если есть `broadcast.pending_deliveries` — snapshot выглядит свежим/понятным; при ложном “залипе” оператор может очистить только snapshot через Admin → Ops → `🧹 Clear pending snapshot`
 
 Если health красный — **стоп**, не зовём пользователей.
 
