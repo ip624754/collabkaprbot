@@ -197,6 +197,22 @@ if (nodeCheckList.length === 0) {
   }
 }
 
+logHeader("Preflight: smoke admin ops render");
+const adminOpsSmokePath = path.join(ROOT, "scripts", "smoke-admin-ops-render.js");
+if (fs.existsSync(adminOpsSmokePath)) {
+  const res = spawnSync(process.execPath, [adminOpsSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  // eslint-disable-next-line no-console
+  console.warn("[preflight] scripts/smoke-admin-ops-render.js not found (skipping)");
+}
+
 logHeader("Preflight: smoke degraded rate-limit");
 const smokePath = path.join(ROOT, "scripts", "smoke-degraded-rate-limit.js");
 if (fs.existsSync(smokePath)) {

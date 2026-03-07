@@ -23,7 +23,7 @@ log('============================================');
 log('');
 log('Quick reminders (top 4):');
 log('  1) GET /api/health → ok:true + cron.* + audit.buffer.*');
-log('  2) Admin UI sanity: Comms/Outbox/Users loads (no dead-ends)');
+log('  2) Admin UI sanity: Ops/Comms/Outbox/Users loads (no dead-ends)');
 log('  3) Redis degraded UX: monetization CTA visible; actions safe');
 log('  4) Input-mode escape: ❌ Отмена + "отмена/cancel/стоп/stop"');
 log('');
