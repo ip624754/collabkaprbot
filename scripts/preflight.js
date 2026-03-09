@@ -218,6 +218,22 @@ if (fs.existsSync(adminOpsSmokePath)) {
   console.warn("[preflight] scripts/smoke-admin-ops-render.js not found (skipping)");
 }
 
+logHeader("Preflight: smoke admin ops keyboard/actions contract");
+const adminOpsContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-ops-contract.js");
+if (fs.existsSync(adminOpsContractSmokePath)) {
+  const res = spawnSync(process.execPath, [adminOpsContractSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  // eslint-disable-next-line no-console
+  console.warn("[preflight] scripts/smoke-admin-ops-contract.js not found (skipping)");
+}
+
 logHeader("Preflight: staging health/admin JSON shape");
 const healthAdminShapePath = path.join(ROOT, "scripts", "smoke-health-admin-shape.js");
 if (fs.existsSync(healthAdminShapePath)) {
