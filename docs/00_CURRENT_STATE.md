@@ -1,4 +1,8 @@
-# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-07
+# 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-10
+
+**STEP388:** Preflight: `health/admin` JSON shape smoke + deploy workflow docs — добавлен `scripts/smoke-health-admin-shape.js`, который в staging/dev с `SIMULATE_REDIS_DOWN=1` проверяет стабильный операторский контракт `/api/health` (`system_status`, `no_go_reasons[{code,severity,hint}]`, `ops.digest_preview`, `broadcast.pending_deliveries/hard_skip`, `qstash.reschedule_failed`, `payments.fallback_apply_effective`). `scripts/preflight.js` теперь запускает этот smoke в non-prod и безопасно skip-ает его в `prod/production`. `/api/health` нормализован: даже при `redis_unavailable`/`not_configured` сохраняет базовый `broadcast/ref/cron` shape, чтобы не ломать дашборды/админские проверки. Обновлены `docs/91_PROD_LAUNCH_30MIN.md` и `docs/93_PROD_DEPLOY_CHECKLIST.md` с пошаговым локальным workflow: `npm install` → `npm run preflight` → `APP_ENV=production npm run preflight` → deploy → `/api/health` + Админка → Операции.
+
+**STEP387:** Preflight: staging fault-injection smoke — `scripts/preflight.js` теперь запускает `scripts/smoke-fault-injection.js` в non-prod (`APP_ENV=staging` по умолчанию, `SIMULATE_REDIS_DOWN=1`) и проверяет критичный degraded-path: Redis calls падают с `SIMULATED_REDIS_DOWN`, а `/api/health` остаётся fail-open и возвращает `system_status=NO_GO` + `no_go_reasons[]`. В `prod/production` smoke безопасно пропускается.
 
 **STEP386:** Admin Ops regression smoke — `renderAdminOps()` вынесен на pure builder `src/bot/adminOpsText.js` без изменений operator UX/DB-логики; добавлен preflight smoke `scripts/smoke-admin-ops-render.js`, который проверяет OK/degraded текст экрана `Админка → Операции` и держит guard на scope `r/key`, чтобы не вернуть crash уровня STEP385.
 

@@ -29,6 +29,21 @@
 
 ---
 
+## 1.5) Локальный прогон перед deploy
+
+В рабочем репо перед выкладкой:
+
+```bash
+npm install
+npm run preflight
+APP_ENV=production npm run preflight
+```
+
+Ожидаемо:
+- обычный preflight зелёный;
+- staging smoke на `Redis down` и `health/admin JSON shape` проходят;
+- в `APP_ENV=production` эти smoke корректно **skip**, без попытки fault-injection в prod env.
+
 ## 2) Деплой (Vercel)
 
 1) Убедись, что изменённые ENV применились (Production scope).

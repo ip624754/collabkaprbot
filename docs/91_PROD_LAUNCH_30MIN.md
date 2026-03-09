@@ -62,6 +62,22 @@
 
 ---
 
+## 3.5) Локальный preflight workflow перед Vercel deploy (2–3 минуты)
+
+Запускай **локально/в CI до выкладки**:
+
+```bash
+npm install
+npm run preflight
+APP_ENV=production npm run preflight
+```
+
+Что это даёт:
+- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path и на стабильный `health/admin` JSON contract.
+- `APP_ENV=production npm run preflight` проверяет, что staging smoke **безопасно skip-аются** в prod env и не пытаются делать fault-injection перед реальным релизом.
+
+После этого можно делать deploy/redeploy на Vercel.
+
 ## 4) Health check (2 минуты)
 
 Открой:
