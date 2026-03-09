@@ -52,6 +52,12 @@ npm run qa:fast
 11) **Admin → Comms keyboard/footer contract smoke**  
    Source-level smoke `scripts/smoke-admin-comms-contract.js` проверяет, что экран `Админка → Коммуникации` сохраняет операторский контракт: primary row (`Объявление / Шаблоны DM`), `Outbox`, условный gate `Офиц.канал (${pending})` только при `OFFICIAL_PUBLISH_ENABLED`, а также footer (`Админка / Меню / Home`). Дополнительно валидируются связанные записи в `src/bot/actionRegistry.js`, чтобы ловить тихие rename/remove/re-guard регрессии до выкладки.
 
+12) **Admin → System keyboard/footer contract smoke**  
+   Source-level smoke `scripts/smoke-admin-system-contract.js` проверяет, что экран `Админка → Система` сохраняет операторский контракт: summary-строки (`Платежи`, `Match/Feat auto-apply`, `Payments fallback apply`, `Broadcast fan-out (QStash)`, `Founder Sale`), keyboard rows для payment toggles / Match-Feat+Fallback / QStash / Hard-skip / Founder / moderators / gift subscription и footer (`Админка / Меню / Home`). Дополнительно валидируются связанные записи в `src/bot/actionRegistry.js`, чтобы ловить тихие rename/remove/re-guard регрессии до выкладки.
+
+13) **Admin → Founder Sale contract smoke**  
+   Source-level smoke `scripts/smoke-admin-founder-contract.js` проверяет отдельный operator-flow `Админка → Founder Sale`: summary/status блок (`Источник настроек`, `ENABLED`, `DEADLINE`, `STATUS`, `⏳ Осталось`, `Цены / кредиты`), control rows (`toggle`, `Дедлайн/Цены`, `Кредиты/Сброс`, `Ссылки/Тексты`), footer (`Система / Меню / Home`), а также helper screens `Founder Sale — ссылки` и `Founder Sale — тексты (copy/paste)` с presets `fs_offers_a/fs_offers_b/fs_gw_brand/fs_gw_creator`. Дополнительно валидируются связанные записи в `src/bot/actionRegistry.js`, чтобы ловить тихие rename/remove/re-guard регрессии до выкладки.
+
 ## Если preflight упал
 
 - На `actions:md changed` → закоммить `docs/02_ACTION_KEYS_REGISTRY.md` и повторить.
@@ -63,6 +69,8 @@ npm run qa:fast
 - На `lint:redis-exports` → проверь `src/lib/redis.js`: в нём должны быть named exports для `incrWithExpireOnFirst`, `incrWithExpire`, `lpushTrim`.
 - На `Admin → Ops keyboard/actions contract` → проверь `renderAdminOps()` и confirm-flow `a:admin_ops_pending_clear`, затем синхронизируй `src/bot/actionRegistry.js` с реальным составом callback buttons.
 - На `Admin → Comms keyboard/footer contract` → проверь `renderAdminComms()` и gate `OFFICIAL_PUBLISH_ENABLED`, затем синхронизируй `src/bot/actionRegistry.js` с реальным составом callback buttons/footer.
+- На `Admin → System keyboard/footer contract` → проверь `renderAdminSystem()` и состав operator rows (`payments/match-fallback/qstash/hard-skip/founder/moderators/gift`), затем синхронизируй `src/bot/actionRegistry.js` с реальным составом callback buttons/footer.
+- На `Admin → Founder Sale contract` → проверь `renderAdminFounder()` + helper screens `renderAdminFounderLinks()/renderAdminFounderTexts()` и синхронизируй `src/bot/actionRegistry.js` с реальным составом callback buttons/footer/deep-link presets.
 
 ## Дальше после preflight
 

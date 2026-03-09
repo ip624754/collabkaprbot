@@ -1,3 +1,44 @@
+## STEP392 — Admin → Founder Sale contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-founder-contract.js`: source-level smoke на отдельный operator-flow `Админка → Founder Sale`.
+- Smoke фиксирует контракт главного экрана `Founder Sale`: summary/status блок (`Источник настроек`, `ENABLED`, `DEADLINE`, `STATUS`, `⏳ Осталось`, `💰 Цены / кредиты`) и control rows (`ENABLED toggle`, `🗓 Дедлайн / 💰 Цены`, `💳 Кредиты / ♻️ Сброс к ENV`, `🔗 Ссылки / 📝 Тексты`, footer `⬅️ Система / 📋 Меню / 🏠 Home`).
+- Дополнительно smoke валидирует marketing helper screens `Founder Sale — ссылки` и `Founder Sale — тексты (copy/paste)`: forwarding-safe note, A/B deep-link presets `fs_offers_a/fs_offers_b/fs_gw_brand/fs_gw_creator`, быстрый copy line `🔥 Founder Sale: <link>` и footer-навигацию между `Founder Sale / Система / Меню / Home`.
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → Founder Sale` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-founder-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-founder-contract.js` → `✅ smoke admin-founder contract OK`
+- `npm run preflight` → новый smoke проходит вместе с остальными guardrails
+- ручной sanity: `Админка → Система → 🔥 Founder Sale`, затем `🔗 Ссылки` и `📝 Тексты` показывают те же operator controls / helper texts / footer navigation
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
+## STEP391 — Admin → System keyboard/footer contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-system-contract.js`: source-level smoke на контракт `Админка → Система`.
+- Smoke проверяет summary-строки экрана (`Платежи`, `Match/Feat auto-apply`, `Payments fallback apply`, `Broadcast fan-out (QStash)`, `Founder Sale`) и keyboard rows: `💳 Прием / ⚙️ Автовыдача`, `🎯🔥 Match/Feat / 🧯 Fallback`, `📣 QStash fan-out / 🛰 QStash статус`, `🧱 Hard-skip (dead chats)`, `🔥 Founder Sale`, `➕ Модератор / 📋 Модераторы`, `🎁 Подарить подписку`, footer `⬅️ Админка / 📋 Меню / 🏠 Home`.
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → System` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-system-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-system-contract.js` → `✅ smoke admin-system keyboard/footer contract OK`
+- `npm run preflight` → новый smoke проходит вместе с остальными guardrails
+- ручной sanity: `Админка → Система` показывает те же summary-строки, operator rows и footer
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
 ## STEP390 — Admin → Comms keyboard/footer contract smoke
 
 Дата: 2026-03-10
