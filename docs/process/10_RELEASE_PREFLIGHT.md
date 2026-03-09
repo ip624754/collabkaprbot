@@ -46,6 +46,9 @@ npm run qa:fast
 9) **Node syntax check (`node --check`)**  
    Запускает `node --check` по ключевым entrypoint‑ам (`src/bot/bot.js`, `api/webhook.js`, `api/cron_router.js`, и т.д.), чтобы ловить **SyntaxError на cold start** (например, случайный literal newline внутри строки `'...'`) ещё **до** деплоя.
 
+10) **Admin → Ops keyboard/actions contract smoke**  
+   Source-level smoke `scripts/smoke-admin-ops-contract.js` проверяет, что экран `Админка → Операции` сохраняет операторский контракт: основные кнопки (`Пользователи/Платежи/Рассылка/Аудит/Метрики`), служебные действия (`Flush ops digest`, `Clear pending snapshot`), footer (`Админка / Меню / Home`), confirm-flow очистки snapshot и health-кнопку только за `PUBLIC_BASE_URL`. Дополнительно валидируются связанные записи в `src/bot/actionRegistry.js`, чтобы ловить тихие rename/remove/re-guard регрессии до выкладки.
+
 ## Если preflight упал
 
 - На `actions:md changed` → закоммить `docs/02_ACTION_KEYS_REGISTRY.md` и повторить.
@@ -55,6 +58,7 @@ npm run qa:fast
 - На `lint:redis-atomic` → перенести операции на helpers из `src/lib/redis.js` (или на Lua‑атомарность), не оставлять fallback‑цепочки.
 - На `lint:redis-ttl` → добавь TTL (`{ ex: ... }`) для `redis.set`, либо явно отметь intentional persistence комментарием `TTL-LINT: ...`.
 - На `lint:redis-exports` → проверь `src/lib/redis.js`: в нём должны быть named exports для `incrWithExpireOnFirst`, `incrWithExpire`, `lpushTrim`.
+- На `Admin → Ops keyboard/actions contract` → проверь `renderAdminOps()` и confirm-flow `a:admin_ops_pending_clear`, затем синхронизируй `src/bot/actionRegistry.js` с реальным составом callback buttons.
 
 ## Дальше после preflight
 

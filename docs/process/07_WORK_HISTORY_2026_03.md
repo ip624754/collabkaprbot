@@ -1,3 +1,23 @@
+
+## STEP389 — Admin → Ops keyboard/actions contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-ops-contract.js`: source-level smoke на контракт `Админка → Операции`.
+- Smoke проверяет состав основного operator keyboard: `👥 Пользователи`, `💰 Платежи`, `📣 Рассылка`, `📜 Аудит`, `📈 Метрики`, `🧾 Flush ops digest`, `🧹 Clear pending snapshot`, footer `⬅️ Админка / 📋 Меню / 🏠 Home` и health URL-кнопку только за `PUBLIC_BASE_URL`.
+- Отдельно зафиксирован confirm-flow `a:admin_ops_pending_clear`: `✅ Очистить snapshot` + `⬅️ Операции` + footer.
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки callback action keys ловились ещё до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-ops-contract.js` → `✅ smoke admin-ops keyboard/actions contract OK`
+- `npm run preflight` → новый smoke проходит вместе с остальными guardrails
+- ручной sanity: `Админка → Операции` показывает те же operator-кнопки и confirm-flow очистки snapshot
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
 ## STEP388 — Preflight smoke for /api/health operator JSON contract + deploy workflow docs
 
 Дата: 2026-03-10
