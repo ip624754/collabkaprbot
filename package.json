@@ -24,6 +24,7 @@
     "migrate": "node migrations/run.js",
     "preflight": "node scripts/preflight.js",
     "qa:fast": "npm run preflight",
+    "smoke:admin-ops-contract": "node scripts/smoke-admin-ops-contract.js",
     "smoke:health-admin": "node scripts/smoke-health-admin-shape.js",
     "smoke:short": "node scripts/smoke-short.js",
     "test:redact": "node scripts/test-redactContactsInText.js",
