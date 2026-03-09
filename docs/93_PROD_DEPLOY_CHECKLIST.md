@@ -104,6 +104,7 @@ APP_ENV=production npm run preflight
 
 ## 5) Smoke test: 1 тестовый broadcast (опционально)
 
+- Перед деплоем можно быстро прогнать `npm run smoke:admin-notice-contract`, чтобы поймать тихие rename/remove регрессии экрана `Админка → Объявление` и его publish/composer-flow.
 - Отправь рассылку только себе/одному тестовому пользователю.
 - Убедись, что:
   - доставилось,

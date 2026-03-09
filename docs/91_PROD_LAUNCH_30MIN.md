@@ -131,6 +131,7 @@ APP_ENV=production npm run preflight
 Если есть smoke‑пакеты — используй их:
 - `smoke-tests_short.md`
 - `smoke-tests_full.md`
+- `npm run smoke:admin-notice-contract` — быстрый guard для `Админка → Объявление` (composer/runtime contract: кнопки, footer, publish/expectText flow)
 
 ---
 
