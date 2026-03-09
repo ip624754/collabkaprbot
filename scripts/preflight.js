@@ -44,6 +44,11 @@ function logHeader(title) {
   console.log(`\n=== ${title} ===`);
 }
 
+function isProdAppEnv(value = process.env.APP_ENV) {
+  const env = String(value || '').trim().toLowerCase();
+  return env === 'prod' || env === 'production';
+}
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
@@ -211,6 +216,29 @@ if (fs.existsSync(adminOpsSmokePath)) {
 } else {
   // eslint-disable-next-line no-console
   console.warn("[preflight] scripts/smoke-admin-ops-render.js not found (skipping)");
+}
+
+logHeader("Preflight: staging fault injection (Redis down)");
+const faultInjectionPath = path.join(ROOT, "scripts", "smoke-fault-injection.js");
+if (fs.existsSync(faultInjectionPath)) {
+  if (isProdAppEnv()) {
+    console.warn('[preflight] scripts/smoke-fault-injection.js skipped in prod APP_ENV');
+  } else {
+    const res = spawnSync(process.execPath, [faultInjectionPath], {
+      cwd: ROOT,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        APP_ENV: process.env.APP_ENV || 'staging',
+        SIMULATE_REDIS_DOWN: '1',
+      },
+    });
+    if (res.status !== 0) {
+      process.exit(res.status ?? 1);
+    }
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-fault-injection.js not found (skipping)");
 }
 
 logHeader("Preflight: smoke degraded rate-limit");
