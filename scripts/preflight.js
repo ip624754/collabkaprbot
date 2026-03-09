@@ -218,6 +218,29 @@ if (fs.existsSync(adminOpsSmokePath)) {
   console.warn("[preflight] scripts/smoke-admin-ops-render.js not found (skipping)");
 }
 
+logHeader("Preflight: staging health/admin JSON shape");
+const healthAdminShapePath = path.join(ROOT, "scripts", "smoke-health-admin-shape.js");
+if (fs.existsSync(healthAdminShapePath)) {
+  if (isProdAppEnv()) {
+    console.warn('[preflight] scripts/smoke-health-admin-shape.js skipped in prod APP_ENV');
+  } else {
+    const res = spawnSync(process.execPath, [healthAdminShapePath], {
+      cwd: ROOT,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        APP_ENV: process.env.APP_ENV || 'staging',
+        SIMULATE_REDIS_DOWN: '1',
+      },
+    });
+    if (res.status !== 0) {
+      process.exit(res.status ?? 1);
+    }
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-health-admin-shape.js not found (skipping)");
+}
+
 logHeader("Preflight: staging fault injection (Redis down)");
 const faultInjectionPath = path.join(ROOT, "scripts", "smoke-fault-injection.js");
 if (fs.existsSync(faultInjectionPath)) {
