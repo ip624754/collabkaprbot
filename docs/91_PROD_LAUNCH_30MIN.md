@@ -73,7 +73,7 @@ APP_ENV=production npm run preflight
 ```
 
 Что это даёт:
-- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` (кнопки/action keys/footer/gates).
+- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` + `Админка → Система` + `Админка → Founder Sale` (кнопки/action keys/footer/gates + helper screens links/texts).
 - `APP_ENV=production npm run preflight` проверяет, что staging smoke **безопасно skip-аются** в prod env и не пытаются делать fault-injection перед реальным релизом.
 
 После этого можно делать deploy/redeploy на Vercel.

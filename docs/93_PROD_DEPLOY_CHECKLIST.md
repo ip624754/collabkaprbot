@@ -44,6 +44,8 @@ APP_ENV=production npm run preflight
 - staging smoke на `Redis down` и `health/admin JSON shape` проходят;
 - source-level smoke на `Admin → Ops` keyboard/actions contract проходит;
 - source-level smoke на `Admin → Comms` keyboard/footer contract проходит;
+- source-level smoke на `Admin → System` keyboard/footer contract проходит;
+- source-level smoke на `Admin → Founder Sale` contract проходит;
 - в `APP_ENV=production` staging smoke корректно **skip**, без попытки fault-injection в prod env.
 
 ## 2) Деплой (Vercel)
