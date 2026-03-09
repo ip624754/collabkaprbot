@@ -42,7 +42,8 @@ APP_ENV=production npm run preflight
 Ожидаемо:
 - обычный preflight зелёный;
 - staging smoke на `Redis down` и `health/admin JSON shape` проходят;
-- в `APP_ENV=production` эти smoke корректно **skip**, без попытки fault-injection в prod env.
+- source-level smoke на `Admin → Ops` keyboard/actions contract проходит;
+- в `APP_ENV=production` staging smoke корректно **skip**, без попытки fault-injection в prod env.
 
 ## 2) Деплой (Vercel)
 
