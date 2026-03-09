@@ -1,3 +1,42 @@
+## STEP388 — Preflight smoke for /api/health operator JSON contract + deploy workflow docs
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-health-admin-shape.js`: staging/dev smoke на стабильный операторский контракт `/api/health` при `SIMULATE_REDIS_DOWN=1`.
+- Smoke проверяет ключевые поля, на которые завязаны operator checks и dashboards: `system_status`, `no_go_reasons[{code,severity,hint}]`, `ops.digest_preview`, `ops.pending`, `broadcast.pending_deliveries`, `broadcast.hard_skip`, `broadcast.db_overload`, `broadcast.tick_deferred_redis`, `qstash.reschedule_failed`, `qstash.official_publish_stuck`, `payments.fallback_apply_effective`, `payments.payload_hmac_minlen_ok`.
+- `scripts/preflight.js` теперь запускает новый smoke в non-prod и безопасно skip-ает его в `prod/production`, как и fault-injection smoke.
+- `/api/health` нормализован по shape: ветки `not_configured` и `redis_unavailable` теперь возвращают тот же базовый `broadcast/ref/cron` контракт, без тихого исчезновения операторских полей.
+- Обновлены `docs/91_PROD_LAUNCH_30MIN.md` и `docs/93_PROD_DEPLOY_CHECKLIST.md` с пошаговым workflow перед Vercel deploy.
+
+QA / как проверить
+- `node scripts/smoke-health-admin-shape.js` → `✅ smoke health/admin JSON shape OK`
+- `node scripts/smoke-fault-injection.js` → degraded-path остаётся fail-open
+- `npm run preflight` → оба smoke проходят
+- `APP_ENV=production npm run preflight` → оба staging smoke корректно skip-аются в prod env
+
+Риск регрессий: **низкий** (health/admin-only; без новых DB reads, без UI/ботовых callback изменений).
+
+## STEP387 — Preflight: staging fault-injection smoke
+
+Дата: 2026-03-09
+
+Что сделано
+- `scripts/preflight.js` теперь запускает `scripts/smoke-fault-injection.js`, который принудительно включает `SIMULATE_REDIS_DOWN=1` и валидирует staging/dev degraded-path без реального Redis/DB.
+- Smoke проверяет два инварианта: (1) Redis calls падают с `code=SIMULATED_REDIS_DOWN`; (2) `/api/health` не падает и отдаёт `ok=true`, `system_status=NO_GO`, `no_go_reasons[]`, `redis.read_ok=false`, `redis.write_ok=false`.
+- Для безопасности preflight автоматически пропускает этот smoke при `APP_ENV=prod|production`, чтобы не ломать операторский контур и не создавать ложный prod-fail на реальном окружении.
+
+Почему это безопасно
+- Нет новых DB-read, callback/action keys, ENV-контрактов или runtime-веток прода.
+- Используется уже существующий smoke-скрипт; меняется только coverage preflight перед деплоем.
+- Ловим регресс fail-open/fail-closed поведения Redis degraded до выкладки, а не на живом `/api/health`.
+
+QA
+- `node scripts/smoke-fault-injection.js`
+- `npm run preflight`
+- опционально: `APP_ENV=production npm run preflight` → smoke корректно skip-ается, а не падает
+
+
 ## STEP386 — Admin Ops regression smoke
 
 Дата: 2026-03-07
