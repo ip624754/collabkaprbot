@@ -1,3 +1,21 @@
+## STEP390 — Admin → Comms keyboard/footer contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-comms-contract.js`: source-level smoke на контракт `Админка → Коммуникации`.
+- Smoke проверяет заголовок/описание, primary keyboard (`📣 Объявление`, `📌 Шаблоны DM`, `📤 Outbox`), условный gate `📣 Офиц.канал (${pending})` только при `OFFICIAL_PUBLISH_ENABLED`, footer `⬅️ Админка / 📋 Меню / 🏠 Home` и связанные записи в `src/bot/actionRegistry.js`.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-comms-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-comms-contract.js` → `✅ smoke admin-comms keyboard/footer contract OK`
+- `npm run preflight` → новый smoke проходит вместе с остальными guardrails
+- ручной sanity: `Админка → Коммуникации` показывает те же operator-кнопки и footer; `Офиц.канал` появляется только при включённом `OFFICIAL_PUBLISH_ENABLED`
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
 
 ## STEP389 — Admin → Ops keyboard/actions contract smoke
 
