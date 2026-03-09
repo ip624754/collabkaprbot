@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "20.x"
+    "node": ">=20"
   },
   "scripts": {
     "actions:check": "node scripts/actions-registry-check.js",
@@ -24,6 +24,7 @@
     "migrate": "node migrations/run.js",
     "preflight": "node scripts/preflight.js",
     "qa:fast": "npm run preflight",
+    "smoke:health-admin": "node scripts/smoke-health-admin-shape.js",
     "smoke:short": "node scripts/smoke-short.js",
     "test:redact": "node scripts/test-redactContactsInText.js",
     "zip": "bash scripts/zip.sh"
