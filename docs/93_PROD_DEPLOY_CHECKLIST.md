@@ -46,6 +46,9 @@ APP_ENV=production npm run preflight
 - source-level smoke на `Admin → Comms` keyboard/footer contract проходит;
 - source-level smoke на `Admin → System` keyboard/footer contract проходит;
 - source-level smoke на `Admin → Founder Sale` contract проходит;
+- source-level smoke на `Admin → Notice` composer/runtime contract проходит;
+- source-level smoke на `Admin → Outbox` contract проходит;
+- source-level smoke на `Admin → DM Templates` contract проходит;
 - в `APP_ENV=production` staging smoke корректно **skip**, без попытки fault-injection в prod env.
 
 ## 2) Деплой (Vercel)
@@ -105,6 +108,7 @@ APP_ENV=production npm run preflight
 ## 5) Smoke test: 1 тестовый broadcast (опционально)
 
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-notice-contract`, чтобы поймать тихие rename/remove регрессии экрана `Админка → Объявление` и его publish/composer-flow.
+- Перед деплоем можно быстро прогнать `npm run smoke:admin-outbox-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Outbox` и его list/view/repeat/clear-flow.
 - Отправь рассылку только себе/одному тестовому пользователю.
 - Убедись, что:
   - доставилось,

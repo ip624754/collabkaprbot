@@ -73,7 +73,7 @@ APP_ENV=production npm run preflight
 ```
 
 Что это даёт:
-- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` + `Админка → Система` + `Админка → Founder Sale` (кнопки/action keys/footer/gates + helper screens links/texts).
+- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` + `Админка → Система` + `Админка → Founder Sale` + `Админка → Объявление` + `Админка → Outbox` + `Админка → Шаблоны DM` (кнопки/action keys/footer/gates + helper screens/confirm flows/runtime prompts).
 - `APP_ENV=production npm run preflight` проверяет, что staging smoke **безопасно skip-аются** в prod env и не пытаются делать fault-injection перед реальным релизом.
 
 После этого можно делать deploy/redeploy на Vercel.
@@ -132,6 +132,7 @@ APP_ENV=production npm run preflight
 - `smoke-tests_short.md`
 - `smoke-tests_full.md`
 - `npm run smoke:admin-notice-contract` — быстрый guard для `Админка → Объявление` (composer/runtime contract: кнопки, footer, publish/expectText flow)
+- `npm run smoke:admin-outbox-contract` — быстрый guard для `Админка → Outbox` (list/view, callback/footer, repeat/template/clear confirm-flow)
 
 ---
 
