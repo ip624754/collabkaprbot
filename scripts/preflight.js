@@ -249,6 +249,51 @@ if (fs.existsSync(adminCommsContractSmokePath)) {
   console.warn("[preflight] scripts/smoke-admin-comms-contract.js not found (skipping)");
 }
 
+logHeader("Preflight: smoke admin system keyboard/footer contract");
+const adminSystemContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-system-contract.js");
+if (fs.existsSync(adminSystemContractSmokePath)) {
+  const res = spawnSync(process.execPath, [adminSystemContractSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-admin-system-contract.js not found (skipping)");
+}
+
+logHeader("Preflight: smoke admin founder contract");
+const adminFounderContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-founder-contract.js");
+if (fs.existsSync(adminFounderContractSmokePath)) {
+  const res = spawnSync(process.execPath, [adminFounderContractSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-admin-founder-contract.js not found (skipping)");
+}
+
+logHeader("Preflight: smoke admin notice composer/runtime contract");
+const adminNoticeContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-notice-contract.js");
+if (fs.existsSync(adminNoticeContractSmokePath)) {
+  const res = spawnSync(process.execPath, [adminNoticeContractSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-admin-notice-contract.js not found (skipping)");
+}
+
 logHeader("Preflight: staging health/admin JSON shape");
 const healthAdminShapePath = path.join(ROOT, "scripts", "smoke-health-admin-shape.js");
 if (fs.existsSync(healthAdminShapePath)) {
