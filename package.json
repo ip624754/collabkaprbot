@@ -26,10 +26,15 @@
     "qa:fast": "npm run preflight",
     "smoke:admin-ops-contract": "node scripts/smoke-admin-ops-contract.js",
     "smoke:admin-comms-contract": "node scripts/smoke-admin-comms-contract.js",
+    "smoke:admin-system-contract": "node scripts/smoke-admin-system-contract.js",
     "smoke:health-admin": "node scripts/smoke-health-admin-shape.js",
     "smoke:short": "node scripts/smoke-short.js",
     "test:redact": "node scripts/test-redactContactsInText.js",
-    "zip": "bash scripts/zip.sh"
+    "zip": "bash scripts/zip.sh",
+    "smoke:admin-founder-contract": "node scripts/smoke-admin-founder-contract.js",
+    "smoke:admin-notice-contract": "node scripts/smoke-admin-notice-contract.js",
+    "smoke:admin-outbox-contract": "node scripts/smoke-admin-outbox-contract.js",
+    "smoke:admin-dm-templates-contract": "node scripts/smoke-admin-dm-templates-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
