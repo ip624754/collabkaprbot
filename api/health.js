@@ -118,6 +118,41 @@ export default async function handler(_req, res) {
           },
         };
 
+  function makeCronBase(enabled = false) {
+    return {
+      enabled: !!enabled,
+      giveaways_tick: null,
+      broadcast_tick: null,
+      ig_verify_tick: null,
+      audit_flush_tick: null,
+    };
+  }
+
+  function makeBroadcastBase() {
+    return {
+      cooldown_until: null,
+      retry_after_sec: null,
+      broadcast_id: null,
+      cooldown_source: null,
+      last_429_at: null,
+      last_429_reason: null,
+      qstash_last_delivery_at: null,
+      pending_deliveries: null,
+      counters: null,
+      hard_skip: null,
+      db_overload: { day, today_count: null, last_at: null, last_where: null },
+      tick_deferred_redis: { day, today_count: null, last_at: null, last_where: null },
+    };
+  }
+
+  function makeRefBase() {
+    return {
+      day: null,
+      today: { ig: 0, tg: 0 },
+      total: { ig: 0, tg: 0 },
+    };
+  }
+
   // Redis is optional for /api/health (so it stays useful in minimal envs).
   if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
     base.redis.configured = false;
@@ -125,7 +160,7 @@ export default async function handler(_req, res) {
     base.redis.write_ok = false;
     base.redis.latency_ms = null;
     base.redis.last_error = 'not_configured';
-    const out = { ...base, cron: { enabled: false }, audit: auditBase };
+    const out = { ...base, cron: makeCronBase(false), broadcast: makeBroadcastBase(), ref: makeRefBase(), audit: auditBase };
     const st = computeSystemStatus(out);
     out.system_status = st.system_status;
     out.no_go_reasons = st.no_go_reasons;
@@ -525,20 +560,7 @@ try {
     ]);
 
     // Broadcast cooldown + counters (Redis-only; no DB)
-    let broadcast = {
-      cooldown_until: null,
-      retry_after_sec: null,
-      broadcast_id: null,
-      cooldown_source: null,
-      last_429_at: null,
-      last_429_reason: null,
-      qstash_last_delivery_at: null,
-      pending_deliveries: null,
-      counters: null,
-      hard_skip: null,
-      db_overload: { day, today_count: null, last_at: null, last_where: null },
-      tick_deferred_redis: { day, today_count: null, last_at: null, last_where: null },
-    };
+    let broadcast = makeBroadcastBase();
 
     try {
       const [untilRaw, bidRaw, lastAt, lastReason] = await readMany([
@@ -871,7 +893,7 @@ try {
 
       ...base,
       cron: {
-        enabled: true,
+        ...makeCronBase(true),
         giveaways_tick: giveawaysTick || null,
         broadcast_tick: broadcastTick || null,
         ig_verify_tick: igVerifyTick || null,
@@ -896,9 +918,9 @@ try {
     const out = {
 
       ...base,
-      cron: { enabled: true, error: 'redis_unavailable' },
-      broadcast: { cooldown_until: null, retry_after_sec: null, broadcast_id: null },
-      ref: { day: null, today: { ig: 0, tg: 0 }, total: { ig: 0, tg: 0 } },
+      cron: { ...makeCronBase(true), error: 'redis_unavailable' },
+      broadcast: makeBroadcastBase(),
+      ref: makeRefBase(),
       audit: auditBase,
 
     };
