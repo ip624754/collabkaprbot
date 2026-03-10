@@ -279,6 +279,21 @@ if (fs.existsSync(adminFounderContractSmokePath)) {
   console.warn("[preflight] scripts/smoke-admin-founder-contract.js not found (skipping)");
 }
 
+logHeader("Preflight: smoke admin payments contract");
+const adminPaymentsContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-payments-contract.js");
+if (fs.existsSync(adminPaymentsContractSmokePath)) {
+  const res = spawnSync(process.execPath, [adminPaymentsContractSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-admin-payments-contract.js not found (skipping)");
+}
+
 logHeader("Preflight: smoke admin outbox contract");
 const adminOutboxContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-outbox-contract.js");
 if (fs.existsSync(adminOutboxContractSmokePath)) {
