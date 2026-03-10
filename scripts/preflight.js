@@ -325,6 +325,21 @@ if (fs.existsSync(adminQStashStatusContractSmokePath)) {
   console.warn("[preflight] scripts/smoke-admin-qstash-status-contract.js not found (skipping)");
 }
 
+logHeader("Preflight: smoke admin hard-skip contract");
+const adminHardSkipContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-hard-skip-contract.js");
+if (fs.existsSync(adminHardSkipContractSmokePath)) {
+  const res = spawnSync(process.execPath, [adminHardSkipContractSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-admin-hard-skip-contract.js not found (skipping)");
+}
+
 logHeader("Preflight: smoke admin outbox contract");
 const adminOutboxContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-outbox-contract.js");
 if (fs.existsSync(adminOutboxContractSmokePath)) {
