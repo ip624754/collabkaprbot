@@ -34,7 +34,11 @@
     "smoke:admin-founder-contract": "node scripts/smoke-admin-founder-contract.js",
     "smoke:admin-notice-contract": "node scripts/smoke-admin-notice-contract.js",
     "smoke:admin-outbox-contract": "node scripts/smoke-admin-outbox-contract.js",
-    "smoke:admin-dm-templates-contract": "node scripts/smoke-admin-dm-templates-contract.js"
+    "smoke:admin-dm-templates-contract": "node scripts/smoke-admin-dm-templates-contract.js",
+    "smoke:admin-payments-contract": "node scripts/smoke-admin-payments-contract.js",
+    "smoke:admin-payments-fallback-contract": "node scripts/smoke-admin-payments-fallback-contract.js",
+    "smoke:admin-qstash-status-contract": "node scripts/smoke-admin-qstash-status-contract.js",
+    "smoke:admin-hard-skip-contract": "node scripts/smoke-admin-hard-skip-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
