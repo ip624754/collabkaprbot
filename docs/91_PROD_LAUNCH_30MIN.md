@@ -73,7 +73,7 @@ APP_ENV=production npm run preflight
 ```
 
 Что это даёт:
-- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` + `Админка → Система` + `Админка → Founder Sale` + `Админка → Объявление` + `Админка → Outbox` + `Админка → Шаблоны DM` (кнопки/action keys/footer/gates + helper screens/confirm flows/runtime prompts).
+- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` + `Админка → Система` + `Админка → Founder Sale` + `Админка → QStash статус` + `Админка → Hard-skip` + `Админка → Объявление` + `Админка → Outbox` + `Админка → Шаблоны DM` + `Админка → Payments` + `Админка → Payments fallback apply` (кнопки/action keys/footer/gates + helper screens/confirm flows/runtime prompts/strict apply contract).
 - `APP_ENV=production npm run preflight` проверяет, что staging smoke **безопасно skip-аются** в prod env и не пытаются делать fault-injection перед реальным релизом.
 
 После этого можно делать deploy/redeploy на Vercel.
@@ -133,6 +133,8 @@ APP_ENV=production npm run preflight
 - `smoke-tests_full.md`
 - `npm run smoke:admin-notice-contract` — быстрый guard для `Админка → Объявление` (composer/runtime contract: кнопки, footer, publish/expectText flow)
 - `npm run smoke:admin-outbox-contract` — быстрый guard для `Админка → Outbox` (list/view, callback/footer, repeat/template/clear confirm-flow)
+- `npm run smoke:admin-payments-contract` — быстрый guard для `Админка → Payments` (list/detail, `Apply (manual)`, `Auto-heal missing_session`, callbacks/strict apply contract)
+- `npm run smoke:admin-payments-fallback-contract` — быстрый guard для `Админка → Payments fallback apply` (`EFFECTIVE/ENV/RUNTIME`, preset TTL buttons, runtime enable/disable callbacks, footer nav)
 
 ---
 
@@ -163,3 +165,5 @@ APP_ENV=production npm run preflight
 - документы:
   - `13_RUNBOOK_RELEASE.md`
   - `90_OWNER_RUNBOOK.md`
+
+- `npm run smoke:admin-hard-skip-contract` — быстрый guard для `Админка → Hard-skip (dead chats)` (home/hits/view, filters/export, find/unskip, footer/nav)

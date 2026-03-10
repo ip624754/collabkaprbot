@@ -49,6 +49,9 @@ APP_ENV=production npm run preflight
 - source-level smoke на `Admin → Notice` composer/runtime contract проходит;
 - source-level smoke на `Admin → Outbox` contract проходит;
 - source-level smoke на `Admin → DM Templates` contract проходит;
+- source-level smoke на `Admin → Payments` contract проходит;
+- source-level smoke на `Admin → Payments Fallback` contract проходит;
+- source-level smoke на `Admin → QStash Status` contract проходит;
 - в `APP_ENV=production` staging smoke корректно **skip**, без попытки fault-injection в prod env.
 
 ## 2) Деплой (Vercel)
@@ -109,6 +112,10 @@ APP_ENV=production npm run preflight
 
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-notice-contract`, чтобы поймать тихие rename/remove регрессии экрана `Админка → Объявление` и его publish/composer-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-outbox-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Outbox` и его list/view/repeat/clear-flow.
+- Перед деплоем можно быстро прогнать `npm run smoke:admin-payments-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Payments` и его list/detail/apply/auto-heal flow.
+- Перед деплоем можно быстро прогнать `npm run smoke:admin-payments-fallback-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Payments fallback apply` и его runtime enable/disable/operator-flow.
+- Перед деплоем можно быстро прогнать `npm run smoke:admin-qstash-status-contract`, чтобы поймать тихие rename/remove регрессии `Админка → QStash статус` и его ping/fan-out/operator-flow.
+- Перед деплоем можно быстро прогнать `npm run smoke:admin-hard-skip-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Hard-skip` и его home/hits/view/find/export/unskip-flow.
 - Отправь рассылку только себе/одному тестовому пользователю.
 - Убедись, что:
   - доставилось,
