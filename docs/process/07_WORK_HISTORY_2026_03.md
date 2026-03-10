@@ -1,3 +1,151 @@
+## STEP399 (Admin Hard-skip contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Hard-skip (dead chats)` — отдельный Redis-only operator-flow для dead chats, HITs и manual unskip. Здесь легко словить тихий регресс: пропажа quick TG buttons, фильтров/экспорта, `hs_find` expectText/back route или action key drift в `ACTION_REGISTRY`.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-hard-skip-contract.js`.
+- Smoke фиксирует source-level контракт:
+  - home-screen `🧱 Hard-skip (dead chats)`: configured TTL, `🔎 Найти TG ID`, `🧾 Последние пропуски`, per-entry quick buttons, pagination, footer `⬅️ Система / ⬅️ Админка`;
+  - hits-screen `🧾 Hard-skip HITs (пропуски)`: filter/window line, today top reasons, filters, `🗒 Export last 200`, quick TG buttons, pagination, footer `⬅️ Система / ⬅️ Админка`;
+  - view-screen `🧱 Hard-skip status`: no-hard-skip vs hard-skip states, `🧹 Снять hard-skip`, `⬅️ Назад`, footer `⬅️ Система / 📋 Меню / 🏠 Home`.
+- Smoke дополнительно валидирует callback/runtime contract:
+  - `a:hs_home`, `a:hs_hits`, `a:hs_find`, `a:hs_view`, `a:hs_unskip`, `a:hs_hits_export`;
+  - `hs_find` expectText (`type: 'hs_find'`, parse TG ID digits, stable invalid prompt, rerender status view);
+  - bounded export helper `adminHardSkipHitsExport(reasonFilter, limit)`;
+  - TXT export document + rerender toast `📤 Export ready:*`.
+- Во время аудита найден реальный хвост: кнопка `🗒 Export last 200` и `a:hs_hits_export` уже были в UI/registry, но callback отсутствовал. Добавлен минимальный handler `a:hs_hits_export` без новых DB-read:
+  - берёт bounded Redis export helper,
+  - отдаёт TXT через `InputFile`,
+  - сохраняет навигацию `🧾 HITs / ⬅️ Система / 📋 Меню / 🏠 Home`,
+  - возвращает в hits-screen с toast.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-hard-skip-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `src/bot/bot.js`
+- `scripts/smoke-admin-hard-skip-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check src/bot/bot.js`
+- `node --check scripts/smoke-admin-hard-skip-contract.js`
+- `node scripts/smoke-admin-hard-skip-contract.js`
+- `npm run smoke:admin-hard-skip-contract`
+- `APP_ENV=production node scripts/preflight.js`
+
+## STEP398 (Admin QStash Status contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → QStash статус` — отдельный operator-flow для self-check и диагностики QStash fan-out/ping. Здесь легко словить тихий регресс: исчезновение summary/status строк, rename action keys, выпадение ping helper screens или разрыв навигации `Система / Меню / Home`.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-qstash-status-contract.js`.
+- Smoke фиксирует source-level контракт `renderAdminQStashStatus()`:
+  - summary/status экран: `🛰 QStash — статус`, `Lib (@upstash/qstash)`, `ENV token/signing/base_url`, `Fan-out (Redis)`, `Broadcast tick last_run`, `Worker last delivery`, `Ping received/enqueued`, `Broadcast cooldown`;
+  - keyboard/footer: `🧪 Send signed ping`, `📣 Fan-out: ON/OFF`, `⬅️ Система / 📋 Меню / 🏠 Home`.
+- Smoke дополнительно валидирует callback/runtime contract:
+  - `a:admin_qstash_status` и `a:admin_qstash_ping`;
+  - admin gate + initial toast `Пинг отправляю…`;
+  - missing-lib / missing-token / missing-base-url helper screens с `⬅️ Назад`;
+  - Redis breadcrumbs `qstash:ping:last_enqueued_at/nonce`;
+  - `qstashPublishJSON(...)` с payload `kind=signed_ping`, `dedup=qping:*`, `retries=0`, `timeout=10s`;
+  - успешный ping делает rerender `renderAdminQStashStatus(ctx)`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-qstash-status-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-qstash-status-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-qstash-status-contract.js`
+- `node scripts/smoke-admin-qstash-status-contract.js`
+- `npm run smoke:admin-qstash-status-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP397 — Admin → Payments Fallback contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-payments-fallback-contract.js`: source-level smoke на отдельный operator-flow `Админка → Payments fallback apply`.
+- Smoke фиксирует summary/status контракт экрана: `EFFECTIVE / ENV / RUNTIME`, TTL hint при runtime enable, инцидентный guidance и runtime details `Enabled by / At / Until / Reason`.
+- Отдельно зафиксирован control/runtime contract: preset rows `🟢 2h (incident) / 🟢 12h (backlog) / 🟢 24h (migration)`, условный `🧹 Disable`, footer `⬅️ Система / ⬅️ Админка / 📋 Меню / 🏠 Home`, а также callbacks `a:admin_pay_fb / a:admin_pay_fb_set / a:admin_pay_fb_off` (admin gate, `setPaymentsFallbackRuntime`, success/failure toasts).
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → Payments fallback apply` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-payments-fallback-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-payments-fallback-contract.js` → `✅ smoke admin-payments-fallback contract OK`
+- `npm run smoke:admin-payments-fallback-contract` → тот же результат
+- `npm run preflight` → новый smoke проходит вместе с остальными source-level guardrails
+- ручной sanity: `Админка → Система → 🧯 Fallback`, затем проверить preset TTL buttons, `🧹 Disable`, строки `EFFECTIVE / ENV / RUNTIME` и footer-навигацию
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
+## STEP396 — Admin → Payments contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-payments-contract.js`: source-level smoke на отдельный operator-flow `Админка → Payments`.
+- Smoke фиксирует контракт list-screen: заголовок `💳 Payments • STATUS`, empty-state `Платежей нет.`, per-payment view buttons, ORPHANED-only action `🔁 Auto-heal missing_session`, pagination и `⬅️ Операции`.
+- Отдельно зафиксирован detail/runtime contract: экран `Payment #id` со строками `Status/Kind/User/Amount/Created`, spoiler-блоками `Charge/Payload/Note`, условным `✅ Apply (manual)`, `⬅️ К списку / ⬅️ Операции`, а также callback/flow `a:admin_payments/view/apply/autoheal` (`clearExpectText`, strict validation, DB claim before apply, block/error alerts, auto-heal только для `ORPHANED missing_session`, summary alert).
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → Payments` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-payments-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-payments-contract.js` → `✅ smoke admin-payments contract OK`
+- `npm run smoke:admin-payments-contract` → тот же результат
+- `npm run preflight` → новый smoke проходит вместе с остальными source-level guardrails
+- ручной sanity: `Админка → Операции → 💰 Платежи`, открыть один платёж, затем проверить `✅ Apply (manual)`, `🔁 Auto-heal missing_session`, pagination и возвраты `К списку / Операции`
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
+## STEP394 — Admin → Outbox contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-outbox-contract.js`: source-level smoke на отдельный operator-flow `Админка → Outbox`.
+- Smoke фиксирует контракт list/view экранов `Outbox`: заголовок `📤 Outbox`, строку `Redis-only`, privacy hint для non-DM (`🔒 Скрыто...`), per-entry кнопки, pagination, `🧹 Очистить` и footer `⬅️ Коммуникации / 📋 Меню / 🏠 Home`.
+- Отдельно зафиксирован view/actions contract: `👤 Карточка / ✉️ Написать`, условные `✉️ Повторить / 📝 Заметка / 📌 В шаблон`, а также callback/confirm-flow `a:admin_outbox*` (clearExpectText на входе, DM-only guard для repeat/save-to-template, preview send controls, `🧹 Очистить Outbox?`, clear → rerender list).
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → Outbox` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-outbox-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-outbox-contract.js` → `✅ smoke admin-outbox contract OK`
+- `npm run smoke:admin-outbox-contract` → тот же результат
+- `npm run preflight` → новый smoke проходит вместе с остальными source-level guardrails
+- ручной sanity: `Админка → Коммуникации → 📤 Outbox`, открыть запись, затем проверить `✉️ Повторить`, `📌 В шаблон`, `🧹 Очистить` confirm-flow и footer-навигацию
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
 ## STEP392 — Admin → Founder Sale contract smoke
 
 Дата: 2026-03-10
@@ -2927,3 +3075,87 @@ QA:
 ### QA
 - `docs/94_PROD_READINESS_PACK.md` упоминает все новые поля health (system_status/no_go_reasons/pending_deliveries/digest_preview) и операторские экраны.
 - `docs/audit/*` содержит актуальный промпт и актуальные правила для pack (≤50 файлов).
+
+
+## STEP393 (Admin Notice composer/runtime contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Объявление` — это отдельный operator-flow с Redis-only runtime-настройками и `expectText` composer-ветками. Здесь легко словить “тихий” регресс: переименование callback/action key, потеря footer-навигации, выпадение prompt/follow-up текста или слом publish-guard (`version++`, `active=true`, publish только при наличии текста).
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-notice-contract.js`.
+- Smoke фиксирует source-level контракт `renderAdminSysNotice()`:
+  - summary/status блок: `STATUS`, `SEVERITY`, `TARGET`, `EXPIRES`, `CTA`, `VERSION`, preview текста;
+  - control rows: `toggle + severity`, `target + expire`, `CTA + text`, `clear + publish`;
+  - footer: `⬅️ Коммуникации / 📋 Меню / 🏠 Home`.
+- Smoke дополнительно валидирует runtime-contract callback/expect веток:
+  - вход в `a:admin_notice` по‑прежнему очищает `expectText` и draft;
+  - `severity` циклично ходит по `info/warn/critical`;
+  - `target` циклично ходит по `all/brand/creator`;
+  - composer prompts `CTA / Expire / Text` остаются стабильными;
+  - publish guard по‑прежнему требует текст, делает `version++`, включает `active`, и после save/CTA/expire оставляет publish follow-up;
+  - text input продолжает использовать Telegram-safe clipping (`clipCodepoints(..., TG_SAFE_BODY_MAX)`).
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-notice-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-notice-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-notice-contract.js`
+- `node scripts/smoke-admin-notice-contract.js`
+- `npm run smoke:admin-notice-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP395 (Admin DM Templates contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Шаблоны DM` — отдельный Redis-only operator-flow, тесно связанный с `Admin → Outbox` через действие `📌 В шаблон`. Здесь легко словить тихий регресс: исчезновение кнопок/footer, rename callback/action key, выпадение add/edit/delete/reset prompts или разрыв обратных ссылок `Открыть шаблон / Шаблоны DM / Outbox`.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-dm-templates-contract.js`.
+- Smoke фиксирует source-level контракт `renderAdminDmTemplates()`:
+  - summary/list блок: `📌 Шаблоны сообщений (DM)`, `Источник`, `Версия`, `Обновлено`, empty-state/list heading;
+  - controls: per-template buttons, `➕ Новый шаблон`, `♻️ Сбросить к дефолту`, pagination, `📎 Вставить`;
+  - footer: `⬅️ Коммуникации / 📋 Меню / 🏠 Home`.
+- Smoke дополнительно фиксирует `renderAdminDmTemplateView()`:
+  - `ID`, `Название`, полный `<pre>` preview текста;
+  - controls: `✏️ Изменить / 🗑 Удалить / 📎 Вставить / ⬅️ Назад`;
+  - missing-template fallback + footer.
+- Smoke валидирует callback/expectText контракт:
+  - `a:admin_umsg_tpls/view/add/edit/del_q/del/reset_q/reset`;
+  - `clearExpectText` на входе add/edit;
+  - стабильные prompts для add/edit;
+  - delete/reset confirm screens;
+  - delete/add/edit продолжают делать `version++`;
+  - связка `Outbox → 📌 В шаблон` сохраняет DM-only guard, кнопки `📌 Открыть шаблон / 📌 Шаблоны DM / 📤 Outbox` и clip warning.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-dm-templates-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-dm-templates-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-dm-templates-contract.js`
+- `node scripts/smoke-admin-dm-templates-contract.js`
+- `npm run smoke:admin-dm-templates-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
