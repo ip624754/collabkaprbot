@@ -27663,6 +27663,54 @@ if (p.a === 'a:hs_hits') {
       return;
     }
 
+    if (p.a === 'a:hs_hits_export') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery({ text: 'Готовлю экспорт…' });
+      const page = Math.max(0, Number(p.p || 0) || 0);
+      const rf = String(p.r || 'all').trim().toLowerCase() || 'all';
+      const ex = await adminHardSkipHitsExport(rf);
+      if (!ex.ok) {
+        await renderAdminHardSkipHits(ctx, page, rf, { toast: '⚠️ Redis недоступен — экспорт временно недоступен.' });
+        return;
+      }
+
+      const tag = String(rf || 'all').toLowerCase().replace(/[^a-z0-9_]+/g, '_').slice(0, 24) || 'all';
+      const ts = new Date().toISOString().slice(0, 10);
+      const header = [
+        'Collabka PR — Hard-skip HIT Export',
+        `Exported: ${new Date().toISOString()}`,
+        `Filter: ${tag}`,
+        `Rows: ${ex.items.length}/${ex.total}`,
+        `Scan window: ${ex.scanN}`,
+        '---',
+      ].join('\n');
+      const body = (ex.items || []).map((it) => {
+        const bc = it.broadcastId ? ` | bc:${it.broadcastId}` : '';
+        const uid = it.userId ? ` | uid:${it.userId}` : '';
+        const via = it.via ? ` | via:${it.via}` : '';
+        return `${it.at || '—'} | tg:${it.tgId} | ${it.r}${bc}${uid}${via}`;
+      }).join('\n');
+      const txt = header + '\n' + (body || 'EMPTY');
+      const filename = `hard_skip_hits_${tag}_${ts}.txt`;
+
+      await ctx.replyWithDocument(
+        new InputFile(Buffer.from(txt, 'utf-8'), filename),
+        {
+          caption: `📤 Export: ${ex.items.length} HITs · фильтр: ${tag}`,
+          reply_markup: new InlineKeyboard()
+            .text('🧾 HITs', `a:hs_hits|p:${page}|r:${rf}`)
+            .text('⬅️ Система', 'a:admin_sys')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home')
+        }
+      );
+
+      await renderAdminHardSkipHits(ctx, page, rf, { toast: `📤 Export ready: ${ex.items.length}` });
+      return;
+    }
+
 
     // --- Admin: System Notice (Redis-only, no broadcast) ---
     if (p.a === 'a:admin_notice') {
