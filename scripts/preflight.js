@@ -309,6 +309,22 @@ if (fs.existsSync(adminPaymentsFallbackContractSmokePath)) {
   console.warn("[preflight] scripts/smoke-admin-payments-fallback-contract.js not found (skipping)");
 }
 
+
+logHeader("Preflight: smoke admin QStash status contract");
+const adminQStashStatusContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-qstash-status-contract.js");
+if (fs.existsSync(adminQStashStatusContractSmokePath)) {
+  const res = spawnSync(process.execPath, [adminQStashStatusContractSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-admin-qstash-status-contract.js not found (skipping)");
+}
+
 logHeader("Preflight: smoke admin outbox contract");
 const adminOutboxContractSmokePath = path.join(ROOT, "scripts", "smoke-admin-outbox-contract.js");
 if (fs.existsSync(adminOutboxContractSmokePath)) {
