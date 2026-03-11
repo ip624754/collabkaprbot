@@ -52,6 +52,7 @@ APP_ENV=production npm run preflight
 - source-level smoke на `Admin → Payments` contract проходит;
 - source-level smoke на `Admin → Payments Fallback` contract проходит;
 - source-level smoke на `Admin → QStash Status` contract проходит;
+- source-level smoke на `Broadcast deliver → local DB overload fuse` проходит;
 - в `APP_ENV=production` staging smoke корректно **skip**, без попытки fault-injection в prod env.
 
 ## 2) Деплой (Vercel)
@@ -115,6 +116,7 @@ APP_ENV=production npm run preflight
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-payments-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Payments` и его list/detail/apply/auto-heal flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-payments-fallback-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Payments fallback apply` и его runtime enable/disable/operator-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-qstash-status-contract`, чтобы поймать тихие rename/remove регрессии `Админка → QStash статус` и его ping/fan-out/operator-flow.
+- Перед деплоем можно быстро прогнать `npm run smoke:broadcast-local-db-fuse`, чтобы поймать регресс local fuse в `api/qstash/broadcast-deliver.js` (arming only on Redis-fuse write failure, precheck before Redis/DB touch).
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-hard-skip-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Hard-skip` и его home/hits/view/find/export/unskip-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-users-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Пользователи` и его filters/search/reset/export/card/message/note-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-user-card-note-contract`, чтобы поймать тихие rename/remove регрессии `Админка → User Card + Note` и его card/actions/DM-only note-flow.

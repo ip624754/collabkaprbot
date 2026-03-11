@@ -1310,3 +1310,12 @@ Auto-heal safeguards + ops alerts:
   - `Админка → Модераторы`: list/empty-state, `➕ Добавить модератора`, per-row `🗑`, footer `Система / Меню / Home`, callbacks `a:admin_mod_*` и `expectText` flow `admin_add_mod_username`.
 - В `package.json` добавлен `npm run smoke:admin-audit-metrics-moderators-contract`.
 - Runtime UX/DB path не менялись; новые DB-read в hot menu paths не добавлялись.
+
+
+### STEP403 — Broadcast deliver local in-memory DB overload fuse
+- В `api/qstash/broadcast-deliver.js` добавлен **warm-instance local fuse** для редкого деградационного сценария: `DB overloaded` + Redis недоступен одновременно.
+- Новый module-level guard `localDbDegradedUntilMs` активируется **только если** запись Redis-fuse (`ops:fuse:db_overload`) не удалась.
+- На входе `broadcast-deliver` теперь есть precheck `local_fuse_precheck` **до Redis-read и до любого DB touch**: warm instance сразу отвечает `429 + Retry-After`, не трогая Neon.
+- `respondDbOverloadFuse(...)` теперь помечает ответ флагом `local_fuse`, чтобы путь было видно в дебаге/QA.
+- В `npm run preflight` добавлен source-level smoke `scripts/smoke-broadcast-local-db-fuse.js`, который фиксирует контракт local fuse: module-level state, arming on Redis-fuse failure, precheck order (`local fuse -> Redis fuse -> DB`), response marker.
+- Runtime UI/action keys/DB schema не менялись; новые DB-read в hot menu paths не добавлялись.

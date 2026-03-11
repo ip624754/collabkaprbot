@@ -73,7 +73,7 @@ APP_ENV=production npm run preflight
 ```
 
 Что это даёт:
-- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` + `Админка → Система` + `Админка → Founder Sale` + `Админка → QStash статус` + `Админка → Hard-skip` + `Админка → Пользователи` + `Админка → User Card + Note` + `Админка → Объявление` + `Админка → Outbox` + `Админка → Шаблоны DM` + `Админка → Payments` + `Админка → Payments fallback apply` (кнопки/action keys/footer/gates + helper screens/confirm flows/runtime prompts/strict apply contract).
+- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` + `Админка → Система` + `Админка → Founder Sale` + `Админка → QStash статус` + `Админка → Hard-skip` + `Админка → Пользователи` + `Админка → User Card + Note` + `Админка → Объявление` + `Админка → Outbox` + `Админка → Шаблоны DM` + `Админка → Payments` + `Админка → Payments fallback apply` (кнопки/action keys/footer/gates + helper screens/confirm flows/runtime prompts/strict apply contract) + warm-instance contract `Broadcast deliver → local DB overload fuse` (arming only when Redis fuse write fails; precheck before Redis/DB touch).
 - `APP_ENV=production npm run preflight` проверяет, что staging smoke **безопасно skip-аются** в prod env и не пытаются делать fault-injection перед реальным релизом.
 
 После этого можно делать deploy/redeploy на Vercel.
