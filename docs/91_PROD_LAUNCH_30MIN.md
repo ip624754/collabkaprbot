@@ -73,7 +73,7 @@ APP_ENV=production npm run preflight
 ```
 
 Что это даёт:
-- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` + `Админка → Система` + `Админка → Founder Sale` + `Админка → QStash статус` + `Админка → Hard-skip` + `Админка → Объявление` + `Админка → Outbox` + `Админка → Шаблоны DM` + `Админка → Payments` + `Админка → Payments fallback apply` (кнопки/action keys/footer/gates + helper screens/confirm flows/runtime prompts/strict apply contract).
+- `npm run preflight` прогоняет обычные lint/test gates + staging smoke на degraded Redis path, стабильный `health/admin` JSON contract и source-level contracts `Админка → Операции` + `Админка → Коммуникации` + `Админка → Система` + `Админка → Founder Sale` + `Админка → QStash статус` + `Админка → Hard-skip` + `Админка → Пользователи` + `Админка → User Card + Note` + `Админка → Объявление` + `Админка → Outbox` + `Админка → Шаблоны DM` + `Админка → Payments` + `Админка → Payments fallback apply` (кнопки/action keys/footer/gates + helper screens/confirm flows/runtime prompts/strict apply contract).
 - `APP_ENV=production npm run preflight` проверяет, что staging smoke **безопасно skip-аются** в prod env и не пытаются делать fault-injection перед реальным релизом.
 
 После этого можно делать deploy/redeploy на Vercel.
@@ -167,3 +167,8 @@ APP_ENV=production npm run preflight
   - `90_OWNER_RUNBOOK.md`
 
 - `npm run smoke:admin-hard-skip-contract` — быстрый guard для `Админка → Hard-skip (dead chats)` (home/hits/view, filters/export, find/unskip, footer/nav)
+
+- `npm run smoke:admin-users-contract` — быстрый guard для `Админка → Пользователи` (filters/search/reset/export/pagination + saved-query + CSV contract)
+- `npm run smoke:admin-user-card-note-contract` — быстрый guard для `Админка → User Card + Note` (card fields/actions + DM-only notes/tags + edit/clear/tag/cancel flow)
+
+- `npm run smoke:admin-audit-metrics-moderators-contract` — быстрый guard для `Админка → Audit / Metrics / Moderators` (audit filters/export/search + metrics windows + moderators add/remove/footer contract).

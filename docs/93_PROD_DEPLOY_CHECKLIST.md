@@ -116,6 +116,8 @@ APP_ENV=production npm run preflight
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-payments-fallback-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Payments fallback apply` и его runtime enable/disable/operator-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-qstash-status-contract`, чтобы поймать тихие rename/remove регрессии `Админка → QStash статус` и его ping/fan-out/operator-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-hard-skip-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Hard-skip` и его home/hits/view/find/export/unskip-flow.
+- Перед деплоем можно быстро прогнать `npm run smoke:admin-users-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Пользователи` и его filters/search/reset/export/card/message/note-flow.
+- Перед деплоем можно быстро прогнать `npm run smoke:admin-user-card-note-contract`, чтобы поймать тихие rename/remove регрессии `Админка → User Card + Note` и его card/actions/DM-only note-flow.
 - Отправь рассылку только себе/одному тестовому пользователю.
 - Убедись, что:
   - доставилось,
@@ -151,3 +153,5 @@ APP_ENV=production npm run preflight
 - `qstash.official_publish_stuck.today_count == 0`
 
 См. incident cookbook: `docs/94_PROD_READINESS_PACK.md`.
+
+- `npm run smoke:admin-audit-metrics-moderators-contract` — быстрый guard для `Админка → Audit / Metrics / Moderators` (audit filters/export/search + metrics windows + moderators add/remove/footer contract).

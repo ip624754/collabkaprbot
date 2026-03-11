@@ -1,5 +1,8 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-10
 
+**STEP400:** Admin Users contract smoke — добавлен `scripts/smoke-admin-users-contract.js`, который фиксирует source-level контракт operator-flow `Админка → Пользователи`: list-screen (`👥 Пользователи · фильтр · стр`, spoiler-строка поиска, empty-state, DM-only quick actions `👤 / ✉️ / 📝` при 1–5 результатах, filter/search/reset/export/pagination, `⬅️ Операции`), search/reset callbacks (`a:admin_users`, `a:admin_users_search`, `a:admin_users_reset`: `clearExpectText`, Redis query state, footer `⬅️ Система / 📋 Меню / 🏠 Home`) и CSV export contract (`a:adm_ucsv`, `exportUsersDirectory`, стабильный header/filename/caption, truncation warning, back buttons `⬅️ К списку / ⬅️ Админка`). Smoke дополнительно валидирует связанные записи `ACTION_REGISTRY` (`a:admin_users*`, `a:adm_ucard`, `a:adm_umsg`, `a:adm_unote`, `a:adm_ucsv`). `scripts/preflight.js` теперь включает и этот smoke обязательно, чтобы ловить тихие rename/remove/re-guard регрессии Users operator-flow до выкладки.
+
+
 **STEP399:** Admin Hard-skip contract smoke — добавлен `scripts/smoke-admin-hard-skip-contract.js`, который фиксирует source-level контракт operator-flow `Админка → Hard-skip (dead chats)`: home/hits/view экраны (`🧱 Hard-skip (dead chats)`, configured TTL, `🧾 Hard-skip HITs`, reason filters + today top reasons, quick TG buttons, `🧹 Снять hard-skip`) и их фактический footer/nav (`⬅️ Система / ⬅️ Админка` на home/hits, `⬅️ Система / 📋 Меню / 🏠 Home` на view). Smoke дополнительно валидирует callback/runtime contract (`a:hs_home`, `a:hs_hits`, `a:hs_find`, `a:hs_view`, `a:hs_unskip`, `a:hs_hits_export`: admin gate, `hs_find` expectText parse/backCb, bounded export helper `adminHardSkipHitsExport`, TXT export document + rerender toast) и связанные записи `ACTION_REGISTRY`. По ходу аудита найден и закрыт реальный хвост: кнопка `🗒 Export last 200` уже была в UI/registry, но callback отсутствовал; добавлен минимальный handler `a:hs_hits_export` без новых DB-read. `scripts/preflight.js` теперь включает и этот smoke обязательно, чтобы ловить тихие rename/remove/re-guard регрессии Hard-skip operator-flow до выкладки.
 
 
@@ -1287,3 +1290,23 @@ Auto-heal safeguards + ops alerts:
 
 - `docs/92_PROD_ENV_BASELINE.md` — baseline ENV for prod (no secrets)
 - `docs/93_PROD_DEPLOY_CHECKLIST.md` — deploy/runbook checklist (health + admin)
+
+
+### STEP401 — Admin User Card + Note contract smoke
+- `npm run preflight` теперь дополнительно запускает source-level smoke `scripts/smoke-admin-user-card-note-contract.js`.
+- Smoke фиксирует операторский контракт `Админка → User Card + Note`:
+  - `renderAdminUserCard()` — title/ID/TG ID/Username/Роли, DM-safe note/tags block, actions `Скопировать ID / Написать / Заметка / Подарить подписку`, revoke/ban toggles, back buttons `К списку / Операции`;
+  - `renderAdminUserNote()` — DM-only guard, note text/tags summary, tag toggle rows, `Изменить текст / Очистить всё / К карточке`, optional return-route button, section footer;
+  - callbacks `a:adm_ucard / a:adm_unote / a:adm_unote_edit / a:adm_unote_clear_q / a:adm_unote_clear / a:adm_unote_tag` и `expectText` flow `adm_user_note` (`clear/cancel/save`).
+- В `package.json` добавлен `npm run smoke:admin-user-card-note-contract`.
+- Runtime UX/DB path не менялись; новые DB-read в hot menu paths не добавлялись.
+
+
+### STEP402 — Admin Audit / Metrics / Moderators contract smoke
+- `npm run preflight` теперь дополнительно запускает source-level smoke `scripts/smoke-admin-audit-metrics-moderators-contract.js`.
+- Smoke фиксирует операторский контракт сразу для трёх экранов:
+  - `Админка → Audit Log`: time filters `24ч / 7д / 30д / Всё`, `Поиск / Сброс / Export TXT`, pagination, back-to-Ops, export filename/caption/back buttons, callbacks `a:aud*` и `expectText` flow `aud_search`.
+  - `Админка → Метрики`: summary blocks `Пользователи / Каналы / Конкурсы / Офферы / Payments / Активность`, day-window controls `7/14/30/90`, footer `Операции / Меню / Home`, callback `a:admin_metrics`.
+  - `Админка → Модераторы`: list/empty-state, `➕ Добавить модератора`, per-row `🗑`, footer `Система / Меню / Home`, callbacks `a:admin_mod_*` и `expectText` flow `admin_add_mod_username`.
+- В `package.json` добавлен `npm run smoke:admin-audit-metrics-moderators-contract`.
+- Runtime UX/DB path не менялись; новые DB-read в hot menu paths не добавлялись.
