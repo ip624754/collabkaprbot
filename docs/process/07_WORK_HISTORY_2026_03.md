@@ -1,3 +1,13 @@
+## STEP406
+
+- Docs-only polish after hardening steps 403–405.
+- Updated `docs/00_CURRENT_STATE.md`, `docs/90_OWNER_RUNBOOK.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+- Added `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` as a short incident/what-to-do sheet for:
+  - Broadcast `DB overload + Redis degraded` / local DB fuse
+  - Payments orphaned autoheal chain-drain visibility
+  - Official Publish `🩺 Проверить статус`
+- No runtime code/schema/action keys changed.
+
 ## STEP399 (Admin Hard-skip contract smoke) — 2026-03-10
 
 ### Зачем

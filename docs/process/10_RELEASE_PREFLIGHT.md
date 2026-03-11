@@ -92,6 +92,18 @@ npm run qa:fast
 
    Source-level smoke `scripts/smoke-payments-autoheal-chain-contract.js` проверяет bounded chain-drain для больших очередей `ORPHANED missing_session`: `src/lib/config.js` должен экспортировать `PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX`, `/api/health` — показывать `payments.orphaned_autoheal_chain_max`, `src/bot/cron.js` — публиковать first-leg continuation (`action='orphaned_autoheal'`, `chain_depth=1`, `chain_source='cron'`, `dedup=mon:autoheal:*`) только на полном batch, а `api/qstash/monetization-retry.js` — иметь worker branch `orphaned_autoheal`, который повторно claim’ит batch через `claimOrphanedMissingSessionPaymentsForAutoheal(...)`, self-reenqueue’ит следующую bounded leg с depth-limit/dedup и не трогает existing exactly-once guards fallback-apply. Это ловит тихий регресс, при котором backlog снова разбирается только по одному batch за tick или цепочка уходит в бесконечный reenqueue.
 
+## После зелёного preflight: быстрый operator sanity (1 минута)
+
+Preflight ловит regressions до деплоя, но после выкладки оператор должен помнить ещё три практических правила:
+- если health показывает `broadcast.db_overload.local_fuse_active=true`, не жми повторные deliver/replay — local fuse уже защищает warm instance от лишнего DB touch;
+- если виден большой хвост `ORPHANED/missing_session`, помни про bounded chain-drain (`payments.orphaned_autoheal_chain_max`) и не включай runtime fallback apply без явного инцидента;
+- если Official Publish завис в `PUBLISHING`, первый safe action — `🩺 Проверить статус`, а не manual republish.
+
+См. также:
+- `docs/90_OWNER_RUNBOOK.md`
+- `docs/94_PROD_READINESS_PACK.md`
+- `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md`
+
 ## Если preflight упал
 
 - На `actions:md changed` → закоммить `docs/02_ACTION_KEYS_REGISTRY.md` и повторить.
