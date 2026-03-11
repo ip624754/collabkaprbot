@@ -5,6 +5,7 @@
 > - `docs/93_PROD_DEPLOY_CHECKLIST.md` — операторский чеклист деплоя (health/admin)
 
 > - `docs/94_PROD_READINESS_PACK.md` — GO/NO‑GO + incident cookbook (Redis/Neon/QStash/Payments)
+> - `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий what-to-do playbook по hardening шагам 403–405
 Цель: безопасно выкатить **текущую версию бота** в прод и убедиться, что критические контуры (платежи/кредиты/разлок/диалоги/cron) работают.
 
 > Важно: **IG OAuth сейчас parked и не деплоится** (см. `23_IG_CONNECT_WORKLOG_AND_RESUME.md`). На запуск продакшена это не влияет и помогает уложиться в лимит Vercel Hobby по функциям.
@@ -90,6 +91,9 @@ APP_ENV=production npm run preflight
 - payments safety: `payments.payload_hmac_minlen_ok` и `payments.fallback_apply_effective`
 - нет ошибок по “critical path”
 - в Admin → Ops `Broadcast pending snapshot` выглядит ожидаемо (и при очистке помни: это только Redis snapshot)
+- если есть `broadcast.db_overload.local_fuse_active=true`, не дергай manual replay/deliver: это защитный short-circuit после overload
+- смотри `payments.orphaned_autoheal_chain_max` как visibility, что большой orphaned хвост разбирается bounded chain-drain'ом
+- stuck Official Publish сначала лечится через `🩺 Проверить статус`, а не повторной публикацией
 
 Если health красный — **стоп**, не зовём пользователей.
 

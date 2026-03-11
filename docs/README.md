@@ -99,3 +99,5 @@
 - `docs/92_PROD_ENV_BASELINE.md` — baseline ENV для prod (без секретов) + проверка через /api/health
 - `docs/93_PROD_DEPLOY_CHECKLIST.md` — операторский чеклист деплоя (health/admin)
 - `docs/94_PROD_READINESS_PACK.md` — GO/NO‑GO + incident cookbook
+
+- `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий what-to-do playbook после hardening шагов 403–405.

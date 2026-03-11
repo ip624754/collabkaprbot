@@ -162,3 +162,11 @@ APP_ENV=production npm run preflight
 ### STEP405 checks
 - Open Official Publish card in `PUBLISHING` and verify `🩺 Проверить статус` is visible to moderators.
 - Confirm the action rerenders the card and never creates a second publish attempt.
+
+### STEP406 docs / operator checks
+- Owner knows where to look first: `docs/90_OWNER_RUNBOOK.md`, `docs/94_PROD_READINESS_PACK.md`, `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md`.
+- `/api/health` playbook is understood for:
+  - `broadcast.db_overload.local_fuse_active`
+  - `payments.orphaned_autoheal_chain_max`
+  - Official Publish stuck `PUBLISHING`
+- Team understands safe order: health → admin/operator action → logs, not the reverse.

@@ -1,4 +1,4 @@
-# 90 — Owner Runbook: как управлять проектом в проде — 2026-02-27
+# 90 — Owner Runbook: как управлять проектом в проде — 2026-03-11
 
 Этот документ — **операционная шпаргалка для владельца**.
 
@@ -40,8 +40,9 @@
 #### Что смотреть в health (сигналы деградации)
 - Redis: `redis.read_ok` / `redis.write_ok` + `last_error`
 - Payments: `payments.payload_hmac_minlen_ok`, `payments.fallback_apply_effective`
-- Broadcast: `broadcast.db_overload`, `broadcast.tick_deferred_redis`
+- Broadcast: `broadcast.db_overload`, `broadcast.tick_deferred_redis`, `broadcast.pending_deliveries`
 - QStash: `qstash.reschedule_failed`, `qstash.official_publish_stuck`
+- New hardening watchlist: local DB fuse, orphaned autoheal chain, manual official verify
 
 Cookbook: `docs/94_PROD_READINESS_PACK.md`.
 
@@ -59,6 +60,11 @@ Cookbook: `docs/94_PROD_READINESS_PACK.md`.
 
 Staging проверка деградаций:
 - `SIMULATE_REDIS_DOWN=1` (только staging/dev) — быстро проверить fail-open/fail-closed (см. readiness pack).
+
+#### Как читать новые hardening-сигналы
+- **Broadcast local DB fuse**: если в `broadcast.db_overload` видны `local_fuse_active=true` / `local_fuse_until_ms`, это значит, что тёплый инстанс сам short-circuit'ит повторные доставочные вызовы после `DB overload + Redis write fail`. Это нормальный защитный режим; не надо вручную “добивать” доставку в этот момент.
+- **Payments orphaned autoheal chain**: смотри `payments.orphaned_autoheal_chain_max`. Это не сигнал аварии сам по себе, а visibility, что большой хвост `ORPHANED/missing_session` теперь разгребается bounded цепочкой, а не только по одному batch за cron tick.
+- **Official Publish manual verify**: если пост застрял в `PUBLISHING`, первый безопасный путь — `🩺 Проверить статус` из карточки official publish. Он не делает повторную публикацию; он только синхронизирует status / safe self-heal.
 
 
 ### 3.2 Support chat (OPS)
@@ -163,6 +169,31 @@ Staging проверка деградаций:
 - проверить, не добавили ли DB‑запросы в меню/рендер
 
 ---
+## 9) Короткий operator playbook: что делать, если…
+
+### 9.1 Broadcast / DB overload + Redis degraded
+1) Открой `/api/health`.
+2) Смотри `broadcast.db_overload`, `broadcast.tick_deferred_redis`, `broadcast.pending_deliveries`.
+3) Если local fuse активен — **не** жми повторные deliver/replay вручную; дай short-circuit/cooldown сработать.
+4) Если проблема не проходит — смотри Ops digest / Vercel logs и уже потом эскалируй как infra incident.
+
+### 9.2 Большой хвост orphaned payments
+1) Открой `/api/health` и проверь payments block.
+2) Помни: first batch идёт из cron, хвост может продолжаться bounded chain-drain worker'ом.
+3) Не включай runtime `Payments fallback apply` без явного инцидента и причины.
+4) Если хвост не уменьшается — смотри ops alert / qstash worker logs, а не пытайся “передёргивать” apply вручную массово.
+
+### 9.3 Official Publish stuck in `PUBLISHING`
+1) Открой карточку публикации.
+2) Сначала нажми `🩺 Проверить статус`.
+3) Только если status уже синхронизирован и есть реальная необходимость — используй следующие operator actions.
+4) Не делай повторную публикацию “на всякий случай”, пока safe verify не отработал.
+
+Ссылки:
+- `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`
+- `docs/94_PROD_READINESS_PACK.md`
+- `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md`
+
 
 ## 9) Instagram (на потом)
 

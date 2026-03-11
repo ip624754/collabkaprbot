@@ -1,5 +1,7 @@
 # 00 — CURRENT STATE (Collabka PR / @collabkaprbot) — 2026-03-11
 
+**STEP406:** Docs / runbook polish after hardening 403–405 — обновлены operator/docs контуры без runtime-изменений: `docs/90_OWNER_RUNBOOK.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md` и новый `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md`. Зафиксировано, как читать `/api/health` после новых hardening-шагов (`broadcast.db_overload.local_fuse_active`, `payments.orphaned_autoheal_chain_max`, manual Official Publish verify/check-now), какие сигналы считать watchlist, и что именно делать оператору при `DB overload + Redis degraded`, большом orphaned-payments backlog и stuck `PUBLISHING` без повторной публикации.
+
 **STEP404:** Payments orphaned auto-heal chain-drain — добавлен bounded self-reenqueue для больших очередей `ORPHANED/missing_session` без изменения exactly-once guard’ов. `src/bot/cron.js` по‑прежнему обрабатывает первый batch сам, но если claimed batch заполнен целиком, он публикует continuation-задачу `action=orphaned_autoheal` в `POST /api/qstash/monetization-retry` (`dedup=mon:autoheal:*`, `chain_depth=1`). В `api/qstash/monetization-retry.js` добавлен worker branch `orphaned_autoheal`, который повторно claim’ит следующий batch через `claimOrphanedMissingSessionPaymentsForAutoheal(...)`, применяет уже существующий fallback-path (`_validateStarsPaymentStrict` + `applyPaymentFallbackNoSession`) и при полном batch сам публикует следующий bounded leg до `PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX`. В `/api/health` добавлено поле `payments.orphaned_autoheal_chain_max`, а `scripts/smoke-payments-autoheal-chain-contract.js` + обязательный прогон в `scripts/preflight.js` ловят регресс contract’а (cron first-leg enqueue, worker self-reenqueue, depth-limit/dedup, health/config visibility) до выкладки.
 
 
@@ -1322,6 +1324,19 @@ Auto-heal safeguards + ops alerts:
 - `respondDbOverloadFuse(...)` теперь помечает ответ флагом `local_fuse`, чтобы путь было видно в дебаге/QA.
 - В `npm run preflight` добавлен source-level smoke `scripts/smoke-broadcast-local-db-fuse.js`, который фиксирует контракт local fuse: module-level state, arming on Redis-fuse failure, precheck order (`local fuse -> Redis fuse -> DB`), response marker.
 - Runtime UI/action keys/DB schema не менялись; новые DB-read в hot menu paths не добавлялись.
+
+## STEP406 — Docs / runbook polish
+
+- Обновлены owner/deploy/preflight документы и добавлен короткий operator playbook `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md`.
+- `/api/health` теперь документирован как основной операторский дашборд для новых hardening-paths:
+  - `broadcast.db_overload.*` и `local_fuse_active` / `local_fuse_until_ms`;
+  - `payments.orphaned_autoheal_chain_max` как visibility для bounded chain-drain;
+  - Official Publish manual `🩺 Проверить статус` как первый safe action при stuck `PUBLISHING`.
+- Зафиксирован короткий playbook “что делать, если” без импровизации:
+  - DB overload + Redis degraded → смотреть health, не жать повторные отправки, ждать short-circuit / cooldown;
+  - orphaned payments backlog → проверять bounded chain-drain, не включать runtime fallback без причины;
+  - Official Publish stuck → сначала `🩺 Проверить статус`, только потом replay/ручные действия.
+- Runtime code/action keys/schema не менялись; это docs-only step.
 
 ## STEP405 — Official Publish: operator check-now / force verify
 - Added manual moderator action `a:off_verify` / `🩺 Проверить статус` on `PUBLISHING` official posts.
