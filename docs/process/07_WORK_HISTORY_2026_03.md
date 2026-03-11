@@ -3313,3 +3313,51 @@ NotebookLM-аудит подсветил редкий, но дорогой дл�
 - `npm run smoke:broadcast-local-db-fuse`
 - `node --check scripts/preflight.js`
 - `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP404 (Payments orphaned auto-heal chain-drain / self-reenqueue) — 2026-03-11
+
+### Зачем
+NotebookLM-аудит подсветил не баг exactly-once, а throughput tail: при большом backlog `ORPHANED missing_session` cron разгребал только один batch за tick. Нужен bounded chain-drain, который ускоряет хвост без увеличения batch size и без ломки уже существующих claim/apply guard’ов.
+
+### Что сделано
+- В `src/lib/config.js` добавлен bounded env `PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX` (по умолчанию 3, максимум 12).
+- В `/api/health` добавлено поле `payments.orphaned_autoheal_chain_max` для visibility.
+- В `src/bot/cron.js` `autoHealOrphanedPayments()` по‑прежнему обрабатывает первый batch сам, но если claimed batch заполнен целиком, публикует continuation-задачу в `POST /api/qstash/monetization-retry`:
+  - `action='orphaned_autoheal'`
+  - `chain_depth=1`
+  - `chain_source='cron'`
+  - `dedup=mon:autoheal:${chainId}:1`
+- В `api/qstash/monetization-retry.js` добавлен worker branch `orphaned_autoheal`:
+  - повторно claim’ит batch через `claimOrphanedMissingSessionPaymentsForAutoheal(...)`
+  - использует текущие safety-path’ы `_validateStarsPaymentStrict(...)` и `applyPaymentFallbackNoSession(...)`
+  - при полном batch self-reenqueue’ит следующую bounded leg через `qstashPublishJSON(...)`
+  - соблюдает depth-limit через `PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX`
+  - пишет best-effort ops digest на notify/apply/chain enqueue failures
+- Добавлен source-level smoke `scripts/smoke-payments-autoheal-chain-contract.js`.
+- `scripts/preflight.js` теперь обязательно запускает этот smoke.
+- В `package.json` добавлен `npm run smoke:payments-autoheal-chain-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `src/lib/config.js`
+- `api/health.js`
+- `src/bot/cron.js`
+- `api/qstash/monetization-retry.js`
+- `scripts/smoke-payments-autoheal-chain-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check src/bot/cron.js`
+- `node --check api/qstash/monetization-retry.js`
+- `node --check scripts/smoke-payments-autoheal-chain-contract.js`
+- `node scripts/smoke-payments-autoheal-chain-contract.js`
+- `npm run smoke:payments-autoheal-chain-contract`
+- `APP_ENV=production node scripts/preflight.js`
+- `APP_ENV=staging node scripts/preflight.js`
