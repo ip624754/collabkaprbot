@@ -186,6 +186,32 @@ function getDbOverloadFuseTtlSec() {
   return Math.max(10, Math.min(300, Math.trunc(v)));
 }
 
+// Best-effort local fuse for the rare path: DB overloaded + Redis unavailable.
+// Scope: warm lambda instance only. This avoids repeatedly touching Neon while Redis is degraded.
+let localDbDegradedUntilMs = 0;
+
+function getLocalDbOverloadFuseTtlMs() {
+  const v = Number(process.env.BROADCAST_DB_OVERLOAD_LOCAL_FUSE_TTL_MS || 15_000);
+  if (!Number.isFinite(v)) return 15_000;
+  return Math.max(5_000, Math.min(60_000, Math.trunc(v)));
+}
+
+function getLocalDbOverloadFuseUntilMs(nowMs = Date.now()) {
+  const untilMs = Number(localDbDegradedUntilMs || 0) || 0;
+  if (!untilMs || untilMs <= nowMs) {
+    localDbDegradedUntilMs = 0;
+    return 0;
+  }
+  return untilMs;
+}
+
+function armLocalDbOverloadFuse(nowMs = Date.now()) {
+  const ttlMs = getLocalDbOverloadFuseTtlMs();
+  const nextUntilMs = nowMs + ttlMs;
+  localDbDegradedUntilMs = Math.max(Number(localDbDegradedUntilMs || 0) || 0, nextUntilMs);
+  return localDbDegradedUntilMs;
+}
+
 function isDbOverloadError(err) {
   if (!err) return false;
   const code = String(err?.code || err?.errno || '').toUpperCase();
@@ -226,10 +252,12 @@ async function respondDbOverload({ res, broadcastId, userId, tgId, attempt, wher
   setQStashRetryAfterHeaders(res, sec);
 
   // DB overload fuse (Redis): short-circuit retries BEFORE touching Neon/pool on the next calls.
-  // Best-effort only.
+  // If Redis is unavailable too, arm a short local fuse for this warm instance.
   try {
     await redis.set(dbOverloadFuseKey(), new Date().toISOString(), { ex: getDbOverloadFuseTtlSec() });
-  } catch {}
+  } catch {
+    armLocalDbOverloadFuse();
+  }
 
   // Redis-only metrics for operators: count today + last timestamp.
   // Best-effort and must never throw (we're already in a degraded path).
@@ -295,11 +323,12 @@ async function respondDbOverload({ res, broadcastId, userId, tgId, attempt, wher
   });
 }
 
-async function respondDbOverloadFuse({ res, broadcastId, userId, tgId, attempt, where }) {
+async function respondDbOverloadFuse({ res, broadcastId, userId, tgId, attempt, where, retryAfterSec, localFuse = false }) {
   const baseSec = getDbBackoffSec();
   const jitterMax = getDbBackoffJitterSec();
   const jitterSec = jitterMax > 0 ? randIntInclusive(0, jitterMax) : 0;
-  const sec = Math.max(1, Number(baseSec) + Number(jitterSec));
+  const floorSec = Math.max(1, Number(retryAfterSec || 0) || 0);
+  const sec = Math.max(floorSec, Number(baseSec) + Number(jitterSec));
   setQStashRetryAfterHeaders(res, sec);
 
   // Best-effort ops digest (deduped) so operators can see that the fuse is active.
@@ -327,8 +356,9 @@ async function respondDbOverloadFuse({ res, broadcastId, userId, tgId, attempt, 
     retry_after_sec: sec,
     base_backoff_sec: baseSec,
     jitter_sec: jitterSec,
-    where: where || 'fuse',
+    where: where || (localFuse ? 'local_fuse' : 'fuse'),
     fuse: true,
+    local_fuse: Boolean(localFuse),
   });
 }
 
@@ -395,6 +425,24 @@ export default async function handler(req, res) {
 
     if (!broadcastId || !userId || !tgId || !bcPayload) {
       res.status(400).json({ ok: false, error: 'bad_payload' });
+      return;
+    }
+
+    // Warm-instance local fuse: if we recently saw DB overload while Redis was unavailable,
+    // short-circuit BEFORE even attempting the Redis fuse read or any DB access.
+    const localFuseUntilMs = getLocalDbOverloadFuseUntilMs();
+    if (localFuseUntilMs) {
+      const retryAfterSec = Math.max(1, Math.ceil((localFuseUntilMs - Date.now()) / 1000));
+      await respondDbOverloadFuse({
+        res,
+        broadcastId,
+        userId,
+        tgId,
+        attempt,
+        where: 'local_fuse_precheck',
+        retryAfterSec,
+        localFuse: true,
+      });
       return;
     }
 
