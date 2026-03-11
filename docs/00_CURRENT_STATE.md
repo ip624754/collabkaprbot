@@ -1322,3 +1322,8 @@ Auto-heal safeguards + ops alerts:
 - `respondDbOverloadFuse(...)` теперь помечает ответ флагом `local_fuse`, чтобы путь было видно в дебаге/QA.
 - В `npm run preflight` добавлен source-level smoke `scripts/smoke-broadcast-local-db-fuse.js`, который фиксирует контракт local fuse: module-level state, arming on Redis-fuse failure, precheck order (`local fuse -> Redis fuse -> DB`), response marker.
 - Runtime UI/action keys/DB schema не менялись; новые DB-read в hot menu paths не добавлялись.
+
+## STEP405 — Official Publish: operator check-now / force verify
+- Added manual moderator action `a:off_verify` / `🩺 Проверить статус` on `PUBLISHING` official posts.
+- Added shared helper `src/lib/officialPublishVerify.js` for safe verify/self-heal used by worker and operator path.
+- Manual check-now does not republish and does not bypass token-lock; it only syncs ACTIVE via Redis breadcrumb or safely resets to PENDING when publish is truly stuck.

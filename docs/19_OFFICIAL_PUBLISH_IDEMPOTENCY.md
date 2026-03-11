@@ -105,3 +105,8 @@ ENV (опционально):
 - Два быстрых клика “✅ Опубликовать” → в канале **1 пост**, второй клик сообщает “уже публикуется”.
 - Два быстрых клика “🔄 Обновить” → в канале **1 обновление**, без дублей.
 - Два быстрых клика “📴 Снять” → одно снятие, второй клик “уже выполняется”.
+
+## STEP405 — Manual check-now
+- Added moderator-only `🩺 Проверить статус` action for `PUBLISHING`.
+- The action reuses the same safe verify/self-heal logic as `/api/qstash/official-publish-verify`.
+- It never republishes the offer and never bypasses the official publish token-lock.

@@ -5,15 +5,15 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **528**
-- Actions in registry: **528**
+- Actions in code: **529**
+- Actions in registry: **529**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
 | admin | 96 |
-| edit | 338 |
+| edit | 339 |
 | ops | 79 |
 | pay | 11 |
 | view | 4 |
@@ -25,7 +25,7 @@
 | db_truth | 4 |
 | none | 168 |
 | queue_first | 2 |
-| require_redis | 354 |
+| require_redis | 355 |
 
 ## Actions table
 
@@ -483,6 +483,7 @@
 | `a:off_req_home` | edit | none |
 | `a:off_rm` | edit | require_redis |
 | `a:off_upd` | edit | require_redis |
+| `a:off_verify` | edit | require_redis |
 | `a:offer_open` | edit | none |
 | `a:onb_brand` | edit | require_redis |
 | `a:onb_creator` | edit | require_redis |

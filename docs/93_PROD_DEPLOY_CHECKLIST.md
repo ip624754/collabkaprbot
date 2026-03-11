@@ -158,3 +158,7 @@ APP_ENV=production npm run preflight
 См. incident cookbook: `docs/94_PROD_READINESS_PACK.md`.
 
 - `npm run smoke:admin-audit-metrics-moderators-contract` — быстрый guard для `Админка → Audit / Metrics / Moderators` (audit filters/export/search + metrics windows + moderators add/remove/footer contract).
+
+### STEP405 checks
+- Open Official Publish card in `PUBLISHING` and verify `🩺 Проверить статус` is visible to moderators.
+- Confirm the action rerenders the card and never creates a second publish attempt.

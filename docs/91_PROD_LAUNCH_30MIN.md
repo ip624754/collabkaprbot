@@ -173,3 +173,6 @@ APP_ENV=production npm run preflight
 - `npm run smoke:admin-user-card-note-contract` — быстрый guard для `Админка → User Card + Note` (card fields/actions + DM-only notes/tags + edit/clear/tag/cancel flow)
 
 - `npm run smoke:admin-audit-metrics-moderators-contract` — быстрый guard для `Админка → Audit / Metrics / Moderators` (audit filters/export/search + metrics windows + moderators add/remove/footer contract).
+
+### STEP405
+- If Official Publish looks stuck in `PUBLISHING`, moderators can use `🩺 Проверить статус` from the official card before attempting any manual replay.
