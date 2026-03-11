@@ -3,7 +3,11 @@ import { setMonRetryMeta, setMonRetryDiag, setMonIntroDiag, setMonAcceptDiag, se
 import { CFG } from '../../src/lib/config.js';
 import { tgSendMessage } from '../../src/lib/tgApi.js';
 import * as db from '../../src/db/queries.js';
-import { getQStashDeliveryUrl, qstashVerifySignature } from '../../src/lib/qstash.js';
+import { _validateStarsPaymentStrict } from '../../src/bot/bot.js';
+import { applyPaymentFallbackNoSession } from '../../src/bot/payments_fallback.js';
+import { isPaymentsFallbackApplyEnabled } from '../../src/lib/paymentsOps.js';
+import { queueOpsDigestSafe } from '../../src/lib/opsDigest.js';
+import { getQStashDeliveryUrl, qstashPublishJSON, qstashVerifySignature } from '../../src/lib/qstash.js';
 
 export const config = {
   api: {
@@ -123,6 +127,161 @@ function contactPackFromWorkspace(ws, ttlDays) {
   }
 
   return lines.join('\n');
+}
+
+function orphanedAutohealChainMax() {
+  return Math.max(0, Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX || 0) || 0);
+}
+
+async function queueOrphanedAutohealNext({ chainId, chainDepth, source = 'worker' } = {}) {
+  const chain = String(chainId || '').trim();
+  const curDepth = Math.max(0, Number(chainDepth || 0) || 0);
+  const nextDepth = curDepth + 1;
+  const maxDepth = orphanedAutohealChainMax();
+  if (!chain) return { queued: false, skipped: 'missing_chain_id' };
+  if (maxDepth <= 0) return { queued: false, skipped: 'chain_disabled' };
+  if (nextDepth > maxDepth) return { queued: false, skipped: 'depth_limit' };
+
+  const url = getQStashDeliveryUrl('/api/qstash/monetization-retry');
+  if (!url) return { queued: false, skipped: 'public_base_url_missing' };
+
+  await qstashPublishJSON({
+    url,
+    body: {
+      action: 'orphaned_autoheal',
+      chain_id: chain,
+      chain_depth: nextDepth,
+      chain_source: String(source || 'worker').slice(0, 24),
+    },
+    deduplicationId: `mon:autoheal:${chain}:${nextDepth}`,
+    retries: 2,
+    timeout: '20s',
+  });
+
+  return { queued: true, chainId: chain, nextDepth };
+}
+
+async function processOrphanedAutohealBatch({ chainId = '', chainDepth = 0, chainSource = 'worker' } = {}) {
+  const fbOn = await isPaymentsFallbackApplyEnabled();
+  if (!CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED || !fbOn) {
+    return { enabled: false, checked: 0, applied: 0, failed: 0, skipped: 0, skipped_young: 0, chain_enqueued: false, chain_id: chainId || null, chain_depth: Math.max(0, Number(chainDepth || 0) || 0), chain_source: String(chainSource || 'worker') };
+  }
+
+  const batch = Math.max(0, Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_BATCH || 20) || 0);
+  if (batch <= 0) {
+    return { enabled: true, checked: 0, applied: 0, failed: 0, skipped: 0, skipped_young: 0, chain_enqueued: false, chain_id: chainId || null, chain_depth: Math.max(0, Number(chainDepth || 0) || 0), chain_source: String(chainSource || 'worker') };
+  }
+
+  let applied = 0;
+  let failed = 0;
+  let skipped = 0;
+  const failedIds = [];
+  const failedReasons = [];
+  let notifySkipped = 0;
+  const notifySkippedIds = [];
+  let validationFailed = 0;
+  const validationFailedIds = [];
+  const validationFailedReasons = [];
+  let manualRequired = 0;
+  const manualRequiredIds = [];
+  const manualRequiredReasons = [];
+
+  const minAgeSec = Math.max(0, Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 0) || 0);
+  const cand = await db.claimOrphanedMissingSessionPaymentsForAutoheal(batch, minAgeSec);
+  const skippedYoung = 0;
+
+  for (const r of cand) {
+    try {
+      const v = await _validateStarsPaymentStrict({
+        payload: String(r.invoice_payload || ''),
+        currency: String(r.currency || 'XTR'),
+        totalAmount: Number(r.total_amount || 0),
+        payerUserId: Number(r.user_id || 0) || null,
+      });
+      if (!v || !v.ok) {
+        const rr = String(v?.reason || 'validation_failed');
+        validationFailed += 1;
+        if (validationFailedIds.length < 5) validationFailedIds.push(Number(r.id));
+        if (validationFailedReasons.length < 3) validationFailedReasons.push(rr);
+        try { await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
+        skipped += 1;
+        continue;
+      }
+
+      const fb = await applyPaymentFallbackNoSession({
+        paymentId: Number(r.id),
+        paymentUserId: Number(r.user_id),
+        invoicePayload: String(r.invoice_payload || ''),
+        appliedByUserId: Number(r.user_id),
+        totalAmount: Number(r.total_amount || 0),
+        currency: String(r.currency || 'XTR'),
+        telegramPaymentChargeId: String(r.telegram_payment_charge_id || ''),
+      });
+
+      if (fb && fb.applied) {
+        applied += 1;
+        try {
+          const tgId = Number(r.tg_id || 0);
+          if (!tgId) {
+            notifySkipped += 1;
+            if (notifySkippedIds.length < 5) notifySkippedIds.push(Number(r.id));
+          } else {
+            let msg = '✅ Оплата применена автоматически (восстановлено после задержки).';
+            if (fb.kind === 'brand_pass') msg += `\n\n💳 Кредиты начислены: +${Number(fb.credits || 0)}.`;
+            if (fb.kind === 'brand_plan') msg += `\n\n⭐️ Brand Plan активирован (${String(fb.plan || '')}).`;
+            if (fb.kind === 'pro') msg += `\n\n⭐️ PRO активирован.`;
+            if (fb.kind === 'founder_brand') msg += `\n\n⭐️ Founder Sale применён.`;
+            await safeTgSend(tgId, msg);
+          }
+        } catch {
+          notifySkipped += 1;
+          if (notifySkippedIds.length < 5) notifySkippedIds.push(Number(r.id));
+        }
+      } else {
+        skipped += 1;
+        const rr = String(fb?.reason || '');
+        if (rr === 'unsupported_payload' || rr === 'missing_userid_or_wsid' || rr === 'bad_input' || rr === 'user_mismatch') {
+          manualRequired += 1;
+          if (manualRequiredIds.length < 5) manualRequiredIds.push(Number(r.id));
+          if (manualRequiredReasons.length < 3) manualRequiredReasons.push(rr);
+          try { await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
+        }
+      }
+    } catch (e) {
+      failed += 1;
+      try {
+        if (failedIds.length < 5) failedIds.push(Number(r.id));
+        if (failedReasons.length < 3) failedReasons.push(String(e?.message || e).slice(0, 120));
+      } catch {}
+    }
+  }
+
+  if (notifySkipped > 0) {
+    await queueOpsDigestSafe({ group: 'ops', reason: 'autoheal_notify_failed', title: 'Auto-heal ORPHANED: notify skipped', paymentId: notifySkippedIds.length ? notifySkippedIds[0] : null, kind: 'payments', payload: '', extra: [ `source=${String(chainSource || 'worker')}`, `Applied: ${applied}`, `Notify skipped: ${notifySkipped}`, `Ids: ${notifySkippedIds.join(',') || '-'}` ].filter(Boolean), dedupId: `autoheal_notify_failed:${String(chainId || 'na')}:${Math.max(0, Number(chainDepth || 0) || 0)}` });
+  }
+  if (failed > 0) {
+    await queueOpsDigestSafe({ group: 'ops', reason: 'autoheal_failed', title: 'Auto-heal ORPHANED missing_session: failures', paymentId: failedIds.length ? failedIds[0] : null, kind: 'payments', payload: '', extra: [ `source=${String(chainSource || 'worker')}`, `Checked: ${cand.length}`, `Applied: ${applied}`, `Failed: ${failed}`, `Ids: ${failedIds.join(',') || '-'}`, failedReasons.length ? `Reason: ${failedReasons[0]}` : '' ].filter(Boolean), dedupId: `autoheal_failed:${String(chainId || 'na')}:${Math.max(0, Number(chainDepth || 0) || 0)}` });
+  }
+  if (validationFailed > 0) {
+    await queueOpsDigestSafe({ group: 'ops', reason: 'autoheal_validation_failed', title: 'Auto-heal ORPHANED: strict validation failed', paymentId: validationFailedIds.length ? validationFailedIds[0] : null, kind: 'payments', payload: '', extra: [ `source=${String(chainSource || 'worker')}`, `Checked: ${cand.length}`, `Applied: ${applied}`, `Validation failed: ${validationFailed}`, `Ids: ${validationFailedIds.join(',') || '-'}`, validationFailedReasons.length ? `Reason: ${validationFailedReasons[0]}` : '' ].filter(Boolean), dedupId: `autoheal_validation_failed:${String(chainId || 'na')}:${Math.max(0, Number(chainDepth || 0) || 0)}` });
+  }
+  if (manualRequired > 0) {
+    await queueOpsDigestSafe({ group: 'ops', reason: 'autoheal_manual_required_failed', title: 'Auto-heal ORPHANED: manual review required', paymentId: manualRequiredIds.length ? manualRequiredIds[0] : null, kind: 'payments', payload: '', extra: [ `source=${String(chainSource || 'worker')}`, `Checked: ${cand.length}`, `Applied: ${applied}`, `Manual required: ${manualRequired}`, `Ids: ${manualRequiredIds.join(',') || '-'}`, manualRequiredReasons.length ? `Reason: ${manualRequiredReasons[0]}` : '' ].filter(Boolean), dedupId: `autoheal_manual_required:${String(chainId || 'na')}:${Math.max(0, Number(chainDepth || 0) || 0)}` });
+  }
+
+  let chainEnqueued = false;
+  let chainDepthNext = null;
+  if (cand.length >= batch) {
+    try {
+      const q = await queueOrphanedAutohealNext({ chainId, chainDepth, source: chainSource });
+      chainEnqueued = !!q?.queued;
+      chainDepthNext = q?.nextDepth ?? null;
+    } catch (e) {
+      await queueOpsDigestSafe({ group: 'ops', reason: 'autoheal_chain_enqueue_failed', title: 'Auto-heal ORPHANED: chain enqueue failed', paymentId: cand[0]?.id ? Number(cand[0].id) : null, kind: 'payments', payload: '', extra: [ `source=${String(chainSource || 'worker')}`, `Checked: ${cand.length}`, `Depth: ${Math.max(0, Number(chainDepth || 0) || 0)}`, String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180) ].filter(Boolean), dedupId: `autoheal_chain_enqueue_failed:${String(chainId || 'na')}:${Math.max(0, Number(chainDepth || 0) || 0)}` });
+    }
+  }
+
+  return { enabled: true, checked: cand.length, applied, failed, skipped, skipped_young: Number(skippedYoung || 0), chain_enqueued: chainEnqueued, chain_id: chainId || null, chain_depth: Math.max(0, Number(chainDepth || 0) || 0), chain_depth_next: chainDepthNext, chain_source: String(chainSource || 'worker') };
 }
 
 export default async function handler(req, res) {
@@ -616,6 +775,16 @@ export default async function handler(req, res) {
       await setMonIntroDiag({ atIso: nowIso, status: 'ok', errorCode: '', offerId });
       await setMonRetryDiag({ status: 'ok' });
       res.status(200).json({ ok: true, action, status: 'ok', threadId });
+      return;
+    }
+
+    if (action === 'orphaned_autoheal') {
+      const chainId = String(payload.chain_id || payload.chainId || '').trim() || `worker-${Date.now()}`;
+      const chainDepth = Math.max(0, Number(payload.chain_depth || payload.chainDepth || 0) || 0);
+      const chainSource = String(payload.chain_source || payload.chainSource || 'worker').trim() || 'worker';
+      const out = await processOrphanedAutohealBatch({ chainId, chainDepth, chainSource });
+      await setMonRetryDiag({ status: 'ok', errorCode: out.chain_enqueued ? 'chain_enqueued' : '' });
+      res.status(200).json({ ok: true, action, status: 'ok', ...out });
       return;
     }
 
