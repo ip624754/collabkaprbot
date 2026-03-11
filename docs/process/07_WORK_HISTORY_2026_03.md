@@ -3375,3 +3375,56 @@ NotebookLM-аудит подсветил не баг exactly-once, а throughput
 ## STEP405
 - Added Official Publish operator `🩺 Проверить статус` path with shared safe verify/self-heal helper.
 - Added source-level smoke and preflight coverage for manual check-now contract.
+
+
+## STEP407
+- Public positioning polish без runtime-изменений.
+- Обновлён `docs/public/00_product_overview_ru.md`: product overview теперь стартует как **система управления коллаборациями внутри Telegram**, а не как “просто бот”; сохранён канонический flow `витрина → запрос → диалог → статус сделки → результат`.
+- Обновлён `docs/public/README_PUBLIC.md`: public pack теперь описывается как пакет материалов о системе, а бот зафиксирован как интерфейс доступа.
+- Обновлён `docs/public/07_press_kit_ru.md`: новый tagline/elevator pitch, добавлен блок “это не просто бот”, усилен framing `creator pipeline / Brand Inbox / управляемость`, при этом без enterprise-overclaim.
+- Обновлён `docs/public/05_publication_templates_ru.md`: добавлены канонические формулировки, обновлены short/pin/B2B шаблоны, чтобы будущие публикации не откатывали продукт в “ботик”.
+- Обновлён `docs/public/06_telegraph_article_ru.md`: статья переведена на framing “система через Telegram”, добавлен раздел “почему это уже не просто бот”, без неподтверждённых рыночных цифр.
+- Обновлён `docs/public/02_for_brands_ru.md`: усилен B2B language (`creator pipeline`, `Brand Inbox`, `прозрачность для команды`, `быстрее путь до сделки`) без обещаний готового white-label/private cabinet/advanced analytics.
+- Обновлён `docs/public/03_faq_ru.md`: добавлены вопросы “бот или система?” и “можно ли private-формат?”, первый ответ переведён с `Collabka PR Bot` на `Collabka PR`.
+- Мягко синхронизированы `docs/public/01_for_creators_ru.md` и `docs/public/04_tech_overview_ru.md`: в creator guide бот теперь описан как интерфейс работы в системе, а tech overview — как основа устойчивой рабочей системы для creator/brand flows.
+- Обновлён `docs/00_CURRENT_STATE.md`.
+
+### Файлы
+- `docs/public/00_product_overview_ru.md`
+- `docs/public/README_PUBLIC.md`
+- `docs/public/07_press_kit_ru.md`
+- `docs/public/05_publication_templates_ru.md`
+- `docs/public/06_telegraph_article_ru.md`
+- `docs/public/02_for_brands_ru.md`
+- `docs/public/03_faq_ru.md`
+- `docs/public/01_for_creators_ru.md`
+- `docs/public/04_tech_overview_ru.md`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- Ручная проверка консистентности public wording: `система` как главное определение, `бот` как интерфейс доступа.
+- Проверка, что в public docs нет жёстких обещаний white-label/private cabinet/advanced analytics/CRM integrations.
+- Проверка markdown-структуры и внутренних относительных ссылок в `docs/public/*`.
+
+## STEP408
+- Added source-level contract smoke for `/start` onboarding / role-gate / payload-priority.
+- New `scripts/smoke-start-role-gate-contract.js` fixes the current contract in tests instead of changing runtime: parser coverage for `gw_ / bp_ / offer_ / wsp_ / fs_ / ig_verify / src_*`, payload-first routing before role gate, fail-open Redis key read for `ui_mode`, and the short role picker `Ты бренд или креатор?`.
+- Smoke also locks the strong-intent role switching semantics: `a:home_mode` must persist `creator|brand`, clear brand-manager + curator overlays, and only touch `db.listBrandsForManager()` on explicit click; `a:ui_mode_set` must keep clearing brand-manager state before `setUiMode()`.
+- Added explicit guard for the cost invariant: `/start` hot-path must not regress to `resolveUiMode()`/`db.listBrandsForManager()` before the gate, so menu/home onboarding stays free of new DB reads.
+- `setUiMode()` fail-open behavior is now covered directly by smoke (Redis write errors stay swallowed).
+- Wired the new smoke into both `package.json` (`npm run smoke:start-role-gate-contract`) and `scripts/preflight.js`, so the contract is checked on every standard preflight.
+
+### Файлы
+- `scripts/smoke-start-role-gate-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-start-role-gate-contract.js`
+- `node scripts/smoke-start-role-gate-contract.js`
+- `npm run smoke:start-role-gate-contract`
+- `npm run preflight`
+
