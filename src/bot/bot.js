@@ -15274,6 +15274,10 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
     kb.text('✅ Опубликовать сейчас', `a:off_pub|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
 
+  if (isMod && st === 'PUBLISHING') {
+    kb.text('🩺 Проверить статус', `a:off_verify|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
+  }
+
   if (isMod && st === 'ACTIVE') {
     kb.text('♻️ Обновить пост', `a:off_upd|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`).row();
   }
@@ -30926,6 +30930,45 @@ ${DEGRADED_COPY.line}
         try {
           await db.setOfficialPostStatus(offerId, 'ERROR', { lastError: String(e?.message || e) });
         } catch (_) {}
+        await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
+      }
+      await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');
+      return;
+    }
+
+    if (p.a === 'a:off_verify') {
+      await ctx.answerCallbackQuery({ text: 'Проверяю статус…' });
+      if (!CFG.OFFICIAL_PUBLISH_ENABLED) {
+        await ctx.answerCallbackQuery({ text: 'Фича отключена.', show_alert: true });
+        return;
+      }
+      const wsId = Number(p.ws);
+      const offerId = Number(p.o);
+      const can = await isModerator(u, ctx.from.id);
+      if (!can) {
+        await ctx.answerCallbackQuery({ text: 'Нет прав.', show_alert: true });
+        return;
+      }
+      try {
+        const result = await verifyOfficialPublishState({
+          offerId,
+          wsId,
+          mode: 'manual',
+          channelChatId: Number(CFG.OFFICIAL_CHANNEL_ID || 0),
+        });
+        const st = String(result?.status || '').toUpperCase();
+        if (result?.reason === 'not_publishing') {
+          await ctx.answerCallbackQuery({ text: st === 'ACTIVE' ? '✅ Уже ACTIVE.' : `Статус: ${st || '—'}`, show_alert: false });
+        } else if (result?.reason === 'too_fresh') {
+          await ctx.answerCallbackQuery({ text: '⏳ Публикация ещё слишком свежая. Проверь чуть позже.', show_alert: false });
+        } else if (result?.via === 'redis_msgid') {
+          await ctx.answerCallbackQuery({ text: '✅ Синхронизировано: ACTIVE.', show_alert: false });
+        } else if (result?.via === 'reset_pending') {
+          await ctx.answerCallbackQuery({ text: '🧹 Статус сброшен в PENDING.', show_alert: false });
+        } else {
+          await ctx.answerCallbackQuery({ text: 'Проверка выполнена.', show_alert: false });
+        }
+      } catch (e) {
         await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e)}`.slice(0, 190), show_alert: true });
       }
       await renderOfficialManageView(ctx, u.id, wsId, offerId, Number(p.p || 0), p.back || '');

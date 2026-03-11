@@ -470,6 +470,7 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:off_manage": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:off_pub": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:off_queue": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
+  "a:off_verify": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:off_req": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:off_req_cancel": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:off_req_home": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
