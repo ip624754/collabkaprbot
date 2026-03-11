@@ -1,5 +1,0 @@
-docs/00_BOOT.md
-docs/00_CURRENT_STATE.md
-docs/16_RELEASE_CHECKLIST.md
-docs/process/07_WORK_HISTORY_2026_03.md
-scripts/check-function-budget.js
