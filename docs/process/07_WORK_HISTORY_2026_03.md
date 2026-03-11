@@ -3159,3 +3159,118 @@ QA:
 - `npm run smoke:admin-dm-templates-contract`
 - `node --check scripts/preflight.js`
 - `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP400 (Admin Users contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Пользователи` — важный operator-flow с Redis-search state, фильтрами, быстрыми DM-actions и CSV export. Здесь легко словить тихий регресс: пропажа `Поиск/Сброс`, drift action keys для `Карточка/Написать/Заметка`, сломанный saved-query/footer или изменение CSV контракта.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-users-contract.js`.
+- Smoke фиксирует source-level контракт:
+  - list-screen `👥 Пользователи`: `Пользователи · фильтр · стр`, spoiler-строка поиска, empty-state, DM-only quick actions `👤 / ✉️ / 📝` при 1–5 результатах, filter rows, `🔎 Поиск`, условный `🧹 Сброс`, `📤 Export CSV`, pagination, `⬅️ Операции`;
+  - search/reset callbacks `a:admin_users / a:admin_users_search / a:admin_users_reset`: `clearExpectText`, prompt `Введи @username или tg_id`, saved Redis-query, footer `⬅️ Система / 📋 Меню / 🏠 Home`;
+  - CSV export contract `a:adm_ucsv`: helper `exportUsersDirectory`, стабильный header/filename/caption, truncation warning, back buttons `⬅️ К списку / ⬅️ Админка`.
+- Smoke дополнительно валидирует связанные записи `ACTION_REGISTRY`: `a:admin_users`, `a:admin_users_search`, `a:admin_users_reset`, `a:adm_ucard`, `a:adm_umsg`, `a:adm_unote`, `a:adm_ucsv`, `a:admin_ops`, `a:admin_sys`, `a:menu`, `a:home`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-users-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-users-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-users-contract.js`
+- `node scripts/smoke-admin-users-contract.js`
+- `npm run smoke:admin-users-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP401 (Admin User Card + Note contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → User Card + Note` — detail-flow поверх каталога пользователей и Outbox return-route. Здесь легко словить тихий регресс: пропажа action keys `Карточка/Заметка`, дрейф кнопок `ban/revoke/gift`, утечка заметок вне DM, поломка tag-toggle/edit/clear flow или потеря возврата назад.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-user-card-note-contract.js`.
+- Smoke фиксирует source-level контракт:
+  - `renderAdminUserCard()` — заголовок `Карточка пользователя`, поля `ID / TG ID / Username / Роли / Регистрация / Обновлён`, DM-safe note/tags block, actions `Скопировать ID / Написать / Заметка / Подарить подписку`, revoke brand-plan/credits/PRO, ban/unban toggle, back buttons `К списку / Операции`;
+  - `renderAdminUserNote()` — return-route helper, DM-only guard, note/tags summary, tag toggle allowlist, actions `Изменить текст / Очистить всё / К карточке`, optional `⬅️ Outbox`, section footer `Коммуникации|Операции / Меню / Home`;
+  - callbacks `a:adm_ucard / a:adm_unote / a:adm_unote_edit / a:adm_unote_clear_q / a:adm_unote_clear / a:adm_unote_tag`;
+  - `expectText` flow `adm_user_note` — DM re-guard, empty prompt, `clear/cancel` commands, save helper `setAdminUserNote(...)` с metadata и возврат в `Карточка/Заметка`.
+- Smoke дополнительно валидирует связанные записи `ACTION_REGISTRY`: `a:adm_ucard`, `a:adm_ucopy`, `a:adm_umsg`, `a:adm_unote*`, `a:adm_ugift`, `a:adm_urevoke_q`, `a:adm_uban_q`, `a:admin_users`, `a:admin_ops`, `a:admin_comms`, `a:menu`, `a:home`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-user-card-note-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-user-card-note-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-user-card-note-contract.js`
+- `node scripts/smoke-admin-user-card-note-contract.js`
+- `npm run smoke:admin-user-card-note-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP402 (Admin Audit / Metrics / Moderators contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Audit / Metrics / Moderators` — три операторских экрана с высоким риском тихих rename/remove/reguard регрессий: временные фильтры audit/export, day-window метрик и add/remove flow модераторов. Здесь полезнее закрыть контракт одним source-level smoke, чем разносить три почти одинаковых релизных шага.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-audit-metrics-moderators-contract.js`.
+- Smoke фиксирует source-level контракт `renderAdminAudit()`:
+  - title/search lines `Action / Workspace / User`, empty-state;
+  - time filters `24ч / 7д / 30д / Всё`;
+  - controls `🔎 Поиск / 🧹 Сброс / 📤 Export TXT / pagination / ⬅️ Операции`;
+  - export helper `sendAdminAuditExport()` с header `Collabka PR — Global Audit Export`, stable filename/caption, payload clipping и back/menu/footer buttons;
+  - callbacks `a:aud / a:aud_search / a:aud_reset / a:aud_export` и `expectText` flow `aud_search`.
+- Smoke фиксирует source-level контракт `renderAdminMetrics()`:
+  - summary blocks `Пользователи / Каналы / Конкурсы / Офферы / Payments / Активность`;
+  - analytics-off fallback;
+  - day-window controls `7д / 14д / 30д / 90д`;
+  - footer `⬅️ Операции / 📋 Меню / 🏠 Home`;
+  - callback `a:admin_metrics`.
+- Smoke фиксирует source-level контракт `renderAdminModerators()`:
+  - title/list/empty-state;
+  - `➕ Добавить модератора` и per-row `🗑`;
+  - footer `⬅️ Система / 📋 Меню / 🏠 Home`;
+  - callbacks `a:admin_mod_list / a:admin_mod_add / a:admin_mod_rm` и `expectText` flow `admin_add_mod_username`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-audit-metrics-moderators-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-audit-metrics-moderators-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-audit-metrics-moderators-contract.js`
+- `node scripts/smoke-admin-audit-metrics-moderators-contract.js`
+- `npm run smoke:admin-audit-metrics-moderators-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`

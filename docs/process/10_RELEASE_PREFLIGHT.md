@@ -79,6 +79,12 @@ npm run qa:fast
 20) **Admin → Hard-skip contract smoke**  
    Source-level smoke `scripts/smoke-admin-hard-skip-contract.js` проверяет отдельный operator-flow `Админка → Hard-skip (dead chats)`: home/hits/view экраны (configured TTL, `Найти TG ID`, `Последние пропуски`, filters, `Export last 200`, quick TG buttons, `Снять hard-skip`) и их фактическую навигацию/footer. Дополнительно валидируются callback/runtime contract `a:hs_home / a:hs_hits / a:hs_find / a:hs_view / a:hs_unskip / a:hs_hits_export` (`hs_find` expectText/backCb, bounded export helper `adminHardSkipHitsExport`, TXT export document + rerender toast) и связанные записи в `src/bot/actionRegistry.js`, чтобы ловить тихие rename/remove/re-guard регрессии до выкладки.
 
+21) **Admin → Users contract smoke**  
+   Source-level smoke `scripts/smoke-admin-users-contract.js` проверяет operator-flow `Админка → Пользователи`: list-screen (`Пользователи · фильтр · стр`, spoiler-строку поиска, empty-state, DM-only quick actions `Карточка / Написать / Заметка` при 1–5 результатах, filter/search/reset/export/pagination, `Операции`), search/reset callbacks (`a:admin_users / a:admin_users_search / a:admin_users_reset`, `clearExpectText`, сохранённый Redis-query, footer `Система / Меню / Home`) и CSV export contract (`a:adm_ucsv`, `exportUsersDirectory`, стабильный header/filename/caption, truncation warning, back buttons `К списку / Админка`). Дополнительно валидируются связанные записи в `src/bot/actionRegistry.js`, чтобы ловить тихие rename/remove/re-guard регрессии до выкладки.
+
+22) **Admin → User Card + Note contract smoke**  
+   Source-level smoke `scripts/smoke-admin-user-card-note-contract.js` проверяет operator-flow `Админка → User Card + Note`: card-screen (`Карточка пользователя`, ID/TG ID/Username/Роли, DM-safe snippet/tags block, actions `Скопировать ID / Написать / Заметка / Подарить подписку`, revoke/ban toggles, back buttons `К списку / Операции`), note-screen (`Заметка (admin)`, DM-only guard, tags summary + toggle rows, `Изменить текст / Очистить всё / К карточке`, optional return-route button, footer `Коммуникации|Операции / Меню / Home`), note callbacks (`a:adm_ucard / a:adm_unote / a:adm_unote_edit / a:adm_unote_clear_q / a:adm_unote_clear / a:adm_unote_tag`) и `expectText` flow `adm_user_note` (`clear/cancel`, save helper с metadata, возврат в `Карточка/Заметка`). Дополнительно валидируются связанные записи в `src/bot/actionRegistry.js`, чтобы ловить тихие rename/remove/re-guard регрессии до выкладки.
+
 ## Если preflight упал
 
 - На `actions:md changed` → закоммить `docs/02_ACTION_KEYS_REGISTRY.md` и повторить.
@@ -97,6 +103,7 @@ npm run qa:fast
 - На `Admin → DM Templates contract` → проверь `renderAdminDmTemplates()/renderAdminDmTemplateView()`, callback handlers `a:admin_umsg_tpl*`, add/edit/delete/reset prompts и confirm flows, `adm_outbox_tpl_label` связку с `Outbox → В шаблон`, а затем синхронизируй `src/bot/actionRegistry.js` с реальным составом callback/footer actions.
 - На `Admin → Payments contract` → проверь `renderAdminPayments()/renderAdminPaymentView()`, helper’ы `adminApplyPayment()/adminAutoHealPayments()`, callbacks `a:admin_payments/view/apply/autoheal`, strict validation + DB claim before apply, ORPHANED-only `missing_session` auto-heal и синхронизируй `src/bot/actionRegistry.js` с реальным составом callback/back actions.
 - На `Admin → Payments Fallback contract` → проверь `renderAdminPaymentsFallback()`, callbacks `a:admin_pay_fb / a:admin_pay_fb_set / a:admin_pay_fb_off`, preset TTL buttons, `setPaymentsFallbackRuntime(...)`, success/failure toasts и синхронизируй `src/bot/actionRegistry.js` с реальным составом callback/footer actions.
+- На `Admin → User Card + Note contract` → проверь `renderAdminUserCard()/renderAdminUserNote()`, callbacks `a:adm_ucard / a:adm_unote*`, DM-only guard и `expectText` flow `adm_user_note` (`clear/cancel/save`), а также синхронизируй `src/bot/actionRegistry.js` с реальным составом card/note/footer actions.
 - На `Admin → QStash Status contract` → проверь `renderAdminQStashStatus()`, callbacks `a:admin_qstash_status / a:admin_qstash_ping`, summary/status lines (`Lib / ENV / Fan-out / Broadcast tick / Ping / Broadcast cooldown`), keyboard/footer (`Send signed ping / Fan-out toggle / Система / Меню / Home`), missing-lib/token/base_url helper screens, `qstashPublishJSON` payload (`signed_ping`, `qping:*`, `retries=0`, `timeout=10s`) и синхронизируй `src/bot/actionRegistry.js` с реальным составом callback/back/footer actions.
 
 ## Дальше после preflight
@@ -157,3 +164,6 @@ redis-cli -u "$REDIS_URL" --scan --pattern 'ops:*' \
 ## Принцип
 
 Preflight **не меняет прод-логику**. Это dev‑инструмент для уверенного релиза (Zero regressions).
+
+
+- На `Admin → Audit / Metrics / Moderators contract` → проверь `renderAdminAudit()/sendAdminAuditExport()/renderAdminMetrics()/renderAdminModerators()`, callbacks `a:aud* / a:admin_metrics / a:admin_mod_*`, `expectText` flows `aud_search` и `admin_add_mod_username`, а затем синхронизируй `src/bot/actionRegistry.js` с реальным составом back/footer/confirm actions.
