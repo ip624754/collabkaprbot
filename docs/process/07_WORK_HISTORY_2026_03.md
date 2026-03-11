@@ -3361,3 +3361,7 @@ NotebookLM-аудит подсветил не баг exactly-once, а throughput
 - `npm run smoke:payments-autoheal-chain-contract`
 - `APP_ENV=production node scripts/preflight.js`
 - `APP_ENV=staging node scripts/preflight.js`
+
+## STEP405
+- Added Official Publish operator `🩺 Проверить статус` path with shared safe verify/self-heal helper.
+- Added source-level smoke and preflight coverage for manual check-now contract.

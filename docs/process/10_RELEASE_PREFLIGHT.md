@@ -176,3 +176,5 @@ Preflight **не меняет прод-логику**. Это dev‑инстру
 
 
 - На `Admin → Audit / Metrics / Moderators contract` → проверь `renderAdminAudit()/sendAdminAuditExport()/renderAdminMetrics()/renderAdminModerators()`, callbacks `a:aud* / a:admin_metrics / a:admin_mod_*`, `expectText` flows `aud_search` и `admin_add_mod_username`, а затем синхронизируй `src/bot/actionRegistry.js` с реальным составом back/footer/confirm actions.
+
+- `scripts/smoke-official-publish-check-now-contract.js` — protects Official Publish operator `check now` / safe verify path.
