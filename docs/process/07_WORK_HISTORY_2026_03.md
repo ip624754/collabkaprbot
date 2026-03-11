@@ -3274,3 +3274,42 @@ QA:
 - `npm run smoke:admin-audit-metrics-moderators-contract`
 - `node --check scripts/preflight.js`
 - `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP403 (Broadcast deliver local in-memory DB overload fuse) — 2026-03-11
+
+### Зачем
+NotebookLM-аудит подсветил редкий, но дорогой для Neon сценарий: `broadcast-deliver` ловит DB overload, а Redis в этот же момент недоступен. В таком случае Redis-fuse не записывается, и следующий вызов на тёплом инстансе снова идёт в Redis/DB. Нужен короткий warm-instance local fuse, который short-circuit’ит повторные попытки **до** Redis-read и **до** любого DB touch.
+
+### Что сделано
+- В `api/qstash/broadcast-deliver.js` добавлен module-level state `localDbDegradedUntilMs`.
+- Добавлены helper’ы:
+  - `getLocalDbOverloadFuseTtlMs()`
+  - `getLocalDbOverloadFuseUntilMs()`
+  - `armLocalDbOverloadFuse()`
+- В `respondDbOverload(...)` local fuse теперь активируется **только если** запись Redis-fuse (`redis.set(dbOverloadFuseKey(), ...)`) не удалась.
+- В начале handler’а добавлен precheck `local_fuse_precheck`: если local fuse активен, запрос немедленно отвечает `429 + Retry-After` через `respondDbOverloadFuse(...)` **до** `redis.get(dbOverloadFuseKey())` и **до** `db.getBroadcast(...)`.
+- `respondDbOverloadFuse(...)` расширен полями `retryAfterSec`, `localFuse`, а JSON-ответ теперь маркирует путь флагом `local_fuse`.
+- Добавлен source-level smoke `scripts/smoke-broadcast-local-db-fuse.js`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:broadcast-local-db-fuse`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `api/qstash/broadcast-deliver.js`
+- `scripts/smoke-broadcast-local-db-fuse.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check api/qstash/broadcast-deliver.js`
+- `node --check scripts/smoke-broadcast-local-db-fuse.js`
+- `node scripts/smoke-broadcast-local-db-fuse.js`
+- `npm run smoke:broadcast-local-db-fuse`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
