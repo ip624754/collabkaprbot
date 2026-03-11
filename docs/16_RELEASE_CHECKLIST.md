@@ -60,11 +60,3 @@ node migrations/run.js --dry-run
 
 - `preflight` покрывает: action registry, автоген docs реестра, nav-lint, redact-тесты, `package-lock` drift gate, **node --check (ловит SyntaxError до Vercel)**.
 - Эта страница — **каноничный короткий чек**. Подробности — в `docs/13_RUNBOOK_RELEASE.md`.
-
-
-## Function budget (Vercel Hobby guardrail)
-
-- Перед деплоем прогонять `npm run check:function-budget` (или полный `npm run preflight`).
-- Budget по умолчанию: warning с 9, fail с 11 deployable `api/*` entrypoints.
-- Parked/disabled routes держать вне `api/`. Всё, что лежит в `api/`, считается deploy surface.
-- Текущий baseline STEP384: 8 entrypoint-ов (`api/cron_router.js`, `api/health.js`, `api/webhook.js`, `api/qstash/*`).

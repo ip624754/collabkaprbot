@@ -27,5 +27,3 @@
 
 
 - IG OAuth parked in STEP383: `api/ig/oauth/*` removed from deploy surface to stay under Vercel Hobby function cap; Instagram remains a normal profile link/contact after unlock.
-
-- Не возвращать parked/disabled routes в `api/` без проверки бюджета: перед релизом обязателен `npm run check:function-budget` / `npm run preflight`. Для Hobby держим запас: warning 9, fail 11, baseline STEP384 = 8.
