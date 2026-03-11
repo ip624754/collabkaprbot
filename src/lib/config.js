@@ -256,6 +256,10 @@ export const CFG = {
     const n = parseIntSafe(process.env.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC, 300);
     return Math.max(0, Math.min(n, 3600)); // 0..3600 sec
   })(),
+  PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX: (() => {
+    const n = parseIntSafe(process.env.PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX, 3);
+    return Math.max(0, Math.min(n, 12));
+  })(),
   // Smart Matching / Featured paid add-ons: allow full auto-apply on successful Stars payment
   // When disabled, paid match/feat payments are marked ORPHANED and require admin processing.
   MATCH_FEAT_AUTO_APPLY_ENABLED: parseBoolSafe(process.env.MATCH_FEAT_AUTO_APPLY_ENABLED, false),
