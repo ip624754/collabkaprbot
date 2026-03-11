@@ -492,6 +492,21 @@ if (fs.existsSync(broadcastLocalDbFuseSmokePath)) {
   console.warn("[preflight] scripts/smoke-broadcast-local-db-fuse.js not found (skipping)");
 }
 
+logHeader("Preflight: smoke payments autoheal chain contract");
+const paymentsAutohealChainSmokePath = path.join(ROOT, "scripts", "smoke-payments-autoheal-chain-contract.js");
+if (fs.existsSync(paymentsAutohealChainSmokePath)) {
+  const res = spawnSync(process.execPath, [paymentsAutohealChainSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-payments-autoheal-chain-contract.js not found (skipping)");
+}
+
 logHeader("Preflight: smoke degraded rate-limit");
 const smokePath = path.join(ROOT, "scripts", "smoke-degraded-rate-limit.js");
 if (fs.existsSync(smokePath)) {
