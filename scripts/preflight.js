@@ -508,6 +508,21 @@ if (fs.existsSync(paymentsAutohealChainSmokePath)) {
 }
 
 
+logHeader("Preflight: smoke start role-gate contract");
+const startRoleGateContractSmokePath = path.join(ROOT, "scripts", "smoke-start-role-gate-contract.js");
+if (fs.existsSync(startRoleGateContractSmokePath)) {
+  const res = spawnSync(process.execPath, [startRoleGateContractSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-start-role-gate-contract.js not found (skipping)");
+}
+
 logHeader("Preflight: smoke official publish check-now contract");
 const officialPublishCheckNowSmokePath = path.join(ROOT, "scripts", "smoke-official-publish-check-now-contract.js");
 if (fs.existsSync(officialPublishCheckNowSmokePath)) {
