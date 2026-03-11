@@ -55,6 +55,7 @@ export default async function handler(_req, res) {
       orphaned_autoheal_enabled: !!CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED,
       orphaned_autoheal_batch: Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_BATCH || 0),
       orphaned_autoheal_min_age_sec: Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 0),
+      orphaned_autoheal_chain_max: Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX || 0),
       orphaned_autoheal_effective: !!(
         CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && CFG.PAYMENTS_FALLBACK_APPLY_ENABLED
       ),
