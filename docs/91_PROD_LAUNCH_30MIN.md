@@ -134,6 +134,7 @@ APP_ENV=production npm run preflight
 - `npm run smoke:admin-notice-contract` — быстрый guard для `Админка → Объявление` (composer/runtime contract: кнопки, footer, publish/expectText flow)
 - `npm run smoke:admin-outbox-contract` — быстрый guard для `Админка → Outbox` (list/view, callback/footer, repeat/template/clear confirm-flow)
 - `npm run smoke:admin-payments-contract` — быстрый guard для `Админка → Payments` (list/detail, `Apply (manual)`, `Auto-heal missing_session`, callbacks/strict apply contract)
+- `npm run smoke:payments-autoheal-chain-contract` — быстрый guard для chain-drain `ORPHANED missing_session` (cron first-leg enqueue → `action=orphaned_autoheal`, worker self-reenqueue, depth-limit/dedup, `/api/health` visibility)
 - `npm run smoke:admin-payments-fallback-contract` — быстрый guard для `Админка → Payments fallback apply` (`EFFECTIVE/ENV/RUNTIME`, preset TTL buttons, runtime enable/disable callbacks, footer nav)
 
 ---

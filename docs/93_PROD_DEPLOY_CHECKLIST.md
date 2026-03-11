@@ -117,6 +117,7 @@ APP_ENV=production npm run preflight
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-payments-fallback-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Payments fallback apply` и его runtime enable/disable/operator-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-qstash-status-contract`, чтобы поймать тихие rename/remove регрессии `Админка → QStash статус` и его ping/fan-out/operator-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:broadcast-local-db-fuse`, чтобы поймать регресс local fuse в `api/qstash/broadcast-deliver.js` (arming only on Redis-fuse write failure, precheck before Redis/DB touch).
+- Перед деплоем можно быстро прогнать `npm run smoke:payments-autoheal-chain-contract`, чтобы поймать регресс chain-drain для `ORPHANED missing_session` (cron first-leg enqueue, worker self-reenqueue, depth-limit/dedup и `payments.orphaned_autoheal_chain_max` в `/api/health`).
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-hard-skip-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Hard-skip` и его home/hits/view/find/export/unskip-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-users-contract`, чтобы поймать тихие rename/remove регрессии `Админка → Пользователи` и его filters/search/reset/export/card/message/note-flow.
 - Перед деплоем можно быстро прогнать `npm run smoke:admin-user-card-note-contract`, чтобы поймать тихие rename/remove регрессии `Админка → User Card + Note` и его card/actions/DM-only note-flow.
