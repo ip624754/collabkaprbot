@@ -477,6 +477,21 @@ if (fs.existsSync(faultInjectionPath)) {
   console.warn("[preflight] scripts/smoke-fault-injection.js not found (skipping)");
 }
 
+logHeader("Preflight: smoke broadcast local DB fuse contract");
+const broadcastLocalDbFuseSmokePath = path.join(ROOT, "scripts", "smoke-broadcast-local-db-fuse.js");
+if (fs.existsSync(broadcastLocalDbFuseSmokePath)) {
+  const res = spawnSync(process.execPath, [broadcastLocalDbFuseSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-broadcast-local-db-fuse.js not found (skipping)");
+}
+
 logHeader("Preflight: smoke degraded rate-limit");
 const smokePath = path.join(ROOT, "scripts", "smoke-degraded-rate-limit.js");
 if (fs.existsSync(smokePath)) {
