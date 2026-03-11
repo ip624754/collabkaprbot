@@ -976,7 +976,51 @@ async function autoHealOrphanedPayments() {
     } catch {}
   }
 
-  return { enabled: true, checked: cand.length, applied, failed, skipped, skipped_young: Number(skippedYoung || 0) };
+  let chainEnqueued = false;
+  let chainId = null;
+  let chainDepthNext = null;
+  if (cand.length >= batch && Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX || 0) > 0) {
+    try {
+      const url = getQStashDeliveryUrl('/api/qstash/monetization-retry');
+      if (url && isQStashLibAvailable()) {
+        chainId = `cron-${Date.now()}`;
+        await qstashPublishJSON({
+          url,
+          body: {
+            action: 'orphaned_autoheal',
+            chain_id: chainId,
+            chain_depth: 1,
+            chain_source: 'cron',
+          },
+          deduplicationId: `mon:autoheal:${chainId}:1`,
+          retries: 2,
+          timeout: '20s',
+        });
+        chainEnqueued = true;
+        chainDepthNext = 1;
+      }
+    } catch (e) {
+      try {
+        const api = getBot().api;
+        await queueOpsAlert(api, {
+          group: 'ops',
+          reason: 'autoheal_chain_enqueue_failed',
+          title: 'Auto-heal ORPHANED: chain enqueue failed',
+          paymentId: cand[0]?.id ? Number(cand[0].id) : null,
+          kind: 'cron',
+          payload: '',
+          extra: [
+            `Checked: ${cand.length}`,
+            `Applied: ${applied}`,
+            `Failed: ${failed}`,
+            String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180),
+          ].filter(Boolean),
+        });
+      } catch {}
+    }
+  }
+
+  return { enabled: true, checked: cand.length, applied, failed, skipped, skipped_young: Number(skippedYoung || 0), chain_enqueued: chainEnqueued, chain_id: chainId, chain_depth_next: chainDepthNext };
 }
 
 export async function giveawaysTick() {
