@@ -55,3 +55,4 @@ INSERT INTO schema_migrations(name, checksum) VALUES ('040_broadcast_fanout_qsta
 INSERT INTO schema_migrations(name, checksum) VALUES ('041_ig_oauth_accounts.sql', 'ddb6af89d3434bac4df82dcdc673a94238e7ea1bb23c52effa75384c2867c7e1') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('042_payments_fk_hardening.sql', 'e16b3cb4ab116965069a9d7dac4eae6848b6e084d19384696bcd6ecc57c2798a') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('043_users_soft_delete.sql', '15220a406620a82f29cd10f68aec639833174cfb0083ea5268e9281d259da315') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('044_workspace_channel_disconnect.sql', 'cdf91e251528528d288caa67462a4528c9f621f63b400c69297bd364cfe8f44c') ON CONFLICT (name) DO NOTHING;
