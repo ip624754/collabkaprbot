@@ -3579,3 +3579,21 @@ QA
 - `⚙️ Канал` по-прежнему открывает full channel menu без регрессий.
 - STEP415 — Creator Main role-switch footer cleanup: renamed creator-menu footer actions from `Я бренд / Я менеджер бренда` to `Перейти в бренд / Режим менеджера бренда`, keeping the same callbacks and click-time gating while making the footer clearly read as mode switching instead of current-channel actions.
 
+
+
+## STEP417 — Split channel work menu vs channel settings
+- Per-channel UX was overloaded after STEP411–415: daily work actions and channel-management actions lived on the same `ws_open` screen. STEP417 splits them cleanly without touching business rules or DB schema.
+- `a:ws_open` now renders **Работа с каналом** only: `📥 Inbox`, `📨 Заявки брендов`, `🎬 UGC / Офферы`, `📁 Папки`, `➕ Новый розыгрыш`, `🎁 Розыгрыши`, plus navigation to `⚙️ Настройки`, `📣 Мои каналы`, `📋 Меню`, `🏠 Home`.
+- `a:ws_settings` stops being an alias and becomes the real **Настройки канала** screen: `🌐 Сеть`, `👥 Кураторы`, `👤 Профиль канала`, `🧾 История`, `⭐️ PRO`, `⛔ Отключить канал`, back to `a:ws_open`.
+- `a:cur_manage` stays the per-channel curator submenu, but its framing is tightened around settings navigation: toggle + add curator + curator list + back to `a:ws_settings|ws:{id}`.
+- `ws_history` back-path now returns to `a:ws_settings|ws:{id}` so history behaves like a settings child instead of jumping back into daily work.
+- `📣 Мои каналы` remains the compact picker from STEP412/413, and tapping a channel still persists current-channel context via existing Redis `active_ws` and opens `ws_open`.
+- Updated source-level smoke to assert: `ws_open` is the work menu, `ws_settings` is the settings menu, curator submenu returns to settings, and disconnected-channel protections remain intact.
+
+### QA
+- `📣 Мои каналы` → выбрать активный канал → открывается **Работа с каналом** без кнопок `Сеть / Кураторы / Профиль / История / PRO / Отключить канал`.
+- На рабочем экране есть `⚙️ Настройки`.
+- `⚙️ Настройки` → открывается **Настройки канала** с `Сеть / Кураторы / Профиль канала / История / PRO / Отключить канал`.
+- `👥 Кураторы` → submenu именно этого канала; `⬅️ К настройкам` возвращает в `ws_settings`.
+- `🧾 История` → back возвращает в `ws_settings`.
+- `⛔ Отключить канал` / `🔌 Подключить снова` продолжают работать без регрессий.
