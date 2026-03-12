@@ -2624,8 +2624,8 @@ function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {
   const { isModerator = false, isAdmin = false, isFolderEditor = false, isCurator = false } = flags;
   const wsId = Number(ws?.id || 0);
   const kb = new InlineKeyboard()
-    .text('📣 Мои каналы', 'a:ws_list')
-    .text('⚙️ Канал', `a:ws_open|ws:${wsId}`)
+    .text('🔁 Сменить канал', 'a:ws_list')
+    .text('📂 Текущий канал', `a:ws_open|ws:${wsId}`)
     .row()
     .text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)
     .text('🏷 Каталог брендов', 'a:brands_home|p:0')
@@ -2642,10 +2642,6 @@ function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {
   if (isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
   if (opts.noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
   kb.text('💬 Поддержка', 'a:support').row();
-
-  kb.text('🏷 Перейти в бренд', 'a:ui_mode_set|m:brand|ret:menu')
-    .text('🧑‍💼 Режим менеджера бренда', 'a:bm_home')
-    .row();
 
   const extra = [];
   if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
@@ -3434,12 +3430,7 @@ async function renderCreatorCurrentMenu(ctx, u, flags = {}, params = {}) {
   if (!current) {
     const kb = new InlineKeyboard().text('🚀 Подключить канал', 'a:setup').row();
     if (inactiveCount > 0) kb.text(`📦 Неактивные (${inactiveCount})`, 'a:ws_list_inactive').row();
-    kb.text('📣 Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu').row();
-    if (founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:menu').row();
-    kb.text('🔗 Поделиться', 'a:share').text('💬 Поддержка', 'a:support').row();
-    if (noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
-    kb.text('🏷 Перейти в бренд', 'a:ui_mode_set|m:brand|ret:menu').text('🧑‍💼 Режим менеджера бренда', 'a:bm_home').row();
-    if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home').row();
+    kb.text('💬 Поддержка', 'a:support').row();
     if (flags?.isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
     if (flags?.isModerator) kb.text('🛡 Модерация', 'a:mod_home').row();
     if (flags?.isAdmin) kb.text('👑 Админка', 'a:admin_home').row();
@@ -3464,7 +3455,7 @@ async function renderCreatorCurrentMenu(ctx, u, flags = {}, params = {}) {
 <b>Текущий канал:</b> <b>${escapeHtml(currentWsLabel(current))}</b>
 <b>${escapeHtml(currentWsStatusLabel(current))}</b>
 
-Действия ниже относятся к текущему каналу. Чтобы переключиться на другой — открой «📣 Мои каналы».`;
+Действия ниже относятся к текущему каналу. Чтобы переключиться на другой — открой «🔁 Сменить канал».`;
   const kb = mainMenuCreatorCurrentKb(flags, current, { founderActive, noticeActive });
   const opts = { parse_mode: 'HTML', reply_markup: kb };
   if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
@@ -4458,12 +4449,24 @@ function wsSettingsKb(wsId, s) {
   const kb = new InlineKeyboard()
     .text(net, `a:net_q|ws:${wsId}|ret:ws`)
     .text('👥 Кураторы', `a:cur_manage|ws:${wsId}`)
-    .row()
-    .text('👤 Профиль канала', `a:ws_profile|ws:${wsId}`)
-    .text('🧾 История', `a:ws_history|ws:${wsId}`)
-    .row()
-    .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
-    .text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)
+    .row();
+
+  if (CFG.VERIFICATION_ENABLED) {
+    kb.text('👤 Профиль канала', `a:ws_profile|ws:${wsId}`)
+      .text('✅ Верификация аккаунта', 'a:verify_home')
+      .row()
+      .text('🧾 История', `a:ws_history|ws:${wsId}`)
+      .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
+      .row();
+  } else {
+    kb.text('👤 Профиль канала', `a:ws_profile|ws:${wsId}`)
+      .text('🧾 История', `a:ws_history|ws:${wsId}`)
+      .row()
+      .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
+      .row();
+  }
+
+  kb.text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)
     .row()
     .text('⬅️ К каналу', `a:ws_open|ws:${wsId}`)
     .text('📋 Меню', 'a:menu')
@@ -8164,7 +8167,8 @@ async function renderWorkspaceSettingsScreen(ctx, ws, opts = {}) {
 Сеть: <b>${net}</b>
 Кураторы: <b>${cur}</b>
 
-<i>Здесь — управление состоянием канала, профилем, кураторами и доступом.</i>`, {
+<i>Здесь — управление состоянием канала, профилем, кураторами и доступом.</i>
+<i>Верификация аккаунта — единая для creator-аккаунта и открывается отсюда как быстрый вход.</i>`, {
     parse_mode: 'HTML',
     reply_markup: wsSettingsKb(wsId, ws)
   });
@@ -9421,8 +9425,6 @@ function wsProfileKb(wsId, ws) {
     .text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu')
     .row()
     .text('🏠 Home', 'a:home');
-
-  if (CFG.VERIFICATION_ENABLED) kb.row().text('✅ Верификация', 'a:verify_home');
 
   return kb;
 }
