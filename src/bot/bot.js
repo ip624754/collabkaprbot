@@ -4426,18 +4426,13 @@ function wsMenuKb(wsId, opts = {}) {
     showCurator = false,
     networkEnabled = false,
     curatorEnabled = false,
+    canFolders = true,
   } = opts || {};
 
-  const net = networkEnabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
-  const cur = curatorEnabled ? '👥 Кураторы: ✅ ВКЛ' : '👥 Кураторы: ❌ ВЫКЛ';
+  const net = networkEnabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
+  const cur = curatorEnabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
 
   const kb = new InlineKeyboard()
-    .text(net, `a:net_q|ws:${wsId}|ret:ws`)
-    .text(cur, `a:cur_manage|ws:${wsId}`)
-    .row()
-    .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
-    .text('🧾 История', `a:ws_history|ws:${wsId}`)
-    .row()
     .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
     .text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
     .row()
@@ -4447,14 +4442,11 @@ function wsMenuKb(wsId, opts = {}) {
     .text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)
     .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
     .row()
-    .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
-    .text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)
-    .row();
-
-  if (showCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
-
-  kb.text('📣 Мои каналы', 'a:ws_list').text('⬅️ К меню', 'a:menu').row();
-  kb.text('🏠 Home', 'a:home');
+    .text('⚙️ Настройки', `a:ws_settings|ws:${wsId}`)
+    .text('📣 Мои каналы', 'a:ws_list')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -4465,16 +4457,18 @@ function wsSettingsKb(wsId, s) {
 
   const kb = new InlineKeyboard()
     .text(net, `a:net_q|ws:${wsId}|ret:ws`)
-    .text(cur, `a:cur_manage|ws:${wsId}`)
+    .text('👥 Кураторы', `a:cur_manage|ws:${wsId}`)
     .row()
-    .text('👥 Управление кураторами', `a:cur_manage|ws:${wsId}`)
+    .text('👤 Профиль канала', `a:ws_profile|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row()
+    .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
     .text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)
-    .row();
-
-  kb.row().text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
-  kb.row().text('🏠 Home', 'a:home');
+    .row()
+    .text('⬅️ К каналу', `a:ws_open|ws:${wsId}`)
+    .text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -4537,23 +4531,11 @@ function curManageKb(wsId, ws = null) {
 
   const kb = new InlineKeyboard();
 
-  // Toggle — одиночная кнопка (режим).
   kb.text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`).row();
-
-  // Частые действия в паре.
-  kb.text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)
-    .text('🔗 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
-    .row();
-
-  kb.text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
-    .text('📜 Журнал', `a:ca|w:${wsId}|u:0|l:0|p:0|al:0|b:cm|s:new|g:0`)
-    .row();
-
-  // Редко, но полезно (техническая история воркспейса).
-  kb.text('🧾 История', `a:ws_history|ws:${wsId}`).row();
-
-  kb.row().text('⬅️ К каналу', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
-  kb.row().text('🏠 Home', 'a:home');
+  kb.text('➕ Добавить куратора', `a:cur_add_username|ws:${wsId}`).row();
+  kb.text('👥 Список кураторов', `a:cur_list|ws:${wsId}`).row();
+  kb.text('⬅️ К настройкам', `a:ws_settings|ws:${wsId}`).text('📋 Меню', 'a:menu').row();
+  kb.text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -4989,7 +4971,7 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
 ` : ''}👥 <b>Управление кураторами</b>
 
 Канал: <b>${escapeHtml(title)}</b>
-Доступ кураторов: <b>${status}</b>
+Статус: <b>${status}</b>
 Кураторов в списке: <b>${count}</b>
 ${limitLine}
 
@@ -8150,24 +8132,41 @@ async function renderWsInactiveList(ctx, ownerUserId) {
 Эти каналы отключены от активной работы. Профиль и история сохранены, а вернуть канал можно через «🔌 Подключить снова».`, { parse_mode: 'HTML', reply_markup: kb });
 }
 
-async function renderWorkspaceManagementScreen(ctx, ws, opts = {}) {
+async function renderWorkspaceWorkScreen(ctx, ws, opts = {}) {
   const wsId = Number(ws.id);
   const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
   const net = ws.network_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
   const cur = ws.curator_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
   await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
 
-<b>Управление каналом</b>
+<b>Работа с каналом</b>
 Сеть: <b>${net}</b>
 Кураторы: <b>${cur}</b>
 
-<i>Здесь собраны основные действия этого канала: сеть, кураторы, профиль, Inbox, офферы и розыгрыши.</i>`, {
+<i>Здесь — ежедневная работа по этому каналу: Inbox, заявки, офферы, папки и розыгрыши.</i>`, {
     parse_mode: 'HTML',
     reply_markup: wsMenuKb(wsId, {
       showCurator: !!opts.showCurator,
       networkEnabled: !!ws.network_enabled,
       curatorEnabled: !!ws.curator_enabled,
     })
+  });
+}
+
+async function renderWorkspaceSettingsScreen(ctx, ws, opts = {}) {
+  const wsId = Number(ws.id);
+  const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
+  const net = ws.network_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
+  const cur = ws.curator_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
+  await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
+
+<b>Настройки канала</b>
+Сеть: <b>${net}</b>
+Кураторы: <b>${cur}</b>
+
+<i>Здесь — управление состоянием канала, профилем, кураторами и доступом.</i>`, {
+    parse_mode: 'HTML',
+    reply_markup: wsSettingsKb(wsId, ws)
   });
 }
 
@@ -8189,7 +8188,7 @@ async function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {
   const showCurator = (opts && typeof opts.showCurator === 'boolean')
     ? !!opts.showCurator
     : await db.hasAnyCuratorRole(ownerUserId);
-  await renderWorkspaceManagementScreen(ctx, ws, { showCurator });
+  await renderWorkspaceWorkScreen(ctx, ws, { showCurator });
 }
 
 async function renderWsSettings(ctx, ownerUserId, wsId) {
@@ -8202,7 +8201,7 @@ async function renderWsSettings(ctx, ownerUserId, wsId) {
     return;
   }
   const showCurator = isAdmin ? false : await db.hasAnyCuratorRole(ownerUserId);
-  await renderWorkspaceManagementScreen(ctx, ws, { showCurator });
+  await renderWorkspaceSettingsScreen(ctx, ws, { showCurator });
 }
 
 async function renderWsHistory(ctx, ownerUserId, wsId) {
@@ -8243,7 +8242,7 @@ async function renderWsHistory(ctx, ownerUserId, wsId) {
   const kb = new InlineKeyboard()
     .text('📥 Скачать полный лог', `a:ws_history_export|ws:${wsId}`)
     .row()
-    .text('⬅️ Назад', `a:ws_open|ws:${wsId}`)
+    .text('⬅️ Назад', `a:ws_settings|ws:${wsId}`)
     .text('📋 Меню', 'a:menu')
     .row()
     .text('🏠 Home', 'a:home');
