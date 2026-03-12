@@ -3521,3 +3521,34 @@ QA
 - Верхняя правая кнопка `👥 Кураторы: ...` → открывает submenu управления кураторами именно этого канала.
 - В submenu: toggle режима, добавить по username, invite link, список, журнал, back `⬅️ К каналу`.
 - `a:ws_settings`/старые back-paths по-прежнему приводят на рабочий экран канала.
+
+
+## STEP413 — Creator current-channel UX reset
+
+Что сделано
+- `renderRoleHub()` в creator-mode больше не открывает сразу `ws_open`; теперь он рендерит отдельный creator main screen с явным контекстом `Текущий канал: @...`.
+- Добавлены helpers `currentWsLabel()`, `currentWsStatusLabel()`, `mainMenuCreatorCurrentKb()` и `renderCreatorCurrentMenu()`.
+- Введён shared resolver `resolveCurrentWorkspaceForOwner(ownerUserId, tgId, opts)` поверх уже существующего Redis-context `active_ws` — без новой схемы БД.
+- `ensureWorkspaceForOwner()` переведён на shared current-channel resolver, чтобы owner hot-flows (Inbox / offers / PRO / giveaways) использовали тот же current context и корректно fallback’ились, если сохранённый канал стал неактивным.
+- `📣 Мои каналы` оставлен compact picker; tap по каналу как и раньше делает `set current + open full channel menu`.
+- На full channel menu нижняя навигация выровнена под новую IA: `📣 Мои каналы` + `⬅️ К меню` + `🏠 Home`.
+- `a:ws_settings` сохранён как совместимый alias на full channel menu.
+
+Почему
+- При нескольких подключённых каналах creator main без явного current context был нечитаем: было непонятно, к какому каналу относятся Inbox / offers / giveaways.
+- При этом уводить пользователя каждый раз внутрь `📣 Мои каналы` тоже хуже по UX. Правильный компромисс — creator main работает для current channel, а `📣 Мои каналы` служит только переключателем.
+
+Инварианты
+- Без новой миграции.
+- Без новой бизнес-логики.
+- Без новых DB-read в hot creator menu path сверх уже существующего workspace cache / fallback.
+- Старые callbacks не ломаются: `a:ws_open`, `a:cur_manage`, `a:ws_settings` продолжают работать.
+
+QA
+- `📋 Меню` в creator-mode показывает `Текущий канал: @...`.
+- `📣 Мои каналы` открывает compact picker.
+- Tap по каналу открывает full channel menu и делает этот канал current.
+- Возврат в `📋 Меню` показывает уже новый current channel.
+- `👥 Кураторы` по-прежнему открывает submenu именно этого канала.
+- Если current channel отключили, следующий вход в creator main корректно fallback’ится на другой активный канал или показывает gate без active channels.
+
