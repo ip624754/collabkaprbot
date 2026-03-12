@@ -40,6 +40,7 @@ assert.ok(dbSource.includes('network_enabled=false,'), 'disconnect setter must d
 assert.ok(dbSource.includes('curator_enabled=false,'), 'disconnect setter must disable curator mode');
 assert.ok(dbSource.includes('channel_connected=true,'), 'reconnect setter must flip DB-truth flag on');
 
+assert.ok(botSource.includes(".text('👥 Кураторы и сеть', `a:ws_settings|ws:${wsId}`)"), 'workspace open menu must expose settings entry for disconnect flow');
 assert.ok(botSource.includes(".text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)"), 'workspace settings screen must expose disconnect button');
 assert.ok(botSource.includes(".text('🔌 Подключить снова', `a:ws_reconnect_q|ws:${wsId}`)"), 'disconnected workspace screen must expose reconnect button');
 assert.ok(botSource.includes("kb.text(`📦 Неактивные (${inactiveItems.length})`, 'a:ws_list_inactive').row();"), 'active workspace list must link to inactive list');
@@ -50,6 +51,13 @@ const renderWsOpenSrc = extractBetween(
   'async function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {',
   '\n\nasync function renderWsSettings(ctx, ownerUserId, wsId) {'
 );
+const wsMenuKbSrc = extractBetween(
+  botSource,
+  'function wsMenuKb(wsId, opts = {}) {',
+  '\n\nfunction wsSettingsKb(wsId, s) {'
+);
+assert.ok(wsMenuKbSrc.includes(".text('👥 Кураторы и сеть', `a:ws_settings|ws:${wsId}`)"), 'workspace open menu must expose settings entry for disconnect flow');
+
 assert.match(renderWsOpenSrc, /if \(isWorkspaceDisconnected\(ws\)\) \{[\s\S]*?await renderWsDisconnected\(/, 'ws_open must route disconnected channels to the special disabled screen');
 
 const renderBxOpenSrc = extractBetween(
