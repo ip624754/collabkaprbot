@@ -45,6 +45,15 @@ assert.ok(botSource.includes(".text(cur, `a:cur_manage|ws:${wsId}`)"), 'workspac
 assert.ok(botSource.includes(".text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)"), 'workspace screens must expose disconnect button');
 assert.ok(botSource.includes(".text('🔌 Подключить снова', `a:ws_reconnect_q|ws:${wsId}`)"), 'disconnected workspace screen must expose reconnect button');
 assert.ok(botSource.includes("function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {"), 'creator current-channel keyboard must exist');
+const mainMenuCreatorCurrentKbSrc = extractBetween(
+  botSource,
+  'function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {',
+  '\n\nfunction mainMenuBrandKb(flags = {}, opts = {}) {'
+);
+assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🚀 Подключить ещё"), 'creator current-channel menu must drop direct setup CTA from the active main screen');
+assert.ok(!mainMenuCreatorCurrentKbSrc.includes("✅ Верификация"), 'creator current-channel menu must drop verification CTA from the active main screen');
+assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🔗 Поделиться"), 'creator current-channel menu must drop share CTA from the active main screen');
+assert.ok(mainMenuCreatorCurrentKbSrc.includes(".text('💬 Поддержка', 'a:support').row();"), 'creator current-channel menu must keep support footer');
 assert.ok(botSource.includes("<b>Текущий канал:</b> <b>${escapeHtml(currentWsLabel(current))}</b>"), 'creator menu must show current channel explicitly');
 assert.ok(botSource.includes(".text('📣 Мои каналы', 'a:ws_list')"), 'creator current-channel menu must keep channel picker entry');
 assert.ok(botSource.includes(".text('⚙️ Канал', `a:ws_open|ws:${wsId}`)"), 'creator current-channel menu must expose direct current-channel management entry');
