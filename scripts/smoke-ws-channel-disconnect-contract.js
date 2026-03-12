@@ -44,6 +44,12 @@ assert.ok(botSource.includes(".text(net, `a:net_q|ws:${wsId}|ret:ws`)"), 'worksp
 assert.ok(botSource.includes(".text(cur, `a:cur_manage|ws:${wsId}`)"), 'workspace screens must expose curator submenu entry');
 assert.ok(botSource.includes(".text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)"), 'workspace screens must expose disconnect button');
 assert.ok(botSource.includes(".text('🔌 Подключить снова', `a:ws_reconnect_q|ws:${wsId}`)"), 'disconnected workspace screen must expose reconnect button');
+assert.ok(botSource.includes("function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {"), 'creator current-channel keyboard must exist');
+assert.ok(botSource.includes("<b>Текущий канал:</b> <b>${escapeHtml(currentWsLabel(current))}</b>"), 'creator menu must show current channel explicitly');
+assert.ok(botSource.includes(".text('📣 Мои каналы', 'a:ws_list')"), 'creator current-channel menu must keep channel picker entry');
+assert.ok(botSource.includes(".text('⚙️ Канал', `a:ws_open|ws:${wsId}`)"), 'creator current-channel menu must expose direct current-channel management entry');
+assert.ok(botSource.includes(".text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'creator current-channel menu must route inbox to the selected current channel');
+assert.ok(botSource.includes(".text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)"), 'creator current-channel menu must route giveaways to the selected current channel');
 assert.ok(botSource.includes("const label = w.channel_username ? `⛔ @${w.channel_username}` : `⛔ ${w.title}`;"), 'inactive workspace list must visibly mark disconnected channels');
 
 const wsMenuKbSrc = extractBetween(
@@ -115,8 +121,8 @@ const ensureWsSrc = extractBetween(
   'async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {',
   '\n\nasync function renderWsList(ctx, ownerUserId) {'
 );
-assert.ok(ensureWsSrc.includes("const activeWsList = (wsList || []).filter((w) => !isWorkspaceDisconnected(w));"), 'ensureWorkspaceForOwner must prefer connected workspaces');
-assert.ok(ensureWsSrc.includes("if (wsList.length && !activeWsList.length) kb.row().text('📦 Неактивные каналы', 'a:ws_list_inactive');"), 'ensureWorkspaceForOwner must surface inactive channel recovery');
+assert.ok(ensureWsSrc.includes('const resolved = await resolveCurrentWorkspaceForOwner(ownerUserId, Number(ctx?.from?.id || 0));'), 'ensureWorkspaceForOwner must resolve current channel through the shared helper');
+assert.ok(ensureWsSrc.includes("if (wsList.length && !activeWsList.length) kb.row().text('📦 Неактивные каналы', 'a:ws_list_inactive');"), 'ensureWorkspaceForOwner must still surface inactive channel recovery in minimal gates');
 
 const renderWsListSrc = extractBetween(
   botSource,
@@ -125,8 +131,33 @@ const renderWsListSrc = extractBetween(
 );
 assert.match(renderWsListSrc, /Выбери канал для управления\./, 'ws_list must use compact picker copy');
 assert.ok(!renderWsListSrc.includes('Выбери канал — дальше можно:'), 'ws_list must drop the old explanatory bullet block');
-assert.ok(renderWsListSrc.includes("kb.text('🚀 Подключить ещё', 'a:setup').text('📋 Меню', 'a:menu').row();") || renderWsListSrc.includes("kb.text('🚀 Подключить ещё', 'a:setup').text('📋 Меню', 'a:menu').row();"), 'ws_list must keep setup/menu navigation');
+assert.ok(renderWsListSrc.includes("kb.text('🚀 Подключить ещё', 'a:setup').row();"), 'ws_list must keep setup entry on the picker');
+assert.ok(renderWsListSrc.includes("kb.text('⬅️ К меню', 'a:menu').text('🏠 Home', 'a:home');"), 'ws_list must return back into the creator main menu');
 assert.ok(renderWsListSrc.includes("kb.text(`📦 Неактивные (${inactiveItems.length})`, 'a:ws_list_inactive').row();"), 'ws_list must keep inactive channel entry when present');
+
+const renderCreatorCurrentMenuSrc = extractBetween(
+  botSource,
+  'async function renderCreatorCurrentMenu(ctx, u, flags = {}, params = {}) {',
+  '\n\nasync function renderRoleHub(ctx, u, flags) {'
+);
+assert.match(renderCreatorCurrentMenuSrc, /<b>Текущий канал:<\/b> <b>\$\{escapeHtml\(currentWsLabel\(current\)\)\}<\/b>/, 'creator current menu must render the selected current channel label');
+assert.match(renderCreatorCurrentMenuSrc, /Действия ниже относятся к текущему каналу\./, 'creator current menu must explain that channel-specific actions are scoped to current channel');
+assert.ok(renderCreatorCurrentMenuSrc.includes('const resolved = await resolveCurrentWorkspaceForOwner(userId, tgId);'), 'creator current menu must resolve current channel through the shared helper');
+
+const renderRoleHubSrc = extractBetween(
+  botSource,
+  'async function renderRoleHub(ctx, u, flags) {',
+  '\n\nfunction curatorModeMenuKb(flags = {}) {'
+);
+assert.ok(renderRoleHubSrc.includes('await renderCreatorCurrentMenu(ctx, u, flags, { edit: true });'), 'role hub must open creator current-channel menu instead of jumping straight into a workspace card');
+
+const resolveCurrentWorkspaceSrc = extractBetween(
+  botSource,
+  'async function resolveCurrentWorkspaceForOwner(ownerUserId, tgId, opts = {}) {',
+  '\n\n// Curator UI mode'
+);
+assert.ok(resolveCurrentWorkspaceSrc.includes('const activeWsList = (wsList || []).filter((w) => !isWorkspaceDisconnected(w));'), 'current workspace resolver must only consider connected channels');
+assert.ok(resolveCurrentWorkspaceSrc.includes('await setActiveWorkspace(tgId, Number(current.id));'), 'current workspace resolver must persist the resolved current channel in Redis');
 
 const disconnectHandlerSrc = extractBetween(
   botSource,
