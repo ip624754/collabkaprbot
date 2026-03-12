@@ -2585,8 +2585,8 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
 
   // Brand Team UX (V4): manager cabinet entry is always visible.
   // Gate happens inside the manager flow (no extra DB queries in Menu render).
-  kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
-    .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
+  kb.text('🏷 Перейти в бренд', 'a:ui_mode_set|m:brand|ret:menu')
+    .text('🧑‍💼 Режим менеджера бренда', 'a:bm_home')
     .row();
 
   // Staff shortcuts (pairs)
@@ -2643,8 +2643,8 @@ function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {
   if (opts.noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
   kb.text('💬 Поддержка', 'a:support').row();
 
-  kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
-    .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
+  kb.text('🏷 Перейти в бренд', 'a:ui_mode_set|m:brand|ret:menu')
+    .text('🧑‍💼 Режим менеджера бренда', 'a:bm_home')
     .row();
 
   const extra = [];
@@ -3438,7 +3438,7 @@ async function renderCreatorCurrentMenu(ctx, u, flags = {}, params = {}) {
     if (founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:menu').row();
     kb.text('🔗 Поделиться', 'a:share').text('💬 Поддержка', 'a:support').row();
     if (noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
-    kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu').text('🧑‍💼 Я менеджер бренда', 'a:bm_home').row();
+    kb.text('🏷 Перейти в бренд', 'a:ui_mode_set|m:brand|ret:menu').text('🧑‍💼 Режим менеджера бренда', 'a:bm_home').row();
     if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home').row();
     if (flags?.isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
     if (flags?.isModerator) kb.text('🛡 Модерация', 'a:mod_home').row();
