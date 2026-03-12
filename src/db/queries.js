@@ -1100,6 +1100,8 @@ export async function ensureWorkspaceSettings(workspaceId) {
 export async function listWorkspaces(ownerUserId) {
   const r = await pool.query(
     `select ws.*, s.network_enabled, s.curator_enabled, s.auto_draw_default, s.auto_publish_default,
+            coalesce(s.channel_connected, true) as channel_connected,
+            s.channel_disconnected_at,
             s.plan, s.pro_until, s.pro_pinned_offer_id,
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
             s.profile_contacts, s.profile_contacts_v,
@@ -1116,6 +1118,8 @@ export async function listWorkspaces(ownerUserId) {
 export async function getWorkspace(ownerUserId, workspaceId) {
   const r = await pool.query(
     `select ws.*, s.network_enabled, s.curator_enabled, s.auto_draw_default, s.auto_publish_default,
+            coalesce(s.channel_connected, true) as channel_connected,
+            s.channel_disconnected_at,
             s.plan, s.pro_until, s.pro_pinned_offer_id,
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
             s.profile_contacts, s.profile_contacts_v,
@@ -1134,6 +1138,8 @@ export async function getWorkspace(ownerUserId, workspaceId) {
 export async function getWorkspaceAny(workspaceId) {
   const r = await pool.query(
     `select ws.*, s.network_enabled, s.curator_enabled, s.auto_draw_default, s.auto_publish_default,
+            coalesce(s.channel_connected, true) as channel_connected,
+            s.channel_disconnected_at,
             s.plan, s.pro_until, s.pro_pinned_offer_id,
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
             s.profile_contacts, s.profile_contacts_v,
@@ -1150,6 +1156,8 @@ export async function findWorkspaceByChannelUsername(channelUsername) {
   const u = String(channelUsername || '').replace(/^@/, '').toLowerCase();
   const r = await pool.query(
     `select ws.*, s.network_enabled, s.curator_enabled, s.auto_draw_default, s.auto_publish_default,
+            coalesce(s.channel_connected, true) as channel_connected,
+            s.channel_disconnected_at,
             s.plan, s.pro_until, s.pro_pinned_offer_id,
             s.profile_title, s.profile_niche, s.profile_contact, s.profile_geo,
             s.profile_contacts, s.profile_contacts_v,
@@ -1212,6 +1220,34 @@ export async function setWorkspaceSetting(workspaceId, patch) {
   await pool.query(
     `update workspace_settings set ${sets.join(', ')}, updated_at=now() where workspace_id=$1`,
     [workspaceId, ...vals]
+  );
+}
+
+
+export async function setWorkspaceChannelConnection(workspaceId, connected) {
+  const wsId = Number(workspaceId || 0);
+  if (!wsId) return;
+  await ensureWorkspaceSettings(wsId);
+  if (connected) {
+    await pool.query(
+      `update workspace_settings
+          set channel_connected=true,
+              channel_disconnected_at=null,
+              updated_at=now()
+        where workspace_id=$1`,
+      [wsId]
+    );
+    return;
+  }
+  await pool.query(
+    `update workspace_settings
+        set channel_connected=false,
+            channel_disconnected_at=now(),
+            network_enabled=false,
+            curator_enabled=false,
+            updated_at=now()
+      where workspace_id=$1`,
+    [wsId]
   );
 }
 
