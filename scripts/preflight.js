@@ -523,6 +523,21 @@ if (fs.existsSync(startRoleGateContractSmokePath)) {
   console.warn("[preflight] scripts/smoke-start-role-gate-contract.js not found (skipping)");
 }
 
+logHeader("Preflight: smoke ws channel disconnect contract");
+const wsChannelDisconnectSmokePath = path.join(ROOT, "scripts", "smoke-ws-channel-disconnect-contract.js");
+if (fs.existsSync(wsChannelDisconnectSmokePath)) {
+  const res = spawnSync(process.execPath, [wsChannelDisconnectSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-ws-channel-disconnect-contract.js not found (skipping)");
+}
+
 logHeader("Preflight: smoke official publish check-now contract");
 const officialPublishCheckNowSmokePath = path.join(ROOT, "scripts", "smoke-official-publish-check-now-contract.js");
 if (fs.existsSync(officialPublishCheckNowSmokePath)) {
