@@ -3504,3 +3504,20 @@ QA
   3) `⛔ Отключить канал` → confirm → канал уходит в `📦 Неактивные`.
   4) Открытие отключённого канала по-прежнему показывает special reconnect screen.
   5) Любой старый путь, ведущий на `a:ws_settings`, открывает тот же unified screen без stale/fallback.
+
+
+## STEP412 — Workspace IA cleanup: compact picker + curator submenu
+- `renderWsList(owner)` упрощён до compact picker: короткий copy `Выбери канал для управления.`, список активных каналов и только служебные CTA (`🚀 Подключить ещё`, `📦 Неактивные`, `📋 Меню`, `🏠 Home`). Старый длинный explanatory block с bullets убран.
+- `wsMenuKb(wsId, opts)` на unified channel screen больше не делает direct toggle кураторов из верхней кнопки. Вместо этого там теперь явный вход `👥 Кураторы: ✅/❌` → `a:cur_manage|ws:{id}`; network toggle остаётся прямым (`🌐 Сеть`).
+- `renderWorkspaceManagementScreen()` теперь показывает status lines `Сеть: ...` / `Кураторы: ...`, чтобы owner видел состояние канала сразу на основном экране, без дополнительных кликов.
+- `curManageKb(wsId, ws)` оставлен как отдельное submenu управления кураторами именно этого канала: master toggle `👤 Куратор: ВКЛ/ВЫКЛ`, `➕ Добавить по @username`, `🔗 Пригласить ссылкой`, `👥 Список кураторов`, `📜 Журнал`, `🧾 История`; back-path обновлён на `⬅️ К каналу` → `a:ws_open|ws:{id}`.
+- `renderCuratorManage()` переоформлен текстово в `👥 Управление кураторами`, без новой DB/business логики и без новых hot-path reads.
+- Совместимость сохранена: `a:ws_settings` по‑прежнему рендерит unified channel screen, старые callbacks/back-paths не ломаются.
+- Обновлён source-level smoke `scripts/smoke-ws-channel-disconnect-contract.js`: теперь он фиксирует compact picker copy, curator submenu entry из `ws_open`, master toggle/add/invite/back-path в `cur_manage`, а также сохранённый alias `ws_settings`.
+
+### QA
+- `📣 Мои каналы` → короткий экран выбора, без bullet-list.
+- Tap по активному каналу → unified `Управление каналом`.
+- Верхняя правая кнопка `👥 Кураторы: ...` → открывает submenu управления кураторами именно этого канала.
+- В submenu: toggle режима, добавить по username, invite link, список, журнал, back `⬅️ К каналу`.
+- `a:ws_settings`/старые back-paths по-прежнему приводят на рабочий экран канала.
