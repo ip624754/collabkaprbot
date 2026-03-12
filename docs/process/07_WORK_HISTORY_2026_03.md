@@ -3481,3 +3481,8 @@ QA
 
 Риск регрессий
 - Низкий-средний: затронут только creator workspace UX + один маленький DB helper + новый migration flag; hot menu/cache contract сохранён.
+
+## STEP410 — Workspace card → settings bridge for channel disconnect
+- Fixed a UX regression left after STEP409: `a:ws_open` did not expose `a:ws_settings`, so owners could not reach `⛔ Отключить канал` from an active channel card.
+- `wsMenuKb(wsId)` now shows `👥 Кураторы и сеть` instead of direct `👥 Кураторы канала`, keeping curator/history/disconnect under the intended settings screen with no new DB reads.
+- Smoke contract extended to assert the workspace card links to `a:ws_settings` and preserves the disconnect path reachability.
