@@ -4318,11 +4318,65 @@ function wsSettingsKb(wsId, s) {
     .row()
     .text('🧹 Кураторы', `a:cur_manage|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
+    .row()
+    .text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)
     .row();
 
   kb.row().text('⬅️ Назад', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
   kb.row().text('🏠 Home', 'a:home');
   return kb;
+}
+
+function isWorkspaceDisconnected(ws) {
+  return !!ws && ws.channel_connected === false;
+}
+
+function wsDisconnectedKb(wsId, opts = {}) {
+  const backCb = String(opts.backCb || 'a:ws_list');
+  const kb = new InlineKeyboard()
+    .text('🔌 Подключить снова', `a:ws_reconnect_q|ws:${wsId}`)
+    .row()
+    .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
+    .text('🧾 История', `a:ws_history|ws:${wsId}`)
+    .row()
+    .text('⬅️ Назад', backCb)
+    .text('📋 Меню', 'a:menu')
+    .row()
+    .text('🏠 Home', 'a:home');
+  return kb;
+}
+
+async function renderWsDisconnected(ctx, ownerUserId, wsId, opts = {}) {
+  const ws = await db.getWorkspace(ownerUserId, wsId);
+  if (!ws) {
+    await renderStaleButton(ctx, {
+      text: '⚠️ Канал не найден или кнопка устарела. Открой 📋 Меню → «📣 Мои каналы» и выбери канал заново.',
+      backCb: 'a:ws_list'
+    });
+    return;
+  }
+  const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
+  const backCb = String(opts.backCb || 'a:ws_list');
+  const disconnectedAt = ws.channel_disconnected_at ? fmtTs(ws.channel_disconnected_at) : null;
+  const sourceHint = opts.source ? `Источник: <i>${escapeHtml(String(opts.source))}</i>
+
+` : '';
+  const whenLine = disconnectedAt ? `
+Отключён: <b>${escapeHtml(disconnectedAt)}</b>` : '';
+  await safeEditOrReply(ctx, `⛔ <b>Канал отключён</b>
+
+Канал: <b>${escapeHtml(title)}</b>${whenLine}
+
+${sourceHint}Что это значит:
+• канал скрыт из активного списка
+• новые офферы / новые розыгрыши / кураторские действия недоступны
+• сеть и куратор уже выключены
+• профиль и история сохранены
+
+Чтобы вернуть канал в работу, нажми «🔌 Подключить снова».`, {
+    parse_mode: 'HTML',
+    reply_markup: wsDisconnectedKb(wsId, { backCb })
+  });
 }
 
 
@@ -4661,6 +4715,10 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
   const ws = await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
     try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    return;
+  }
+  if (isWorkspaceDisconnected(ws)) {
+    await renderWsDisconnected(ctx, ownerUserId, wsId, { backCb: 'a:ws_list', source: 'curator_manage' });
     return;
   }
   try { await db.ensureWorkspaceSettings(wsId); } catch {}
@@ -7835,35 +7893,43 @@ async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
       // keep cached/empty
     }
   }
-  if (!wsList.length) {
+  const activeWsList = (wsList || []).filter((w) => !isWorkspaceDisconnected(w));
+  if (!wsList.length || !activeWsList.length) {
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     try { await clearExpectText(ctx.from.id); } catch {}
 
     const minimal = !!opts?.minimal;
     const backCb = String(opts?.backCb || 'a:home');
 
-    const kb = minimal
-      ? (() => {
-          const kbx = new InlineKeyboard().text('🚀 Подключить канал', 'a:setup');
-          kbNavRow(kbx, backCb);
-          return kbx;
-        })()
-      : mainMenuKb(await getRoleFlags(u, ctx.from.id));
+    let kb;
+    if (minimal) {
+      kb = new InlineKeyboard().text('🚀 Подключить канал', 'a:setup');
+      if (wsList.length && !activeWsList.length) kb.row().text('📦 Неактивные каналы', 'a:ws_list_inactive');
+      kbNavRow(kb, backCb);
+    } else {
+      kb = mainMenuKb(await getRoleFlags(u, ctx.from.id));
+      if (wsList.length && !activeWsList.length) kb.row().text('📦 Неактивные каналы', 'a:ws_list_inactive');
+    }
 
-    await safeEditOrReply(ctx, `⚠️ Чтобы продолжить, нужен подключённый канал (витрина).
+    const hint = (!wsList.length)
+      ? `⚠️ Чтобы продолжить, нужен подключённый канал (витрина).
 
 1) Нажми «🚀 Подключить канал» и добавь бота админом в свой канал.
-2) Затем вернись сюда и повтори действие.`, { reply_markup: kb });
+2) Затем вернись сюда и повтори действие.`
+      : `⚠️ Активный канал сейчас не выбран.
+
+У тебя есть только отключённые каналы. Их можно вернуть через «📦 Неактивные каналы» → «🔌 Подключить снова», либо подключить новый канал.`;
+    await safeEditOrReply(ctx, hint, { reply_markup: kb });
     return null;
   }
   const active = await getActiveWorkspace(ctx.from.id);
   if (active) {
     const ws = await db.getWorkspace(ownerUserId, active);
-    if (ws) return ws;
+    if (ws && !isWorkspaceDisconnected(ws)) return ws;
   }
-  // pick first
-  await setActiveWorkspace(ctx.from.id, wsList[0].id);
-  return await db.getWorkspace(ownerUserId, wsList[0].id);
+  // pick first active workspace
+  await setActiveWorkspace(ctx.from.id, activeWsList[0].id);
+  return await db.getWorkspace(ownerUserId, activeWsList[0].id);
 }
 
 async function renderWsList(ctx, ownerUserId) {
@@ -7883,16 +7949,34 @@ async function renderWsList(ctx, ownerUserId) {
 Нажми «🚀 Подключить канал», добавь бота админом в свой канал — и после этого появится витрина и все функции.`, { reply_markup: mainMenuKb(await getRoleFlags(await db.upsertUser(ctx.from.id, ctx.from.username ?? null), ctx.from.id)) });
     return;
   }
+  const activeItems = items.filter((w) => !isWorkspaceDisconnected(w));
+  const inactiveItems = items.filter((w) => isWorkspaceDisconnected(w));
+  if (!activeItems.length && inactiveItems.length) {
+    const kb = new InlineKeyboard()
+      .text(`📦 Неактивные каналы (${inactiveItems.length})`, 'a:ws_list_inactive')
+      .row()
+      .text('🚀 Подключить ещё', 'a:setup')
+      .text('📋 Меню', 'a:menu')
+      .row()
+      .text('🏠 Home', 'a:home');
+    await safeEditOrReply(ctx, `📣 <b>Мои каналы</b>
+
+Активных каналов сейчас нет.
+
+Неактивные каналы сохранены отдельно: профиль и история на месте, а в активную работу их можно вернуть через «🔌 Подключить снова».`, { parse_mode: 'HTML', reply_markup: kb });
+    return;
+  }
   const kb = new InlineKeyboard();
-  for (const w of items) {
+  for (const w of activeItems) {
     const label = w.channel_username ? `@${w.channel_username}` : w.title;
     kb.text(label, `a:ws_open|ws:${w.id}`).row();
   }
+  if (inactiveItems.length) kb.text(`📦 Неактивные (${inactiveItems.length})`, 'a:ws_list_inactive').row();
   kb.text('🚀 Подключить ещё', 'a:setup').text('📋 Меню', 'a:menu').row();
   kb.text('🏠 Home', 'a:home');
   await safeEditOrReply(ctx, `📣 <b>Мои каналы</b>
 
-Это каналы, которые ты подключил к боту (workspace).
+Это активные каналы, которые сейчас подключены к боту.
 
 Выбери канал — дальше можно:
 • ➕ создать новый конкурс
@@ -7901,6 +7985,34 @@ async function renderWsList(ctx, ownerUserId) {
 • 👤 профиль/витрина и настройки
 
 💡 Хочешь добавить ещё канал — жми «🚀 Подключить ещё».`, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function renderWsInactiveList(ctx, ownerUserId) {
+  let items = await listWorkspacesCached(ownerUserId);
+  if (!items.length) {
+    try {
+      items = await db.listWorkspaces(ownerUserId);
+    } catch {
+      items = [];
+    }
+  }
+  const inactiveItems = items.filter((w) => isWorkspaceDisconnected(w));
+  if (!inactiveItems.length) {
+    await safeEditOrReply(ctx, '📦 Неактивных каналов пока нет.', {
+      reply_markup: new InlineKeyboard().text('⬅️ Активные', 'a:ws_list').text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home')
+    });
+    return;
+  }
+  const kb = new InlineKeyboard();
+  for (const w of inactiveItems) {
+    const label = w.channel_username ? `⛔ @${w.channel_username}` : `⛔ ${w.title}`;
+    kb.text(label, `a:ws_open|ws:${w.id}|ret:inactive`).row();
+  }
+  kb.text('⬅️ Активные', 'a:ws_list').text('🚀 Подключить ещё', 'a:setup').row();
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  await safeEditOrReply(ctx, `📦 <b>Неактивные каналы</b>
+
+Эти каналы отключены от активной работы. Профиль и история сохранены, а вернуть канал можно через «🔌 Подключить снова».`, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {
@@ -7913,6 +8025,11 @@ async function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {
     return;
   }
   await setActiveWorkspace(ctx.from.id, wsId);
+  if (isWorkspaceDisconnected(ws)) {
+    const backCb = opts?.ret === 'inactive' ? 'a:ws_list_inactive' : 'a:ws_list';
+    await renderWsDisconnected(ctx, ownerUserId, wsId, { backCb, source: 'workspace_open' });
+    return;
+  }
   const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
   const showCurator = (opts && typeof opts.showCurator === 'boolean')
     ? !!opts.showCurator
@@ -7929,6 +8046,10 @@ async function renderWsSettings(ctx, ownerUserId, wsId) {
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
   if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
   if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!isAdmin && isWorkspaceDisconnected(ws)) {
+    await renderWsDisconnected(ctx, ownerUserId, wsId, { backCb: 'a:ws_list', source: 'workspace_settings' });
+    return;
+  }
   await db.ensureWorkspaceSettings(wsId);
   const s = await db.getWorkspace(ownerUserId, wsId);
   const settings = {
@@ -7953,6 +8074,8 @@ async function renderWsHistory(ctx, ownerUserId, wsId) {
     'ws.profile_reset': 'Профиль сброшен',
     'ws.network_toggled': 'Сеть переключена',
     'ws.curator_toggled': 'Куратор переключен',
+    'ws.channel_disconnected': 'Канал отключён',
+    'ws.channel_reconnected': 'Канал подключён снова',
     'gw.deleted': 'Розыгрыш удалён',
     'gw.created': 'Розыгрыш создан',
     'gw.updated': 'Розыгрыш обновлён',
@@ -10577,6 +10700,10 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
   }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
+  if (!isAdmin && isOwner && isWorkspaceDisconnected(ws)) {
+    await renderWsDisconnected(ctx, ownerUserId, wsId, { backCb: 'a:ws_list', source: 'workspace_leads' });
+    return;
+  }
   let isCurator = false;
   if (!isAdmin && !isOwner) {
     try { isCurator = await db.isCuratorForWorkspace(Number(wsId), Number(actorUserId)); } catch {}
@@ -13582,6 +13709,10 @@ ${trialLine}
 
   const ws = await db.getWorkspace(ownerUserId, wsNum);
   if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (isWorkspaceDisconnected(ws)) {
+    await renderWsDisconnected(ctx, ownerUserId, wsNum, { backCb: 'a:ws_list', source: 'bx_open' });
+    return;
+  }
 
   if (!ws.network_enabled) {
     await safeEditOrReply(ctx, 
@@ -25744,6 +25875,11 @@ if (p.a === 'a:lead_set') {
       await renderWsList(ctx, u.id);
       return;
     }
+    if (p.a === 'a:ws_list_inactive') {
+      await ctx.answerCallbackQuery();
+      await renderWsInactiveList(ctx, u.id);
+      return;
+    }
     
     if (p.a === 'a:pro_home') {
       await ctx.answerCallbackQuery();
@@ -25755,7 +25891,7 @@ if (p.a === 'a:lead_set') {
 
 if (p.a === 'a:ws_open') {
       await ctx.answerCallbackQuery();
-      await renderWsOpen(ctx, u.id, Number(p.ws));
+      await renderWsOpen(ctx, u.id, Number(p.ws), { ret: String(p.ret || '') });
       return;
     }
     if (p.a === 'a:ws_settings') {
@@ -31700,6 +31836,11 @@ if (p.a === 'a:bx_retry_help') {
       db.trackEvent('bx_offer_new_open', { userId: u.id, wsId, meta: {} });
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (isWorkspaceDisconnected(ws)) {
+        await ctx.answerCallbackQuery();
+        await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'bx_new' });
+        return;
+      }
       if (!ws.network_enabled) {
         await ctx.answerCallbackQuery();
         await renderBxOpen(ctx, u.id, wsId);
@@ -32111,6 +32252,11 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (isWorkspaceDisconnected(ws)) {
+        await ctx.answerCallbackQuery();
+        await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'bx_publish' });
+        return;
+      }
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
@@ -32367,9 +32513,104 @@ if (p.a === 'a:bx_publish_hint') {
       return;
     }
 
+    if (p.a === 'a:ws_disconnect_q') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (isWorkspaceDisconnected(ws)) {
+        await ctx.answerCallbackQuery();
+        await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'disconnect_confirm' });
+        return;
+      }
+      const kb = new InlineKeyboard()
+        .text('✅ Отключить', `a:ws_disconnect_do|ws:${wsId}`)
+        .text('❌ Отмена', `a:ws_settings|ws:${wsId}`)
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
+      await ctx.answerCallbackQuery();
+      await safeEditOrReply(ctx, `⛔ <b>Отключить канал</b>
+
+Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
+
+Что произойдёт:
+• канал исчезнет из активного списка
+• новые офферы / новые розыгрыши / кураторские действия станут недоступны
+• сеть и куратор будут выключены
+• профиль, история и прошлые данные сохранятся
+
+Канал можно будет подключить снова позже.`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:ws_disconnect_do') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await db.setWorkspaceChannelConnection(wsId, false);
+      await db.auditWorkspace(wsId, u.id, 'ws.channel_disconnected', { network_enabled: false, curator_enabled: false });
+      await invalidateWorkspacesCache(u.id);
+      try {
+        const activeWs = await getActiveWorkspace(ctx.from.id);
+        if (Number(activeWs || 0) === wsId) await redis.del(k(['active_ws', ctx.from.id]));
+      } catch {}
+      await ctx.answerCallbackQuery({ text: '⛔ Канал отключён' });
+      await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list_inactive', source: 'disconnect_done' });
+      return;
+    }
+
+    if (p.a === 'a:ws_reconnect_q') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!isWorkspaceDisconnected(ws)) {
+        await ctx.answerCallbackQuery();
+        await renderWsOpen(ctx, u.id, wsId);
+        return;
+      }
+      const kb = new InlineKeyboard()
+        .text('✅ Подключить', `a:ws_reconnect_do|ws:${wsId}`)
+        .text('❌ Отмена', `a:ws_open|ws:${wsId}|ret:inactive`)
+        .row()
+        .text('📋 Меню', 'a:menu')
+        .text('🏠 Home', 'a:home');
+      await ctx.answerCallbackQuery();
+      await safeEditOrReply(ctx, `🔌 <b>Подключить канал снова</b>
+
+Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
+
+Что произойдёт:
+• канал вернётся в активный список
+• профиль и история останутся на месте
+• сеть и куратор останутся выключенными — их можно включить отдельно в настройках
+
+Перед продолжением убедись, что бот всё ещё админ в канале.`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:ws_reconnect_do') {
+      const wsId = Number(p.ws);
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await db.setWorkspaceChannelConnection(wsId, true);
+      await db.auditWorkspace(wsId, u.id, 'ws.channel_reconnected', {});
+      await invalidateWorkspacesCache(u.id);
+      await setActiveWorkspace(ctx.from.id, wsId);
+      await ctx.answerCallbackQuery({ text: '🔌 Канал снова активен' });
+      await renderWsOpen(ctx, u.id, wsId);
+      return;
+    }
+
     if (p.a === 'a:net_q') {
       const wsId = Number(p.ws);
       const ret = String(p.ret || 'ws');
+      const ws = await db.getWorkspace(u.id, wsId);
+      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (isWorkspaceDisconnected(ws)) {
+        await ctx.answerCallbackQuery();
+        await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'network_gate' });
+        return;
+      }
       await renderNetConfirm(ctx, u.id, wsId, ret);
       return;
     }
@@ -32380,6 +32621,11 @@ if (p.a === 'a:bx_publish_hint') {
       const ret = String(p.ret || 'ws') === 'bx' ? 'bx' : 'ws';
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (isWorkspaceDisconnected(ws)) {
+        await ctx.answerCallbackQuery();
+        await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'network_set' });
+        return;
+      }
 
       await db.setWorkspaceSetting(wsId, { network_enabled: enabled });
       await db.auditWorkspace(wsId, u.id, 'ws.network_toggled', { enabled, source: ret });
@@ -32403,6 +32649,11 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (isWorkspaceDisconnected(ws)) {
+        await ctx.answerCallbackQuery();
+        await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'curator_toggle' });
+        return;
+      }
       await db.setWorkspaceSetting(wsId, { curator_enabled: !ws.curator_enabled });
       await db.auditWorkspace(wsId, u.id, 'ws.curator_toggled', { enabled: !ws.curator_enabled });
       const ret = String(p.ret || 'ws');
@@ -32417,7 +32668,13 @@ if (p.a === 'a:bx_publish_hint') {
 	// Curators
 	if (p.a === 'a:cur_manage') {
 	  const wsId = Number(p.ws);
+	  const ws = await db.getWorkspace(u.id, wsId);
+	  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
 	  await ctx.answerCallbackQuery();
+	  if (isWorkspaceDisconnected(ws)) {
+	    await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'curator_manage' });
+	    return;
+	  }
 	  await renderCuratorManage(ctx, u.id, wsId);
 	  return;
 	}
@@ -33475,6 +33732,11 @@ ${winnersHeader}`;
         await renderGwNewGate(ctx, { backCb: 'a:gw_list', reason: 'Канал не найден или нет доступа. Выбери канал заново.' });
         return;
       }
+      if (isWorkspaceDisconnected(ws)) {
+        await ctx.answerCallbackQuery();
+        await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'gw_new' });
+        return;
+      }
       await clearDraft(ctx.from.id);
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '🎁 <b>Новый конкурс</b>\n\nКонкурс — инструмент PR и роста аудитории.\nИспользуй его, чтобы собрать участников, вовлечённость и заявки брендов.\n\n<b>Шаг 1/6:</b> выбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
@@ -33758,6 +34020,11 @@ if (p.a === 'a:gw_publish') {
   const wsId = Number(p.ws);
   const ws = await db.getWorkspace(u.id, wsId);
   if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (isWorkspaceDisconnected(ws)) {
+    await ctx.answerCallbackQuery();
+    await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'gw_publish' });
+    return;
+  }
   const draft = (await getDraft(ctx.from.id)) || {};
   if (!draft.prize_value_text || !draft.winners_count || !draft.sponsors || !draft.ends_at) {
     await ctx.answerCallbackQuery({ text: 'Черновик не полный.' });
