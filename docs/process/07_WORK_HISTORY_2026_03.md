@@ -3552,3 +3552,28 @@ QA
 - `👥 Кураторы` по-прежнему открывает submenu именно этого канала.
 - Если current channel отключили, следующий вход в creator main корректно fallback’ится на другой активный канал или показывает gate без active channels.
 
+
+
+## STEP414 — Creator main cleanup: keep only current-channel actions + role/support footer
+
+Что сделано
+- `mainMenuCreatorCurrentKb()` очищен от utility/setup CTA, которые визуально конфликтовали с current-channel моделью.
+- Из active creator main screen убраны: `🚀 Подключить ещё`, `✅ Верификация`, `🔗 Поделиться`.
+- Сохранены только current-channel actions (`📣 Мои каналы`, `⚙️ Канал`, `UGC / Офферы`, `Каталог брендов`, `Мои заявки`, `Inbox`, `PRO`, `Розыгрыши`, `Папки` при наличии) и нижний role/support footer (`💬 Поддержка`, role-switch, curator/admin entries, `🏠 Home`).
+- `📣 Мои каналы` остаётся единственной точкой для переключения/добавления каналов; полная логика current-channel, full channel menu и curator submenu из STEP413 не менялась.
+
+Почему
+- После STEP413 creator main стал логически правильным, но визуально оставался перегружен utility/setup-кнопками, которые не относятся к ежедневной работе текущего канала.
+- Для человеческого UX главное меню current-channel должно показывать только то, что относится к работе по текущему каналу, а setup/share/verification должны жить в своих собственных flows.
+
+Инварианты
+- Без новой миграции.
+- Без новой бизнес-логики.
+- Без новых hot-path DB reads.
+- Старые callback routes не ломаются: удалены только входы из active creator main screen, сами flows share/verify/setup остаются в системе.
+
+QA
+- `📋 Меню` в creator-mode не показывает `🚀 Подключить ещё / ✅ Верификация / 🔗 Поделиться`.
+- `📋 Меню` всё ещё показывает `📣 Мои каналы / ⚙️ Канал / Inbox / UGC / Розыгрыши / PRO` и role/support footer.
+- `📣 Мои каналы` по-прежнему остаётся местом для `🚀 Подключить ещё`.
+- `⚙️ Канал` по-прежнему открывает full channel menu без регрессий.
