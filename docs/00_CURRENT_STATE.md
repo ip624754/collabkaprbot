@@ -1,3 +1,7 @@
+**STEP419:** Docs sync for current Creator/channel UX — documentation is now aligned to the actual STEP418 runtime model. Creator main is explicitly documented as a **current-channel menu**: top row is `🔁 Сменить канал` (compact picker) and `📂 Текущий канал` (open current channel work screen); role switching stays only in `🏠 Home`; the no-active-channel creator gate is intentionally minimal (`🚀 Подключить канал`, `📦 Неактивные`, `💬 Поддержка`, `🏠 Home`). Channel IA is fixed as `ws_open = Работа с каналом`, `ws_settings = Настройки канала`, `a:cur_manage = Кураторы канала`. Verification semantics are now documented honestly: current implementation is **account-level/user-level**, not per-channel DB truth, so quick access lives in channel settings as `✅ Верификация аккаунта` and is shared across all creator channels.
+
+**Future UX note (watchlist, not current work):** the current separation `Меню → 📂 Текущий канал → ⚙️ Настройки` is intentional because it clearly splits daily work from rarer settings. If later real users complain that settings are too deep, the first safe micro-improvement to consider is returning **one frequent setting only** (most likely `🌐 Сеть`) back onto the channel work screen as a fast toggle, while keeping curator management / profile / history / PRO / disconnect inside settings. This is a future UX option, not an active task.
+
 **STEP417:** Channel work/settings split — per-channel UX is now split into three clear levels without DB/schema changes: `a:ws_open` renders **Работа с каналом** (Inbox, brand applications, offers, folders, giveaway create/list), `a:ws_settings` renders **Настройки канала** (network toggle, curator submenu entry, profile, history, PRO, soft disconnect), and `a:cur_manage` stays the separate curator submenu for that same channel. `📣 Мои каналы` still works as the compact picker and tapping a channel still does `set current + open ws_open`. History now returns into channel settings, not the work menu. Existing disconnect/reconnect semantics from STEP409 remain unchanged; this is purely an IA split of work vs settings with no new hot-path DB reads. Source-level smoke `scripts/smoke-ws-channel-disconnect-contract.js` now asserts the new separation.
 
 **STEP414:** Creator main menu cleanup — active Creator current-channel main menu is now limited to current-channel actions plus a small role/support footer. Removed utility/setup CTA from the active main screen: `🚀 Подключить ещё`, `✅ Верификация`, and `🔗 Поделиться` no longer appear next to current-channel work actions. `📣 Мои каналы` remains the single entry for switching/adding channels, while verification/share stay reachable from their dedicated flows and channel/profile contexts. The current-channel model from STEP413 stays intact (`📋 Меню` = current channel, `📣 Мои каналы` = picker, `⚙️ Канал` = full per-channel menu) with no schema change and no new hot-path DB reads. Source-level smoke now also asserts that the active creator main screen does not leak setup/share/verification utility buttons.
@@ -1361,3 +1365,14 @@ Auto-heal safeguards + ops alerts:
 - Manual check-now does not republish and does not bypass token-lock; it only syncs ACTIVE via Redis breadcrumb or safely resets to PENDING when publish is truly stuck.
 
 - STEP410 UX bridge: channel card (`a:ws_open`) now exposes `👥 Кураторы и сеть` → `a:ws_settings`, so owner can actually reach `⛔ Отключить канал` / `🔌 Подключить снова` flow from an active workspace without hidden paths.
+
+
+## STEP418 — Creator menu polish / verification placement
+- Creator current menu now uses explicit channel-context copy:
+  - `🔁 Сменить канал` opens the compact picker
+  - `📂 Текущий канал` opens the current channel work screen
+- Role-switch footer is removed from Creator current menu and from the no-active-channel creator gate. Role switching stays in `🏠 Home` only.
+- No-active creator gate is tightened to actionable recovery only: `🚀 Подключить канал`, `📦 Неактивные` (when present), `💬 Поддержка`, `🏠 Home`, plus staff shortcuts when applicable.
+- Verification is treated as **account-level**, not per-channel DB truth. The quick entrypoint now lives in `Настройки канала` as `✅ Верификация аккаунта`, with copy clarifying that it is one verification for the creator account.
+- `ws_profile` no longer duplicates the verification button; the profile screen stays focused on profile editing only.
+- Runtime business logic, schema and current-channel resolver were not changed.
