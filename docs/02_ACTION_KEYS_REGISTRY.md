@@ -5,15 +5,15 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **529**
-- Actions in registry: **529**
+- Actions in code: **534**
+- Actions in registry: **534**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
 | admin | 96 |
-| edit | 339 |
+| edit | 344 |
 | ops | 79 |
 | pay | 11 |
 | view | 4 |
@@ -23,7 +23,7 @@
 | Guard | Count |
 |---|---:|
 | db_truth | 4 |
-| none | 168 |
+| none | 173 |
 | queue_first | 2 |
 | require_redis | 355 |
 
@@ -508,6 +508,8 @@
 | `a:verify_home` | edit | none |
 | `a:verify_info` | edit | none |
 | `a:verify_kind` | edit | require_redis |
+| `a:ws_disconnect_do` | edit | none |
+| `a:ws_disconnect_q` | edit | none |
 | `a:ws_editor_add_username` | edit | require_redis |
 | `a:ws_editor_invite` | edit | require_redis |
 | `a:ws_editor_rm_do` | edit | require_redis |
@@ -526,6 +528,7 @@
 | `a:ws_lead` | edit | require_redis |
 | `a:ws_leads` | edit | require_redis |
 | `a:ws_list` | edit | none |
+| `a:ws_list_inactive` | edit | none |
 | `a:ws_open` | edit | none |
 | `a:ws_pro` | edit | require_redis |
 | `a:ws_pro_buy` | pay | require_redis |
@@ -550,6 +553,8 @@
 | `a:ws_prof_vert_t` | edit | require_redis |
 | `a:ws_prof_verticals` | edit | require_redis |
 | `a:ws_profile` | edit | none |
+| `a:ws_reconnect_do` | edit | none |
+| `a:ws_reconnect_q` | edit | none |
 | `a:ws_settings` | edit | require_redis |
 | `a:ws_share` | edit | require_redis |
 | `a:ws_share_send` | edit | require_redis |
