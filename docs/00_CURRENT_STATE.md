@@ -1349,3 +1349,5 @@ Auto-heal safeguards + ops alerts:
 - Added manual moderator action `a:off_verify` / `🩺 Проверить статус` on `PUBLISHING` official posts.
 - Added shared helper `src/lib/officialPublishVerify.js` for safe verify/self-heal used by worker and operator path.
 - Manual check-now does not republish and does not bypass token-lock; it only syncs ACTIVE via Redis breadcrumb or safely resets to PENDING when publish is truly stuck.
+
+- STEP410 UX bridge: channel card (`a:ws_open`) now exposes `👥 Кураторы и сеть` → `a:ws_settings`, so owner can actually reach `⛔ Отключить канал` / `🔌 Подключить снова` flow from an active workspace without hidden paths.
