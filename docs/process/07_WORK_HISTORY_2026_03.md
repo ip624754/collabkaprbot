@@ -3577,3 +3577,5 @@ QA
 - `📋 Меню` всё ещё показывает `📣 Мои каналы / ⚙️ Канал / Inbox / UGC / Розыгрыши / PRO` и role/support footer.
 - `📣 Мои каналы` по-прежнему остаётся местом для `🚀 Подключить ещё`.
 - `⚙️ Канал` по-прежнему открывает full channel menu без регрессий.
+- STEP415 — Creator Main role-switch footer cleanup: renamed creator-menu footer actions from `Я бренд / Я менеджер бренда` to `Перейти в бренд / Режим менеджера бренда`, keeping the same callbacks and click-time gating while making the footer clearly read as mode switching instead of current-channel actions.
+
