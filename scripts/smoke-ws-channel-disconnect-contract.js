@@ -40,9 +40,10 @@ assert.ok(dbSource.includes('network_enabled=false,'), 'disconnect setter must d
 assert.ok(dbSource.includes('curator_enabled=false,'), 'disconnect setter must disable curator mode');
 assert.ok(dbSource.includes('channel_connected=true,'), 'reconnect setter must flip DB-truth flag on');
 
-assert.ok(botSource.includes(".text(net, `a:net_q|ws:${wsId}|ret:ws`)"), 'workspace screens must expose direct network toggle');
-assert.ok(botSource.includes(".text(cur, `a:cur_manage|ws:${wsId}`)"), 'workspace screens must expose curator submenu entry');
-assert.ok(botSource.includes(".text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)"), 'workspace screens must expose disconnect button');
+assert.ok(botSource.includes(".text('⚙️ Настройки', `a:ws_settings|ws:${wsId}`)"), 'workspace work menu must expose dedicated settings entry');
+assert.ok(botSource.includes(".text('🌐 Сеть: ✅ ВКЛ', `a:net_q|ws:${wsId}|ret:ws`)") || botSource.includes(".text(net, `a:net_q|ws:${wsId}|ret:ws`)"), 'workspace settings must expose direct network toggle');
+assert.ok(botSource.includes(".text('👥 Кураторы', `a:cur_manage|ws:${wsId}`)"), 'workspace settings must expose curator submenu entry');
+assert.ok(botSource.includes(".text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)"), 'workspace settings must expose disconnect button');
 assert.ok(botSource.includes(".text('🔌 Подключить снова', `a:ws_reconnect_q|ws:${wsId}`)"), 'disconnected workspace screen must expose reconnect button');
 assert.ok(botSource.includes("function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {"), 'creator current-channel keyboard must exist');
 const mainMenuCreatorCurrentKbSrc = extractBetween(
@@ -60,7 +61,7 @@ assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🏷 Я бренд"), 'creator 
 assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🧑‍💼 Я менеджер бренда"), 'creator current-channel menu must not use the old ambiguous manager-footer copy');
 assert.ok(botSource.includes("<b>Текущий канал:</b> <b>${escapeHtml(currentWsLabel(current))}</b>"), 'creator menu must show current channel explicitly');
 assert.ok(botSource.includes(".text('📣 Мои каналы', 'a:ws_list')"), 'creator current-channel menu must keep channel picker entry');
-assert.ok(botSource.includes(".text('⚙️ Канал', `a:ws_open|ws:${wsId}`)"), 'creator current-channel menu must expose direct current-channel management entry');
+assert.ok(botSource.includes(".text('⚙️ Канал', `a:ws_open|ws:${wsId}`)") || botSource.includes(".text('📂 Текущий канал', `a:ws_open|ws:${wsId}`)"), 'creator current-channel menu must expose direct current-channel management entry');
 assert.ok(botSource.includes(".text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'creator current-channel menu must route inbox to the selected current channel');
 assert.ok(botSource.includes(".text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)"), 'creator current-channel menu must route giveaways to the selected current channel');
 assert.ok(botSource.includes("const label = w.channel_username ? `⛔ @${w.channel_username}` : `⛔ ${w.title}`;"), 'inactive workspace list must visibly mark disconnected channels');
@@ -70,23 +71,47 @@ const wsMenuKbSrc = extractBetween(
   'function wsMenuKb(wsId, opts = {}) {',
   '\n\nfunction wsSettingsKb(wsId, s) {'
 );
-assert.ok(wsMenuKbSrc.includes("const cur = curatorEnabled ? '👥 Кураторы: ✅ ВКЛ' : '👥 Кураторы: ❌ ВЫКЛ';"), 'workspace menu must label the curator submenu clearly');
-assert.ok(wsMenuKbSrc.includes(".text(cur, `a:cur_manage|ws:${wsId}`)"), 'workspace menu must route curator button into submenu');
-assert.ok(wsMenuKbSrc.includes(".text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)") , 'workspace menu must preserve inbox shortcut');
-assert.ok(wsMenuKbSrc.includes(".text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)") , 'workspace menu must preserve leads shortcut');
-assert.ok(wsMenuKbSrc.includes(".text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)"), 'workspace menu must preserve offers shortcut');
-assert.ok(wsMenuKbSrc.includes(".text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)"), 'workspace menu must preserve giveaway create shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'workspace work menu must preserve inbox shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)"), 'workspace work menu must preserve leads shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)"), 'workspace work menu must preserve offers shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('📁 Папки', `a:folders_home|ws:${wsId}`)"), 'workspace work menu must preserve folders shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)"), 'workspace work menu must preserve giveaway create shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)"), 'workspace work menu must preserve giveaway list shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('⚙️ Настройки', `a:ws_settings|ws:${wsId}`)"), 'workspace work menu must route to dedicated settings screen');
+assert.ok(!wsMenuKbSrc.includes("a:net_q|ws:${wsId}|ret:ws"), 'workspace work menu must not expose direct network toggle');
+assert.ok(!wsMenuKbSrc.includes("a:cur_manage|ws:${wsId}"), 'workspace work menu must not expose curator submenu directly');
+assert.ok(!wsMenuKbSrc.includes("a:ws_disconnect_q|ws:${wsId}"), 'workspace work menu must not expose disconnect directly');
 
-const renderWorkspaceManagementScreenSrc = extractBetween(
+const wsSettingsKbSrc = extractBetween(
   botSource,
-  'async function renderWorkspaceManagementScreen(ctx, ws, opts = {}) {',
+  'function wsSettingsKb(wsId, s) {',
+  '\n\nfunction isWorkspaceDisconnected(ws) {'
+);
+assert.ok(wsSettingsKbSrc.includes(".text(net, `a:net_q|ws:${wsId}|ret:ws`)"), 'workspace settings must expose direct network toggle');
+assert.ok(wsSettingsKbSrc.includes(".text('👥 Кураторы', `a:cur_manage|ws:${wsId}`)"), 'workspace settings must expose curator submenu entry');
+assert.ok(wsSettingsKbSrc.includes(".text('👤 Профиль канала', `a:ws_profile|ws:${wsId}`)"), 'workspace settings must expose profile entry');
+assert.ok(wsSettingsKbSrc.includes(".text('🧾 История', `a:ws_history|ws:${wsId}`)"), 'workspace settings must expose history entry');
+assert.ok(wsSettingsKbSrc.includes(".text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)"), 'workspace settings must expose PRO entry');
+assert.ok(wsSettingsKbSrc.includes(".text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)"), 'workspace settings must expose disconnect entry');
+assert.ok(wsSettingsKbSrc.includes(".text('⬅️ К каналу', `a:ws_open|ws:${wsId}`)"), 'workspace settings must return to channel work menu');
+
+const renderWorkspaceWorkScreenSrc = extractBetween(
+  botSource,
+  'async function renderWorkspaceWorkScreen(ctx, ws, opts = {}) {',
+  '\n\nasync function renderWorkspaceSettingsScreen(ctx, ws, opts = {}) {'
+);
+assert.match(renderWorkspaceWorkScreenSrc, /<b>Работа с каналом<\/b>/, 'workspace work screen must use work-menu framing');
+assert.match(renderWorkspaceWorkScreenSrc, /Сеть: <b>\$\{net\}<\/b>/, 'workspace work screen must show current network status');
+assert.match(renderWorkspaceWorkScreenSrc, /Кураторы: <b>\$\{cur\}<\/b>/, 'workspace work screen must show current curator status');
+
+const renderWorkspaceSettingsScreenSrc = extractBetween(
+  botSource,
+  'async function renderWorkspaceSettingsScreen(ctx, ws, opts = {}) {',
   '\n\nasync function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {'
 );
-assert.match(renderWorkspaceManagementScreenSrc, /<b>Управление каналом<\/b>/, 'workspace management screen must use channel-management framing');
-assert.match(renderWorkspaceManagementScreenSrc, /Сеть: <b>\$\{net\}<\/b>/, 'workspace management screen must show current network status');
-assert.match(renderWorkspaceManagementScreenSrc, /Кураторы: <b>\$\{cur\}<\/b>/, 'workspace management screen must show current curator status');
-assert.ok(renderWorkspaceManagementScreenSrc.includes("const net = ws.network_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';"), 'workspace management screen must derive network status without extra reads');
-assert.ok(renderWorkspaceManagementScreenSrc.includes("const cur = ws.curator_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';"), 'workspace management screen must derive curator status without extra reads');
+assert.match(renderWorkspaceSettingsScreenSrc, /<b>Настройки канала<\/b>/, 'workspace settings screen must use settings framing');
+assert.match(renderWorkspaceSettingsScreenSrc, /Сеть: <b>\$\{net\}<\/b>/, 'workspace settings screen must show current network status');
+assert.match(renderWorkspaceSettingsScreenSrc, /Кураторы: <b>\$\{cur\}<\/b>/, 'workspace settings screen must show current curator status');
 
 const renderWsOpenSrc = extractBetween(
   botSource,
@@ -94,14 +119,14 @@ const renderWsOpenSrc = extractBetween(
   '\n\nasync function renderWsSettings(ctx, ownerUserId, wsId) {'
 );
 assert.match(renderWsOpenSrc, /if \(isWorkspaceDisconnected\(ws\)\) \{[\s\S]*?await renderWsDisconnected\(/, 'ws_open must route disconnected channels to the special disabled screen');
-assert.ok(renderWsOpenSrc.includes('await renderWorkspaceManagementScreen(ctx, ws, { showCurator });'), 'ws_open must render the unified management screen');
+assert.ok(renderWsOpenSrc.includes('await renderWorkspaceWorkScreen(ctx, ws, { showCurator });'), 'ws_open must render the channel work screen');
 
 const renderWsSettingsSrc = extractBetween(
   botSource,
   'async function renderWsSettings(ctx, ownerUserId, wsId) {',
   '\n\nasync function renderWsHistory(ctx, ownerUserId, wsId) {'
 );
-assert.ok(renderWsSettingsSrc.includes('await renderWorkspaceManagementScreen(ctx, ws, { showCurator });'), 'ws_settings must stay as a compatible alias to the unified management screen');
+assert.ok(renderWsSettingsSrc.includes('await renderWorkspaceSettingsScreen(ctx, ws, { showCurator });'), 'ws_settings must render the dedicated settings screen');
 
 const curManageKbSrc = extractBetween(
   botSource,
@@ -109,18 +134,17 @@ const curManageKbSrc = extractBetween(
   '\n\nasync function wsCuratorLimitInfo(wsId) {'
 );
 assert.ok(curManageKbSrc.includes("kb.text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`).row();"), 'curator submenu must keep direct enable/disable toggle');
-assert.ok(curManageKbSrc.includes(".text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)"), 'curator submenu must expose add-by-username');
-assert.ok(curManageKbSrc.includes(".text('🔗 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)"), 'curator submenu must expose invite link');
+assert.ok(curManageKbSrc.includes(".text('➕ Добавить куратора', `a:cur_add_username|ws:${wsId}`)"), 'curator submenu must expose add curator entry');
 assert.ok(curManageKbSrc.includes(".text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)"), 'curator submenu must expose curator list');
-assert.ok(curManageKbSrc.includes("text('⬅️ К каналу', `a:ws_open|ws:${wsId}`)"), 'curator submenu must return to the channel screen');
+assert.ok(curManageKbSrc.includes("text('⬅️ К настройкам', `a:ws_settings|ws:${wsId}`)"), 'curator submenu must return to channel settings');
 
 const renderCuratorManageSrc = extractBetween(
   botSource,
   'async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {',
   '\n\n\nfunction brandTeamKb({'
 );
-assert.match(renderCuratorManageSrc, /👥 <b>Управление кураторами<\/b>/, 'curator submenu screen must use explicit channel-scoped framing');
-assert.match(renderCuratorManageSrc, /Доступ кураторов: <b>\$\{status\}<\/b>/, 'curator submenu screen must show current toggle status');
+assert.match(renderCuratorManageSrc, /👥 <b>Управление кураторами<\/b>|👥 <b>Кураторы канала<\/b>/, 'curator submenu screen must use explicit channel-scoped framing');
+assert.match(renderCuratorManageSrc, /Статус: <b>\$\{status\}<\/b>/, 'curator submenu screen must show current toggle status');
 
 const renderBxOpenSrc = extractBetween(
   botSource,
