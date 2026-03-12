@@ -2605,6 +2605,72 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
   return kb;
 }
 
+function currentWsLabel(ws) {
+  if (!ws) return '—';
+  const uname = String(ws.channel_username || '').replace(/^@/, '').trim();
+  if (uname) return '@' + uname;
+  const title = String(ws.title || '').trim();
+  return title || `Канал #${ws.id}`;
+}
+
+function currentWsStatusLabel(ws) {
+  if (!ws) return 'Сеть: — · Кураторы: —';
+  const net = ws.network_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
+  const cur = ws.curator_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
+  return `Сеть: ${net} · Кураторы: ${cur}`;
+}
+
+function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {
+  const { isModerator = false, isAdmin = false, isFolderEditor = false, isCurator = false } = flags;
+  const wsId = Number(ws?.id || 0);
+  const kb = new InlineKeyboard()
+    .text('📣 Мои каналы', 'a:ws_list')
+    .text('⚙️ Канал', `a:ws_open|ws:${wsId}`)
+    .row()
+    .text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)
+    .text('🏷 Каталог брендов', 'a:brands_home|p:0')
+    .row()
+    .text('📨 Мои заявки', 'a:my_apps|p:0')
+    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+    .row()
+    .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
+    .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
+    .row();
+
+  if (isFolderEditor) kb.text('📁 Папки', `a:folders_home|ws:${wsId}`).row();
+  if (opts.founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:menu').row();
+
+  kb.text('🚀 Подключить ещё', 'a:setup').row();
+
+  if (isCurator && CFG.VERIFICATION_ENABLED) {
+    kb.text('🧹 Кабинет куратора', 'a:cur_home').text('✅ Верификация', 'a:verify_home').row();
+  } else {
+    if (isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
+    if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home').row();
+  }
+
+  kb.text('🔗 Поделиться', 'a:share').text('💬 Поддержка', 'a:support').row();
+  if (opts.noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
+
+  kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
+    .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
+    .row();
+
+  const extra = [];
+  if (isModerator) extra.push(['🛡 Модерация', 'a:mod_home']);
+  if (isAdmin) extra.push(['👑 Админка', 'a:admin_home']);
+  for (let i = 0; i < extra.length; i += 2) {
+    const a = extra[i];
+    const b = extra[i + 1];
+    kb.text(a[0], a[1]);
+    if (b) kb.text(b[0], b[1]);
+    kb.row();
+  }
+
+  kb.row().text('🏠 Home', 'a:home');
+  return kb;
+}
+
 function mainMenuBrandKb(flags = {}, opts = {}) {
   const { isModerator = false, isAdmin = false, isCurator = false } = flags;
   const { isManager = false, hasMultipleBrands = false, canManager = false, teamLocked = false, teamBasicDone = null, teamPaid = null } = opts;
@@ -3344,6 +3410,76 @@ async function renderAccountDeletedGate(ctx, opts = {}) {
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
+
+async function renderCreatorCurrentMenu(ctx, u, flags = {}, params = {}) {
+  const edit = params.edit !== false;
+  const userId = Number(u?.id || 0);
+  const tgId = Number(ctx?.from?.id || 0);
+
+  if (ctx.from?.id) await setUiHome(ctx.from.id, BX_HOME.MENU);
+
+  const chatType = String(ctx?.chat?.type || '');
+  let notice = null;
+  let noticeAvail = { ok: false, audience: 'unknown', reason: '' };
+  if (chatType === 'private') {
+    try {
+      notice = await getSysNotice();
+      noticeAvail = await getSysNoticeAvailabilityForUser(tgId, notice);
+    } catch {
+      notice = null;
+      noticeAvail = { ok: false, audience: 'unknown', reason: 'error' };
+    }
+  }
+  try { await maybeSendSystemNotice(ctx, { notice, avail: noticeAvail }); } catch {}
+  const noticeActive = chatType === 'private' && !!noticeAvail.ok;
+
+  const founderState = await getFounderSaleState();
+  const founderActive = !!founderState.active;
+
+  const resolved = await resolveCurrentWorkspaceForOwner(userId, tgId);
+  const inactiveCount = Math.max(0, (resolved.wsList || []).length - (resolved.activeWsList || []).length);
+  const current = resolved.current;
+
+  if (!current) {
+    const kb = new InlineKeyboard().text('🚀 Подключить канал', 'a:setup').row();
+    if (inactiveCount > 0) kb.text(`📦 Неактивные (${inactiveCount})`, 'a:ws_list_inactive').row();
+    kb.text('📣 Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu').row();
+    if (founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:menu').row();
+    kb.text('🔗 Поделиться', 'a:share').text('💬 Поддержка', 'a:support').row();
+    if (noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
+    kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu').text('🧑‍💼 Я менеджер бренда', 'a:bm_home').row();
+    if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home').row();
+    if (flags?.isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
+    if (flags?.isModerator) kb.text('🛡 Модерация', 'a:mod_home').row();
+    if (flags?.isAdmin) kb.text('👑 Админка', 'a:admin_home').row();
+    kb.row().text('🏠 Home', 'a:home');
+
+    const text = `🏠 <b>Главное меню</b>
+
+<b>Ты сейчас в режиме:</b> <b>Creator</b>
+
+Сейчас у тебя нет активного канала.
+
+Подключи новый канал или верни один из неактивных, чтобы снова работать с Inbox, офферами, папками и розыгрышами.`;
+    const opts = { parse_mode: 'HTML', reply_markup: kb };
+    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
+    else await ctx.reply(text, opts);
+    return;
+  }
+
+  const text = `🏠 <b>Главное меню</b>
+
+<b>Ты сейчас в режиме:</b> <b>Creator</b>
+<b>Текущий канал:</b> <b>${escapeHtml(currentWsLabel(current))}</b>
+<b>${escapeHtml(currentWsStatusLabel(current))}</b>
+
+Действия ниже относятся к текущему каналу. Чтобы переключиться на другой — открой «📣 Мои каналы».`;
+  const kb = mainMenuCreatorCurrentKb(flags, current, { founderActive, noticeActive });
+  const opts = { parse_mode: 'HTML', reply_markup: kb };
+  if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
+  else await ctx.reply(text, opts);
+}
+
 async function renderRoleHub(ctx, u, flags) {
   // Role hub is a navigation home for Back in BX flows
   if (ctx.from?.id) await setUiHome(ctx.from.id, BX_HOME.MENU);
@@ -3391,21 +3527,7 @@ async function renderRoleHub(ctx, u, flags) {
     return;
   }
 
-  // Creator hub (STEP298: cache listWorkspaces in Redis to avoid Neon hits on each Menu open)
-  const wsList = await listWorkspacesCached(u.id);
-  if (!wsList.length) {
-    await renderMainMenu(ctx, flags, { edit: true, user: u });
-    return;
-  }
-
-  const active = await getActiveWorkspace(ctx.from.id);
-  let wsId = wsList[0].id;
-  if (active) {
-    const a = wsList.find((w) => Number(w.id) === Number(active));
-    if (a) wsId = a.id;
-  }
-
-  await renderWsOpen(ctx, u.id, wsId, { showCurator: !!flags.isCurator });
+  await renderCreatorCurrentMenu(ctx, u, flags, { edit: true });
 }
 
 
@@ -4048,6 +4170,33 @@ async function getActiveWorkspace(tgId) {
   }
 }
 
+
+async function resolveCurrentWorkspaceForOwner(ownerUserId, tgId, opts = {}) {
+  let wsList = Array.isArray(opts.wsList) ? opts.wsList : await listWorkspacesCached(ownerUserId);
+  if (!wsList.length) {
+    try { wsList = await db.listWorkspaces(ownerUserId); } catch { wsList = []; }
+  }
+  const activeWsList = (wsList || []).filter((w) => !isWorkspaceDisconnected(w));
+  if (!activeWsList.length) return { wsList, activeWsList, current: null };
+
+  const preferred = Number(opts.preferredWsId || 0);
+  let current = null;
+  if (preferred > 0) {
+    current = activeWsList.find((w) => Number(w.id) === preferred) || null;
+  }
+  if (!current) {
+    const active = await getActiveWorkspace(tgId);
+    if (active) current = activeWsList.find((w) => Number(w.id) === Number(active)) || null;
+  }
+  if (!current) {
+    current = activeWsList[0] || null;
+  }
+  if (current && Number(current.id) > 0) {
+    await setActiveWorkspace(tgId, Number(current.id));
+  }
+  return { wsList, activeWsList, current };
+}
+
 // Curator UI mode (hide non-curator actions to reduce confusion)
 async function setCuratorMode(tgId, enabled) {
   try {
@@ -4313,7 +4462,8 @@ function wsMenuKb(wsId, opts = {}) {
 
   if (showCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
 
-  kb.text('⬅️ Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  kb.text('📣 Мои каналы', 'a:ws_list').text('⬅️ К меню', 'a:menu').row();
+  kb.text('🏠 Home', 'a:home');
   return kb;
 }
 
@@ -7893,19 +8043,10 @@ function renderParticipantScreen(g, entry, opts = {}) {
 
 
 async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
-  // STEP333: avoid extra DB read on hot flows (best-effort Redis cache).
-  // Safety: if cache says "empty", double-check DB once to avoid a stale-empty UX gate.
-  let wsList = await listWorkspacesCached(ownerUserId);
-  if (!wsList.length) {
-    try {
-      wsList = await db.listWorkspaces(ownerUserId);
-    } catch {
-      // keep cached/empty
-    }
-  }
-  const activeWsList = (wsList || []).filter((w) => !isWorkspaceDisconnected(w));
+  const resolved = await resolveCurrentWorkspaceForOwner(ownerUserId, Number(ctx?.from?.id || 0));
+  const wsList = resolved.wsList || [];
+  const activeWsList = resolved.activeWsList || [];
   if (!wsList.length || !activeWsList.length) {
-    const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
     try { await clearExpectText(ctx.from.id); } catch {}
 
     const minimal = !!opts?.minimal;
@@ -7917,8 +8058,10 @@ async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
       if (wsList.length && !activeWsList.length) kb.row().text('📦 Неактивные каналы', 'a:ws_list_inactive');
       kbNavRow(kb, backCb);
     } else {
-      kb = mainMenuKb(await getRoleFlags(u, ctx.from.id));
-      if (wsList.length && !activeWsList.length) kb.row().text('📦 Неактивные каналы', 'a:ws_list_inactive');
+      kb = new InlineKeyboard().text('🚀 Подключить канал', 'a:setup').row();
+      if (wsList.length && !activeWsList.length) kb.text('📦 Неактивные каналы', 'a:ws_list_inactive').row();
+      kb.text('📣 Мои каналы', 'a:ws_list').text('📋 Меню', 'a:menu').row();
+      kb.text('🏠 Home', 'a:home');
     }
 
     const hint = (!wsList.length)
@@ -7932,14 +8075,11 @@ async function ensureWorkspaceForOwner(ctx, ownerUserId, opts = null) {
     await safeEditOrReply(ctx, hint, { reply_markup: kb });
     return null;
   }
-  const active = await getActiveWorkspace(ctx.from.id);
-  if (active) {
-    const ws = await db.getWorkspace(ownerUserId, active);
+  if (resolved.current) {
+    const ws = await db.getWorkspace(ownerUserId, resolved.current.id);
     if (ws && !isWorkspaceDisconnected(ws)) return ws;
   }
-  // pick first active workspace
-  await setActiveWorkspace(ctx.from.id, activeWsList[0].id);
-  return await db.getWorkspace(ownerUserId, activeWsList[0].id);
+  return null;
 }
 
 async function renderWsList(ctx, ownerUserId) {
@@ -7984,8 +8124,8 @@ async function renderWsList(ctx, ownerUserId) {
     kb.text(label, `a:ws_open|ws:${w.id}`).row();
   }
   if (inactiveItems.length) kb.text(`📦 Неактивные (${inactiveItems.length})`, 'a:ws_list_inactive').row();
-  kb.text('🚀 Подключить ещё', 'a:setup').text('📋 Меню', 'a:menu').row();
-  kb.text('🏠 Home', 'a:home');
+  kb.text('🚀 Подключить ещё', 'a:setup').row();
+  kb.text('⬅️ К меню', 'a:menu').text('🏠 Home', 'a:home');
   await safeEditOrReply(ctx, `📣 <b>Мои каналы</b>
 
 Выбери канал для управления.`, { parse_mode: 'HTML', reply_markup: kb });
@@ -8013,7 +8153,7 @@ async function renderWsInactiveList(ctx, ownerUserId) {
     kb.text(label, `a:ws_open|ws:${w.id}|ret:inactive`).row();
   }
   kb.text('⬅️ Активные', 'a:ws_list').text('🚀 Подключить ещё', 'a:setup').row();
-  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  kb.text('⬅️ К меню', 'a:menu').text('🏠 Home', 'a:home');
   await safeEditOrReply(ctx, `📦 <b>Неактивные каналы</b>
 
 Эти каналы отключены от активной работы. Профиль и история сохранены, а вернуть канал можно через «🔌 Подключить снова».`, { parse_mode: 'HTML', reply_markup: kb });
