@@ -3486,3 +3486,21 @@ QA
 - Fixed a UX regression left after STEP409: `a:ws_open` did not expose `a:ws_settings`, so owners could not reach `⛔ Отключить канал` from an active channel card.
 - `wsMenuKb(wsId)` now shows `👥 Кураторы и сеть` instead of direct `👥 Кураторы канала`, keeping curator/history/disconnect under the intended settings screen with no new DB reads.
 - Smoke contract extended to assert the workspace card links to `a:ws_settings` and preserves the disconnect path reachability.
+
+
+## STEP411 — Workspace open → unified channel management screen
+- Flattened creator workspace navigation without changing DB/business semantics: `a:ws_open` now renders a single **Управление каналом** screen instead of a промежуточная карточка + отдельный settings hop.
+- `wsMenuKb(wsId, opts)` now exposes direct owner controls at the top of the channel screen: `🌐 Сеть`, `👤 Куратор`, `👤 Профиль`, `🧾 История`, `⛔ Отключить канал`, while preserving fast workspace actions (`📥 Inbox`, `📨 Заявки брендов`, `🎬 UGC / Офферы`, `📁 Папки`, `➕ Новый розыгрыш`, `🎁 Розыгрыши`, `⭐️ PRO`).
+- Added shared renderer `renderWorkspaceManagementScreen(...)`; both `renderWsOpen(...)` and `renderWsSettings(...)` now route to the same screen. This keeps `a:ws_settings` alive as a compatibility alias for existing callbacks/back-paths, but the primary UX is now direct.
+- No schema changes, no new business logic, no new hot-path SQL: screen uses the already-loaded `getWorkspace()` row and renders current `network_enabled` / `curator_enabled` state directly.
+- Updated source-level contract smoke to assert direct reachability of network/curator/disconnect from `ws_open`, direct channel-management framing, and `ws_settings` alias behavior.
+
+QA
+- `node --check src/bot/bot.js scripts/smoke-ws-channel-disconnect-contract.js`
+- `node scripts/smoke-ws-channel-disconnect-contract.js`
+- Manual smoke:
+  1) `📣 Мои каналы` → выбрать активный канал → сразу увидеть `🌐 Сеть / 👤 Куратор / 👤 Профиль / 🧾 История / ⛔ Отключить канал`.
+  2) Проверить, что быстрые действия канала (`Inbox`, `UGC / Офферы`, `Розыгрыши`) сохранились на том же экране.
+  3) `⛔ Отключить канал` → confirm → канал уходит в `📦 Неактивные`.
+  4) Открытие отключённого канала по-прежнему показывает special reconnect screen.
+  5) Любой старый путь, ведущий на `a:ws_settings`, открывает тот же unified screen без stale/fallback.
