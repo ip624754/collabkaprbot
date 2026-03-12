@@ -2638,19 +2638,10 @@ function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {
     .row();
 
   if (isFolderEditor) kb.text('📁 Папки', `a:folders_home|ws:${wsId}`).row();
-  if (opts.founderActive) kb.text('🔥 Founder Sale', 'a:founder|ret:menu').row();
 
-  kb.text('🚀 Подключить ещё', 'a:setup').row();
-
-  if (isCurator && CFG.VERIFICATION_ENABLED) {
-    kb.text('🧹 Кабинет куратора', 'a:cur_home').text('✅ Верификация', 'a:verify_home').row();
-  } else {
-    if (isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
-    if (CFG.VERIFICATION_ENABLED) kb.text('✅ Верификация', 'a:verify_home').row();
-  }
-
-  kb.text('🔗 Поделиться', 'a:share').text('💬 Поддержка', 'a:support').row();
+  if (isCurator) kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
   if (opts.noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
+  kb.text('💬 Поддержка', 'a:support').row();
 
   kb.text('🏷 Я бренд', 'a:ui_mode_set|m:brand|ret:menu')
     .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
