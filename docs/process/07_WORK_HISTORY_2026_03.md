@@ -3523,6 +3523,17 @@ QA
 - `a:ws_settings`/старые back-paths по-прежнему приводят на рабочий экран канала.
 
 
+## STEP419 — Docs sync / current Creator-channel model frozen
+- Re-synced docs to the actual STEP418 runtime model instead of the older intermediate menu states. Creator main is now documented unambiguously as a **current-channel menu** with top-row entries `🔁 Сменить канал` and `📂 Текущий канал`; role switching stays only in `🏠 Home`, and the creator no-active state is intentionally minimal/recovery-oriented.
+- Clarified verification semantics in docs: current verification is **account-level**, not per-channel workspace truth. Quick access is therefore described as `✅ Верификация аккаунта` inside channel settings, while channel profile editing no longer carries a duplicate verification CTA.
+- Added a future-only UX watch note to docs: the current 3-click path to channel settings is an intentional beginner-friendly split of daily work vs rare settings. If real user pain appears later, the first candidate micro-improvement is a fast `🌐 Сеть` toggle on the channel work screen while keeping heavier controls (`Кураторы / Профиль / История / PRO / Отключить канал`) inside settings.
+- No code/runtime behavior changed in this step; this is docs-only synchronization after STEP418.
+
+### QA
+- `docs/00_CURRENT_STATE.md` matches the actual STEP418 menu model (`🔁 Сменить канал`, `📂 Текущий канал`, current-channel creator main, account-level verification entrypoint).
+- `docs/15_NEW_CHAT_HANDOFF.md` and `docs/17_START_NEW_CHAT_PROMPT.md` mention the current-channel creator model so future chats do not fall back to pre-STEP413 assumptions.
+- Future improvement note is explicitly marked as watchlist / not active work.
+
 ## STEP413 — Creator current-channel UX reset
 
 Что сделано
@@ -3597,3 +3608,12 @@ QA
 - `👥 Кураторы` → submenu именно этого канала; `⬅️ К настройкам` возвращает в `ws_settings`.
 - `🧾 История` → back возвращает в `ws_settings`.
 - `⛔ Отключить канал` / `🔌 Подключить снова` продолжают работать без регрессий.
+
+
+## STEP418 — Creator menu polish / verification placement
+- Active creator main menu cleaned further: `📣 Мои каналы` was renamed to **`🔁 Сменить канал`** on the current-channel screen, and `⚙️ Канал` was renamed to **`📂 Текущий канал`** so the top row clearly reads as switch vs open-current.
+- Removed role-switch footer from creator current menu and from the no-active creator gate. Switching between Creator / Brand / Brand Manager now stays in `🏠 Home`; creator menu is reserved for creator work only.
+- No-active creator gate is now minimal and recovery-oriented: connect a channel, reopen an inactive one, ask support, or go Home. Utility/setup/share/verification buttons were removed from that empty state.
+- Verification semantics were checked in code: current implementation is **one verification record per user**, not per workspace/channel. To keep UX honest, the entrypoint is exposed in channel settings as **`✅ Верификация аккаунта`** (quick access), and the settings copy explicitly says this verification is shared by the creator account.
+- `ws_profile` verification shortcut was removed to avoid duplicate CTA and keep profile editing focused.
+- No DB schema changes, no new hot-path reads, no changes to inbox/offers/giveaways business logic.
