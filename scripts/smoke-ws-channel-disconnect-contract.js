@@ -40,43 +40,68 @@ assert.ok(dbSource.includes('network_enabled=false,'), 'disconnect setter must d
 assert.ok(dbSource.includes('curator_enabled=false,'), 'disconnect setter must disable curator mode');
 assert.ok(dbSource.includes('channel_connected=true,'), 'reconnect setter must flip DB-truth flag on');
 
-assert.ok(botSource.includes(".text(net, `a:net_q|ws:${wsId}|ret:ws`)"), 'workspace open menu must expose direct network toggle');
-assert.ok(botSource.includes(".text(cur, `a:ws_toggle_cur|ws:${wsId}`)"), 'workspace open menu must expose direct curator toggle');
-assert.ok(botSource.includes(".text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)"), 'workspace settings screen must expose disconnect button');
+assert.ok(botSource.includes(".text(net, `a:net_q|ws:${wsId}|ret:ws`)"), 'workspace screens must expose direct network toggle');
+assert.ok(botSource.includes(".text(cur, `a:cur_manage|ws:${wsId}`)"), 'workspace screens must expose curator submenu entry');
+assert.ok(botSource.includes(".text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)"), 'workspace screens must expose disconnect button');
 assert.ok(botSource.includes(".text('🔌 Подключить снова', `a:ws_reconnect_q|ws:${wsId}`)"), 'disconnected workspace screen must expose reconnect button');
-assert.ok(botSource.includes("kb.text(`📦 Неактивные (${inactiveItems.length})`, 'a:ws_list_inactive').row();"), 'active workspace list must link to inactive list');
 assert.ok(botSource.includes("const label = w.channel_username ? `⛔ @${w.channel_username}` : `⛔ ${w.title}`;"), 'inactive workspace list must visibly mark disconnected channels');
+
+const wsMenuKbSrc = extractBetween(
+  botSource,
+  'function wsMenuKb(wsId, opts = {}) {',
+  '\n\nfunction wsSettingsKb(wsId, s) {'
+);
+assert.ok(wsMenuKbSrc.includes("const cur = curatorEnabled ? '👥 Кураторы: ✅ ВКЛ' : '👥 Кураторы: ❌ ВЫКЛ';"), 'workspace menu must label the curator submenu clearly');
+assert.ok(wsMenuKbSrc.includes(".text(cur, `a:cur_manage|ws:${wsId}`)"), 'workspace menu must route curator button into submenu');
+assert.ok(wsMenuKbSrc.includes(".text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)") , 'workspace menu must preserve inbox shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)") , 'workspace menu must preserve leads shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)"), 'workspace menu must preserve offers shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)"), 'workspace menu must preserve giveaway create shortcut');
 
 const renderWorkspaceManagementScreenSrc = extractBetween(
   botSource,
   'async function renderWorkspaceManagementScreen(ctx, ws, opts = {}) {',
   '\n\nasync function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {'
 );
+assert.match(renderWorkspaceManagementScreenSrc, /<b>Управление каналом<\/b>/, 'workspace management screen must use channel-management framing');
+assert.match(renderWorkspaceManagementScreenSrc, /Сеть: <b>\$\{net\}<\/b>/, 'workspace management screen must show current network status');
+assert.match(renderWorkspaceManagementScreenSrc, /Кураторы: <b>\$\{cur\}<\/b>/, 'workspace management screen must show current curator status');
+assert.ok(renderWorkspaceManagementScreenSrc.includes("const net = ws.network_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';"), 'workspace management screen must derive network status without extra reads');
+assert.ok(renderWorkspaceManagementScreenSrc.includes("const cur = ws.curator_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';"), 'workspace management screen must derive curator status without extra reads');
+
 const renderWsOpenSrc = extractBetween(
   botSource,
   'async function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {',
   '\n\nasync function renderWsSettings(ctx, ownerUserId, wsId) {'
 );
+assert.match(renderWsOpenSrc, /if \(isWorkspaceDisconnected\(ws\)\) \{[\s\S]*?await renderWsDisconnected\(/, 'ws_open must route disconnected channels to the special disabled screen');
+assert.ok(renderWsOpenSrc.includes('await renderWorkspaceManagementScreen(ctx, ws, { showCurator });'), 'ws_open must render the unified management screen');
+
 const renderWsSettingsSrc = extractBetween(
   botSource,
   'async function renderWsSettings(ctx, ownerUserId, wsId) {',
   '\n\nasync function renderWsHistory(ctx, ownerUserId, wsId) {'
 );
-const wsMenuKbSrc = extractBetween(
-  botSource,
-  'function wsMenuKb(wsId, opts = {}) {',
-  '\n\nfunction wsSettingsKb(wsId, s) {'
-);
-assert.ok(wsMenuKbSrc.includes(".text(net, `a:net_q|ws:${wsId}|ret:ws`)"), 'workspace open menu must expose direct network toggle');
-assert.ok(wsMenuKbSrc.includes(".text(cur, `a:ws_toggle_cur|ws:${wsId}`)"), 'workspace open menu must expose direct curator toggle');
-assert.ok(wsMenuKbSrc.includes(".text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)"), 'workspace open menu must expose direct disconnect button');
-assert.ok(wsMenuKbSrc.includes(".text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'workspace open menu must preserve direct workspace actions');
-assert.match(renderWorkspaceManagementScreenSrc, /<b>Управление каналом<\/b>/, 'workspace management screen must use direct channel-management framing');
-assert.ok(renderWorkspaceManagementScreenSrc.includes('networkEnabled: !!ws.network_enabled'), 'workspace management screen must render current network state');
-assert.ok(renderWorkspaceManagementScreenSrc.includes('curatorEnabled: !!ws.curator_enabled'), 'workspace management screen must render current curator state');
-assert.match(renderWsOpenSrc, /if \(isWorkspaceDisconnected\(ws\)\) \{[\s\S]*?await renderWsDisconnected\(/, 'ws_open must route disconnected channels to the special disabled screen');
-assert.ok(renderWsOpenSrc.includes('await renderWorkspaceManagementScreen(ctx, ws, { showCurator });'), 'ws_open must render the unified management screen');
 assert.ok(renderWsSettingsSrc.includes('await renderWorkspaceManagementScreen(ctx, ws, { showCurator });'), 'ws_settings must stay as a compatible alias to the unified management screen');
+
+const curManageKbSrc = extractBetween(
+  botSource,
+  'function curManageKb(wsId, ws = null) {',
+  '\n\nasync function wsCuratorLimitInfo(wsId) {'
+);
+assert.ok(curManageKbSrc.includes("kb.text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`).row();"), 'curator submenu must keep direct enable/disable toggle');
+assert.ok(curManageKbSrc.includes(".text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)"), 'curator submenu must expose add-by-username');
+assert.ok(curManageKbSrc.includes(".text('🔗 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)"), 'curator submenu must expose invite link');
+assert.ok(curManageKbSrc.includes(".text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)"), 'curator submenu must expose curator list');
+assert.ok(curManageKbSrc.includes("text('⬅️ К каналу', `a:ws_open|ws:${wsId}`)"), 'curator submenu must return to the channel screen');
+
+const renderCuratorManageSrc = extractBetween(
+  botSource,
+  'async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {',
+  '\n\n\nfunction brandTeamKb({'
+);
+assert.match(renderCuratorManageSrc, /👥 <b>Управление кураторами<\/b>/, 'curator submenu screen must use explicit channel-scoped framing');
+assert.match(renderCuratorManageSrc, /Доступ кураторов: <b>\$\{status\}<\/b>/, 'curator submenu screen must show current toggle status');
 
 const renderBxOpenSrc = extractBetween(
   botSource,
@@ -93,15 +118,25 @@ const ensureWsSrc = extractBetween(
 assert.ok(ensureWsSrc.includes("const activeWsList = (wsList || []).filter((w) => !isWorkspaceDisconnected(w));"), 'ensureWorkspaceForOwner must prefer connected workspaces');
 assert.ok(ensureWsSrc.includes("if (wsList.length && !activeWsList.length) kb.row().text('📦 Неактивные каналы', 'a:ws_list_inactive');"), 'ensureWorkspaceForOwner must surface inactive channel recovery');
 
+const renderWsListSrc = extractBetween(
+  botSource,
+  'async function renderWsList(ctx, ownerUserId) {',
+  '\n\nasync function renderWsInactiveList(ctx, ownerUserId) {'
+);
+assert.match(renderWsListSrc, /Выбери канал для управления\./, 'ws_list must use compact picker copy');
+assert.ok(!renderWsListSrc.includes('Выбери канал — дальше можно:'), 'ws_list must drop the old explanatory bullet block');
+assert.ok(renderWsListSrc.includes("kb.text('🚀 Подключить ещё', 'a:setup').text('📋 Меню', 'a:menu').row();") || renderWsListSrc.includes("kb.text('🚀 Подключить ещё', 'a:setup').text('📋 Меню', 'a:menu').row();"), 'ws_list must keep setup/menu navigation');
+assert.ok(renderWsListSrc.includes("kb.text(`📦 Неактивные (${inactiveItems.length})`, 'a:ws_list_inactive').row();"), 'ws_list must keep inactive channel entry when present');
+
 const disconnectHandlerSrc = extractBetween(
   botSource,
   "    if (p.a === 'a:ws_disconnect_q') {",
   "    if (p.a === 'a:net_q') {"
 );
-assert.ok(disconnectHandlerSrc.includes("await db.setWorkspaceChannelConnection(wsId, false);"), 'disconnect handler must persist DB-truth disconnect');
+assert.ok(disconnectHandlerSrc.includes('await db.setWorkspaceChannelConnection(wsId, false);'), 'disconnect handler must persist DB-truth disconnect');
 assert.ok(disconnectHandlerSrc.includes("await db.auditWorkspace(wsId, u.id, 'ws.channel_disconnected'"), 'disconnect handler must audit action');
 assert.ok(disconnectHandlerSrc.includes('await invalidateWorkspacesCache(u.id);'), 'disconnect handler must invalidate cached ws list');
-assert.ok(disconnectHandlerSrc.includes("await db.setWorkspaceChannelConnection(wsId, true);"), 'reconnect handler must persist DB-truth reconnect');
+assert.ok(disconnectHandlerSrc.includes('await db.setWorkspaceChannelConnection(wsId, true);'), 'reconnect handler must persist DB-truth reconnect');
 assert.ok(disconnectHandlerSrc.includes("await db.auditWorkspace(wsId, u.id, 'ws.channel_reconnected'"), 'reconnect handler must audit reconnect');
 
 const gwPublishSrc = extractBetween(
@@ -123,5 +158,6 @@ expectRegistry('a:ws_disconnect_q', { type: ACTION_TYPES.EDIT, guard: ACTION_GUA
 expectRegistry('a:ws_disconnect_do', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE });
 expectRegistry('a:ws_reconnect_q', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE });
 expectRegistry('a:ws_reconnect_do', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE });
+expectRegistry('a:cur_manage', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE });
 
-console.log('✅ smoke ws channel disconnect contract OK');
+console.log('✅ smoke ws channel disconnect + IA contract OK');
