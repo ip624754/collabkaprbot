@@ -54,6 +54,10 @@ assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🚀 Подключить ещ�
 assert.ok(!mainMenuCreatorCurrentKbSrc.includes("✅ Верификация"), 'creator current-channel menu must drop verification CTA from the active main screen');
 assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🔗 Поделиться"), 'creator current-channel menu must drop share CTA from the active main screen');
 assert.ok(mainMenuCreatorCurrentKbSrc.includes(".text('💬 Поддержка', 'a:support').row();"), 'creator current-channel menu must keep support footer');
+assert.ok(mainMenuCreatorCurrentKbSrc.includes(".text('🏷 Перейти в бренд', 'a:ui_mode_set|m:brand|ret:menu')"), 'creator current-channel menu must present the brand footer as an explicit role switch');
+assert.ok(mainMenuCreatorCurrentKbSrc.includes(".text('🧑‍💼 Режим менеджера бренда', 'a:bm_home')"), 'creator current-channel menu must present manager mode as an explicit role switch');
+assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🏷 Я бренд"), 'creator current-channel menu must not use the old ambiguous brand-footer copy');
+assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🧑‍💼 Я менеджер бренда"), 'creator current-channel menu must not use the old ambiguous manager-footer copy');
 assert.ok(botSource.includes("<b>Текущий канал:</b> <b>${escapeHtml(currentWsLabel(current))}</b>"), 'creator menu must show current channel explicitly');
 assert.ok(botSource.includes(".text('📣 Мои каналы', 'a:ws_list')"), 'creator current-channel menu must keep channel picker entry');
 assert.ok(botSource.includes(".text('⚙️ Канал', `a:ws_open|ws:${wsId}`)"), 'creator current-channel menu must expose direct current-channel management entry');
