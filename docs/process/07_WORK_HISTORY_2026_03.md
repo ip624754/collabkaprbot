@@ -3428,3 +3428,56 @@ NotebookLM-аудит подсветил не баг exactly-once, а throughput
 - `npm run smoke:start-role-gate-contract`
 - `npm run preflight`
 
+
+
+## STEP409
+
+Что делаем
+- Добавить безопасный owner-flow `soft disconnect / reconnect workspace channel` без hard-delete и без новых DB-read в hot menu paths.
+
+Что сделано
+- `migrations/044_workspace_channel_disconnect.sql`
+  - в `workspace_settings` добавлены `channel_connected boolean not null default true` и `channel_disconnected_at timestamptz`.
+- `src/db/queries.js`
+  - `listWorkspaces`, `getWorkspace`, `getWorkspaceAny`, `findWorkspaceByChannelUsername` теперь возвращают `channel_connected` / `channel_disconnected_at` с fail-open `coalesce(..., true)`.
+  - добавлен helper `setWorkspaceChannelConnection(workspaceId, connected)`.
+- `src/bot/bot.js`
+  - в `Кураторы и сеть` добавлена owner-кнопка `⛔ Отключить канал`.
+  - добавлены `renderWsDisconnected()` + `wsDisconnectedKb()` и разделение `📣 Мои каналы` / `📦 Неактивные каналы`.
+  - `renderWsOpen()` для отключённого workspace теперь показывает специальный disabled screen вместо обычного ws-menu.
+  - `renderWsSettings()`, `renderCuratorManage()`, `renderBxOpen()` и owner-view `renderWsLeadsList()` дружелюбно гейтят отключённый канал.
+  - `ensureWorkspaceForOwner()` выбирает только активные каналы и в сценарии «есть только отключённые» ведёт в recovery flow.
+  - callback handlers добавлены для `a:ws_list_inactive`, `a:ws_disconnect_q/do`, `a:ws_reconnect_q/do`.
+  - в mutating creator entrypoints добавлены guards на отключённый канал: `a:bx_new`, `a:bx_publish`, `a:gw_new`, `a:gw_publish`.
+  - workspace audit labels пополнены `ws.channel_disconnected` / `ws.channel_reconnected`.
+- `src/bot/actionRegistry.js`
+  - зарегистрированы новые action keys: `a:ws_list_inactive`, `a:ws_disconnect_q`, `a:ws_disconnect_do`, `a:ws_reconnect_q`, `a:ws_reconnect_do`.
+- `scripts/smoke-ws-channel-disconnect-contract.js`
+  - фиксирует migration/queries/UI/handlers/registry контракт STEP409.
+- `scripts/preflight.js`
+  - обязательно прогоняет новый smoke.
+- `docs/00_CURRENT_STATE.md`
+  - updated source-of-truth summary for STEP409.
+
+Инварианты
+- Отключение канала = только `soft disconnect`, не delete.
+- История, профиль, audit и billing сохраняются.
+- На disconnect сеть и куратор выключаются атомарно вместе с `channel_connected=false`.
+- Reconnect не восстанавливает `network_enabled`/`curator_enabled` автоматически.
+- Hot UI paths не получают новых DB-read: список workspaces как и раньше идёт через кешированный `listWorkspacesCached`; фильтрация active/inactive делается в памяти.
+
+QA
+- `npm run actions:check`
+- `npm run actions:md`
+- `npm run gen:migration-pack`
+- `node --check src/bot/bot.js src/db/queries.js scripts/smoke-ws-channel-disconnect-contract.js`
+- `node scripts/smoke-ws-channel-disconnect-contract.js`
+- ручной smoke:
+  1) `📣 Мои каналы` → `Кураторы и сеть` → `⛔ Отключить канал` → confirm.
+  2) Канал исчезает из активного списка и появляется в `📦 Неактивные`.
+  3) `ws_open` для отключённого канала показывает disabled screen с `🔌 Подключить снова / 👤 Профиль / 🧾 История`.
+  4) `a:bx_new`, `a:gw_new`, `a:bx_publish`, `a:gw_publish` не пускают дальше и не создают новые сущности.
+  5) `🔌 Подключить снова` возвращает канал в активный список; сеть и куратор остаются выключенными.
+
+Риск регрессий
+- Низкий-средний: затронут только creator workspace UX + один маленький DB helper + новый migration flag; hot menu/cache contract сохранён.
