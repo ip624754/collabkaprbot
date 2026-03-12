@@ -4289,11 +4289,11 @@ function wsMenuKb(wsId, opts = {}) {
   } = opts || {};
 
   const net = networkEnabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
-  const cur = curatorEnabled ? '👤 Куратор: ✅ ВКЛ' : '👤 Куратор: ❌ ВЫКЛ';
+  const cur = curatorEnabled ? '👥 Кураторы: ✅ ВКЛ' : '👥 Кураторы: ❌ ВЫКЛ';
 
   const kb = new InlineKeyboard()
     .text(net, `a:net_q|ws:${wsId}|ret:ws`)
-    .text(cur, `a:ws_toggle_cur|ws:${wsId}`)
+    .text(cur, `a:cur_manage|ws:${wsId}`)
     .row()
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
@@ -4320,13 +4320,13 @@ function wsMenuKb(wsId, opts = {}) {
 
 function wsSettingsKb(wsId, s) {
   const net = s.network_enabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
-  const cur = s.curator_enabled ? '👤 Куратор: ✅ ВКЛ' : '👤 Куратор: ❌ ВЫКЛ';
+  const cur = s.curator_enabled ? '👥 Кураторы: ✅ ВКЛ' : '👥 Кураторы: ❌ ВЫКЛ';
 
   const kb = new InlineKeyboard()
     .text(net, `a:net_q|ws:${wsId}|ret:ws`)
-    .text(cur, `a:ws_toggle_cur|ws:${wsId}`)
+    .text(cur, `a:cur_manage|ws:${wsId}`)
     .row()
-    .text('🧹 Кураторы', `a:cur_manage|ws:${wsId}`)
+    .text('👥 Управление кураторами', `a:cur_manage|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row()
     .text('⛔ Отключить канал', `a:ws_disconnect_q|ws:${wsId}`)
@@ -4400,8 +4400,8 @@ function curManageKb(wsId, ws = null) {
   kb.text(toggleLabel, `a:ws_toggle_cur|ws:${wsId}|ret:cur_manage`).row();
 
   // Частые действия в паре.
-  kb.text('👤 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
-    .text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)
+  kb.text('➕ Добавить по @username', `a:cur_add_username|ws:${wsId}`)
+    .text('🔗 Пригласить ссылкой', `a:cur_invite|ws:${wsId}`)
     .row();
 
   kb.text('👥 Список кураторов', `a:cur_list|ws:${wsId}`)
@@ -4411,7 +4411,7 @@ function curManageKb(wsId, ws = null) {
   // Редко, но полезно (техническая история воркспейса).
   kb.text('🧾 История', `a:ws_history|ws:${wsId}`).row();
 
-  kb.row().text('⬅️ Назад', `a:ws_settings|ws:${wsId}`).text('📋 Меню', 'a:menu');
+  kb.row().text('⬅️ К каналу', `a:ws_open|ws:${wsId}`).text('📋 Меню', 'a:menu');
   kb.row().text('🏠 Home', 'a:home');
   return kb;
 }
@@ -4845,7 +4845,7 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
 
   const text = `${notice ? `✅ ${escapeHtml(notice)}
 
-` : ''}👥 <b>Куратор HQ</b>
+` : ''}👥 <b>Управление кураторами</b>
 
 Канал: <b>${escapeHtml(title)}</b>
 Доступ кураторов: <b>${status}</b>
@@ -4866,7 +4866,7 @@ ${count ? cards : 'Пока нет.'}
 <b>Последние события:</b>
 ${activityLines.length ? activityLines.join('\n') : 'Пока пусто.'}
 
-💡 Куратор открывает кабинет через «🧹 Кабинет куратора» в меню (если он назначен куратором хотя бы в одном канале).`;
+💡 Здесь можно включать и выключать режим кураторов, добавлять новых кураторов и смотреть активность только по этому каналу.`;
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
@@ -7954,9 +7954,11 @@ async function renderWsList(ctx, ownerUserId) {
     }
   }
   if (!items.length) {
-    await safeEditOrReply(ctx, `⚠️ У тебя пока нет подключённых каналов.
+    await safeEditOrReply(ctx, `📣 <b>Мои каналы</b>
 
-Нажми «🚀 Подключить канал», добавь бота админом в свой канал — и после этого появится витрина и все функции.`, { reply_markup: mainMenuKb(await getRoleFlags(await db.upsertUser(ctx.from.id, ctx.from.username ?? null), ctx.from.id)) });
+Сейчас у тебя нет активных каналов.
+
+Подключи канал, чтобы открыть управление витриной, Inbox, офферами и розыгрышами.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('🚀 Подключить канал', 'a:setup').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home') });
     return;
   }
   const activeItems = items.filter((w) => !isWorkspaceDisconnected(w));
@@ -7973,7 +7975,7 @@ async function renderWsList(ctx, ownerUserId) {
 
 Активных каналов сейчас нет.
 
-Неактивные каналы сохранены отдельно: профиль и история на месте, а в активную работу их можно вернуть через «🔌 Подключить снова».`, { parse_mode: 'HTML', reply_markup: kb });
+Открой «📦 Неактивные каналы», чтобы вернуть один из них в работу, или подключи новый канал.`, { parse_mode: 'HTML', reply_markup: kb });
     return;
   }
   const kb = new InlineKeyboard();
@@ -7986,15 +7988,7 @@ async function renderWsList(ctx, ownerUserId) {
   kb.text('🏠 Home', 'a:home');
   await safeEditOrReply(ctx, `📣 <b>Мои каналы</b>
 
-Это активные каналы, которые сейчас подключены к боту.
-
-Выбери канал — дальше можно:
-• ➕ создать новый конкурс
-• 🎁 смотреть активные/прошлые конкурсы
-• 🤝 бартер‑биржа и Inbox
-• 👤 профиль/витрина и настройки
-
-💡 Хочешь добавить ещё канал — жми «🚀 Подключить ещё».`, { parse_mode: 'HTML', reply_markup: kb });
+Выбери канал для управления.`, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderWsInactiveList(ctx, ownerUserId) {
@@ -8028,10 +8022,15 @@ async function renderWsInactiveList(ctx, ownerUserId) {
 async function renderWorkspaceManagementScreen(ctx, ws, opts = {}) {
   const wsId = Number(ws.id);
   const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
+  const net = ws.network_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
+  const cur = ws.curator_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
   await safeEditOrReply(ctx, `📣 <b>${escapeHtml(title)}</b>
 
 <b>Управление каналом</b>
-<i>Здесь можно управлять сетью, куратором и статусом канала, а также быстро перейти к офферам, Inbox и розыгрышам.</i>`, {
+Сеть: <b>${net}</b>
+Кураторы: <b>${cur}</b>
+
+<i>Здесь собраны основные действия этого канала: сеть, кураторы, профиль, Inbox, офферы и розыгрыши.</i>`, {
     parse_mode: 'HTML',
     reply_markup: wsMenuKb(wsId, {
       showCurator: !!opts.showCurator,
