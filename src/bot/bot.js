@@ -4297,7 +4297,7 @@ function wsMenuKb(wsId, opts = {}) {
     .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
     .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
     .row()
-    .text('👥 Кураторы канала', `a:cur_manage|ws:${wsId}`)
+    .text('👥 Кураторы и сеть', `a:ws_settings|ws:${wsId}`)
     .text('🧾 История', `a:ws_history|ws:${wsId}`)
     .row();
 
