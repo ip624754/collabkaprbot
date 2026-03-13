@@ -166,6 +166,9 @@ runNpm("smoke:brand-apps-list-density-contract");
 logHeader("Preflight: brand Inbox density contract");
 runNpm("smoke:brand-inbox-density-contract");
 
+logHeader("Preflight: brand-side lead entrypoints contract");
+runNpm("smoke:brand-lead-entrypoints-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
