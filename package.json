@@ -49,7 +49,11 @@
     "smoke:ws-channel-disconnect-contract": "node scripts/smoke-ws-channel-disconnect-contract.js",
     "smoke:env-baseline-contract": "node scripts/smoke-env-baseline-contract.js",
     "smoke:creator-current-channel-contract": "node scripts/smoke-creator-current-channel-contract.js",
-    "smoke:share-url-compat-contract": "node scripts/smoke-share-url-compat-contract.js"
+    "smoke:share-url-compat-contract": "node scripts/smoke-share-url-compat-contract.js",
+    "smoke:brand-inbox-accept-contract": "node scripts/smoke-brand-inbox-accept-contract.js",
+    "smoke:contacts-brand-pass-contract": "node scripts/smoke-contacts-brand-pass-contract.js",
+    "smoke:no-channel-gate-contract": "node scripts/smoke-no-channel-gate-contract.js",
+    "smoke:input-mode-contract": "node scripts/smoke-input-mode-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
