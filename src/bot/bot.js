@@ -8613,6 +8613,42 @@ function leadStatusFromCb(s) {
   return normLeadStatus(v);
 }
 
+function parseBrandDealAppBack(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return { appStatus: '', appPage: 0 };
+  const [stRaw, pageRaw = '0'] = raw.split('.', 2);
+  const appStatus = leadStatusFromCb(stRaw);
+  const appPage = Math.max(0, Number(pageRaw || 0));
+  return { appStatus, appPage };
+}
+
+function brandDealAppBackPart(back = {}) {
+  const appStatus = back.appStatus ? leadStatusFromCb(back.appStatus) : '';
+  if (!appStatus) return '';
+  const appPage = Math.max(0, Number(back.appPage || 0));
+  return `|ab:${leadStatusToCb(appStatus)}.${appPage}`;
+}
+
+function brandDealBackCtx(back = {}) {
+  const stage = normDealStage(back.stage || 'negotiation');
+  const page = Math.max(0, Number(back.page || 0));
+  const parsed = parseBrandDealAppBack(back.ab || '');
+  const appStatus = back.appStatus ? leadStatusFromCb(back.appStatus) : parsed.appStatus;
+  const appPage = back.appPage !== undefined ? Math.max(0, Number(back.appPage || 0)) : parsed.appPage;
+  return { stage, page, appStatus, appPage };
+}
+
+function brandDealViewCb(appId, back = {}) {
+  const ctx = brandDealBackCtx(back);
+  return `a:brand_deal_view|id:${Number(appId || 0)}|st:${ctx.stage}|p:${ctx.page}${brandDealAppBackPart(ctx)}`;
+}
+
+function brandDealAppBackCb(appId, back = {}) {
+  const ctx = brandDealBackCtx(back);
+  const st = ctx.appStatus ? ctx.appStatus : 'in_progress';
+  return `a:brand_app_view|id:${Number(appId || 0)}|s:${st}|p:${ctx.appPage}`;
+}
+
 function retToCb(ret) {
   const k = String(ret || '').trim();
   if (!k) return '';
@@ -11737,8 +11773,8 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
   const hasNext = (offset + apps.length) < total;
 
   if (hasPrev || hasNext) kb.row();
-  if (hasPrev) kb.text('⬅️', `a:brand_apps|ws:0|s:${st}|p:${p - 1}`);
-  if (hasNext) kb.text('➡️', `a:brand_apps|ws:0|s:${st}|p:${p + 1}`);
+  if (hasPrev) kb.text('⬅️ Назад', `a:brand_apps|ws:0|s:${st}|p:${p - 1}`);
+  if (hasNext) kb.text('➡️ Далее', `a:brand_apps|ws:0|s:${st}|p:${p + 1}`);
 
   const hubBackCb = access.isManager ? 'a:bx_inbox|ws:0|p:0|h:mm' : 'a:menu';
   kbNavRow(kb, hubBackCb);
@@ -11850,8 +11886,8 @@ async function renderBrandDealsList(ctx, actorUserId, brandUserId, stage = 'nego
   const hasPrev = p > 0;
   const hasNext = (offset + items.length) < total;
   if (hasPrev || hasNext) kb.row();
-  if (hasPrev) kb.text('⬅️', `a:brand_deals|ws:0|st:${st}|p:${p - 1}`);
-  if (hasNext) kb.text('➡️', `a:brand_deals|ws:0|st:${st}|p:${p + 1}`);
+  if (hasPrev) kb.text('⬅️ Назад', `a:brand_deals|ws:0|st:${st}|p:${p - 1}`);
+  if (hasNext) kb.text('➡️ Далее', `a:brand_deals|ws:0|st:${st}|p:${p + 1}`);
 
   const hubBackCb = access.isManager ? 'a:bx_inbox|ws:0|p:0|h:mm' : 'a:menu';
   kbNavRow(kb, hubBackCb);
@@ -11876,6 +11912,10 @@ async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'neg
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
   const stage = getAppDealStage(app) || 'negotiation';
+  const backCtx = brandDealBackCtx(back);
+  const viewCb = brandDealViewCb(app.id, backCtx);
+  const appBackCb = backCtx.appStatus ? brandDealAppBackCb(app.id, backCtx) : `a:brand_app_view|id:${app.id}|s:${normLeadStatus(app.status)}|p:0`;
+  const backExtra = brandDealAppBackPart(backCtx);
 
   const who = app.creator_username
     ? '@' + String(app.creator_username).replace(/^@/, '')
@@ -11883,47 +11923,65 @@ async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'neg
   const when = app.updated_at ? fmtTs(app.updated_at) : (app.created_at ? fmtTs(app.created_at) : '—');
   const msg = String(app.message || '').trim();
 
-const thread = Array.isArray(app?.meta?.thread) ? app.meta.thread : [];
+  const thread = Array.isArray(app?.meta?.thread) ? app.meta.thread : [];
 
-let text =
-  `📌 <b>Сделка</b>\n` +
-  `Бренд: <b>${escapeHtml(brandName)}</b>\n` +
-  `Креатор: <b>${escapeHtml(who)}</b>\n` +
-  `Обновлено: <b>${escapeHtml(when)}</b>\n\n` +
-  `Стадия: <b>${escapeHtml(dealStageTitle(stage))}</b>\n\n` +
-  `<b>Сообщение:</b>\n<code>${escapeHtml(msg || '—')}</code>`;
+  let text =
+    `📌 <b>Сделка</b>
+` +
+    `Бренд: <b>${escapeHtml(brandName)}</b>
+` +
+    `Креатор: <b>${escapeHtml(who)}</b>
+` +
+    `Обновлено: <b>${escapeHtml(when)}</b>
 
-if (app.reply_text) {
-  text += `\n\n<b>Последний ответ бренда:</b>\n<code>${escapeHtml(String(app.reply_text))}</code>`;
-}
+` +
+    `Стадия: <b>${escapeHtml(dealStageTitle(stage))}</b>
+` +
+    `<i>Это стадия сделки по этой заявке.</i>
 
-const threadBlock = formatBrandAppThread(thread, 8);
-if (threadBlock) {
-  text += `\n\n<b>Диалог:</b>\n${threadBlock}`;
-}
+` +
+    `<b>Сообщение:</b>
+<code>${escapeHtml(msg || '—')}</code>`;
+
+  if (app.reply_text) {
+    text += `
+
+<b>Последний ответ бренда:</b>
+<code>${escapeHtml(String(app.reply_text))}</code>`;
+  }
+
+  const threadBlock = formatBrandAppThread(thread, 8);
+  if (threadBlock) {
+    text += `
+
+<b>Диалог:</b>
+${threadBlock}`;
+  }
 
   const kb = new InlineKeyboard()
-    .text(dealStageTitle('negotiation'), `a:brand_deal_set|id:${app.id}|st:negotiation|b:${back.stage}|p:${back.page}`)
-    .text(dealStageTitle('deal'), `a:brand_deal_set|id:${app.id}|st:deal|b:${back.stage}|p:${back.page}`)
+    .text(dealStageTitle('negotiation'), `a:brand_deal_set|id:${app.id}|st:negotiation|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
+    .text(dealStageTitle('deal'), `a:brand_deal_set|id:${app.id}|st:deal|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text(dealStageTitle('paid'), `a:brand_deal_set|id:${app.id}|st:paid|b:${back.stage}|p:${back.page}`)
-    .text(dealStageTitle('done'), `a:brand_deal_set|id:${app.id}|st:done|b:${back.stage}|p:${back.page}`)
+    .text(dealStageTitle('paid'), `a:brand_deal_set|id:${app.id}|st:paid|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
+    .text(dealStageTitle('done'), `a:brand_deal_set|id:${app.id}|st:done|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text(dealStageTitle('lost'), `a:brand_deal_set|id:${app.id}|st:lost|b:${back.stage}|p:${back.page}`)
+    .text(dealStageTitle('lost'), `a:brand_deal_set|id:${app.id}|st:lost|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text('✍️ Ответить', `a:brand_deal_reply|id:${app.id}|b:${back.stage}|p:${back.page}`)
-    .text('⚡ Шаблоны', `a:brand_deal_tpls|id:${app.id}|b:${back.stage}|p:${back.page}`)
+    .text('✍️ Ответить', `a:brand_deal_reply|id:${app.id}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
+    .text('⚡ Шаблоны', `a:brand_deal_tpls|id:${app.id}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text('✉️ Открыть заявку', `a:brand_app_view|id:${app.id}|s:in_progress|p:0`)
+    .text('✉️ Открыть заявку', appBackCb)
     .row();
 
   if (access.isManager) {
     kb.text('🔁 Сменить бренд', 'a:bm_pick_brand|ret:brand_deals|ws:0|p:0').row();
   }
 
-  const bStage = normDealStage(back.stage);
-  const bPage = Math.max(0, Number(back.page) || 0);
-  kbNavRow(kb, `a:brand_deals|ws:0|st:${bStage}|p:${bPage}`);
+  if (backCtx.appStatus) {
+    kb.text('⬅️ Назад', appBackCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  } else {
+    kbNavRow(kb, `a:brand_deals|ws:0|st:${backCtx.stage}|p:${backCtx.page}`);
+  }
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -12064,7 +12122,7 @@ ${threadBlock}`;
     }
   } else {
     if (dealStage) {
-      kb.text('📌 В сделках', `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0`).row();
+      kb.text('📌 Стадия сделки', `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0|ab:${leadStatusToCb(back.status)}.${back.page}`).row();
     }
 
     kb
@@ -12155,7 +12213,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
 
   const who = app.creator_username ? '@' + String(app.creator_username).replace(/^@/, '') : (app.creator_tg_id ? `id:${app.creator_tg_id}` : 'creator');
 
-  const backCb = `a:brand_deal_view|id:${app.id}|st:${normDealStage(back.stage)}|p:${Math.max(0, Number(back.page) || 0)}`;
+  const backCb = brandDealViewCb(app.id, back);
 
   await setExpectText(ctx.from.id, {
     type: 'brand_app_reply',
@@ -12205,18 +12263,21 @@ async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage:
 ` +
     `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”. После отправки у креатора появится кнопка “💬 Написать бренду”.`;
 
-  const backCb = `a:brand_deal_view|id:${app.id}|st:${normDealStage(back.stage)}|p:${Math.max(0, Number(back.page) || 0)}`;
+  const backCb = brandDealViewCb(app.id, back);
+
+  const backCtx = brandDealBackCtx(back);
+  const backExtra = brandDealAppBackPart(backCtx);
 
   const kb = new InlineKeyboard()
-    .text('✅ Приняли — дальше', `a:brand_deal_tpl|id:${app.id}|k:next|b:${back.stage}|p:${back.page}`)
+    .text('✅ Приняли — дальше', `a:brand_deal_tpl|id:${app.id}|k:next|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text('📎 Прайс / медиа‑кит', `a:brand_deal_tpl|id:${app.id}|k:price|b:${back.stage}|p:${back.page}`)
+    .text('📎 Прайс / медиа‑кит', `a:brand_deal_tpl|id:${app.id}|k:price|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text('🧾 Уточнить детали', `a:brand_deal_tpl|id:${app.id}|k:brief|b:${back.stage}|p:${back.page}`)
+    .text('🧾 Уточнить детали', `a:brand_deal_tpl|id:${app.id}|k:brief|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text('🤝 Бартер', `a:brand_deal_tpl|id:${app.id}|k:barter|b:${back.stage}|p:${back.page}`)
+    .text('🤝 Бартер', `a:brand_deal_tpl|id:${app.id}|k:barter|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text('⏱ Сроки', `a:brand_deal_tpl|id:${app.id}|k:timing|b:${back.stage}|p:${back.page}`)
+    .text('⏱ Сроки', `a:brand_deal_tpl|id:${app.id}|k:timing|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
     .text('⬅️ Назад', backCb)
     .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
@@ -12277,7 +12338,7 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
     if (!api) throw new Error('BOT API not initialized');
     await api.sendMessage(creatorTgId, outText, { parse_mode: 'HTML', reply_markup: outKb, disable_web_page_preview: true });
   } catch (e) {
-    const backCb = `a:brand_deal_view|id:${app.id}|st:${normDealStage(back.stage)}|p:${Math.max(0, Number(back.page) || 0)}`;
+    const backCb = brandDealViewCb(app.id, back);
     await ctx.reply('❌ Не удалось отправить сообщение креатору. Возможно, он ещё не нажимал /start.', {
       reply_markup: navKb(backCb)
     });
@@ -12331,11 +12392,11 @@ function buildBrandAppTemplateText(brandName, key) {
 // Payloads are NOT renamed. Only internal UI reuse.
 
 const BRAND_APP_TPLS = [
-  { key: 'next', label: '✅ Приняли — дальше', icon: '✅', quick_label: '✅ Готово' },
-  { key: 'price', label: '📎 Прайс / медиа‑кит', icon: '📎', quick_label: '📎 Детали' },
-  { key: 'brief', label: '🧾 Уточнить детали', icon: '🧾', quick_label: '🧾 Бриф' },
-  { key: 'barter', label: '🤝 Бартер', icon: '🤝', quick_label: '🤝 Условия' },
-  { key: 'timing', label: '⏱ Сроки', icon: '⏱', quick_label: '🕒 Сроки' },
+  { key: 'next', label: '✅ Приняли — дальше', icon: '✅' },
+  { key: 'price', label: '📎 Прайс / медиа‑кит', icon: '📎' },
+  { key: 'brief', label: '🧾 Уточнить детали', icon: '🧾' },
+  { key: 'barter', label: '🤝 Бартер', icon: '🤝' },
+  { key: 'timing', label: '⏱ Сроки', icon: '⏱' },
 ];
 
 const LEAD_TPLS = [
@@ -12355,8 +12416,7 @@ function kbTplList(kb, templates, mkCb) {
 function kbTplIconPicker(kb, templates, mkCb, perRow = 3) {
   let n = 0;
   for (const t of templates) {
-    const label = String(t.quick_label || t.icon || '•');
-    kb.text(label, mkCb(String(t.key)));
+    kb.text(String(t.icon || '•'), mkCb(String(t.key)));
     n += 1;
     if (n % perRow === 0 && n < templates.length) kb.row();
   }
@@ -12455,7 +12515,7 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
   if (text.length > 3900) text = outText;
 
   const kb = new InlineKeyboard();
-  kbTplIconPicker(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`, 2);
+  kbTplIconPicker(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`, 3);
   kb.text('📨 Отправить', `a:brand_app_tpl_send|id:${app.id}|k:${String(key || 'discuss')}|s:${back.status}|p:${back.page}`)
     .row()
     .text('🔄 Выбрать другой', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
@@ -24823,7 +24883,7 @@ if (p.a === 'a:brand_deals_mine_toggle') {
 if (p.a === 'a:brand_deal_view') {
 	  await ctx.answerCallbackQuery();
 	  const appId = Number(p.id || 0);
-	  const back = { stage: String(p.st || 'negotiation'), page: Math.max(0, Number(p.p || 0)) };
+	  const back = { stage: String(p.st || 'negotiation'), page: Math.max(0, Number(p.p || 0)), ab: String(p.ab || '') };
 	  await renderBrandDealView(ctx, u.id, appId, back);
 	  return;
 	}
@@ -24832,7 +24892,7 @@ if (p.a === 'a:brand_deal_view') {
 	  await ctx.answerCallbackQuery();
 	  const appId = Number(p.id || 0);
 	  const stage = normDealStage(String(p.st || 'negotiation'));
-	  const back = { stage: String(p.b || 'negotiation'), page: Math.max(0, Number(p.p || 0)) };
+	  const back = { stage: String(p.b || 'negotiation'), page: Math.max(0, Number(p.p || 0)), ab: String(p.ab || '') };
 	  if (!appId) return;
 
 	  await safeBrandApplications(() => db.setBrandApplicationDealStage(appId, stage, u.id), async () => null);
@@ -24842,7 +24902,7 @@ if (p.a === 'a:brand_deal_view') {
 if (p.a === 'a:brand_deal_reply') {
   await ctx.answerCallbackQuery();
   const appId = Number(p.id || 0);
-  const back = { stage: String(p.b || p.st || 'negotiation'), page: Math.max(0, Number(p.p || 0)) };
+  const back = { stage: String(p.b || p.st || 'negotiation'), page: Math.max(0, Number(p.p || 0)), ab: String(p.ab || '') };
   if (!appId) return;
   await startBrandDealReply(ctx, u.id, appId, back);
   return;
@@ -24851,7 +24911,7 @@ if (p.a === 'a:brand_deal_reply') {
 if (p.a === 'a:brand_deal_tpls') {
   try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
-  const back = { stage: String(p.b || p.st || 'negotiation'), page: Math.max(0, Number(p.p || 0)) };
+  const back = { stage: String(p.b || p.st || 'negotiation'), page: Math.max(0, Number(p.p || 0)), ab: String(p.ab || '') };
   if (!appId) return;
   await renderBrandDealTemplates(ctx, u.id, appId, back);
   return;
@@ -24861,7 +24921,7 @@ if (p.a === 'a:brand_deal_tpl') {
   try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   const key = String(p.k || 'discuss');
-  const back = { stage: String(p.b || 'negotiation'), page: Math.max(0, Number(p.p || 0)) };
+  const back = { stage: String(p.b || 'negotiation'), page: Math.max(0, Number(p.p || 0)), ab: String(p.ab || '') };
   if (!appId) return;
   await sendBrandDealTemplateReply(ctx, u.id, appId, key, back);
   return;
