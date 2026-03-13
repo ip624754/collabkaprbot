@@ -1,3 +1,73 @@
+## STEP427 (STEP424–STEP427) — Runtime contract smokes for Inbox / contacts / no-channel gate / input mode
+
+### Зачем
+После STEP423 самый хрупкий слой уже не tooling, а пользовательские runtime-contracts вокруг Brand Inbox, paywalled contacts, creator no-channel recovery и явных input-mode flows. Здесь легко получить тихий регресс без падения кода: неправильные кнопки до `✅ Принять`, утечка контактов/ссылок до unlock, молчаливый dead-end без активного канала или stuck `expectText` после черновика.
+
+### Что сделано
+- Добавлены новые source-level smoke scripts:
+  - `scripts/smoke-brand-inbox-accept-contract.js`
+  - `scripts/smoke-contacts-brand-pass-contract.js`
+  - `scripts/smoke-no-channel-gate-contract.js`
+  - `scripts/smoke-input-mode-contract.js`
+- `scripts/preflight.js` теперь запускает эти четыре smoke обязательно, сразу после уже существующих env/creator/share contract guards.
+- В `package.json` добавлены команды:
+  - `npm run smoke:brand-inbox-accept-contract`
+  - `npm run smoke:contacts-brand-pass-contract`
+  - `npm run smoke:no-channel-gate-contract`
+  - `npm run smoke:input-mode-contract`
+- Обновлены `docs/00_CURRENT_STATE.md` и `docs/process/10_RELEASE_PREFLIGHT.md` под новый baseline STEP427.
+
+### Что фиксируют smokes
+- **STEP424 / Brand Inbox accept-point:**
+  - карточка `new`-статуса оставляет только `✅ Принять / ⛔ Спам / 🗑 Удалить`;
+  - явный hint, что `✅ Принять` открывает диалог и может списывать кредиты;
+  - `В работу / Закрыть / Ответить / Шаблоны` появляются только после accept;
+  - server-side guard на manual reply остаётся accept-first;
+  - `✅ Принять` остаётся единственной spending transition и ведёт в `in_progress`.
+- **STEP425 / Contacts + Brand Pass anti-bypass:**
+  - публичная витрина и brand lead dialog скрывают контакты/канал по умолчанию;
+  - unlock идёт через Redis cache + DB fallback только при degraded Redis;
+  - после unlock сохраняется приоритет `structured contacts → legacy contact → site`;
+  - IG templates / IG DM не возвращают прямые контакты или portfolio links до unlock.
+- **STEP426 / No-channel gates:**
+  - giveaway create при отсутствии/устаревшем `ws` уводит в явный gate, а не в silent stop;
+  - gate содержит recovery CTA `🚀 Подключить канал / 📣 Мои каналы / 📣 Выбрать канал`;
+  - creator → brand application требует активную витрину и даёт понятный recovery screen при отсутствии/стухшем active workspace.
+- **STEP427 / Input mode cancel/reset:**
+  - `✍️ Написать заявку` включает короткоживущий `expectText` и показывает `❌ Отмена ввода`;
+  - после ввода текст уходит в preview (`✅ Отправить / ✍️ Изменить / 🗑 Сбросить`) и input mode очищается;
+  - structured contacts editor держит явный reset path `🧹 Очистить поле`.
+
+### Файлы
+- `scripts/smoke-brand-inbox-accept-contract.js`
+- `scripts/smoke-contacts-brand-pass-contract.js`
+- `scripts/smoke-no-channel-gate-contract.js`
+- `scripts/smoke-input-mode-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-brand-inbox-accept-contract.js`
+- `node --check scripts/smoke-contacts-brand-pass-contract.js`
+- `node --check scripts/smoke-no-channel-gate-contract.js`
+- `node --check scripts/smoke-input-mode-contract.js`
+- `node scripts/smoke-brand-inbox-accept-contract.js`
+- `node scripts/smoke-contacts-brand-pass-contract.js`
+- `node scripts/smoke-no-channel-gate-contract.js`
+- `node scripts/smoke-input-mode-contract.js`
+- `npm run smoke:brand-inbox-accept-contract`
+- `npm run smoke:contacts-brand-pass-contract`
+- `npm run smoke:no-channel-gate-contract`
+- `npm run smoke:input-mode-contract`
+- `npm run actions:check`
+- `npm run lint:nav`
+- `npm run test:redact`
+
+Риск регрессий: **низкий** (source/preflight/docs only; runtime UX/logic не менялась, новых DB reads нет).
+
 ## STEP406
 
 - Docs-only polish after hardening steps 403–405.
