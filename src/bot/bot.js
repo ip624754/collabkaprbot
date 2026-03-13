@@ -2302,6 +2302,10 @@ function brandAppAcceptNotifiedKey(appId) {
   return k(['brand_app', 'accept_notified', Number(appId || 0)]);
 }
 
+function brandAppAcceptPendingKey(appId) {
+  return k(['brand_app', 'accept_pending', Number(appId || 0)]);
+}
+
 function isMonetizationAsyncRetryEnabled() {
   try {
     const url = getQStashDeliveryUrl('/api/qstash/monetization-retry');
@@ -12016,22 +12020,27 @@ ${threadBlock}`;
 
 ℹ️ <i>Статусы “В работу / Закрыть / Спам” — внутренняя сортировка бренда: они только сортируют заявки по вкладкам 🆕/💬/✅/🗑. Креатор их не видит.</i>`;
 
-  // STEP175: anti-spam UI — if monetization token-lock is active, hide the spending CTA.
+  // STEP175 / STEP436: while accept completion is pending, keep the user on the same card
+  // and do not expose misleading routes or conflicting actions.
   let acceptPending = false;
   if (st === 'new') {
     const lockKey = k(['mon', 'lock', 'brand_app_accept', app.id]);
+    const pendingKey = brandAppAcceptPendingKey(app.id);
     try {
-      acceptPending = !!(await withTimeout(redis.get(lockKey), 1200, 'mon.lock'));
+      const [lockV, pendingV] = await Promise.all([
+        withTimeout(redis.get(lockKey), 1200, 'mon.lock'),
+        withTimeout(redis.get(pendingKey), 1200, 'brand_app.pending')
+      ]);
+      acceptPending = !!(lockV || pendingV);
     } catch {
       acceptPending = false;
     }
     if (acceptPending) {
       text += `
 
-⏳ <b>В обработке…</b>
-<i>✅ Принять</i>
-
-Запрос уже в очереди. Кредит спишется после завершения обработки. Открой заявку, проверь вкладку «💬 В работе» или нажми «🔄 Обновить» через 10–60 секунд.`;
+⏳ <b>Принятие ещё не завершено</b>
+<i>Кредит спишется и заявка перейдёт во вкладку «💬 В работе» только после завершения обработки.</i>
+<i>Сейчас не нужно нажимать ✅ Принять повторно — просто нажми «🔄 Проверить заявку» через 10–60 секунд.</i>`;
     }
   }
 
@@ -12039,19 +12048,20 @@ ${threadBlock}`;
   if (st === 'new') {
     if (acceptPending) {
       kb
-        .text('📨 Открыть заявку', `a:brand_app_view|id:${app.id}|s:in_progress|p:${back.page}`)
-        .text('💬 В работе', 'a:brand_apps|ws:0|s:in_progress|p:0')
+        .text('🔄 Проверить заявку', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
         .row()
-        .text('🔄 Обновить', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`).row();
+        .text('📝 Заявки', `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`)
+        .row()
+        .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
     } else {
       kb.text('✅ Принять', `a:brand_app_accept|id:${app.id}|s:${back.status}|p:${back.page}`).row();
-    }
 
-    // До принятия разрешаем только безопасные действия: СПАМ/удаление.
-    // “В работу/Закрыть/Ответить/Шаблоны” доступны после ✅ Принять.
-    kb
-      .text('⛔ Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
-      .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
+      // До принятия разрешаем только безопасные действия: СПАМ/удаление.
+      // “В работу/Закрыть/Ответить/Шаблоны” доступны после ✅ Принять.
+      kb
+        .text('⛔ Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
+        .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
+    }
   } else {
     if (dealStage) {
       kb.text('📌 В сделках', `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0`).row();
@@ -12703,8 +12713,16 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
   const needFastTimeout = (asyncRetryEnabled || redisDegraded);
 
   const refreshCb = `a:brand_app_view|id:${aid}|s:${back.status}|p:${back.page}`;
-  const openAppCb = `a:brand_app_view|id:${aid}|s:in_progress|p:${back.page}`;
-  const inProgressCb = 'a:brand_apps|ws:0|s:in_progress|p:0';
+  const listCb = `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`;
+  const pendingKey = brandAppAcceptPendingKey(aid);
+  const pendingTtlSec = Math.max(MONETIZATION_TOKEN_LOCK_TTL_SEC, MONETIZATION_QSTASH_DELAY_SEC + 60);
+
+  const markAcceptPending = async () => {
+    try { await redis.set(pendingKey, '1', { ex: pendingTtlSec }); } catch {}
+  };
+  const clearAcceptPending = async () => {
+    try { await redis.del(pendingKey); } catch {}
+  };
 
   const renderAcceptPending = async (opts = {}) => {
     const alreadyQueued = !!opts.alreadyQueued;
@@ -12712,10 +12730,9 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
     try { await ctx.answerCallbackQuery({ text: alreadyQueued ? '⏳ Уже в обработке…' : '⏳ В обработке…', show_alert: false }); } catch {}
 
     const kb = new InlineKeyboard()
-      .text('📨 Открыть заявку', openAppCb)
-      .text('💬 В работе', inProgressCb)
+      .text('🔄 Проверить заявку', refreshCb)
       .row()
-      .text('🔄 Обновить', refreshCb)
+      .text('📝 Заявки', listCb)
       .row()
       .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
@@ -12728,10 +12745,10 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
 
     await safeEditOrReply(
       ctx,
-      `⏳ <b>В обработке…</b>
+      `⏳ <b>Принятие ещё не завершено</b>
 <i>✅ Принять</i>
 
-${extra}${hint} Кредит спишется после завершения обработки. Открой заявку, проверь вкладку «💬 В работе» или нажми «🔄 Обновить» через 10–60 секунд.`,
+${extra}${hint} Кредит спишется, а заявка появится во вкладке «💬 В работе» только после завершения обработки. Сейчас не нужно нажимать ✅ Принять повторно — просто нажми «🔄 Проверить заявку» через 10–60 секунд.`,
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
     );
   };
@@ -12745,6 +12762,7 @@ ${extra}${hint} Кредит спишется после завершения о
     if (asyncRetryEnabled && isTransientNeonError(e)) {
       const q = await enqueueMonetizationRetry('brand_app_accept', { app_id: aid, actor_user_id: uid, actor_tg_id: Number(ctx.from?.id || 0) }, dedupId);
       if (q.ok) {
+        await markAcceptPending();
         await setMonAcceptDiag({ source: 'click',  status: 'ok', errorCode: 'queued', appId: aid });
         await renderAcceptPending({ reason: 'База данных сейчас отвечает медленно — мы поставили задачу в очередь.' });
         return;
@@ -12781,43 +12799,6 @@ ${extra}${hint} Кредит спишется после завершения о
   // Idempotent: if already accepted / already charged -> no double charge.
   const cost = Math.max(0, Number(BRAND_APP_ACCEPT_COST || 0));
 
-  // STEP174: optimistic accept (queue-first) when async retry is configured.
-  // Goal: UX must not depend on synchronous Neon writes; DB-truth happens in QStash worker.
-  if (asyncRetryEnabled) {
-    const lockKey = k(['mon', 'lock', 'brand_app_accept', aid]);
-    let lock = null;
-    let lockErr = false;
-    try {
-      lock = await acquireLock(lockKey, MONETIZATION_TOKEN_LOCK_TTL_SEC);
-    } catch {
-      lockErr = true;
-      lock = null;
-    }
-
-    if (!lockErr) {
-      if (!lock) {
-        await setMonAcceptDiag({ source: 'click',  status: 'skipped', errorCode: 'queued', appId: aid });
-                await renderAcceptPending({ alreadyQueued: true });
-        return;
-      }
-
-      const q = await enqueueMonetizationRetry(
-        'brand_app_accept',
-        { app_id: aid, actor_user_id: uid, actor_tg_id: Number(ctx.from?.id || 0), lock_key: lockKey, lock_token: lock.token },
-        dedupId
-      );
-
-      if (q.ok) {
-        await setMonAcceptDiag({ source: 'click',  status: 'ok', errorCode: 'queued', appId: aid });
-        await renderAcceptPending({ reason: 'Если кредитов не хватит — бот подскажет.' });
-        return;
-      }
-
-      // enqueue failed → release lock and fall through to sync DB path
-      try { await releaseLock(lockKey, lock.token); } catch {}
-    }
-  }
-
   let res = null;
   try {
     const opts = (needFastTimeout) ? { statementTimeoutMs: MONETIZATION_CB_TIMEOUT_MS } : null;
@@ -12832,6 +12813,7 @@ ${extra}${hint} Кредит спишется после завершения о
     if (asyncRetryEnabled && isTransientNeonError(e)) {
       const q = await enqueueMonetizationRetry('brand_app_accept', { app_id: aid, actor_user_id: uid, actor_tg_id: Number(ctx.from?.id || 0) }, dedupId);
       if (q.ok) {
+        await markAcceptPending();
         await setMonAcceptDiag({ source: 'click',  status: 'ok', errorCode: 'queued', appId: aid });
         await renderAcceptPending({ reason: 'База данных сейчас отвечает медленно — мы поставили задачу в очередь.' });
         return;
@@ -12853,10 +12835,13 @@ ${extra}${hint} Кредит спишется после завершения о
 
   // If another accept is already in-flight (Redis degraded / multi-instance), show pending instead of piling up DB locks.
   if (res && res.status === 'busy') {
+    await markAcceptPending();
     await setMonAcceptDiag({ source: 'click',  status: 'skipped', errorCode: 'busy', appId: aid });
-    await renderAcceptPending({ alreadyQueued: true });
+    await renderAcceptPending({ alreadyQueued: true, reason: 'Другое принятие этой заявки ещё не завершилось.' });
     return;
   }
+  await clearAcceptPending();
+
   // Best-effort: keep Redis credits cache in sync (UI is Redis-only).
   if (res && res.status === 'accepted') {
     const left = res.left;
