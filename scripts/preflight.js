@@ -139,11 +139,8 @@ runNpm("smoke:brand-app-ops-copy-contract");
 logHeader("Preflight: brand application accept UX / post-accept flow contract");
 runNpm("smoke:brand-app-accept-ux-contract");
 
-logHeader("Preflight: brand application accept SQL typed params contract");
-runNpm("smoke:brand-app-accept-sql-contract");
-
-logHeader("Preflight: brand application template quick labels contract");
-runNpm("smoke:brand-app-template-quick-labels-contract");
+logHeader("Preflight: brand deal stage + navigation contract");
+runNpm("smoke:brand-deal-stage-nav-contract");
 
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
