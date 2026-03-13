@@ -13106,41 +13106,59 @@ async function renderCreatorApplications(ctx, creatorUserId, page = 0) {
 
   const stIcon = { new: '🆕', in_progress: '💬', closed: '✅', spam: '🗑' };
 
-  let text = `📨 <b>Мои заявки к брендам</b> · стр ${p + 1}\n`;
-  text += `<i>Всего: ${total}</i>\n\n`;
+  let text = `📨 <b>Мои заявки</b>
+`;
+  text += `<i>Показываю последние движения по твоим заявкам к брендам.</i>
+`;
+  text += `<i>Всего: ${total} · стр ${p + 1}</i>
+
+`;
 
   if (!items.length) {
-    text += 'Заявок пока нет.\n\n💡 Чтобы подать заявку — открой 🏷 Каталог брендов → выбери бренд → 📝 Оставить заявку.';
+    text += `Заявок пока нет.\n\n💡 Чтобы подать заявку — открой 🏷 Каталог брендов → выбери бренд → 📝 Оставить заявку.`;
   } else {
     for (const a of items) {
-      const brand = a.brand_name || a.brand_username ? ('@' + a.brand_username) : 'Бренд';
+      const brandName = String(a.brand_name || '').trim();
+      const brandUsername = String(a.brand_username || '').trim().replace(/^@/, '');
+      const brand = brandName || (brandUsername ? '@' + brandUsername : 'Бренд');
       const st = normLeadStatus(a.status);
       const icon = stIcon[st] || '❓';
+      const stTitle = (LEAD_STATUSES[st] || LEAD_STATUSES.new).title;
       const when = a.updated_at ? fmtTs(a.updated_at) : '—';
       const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
-      const short = msg.length > 40 ? msg.slice(0, 40) + '…' : (msg || '—');
-      text += `${icon} <b>#${a.id}</b> · <b>${escapeHtml(brand)}</b> · ${escapeHtml(when)}\n<code>${escapeHtml(short)}</code>\n\n`;
+      const short = clipText(msg || '—', 56);
+      text += `${icon} <b>${escapeHtml(brand)}</b>
+`;
+      text += `<i>${escapeHtml(stTitle)} · #${a.id} · ${escapeHtml(when)}</i>
+`;
+      text += `<code>${escapeHtml(short)}</code>
+
+`;
     }
+    text += `<i>Открой карточку: там статус, ответ бренда и история.</i>`;
   }
 
   const kb = new InlineKeyboard();
   for (const a of items) {
-    const brand = a.brand_name || (a.brand_username ? '@' + a.brand_username : 'Бренд');
+    const brandName = String(a.brand_name || '').trim();
+    const brandUsername = String(a.brand_username || '').trim().replace(/^@/, '');
+    const brand = brandName || (brandUsername ? '@' + brandUsername : 'Бренд');
     const st = normLeadStatus(a.status);
     const icon = stIcon[st] || '❓';
-    const label = `${icon} #${a.id} ${brand}`.slice(0, 50);
+    const label = clipText(`${icon} ${brand} · #${a.id}`, 50);
     kb.text(label, `a:brand_app_card|id:${a.id}`).row();
   }
 
-  if (p > 0) kb.text('⬅️', `a:my_apps|p:${p - 1}`);
-  if (hasNext) kb.text('➡️', `a:my_apps|p:${p + 1}`);
+  if (p > 0) kb.text('⬅️ Назад', `a:my_apps|p:${p - 1}`);
+  if (hasNext) kb.text('➡️ Далее', `a:my_apps|p:${p + 1}`);
   if (p > 0 || hasNext) kb.row();
 
   kb.text('🏷 Каталог брендов', 'a:brands_home').row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
+
 
 
 async function renderBrandAppCardForCreator(ctx, actorUserId, appId) {
