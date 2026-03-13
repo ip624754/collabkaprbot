@@ -60,7 +60,8 @@
     "smoke:brand-app-accept-ux-contract": "node scripts/smoke-brand-app-accept-ux-contract.js",
     "smoke:brand-deal-stage-nav-contract": "node scripts/smoke-brand-deal-stage-nav-contract.js",
     "smoke:brand-deal-density-contract": "node scripts/smoke-brand-deal-density-contract.js",
-    "smoke:brand-app-density-contract": "node scripts/smoke-brand-app-density-contract.js"
+    "smoke:brand-app-density-contract": "node scripts/smoke-brand-app-density-contract.js",
+    "smoke:creator-app-dialog-density-contract": "node scripts/smoke-creator-app-dialog-density-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
