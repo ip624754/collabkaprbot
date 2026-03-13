@@ -100,6 +100,11 @@ Vercel → Project → **Settings → Environment Variables**:
 - проверяй signing keys (`QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`)
 - проверь, что `CFG.PUBLIC_BASE_URL` верный (QStash доставляет по абсолютному URL)
 
+Если `🧪 Send signed ping` падает ещё до enqueue с ошибкой вида `DeduplicationId cannot contain ...`:
+- это не про signing verify; проблема на publish-стадии
+- проверь dedup-id формат и последние runtime changes вокруг `qstashPublishJSON()`
+- после STEP433 wrapper централизованно санитизирует `Upstash-Deduplication-Id`, поэтому colon-separated raw dedup inputs должны переживать publish без ручной правки call-sites
+
 ---
 
 ## 5) Рекомендуемый rollout (без регрессий)
