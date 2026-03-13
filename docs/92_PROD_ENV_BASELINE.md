@@ -23,11 +23,11 @@
 - `NODE_ENV=production`
 - `LOG_LEVEL=info`
 - `BOT_TOKEN=<set>`
-- `BOT_WEBHOOK_URL=<set>`
+- `PUBLIC_BASE_URL=<set>`
 - `WEBHOOK_SECRET_TOKEN=<set>`
 - `CRON_SECRET=<set>`
 - `SUPPORT_CHAT_ID=<set>`
-- `SUPER_ADMIN_IDS=<set>`
+- `SUPER_ADMIN_TG_IDS=<set>`
 
 ### Neon / Postgres
 - `DATABASE_URL=<set>`
