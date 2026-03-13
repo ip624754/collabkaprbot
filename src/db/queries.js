@@ -5781,7 +5781,7 @@ export async function markBrandApplicationAccepted(appId, acceptedByUserId) {
                '{deal}',
                coalesce(coalesce(meta,'{}'::jsonb)->'deal','{}'::jsonb)
                  || jsonb_build_object(
-                      'accepted_by_user_id', $2::bigint,
+                      'accepted_by_user_id', $2,
                       'accepted_at', now()
                     ),
                true
@@ -5901,9 +5901,9 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
                    '{deal}',
                    coalesce(coalesce(meta,'{}'::jsonb)->'deal','{}'::jsonb)
                      || jsonb_build_object(
-                          'accepted_by_user_id', $2::bigint,
+                          'accepted_by_user_id', $2,
                           'accepted_at', now(),
-                          'charged_cost', $3::int,
+                          'charged_cost', $3,
                           'charged_at', now()
                         ),
                    true
@@ -6120,7 +6120,7 @@ export async function setBrandApplicationDealStage(appId, stage, setByUserId) {
          ),
          '{deal_stage_meta}',
          coalesce(coalesce(meta,'{}'::jsonb)->'deal_stage_meta','{}'::jsonb)
-           || jsonb_build_object('set_by_user_id',$3,'set_at',now()),
+           || jsonb_build_object('set_by_user_id',$3::bigint,'set_at',now()),
          true
        ),
        updated_at=now()
