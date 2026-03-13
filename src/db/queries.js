@@ -5781,7 +5781,7 @@ export async function markBrandApplicationAccepted(appId, acceptedByUserId) {
                '{deal}',
                coalesce(coalesce(meta,'{}'::jsonb)->'deal','{}'::jsonb)
                  || jsonb_build_object(
-                      'accepted_by_user_id', $2,
+                      'accepted_by_user_id', $2::bigint,
                       'accepted_at', now()
                     ),
                true
@@ -5901,9 +5901,9 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
                    '{deal}',
                    coalesce(coalesce(meta,'{}'::jsonb)->'deal','{}'::jsonb)
                      || jsonb_build_object(
-                          'accepted_by_user_id', $2,
+                          'accepted_by_user_id', $2::bigint,
                           'accepted_at', now(),
-                          'charged_cost', $3,
+                          'charged_cost', $3::int,
                           'charged_at', now()
                         ),
                    true
