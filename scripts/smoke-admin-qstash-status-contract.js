@@ -92,6 +92,7 @@ assertMatch(
   'Admin → QStash ping callback must keep signed_ping publish payload, dedup, retries=0, timeout=10s'
 );
 assert.ok(adminQStashCallbacksSrc.includes('`⛔ Не удалось отправить ping через QStash.'), 'Admin → QStash ping callback must keep publish-failed screen');
+assert.ok(adminQStashCallbacksSrc.includes('Подсказка: это не всегда ENV/signing keys.'), 'Admin → QStash ping callback must keep non-misleading helper hint');
 assert.ok(adminQStashCallbacksSrc.includes('await renderAdminQStashStatus(ctx);'), 'Admin → QStash ping callback must rerender status after successful publish');
 assertMatch(
   adminQStashCallbacksSrc,
