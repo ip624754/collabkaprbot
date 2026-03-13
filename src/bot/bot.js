@@ -6968,34 +6968,62 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
   const creatorName = ws ? safeCreatorDisplayName(ws) : 'Креатор';
   const creatorLabel = `<b>${escapeHtml(creatorName)}</b>`;
 
-  const notifText = `📝 <b>Новая заявка от креатора</b>\n\nБренд: <b>${escapeHtml(brandName)}</b>\nОт: ${creatorLabel}\n\n<b>Текст:</b>\n${escapeHtml(msg)}`;
+  const notifText = `📝 <b>Новая заявка от креатора</b>
+
+Бренд: <b>${escapeHtml(brandName)}</b>
+От: ${creatorLabel}
+
+<b>Текст:</b>
+${escapeHtml(msg)}`;
+  const opsCopyText = `🛠 <b>OPS COPY · Заявка креатора бренду</b>
+<i>Это операторская копия. Основной workflow идёт у бренда.</i>
+
+Бренд: <b>${escapeHtml(brandName)}</b>
+От: ${creatorLabel}
+
+<b>Текст:</b>
+${escapeHtml(msg)}`;
 
   const kbNotif = new InlineKeyboard()
     .text('📥 Открыть в Inbox', `a:brand_app_view|id:${res.id}|s:new|p:0`)
     .row()
     .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
-  // Recipients: owner + managers + super admins
-  const recipients = new Set();
+  // Recipients: owner + managers always; super-admin ops copy only when explicitly enabled.
+  const brandRecipients = new Set();
+  const superAdminRecipients = new Set();
   try {
     const ownerRow = await db.getUserTgIdByUserId(brandUserId);
     const ownerTid = Number(ownerRow?.tg_id || 0);
-    if (ownerTid) recipients.add(ownerTid);
+    if (ownerTid) brandRecipients.add(ownerTid);
   } catch {}
   try {
     const mgrs = await db.listBrandManagers(brandUserId);
     for (const m of mgrs || []) {
       const tid = Number(m.tg_id || 0);
-      if (tid) recipients.add(tid);
+      if (tid) brandRecipients.add(tid);
     }
   } catch {}
-  for (const tid of (CFG.SUPER_ADMIN_TG_IDS || [])) recipients.add(Number(tid));
+  if (CFG.BRAND_APP_SUPERADMIN_COPY_ENABLED) {
+    for (const tid of (CFG.SUPER_ADMIN_TG_IDS || [])) {
+      const adminTid = Number(tid || 0);
+      if (adminTid) superAdminRecipients.add(adminTid);
+    }
+  }
 
-  for (const chatId of recipients) {
+  for (const chatId of brandRecipients) {
     try {
       await api.sendMessage(chatId, notifText, { parse_mode: 'HTML', reply_markup: kbNotif, disable_web_page_preview: true });
     } catch (e) {
-      try { console.warn('[brand_apply_notify] failed', { chatId, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+      try { console.warn('[brand_apply_notify] failed', { audience: 'brand', chatId, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    }
+  }
+
+  for (const chatId of superAdminRecipients) {
+    try {
+      await api.sendMessage(chatId, opsCopyText, { parse_mode: 'HTML', reply_markup: kbNotif, disable_web_page_preview: true });
+    } catch (e) {
+      try { console.warn('[brand_apply_notify] failed', { audience: 'ops_copy', chatId, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
     }
   }
 
