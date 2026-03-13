@@ -1,6 +1,6 @@
 # Collabka PR — PROCESS & WORK HISTORY
 
-Собрано автоматически для NotebookLM. Обновлено: 2026-03-04 18:19:55 UTC
+Собрано автоматически для NotebookLM. Обновлено: 2026-03-13 09:50:21 UTC
 
 ---
 
@@ -1463,6 +1463,471 @@ docs/01_SECURITY_INVARIANTS.md
 ---
 
 ## SOURCE: `docs/process/07_WORK_HISTORY_2026_03.md`
+
+## STEP430 (STEP428–STEP430) — What-next/back-nav contract + health one-screen + NotebookLM refresh
+
+### Зачем
+После STEP427 боевой runtime уже был хорошо прикрыт contract-smoke’ами, но оставались три тихих класса дрейфа:
+- UX footer / what-next экраны могли постепенно разъехаться по лейблам и escape-hatch кнопкам;
+- `/api/health` уже стал главным operator dashboard, но для владельца не было совсем короткой one-screen шпаргалки;
+- NotebookLM audit pack отставал по timestamp/source bundles и больше не отражал baseline STEP423–STEP427.
+
+Нужен был спокойный финальный пакет без трогания прод-логики: зафиксировать навигационный контракт, дать сверхкороткий health guide и пересобрать audit baseline под текущий source of truth.
+
+### Что сделано
+- **STEP428 / What-next / back-navigation contract smoke**
+  - Добавлен `scripts/smoke-what-next-backnav-contract.js`.
+  - Smoke фиксирует shared helpers `navKb()`, `navKbInput()`, `kbNavRow()` и проверяет несколько high-signal экранов: `renderGwNewGate()`, `kbBrandApplyDone()`, `kbBrandApplyMore()`, `kbBrandAppAcceptedDone()`, `kbBrandAppAcceptedMore()`, `renderBrandApplyPreview()`.
+  - В `package.json` добавлен `npm run smoke:what-next-backnav-contract`, а `scripts/preflight.js` теперь запускает его до общих lint/test gates.
+  - `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md` синхронизирован с реальным runtime-контрактом: `📋 Меню`, `⬅️ Назад`, `🏠 Home`, `❌ Отмена`.
+- **STEP429 / `/api/health` one-screen guide**
+  - Добавлен `docs/ops/02_HEALTH_ONE_SCREEN.md` с коротким top-down pass по `/api/health`.
+  - Обновлены `docs/README.md`, `docs/90_OWNER_RUNBOOK.md`, `docs/94_PROD_READINESS_PACK.md`, чтобы one-screen guide был первым коротким operator-entrypoint до длинных runbook’ов.
+- **STEP430 / NotebookLM audit baseline refresh**
+  - Обновлены `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md`, `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`, `docs/audit/notebooklm_pack/00_NOTEBOOKLM_PACK_RULES_RU.md`, `docs/audit/notebooklm_pack/04_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`.
+  - Пересобраны bundle-файлы `docs/audit/notebooklm_pack/01_BUNDLE_CORE_RU.md`, `02_BUNDLE_FEATURES_RU.md`, `03_BUNDLE_PROCESS_HISTORY_RU.md`, `06_CODE_BUNDLE.txt`, `07_MIGRATIONS_ALL.sql.txt` на текущем snapshot.
+  - Генератор `npm run gen:notebooklm-sources` снова прогнан: output `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip` свежий и text-only.
+- Обновлены `docs/00_CURRENT_STATE.md` и `docs/process/10_RELEASE_PREFLIGHT.md` под baseline STEP430.
+
+### Почему это безопасно
+- Runtime/business logic не менялись.
+- Новых DB-read в hot UI paths не добавлено.
+- Все новые изменения либо source-level smoke/preflight, либо docs/audit bundles.
+
+### QA
+- `node --check scripts/smoke-what-next-backnav-contract.js`
+- `node scripts/smoke-what-next-backnav-contract.js`
+- `npm run smoke:what-next-backnav-contract`
+- `npm run gen:notebooklm-sources` → output `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip`
+- `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md` использует актуальный runtime label `📋 Меню` и не тянет старое `📋 Открыть меню`.
+- `docs/ops/02_HEALTH_ONE_SCREEN.md` упоминается из README / owner / readiness docs.
+- `docs/audit/notebooklm_pack/07_MIGRATIONS_ALL.sql.txt` включает текущий `migrations/044_workspace_channel_disconnect.sql` и `migration_pack/*`.
+- `npm run preflight` в bare snapshot по-прежнему честно останавливается на STEP420 dependency-install guard до глубоких npm-зависимых smoke — это ожидаемо.
+
+
+## STEP427 (STEP424–STEP427) — Runtime contract smokes for Inbox / contacts / no-channel gate / input mode
+
+### Зачем
+После STEP423 самый хрупкий слой уже не tooling, а пользовательские runtime-contracts вокруг Brand Inbox, paywalled contacts, creator no-channel recovery и явных input-mode flows. Здесь легко получить тихий регресс без падения кода: неправильные кнопки до `✅ Принять`, утечка контактов/ссылок до unlock, молчаливый dead-end без активного канала или stuck `expectText` после черновика.
+
+### Что сделано
+- Добавлены новые source-level smoke scripts:
+  - `scripts/smoke-brand-inbox-accept-contract.js`
+  - `scripts/smoke-contacts-brand-pass-contract.js`
+  - `scripts/smoke-no-channel-gate-contract.js`
+  - `scripts/smoke-input-mode-contract.js`
+- `scripts/preflight.js` теперь запускает эти четыре smoke обязательно, сразу после уже существующих env/creator/share contract guards.
+- В `package.json` добавлены команды:
+  - `npm run smoke:brand-inbox-accept-contract`
+  - `npm run smoke:contacts-brand-pass-contract`
+  - `npm run smoke:no-channel-gate-contract`
+  - `npm run smoke:input-mode-contract`
+- Обновлены `docs/00_CURRENT_STATE.md` и `docs/process/10_RELEASE_PREFLIGHT.md` под новый baseline STEP427.
+
+### Что фиксируют smokes
+- **STEP424 / Brand Inbox accept-point:**
+  - карточка `new`-статуса оставляет только `✅ Принять / ⛔ Спам / 🗑 Удалить`;
+  - явный hint, что `✅ Принять` открывает диалог и может списывать кредиты;
+  - `В работу / Закрыть / Ответить / Шаблоны` появляются только после accept;
+  - server-side guard на manual reply остаётся accept-first;
+  - `✅ Принять` остаётся единственной spending transition и ведёт в `in_progress`.
+- **STEP425 / Contacts + Brand Pass anti-bypass:**
+  - публичная витрина и brand lead dialog скрывают контакты/канал по умолчанию;
+  - unlock идёт через Redis cache + DB fallback только при degraded Redis;
+  - после unlock сохраняется приоритет `structured contacts → legacy contact → site`;
+  - IG templates / IG DM не возвращают прямые контакты или portfolio links до unlock.
+- **STEP426 / No-channel gates:**
+  - giveaway create при отсутствии/устаревшем `ws` уводит в явный gate, а не в silent stop;
+  - gate содержит recovery CTA `🚀 Подключить канал / 📣 Мои каналы / 📣 Выбрать канал`;
+  - creator → brand application требует активную витрину и даёт понятный recovery screen при отсутствии/стухшем active workspace.
+- **STEP427 / Input mode cancel/reset:**
+  - `✍️ Написать заявку` включает короткоживущий `expectText` и показывает `❌ Отмена ввода`;
+  - после ввода текст уходит в preview (`✅ Отправить / ✍️ Изменить / 🗑 Сбросить`) и input mode очищается;
+  - structured contacts editor держит явный reset path `🧹 Очистить поле`.
+
+### Файлы
+- `scripts/smoke-brand-inbox-accept-contract.js`
+- `scripts/smoke-contacts-brand-pass-contract.js`
+- `scripts/smoke-no-channel-gate-contract.js`
+- `scripts/smoke-input-mode-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-brand-inbox-accept-contract.js`
+- `node --check scripts/smoke-contacts-brand-pass-contract.js`
+- `node --check scripts/smoke-no-channel-gate-contract.js`
+- `node --check scripts/smoke-input-mode-contract.js`
+- `node scripts/smoke-brand-inbox-accept-contract.js`
+- `node scripts/smoke-contacts-brand-pass-contract.js`
+- `node scripts/smoke-no-channel-gate-contract.js`
+- `node scripts/smoke-input-mode-contract.js`
+- `npm run smoke:brand-inbox-accept-contract`
+- `npm run smoke:contacts-brand-pass-contract`
+- `npm run smoke:no-channel-gate-contract`
+- `npm run smoke:input-mode-contract`
+- `npm run actions:check`
+- `npm run lint:nav`
+- `npm run test:redact`
+
+Риск регрессий: **низкий** (source/preflight/docs only; runtime UX/logic не менялась, новых DB reads нет).
+
+## STEP406
+
+- Docs-only polish after hardening steps 403–405.
+- Updated `docs/00_CURRENT_STATE.md`, `docs/90_OWNER_RUNBOOK.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+- Added `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` as a short incident/what-to-do sheet for:
+  - Broadcast `DB overload + Redis degraded` / local DB fuse
+  - Payments orphaned autoheal chain-drain visibility
+  - Official Publish `🩺 Проверить статус`
+- No runtime code/schema/action keys changed.
+
+## STEP399 (Admin Hard-skip contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Hard-skip (dead chats)` — отдельный Redis-only operator-flow для dead chats, HITs и manual unskip. Здесь легко словить тихий регресс: пропажа quick TG buttons, фильтров/экспорта, `hs_find` expectText/back route или action key drift в `ACTION_REGISTRY`.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-hard-skip-contract.js`.
+- Smoke фиксирует source-level контракт:
+  - home-screen `🧱 Hard-skip (dead chats)`: configured TTL, `🔎 Найти TG ID`, `🧾 Последние пропуски`, per-entry quick buttons, pagination, footer `⬅️ Система / ⬅️ Админка`;
+  - hits-screen `🧾 Hard-skip HITs (пропуски)`: filter/window line, today top reasons, filters, `🗒 Export last 200`, quick TG buttons, pagination, footer `⬅️ Система / ⬅️ Админка`;
+  - view-screen `🧱 Hard-skip status`: no-hard-skip vs hard-skip states, `🧹 Снять hard-skip`, `⬅️ Назад`, footer `⬅️ Система / 📋 Меню / 🏠 Home`.
+- Smoke дополнительно валидирует callback/runtime contract:
+  - `a:hs_home`, `a:hs_hits`, `a:hs_find`, `a:hs_view`, `a:hs_unskip`, `a:hs_hits_export`;
+  - `hs_find` expectText (`type: 'hs_find'`, parse TG ID digits, stable invalid prompt, rerender status view);
+  - bounded export helper `adminHardSkipHitsExport(reasonFilter, limit)`;
+  - TXT export document + rerender toast `📤 Export ready:*`.
+- Во время аудита найден реальный хвост: кнопка `🗒 Export last 200` и `a:hs_hits_export` уже были в UI/registry, но callback отсутствовал. Добавлен минимальный handler `a:hs_hits_export` без новых DB-read:
+  - берёт bounded Redis export helper,
+  - отдаёт TXT через `InputFile`,
+  - сохраняет навигацию `🧾 HITs / ⬅️ Система / 📋 Меню / 🏠 Home`,
+  - возвращает в hits-screen с toast.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-hard-skip-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `src/bot/bot.js`
+- `scripts/smoke-admin-hard-skip-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check src/bot/bot.js`
+- `node --check scripts/smoke-admin-hard-skip-contract.js`
+- `node scripts/smoke-admin-hard-skip-contract.js`
+- `npm run smoke:admin-hard-skip-contract`
+- `APP_ENV=production node scripts/preflight.js`
+
+## STEP398 (Admin QStash Status contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → QStash статус` — отдельный operator-flow для self-check и диагностики QStash fan-out/ping. Здесь легко словить тихий регресс: исчезновение summary/status строк, rename action keys, выпадение ping helper screens или разрыв навигации `Система / Меню / Home`.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-qstash-status-contract.js`.
+- Smoke фиксирует source-level контракт `renderAdminQStashStatus()`:
+  - summary/status экран: `🛰 QStash — статус`, `Lib (@upstash/qstash)`, `ENV token/signing/base_url`, `Fan-out (Redis)`, `Broadcast tick last_run`, `Worker last delivery`, `Ping received/enqueued`, `Broadcast cooldown`;
+  - keyboard/footer: `🧪 Send signed ping`, `📣 Fan-out: ON/OFF`, `⬅️ Система / 📋 Меню / 🏠 Home`.
+- Smoke дополнительно валидирует callback/runtime contract:
+  - `a:admin_qstash_status` и `a:admin_qstash_ping`;
+  - admin gate + initial toast `Пинг отправляю…`;
+  - missing-lib / missing-token / missing-base-url helper screens с `⬅️ Назад`;
+  - Redis breadcrumbs `qstash:ping:last_enqueued_at/nonce`;
+  - `qstashPublishJSON(...)` с payload `kind=signed_ping`, `dedup=qping:*`, `retries=0`, `timeout=10s`;
+  - успешный ping делает rerender `renderAdminQStashStatus(ctx)`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-qstash-status-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-qstash-status-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-qstash-status-contract.js`
+- `node scripts/smoke-admin-qstash-status-contract.js`
+- `npm run smoke:admin-qstash-status-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP397 — Admin → Payments Fallback contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-payments-fallback-contract.js`: source-level smoke на отдельный operator-flow `Админка → Payments fallback apply`.
+- Smoke фиксирует summary/status контракт экрана: `EFFECTIVE / ENV / RUNTIME`, TTL hint при runtime enable, инцидентный guidance и runtime details `Enabled by / At / Until / Reason`.
+- Отдельно зафиксирован control/runtime contract: preset rows `🟢 2h (incident) / 🟢 12h (backlog) / 🟢 24h (migration)`, условный `🧹 Disable`, footer `⬅️ Система / ⬅️ Админка / 📋 Меню / 🏠 Home`, а также callbacks `a:admin_pay_fb / a:admin_pay_fb_set / a:admin_pay_fb_off` (admin gate, `setPaymentsFallbackRuntime`, success/failure toasts).
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → Payments fallback apply` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-payments-fallback-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-payments-fallback-contract.js` → `✅ smoke admin-payments-fallback contract OK`
+- `npm run smoke:admin-payments-fallback-contract` → тот же результат
+- `npm run preflight` → новый smoke проходит вместе с остальными source-level guardrails
+- ручной sanity: `Админка → Система → 🧯 Fallback`, затем проверить preset TTL buttons, `🧹 Disable`, строки `EFFECTIVE / ENV / RUNTIME` и footer-навигацию
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
+## STEP396 — Admin → Payments contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-payments-contract.js`: source-level smoke на отдельный operator-flow `Админка → Payments`.
+- Smoke фиксирует контракт list-screen: заголовок `💳 Payments • STATUS`, empty-state `Платежей нет.`, per-payment view buttons, ORPHANED-only action `🔁 Auto-heal missing_session`, pagination и `⬅️ Операции`.
+- Отдельно зафиксирован detail/runtime contract: экран `Payment #id` со строками `Status/Kind/User/Amount/Created`, spoiler-блоками `Charge/Payload/Note`, условным `✅ Apply (manual)`, `⬅️ К списку / ⬅️ Операции`, а также callback/flow `a:admin_payments/view/apply/autoheal` (`clearExpectText`, strict validation, DB claim before apply, block/error alerts, auto-heal только для `ORPHANED missing_session`, summary alert).
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → Payments` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-payments-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-payments-contract.js` → `✅ smoke admin-payments contract OK`
+- `npm run smoke:admin-payments-contract` → тот же результат
+- `npm run preflight` → новый smoke проходит вместе с остальными source-level guardrails
+- ручной sanity: `Админка → Операции → 💰 Платежи`, открыть один платёж, затем проверить `✅ Apply (manual)`, `🔁 Auto-heal missing_session`, pagination и возвраты `К списку / Операции`
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
+## STEP394 — Admin → Outbox contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-outbox-contract.js`: source-level smoke на отдельный operator-flow `Админка → Outbox`.
+- Smoke фиксирует контракт list/view экранов `Outbox`: заголовок `📤 Outbox`, строку `Redis-only`, privacy hint для non-DM (`🔒 Скрыто...`), per-entry кнопки, pagination, `🧹 Очистить` и footer `⬅️ Коммуникации / 📋 Меню / 🏠 Home`.
+- Отдельно зафиксирован view/actions contract: `👤 Карточка / ✉️ Написать`, условные `✉️ Повторить / 📝 Заметка / 📌 В шаблон`, а также callback/confirm-flow `a:admin_outbox*` (clearExpectText на входе, DM-only guard для repeat/save-to-template, preview send controls, `🧹 Очистить Outbox?`, clear → rerender list).
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → Outbox` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-outbox-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-outbox-contract.js` → `✅ smoke admin-outbox contract OK`
+- `npm run smoke:admin-outbox-contract` → тот же результат
+- `npm run preflight` → новый smoke проходит вместе с остальными source-level guardrails
+- ручной sanity: `Админка → Коммуникации → 📤 Outbox`, открыть запись, затем проверить `✉️ Повторить`, `📌 В шаблон`, `🧹 Очистить` confirm-flow и footer-навигацию
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
+## STEP392 — Admin → Founder Sale contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-founder-contract.js`: source-level smoke на отдельный operator-flow `Админка → Founder Sale`.
+- Smoke фиксирует контракт главного экрана `Founder Sale`: summary/status блок (`Источник настроек`, `ENABLED`, `DEADLINE`, `STATUS`, `⏳ Осталось`, `💰 Цены / кредиты`) и control rows (`ENABLED toggle`, `🗓 Дедлайн / 💰 Цены`, `💳 Кредиты / ♻️ Сброс к ENV`, `🔗 Ссылки / 📝 Тексты`, footer `⬅️ Система / 📋 Меню / 🏠 Home`).
+- Дополнительно smoke валидирует marketing helper screens `Founder Sale — ссылки` и `Founder Sale — тексты (copy/paste)`: forwarding-safe note, A/B deep-link presets `fs_offers_a/fs_offers_b/fs_gw_brand/fs_gw_creator`, быстрый copy line `🔥 Founder Sale: <link>` и footer-навигацию между `Founder Sale / Система / Меню / Home`.
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → Founder Sale` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-founder-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-founder-contract.js` → `✅ smoke admin-founder contract OK`
+- `npm run preflight` → новый smoke проходит вместе с остальными guardrails
+- ручной sanity: `Админка → Система → 🔥 Founder Sale`, затем `🔗 Ссылки` и `📝 Тексты` показывают те же operator controls / helper texts / footer navigation
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
+## STEP391 — Admin → System keyboard/footer contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-system-contract.js`: source-level smoke на контракт `Админка → Система`.
+- Smoke проверяет summary-строки экрана (`Платежи`, `Match/Feat auto-apply`, `Payments fallback apply`, `Broadcast fan-out (QStash)`, `Founder Sale`) и keyboard rows: `💳 Прием / ⚙️ Автовыдача`, `🎯🔥 Match/Feat / 🧯 Fallback`, `📣 QStash fan-out / 🛰 QStash статус`, `🧱 Hard-skip (dead chats)`, `🔥 Founder Sale`, `➕ Модератор / 📋 Модераторы`, `🎁 Подарить подписку`, footer `⬅️ Админка / 📋 Меню / 🏠 Home`.
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки `Admin → System` ловились до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-system-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-system-contract.js` → `✅ smoke admin-system keyboard/footer contract OK`
+- `npm run preflight` → новый smoke проходит вместе с остальными guardrails
+- ручной sanity: `Админка → Система` показывает те же summary-строки, operator rows и footer
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
+## STEP390 — Admin → Comms keyboard/footer contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-comms-contract.js`: source-level smoke на контракт `Админка → Коммуникации`.
+- Smoke проверяет заголовок/описание, primary keyboard (`📣 Объявление`, `📌 Шаблоны DM`, `📤 Outbox`), условный gate `📣 Офиц.канал (${pending})` только при `OFFICIAL_PUBLISH_ENABLED`, footer `⬅️ Админка / 📋 Меню / 🏠 Home` и связанные записи в `src/bot/actionRegistry.js`.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- В `package.json` добавлен `smoke:admin-comms-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-comms-contract.js` → `✅ smoke admin-comms keyboard/footer contract OK`
+- `npm run preflight` → новый smoke проходит вместе с остальными guardrails
+- ручной sanity: `Админка → Коммуникации` показывает те же operator-кнопки и footer; `Офиц.канал` появляется только при включённом `OFFICIAL_PUBLISH_ENABLED`
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+
+## STEP389 — Admin → Ops keyboard/actions contract smoke
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-admin-ops-contract.js`: source-level smoke на контракт `Админка → Операции`.
+- Smoke проверяет состав основного operator keyboard: `👥 Пользователи`, `💰 Платежи`, `📣 Рассылка`, `📜 Аудит`, `📈 Метрики`, `🧾 Flush ops digest`, `🧹 Clear pending snapshot`, footer `⬅️ Админка / 📋 Меню / 🏠 Home` и health URL-кнопку только за `PUBLIC_BASE_URL`.
+- Отдельно зафиксирован confirm-flow `a:admin_ops_pending_clear`: `✅ Очистить snapshot` + `⬅️ Операции` + footer.
+- Smoke валидирует связанные записи в `src/bot/actionRegistry.js`, чтобы тихие rename/remove/re-guard поломки callback action keys ловились ещё до деплоя.
+- `scripts/preflight.js` теперь включает этот smoke как обязательный guard.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+QA / как проверить
+- `node scripts/smoke-admin-ops-contract.js` → `✅ smoke admin-ops keyboard/actions contract OK`
+- `npm run preflight` → новый smoke проходит вместе с остальными guardrails
+- ручной sanity: `Админка → Операции` показывает те же operator-кнопки и confirm-flow очистки snapshot
+
+Риск регрессий: **низкий** (source/preflight/docs only; без новых DB reads, без изменения runtime UX/logic).
+
+## STEP388 — Preflight smoke for /api/health operator JSON contract + deploy workflow docs
+
+Дата: 2026-03-10
+
+Что сделано
+- Добавлен `scripts/smoke-health-admin-shape.js`: staging/dev smoke на стабильный операторский контракт `/api/health` при `SIMULATE_REDIS_DOWN=1`.
+- Smoke проверяет ключевые поля, на которые завязаны operator checks и dashboards: `system_status`, `no_go_reasons[{code,severity,hint}]`, `ops.digest_preview`, `ops.pending`, `broadcast.pending_deliveries`, `broadcast.hard_skip`, `broadcast.db_overload`, `broadcast.tick_deferred_redis`, `qstash.reschedule_failed`, `qstash.official_publish_stuck`, `payments.fallback_apply_effective`, `payments.payload_hmac_minlen_ok`.
+- `scripts/preflight.js` теперь запускает новый smoke в non-prod и безопасно skip-ает его в `prod/production`, как и fault-injection smoke.
+- `/api/health` нормализован по shape: ветки `not_configured` и `redis_unavailable` теперь возвращают тот же базовый `broadcast/ref/cron` контракт, без тихого исчезновения операторских полей.
+- Обновлены `docs/91_PROD_LAUNCH_30MIN.md` и `docs/93_PROD_DEPLOY_CHECKLIST.md` с пошаговым workflow перед Vercel deploy.
+
+QA / как проверить
+- `node scripts/smoke-health-admin-shape.js` → `✅ smoke health/admin JSON shape OK`
+- `node scripts/smoke-fault-injection.js` → degraded-path остаётся fail-open
+- `npm run preflight` → оба smoke проходят
+- `APP_ENV=production npm run preflight` → оба staging smoke корректно skip-аются в prod env
+
+Риск регрессий: **низкий** (health/admin-only; без новых DB reads, без UI/ботовых callback изменений).
+
+## STEP387 — Preflight: staging fault-injection smoke
+
+Дата: 2026-03-09
+
+Что сделано
+- `scripts/preflight.js` теперь запускает `scripts/smoke-fault-injection.js`, который принудительно включает `SIMULATE_REDIS_DOWN=1` и валидирует staging/dev degraded-path без реального Redis/DB.
+- Smoke проверяет два инварианта: (1) Redis calls падают с `code=SIMULATED_REDIS_DOWN`; (2) `/api/health` не падает и отдаёт `ok=true`, `system_status=NO_GO`, `no_go_reasons[]`, `redis.read_ok=false`, `redis.write_ok=false`.
+- Для безопасности preflight автоматически пропускает этот smoke при `APP_ENV=prod|production`, чтобы не ломать операторский контур и не создавать ложный prod-fail на реальном окружении.
+
+Почему это безопасно
+- Нет новых DB-read, callback/action keys, ENV-контрактов или runtime-веток прода.
+- Используется уже существующий smoke-скрипт; меняется только coverage preflight перед деплоем.
+- Ловим регресс fail-open/fail-closed поведения Redis degraded до выкладки, а не на живом `/api/health`.
+
+QA
+- `node scripts/smoke-fault-injection.js`
+- `npm run preflight`
+- опционально: `APP_ENV=production npm run preflight` → smoke корректно skip-ается, а не падает
+
+
+## STEP386 — Admin Ops regression smoke
+
+Дата: 2026-03-07
+
+Что сделано
+- Вынесен pure text builder `src/bot/adminOpsText.js` для экрана `Админка → Операции`; сам `renderAdminOps()` продолжает только собирать Redis-only данные и клавиатуру.
+- Добавлен `scripts/smoke-admin-ops-render.js`:
+  - проверяет рендер OK/degraded/probe-failed вариантов без Telegram/Redis/DB;
+  - проверяет guard по исходнику `renderAdminOps()` (переменные `r/key` остаются в scope функции, а pending snapshot остаётся под `if (r && key)`).
+- `scripts/preflight.js` теперь запускает этот smoke; `scripts/smoke-short.js` напоминает проверить `Ops` вместе с остальными admin-экранами.
+
+Почему это безопасно
+- Нет новых DB-read и нет новых callback/action keys.
+- Продуктовый UX не меняется: тот же текст/баннеры/кнопки, только собраны через тестируемый helper.
+- Ловим повторный регресс до деплоя, а не после открытия `a:admin_ops` на проде.
+
+QA
+- `node scripts/smoke-admin-ops-render.js`
+- `npm run preflight`
+- ручная проверка: `👑 Админка → 🧰 Операции` открывается и при Redis OK, и при degraded path без error-screen.
+
+
+## STEP385 — Admin Ops scope hotfix
+
+Дата: 2026-03-07
+
+Что сломалось
+- `Админка → Операции` (`a:admin_ops`) падала с `ReferenceError: r is not defined`.
+- Причина: в `renderAdminOps()` переменные `r` / `key` были объявлены через `let` внутри outer `try`, а блок `Broadcast pending snapshot` использовал их уже после выхода из этого блока.
+
+Что сделано
+- В `src/bot/bot.js` переменные `r` / `key` подняты на уровень функции `renderAdminOps()`.
+- Redis-only блоки (`probe`, ops banners, `Broadcast pending snapshot`) продолжают работать по прежней логике; изменён только scope переменных.
+
+Почему это безопасно
+- Нет новых DB-read.
+- Нет изменений бизнес-логики, action keys, ENV, schema или маршрутов.
+- Hotfix маленький и полностью обратимый.
+
+QA
+- `node --check src/bot/bot.js`
+- ручная проверка: `👑 Админка → 🧰 Операции` открывается без `cid/act/err`-экрана; `Broadcast pending snapshot` и ops banners рендерятся как раньше.
+
+
+## STEP383 — IG OAuth parked from deploy surface (Vercel Hobby function budget)
+Date: 2026-03-07
+
+Scope:
+- removed `api/ig/oauth/start|callback|status|disconnect` from deploy surface
+- kept IG OAuth context as parked docs/migrations only
+- synced docs/boot/current-state/release/env/handoff with parked baseline
+
+Why:
+- deploy was blocked by Vercel Hobby `<=12 serverless functions` limit
+- IG OAuth is not used in current product baseline and UI was already hidden
+- smallest safe fix is to stop deploying unused IG OAuth entrypoints instead of touching core flows
+
+Impact:
+- frees 4 function entrypoints from `api/`
+- no change to payments/broadcast/official publish/brand inbox flows
+- Instagram remains a normal profile link/contact after unlock
+- restoring OAuth later will require reintroducing the routes (or consolidating them) and re-running Meta smoke
+
+## 2026-03-07
+
+### STEP382 — Ops clarity + media timeout
+- Добавлены ENV guardrails `TG_HTTP_TIMEOUT_MS` (default 5500ms) и `TG_HTTP_MEDIA_TIMEOUT_MS` (default 15000ms).
+- `src/lib/tgApi.js`: общий AbortSignal timeout helper для raw Telegram fetch.
+- `src/bot/cron.js`: broadcast text/media sends теперь идут с timeout; для media используется отдельный, более длинный timeout.
+- `src/bot/bot.js`: official publish media sends переведены на `TG_HTTP_MEDIA_TIMEOUT_MS`, текстовые send/edit оставлены на базовом timeout.
+- Admin → `🧰 Операции`: добавлен блок `Broadcast pending snapshot` с явной подписью `Redis snapshot only; не DB truth`.
+- `🧹 Clear pending snapshot` теперь идёт через confirm-screen и очищает только Redis snapshot `broadcast.pending_deliveries`.
+- Admin → `🧱 Hard-skip`: на home/view экранах показывается configured TTL (`BROADCAST_HARD_SKIP_TTL_DAYS`).
+- `scripts/check-package-lock.js` + `package-lock.json`: preflight теперь валится при drift между `package.json` и `package-lock.json`.
+
+Риск регрессий: **низкий** (без новых DB-read в hot UI; изменения ограничены timeout guardrails, Redis-only ops visibility и preflight/docs).
+
 
 # Work History — 2026-03
 
@@ -3022,6 +3487,1756 @@ QA:
   - В fan-out режиме `/api/qstash/broadcast-deliver` при активной паузе должен republish с delay и без Telegram send.
 
 Риск регрессий: низкий (только broadcast cooldown plumbing; без влияния на меню/хабы).
+
+
+## STEP319 — NotebookLM audit sources pack (text-only, ≤50 files)
+
+Цель:
+- Дать “внешнему аудитору / NotebookLM” **актуальные источники** без перегруза.
+- Уложиться в лимит: **≤50 файлов**, только **текстовые** форматы (md/txt), без .sql.
+
+Изменения:
+- Обновлён `docs/audit/notebooklm_pack/`:
+  - `docs/audit/notebooklm_pack/01_BUNDLE_CORE_RU.md`, `docs/audit/notebooklm_pack/02_BUNDLE_FEATURES_RU.md`, `docs/audit/notebooklm_pack/03_BUNDLE_PROCESS_HISTORY_RU.md` — пересобраны из текущих доков (с актуальным timestamp).
+  - `docs/audit/notebooklm_pack/06_CODE_BUNDLE.txt` — обновлён (включает ключевой код: bot/db/redis/api/qstash/migrations runner).
+  - `docs/audit/notebooklm_pack/07_MIGRATIONS_ALL.sql.txt` — обновлён (включает все `migrations/*.sql` и `migration_pack/*` как текст).
+- Генерация ZIP для загрузки в NotebookLM: `npm run gen:notebooklm-sources` (script `scripts/gen-notebooklm-sources.js`).
+  - Output: `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip`.
+
+QA:
+- `npm run gen:notebooklm-sources` проходит и пишет `OK: N files (<=50)`.
+- В `docs/audit/notebooklm_pack/` нет файлов с расширением `.sql` (только .md / .txt).
+- Bundle-файлы содержат актуальные STEP316–STEP318 изменения (official publish outbox, hydration tokens, broadcast cooldown).
+
+Риск регрессий: нулевой (docs-only + audit pack; runtime не затронут).
+
+
+## STEP320 — NotebookLM: короткий “жёсткий” аудит‑промпт (copy/paste)
+
+Цель:
+- Дать один компактный промпт, который можно **прямо вставить** в NotebookLM.
+- Сохранить строгость: только факты из файлов, доказательства, repro, минимальные фиксы.
+
+Изменения:
+- Обновлён канонический файл промпта для NotebookLM пакета:
+  - `docs/audit/notebooklm_pack/04_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+- Синхронизирован “верхний” промпт (чтобы не было расхождений):
+  - `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — обновлён STEP320 и ссылка на канонический prompt.
+- `docs/process/07_WORK_HISTORY_2026_03.md` — добавлен STEP320.
+
+QA:
+- Открыть `docs/audit/notebooklm_pack/04_NOTEBOOKLM_AUDIT_PROMPT_RU.txt` и убедиться, что он:
+  - короткий (без простыней),
+  - требует proof (path + фрагмент ≤25 слов + search‑phrase),
+  - задаёт жёсткий формат отчёта и чек‑лист критичных зон.
+- Проверить, что `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt` идентичен каноническому.
+
+Риск регрессий: нулевой (docs-only).
+
+
+## STEP321 — Giveaways: стабилизация seed (order‑independent eligible ids)
+
+Дата: 2026-03-05
+
+Контекст:
+- Детерминированность winners draw нарушалась, если `eligibleUserIds` приходили из БД в разном порядке.
+
+Изменения:
+- `src/bot/prng.js`: `makeSeed()` теперь сортирует копию `eligibleUserIds` перед `join()` → seed/eligibleHash зависят только от набора участников, а не от порядка выдачи.
+
+QA:
+- Запустить локально quick-check: два массива с одинаковыми id в разном порядке должны давать одинаковый `eligibleHash`/`seedHash`.
+- Smoke: `/api/cron/giveaways-tick` (dry run/лог) — winners остаются воспроизводимыми.
+
+Риск регрессий: нулевой/минимальный (изменение влияет только на seed hashing, без UI/DB).
+
+
+## STEP322 — Payments fallback hardening: default‑off + HMAC payload signature
+
+Дата: 2026-03-05
+
+Цель:
+- Убрать риск “auto-apply по payload без сессии” как дефолт.
+- Добавить крипто‑гарантию, что payload “наш” (когда fallback включён).
+
+Изменения:
+- `src/lib/config.js`
+  - `PAYMENTS_FALLBACK_APPLY_ENABLED` теперь **default=0** (строгий режим).
+  - Добавлены ENV:
+    - `PAYMENTS_PAYLOAD_HMAC_KEY`
+    - `PAYMENTS_PAYLOAD_HMAC_LEN` (6..16, default 10)
+    - `PAYMENTS_FALLBACK_ALLOW_UNSIGNED` (default 0)
+- `src/bot/bot.js`
+  - Новые Stars-инвойсы (PRO / Brand Pass / Brand Plan / Founder Sale) подписывают token: `tokenRaw + hmac(payloadNoSig)` (hex, длина по ENV).
+  - Redis `pay_*` сессии сохраняются по **подписанному** token, чтобы match в `successful_payment` не ломался.
+- `src/bot/payments_fallback.js`
+  - При наличии `PAYMENTS_PAYLOAD_HMAC_KEY` fallback требует валидную подпись (иначе reject; legacy можно временно разрешить `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=1`).
+  - Добавлен DB‑чек: payment row принадлежит payer + charge_id совпадает (money path → fail‑closed).
+  - Явно запрещён fallback для `offpub_*` (manual/moderation).
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — обновлены правила fallback + описаны новые ENV для подписи.
+
+QA:
+- `node --check src/bot/bot.js src/bot/payments_fallback.js src/lib/config.js`
+- Инвойс создание:
+  - купить PRO / Brand Pass / Brand Plan / Founder Sale → payload остаётся ASCII/≤128 и проходит `_isSafeInvoicePayload`.
+  - `pay_*` ключ в Redis соответствует token из payload (подписанному).
+- Fallback:
+  - при `PAYMENTS_PAYLOAD_HMAC_KEY` и `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0`: неподписанный payload → `unsigned_payload` (не применяет).
+  - подписанный payload → применяет, пишет note с `...:hmac`.
+- По умолчанию (`PAYMENTS_FALLBACK_APPLY_ENABLED=0`) поведение прод‑безопасное: missing_session → ORPHANED, без авто‑выдачи.
+
+Риск регрессий: низкий (меняет только invoice payload token и fallback путь; основной happy-path по Redis-сессии сохраняется).
+
+
+## STEP323 — IG_TOKEN_ENC_KEY hardening: no weak-key fallback
+
+Дата: 2026-03-05
+
+Цель:
+- Убрать небезопасный режим, когда `IG_TOKEN_ENC_KEY` мог быть “короткой строкой”, а ключ фактически получался через `sha256(строка)`.
+- При неверной конфигурации — **жёстко блокировать IG OAuth**, но не ломать прод (пока UI скрыт).
+
+Изменения:
+- `src/lib/config.js`
+  - Добавлен строгий парсинг `IG_TOKEN_ENC_KEY`: принимаем только `hex64` (32 bytes) или `base64/base64url` (>=32 bytes).
+  - Введены поля: `IG_TOKEN_ENC_KEY_BYTES`, `IG_TOKEN_ENC_KEY_VALID`, `IG_TOKEN_ENC_KEY_KIND`, `IG_OAUTH_READY`.
+  - `assertEnv()` больше не блокирует весь бот из‑за IG, пока UI/routes скрыты; fail-fast только при публичном включении (UI+routes).
+- `src/lib/cryptoBox.js`
+  - Убрана sha256‑деривация из “плохого ключа”. Теперь при невалидном ключе кидаем `IG_TOKEN_ENC_KEY_invalid`.
+- `api/ig/oauth/*`
+  - При невалидном `IG_TOKEN_ENC_KEY` отвечаем `503/500 misconfigured` и отправляем ops‑alert (dedup 6h).
+- `src/bot/bot.js`
+  - В UI-кнопке OAuth добавлено явное сообщение “misconfigured” (без DB-чтений) при невалидном ключе.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — уточнён строгий формат `IG_TOKEN_ENC_KEY`.
+
+QA:
+- `node --check src/lib/config.js src/lib/cryptoBox.js api/ig/oauth/start.js api/ig/oauth/callback.js api/ig/oauth/status.js api/ig/oauth/disconnect.js`
+- (Если IG UI включён) открыть `/api/ig/oauth/start?...`:
+  - при валидном ключе — 302 на Meta authorize
+  - при невалидном — 503 + ops alert в SUPPORT/админам
+
+Риск регрессий: низкий (IG сейчас скрыт; изменения затрагивают только IG oauth + крипто-бокс).
+
+## 2026-03-05
+
+### STEP324 — Ops digest for expensive silent-catch paths
+- Добавлен `src/lib/opsDigest.js`: лёгкий Redis-only буфер для ops-событий без Telegram API (anti-spam dedup через NX key).
+- `src/lib/qstash.js`: при ошибках `publishJSON` теперь пишем digest ops alert `qstash_publish_failed` (и пробрасываем ошибку дальше).
+- `src/lib/redis.js`: при падении Lua `eval` в ключевых helper’ах пишем digest ops alert `redis_lua_failed`:
+  - `consumeOnce` (atomic getdel→eval→GET+DEL fallback),
+  - `releaseLock` (token-lock safety),
+  - `rateLimit` (fallback=memory when Redis degraded),
+  - `incrWithExpireOnFirst` (non-atomic fallback).
+- `/api/qstash/official-publish-deliver`: если не удалось enqueue delayed retry при `locked`, пишем digest ops alert `qstash_reschedule_failed`.
+
+Риск регрессий: **низкий** (код затрагивает только error paths; success-path и UX не меняются).
+
+## STEP325 — Broadcast: per-recipient 429 skip + global burst detection
+
+Дата: 2026-03-05
+
+Цель:
+- Убрать риск, когда один проблемный получатель держит рассылку в статусе `pending` бесконечно (вечные `deferred/quarantined` по 429).
+- При этом не ломать защиту от глобального 429: cooldown нужен, но только если это реально burst по нескольким чатам.
+
+Изменения:
+- `api/qstash/broadcast-deliver.js`
+  - 429 обработка теперь разделяет два сценария:
+    - **per-recipient 429**: считаем повторные 429 на конкретного получателя (`BROADCAST_QUARANTINE_THRESHOLD`). Если достигли порога — помечаем доставку как `blocked` (non‑retryable), чтобы рассылка могла завершиться.
+    - **global 429 burst**: считаем distinct получателей, получивших 429 за короткое окно (`BROADCAST_GLOBAL_429_WINDOW_SEC`). Если достигли `BROADCAST_GLOBAL_429_THRESHOLD` — ставим global cooldown через `setBroadcastCooldown()`.
+  - Добавлены Redis ключи для distinct 429 users (`broadcast:<id>:429users`) с TTL.
+
+ENV (опционально):
+- `BROADCAST_GLOBAL_429_THRESHOLD` (default `6`) — сколько distinct 429 получателей за окно считаем «глобальным» лимитом.
+- `BROADCAST_GLOBAL_429_WINDOW_SEC` (default `60`) — окно для distinct 429 получателей.
+
+Docs:
+- `docs/00_CURRENT_STATE.md` — добавлено описание STEP325 (anti‑stall для broadcast 429).
+
+QA:
+- `node --check api/qstash/broadcast-deliver.js`
+- Смоук (ручной):
+  - Запусти рассылку в режиме QStash fan‑out.
+  - (Тестовый режим) Временно выставь `BROADCAST_QUARANTINE_THRESHOLD=2` и воспроизведи 429 на одном chat (например, ограниченный чат/частые отправки).
+    - ожидаемо: запись `broadcast_sent_log` для этого user → `status='blocked'`, рассылка может перейти в `DONE` без вечного `deferred_wait`.
+  - (Burst тест) Временно выставь `BROADCAST_GLOBAL_429_THRESHOLD=2` и добейся 429 на двух разных chat в пределах минуты.
+    - ожидаемо: `setBroadcastCooldown` ставит `broadcast.cooldown_until`, а deliver jobs уходят в delayed retry.
+
+Риск регрессий: низкий (меняется только 429 error-path; success-path рассылки не трогаем).
+
+
+## STEP326 — Broadcast: hard skip list for dead chats + admin report
+
+Дата: 2026-03-05
+
+Цель:
+- Не тратить QStash/Telegram попытки на заведомо «мёртвые» чаты (bot blocked / chat not found / user deactivated).
+- Дать в админке отчёт «кого и почему пропустили» (по конкретной рассылке).
+
+Изменения:
+- `src/bot/cron.js`
+  - Добавлен Redis-only hard-skip список по `tg_id` с TTL (`BROADCAST_HARD_SKIP_TTL_DAYS`, default 90).
+  - При enqueue (QStash fan-out) и при legacy direct-send: получатели из hard-skip **не отправляются**, вместо этого сразу логируются как `blocked` с `last_error=hard_skip:<reason>`.
+  - При permanent Telegram errors (по desc: blocked/chat not found/deactivated) — автоматически добавляем `tg_id` в hard-skip.
+- `api/qstash/broadcast-deliver.js`
+  - Перед claim/send проверяем hard-skip; если есть — логируем `blocked` и завершаем job `200 OK`.
+  - При non-retryable Telegram errors — добавляем `tg_id` в hard-skip (только для известных permanent причин).
+- `src/db/queries.js`
+  - `logBroadcastBlocked()` (upsert) — терминальная фиксация blocked c `non_retryable=true` и `last_error`.
+  - `countBroadcastDeliveryStats()` теперь возвращает `hard_skipped` (subset blocked, `last_error like 'hard_skip:%'`).
+  - `listBroadcastBlockedDeliveries()` — список blocked получателей для админ-отчёта.
+- `src/bot/bot.js`
+  - В карточке рассылки показываем `blocked` и `hard-skip` счётчики.
+  - Добавлена кнопка `🧱 Пропуски/ошибки` → экран отчёта по blocked/hard-skip (пагинация + табы).
+
+ENV:
+- `BROADCAST_HARD_SKIP_TTL_DAYS` (default `90`) — сколько дней держим hard-skip запись по tg_id.
+
+QA:
+- `node --check src/bot/cron.js api/qstash/broadcast-deliver.js src/bot/bot.js src/db/queries.js`
+- Ручной smoke:
+  - На активной рассылке зайти в `Админка → Операции → 📣 Рассылка → #id` и открыть `🧱 Пропуски/ошибки`.
+  - Имитировать permanent ошибку (заблокированный чат) и убедиться:
+    - запись в `broadcast_sent_log` становится `blocked` с `last_error` (а для hard-skip: `hard_skip:<reason>`),
+    - последующие рассылки для этого tg_id пропускают отправку и сразу логируют `hard_skip:*` без попытки Telegram send.
+
+Риск регрессий: низкий (изменения только в broadcast error-path + admin-экраны; success-path рассылки не трогаем).
+
+
+
+## STEP331 — Giveaways: results auto-publish idempotency (reserve-before-send)
+
+Дата: 2026-03-05
+
+Контекст:
+- Auto publish результатов (cron `autoPublishDrawn`) мог отправить новый пост в канал, а затем упасть на DB commit → следующий тик мог отправить ещё один (дубли), особенно когда edit оригинального анонса невозможен и используется send.
+
+Цель:
+- Сделать auto-publish результатов идемпотентным: **сначала** DB-claim, потом TG edit/send, потом DB-finalize. При падении после TG — повторные тики не отправляют снова, а только завершают commit.
+
+Изменения:
+- `src/db/queries.js`
+  - `listDrawnGiveawaysToPublish`: берём и claimed записи (`results_message_id=0`) для recovery.
+  - `atomicClaimGiveawayResultsPublishing`: claim `results_message_id=0` только если ещё `WINNERS_DRAWN` и `results_message_id IS NULL`.
+  - `atomicReleaseGiveawayResultsClaim`: release claim обратно в NULL, если send не удалось.
+  - `atomicFinalizeGiveawayResultsPublish`: finalize только если claim удержан (`results_message_id=0`).
+- `src/bot/cron.js`
+  - `autoPublishDrawn`: reserve-before-send + Redis breadcrumb `gw:results:sent:<gwId>` (TTL 7 дней).
+  - Recovery: если `results_message_id=0`, сначала пытаемся finalize по breadcrumb; если breadcrumb нет — делаем безопасный edit оригинального анонса (без нового send).
+
+ENV:
+- нет
+
+QA:
+- `npm run preflight`
+- Ручной smoke (по возможности):
+  1) Завести розыгрыш с `auto_publish=true`, довести до `WINNERS_DRAWN`.
+  2) Дождаться крона: результаты публикуются (edit или send).
+  3) При временных DB сбоях: повторные тики не должны создавать дубли, а должны дожимать finalize.
+
+Риск регрессий: низкий (cron-only path; UI/монетизация не меняются).
+
+## STEP330 — Giveaways: publish idempotency (reserve → send → commit)
+
+Дата: 2026-03-05
+
+Контекст:
+- `a:gw_publish` раньше делал create→send→update. Если функция умирала после `send*` (или падал DB update), повтор мог создать дубль или оставить запись в `DRAFT`.
+
+Цель:
+- Сделать публикацию идемпотентной: повторный клик не отправляет второй пост, а **дожимает** фиксацию в DB.
+
+Изменения:
+- `src/bot/bot.js`
+  - Token-lock `lock:gw_publish:<wsId>:<tgId>` (30s) против двойных кликов.
+  - В черновик пишем `draft.gw_id` при первом create → все ретраи используют один giveaway.
+  - Перед отправкой ставим `status='PUBLISHING'`.
+  - После успешного отправления в канал пишем Redis breadcrumb `gw:publish:sent:<gwId>` = `{ chat_id, message_id }` с TTL 7 дней.
+  - Если DB commit упал после отправки — показываем кнопку «📣 Опубликовать ещё раз». Повторная попытка увидит breadcrumb и завершит DB update + audit **без** повторного отправления в канал.
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Нажать «📣 Опубликовать» дважды быстро → второй клик должен ответить «⏳ Уже публикуется…», в канал уходит **один** пост.
+  2) Если поймал сообщение «Пост отправлен, но не сохранён. Нажми ещё раз.» → нажать «📣 Опубликовать ещё раз»:
+     - ожидаемо: второй пост **не** отправляется,
+     - giveaway открывается как опубликованный.
+
+Риск регрессий: низкий (меняется только publish-path розыгрышей; success-path участника/проверок не трогаем).
+
+## STEP327 — Anti-bypass: offer title redaction (monetization safety)
+
+Дата: 2026-03-05
+
+Контекст:
+- До unlock (Brand Pass) контакты должны быть скрыты. Раньше редактировалось только `description`, но контакт мог утечь через `title` (например, `@username` или ссылка в заголовке).
+
+Цель:
+- Закрыть утечку контактов через заголовок оффера в публичной карточке и ленте, без DB-reads в hot UI.
+
+Изменения:
+- `src/bot/bot.js`
+  - `renderBxPublicView`: для non-owner до unlock прогоняем `o.title` через `redactContactsInText` (аналогично `description`).
+  - `renderBxFeed`: заголовок в ленте креаторов всегда проходит через `redactContactsInText` (feed не знает unlock per-offer и не должен показывать контакты в title вообще).
+  - `offerShareUrl`: share-text также редактирует title через `redactContactsInText`, чтобы контакты не утекали через share-url.
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP327 в шапку и уточнено, что анти-bypass применяется к title+description.
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Создай оффер с `@username` / ссылкой / email в **title** и любой description.
+  2) Открой этот оффер в brand-mode **до unlock**:
+     - ожидаемо: в карточке и в ленте заголовок показывает «🔒 … скрыто»/маскировку, контактов нет.
+  3) Сделай unlock (Brand Pass) и открой карточку снова:
+     - ожидаемо: title в карточке показывается как есть (контакты допустимы после unlock), контакты отображаются по правилам unlock.
+  4) Нажми “поделиться”/share:
+     - ожидаемо: share-text не содержит контактов, даже если они были в title.
+
+Риск регрессий: низкий (только отображение текста; success-path и монетизация не меняются).
+
+## STEP333 — Neon cost: cached workspaces list in `ensureWorkspaceForOwner` and «📣 Мои каналы»
+
+Дата: 2026-03-05
+
+Контекст:
+- В проекте уже есть `listWorkspacesCached()` (TTL 5 мин) для Menu/Home hot path (Neon-saving), но ряд частых переходов всё ещё делал прямой `db.listWorkspaces()`.
+
+Цель:
+- Убрать лишние DB‑reads в частых UI переходах, без изменения бизнес-логики и без риска деградации при Redis down.
+
+Изменения:
+- `src/bot/bot.js`
+  - `ensureWorkspaceForOwner`: используем `listWorkspacesCached(ownerUserId)`.
+  - Safety: если кеш вернул пустой список — один раз перепроверяем `db.listWorkspaces()` (чтобы избежать stale‑empty UX gate при частичных сбоях/неуспешной инвалидации).
+  - `renderWsList` («📣 Мои каналы»): аналогично — кеш + DB double-check на пустом результате.
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP333 (Neon cost hardening) и уточнён пункт про hot UI кеш workspaces.
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Открыть `📋 Меню` → «📣 Мои каналы» → убедиться, что список рендерится.
+  2) Подключить новый канал через `🚀 Подключить канал` → открыть «📣 Мои каналы» и убедиться, что канал появился (инвалидация кеша срабатывает).
+
+Риск регрессий: низкий (read-only path + best-effort кеш; при Redis degraded всё работает по DB‑truth).
+
+## STEP334 — Neon cost: cache Barter feed COUNT(*) per filter (Redis, TTL 60s)
+
+Дата: 2026-03-05
+
+Контекст:
+- `renderBxFeed` делал `db.countNetworkBarterOffers()` на каждый рендер страницы (включая пагинацию). По мере роста таблицы это начинает ощутимо жечь Neon CU.
+
+Цель:
+- Сохранить текущий UX (точная пагинация по total), но убрать повторяющиеся COUNT(*) запросы на каждом переходе страниц.
+
+Изменения:
+- `src/bot/bot.js`
+  - Добавлен best‑effort Redis cache для total count в ленте:
+    - ключ: `cache:bx:feed_count:<sha1>` (sha1 от нормализованных фильтров)
+    - TTL: 60 секунд (`BX_FEED_COUNT_CACHE_TTL_SEC`)
+  - `renderBxFeed`: total берём через `countNetworkBarterOffersCached(filter)`.
+  - При Redis degraded/ошибках кеша: fail‑open — считаем через DB-truth как раньше.
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP334 в шапку и уточнено, что COUNT(*) в bx_feed кешируется (Neon-saving).
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Открыть «📰 Лента креаторов» с дефолтными фильтрами.
+  2) Переходить страницами (⬅️/➡️) — навигация работает как раньше.
+  3) Поменять фильтр → пагинация пересчитывается (другой cache key).
+  4) (Опционально) при Redis degraded: лента всё равно открывается (fallback на DB).
+
+Риск регрессий: низкий (best-effort кеш; DB-truth fallback; бизнес-логика не меняется).
+
+## STEP335 — Infra: namespace brand_apply rate-limit Redis keys
+
+Дата: 2026-03-05
+
+Контекст:
+- В `sendBrandApplyDraft()` rate-limit ключи (`brand_apply:*`, `brand_apply_ws:*`) были “сырыми” строками и обходили общий namespace через `k([...])`.
+- Если окружения (prod/preview) когда-то делят один Redis — возможны коллизии лимитов и неочевидные блокировки.
+
+Цель:
+- Привести rate-limit ключи к единому неймспейсу проекта (`mg:<APP_ENV>:...`), без изменения логики/лимитов.
+
+Изменения:
+- `src/bot/bot.js`
+  - `rlPairKey` → `k(['rl','brand_apply', userId, brandUserId])`
+  - `rlWsKey` → `k(['rl','brand_apply_ws', wsId, brandUserId])`
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP335 в шапку.
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) От креатора открыть карточку бренда → «📝 Оставить заявку» → написать текст → «✅ Отправить».
+  2) Повторить отправку 4 раза подряд → должен сработать лимит “3 заявки / 6 часов” (как раньше).
+  3) Для одного и того же канала (`wsId`) повторить много раз → лимит “5 / 6 часов” (как раньше).
+
+Риск регрессий: низкий (меняются только ключи Redis, лимиты/UX прежние).
+
+## STEP336 — Admin: manage Broadcast hard-skip list (browse recent + unskip)
+
+Дата: 2026-03-05
+
+Контекст:
+- STEP326 добавил hard-skip список “мёртвых” чатов (Redis-only, per tg_id) + отчёт внутри конкретной рассылки.
+- Нужно управлять этим списком как оператор: быстро проверить tg_id и снять hard-skip, если пользователь “ожил” или ошибка была ложной.
+
+Цель:
+- Добавить в админке (Admin → System) простой control-plane:
+  - посмотреть последние hard-skip записи,
+  - найти запись по tg_id,
+  - снять hard-skip одной кнопкой.
+- Без SCAN/KEYS (serverless/Upstash-safe) и без DB-запросов.
+
+Изменения:
+- `src/bot/cron.js`
+  - `setBroadcastHardSkip()` теперь дополнительно пишет запись в Redis list `mg:<env>:broadcast:hard_skip:recent` (LPUSH+LTRIM, max 1000, TTL такой же как у hard-skip).
+  - Это даёт “recent index” для админского просмотра без тяжёлых операций по Redis.
+- `src/bot/bot.js`
+  - Admin → System: добавлена кнопка `🧱 Hard-skip (dead chats)`.
+  - Экран `a:hs_home`: показывает recent list (страницы) + быстрые кнопки `tg:<id>`.
+  - `a:hs_find`: ввод tg_id через expectText → переход в `a:hs_view`.
+  - `a:hs_view`: показывает статус hard-skip + reason + TTL.
+  - `a:hs_unskip`: удаляет key hard-skip (Redis DEL) и возвращает в карточку.
+- `src/bot/actionRegistry.js`
+  - Добавлены новые action keys: `a:hs_home`, `a:hs_find`, `a:hs_view`, `a:hs_unskip`.
+- `docs/00_CURRENT_STATE.md`
+  - Добавлен STEP336 в шапку.
+
+ENV:
+- нет
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Админка → Система → `🧱 Hard-skip (dead chats)` → открыть список (стр.1).
+  2) Нажать `🔎 Найти TG ID` → ввести tg_id → убедиться, что виден статус.
+  3) Если статус hard-skip активен → нажать `🧹 Снять hard-skip` → статус становится “нет hard-skip”.
+  4) (Опционально) Запустить рассылку/доставку на tg_id: убеждаемся, что после unskip он больше не пропускается по hard-skip.
+
+Риск регрессий: низкий (только админская часть + best-effort индекс; core broadcast/send логика не меняется).
+
+
+## STEP337 — Payments ops: runtime TTL control for fallback apply
+
+Дата: 2026-03-05
+
+Контекст:
+- `PAYMENTS_FALLBACK_APPLY_ENABLED` по умолчанию должен быть `0` (строгий режим), но иногда при инцидентах нужно временно включить fallback apply (без redeploy).
+- Требование: управлять через админку, Redis-only, с TTL и без DB.
+
+Цель:
+- Добавить runtime override: включать/выключать fallback apply на время (2h/12h/24h) из админки.
+- Эффективное состояние: `ENV OR runtime`.
+- Использовать в bot + cron + admin auto-heal, чтобы поведение было единым.
+
+Изменения:
+- `src/lib/paymentsOps.js`
+  - Добавлен Redis TTL flag `mg:<env>:sys:pay_fallback_apply` (object + EX).
+  - Экспорт: `isPaymentsFallbackApplyEnabled()`, `getPaymentsFallbackApplyState()`, `setPaymentsFallbackRuntime()`.
+- `src/bot/bot.js`
+  - `Admin → System`: добавлена строка статуса и кнопка `🧯 Fallback: ON/OFF`.
+  - Новый экран `🧯 Payments fallback apply` с кнопками включения на TTL и отключения.
+  - Все проверки `CFG.PAYMENTS_FALLBACK_APPLY_ENABLED` в money paths заменены на effective (`env OR runtime`).
+  - Admin auto-heal теперь доступен при runtime enable (без ENV=1).
+- `src/bot/cron.js`
+  - `autoHealOrphanedPayments` теперь запускается, если effective fallback apply включен (env OR runtime).
+- `docs/00_CURRENT_STATE.md`
+  - Добавлено описание runtime override из админки.
+
+ENV:
+- нет (runtime хранится в Redis)
+
+QA:
+- `node --check src/bot/bot.js`
+- Ручной smoke:
+  1) Админка → Система → `🧯 Fallback: OFF` → открыть экран → включить на 2h.
+  2) Вернуться в `⚙️ Система` → статус должен стать `ON (runtime)`.
+  3) Нажать `Disable` → статус возвращается в `OFF`.
+  4) (Опционально) На тестовом платеже с истекшей `pay_*` сессией убедиться, что fallback применяется только когда runtime включён.
+
+Риск регрессий: низкий (меняется только gating на effective flag + админский control-plane; DB-truth пути не меняются).
+
+
+## STEP338 — Payments ops: observability for unsigned/invalid payload (digest + /api/health)
+
+Дата: 2026-03-05
+
+Контекст:
+- После STEP322 payload подписывается HMAC (опционально), а fallback может отклонять неподписанные/невалидные payload.
+- Нужно видеть это в режиме оператора: сколько таких случаев, и понимать, это “старые инвойсы” или потенциальная атака/мисконфиг.
+
+Цель:
+- Добавить Redis-only счётчики по проблемам подписи payload.
+- Добавить ops-digest для потенциально опасных кейсов (bad_sig/hmac_error/bad_format).
+- Вывести всё в `/api/health` (без DB).
+
+Изменения:
+- `src/lib/paymentsOps.js`
+  - Добавлены счётчики `mg:<env>:ops:payments:payload:<bucket>:d:<YYYYMMDD>` с TTL 14 дней.
+  - Экспорт: `recordPaymentsPayloadIssue()` + `getPaymentsPayloadIssueCounts()`.
+- `src/bot/payments_fallback.js`
+  - При reject по подписи/формату payload пишет `recordPaymentsPayloadIssue()` (best-effort).
+  - Если разрешены unsigned legacy payload — тоже пишет в счётчик (без спама).
+- `api/health.js`
+  - Добавлено: `payments.fallback_apply_runtime_*` + `payments.fallback_apply_effective`.
+  - Добавлено: `payments.payload_issues_today` (unsigned/bad_sig/bad_format/hmac_error/other).
+- `docs/00_CURRENT_STATE.md`
+  - Описана observability секция.
+
+ENV:
+- нет
+
+QA:
+- `node --check api/health.js`
+- `node --check src/bot/payments_fallback.js`
+- Ручной smoke:
+  1) Если `PAYMENTS_PAYLOAD_HMAC_KEY` задан и `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0`: подать в fallback неподписанный payload → он отклоняется, а `/api/health` увеличивает `payments.payload_issues_today.unsigned`.
+  2) Подать payload с неверной подписью → увеличивается `bad_sig`, и появляется событие в ops-digest.
+
+Риск регрессий: низкий (только best-effort метрики/алерты; money-path остаётся fail-closed).
+
+## STEP339 — Ops digest: расширение на “дорогие” падения (PG/cron_router/QStash)
+
+Цель: убрать “тихие” провалы в местах, где оператору важно видеть причину (без спама, Redis-only буфер, отправка дайджестом).
+
+Что сделано
+- `api/cron_router.js`: при падении роутера крона — пишем событие в ops digest (`cron_router_failed`, dedup по job).
+- `src/db/pool.js`: при `statement_timeout` и при `pool.on('error')` — пишем в ops digest (`pg_statement_timeout`, `pg_pool_error`).
+  Также алертим, если не удалось установить `statement_timeout` на соединении (`pg_stmt_timeout_init_failed`).
+- `api/qstash/broadcast-deliver.js`: в top-level catch добавлен ops digest (`qstash_bc_deliver_failed`, dedup по broadcastId).
+
+QA
+- Принудительно вызвать ошибку в cron (невалидный job / throw внутри tick) → /api/health показывает рост ops.pending, а cron tick отправляет дайджест в OPS.
+- Смоделировать `statement_timeout` (уменьшить PG_STATEMENT_TIMEOUT_MS и выполнить тяжёлый запрос в админке) → появляется digest `pg_statement_timeout`.
+- Смоделировать crash в broadcast-deliver (искусственно бросить exception) → digest `qstash_bc_deliver_failed` появляется и дедупится.
+
+## STEP340 — /api/health: operator-friendly (Redis-only) + hard-skip counters
+
+Цель: сделать health более “операторским”, без DB и без риска падений, чтобы быстрее понимать: что происходит с ops digest, broadcast cooldown и hard-skip.
+
+Что сделано
+- `/api/health`:
+  - добавлены `ops.last_sent_at`, `ops.targets_count`, `ops.top_reasons` (sample), `ops.window_sec`.
+  - добавлен блок `broadcast.hard_skip` (TTL, recent_len, counters: set/hit/unskip for today).
+- Broadcast hard-skip counters (Redis-only):
+  - `setBroadcastHardSkip()` инкрементит `broadcast:hard_skip:set:d:<day>`.
+  - при пропуске доставки из hard-skip инкрементим `broadcast:hard_skip:hit:d:<day>` (cron + qstash worker).
+  - при снятии hard-skip из админки инкрементим `broadcast:hard_skip:unskip:d:<day>`.
+
+QA
+- `GET /api/health` → видны новые поля `ops.*` и `broadcast.hard_skip.*`.
+- Сделать hard-skip (blocked/chat not found/deactivated) → растёт `broadcast.hard_skip.counters.set`.
+- Запустить рассылку на hard-skip tg_id → растёт `broadcast.hard_skip.counters.hit`.
+- Снять hard-skip из админки → растёт `broadcast.hard_skip.counters.unskip`.
+
+
+## STEP341 — Giveaway winners reproducibility pack (audit metadata)
+
+Дата: 2026-03-05
+
+Цель: чтобы любой розыгрыш можно было воспроизвести/проверить “на бумаге” без догадок.
+
+Что сделано
+- Добавлен единый набор версий/лейблов (`src/lib/gwRepro.js`) для audit payload:
+  - `algo_version`, `seed_version`
+  - методы хеширования `pool_hash_method`, `winners_hash_method`
+- Auto-draw (SQL tx) `drawAndFinalizeGiveawayWinnersAtomic`:
+  - в `gw.winners_drawn` добавлены `algo_version`, `seed_version`, `ends_at_iso_used`
+  - добавлены `pool_hash` (и отдельно `eligible_pool_hash`, `entries_pool_hash`) + counts
+  - добавлен `winners_hash` (place-order)
+  - для `gw.winners_drawn_skipped` (no_entries) тоже пишем версии/ends_at_iso_used
+- Manual draw (JS PRNG) `a:gw_draw_do`:
+  - в `gw.winners_drawn` добавлены `algo_version`, `seed_version`, `ends_at_iso_used`
+  - добавлены `pool_hash` + `winners_hash` (sha256)
+
+Важно
+- Никаких миграций: всё хранится в `giveaway_audit.payload`.
+- Никаких новых DB-reads в hot UI путях (изменения только в draw path).
+
+QA
+1) Авто-розыгрыш (cron): довести giveaway до `ENDED` с `auto_draw=true` → после draw в `giveaway_audit` для action=`gw.winners_drawn` должны появиться поля:
+   - `algo_version`, `seed_version`, `ends_at_iso_used`, `pool_hash`, `winners_hash`.
+2) Ручной draw (кнопка): тот же набор полей появляется в audit.
+3) Повторный draw не создаёт второй `gw.winners_drawn` (idempotency сохраняется).
+
+## STEP342 — Prod ENV baseline + payments ops semantics (docs)
+
+- Added `docs/92_PROD_ENV_BASELINE.md` (recommended prod env checklist, no secrets)
+- Updated `docs/process/11_ENV_CHEATSHEET_ONE_SCREEN.md` with production baseline values + semantics (ENV vs runtime)
+- Updated `docs/00_CURRENT_STATE.md` with payments fallback ops control semantics
+- No code changes.
+
+QA:
+- Open `/api/health` and confirm payments fallback shows `fallback_apply_effective=false` when `PAYMENTS_FALLBACK_APPLY_ENABLED=0`.
+- Toggle fallback in admin for 2h and confirm `/api/health` shows `fallback_apply_runtime_enabled=true` and `fallback_apply_effective=true`.
+
+## STEP343 — Prod docs pack (deploy checklist)
+
+- Added `docs/93_PROD_DEPLOY_CHECKLIST.md` (operator checklist: /api/health + admin runtime controls)
+- Updated `docs/README.md` (Production section)
+- Updated `docs/91_PROD_LAUNCH_30MIN.md` (links to env baseline + deploy checklist)
+- Updated `docs/15_NEW_CHAT_HANDOFF.md` (include prod docs section)
+
+QA:
+- Follow `docs/93_PROD_DEPLOY_CHECKLIST.md` and confirm /api/health + admin checks.
+## STEP344 — Portable paths gate + Neon history filename fix (docs-only)
+
+Дата: 2026-03-05
+
+Проблема:
+- Один файл в `docs/neon` имел не-UTF8/битый заголовок внутри ZIP и из-за этого FULL ZIP мог не распаковываться (“File name too long”, особенно на Windows).
+
+Что сделано:
+- Переименован исторический файл в ASCII: `docs/neon/NEON_HISTORY_RAW.txt`
+- Обновлён `docs/neon/README.md`
+- Добавлен `scripts/lint-portable-paths.js` и подключён в `npm run preflight` как gate `lint:portable-paths`
+- Обновлён `docs/00_CURRENT_STATE.md` (ops note про ZIP/Windows-safe)
+
+QA:
+1) `npm run preflight` проходит (включая portable-paths gate).
+2) FULL ZIP распаковывается на Windows (без “File name too long”).
+
+## STEP345 — Payments fallback exactly-once (atomic tx)
+
+Дата: 2026-03-05
+
+Проблема:
+- Fallback apply (когда истекла `pay_*` сессия) выполнял: DB-check → apply сайд‑эффектов → `markPaymentApplied()`.
+- В serverless (ретраи Telegram / параллельный раннер) возможна гонка: двойное начисление или “частично применили → упали → применили ещё раз”.
+
+Что сделано:
+- `src/bot/payments_fallback.js`: fallback apply переведён на **одну** DB‑транзакцию:
+  - `SELECT payments ... FOR UPDATE NOWAIT` (если строка занята — `reason=locked`, без ожидания).
+  - строгая валидация: `user_id`, `telegram_payment_charge_id` (если передан), и `invoice_payload` (нормализованно, с учётом подписи).
+  - apply сайд‑эффектов (credits/plan/PRO) выполняется **внутри** tx.
+  - `status='APPLIED'` выставляется **в том же tx** (note сохраняется).
+- Для PRO добавлен безопасный upsert в `workspace_settings` (на случай отсутствующей строки).
+- `docs/00_CURRENT_STATE.md`: отражена атомарность fallback apply.
+
+QA:
+1) Два параллельных вызова fallback по одному `paymentId` → один применяет, второй возвращает `locked`, double‑apply нет.
+2) Несовпадение `invoice_payload` или charge id → `payload_mismatch` / `charge_id_mismatch`, ничего не применено.
+3) PRO fallback: без ownership на workspace → `no_ws_access`.
+4) Brand topup / plan / founder: сумма должна совпасть с каталогом (amount_mismatch → fail‑closed).
+
+
+## STEP346 — Giveaways winners draw: REPEATABLE READ snapshot + audit cutoff
+
+Дата: 2026-03-05
+
+Проблема:
+- В `READ COMMITTED` внутри draw‑транзакции пул `giveaway_entries` мог измениться между выборкой победителей и вычислением метрик воспроизводимости (pool hash/count).
+- Это ухудшает “аудитопригодность”: победители остаются детерминированными, но метаданные пула могут выглядеть как будто “не совпали”.
+
+Что сделано:
+- `src/db/queries.js`: `drawAndFinalizeGiveawayWinnersAtomic()` теперь стартует транзакцию как `BEGIN ISOLATION LEVEL REPEATABLE READ` → весь draw видит **один** snapshot.
+- В audit payload (`gw.winners_drawn` и `gw.winners_drawn_skipped`) добавлены: `tx_isolation` и `snapshot_ts` (UTC).
+- `computePoolHash()` расширен: добавлен `max(joined_at)` (UTC ISO). В audit добавлены `pool_cutoff_joined_at`, `eligible_max_joined_at`, `entries_max_joined_at`.
+
+QA:
+1) Во время draw добавить entry/поменять eligibility (параллельным действием) → победители и pool‑метаданные остаются согласованными (один snapshot).
+2) Повторный draw: возвращается `already_drawn` или `locked`, дублей нет.
+
+
+## STEP347 — /api/health redis probe + баннер в админке (ops)
+
+Дата: 2026-03-05
+
+Проблема:
+- При деградации/отключении Redis админ видел «странности» (тумблеры/кеши/троттлы), но было трудно понять причину быстро.
+- `a:admin_ops` был `REQUIRE_REDIS`, что делало диагностику хуже именно в момент деградации.
+
+Что сделано:
+- `api/health.js`: добавлен блок `redis` (configured/read_ok/write_ok/latency_ms/last_error) через лёгкий probe `SET+GET` (TTL 60s), endpoint остаётся fail-open.
+- `src/bot/actionRegistry.js`: `a:admin_ops` переведён в guard `NONE`.
+- `src/bot/bot.js`: экран «🧰 Админка → Операции» показывает баннер статуса Redis (OK/degraded/not configured) и (если есть `PUBLIC_BASE_URL`) добавляет кнопку `🩺 /api/health`.
+
+Риск регрессий:
+- Низкий: изменения затрагивают только ops-диагностику. Все probe операции — best-effort и не блокируют UI.
+
+QA:
+1) При нормальном Redis — баннер «Redis OK».
+2) При неверном токене Redis — баннер «Redis degraded», `/api/health` отдаёт `redis.write_ok=false`.
+3) При отсутствии Redis env — `/api/health` показывает `not_configured`, админка показывает «Redis не настроен».
+
+
+## STEP348 — Broadcast deliver load-shedding при деградации DB (429 + Retry-After)
+
+Дата: 2026-03-05
+
+Проблема:
+- При проблемах Neon/DB (таймауты/коннекты/лимиты) `/api/qstash/broadcast-deliver` падал 500 и QStash мог быстро ретраить, создавая «шторм» и ещё сильнее нагружая DB.
+
+Что сделано:
+- `api/qstash/broadcast-deliver.js`: добавлен детектор `isDbOverloadError()` (сетевые ошибки + типовые PG коды/сообщения).
+- На DB overload мы отвечаем `HTTP 429` и выставляем `Retry-After` + `Upstash-Retry-After` (в секундах), чтобы QStash корректно бэк‑оффился.
+- Добавлен ops-digest breadcrumb `broadcast_db_overload` (Redis-only, dedup per broadcast), чтобы видеть проблему в алертах без спама.
+- Критичные DB-reads (`getBroadcast`, `claimBroadcastDelivery`) теперь обёрнуты: при overload — 429 вместо crash.
+
+Риск регрессий:
+- Низкий/средний: логика трогает только QStash delivery endpoint. При нормальной DB поведение не меняется.
+
+QA:
+1) Смоделировать DB outage (невалидный DATABASE_URL на preview): endpoint возвращает 429 и `Retry-After`.
+2) При восстановлении DB — рассылка продолжает доставку.
+3) Нет дублей: мы не делаем self-republish на DB overload, а полагаемся на retry policy QStash.
+
+---
+
+## STEP349 — Ops polish: expose broadcast DB overload metrics in /api/health + Admin→Ops
+
+Что сделано:
+- В `api/qstash/broadcast-deliver.js` при DB overload (load‑shedding) записываем Redis‑метрики: счётчик за день и `last_at/last_where`.
+- В `/api/health` добавлен блок `broadcast.db_overload` (Redis-only): `today_count`, `last_at`, `last_where`.
+- В «🧰 Админка → Операции» добавлен баннер “Broadcast: DB overload” рядом со статусом Redis (best-effort).
+
+Риск регрессий:
+- Низкий: изменения затрагивают только qstash endpoint (degraded path) и ops‑экраны/health (read-only).
+
+QA:
+1) На preview с неверным `DATABASE_URL` дернуть `api/qstash/broadcast-deliver` с валидным payload → получаем 429 + Retry‑After.
+2) Открыть `/api/health` → увидеть `broadcast.db_overload.today_count >= 1` и `last_at`.
+3) Открыть «🧰 Админка → Операции» → увидеть баннер “Broadcast: DB overload”.
+
+
+## STEP350 — Fix: свободный ответ в SUPPORT-группе (adm_support_reply) не должен падать в главное меню
+
+Дата: 2026-03-05
+
+Проблема:
+- В SUPPORT-группе «✍️ Ответить» запускал сессию, но свободный текст часто не доходил до пользователя:
+  - админ отвечал reply на сам тикет (а не на подсказку) → сессия не матчилась,
+  - в forum-группах подсказка могла отправиться не в тот топик,
+  - при любом “неправильном” сообщении бот падал в дефолтный путь и постил «главное меню» в группу.
+
+Что сделано:
+- `src/bot/bot.js`:
+  - при старте `a:adm_support_reply` сохраняем `originMsgId` (id тикета) и `threadId` (topic id),
+  - подсказка отправляется в тот же topic (`message_thread_id`) при наличии,
+  - в обработчике текста принимаем reply <b>и на тикет</b>, и на подсказку (`promptMsgId`),
+  - если сессия активна, но сообщение не reply на нужное — показываем короткую подсказку и не постим «главное меню».
+
+Риск регрессий:
+- Низкий: изменения касаются только support-группы и только для супер-админов при активной reply-сессии.
+
+QA:
+1) В SUPPORT-группе открыть тикет → нажать «✍️ Ответить» → сделать Reply прямо на тикет и отправить текст → пользователь получает DM «Ответ поддержки», в группе приходит подтверждение.
+2) В forum/supergroup с топиками: тикет в topic → «✍️ Ответить» → подсказка появляется в том же topic; reply на тикет работает.
+3) При активной сессии отправить обычное сообщение <i>без Reply</i> → бот выдаёт подсказку (не меню) и предлагает «❌ Отмена».
+## STEP351 — RateLimit: in-memory fallback + circuit breaker при деградации Redis (anti-Neon-exhaust)
+
+Дата: 2026-03-05
+
+Проблема:
+- Ранее `rateLimit()` при падении Redis/Lua `EVAL` работал в режиме unlimited **fail-open**.
+- Это безопасно с точки зрения TTL (не создаём “вечные” ключи), но опасно по нагрузке: при Redis outage спам/шторм может ударить в Neon (connection exhaustion / CU burn).
+
+Что сделано:
+- `src/lib/redis.js`:
+  - добавлен короткий circuit‑breaker: если Redis rateLimit EVAL падает, на `RATE_LIMIT_FALLBACK_DEGRADED_MS` пропускаем попытки EVAL и используем fallback,
+  - fallback — best‑effort **in‑memory limiter** (bounded LRU-ish Map), только на деградации Redis,
+  - по‑прежнему **не используем** non‑atomic `INCR+EXPIRE` fallback (не создаём ключи без TTL).
+
+ENV (опционально):
+- `RATE_LIMIT_FALLBACK_DEGRADED_MS` (default 10000)
+- `RATE_LIMIT_FALLBACK_MAX_KEYS` (default 2000)
+
+Риск регрессий:
+- Низкий: изменения активируются только при Redis деградации; в нормальном режиме всё работает как раньше.
+
+QA:
+1) Нормальный Redis: rateLimit ограничивает как раньше.
+2) Эмулировать Redis EVAL error (невалидный UPSTASH токен / отключить Redis): первые вызовы логируют `redis_lua_failed`, дальше в течение окна деградации rateLimit обслуживается из памяти.
+3) Убедиться, что при деградации Redis нет unlimited fail-open: после превышения `limit` получаем `allowed=false` (best-effort, per-warm-instance).
+
+## STEP352 — Ops visibility: QStash reschedule failures + OFFICIAL publish stuck (health + admin banners)
+
+Дата: 2026-03-05
+
+Проблема:
+- `qstashPublishJSON()` при enqueue delayed retry может падать (например, из-за неверного токена/сетевых ошибок). Ранее это было видно только в digest (и не всегда), а в `/api/health` и Admin→Ops это не отражалось.
+- “OFFICIAL publish stuck” (self-heal в `/api/qstash/official-publish-verify`) может происходить, но оператору нужен быстрый сигнал в health/admin.
+
+Что сделано:
+- `api/qstash/official-publish-deliver.js`:
+  - при `qstash_reschedule_failed` добавлены Redis-only счётчики/last_* (`ops:reasons:qstash_reschedule_failed:*`).
+- `api/qstash/official-publish-verify.js`:
+  - если reschedule verify-ретрая не удалось — пишем те же метрики + `queueOpsDigestSafe(reason=qstash_reschedule_failed)`.
+  - при self-heal “publish stuck” пишем Redis-only метрики `ops:reasons:official_publish_stuck:*` (last_offer_id, last_age_sec, last_via).
+- `api/health.js`:
+  - добавлен блок `qstash.*` (breadcrumbs deliver/verify + `reschedule_failed` + `official_publish_stuck`).
+- `src/bot/bot.js`:
+  - Admin→Ops теперь показывает баннеры для `QStash: reschedule failed` и `OFFICIAL: publish stuck`.
+  - заодно исправлен баг области видимости (`redis/k`), из-за которого Admin→Ops мог падать в общий catch и всегда писать “probe failed”.
+
+Риск регрессий:
+- Низкий: изменения Redis-only, `/api/health` по-прежнему без DB чтений, логика публикации не менялась.
+
+QA:
+1) Открыть «🧰 Админка → Операции» — экран должен грузиться и показывать реальный статус Redis (не “probe failed”).
+2) Открыть `/api/health` — в JSON есть блок `qstash.reschedule_failed` и `qstash.official_publish_stuck`.
+3) (Preview) Поставить неверный `UPSTASH_QSTASH_TOKEN`, инициировать OFFICIAL publish (или verify retry) → `/api/health.qstash.reschedule_failed.today_count` растёт; в Admin→Ops появляется баннер.
+4) Если был случай stuck: после self-heal `/api/health.qstash.official_publish_stuck.*` заполнен (offer_id/age/via) и баннер виден в Admin→Ops.
+
+## STEP353 — Contacts unlock: no-charge when contact pack empty (anti “sell air”)
+
+Дата: 2026-03-05
+
+Проблема:
+- Разлок контактов мог списать кредиты Brand Pass, даже если у креатора реально нет контактов/ссылок (например, портфолио-массив содержит пустые строки, или профиль был очищен после того, как бренд открыл экран).
+- Это создаёт риск жалоб (“списали, а контактов нет”) и потенциальных чарджбеков.
+
+Что сделано:
+- `src/db/queries.js`:
+  - `unlockWorkspaceContactsWithCredits()` перед активацией unlock в одной транзакции проверяет, что в workspace есть хотя бы 1 revealable поле: `channel_username` / `profile_contact` / `profile_ig` / непустой `profile_portfolio_urls[]` / структурные контакты (`profile_contacts.tg/email/phone/site/other`).
+  - если контактов нет → возврат `{ ok:false, error:'no_contacts' }` (без списания и без unlock записи).
+  - если витрина удалена/не найдена → `{ ok:false, error:'missing_ws' }`.
+- `src/bot/bot.js`:
+  - обработка `no_contacts`/`missing_ws` в `a:wsp_contact_unlock`: показываем понятный экран и подтверждаем, что **списания не было**.
+  - доп.: нормализуем `profile_portfolio_urls` (фильтруем пустые строки), чтобы не показывать разлок “ради пустого портфолио”.
+- `api/qstash/monetization-retry.js`:
+  - воркер `wsp_contact_unlock` обрабатывает `no_contacts`/`missing_ws` и уведомляет бренд-актора (списаний нет), освобождает token-lock как обычно.
+
+Риск регрессий:
+- Низкий: изменения затрагивают только путь “🔓 Разлок контактов” (money-path) и улучшают UX при неконсистентных данных.
+
+QA:
+1) Workspace без контактов/IG/портфолио/канала: нажатие «🔓 Разлок» → сообщение “Контактов пока нет, списания не было”, баланс не меняется.
+2) Workspace с портфолио, но массив содержит пустые строки: unlock CTA не должен появляться только из-за пустых значений; при клике списания нет (no_contacts).
+3) Нормальный workspace с контактами: разлок списывает 1 кредит (если нужно), ставит unlock, витрина показывает контакт‑пакет.
+4) Async retry включен: при no_contacts воркер шлёт бренд-актору сообщение “списания не было”, и unlock не активируется.
+
+
+### STEP354 — Broadcast tick fail-closed when Redis is degraded
+- Cron `broadcastTick()` теперь **не делает DB polling**, если Redis недоступен: возвращает `skip/deferred` и пишет ops-метрики `broadcast_tick_deferred_redis` (today_count + last_*).
+- Зачем: при Redis down мы теряем lock/cooldown/runtime flags; падение в legacy sync-send может перегрузить Neon и упереться в таймауты Vercel.
+- Наблюдаемость: `/api/health.broadcast.tick_deferred_redis` + баннер в «🧰 Админка → Операции».
+
+Риск регрессий: **низкий** (затрагивает только cron broadcast tick и только при деградации Redis; в нормальном режиме поведение не меняется).
+
+
+### STEP355 — Auto-heal ORPHANED payments: batch claim via SKIP LOCKED
+- Выборка платежей для auto-heal (только `missing_session`) теперь делается через один SQL: `FOR UPDATE SKIP LOCKED` + перевод в `APPLYING` + `RETURNING`.
+- Зачем: при перекрытии крона/ретраях не тратить ресурсы на одни и те же записи и не нагружать Neon лишними read+claim циклами.
+- Семантика денег не меняется: apply по‑прежнему exactly-once (STEP345), здесь только конкурентность/экономия.
+
+Риск регрессий: **низкий** (затрагивает только cron auto-heal; горячие UI пути не меняются).
+
+
+### STEP356 — Degraded rate-limit becomes stricter (Redis down protection)
+- Когда `rateLimit()` переходит в in-memory fallback (Redis Lua/EVAL сломан), лимит в degraded‑режиме режется (по умолчанию ÷5; ENV `RATE_LIMIT_FALLBACK_LIMIT_DIV`).
+- Зачем: в serverless много инстансов → суммарная пропускная способность in-memory limiter может стать слишком большой; в degraded режиме лучше защитить Neon/DB.
+
+Риск регрессий: **низкий/средний** (влияет только при деградации Redis; может стать больше 429/лимитов в плохие минуты — это ожидаемо и лучше, чем перегруз БД).
+
+
+### STEP357 — Payments safety banners (HMAC + fallback apply)
+- `/api/health.payments` теперь показывает длину HMAC ключа и флаг `payload_hmac_minlen_ok` (рекомендуемый минимум 32 символа).
+- В «🧰 Админка → Операции» добавлены баннеры:
+  - 🚨 если HMAC ключ отсутствует,
+  - ⚠️ если ключ слишком короткий,
+  - 🚨 если включён `fallback apply` (env/runtime).
+- Зачем: минимизировать человеческие ошибки в ENV и ускорить диагностику перед запуском.
+
+Риск регрессий: **минимальный** (health/admin-only; без DB reads).
+
+
+## 2026-03-05
+- STEP345: Payments fallback apply made exactly-once (row-lock + one TX); HMAC/amount checks tightened.
+- STEP346: Giveaways winners draw moved to REPEATABLE READ snapshot + audit reproducibility fields.
+- STEP347: `/api/health` redis read/write probes + Admin→Ops Redis degraded banner.
+- STEP348: Broadcast delivery load-shedding: 429 + Retry-After on DB overload.
+- STEP349: Ops metrics for broadcast DB overload surfaced in health + Admin→Ops banner.
+- STEP350: Support “free text reply” fixed for forum topics; reply accepted to ticket or prompt; no dump to main menu.
+- STEP351: RateLimit hardening — bounded in-memory fallback + circuit-breaker when Redis EVAL fails.
+- STEP352: Ops visibility — `qstash_reschedule_failed` + `official_publish_stuck` in health + Admin→Ops banners.
+- STEP353: Contacts unlock safety — do not charge credits if contact pack is empty; portfolio URLs normalized.
+- STEP354: Broadcast tick fail-closed when Redis degraded; emits `broadcast_tick_deferred_redis` (health + Admin→Ops).
+- STEP355: Payments orphaned auto-heal batching via `FOR UPDATE SKIP LOCKED` to avoid duplicate work.
+- STEP356: Degraded rate-limit stricter (default ÷5 via `RATE_LIMIT_FALLBACK_LIMIT_DIV`).
+- STEP357: Payments safety visibility — health exposes HMAC minlen + key length; Admin→Ops banners for missing/short HMAC key and fallback enabled.
+- STEP358: Prod readiness pack — new `94_PROD_READINESS_PACK.md` (GO/NO‑GO + incident cookbook) + prod docs updated.
+
+Риск регрессий: **нет** (docs-only в STEP358).
+
+
+## STEP359 (docs consistency sweep) — 2026-03-05
+- Привели ссылки/нумерацию документации к консистентному виду (public/, neon/, smoke-tests), добавили compat placeholders (audit 22/24/25, audit_staff manifest).
+
+
+## STEP360 (broadcast db_overload jitter) — 2026-03-06
+- При `db_overload` в `broadcast-deliver` возвращаем 429 + `Retry-After` **с джиттером** (по умолчанию 0–15с; ENV `BROADCAST_DB_BACKOFF_JITTER_SEC`).
+- Зачем: при восстановлении Neon/DB и массовых ретраях QStash избегаем “громового стада” (thundering herd) и распределяем нагрузку.
+
+Риск регрессий: **минимальный** (меняется только задержка ретрая при DB overload; основной happy-path не трогаем).
+
+
+## STEP361 (broadcast db_overload fuse) — 2026-03-06
+- При детекте `db_overload` ставим Redis‑ключ‑предохранитель `ops:fuse:db_overload` (TTL ~50с; ENV `BROADCAST_DB_OVERLOAD_FUSE_TTL_SEC`).
+- При наличии fuse в начале `broadcast-deliver` сразу отвечаем 429 + Retry‑After (с jitter) **до любых DB обращений**.
+- Зачем: защитить Neon/pool от повторных попыток подключения во время частичной деградации и быстрее стабилизировать систему.
+
+Риск регрессий: **минимальный** (меняется только поведение при DB overload; в нормальном режиме fuse не активен).
+
+
+## STEP362 (stdout fallback for ops events) — 2026-03-06
+- В `queueOpsDigest` добавлен резервный канал: если Redis недоступен (dedup/buffer), событие пишется в stdout как JSON (`t=ops_event`).
+- Дополнительно: при падении Redis в `broadcast_db_overload` метриках пишем компактный JSON breadcrumb в stdout.
+- Зачем: при полном outage Redis не теряем “почему/где” для инцидента — это облегчает разбор по логам Vercel.
+
+Риск регрессий: **минимальный** (только логирование в degraded путях; бизнес‑логика не меняется).
+
+
+## STEP363 (payments handlers extracted) — 2026-03-06
+- Декомпозиция: Stars payments обработчики вынесены из монолита `src/bot/bot.js` в модуль `src/bot/payments/starsHandlers.js`.
+- Вынесено без изменения логики: `/paysupport`, `pre_checkout_query`, `message:successful_payment`.
+- Зачем: уменьшить “площадь” монолита и снизить риск регрессий при будущих правках платежей/бота.
+
+Риск регрессий: **низкий** (перемещение кода + dependency injection; поведение не меняется).
+
+
+## STEP364 (broadcast pending deliveries in /api/health) — 2026-03-06
+- Cron `broadcastTick()` writes a Redis-only snapshot of pending deliveries (`broadcast:pending_deliveries`, TTL 30 min) when it already computes `countBroadcastPendingDeliveries()`.
+- `/api/health` now exposes `broadcast.pending_deliveries` (Redis-only) so operators can spot "stuck" deliveries early without any DB reads in health.
+- When there is no active broadcast, the snapshot key is cleared (best-effort) to avoid stale data.
+
+Риск регрессий: **минимальный** (только Redis-visibility; бизнес‑логика broadcast не меняется).
+
+
+## STEP365 (Admin→Ops: flush ops digest button) — 2026-03-06
+- В `🧰 Админка → Операции` добавлена кнопка `🧾 Flush ops digest` (`a:admin_ops_flush`).
+- Action имеет guard `NONE` (экран Ops должен оставаться доступным при Redis degraded) и работает best-effort.
+- При нажатии вызываем `flushOpsAlerts(getBot().api, 'ops', { force: true })` и показываем результат (sent/events или skipped+reason) прямо на экране Ops.
+- Без DB-чтений: только Redis lock/buffer + отправка сообщения в ops targets.
+
+Риск регрессий: **минимальный** (admin-only UX; нет изменений в продуктовых потоках; при Redis outage — корректный soft-fail).
+
+
+## STEP366 (Preflight: smoke degraded rate-limit + extra node-check) — 2026-03-06
+- `scripts/preflight.js` расширен:
+  - добавлен `node --check` для `src/bot/payments/starsHandlers.js` (страховка против ESM/syntax регрессий после вынесения обработчиков платежей).
+  - добавлен запуск `scripts/smoke-degraded-rate-limit.js`.
+- Новый smoke `scripts/smoke-degraded-rate-limit.js`:
+  - не требует реальных Upstash ключей;
+  - симулирует Redis HTTP failure через `globalThis.fetch = () => throw`;
+  - вызывает `rateLimit()` и проверяет, что включается **in-memory fallback** и лимит становится **строже** (default ÷5 через `RATE_LIMIT_FALLBACK_LIMIT_DIV`).
+
+Риск регрессий: **нулевой** для прод‑runtime (dev/CI only); добавляет только проверки перед деплоем.
+
+
+## STEP367 (Preflight: broadcast overload invariants) — 2026-03-06
+- Добавлен `scripts/test-broadcast-overload-invariants.js` и подключён в `scripts/preflight.js`.
+- Скрипт проверяет инварианты overload‑веток в `api/qstash/broadcast-deliver.js`:
+  - ответ **429** при `db_overload` и при активном fuse;
+  - выставление `Retry-After` + `Upstash-Retry-After` (через `setQStashRetryAfterHeaders`);
+  - наличие полей `retry_after_sec`, `base_backoff_sec`, `jitter_sec` в JSON;
+  - jitter считается через `randIntInclusive(0, jitterMax)`.
+
+Риск регрессий: **нулевой** (dev/CI only); прод‑поведение broadcast не меняется.
+
+
+## STEP368 (Contacts redaction anti-bypass) — 2026-03-06
+- Усилены тесты `scripts/test-redactContactsInText.js` (расширено покрытие bypass-паттернов):
+  - `t . me / ...` (пробелы вокруг точки/слэша)
+  - zero‑width символы внутри `t.me` (например `t\u200B.\u200Cme/...`)
+  - `instagram (dot) com/...`
+  - `@ handle` с пробелом
+  - obfuscated email: `user (at) example (dot) com` и `Email: user at example dot com`
+  - `+7 (999) 123 45 67`
+  - добавлен негативный кейс против ложноположительных: `Email marketing ...` без `email:`
+- Минимально усилен `src/bot/redactContacts.js` (без изменения общей архитектуры):
+  - нормализация zero‑width (`\u200B/\u200C/\u200D/\u2060/\uFEFF`) для анти‑bypass
+  - `t.me` regex допускает пробелы/невидимые разделители вокруг точки и слэша
+  - `instagram (dot) com/...` ловится как social link
+  - `@`-handle regex допускает пробелы/невидимые разделители после `@`
+  - obfuscated email ловится:
+    - bracket‑вариант всегда (`(at)/(dot)`/`[at]/[dot]`/`{at}/{dot}`)
+    - word‑вариант только при явном триггере `email:`/`почта:` (уменьшаем риск ложноположительных)
+
+Риск регрессий: **низкий** (regex‑усиление в redaction‑хелпере + расширение тестов). Горячие UI пути и DB не затронуты.
+
+
+## STEP369 (Docs armor: runtime fallback runbook + microfix matrix) — 2026-03-06
+- Обновлён `docs/94_PROD_READINESS_PACK.md`:
+  - добавлена секция **3.0 Матрица микрофиксов** (Symptom → Microfix → Verify → Rollback) для основных деградаций (Redis/DB/QStash/Official publish/Payments/Audit).
+  - переписан payments-инцидент как короткий runbook **runtime fallback apply** (preconditions по HMAC/payload issues, включение через Admin→System→🧯 Fallback, мониторинг, обязательное выключение, rollback).
+- Обновлён `docs/90_OWNER_RUNBOOK.md`: добавлена явная ссылка на `94` (матрица + runbook) в разделе “если что-то сломалось”.
+- Обновлён `docs/README.md`: в “Что нового” уточнено, что readiness pack включает матрицу микрофиксов и runbook fallback apply.
+- Обновлён `docs/00_CURRENT_STATE.md`: добавлен STEP369 (docs-only).
+
+Риск регрессий: **нулевой** (docs-only; поведение продакшена не изменено).
+
+
+## STEP370 (Health GO/NO_GO aggregator) — 2026-03-06
+- Обновлён `/api/health`: добавлены поля:
+  - `system_status: "GO" | "NO_GO"`
+  - `no_go_reasons[]` (массив объектов `{code,value,threshold}` для операторского разбора)
+- Правило NO_GO (строго Redis-only; без DB):
+  - `redis.read_ok === false` или `redis.write_ok === false`
+  - `payments.payload_hmac_minlen_ok === false`
+  - `payments.fallback_apply_effective === true` (или env-enabled)
+  - пороги: `broadcast.tick_deferred_redis.today_count > 50`, `qstash.reschedule_failed.today_count > 10`, `qstash.official_publish_stuck.today_count > 5`
+
+Риск регрессий: **нулевой** (только добавлены новые поля в health; existing поля не менялись).
+## STEP371 (Staging fault-injection: simulate Redis down) — 2026-03-06
+- Добавлен флаг ENV `SIMULATE_REDIS_DOWN=1` (только staging/dev; **в prod игнорируется**).
+- `src/lib/redis.js`: при включённом флаге все методы Redis принудительно возвращают ошибку `code=SIMULATED_REDIS_DOWN` (через Proxy), чтобы проверять fail-open/fail-closed поведение без реального падения Upstash.
+- Добавлен ручной smoke `scripts/smoke-fault-injection.js`:
+  - валидирует, что fault injection реально включён (`redis.__simulated_down === true`)
+  - проверяет, что Redis вызовы падают с `SIMULATED_REDIS_DOWN`
+  - проверяет, что `/api/health` **не падает** и отдаёт `system_status=NO_GO` + причины
+- `.env.example`: добавлена подсказка для staging.
+
+Риск регрессий: **нулевой в prod** (флаг не может сработать в `APP_ENV=prod/production`). На staging/preview — включается только вручную для тестов.
+
+
+
+## STEP372 (Broadcast hard-skip HIT log + admin report) — 2026-03-06
+- Расширена наблюдаемость hard-skip (dead chats): теперь фиксируем не только SET (когда добавили TG ID в hard-skip), но и HIT — когда рассылка реально пропускает отправку из-за существующего hard-skip.
+- `src/bot/cron.js`:
+  - добавлен Redis список `broadcast:hard_skip:hit_recent` (trim до 2000, TTL 14d)
+  - добавлен helper `logBroadcastHardSkipHit(tgId, reason, {broadcastId,userId,via})`
+  - cron `broadcastTick()` логирует HIT при пропуске в fanout и non-fanout режимах.
+- `api/qstash/broadcast-deliver.js`: при раннем hard-skip (race-friendly) логируем HIT (via `qstash`).
+- Админский отчёт:
+  - `src/bot/bot.js`: добавлен экран `🧾 Hard-skip HITs (пропуски)` (`a:hs_hits|p:*`) и кнопка `🧾 Последние пропуски` в `a:hs_home`.
+  - `src/bot/actionRegistry.js` + `docs/02_ACTION_KEYS_REGISTRY.md`: добавлен action `a:hs_hits` (admin, guard none).
+
+Риск регрессий: **низкий** (Redis-only логирование + новый admin-экран; прод бизнес-логика не менялась, DB в hot UI не затрагивалась).
+
+
+## STEP373 (Admin→Ops: payments fallback runtime banner details) — 2026-03-06
+- Усилен баннер `Payments: fallback apply ENABLED` в `🧰 Админка → Операции`:
+  - при runtime-включении fallback (через админку) показываем детали: `since`, `until`, `by` (tgId/user), `reason`.
+  - добавлена явная подсказка “как выключить” (через `⚙️ Админка → Система → Payments fallback apply → runtime OFF`).
+- Инварианты: **без DB** (Redis-only), экран Ops остаётся доступным при деградации Redis (best-effort banners).
+
+Риск регрессий: **низкий** (UI/текстовые баннеры на admin-экране; бизнес-логика payments не менялась).
+
+
+## STEP374 (/api/health: NO_GO reasons normalized + hints) — 2026-03-06
+- Усилен агрегатор GO/NO_GO в `/api/health`:
+  - `no_go_reasons[]` теперь содержит операторские объекты `{code,severity,value,threshold?,hint}`.
+  - добавлен отдельный P0‑reason `payments_payload_hmac_key_missing`, если `PAYMENTS_PAYLOAD_HMAC_KEY` не задан.
+  - для ключевых причин добавлены короткие подсказки (hint), включая проверки Redis и пороговые метрики.
+- Инварианты: endpoint по‑прежнему **never throw** и остаётся **Redis-only** (без DB).
+
+Риск регрессий: **нулевой** (добавлены/расширены поля в health; прод‑логика не менялась).
+
+
+## STEP375 (Redaction: reduce math-like false positives for phone-in-words) — 2026-03-06
+- `src/bot/redactContacts.js`: word-phone детектор стал строже, если **нет явных phone‑триггеров** (`тел/номер/whatsapp/...`) и мы сработали только по `плюс`:
+  - редактируем только типичную RU mobile форму с префиксом страны: `+7 9xx...` / `8 9xx...` (в виде слов, например `плюс семь девять ...`).
+  - при наличии phone‑триггеров сохраняем более широкий режим (10–15 цифр), чтобы не ослаблять защиту в явном “телефонном” контексте.
+- `scripts/test-redactContactsInText.js`: добавлены тесты:
+  - строгий кейс без phone‑триггера должен редактироваться;
+  - “плюс семь восемь…” как пример/математика не должен редактироваться.
+
+Риск регрессий: **низкий** (изменения изолированы в redaction‑хелпере + тесты; DB/hot UI не затронуты).
+
+
+## STEP376 (IG templates: no-contact-leak invariants) — 2026-03-06
+- Добавлен тест `scripts/test-ig-templates-no-contacts.js`:
+  - извлекает из `src/bot/bot.js` функции `buildWsIgTemplate` и `buildWsIgDmRaw` (без импорта всего bot.js, чтобы избежать побочных эффектов).
+  - прогоняет шаблоны на “опасных” данных (email/phone/@handle/portfolio) и валидирует, что шаблоны не содержат контактов и внешних ссылок (кроме bot deep-link `t.me/...start=wsp_...`).
+- `scripts/preflight.js`: подключён новый тест как обязательный preflight guard.
+
+Риск регрессий: **нулевой** (dev/CI only; прод‑runtime не менялся).
+
+
+## STEP377 (Preflight: expanded node-check coverage for entrypoints) — 2026-03-06
+- `scripts/preflight.js`: расширено покрытие `node --check`:
+  - добавлен безопасный скан всех `api/**/*.js` (включая `api/qstash/*`)
+  - добавлен скан `migrations/*.js`
+  - добавлен скан `src/lib/*.js` (частая зона экспорт/ESM регрессий)
+  - добавлен скан `src/bot/routes/*.js` и `src/bot/payments/*.js`
+  - добавлен скан `scripts/test-*.js` и `scripts/smoke-*.js`
+- Цель: ловить синтакс/ESM-export проблемы **до** деплоя (dev/CI only).
+
+Риск регрессий: **нулевой** (dev/CI only; прод‑runtime не менялся).
+
+
+## STEP378 (Hard-skip HITs: filters/export + top reasons today) — 2026-03-06
+
+### Зачем
+- Оператору нужно быстро понимать **кого/почему** пропускаем из‑за dead chats, и иметь быстрый экспорт для разборов.
+- В инциденте/массовой рассылке важно видеть “top reasons today” без тяжёлых сканов.
+
+### Что сделано
+- Добавлены per‑reason day counters для hard-skip HITs (Redis-only, TTL 14d):
+  - `mg:<env>:broadcast:hard_skip:hit_reason:d:<YYYYMMDD>:bot_blocked`
+  - `...:chat_not_found`
+  - `...:user_deactivated`
+  - `...:unknown` / `...:other`
+- Экран `Admin → System → 🧱 Hard-skip → 🧾 Последние пропуски`:
+  - фильтры по причине (кнопки с today‑счётчиками),
+  - `🗒 Export last 200` (отправляет таблицу в этот чат, чанкуется до лимита сообщений),
+  - отображение “Сегодня: …” (top reasons today).
+- Добавлен action key: `a:hs_hits_export` (admin-only, guard none).
+
+### Файлы
+- `src/bot/cron.js`
+- `src/bot/bot.js`
+- `src/bot/actionRegistry.js`
+- `docs/02_ACTION_KEYS_REGISTRY.md`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- В админке открыть `🧱 Hard-skip` → `🧾 Последние пропуски`: фильтры переключаются, список меняется.
+- Нажать `🗒 Export last 200` → приходит таблица(ы) в чат админа, затем UI возвращается на экран HITs.
+- При Redis degraded экран даёт понятное сообщение, не падает.
+
+
+## STEP379 (/api/health: ops digest preview for dashboards) — 2026-03-06
+
+### Зачем
+- Быстрый “human preview” прямо в `/api/health`, чтобы мониторинг/дашборды видели не только counters, но и короткий сэмпл последних ops-событий.
+
+### Что сделано
+- В `/api/health` добавлено `ops.digest_preview` (Redis-only; bounded):
+  - `day`, `pending`, `last_sent_at`
+  - `top`: top-3 reasons из буфера `ops:alerts:ops:d:<day>`
+  - `last`: последние 5 событий (ts/reason/kind/title), с жёсткими лимитами по длинам
+- Для извлечения используется короткий `LRANGE 0..30`; endpoint остаётся “never throw”.
+
+### Файлы
+- `api/health.js`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `/api/health` отдаёт `ops.digest_preview` при наличии событий в ops-буфере.
+- При пустом буфере `ops.digest_preview.top=[]` и `last=[]` (или null), без ошибок.
+- При Redis degraded endpoint остаётся доступным и не бросает исключения.
+## STEP380 (Readiness pack + NotebookLM audit baseline refresh) — 2026-03-06
+
+### Зачем
+После серии укреплений (STEP364–379) нужен “единый операторский источник правды” и актуальный audit baseline для NotebookLM.
+
+### Что сделано
+- Обновлён `docs/94_PROD_READINESS_PACK.md`:
+  - GO/NO‑GO через `system_status` + `no_go_reasons[].hint`
+  - добавлены новые сигналы: `broadcast.pending_deliveries`, `ops.digest_preview`
+  - расширена матрица микрофиксов (pending stuck / hard-skip spike / fallback enabled)
+  - добавлены ссылки на операторские кнопки/экраны: `🧾 Flush ops digest`, Hard-skip HITs report
+- Обновлён `docs/90_OWNER_RUNBOOK.md` — короткий блок “что смотреть ежедневно” под новые поля health/ops.
+- Обновлены audit-доки: `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md` и `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt` (baseline STEP380, новые поля health/ops).
+- Обновлены `docs/README.md`, `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_03.md`.
+
+### Файлы
+- `docs/94_PROD_READINESS_PACK.md`
+- `docs/90_OWNER_RUNBOOK.md`
+- `docs/README.md`
+- `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md`
+- `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+- `docs/audit/notebooklm_pack/04_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `docs/94_PROD_READINESS_PACK.md` упоминает все новые поля health (system_status/no_go_reasons/pending_deliveries/digest_preview) и операторские экраны.
+- `docs/audit/*` содержит актуальный промпт и актуальные правила для pack (≤50 файлов).
+
+
+## STEP393 (Admin Notice composer/runtime contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Объявление` — это отдельный operator-flow с Redis-only runtime-настройками и `expectText` composer-ветками. Здесь легко словить “тихий” регресс: переименование callback/action key, потеря footer-навигации, выпадение prompt/follow-up текста или слом publish-guard (`version++`, `active=true`, publish только при наличии текста).
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-notice-contract.js`.
+- Smoke фиксирует source-level контракт `renderAdminSysNotice()`:
+  - summary/status блок: `STATUS`, `SEVERITY`, `TARGET`, `EXPIRES`, `CTA`, `VERSION`, preview текста;
+  - control rows: `toggle + severity`, `target + expire`, `CTA + text`, `clear + publish`;
+  - footer: `⬅️ Коммуникации / 📋 Меню / 🏠 Home`.
+- Smoke дополнительно валидирует runtime-contract callback/expect веток:
+  - вход в `a:admin_notice` по‑прежнему очищает `expectText` и draft;
+  - `severity` циклично ходит по `info/warn/critical`;
+  - `target` циклично ходит по `all/brand/creator`;
+  - composer prompts `CTA / Expire / Text` остаются стабильными;
+  - publish guard по‑прежнему требует текст, делает `version++`, включает `active`, и после save/CTA/expire оставляет publish follow-up;
+  - text input продолжает использовать Telegram-safe clipping (`clipCodepoints(..., TG_SAFE_BODY_MAX)`).
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-notice-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-notice-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-notice-contract.js`
+- `node scripts/smoke-admin-notice-contract.js`
+- `npm run smoke:admin-notice-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP395 (Admin DM Templates contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Шаблоны DM` — отдельный Redis-only operator-flow, тесно связанный с `Admin → Outbox` через действие `📌 В шаблон`. Здесь легко словить тихий регресс: исчезновение кнопок/footer, rename callback/action key, выпадение add/edit/delete/reset prompts или разрыв обратных ссылок `Открыть шаблон / Шаблоны DM / Outbox`.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-dm-templates-contract.js`.
+- Smoke фиксирует source-level контракт `renderAdminDmTemplates()`:
+  - summary/list блок: `📌 Шаблоны сообщений (DM)`, `Источник`, `Версия`, `Обновлено`, empty-state/list heading;
+  - controls: per-template buttons, `➕ Новый шаблон`, `♻️ Сбросить к дефолту`, pagination, `📎 Вставить`;
+  - footer: `⬅️ Коммуникации / 📋 Меню / 🏠 Home`.
+- Smoke дополнительно фиксирует `renderAdminDmTemplateView()`:
+  - `ID`, `Название`, полный `<pre>` preview текста;
+  - controls: `✏️ Изменить / 🗑 Удалить / 📎 Вставить / ⬅️ Назад`;
+  - missing-template fallback + footer.
+- Smoke валидирует callback/expectText контракт:
+  - `a:admin_umsg_tpls/view/add/edit/del_q/del/reset_q/reset`;
+  - `clearExpectText` на входе add/edit;
+  - стабильные prompts для add/edit;
+  - delete/reset confirm screens;
+  - delete/add/edit продолжают делать `version++`;
+  - связка `Outbox → 📌 В шаблон` сохраняет DM-only guard, кнопки `📌 Открыть шаблон / 📌 Шаблоны DM / 📤 Outbox` и clip warning.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-dm-templates-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-dm-templates-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-dm-templates-contract.js`
+- `node scripts/smoke-admin-dm-templates-contract.js`
+- `npm run smoke:admin-dm-templates-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP400 (Admin Users contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Пользователи` — важный operator-flow с Redis-search state, фильтрами, быстрыми DM-actions и CSV export. Здесь легко словить тихий регресс: пропажа `Поиск/Сброс`, drift action keys для `Карточка/Написать/Заметка`, сломанный saved-query/footer или изменение CSV контракта.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-users-contract.js`.
+- Smoke фиксирует source-level контракт:
+  - list-screen `👥 Пользователи`: `Пользователи · фильтр · стр`, spoiler-строка поиска, empty-state, DM-only quick actions `👤 / ✉️ / 📝` при 1–5 результатах, filter rows, `🔎 Поиск`, условный `🧹 Сброс`, `📤 Export CSV`, pagination, `⬅️ Операции`;
+  - search/reset callbacks `a:admin_users / a:admin_users_search / a:admin_users_reset`: `clearExpectText`, prompt `Введи @username или tg_id`, saved Redis-query, footer `⬅️ Система / 📋 Меню / 🏠 Home`;
+  - CSV export contract `a:adm_ucsv`: helper `exportUsersDirectory`, стабильный header/filename/caption, truncation warning, back buttons `⬅️ К списку / ⬅️ Админка`.
+- Smoke дополнительно валидирует связанные записи `ACTION_REGISTRY`: `a:admin_users`, `a:admin_users_search`, `a:admin_users_reset`, `a:adm_ucard`, `a:adm_umsg`, `a:adm_unote`, `a:adm_ucsv`, `a:admin_ops`, `a:admin_sys`, `a:menu`, `a:home`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-users-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-users-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-users-contract.js`
+- `node scripts/smoke-admin-users-contract.js`
+- `npm run smoke:admin-users-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP401 (Admin User Card + Note contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → User Card + Note` — detail-flow поверх каталога пользователей и Outbox return-route. Здесь легко словить тихий регресс: пропажа action keys `Карточка/Заметка`, дрейф кнопок `ban/revoke/gift`, утечка заметок вне DM, поломка tag-toggle/edit/clear flow или потеря возврата назад.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-user-card-note-contract.js`.
+- Smoke фиксирует source-level контракт:
+  - `renderAdminUserCard()` — заголовок `Карточка пользователя`, поля `ID / TG ID / Username / Роли / Регистрация / Обновлён`, DM-safe note/tags block, actions `Скопировать ID / Написать / Заметка / Подарить подписку`, revoke brand-plan/credits/PRO, ban/unban toggle, back buttons `К списку / Операции`;
+  - `renderAdminUserNote()` — return-route helper, DM-only guard, note/tags summary, tag toggle allowlist, actions `Изменить текст / Очистить всё / К карточке`, optional `⬅️ Outbox`, section footer `Коммуникации|Операции / Меню / Home`;
+  - callbacks `a:adm_ucard / a:adm_unote / a:adm_unote_edit / a:adm_unote_clear_q / a:adm_unote_clear / a:adm_unote_tag`;
+  - `expectText` flow `adm_user_note` — DM re-guard, empty prompt, `clear/cancel` commands, save helper `setAdminUserNote(...)` с metadata и возврат в `Карточка/Заметка`.
+- Smoke дополнительно валидирует связанные записи `ACTION_REGISTRY`: `a:adm_ucard`, `a:adm_ucopy`, `a:adm_umsg`, `a:adm_unote*`, `a:adm_ugift`, `a:adm_urevoke_q`, `a:adm_uban_q`, `a:admin_users`, `a:admin_ops`, `a:admin_comms`, `a:menu`, `a:home`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-user-card-note-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-user-card-note-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-user-card-note-contract.js`
+- `node scripts/smoke-admin-user-card-note-contract.js`
+- `npm run smoke:admin-user-card-note-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP402 (Admin Audit / Metrics / Moderators contract smoke) — 2026-03-10
+
+### Зачем
+`Админка → Audit / Metrics / Moderators` — три операторских экрана с высоким риском тихих rename/remove/reguard регрессий: временные фильтры audit/export, day-window метрик и add/remove flow модераторов. Здесь полезнее закрыть контракт одним source-level smoke, чем разносить три почти одинаковых релизных шага.
+
+### Что сделано
+- Добавлен `scripts/smoke-admin-audit-metrics-moderators-contract.js`.
+- Smoke фиксирует source-level контракт `renderAdminAudit()`:
+  - title/search lines `Action / Workspace / User`, empty-state;
+  - time filters `24ч / 7д / 30д / Всё`;
+  - controls `🔎 Поиск / 🧹 Сброс / 📤 Export TXT / pagination / ⬅️ Операции`;
+  - export helper `sendAdminAuditExport()` с header `Collabka PR — Global Audit Export`, stable filename/caption, payload clipping и back/menu/footer buttons;
+  - callbacks `a:aud / a:aud_search / a:aud_reset / a:aud_export` и `expectText` flow `aud_search`.
+- Smoke фиксирует source-level контракт `renderAdminMetrics()`:
+  - summary blocks `Пользователи / Каналы / Конкурсы / Офферы / Payments / Активность`;
+  - analytics-off fallback;
+  - day-window controls `7д / 14д / 30д / 90д`;
+  - footer `⬅️ Операции / 📋 Меню / 🏠 Home`;
+  - callback `a:admin_metrics`.
+- Smoke фиксирует source-level контракт `renderAdminModerators()`:
+  - title/list/empty-state;
+  - `➕ Добавить модератора` и per-row `🗑`;
+  - footer `⬅️ Система / 📋 Меню / 🏠 Home`;
+  - callbacks `a:admin_mod_list / a:admin_mod_add / a:admin_mod_rm` и `expectText` flow `admin_add_mod_username`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:admin-audit-metrics-moderators-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `scripts/smoke-admin-audit-metrics-moderators-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-admin-audit-metrics-moderators-contract.js`
+- `node scripts/smoke-admin-audit-metrics-moderators-contract.js`
+- `npm run smoke:admin-audit-metrics-moderators-contract`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP403 (Broadcast deliver local in-memory DB overload fuse) — 2026-03-11
+
+### Зачем
+NotebookLM-аудит подсветил редкий, но дорогой для Neon сценарий: `broadcast-deliver` ловит DB overload, а Redis в этот же момент недоступен. В таком случае Redis-fuse не записывается, и следующий вызов на тёплом инстансе снова идёт в Redis/DB. Нужен короткий warm-instance local fuse, который short-circuit’ит повторные попытки **до** Redis-read и **до** любого DB touch.
+
+### Что сделано
+- В `api/qstash/broadcast-deliver.js` добавлен module-level state `localDbDegradedUntilMs`.
+- Добавлены helper’ы:
+  - `getLocalDbOverloadFuseTtlMs()`
+  - `getLocalDbOverloadFuseUntilMs()`
+  - `armLocalDbOverloadFuse()`
+- В `respondDbOverload(...)` local fuse теперь активируется **только если** запись Redis-fuse (`redis.set(dbOverloadFuseKey(), ...)`) не удалась.
+- В начале handler’а добавлен precheck `local_fuse_precheck`: если local fuse активен, запрос немедленно отвечает `429 + Retry-After` через `respondDbOverloadFuse(...)` **до** `redis.get(dbOverloadFuseKey())` и **до** `db.getBroadcast(...)`.
+- `respondDbOverloadFuse(...)` расширен полями `retryAfterSec`, `localFuse`, а JSON-ответ теперь маркирует путь флагом `local_fuse`.
+- Добавлен source-level smoke `scripts/smoke-broadcast-local-db-fuse.js`.
+- `scripts/preflight.js` теперь запускает этот smoke обязательно.
+- В `package.json` добавлен `npm run smoke:broadcast-local-db-fuse`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `api/qstash/broadcast-deliver.js`
+- `scripts/smoke-broadcast-local-db-fuse.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check api/qstash/broadcast-deliver.js`
+- `node --check scripts/smoke-broadcast-local-db-fuse.js`
+- `node scripts/smoke-broadcast-local-db-fuse.js`
+- `npm run smoke:broadcast-local-db-fuse`
+- `node --check scripts/preflight.js`
+- `APP_ENV=production node scripts/preflight.js`
+
+
+## STEP404 (Payments orphaned auto-heal chain-drain / self-reenqueue) — 2026-03-11
+
+### Зачем
+NotebookLM-аудит подсветил не баг exactly-once, а throughput tail: при большом backlog `ORPHANED missing_session` cron разгребал только один batch за tick. Нужен bounded chain-drain, который ускоряет хвост без увеличения batch size и без ломки уже существующих claim/apply guard’ов.
+
+### Что сделано
+- В `src/lib/config.js` добавлен bounded env `PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX` (по умолчанию 3, максимум 12).
+- В `/api/health` добавлено поле `payments.orphaned_autoheal_chain_max` для visibility.
+- В `src/bot/cron.js` `autoHealOrphanedPayments()` по‑прежнему обрабатывает первый batch сам, но если claimed batch заполнен целиком, публикует continuation-задачу в `POST /api/qstash/monetization-retry`:
+  - `action='orphaned_autoheal'`
+  - `chain_depth=1`
+  - `chain_source='cron'`
+  - `dedup=mon:autoheal:${chainId}:1`
+- В `api/qstash/monetization-retry.js` добавлен worker branch `orphaned_autoheal`:
+  - повторно claim’ит batch через `claimOrphanedMissingSessionPaymentsForAutoheal(...)`
+  - использует текущие safety-path’ы `_validateStarsPaymentStrict(...)` и `applyPaymentFallbackNoSession(...)`
+  - при полном batch self-reenqueue’ит следующую bounded leg через `qstashPublishJSON(...)`
+  - соблюдает depth-limit через `PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX`
+  - пишет best-effort ops digest на notify/apply/chain enqueue failures
+- Добавлен source-level smoke `scripts/smoke-payments-autoheal-chain-contract.js`.
+- `scripts/preflight.js` теперь обязательно запускает этот smoke.
+- В `package.json` добавлен `npm run smoke:payments-autoheal-chain-contract`.
+- Обновлены `docs/00_CURRENT_STATE.md`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/93_PROD_DEPLOY_CHECKLIST.md`, `docs/process/10_RELEASE_PREFLIGHT.md`.
+
+### Файлы
+- `src/lib/config.js`
+- `api/health.js`
+- `src/bot/cron.js`
+- `api/qstash/monetization-retry.js`
+- `scripts/smoke-payments-autoheal-chain-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check src/bot/cron.js`
+- `node --check api/qstash/monetization-retry.js`
+- `node --check scripts/smoke-payments-autoheal-chain-contract.js`
+- `node scripts/smoke-payments-autoheal-chain-contract.js`
+- `npm run smoke:payments-autoheal-chain-contract`
+- `APP_ENV=production node scripts/preflight.js`
+- `APP_ENV=staging node scripts/preflight.js`
+
+## STEP405
+- Added Official Publish operator `🩺 Проверить статус` path with shared safe verify/self-heal helper.
+- Added source-level smoke and preflight coverage for manual check-now contract.
+
+
+## STEP407
+- Public positioning polish без runtime-изменений.
+- Обновлён `docs/public/00_product_overview_ru.md`: product overview теперь стартует как **система управления коллаборациями внутри Telegram**, а не как “просто бот”; сохранён канонический flow `витрина → запрос → диалог → статус сделки → результат`.
+- Обновлён `docs/public/README_PUBLIC.md`: public pack теперь описывается как пакет материалов о системе, а бот зафиксирован как интерфейс доступа.
+- Обновлён `docs/public/07_press_kit_ru.md`: новый tagline/elevator pitch, добавлен блок “это не просто бот”, усилен framing `creator pipeline / Brand Inbox / управляемость`, при этом без enterprise-overclaim.
+- Обновлён `docs/public/05_publication_templates_ru.md`: добавлены канонические формулировки, обновлены short/pin/B2B шаблоны, чтобы будущие публикации не откатывали продукт в “ботик”.
+- Обновлён `docs/public/06_telegraph_article_ru.md`: статья переведена на framing “система через Telegram”, добавлен раздел “почему это уже не просто бот”, без неподтверждённых рыночных цифр.
+- Обновлён `docs/public/02_for_brands_ru.md`: усилен B2B language (`creator pipeline`, `Brand Inbox`, `прозрачность для команды`, `быстрее путь до сделки`) без обещаний готового white-label/private cabinet/advanced analytics.
+- Обновлён `docs/public/03_faq_ru.md`: добавлены вопросы “бот или система?” и “можно ли private-формат?”, первый ответ переведён с `Collabka PR Bot` на `Collabka PR`.
+- Мягко синхронизированы `docs/public/01_for_creators_ru.md` и `docs/public/04_tech_overview_ru.md`: в creator guide бот теперь описан как интерфейс работы в системе, а tech overview — как основа устойчивой рабочей системы для creator/brand flows.
+- Обновлён `docs/00_CURRENT_STATE.md`.
+
+### Файлы
+- `docs/public/00_product_overview_ru.md`
+- `docs/public/README_PUBLIC.md`
+- `docs/public/07_press_kit_ru.md`
+- `docs/public/05_publication_templates_ru.md`
+- `docs/public/06_telegraph_article_ru.md`
+- `docs/public/02_for_brands_ru.md`
+- `docs/public/03_faq_ru.md`
+- `docs/public/01_for_creators_ru.md`
+- `docs/public/04_tech_overview_ru.md`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- Ручная проверка консистентности public wording: `система` как главное определение, `бот` как интерфейс доступа.
+- Проверка, что в public docs нет жёстких обещаний white-label/private cabinet/advanced analytics/CRM integrations.
+- Проверка markdown-структуры и внутренних относительных ссылок в `docs/public/*`.
+
+## STEP408
+- Added source-level contract smoke for `/start` onboarding / role-gate / payload-priority.
+- New `scripts/smoke-start-role-gate-contract.js` fixes the current contract in tests instead of changing runtime: parser coverage for `gw_ / bp_ / offer_ / wsp_ / fs_ / ig_verify / src_*`, payload-first routing before role gate, fail-open Redis key read for `ui_mode`, and the short role picker `Ты бренд или креатор?`.
+- Smoke also locks the strong-intent role switching semantics: `a:home_mode` must persist `creator|brand`, clear brand-manager + curator overlays, and only touch `db.listBrandsForManager()` on explicit click; `a:ui_mode_set` must keep clearing brand-manager state before `setUiMode()`.
+- Added explicit guard for the cost invariant: `/start` hot-path must not regress to `resolveUiMode()`/`db.listBrandsForManager()` before the gate, so menu/home onboarding stays free of new DB reads.
+- `setUiMode()` fail-open behavior is now covered directly by smoke (Redis write errors stay swallowed).
+- Wired the new smoke into both `package.json` (`npm run smoke:start-role-gate-contract`) and `scripts/preflight.js`, so the contract is checked on every standard preflight.
+
+### Файлы
+- `scripts/smoke-start-role-gate-contract.js`
+- `scripts/preflight.js`
+- `package.json`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_03.md`
+
+### QA
+- `node --check scripts/smoke-start-role-gate-contract.js`
+- `node scripts/smoke-start-role-gate-contract.js`
+- `npm run smoke:start-role-gate-contract`
+- `npm run preflight`
+
+
+
+## STEP409
+
+Что делаем
+- Добавить безопасный owner-flow `soft disconnect / reconnect workspace channel` без hard-delete и без новых DB-read в hot menu paths.
+
+Что сделано
+- `migrations/044_workspace_channel_disconnect.sql`
+  - в `workspace_settings` добавлены `channel_connected boolean not null default true` и `channel_disconnected_at timestamptz`.
+- `src/db/queries.js`
+  - `listWorkspaces`, `getWorkspace`, `getWorkspaceAny`, `findWorkspaceByChannelUsername` теперь возвращают `channel_connected` / `channel_disconnected_at` с fail-open `coalesce(..., true)`.
+  - добавлен helper `setWorkspaceChannelConnection(workspaceId, connected)`.
+- `src/bot/bot.js`
+  - в `Кураторы и сеть` добавлена owner-кнопка `⛔ Отключить канал`.
+  - добавлены `renderWsDisconnected()` + `wsDisconnectedKb()` и разделение `📣 Мои каналы` / `📦 Неактивные каналы`.
+  - `renderWsOpen()` для отключённого workspace теперь показывает специальный disabled screen вместо обычного ws-menu.
+  - `renderWsSettings()`, `renderCuratorManage()`, `renderBxOpen()` и owner-view `renderWsLeadsList()` дружелюбно гейтят отключённый канал.
+  - `ensureWorkspaceForOwner()` выбирает только активные каналы и в сценарии «есть только отключённые» ведёт в recovery flow.
+  - callback handlers добавлены для `a:ws_list_inactive`, `a:ws_disconnect_q/do`, `a:ws_reconnect_q/do`.
+  - в mutating creator entrypoints добавлены guards на отключённый канал: `a:bx_new`, `a:bx_publish`, `a:gw_new`, `a:gw_publish`.
+  - workspace audit labels пополнены `ws.channel_disconnected` / `ws.channel_reconnected`.
+- `src/bot/actionRegistry.js`
+  - зарегистрированы новые action keys: `a:ws_list_inactive`, `a:ws_disconnect_q`, `a:ws_disconnect_do`, `a:ws_reconnect_q`, `a:ws_reconnect_do`.
+- `scripts/smoke-ws-channel-disconnect-contract.js`
+  - фиксирует migration/queries/UI/handlers/registry контракт STEP409.
+- `scripts/preflight.js`
+  - обязательно прогоняет новый smoke.
+- `docs/00_CURRENT_STATE.md`
+  - updated source-of-truth summary for STEP409.
+
+Инварианты
+- Отключение канала = только `soft disconnect`, не delete.
+- История, профиль, audit и billing сохраняются.
+- На disconnect сеть и куратор выключаются атомарно вместе с `channel_connected=false`.
+- Reconnect не восстанавливает `network_enabled`/`curator_enabled` автоматически.
+- Hot UI paths не получают новых DB-read: список workspaces как и раньше идёт через кешированный `listWorkspacesCached`; фильтрация active/inactive делается в памяти.
+
+QA
+- `npm run actions:check`
+- `npm run actions:md`
+- `npm run gen:migration-pack`
+- `node --check src/bot/bot.js src/db/queries.js scripts/smoke-ws-channel-disconnect-contract.js`
+- `node scripts/smoke-ws-channel-disconnect-contract.js`
+- ручной smoke:
+  1) `📣 Мои каналы` → `Кураторы и сеть` → `⛔ Отключить канал` → confirm.
+  2) Канал исчезает из активного списка и появляется в `📦 Неактивные`.
+  3) `ws_open` для отключённого канала показывает disabled screen с `🔌 Подключить снова / 👤 Профиль / 🧾 История`.
+  4) `a:bx_new`, `a:gw_new`, `a:bx_publish`, `a:gw_publish` не пускают дальше и не создают новые сущности.
+  5) `🔌 Подключить снова` возвращает канал в активный список; сеть и куратор остаются выключенными.
+
+Риск регрессий
+- Низкий-средний: затронут только creator workspace UX + один маленький DB helper + новый migration flag; hot menu/cache contract сохранён.
+
+## STEP410 — Workspace card → settings bridge for channel disconnect
+- Fixed a UX regression left after STEP409: `a:ws_open` did not expose `a:ws_settings`, so owners could not reach `⛔ Отключить канал` from an active channel card.
+- `wsMenuKb(wsId)` now shows `👥 Кураторы и сеть` instead of direct `👥 Кураторы канала`, keeping curator/history/disconnect under the intended settings screen with no new DB reads.
+- Smoke contract extended to assert the workspace card links to `a:ws_settings` and preserves the disconnect path reachability.
+
+
+## STEP411 — Workspace open → unified channel management screen
+- Flattened creator workspace navigation without changing DB/business semantics: `a:ws_open` now renders a single **Управление каналом** screen instead of a промежуточная карточка + отдельный settings hop.
+- `wsMenuKb(wsId, opts)` now exposes direct owner controls at the top of the channel screen: `🌐 Сеть`, `👤 Куратор`, `👤 Профиль`, `🧾 История`, `⛔ Отключить канал`, while preserving fast workspace actions (`📥 Inbox`, `📨 Заявки брендов`, `🎬 UGC / Офферы`, `📁 Папки`, `➕ Новый розыгрыш`, `🎁 Розыгрыши`, `⭐️ PRO`).
+- Added shared renderer `renderWorkspaceManagementScreen(...)`; both `renderWsOpen(...)` and `renderWsSettings(...)` now route to the same screen. This keeps `a:ws_settings` alive as a compatibility alias for existing callbacks/back-paths, but the primary UX is now direct.
+- No schema changes, no new business logic, no new hot-path SQL: screen uses the already-loaded `getWorkspace()` row and renders current `network_enabled` / `curator_enabled` state directly.
+- Updated source-level contract smoke to assert direct reachability of network/curator/disconnect from `ws_open`, direct channel-management framing, and `ws_settings` alias behavior.
+
+QA
+- `node --check src/bot/bot.js scripts/smoke-ws-channel-disconnect-contract.js`
+- `node scripts/smoke-ws-channel-disconnect-contract.js`
+- Manual smoke:
+  1) `📣 Мои каналы` → выбрать активный канал → сразу увидеть `🌐 Сеть / 👤 Куратор / 👤 Профиль / 🧾 История / ⛔ Отключить канал`.
+  2) Проверить, что быстрые действия канала (`Inbox`, `UGC / Офферы`, `Розыгрыши`) сохранились на том же экране.
+  3) `⛔ Отключить канал` → confirm → канал уходит в `📦 Неактивные`.
+  4) Открытие отключённого канала по-прежнему показывает special reconnect screen.
+  5) Любой старый путь, ведущий на `a:ws_settings`, открывает тот же unified screen без stale/fallback.
+
+
+## STEP412 — Workspace IA cleanup: compact picker + curator submenu
+- `renderWsList(owner)` упрощён до compact picker: короткий copy `Выбери канал для управления.`, список активных каналов и только служебные CTA (`🚀 Подключить ещё`, `📦 Неактивные`, `📋 Меню`, `🏠 Home`). Старый длинный explanatory block с bullets убран.
+- `wsMenuKb(wsId, opts)` на unified channel screen больше не делает direct toggle кураторов из верхней кнопки. Вместо этого там теперь явный вход `👥 Кураторы: ✅/❌` → `a:cur_manage|ws:{id}`; network toggle остаётся прямым (`🌐 Сеть`).
+- `renderWorkspaceManagementScreen()` теперь показывает status lines `Сеть: ...` / `Кураторы: ...`, чтобы owner видел состояние канала сразу на основном экране, без дополнительных кликов.
+- `curManageKb(wsId, ws)` оставлен как отдельное submenu управления кураторами именно этого канала: master toggle `👤 Куратор: ВКЛ/ВЫКЛ`, `➕ Добавить по @username`, `🔗 Пригласить ссылкой`, `👥 Список кураторов`, `📜 Журнал`, `🧾 История`; back-path обновлён на `⬅️ К каналу` → `a:ws_open|ws:{id}`.
+- `renderCuratorManage()` переоформлен текстово в `👥 Управление кураторами`, без новой DB/business логики и без новых hot-path reads.
+- Совместимость сохранена: `a:ws_settings` по‑прежнему рендерит unified channel screen, старые callbacks/back-paths не ломаются.
+- Обновлён source-level smoke `scripts/smoke-ws-channel-disconnect-contract.js`: теперь он фиксирует compact picker copy, curator submenu entry из `ws_open`, master toggle/add/invite/back-path в `cur_manage`, а также сохранённый alias `ws_settings`.
+
+### QA
+- `📣 Мои каналы` → короткий экран выбора, без bullet-list.
+- Tap по активному каналу → unified `Управление каналом`.
+- Верхняя правая кнопка `👥 Кураторы: ...` → открывает submenu управления кураторами именно этого канала.
+- В submenu: toggle режима, добавить по username, invite link, список, журнал, back `⬅️ К каналу`.
+- `a:ws_settings`/старые back-paths по-прежнему приводят на рабочий экран канала.
+
+
+## STEP420 — Preflight dependency install guard / fail-fast for bare snapshots
+- Problem found during STEP419 audit: on a bare ZIP checkout without `node_modules`, `npm run preflight` could spend time on zero-dependency checks and only fail later inside staging smoke when `scripts/smoke-health-admin-shape.js` imported runtime modules that transitively require `dotenv`.
+- Added a small fail-fast guard at the top of `scripts/preflight.js`: it reads declared dependencies from `package.json`, verifies they are locally resolvable, and exits early with a clear install hint (`npm ci` for bare snapshot, `npm install` if the checkout is partially installed).
+- No runtime behavior changed. No bot/business logic changed. No DB schema change. No new DB reads. This is release-tooling only.
+- Synced docs so release preflight explicitly calls out the dependency-install gate and the expected operator action when working from a fresh archive.
+
+### QA
+- On a fresh bare snapshot without `node_modules`, `npm run preflight` fails immediately at `Preflight: local npm dependencies` with a readable install hint instead of reaching late smoke/import failure.
+- `node --check scripts/preflight.js` stays green.
+- Runtime folders (`api/*`, `src/bot/*`, `src/db/*`) are unchanged.
+
+## STEP419 — Docs sync / current Creator-channel model frozen
+- Re-synced docs to the actual STEP418 runtime model instead of the older intermediate menu states. Creator main is now documented unambiguously as a **current-channel menu** with top-row entries `🔁 Сменить канал` and `📂 Текущий канал`; role switching stays only in `🏠 Home`, and the creator no-active state is intentionally minimal/recovery-oriented.
+- Clarified verification semantics in docs: current verification is **account-level**, not per-channel workspace truth. Quick access is therefore described as `✅ Верификация аккаунта` inside channel settings, while channel profile editing no longer carries a duplicate verification CTA.
+- Added a future-only UX watch note to docs: the current 3-click path to channel settings is an intentional beginner-friendly split of daily work vs rare settings. If real user pain appears later, the first candidate micro-improvement is a fast `🌐 Сеть` toggle on the channel work screen while keeping heavier controls (`Кураторы / Профиль / История / PRO / Отключить канал`) inside settings.
+- No code/runtime behavior changed in this step; this is docs-only synchronization after STEP418.
+
+### QA
+- `docs/00_CURRENT_STATE.md` matches the actual STEP418 menu model (`🔁 Сменить канал`, `📂 Текущий канал`, current-channel creator main, account-level verification entrypoint).
+- `docs/15_NEW_CHAT_HANDOFF.md` and `docs/17_START_NEW_CHAT_PROMPT.md` mention the current-channel creator model so future chats do not fall back to pre-STEP413 assumptions.
+- Future improvement note is explicitly marked as watchlist / not active work.
+
+## STEP413 — Creator current-channel UX reset
+
+Что сделано
+- `renderRoleHub()` в creator-mode больше не открывает сразу `ws_open`; теперь он рендерит отдельный creator main screen с явным контекстом `Текущий канал: @...`.
+- Добавлены helpers `currentWsLabel()`, `currentWsStatusLabel()`, `mainMenuCreatorCurrentKb()` и `renderCreatorCurrentMenu()`.
+- Введён shared resolver `resolveCurrentWorkspaceForOwner(ownerUserId, tgId, opts)` поверх уже существующего Redis-context `active_ws` — без новой схемы БД.
+- `ensureWorkspaceForOwner()` переведён на shared current-channel resolver, чтобы owner hot-flows (Inbox / offers / PRO / giveaways) использовали тот же current context и корректно fallback’ились, если сохранённый канал стал неактивным.
+- `📣 Мои каналы` оставлен compact picker; tap по каналу как и раньше делает `set current + open full channel menu`.
+- На full channel menu нижняя навигация выровнена под новую IA: `📣 Мои каналы` + `⬅️ К меню` + `🏠 Home`.
+- `a:ws_settings` сохранён как совместимый alias на full channel menu.
+
+Почему
+- При нескольких подключённых каналах creator main без явного current context был нечитаем: было непонятно, к какому каналу относятся Inbox / offers / giveaways.
+- При этом уводить пользователя каждый раз внутрь `📣 Мои каналы` тоже хуже по UX. Правильный компромисс — creator main работает для current channel, а `📣 Мои каналы` служит только переключателем.
+
+Инварианты
+- Без новой миграции.
+- Без новой бизнес-логики.
+- Без новых DB-read в hot creator menu path сверх уже существующего workspace cache / fallback.
+- Старые callbacks не ломаются: `a:ws_open`, `a:cur_manage`, `a:ws_settings` продолжают работать.
+
+QA
+- `📋 Меню` в creator-mode показывает `Текущий канал: @...`.
+- `📣 Мои каналы` открывает compact picker.
+- Tap по каналу открывает full channel menu и делает этот канал current.
+- Возврат в `📋 Меню` показывает уже новый current channel.
+- `👥 Кураторы` по-прежнему открывает submenu именно этого канала.
+- Если current channel отключили, следующий вход в creator main корректно fallback’ится на другой активный канал или показывает gate без active channels.
+
+
+
+## STEP414 — Creator main cleanup: keep only current-channel actions + role/support footer
+
+Что сделано
+- `mainMenuCreatorCurrentKb()` очищен от utility/setup CTA, которые визуально конфликтовали с current-channel моделью.
+- Из active creator main screen убраны: `🚀 Подключить ещё`, `✅ Верификация`, `🔗 Поделиться`.
+- Сохранены только current-channel actions (`📣 Мои каналы`, `⚙️ Канал`, `UGC / Офферы`, `Каталог брендов`, `Мои заявки`, `Inbox`, `PRO`, `Розыгрыши`, `Папки` при наличии) и нижний role/support footer (`💬 Поддержка`, role-switch, curator/admin entries, `🏠 Home`).
+- `📣 Мои каналы` остаётся единственной точкой для переключения/добавления каналов; полная логика current-channel, full channel menu и curator submenu из STEP413 не менялась.
+
+Почему
+- После STEP413 creator main стал логически правильным, но визуально оставался перегружен utility/setup-кнопками, которые не относятся к ежедневной работе текущего канала.
+- Для человеческого UX главное меню current-channel должно показывать только то, что относится к работе по текущему каналу, а setup/share/verification должны жить в своих собственных flows.
+
+Инварианты
+- Без новой миграции.
+- Без новой бизнес-логики.
+- Без новых hot-path DB reads.
+- Старые callback routes не ломаются: удалены только входы из active creator main screen, сами flows share/verify/setup остаются в системе.
+
+QA
+- `📋 Меню` в creator-mode не показывает `🚀 Подключить ещё / ✅ Верификация / 🔗 Поделиться`.
+- `📋 Меню` всё ещё показывает `📣 Мои каналы / ⚙️ Канал / Inbox / UGC / Розыгрыши / PRO` и role/support footer.
+- `📣 Мои каналы` по-прежнему остаётся местом для `🚀 Подключить ещё`.
+- `⚙️ Канал` по-прежнему открывает full channel menu без регрессий.
+- STEP415 — Creator Main role-switch footer cleanup: renamed creator-menu footer actions from `Я бренд / Я менеджер бренда` to `Перейти в бренд / Режим менеджера бренда`, keeping the same callbacks and click-time gating while making the footer clearly read as mode switching instead of current-channel actions.
+
+
+
+## STEP417 — Split channel work menu vs channel settings
+- Per-channel UX was overloaded after STEP411–415: daily work actions and channel-management actions lived on the same `ws_open` screen. STEP417 splits them cleanly without touching business rules or DB schema.
+- `a:ws_open` now renders **Работа с каналом** only: `📥 Inbox`, `📨 Заявки брендов`, `🎬 UGC / Офферы`, `📁 Папки`, `➕ Новый розыгрыш`, `🎁 Розыгрыши`, plus navigation to `⚙️ Настройки`, `📣 Мои каналы`, `📋 Меню`, `🏠 Home`.
+- `a:ws_settings` stops being an alias and becomes the real **Настройки канала** screen: `🌐 Сеть`, `👥 Кураторы`, `👤 Профиль канала`, `🧾 История`, `⭐️ PRO`, `⛔ Отключить канал`, back to `a:ws_open`.
+- `a:cur_manage` stays the per-channel curator submenu, but its framing is tightened around settings navigation: toggle + add curator + curator list + back to `a:ws_settings|ws:{id}`.
+- `ws_history` back-path now returns to `a:ws_settings|ws:{id}` so history behaves like a settings child instead of jumping back into daily work.
+- `📣 Мои каналы` remains the compact picker from STEP412/413, and tapping a channel still persists current-channel context via existing Redis `active_ws` and opens `ws_open`.
+- Updated source-level smoke to assert: `ws_open` is the work menu, `ws_settings` is the settings menu, curator submenu returns to settings, and disconnected-channel protections remain intact.
+
+### QA
+- `📣 Мои каналы` → выбрать активный канал → открывается **Работа с каналом** без кнопок `Сеть / Кураторы / Профиль / История / PRO / Отключить канал`.
+- На рабочем экране есть `⚙️ Настройки`.
+- `⚙️ Настройки` → открывается **Настройки канала** с `Сеть / Кураторы / Профиль канала / История / PRO / Отключить канал`.
+- `👥 Кураторы` → submenu именно этого канала; `⬅️ К настройкам` возвращает в `ws_settings`.
+- `🧾 История` → back возвращает в `ws_settings`.
+- `⛔ Отключить канал` / `🔌 Подключить снова` продолжают работать без регрессий.
+
+
+## STEP418 — Creator menu polish / verification placement
+- Active creator main menu cleaned further: `📣 Мои каналы` was renamed to **`🔁 Сменить канал`** on the current-channel screen, and `⚙️ Канал` was renamed to **`📂 Текущий канал`** so the top row clearly reads as switch vs open-current.
+- Removed role-switch footer from creator current menu and from the no-active creator gate. Switching between Creator / Brand / Brand Manager now stays in `🏠 Home`; creator menu is reserved for creator work only.
+- No-active creator gate is now minimal and recovery-oriented: connect a channel, reopen an inactive one, ask support, or go Home. Utility/setup/share/verification buttons were removed from that empty state.
+- Verification semantics were checked in code: current implementation is **one verification record per user**, not per workspace/channel. To keep UX honest, the entrypoint is exposed in channel settings as **`✅ Верификация аккаунта`** (quick access), and the settings copy explicitly says this verification is shared by the creator account.
+- `ws_profile` verification shortcut was removed to avoid duplicate CTA and keep profile editing focused.
+- No DB schema changes, no new hot-path reads, no changes to inbox/offers/giveaways business logic.
+
+
+## STEP421 — Release env baseline contract / fail-fast guard
+- Added `scripts/smoke-env-baseline-contract.js` and wired it into `scripts/preflight.js` right after the STEP420 dependency-install gate. This new smoke protects the **release/env contract** itself: `.env.example`, `docs/92_PROD_ENV_BASELINE.md`, and `src/lib/config.js#assertEnv()` must describe the same modern baseline before any deeper smoke chain runs.
+- Updated `.env.example` to include the currently relevant prod/release keys that were missing from the example snapshot: `PUBLIC_BASE_URL`, `SUPPORT_CHAT_ID`, QStash signing/token vars, payments HMAC/fallback flags, broadcast cooldown/quarantine vars, and parked Instagram flags. Safe defaults are explicit: `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0`, `PAYMENTS_FALLBACK_APPLY_ENABLED=0`, `IG_* = false`.
+- Fixed docs drift in `docs/92_PROD_ENV_BASELINE.md`: old names `BOT_WEBHOOK_URL` and `SUPER_ADMIN_IDS` are replaced with the actual live contract `PUBLIC_BASE_URL` and `SUPER_ADMIN_TG_IDS`.
+- The smoke is intentionally zero-dependency and source-first. If local prod-like `.env*` files are present, it additionally fails fast on missing required prod keys or dangerous fallback defaults; if not, it still validates docs/example/code alignment so drift is caught before release.
+
+### QA
+- `node scripts/smoke-env-baseline-contract.js` passes on the repo snapshot.
+- `.env.example` contains current baseline keys for QStash / payments HMAC / broadcast cooldown / parked IG flags.
+- `docs/92_PROD_ENV_BASELINE.md` no longer mentions obsolete `BOT_WEBHOOK_URL` or `SUPER_ADMIN_IDS`.
+
+## STEP422 — Creator current-channel contract smoke
+- Added `scripts/smoke-creator-current-channel-contract.js` and wired it into `scripts/preflight.js` so the current Creator IA is frozen in source-level contract tests rather than memory/docs only.
+- The smoke fixes the intended post-STEP418 model: Creator `📋 Меню` is the **current-channel menu**; top row is `🔁 Сменить канал` + `📂 Текущий канал`; `renderRoleHub()` routes Creator into that menu; `ws_open` remains the work screen; `ws_settings` remains the settings screen; account-level verification stays reachable from settings as `✅ Верификация аккаунта`.
+- Also added negative guards so the creator current/no-active screens do not silently regrow `Перейти в бренд`, `Режим менеджера бренда`, `✅ Верификация`, or `🔗 Поделиться` utility CTA in places where they would blur the current-channel model again.
+
+### QA
+- `node scripts/smoke-creator-current-channel-contract.js` passes on the repo snapshot.
+- `package.json` exposes `npm run smoke:creator-current-channel-contract`.
+- `scripts/preflight.js` now schedules this smoke before the deeper runtime/admin contract checks.
+
+## STEP423 — Telegram share URL compatibility contract smoke
+- Added `scripts/smoke-share-url-compat-contract.js` and wired it into `scripts/preflight.js` to freeze the Telegram share workaround that already exists in runtime code but was previously unprotected by a dedicated contract smoke.
+- The smoke checks both fragile share paths: `sendWsShareTextMessage()` for workspace showcase share (`📨 Отправить`) and the `a:cur_invite` flow for curator invite share (`📤 Поделиться`). Both must keep the compatibility format `https://t.me/share/url?url=<U+2060>&text=...`, with the real content going into `text=` and the invisible WORD JOINER occupying `url=`.
+- Added explicit no-regression assertions against the two bad historical formats that cause Telegram-client silent failures: `...share/url?text=...` and `...share/url?url=&text=...`. Related action registry entries (`a:ws_share`, `a:ws_share_send`, `a:cur_invite`) are checked too, so quiet re-guard/retype regressions are caught together with the URL shape.
+
+### QA
+- `node scripts/smoke-share-url-compat-contract.js` passes on the repo snapshot.
+- `package.json` exposes `npm run smoke:share-url-compat-contract`.
+- Source contains no text-only or empty-URL Telegram share links in `src/bot/bot.js`.
 
 
 ---

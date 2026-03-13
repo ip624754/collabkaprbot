@@ -14,6 +14,11 @@
 - `docs/audit/notebooklm_pack/07_MIGRATIONS_ALL.sql.txt` — миграции как текст (NotebookLM-friendly).
 
 ## Как обновлять при новых STEP
-1) Обнови `docs/00_CURRENT_STATE.md` и `docs/process/07_WORK_HISTORY_2026_02.md`.
+1) Обнови `docs/00_CURRENT_STATE.md` и актуальный `docs/process/07_WORK_HISTORY_2026_03.md`.
 2) Перегенерируй этот pack (файлы 01–07 должны отражать текущую правду).
 3) Перезалей ZIP в NotebookLM и прогоняй “Рецензия”.
+
+
+## Базовый baseline сейчас
+- Текущий audit baseline: **STEP430**.
+- Pack должен отражать contract-smoke coverage до STEP430 и include one-screen health guide / what-next styleguide без рассинхрона с runtime.

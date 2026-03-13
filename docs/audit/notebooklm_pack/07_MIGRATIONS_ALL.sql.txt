@@ -1,5 +1,5 @@
 Collabka PR — MIGRATIONS BUNDLE (.sql as text)
-Updated: 2026-03-04 18:19:55 UTC
+Updated: 2026-03-13 09:50:21 UTC
 
 Files included:
 - migrations/001_init.sql
@@ -45,6 +45,7 @@ Files included:
 - migrations/041_ig_oauth_accounts.sql
 - migrations/042_payments_fk_hardening.sql
 - migrations/043_users_soft_delete.sql
+- migrations/044_workspace_channel_disconnect.sql
 - migration_pack/00_mark_all_applied.sql
 - migration_pack/01_reconcile.sql
 - migration_pack/README.md
@@ -177,6 +178,7 @@ create table if not exists network_sponsors (
   created_at timestamptz not null default now()
 );
 
+
 ================================================================================
 FILE: migrations/002_barters.sql
 ================================================================================
@@ -214,6 +216,7 @@ create table if not exists barter_offer_audit (
 
 create index if not exists idx_barter_offer_audit_offer_time on barter_offer_audit(offer_id, created_at desc);
 
+
 ================================================================================
 FILE: migrations/003_barters_ideal.sql
 ================================================================================
@@ -248,6 +251,7 @@ create table if not exists barter_messages (
 );
 
 create index if not exists idx_barter_messages_thread_time on barter_messages(thread_id, created_at desc);
+
 
 ================================================================================
 FILE: migrations/004_final_pack.sql
@@ -311,6 +315,7 @@ BEGIN
   END IF;
 END$$;
 
+
 ================================================================================
 FILE: migrations/005_brand_pass.sql
 ================================================================================
@@ -327,6 +332,7 @@ alter table users
 
 create index if not exists idx_users_brand_credits on users(brand_credits);
 
+
 ================================================================================
 FILE: migrations/006_brand_plan.sql
 ================================================================================
@@ -342,6 +348,7 @@ alter table users
   add column if not exists brand_plan_updated_at timestamptz;
 
 create index if not exists idx_users_brand_plan_until on users (brand_plan_until);
+
 
 ================================================================================
 FILE: migrations/007_matching.sql
@@ -361,6 +368,7 @@ create table if not exists matching_requests (
 );
 
 create index if not exists idx_matching_requests_user on matching_requests (user_id, created_at desc);
+
 
 ================================================================================
 FILE: migrations/008_featured.sql
@@ -385,6 +393,7 @@ create table if not exists featured_placements (
 create index if not exists idx_featured_active on featured_placements (status, ends_at desc);
 create index if not exists idx_featured_user on featured_placements (user_id, created_at desc);
 
+
 ================================================================================
 FILE: migrations/009_crm_stage.sql
 ================================================================================
@@ -394,6 +403,7 @@ alter table barter_threads
   add column if not exists buyer_stage text;
 
 create index if not exists idx_barter_threads_buyer_stage on barter_threads (buyer_user_id, buyer_stage);
+
 
 ================================================================================
 FILE: migrations/010_user_verifications.sql
@@ -414,6 +424,7 @@ create table if not exists user_verifications (
 
 create index if not exists idx_user_verifications_status on user_verifications(status);
 create index if not exists idx_user_verifications_submitted_at on user_verifications(submitted_at desc);
+
 
 ================================================================================
 FILE: migrations/011_stars_payments.sql
@@ -442,6 +453,7 @@ create unique index if not exists uq_stars_payments_invoice_payload
 
 create index if not exists idx_stars_payments_user
   on stars_payments (user_id, created_at desc);
+
 
 ================================================================================
 FILE: migrations/012_payments_ledger.sql
@@ -485,6 +497,7 @@ create index if not exists idx_payments_status_time
 create index if not exists idx_payments_user_time
   on payments (user_id, created_at desc);
 
+
 ================================================================================
 FILE: migrations/013_payments_extras.sql
 ================================================================================
@@ -511,6 +524,7 @@ create index if not exists idx_payments_orphaned_time
   on payments (created_at desc)
   where status = 'ORPHANED';
 
+
 ================================================================================
 FILE: migrations/014_intro_trial_daily_limits.sql
 ================================================================================
@@ -534,6 +548,7 @@ create table if not exists intro_daily_usage (
 
 create index if not exists idx_intro_daily_usage_day on intro_daily_usage(day desc);
 
+
 ================================================================================
 FILE: migrations/015_barter_thread_proofs.sql
 ================================================================================
@@ -555,6 +570,7 @@ create index if not exists idx_barter_thread_proofs_thread_id
 
 create index if not exists idx_barter_thread_proofs_added_by
   on barter_thread_proofs (added_by_user_id, created_at desc);
+
 
 ================================================================================
 FILE: migrations/016_channel_folders_and_editors.sql
@@ -598,6 +614,7 @@ alter table barter_offers
 
 create index if not exists idx_barter_offers_partner_folder_id on barter_offers(partner_folder_id);
 
+
 ================================================================================
 FILE: migrations/017_analytics_events.sql
 ================================================================================
@@ -616,6 +633,7 @@ create table if not exists events (
 create index if not exists events_name_ts_idx on events (name, ts desc);
 create index if not exists events_ws_ts_idx on events (ws_id, ts desc);
 create index if not exists events_user_ts_idx on events (user_id, ts desc);
+
 
 ================================================================================
 FILE: migrations/018_official_channel_posts.sql
@@ -642,6 +660,7 @@ create table if not exists official_posts (
 create unique index if not exists official_posts_offer_id_uniq on official_posts (offer_id);
 create index if not exists official_posts_status_idx on official_posts (status, updated_at desc);
 create index if not exists official_posts_expires_idx on official_posts (slot_expires_at) where slot_expires_at is not null;
+
 
 ================================================================================
 FILE: migrations/019_intro_retry_credits.sql
@@ -679,6 +698,7 @@ create table if not exists brand_retry_credits (
 create index if not exists idx_brand_retry_credits_user_status on brand_retry_credits(user_id, status, expires_at);
 create index if not exists idx_brand_retry_credits_status_expires on brand_retry_credits(status, expires_at);
 
+
 ================================================================================
 FILE: migrations/020_profile_matrix_ig_tg_deals.sql
 ================================================================================
@@ -711,6 +731,7 @@ create index if not exists idx_ws_settings_profile_ig on workspace_settings (low
 create index if not exists gin_ws_settings_profile_verticals on workspace_settings using gin (profile_verticals);
 create index if not exists gin_ws_settings_profile_formats on workspace_settings using gin (profile_formats);
 create index if not exists gin_ws_settings_profile_portfolio_urls on workspace_settings using gin (profile_portfolio_urls);
+
 
 ================================================================================
 FILE: migrations/021_brand_leads.sql
@@ -750,6 +771,7 @@ create index if not exists idx_brand_leads_ws_status_created on brand_leads (wor
 create index if not exists idx_brand_leads_owner_status_created on brand_leads (owner_user_id, status, created_at desc);
 create index if not exists idx_brand_leads_brand_user_created on brand_leads (brand_user_id, created_at desc);
 
+
 ================================================================================
 FILE: migrations/022_profile_matrix_match_indexes.sql
 ================================================================================
@@ -764,6 +786,7 @@ create index if not exists idx_ws_settings_profile_formats_gin
 
 create index if not exists idx_ws_settings_profile_mode_btree
   on workspace_settings (profile_mode);
+
 
 ================================================================================
 FILE: migrations/023_barter_offer_media.sql
@@ -787,6 +810,7 @@ BEGIN
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_barter_offers_media_type ON barter_offers(media_type);
+
 
 ================================================================================
 FILE: migrations/024_brand_profiles.sql
@@ -816,6 +840,7 @@ create table if not exists brand_profiles (
 
 create index if not exists idx_brand_profiles_updated_at on brand_profiles(updated_at desc);
 
+
 ================================================================================
 FILE: migrations/025_giveaways_media.sql
 ================================================================================
@@ -827,6 +852,7 @@ alter table if exists giveaways
   add column if not exists media_file_id text;
 
 create index if not exists idx_giveaways_media_type on giveaways(media_type);
+
 
 ================================================================================
 FILE: migrations/026_brand_managers.sql
@@ -848,6 +874,7 @@ create index if not exists idx_brand_contact_unlocks_brand_until
 
 create index if not exists idx_brand_contact_unlocks_ws_until
   on brand_contact_unlocks (workspace_id, unlocked_until desc);
+
 
 ================================================================================
 FILE: migrations/027_brand_applications.sql
@@ -876,6 +903,7 @@ create index if not exists idx_brand_applications_brand_status_created on brand_
 create index if not exists idx_brand_applications_brand_created on brand_applications (brand_user_id, created_at desc);
 create index if not exists idx_brand_applications_creator_created on brand_applications (creator_user_id, created_at desc);
 
+
 ================================================================================
 FILE: migrations/028_barter_offers_meta.sql
 ================================================================================
@@ -887,6 +915,7 @@ alter table if exists barter_offers
 
 -- Optional: speeds up tag overlap filters (goals_tags/req_tags)
 create index if not exists idx_barter_offers_meta_gin on barter_offers using gin (meta);
+
 
 ================================================================================
 FILE: migrations/029_barter_threads_triage_status.sql
@@ -914,6 +943,7 @@ exception when undefined_table then
 end $$;
 
 create index if not exists idx_barter_threads_triage_status on barter_threads(triage_status);
+
 
 ================================================================================
 FILE: migrations/030_broadcasts.sql
@@ -957,6 +987,7 @@ create table if not exists broadcast_sent_log (
   primary key (broadcast_id, user_id)
 );
 
+
 ================================================================================
 FILE: migrations/031_brand_leads_assignment.sql
 ================================================================================
@@ -982,6 +1013,7 @@ BEGIN
 END$$;
 
 CREATE INDEX IF NOT EXISTS idx_brand_leads_assigned ON brand_leads (assigned_user_id) WHERE assigned_user_id IS NOT NULL;
+
 
 ================================================================================
 FILE: migrations/032_soft_delete.sql
@@ -1013,6 +1045,7 @@ BEGIN
   END IF;
 END$$;
 
+
 ================================================================================
 FILE: migrations/033_user_ban.sql
 ================================================================================
@@ -1029,6 +1062,7 @@ END$$;
 create index if not exists idx_brand_leads_ws_status_created on brand_leads (workspace_id, status, created_at desc);
 create index if not exists idx_brand_leads_owner_status_created on brand_leads (owner_user_id, status, created_at desc);
 create index if not exists idx_brand_leads_brand_user_created on brand_leads (brand_user_id, created_at desc);
+
 
 ================================================================================
 FILE: migrations/034_SQL Migration Neon Postgres.sql
@@ -1073,6 +1107,7 @@ WHERE status IN ('ACTIVE', 'RUNNING');
 
 CREATE INDEX idx_entries_draw ON giveaway_entries (giveaway_id, is_eligible);
 
+
 ================================================================================
 FILE: migrations/035_brand_credits_gifted.sql
 ================================================================================
@@ -1083,6 +1118,7 @@ alter table users
   add column if not exists brand_credits_gifted int not null default 0;
 
 create index if not exists idx_users_brand_credits_gifted on users(brand_credits_gifted);
+
 
 ================================================================================
 FILE: migrations/036_payments_provider_charge_unique.sql
@@ -1099,6 +1135,7 @@ create unique index if not exists uq_payments_provider_charge
   on payments (provider_payment_charge_id)
   where provider_payment_charge_id is not null;
 
+
 ================================================================================
 FILE: migrations/037_broadcast_sent_log_retry_after.sql
 ================================================================================
@@ -1112,6 +1149,7 @@ alter table broadcast_sent_log
 create index if not exists idx_broadcast_sent_log_deferred_retry
   on broadcast_sent_log (broadcast_id, retry_after_until)
   where status = 'deferred';
+
 
 ================================================================================
 FILE: migrations/038_workspace_profile_contacts.sql
@@ -1127,6 +1165,7 @@ alter table workspace_settings
 alter table workspace_settings
   add column if not exists profile_contacts_v int not null default 1;
 
+
 ================================================================================
 FILE: migrations/039_broadcast_cooldown_db_fuse.sql
 ================================================================================
@@ -1139,6 +1178,7 @@ alter table broadcasts
   add column if not exists cooldown_reason text;
 
 create index if not exists idx_broadcasts_cooldown_until on broadcasts(cooldown_until);
+
 
 ================================================================================
 FILE: migrations/040_broadcast_fanout_qstash.sql
@@ -1164,6 +1204,7 @@ create index if not exists idx_broadcast_sent_log_sending_stale
   on broadcast_sent_log (broadcast_id, last_attempt_at)
   where status = 'sending';
 
+
 ================================================================================
 FILE: migrations/041_ig_oauth_accounts.sql
 ================================================================================
@@ -1188,6 +1229,7 @@ create table if not exists ig_oauth_accounts (
 );
 
 create index if not exists ig_oauth_accounts_ig_user_id_idx on ig_oauth_accounts(ig_user_id);
+
 
 ================================================================================
 FILE: migrations/042_payments_fk_hardening.sql
@@ -1255,6 +1297,7 @@ BEGIN
   END IF;
 END$$;
 
+
 ================================================================================
 FILE: migrations/043_users_soft_delete.sql
 ================================================================================
@@ -1301,6 +1344,24 @@ BEGIN
     END IF;
   END IF;
 END$$;
+
+
+================================================================================
+FILE: migrations/044_workspace_channel_disconnect.sql
+================================================================================
+-- STEP409: soft disconnect / reconnect workspace channel.
+-- Keep history/profile/billing; disable active creator flows via DB-truth flag.
+
+alter table workspace_settings
+  add column if not exists channel_connected boolean not null default true;
+
+alter table workspace_settings
+  add column if not exists channel_disconnected_at timestamptz;
+
+update workspace_settings
+   set channel_connected = true
+ where channel_connected is null;
+
 
 ================================================================================
 FILE: migration_pack/00_mark_all_applied.sql
@@ -1362,6 +1423,8 @@ INSERT INTO schema_migrations(name, checksum) VALUES ('040_broadcast_fanout_qsta
 INSERT INTO schema_migrations(name, checksum) VALUES ('041_ig_oauth_accounts.sql', 'ddb6af89d3434bac4df82dcdc673a94238e7ea1bb23c52effa75384c2867c7e1') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('042_payments_fk_hardening.sql', 'e16b3cb4ab116965069a9d7dac4eae6848b6e084d19384696bcd6ecc57c2798a') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('043_users_soft_delete.sql', '15220a406620a82f29cd10f68aec639833174cfb0083ea5268e9281d259da315') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('044_workspace_channel_disconnect.sql', 'cdf91e251528528d288caa67462a4528c9f621f63b400c69297bd364cfe8f44c') ON CONFLICT (name) DO NOTHING;
+
 
 ================================================================================
 FILE: migration_pack/01_reconcile.sql
@@ -1597,6 +1660,7 @@ BEGIN
   END IF;
 END $$;
 
+
 ================================================================================
 FILE: migration_pack/README.md
 ================================================================================
@@ -1653,3 +1717,4 @@ psql "$DATABASE_URL" -f migration_pack/01_reconcile.sql
 ## Важное про папку `migrations/`
 В папке `migrations/` должны лежать **только настоящие миграции** вида `NNN_name.sql`.
 Файлы `migration_pack/*` не должны дублироваться внутри `migrations/`, иначе раннер миграций может применить их как обычные миграции.
+
