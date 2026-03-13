@@ -157,6 +157,9 @@ runNpm("smoke:creator-apps-list-density-contract");
 logHeader("Preflight: creator-side brand leads density contract");
 runNpm("smoke:creator-leads-density-contract");
 
+logHeader("Preflight: creator-side lead entrypoints contract");
+runNpm("smoke:creator-leads-entrypoints-contract");
+
 logHeader("Preflight: brand applications list density contract");
 runNpm("smoke:brand-apps-list-density-contract");
 
