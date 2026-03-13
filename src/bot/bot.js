@@ -10900,6 +10900,53 @@ function leadListTabsKb(wsId, counts, active, ret) {
   return kb;
 }
 
+
+function creatorLeadWhatNow(status, opts = {}) {
+  const st = normLeadStatus(status);
+  const canManualReply = !!opts.canManualReply;
+  if (st === 'new') {
+    return canManualReply
+      ? 'Новая заявка: ответь бренду, возьми в работу или добавь заметку.'
+      : 'Новая заявка: возьми её себе, отправь шаблон и поставь статус.';
+  }
+  if (st === 'in_progress') {
+    return canManualReply
+      ? 'Диалог уже в работе: смотри последние сообщения и двигай заявку дальше.'
+      : 'Заявка уже в работе: продолжай диалог, статус и заметки держи в этой карточке.';
+  }
+  if (st === 'closed') {
+    return canManualReply
+      ? 'Заявка закрыта: смотри историю и при необходимости открой новый ответ.'
+      : 'Заявка закрыта: можно посмотреть историю или вернуть внимание через заметку.';
+  }
+  if (st === 'spam') {
+    return canManualReply
+      ? 'Заявка помечена как спам: история сохранена внутри карточки.'
+      : 'Спам: карточка сохранена для внутренней проверки и заметок.';
+  }
+  return 'Открой карточку и продолжай работу по заявке.';
+}
+
+function formatCreatorLeadThread(items, limit = 3) {
+  const arr = Array.isArray(items) ? items : [];
+  const tail = arr.slice(Math.max(0, arr.length - limit));
+  if (!tail.length) return '';
+
+  const whoTitle = (by) => {
+    if (by === 'brand') return 'Бренд';
+    if (by === 'creator') return 'Вы';
+    if (by === 'curator') return 'Вы';
+    return 'Система';
+  };
+
+  return tail.map((x) => {
+    const who = whoTitle(String(x?.by || 'system').trim().toLowerCase());
+    const t = String(x?.text || '').replace(/\s+/g, ' ').trim();
+    const snippet = clipText(t || '—', 180);
+    return `• <b>${escapeHtml(who)}:</b> ${escapeHtml(snippet)}`;
+  }).join('\n');
+}
+
 async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 0, ret = null) {
   const actorUserId = ownerUserId;
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -10933,47 +10980,62 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const roleHint = (!isOwner && isCurator && !isAdmin)
-    ? `ℹ️ <i>Ты куратор: можешь отвечать шаблонами, ставить статусы и заметки. Владелец видит все изменения.</i>\n\n`
+    ? 'ℹ️ <i>Ты куратор: можешь отвечать шаблонами, ставить статусы и заметки. Владелец видит все изменения.</i>'
     : '';
 
-  const textHeader =
-    `📨 <b>Заявки брендов</b>\n\n` +
-    `Канал: <b>${escapeHtml(channel)}</b>\n` +
-    `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>\n\n` +
-    roleHint;
+  let text = `📨 <b>Заявки брендов</b>`;
+  text += `
+Показываю последние движения по заявкам брендов в этот канал.`;
+  text += `
+<i>${escapeHtml(channel)} · ${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)} · ${leads.length} на странице · стр ${p + 1}</i>`;
+  if (roleHint) text += `
+${roleHint}`;
 
-  const lines = leads.map((l) => {
-    const who = l.brand_username ? '@' + String(l.brand_username).replace(/^@/, '') : (l.brand_name || 'brand');
-    const snippet = String(l.message || '').replace(/\s+/g, ' ').slice(0, 60);
-    return `${leadStatusIcon(l.status)} <b>#${l.id}</b> — ${escapeHtml(who)} — <i>${escapeHtml(snippet)}${String(l.message || '').length > 60 ? '…' : ''}</i>`;
-  });
+  if (leads.length) {
+    text += `
 
-  const body = lines.length ? lines.join('\n') : 'Пока пусто. Заявки появятся, когда бренд нажмёт кнопку на витрине.';
+`;
+    for (const l of leads) {
+      const whoRaw = l.brand_username ? '@' + String(l.brand_username).replace(/^@/, '') : (String(l.brand_name || '').trim() || 'Бренд');
+      const who = clipText(whoRaw, 32);
+      const rowStatus = normLeadStatus(l.status);
+      const stTitle = (LEAD_STATUSES[rowStatus] || LEAD_STATUSES.new).title;
+      const when = l.updated_at ? fmtTs(l.updated_at) : (l.created_at ? fmtTs(l.created_at) : '—');
+      const msg = String(l.message || '').replace(/\s+/g, ' ').trim();
+      const short = clipText(msg || '—', 56);
+      const icon = leadStatusIcon(rowStatus);
+      text += `${icon} <b>${escapeHtml(who)}</b>
+`;
+      text += `<i>${escapeHtml(stTitle)} · #${l.id} · ${escapeHtml(when)}</i>
+`;
+      text += `${escapeHtml(short)}
+
+`;
+    }
+    text += `Открой заявку: там статус, последние сообщения, заметки и действия.`;
+  } else {
+    text += `
+
+Пока пусто. Заявки появятся, когда бренд нажмёт кнопку на витрине.`;
+  }
 
   const kb = leadListTabsKb(wsId, counts, st, ret);
-
   const retKey = String(ret || '').trim();
   const rPart = retKey ? retPartShort(retKey) : '';
 
-  // quick open buttons (max 8 to avoid huge kb)
   for (const l of leads.slice(0, 8)) {
-    const whoBtn = l.brand_username
-      ? '@' + String(l.brand_username).replace(/^@/, '')
-      : (String(l.brand_name || '').trim() || 'brand');
-    const whoShort = clipText(whoBtn, 16);
-    const btnLabel = clipText(`${leadStatusIcon(l.status)} #${l.id} ${whoShort}`, 56);
-
+    const whoBtn = l.brand_username ? '@' + String(l.brand_username).replace(/^@/, '') : (String(l.brand_name || '').trim() || 'Бренд');
+    const whoShort = clipText(whoBtn, 18);
+    const btnLabel = clipText(`${leadStatusIcon(l.status)} ${whoShort} · #${l.id}`, 50);
     kb.row().text(btnLabel, `a:lead_view|id:${l.id}|w:${wsId}|s:${leadStatusToCb(st)}|p:${p}${rPart}`);
   }
 
-  // pagination
-  if (p > 0) {
-    kb.row().text('⬅️', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p - 1}${rPart}`);
-  }
+  if (p > 0) kb.row().text('⬅️ Назад', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p - 1}${rPart}`);
   if (leads.length === limit) {
-    if (p > 0) kb.text('➡️', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p + 1}${rPart}`);
-    else kb.row().text('➡️', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p + 1}${rPart}`);
+    if (p > 0) kb.text('➡️ Далее', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p + 1}${rPart}`);
+    else kb.row().text('➡️ Далее', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p + 1}${rPart}`);
   }
+
   let backCb = `a:ws_profile|ws:${wsId}`;
   if (retKey === 'ws_open') backCb = `a:ws_open|ws:${wsId}`;
   else if (retKey === 'cw') backCb = `a:cur_ws|ws:${wsId}`;
@@ -10984,9 +11046,9 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
   kbNavRow(kb, backCb);
 
   try {
-    await safeEditOrReply(ctx, textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   } catch {
-    await ctx.reply(textHeader + body, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
 }
 
@@ -11137,53 +11199,110 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const canManualReply = isOwner || isAdmin;
-  const actorRole = (!isOwner && !isAdmin) ? 'curator' : (isAdmin ? 'admin' : 'owner');
-  const plainUi = !canManualReply; // curator view: no clickable URLs / @mentions
+  const plainUi = !canManualReply;
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const who = lead.brand_username ? '@' + String(lead.brand_username).replace(/^@/, '') : (lead.brand_name || 'brand');
-  const when = lead.created_at ? fmtTs(lead.created_at) : '—';
+  const when = lead.updated_at ? fmtTs(lead.updated_at) : (lead.created_at ? fmtTs(lead.created_at) : '—');
+  const st = normLeadStatus(lead.status);
+  const stTitle = (LEAD_STATUSES[st] || LEAD_STATUSES.new).title;
+  const flash = String(back?.flash || '').trim();
 
   const link = wsBrandLink(wsId);
-
   const channelShown = plainUi ? deLinkifyText(channel) : channel;
   const whoShown = plainUi ? deLinkifyText(who) : who;
   const vitrinaLine = link
     ? (plainUi
-        ? `Витрина: <code>${escapeHtml(deLinkifyText(link))}</code>
-`
-        : `Витрина: <a href="${escapeHtml(link)}">${escapeHtml(link)}</a>
-`)
+        ? `🪟 <b>Витрина</b>
+<code>${escapeHtml(deLinkifyText(link))}</code>`
+        : `🪟 <b>Витрина</b>
+<a href="${escapeHtml(link)}">${escapeHtml(link)}</a>`)
     : '';
 
-  let text =
-    `✉️ <b>Заявка #${lead.id}</b> ${leadStatusIcon(lead.status)}\n\n` +
-    `Канал: <b>${escapeHtml(channelShown)}</b>\n` +
-    vitrinaLine +
-    `От: <b>${escapeHtml(whoShown)}</b>\n` +
-    `Когда: <b>${escapeHtml(when)}</b>\n\n` +
-    `<b>Текст:</b>\n${escapeHtml(stripBrokenSurrogates(String(lead.message || '—')))}`;
+  const msgRaw = String(lead.message || '').trim();
+  const msgText = msgRaw ? clipText(msgRaw, 700) : '—';
+  const msgEsc = escapeHtml(msgText) + (msgRaw && msgRaw.length > 700 ? '\n<i>(сокращено)</i>' : '');
 
-  if (lead.reply_text) {
-    text += `\n\n<b>Ответ:</b>\n${escapeHtml(stripBrokenSurrogates(String(lead.reply_text)))}`;
-  }
+  const replyRaw = String(lead.reply_text || '').trim();
+  const replyText = replyRaw ? clipText(replyRaw, 500) : '';
+  const replyEsc = replyRaw ? (escapeHtml(replyText) + (replyRaw.length > 500 ? '\n<i>(сокращено)</i>' : '')) : '';
 
   const notesRaw = (lead.meta && Array.isArray(lead.meta.curator_notes)) ? lead.meta.curator_notes : [];
   const notes = normalizeLeadNotes(notesRaw);
-  if (notes.length) {
-    const last = notes.slice(-3).reverse();
-    const lines = last.map((n) => {
+  const notesLast = notes.slice(-3).reverse();
+  const thread = getBrandLeadThreadItems(lead);
+  const threadBlock = formatCreatorLeadThread(thread, 3);
+
+  let text =
+    `💬 <b>Диалог по заявке #${lead.id}</b>
+` +
+    `<b>${escapeHtml(stTitle)}</b>
+` +
+    `📣 <b>${escapeHtml(channelShown)}</b> · 🏷️ <b>${escapeHtml(whoShown)}</b>
+` +
+    `🕒 <code>${escapeHtml(when)}</code>`;
+
+  if (flash) text += `
+
+✅ <b>${escapeHtml(flash)}</b>`;
+  text += `
+
+💡 <b>Сейчас</b>
+${escapeHtml(creatorLeadWhatNow(st, { canManualReply }))}`;
+  text += `
+
+📌 <b>Состояние</b>
+Статус: <b>${escapeHtml(stTitle)}</b>`;
+  if (vitrinaLine) text += `
+
+${vitrinaLine}`;
+
+  const assignedId = lead.assigned_user_id ? Number(lead.assigned_user_id) : null;
+  if (assignedId) {
+    let assignedWho = 'id:' + assignedId;
+    try {
+      const au = await db.getUserById(assignedId);
+      if (au?.tg_username) assignedWho = '@' + au.tg_username;
+    } catch {}
+    const assignIcon = assignedId === Number(actorUserId) ? '👤 Ты' : `📌 ${assignedWho}`;
+    text += `
+Назначена: <b>${escapeHtml(assignIcon)}</b>`;
+  }
+
+  text += `
+
+📝 <b>Запрос бренда</b>
+${msgEsc}`;
+  if (replyEsc) text += `
+
+✍️ <b>Последний ответ</b>
+${replyEsc}`;
+  if (threadBlock) {
+    text += `
+
+💬 <b>Последние сообщения</b>
+${threadBlock}`;
+    if (thread.length > 3) text += `
+<i>Показаны последние 3 из ${thread.length}.</i>`;
+  }
+
+  if (notesLast.length) {
+    const noteLines = notesLast.map((n) => {
       const by = n?.by ? `id:${n.by}` : 'id:?';
       const at = n?.at ? fmtTs(n.at) : '';
       const t = String(n?.text || '').trim();
-      const clipped = clipText(t.replace(/\s+/g, ' '), 220);
+      const clipped = clipText(t.replace(/\s+/g, ' '), 180);
       const tagsHtml = fmtLeadNoteTags(n?.tags || extractLeadNoteTags(t));
       return `• <code>${escapeHtml(by)}</code>${at ? ` • <i>${escapeHtml(at)}</i>` : ''}: ${escapeHtml(clipped)}${tagsHtml}`;
     }).join('\n');
-    text += `\n\n📝 <b>Заметки</b>\n${lines}`;
+    text += `
+
+📝 <b>Последние заметки</b>
+${noteLines}`;
+    if (notes.length > 3) text += `
+<i>Показаны последние 3 из ${notes.length}.</i>`;
   }
 
-  // Owner-only: show last curator actions for this lead
   if (canManualReply) {
     try {
       const curatorsForWs = await db.listCurators(wsId);
@@ -11192,44 +11311,27 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
         actionPrefix: 'lead.',
         actorUserId: 0,
         leadId: Number(lead.id),
-        limit: 5,
+        limit: 3,
         offset: 0,
         onlyRole: 'curator'
       });
       if (Array.isArray(auditRows) && auditRows.length) {
         const lines = auditRows.map((r) => {
-          const p = r.payload || {};
+          const payload = r.payload || {};
           const a = auditActorLabel(r, curatorIndex);
-          const label = leadAuditActionLabel(String(r.action || ''), p);
+          const label = leadAuditActionLabel(String(r.action || ''), payload);
           return `• ${escapeHtml(fmtTs(r.created_at))} — <b>${escapeHtml(a)}</b> — ${escapeHtml(label)}`;
-        });
-        text += `\n\n📜 <b>Последние действия</b>\n${lines.join('\n')}`;
+        }).join('\n');
+        text += `
+
+📜 <b>Последние действия</b>
+${lines}`;
       }
     } catch {}
-  }
+  } else {
+    text += `
 
-  const st = normLeadStatus(lead.status);
-
-  // Assignment info
-  const assignedId = lead.assigned_user_id ? Number(lead.assigned_user_id) : null;
-  const isAssignedToMe = assignedId === Number(actorUserId);
-  const isAssignedToOther = assignedId && !isAssignedToMe;
-  if (assignedId) {
-    let assignedWho = 'id:' + assignedId;
-    try {
-      const au = await db.getUserById(assignedId);
-      if (au?.tg_username) assignedWho = '@' + au.tg_username;
-    } catch {}
-    const assignIcon = isAssignedToMe ? '👤 Ты' : `📌 ${assignedWho}`;
-    text += `\n\n<b>Назначена:</b> ${escapeHtml(assignIcon)}`;
-  }
-
-  if (!canManualReply) {
-    text += `\n\n<b>Что дальше:</b>\n` +
-      `1) 👤 Взять себе — закрепить заявку.\n` +
-      `2) ✅/🧾/❌ — отправить бренду ответ шаблоном.\n` +
-      `3) 💬 В работу / ✅ Закрыть — сортировка по вкладкам.\n` +
-      `4) 📝 Заметка — внутренняя, её увидит владелец.`;
+<i>Кураторский режим: ручной ответ недоступен — используй шаблоны, статус и заметки.</i>`;
   }
 
   const retKey = String(back?.ret || '').trim();
@@ -11240,7 +11342,6 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     : `a:ws_leads|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`;
 
   const auditCb = `a:ca|w:${wsId}|u:0|l:${lead.id}|p:0|al:0|b:lv|s:${leadStatusToCb(back.status)}|g:${back.page}${rPart}`;
-
   const kb = new InlineKeyboard();
 
   if (canManualReply) {
@@ -11257,7 +11358,6 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
       .text('📜 Журнал', auditCb)
       .row();
   } else {
-    // Curator mode: only templates + status + internal notes (no manual replies)
     kb.text('✅ Принять', `a:lead_tpl_send|id:${lead.id}|k:discuss|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .text('🧾 Детали', `a:lead_tpl_send|id:${lead.id}|k:brief|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`)
       .row()
@@ -11273,20 +11373,17 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
       .row();
   }
 
-  // Assignment buttons (for curators and owners)
   const assignCbBase = `a:lead_assign|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`;
-  if (isAssignedToMe) {
+  if (assignedId === Number(actorUserId)) {
     kb.text('❌ Снять с себя', `${assignCbBase}|do:un`).row();
-  } else if (isAssignedToOther) {
+  } else if (assignedId) {
     kb.text('⚠️ Назначена другому', `${assignCbBase}|do:re`).row();
   } else {
     kb.text('👤 Взять себе', `${assignCbBase}|do:me`).row();
   }
 
   kb.text('🗑 Удалить', `a:lead_del_q|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`).row();
-
   kbNavRow(kb, listCb);
-
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
@@ -11295,7 +11392,6 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
     await p0Await(ctx, stepId, `${stepId}:sendReply`, () => ctx.reply(text, extra), 8000);
   }
 }
-
 
 async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
   const id = Number(leadId || 0);
@@ -13520,7 +13616,8 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   try { await ctx.answerCallbackQuery({ text: '✅ Отправлено бренду' }); } catch {}
   try {
-    await renderLeadView(ctx, actorUserId, leadId, back);
+    const flash = `Шаблон отправлен: ${leadTplLabel(tplKey)}`;
+    await renderLeadView(ctx, actorUserId, leadId, { ...back, flash });
   } catch {
     const retPart = back?.ret ? `|ret:${String(back.ret)}` : '';
     await ctx.reply('✅ Отправлено.', { reply_markup: navKb(`a:lead_view|id:${leadId}|ws:${wsId}|s:${back.status}|p:${back.page}${retPart}`) });
@@ -25637,7 +25734,6 @@ if (p.a === 'a:lead_del_do') {
 }
 
 if (p.a === 'a:lead_set') {
-      try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
         await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
@@ -25781,7 +25877,11 @@ if (p.a === 'a:lead_set') {
       }
 
       try {
-        await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus || st, page: backPage, ret: retKey });
+        const flash = stBefore === stAfter
+          ? `Статус уже: ${(LEAD_STATUSES[stAfter]?.title || stAfter)}`
+          : `Статус обновлён: ${(LEAD_STATUSES[stBefore]?.title || stBefore)} → ${(LEAD_STATUSES[stAfter]?.title || stAfter)}`;
+        try { await ctx.answerCallbackQuery({ text: `✅ ${flash}` }); } catch {}
+        await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus || st, page: backPage, ret: retKey, flash });
       } catch (e) {
         try { console.warn('[lead_set] unhandled', { leadId, st, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
         const text = '✅ Статус обновлён. (Экран не удалось перерисовать — открой заявку заново.)';
