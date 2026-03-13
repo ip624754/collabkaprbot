@@ -8178,7 +8178,8 @@ async function renderWorkspaceWorkScreen(ctx, ws, opts = {}) {
 Сеть: <b>${net}</b>
 Кураторы: <b>${cur}</b>
 
-<i>Здесь — ежедневная работа по этому каналу: Inbox, заявки, офферы, папки и розыгрыши.</i>`, {
+<i>Здесь — ежедневная работа по этому каналу: Inbox, 📨 Заявки брендов, офферы, папки и розыгрыши.</i>
+<i>Сначала открой «📨 Заявки брендов»: там вход в список, карточки и диалоги по заявкам брендов.</i>`, {
     parse_mode: 'HTML',
     reply_markup: wsMenuKb(wsId, {
       showCurator: !!opts.showCurator,
@@ -13440,6 +13441,15 @@ function leadTplLabel(k) {
   return LEAD_TPL_LABELS[kk] || LEAD_TPL_LABELS.discuss;
 }
 
+function creatorLeadOpenButtonLabel(leadId) {
+  const id = Math.max(0, Number(leadId || 0));
+  return id ? `🔎 Заявка #${id}` : '🔎 Открыть заявку';
+}
+
+function creatorLeadListButtonLabel() {
+  return '📨 К заявкам';
+}
+
 async function renderLeadTemplatePreview(ctx, actorUserId, leadId, key, back) {
   return renderTemplatePreviewFlow(ctx, actorUserId, 'lead', leadId, key, back);
 }
@@ -13601,7 +13611,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 ` +
       `• Жди ответ бренда — он придёт сообщением по этой заявке.`;
     const notifKb = new InlineKeyboard()
-      .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
+      .text(creatorLeadOpenButtonLabel(leadId), `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
       .row().text('🗑 Убрать', 'a:nd');
 
     // If assigned to specific curator, only notify them; otherwise notify all
@@ -17144,7 +17154,7 @@ function curatorWsKb(wsId, giveaways, checkedSet = new Set(), leadCounts = null)
 
   const newLeads = leadCounts ? Number(leadCounts.new || 0) : 0;
   const leadBadge = newLeads ? ` (${newLeads})` : '';
-  kb.text(`📨 Inbox брендов${leadBadge}`, `a:ws_leads|w:${wsId}|s:n|p:0${retPartShort('cw')}`).row();
+  kb.text(`📨 Заявки брендов${leadBadge}`, `a:ws_leads|w:${wsId}|s:n|p:0${retPartShort('cw')}`).row();
 
   kb.text('❌ Выйти из канала', `a:cur_leave_q|ws:${wsId}`).row();
 
@@ -17199,6 +17209,7 @@ ${giveaways.length ? 'Конкурсы:' : 'Пока нет конкурсов.'
 • Если нужно — «📩 Владельцу» (короткий апдейт) или 📣 «Напомнить проверить».
 
 Подсказка: ✅/☑️ — отметить «проверено», 📣 — напомнить участникам нажать «Проверить».
+📨 «Заявки брендов» — вход в список заявок, карточки и диалоги по брендам.
 
 Если тебя назначили по ошибке или помощь больше не нужна — нажми “❌ Выйти из канала”.`;
     // Preload "checked" meta for quick status icons (best-effort; Redis).
@@ -20125,7 +20136,7 @@ ${escapeHtml(details)}`;
 ` +
           `• Жди ответ бренда — он придёт сообщением по этой заявке.`;
         const notifKb = new InlineKeyboard()
-          .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:n|p:0`)
+          .text(creatorLeadOpenButtonLabel(leadId), `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:n|p:0`)
           .row().text('🗑 Убрать', 'a:nd');
         const assignedTo = lead.assigned_user_id && Number(lead.assigned_user_id) !== Number(u.id) ? Number(lead.assigned_user_id) : null;
         await notifyWorkspaceTeam(apiFromCtx(ctx), Number(ws.id), {
@@ -20150,8 +20161,8 @@ ${escapeHtml(details)}`;
       } catch (e) {
         const rPart = back.ret ? retPartShort(back.ret) : '';
         const kb = new InlineKeyboard()
-          .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:${leadStatusToCb(back.status)}|p:${Number(back.page || 0)}${rPart}`)
-          .text('📨 Заявки', `a:ws_leads|w:${Number(ws.id)}|s:${leadStatusToCb(back.status)}|p:${Number(back.page || 0)}${rPart}`);
+          .text(creatorLeadOpenButtonLabel(leadId), `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:${leadStatusToCb(back.status)}|p:${Number(back.page || 0)}${rPart}`)
+          .text(creatorLeadListButtonLabel(), `a:ws_leads|w:${Number(ws.id)}|s:${leadStatusToCb(back.status)}|p:${Number(back.page || 0)}${rPart}`);
         await ctx.reply('✅ Ответ отправлен бренду.', { reply_markup: kb });
       }
       return;
@@ -20203,7 +20214,7 @@ ${escapeHtml(details)}`;
 ` +
         `<b>Что дальше:</b>
 ` +
-        `• Нажми «👀 Открыть» — карточка заявки.
+        `• Нажми «🔎 Заявка #${leadId}» — откроется карточка заявки.
 ` +
         `• «✍️ Ответить» — ответ бренду.
 
@@ -20212,7 +20223,7 @@ ${escapeHtml(details)}`;
 
       const leadOpenCb = `a:lead_view|id:${leadId}|w:${Number(lead.workspace_id)}|s:n|p:0|r:wo`;
       const leadReplyCb = `a:lead_reply|id:${leadId}|w:${Number(lead.workspace_id)}|s:n|p:0|r:wo`;
-      const kb = new InlineKeyboard().text('👀 Открыть', leadOpenCb).text('✍️ Ответить', leadReplyCb);
+      const kb = new InlineKeyboard().text(creatorLeadOpenButtonLabel(leadId), leadOpenCb).text('✍️ Ответить', leadReplyCb);
 
       const recipients = []
       try {
@@ -20284,7 +20295,7 @@ ${escapeHtml(details)}`;
 
       if (!saved) {
         const kb = new InlineKeyboard()
-          .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
+          .text(creatorLeadOpenButtonLabel(leadId), `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
           .text('📝 Заметки', `a:lead_notes|id:${leadId}|w:${wsId}|n:${nb}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
           .row()
           .text('📋 Меню', 'a:menu')
@@ -20309,10 +20320,10 @@ ${escapeHtml(details)}`;
       const notesCb = `a:lead_notes|id:${leadId}|w:${wsId}|n:0|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`;
 
       const kb = new InlineKeyboard()
-        .text('🔎 Открыть заявку', `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
+        .text(creatorLeadOpenButtonLabel(leadId), `a:lead_view|id:${leadId}|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
         .text('📝 Заметки', notesCb)
         .row()
-        .text('📨 Заявки', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
+        .text(creatorLeadListButtonLabel(), `a:ws_leads|w:${wsId}|s:${leadStatusToCb(backStatus)}|p:${backPage}${rPart}`)
         .row()
         .text('📋 Меню', 'a:menu')
         .text('🏠 Home', 'a:home');
@@ -25670,7 +25681,7 @@ if (p.a === 'a:lead_assign') {
         `• Если нужно — переназначь куратора в карточке.
 `;
       const notifKb = new InlineKeyboard()
-        .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
+        .text(creatorLeadOpenButtonLabel(leadId), `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
         .row().text('🗑 Убрать', 'a:nd');
       await notifyWorkspaceTeam(apiFromCtx(ctx), wsId, {
         text: notifText,
@@ -25862,7 +25873,7 @@ if (p.a === 'a:lead_set') {
             `• Открой карточку заявки и посмотри тред.\n` +
             `• Если нужно — ответь бренду или добавь заметку.`;
           const notifKb = new InlineKeyboard()
-            .text('👀 Открыть', `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
+            .text(creatorLeadOpenButtonLabel(leadId), `a:lead_view|id:${leadId}|w:${wsId}|s:n|p:0`)
             .row().text('🗑 Убрать', 'a:nd');
 
           // If lead has assigned curator — notify only them (+ owner). If not — notify only owner.
