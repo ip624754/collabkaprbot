@@ -63,6 +63,8 @@
 
 ## 2.5) Owner docs (для управления продом)
 - `90_OWNER_RUNBOOK.md` — шпаргалка владельца: деплой/ENV/migrations/cron/health/инциденты
+- `ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий incident playbook
+- `ops/02_HEALTH_ONE_SCREEN.md` — one-screen guide: как читать `/api/health` сверху вниз
 
 ## 3) Protocol / Process (как работаем)
 Папка: `docs/process/`
@@ -80,13 +82,15 @@
 ## Как использовать в новом чате
 Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.
 
-## Что нового в текущем snapshot (2026-03-05)
+## Что нового в текущем snapshot (2026-03-13)
 - Платежи: fallback apply exactly‑once (DB lock) + safety visibility (HMAC minlen + баннеры в Admin→Ops).
 - Giveaways: winners draw в REPEATABLE READ + audit метаданные воспроизводимости.
 - Broadcast: DB overload load‑shedding (429+Retry‑After) + метрики в health + баннеры в админке; tick fail‑closed при Redis degraded.
 - Ops: health/admin баннеры по `qstash_reschedule_failed` и `official_publish_stuck`.
 - RateLimit: деградация Redis больше не даёт unlimited fail‑open; degraded режим стал строже.
 - Новый операторский пакет: `94_PROD_READINESS_PACK.md` (GO/NO‑GO через `system_status/no_go_reasons` + матрица микрофиксов + runtime fallback runbook + `pending_deliveries`/`ops.digest_preview` + hard-skip отчёт + staging fault‑injection).
+- Навигационный контракт what-next/back-nav теперь зафиксирован отдельным source-level smoke (`smoke:what-next-backnav-contract`) и синхронизирован с `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md`.
+- Добавлен one-screen guide `docs/ops/02_HEALTH_ONE_SCREEN.md` для `/api/health` и обновлён NotebookLM audit baseline STEP430.
 
 
 ## Аудит (NotebookLM / внешняя проверка)
@@ -101,3 +105,4 @@
 - `docs/94_PROD_READINESS_PACK.md` — GO/NO‑GO + incident cookbook
 
 - `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий what-to-do playbook после hardening шагов 403–405.
+- `docs/ops/02_HEALTH_ONE_SCREEN.md` — one-screen guide по `/api/health` (STEP429).
