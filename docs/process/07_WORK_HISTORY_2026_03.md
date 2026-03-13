@@ -1,38 +1,33 @@
-## STEP437 — Brand application accept SQL typed params hotfix
+
+## STEP439 — Deals stage transition fix + context-correct navigation + clearer labels
 
 ### Почему
-После выкладки STEP436 live callback `a:brand_app_accept|id:N|s:new|p:0` доходил до сервера, но падал уже внутри DB accept-path с PostgreSQL ошибкой `could not determine data type of parameter $2`. Корень оказался не в файлах архива, не в QStash и не в UX: в `src/db/queries.js` metadata write внутри `acceptBrandApplicationWithCharge(...)` использовал `jsonb_build_object('accepted_by_user_id', $2, 'charged_cost', $3, ...)`, где PostgreSQL не смог вывести тип параметров внутри JSON builder. Из-за rollback accept не доходил до COMMIT: кредит не списывался, статус не переходил в `in_progress`, заявка оставалась `new`, а бренд видел повторный `✅ Принять` и пустой `💬 В работе`.
+После стабилизации creator → brand applications оказалось, что следующий реальный UX/runtime хвост сидит уже в deal-layer:
+- в карточке сделки stage-buttons (`💬 Переговоры / 🤝 Договорились / 💳 Оплата / ✅ Завершено / 🗑 Потеряно`) вели себя как “нажал и ничего не произошло”; корень оказался тем же классом PostgreSQL-bug, что и в STEP437 — нетипизированный параметр в `jsonb_build_object(...)` внутри `setBrandApplicationDealStage()`;
+- локальный вход из карточки заявки был назван слишком глобально (`📌 В сделках`), а `⬅️ Назад` из deal-view мог уводить в общий раздел `📌 Сделки`, хотя пользователь пришёл из конкретной заявки;
+- списки заявок/сделок по-прежнему держали pagination на голых `⬅️ / ➡️`, что для живого brand-side UX выглядело слишком немым.
 
 ### Что сделано
-- `src/db/queries.js`:
-  - в `acceptBrandApplicationWithCharge(...)` добавлены явные cast внутри `jsonb_build_object(...)`: `accepted_by_user_id = $2::bigint`, `charged_cost = $3::int`;
-  - тем же маленьким патчем усилен legacy helper `markBrandApplicationAccepted(...)`, чтобы он не повторил тот же класс ошибки при будущем reuse (`accepted_by_user_id = $2::bigint`).
-- Добавлен source-level smoke `scripts/smoke-brand-app-accept-sql-contract.js`, который держит typed SQL contract для обоих мест и не даст вернуть raw `$2 / $3` обратно в JSON metadata write.
-- `package.json` и `scripts/preflight.js` обновлены: новый smoke обязателен в preflight рядом с accept UX contract.
-- Обновлены `docs/00_CURRENT_STATE.md` и этот work history.
+- `src/db/queries.js`: `setBrandApplicationDealStage()` теперь пишет `deal_stage_meta.set_by_user_id` как `$3::bigint`, чтобы mutation-path стадий сделки не падал на типизации параметра внутри `jsonb_build_object(...)`;
+- `src/bot/bot.js`:
+  - локальный CTA в карточке заявки relabel с `📌 В сделках` на `📌 Стадия сделки`;
+  - введён компактный callback back-context `ab:<statusCode>.<page>` для deal-view, чтобы локальный переход из заявки оставался локальным и не ломал лимит Telegram callback_data;
+  - `renderBrandDealView()` теперь различает локальный и глобальный контекст: если экран открыт из заявки, `⬅️ Назад` и `✉️ Открыть заявку` возвращают в эту же заявку, а не в глобальный CRM-раздел;
+  - в карточке сделки добавлен короткий hint `Это стадия сделки по этой заявке.`;
+  - pagination-кнопки в `renderBrandAppsList()` и `renderBrandDealsList()` relabel в `⬅️ Назад / ➡️ Далее`.
+- Добавлен source-level smoke `scripts/smoke-brand-deal-stage-nav-contract.js` и wired в `package.json` + `scripts/preflight.js`.
 
 ### Что не меняли
-- никаких новых migrations / schema changes;
-- accept UX / pending semantics из STEP436;
-- Brand OPS COPY / STEP434;
-- QStash dedup / STEP433;
-- reply / routing / credits visibility.
+- глобальный entrypoint `📌 Сделки` из главного меню;
+- core accept/charge/reply flow brand applications;
+- QStash / OPS COPY / migrations / hot-path DB reads.
 
 ### QA
-- `node --check src/db/queries.js`
-- `node --check scripts/smoke-brand-app-accept-sql-contract.js`
-- `node scripts/smoke-brand-app-accept-sql-contract.js`
-- `npm run smoke:brand-app-accept-sql-contract`
-- `npm run smoke:brand-app-accept-ux-contract`
-- `npm run actions:check`
-- `npm run lint:nav`
-- `npm run test:redact`
-- Live verify after deploy:
-  1. creator отправляет заявку;
-  2. brand жмёт `✅ Принять`;
-  3. callback больше не падает на `could not determine data type of parameter $2`;
-  4. кредит списывается;
-  5. заявка переходит в `in_progress` и появляется в `💬 В работе`.
+- stage buttons в карточке сделки реально меняют стадию и больше не падают в silent SQL/runtime error;
+- локальный переход `📌 Стадия сделки` из карточки заявки сохраняет local back: `⬅️ Назад` возвращает в эту же заявку;
+- глобальный вход `📌 Сделки` из меню остаётся глобальным CRM-контекстом;
+- в списках заявок и сделок pagination показывает `⬅️ Назад / ➡️ Далее`;
+- `npm run smoke:brand-deal-stage-nav-contract` зелёный.
 
 ## STEP436 — Brand application accept completion / final-state hardening
 
