@@ -55,6 +55,20 @@ export function getQStashDeliveryUrl(pathname) {
   return `${base}${p}`;
 }
 
+export function sanitizeQStashDeduplicationId(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const safe = raw
+    .normalize('NFKC')
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 180);
+
+  return safe || 'qstash-dedup';
+}
+
 export async function qstashPublishJSON({
   url,
   body,
@@ -67,7 +81,8 @@ export async function qstashPublishJSON({
   const client = getClientOrNull();
   if (!client) throw new Error('qstash_token_missing');
   const headers = {};
-  if (deduplicationId) headers['Upstash-Deduplication-Id'] = String(deduplicationId);
+  const dedupHeaderValue = sanitizeQStashDeduplicationId(deduplicationId);
+  if (dedupHeaderValue) headers['Upstash-Deduplication-Id'] = dedupHeaderValue;
 
   let r;
   try {
@@ -89,7 +104,10 @@ export async function qstashPublishJSON({
       kind: 'qstash',
       payload: String(url || '').slice(0, 180),
       extra: [
-        deduplicationId ? `dedup: ${String(deduplicationId).slice(0, 120)}` : '',
+        dedupHeaderValue ? `dedup: ${dedupHeaderValue.slice(0, 120)}` : '',
+        dedupHeaderValue && String(deduplicationId || '') !== dedupHeaderValue
+          ? `dedup_raw: ${String(deduplicationId).slice(0, 120)}`
+          : '',
         delaySec ? `delaySec: ${Math.floor(delaySec)}` : '',
         typeof retries === 'number' ? `retries: ${retries}` : '',
         String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180),
