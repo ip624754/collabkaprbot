@@ -11556,6 +11556,21 @@ function dealStageTitle(s) {
   return `${d.icon} ${d.label}`;
 }
 
+function dealStageWhatNow(s) {
+  const k = normDealStage(s);
+  if (k === 'negotiation') return 'обсудить условия или отправить шаблон';
+  if (k === 'deal') return 'зафиксировать договорённость и перейти к оплате';
+  if (k === 'paid') return 'дождаться оплаты или подтвердить завершение';
+  if (k === 'done') return 'сделка завершена';
+  if (k === 'lost') return 'сделка остановлена';
+  return 'продолжить работу по сделке';
+}
+
+function dealStageButtonLabel(targetStage, activeStage) {
+  const title = dealStageTitle(targetStage);
+  return normDealStage(targetStage) === normDealStage(activeStage) ? `• ${title}` : title;
+}
+
 function getAppDealStage(app) {
   const s = app?.meta?.deal_stage;
   const k = String(s || '').toLowerCase().trim();
@@ -11913,7 +11928,6 @@ async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'neg
 
   const stage = getAppDealStage(app) || 'negotiation';
   const backCtx = brandDealBackCtx(back);
-  const viewCb = brandDealViewCb(app.id, backCtx);
   const appBackCb = backCtx.appStatus ? brandDealAppBackCb(app.id, backCtx) : `a:brand_app_view|id:${app.id}|s:${normLeadStatus(app.status)}|p:0`;
   const backExtra = brandDealAppBackPart(backCtx);
 
@@ -11921,51 +11935,73 @@ async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'neg
     ? '@' + String(app.creator_username).replace(/^@/, '')
     : (app.creator_tg_id ? `id:${app.creator_tg_id}` : 'creator');
   const when = app.updated_at ? fmtTs(app.updated_at) : (app.created_at ? fmtTs(app.created_at) : '—');
-  const msg = String(app.message || '').trim();
+
+  const msgRaw = String(app.message || '').trim();
+  const msgText = msgRaw ? clipText(msgRaw, 700) : '—';
+  const msgEsc = escapeHtml(msgText) + (msgRaw && msgRaw.length > 700 ? '\n<i>(сокращено)</i>' : '');
+
+  const replyRaw = String(app.reply_text || '').trim();
+  const replyText = replyRaw ? clipText(replyRaw, 500) : '';
+  const replyEsc = replyRaw ? (escapeHtml(replyText) + (replyRaw.length > 500 ? '\n<i>(сокращено)</i>' : '')) : '';
 
   const thread = Array.isArray(app?.meta?.thread) ? app.meta.thread : [];
+  const threadBlock = formatBrandAppThread(thread, 3);
+  const flash = String(back?.flash || '').trim();
 
   let text =
-    `📌 <b>Сделка</b>
+    `📌 <b>Сделка #${app.id}</b>
 ` +
-    `Бренд: <b>${escapeHtml(brandName)}</b>
+    `<b>${escapeHtml(dealStageTitle(stage))}</b>
 ` +
-    `Креатор: <b>${escapeHtml(who)}</b>
+    `🏷️ <b>${escapeHtml(brandName)}</b> · 🧑‍🎨 <b>${escapeHtml(who)}</b>
 ` +
-    `Обновлено: <b>${escapeHtml(when)}</b>
+    `🕒 <code>${escapeHtml(when)}</code>
 
 ` +
-    `Стадия: <b>${escapeHtml(dealStageTitle(stage))}</b>
-` +
-    `<i>Это стадия сделки по этой заявке.</i>
+    `<i>Это стадия сделки по этой заявке.</i>`;
 
-` +
-    `<b>Сообщение:</b>
-<code>${escapeHtml(msg || '—')}</code>`;
-
-  if (app.reply_text) {
+  if (flash) {
     text += `
 
-<b>Последний ответ бренда:</b>
-<code>${escapeHtml(String(app.reply_text))}</code>`;
+✅ <b>${escapeHtml(flash)}</b>`;
   }
 
-  const threadBlock = formatBrandAppThread(thread, 8);
+  text += `
+
+💡 <b>Сейчас</b>
+${escapeHtml(dealStageWhatNow(stage))}`;
+
+  text += `
+
+📝 <b>Заявка</b>
+${msgEsc}`;
+
+  if (replyEsc) {
+    text += `
+
+✍️ <b>Последний ответ бренда</b>
+${replyEsc}`;
+  }
+
   if (threadBlock) {
     text += `
 
-<b>Диалог:</b>
+💬 <b>Последние сообщения</b>
 ${threadBlock}`;
+    if (thread.length > 3) {
+      text += `
+<i>Показаны последние 3 из ${thread.length}.</i>`;
+    }
   }
 
   const kb = new InlineKeyboard()
-    .text(dealStageTitle('negotiation'), `a:brand_deal_set|id:${app.id}|st:negotiation|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
-    .text(dealStageTitle('deal'), `a:brand_deal_set|id:${app.id}|st:deal|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
+    .text(dealStageButtonLabel('negotiation', stage), `a:brand_deal_set|id:${app.id}|st:negotiation|c:${stage}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
+    .text(dealStageButtonLabel('deal', stage), `a:brand_deal_set|id:${app.id}|st:deal|c:${stage}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text(dealStageTitle('paid'), `a:brand_deal_set|id:${app.id}|st:paid|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
-    .text(dealStageTitle('done'), `a:brand_deal_set|id:${app.id}|st:done|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
+    .text(dealStageButtonLabel('paid', stage), `a:brand_deal_set|id:${app.id}|st:paid|c:${stage}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
+    .text(dealStageButtonLabel('done', stage), `a:brand_deal_set|id:${app.id}|st:done|c:${stage}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text(dealStageTitle('lost'), `a:brand_deal_set|id:${app.id}|st:lost|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
+    .text(dealStageButtonLabel('lost', stage), `a:brand_deal_set|id:${app.id}|st:lost|c:${stage}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
     .text('✍️ Ответить', `a:brand_deal_reply|id:${app.id}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .text('⚡ Шаблоны', `a:brand_deal_tpls|id:${app.id}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
@@ -24889,14 +24925,18 @@ if (p.a === 'a:brand_deal_view') {
 	}
 
 	if (p.a === 'a:brand_deal_set') {
-	  await ctx.answerCallbackQuery();
 	  const appId = Number(p.id || 0);
 	  const stage = normDealStage(String(p.st || 'negotiation'));
+	  const prevStage = normDealStage(String(p.c || 'negotiation'));
 	  const back = { stage: String(p.b || 'negotiation'), page: Math.max(0, Number(p.p || 0)), ab: String(p.ab || '') };
 	  if (!appId) return;
 
+	  const flash = prevStage === stage
+	    ? `Стадия уже: ${dealStageTitle(stage)}`
+	    : `Стадия обновлена: ${dealStageTitle(prevStage)} → ${dealStageTitle(stage)}`;
+	  try { await ctx.answerCallbackQuery({ text: flash }); } catch {}
 	  await safeBrandApplications(() => db.setBrandApplicationDealStage(appId, stage, u.id), async () => null);
-	  await renderBrandDealView(ctx, u.id, appId, back);
+	  await renderBrandDealView(ctx, u.id, appId, { ...back, flash });
 	  return;
 	}
 if (p.a === 'a:brand_deal_reply') {
