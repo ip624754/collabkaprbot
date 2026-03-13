@@ -1,3 +1,39 @@
+## STEP437 — Brand application accept SQL typed params hotfix
+
+### Почему
+После выкладки STEP436 live callback `a:brand_app_accept|id:N|s:new|p:0` доходил до сервера, но падал уже внутри DB accept-path с PostgreSQL ошибкой `could not determine data type of parameter $2`. Корень оказался не в файлах архива, не в QStash и не в UX: в `src/db/queries.js` metadata write внутри `acceptBrandApplicationWithCharge(...)` использовал `jsonb_build_object('accepted_by_user_id', $2, 'charged_cost', $3, ...)`, где PostgreSQL не смог вывести тип параметров внутри JSON builder. Из-за rollback accept не доходил до COMMIT: кредит не списывался, статус не переходил в `in_progress`, заявка оставалась `new`, а бренд видел повторный `✅ Принять` и пустой `💬 В работе`.
+
+### Что сделано
+- `src/db/queries.js`:
+  - в `acceptBrandApplicationWithCharge(...)` добавлены явные cast внутри `jsonb_build_object(...)`: `accepted_by_user_id = $2::bigint`, `charged_cost = $3::int`;
+  - тем же маленьким патчем усилен legacy helper `markBrandApplicationAccepted(...)`, чтобы он не повторил тот же класс ошибки при будущем reuse (`accepted_by_user_id = $2::bigint`).
+- Добавлен source-level smoke `scripts/smoke-brand-app-accept-sql-contract.js`, который держит typed SQL contract для обоих мест и не даст вернуть raw `$2 / $3` обратно в JSON metadata write.
+- `package.json` и `scripts/preflight.js` обновлены: новый smoke обязателен в preflight рядом с accept UX contract.
+- Обновлены `docs/00_CURRENT_STATE.md` и этот work history.
+
+### Что не меняли
+- никаких новых migrations / schema changes;
+- accept UX / pending semantics из STEP436;
+- Brand OPS COPY / STEP434;
+- QStash dedup / STEP433;
+- reply / routing / credits visibility.
+
+### QA
+- `node --check src/db/queries.js`
+- `node --check scripts/smoke-brand-app-accept-sql-contract.js`
+- `node scripts/smoke-brand-app-accept-sql-contract.js`
+- `npm run smoke:brand-app-accept-sql-contract`
+- `npm run smoke:brand-app-accept-ux-contract`
+- `npm run actions:check`
+- `npm run lint:nav`
+- `npm run test:redact`
+- Live verify after deploy:
+  1. creator отправляет заявку;
+  2. brand жмёт `✅ Принять`;
+  3. callback больше не падает на `could not determine data type of parameter $2`;
+  4. кредит списывается;
+  5. заявка переходит в `in_progress` и появляется в `💬 В работе`.
+
 ## STEP436 — Brand application accept completion / final-state hardening
 
 ### Почему
