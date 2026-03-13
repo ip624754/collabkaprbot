@@ -3660,9 +3660,9 @@ function kbBrandApplyMore(brandUserId, backPage = 0, canOpenInbox = false) {
 
 
 function kbBrandAppAcceptedDone(appId, brandUserId) {
-  // STEP58: Focused done screen for "application accepted" notification (creator side)
+  // Legacy follow-up for already-sent accept notices; keep callbacks compatible while using the cleaned creator-side vocabulary.
   const kb = new InlineKeyboard();
-  kb.text('💬 Написать бренду', `a:brand_app_chat|id:${appId}`).row();
+  kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${appId}`).row();
   kb.text('⋯ Ещё действия', `a:more|k:brand_app_accepted|id:${appId}|u:${brandUserId}`).row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
@@ -3670,8 +3670,9 @@ function kbBrandAppAcceptedDone(appId, brandUserId) {
 
 function kbBrandAppAcceptedMore(appId, brandUserId) {
   const kb = new InlineKeyboard();
-  kb.text('📨 Открыть заявку', `a:brand_app_card|id:${appId}`).row();
+  kb.text(creatorBrandAppDialogButtonLabel(appId), `a:brand_app_card|id:${appId}`).row();
   kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`).row();
+  kb.text(creatorBrandAppListButtonLabel(), 'a:my_apps|p:0').row();
   kb.text('⬅️ Назад', `a:brand_app_accepted_done|id:${appId}|u:${brandUserId}`).row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
@@ -6972,13 +6973,14 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
   const creatorName = ws ? safeCreatorDisplayName(ws) : 'Креатор';
   const creatorLabel = `<b>${escapeHtml(creatorName)}</b>`;
 
-  const notifText = `📝 <b>Новая заявка от креатора</b>
-
-Бренд: <b>${escapeHtml(brandName)}</b>
-От: ${creatorLabel}
-
-<b>Текст:</b>
-${escapeHtml(msg)}`;
+  const notifText = buildBrandAppServiceNoticeText({
+    appId: Number(res.id),
+    kind: 'new_app',
+    brandName,
+    creatorName,
+    body: msg,
+    status: 'new'
+  });
   const opsCopyText = `🛠 <b>OPS COPY · Заявка креатора бренду</b>
 <i>Это операторская копия. Основной workflow идёт у бренда.</i>
 
@@ -6988,10 +6990,7 @@ ${escapeHtml(msg)}`;
 <b>Текст:</b>
 ${escapeHtml(msg)}`;
 
-  const kbNotif = new InlineKeyboard()
-    .text('📨 Открыть заявку', `a:brand_app_view|id:${res.id}|s:new|p:0`)
-    .row()
-    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  const kbNotif = brandAppNoticeKb(res.id, { status: 'new', page: 0, dismiss: false });
 
   // Recipients: owner + managers always; super-admin ops copy only when explicitly enabled.
   const brandRecipients = new Set();
@@ -8769,15 +8768,46 @@ function wsBrandLink(wsId) {
   return `https://t.me/${un}?start=wsp_${wsId}`;
 }
 
+function brandLeadDialogButtonLabel(leadId = 0) {
+  const id = Math.max(0, Number(leadId || 0));
+  return id ? `💬 Диалог #${id}` : '💬 Диалог';
+}
+
+function brandLeadProfileButtonLabel() {
+  return '🪟 Витрина креатора';
+}
+
+function brandLeadContactUnlockButtonLabel() {
+  const raw = String(contactUnlockBtnLabel() || '').trim();
+  if (!raw) return '🔓 Контакты на витрине';
+  return raw.replace(/^🔓\s*Контакты\b/i, '🔓 Контакты на витрине');
+}
+
+function brandLeadWhatNextText(leadId = 0, mode = 'default') {
+  const dialogLabel = brandLeadDialogButtonLabel(leadId);
+  const profileLabel = brandLeadProfileButtonLabel();
+  const contactsLabel = brandLeadContactUnlockButtonLabel();
+  if (mode === 'contacts_open') {
+    return `Продолжай через «${dialogLabel}» или открой «${profileLabel}». Контакты на витрине уже открыты.`;
+  }
+  if (mode === 'reply_sent') {
+    return `Продолжай через «${dialogLabel}», открой «${profileLabel}». Контакты — через «${contactsLabel}».`;
+  }
+  return `Продолжай через «${dialogLabel}», открой «${profileLabel}» или разблокируй контакты через «${contactsLabel}».`;
+}
+
 function brandReplyKb(ws, wsId, brandCredits = 0, leadId = 0) {
   const kb = new InlineKeyboard();
   const lid = Number(leadId || 0);
   const ctxPart = lid ? `|r:bl|l:${lid}` : '';
+  const dialogLabel = brandLeadDialogButtonLabel(lid);
+  const profileLabel = brandLeadProfileButtonLabel();
+  const contactsLabel = brandLeadContactUnlockButtonLabel();
 
   // Keep brands inside the bot (no direct contact links in replies).
-  // Provide a clear way to continue the same deal thread.
-  if (lid) kb.text('💬 Диалог', `a:blead_view|id:${lid}|w:${wsId}`);
-  kb.text('🪟 Витрина', `a:wsp_open|ws:${wsId}|m:ro${ctxPart}`);
+  // Provide a clear way to continue the same lead thread and open the same creator profile.
+  if (lid) kb.text(dialogLabel, `a:blead_view|id:${lid}|w:${wsId}`);
+  kb.text(profileLabel, `a:wsp_open|ws:${wsId}|m:ro${ctxPart}`);
 
   kb.row();
 
@@ -8787,15 +8817,15 @@ function brandReplyKb(ws, wsId, brandCredits = 0, leadId = 0) {
   // STEP213: never hide monetization CTAs because of an unknown/stale/zero Redis balance.
   // показываем «Контакты» всегда, а проверку кредитов делаем на клике (DB-truth).
   if (CONTACT_UNLOCK_COST <= 0) {
-    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`);
+    kb.text(contactsLabel, `a:wsp_contact_req|ws:${wsId}${ctxPart}`);
   } else if (bal <= 0) {
-    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`)
+    kb.text(contactsLabel, `a:wsp_contact_req|ws:${wsId}${ctxPart}`)
       .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
   } else if (bal < CONTACT_UNLOCK_COST) {
-    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`)
+    kb.text(contactsLabel, `a:wsp_contact_req|ws:${wsId}${ctxPart}`)
       .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
   } else {
-    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${ctxPart}`);
+    kb.text(contactsLabel, `a:wsp_contact_req|ws:${wsId}${ctxPart}`);
   }
 
   // Always include navigation buttons so brand isn't stuck with a text-only message.
@@ -10434,6 +10464,11 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
 
   const hideApply = !!opts?.hideApply;
   const contactCbExtra = String(opts?.contactCbExtra || '');
+  const brandLeadId = Math.max(0, Number(opts?.brandLeadId || 0));
+  const brandLeadCtx = !!opts?.dialogCb && hideApply;
+  const dialogEntryLabel = brandLeadCtx ? brandLeadDialogButtonLabel(brandLeadId) : '💬 Диалог';
+  const profileEntryLabel = brandLeadCtx ? brandLeadProfileButtonLabel() : '🪟 Витрина';
+  const contactsEntryLabel = brandLeadCtx ? brandLeadContactUnlockButtonLabel() : contactUnlockBtnLabel();
 
   // Public view: hide direct contacts/channel by default to prevent bypassing the bot.
   // Contacts can be revealed via paid unlock (Brand Pass credits) and cached in Redis.
@@ -10607,8 +10642,8 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     blocks.push(`👁 <b>Предпросмотр</b>: так бренды видят твою витрину.`);
     if (isOwner) blocks.push(`🔗 Чтобы поделиться витриной — нажми «🔗 Поделиться» ниже. Для Instagram — «📌 IG шаблоны».`);
   } else {
-    if (hideApply) blocks.push(`🪟 Витрина (read-only): продолжай через «💬 Диалог». Контакты на витрине — через «${contactUnlockBtnLabel()}».`);
-    else blocks.push(`🪟 Витрина: нажми «📝 Оставить заявку». Контакты на витрине — через «${contactUnlockBtnLabel()}».`);
+    if (hideApply) blocks.push(`${profileEntryLabel} (read-only): продолжай через «${dialogEntryLabel}». Контакты на витрине — через «${contactsEntryLabel}».`);
+    else blocks.push(`${profileEntryLabel}: нажми «📝 Оставить заявку». Контакты на витрине — через «${contactsEntryLabel}».`);
 
     if (viewer) {
       for (const line of brandPassCreditsBlockLines(brandCredits)) blocks.push(line);
@@ -10718,7 +10753,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
       } else if (contactUnlockPending) {
         lines.push(`• Контакты: <b>⏳ в обработке</b> (обнови витрину через 10–30 сек)`);
       } else {
-        lines.push(`• Контакты: <b>🔒 скрыто</b> (открываются через «${contactUnlockBtnLabel()}»)`);
+        lines.push(`• Контакты: <b>🔒 скрыто</b> (открываются через «${contactsEntryLabel}»)`);
       }
       blocks.push('');
       blocks.push(lines.join('\n'));
@@ -10745,7 +10780,7 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
     // Row 1: dialog (if any) + apply (public)
     let rowHas = false;
     if (dialogCb) {
-      kb.text('💬 Диалог', dialogCb);
+      kb.text(dialogEntryLabel, dialogCb);
       rowHas = true;
     }
     if (!hideApply) {
@@ -10772,20 +10807,20 @@ async function renderWsPublicProfile(ctx, wsId, opts = {}) {
       // Если кредитов мало — оставляем и «Контакты», и «Купить», чтобы путь был очевиден.
       const balNum = (brandCredits === null || brandCredits === undefined) ? null : Number(brandCredits || 0);
       if (CONTACT_UNLOCK_COST <= 0) {
-        kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
+        kb.text(contactsEntryLabel, `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
       } else if (balNum !== null) {
         if (balNum <= 0) {
           // STEP213: keep «Контакты» visible even when Redis balance is 0/stale.
-          kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`)
+          kb.text(contactsEntryLabel, `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`)
             .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
         } else if (balNum < CONTACT_UNLOCK_COST) {
-          kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`)
+          kb.text(contactsEntryLabel, `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`)
             .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
         } else {
-          kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
+          kb.text(contactsEntryLabel, `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
         }
       } else {
-        kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
+        kb.text(contactsEntryLabel, `a:wsp_contact_req|ws:${wsId}${contactCbExtra}`);
         if (CONTACT_UNLOCK_COST > 0) kb.text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
       }
       kb.row();
@@ -11410,6 +11445,9 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
   const realWsId = Number(wsId || lead.workspace_id || 0);
   const ws = realWsId ? await db.getWorkspaceAny(realWsId) : null;
   const channel = ws?.channel_username ? '@' + String(ws.channel_username) : (ws?.title || 'Креатор');
+  const dialogLabel = brandLeadDialogButtonLabel(id);
+  const profileLabel = brandLeadProfileButtonLabel();
+  const contactsLabel = brandLeadContactUnlockButtonLabel();
 
   // Prevent monetization bypass: do not reveal direct channel handle in the lead dialog
   // unless contacts were unlocked for this brand on this workspace.
@@ -11454,70 +11492,55 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
   const meta = normalizeJsonb(lead.meta) || {};
   const thread = Array.isArray(meta.thread) ? meta.thread : [];
   const threadBlock = fmtBrandLeadThread(thread, 6);
+  const currentHint = contactsUnlocked
+    ? `Продолжай через «✍️ Ответить» или ${brandLeadWhatNextText(id, 'contacts_open').replace(/^Продолжай через /, '').replace(/\.$/, '')}.`
+    : `Продолжай через «✍️ Ответить», ${brandLeadWhatNextText(id).replace(/^Продолжай через /, '').replace(/\.$/, '')}.`;
 
   let text =
-    `💬 <b>Диалог по заявке #${id}</b>
+    `💬 <b>${escapeHtml(dialogLabel)}</b>\n\n` +
+    `💡 <b>Сейчас:</b> ${escapeHtml(currentHint)}\n\n` +
+    `Креатор: <b>${escapeHtml(who)}</b>\n` +
+    `Канал: <b>${escapeHtml(channelShown)}</b>\n` +
+    `Статус: <b>${escapeHtml(statusTitle)}</b>\n` +
+    `Создано: <code>${escapeHtml(String(when))}</code>\n` +
+    `${brandPassCreditsBlockLines(credits).join('\n')}\n` +
+    (needLine ? `${needLine}\n` : ``);
 
-` +
-    `Креатор: <b>${escapeHtml(who)}</b>
-` +
-    `Канал: <b>${escapeHtml(channelShown)}</b>
-` +
-    `Статус: <b>${escapeHtml(statusTitle)}</b>
-` +
-    `Создано: <code>${escapeHtml(String(when))}</code>
-` +
-    `${brandPassCreditsBlockLines(credits).join('\n')}
-` +
-    (needLine ? `${needLine}
-` : ``) +
-    ``;
-
-  text += `
-<b>Заявка:</b>
-${escapeHtml(stripBrokenSurrogates(String(lead.message || '—')))}
-`;
+  text += `\n<b>Заявка:</b>\n${escapeHtml(stripBrokenSurrogates(String(lead.message || '—')))}\n`;
 
   if (lead.reply_text) {
-    text += `
-<b>Последний ответ:</b>
-${escapeHtml(stripBrokenSurrogates(String(lead.reply_text || '')))}
-`;
+    text += `\n<b>Последний ответ:</b>\n${escapeHtml(stripBrokenSurrogates(String(lead.reply_text || '')))}\n`;
   }
 
   if (threadBlock) {
-    text += `
-<b>Последние сообщения:</b>
-${threadBlock}`;
+    text += `\n<b>Последние сообщения:</b>\n${threadBlock}`;
   }
 
-  // Actions
   const kb = new InlineKeyboard();
   kb.text('✍️ Ответить', `a:blead_reply|id:${id}|w:${realWsId}`)
-    .text('🪟 Витрина', `a:wsp_open|ws:${realWsId}|m:ro|r:bl|l:${id}`)
+    .text(profileLabel, `a:wsp_open|ws:${realWsId}|m:ro|r:bl|l:${id}`)
     .row();
 
   if (needContacts <= 0) {
-    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
+    kb.text(contactsLabel, `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
   } else if (credits === null) {
-    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
+    kb.text(contactsLabel, `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
       .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
   } else if (Number(creditsNum || 0) <= 0) {
     // STEP213: don't hide «Контакты» when balance is 0/unknown in Redis.
-    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
+    kb.text(contactsLabel, `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
       .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
   } else if (needsContactsTopup) {
-    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
+    kb.text(contactsLabel, `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)
       .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${realWsId}`);
   } else {
-    kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
+    kb.text(contactsLabel, `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
   }
 
   kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
-
 
 async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }, notesPage = 0) {
   const stepId = 'lead_notes_view';
@@ -11698,6 +11721,66 @@ function brandAppStatusActionLabel(targetStatus, activeStatus) {
   return st === active ? `• ${base}` : base;
 }
 
+function brandAppOpenButtonLabel(appId = 0) {
+  const id = Math.max(0, Number(appId || 0));
+  return id ? `✉️ Заявка #${id}` : '✉️ Заявка';
+}
+
+function brandAppDealButtonLabel() {
+  return '📌 Стадия сделки';
+}
+
+function brandAppNoticeWhatNext(appId = 0, status = 'new', dealStage = '') {
+  const openLabel = brandAppOpenButtonLabel(appId);
+  const dealLabel = brandAppDealButtonLabel();
+  const st = normLeadStatus(status);
+  const ds = String(dealStage || '').trim() ? normDealStage(dealStage) : '';
+
+  if (st === 'new') return `Открой «${openLabel}» и реши, принимать ли заявку.`;
+  if (ds) return `Открой «${openLabel}» или «${dealLabel}» и продолжи работу.`;
+  return `Открой «${openLabel}» и продолжи диалог.`;
+}
+
+function brandAppNoticeKb(appId = 0, opts = {}) {
+  const page = Math.max(0, Number(opts.page || 0));
+  const status = normLeadStatus(opts.status || 'new');
+  const dealStageRaw = String(opts.dealStage || '').trim();
+  const dealStage = dealStageRaw ? normDealStage(dealStageRaw) : '';
+  const dismiss = opts.dismiss !== false;
+  const kb = new InlineKeyboard();
+
+  kb.text(brandAppOpenButtonLabel(appId), `a:brand_app_view|id:${Number(appId || 0)}|s:${leadStatusToCb(status)}|p:${page}`);
+  if (status !== 'new' || dealStage) {
+    kb.text(brandAppDealButtonLabel(), `a:brand_deal_view|id:${Number(appId || 0)}|st:${dealStage || 'negotiation'}|p:0|ab:${leadStatusToCb(status)}.${page}`);
+  }
+  if (dismiss) kb.row().text('🗑 Убрать', 'a:nd');
+  kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  return kb;
+}
+
+function buildBrandAppServiceNoticeText({ appId = 0, kind = 'reply', brandName = '', creatorName = '', body = '', status = 'new', dealStage = '' } = {}) {
+  const id = Math.max(0, Number(appId || 0));
+  const title = kind === 'new_app'
+    ? `📝 <b>Новая заявка #${id}</b>`
+    : `💬 <b>Новое сообщение по заявке #${id}</b>`;
+  const bodyLabel = kind === 'new_app' ? 'Текст заявки' : 'Последнее сообщение';
+  const creatorLine = creatorName ? `🧑‍🎨 Креатор: <b>${escapeHtml(String(creatorName))}</b>
+` : '';
+  const brandLine = brandName ? `🏷 Бренд: <b>${escapeHtml(String(brandName))}</b>
+` : '';
+  const stageLine = dealStage ? `📌 Сделка: <b>${escapeHtml(dealStageTitle(dealStage))}</b>
+` : '';
+  const preview = clipText(String(body || '').replace(/\s+/g, ' ').trim(), kind === 'new_app' ? 900 : 700);
+  const whatNext = brandAppNoticeWhatNext(id, status, dealStage);
+
+  return `${title}
+
+${creatorLine}${brandLine}${stageLine}💡 <b>Сейчас:</b> ${escapeHtml(whatNext)}
+
+<b>${bodyLabel}:</b>
+${escapeHtml(preview || '—')}`;
+}
+
 function creatorBrandAppWhatNow(status) {
   const st = normLeadStatus(status);
   if (st === 'new') return 'дождаться решения бренда; кнопка ответа появится после принятия заявки';
@@ -11705,6 +11788,83 @@ function creatorBrandAppWhatNow(status) {
   if (st === 'closed') return 'диалог завершён; следи за обновлениями, если бренд вернётся';
   if (st === 'spam') return 'заявка скрыта брендом; новых сообщений по ней, скорее всего, не будет';
   return 'следить за ответом бренда по этой заявке';
+}
+
+
+function creatorBrandAppDialogButtonLabel(appId = 0) {
+  const id = Math.max(0, Number(appId || 0));
+  return id ? `✉️ Диалог #${id}` : '✉️ Диалог';
+}
+
+function creatorBrandAppReplyButtonLabel() {
+  return '💬 Написать бренду';
+}
+
+function creatorBrandAppListButtonLabel() {
+  return '📨 Мои заявки';
+}
+
+function creatorBrandAppNoticeWhatNext(appId = 0, status = 'new') {
+  const dialogLabel = creatorBrandAppDialogButtonLabel(appId);
+  const replyLabel = creatorBrandAppReplyButtonLabel();
+  const st = normLeadStatus(status);
+
+  if (st === 'new') return `Открой «${dialogLabel}» и дождись решения бренда.`;
+  if (st === 'closed') return `Открой «${dialogLabel}» и проверь финальный контекст заявки.`;
+  if (st === 'spam') return `Открой «${dialogLabel}» и проверь, что произошло по заявке.`;
+  return `Открой «${dialogLabel}» или нажми «${replyLabel}». Все сообщения идут внутри этого бота.`;
+}
+
+function creatorBrandAppNoticeKb(appId = 0, brandUserId = 0, opts = {}) {
+  const status = normLeadStatus(opts.status || 'new');
+  const dismiss = opts.dismiss !== false;
+  const showReply = opts.showReply !== false && status !== 'new';
+  const kb = new InlineKeyboard();
+
+  kb.text(creatorBrandAppDialogButtonLabel(appId), `a:brand_app_card|id:${Number(appId || 0)}`);
+  if (showReply) kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${Number(appId || 0)}`);
+  kb.row();
+
+  if (brandUserId) kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${Number(brandUserId || 0)}|p:0`);
+  kb.text(creatorBrandAppListButtonLabel(), 'a:my_apps|p:0');
+
+  if (dismiss) kb.row().text('🗑 Убрать', 'a:nd');
+  kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  return kb;
+}
+
+function buildCreatorBrandAppServiceNoticeText({ appId = 0, kind = 'reply', brandName = '', body = '', status = 'new', deliveryLine = '' } = {}) {
+  const id = Math.max(0, Number(appId || 0));
+  const title = kind === 'accepted'
+    ? `✅ <b>Бренд принял заявку #${id}</b>`
+    : kind === 'sent'
+      ? `✅ <b>Сообщение по заявке #${id} отправлено</b>`
+      : `📩 <b>Ответ бренда по заявке #${id}</b>`;
+  const brandLine = brandName ? `🏷 Бренд: <b>${escapeHtml(String(brandName))}</b>
+` : '';
+  const whatNext = creatorBrandAppNoticeWhatNext(id, status);
+  const bodyText = clipText(String(body || '').replace(/\s+/g, ' ').trim(), kind === 'reply' ? 700 : 500);
+  const bodyLabel = kind === 'reply'
+    ? 'Последнее сообщение'
+    : kind === 'accepted'
+      ? 'Что изменилось'
+      : 'Статус отправки';
+  const defaultBody = kind === 'accepted'
+    ? 'Теперь можно продолжить диалог прямо в этом боте.'
+    : kind === 'sent'
+      ? 'Сообщение добавлено в диалог и отправлено бренду.'
+      : 'Бренд отправил новое сообщение по заявке.';
+  const bodyFinal = bodyText || defaultBody;
+  const delivery = String(deliveryLine || '').trim();
+  const deliveryBlock = delivery ? `
+🔔 ${escapeHtml(delivery)}` : '';
+
+  return `${title}
+
+${brandLine}💡 <b>Сейчас:</b> ${escapeHtml(whatNext)}${deliveryBlock}
+
+<b>${bodyLabel}:</b>
+${escapeHtml(bodyFinal)}`;
 }
 
 function getAppDealStage(app) {
@@ -12489,31 +12649,19 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
 
   const cUrl = prof?.contact ? brandContactUrl(prof.contact) : null;
   const link = String(prof?.brand_link || '').trim();
-  const linkLine = link ? `\n🔗 Сайт/ссылка: ${escapeHtml(link)}` : '';
-  const contactLine = cUrl ? `\n✍️ Контакт: ${escapeHtml(String(prof.contact))}` : '';
+  const creatorStatus = normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status);
+  const outText = buildCreatorBrandAppServiceNoticeText({
+    appId,
+    kind: 'reply',
+    brandName,
+    body: [link ? `Сайт/ссылка: ${link}` : '', cUrl ? `Контакт: ${String(prof.contact)}` : '', replyText].filter(Boolean).join(' · '),
+    status: creatorStatus
+  });
 
-  let outText =
-    `📩 <b>Ответ бренда</b>\n\n` +
-    `Бренд: <b>${escapeHtml(brandName)}</b>` +
-    linkLine +
-    contactLine +
-    `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
-
-  // Guard: Telegram max message length is 4096
-  // If too long, drop contact/link and keep message only
-  if (outText.length > 3900) {
-    outText =
-      `📩 <b>Ответ бренда</b>\n\n` +
-      `Бренд: <b>${escapeHtml(brandName)}</b>` +
-      `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
-  }
-
-  const outKb = new InlineKeyboard()
-      .text('📨 Открыть заявку', `a:brand_app_card|id:${appId}`)
-      .text('💬 Ответить', `a:brand_app_chat|id:${appId}`)
-      .row()
-      .text('📋 Меню', 'a:menu')
-      .text('🏠 Home', 'a:home');
+  const outKb = creatorBrandAppNoticeKb(appId, brandUserId, {
+    status: creatorStatus,
+    dismiss: false
+  });
 
   try {
     const api = apiFromCtx(ctx);
@@ -12521,9 +12669,20 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
     await api.sendMessage(creatorTgId, outText, { parse_mode: 'HTML', reply_markup: outKb, disable_web_page_preview: true });
   } catch (e) {
     const backCb = brandDealViewCb(app.id, back);
-    await ctx.reply('❌ Не удалось отправить сообщение креатору. Возможно, он ещё не нажимал /start.', {
-      reply_markup: navKb(backCb)
-    });
+    await ctx.reply(
+      `❌ Не удалось отправить сообщение креатору.
+
+💡 Сейчас: ${brandAppNoticeWhatNext(app.id, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app))}
+
+Возможно, он ещё не нажимал /start.`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text(brandAppDealButtonLabel(), backCb)
+          .text(brandAppOpenButtonLabel(app.id), `a:brand_app_view|id:${app.id}|s:${leadStatusToCb(normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status))}|p:${Math.max(0, Number(back.page || 0))}`)
+          .row()
+          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+      }
+    );
     return;
   }
 
@@ -12840,31 +12999,19 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
 
   const cUrl = prof?.contact ? brandContactUrl(prof.contact) : null;
   const link = String(prof?.brand_link || '').trim();
-  const linkLine = link ? `\n🔗 Сайт/ссылка: ${escapeHtml(link)}` : '';
-  const contactLine = cUrl ? `\n✍️ Контакт: ${escapeHtml(String(prof.contact))}` : '';
+  const creatorStatus = normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status);
+  const outText = buildCreatorBrandAppServiceNoticeText({
+    appId: app.id,
+    kind: 'reply',
+    brandName,
+    body: [link ? `Сайт/ссылка: ${link}` : '', cUrl ? `Контакт: ${String(prof.contact)}` : '', replyText].filter(Boolean).join(' · '),
+    status: creatorStatus
+  });
 
-  // Guard: Telegram max message length is 4096
-  // If too long, drop contact/link and keep message only
-  let outText =
-    `📩 <b>Ответ бренда</b>\n\n` +
-    `Бренд: <b>${escapeHtml(brandName)}</b>` +
-    linkLine +
-    contactLine +
-    `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
-
-  if (outText.length > 3900) {
-    outText =
-      `📩 <b>Ответ бренда</b>\n\n` +
-      `Бренд: <b>${escapeHtml(brandName)}</b>` +
-      `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
-  }
-
-  const outKb = new InlineKeyboard()
-    .text('📨 Открыть заявку', `a:brand_app_card|id:${app.id}`)
-    .text('💬 Ответить', `a:brand_app_chat|id:${app.id}`)
-    .row()
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Home', 'a:home');
+  const outKb = creatorBrandAppNoticeKb(app.id, brandUserId, {
+    status: creatorStatus,
+    dismiss: false
+  });
 
   const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
     parse_mode: 'HTML',
@@ -12877,9 +13024,12 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
     console.warn('[brand_app_tpl] sendMessage failed', { appId: Number(appId), creatorTgId, reason, raw: String(sendRes.err?.description || sendRes.err?.message || sendRes.err || '') });
 
     const botLink = CFG.BOT_USERNAME ? `https://t.me/${CFG.BOT_USERNAME}` : null;
-    const kb = new InlineKeyboard()
-      .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
-      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    const kb = brandAppNoticeKb(app.id, {
+      status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
+      page: Math.max(0, Number(back.page || 0)),
+      dealStage: getAppDealStage(app),
+      dismiss: false
+    });
     if (botLink) kb.row().url('🔗 Ссылка креатору (/start)', botLink);
 
     const errMsg =
@@ -12887,6 +13037,9 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
 
 ` +
       `Причина: <i>${escapeHtml(reason)}</i>
+
+` +
+      `💡 Сейчас: ${escapeHtml(brandAppNoticeWhatNext(app.id, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app)))}
 
 ` +
       `<b>Текст ответа (можно скопировать):</b>
@@ -12920,7 +13073,7 @@ ${escapeHtml(replyText)}`;
 
   if (!sendRes.ok) return;
 
-  try { await ctx.answerCallbackQuery({ text: '✅ Отправлено бренду' }); } catch {}
+  try { await ctx.answerCallbackQuery({ text: '✅ Отправлено креатору' }); } catch {}
 
   // Guard: renderBrandAppView can fail (rare, but must be handled)
   try {
@@ -12937,11 +13090,19 @@ ${escapeHtml(replyText)}`;
     } catch {}
     // Fallback: send confirmation message with navigation (no render)
     try {
-      await ctx.reply('✅ Отправлено.', {
-        reply_markup: new InlineKeyboard()
-          .text('⬅️ Назад', `a:brand_app_view|id:${appId}|s:${back.status}|p:${back.page}`)
-          .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
-      });
+      await ctx.reply(
+        `✅ Отправлено.
+
+💡 Сейчас: ${brandAppNoticeWhatNext(appId, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app))}`,
+        {
+          reply_markup: brandAppNoticeKb(appId, {
+            status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
+            page: Math.max(0, Number(back.page || 0)),
+            dealStage: getAppDealStage(app),
+            dismiss: false
+          })
+        }
+      );
     } catch {}
   }
 }
@@ -13141,12 +13302,17 @@ ${extra}${hint} Кредит спишется, а заявка появится 
   if (creatorTgId) {
     const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
     const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
-    const outText =
-      `✅ <b>Заявка принята</b>\n\n` +
-      `Бренд <b>${escapeHtml(brandName)}</b> принял твою заявку.\n` +
-      `Теперь можно продолжить диалог прямо в боте.`;
+    const outText = buildCreatorBrandAppServiceNoticeText({
+      appId: app.id,
+      kind: 'accepted',
+      brandName,
+      status: 'in_progress'
+    });
 
-    const outKb = kbBrandAppAcceptedDone(app.id, brandUserId);
+    const outKb = creatorBrandAppNoticeKb(app.id, brandUserId, {
+      status: 'in_progress',
+      dismiss: false
+    });
 
     const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
       parse_mode: 'HTML',
@@ -13338,9 +13504,9 @@ ${threadBlock}`;
   }
 
   const kb = new InlineKeyboard();
-  if (st !== 'new') kb.text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`).row();
+  if (st !== 'new') kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${app.id}`).row();
   kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`).row();
-  kb.text('⬅️ Мои заявки', 'a:my_apps|p:0').text('📋 Меню', 'a:menu').row();
+  kb.text(`⬅️ ${creatorBrandAppListButtonLabel()}`, 'a:my_apps|p:0').text('📋 Меню', 'a:menu').row();
   kb.text('🏠 Home', 'a:home');
 
   try {
@@ -13397,7 +13563,8 @@ ${DEGRADED_COPY.tips}`;
   }
 
   const kb = new InlineKeyboard()
-    .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`);
+    .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
+    .text(creatorBrandAppDialogButtonLabel(app.id), `a:brand_app_card|id:${app.id}`);
 
   // Keep context: Back goes to the dialog card (not straight to main menu)
   kbNavRow(kb, `a:brand_app_card|id:${app.id}`);
@@ -13490,8 +13657,8 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const lockHint = contactsLockedHintHtml(Number(brandCredits || 0) > 0);
 
   const whatNext = `<b>Что дальше:</b>
-• Нажми «💬 Диалог» → «✍️ Ответить», чтобы продолжить переписку.
-• «🪟 Витрина» — посмотреть профиль креатора.`;
+• Нажми «${brandLeadDialogButtonLabel(leadId)}» → «✍️ Ответить», чтобы продолжить переписку.
+• «${brandLeadProfileButtonLabel()}» — посмотреть профиль креатора.`;
 
   let out = `${header}\n\n${curatorBadge ? curatorBadge + '\n\n' : ''}${escapeHtml(String(replyText))}\n\n${whatNext}\n\n${lockHint}`;
   if (out.length > 3900) {
@@ -20086,8 +20253,8 @@ ${escapeHtml(details)}`;
 
       const whatNext =
         `<b>Что дальше:</b>\n` +
-        `• Нажми «💬 Диалог» → «✍️ Ответить», чтобы продолжить переписку.\n` +
-        `• «🪟 Витрина» — посмотреть профиль креатора.`;
+        `• Нажми «${brandLeadDialogButtonLabel(leadId)}» → «✍️ Ответить», чтобы продолжить переписку.\n` +
+        `• «${brandLeadProfileButtonLabel()}» — посмотреть профиль креатора.`;
 
       const out =
         `💬 <b>Ответ по заявке #${leadId}</b>\n\n` +
@@ -20246,15 +20413,22 @@ ${escapeHtml(details)}`;
       }
 
       await clearExpectText(ctx.from.id);
+      const replyDialogLabel = brandLeadDialogButtonLabel(leadId);
+      const replyProfileLabel = brandLeadProfileButtonLabel();
+      const replyContactsLabel = brandLeadContactUnlockButtonLabel();
       const brandReceipt =
         '✅ Отправлено креатору.\n\n' +
-        '<b>Что дальше:</b>\n' +
-        '• Открой «💬 Диалог» — увидишь переписку по заявке.\n' +
+        `<b>Что дальше:</b>\n` +
+        `• ${escapeHtml(brandLeadWhatNextText(leadId, 'reply_sent'))}\n` +
         '• Жди ответа — он придёт сообщением по этой заявке.';
       await ctx.reply(brandReceipt, {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
-        reply_markup: new InlineKeyboard().text('💬 Диалог', `a:blead_view|id:${leadId}|w:${Number(lead.workspace_id)}`),
+        reply_markup: new InlineKeyboard()
+          .text(replyDialogLabel, `a:blead_view|id:${leadId}|w:${Number(lead.workspace_id)}`)
+          .text(replyProfileLabel, `a:wsp_open|ws:${Number(lead.workspace_id)}|m:ro|r:bl|l:${leadId}`)
+          .row()
+          .text(replyContactsLabel, `a:wsp_contact_req|ws:${Number(lead.workspace_id)}|r:bl|l:${leadId}`),
       });
       return;
     }
@@ -20426,21 +20600,18 @@ if (exp.type === 'brand_apply') {
       const linkLine = link ? `\n🔗 Сайт/ссылка: ${escapeHtml(link)}` : '';
       const contactLine = cUrl ? `\n✍️ Контакт: ${escapeHtml(String(prof.contact))}` : '';
 
-      const outText =
-        `📩 <b>Ответ бренда</b>
+      const creatorStatus = normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status);
+      const outText = buildCreatorBrandAppServiceNoticeText({
+        appId,
+        kind: 'reply',
+        brandName,
+        body: [link ? `Сайт/ссылка: ${link}` : '', prof?.contact ? `Контакт: ${String(prof.contact)}` : '', reply].filter(Boolean).join(' · '),
+        status: creatorStatus
+      });
 
-` +
-        `Бренд: <b>${escapeHtml(brandName)}</b>` +
-        linkLine +
-        contactLine +
-        `
-
-<b>Сообщение:</b>
-${escapeHtml(reply)}`;
-
-      const outKb = notifyReplyKb({
-        openCb: `a:brand_app_card|id:${appId}` ,
-        replyCb: `a:brand_app_chat|id:${appId}`
+      const outKb = creatorBrandAppNoticeKb(appId, brandUserId, {
+        status: creatorStatus,
+        dismiss: false
       });
 
       const sendRes = await sendMessageWithFallback(apiFromCtx(ctx), creatorTgId, outText, {
@@ -20489,12 +20660,18 @@ ${escapeHtml(reply)}`;
             page: Math.max(0, Number(exp.backPage || 0))
           });
         } catch (e) {
-          const doneKb = new InlineKeyboard()
-            .text('📨 Открыть заявку', `a:brand_app_view|id:${appId}|s:in_progress|p:${Math.max(0, Number(exp.backPage || 0))}`)
-            .text('💬 В работе', 'a:brand_apps|ws:0|s:in_progress|p:0')
-            .row()
-            .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-          return ctx.reply('✅ Ответ доставлен креатору.', { reply_markup: doneKb });
+          const doneKb = brandAppNoticeKb(appId, {
+            status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
+            page: Math.max(0, Number(exp.backPage || 0)),
+            dealStage: getAppDealStage(app),
+            dismiss: false
+          });
+          return ctx.reply(
+            `✅ Ответ доставлен креатору.
+
+💡 Сейчас: ${brandAppNoticeWhatNext(appId, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app))}`,
+            { reply_markup: doneKb }
+          );
         }
         return;
       }
@@ -20516,11 +20693,14 @@ ${escapeHtml(reply)}`;
         `Причина: <b>${escapeHtml(String(deliveryReason || 'ошибка отправки'))}</b>
 
 ` +
+        `💡 Сейчас: ${escapeHtml(brandAppNoticeWhatNext(appId, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app)))}
+
+` +
         `Текст (скопируй):
 <pre>${escapeHtml(reply)}</pre>
 
 ` +
-        `💡 Попроси креатора нажать /start в этом боте и попробуй ещё раз.`;
+        `Попроси креатора нажать /start в этом боте и попробуй ещё раз.`;
 
       return ctx.reply(failText, { parse_mode: 'HTML', reply_markup: failKb, disable_web_page_preview: true });
     }
@@ -20652,21 +20832,24 @@ if (exp.type === 'brand_deals_search') {
           targetsMap.set(t, { tgId: t, role: 'manager', tg_username: m?.tg_username || null });
         }
       }
+      const dealStage = getAppDealStage(app);
+      const appStatusForNotice = normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status);
+      const notif = buildBrandAppServiceNoticeText({
+        appId,
+        kind: 'reply',
+        brandName,
+        creatorName: String(who),
+        body: msg,
+        status: appStatusForNotice,
+        dealStage
+      });
 
-      const preview = msg.replace(/\s+/g, ' ').slice(0, 280);
-      const notif =
-        `💬 <b>Новое сообщение по заявке #${appId}</b>\n\n` +
-        `Бренд: <b>${escapeHtml(brandName)}</b>\n` +
-        `От: <b>${escapeHtml(String(who))}</b>\n\n` +
-        `${escapeHtml(preview)}${msg.length > preview.length ? '…' : ''}`;
-
-      const kb = new InlineKeyboard()
-        .text('📥 Открыть в Inbox', `a:brand_app_view|id:${appId}|s:in_progress|p:0`)
-        .row()
-        .text('🗑 Убрать', 'a:nd')
-        .row()
-        .text('📋 Меню', 'a:menu')
-        .text('🏠 Home', 'a:home');
+      const kb = brandAppNoticeKb(appId, {
+        status: appStatusForNotice,
+        page: 0,
+        dealStage,
+        dismiss: true
+      });
 
       let delivered = 0;
       const deliveredTo = [];
@@ -20698,22 +20881,27 @@ if (exp.type === 'brand_deals_search') {
       const hasManagers2 = Array.from(targetsMap.values()).some(r => r.role === 'manager');
       const whoNotified2 = hasManagers2 ? 'владелец + менеджеры' : 'владелец';
 
-      const ackText = (targetsMap.size === 0)
-        ? '✅ Сообщение добавлено в диалог. 🔕 Уведомление: не отправлено (у бренда не найден tg_id).'
+      const ackLine = (targetsMap.size === 0)
+        ? 'Уведомление не отправлено: у бренда не найден tg_id.'
         : (delivered > 0)
-          ? `✅ Сообщение добавлено в диалог. 🔔 Уведомление (${whoNotified2}): ${delivered}/${targetsMap.size}`
-          : '✅ Сообщение добавлено в диалог. 🔕 Уведомление: не доставлено (ошибка отправки).';
+          ? `Уведомление (${whoNotified2}): ${delivered}/${targetsMap.size}`
+          : 'Уведомление не доставлено: ошибка отправки.';
+
+      const ackText = buildCreatorBrandAppServiceNoticeText({
+        appId,
+        kind: 'sent',
+        brandName,
+        status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
+        deliveryLine: ackLine
+      });
 
       return ctx.reply(ackText, {
-        reply_markup: new InlineKeyboard()
-          .text('💬 Написать ещё', `a:brand_app_chat|id:${appId}`)
-          .text('✉️ Диалог', `a:brand_app_card|id:${appId}`)
-          .row()
-          .text('📨 Мои заявки', 'a:my_apps|p:0')
-          .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
-          .row()
-	          .text('📋 Меню', 'a:menu')
-	          .text('🏠 Home', 'a:home')
+        parse_mode: 'HTML',
+        reply_markup: creatorBrandAppNoticeKb(appId, brandUserId, {
+          status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
+          dismiss: false
+        }),
+        disable_web_page_preview: true
       });
     }
 
@@ -24540,6 +24728,7 @@ cid: ${cid}`, { reply_markup: kb });
         opts.backCb = `a:blead_view|id:${leadId}|w:${wsId}`;
         opts.contactCbExtra = `|r:bl|l:${leadId}`;
         opts.dialogCb = `a:blead_view|id:${leadId}|w:${wsId}`;
+        opts.brandLeadId = leadId;
       }
 
       await renderWsPublicProfile(ctx, wsId, opts);
@@ -24568,7 +24757,7 @@ cid: ${cid}`, { reply_markup: kb });
         try {
           if (await redis.get(key)) {
             try { await ctx.answerCallbackQuery({ text: 'Уже открыто ✅' }); } catch {}
-            await renderWsPublicProfile(ctx, wsId, { revealContacts: true, hideApply: fromLead, backCb: backCb, contactCbExtra: ctxExtra, dialogCb: fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : '' });
+            await renderWsPublicProfile(ctx, wsId, { revealContacts: true, hideApply: fromLead, backCb: backCb, contactCbExtra: ctxExtra, dialogCb: fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : '', brandLeadId: fromLead ? leadId : 0 });
             return;
           }
         } catch {
@@ -24581,7 +24770,7 @@ cid: ${cid}`, { reply_markup: kb });
             if (await withTimeout(db.isWorkspaceContactsUnlocked(u.id, wsId), 2500, 'wsp.unlock.db')) {
               try { await redis.set(key, 1, { ex: CONTACT_UNLOCK_TTL_SEC }); } catch {}
               try { await ctx.answerCallbackQuery({ text: 'Уже открыто ✅' }); } catch {}
-              await renderWsPublicProfile(ctx, wsId, { revealContacts: true, hideApply: fromLead, backCb: backCb, contactCbExtra: ctxExtra, dialogCb: fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : '' });
+              await renderWsPublicProfile(ctx, wsId, { revealContacts: true, hideApply: fromLead, backCb: backCb, contactCbExtra: ctxExtra, dialogCb: fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : '', brandLeadId: fromLead ? leadId : 0 });
               return;
             }
           } catch {}
@@ -24606,7 +24795,7 @@ cid: ${cid}`, { reply_markup: kb });
             .row()
             .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`)
             .row()
-            .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb)
+            .text(fromLead ? brandLeadDialogButtonLabel(leadId) : '⬅️ Назад', backCb)
             .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
           const text =
@@ -24624,24 +24813,24 @@ cid: ${cid}`, { reply_markup: kb });
       // Balance can be "—" (Redis degradation / cold cache), but the click handler is DB-truth.
       const bal = await getBrandCreditsRedisOnly(u.id, { warm: true });
       const kb = new InlineKeyboard();
-      kb.text(contactUnlockActionLabel(), `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`).row();
+      kb.text(fromLead ? brandLeadContactUnlockButtonLabel() : contactUnlockActionLabel(), `a:wsp_contact_unlock|ws:${wsId}${ctxExtra}`).row();
       kb
         .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`)
         .row()
-        .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb);
+        .text(fromLead ? brandLeadDialogButtonLabel(leadId) : '⬅️ Назад', backCb);
 
       const balNum = (bal === null || bal === undefined) ? null : Number(bal || 0);
       const canUnlock = (CONTACT_UNLOCK_COST <= 0) || (balNum !== null && balNum >= CONTACT_UNLOCK_COST);
       const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
 
       const tail = canUnlock
-        ? `Нажми «${contactUnlockActionLabel()}» или купи кредиты.`
+        ? `Нажми «${fromLead ? brandLeadContactUnlockButtonLabel() : contactUnlockActionLabel()}» или купи кредиты.`
         : (balNum === null
-          ? `Нажми «${contactUnlockActionLabel()}» — баланс проверим при нажатии. Если кредитов не хватит, предложим докупить.`
-          : `Недостаточно кредитов для ${contactUnlockBtnLabel()}: нужно <b>${CONTACT_UNLOCK_COST}</b>, у тебя <b>${balNum}</b>. Купи кредиты и повтори.`);
+          ? `Нажми «${fromLead ? brandLeadContactUnlockButtonLabel() : contactUnlockActionLabel()}» — баланс проверим при нажатии. Если кредитов не хватит, предложим докупить.`
+          : `Недостаточно кредитов для ${fromLead ? brandLeadContactUnlockButtonLabel() : contactUnlockBtnLabel()}: нужно <b>${CONTACT_UNLOCK_COST}</b>, у тебя <b>${balNum}</b>. Купи кредиты и повтори.`);
 
       const text =
-        `🔒 <b>Контакты скрыты</b>
+        `🔒 <b>Контакты на витрине скрыты</b>
 
 <b>Кредиты</b> = Stars для интро.
 
@@ -24679,7 +24868,7 @@ ${tail}`;
       const fromLead = ret === 'bl' && !!leadId;
       const ctxExtra = fromLead ? `|r:bl|l:${leadId}` : '';
       const backCb = fromLead ? `a:blead_view|id:${leadId}|w:${wsId}` : `a:wsp_open|ws:${wsId}`;
-      const roOpts = fromLead ? { hideApply: true, backCb, contactCbExtra: ctxExtra, dialogCb: backCb } : {};
+      const roOpts = fromLead ? { hideApply: true, backCb, contactCbExtra: ctxExtra, dialogCb: backCb, brandLeadId: leadId } : {};
 
       const openCb = fromLead ? `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}` : `a:wsp_open|ws:${wsId}`;
       const inboxCb = 'a:bx_inbox|ws:0|p:0|h:mm';
@@ -24696,7 +24885,7 @@ ${tail}`;
           .row()
           .text('💳 Купить ещё', buyCb)
           .row()
-          .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb)
+          .text(fromLead ? brandLeadDialogButtonLabel(leadId) : '⬅️ Назад', backCb)
           .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
         const hint = alreadyQueued
@@ -24834,10 +25023,10 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
           } catch {}
 
           const kb = new InlineKeyboard()
-            .text('🪟 Витрина', openCb)
+.text(fromLead ? brandLeadProfileButtonLabel() : '🪟 Витрина', openCb)
             .text('📥 Inbox', inboxCb)
             .row()
-            .text(fromLead ? '💬 Диалог' : '⬅️ Назад', backCb)
+            .text(fromLead ? brandLeadDialogButtonLabel(leadId) : '⬅️ Назад', backCb)
             .text('📋 Меню', 'a:menu')
             .text('🏠 Home', 'a:home');
 
@@ -24906,6 +25095,9 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
       try {
         const ws2 = await db.getWorkspaceAny(wsId);
         if (ws2) {
+          const followupDialogLabel = fromLead ? brandLeadDialogButtonLabel(leadId) : '⬅️ Назад';
+          const followupProfileLabel = fromLead ? brandLeadProfileButtonLabel() : '🪟 Витрина';
+          const followupWhatNext = fromLead ? brandLeadWhatNextText(leadId, 'contacts_open') : '';
           const ig2 = ws2.profile_ig ? String(ws2.profile_ig) : '';
           const ports2Raw = Array.isArray(ws2.profile_portfolio_urls) ? ws2.profile_portfolio_urls : [];
           const ports2 = ports2Raw.map((x) => String(x || '').trim()).filter(Boolean);
@@ -24932,6 +25124,10 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
 
           const lines = [];
           lines.push(`✅ <b>Контакт‑пакет</b> (доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')})`);
+          if (followupWhatNext) {
+            lines.push('');
+            lines.push(`💡 <b>Сейчас:</b> ${escapeHtml(followupWhatNext)}`);
+          }
           lines.push('');
           if (ws2.channel_username) {
             const un = String(ws2.channel_username).replace(/^@/, '');
@@ -24963,7 +25159,12 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
             const u0 = String(ports2[0] || '').trim();
             if (u0) kb2.url('🗂 Портфолио', u0);
           }
-          kb2.row().text('🪟 Витрина', `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}`).text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
+          if (fromLead) {
+            kb2.row().text(followupDialogLabel, `a:blead_view|id:${leadId}|w:${wsId}`).text(followupProfileLabel, `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}`);
+            kb2.row().text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
+          } else {
+            kb2.row().text(followupProfileLabel, `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}`).text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);
+          }
 
           await ctx.reply(lines.join('\n'), { parse_mode: 'HTML', reply_markup: kb2, disable_web_page_preview: true });
         }
@@ -25449,7 +25650,7 @@ if (p.a === 'a:brand_app_chat') {
   } catch (e) {
     try { console.warn('[brand_app_chat] unhandled', { appId, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
     const kb = new InlineKeyboard()
-      .text('📨 Открыть заявку', `a:brand_app_card|id:${appId}`)
+      .text(creatorBrandAppDialogButtonLabel(appId), `a:brand_app_card|id:${appId}`)
       .row()
       .text('📋 Меню', 'a:menu')
       .text('🏠 Home', 'a:home');
@@ -25834,9 +26035,9 @@ if (p.a === 'a:lead_set') {
 ` +
               `<b>Что дальше:</b>
 ` +
-              `• Если нужно уточнить — открой «💬 Диалог» и напиши сообщение.
+              `• Если нужно уточнить — открой «${brandLeadDialogButtonLabel(leadId)}» и напиши сообщение.
 ` +
-              `• Или посмотри «🪟 Витрина».`;
+              `• Или посмотри «${brandLeadProfileButtonLabel()}».`;
 
             const kbToBrand = brandReplyKb(ws, wsId, brandCredits, leadId);
             await sendMessageWithFallback(apiFromCtx(ctx), brandTgId, outToBrand, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kbToBrand });
