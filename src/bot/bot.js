@@ -7561,8 +7561,8 @@ function bxInboxNavKb(wsId, page, hasPrev, hasNext, opts = {}) {
   const h = normBxHome(opts.h, wsNum ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
   const kb = new InlineKeyboard();
-  if (hasPrev) kb.text('⬅️', `a:bx_inbox|ws:${wsId}|p:${page - 1}|h:${h}`);
-  if (hasNext) kb.text('➡️', `a:bx_inbox|ws:${wsId}|p:${page + 1}|h:${h}`);
+  if (hasPrev) kb.text('⬅️ Назад', `a:bx_inbox|ws:${wsId}|p:${page - 1}|h:${h}`);
+  if (hasNext) kb.text('➡️ Далее', `a:bx_inbox|ws:${wsId}|p:${page + 1}|h:${h}`);
 
   kbNavRow(kb, bxHomeCb(wsNum, h));
   return kb;
@@ -15980,6 +15980,67 @@ ${brandPassTrialLineHtml(credits)}
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
+
+function bxThreadStageTitle(stage) {
+  const st = CRM_STAGES.find((s) => s.id === String(stage || '').trim());
+  return st ? String(st.title).trim() : '';
+}
+
+function bxThreadTriageTitle(triage) {
+  const v = String(triage || 'open').toLowerCase();
+  if (v === 'in_progress') return '💬 В работе';
+  if (v === 'spam') return '⛔ Спам';
+  return '🆕 Открыт';
+}
+
+function bxThreadWhatNow(thread, viewerUserId, replySt) {
+  const statusRaw = String(thread?.status || 'OPEN').toUpperCase();
+  if (statusRaw === 'CLOSED') return 'диалог закрыт — можно открыть оффер или просмотреть историю';
+  if (statusRaw === 'DELETED') return 'диалог удалён из твоего Inbox';
+
+  const triage = String(thread?.triage_status || 'open').toLowerCase();
+  if (triage === 'spam') return 'диалог помечен как спам — можно вернуть его обратно, если это ошибка';
+
+  const stage = String(thread?.buyer_stage || '').trim();
+  if (stage === 'paid') return 'проверить оплату и довести сделку до результата';
+  if (stage === 'done') return 'сделка отмечена как готовая — можно закрыть диалог или проверить пруфы';
+  if (stage === 'deal') return 'зафиксировать договорённость и перевести общение к оплате или результату';
+  if (stage === 'talk') return 'продолжить переговоры и уточнить условия в одном сообщении';
+  if (replySt?.retry) return 'ожидать ответ или использовать повтор, когда он станет доступен';
+  if (replySt?.base === '✍️ напишите первым') return 'отправить первое сообщение, чтобы открыть живой диалог';
+  if (replySt?.base === '⏳ ждём ответ…') return 'подождать ответ или сделать аккуратный follow-up позже';
+  if (replySt?.base === '⏳ ждёт ваш ответ…') return 'ответить собеседнику и при необходимости обновить стадию';
+  return 'держать диалог коротким и обновлять только реальное состояние';
+}
+
+function formatBxThreadMessages(msgs, userId, limit = 3) {
+  const rows = Array.isArray(msgs) ? msgs.filter((m) => m && String(m.body || '').trim()) : [];
+  if (!rows.length) return '';
+
+  const tail = rows.slice(-Math.max(1, Number(limit) || 3));
+  return tail.map((m) => {
+    const mine = Number(m.sender_user_id) === Number(userId);
+    const who = mine ? 'Вы' : (m.tg_username ? '@' + m.tg_username : 'Собеседник');
+    const ts = m.created_at ? fmtTs(m.created_at) : '';
+    const raw = String(m.body || '').trim().replace(/\s+/g, ' ');
+    const short = clipText(raw, 220);
+    const clipped = raw.length > 220 ? '\\n<i>(сокращено)</i>' : '';
+    return `• <b>${escapeHtml(who)}</b>${ts ? ` · <code>${escapeHtml(ts)}</code>` : ''}\\n${escapeHtml(short)}${clipped}`;
+  }).join('\\n\\n');
+}
+
+function bxInboxPrimaryIcon(thread, userId, replySt) {
+  const isBuyer = Number(thread?.buyer_user_id) === Number(userId);
+  const triage = String(thread?.triage_status || 'open').toLowerCase();
+  if (isBuyer && triage === 'spam') return '⛔';
+  if (isBuyer && triage === 'in_progress') return '💬';
+  const stage = bxThreadStageTitle(thread?.buyer_stage);
+  if (isBuyer && stage) return String(stage).trim().split(' ')[0] || '💬';
+  if (String(replySt?.base || '').includes('✅')) return '✅';
+  if (String(replySt?.base || '').includes('✍️')) return '✍️';
+  return '💬';
+}
+
 async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
 
   const wsNum = Number(wsId || 0);
@@ -15991,14 +16052,16 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
     ? await safeUserVerifications(() => db.listBarterThreadsForUserWithVerified(userId, limit, offset), () => db.listBarterThreadsForUser(userId, limit, offset))
     : await db.listBarterThreadsForUser(userId, limit, offset);
 
-  let header = `📥 <b>Inbox</b>`;
+  let text = `📥 <b>Inbox</b>
+`;
+  text += `<i>Показываю последние движения по диалогам и заявкам.</i>
+`;
 
-  // Brand Manager: show current brand + quick switch прямо в Inbox
-  if (opts?.bm?.enabled) {
-    header += `\n\n<b>Бренд:</b> <b>${escapeHtml(opts.bm.brandLabel || '—')}</b>`;
-  }
-
-  header += `\n\nПереписка по офферам (бренд ↔ блогер).`;
+  const secondary = [];
+  if (opts?.bm?.enabled) secondary.push(`Бренд: ${escapeHtml(opts.bm.brandLabel || '—')}`);
+  secondary.push(`стр ${page + 1}`);
+  secondary.push(`на странице ${rows.length}`);
+  text += `<i>${secondary.join(' · ')}</i>`;
 
   const kb = new InlineKeyboard();
 
@@ -16006,34 +16069,51 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
     kb.text('🔁 Сменить бренд', `a:bm_pick_brand|ret:bx_inbox|ws:${wsId}|p:${page}|h:${h}`).row();
   }
 
-  for (const t of rows) {
-    const other = t.other_username ? '@' + t.other_username : ('user #' + t.other_user_id);
-    const v = t.other_verified ? ' ✅' : '';
-    // Buyer-side indicators
-    let triageEmoji = '';
-    let stageEmoji = '';
-    if (Number(t.buyer_user_id) === Number(userId)) {
-      const triage = String(t.triage_status || 'open').toLowerCase();
-      if (triage === 'in_progress') triageEmoji = '💬';
-      else if (triage === 'spam') triageEmoji = '🗑';
+  if (!rows.length) {
+    text += `
 
-      if (t.buyer_stage) {
-        const st = CRM_STAGES.find((s) => s.id === String(t.buyer_stage));
-        stageEmoji = st ? String(st.title).trim().split(' ')[0] : '';
+Пока нет переписок.
+
+💬 Интро = новый диалог. Бренду нужны кредиты, креатору — просто отвечать здесь.`;
+  } else {
+    text += `
+
+`;
+    for (const t of rows) {
+      const other = t.other_username ? '@' + t.other_username : ('user #' + t.other_user_id);
+      const v = t.other_verified ? ' ✅' : '';
+      const replySt = computeThreadReplyStatus(t, userId, {
+        retryEnabled: CFG.INTRO_RETRY_ENABLED,
+        afterHours: CFG.INTRO_RETRY_AFTER_HOURS
+      });
+      const replyLine = replySt.retry ? `${replySt.base} · ${replySt.retry}` : replySt.base;
+      const signalParts = [];
+      if (Number(t.buyer_user_id) === Number(userId)) {
+        signalParts.push(bxThreadTriageTitle(t.triage_status));
+        const stageTitle = bxThreadStageTitle(t.buyer_stage);
+        if (stageTitle) signalParts.push(stageTitle);
       }
+      signalParts.push(replyLine);
+
+      const when = t.last_created_at
+        ? fmtTs(t.last_created_at)
+        : (t.last_message_at ? fmtTs(t.last_message_at) : (t.created_at ? fmtTs(t.created_at) : '—'));
+      const previewRaw = String(t.last_body || t.offer_title || '').replace(/\s+/g, ' ').trim();
+      const preview = clipText(previewRaw || '—', 64);
+      const icon = bxInboxPrimaryIcon(t, userId, replySt);
+
+      text += `${icon} <b>${escapeHtml(other)}${v}</b>
+`;
+      text += `<i>${escapeHtml(signalParts.join(' · '))} · #${t.id} · ${escapeHtml(when)}</i>
+`;
+      text += `<code>${escapeHtml(preview)}</code>
+
+`;
+
+      const label = clipText(`${icon} ${other} · #${t.id}`, 50);
+      kb.text(label, `a:bx_thread|ws:${wsId}|t:${t.id}|p:${page}|b:inbox|h:${h}`).row();
     }
-
-    const emojis = [triageEmoji, stageEmoji].filter(Boolean).join(' ');
-    const prefix = emojis ? `#${t.id} ${emojis}` : `#${t.id}`;
-
-    const st = computeThreadReplyStatus(t, userId, {
-      retryEnabled: CFG.INTRO_RETRY_ENABLED,
-      afterHours: CFG.INTRO_RETRY_AFTER_HOURS
-    });
-    const stLine = st.retry ? `${st.base} · ${st.retry}` : st.base;
-
-    const line = `${prefix} · ${stLine} · ${escapeHtml(t.offer_title || 'оффер')} · ${escapeHtml(other)}${v}`;
-    kb.text(line.slice(0, 60), `a:bx_thread|ws:${wsId}|t:${t.id}|p:${page}|b:inbox|h:${h}`).row();
+    text += `<i>Открой диалог: там статус, стадия, последние сообщения и действия.</i>`;
   }
 
   const hasPrev = page > 0;
@@ -16041,22 +16121,15 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
   const nav = bxInboxNavKb(wsId, page, hasPrev, hasNext, { h });
   for (const row of nav.inline_keyboard) kb.inline_keyboard.push(row);
 
-  const emptyTail = rows.length ? '' : `
-
-Пока нет переписок.
-
-💬 Интро = новый диалог. Бренду нужен кредиты, креатору — просто отвечать здесь.`;
-
-  await safeEditOrReply(ctx, header + emptyTail, { parse_mode: 'HTML', reply_markup: kb });
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
-async function buildBxThreadView(userId, threadId) {
+async function buildBxThreadView(userId, threadId, opts = {}) {
   const thread = CFG.VERIFICATION_ENABLED
     ? await safeUserVerifications(() => db.getBarterThreadForUserWithVerified(threadId, userId), () => db.getBarterThreadForUser(threadId, userId))
     : await db.getBarterThreadForUser(threadId, userId);
   if (!thread) return null;
 
-  // Proofs are optional (feature may be deployed later)
   let proofsCount = 0;
   try {
     proofsCount = await db.countBarterThreadProofs(threadId);
@@ -16074,59 +16147,82 @@ async function buildBxThreadView(userId, threadId) {
   const other = otherUsername ? '@' + otherUsername : ('user #' + otherUserId);
   const otherMark = otherVerified ? ' ✅' : '';
   const statusRaw = String(thread.status || 'OPEN').toUpperCase();
-  const statusMap = { 'OPEN': 'Открыт', 'CLOSED': 'Закрыт', 'DELETED': 'Удалён' };
+  const statusMap = { 'OPEN': '🆕 Открыт', 'CLOSED': '✅ Закрыт', 'DELETED': '🗑 Удалён' };
   const status = statusMap[statusRaw] || statusRaw;
-  const stageTitle = thread.buyer_stage
-    ? (CRM_STAGES.find((s) => s.id === String(thread.buyer_stage))?.title || String(thread.buyer_stage))
-    : null;
+  const stageTitle = bxThreadStageTitle(thread.buyer_stage);
+  const triageTitle = isBuyer ? bxThreadTriageTitle(thread.triage_status) : '';
 
-  // Buyer-side triage
-  const triage = String(thread.triage_status || 'open').toLowerCase();
-  const triageTitle = isBuyer
-    ? (triage === 'in_progress' ? '💬 В работе' : (triage === 'spam' ? '⛔ Спам' : '🆕 Открыт'))
-    : null;
+  const replySt = computeThreadReplyStatus(thread, userId, {
+    retryEnabled: CFG.INTRO_RETRY_ENABLED,
+    afterHours: CFG.INTRO_RETRY_AFTER_HOURS
+  });
+  const chargeLine = isBuyer ? formatBxChargeLine(thread) : '';
+  const flash = String(opts.flash || '').trim();
+  const lastWhen = msgs.length
+    ? (msgs[msgs.length - 1]?.created_at ? fmtTs(msgs[msgs.length - 1].created_at) : '')
+    : (thread.last_message_at ? fmtTs(thread.last_message_at) : (thread.created_at ? fmtTs(thread.created_at) : '—'));
+  const offerTitle = clipText(String(thread.offer_title || '—').trim(), 90);
+  const threadBlock = formatBxThreadMessages(msgs, userId, 3);
 
-const replySt = computeThreadReplyStatus(thread, userId, {
-  retryEnabled: CFG.INTRO_RETRY_ENABLED,
-  afterHours: CFG.INTRO_RETRY_AFTER_HOURS
-});
-const replyLine = `Ответ: <b>${escapeHtml(replySt.base)}</b>`;
-const retryLine = replySt.retry ? `Retry: <b>${escapeHtml(replySt.retry)}</b>` : null;
+  const stateParts = [status];
+  if (triageTitle) stateParts.push(triageTitle);
+  if (stageTitle) stateParts.push(stageTitle);
 
-const chargeLine = isBuyer ? formatBxChargeLine(thread) : '';
-const chargeHtml = chargeLine ? `${escapeHtml(chargeLine)}` : null;
-	const offerMeta = offerMetaLinesHtml(thread.offer_meta);
+  let text =
+    `💬 <b>Диалог #${thread.id}</b>
+` +
+    `<b>${escapeHtml(other)}${otherMark}</b>
+` +
+    `🕒 <code>${escapeHtml(lastWhen || '—')}</code>`;
 
-  const headLines = [
-    `💬 <b>Диалог #${thread.id}</b>`,
-    `Оффер: <b>${escapeHtml(thread.offer_title || '—')}</b>`,
-	    offerMeta ? offerMeta : null,
-    `С кем: <b>${escapeHtml(other)}${otherMark}</b>`,
-    `Статус: <b>${escapeHtml(status)}</b>`,
-    triageTitle ? `Обработка: <b>${escapeHtml(triageTitle)}</b>` : null,
-    stageTitle ? `Стадия: <b>${escapeHtml(stageTitle)}</b>` : null,
-    replyLine,
-    retryLine,
-    chargeHtml
-  ].filter(Boolean);
+  if (flash) {
+    text += `
 
-  const head = headLines.join('\n');
+✅ <b>${escapeHtml(flash)}</b>`;
+  }
 
-  const body = msgs.length ? msgs.map(m => {
-    const who = Number(m.sender_user_id) === Number(userId) ? 'Вы' : (m.tg_username ? '@' + m.tg_username : 'Собеседник');
-    const ts = m.created_at ? fmtTs(m.created_at) : '';
-    return `<b>${escapeHtml(who)}</b> <tg-spoiler>${escapeHtml(ts)}</tg-spoiler>
-${escapeHtml(m.body)}`;
-  }).join('\n\n') : 'Сообщений пока нет.';
+  text += `
 
-  const text = `${head}
+💡 <b>Сейчас</b>
+${escapeHtml(bxThreadWhatNow(thread, userId, replySt))}`;
 
-${body}`;
+  text += `
+
+📌 <b>Состояние</b>
+${escapeHtml(stateParts.join(' · '))}`;
+  text += `
+${escapeHtml(`Ответ: ${replySt.base}`)}`;
+  if (replySt.retry) text += `
+${escapeHtml(`Повтор: ${replySt.retry}`)}`;
+  if (chargeLine) text += `
+${escapeHtml(chargeLine)}`;
+
+  text += `
+
+📝 <b>Оффер</b>
+${escapeHtml(offerTitle)}`;
+
+  if (threadBlock) {
+    text += `
+
+💬 <b>Последние сообщения</b>
+${threadBlock}`;
+    if (msgs.length > 3) {
+      text += `
+<i>Показаны последние 3 из ${msgs.length}.</i>`;
+    }
+  } else {
+    text += `
+
+💬 <b>Последние сообщения</b>
+Сообщений пока нет.`;
+  }
+
   return { thread, text, proofsCount };
 }
 
 async function renderBxThread(ctx, userId, wsId, threadId, opts = {}) {
-  const built = await buildBxThreadView(userId, threadId);
+  const built = await buildBxThreadView(userId, threadId, { flash: opts.flash });
   if (!built) return ctx.answerCallbackQuery({ text: 'Диалог не найден.' });
   const { thread, text, proofsCount } = built;
 
@@ -16172,7 +16268,7 @@ function bxProofsKb(wsId, threadId, opts = {}) {
 }
 
 async function renderBxProofs(ctx, userId, wsId, threadId, opts = {}) {
-  const built = await buildBxThreadView(userId, threadId);
+  const built = await buildBxThreadView(userId, threadId, { flash: opts.flash });
   if (!built) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
   const offerId = built.thread.offer_id ? Number(built.thread.offer_id) : null;
 
@@ -31944,8 +32040,9 @@ if (p.a === 'a:bx_retry_help') {
         await ctx.answerCallbackQuery({ text: 'Не удалось обновить стадию.' });
         return;
       }
-      await ctx.answerCallbackQuery({ text: '✅ Обновлено' });
-      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h });
+      const flash = `Стадия: ${bxThreadStageTitle(stage) || stage}`;
+      await ctx.answerCallbackQuery({ text: flash });
+      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h, flash });
       return;
     }
 
@@ -31969,13 +32066,16 @@ if (p.a === 'a:bx_retry_help') {
       }
 
       const updated = await db.setBarterThreadTriageStatus(threadId, bmRes.userId, triage);
+      let flash = '';
       if (!updated) {
         // Likely: migration not applied yet (undefined_column)
-        await ctx.answerCallbackQuery({ text: 'Не удалось обновить. Проверь миграцию.' });
+        flash = 'Не удалось обновить. Проверь миграцию.';
+        await ctx.answerCallbackQuery({ text: flash });
       } else {
-        await ctx.answerCallbackQuery({ text: '✅ Обновлено' });
+        flash = `Обработка: ${bxThreadTriageTitle(triage)}`;
+        await ctx.answerCallbackQuery({ text: flash });
       }
-      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h });
+      await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h, flash });
       return;
     }
 
