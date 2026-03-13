@@ -133,6 +133,9 @@ runNpm("smoke:what-next-backnav-contract");
 logHeader("Preflight: QStash dedup sanitize contract");
 runNpm("smoke:qstash-dedup-sanitize-contract");
 
+logHeader("Preflight: brand application super-admin OPS COPY contract");
+runNpm("smoke:brand-app-ops-copy-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 

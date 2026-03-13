@@ -63,6 +63,7 @@ const requiredExampleKeys = [
   'WEBHOOK_SECRET_TOKEN',
   'CRON_SECRET',
   'SUPER_ADMIN_TG_IDS',
+  'BRAND_APP_SUPERADMIN_COPY_ENABLED',
   'PUBLIC_BASE_URL',
   'SUPPORT_CHAT_ID',
   'QSTASH_TOKEN',
@@ -96,6 +97,7 @@ for (const key of requiredExampleKeys) {
 }
 
 assert.equal(envExample.APP_ENV, 'prod', '.env.example must default APP_ENV=prod for prod-like release sanity');
+assert.equal(envExample.BRAND_APP_SUPERADMIN_COPY_ENABLED, '1', '.env.example must keep BRAND_APP_SUPERADMIN_COPY_ENABLED=1 for zero-regression rollout');
 assert.equal(envExample.PAYMENTS_FALLBACK_ALLOW_UNSIGNED, '0', '.env.example must keep PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0');
 assert.equal(envExample.PAYMENTS_FALLBACK_APPLY_ENABLED, '0', '.env.example must keep PAYMENTS_FALLBACK_APPLY_ENABLED=0');
 assert.equal(envExample.IG_OAUTH_ENABLED, 'false', '.env.example must keep IG_OAUTH_ENABLED=false in parked prod baseline');
@@ -105,6 +107,7 @@ assert.equal(envExample.IG_VERIFY_TICK_ENABLED, 'false', '.env.example must keep
 
 assertDocHas(envDoc, 'PUBLIC_BASE_URL=<set>', 'docs/92 must mention PUBLIC_BASE_URL in Core baseline');
 assertDocHas(envDoc, 'SUPER_ADMIN_TG_IDS=<set>', 'docs/92 must mention SUPER_ADMIN_TG_IDS in Core baseline');
+assertDocHas(envDoc, 'BRAND_APP_SUPERADMIN_COPY_ENABLED=1', 'docs/92 must mention BRAND_APP_SUPERADMIN_COPY_ENABLED=1 in Core baseline');
 assertDocHas(envDoc, 'PAYMENTS_FALLBACK_APPLY_ENABLED=0', 'docs/92 must document safe default PAYMENTS_FALLBACK_APPLY_ENABLED=0');
 assertDocHas(envDoc, 'PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0', 'docs/92 must document safe default PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0');
 assertDocHas(envDoc, 'IG_OAUTH_UI_ENABLED=false', 'docs/92 must document parked IG UI baseline');
