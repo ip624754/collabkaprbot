@@ -2,11 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+const require = createRequire(import.meta.url);
 
 function readTextSafe(p) {
   try {
@@ -14,6 +16,58 @@ function readTextSafe(p) {
   } catch {
     return "";
   }
+}
+
+function readJsonSafe(p) {
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function getDeclaredDependencies() {
+  const pkg = readJsonSafe(path.join(ROOT, "package.json"));
+  if (!pkg || typeof pkg !== "object") return [];
+  return Object.keys(pkg.dependencies || {}).filter(Boolean).sort();
+}
+
+function getMissingLocalDependencies() {
+  const deps = getDeclaredDependencies();
+  if (deps.length === 0) return [];
+
+  return deps.filter((dep) => {
+    try {
+      require.resolve(`${dep}/package.json`, { paths: [ROOT] });
+      return false;
+    } catch {
+      return true;
+    }
+  });
+}
+
+function assertDependenciesInstalled() {
+  const deps = getDeclaredDependencies();
+  if (deps.length === 0) return;
+
+  const missing = getMissingLocalDependencies();
+  if (missing.length === 0) return;
+
+  const hasNodeModules = fs.existsSync(path.join(ROOT, "node_modules"));
+  const installHint = hasNodeModules ? "npm install" : "npm ci";
+  const missingPreview = missing.slice(0, 8).join(", ");
+  const extra = missing.length > 8 ? ` (+${missing.length - 8} more)` : "";
+
+  console.error(
+    "\n[preflight] Missing local npm dependencies required for full preflight.\n" +
+      (hasNodeModules
+        ? "Some declared packages are not resolvable from this checkout.\n"
+        : "This looks like a bare snapshot without node_modules.\n") +
+      `Missing: ${missingPreview}${extra}\n` +
+      `Run \`${installHint}\` in the project root, then re-run preflight.\n` +
+      "Failing fast before late smoke checks so the issue is explicit and operator-friendly."
+  );
+  process.exit(2);
 }
 
 function runNpm(scriptName) {
@@ -48,6 +102,18 @@ function isProdAppEnv(value = process.env.APP_ENV) {
   const env = String(value || '').trim().toLowerCase();
   return env === 'prod' || env === 'production';
 }
+
+logHeader("Preflight: local npm dependencies");
+assertDependenciesInstalled();
+
+logHeader("Preflight: ENV baseline contract");
+runNpm("smoke:env-baseline-contract");
+
+logHeader("Preflight: creator current-channel contract");
+runNpm("smoke:creator-current-channel-contract");
+
+logHeader("Preflight: Telegram share URL compatibility contract");
+runNpm("smoke:share-url-compat-contract");
 
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
