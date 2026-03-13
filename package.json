@@ -53,7 +53,8 @@
     "smoke:brand-inbox-accept-contract": "node scripts/smoke-brand-inbox-accept-contract.js",
     "smoke:contacts-brand-pass-contract": "node scripts/smoke-contacts-brand-pass-contract.js",
     "smoke:no-channel-gate-contract": "node scripts/smoke-no-channel-gate-contract.js",
-    "smoke:input-mode-contract": "node scripts/smoke-input-mode-contract.js"
+    "smoke:input-mode-contract": "node scripts/smoke-input-mode-contract.js",
+    "smoke:what-next-backnav-contract": "node scripts/smoke-what-next-backnav-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
