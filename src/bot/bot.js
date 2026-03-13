@@ -1514,7 +1514,7 @@ ${escapeHtml(safeText)}` +
       const label = clipCodepoints(String(n.ctaLabel || '🔗 Подробнее'), CTA_LABEL_MAX, { ellipsis: '' }).text;
       kb.url(label, String(n.ctaUrl)).row();
     }
-    kb.text('📋 Открыть меню', 'a:menu').text('💬 Поддержка', 'a:support').row();
+    kb.text('📋 Меню', 'a:menu').text('💬 Поддержка', 'a:support').row();
     kb.text('✅ Понятно', 'a:usr_ack|src:admmsg');
 
     await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }).catch(() => {});
@@ -22817,7 +22817,7 @@ if (p.a === 'a:support_push') {
     ? new InlineKeyboard()
         .text('✍️ Написать в поддержку', 'a:support_write')
         .row()
-        .text('📋 Открыть меню', 'a:menu')
+        .text('📋 Меню', 'a:menu')
     : new InlineKeyboard()
         .text('✍️ Написать в поддержку', 'a:support_write')
         .row()
@@ -23473,7 +23473,7 @@ if (p.a === 'a:usr_ack') {
   // Admin-to-user receipts: keep navigation buttons, only remove the ack button.
   if (src === 'admmsg') {
     const kb = new InlineKeyboard()
-      .text('📋 Открыть меню', 'a:menu_push|src:admmsg')
+      .text('📋 Меню', 'a:menu_push|src:admmsg')
       .text('💬 Поддержка', 'a:support_push|src:admmsg');
     try { await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: kb }); } catch {}
     return;
@@ -23498,7 +23498,7 @@ if (p.a === 'a:notice') {
   const n = await getSysNotice();
   const avail = await getSysNoticeAvailabilityForUser(tgId, n);
   if (!avail.ok) {
-    const kb = new InlineKeyboard().text('📋 Открыть меню', 'a:menu').text('💬 Поддержка', 'a:support');
+    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('💬 Поддержка', 'a:support');
     await safeEditOrReply(ctx, 'ℹ️ Сейчас нет активного объявления.', { reply_markup: kb });
     return;
   }
@@ -37226,7 +37226,7 @@ ${bodyHtml}`;
 ${bodyHtml}
 
 <b>Что дальше:</b>
-• Вернуться к действиям бота — «📋 Открыть меню»
+• Вернуться к действиям бота — «📋 Меню»
 • Вопросы/ошибка — «💬 Поддержка»
 • Прочитано — «✅ Понятно»`;
 }
@@ -37320,7 +37320,7 @@ const sectionCb = sectionBackCb || (retCb ? 'a:admin_comms' : 'a:admin_ops');
 
   const userMsg = renderAdminDmUserMessageHtml(bodyHtml, { withNext });
   const userKb = new InlineKeyboard()
-    .text('📋 Открыть меню', 'a:menu_push|src:admmsg')
+    .text('📋 Меню', 'a:menu_push|src:admmsg')
     .text('💬 Поддержка', 'a:support_push|src:admmsg')
     .row()
     .text('✅ Понятно', 'a:usr_ack|src:admmsg');
