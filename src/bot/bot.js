@@ -6985,7 +6985,7 @@ ${escapeHtml(msg)}`;
 ${escapeHtml(msg)}`;
 
   const kbNotif = new InlineKeyboard()
-    .text('📥 Открыть в Inbox', `a:brand_app_view|id:${res.id}|s:new|p:0`)
+    .text('📨 Открыть заявку', `a:brand_app_view|id:${res.id}|s:new|p:0`)
     .row()
     .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
@@ -12004,10 +12004,12 @@ ${threadBlock}`;
         ? `
 <i>✅ Принять спишет: <b>${BRAND_APP_ACCEPT_COST}</b> ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')}.</i>`
         : `
-<i>✅ Принять: бесплатно.</i>`);    // Balance block: Redis-only (STEP155: snapshot hydrate), consistent placeholder/hint.
-    const bpLines = brandPassCreditsBlockLines(creditsCached, { showHintWhenUnknown: true });
-    if (bpLines.length) text += '\n\n' + bpLines.join('\n');
+<i>✅ Принять: бесплатно.</i>`);
   }
+
+  // Balance block: Redis-only (STEP155: snapshot hydrate) and should stay visible after accept too.
+  const bpLines = brandPassCreditsBlockLines(creditsCached, { showHintWhenUnknown: true });
+  if (bpLines.length) text += '\n\n' + bpLines.join('\n');
 
   // UX note: statuses are internal triage for brand inbox
   text += `
@@ -12029,14 +12031,18 @@ ${threadBlock}`;
 ⏳ <b>В обработке…</b>
 <i>✅ Принять</i>
 
-Запрос уже в очереди. Открой «📥 Inbox» или нажми «🔄 Обновить» через 10–30 секунд.`;
+Запрос уже в очереди. Кредит спишется после завершения обработки. Открой заявку, проверь вкладку «💬 В работе» или нажми «🔄 Обновить» через 10–60 секунд.`;
     }
   }
 
   const kb = new InlineKeyboard();
   if (st === 'new') {
     if (acceptPending) {
-      kb.text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm').text('🔄 Обновить', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`).row();
+      kb
+        .text('📨 Открыть заявку', `a:brand_app_view|id:${app.id}|s:in_progress|p:${back.page}`)
+        .text('💬 В работе', 'a:brand_apps|ws:0|s:in_progress|p:0')
+        .row()
+        .text('🔄 Обновить', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`).row();
     } else {
       kb.text('✅ Принять', `a:brand_app_accept|id:${app.id}|s:${back.status}|p:${back.page}`).row();
     }
@@ -12697,7 +12703,8 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
   const needFastTimeout = (asyncRetryEnabled || redisDegraded);
 
   const refreshCb = `a:brand_app_view|id:${aid}|s:${back.status}|p:${back.page}`;
-  const inboxCb = 'a:bx_inbox|ws:0|p:0|h:mm';
+  const openAppCb = `a:brand_app_view|id:${aid}|s:in_progress|p:${back.page}`;
+  const inProgressCb = 'a:brand_apps|ws:0|s:in_progress|p:0';
 
   const renderAcceptPending = async (opts = {}) => {
     const alreadyQueued = !!opts.alreadyQueued;
@@ -12705,7 +12712,9 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
     try { await ctx.answerCallbackQuery({ text: alreadyQueued ? '⏳ Уже в обработке…' : '⏳ В обработке…', show_alert: false }); } catch {}
 
     const kb = new InlineKeyboard()
-      .text('📥 Inbox', inboxCb)
+      .text('📨 Открыть заявку', openAppCb)
+      .text('💬 В работе', inProgressCb)
+      .row()
       .text('🔄 Обновить', refreshCb)
       .row()
       .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
@@ -12722,7 +12731,7 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
       `⏳ <b>В обработке…</b>
 <i>✅ Принять</i>
 
-${extra}${hint} Открой «📥 Inbox» или нажми «🔄 Обновить» через 10–30 секунд.`,
+${extra}${hint} Кредит спишется после завершения обработки. Открой заявку, проверь вкладку «💬 В работе» или нажми «🔄 Обновить» через 10–60 секунд.`,
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
     );
   };
@@ -19774,7 +19783,7 @@ ${escapeHtml(details)}`;
       await clearExpectText(ctx.from.id);
 
       const back = {
-        status: String(exp.backStatus || 'new'),
+        status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
         page: Math.max(0, Number(exp.backPage || 0)),
         ret: String(exp.ret || '').trim()
       };
@@ -19888,7 +19897,7 @@ ${escapeHtml(details)}`;
       const wsId = Number(exp.wsId || 0);
       const noteText = String(ctx.message.text || '').trim();
 
-      const backStatus = String(exp.backStatus || 'new');
+      const backStatus = String(exp.backStatus || 'in_progress');
       const backPage = Number(exp.backPage || 0);
       const nb = Number(exp.nb || 0);
       const retKey = String(exp.ret || '').trim();
@@ -20013,11 +20022,11 @@ if (exp.type === 'brand_apply') {
         } catch {}
         try {
           await renderBrandAppView(ctx, u.id, appId, {
-            status: String(exp.backStatus || 'new'),
+            status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
             page: Math.max(0, Number(exp.backPage || 0))
           });
         } catch {
-          const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:new|p:0`);
+          const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:in_progress|p:0`);
           await ctx.reply('⚠️ Бренд ещё не принял заявку. Нажми ✅ Принять в карточке.', { reply_markup: navKb(backCb) });
         }
         return;
@@ -20100,7 +20109,7 @@ ${escapeHtml(reply)}`;
       }), { op: 'brand_app_thread_append', appId });
       await clearExpectText(ctx.from.id);
 
-      const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:new|p:0`);
+      const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:in_progress|p:0`);
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', backCb)
         .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
@@ -20109,16 +20118,21 @@ ${escapeHtml(reply)}`;
         // UX: после ручного ответа возвращаем в карточку заявки (не оставляем на квитанции).
         try {
           await renderBrandAppView(ctx, u.id, appId, {
-            status: String(exp.backStatus || 'new'),
+            status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
             page: Math.max(0, Number(exp.backPage || 0))
           });
         } catch (e) {
-          return ctx.reply('✅ Ответ доставлен креатору.', { reply_markup: kb });
+          const doneKb = new InlineKeyboard()
+            .text('📨 Открыть заявку', `a:brand_app_view|id:${appId}|s:in_progress|p:${Math.max(0, Number(exp.backPage || 0))}`)
+            .text('💬 В работе', 'a:brand_apps|ws:0|s:in_progress|p:0')
+            .row()
+            .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+          return ctx.reply('✅ Ответ доставлен креатору.', { reply_markup: doneKb });
         }
         return;
       }
 
-      const backStatus = String(exp.backStatus || 'new');
+      const backStatus = String(exp.backStatus || 'in_progress');
       const backPage = Math.max(0, Number(exp.backPage || 0));
       const creatorU = exp.creatorUsername ? String(exp.creatorUsername).replace(/^@/, '').trim() : '';
       const failKb = new InlineKeyboard();
