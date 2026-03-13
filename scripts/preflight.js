@@ -151,6 +151,9 @@ runNpm("smoke:brand-app-density-contract");
 logHeader("Preflight: creator application dialog density contract");
 runNpm("smoke:creator-app-dialog-density-contract");
 
+logHeader("Preflight: creator applications list density contract");
+runNpm("smoke:creator-apps-list-density-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
