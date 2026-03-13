@@ -425,6 +425,7 @@ export const CFG = {
 
   // Moderation
   SUPER_ADMIN_TG_IDS: parseCsvNums(process.env.SUPER_ADMIN_TG_IDS || DEFAULT_SUPER_ADMINS),
+  BRAND_APP_SUPERADMIN_COPY_ENABLED: parseBoolSafe(process.env.BRAND_APP_SUPERADMIN_COPY_ENABLED, true),
 
   // Upstash Redis REST
   UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL || '',
