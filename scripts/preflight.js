@@ -172,6 +172,9 @@ runNpm("smoke:brand-lead-entrypoints-contract");
 logHeader("Preflight: brand-side lead follow-ups contract");
 runNpm("smoke:brand-lead-followups-contract");
 
+logHeader("Preflight: brand-side brand-app notices contract");
+runNpm("smoke:brand-app-notices-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
