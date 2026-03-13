@@ -127,6 +127,9 @@ runNpm("smoke:no-channel-gate-contract");
 logHeader("Preflight: input mode cancel/reset contract");
 runNpm("smoke:input-mode-contract");
 
+logHeader("Preflight: what-next / back-navigation contract");
+runNpm("smoke:what-next-backnav-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
