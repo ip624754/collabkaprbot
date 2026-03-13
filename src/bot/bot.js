@@ -11601,6 +11601,15 @@ function brandAppStatusActionLabel(targetStatus, activeStatus) {
   return st === active ? `• ${base}` : base;
 }
 
+function creatorBrandAppWhatNow(status) {
+  const st = normLeadStatus(status);
+  if (st === 'new') return 'дождаться решения бренда; кнопка ответа появится после принятия заявки';
+  if (st === 'in_progress') return 'открыть чат и ответить бренду прямо в этом боте';
+  if (st === 'closed') return 'диалог завершён; следи за обновлениями, если бренд вернётся';
+  if (st === 'spam') return 'заявка скрыта брендом; новых сообщений по ней, скорее всего, не будет';
+  return 'следить за ответом бренда по этой заявке';
+}
+
 function getAppDealStage(app) {
   const s = app?.meta?.deal_stage;
   const k = String(s || '').toLowerCase().trim();
@@ -13152,7 +13161,8 @@ async function renderBrandAppCardForCreator(ctx, actorUserId, appId) {
   const when = app.updated_at ? fmtTs(app.updated_at) : (app.created_at ? fmtTs(app.created_at) : '—');
 
   const msgRaw = String(app.message || '').trim();
-  const msgShort = msgRaw ? clipText(msgRaw, 900) : '—';
+  const msgText = msgRaw ? clipText(msgRaw, 700) : '—';
+  const msgEsc = escapeHtml(msgText) + (msgRaw && msgRaw.length > 700 ? '\n<i>(сокращено)</i>' : '');
 
   const thread = Array.isArray(app?.meta?.thread) ? app.meta.thread : [];
   let lastBrand = '';
@@ -13164,44 +13174,57 @@ async function renderBrandAppCardForCreator(ctx, actorUserId, appId) {
     }
   }
   const replyRaw = String(app.reply_text || '').trim();
-  const lastReply = replyRaw || lastBrand;
+  const replyText = replyRaw || lastBrand;
+  const replyEsc = replyText
+    ? (escapeHtml(clipText(replyText, 500)) + (replyText.length > 500 ? '\n<i>(сокращено)</i>' : ''))
+    : '';
+  const threadBlock = formatBrandAppThread(thread, 3);
 
   let text =
     `✉️ <b>Диалог по заявке #${app.id}</b>
 ` +
-    `Бренд: <b>${escapeHtml(brandName)}</b>
+    `<b>${escapeHtml(stTitle)}</b>
 ` +
-    `Статус: <b>${escapeHtml(stTitle)}</b>
+    `🏷️ <b>${escapeHtml(brandName)}</b>
 ` +
-    `Обновлено: <code>${escapeHtml(when)}</code>
+    `🕒 <code>${escapeHtml(when)}</code>`;
 
-` +
-    `📝 <b>Твоя заявка</b>
-<code>${escapeHtml(msgShort)}</code>`;
+  text += `
 
-  if (lastReply) {
+💡 <b>Сейчас</b>
+${escapeHtml(creatorBrandAppWhatNow(st))}`;
+
+  text += `
+
+📝 <b>Твоя заявка</b>
+${msgEsc}`;
+
+  if (replyEsc) {
     text += `
 
 📩 <b>Последний ответ бренда</b>
-<code>${escapeHtml(clipText(lastReply, 900))}</code>`;
+${replyEsc}`;
   }
 
-  const tail = formatBrandAppThread(thread, 4);
-  if (tail) {
+  if (threadBlock) {
     text += `
 
 💬 <b>Последние сообщения</b>
-${tail}`;
+${threadBlock}`;
+    if (thread.length > 3) {
+      text += `
+<i>Показаны последние 3 из ${thread.length}.</i>`;
+    }
   }
 
   if (st === 'new') {
     text += `
 
-⏳ <i>Пока бренд не принял заявку — писать нельзя. Когда примут, появится кнопка “💬 Написать бренду”.</i>`;
+⏳ <i>Пока бренд не принял заявку — кнопка «💬 Написать бренду» появится после принятия.</i>`;
   } else {
     text += `
 
-	💬 Нажми «Написать бренду» и отправь сообщение — оно появится у бренда во входящих (Inbox) внутри этого бота.`;
+<i>Сообщения идут внутри этого бота — без перехода в личку.</i>`;
   }
 
   const kb = new InlineKeyboard();
