@@ -115,6 +115,18 @@ runNpm("smoke:creator-current-channel-contract");
 logHeader("Preflight: Telegram share URL compatibility contract");
 runNpm("smoke:share-url-compat-contract");
 
+logHeader("Preflight: Brand Inbox accept-point contract");
+runNpm("smoke:brand-inbox-accept-contract");
+
+logHeader("Preflight: Contacts / Brand Pass anti-bypass contract");
+runNpm("smoke:contacts-brand-pass-contract");
+
+logHeader("Preflight: no-channel gates contract");
+runNpm("smoke:no-channel-gate-contract");
+
+logHeader("Preflight: input mode cancel/reset contract");
+runNpm("smoke:input-mode-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
