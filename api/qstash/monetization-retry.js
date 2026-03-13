@@ -439,7 +439,8 @@ export default async function handler(req, res) {
           const kb = {
             inline_keyboard: [
               [
-                { text: '📨 Открыть заявку', callback_data: `a:brand_app_view|id:${appId}|s:new|p:0` },
+                { text: '📨 Открыть заявку', callback_data: `a:brand_app_view|id:${appId}|s:in_progress|p:0` },
+                { text: '💬 В работе', callback_data: 'a:brand_apps|ws:0|s:in_progress|p:0' },
               ],
               [
                 { text: '📋 Меню', callback_data: 'a:menu' },
@@ -450,7 +451,7 @@ export default async function handler(req, res) {
 
           const msg = (r?.status === 'insufficient_credits')
             ? `⚠️ <b>Недостаточно кредитов</b>\n\nЧтобы принять заявку, докупи кредиты и повтори.`
-            : `✅ <b>Готово</b>\n\nЗаявка обработана. Если UI ещё не обновился — нажми «Открыть заявку».`;
+            : `✅ <b>Готово</b>\n\nКредит списан после обработки, а заявка теперь должна быть во вкладке «💬 В работе». Если UI ещё не обновился — нажми «Открыть заявку».`;
 
           await safeTgSend(actorTgId, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
         }
