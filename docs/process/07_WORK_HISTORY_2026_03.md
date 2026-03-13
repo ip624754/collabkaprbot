@@ -3523,6 +3523,17 @@ QA
 - `a:ws_settings`/старые back-paths по-прежнему приводят на рабочий экран канала.
 
 
+## STEP420 — Preflight dependency install guard / fail-fast for bare snapshots
+- Problem found during STEP419 audit: on a bare ZIP checkout without `node_modules`, `npm run preflight` could spend time on zero-dependency checks and only fail later inside staging smoke when `scripts/smoke-health-admin-shape.js` imported runtime modules that transitively require `dotenv`.
+- Added a small fail-fast guard at the top of `scripts/preflight.js`: it reads declared dependencies from `package.json`, verifies they are locally resolvable, and exits early with a clear install hint (`npm ci` for bare snapshot, `npm install` if the checkout is partially installed).
+- No runtime behavior changed. No bot/business logic changed. No DB schema change. No new DB reads. This is release-tooling only.
+- Synced docs so release preflight explicitly calls out the dependency-install gate and the expected operator action when working from a fresh archive.
+
+### QA
+- On a fresh bare snapshot without `node_modules`, `npm run preflight` fails immediately at `Preflight: local npm dependencies` with a readable install hint instead of reaching late smoke/import failure.
+- `node --check scripts/preflight.js` stays green.
+- Runtime folders (`api/*`, `src/bot/*`, `src/db/*`) are unchanged.
+
 ## STEP419 — Docs sync / current Creator-channel model frozen
 - Re-synced docs to the actual STEP418 runtime model instead of the older intermediate menu states. Creator main is now documented unambiguously as a **current-channel menu** with top-row entries `🔁 Сменить канал` and `📂 Текущий канал`; role switching stays only in `🏠 Home`, and the creator no-active state is intentionally minimal/recovery-oriented.
 - Clarified verification semantics in docs: current verification is **account-level**, not per-channel workspace truth. Quick access is therefore described as `✅ Верификация аккаунта` inside channel settings, while channel profile editing no longer carries a duplicate verification CTA.
@@ -3617,3 +3628,35 @@ QA
 - Verification semantics were checked in code: current implementation is **one verification record per user**, not per workspace/channel. To keep UX honest, the entrypoint is exposed in channel settings as **`✅ Верификация аккаунта`** (quick access), and the settings copy explicitly says this verification is shared by the creator account.
 - `ws_profile` verification shortcut was removed to avoid duplicate CTA and keep profile editing focused.
 - No DB schema changes, no new hot-path reads, no changes to inbox/offers/giveaways business logic.
+
+
+## STEP421 — Release env baseline contract / fail-fast guard
+- Added `scripts/smoke-env-baseline-contract.js` and wired it into `scripts/preflight.js` right after the STEP420 dependency-install gate. This new smoke protects the **release/env contract** itself: `.env.example`, `docs/92_PROD_ENV_BASELINE.md`, and `src/lib/config.js#assertEnv()` must describe the same modern baseline before any deeper smoke chain runs.
+- Updated `.env.example` to include the currently relevant prod/release keys that were missing from the example snapshot: `PUBLIC_BASE_URL`, `SUPPORT_CHAT_ID`, QStash signing/token vars, payments HMAC/fallback flags, broadcast cooldown/quarantine vars, and parked Instagram flags. Safe defaults are explicit: `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0`, `PAYMENTS_FALLBACK_APPLY_ENABLED=0`, `IG_* = false`.
+- Fixed docs drift in `docs/92_PROD_ENV_BASELINE.md`: old names `BOT_WEBHOOK_URL` and `SUPER_ADMIN_IDS` are replaced with the actual live contract `PUBLIC_BASE_URL` and `SUPER_ADMIN_TG_IDS`.
+- The smoke is intentionally zero-dependency and source-first. If local prod-like `.env*` files are present, it additionally fails fast on missing required prod keys or dangerous fallback defaults; if not, it still validates docs/example/code alignment so drift is caught before release.
+
+### QA
+- `node scripts/smoke-env-baseline-contract.js` passes on the repo snapshot.
+- `.env.example` contains current baseline keys for QStash / payments HMAC / broadcast cooldown / parked IG flags.
+- `docs/92_PROD_ENV_BASELINE.md` no longer mentions obsolete `BOT_WEBHOOK_URL` or `SUPER_ADMIN_IDS`.
+
+## STEP422 — Creator current-channel contract smoke
+- Added `scripts/smoke-creator-current-channel-contract.js` and wired it into `scripts/preflight.js` so the current Creator IA is frozen in source-level contract tests rather than memory/docs only.
+- The smoke fixes the intended post-STEP418 model: Creator `📋 Меню` is the **current-channel menu**; top row is `🔁 Сменить канал` + `📂 Текущий канал`; `renderRoleHub()` routes Creator into that menu; `ws_open` remains the work screen; `ws_settings` remains the settings screen; account-level verification stays reachable from settings as `✅ Верификация аккаунта`.
+- Also added negative guards so the creator current/no-active screens do not silently regrow `Перейти в бренд`, `Режим менеджера бренда`, `✅ Верификация`, or `🔗 Поделиться` utility CTA in places where they would blur the current-channel model again.
+
+### QA
+- `node scripts/smoke-creator-current-channel-contract.js` passes on the repo snapshot.
+- `package.json` exposes `npm run smoke:creator-current-channel-contract`.
+- `scripts/preflight.js` now schedules this smoke before the deeper runtime/admin contract checks.
+
+## STEP423 — Telegram share URL compatibility contract smoke
+- Added `scripts/smoke-share-url-compat-contract.js` and wired it into `scripts/preflight.js` to freeze the Telegram share workaround that already exists in runtime code but was previously unprotected by a dedicated contract smoke.
+- The smoke checks both fragile share paths: `sendWsShareTextMessage()` for workspace showcase share (`📨 Отправить`) and the `a:cur_invite` flow for curator invite share (`📤 Поделиться`). Both must keep the compatibility format `https://t.me/share/url?url=<U+2060>&text=...`, with the real content going into `text=` and the invisible WORD JOINER occupying `url=`.
+- Added explicit no-regression assertions against the two bad historical formats that cause Telegram-client silent failures: `...share/url?text=...` and `...share/url?url=&text=...`. Related action registry entries (`a:ws_share`, `a:ws_share_send`, `a:cur_invite`) are checked too, so quiet re-guard/retype regressions are caught together with the URL shape.
+
+### QA
+- `node scripts/smoke-share-url-compat-contract.js` passes on the repo snapshot.
+- `package.json` exposes `npm run smoke:share-url-compat-contract`.
+- Source contains no text-only or empty-URL Telegram share links in `src/bot/bot.js`.

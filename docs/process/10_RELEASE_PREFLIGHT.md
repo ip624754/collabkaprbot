@@ -5,10 +5,13 @@
 ## Команда
 
 ```bash
+npm ci
 npm run preflight
 # или
 npm run qa:fast
 ```
+
+> Если работаешь из свежего ZIP/snapshot checkout без `node_modules`, сначала обязательно поставь зависимости. Начиная с STEP420 preflight валится на этом сразу и явно, а не позже внутри deep smoke/import chain.
 
 ## Что проверяет
 
@@ -92,6 +95,24 @@ npm run qa:fast
 
    Source-level smoke `scripts/smoke-payments-autoheal-chain-contract.js` проверяет bounded chain-drain для больших очередей `ORPHANED missing_session`: `src/lib/config.js` должен экспортировать `PAYMENTS_ORPHANED_AUTOHEAL_CHAIN_MAX`, `/api/health` — показывать `payments.orphaned_autoheal_chain_max`, `src/bot/cron.js` — публиковать first-leg continuation (`action='orphaned_autoheal'`, `chain_depth=1`, `chain_source='cron'`, `dedup=mon:autoheal:*`) только на полном batch, а `api/qstash/monetization-retry.js` — иметь worker branch `orphaned_autoheal`, который повторно claim’ит batch через `claimOrphanedMissingSessionPaymentsForAutoheal(...)`, self-reenqueue’ит следующую bounded leg с depth-limit/dedup и не трогает existing exactly-once guards fallback-apply. Это ловит тихий регресс, при котором backlog снова разбирается только по одному batch за tick или цепочка уходит в бесконечный reenqueue.
 
+24) **ENV baseline contract smoke**  
+   Source-level smoke `scripts/smoke-env-baseline-contract.js` проверяет, что `.env.example`, `docs/92_PROD_ENV_BASELINE.md` и `src/lib/config.js#assertEnv()` не расходятся по текущему prod/release baseline: используются актуальные имена `PUBLIC_BASE_URL` / `SUPER_ADMIN_TG_IDS`, в example присутствуют критичные QStash / payments / broadcast / audit / parked-IG ключи, а безопасные дефолты `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0` и `PAYMENTS_FALLBACK_APPLY_ENABLED=0` не разъехались. Если рядом есть локальный prod-like `.env*`, smoke дополнительно падает сразу на missing required keys вместо позднего runtime сюрприза.
+
+25) **Creator current-channel contract smoke**  
+   Source-level smoke `scripts/smoke-creator-current-channel-contract.js` фиксирует текущую creator IA: `📋 Меню` = current-channel menu, top row `🔁 Сменить канал` + `📂 Текущий канал`, `ws_open = Работа с каналом`, `ws_settings = Настройки канала`, quick verification entrypoint живёт в settings как `✅ Верификация аккаунта`, а creator current/no-active screens не протекают role-switch/share/verification utility CTA обратно в рабочее меню.
+
+26) **Telegram share URL compatibility contract smoke**  
+   Source-level smoke `scripts/smoke-share-url-compat-contract.js` проверяет совместимый share contract для `📨 Отправить` и curator invite `📤 Поделиться`: share URL должен оставаться в формате `t.me/share/url?url=<U+2060>&text=...`, без регресса к `...share/url?text=...` или `url=&text=...`, а связанные action keys должны сохранять свои guards. Это ловит очень неприятные Telegram-client regressions, когда кнопка выглядит живой, но при нажатии «молчит».
+
+## Дополнительный ранний gate (STEP420)
+
+Перед всеми deep smoke `scripts/preflight.js` теперь делает **local dependency install guard**:
+- читает declared dependencies из `package.json`;
+- проверяет, что они реально резолвятся из текущего checkout;
+- если зависимостей локально нет, падает сразу с явным install hint (`npm ci` / `npm install`).
+
+Это не runtime-check и не бизнес-логика. Цель только одна: свежий архив/снимок должен ломаться сразу и понятно, а не через поздний `ERR_MODULE_NOT_FOUND` внутри staging smoke.
+
 ## После зелёного preflight: быстрый operator sanity (1 минута)
 
 Preflight ловит regressions до деплоя, но после выкладки оператор должен помнить ещё три практических правила:
@@ -106,6 +127,7 @@ Preflight ловит regressions до деплоя, но после выклад
 
 ## Если preflight упал
 
+- На `Missing local npm dependencies required for full preflight` → это install/tooling issue, а не runtime-regression: запусти `npm ci` (или `npm install`, если checkout частично установлен), затем повтори preflight.
 - На `actions:md changed` → закоммить `docs/02_ACTION_KEYS_REGISTRY.md` и повторить.
 - На `lint:nav` → поправить клавиатуру/футер по `docs/process/09_ADMIN_UX_STANDARD.md`.
 - На `test:redact` → поправить редактирование/маскирование, не допуская “полных” контактов.
@@ -190,3 +212,7 @@ Preflight **не меняет прод-логику**. Это dev‑инстру
 - На `Admin → Audit / Metrics / Moderators contract` → проверь `renderAdminAudit()/sendAdminAuditExport()/renderAdminMetrics()/renderAdminModerators()`, callbacks `a:aud* / a:admin_metrics / a:admin_mod_*`, `expectText` flows `aud_search` и `admin_add_mod_username`, а затем синхронизируй `src/bot/actionRegistry.js` с реальным составом back/footer/confirm actions.
 
 - `scripts/smoke-official-publish-check-now-contract.js` — protects Official Publish operator `check now` / safe verify path.
+
+- На `ENV baseline contract smoke` → синхронизируй `.env.example`, `docs/92_PROD_ENV_BASELINE.md` и `src/lib/config.js#assertEnv()`, не возвращай obsolete names (`BOT_WEBHOOK_URL`, `SUPER_ADMIN_IDS`) и не ослабляй safe defaults `PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0` / `PAYMENTS_FALLBACK_APPLY_ENABLED=0`.
+- На `Creator current-channel contract smoke` → проверь `mainMenuCreatorCurrentKb()`, `renderCreatorCurrentMenu()`, `renderRoleHub()`, `wsMenuKb()` и `wsSettingsKb()`, чтобы current-channel IA не откатилась к pre-STEP413 модели и не потащила role-switch/share/verification обратно в рабочий creator menu.
+- На `Telegram share URL compatibility contract smoke` → проверь `sendWsShareTextMessage()` и `a:cur_invite`: должен оставаться совместимый формат `t.me/share/url?url=<U+2060>&text=...`, без text-only или empty-url вариантов.
