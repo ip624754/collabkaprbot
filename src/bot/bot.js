@@ -11571,6 +11571,36 @@ function dealStageButtonLabel(targetStage, activeStage) {
   return normDealStage(targetStage) === normDealStage(activeStage) ? `• ${title}` : title;
 }
 
+
+function brandAppWhatNow(status, opts = {}) {
+  const st = normLeadStatus(status);
+  const pending = !!opts.pending;
+  const dealStage = opts.dealStage ? normDealStage(opts.dealStage) : '';
+
+  if (pending) return 'дождаться завершения принятия и нажать «Проверить заявку»';
+  if (st === 'new') return 'решить, принимать ли заявку и открывать ли диалог';
+  if (st === 'in_progress') {
+    if (dealStage) return `продолжить диалог или открыть «${dealStageTitle(dealStage)}»`;
+    return 'ответить креатору или обновить внутренний статус';
+  }
+  if (st === 'closed') return 'заявка закрыта; при необходимости можно вернуть её в работу';
+  if (st === 'spam') return 'заявка скрыта как спам; при ошибке её можно пересмотреть';
+  return 'продолжить работу по заявке';
+}
+
+function brandAppStatusActionLabel(targetStatus, activeStatus) {
+  const st = normLeadStatus(targetStatus);
+  const active = normLeadStatus(activeStatus);
+  const base = st === 'in_progress'
+    ? (st === active ? '💬 В работе' : '💬 В работу')
+    : st === 'closed'
+      ? (st === active ? '✅ Закрыто' : '✅ Закрыть')
+      : st === 'spam'
+        ? '⛔ Спам'
+        : (LEAD_STATUSES[st]?.title || LEAD_STATUSES[st]?.label || st);
+  return st === active ? `• ${base}` : base;
+}
+
 function getAppDealStage(app) {
   const s = app?.meta?.deal_stage;
   const k = String(s || '').toLowerCase().trim();
@@ -12043,76 +12073,9 @@ async function renderBrandAppView(ctx, actorUserId, appId, back = { status: 'new
   const who = app.creator_username ? '@' + String(app.creator_username).replace(/^@/, '') : (app.creator_tg_id ? `id:${app.creator_tg_id}` : 'creator');
   const when = app.created_at ? fmtTs(app.created_at) : '—';
   const st = normLeadStatus(app.status);
-
-  // Micro-CRM thread (stored in meta.thread[])
-  const thread = Array.isArray(app?.meta?.thread) ? app.meta.thread : [];
-
   const stTitle = (LEAD_STATUSES[st] || LEAD_STATUSES.new).title;
-
-  const msgRaw = String(app.message || '').trim();
-  const msgText = msgRaw ? clipText(msgRaw, 2400) : '—';
-  const msgEsc = escapeHtml(msgText) + (msgRaw && msgRaw.length > 2400 ? '\n<i>(сокращено)</i>' : '');
-
-  const replyRaw = String(app.reply_text || '').trim();
-  const replyText = replyRaw ? clipText(replyRaw, 1600) : '';
-  const replyEsc = replyRaw ? (escapeHtml(replyText) + (replyRaw.length > 1600 ? '\n<i>(сокращено)</i>' : '')) : '';
-
-  let text =
-    `✉️ <b>Заявка #${app.id}</b>  ·  <b>${escapeHtml(stTitle)}</b>
-
-` +
-    `🏷️ Бренд: <b>${escapeHtml(brandName)}</b>
-` +
-    `🧑‍🎨 Креатор: <b>${escapeHtml(who)}</b>
-` +
-    `🕒 Дата: <code>${escapeHtml(when)}</code>
-
-` +
-    `📝 <b>Сообщение</b>
-${msgEsc}`;
-
   const dealStage = getAppDealStage(app);
-  if (dealStage) {
-    text += `
-
-📌 <b>Сделка</b>
-${escapeHtml(dealStageTitle(dealStage))}`;
-  }
-
-  if (replyEsc) {
-    text += `
-
-✍️ <b>Ответ бренда</b>
-${replyEsc}`;
-  }
-
-  const threadBlock = formatBrandAppThread(thread, 6);
-  if (threadBlock) {
-    text += `
-
-💬 <b>Диалог</b>
-${threadBlock}`;
-  }
-
-  if (st === 'new') {
-    text += `
-
-💡 <i>Нажми ✅ Принять, чтобы открыть диалог: креатор получит кнопку “💬 Написать бренду”.</i>` +
-      (BRAND_APP_ACCEPT_COST > 0
-        ? `
-<i>✅ Принять спишет: <b>${BRAND_APP_ACCEPT_COST}</b> ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')}.</i>`
-        : `
-<i>✅ Принять: бесплатно.</i>`);
-  }
-
-  // Balance block: Redis-only (STEP155: snapshot hydrate) and should stay visible after accept too.
-  const bpLines = brandPassCreditsBlockLines(creditsCached, { showHintWhenUnknown: true });
-  if (bpLines.length) text += '\n\n' + bpLines.join('\n');
-
-  // UX note: statuses are internal triage for brand inbox
-  text += `
-
-ℹ️ <i>Статусы “В работу / Закрыть / Спам” — внутренняя сортировка бренда: они только сортируют заявки по вкладкам 🆕/💬/✅/🗑. Креатор их не видит.</i>`;
+  const flash = String(back?.flash || '').trim();
 
   // STEP175 / STEP436: while accept completion is pending, keep the user on the same card
   // and do not expose misleading routes or conflicting actions.
@@ -12129,13 +12092,95 @@ ${threadBlock}`;
     } catch {
       acceptPending = false;
     }
-    if (acceptPending) {
+  }
+
+  // Micro-CRM thread (stored in meta.thread[])
+  const thread = Array.isArray(app?.meta?.thread) ? app.meta.thread : [];
+  const threadBlock = formatBrandAppThread(thread, 3);
+
+  const msgRaw = String(app.message || '').trim();
+  const msgText = msgRaw ? clipText(msgRaw, 900) : '—';
+  const msgEsc = escapeHtml(msgText) + (msgRaw && msgRaw.length > 900 ? '\n<i>(сокращено)</i>' : '');
+
+  const replyRaw = String(app.reply_text || '').trim();
+  const replyText = replyRaw ? clipText(replyRaw, 700) : '';
+  const replyEsc = replyRaw ? (escapeHtml(replyText) + (replyRaw.length > 700 ? '\n<i>(сокращено)</i>' : '')) : '';
+
+  let text =
+    `✉️ <b>Заявка #${app.id}</b>
+` +
+    `<b>${escapeHtml(stTitle)}</b>
+` +
+    `🏷️ <b>${escapeHtml(brandName)}</b> · 🧑‍🎨 <b>${escapeHtml(who)}</b>
+` +
+    `🕒 <code>${escapeHtml(when)}</code>`;
+
+  if (flash) {
+    text += `
+
+✅ <b>${escapeHtml(flash)}</b>`;
+  }
+
+  text += `
+
+💡 <b>Сейчас</b>
+${escapeHtml(brandAppWhatNow(st, { pending: acceptPending, dealStage }))}`;
+
+  if (dealStage) {
+    text += `
+
+📌 <b>Сделка</b>
+${escapeHtml(dealStageTitle(dealStage))}`;
+  }
+
+  text += `
+
+📝 <b>Заявка</b>
+${msgEsc}`;
+
+  if (replyEsc) {
+    text += `
+
+✍️ <b>Последний ответ бренда</b>
+${replyEsc}`;
+  }
+
+  if (threadBlock) {
+    text += `
+
+💬 <b>Последние сообщения</b>
+${threadBlock}`;
+    if (thread.length > 3) {
       text += `
+<i>Показаны последние 3 из ${thread.length}.</i>`;
+    }
+  }
+
+  if (st === 'new') {
+    text += `
+
+💳 <b>Принятие</b>` +
+      (BRAND_APP_ACCEPT_COST > 0
+        ? `
+<i>✅ Принять спишет: <b>${BRAND_APP_ACCEPT_COST}</b> ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')}.</i>`
+        : `
+<i>✅ Принять: бесплатно.</i>`);
+  }
+
+  // Balance block: Redis-only (STEP155: snapshot hydrate) and should stay visible after accept too.
+  const bpLines = brandPassCreditsBlockLines(creditsCached, { showHintWhenUnknown: true });
+  if (bpLines.length) text += '\n\n' + bpLines.join('\n');
+
+  text += `
+
+ℹ️ <i>Внутренний статус бренда: креатор его не видит.</i>`;
+
+  if (acceptPending) {
+    text += `
 
 ⏳ <b>Принятие ещё не завершено</b>
 <i>Кредит спишется и заявка перейдёт во вкладку «💬 В работе» только после завершения обработки.</i>
 <i>Сейчас не нужно нажимать ✅ Принять повторно — просто нажми «🔄 Проверить заявку» через 10–60 секунд.</i>`;
-    }
   }
 
   const kb = new InlineKeyboard();
@@ -12153,7 +12198,7 @@ ${threadBlock}`;
       // До принятия разрешаем только безопасные действия: СПАМ/удаление.
       // “В работу/Закрыть/Ответить/Шаблоны” доступны после ✅ Принять.
       kb
-        .text('⛔ Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
+        .text(brandAppStatusActionLabel('spam', st), `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
         .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
     }
   } else {
@@ -12167,10 +12212,10 @@ ${threadBlock}`;
       .row();
 
     kb
-      .text('💬 В работу', `a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`)
-      .text('✅ Закрыть', `a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`)
+      .text(brandAppStatusActionLabel('in_progress', st), `a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`)
+      .text(brandAppStatusActionLabel('closed', st), `a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`)
       .row()
-      .text('⛔ Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
+      .text(brandAppStatusActionLabel('spam', st), `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)
       .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
   }
 
@@ -25041,13 +25086,17 @@ if (p.a === 'a:brand_app_set') {
     return;
   }
 
+  const prevSt = curSt;
+  const flash = prevSt === st
+    ? `Статус уже: ${(LEAD_STATUSES[st]?.title || LEAD_STATUSES[st]?.label || st)}`
+    : `Статус обновлён: ${(LEAD_STATUSES[prevSt]?.title || LEAD_STATUSES[prevSt]?.label || prevSt)} → ${(LEAD_STATUSES[st]?.title || LEAD_STATUSES[st]?.label || st)}`;
+
   // Toast with meaning (anti-confusion)
   try {
-    const t = (LEAD_STATUSES[st]?.title || LEAD_STATUSES[st]?.label || st);
-    await ctx.answerCallbackQuery({ text: `✅ Перемещено: ${t}` });
+    await ctx.answerCallbackQuery({ text: `✅ ${flash}` });
   } catch {}
 
-  const nextBack = { status: st, page: back.page };
+  const nextBack = { status: st, page: back.page, flash };
 
   try {
     await renderBrandAppView(ctx, u.id, appId, nextBack);
