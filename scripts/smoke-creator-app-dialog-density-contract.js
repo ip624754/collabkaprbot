@@ -37,7 +37,8 @@ assert.ok(
 assert.ok(
   botSrc.includes('Пока бренд не принял заявку — кнопка «💬 Написать бренду» появится после принятия.') &&
     botSrc.includes('Сообщения идут внутри этого бота — без перехода в личку.') &&
-    botSrc.includes("if (st !== 'new') kb.text('💬 Написать бренду', `a:brand_app_chat|id:${app.id}`).row();"),
+    botSrc.includes("function creatorBrandAppReplyButtonLabel() {") &&
+    botSrc.includes("if (st !== 'new') kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${app.id}`).row();"),
   'Expected creator-side application dialog cards to keep honest reply gating: no reply button before accept, clear in-bot messaging after accept'
 );
 
