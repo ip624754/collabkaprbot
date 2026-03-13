@@ -66,6 +66,9 @@ function asInt(v, def = 0) {
   return Number.isFinite(n) ? Math.trunc(n) : def;
 }
 
+function brandAppAcceptPendingKey(appId) {
+  return k(['brand_app', 'accept_pending', Number(appId || 0)]);
+}
 
 async function safeReleaseMonLock(lockKey, lockToken) {
   const lk = String(lockKey || '');
@@ -349,11 +352,13 @@ export default async function handler(req, res) {
       const appId = asInt(payload.app_id || payload.appId || 0);
       const actorUserId = asInt(payload.actor_user_id || payload.actorUserId || 0);
       const actorTgId = asInt(payload.actor_tg_id || payload.actorTgId || 0);
+      const pendingKey = brandAppAcceptPendingKey(appId);
 
       // STEP182: accept breadcrumbs (Redis-only)
       await setMonAcceptDiag({ source: 'worker',  atIso: nowIso, appId });
 
       if (!appId) {
+        try { await redis.del(pendingKey); } catch {}
         await setMonAcceptDiag({ source: 'worker',  atIso: nowIso, status: 'skipped', errorCode: 'bad_app_id', appId: appId || null });
         await setMonRetryDiag({ status: 'skipped', errorCode: 'bad_app_id' });
         res.status(200).json({ ok: true, skipped: 'bad_app_id' });
@@ -365,6 +370,7 @@ export default async function handler(req, res) {
       // Get app (DB truth)
       const app = await db.getBrandApplicationById(appId);
       if (!app) {
+        try { await redis.del(pendingKey); } catch {}
         await setMonAcceptDiag({ source: 'worker',  atIso: nowIso, status: 'skipped', errorCode: 'missing', appId });
         await setMonRetryDiag({ status: 'skipped', errorCode: 'missing' });
         res.status(200).json({ ok: true, skipped: 'missing' });
@@ -376,6 +382,8 @@ export default async function handler(req, res) {
 
       // Exactly-once accept+charge (idempotent)
       const r = await db.acceptBrandApplicationWithCharge(appId, actorUserId || null, brandUserId, cost);
+
+      try { await redis.del(pendingKey); } catch {}
 
       // STEP182: accept outcome breadcrumbs (Redis-only)
       try {
@@ -436,7 +444,7 @@ export default async function handler(req, res) {
 
         // Brand actor DM (optional)
         if (actorTgId) {
-          const kb = {
+          const okKb = {
             inline_keyboard: [
               [
                 { text: '📨 Открыть заявку', callback_data: `a:brand_app_view|id:${appId}|s:in_progress|p:0` },
@@ -448,12 +456,31 @@ export default async function handler(req, res) {
               ],
             ],
           };
+          const failKb = {
+            inline_keyboard: [
+              [
+                { text: '📨 Открыть заявку', callback_data: `a:brand_app_view|id:${appId}|s:new|p:0` },
+              ],
+              [
+                { text: '📋 Меню', callback_data: 'a:menu' },
+                { text: '🏠 Home', callback_data: 'a:home' },
+              ],
+            ],
+          };
 
           const msg = (r?.status === 'insufficient_credits')
-            ? `⚠️ <b>Недостаточно кредитов</b>\n\nЧтобы принять заявку, докупи кредиты и повтори.`
-            : `✅ <b>Готово</b>\n\nКредит списан после обработки, а заявка теперь должна быть во вкладке «💬 В работе». Если UI ещё не обновился — нажми «Открыть заявку».`;
+            ? `⚠️ <b>Недостаточно кредитов</b>
 
-          await safeTgSend(actorTgId, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+Чтобы принять заявку, докупи кредиты и повтори.`
+            : `✅ <b>Готово</b>
+
+Кредит списан после обработки, а заявка теперь должна быть во вкладке «💬 В работе». Если UI ещё не обновился — нажми «Открыть заявку».`;
+
+          await safeTgSend(actorTgId, msg, {
+            parse_mode: 'HTML',
+            reply_markup: (r?.status === 'insufficient_credits') ? failKb : okKb,
+            disable_web_page_preview: true,
+          });
         }
 
         try { await redis.set(notifiedKey, '1', { ex: 90 * 24 * 60 * 60 }); } catch {}
