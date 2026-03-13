@@ -1,3 +1,78 @@
+## STEP433 — QStash dedup hotfix: central sanitize + clearer admin ping helper
+
+### Зачем
+В проде всплыл реальный async-layer инцидент: `🧪 Send signed ping` падал с `DeduplicationId cannot contain ':'`, а ops-digest начал копить `qstash_publish_failed`. Проблема оказалась не в `QSTASH_TOKEN` и не в signing keys, а в том, что QStash больше не принимает двоеточие в `Upstash-Deduplication-Id`, тогда как у нас raw dedup inputs были человекочитаемыми и colon-separated (`qping:${nonce}`, `mon:autoheal:...`, broadcast / official publish dedup keys).
+
+Нужен был **узкий hotfix без переписывания call-sites**: централизованно санитизировать dedup header в одном wrapper-е `qstashPublishJSON()` и одновременно перестать вводить оператора в заблуждение helper-текстом про “проверь signing keys”.
+
+### Что сделано
+- `src/lib/qstash.js`:
+  - добавлен central helper `sanitizeQStashDeduplicationId(value)`;
+  - `qstashPublishJSON()` теперь всегда прогоняет входной `deduplicationId` через sanitize до постановки заголовка `Upstash-Deduplication-Id`;
+  - safe charset ограничен до `A-Z a-z 0-9 . _ -`, forbidden chars (включая `:`) заменяются на `-`, повторные `-` схлопываются, шум по краям тримится;
+  - в ops-digest extra теперь при необходимости видно и safe `dedup`, и `dedup_raw`, если sanitize реально что-то изменил.
+- `src/bot/bot.js`:
+  - helper-текст ошибки в `Админка → QStash статус → 🧪 Send signed ping` исправлен: он больше не сваливает всё на `QSTASH_TOKEN` / signing keys и честно подсказывает про invalid dedup format, `PUBLIC_BASE_URL` и QStash/network сбой.
+- Добавлен source-level smoke `scripts/smoke-qstash-dedup-sanitize-contract.js`.
+- `package.json` и `scripts/preflight.js` обновлены: новый smoke теперь обязателен в preflight.
+- Обновлён `scripts/smoke-admin-qstash-status-contract.js`, чтобы он держал новый non-misleading helper hint.
+- Обновлены `docs/00_CURRENT_STATE.md` и этот work history.
+
+### Почему это безопасно
+- Не меняются brand/app/payment business-flows и не трогаются DB guards.
+- Не добавляются новые SQL/Redis reads в hot paths.
+- Call-sites (`qping:${nonce}`, broadcast / official publish / autoheal dedup keys) остаются читабельными и локально стабильными.
+- Фикс централизован: один wrapper закрывает сразу весь класс `publishJSON()` enqueue-путей.
+
+### QA
+- `node --check src/lib/qstash.js`
+- `node --check src/bot/bot.js`
+- `node --check scripts/smoke-qstash-dedup-sanitize-contract.js`
+- `node scripts/smoke-qstash-dedup-sanitize-contract.js`
+- `node scripts/smoke-admin-qstash-status-contract.js`
+- `npm run smoke:qstash-dedup-sanitize-contract`
+- `npm run smoke:admin-qstash-status-contract`
+- `npm run actions:check`
+- `npm run lint:nav`
+- `npm run test:redact`
+- Дополнительно проверить вручную в проде: `👑 Админка → 🛰 QStash статус → 🧪 Send signed ping` больше не падает на `DeduplicationId cannot contain ':'`.
+
+
+## STEP432 — Docs-only: formalized future watch spec for super-admin `🛠 OPS COPY` on creator applications
+
+### Зачем
+После разбора creator → brand applications стало понятно, что текущая super-admin копия полезна как operator oversight, но смысл у неё размыт: сообщение выглядит слишком похоже на обычную рабочую заявку бренда. Для следующих чатов и будущих микро-шагов нужен явный spec-card, который фиксирует правильную минимальную форму улучшения без преждевременного расширения поверхности.
+
+Нужно было зафиксировать будущий шаг как **неактивный watchlist**: если когда-нибудь брать этот runtime micro-fix, то делать его только как `ENV on/off + relabel в OPS COPY`, без новой админской ветки, без новой state machine и без влияния на brand-side flow.
+
+### Что сделано
+- `docs/00_CURRENT_STATE.md`:
+  - поднят baseline до **STEP432** как docs-only шага;
+  - добавлена явная **STEP432 spec card** для super-admin copies creator → brand applications;
+  - зафиксировано, что будущий safe-shape — это только `BRAND_APP_SUPERADMIN_COPY_ENABLED=1|0` + relabel super-admin уведомления в `🛠 OPS COPY`, при неизменном owner/manager flow.
+- `docs/process/07_WORK_HISTORY_2026_03.md`:
+  - добавлена эта запись STEP432 как объяснение, что речь идёт не о новой админке или новом inbox, а о future-only clarify/safety patch.
+
+### Что именно фиксирует STEP432 spec card
+- текущая fanout-модель (`owner + managers + super admins`) остаётся **source of truth**, пока runtime-шаг ещё не выполнен;
+- будущий safe patch — это только один env-флаг `BRAND_APP_SUPERADMIN_COPY_ENABLED=1|0` и отдельный relabel super-admin-копии в `🛠 OPS COPY · Заявка креатора бренду`;
+- brand-side уведомление и Brand Inbox flow не меняются;
+- не допускаются новая admin-inbox ветка, read-only/break-glass подсистема, Redis runtime toggles и новые DB-reads в hot paths;
+- перед runtime rollout обязателен узкий contract smoke на recipients/env/relabel.
+
+### Почему это безопасно
+- Runtime/business logic не менялись.
+- `src/*`, `api/*`, `scripts/*`, migrations и action-registry не трогались.
+- Новых DB-read в hot UI paths не добавлено.
+- Это чистый docs-only clarification будущего улучшения в уже существующем watchlist-контуре.
+
+### QA
+- Открыть `docs/00_CURRENT_STATE.md` → сверху есть новый baseline **STEP432** с явной пометкой, что это future-only spec.
+- В `docs/00_CURRENT_STATE.md` присутствует отдельная **STEP432 spec card** про super-admin `🛠 OPS COPY` и env `BRAND_APP_SUPERADMIN_COPY_ENABLED`.
+- Открыть `docs/process/07_WORK_HISTORY_2026_03.md` → STEP432 описан как docs-only clarification, а не как уже внедрённый runtime change.
+- Убедиться, что в docs нигде не заявлено, будто `BRAND_APP_SUPERADMIN_COPY_ENABLED` уже активен в runtime или что существует отдельный admin inbox для этих заявок.
+
+
 ## STEP431 — Docs-only: formalized future watch spec for fast `🌐 Сеть` access
 
 ### Зачем
