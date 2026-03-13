@@ -1,3 +1,38 @@
+## STEP431 — Docs-only: formalized future watch spec for fast `🌐 Сеть` access
+
+### Зачем
+Идея про возможный быстрый доступ к `🌐 Сеть` уже была честно отмечена в текущем state как watchlist, но только одной короткой ремаркой. Для следующих чатов и будущих микро-шагов этого мало: нужен более явный spec-card формат, чтобы потом не превратить эту мысль в расплывчатое “давайте вернём старый unified screen”.
+
+Нужно было зафиксировать будущий шаг как **неактивный watchlist**, с понятными trigger conditions, ограничениями и безопасной формой реализации — без трогания runtime, без новых DB-read и без изменения текущей IA.
+
+### Что сделано
+- `docs/00_CURRENT_STATE.md`:
+  - поднят baseline до **STEP431** как docs-only шага;
+  - существующая future UX note оставлена как watchlist, но расширена до явной **STEP431 spec card**;
+  - зафиксированы trigger conditions, safe shape change, hard constraints и pre-rollout requirement на отдельный contract smoke.
+- `docs/process/07_WORK_HISTORY_2026_03.md`:
+  - добавлена эта запись STEP431 как объяснение, что future shortcut `🌐 Сеть` — это не активная разработка, а оформленный future-only candidate.
+
+### Что именно фиксирует STEP431 spec card
+- текущий путь `Меню → 📂 Текущий канал → ⚙️ Настройки → 🌐 Сеть` остаётся **source of truth**;
+- будущий shortcut — это только **второй вход** в тот же route/handler, а не новый экран и не возврат к старому плотному channel-management UI;
+- heavier controls (`👥 Кураторы / 👤 Профиль / 🧾 История / ⭐️ PRO / ⛔ Отключить канал`) остаются внутри настроек;
+- запуск такого шага допустим только после повторяющегося живого сигнала от пользователей;
+- перед runtime rollout обязателен узкий contract smoke на visibility/destination/back-nav.
+
+### Почему это безопасно
+- Runtime/business logic не менялись.
+- `src/*`, `api/*`, `scripts/*`, migrations и action-registry не трогались.
+- Новых DB-read в hot UI paths не добавлено.
+- Это чистый docs-only clarification поверх уже существующего watchlist.
+
+### QA
+- Открыть `docs/00_CURRENT_STATE.md` → сверху есть новый baseline **STEP431** с явной пометкой, что это future-only watch spec.
+- В `docs/00_CURRENT_STATE.md` future UX note расширена до отдельной **STEP431 spec card** с trigger / goal / constraints / rollout guard.
+- Открыть `docs/process/07_WORK_HISTORY_2026_03.md` → STEP431 описан как docs-only future-watch clarification, а не как runtime change.
+- Убедиться, что в docs нигде не заявлено, будто shortcut `🌐 Сеть` уже внедрён в runtime.
+
+
 ## STEP430 (STEP428–STEP430) — What-next/back-nav contract + health one-screen + NotebookLM refresh
 
 ### Зачем
