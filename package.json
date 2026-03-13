@@ -55,7 +55,8 @@
     "smoke:no-channel-gate-contract": "node scripts/smoke-no-channel-gate-contract.js",
     "smoke:input-mode-contract": "node scripts/smoke-input-mode-contract.js",
     "smoke:what-next-backnav-contract": "node scripts/smoke-what-next-backnav-contract.js",
-    "smoke:qstash-dedup-sanitize-contract": "node scripts/smoke-qstash-dedup-sanitize-contract.js"
+    "smoke:qstash-dedup-sanitize-contract": "node scripts/smoke-qstash-dedup-sanitize-contract.js",
+    "smoke:brand-app-ops-copy-contract": "node scripts/smoke-brand-app-ops-copy-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
