@@ -63,7 +63,8 @@
     "smoke:brand-app-density-contract": "node scripts/smoke-brand-app-density-contract.js",
     "smoke:creator-app-dialog-density-contract": "node scripts/smoke-creator-app-dialog-density-contract.js",
     "smoke:creator-apps-list-density-contract": "node scripts/smoke-creator-apps-list-density-contract.js",
-    "smoke:brand-apps-list-density-contract": "node scripts/smoke-brand-apps-list-density-contract.js"
+    "smoke:brand-apps-list-density-contract": "node scripts/smoke-brand-apps-list-density-contract.js",
+    "smoke:brand-inbox-density-contract": "node scripts/smoke-brand-inbox-density-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
