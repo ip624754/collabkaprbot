@@ -130,6 +130,9 @@ runNpm("smoke:input-mode-contract");
 logHeader("Preflight: what-next / back-navigation contract");
 runNpm("smoke:what-next-backnav-contract");
 
+logHeader("Preflight: QStash dedup sanitize contract");
+runNpm("smoke:qstash-dedup-sanitize-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
