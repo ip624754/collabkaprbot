@@ -142,6 +142,9 @@ runNpm("smoke:brand-app-accept-ux-contract");
 logHeader("Preflight: brand deal stage + navigation contract");
 runNpm("smoke:brand-deal-stage-nav-contract");
 
+logHeader("Preflight: brand deal card density contract");
+runNpm("smoke:brand-deal-density-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
