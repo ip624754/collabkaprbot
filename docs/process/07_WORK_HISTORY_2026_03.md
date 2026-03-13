@@ -1,3 +1,34 @@
+## STEP436 — Brand application accept completion / final-state hardening
+
+### Почему
+После STEP435 стало понятнее, что делать после `✅ Принять`, но сам completion-path всё ещё мог путать пользователя и не доводил accept до подтверждённого финального состояния так прозрачно, как ожидалось:
+- при включённом QStash accept всё ещё уходил в queue-first режим по умолчанию, даже когда Neon был здоров, поэтому бренд слишком часто видел pending вместо немедленного `accepted → in_progress`;
+- pending UX обещал `💬 В работе` слишком рано, и пользователь мог снова открыть заявку / снова нажать `✅ Принять`, попав в ощущение “по кругу”;
+- после queued/busy accept не было отдельного Redis-pending marker, который честно держал бы карточку в состоянии “ещё не завершено” до терминального исхода worker/click path.
+
+### Что сделано
+- `acceptBrandApplication()` переведён на **sync-first completion**: click path сначала пытается выполнить `db.acceptBrandApplicationWithCharge(...)` и только на transient Neon errors/timeout fallback’ится в `enqueueMonetizationRetry('brand_app_accept', ...)`;
+- queue-first ветка с lock-token enqueue для `brand_app_accept` убрана: QStash остаётся резервным async continuation-path, а не дефолтным happy-path для каждого accept;
+- добавлен Redis marker `brandAppAcceptPendingKey(appId)`, который ставится на queued/busy accept и читается в `renderBrandAppView()` вместе с monetization lock-проверкой;
+- pending-state карточки и callback-screen выровнены: вместо преждевременных `📨 Открыть заявку / 💬 В работе` теперь показываются только безопасные CTA `🔄 Проверить заявку` + `📝 Заявки` + menu/home;
+- pending copy теперь прямо говорит, что кредит спишется и заявка появится в `💬 В работе` **только после завершения обработки**, и что `✅ Принять` повторно нажимать не нужно;
+- click path очищает pending marker после terminal sync outcome, а QStash worker (`api/qstash/monetization-retry.js`) очищает тот же marker на terminal async outcomes (`accepted`, `already`, `insufficient_credits`, `missing`, `bad_app_id`), чтобы stale pending UI не зависал после завершения accept;
+- source-level smoke `scripts/smoke-brand-app-accept-ux-contract.js` обновлён под completion contract: pending marker, sync-first accept, no misleading early `💬 В работе`, clear-on-terminal semantics.
+
+### Что не меняли
+- `db.acceptBrandApplicationWithCharge(...)` и сам exactly-once credit charge / `status='in_progress'` transition;
+- Brand Pass schema / migrations / credit counters;
+- creator-side application card/chat flow;
+- super-admin OPS COPY / STEP434 contract;
+- QStash dedup sanitizer / STEP433 contract.
+
+### QA
+- Healthy Neon path: `✅ Принять` должен сразу переводить заявку в `in_progress`, списывать кредит и ререндерить карточку без обязательного queued/pending экрана.
+- Queued fallback path: при transient DB error/timeout бренд видит только `🔄 Проверить заявку` + `📝 Заявки`, без преждевременного `💬 В работе` / повторного `✅ Принять`.
+- Refresh while pending: `renderBrandAppView()` держит карточку в pending-state, пока Redis pending marker не очищен terminal outcome’ом.
+- Terminal outcomes clear pending: sync accept / already / insufficient credits и worker success/skip больше не оставляют stale pending marker.
+- `npm run smoke:brand-app-accept-ux-contract` зелёный.
+
 ## STEP435 — Brand application accept UX / credits / post-accept flow hardening
 
 ### Почему
