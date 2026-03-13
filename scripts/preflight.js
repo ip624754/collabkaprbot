@@ -148,6 +148,9 @@ runNpm("smoke:brand-deal-density-contract");
 logHeader("Preflight: brand application card density contract");
 runNpm("smoke:brand-app-density-contract");
 
+logHeader("Preflight: creator application dialog density contract");
+runNpm("smoke:creator-app-dialog-density-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
