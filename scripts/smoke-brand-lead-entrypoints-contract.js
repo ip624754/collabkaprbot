@@ -45,7 +45,9 @@ assert.ok(
     botSrc.includes("const roOpts = fromLead ? { hideApply: true, backCb, contactCbExtra: ctxExtra, dialogCb: backCb, brandLeadId: leadId } : {};") &&
     botSrc.includes(".text(fromLead ? brandLeadDialogButtonLabel(leadId) : '⬅️ Назад', backCb)") &&
     botSrc.includes(".text(fromLead ? brandLeadProfileButtonLabel() : '🪟 Витрина', openCb)") &&
-    botSrc.includes("kb2.row().text(fromLead ? brandLeadProfileButtonLabel() : '🪟 Витрина', `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}`).text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`);") &&
+    botSrc.includes("const followupDialogLabel = fromLead ? brandLeadDialogButtonLabel(leadId) : '⬅️ Назад';") &&
+    botSrc.includes("const followupProfileLabel = fromLead ? brandLeadProfileButtonLabel() : '🪟 Витрина';") &&
+    botSrc.includes("kb2.row().text(followupDialogLabel, `a:blead_view|id:${leadId}|w:${wsId}`).text(followupProfileLabel, `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}`);") &&
     botSrc.includes('Недостаточно кредитов для ${fromLead ? brandLeadContactUnlockButtonLabel() : contactUnlockBtnLabel()}'),
   'Expected brand-side vitrina / unlock / back-entry screens to keep one shared vocabulary when returning from a lead dialog'
 );
