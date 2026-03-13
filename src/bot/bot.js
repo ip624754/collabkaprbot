@@ -11764,38 +11764,45 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
 
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
+  const stTitle = (LEAD_STATUSES[st] || LEAD_STATUSES.new).title;
 
   const counts = await safeBrandApplications(() => db.countBrandApplicationsByStatus(brandUserId), async () => ({
     new: 0, in_progress: 0, closed: 0, spam: 0
   }));
 
   const apps = await safeBrandApplications(() => db.listBrandApplications(brandUserId, st, limit, offset), async () => []);
+  const total = (counts[st] ?? 0) || 0;
 
-  const header =
-    `📨 <b>Заявки от креаторов</b>
-` +
-    `Бренд: <b>${escapeHtml(brandName)}</b>
-` +
-    `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>
-` +
-    `
-<i>Фильтры: 🆕 Новые / 💬 В работе / ✅ Закрыты / ⛔ Спам.</i>
-<i>Подсказка: открой ✉️ → выбери статус → ответь (✍️ или ⚡).</i>`;
+  let text = `📨 <b>Заявки от креаторов</b>
+`;
+  text += `<i>Показываю последние движения по входящим заявкам к бренду.</i>
+`;
+  text += `<i>${escapeHtml(brandName)} · ${escapeHtml(stTitle)} · всего ${total} · стр ${p + 1}</i>
 
-  let body = '';
+`;
+
   if (!apps.length) {
-    body = '\nПока пусто. Заявки появятся, когда креаторы нажимают “📝 Оставить заявку” в каталоге.';
+    text += 'Пока пусто. Заявки появятся, когда креаторы нажимают «📝 Оставить заявку» в каталоге.';
   } else {
-    const lines = apps.map((a, i) => {
-      const who = a.creator_username
-        ? '@' + String(a.creator_username).replace(/^@/, '')
-        : (a.creator_tg_id ? `id:${a.creator_tg_id}` : 'creator');
-      const when = a.created_at ? fmtTs(a.created_at) : '—';
+    for (const a of apps) {
+      const username = a.creator_username ? '@' + String(a.creator_username).replace(/^@/, '') : '';
+      const tgId = (!username && a.creator_tg_id) ? `id:${a.creator_tg_id}` : '';
+      const who = username || tgId || 'creator';
+      const itemSt = normLeadStatus(a.status);
+      const icon = leadStatusIcon(itemSt);
+      const itemTitle = (LEAD_STATUSES[itemSt] || LEAD_STATUSES.new).title;
+      const when = a.updated_at ? fmtTs(a.updated_at) : (a.created_at ? fmtTs(a.created_at) : '—');
       const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
-      const short = msg.length > 60 ? msg.slice(0, 60) + '…' : (msg || '—');
-      return `${leadStatusIcon(a.status)} <b>#${a.id}</b> — <b>${escapeHtml(who)}</b> · <code>${escapeHtml(when)}</code>\n<code>${escapeHtml(short)}</code>`;
-    });
-    body = '\n\n' + lines.join('\n\n');
+      const short = clipText(msg || '—', 56);
+      text += `${icon} <b>${escapeHtml(who)}</b>
+`;
+      text += `<i>${escapeHtml(itemTitle)} · #${a.id} · ${escapeHtml(when)}</i>
+`;
+      text += `<code>${escapeHtml(short)}</code>
+
+`;
+    }
+    text += '<i>Открой карточку: там заявка, ответ, история и действия.</i>';
   }
 
   const kb = brandAppsTabsKb(counts, st);
@@ -11804,25 +11811,15 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
     kb.row().text('🔁 Сменить бренд', 'a:bm_pick_brand|ret:brand_apps|ws:0|p:0');
   }
 
-  if (apps.length) {
-    // Quick-open: one per row, with status + #id + who/id/snippet (readable & match list)
-    for (const a of apps) {
-      const username = a.creator_username ? '@' + String(a.creator_username).replace(/^@/, '') : '';
-      const tgId = (!username && a.creator_tg_id) ? `id:${a.creator_tg_id}` : '';
-
-      const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
-      const snippet = msg.length > 18 ? msg.slice(0, 18) + '…' : (msg || '');
-
-      const tailRaw = username || tgId || snippet || 'creator';
-      const tail = String(tailRaw).length > 18 ? String(tailRaw).slice(0, 18) + '…' : String(tailRaw);
-
-      const label = `${leadStatusIcon(a.status)} #${a.id}${tail ? (' ' + tail) : ''}`;
-      kb.row().text(label, `a:brand_app_view|id:${a.id}|s:${st}|p:${p}`);
-    }
+  for (const a of apps) {
+    const username = a.creator_username ? '@' + String(a.creator_username).replace(/^@/, '') : '';
+    const tgId = (!username && a.creator_tg_id) ? `id:${a.creator_tg_id}` : '';
+    const who = username || tgId || 'creator';
+    const icon = leadStatusIcon(normLeadStatus(a.status));
+    const label = clipText(`${icon} ${who} · #${a.id}`, 50);
+    kb.row().text(label, `a:brand_app_view|id:${a.id}|s:${st}|p:${p}`);
   }
 
-  // Pagination
-  const total = (counts[st] ?? 0) || 0;
   const hasPrev = p > 0;
   const hasNext = (offset + apps.length) < total;
 
@@ -11832,8 +11829,6 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
 
   const hubBackCb = access.isManager ? 'a:bx_inbox|ws:0|p:0|h:mm' : 'a:menu';
   kbNavRow(kb, hubBackCb);
-
-  const text = header + body;
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
