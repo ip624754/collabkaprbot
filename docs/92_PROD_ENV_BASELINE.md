@@ -28,6 +28,7 @@
 - `CRON_SECRET=<set>`
 - `SUPPORT_CHAT_ID=<set>`
 - `SUPER_ADMIN_TG_IDS=<set>`
+- `BRAND_APP_SUPERADMIN_COPY_ENABLED=1`
 
 ### Neon / Postgres
 - `DATABASE_URL=<set>`
