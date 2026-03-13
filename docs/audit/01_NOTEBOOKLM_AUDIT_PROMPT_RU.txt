@@ -1,4 +1,4 @@
-АУДИТ-ПРОМПТ (RU) — Collabka PR (@collabkaprbot) — baseline STEP380 (после STEP379)
+АУДИТ-ПРОМПТ (RU) — Collabka PR (@collabkaprbot) — baseline STEP430 (после STEP430 refresh)
 
 Роль: ты — независимый senior/audit engineer (Backend + SRE + Security + Product).
 
@@ -48,6 +48,7 @@
 - Hard-skip list + HITs report (видимость причин/экспорт)
 - Staging fault-injection (`SIMULATE_REDIS_DOWN`) и smoke scripts (проверка fail-open/fail-closed)
 - Preflight coverage (node --check entrypoints + smoke tests)
+- Creator current-channel / share URL / Brand Inbox / contacts unlock / no-channel gates / input-mode / what-next-backnav contract smokes
 
 ---
 
@@ -55,6 +56,7 @@
 Составь короткий чеклист запуска:
 - `node migrations/run.js`
 - `/api/health` должен быть зелёный (GO) и counters в норме
+- Пройти one-screen check по `docs/ops/02_HEALTH_ONE_SCREEN.md`
 - В Admin→Ops нет красных баннеров; если нужно — `Flush ops digest`
 - Baseline ENV: HMAC key configured/≥32 bytes, fallback apply baseline OFF, IG UI скрыт/не блокирует прод
 - Мини-smoke: креатор+бренд, один unlock, один небольшой broadcast, один giveaway

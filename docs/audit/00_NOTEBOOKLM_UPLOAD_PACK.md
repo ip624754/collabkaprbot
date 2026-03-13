@@ -1,6 +1,6 @@
 # NotebookLM Audit Pack — что загрузить и как использовать 
 
-## ВАЖНО: лимиты NotebookLM (2026-02)
+## ВАЖНО: лимиты NotebookLM (2026-03)
 - NotebookLM позволяет загрузить **максимум 50 файлов**.
 - NotebookLM часто **не принимает расширение `.sql`**.
 
@@ -13,13 +13,13 @@
 Цель: чтобы аудитор видел **актуальный source of truth** и не тратил время на поиск.
 
 ### Текущий baseline
-- Актуальный baseline фиксируем по STEP (на сегодня: **STEP380**).
+- Актуальный baseline фиксируем по STEP (на сегодня: **STEP430**).
 - К каждому ZIP идёт `..._list.txt` (маппинг: исходный путь → txt-файл в паке).
 - В baseline обязательно присутствуют: `docs/94_PROD_READINESS_PACK.md`, `docs/00_CURRENT_STATE.md`, `api/health.js`, ключевые контуры broadcast/payments/publish + preflight/smoke/tests.
 
 ## 1) Что загружать в NotebookLM (рекомендуемый порядок)
 
-> Если у тебя есть отдельный архив вида `NOTEBOOKLM_AUDIT_SOURCES_STEP###.zip` — используй **самый свежий**.
+> Если у тебя есть отдельный архив вида `NOTEBOOKLM_AUDIT_SOURCES_STEP###.zip` или `NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip` — используй **самый свежий**.
 
 ### Вариант A — если NotebookLM принимает ZIP
 1) **FULL ZIP (репозиторий, снапшот проекта)** — самый актуальный FULL_*.zip
@@ -29,7 +29,7 @@
 ⚠️ Если NotebookLM **не принимает .sql** (частый кейс):
 - Используй текстовые копии `migrations_txt/*.sql.txt` и `migration_pack_txt/*.sql.txt`.
 - Их можно:
-  - взять из готового архива `NOTEBOOKLM_AUDIT_SOURCES_*.zip` (в наших артефактах), или
+  - взять из готового архива `NOTEBOOKLM_AUDIT_SOURCES_*.zip` / `NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip` (в наших артефактах), или
   - сгенерировать локально командой `npm run gen:notebooklm-sources`.
 
 ### Вариант B — если ZIP не читается
@@ -61,3 +61,9 @@
 
 ## 4) Если NotebookLM не принимает .sql
 Смотри `docs/audit/03_NOTEBOOKLM_SQL_WORKAROUND.md`.
+
+
+## 5) Что нового в baseline STEP430
+- В pack уже включены свежие contract-smoke/delivery guard контуры до STEP430.
+- Обновлены `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md`, `docs/ops/02_HEALTH_ONE_SCREEN.md`, `docs/00_CURRENT_STATE.md`, `docs/process/07_WORK_HISTORY_2026_03.md`.
+- Audit prompt baseline поднят до STEP430 и отдельно напоминает проверить preflight/smoke coverage для creator current-channel, share URL, Brand Inbox, contacts unlock, no-channel gates, input-mode и what-next/back-nav.
