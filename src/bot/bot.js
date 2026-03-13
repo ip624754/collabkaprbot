@@ -12331,11 +12331,11 @@ function buildBrandAppTemplateText(brandName, key) {
 // Payloads are NOT renamed. Only internal UI reuse.
 
 const BRAND_APP_TPLS = [
-  { key: 'next', label: '✅ Приняли — дальше', icon: '✅' },
-  { key: 'price', label: '📎 Прайс / медиа‑кит', icon: '📎' },
-  { key: 'brief', label: '🧾 Уточнить детали', icon: '🧾' },
-  { key: 'barter', label: '🤝 Бартер', icon: '🤝' },
-  { key: 'timing', label: '⏱ Сроки', icon: '⏱' },
+  { key: 'next', label: '✅ Приняли — дальше', icon: '✅', quick_label: '✅ Готово' },
+  { key: 'price', label: '📎 Прайс / медиа‑кит', icon: '📎', quick_label: '📎 Детали' },
+  { key: 'brief', label: '🧾 Уточнить детали', icon: '🧾', quick_label: '🧾 Бриф' },
+  { key: 'barter', label: '🤝 Бартер', icon: '🤝', quick_label: '🤝 Условия' },
+  { key: 'timing', label: '⏱ Сроки', icon: '⏱', quick_label: '🕒 Сроки' },
 ];
 
 const LEAD_TPLS = [
@@ -12355,7 +12355,8 @@ function kbTplList(kb, templates, mkCb) {
 function kbTplIconPicker(kb, templates, mkCb, perRow = 3) {
   let n = 0;
   for (const t of templates) {
-    kb.text(String(t.icon || '•'), mkCb(String(t.key)));
+    const label = String(t.quick_label || t.icon || '•');
+    kb.text(label, mkCb(String(t.key)));
     n += 1;
     if (n % perRow === 0 && n < templates.length) kb.row();
   }
@@ -12454,7 +12455,7 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
   if (text.length > 3900) text = outText;
 
   const kb = new InlineKeyboard();
-  kbTplIconPicker(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`, 3);
+  kbTplIconPicker(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`, 2);
   kb.text('📨 Отправить', `a:brand_app_tpl_send|id:${app.id}|k:${String(key || 'discuss')}|s:${back.status}|p:${back.page}`)
     .row()
     .text('🔄 Выбрать другой', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
