@@ -46,7 +46,10 @@
     "smoke:payments-autoheal-chain-contract": "node scripts/smoke-payments-autoheal-chain-contract.js",
     "smoke:official-publish-check-now-contract": "node scripts/smoke-official-publish-check-now-contract.js",
     "smoke:start-role-gate-contract": "node scripts/smoke-start-role-gate-contract.js",
-    "smoke:ws-channel-disconnect-contract": "node scripts/smoke-ws-channel-disconnect-contract.js"
+    "smoke:ws-channel-disconnect-contract": "node scripts/smoke-ws-channel-disconnect-contract.js",
+    "smoke:env-baseline-contract": "node scripts/smoke-env-baseline-contract.js",
+    "smoke:creator-current-channel-contract": "node scripts/smoke-creator-current-channel-contract.js",
+    "smoke:share-url-compat-contract": "node scripts/smoke-share-url-compat-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
