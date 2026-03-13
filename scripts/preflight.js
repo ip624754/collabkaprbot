@@ -136,6 +136,9 @@ runNpm("smoke:qstash-dedup-sanitize-contract");
 logHeader("Preflight: brand application super-admin OPS COPY contract");
 runNpm("smoke:brand-app-ops-copy-contract");
 
+logHeader("Preflight: brand application accept UX / post-accept flow contract");
+runNpm("smoke:brand-app-accept-ux-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
