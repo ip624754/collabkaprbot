@@ -57,7 +57,8 @@
     "smoke:what-next-backnav-contract": "node scripts/smoke-what-next-backnav-contract.js",
     "smoke:qstash-dedup-sanitize-contract": "node scripts/smoke-qstash-dedup-sanitize-contract.js",
     "smoke:brand-app-ops-copy-contract": "node scripts/smoke-brand-app-ops-copy-contract.js",
-    "smoke:brand-app-accept-ux-contract": "node scripts/smoke-brand-app-accept-ux-contract.js"
+    "smoke:brand-app-accept-ux-contract": "node scripts/smoke-brand-app-accept-ux-contract.js",
+    "smoke:brand-app-accept-sql-contract": "node scripts/smoke-brand-app-accept-sql-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
