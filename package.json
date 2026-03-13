@@ -58,7 +58,8 @@
     "smoke:qstash-dedup-sanitize-contract": "node scripts/smoke-qstash-dedup-sanitize-contract.js",
     "smoke:brand-app-ops-copy-contract": "node scripts/smoke-brand-app-ops-copy-contract.js",
     "smoke:brand-app-accept-ux-contract": "node scripts/smoke-brand-app-accept-ux-contract.js",
-    "smoke:brand-app-accept-sql-contract": "node scripts/smoke-brand-app-accept-sql-contract.js"
+    "smoke:brand-app-accept-sql-contract": "node scripts/smoke-brand-app-accept-sql-contract.js",
+    "smoke:brand-app-template-quick-labels-contract": "node scripts/smoke-brand-app-template-quick-labels-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
