@@ -1,3 +1,44 @@
+## STEP430 (STEP428–STEP430) — What-next/back-nav contract + health one-screen + NotebookLM refresh
+
+### Зачем
+После STEP427 боевой runtime уже был хорошо прикрыт contract-smoke’ами, но оставались три тихих класса дрейфа:
+- UX footer / what-next экраны могли постепенно разъехаться по лейблам и escape-hatch кнопкам;
+- `/api/health` уже стал главным operator dashboard, но для владельца не было совсем короткой one-screen шпаргалки;
+- NotebookLM audit pack отставал по timestamp/source bundles и больше не отражал baseline STEP423–STEP427.
+
+Нужен был спокойный финальный пакет без трогания прод-логики: зафиксировать навигационный контракт, дать сверхкороткий health guide и пересобрать audit baseline под текущий source of truth.
+
+### Что сделано
+- **STEP428 / What-next / back-navigation contract smoke**
+  - Добавлен `scripts/smoke-what-next-backnav-contract.js`.
+  - Smoke фиксирует shared helpers `navKb()`, `navKbInput()`, `kbNavRow()` и проверяет несколько high-signal экранов: `renderGwNewGate()`, `kbBrandApplyDone()`, `kbBrandApplyMore()`, `kbBrandAppAcceptedDone()`, `kbBrandAppAcceptedMore()`, `renderBrandApplyPreview()`.
+  - В `package.json` добавлен `npm run smoke:what-next-backnav-contract`, а `scripts/preflight.js` теперь запускает его до общих lint/test gates.
+  - `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md` синхронизирован с реальным runtime-контрактом: `📋 Меню`, `⬅️ Назад`, `🏠 Home`, `❌ Отмена`.
+- **STEP429 / `/api/health` one-screen guide**
+  - Добавлен `docs/ops/02_HEALTH_ONE_SCREEN.md` с коротким top-down pass по `/api/health`.
+  - Обновлены `docs/README.md`, `docs/90_OWNER_RUNBOOK.md`, `docs/94_PROD_READINESS_PACK.md`, чтобы one-screen guide был первым коротким operator-entrypoint до длинных runbook’ов.
+- **STEP430 / NotebookLM audit baseline refresh**
+  - Обновлены `docs/audit/00_NOTEBOOKLM_UPLOAD_PACK.md`, `docs/audit/01_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`, `docs/audit/notebooklm_pack/00_NOTEBOOKLM_PACK_RULES_RU.md`, `docs/audit/notebooklm_pack/04_NOTEBOOKLM_AUDIT_PROMPT_RU.txt`.
+  - Пересобраны bundle-файлы `docs/audit/notebooklm_pack/01_BUNDLE_CORE_RU.md`, `02_BUNDLE_FEATURES_RU.md`, `03_BUNDLE_PROCESS_HISTORY_RU.md`, `06_CODE_BUNDLE.txt`, `07_MIGRATIONS_ALL.sql.txt` на текущем snapshot.
+  - Генератор `npm run gen:notebooklm-sources` снова прогнан: output `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip` свежий и text-only.
+- Обновлены `docs/00_CURRENT_STATE.md` и `docs/process/10_RELEASE_PREFLIGHT.md` под baseline STEP430.
+
+### Почему это безопасно
+- Runtime/business logic не менялись.
+- Новых DB-read в hot UI paths не добавлено.
+- Все новые изменения либо source-level smoke/preflight, либо docs/audit bundles.
+
+### QA
+- `node --check scripts/smoke-what-next-backnav-contract.js`
+- `node scripts/smoke-what-next-backnav-contract.js`
+- `npm run smoke:what-next-backnav-contract`
+- `npm run gen:notebooklm-sources` → output `dist/NOTEBOOKLM_AUDIT_SOURCES_NOTEBOOKLM50.zip`
+- `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md` использует актуальный runtime label `📋 Меню` и не тянет старое `📋 Открыть меню`.
+- `docs/ops/02_HEALTH_ONE_SCREEN.md` упоминается из README / owner / readiness docs.
+- `docs/audit/notebooklm_pack/07_MIGRATIONS_ALL.sql.txt` включает текущий `migrations/044_workspace_channel_disconnect.sql` и `migration_pack/*`.
+- `npm run preflight` в bare snapshot по-прежнему честно останавливается на STEP420 dependency-install guard до глубоких npm-зависимых smoke — это ожидаемо.
+
+
 ## STEP427 (STEP424–STEP427) — Runtime contract smokes for Inbox / contacts / no-channel gate / input mode
 
 ### Зачем
