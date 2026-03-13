@@ -30346,7 +30346,7 @@ ${DEGRADED_COPY.line}
 
 Причина: <code>${escapeHtml(msg)}</code>
 
-Проверь ENV: QSTASH_TOKEN и Signing Keys в Vercel.`,
+Подсказка: это не всегда ENV/signing keys. Часто причина — invalid DeduplicationId format, QStash/network сбой или неверный PUBLIC_BASE_URL.`,
           { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
         );
         return;
