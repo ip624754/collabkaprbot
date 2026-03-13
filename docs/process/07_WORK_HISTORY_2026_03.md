@@ -1,3 +1,73 @@
+## STEP435 — Brand application accept UX / credits / post-accept flow hardening
+
+### Почему
+После STEP433 accept по заявке снова начал срабатывать, но UX после `✅ Принять` оставался кривым и путал brand-side flow:
+- pending/success тексты уводили в общий `📥 Inbox`, хотя creator applications живут в отдельном `📝 Заявки бренду` flow;
+- async accept не объяснял честно, что списание кредита происходит после завершения обработки;
+- follow-up routing после accept/reply местами возвращал в stale/new context вместо `💬 В работе`;
+- на самой карточке после accept исчезал Redis-only блок баланса, из-за чего оператору было трудно быстро проверить, что кредит действительно списался.
+
+### Что сделано
+- в `renderBrandAppView()` pending-state заменён с generic `📥 Inbox` на `📨 Открыть заявку` + `💬 В работе` + `🔄 Обновить`, а copy теперь прямо говорит про async списание кредита и вкладку `💬 В работе`;
+- в `acceptBrandApplication()` pending-render тоже переведён на правильный post-accept continuation (`open application / in progress / refresh`) без изменения monetization core;
+- в `api/qstash/monetization-retry.js` brand-actor follow-up DM после async accept теперь открывает заявку сразу в `s:in_progress` и даёт кнопку `💬 В работе`;
+- исходное уведомление о новой creator application relabel с `📥 Открыть в Inbox` на `📨 Открыть заявку`, чтобы UI не смешивал application card с barter inbox;
+- fallback после ручного brand reply теперь тоже возвращает в application/in-progress flow, а не оставляет оператора на неясной квитанции;
+- Redis-only credits block в карточке brand application оставлен видимым и после accept, чтобы проверять post-charge состояние без новых DB reads;
+- добавлен source-level smoke `scripts/smoke-brand-app-accept-ux-contract.js` и включён в `scripts/preflight.js`.
+
+### Что не меняли
+- `db.acceptBrandApplicationWithCharge(...)` и сам exactly-once credit charge;
+- Brand Inbox / barter inbox схемы и action keys;
+- creator-side card/chat flow;
+- новые DB migrations / новые hot-path DB reads;
+- новую state machine, отдельный admin inbox или break-glass механику.
+
+### QA
+- Креатор отправляет заявку → бренд получает `📨 Открыть заявку`, не `Inbox`.
+- Бренд нажимает `✅ Принять` → при async path видит `📨 Открыть заявку / 💬 В работе / 🔄 Обновить` и явную подсказку, что кредит спишется после обработки.
+- После завершения accept заявка открывается в `in_progress` контексте и видна во вкладке `💬 В работе`.
+- После `✍️ Ответить` и успешной доставки бренд остаётся в application-flow; fallback тоже ведёт в `📨 Открыть заявку / 💬 В работе`.
+- На карточке заявки после accept остаётся видимым Redis-only блок баланса кредитов.
+- `npm run smoke:brand-app-accept-ux-contract` зелёный.
+
+## STEP434 — Creator → Brand OPS COPY clarify + ENV on/off
+
+### Зачем
+После STEP432 у нас уже был правильный минимальный spec: super-admin copies creator → brand applications полезны как operator oversight, но без relabel они выглядят слишком похоже на обычную рабочую очередь бренда. Нужен был **узкий runtime patch**, который ничего не ломает в Brand Inbox, но делает смысл копии явным и даёт простой on/off без новой админки и без новой state machine.
+
+### Что сделано
+- `src/lib/config.js`:
+  - добавлен `CFG.BRAND_APP_SUPERADMIN_COPY_ENABLED` с safe default `true` (`BRAND_APP_SUPERADMIN_COPY_ENABLED=1` для zero-regression rollout).
+- `src/bot/bot.js`:
+  - creator → brand notify fanout разделён на две аудитории: `brandRecipients` (owner + managers) и `superAdminRecipients`;
+  - owner/manager продолжают получать исходный `notifText` без изменений;
+  - super-admin copies теперь отправляются только при включённом env и получают отдельный `opsCopyText` с префиксом `🛠 OPS COPY · Заявка креатора бренду` и короткой строкой `Это операторская копия. Основной workflow идёт у бренда.`
+- `.env.example` и `docs/92_PROD_ENV_BASELINE.md` обновлены: новый env задокументирован как `BRAND_APP_SUPERADMIN_COPY_ENABLED=1`.
+- Добавлен source-level smoke `scripts/smoke-brand-app-ops-copy-contract.js`, wired в `package.json` и `scripts/preflight.js`.
+- Обновлены `docs/00_CURRENT_STATE.md`, этот work history и release-preflight docs.
+
+### Почему это безопасно
+- Brand Inbox / `✅ Принять` / reply/status/credits не менялись.
+- Нет новых DB/Redis reads в hot paths.
+- Нет новой админской ветки UI, нет read-only/break-glass и нет runtime toggle в Redis.
+- Rollback тривиален: либо вернуть старую ветку, либо просто поставить `BRAND_APP_SUPERADMIN_COPY_ENABLED=0` и выключить super-admin copy fanout.
+
+### QA
+- `node --check src/lib/config.js`
+- `node --check src/bot/bot.js`
+- `node --check scripts/smoke-brand-app-ops-copy-contract.js`
+- `node scripts/smoke-brand-app-ops-copy-contract.js`
+- `npm run smoke:brand-app-ops-copy-contract`
+- `npm run smoke:env-baseline-contract`
+- `npm run actions:check`
+- `npm run lint:nav`
+- `npm run test:redact`
+- Ручная smoke-проверка после выкладки:
+  - при `BRAND_APP_SUPERADMIN_COPY_ENABLED=1` owner/manager получают прежний текст, super-admin — `🛠 OPS COPY`;
+  - при `BRAND_APP_SUPERADMIN_COPY_ENABLED=0` owner/manager остаются без изменений, super-admin копию не получает.
+
+
 ## STEP433 — QStash dedup hotfix: central sanitize + clearer admin ping helper
 
 ### Зачем
