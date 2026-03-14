@@ -39,7 +39,7 @@
 
 #### Что смотреть в health (сигналы деградации)
 - Redis: `redis.read_ok` / `redis.write_ok` + `last_error`
-- Payments: `payments.payload_hmac_minlen_ok`, `payments.fallback_apply_effective`
+- Payments: `payments.payload_hmac_minlen_ok`, `payments.fallback_apply_effective`, `payments.fallback_apply_hours_active`
 - Broadcast: `broadcast.db_overload`, `broadcast.tick_deferred_redis`, `broadcast.pending_deliveries`
 - QStash: `qstash.reschedule_failed`, `qstash.official_publish_stuck`
 - New hardening watchlist: local DB fuse, orphaned autoheal chain, manual official verify
@@ -180,7 +180,8 @@ Staging проверка деградаций:
 ### 9.2 Большой хвост orphaned payments
 1) Открой `/api/health` и проверь payments block.
 2) Помни: first batch идёт из cron, хвост может продолжаться bounded chain-drain worker'ом.
-3) Не включай runtime `Payments fallback apply` без явного инцидента и причины.
+3) Не включай runtime `Payments fallback apply` без явного инцидента и причины. Если включил — смотри `payments.fallback_apply_hours_active` и не держи окно дольше, чем нужно.
+4) Пока runtime fallback ON, в Admin → Ops должен оставаться reminder-блок; после отключения он должен исчезнуть.
 4) Если хвост не уменьшается — смотри ops alert / qstash worker logs, а не пытайся “передёргивать” apply вручную массово.
 
 ### 9.3 Official Publish stuck in `PUBLISHING`

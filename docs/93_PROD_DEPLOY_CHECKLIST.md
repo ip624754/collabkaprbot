@@ -75,6 +75,7 @@ APP_ENV=production npm run preflight
 - `payments.payload_hmac_key_configured == true`
 - `payments.payload_hmac_minlen_ok == true`
 - `payments.fallback_apply_effective == false` (baseline)
+- `payments.fallback_apply_hours_active == null` (baseline; если не null — runtime fallback ещё активен)
 - `payments.payload_allow_unsigned == false`
 
 ### Cron / QStash
