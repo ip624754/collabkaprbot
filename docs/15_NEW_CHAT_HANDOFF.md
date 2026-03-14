@@ -55,6 +55,9 @@
 - **STEP472** — home copy cleanup + first-run / returning split
 - **STEP473** — repo hygiene cleanup (removed confirmed stale files)
 - **STEP474** — parked IG OAuth libs moved out of active `src/lib` into `_ig_oauth_parked/`, handoff/docs canon refresh
+- **STEP475** — payments fallback guardrails (bounded runtime toggle, age/heartbeat, stale cleanup visibility)
+- **STEP476** — broadcast stale visibility + tiny 429 atomicity hardening
+- **STEP477** — IG parked hard gate (source/preflight guard that blocks silent return to active deploy surface)
 
 ### Что сейчас уже не надо делать
 
@@ -77,6 +80,9 @@
 - source-only regression sweep и честный deps/runtime split
 - role-aware home и short first-run split
 - repo hygiene / docs kernel / current handoff canon
+- payments fallback guardrails / bounded runtime toggle visibility
+- broadcast pending snapshot stale visibility / atomic 429 rolling window helper
+- IG parked deploy-surface hard gate
 
 ### Что ещё требует live runtime verification
 
@@ -122,6 +128,7 @@
 - не ломать локальный контекст возврата
 - не менять working terminology без причины
 - не возвращать parked IG OAuth helpers в active `src/lib/*` без отдельного revival-плана
+- не возвращать parked IG OAuth routes в active `api/ig/oauth/*` без отдельного revival-step
 
 ### Какой должен быть первый ответ ассистента
 
