@@ -30,6 +30,7 @@
     "smoke:health-admin": "node scripts/smoke-health-admin-shape.js",
     "smoke:short": "node scripts/smoke-short.js",
     "test:redact": "node scripts/test-redactContactsInText.js",
+    "test:runtime-stars-payment-validation": "node scripts/test-runtime-stars-payment-validation.js",
     "zip": "bash scripts/zip.sh",
     "smoke:admin-founder-contract": "node scripts/smoke-admin-founder-contract.js",
     "smoke:admin-notice-contract": "node scripts/smoke-admin-notice-contract.js",
