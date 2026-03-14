@@ -71,6 +71,7 @@ assert.ok(hardSkipExportHelperSrc.includes('const out = filtered.slice(0, Math.m
 assert.ok(hardSkipExportHelperSrc.includes("return { ok: true, reason: rf || 'all', scanN, total: filtered.length, items: out };"), 'Admin → Hard-skip export helper must keep ok result shape');
 
 assert.ok(renderAdminHardSkipHomeSrc.includes("let text = '🧱 <b>Hard-skip (dead chats)</b>\\n\\n';"), 'Admin → Hard-skip home must keep stable title');
+assert.ok(renderAdminHardSkipHomeSrc.includes("const ttlDays = envInt('BROADCAST_HARD_SKIP_TTL_DAYS', 90, { min: 1, max: 365 });"), 'Admin → Hard-skip home must bind bounded ttlDays before render');
 assert.ok(renderAdminHardSkipHomeSrc.includes("text += `TTL configured: <b>${ttlDays}</b> дн.\\n\\n`;"), 'Admin → Hard-skip home must keep TTL configured line');
 assert.ok(renderAdminHardSkipHomeSrc.includes("text += '⚠️ Redis недоступен — список временно недоступен.\\n';"), 'Admin → Hard-skip home must keep redis unavailable helper');
 assert.ok(renderAdminHardSkipHomeSrc.includes("text += 'Пока пусто.\\n';"), 'Admin → Hard-skip home must keep empty-state');
