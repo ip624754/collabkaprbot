@@ -465,6 +465,51 @@ export async function incrWithExpire(key, ttlSec) {
   }
 }
 
+
+// SADD member; always EXPIRE ttlSec; then return SCARD key.
+// Useful for short rolling distinct-count windows (broadcast 429 users, etc.).
+export async function saddCardWithExpire(key, member, ttlSec) {
+  if (!key || member === undefined || member === null) return 0;
+  const ttl = Number(ttlSec);
+  const val = String(member);
+
+  if (!Number.isFinite(ttl) || ttl <= 0) {
+    try {
+      await redis.sadd(key, val);
+      return Number(await redis.scard(key)) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  try {
+    const script = `
+      redis.call('SADD', KEYS[1], ARGV[1])
+      redis.call('EXPIRE', KEYS[1], ARGV[2])
+      return redis.call('SCARD', KEYS[1])
+    `;
+    const r = await redis.eval(script, [key], [val, String(ttl)]);
+    return Number(r || 0);
+  } catch (e) {
+    await queueOpsDigestFromRedis({
+      reason: 'redis_lua_failed',
+      title: 'saddCardWithExpire: eval failed (non-atomic fallback)',
+      kind: 'redis',
+      payload: String(key || '').slice(0, 160),
+      extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
+      dedupId: 'redis_eval:saddCardWithExpire',
+    });
+    // Fallback: best-effort (non-atomic)
+    try {
+      await redis.sadd(key, val);
+      try { await redis.expire(key, ttl); } catch {}
+      return Number(await redis.scard(key)) || 0;
+    } catch {
+      return 0;
+    }
+  }
+}
+
 // LPUSH + LTRIM (bounded list) with optional EXPIRE; atomic via Lua.
 export async function lpushTrim(key, value, maxLen = 200, ttlSec = null) {
   if (!key) return false;
