@@ -92,7 +92,7 @@ const kbBrandAppAcceptedMoreSrc = extractBetween(
   "\n\n\n// STEP308: Hydration tokens for oversized callback_data (>64 bytes)."
 );
 assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text(creatorBrandAppDialogButtonLabel(appId), `a:brand_app_card|id:${appId}`).row();"), 'accepted-more screen must keep open-application CTA');
-assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`).row();"), 'accepted-more screen must keep open-brand CTA');
+assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text('🪟 Открыть бренд', creatorBrandAppOpenBrandCallback(brandUserId, appId, 0)).row();"), 'accepted-more screen must keep open-brand CTA with local return context');
 assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text(creatorBrandAppListButtonLabel(), 'a:my_apps|p:0').row();"), 'accepted-more screen must keep applications-list CTA');
 assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text('⬅️ Назад', `a:brand_app_accepted_done|id:${appId}|u:${brandUserId}`).row();"), 'accepted-more screen must keep Back CTA');
 assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');"), 'accepted-more screen must keep Menu/Home escape hatches');
