@@ -213,8 +213,8 @@ Feature flag:
 - `api/ig/oauth/status.js`
 - `api/ig/oauth/disconnect.js`
 - `migrations/041_ig_oauth_accounts.sql`
-- `src/lib/igOAuth.js` (формирование OAuth URL, обмен code→token, Graph запрос профиля)
-- `src/lib/cryptoBox.js` (encrypt/decrypt токена)
+- `_ig_oauth_parked/lib/igOAuth.js` (parked helper: формирование OAuth URL, обмен code→token, Graph запрос профиля)
+- `_ig_oauth_parked/lib/cryptoBox.js` (parked helper: encrypt/decrypt токена)
 
 ### Изменить
 - `src/lib/config.js`
