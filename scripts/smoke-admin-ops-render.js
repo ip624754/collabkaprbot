@@ -66,6 +66,7 @@ function run() {
           reason: 'incident tail cleanup',
           at: '2026-03-07T17:00:00.000Z',
           expAt: '2026-03-07T18:00:00.000Z',
+          hoursActive: 1.0,
         },
       },
     },
@@ -76,6 +77,8 @@ function run() {
   assertIncludes(degradedText, 'simulated redis timeout', 'redis error tail must be rendered');
   assertIncludes(degradedText, '🚨 <b>Payments: HMAC key отсутствует</b>', 'payments HMAC warning must be rendered');
   assertIncludes(degradedText, '🚨 <b>Payments: fallback apply ENABLED</b>', 'payments fallback banner must be rendered');
+  assertIncludes(degradedText, 'ops reminder: каждые ~2h, пока runtime ON', 'payments fallback reminder cadence must be rendered');
+  assertIncludes(degradedText, 'active ~<b>1</b>h', 'payments fallback active-hours tail must be rendered');
   assertIncludes(degradedText, '• ⚠️ недоступно (Redis degraded)', 'degraded pending snapshot must stay graceful');
 
   const probeFailText = buildAdminOpsText({
