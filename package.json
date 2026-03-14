@@ -82,7 +82,8 @@
     "smoke:creator-app-reply-runtime-guard-contract": "node scripts/smoke-creator-app-reply-runtime-guard-contract.js",
     "smoke:new-dialog-terminology-contract": "node scripts/smoke-new-dialog-terminology-contract.js",
     "preflight:source": "node scripts/preflight.js source",
-    "preflight:deps": "node scripts/preflight.js deps"
+    "preflight:deps": "node scripts/preflight.js deps",
+    "smoke:home-copy-contract": "node scripts/smoke-home-copy-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
