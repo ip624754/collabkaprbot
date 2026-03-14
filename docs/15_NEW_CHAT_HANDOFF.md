@@ -1,13 +1,14 @@
-# 15 — NEW CHAT HANDOFF (copy‑paste) — 2026-02-22
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP460 baseline
 
-Цель: чтобы в новом чате ассистент **сразу** попал в контекст и работал без регрессий.
+Цель: чтобы новый чат **сразу продолжил текущий процесс**, а не начинал проект заново.
 
 ---
 
 ## 1) Что загрузить в новый чат
+
 1) **FULL project zip** (актуальный snapshot репозитория)
-2) (Опционально) отдельный **docs zip** — если хочешь грузить только доки (но в FULL zip они уже есть)
-3) (Опционально) список env‑переменных, которые включены в проде (без секретов)
+2) (Опционально) отдельный docs zip
+3) (Опционально) актуальный `/api/health` или краткий live runtime recap после деплоя
 
 ---
 
@@ -16,64 +17,135 @@
 Скопируй целиком:
 
 ---
-Я продолжаю работу над Collabka PR Bot (@collabkaprbot).
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP460 baseline)**
 
-Я загрузил:
-- полный архив репозитория (FINAL snapshot)
-- доки в папке docs/ (актуальные)
+Продолжаем не с нуля, а от **STEP460 baseline**.
 
-Инварианты:
-- Vercel serverless, Neon бережём
-- не добавлять лишние DB‑запросы в горячие UI пути (меню/кнопки)
-- любые изменения маленькие, обратимые, без ломки прода
+Текущий цикл был не про новые фичи, а про **stability + clarity + context correctness** в ядре:
+- creator → brand applications
+- accept / charge / reply
+- deals stage transitions
+- local vs global navigation context
+- lead / dialog / list / notice consistency
+- Telegram-native density cleanup без redesign
 
-Текущее состояние (важное):
-- /api/health: cron last_run + метрики audit throttle
-- audit write‑shedding (ENV‑гейт) для снижения INSERT в workspace_audit
-- broadcast: URL‑кнопки до 3, deep-link shortcuts (gw/bp/offer), шаблоны кнопок, ссылки “в слово”, финальный экран рассылки с кнопками
-- broadcast: 429-safe курсор + Redis cooldown (пауза) + **DB fuse** `broadcasts.cooldown_until` при деградации Redis + cooldown виден в /api/health
-- Contacts / Brand Pass: structured contacts (`profile_contacts` JSONB) + opt-in UI для креатора + приоритет structured→контакт (текстом) + unlock DB-truth (см. `docs/20_CONTACTS_MODEL.md`)
-- Anti-bypass: телефоны в тексте маскируем и цифрами, и **словами** (до unlock)
-- Break-glass (Admin): при Redis down супер‑админ может открыть allowlist (payments/users/audit) через `bg=1` + ops alert
-- Creator → Каталог брендов: «✍️ Написать заявку» включает явный режим ввода + «❌ Отмена ввода» (без “тишины”)
-- Brand Inbox: «✅ Принять» — точка списания (status=new→in_progress). До принятия доступны только ✅ Принять / ⛔ Спам / 🗑 Удалить; нельзя «Ответить/Шаблоны/В работу/Закрыть». В карточке показываем баланс кредитов (Redis-only).
-- Giveaways: «➕ Новый розыгрыш» без подключённого канала показывает gate‑экран (подключить/выбрать канал) + корректный back
-- Creator/menu UX: `📋 Меню` в режиме Creator = меню **текущего канала**; верхний ряд `🔁 Сменить канал` (compact picker) + `📂 Текущий канал` (вход в рабочий экран канала); `ws_open = Работа с каналом`, `ws_settings = Настройки канала`, `a:cur_manage = Кураторы канала`
-- Creator no-active gate намеренно минимален: `🚀 Подключить канал`, `📦 Неактивные`, `💬 Поддержка`, `🏠 Home`
-- Verification semantics: текущая верификация **account-level**, а не per-channel; quick entrypoint расположен в `Настройки канала` как `✅ Верификация аккаунта`
-- UX polish: очистка полей через кнопки `🧹 Очистить` (без упоминания “-”), “legacy/старое” не показываем пользователю
-- /start role gate: если нет ui_mode (Redis) и нет payload → короткая развилка (Бренд/Креатор), fail‑open
-- Instagram OAuth parked: `api/ig/oauth/*` убраны из deploy surface (Hobby function budget), UI скрыт, Instagram остаётся обычной ссылкой/контактом после unlock
-- Official publish (@collabka_offers): анти‑дубли token-lock + DB-reserve PUBLISHING (stale rescue) + runbook doc 19
-- Founder Sale: экран акции + Stars purchase + runtime управление из админки + deep-link fs_* + маркетинг шаблоны
-- Cron safety: token-based Redis locks + SQL atomic guards на статусных переходах; notify ограничены по времени (withTimeout ~5s)
+### Что уже критично стабилизировано
 
-Пожалуйста:
-1) прочитай docs/README.md → затем docs/00_BOOT.md → затем docs/00_CURRENT_STATE.md (в т.ч. раздел «Выводы последнего регресс-аудита + watchlist»)
-2) перечисли 3–7 самых рисковых зон регрессий
-3) предложи следующий микро‑шаг без расширения поверхности и без лишних DB‑запросов в меню
+- **STEP433** — QStash dedup hotfix (`DeduplicationId cannot contain ':'`)
+- **STEP434** — super-admin OPS COPY вынесен под отдельный env-gated flow
+- **STEP435** — post-accept UX cleanup, убран misleading переход после accept
+- **STEP436** — accept completion hardening: sync-first completion, async только как fallback
+- **STEP437** — critical SQL fix for accept (`could not determine data type of parameter $2`)
+- **STEP438** — template quick-buttons relabel на brand side
+- **STEP439** — deals stage + local/global context
+- **STEP440–456** — signal-first list/card/dialog/notice/footer consistency pass на обеих сторонах
+- **STEP457** — creator-side `🏷 Каталог брендов` open-path cleanup без blink на normal path
+- **STEP458** — accept SQL family hardening + accept smoke wired in preflight
+- **STEP459** — brand quick-reply preview dedupe cleanup
+- **STEP460** — creator application dialog / composer / local-return clarity pass
 
-Формат результата для любого изменения:
-- FULL zip + Hotfix zip (только изменённые файлы) + git‑apply patch
-- список изменённых файлов + что поменялось
-- QA чеклист
+### Что сейчас уже не надо делать
+
+- заново переписывать accept / charge
+- сливать applications / deals / inbox в один super-section
+- делать большой IA redesign
+- трогать working paths без явной причины
+
+### Что уже стабилизировано
+
+- accept / charge ядро
+- local vs global deal context
+- list / card / dialog density на обеих сторонах
+- notice / receipt слой на обеих сторонах
+- input / fallback / recovery слой на обеих сторонах
+- footer / back / list-return semantics
+- creator-side catalog open blink cleanup
+- creator-side application composer / local return clarity
+
+### Что ещё требует live runtime verification
+
+Проверить руками после deploy:
+- creator → brand application
+- brand open application
+- accept
+- creator dialog open
+- creator reply
+- brand reply
+- local `📌 Стадия сделки`
+- stage transitions
+- local back
+- global deals path
+- creator leads flow
+- brand leads flow
+- unlock / follow-ups
+- empty states
+- catalog open path без blink
+- creator application local return (`⬅️ К диалогу #…` / `⬅️ К заявке #…`)
+
+### Как работать в новом чате
+
+Новый чат должен:
+- подтвердить, что продолжает от STEP460, а не с нуля
+- прочитать docs как обычно
+- кратко перечислить, что уже стабилизировано
+- отдельно назвать, что подтверждено source/snapshot-level
+- отдельно назвать, что ещё нужно проверить живьём в Telegram
+- не предлагать новый redesign
+- следующим ходом делать только:
+  - live runtime triage
+  - или **STEP461+ micro-hotfix** по реальному хвосту
+
+### Что нельзя делать
+
+- не начинать “новую архитектуру”
+- не трогать accept / charge без очень сильной причины
+- не добавлять лишние DB reads в hot UI paths
+- не устраивать массовую “чистку ради красоты”
+- не ломать локальный контекст возврата
+- не менять working terminology без причины
+
+### Какой должен быть первый ответ ассистента
+
+Ожидаемый формат:
+- подтвердить, что baseline = STEP460
+- кратко перечислить, что было стабилизировано в STEP433–460
+- отдельно назвать:
+  - что подтверждено source/snapshot-level
+  - что ещё нужно проверить живьём в Telegram
+- предложить только один следующий микро-шаг:
+  - runtime verification / triage
+  - либо micro-hotfix по реальному хвосту
 ---
 
 ---
 
-## 3) Мини‑смоук, который ассистент должен предложить
-- `/api/health` (ok/cron/audit)
-- broadcast (создать тест → tick вручную → “завершена” с кнопками)
-- /start (новый юзер видит роль, deep‑links не ломаются)
+## 3) Мини-smoke, который ассистент должен предложить
+
+- `/api/health` (ok / mon.accept / cron / audit)
+- creator → brand application → brand accept → creator reply → brand reply
+- local `📌 Стадия сделки` → stage transition → local back
+- `🏷 Каталог брендов` fast path без blink
+- creator application flow: `✍️ Ответить бренду` → composer → `⬅️ К диалогу #…` / `📨 К заявкам`
 
 ---
 
 ## 4) Быстрый шаблон промпта
-Если хочется прям “как надо” — используй файл:
+
+Используй файл:
 `docs/17_START_NEW_CHAT_PROMPT.md`
 
-## Production docs (read before going live)
+Он теперь является canonical prompt v3:
+- Jobs / Vitalik / Woz / Durov
+- docs-first
+- small-surface-area patching
+- Telegram-native clarity
+- local-context-first UX
 
-- `docs/92_PROD_ENV_BASELINE.md` — baseline ENV для продакшена (без секретов)
-- `docs/93_PROD_DEPLOY_CHECKLIST.md` — чеклист деплоя/проверок (health + админка)
+---
 
+## 5) Production docs (read before going live)
+
+- `docs/91_PROD_LAUNCH_30MIN.md`
+- `docs/92_PROD_ENV_BASELINE.md`
+- `docs/93_PROD_DEPLOY_CHECKLIST.md`
+- `docs/94_PROD_READINESS_PACK.md`

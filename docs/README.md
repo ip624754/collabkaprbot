@@ -6,8 +6,8 @@
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
-- `15_NEW_CHAT_HANDOFF.md` — copy‑paste для старта нового чата
-- `17_START_NEW_CHAT_PROMPT.md` — готовый промпт для старта нового чата
+- `15_NEW_CHAT_HANDOFF.md` — copy‑paste handoff для старта нового чата (canonical baseline context)
+- `17_START_NEW_CHAT_PROMPT.md` — готовый промпт для старта нового чата (canonical behavior kernel, v3)
 
 ## 1) Текущее состояние (source of truth)
 - `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (**source of truth**)
@@ -80,7 +80,7 @@
 - `docs/process/05_legacy_telegraph_article_and_manual.md` — telegraph‑статья/мануал (legacy reference)
 
 ## Как использовать в новом чате
-Открой `15_NEW_CHAT_HANDOFF.md` и следуй шагам: что загрузить и что вставить первым сообщением.
+Сначала используй `17_START_NEW_CHAT_PROMPT.md` как ядро правил работы, затем `15_NEW_CHAT_HANDOFF.md` как живой baseline текущего цикла.
 
 ## Что нового в текущем snapshot (2026-03-13)
 - Платежи: fallback apply exactly‑once (DB lock) + safety visibility (HMAC minlen + баннеры в Admin→Ops).
