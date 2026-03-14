@@ -66,7 +66,8 @@ assert.ok(renderBrandLeadDialogSrc.includes('// Prevent monetization bypass: do 
 assert.ok(renderBrandLeadDialogSrc.includes('// unless contacts were unlocked for this brand on this workspace.'), 'brand lead dialog must only reveal channel after unlock');
 assert.ok(renderBrandLeadDialogSrc.includes('// DB fallback ONLY when Redis is unavailable.'), 'brand lead dialog must keep DB fallback only for Redis degradation');
 assert.ok(renderBrandLeadDialogSrc.includes("const channelShown = (ws?.channel_username && !contactsUnlocked) ? '🔒 скрыто' : channel;"), 'brand lead dialog must hide channel handle until contacts are unlocked');
-assert.ok(renderBrandLeadDialogSrc.includes("kb.text(contactUnlockBtnLabel(), `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)"), 'brand lead dialog must route contact unlock through Brand Pass CTA');
+assert.ok(renderBrandLeadDialogSrc.includes("const contactsLabel = brandLeadContactUnlockButtonLabel();"), 'brand lead dialog must derive a lead-context contact unlock label');
+assert.ok(renderBrandLeadDialogSrc.includes("kb.text(contactsLabel, `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`)"), 'brand lead dialog must route contact unlock through Brand Pass CTA');
 
 assert.ok(botSource.includes('// Do NOT include contacts in IG templates (anti-bypass).'), 'IG templates must keep anti-bypass no-contacts rule');
 assert.ok(botSource.includes('// Anti-bypass: no contacts in template footer. Only bot link is in the template body.'), 'IG templates must keep no-contacts footer rule');

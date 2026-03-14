@@ -37,18 +37,19 @@ const renderBrandAppViewSrc = extractBetween(
   "async function renderBrandAppView(ctx, actorUserId, appId, back = { status: 'new', page: 0 }) {",
   '\n\nasync function startBrandAppReply(ctx, actorUserId, appId, back) {'
 );
-assert.ok(renderBrandAppViewSrc.includes('Нажми ✅ Принять, чтобы открыть диалог: креатор получит кнопку “💬 Написать бренду”.'), 'brand app new-state card must explain accept-point dialog opening');
+assert.ok(renderBrandAppViewSrc.includes('💡 <b>Сейчас</b>'), 'brand app card must keep signal-first what-now block');
+assert.ok(renderBrandAppViewSrc.includes('💳 <b>Принятие</b>'), 'brand app new-state card must keep acceptance block');
 assert.ok(renderBrandAppViewSrc.includes('✅ Принять спишет:'), 'brand app new-state card must show accept spend hint when cost > 0');
-assert.ok(renderBrandAppViewSrc.includes('Статусы “В работу / Закрыть / Спам” — внутренняя сортировка бренда'), 'brand app card must explain that triage statuses are internal only');
+assert.ok(renderBrandAppViewSrc.includes('ℹ️ <i>Внутренний статус бренда: креатор его не видит.</i>'), 'brand app card must explain that brand status stays internal');
 assert.ok(renderBrandAppViewSrc.includes("kb.text('✅ Принять', `a:brand_app_accept|id:${app.id}|s:${back.status}|p:${back.page}`).row();"), 'brand app new-state keyboard must expose accept CTA');
-assert.ok(renderBrandAppViewSrc.includes(".text('⛔ Спам', `a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`)"), 'brand app new-state keyboard must expose spam CTA');
+assert.ok(renderBrandAppViewSrc.includes("`a:brand_app_set|id:${app.id}|st:spam|s:${back.status}|p:${back.page}`"), 'brand app new-state keyboard must expose spam CTA callback');
 assert.ok(renderBrandAppViewSrc.includes(".text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);"), 'brand app new-state keyboard must expose delete CTA');
 assert.ok(renderBrandAppViewSrc.includes('До принятия разрешаем только безопасные действия: СПАМ/удаление.'), 'brand app card must document safe-actions-only rule before accept');
 assert.ok(renderBrandAppViewSrc.includes('“В работу/Закрыть/Ответить/Шаблоны” доступны после ✅ Принять.'), 'brand app card must document hidden post-accept actions');
 assert.ok(renderBrandAppViewSrc.includes(".text('✍️ Ответить', `a:brand_app_reply|id:${app.id}|s:${back.status}|p:${back.page}`)"), 'brand app accepted-state keyboard must expose reply CTA');
 assert.ok(renderBrandAppViewSrc.includes(".text('⚡ Шаблоны', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)"), 'brand app accepted-state keyboard must expose templates CTA');
-assert.ok(renderBrandAppViewSrc.includes(".text('💬 В работу', `a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`)"), 'brand app accepted-state keyboard must expose in-progress triage CTA');
-assert.ok(renderBrandAppViewSrc.includes(".text('✅ Закрыть', `a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`)"), 'brand app accepted-state keyboard must expose close CTA');
+assert.ok(renderBrandAppViewSrc.includes("`a:brand_app_set|id:${app.id}|st:in_progress|s:${back.status}|p:${back.page}`"), 'brand app accepted-state keyboard must expose in-progress triage CTA callback');
+assert.ok(renderBrandAppViewSrc.includes("`a:brand_app_set|id:${app.id}|st:closed|s:${back.status}|p:${back.page}`"), 'brand app accepted-state keyboard must expose close CTA callback');
 
 const startBrandAppReplySrc = extractBetween(
   botSource,

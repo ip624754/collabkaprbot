@@ -31,13 +31,18 @@ assert.ok(
   'docs/92_PROD_ENV_BASELINE.md must mention BRAND_APP_SUPERADMIN_COPY_ENABLED=1'
 );
 
-const startMarker = "  const notifText = `📝 <b>Новая заявка от креатора</b>";
+const startMarker = "  const notifText = buildBrandAppServiceNoticeText({";
 const endMarker = "\n\n  // cleanup draft";
 const start = botSource.indexOf(startMarker);
-assert.ok(start >= 0, 'brand application notify block must keep notifText marker');
+assert.ok(start >= 0, 'brand application notify block must keep helper-based notifText marker');
 const end = botSource.indexOf(endMarker, start);
 assert.ok(end > start, 'brand application notify block must end before cleanup draft');
 const notifyBlock = botSource.slice(start, end);
+
+assert.ok(
+  botSource.includes("function buildBrandAppServiceNoticeText({ appId = 0, kind = 'reply', brandName = '', creatorName = '', body = '', status = 'new', dealStage = '' } = {}) {"),
+  'brand app notices must be centralized in buildBrandAppServiceNoticeText helper'
+);
 
 assert.ok(
   notifyBlock.includes("const opsCopyText = `🛠 <b>OPS COPY · Заявка креатора бренду</b>"),
