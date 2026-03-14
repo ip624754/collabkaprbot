@@ -49,6 +49,7 @@
     "smoke:start-role-gate-contract": "node scripts/smoke-start-role-gate-contract.js",
     "smoke:ws-channel-disconnect-contract": "node scripts/smoke-ws-channel-disconnect-contract.js",
     "smoke:env-baseline-contract": "node scripts/smoke-env-baseline-contract.js",
+    "smoke:ig-parked-hard-gate": "node scripts/smoke-ig-parked-hard-gate.js",
     "smoke:creator-current-channel-contract": "node scripts/smoke-creator-current-channel-contract.js",
     "smoke:share-url-compat-contract": "node scripts/smoke-share-url-compat-contract.js",
     "smoke:brand-inbox-accept-contract": "node scripts/smoke-brand-inbox-accept-contract.js",
