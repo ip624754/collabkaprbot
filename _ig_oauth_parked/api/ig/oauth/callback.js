@@ -1,7 +1,7 @@
 import { CFG } from '../../../src/lib/config.js';
 import { consumeOnce, k, redis } from '../../../src/lib/redis.js';
-import { exchangeCodeForShortLivedToken, exchangeForLongLivedToken, listPages, getPageIgBusinessAccount, getIgUser, getMe, listPermissions, listBusinesses, listBusinessPages } from '../../../src/lib/igOAuth.js';
-import { encryptText } from '../../../src/lib/cryptoBox.js';
+import { exchangeCodeForShortLivedToken, exchangeForLongLivedToken, listPages, getPageIgBusinessAccount, getIgUser, getMe, listPermissions, listBusinesses, listBusinessPages } from '../../../lib/igOAuth.js';
+import { encryptText } from '../../../lib/cryptoBox.js';
 import { tgSendMessage } from '../../../src/lib/tgApi.js';
 import * as db from '../../../src/db/queries.js';
 

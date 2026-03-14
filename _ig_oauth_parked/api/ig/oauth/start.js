@@ -1,6 +1,6 @@
 import { CFG } from '../../../src/lib/config.js';
 import { redis, k } from '../../../src/lib/redis.js';
-import { buildAuthorizeUrl } from '../../../src/lib/igOAuth.js';
+import { buildAuthorizeUrl } from '../../../lib/igOAuth.js';
 import { tgSendMessage } from '../../../src/lib/tgApi.js';
 
 function noStore(res) {
