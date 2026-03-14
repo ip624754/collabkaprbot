@@ -12361,35 +12361,22 @@ async function renderBrandAppsList(ctx, actorUserId, brandUserId, status = 'new'
   const apps = await safeBrandApplications(() => db.listBrandApplications(brandUserId, st, limit, offset), async () => []);
   const total = (counts[st] ?? 0) || 0;
 
+  const hasMultiplePages = total > limit;
+  const summaryMeta = hasMultiplePages
+    ? `${escapeHtml(brandName)} · ${escapeHtml(stTitle)} · всего ${total} · стр ${p + 1}`
+    : `${escapeHtml(brandName)} · ${escapeHtml(stTitle)} · всего ${total}`;
+
   let text = `📨 <b>Заявки от креаторов</b>
 `;
-  text += `<i>Показываю последние движения по входящим заявкам к бренду.</i>
+  text += `<i>Последние входящие заявки к бренду.</i>
 `;
-  text += `<i>${escapeHtml(brandName)} · ${escapeHtml(stTitle)} · всего ${total} · стр ${p + 1}</i>
+  text += `<i>${summaryMeta}</i>
 
 `;
 
   if (!apps.length) {
     text += 'Пока пусто. Заявки появятся, когда креаторы нажимают «📝 Оставить заявку» в каталоге.';
   } else {
-    for (const a of apps) {
-      const username = a.creator_username ? '@' + String(a.creator_username).replace(/^@/, '') : '';
-      const tgId = (!username && a.creator_tg_id) ? `id:${a.creator_tg_id}` : '';
-      const who = username || tgId || 'creator';
-      const itemSt = normLeadStatus(a.status);
-      const icon = leadStatusIcon(itemSt);
-      const itemTitle = (LEAD_STATUSES[itemSt] || LEAD_STATUSES.new).title;
-      const when = a.updated_at ? fmtTs(a.updated_at) : (a.created_at ? fmtTs(a.created_at) : '—');
-      const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
-      const short = clipText(msg || '—', 56);
-      text += `${icon} <b>${escapeHtml(who)}</b>
-`;
-      text += `<i>${escapeHtml(itemTitle)} · #${a.id} · ${escapeHtml(when)}</i>
-`;
-      text += `<code>${escapeHtml(short)}</code>
-
-`;
-    }
     text += '<i>Открой карточку: там заявка, ответ, история и действия.</i>';
   }
 
@@ -16782,14 +16769,18 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
 
   let text = `📥 <b>Inbox</b>
 `;
-  text += `<i>Показываю последние движения по диалогам и заявкам.</i>
+  text += `<i>Здесь появляются новые диалоги и свежие сообщения.</i>
 `;
 
   const secondary = [];
   if (opts?.bm?.enabled) secondary.push(`Бренд: ${escapeHtml(opts.bm.brandLabel || '—')}`);
-  secondary.push(`стр ${page + 1}`);
-  secondary.push(`на странице ${rows.length}`);
-  text += `<i>${secondary.join(' · ')}</i>`;
+  if (rows.length) {
+    secondary.push(`стр ${page + 1}`);
+    secondary.push(`на странице ${rows.length}`);
+  }
+  if (secondary.length) {
+    text += `<i>${secondary.join(' · ')}</i>`;
+  }
 
   const kb = new InlineKeyboard();
 
@@ -16800,9 +16791,10 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
   if (!rows.length) {
     text += `
 
-Пока нет переписок.
+Пока здесь пусто.
 
-💬 Интро = новый диалог. Бренду нужны кредиты, креатору — просто отвечать здесь.`;
+Новый диалог появится, когда кто-то напишет первым.
+Если переписка идёт внутри заявки, открой её карточку.`;
   } else {
     text += `
 
