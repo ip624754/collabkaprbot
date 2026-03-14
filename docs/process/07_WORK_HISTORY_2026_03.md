@@ -4973,3 +4973,11 @@ What changed:
 Why:
 - source-smoke drift had accumulated across STEP459–467 and was reporting old contracts instead of the current product state.
 - this step restores trust in source guards before the next preflight/dependency split.
+
+## STEP473 — repo hygiene cleanup
+- Compared the real repo snapshot against the current STEP472 full snapshot and confirmed there was no shared-file drift; only two stale repo-only files remained.
+- Removed legacy duplicate `src/bot.js` (the active bot entry stays `src/bot/bot.js`).
+- Removed orphaned `scripts/smoke-brand-app-preview-dedupe-contract.js`, which is no longer referenced by `package.json`, `scripts/preflight.js`, docs, or active source guards.
+- This is hygiene-only work: no runtime logic, callbacks, DB queries, money paths, or hot UI surfaces changed.
+- Source-only verification after removal remains green.
+
