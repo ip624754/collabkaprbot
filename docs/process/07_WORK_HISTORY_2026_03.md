@@ -1,3 +1,490 @@
+## STEP450 — Brand-side application/deal notice cleanup (`accept / reply / deal updates`)
+
+Контекст / проблема:
+После STEP439–445 карточки, списки и deal-view у бренда уже стали signal-first, а STEP448–449 выровняли lead-context vocabulary. Но brand-side сервисные сообщения вокруг creator → brand application flow всё ещё говорили разными языками:
+- новое входящее сообщение по accepted заявке приходило с generic CTA `📥 Открыть в Inbox`, хотя оператор дальше работал уже не через общий Inbox, а через `✉️ Заявка #…` и `📌 Стадия сделки`;
+- новая заявка, creator-reply notification и fallback receipts после brand reply/deal reply не делили один словарь и один `что дальше` слой;
+- в fallback после template reply callback-text вообще оставался неточным (`✅ Отправлено бренду`), хотя сообщение уходило от бренда к креатору;
+- в итоге cleaned brand-side application/deal surfaces уже были системными, но входящие service notices и edge receipts вокруг них визуально отставали.
+
+Что сделано:
+- добавлены shared brand-app notice helpers без изменения query/mutation-layer:
+  - `brandAppOpenButtonLabel(appId)` → `✉️ Заявка #...`;
+  - `brandAppDealButtonLabel()` → `📌 Стадия сделки`;
+  - `brandAppNoticeWhatNext(appId, status, dealStage)` → один короткий what-next для brand-side service layers;
+  - `brandAppNoticeKb(appId, opts)` → единый CTA-set для notice/fallback surfaces;
+  - `buildBrandAppServiceNoticeText(...)` → компактный signal-first текст для new/reply notifications;
+- brand-side notification о новой заявке теперь использует тот же service-notice builder и тот же CTA language, что и later application screens;
+- creator → brand message notification в accepted application flow больше не зовёт в generic `📥 Inbox`:
+  - notification now routes through `brandAppNoticeKb()`;
+  - если у заявки уже есть deal-stage, notice даёт прямой `📌 Стадия сделки` CTA рядом с `✉️ Заявка #...`;
+- template/manual reply fallback receipts у бренда теперь тоже используют тот же `💡 Сейчас` + `✉️ Заявка #... / 📌 Стадия сделки` слой вместо старых generic back/open patterns;
+- deal-template fail receipt тоже выровнен под тот же словарь;
+- callback text после template-send исправлен на `✅ Отправлено креатору`;
+- добавлен source-level smoke `scripts/smoke-brand-app-notices-contract.js` и он подключён в `package.json` + `scripts/preflight.js`.
+
+Что не менялось:
+- accept / charge / credits semantics;
+- exactly-once accept flow STEP436–437;
+- application/deal card/list contracts STEP439–445;
+- lead-context vocabulary STEP448–449;
+- DB schema, callbacks semantics и hot-path reads.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node --check scripts/smoke-brand-app-notices-contract.js`
+- `node scripts/smoke-brand-app-notices-contract.js`
+- `node scripts/smoke-brand-app-density-contract.js`
+- `node scripts/smoke-brand-deal-density-contract.js`
+- `node scripts/smoke-brand-deal-stage-nav-contract.js`
+- `node scripts/smoke-brand-inbox-density-contract.js`
+- `node scripts/smoke-brand-lead-entrypoints-contract.js`
+- `node scripts/smoke-brand-lead-followups-contract.js`
+- `node scripts/smoke-brand-apps-list-density-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-creator-apps-list-density-contract.js`
+- `node scripts/smoke-creator-leads-density-contract.js`
+- `node scripts/smoke-creator-leads-entrypoints-contract.js`
+- `node scripts/actions-registry-check.js`
+- `node scripts/lint-footer-nav.js`
+- `node scripts/test-redactContactsInText.js`
+- `node scripts/preflight.js` → expected fail-fast on bare snapshot without `node_modules`
+
+Итог:
+- brand-side inbound service messages вокруг application/deal flow теперь говорят тем же языком, что и сами cleaned screens;
+- notice/receipt layer больше не возвращает оператора в generic `Inbox` mental model, когда фактическая работа уже идёт в `✉️ Заявка #...` / `📌 Стадия сделки`;
+- surface area остался узким: copy + CTA + smoke/docs only, без затрагивания business logic.
+
+## STEP449 — Brand-side lead follow-up cleanup (`reply / unlock`)
+
+Контекст / проблема:
+После STEP448 сам brand-side lead flow уже говорил единым языком на входе в `💬 Диалог / 🪟 Витрина / 🔓 Контакты`, но post-action screens всё ещё оставались чуть менее собранными:
+- после `✍️ Ответить` бренд видел отдельную receipt-квитанцию с общим `💬 Диалог`, без того же lead-specific vocabulary, который уже использовался в `blead_view` и read-only витрине;
+- после `🔓 Контакты` compact contact-pack отправлялся корректно, но follow-up layer всё ещё жил отдельно: там не было явного return в тот же `💬 Диалог #...`, а copy не повторяла тот же `что дальше` язык, что и сам lead flow;
+- в итоге путь `💬 Диалог #... → ✍️ Ответить → квитанция` и путь `💬 Диалог #... → 🔓 Контакты → контакт-пакет` были рабочими, но завершались экранами/сообщениями, которые снова ощущались немного "отдельными" от основного lead context.
+
+Что сделано:
+- добавлен shared helper `brandLeadWhatNextText(leadId, mode)` без изменения query/mutation-layer:
+  - `default` — для обычного закрытого lead-context;
+  - `contacts_open` — когда контакты уже открыты;
+  - `reply_sent` — для post-reply receipt;
+- `renderBrandLeadDialog()` переведён на этот helper в `💡 Сейчас`, чтобы opened dialog и post-action follow-ups использовали один и тот же словарь;
+- post-reply receipt после `blead_reply` больше не возвращает бренд в generic `💬 Диалог`:
+  - receipt теперь строится через `brandLeadWhatNextText(..., 'reply_sent')`;
+  - CTA buttons выровнены в тот же lead-context vocabulary: `💬 Диалог #...`, `🪟 Витрина креатора`, `🔓 Контакты на витрине ...`;
+- post-unlock contact-pack при `fromLead` тоже выровнен:
+  - добавлен короткий `💡 Сейчас` block с тем же `contacts_open` copy;
+  - CTA row теперь возвращает в тот же `💬 Диалог #...` и `🪟 Витрина креатора`, а не только в generic profile/open flow;
+  - `💳 Купить ещё` оставлен как отдельное продолжение без изменения charging logic;
+- добавлен source-level smoke `scripts/smoke-brand-lead-followups-contract.js` и он подключён в `package.json` + `scripts/preflight.js`;
+- existing `scripts/smoke-brand-lead-entrypoints-contract.js` обновлён под новую post-unlock CTA форму, чтобы контракт STEP448+449 проверялся честно, а не ожидал старую строку.
+
+Что не менялось:
+- accept / charge / credits / lead-write semantics;
+- brand-side Inbox/dialog density STEP445;
+- creator-side lead entrypoints/density STEP446–447;
+- STEP448 entrypoint vocabulary itself;
+- DB schema, callbacks semantics и hot-path reads.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node --check scripts/smoke-brand-lead-followups-contract.js`
+- `node scripts/smoke-brand-lead-followups-contract.js`
+- `node scripts/smoke-brand-lead-entrypoints-contract.js`
+- `node scripts/smoke-brand-inbox-density-contract.js`
+- `node scripts/smoke-creator-leads-entrypoints-contract.js`
+- `node scripts/smoke-creator-leads-density-contract.js`
+- `node scripts/smoke-brand-apps-list-density-contract.js`
+- `node scripts/smoke-creator-apps-list-density-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-brand-app-density-contract.js`
+- `node scripts/smoke-brand-deal-density-contract.js`
+- `node scripts/smoke-brand-deal-stage-nav-contract.js`
+- `node scripts/actions-registry-check.js`
+- `node scripts/lint-footer-nav.js`
+- `node scripts/test-redactContactsInText.js`
+- `node scripts/preflight.js` → expected fail-fast on bare snapshot without `node_modules`
+
+Итог:
+- post-reply и post-unlock follow-ups больше не выпадают из lead-context vocabulary;
+- brand-side lead flow теперь говорит одним языком не только на входе, но и после действий;
+- surface area остался узким: copy + CTA + smoke/docs only, без затрагивания mutation/business logic.
+
+## STEP448 — Brand-side lead entrypoints cleanup (`💬 Диалог / 🪟 Витрина / 🔓 Контакты`)
+
+Контекст / проблема:
+После STEP445 сам brand-side `📥 Inbox` уже читался чище, а после STEP447 creator-side entry layer тоже стал единым, но в brand-lead flow вокруг `blead_view` ещё оставался разнобой:
+- reply notifications и brand-side dialog использовали общий `💬 Диалог` / `🪟 Витрина`, без lead-specific словаря, поэтому вход в тот же flow ощущался менее собранным, чем creator-side `🔎 Заявка #…`;
+- read-only витрина и экран разлока контактов в контексте lead-а местами возвращались тем же callback-ом, но продолжали говорить общими словами `Витрина` / `Контакты`, что ослабляло ощущение одной системы;
+- из-за этого путь `ответ креатора → диалог → витрина → разлок контактов → назад в диалог` был рабочим, но визуально говорил разными языками на соседних экранах.
+
+Что сделано:
+- добавлены централизованные brand-side label helpers без изменения query/mutation-layer:
+  - `brandLeadDialogButtonLabel(leadId)` → `💬 Диалог #...`;
+  - `brandLeadProfileButtonLabel()` → `🪟 Витрина креатора`;
+  - `brandLeadContactUnlockButtonLabel()` → contextualized `🔓 Контакты на витрине ...`;
+- `brandReplyKb()` переведён на эти единые labels, чтобы brand-side reply notifications вели в тот же flow тем же языком;
+- `renderBrandLeadDialog()` получил тот же vocabulary-layer:
+  - CTA buttons теперь используют `💬 Диалог #...` / `🪟 Витрина креатора` / `🔓 Контакты на витрине ...`;
+  - copy внутри карточки тоже использует те же labels, включая короткий `💡 Сейчас` block без изменения mutation semantics;
+- `renderWsPublicProfile()` в lead-context теперь принимает `brandLeadId` и использует contextual labels в read-only витрине:
+  - верхняя подсказка говорит через `💬 Диалог #...` / `🪟 Витрина креатора` / `🔓 Контакты на витрине ...`;
+  - CTA buttons и скрытые contacts hints больше не скатываются обратно к общим `Витрина` / `Контакты` labels;
+- screens вокруг contact unlock в brand-lead context тоже выровнены:
+  - pending / insufficient / no-contacts / post-unlock replies используют тот же dialog/profile vocabulary;
+  - `brandLeadId` передаётся через `wsp_open` / `wsp_contact_req` / `wsp_contact_unlock` render-path, чтобы open/back labels оставались context-correct;
+- добавлен source-level smoke `scripts/smoke-brand-lead-entrypoints-contract.js` и он подключён в `package.json` + `scripts/preflight.js`.
+
+Что не менялось:
+- accept / charge / credits / lead-write semantics;
+- brand-side Inbox density/layout STEP445;
+- creator-side lead entrypoints STEP447;
+- application/deal contracts STEP439–444;
+- DB schema, action semantics и hot-path reads.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node --check scripts/smoke-brand-lead-entrypoints-contract.js`
+- `node scripts/smoke-brand-lead-entrypoints-contract.js`
+- `node scripts/smoke-brand-inbox-density-contract.js`
+- `node scripts/smoke-creator-leads-entrypoints-contract.js`
+- `node scripts/smoke-creator-leads-density-contract.js`
+- `node scripts/smoke-brand-apps-list-density-contract.js`
+- `node scripts/smoke-creator-apps-list-density-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-brand-app-density-contract.js`
+- `node scripts/smoke-brand-deal-density-contract.js`
+- `node scripts/smoke-brand-deal-stage-nav-contract.js`
+- `node scripts/actions-registry-check.js`
+- `node scripts/lint-footer-nav.js`
+- `node scripts/test-redactContactsInText.js`
+
+Итог:
+- brand-side путь `reply notification → диалог → витрина → контакты → назад в диалог` теперь говорит одним языком;
+- brand-side lead flow догнал creator-side entry discipline STEP447 и теперь читается как одна система, а не как смесь общих и context-specific labels;
+- surface-area правки осталась узкой: vocabulary / entrypoints / back-context only, без затрагивания рабочих mutation-paths.
+
+## STEP447 — Creator-side lead entrypoints cleanup (`📨 Заявки брендов`)
+
+Контекст / проблема:
+После STEP446 сама creator-side карточка `lead_view` уже стала signal-first, но входной слой вокруг неё всё ещё говорил разными словами:
+- в channel/workspace entrypoint-ах использовались смешанные термины `Заявки брендов` и `Inbox брендов`, из-за чего путь до списка/карточки воспринимался не как одна система;
+- в creator-side уведомлениях и receipt-ах сосуществовали `👀 Открыть`, `🔎 Открыть заявку` и просто `📨 Заявки`, поэтому оператор видел разный язык на одном и том же переходе;
+- в результате даже после STEP446 карточка уже была чистой, но вход в неё и возврат из мелких flow всё ещё ощущались менее собранными, чем сами list/open screens.
+
+Что сделано:
+- workspace work-screen (`renderWorkspaceWorkScreen`) получил явную подсказку: `Сначала открой «📨 Заявки брендов»: там вход в список, карточки и диалоги по заявкам брендов.`;
+- curator workspace button `📨 Inbox брендов` переименован в `📨 Заявки брендов`, а curator copy теперь прямо говорит, что это вход в список заявок, карточки и диалоги по брендам;
+- добавлены централизованные label helpers без изменения query/mutation-layer:
+  - `creatorLeadOpenButtonLabel(leadId)` → `🔎 Заявка #...`;
+  - `creatorLeadListButtonLabel()` → `📨 К заявкам`;
+- creator-side notifications / receipts / fallback buttons вокруг `lead_view` переведены на эти единые labels:
+  - командные уведомления о reply/status больше не показывают `👀 Открыть`;
+  - fallback receipts больше не смешивают `Открыть заявку` и `Заявки`;
+  - copy внутри creator-side brand-message notifications теперь прямо говорит: `Нажми «🔎 Заявка #...», откроется карточка заявки.`;
+- добавлен source-level smoke `scripts/smoke-creator-leads-entrypoints-contract.js` и он подключён в `package.json` + `scripts/preflight.js`.
+
+Что не менялось:
+- accept / charge / credits;
+- creator-side `lead_view` density/layout STEP446;
+- brand-side Inbox/dialog STEP445;
+- brand applications/deals contracts STEP439–444;
+- action semantics, DB schema и hot-path reads.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node --check scripts/smoke-creator-leads-entrypoints-contract.js`
+- `node scripts/smoke-creator-leads-entrypoints-contract.js`
+- `node scripts/smoke-creator-leads-density-contract.js`
+- `node scripts/smoke-brand-inbox-density-contract.js`
+- `node scripts/smoke-brand-apps-list-density-contract.js`
+- `node scripts/smoke-creator-apps-list-density-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-brand-app-density-contract.js`
+- `node scripts/smoke-brand-deal-density-contract.js`
+- `node scripts/smoke-brand-deal-stage-nav-contract.js`
+- `node scripts/actions-registry-check.js`
+- `node scripts/lint-footer-nav.js`
+- `node scripts/test-redactContactsInText.js`
+
+Итог:
+- creator-side путь `канал / кураторский экран → Заявки брендов → карточка заявки → назад к списку` теперь говорит одним языком;
+- карточка STEP446 и все соседние entrypoint-ы читаются как одна система, а не как набор исторически разных кнопок;
+- surface-area правки осталась узкой: vocabulary / labels / entry hints only, без затрагивания рабочих mutation-paths.
+
+## STEP446 — Creator-side brand-leads Inbox / dialog cleanup (`📨 Заявки брендов`)
+
+Контекст / проблема:
+После STEP445 brand-side `📥 Inbox` уже стал signal-first, но creator-side `📨 Заявки брендов` всё ещё читался плотнее соседних экранов:
+- входной список показывал статус и текст менее системно, поэтому при большом потоке глаз хуже считывал бренд, последнее движение и что открывать;
+- открытая карточка заявки одновременно смешивала статус, текст, заметки, журнал и действия без сильной иерархии, из-за чего текущее состояние терялось;
+- после шаблонного ответа или смены статуса изменение подтверждалось в основном toast-ом, а внутри самой карточки визуальный след был слабее, чем в brand-side `Inbox`.
+
+Что сделано:
+- добавлены helpers `creatorLeadWhatNow()` и `formatCreatorLeadThread()` без изменения query/mutation architecture;
+- `renderWsLeadsList()` переведён в signal-first list layout:
+  - header ужат до `📨 Заявки брендов`;
+  - добавлена короткая строка: `Показываю последние движения по заявкам брендов в этот канал.`;
+  - каждая строка списка теперь строится как: бренд → status title + `#id` + updated-at → clipped preview;
+  - quick-open кнопки приведены к тому же смыслу: `icon + brand + #id`;
+  - pagination приведена к полным label-ам `⬅️ Назад` / `➡️ Далее`;
+- `renderLeadView()` переведён в signal-first dialog layout:
+  - compact header `💬 Диалог по заявке #...` + current status + channel/brand + updated-at;
+  - короткий блок `💡 Сейчас`;
+  - отдельный state-block с текущим статусом и назначением;
+  - request/reply сведены к clipped preview;
+  - thread показывает только последние 3 сообщения + count hint;
+  - internal notes показывают только последние 3 заметки + count hint;
+  - curator-mode получил короткую честную подсказку, что ручной ответ недоступен и работа идёт через шаблоны/статус/заметки;
+- template-send / status-change now rerender the same card with inline flash:
+  - `Шаблон отправлен: ...`
+  - `Статус обновлён: old → new`
+- добавлен `scripts/smoke-creator-leads-density-contract.js` и подключён в `package.json` + `scripts/preflight.js`.
+
+Что не менялось:
+- accept / charge / credits;
+- lead query-layer / write semantics;
+- brand-side `Inbox` STEP445;
+- brand-side applications/deals STEP439–444;
+- curator aggregate queue (`a:cur_inbox`) beyond keeping it compatible with the same card.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node --check scripts/smoke-creator-leads-density-contract.js`
+- `node scripts/smoke-creator-leads-density-contract.js`
+- `node scripts/smoke-brand-inbox-density-contract.js`
+- `node scripts/smoke-brand-apps-list-density-contract.js`
+- `node scripts/smoke-creator-apps-list-density-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-brand-app-density-contract.js`
+- `node scripts/smoke-brand-deal-density-contract.js`
+- `node scripts/smoke-brand-deal-stage-nav-contract.js`
+- `node scripts/actions-registry-check.js`
+- `node scripts/lint-footer-nav.js`
+- `node scripts/test-redactContactsInText.js`
+
+Итог:
+- creator-side brand-leads list/open screens теперь читаются как одна система с brand-side `Inbox` и уже вычищенными application/deal screens;
+- оператор/владелец/куратор быстрее считывает кто написал, в каком состоянии заявка и что делать дальше;
+- surface-area правки осталась узкой: list/open UX only + visible inline state flash, без изменения working business logic.
+
+## STEP445 — Brand-side Inbox / thread-open cleanup (`📥 Inbox`)
+
+Контекст / проблема:
+После STEP440–444 список/карточки заявок и сделок уже стали signal-first, но brand-side `📥 Inbox` всё ещё выбивался из этой системы:
+- сам Inbox-list был почти только набором кнопок, поэтому оператор видел мало сканируемого сигнала до открытия диалога;
+- открытый thread-screen показывал плотный dump статусов, offer-meta и до 12 сообщений подряд, из-за чего текущее состояние и последнее действие тонули в тексте;
+- после смены стадии/обработки изменение подтверждалось только toast-ом `✅ Обновлено`, а внутри самого экрана не оставалось явного следа, что именно поменялось.
+
+Что сделано:
+- `renderBxInbox()` переведён в signal-first list layout без изменения query-layer:
+  - header ужат до `📥 Inbox`;
+  - добавлена короткая строка: `Показываю последние движения по диалогам и заявкам.`;
+  - вторичный контекст (бренд для manager-mode, страница, число строк на странице) сохранён одной строкой;
+  - каждая строка списка теперь строится как: участник → текущее состояние/обработка/стадия → `#id` + updated-at → clipped preview последнего сообщения/оффера;
+  - quick-open кнопки приведены к тому же смыслу: `icon + participant + #id`;
+  - pagination приведена к полным label-ам `⬅️ Назад` / `➡️ Далее`;
+- добавлены точечные helpers для thread-layer (`bxThreadStageTitle`, `bxThreadTriageTitle`, `bxThreadWhatNow`, `formatBxThreadMessages`, `bxInboxPrimaryIcon`) без захода в mutation/query architecture;
+- `buildBxThreadView()` переведён в signal-first thread-open layout:
+  - compact header `💬 Диалог #...` + собеседник + последнее время;
+  - короткий блок `💡 Сейчас`;
+  - отдельный state-block: status / triage / stage / reply / retry / charge;
+  - offer сведён к короткой строке;
+  - вместо плотного dump показываются только последние 3 сообщения + hint `Показаны последние 3 из N`;
+- stage / triage handlers теперь не только дают callback-toast, но и rerender-ят тот же thread с inline flash:
+  - `Стадия: ...`
+  - `Обработка: ...`
+- добавлен `scripts/smoke-brand-inbox-density-contract.js` и подключён в `package.json` + `scripts/preflight.js`.
+
+Что не менялось:
+- accept / charge / credits / Brand Pass spending rules;
+- business logic открытия диалога;
+- proofs flow;
+- brand-side application/deal cards и списки STEP440–444;
+- local/global navigation contracts STEP439;
+- любые новые DB reads в hot UI path.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node --check scripts/smoke-brand-inbox-density-contract.js`
+- `node scripts/smoke-brand-inbox-density-contract.js`
+- `node scripts/smoke-brand-deal-stage-nav-contract.js`
+- `node scripts/smoke-brand-deal-density-contract.js`
+- `node scripts/smoke-brand-app-density-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-creator-apps-list-density-contract.js`
+- `node scripts/smoke-brand-apps-list-density-contract.js`
+- `node scripts/actions-registry-check.js`
+- `node scripts/lint-footer-nav.js`
+- `node scripts/test-redactContactsInText.js`
+
+Итог:
+- brand-side Inbox-list и открытый thread теперь читаются как одна система с уже вычищенными application/deal screens;
+- оператор быстрее считывает кто пишет, в каком состоянии диалог и что делать дальше, не проламываясь через длинный dump;
+- surface-area правки осталась узкой: list/open UX only, без изменения working monetization/mutation paths.
+
+## STEP444 — Brand-side applications list cleanup (`📨 Заявки от креаторов`)
+
+Контекст / проблема:
+После STEP443 creator-side входной список уже стал signal-first, но brand-side `📨 Заявки от креаторов` всё ещё читался плотнее соседних экранов:
+- header был перегружен брендом, статусом, фильтрами и подсказкой сразу, поэтому главное движение по входящим заявкам не считывалось за один взгляд;
+- строки списка были собраны как `status + #id + who + time`, а quick-open кнопки отдельно повторяли почти ту же информацию, из-за чего список выглядел менее системным;
+- creator-side список и карточка уже стали одной системой, а brand-side входной слой по-прежнему визуально отставал.
+
+Что сделано:
+- `renderBrandAppsList()` переведён в signal-first list layout без изменения query-layer:
+  - header ужат до `📨 Заявки от креаторов`;
+  - добавлена короткая строка: `Показываю последние движения по входящим заявкам к бренду.`;
+  - бренд, текущий фильтр-статус, total и page сохранены как вторичный контекст в одной строке;
+- каждая строка списка теперь строится как:
+  - creator крупнее;
+  - ниже status title + `#id` + updated-at;
+  - затем clipped preview текста (`clipText(..., 56)`), чтобы список сканировался быстрее;
+- quick-open кнопки приведены к тому же смысловому формату: `icon + creator + #id`;
+- pagination остаётся на читабельных `⬅️ Назад` / `➡️ Далее`;
+- внизу списка добавлен короткий hint, что карточка содержит заявку, ответ, историю и действия.
+
+Что не менялось:
+- accept / charge / credits;
+- manager access semantics / return-to contract;
+- brand-side application card STEP441;
+- creator-side list/card symmetry из STEP442–443;
+- любые DB reads в hot UI path.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node --check scripts/smoke-brand-apps-list-density-contract.js`
+- `node scripts/smoke-brand-apps-list-density-contract.js`
+- `node scripts/smoke-creator-apps-list-density-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-brand-app-density-contract.js`
+- `node scripts/smoke-brand-deal-density-contract.js`
+- `node scripts/smoke-brand-deal-stage-nav-contract.js`
+- `node scripts/actions-registry-check.js`
+- `node scripts/lint-footer-nav.js`
+- `node scripts/test-redactContactsInText.js`
+
+Итог:
+- brand-side входной список теперь читается в той же системе, что и creator-side список/карточка и brand-side карточка заявки;
+- оператор сначала быстро видит креатора + состояние + свежесть движения, а глубину открывает уже в карточке;
+- surface-area изменения осталась узкой и не задела working business paths.
+
+## STEP443 — Creator-side applications list cleanup (`📨 Мои заявки`)
+
+Контекст / проблема:
+После STEP442 карточка creator-side заявки уже стала signal-first, но входной список `📨 Мои заявки` оставался визуально более плотным и менее системным:
+- список одновременно дублировал статус/бренд/время и в тексте, и в кнопках, поэтому глаз слабо считывал главное;
+- header был сухим (`Мои заявки к брендам · стр N`) и не подсказывал, что именно показывает экран;
+- pagination оставалась стрелками без слов, поэтому список читался слабее соседних экранов STEP439–442.
+
+Что сделано:
+- `renderCreatorApplications()` приведён к signal-first list layout без изменения query-layer:
+  - header ужат до `📨 Мои заявки`;
+  - добавлена короткая строка: `Показываю последние движения по твоим заявкам к брендам.`;
+  - строка totals/page сохранена, но оформлена как вторичный контекст;
+- каждая строка списка теперь строится как:
+  - бренд крупнее;
+  - ниже status title + `#id` + updated-at;
+  - затем clipped preview сообщения (`clipText(..., 56)`), чтобы список сканировался быстрее;
+- quick-open кнопки приведены к тому же смысловому формату: `icon + brand + #id`;
+- pagination labels переведены в читабельные `⬅️ Назад` / `➡️ Далее`;
+- внизу списка добавлен короткий hint, что карточка заявки содержит статус, ответ бренда и историю.
+
+Что не менялось:
+- accept / charge / credits;
+- creator-send mutation path;
+- creator-side диалог/карточка STEP442;
+- brand-side application/deal contracts STEP439–441;
+- любые DB reads в hot UI path.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node --check scripts/smoke-creator-apps-list-density-contract.js`
+- `node scripts/smoke-creator-apps-list-density-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-brand-app-density-contract.js`
+- `node scripts/smoke-brand-deal-density-contract.js`
+- `node scripts/smoke-brand-deal-stage-nav-contract.js`
+- `node scripts/actions-registry-check.js`
+- `node scripts/lint-footer-nav.js`
+- `node scripts/test-redactContactsInText.js`
+
+Итог:
+- creator-side список `📨 Мои заявки` теперь читается как один слой с creator-side карточкой STEP442;
+- пользователь сначала быстро видит бренд + состояние + свежесть движения, а глубину открывает только в карточке;
+- surface-area изменения осталась узкой и не задела working business paths.
+
+## STEP442 — Creator-side application dialog density reduction + signal-first reply clarity
+
+### Почему
+После STEP440–441 brand-side экраны стали заметно чище, но creator-side карточка `✉️ Диалог по заявке` всё ещё отставала по плотности и читабельности:
+- в одном блоке без сильной иерархии смешивались бренд, статус, время, длинная заявка, длинный последний ответ и длинный thread, поэтому пользователь не считывал быстро “что с этой заявкой сейчас”;
+- логика “можно ли уже писать бренду” была честной, но визуально терялась в нижнем длинном абзаце;
+- из-за этого creator-side экран выглядел слабее brand-side signal-first карточек, хотя функционально уже работал правильно.
+
+### Что сделано
+- `src/bot/bot.js`:
+  - добавлен helper `creatorBrandAppWhatNow()` для короткой строки `💡 Сейчас` по статусу creator-side заявки;
+  - creator-side карточка `renderBrandAppCardForCreator()` переведена в compact layout: header `✉️ Диалог по заявке #…` + текущий статус + бренд + время, затем короткий `💡 Сейчас`;
+  - превью `Твоя заявка` и `Последний ответ бренда` теперь клипуются, а не отдают длинный текстовый dump;
+  - thread preview сжат до последних 3 сообщений с hint `Показаны последние 3 из N`, если история длиннее;
+  - длинный операторский абзац внизу заменён на одну честную transport-note: до принятия кнопки ответа нет, после принятия сообщения идут внутри этого бота.
+- Добавлен source-level smoke `scripts/smoke-creator-app-dialog-density-contract.js` и wired в `package.json` + `scripts/preflight.js`.
+
+### Что не меняли
+- creator → brand application send / reply mutation path;
+- accept/charge core и STEP433–437 invariants;
+- brand-side application/deal cards из STEP440–441;
+- local/global navigation contracts из STEP439;
+- новые миграции / новые hot-path DB reads.
+
+### QA
+- creator-side карточка показывает compact header + `💡 Сейчас`, а не длинный dump;
+- `Твоя заявка` и `Последний ответ бренда` клипуются и при длинном тексте показывают `(сокращено)`;
+- thread preview ограничен последними 3 сообщениями и при необходимости показывает `Показаны последние 3 из N`;
+- при статусе `new` кнопки ответа нет и copy честно говорит, что она появится после принятия;
+- при статусе не `new` остаётся `💬 Написать бренду`, и copy ясно говорит, что сообщения идут внутри этого бота;
+- `npm run smoke:creator-app-dialog-density-contract` зелёный.
+
+
+## STEP441 — Brand application card density reduction + status signal hardening
+
+### Почему
+После STEP440 deal-view стал signal-first, но соседняя brand-side карточка заявки всё ещё оставалась перегруженной:
+- в одном экране смешивались decision-state, длинное сообщение, ответ бренда, длинный thread и длинная operator-note, поэтому после смены `В работу / Закрыть / Спам` глаз не считывал главное изменение сразу;
+- статус менялся через callback-toast, но сам rerender карточки не давал сильного inline-сигнала `old → new`, из-за чего создавалось ощущение “что-то обновилось, но не видно что именно”;
+- post-STEP439 local deal-context уже был правильным, но card-level UX вокруг самой заявки ещё не дотягивал до того же signal-first стандарта.
+
+### Что сделано
+- `src/bot/bot.js`:
+  - добавлен короткий helper `brandAppWhatNow()` для строки `💡 Сейчас` по внутреннему статусу заявки / pending accept / наличию deal-stage;
+  - сама карточка заявки переведена в compact layout: header `✉️ Заявка #…` + текущий статус, короткий `💡 Сейчас`, укороченные previews сообщения/ответа, и только последние 3 сообщения треда с hint `Показаны последние 3 из N`;
+  - длинная нижняя operator-note сжата до одной честной строки `Внутренний статус бренда: креатор его не видит.`;
+  - status-actions (`💬 В работу / ✅ Закрыть / ⛔ Спам`) теперь визуально помечают активное состояние через `brandAppStatusActionLabel()`, а активный статус читается как `• 💬 В работе / • ✅ Закрыто / • ⛔ Спам`;
+  - `a:brand_app_set` теперь формирует inline flash `Статус обновлён: old → new` (или `Статус уже: …`) и передаёт его в rerender, чтобы изменение не терялось внутри плотного текста.
+- Добавлен source-level smoke `scripts/smoke-brand-app-density-contract.js` и wired в `package.json` + `scripts/preflight.js`.
+
+### Что не меняли
+- core accept/charge path (`✅ Принять` и списание кредитов);
+- pending accept guard / Redis pending semantics из STEP436;
+- deal-stage mutation/local back contracts из STEP439;
+- deal-view layout и reply/template handlers из STEP440.
+
+### QA
+- карточка заявки показывает compact header + `💡 Сейчас`, а не только длинный dump;
+- thread preview ограничен последними 3 сообщениями и показывает count-hint, если история длиннее;
+- после `💬 В работу / ✅ Закрыть / ⛔ Спам` пользователь видит и callback-toast, и inline flash `old → new` в самой карточке;
+- active internal status action помечен визуально;
+- `npm run smoke:brand-app-density-contract` зелёный.
+
 
 ## STEP439 — Deals stage transition fix + context-correct navigation + clearer labels
 
@@ -4013,3 +4500,185 @@ QA
 - `node scripts/smoke-share-url-compat-contract.js` passes on the repo snapshot.
 - `package.json` exposes `npm run smoke:share-url-compat-contract`.
 - Source contains no text-only or empty-URL Telegram share links in `src/bot/bot.js`.
+
+
+## STEP451 — Creator-side application notices / receipts cleanup
+
+Что сделано
+- Creator-side service notices around brand applications cleaned to the same signal-first / one-vocabulary model as brand-side notices from STEP450.
+- Added shared creator-side helpers for notice surfaces: `creatorBrandAppDialogButtonLabel()`, `creatorBrandAppReplyButtonLabel()`, `creatorBrandAppListButtonLabel()`, `creatorBrandAppNoticeWhatNext()`, `creatorBrandAppNoticeKb()`, `buildCreatorBrandAppServiceNoticeText()`.
+- Applied the same notice layer to:
+  - brand accepted → creator notification
+  - brand replied / template reply → creator notification
+  - creator reply sent → creator local receipt / follow-up
+- Legacy accept follow-up submenu (`a:more|k:brand_app_accepted`) kept callback-compatible but now shows the cleaned creator-side labels.
+- Added source-level smoke `scripts/smoke-creator-app-notices-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Почему
+- After STEP450 the brand-side notice layer already spoke one language, but creator-side still mixed `📨 Открыть заявку`, `✉️ Диалог`, `💬 Ответить`, and freeform receipts.
+- The result was small but persistent cognitive friction exactly at the service-message layer: accept notice, new brand reply, and creator send receipt looked like three different systems.
+- STEP451 keeps the working flows intact and cleans only that vocabulary / CTA layer.
+
+Инварианты
+- No accept / charge / credits logic changes.
+- No DB schema changes.
+- No new DB reads in hot UI paths.
+- No redesign of the creator application card/list; only notice / receipt / follow-up surfaces were touched.
+
+QA
+- Creator accept notice opens the same `✉️ Диалог #...` / `💬 Написать бренду` / `📨 Мои заявки` system instead of a separate wording branch.
+- Brand manual reply and brand template reply to creator use the same notice/CTA language.
+- Creator local send receipt uses the same notice/CTA language as incoming creator-side service messages.
+- `scripts/smoke-creator-app-notices-contract.js` passes on the source snapshot.
+
+
+## STEP452 — Creator-side `💬 Написать бренду` entry / fallback / error-recovery cleanup
+
+Что сделано
+- Creator-side entry into `💬 Написать бренду` cleaned to the same one-vocabulary model as STEP451 creator notices.
+- Added shared chat-surface helpers: `creatorBrandAppChatRecoveryKb()`, `buildCreatorBrandAppChatPromptText()`, `buildCreatorBrandAppChatRecoveryText()`.
+- Applied that same language to:
+  - normal prompt when creator opens `💬 Написать бренду`
+  - degraded fallback when input mode cannot be opened
+  - recovery replies for missing id, too short / too long message, rate-limit, not found / no access, and not-yet-accepted guard
+- Added source-level smoke `scripts/smoke-creator-app-chat-entrypoints-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Почему
+- After STEP451 the creator-side notice layer already spoke one system, but the actual entry into `💬 Написать бренду` still diverged: generic “не удалось открыть чат”, separate degraded copy, and validation/recovery replies with no shared CTA model.
+- The result was local friction exactly at the moment where the creator tries to send a message: the dialog card, service notices, and chat-open prompt still felt like adjacent but different systems.
+- STEP452 keeps the working send path intact and cleans only the entry / fallback / recovery layer around it.
+
+Инварианты
+- No accept / charge / credits logic changes.
+- No DB schema changes.
+- No new DB reads in hot UI paths.
+- No redesign of creator application card/list/notice surfaces outside this chat-open layer.
+
+QA
+- Opening `💬 Написать бренду` now shows the same `✉️ Диалог #...` / `📨 Мои заявки` vocabulary as the cleaned creator-side notices.
+- If input mode cannot be opened, degraded fallback keeps creator in the same local application context instead of switching to generic wording.
+- Missing id / validation / rate-limit / not-found / no-access / not-yet-accepted recovery replies use the same vocabulary and CTA family.
+- `scripts/smoke-creator-app-chat-entrypoints-contract.js` passes on the source snapshot.
+
+
+## STEP453 — Brand-side `✍️ Ответить креатору` entry / fallback / error-recovery cleanup
+
+Что сделано
+- Brand-side entry into `✍️ Ответить креатору` cleaned to the same one-vocabulary model as STEP452 creator-side `💬 Написать бренду`.
+- Added shared reply-surface helpers: `brandAppReplyButtonLabel()`, `brandAppReplyRecoveryKb()`, `buildBrandAppReplyPromptText()`, `buildBrandAppReplyRecoveryText()`.
+- Applied that same language to:
+  - normal prompt when brand opens `✍️ Ответить` from application card
+  - normal prompt when brand opens `✍️ Ответить` from local deal view
+  - degraded fallback when input mode cannot be opened
+  - recovery replies for missing id, too short / too long reply, rate-limit, not found / no access, not-yet-accepted guard, missing creator TG id, and open-error fallback handlers
+- Added source-level smoke `scripts/smoke-brand-app-reply-entrypoints-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Почему
+- After STEP452 the creator-side input layer already spoke one system, but brand-side `✍️ Ответить` still diverged: generic prompt copy, separate degraded fallback, and validation/recovery replies with no shared CTA model.
+- The result was local friction exactly at the moment where the brand tries to answer: application card, deal view, and reply-open / recovery surfaces still felt like adjacent but different systems.
+- STEP453 keeps the working send path intact and cleans only the entry / fallback / recovery layer around it.
+
+Инварианты
+- No accept / charge / credits logic changes.
+- No DB schema changes.
+- No new DB reads in hot UI paths.
+- No redesign of brand-side application/deal cards outside this reply-open layer.
+
+QA
+- Opening `✍️ Ответить` from application card now shows the same local `✉️ Заявка #...` / `📝 Заявки` vocabulary as the cleaned brand-side application surfaces.
+- Opening `✍️ Ответить` from local deal view now stays in the same local deal-context with `📌 Стадия сделки` / `✉️ Открыть заявку` follow-ups.
+- Missing id / validation / rate-limit / not-found / no-access / not-yet-accepted / no-creator-TG recovery replies use the same vocabulary and CTA family.
+- `scripts/smoke-brand-app-reply-entrypoints-contract.js` passes on the source snapshot.
+
+## STEP454 — Empty / no-history / first-message states cleanup
+- Application / deal / dialog cards now keep the same `💬 Последние сообщения` section even when the history is still empty.
+- Added shared empty-state helpers in `src/bot/bot.js` for the currently cleaned surfaces:
+  - `brandAppThreadEmptyStateText()`
+  - `creatorBrandAppThreadEmptyStateText()`
+  - `creatorLeadThreadEmptyStateText()`
+  - `brandLeadThreadEmptyStateText()`
+- The goal is not new logic, but honest first-state guidance:
+  - brand-side application card explains what to do before the first message
+  - local deal view explains how to send the first message/template
+  - creator-side application dialog explains accepted vs not-yet-accepted empty history
+  - creator/brand lead dialogs explain how the first reply appears in the same screen
+- Added source-level smoke `scripts/smoke-empty-state-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+- Scope is empty-state copy + CTA clarity only. No accept/charge semantics, no DB schema changes, no new hot-path DB reads.
+
+
+
+## STEP455 — Footer / back / list-return consistency pass
+
+Что сделано
+- Добавлен узкий consistency-pass по footer/back/list-return на уже вычищенных application/deal/dialog экранах.
+- В `src/bot/bot.js` добавлены shared helpers:
+  - `brandAppListReturnButtonLabel()`
+  - `brandDealsListReturnButtonLabel()`
+  - `creatorBrandAppListReturnButtonLabel()`
+- Применено в ключевых экранах:
+  - brand-side `✉️ Заявка #...` footer теперь возвращает через `📨 К заявкам`
+  - brand-side local `📌 Стадия сделки` footer теперь возвращает через `📌 К сделкам`, а при локальном открытии из заявки — через конкретную `✉️ Заявка #...`
+  - creator-side `✉️ Диалог #...` по заявке теперь возвращает через `📨 К заявкам`
+  - creator-side `💬 Диалог по заявке #...` в `📨 Заявки брендов` теперь возвращает через `📨 К заявкам`
+  - brand-side `💬 Диалог #...` в lead-flow теперь тоже получил явный `📨 К заявкам` возврат вместо только `📋 Меню / 🏠 Home`
+- Добавлен source-level smoke `scripts/smoke-footer-back-consistency-contract.js`, wired в `package.json` и `scripts/preflight.js`.
+
+Почему
+- После STEP440–454 основные экраны уже стали signal-first, но footer-layer ещё говорил разным языком: где-то generic `⬅️ Назад`, где-то `⬅️ Мои заявки`, где-то вообще только `📋 Меню / 🏠 Home`.
+- Это не ломало логику, но создавало ощущение, что соседние экраны принадлежат разным системам.
+- STEP455 не меняет маршруты и не делает redesign, а лишь делает возвраты более явными и предсказуемыми: назад не "вообще", а в конкретный список или карточку.
+
+Инварианты
+- No accept / charge / credits logic changes.
+- No DB schema changes.
+- No new hot-path DB reads.
+- No mutation-layer changes.
+
+QA
+- Brand application card footer uses `📨 К заявкам` instead of generic `⬅️ Назад`.
+- Brand deal view footer uses `📌 К сделкам`, and in local application context uses concrete `✉️ Заявка #...`.
+- Creator application dialog footer uses `📨 К заявкам`.
+- Creator lead dialog footer uses `📨 К заявкам`.
+- Brand lead dialog now has contextual `📨 К заявкам` return path plus `📋 Меню / 🏠 Home`.
+- `scripts/smoke-footer-back-consistency-contract.js` passes on the source snapshot.
+
+## STEP456 — Runtime sweep + QA-contract refresh
+
+Что сделано
+- Выполнен широкий snapshot-level runtime sweep по уже очищенной цепочке без product-runtime изменений:
+  - creator → brand application
+  - accept / post-accept application screens
+  - reply туда/обратно
+  - local deal stage / local-global back-context
+  - creator leads / brand leads
+  - contact unlock / follow-ups
+  - empty / no-history / first-message states
+  - footer / list-return consistency
+- Прогнаны source-level проверки на STEP455 snapshot: syntax checks, application/deal/lead smokes, notice/fallback smokes, empty-state / footer consistency, registry/lint/redact/public-contact/redis/portable-path gates.
+- Результат sweep: все targeted snapshot/runtime checks зелёные, кроме полного `scripts/preflight.js`, который fail-fast останавливается только потому, что uploaded snapshot bare и без локальных `node_modules`.
+- В ходе sweep выявлены 4 stale smoke contracts, дававшие ложный red после vocabulary/helper cleanup STEP439–455. Обновлены без product behavior changes:
+  - `scripts/smoke-brand-inbox-accept-contract.js`
+  - `scripts/smoke-contacts-brand-pass-contract.js`
+  - `scripts/smoke-what-next-backnav-contract.js`
+  - `scripts/smoke-brand-app-ops-copy-contract.js`
+- Добавлен операторский отчёт `docs/ops/02_RUNTIME_SWEEP_STEP456.md` с разделением:
+  - что подтверждено на snapshot сейчас
+  - что ещё требует live Telegram verification после деплоя
+
+Почему
+- После STEP439–455 UI/runtime vocabulary и helper-layer сильно обновились, но часть старых smoke scripts всё ещё ожидала старые literal labels/markers (`💬 Написать бренду`, direct contact-unlock literal, pre-helper notif marker, старые back/open literals).
+- Эти падения выглядели как runtime regression, хотя по факту были QA-contract drift после легитимной очистки UI/entry/follow-up layers.
+- STEP456 закрывает именно этот drift: продукт не меняется, но QA/runtime sweep снова становится честным и оператор-friendly.
+
+Инварианты
+- No accept / charge / credits logic changes.
+- No mutation-layer changes.
+- No DB schema changes.
+- No new hot-path DB reads.
+- No IA redesign.
+
+QA
+- Snapshot-level runtime sweep: все targeted checks проходят.
+- Единственный remaining red — `scripts/preflight.js`, и он объясним/ожидаем: bare checkout without `node_modules`.
+- True live/runtime still must be confirmed post-deploy inside Telegram for networked/operator paths (accept click, bidirectional replies, local deal stage transitions, contact unlock receipts, footer returns, empty states in actual chat rendering).
+
