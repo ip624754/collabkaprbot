@@ -116,9 +116,11 @@ assert.ok(idxFounderSale >= 0 && idxFounderSale < idxGate, 'fs_* payload branch 
 assert.ok(idxGate >= 0 && idxGate < idxRoleFlags, 'role gate must execute before HomeHub role flags load');
 
 // Role selection screen contract.
-assert.ok(renderRoleSelectionSrc.includes('❓ <b>Ты бренд или креатор?</b>'), 'Role gate must keep explicit question copy');
-assert.ok(renderRoleSelectionSrc.includes('Выбери роль ниже — я настрою меню под тебя.'), 'Role gate must keep short onboarding copy');
-assert.ok(renderRoleSelectionSrc.includes('<i>Роль можно переключить позже на «🏠 Home».'), 'Role gate must keep later-switch hint');
+assert.ok(renderRoleSelectionSrc.includes('🏠 <b>Добро пожаловать</b>'), 'Role gate must keep welcome heading');
+assert.ok(renderRoleSelectionSrc.includes('Выбери, как хочешь работать:'), 'Role gate must keep short first-run split copy');
+assert.ok(renderRoleSelectionSrc.includes('✨ Creator / канал — офферы, Inbox и заявки брендов через твои каналы.'), 'Role gate must explain creator path briefly');
+assert.ok(renderRoleSelectionSrc.includes('🏷 Бренд — лента креаторов, Inbox, заявки и фильтры.'), 'Role gate must explain brand path briefly');
+assert.ok(renderRoleSelectionSrc.includes('<i>Режим можно поменять позже на «🏠 Home».</i>'), 'Role gate must keep later-switch hint');
 assert.ok(renderRoleSelectionSrc.includes(".text('🏢 Бренд / Заказчик', 'a:home_mode|m:brand')"), 'Role gate must keep brand pick button');
 assert.ok(renderRoleSelectionSrc.includes(".text('🤳 Креатор / Блогер', 'a:home_mode|m:creator')"), 'Role gate must keep creator pick button');
 assert.ok(renderRoleSelectionSrc.includes(".text('🔗 Поделиться ботом', 'a:share');"), 'Role gate must keep share button');
