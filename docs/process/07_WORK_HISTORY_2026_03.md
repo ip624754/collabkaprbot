@@ -4669,22 +4669,48 @@ QA
 - `scripts/smoke-creator-brands-home-open-contract.js` проходит на source snapshot.
 
 
-## STEP458 — brand application accept SQL hardening + preflight wiring
+## STEP458 — Brand application accept SQL typing hardening
 
-Дата: 2026-03-14
+Что сделано
+- Добили accept-family SQL typing в brand applications: оставшиеся JSONB mutation paths больше не оставляют PostgreSQL-параметры без явного типа в live accept flow.
+- Узко усилили runtime diagnostics вокруг `a:brand_app_accept`, чтобы в мониторе/логах следующий сбой не схлопывался в безликий `db_error` без контекста.
+- Подключили dedicated source-smoke для accept SQL contract в обязательный preflight, чтобы именно этот класс регрессии перестал быть «подготовлен, но не включён».
 
-Что было найдено
-- live `/api/health` показывал `mon.accept.last_status=error`, `last_error=db_error`, а retry breadcrumb всё ещё держал `could_not_determine_data_type_of_parameter_2`;
-- в `src/db/queries.js` и `markBrandApplicationAccepted()`, и `acceptBrandApplicationWithCharge()` всё ещё писали `accepted_by_user_id` в `jsonb_build_object(...)` без явного типа;
-- рядом уже существовал узкий smoke `scripts/smoke-brand-app-accept-sql-contract.js`, но он не был подключён в `package.json`/`scripts/preflight.js`, поэтому этот регресс не блокировал preflight.
+Почему
+- Live `/api/health` уже показывал, что accept click доходит до runtime, но падает внутри DB layer: `mon.accept.last_status=error`, `mon.retry.last_error=could_not_determine_data_type_of_parameter_2`.
+- Значит проблема была не в Telegram button path и не в доставке заявки, а в хвосте accept SQL family после STEP437.
 
-Что изменено
-- `markBrandApplicationAccepted()` теперь пишет `'accepted_by_user_id', $2::bigint`;
-- `acceptBrandApplicationWithCharge()` теперь пишет `'accepted_by_user_id', $2::bigint` и `'charged_cost', $3::int` внутри `jsonb_build_object(...)`;
-- в `src/bot/bot.js` добавлены узкие runtime diagnostics в catch-блоки accept click-path (`app-load failed` / `accept failed`) с `appId`, actor/brand ids, `e.code`, `e.message`, `cid`;
-- `scripts/smoke-brand-app-accept-sql-contract.js` подключён в `package.json` и `scripts/preflight.js`, чтобы типизация accept-SQL стала обязательным smoke-контрактом.
+Инварианты
+- No change to accept/charge business semantics.
+- No new DB reads in hot UI paths.
+- Credits continue to charge exactly once on the successful accept path.
 
-Почему это важно
-- это тот же класс PostgreSQL-bug, который уже бил stage-mutation path: нетипизированный параметр внутри `jsonb_build_object(...)`;
-- теперь accept-path закрыт не только фиксом, но и регрессионным стоп-контрактом в preflight;
-- prod triage по accept больше не прячется за голым `db_error` без контекста.
+QA
+- `✅ Принять` больше не должен оставлять заявку в `new` из-за PG typing error.
+- `/api/health` больше не должен показывать новый `could_not_determine_data_type_of_parameter_2` после успешного accept.
+- Source-smoke для accept SQL contract проходит в preflight.
+
+## STEP459 — Brand quick-reply preview dedupe cleanup
+
+Что сделано
+- Второй экран quick replies после `✅ Принял — дальше` очищен до реального preview/confirm step: duplicate template-switch row удалён из brand application preview.
+- Preview теперь явно показывает строку `Шаблон: …`, чтобы бренд видел, какой шаблон выбран, не возвращая второй экран к роли «ещё один picker».
+- На confirm-экране оставлены только действия по смыслу: `📨 Отправить`, `🔁 Выбрать другой`, `✍️ Ответить`, плюс стандартный footer.
+- Добавлен source-smoke `scripts/smoke-brand-app-preview-dedupe-contract.js`, wired в `package.json` и `scripts/preflight.js`.
+
+Почему
+- Когда preview-экран снова показывал template-switch controls, второй экран ощущался как дубль первого и размывал роли flow `выбор шаблона → подтверждение`.
+- Для Telegram-native UX здесь чище один выборочный экран и один confirm-экран, чем повторный picker внутри preview.
+
+Инварианты
+- Сам preview-step сохранён.
+- `📨 Отправить` остаётся единственным explicit send action.
+- `🔁 Выбрать другой` возвращает в template picker, а не меняет шаблон прямо на confirm-экране.
+- No accept / charge / deals / callback payload changes.
+- No new DB reads in hot UI paths.
+
+QA
+- После выбора quick template бренд попадает в preview как и раньше.
+- На preview-экране больше нет duplicate template-switch rows.
+- Видна строка `Шаблон: ...` для текущего quick reply.
+- `📨 Отправить`, `🔁 Выбрать другой`, `✍️ Ответить` и footer работают как раньше.
