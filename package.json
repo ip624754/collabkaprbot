@@ -22,8 +22,8 @@
     "lint:redis-exports": "node scripts/lint-redis-exports.js",
     "lint:redis-ttl": "node scripts/lint-redis-ttl.js",
     "migrate": "node migrations/run.js",
-    "preflight": "node scripts/preflight.js",
-    "qa:fast": "npm run preflight",
+    "preflight": "node scripts/preflight.js full",
+    "qa:fast": "npm run preflight:source",
     "smoke:admin-ops-contract": "node scripts/smoke-admin-ops-contract.js",
     "smoke:admin-comms-contract": "node scripts/smoke-admin-comms-contract.js",
     "smoke:admin-system-contract": "node scripts/smoke-admin-system-contract.js",
@@ -79,7 +79,9 @@
     "smoke:footer-back-consistency-contract": "node scripts/smoke-footer-back-consistency-contract.js",
     "smoke:creator-brands-home-open-contract": "node scripts/smoke-creator-brands-home-open-contract.js",
     "smoke:creator-app-reply-completion-contract": "node scripts/smoke-creator-app-reply-completion-contract.js",
-    "smoke:creator-app-reply-runtime-guard-contract": "node scripts/smoke-creator-app-reply-runtime-guard-contract.js"
+    "smoke:creator-app-reply-runtime-guard-contract": "node scripts/smoke-creator-app-reply-runtime-guard-contract.js",
+    "preflight:source": "node scripts/preflight.js source",
+    "preflight:deps": "node scripts/preflight.js deps"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
