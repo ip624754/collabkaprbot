@@ -2228,6 +2228,17 @@ async function safeBrandApplications(primaryFn, fallbackFn) {
   }
 }
 
+async function safeBrandManagers(primaryFn, fallbackFn) {
+  try {
+    return await primaryFn();
+  } catch (e) {
+    if (isMissingRelationError(e, 'brand_managers')) {
+      return await fallbackFn();
+    }
+    throw e;
+  }
+}
+
 
 // Non-fatal write wrappers: keep UX responsive even if DB write fails (we still log).
 function errInfo(e) {
@@ -12049,7 +12060,7 @@ function buildCreatorBrandAppChatPromptText({ appId = 0, brandName = '' } = {}) 
 
   return `✍️ <b>Ответ бренду по заявке #${id}</b>
 
-${brandLine}💡 <b>Сейчас:</b> Напиши одно сообщение — я добавлю его в «${escapeHtml(dialogLabel)}» и доставлю бренду внутри этого бота. После отправки я сразу верну тебя в этот диалог.
+${brandLine}💡 <b>Сейчас:</b> Напиши обычное сообщение в поле ввода Telegram снизу и отправь его — я добавлю его в «${escapeHtml(dialogLabel)}» и доставлю бренду внутри этого бота. После отправки я сразу верну тебя в этот диалог.
 
 <i>Если передумаешь — нажми «${escapeHtml(dialogBackLabel)}» или вернись в «${escapeHtml(listLabel)}».</i>`;
 }
