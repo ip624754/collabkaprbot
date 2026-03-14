@@ -74,7 +74,8 @@
     "smoke:creator-app-chat-entrypoints-contract": "node scripts/smoke-creator-app-chat-entrypoints-contract.js",
     "smoke:brand-app-reply-entrypoints-contract": "node scripts/smoke-brand-app-reply-entrypoints-contract.js",
     "smoke:empty-state-contract": "node scripts/smoke-empty-state-contract.js",
-    "smoke:footer-back-consistency-contract": "node scripts/smoke-footer-back-consistency-contract.js"
+    "smoke:footer-back-consistency-contract": "node scripts/smoke-footer-back-consistency-contract.js",
+    "smoke:creator-brands-home-open-contract": "node scripts/smoke-creator-brands-home-open-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
