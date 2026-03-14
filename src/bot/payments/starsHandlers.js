@@ -655,7 +655,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
   🎫 кредиты: ${fmtCredits(newBalance)}
   
   Как тратить кредиты:
-  • 💬 Интро = новый диалог: ${introCost} кредит(ов)
+  • 💬 Новый диалог: ${introCost} кредит(ов)
   • 🔓 Контакты на витрине: ${CONTACT_UNLOCK_COST <= 0 ? 'бесплатно' : (CONTACT_UNLOCK_COST + ' кредит(ов)')} → ${CONTACT_UNLOCK_TTL_DAYS} дней
   • Переписка внутри диалога — бесплатно
   
