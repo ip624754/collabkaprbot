@@ -132,6 +132,18 @@ export default async function handler(_req, res) {
     };
   }
 
+  function parseAgeSecFromIso(ts) {
+    const raw = ts ? String(ts) : '';
+    if (!raw) return null;
+    try {
+      const ms = Date.parse(raw);
+      if (!Number.isFinite(ms) || ms <= 0) return null;
+      return Math.max(0, Math.round((Date.now() - ms) / 1000));
+    } catch {
+      return null;
+    }
+  }
+
   function makeBroadcastBase() {
     return {
       cooldown_until: null,
@@ -587,10 +599,16 @@ try {
           if (snap && typeof snap === 'object') {
             const bid = Number(snap.broadcast_id ?? snap.broadcastId) || null;
             const pc = Number(snap.pending_count ?? snap.pendingCount ?? snap.pending) || 0;
+            const ts = snap.ts || null;
+            const ageSec = parseAgeSecFromIso(ts);
+            const staleAfterSec = Math.max(60, Number(snap.stale_after_sec ?? snap.staleAfterSec) || 10 * 60);
             broadcast.pending_deliveries = {
-              ts: snap.ts || null,
+              ts,
               broadcast_id: bid,
               pending_count: pc,
+              age_sec: Number.isFinite(ageSec) ? ageSec : null,
+              stale_after_sec: staleAfterSec,
+              stale: Number.isFinite(ageSec) ? ageSec > staleAfterSec : false,
             };
           } else {
             broadcast.pending_deliveries = null;
