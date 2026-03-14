@@ -146,8 +146,8 @@ Meta начала:
 
 ## 6) Где смотреть код
 
-- OAuth endpoints: `api/ig/oauth/*`
-- крипто/токены: `src/lib/*` (внутри проекта)
+- Parked OAuth endpoints: `_ig_oauth_parked/api/ig/oauth/*`
+- Parked helper libs: `_ig_oauth_parked/lib/*`
 - bot UI: `src/bot/bot.js` (экраны профиля)
 - модель контактов/paywall: `docs/20_CONTACTS_MODEL.md`
 
@@ -156,7 +156,7 @@ Meta начала:
 ## 4) Что нужно, чтобы вернуть IG OAuth
 
 Минимальный план возврата:
-- вернуть `api/ig/oauth/start|callback|status|disconnect` в deploy surface,
+- вернуть `_ig_oauth_parked/api/ig/oauth/start|callback|status|disconnect` в deploy surface,
 - убедиться, что укладываемся в лимит функций (или перейти на Pro / объединить роуты),
 - заново проверить `IG_OAUTH_*`, `IG_TOKEN_ENC_KEY`, `PUBLIC_BASE_URL`,
 - прогнать ручной smoke Meta flow.
