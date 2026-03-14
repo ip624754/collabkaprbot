@@ -250,6 +250,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin DM templates contract", "smoke:admin-dm-templates-contract"],
   ["Preflight (source-only): admin notice composer/runtime contract", "smoke:admin-notice-contract"],
   ["Preflight (source-only): broadcast local DB fuse contract", "smoke:broadcast-local-db-fuse"],
+  ["Preflight (source-only): broadcast 429 atomicity contract", "smoke:broadcast-429-atomicity-contract"],
   ["Preflight (source-only): payments autoheal chain contract", "smoke:payments-autoheal-chain-contract"],
   ["Preflight (source-only): start role-gate contract", "smoke:start-role-gate-contract"],
   ["Preflight (source-only): brand application accept SQL contract", "smoke:brand-app-accept-sql-contract"],
