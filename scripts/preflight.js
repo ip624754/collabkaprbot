@@ -178,6 +178,13 @@ runNpm("smoke:brand-app-notices-contract");
 logHeader("Preflight: creator-side brand-app notices contract");
 runNpm("smoke:creator-app-notices-contract");
 
+logHeader("Preflight: creator-side brand-app chat entry/fallback contract");
+runNpm("smoke:creator-app-chat-entrypoints-contract");
+runNpm("smoke:brand-app-reply-entrypoints-contract");
+
+logHeader("Preflight: empty / no-history / first-message states contract");
+runNpm("smoke:empty-state-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
