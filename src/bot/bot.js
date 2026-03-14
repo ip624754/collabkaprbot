@@ -29091,7 +29091,10 @@ if (p.a === 'a:match_home') {
       } else {
         const ts = st.snap.ts ? `<code>${escapeHtml(String(st.snap.ts).slice(0, 19))}</code>` : '—';
         const bid = st.snap.broadcast_id ? `<b>#${st.snap.broadcast_id}</b>` : '—';
-        text += `Текущий snapshot: broadcast ${bid}; pending <b>${st.snap.pending_count}</b>; ts ${ts}\n`;
+        const ageSec = Number.isFinite(st.snap.age_sec) ? Number(st.snap.age_sec) : null;
+        const ageTail = ageSec !== null ? `; age ~<b>${fmtWait(ageSec)}</b>` : '';
+        const staleTail = st.snap.stale ? ' <b>⚠️ STALE</b>' : '';
+        text += `Текущий snapshot: broadcast ${bid}; pending <b>${st.snap.pending_count}</b>; ts ${ts}${ageTail}${staleTail}\n`;
       }
       const kb = new InlineKeyboard()
         .text('✅ Очистить snapshot', 'a:admin_ops_pending_clear_do')
@@ -36353,6 +36356,18 @@ async function renderAdminHome(ctx) {
 }
 
 
+function adminParseIsoAgeSec(ts) {
+  const raw = ts ? String(ts) : '';
+  if (!raw) return null;
+  try {
+    const ms = Date.parse(raw);
+    if (!Number.isFinite(ms) || ms <= 0) return null;
+    return Math.max(0, Math.round((Date.now() - ms) / 1000));
+  } catch {
+    return null;
+  }
+}
+
 async function adminGetBroadcastPendingSnapshot() {
   try {
     const snapRaw = await redis.get(k(['broadcast', 'pending_deliveries']));
@@ -36362,14 +36377,20 @@ async function adminGetBroadcastPendingSnapshot() {
       try { snap = JSON.parse(snapRaw); } catch { snap = null; }
     }
     if (!snap || typeof snap !== 'object') return { ok: true, snap: null };
+    const ts = snap.ts ? String(snap.ts) : '';
     const bid = Number(snap.broadcast_id ?? snap.broadcastId) || 0;
     const pc = Number(snap.pending_count ?? snap.pendingCount ?? snap.pending) || 0;
+    const ageSec = adminParseIsoAgeSec(ts);
+    const staleAfterSec = Math.max(60, Number(snap.stale_after_sec ?? snap.staleAfterSec) || 10 * 60);
     return {
       ok: true,
       snap: {
-        ts: snap.ts ? String(snap.ts) : '',
+        ts,
         broadcast_id: bid > 0 ? bid : 0,
         pending_count: pc,
+        age_sec: Number.isFinite(ageSec) ? ageSec : null,
+        stale_after_sec: staleAfterSec,
+        stale: Number.isFinite(ageSec) ? ageSec > staleAfterSec : false,
       },
     };
   } catch (e) {

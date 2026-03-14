@@ -1,5 +1,13 @@
 import { escapeHtml, fmtTs } from './helpers.js';
 
+function fmtRoughAge(sec) {
+  const n = Math.max(0, Number(sec) || 0);
+  if (n >= 24 * 3600) return `${Math.max(1, Math.round(n / (24 * 3600)))}d`;
+  if (n >= 3600) return `${Math.max(1, Math.round(n / 3600))}h`;
+  if (n >= 60) return `${Math.max(1, Math.round(n / 60))}m`;
+  return `${n}s`;
+}
+
 function appendOpsReasonBlock(text, cfg = {}) {
   const cnt = Number(cfg.count) || 0;
   const last = cfg.lastAt ? String(cfg.lastAt) : '';
@@ -118,7 +126,20 @@ export function buildAdminOpsText({
         : '—';
       const bid = pendingSnapshot.snap.broadcast_id ? `<b>#${pendingSnapshot.snap.broadcast_id}</b>` : '—';
       const pc = Number(pendingSnapshot.snap.pending_count) || 0;
-      text += `• broadcast: ${bid}; pending: <b>${pc}</b>; ts: ${ts}\n\n`;
+      const ageSec = Number.isFinite(Number(pendingSnapshot.snap.age_sec)) ? Number(pendingSnapshot.snap.age_sec) : null;
+      const staleAfterSec = Number.isFinite(Number(pendingSnapshot.snap.stale_after_sec))
+        ? Number(pendingSnapshot.snap.stale_after_sec)
+        : null;
+      const stale = !!pendingSnapshot.snap.stale;
+      const ageTail = ageSec !== null ? `; age: ~<b>${escapeHtml(fmtRoughAge(ageSec))}</b>` : '';
+      const staleTail = stale && staleAfterSec !== null
+        ? `; 🚨 stale &gt; ~<b>${escapeHtml(fmtRoughAge(staleAfterSec))}</b>`
+        : '';
+            text += `• broadcast: ${bid}; pending: <b>${pc}</b>; ts: ${ts}${ageTail}${staleTail}\n`;
+      if (stale) {
+        text += '• 🚨 snapshot выглядит stale — проверь <b>cron broadcast_tick</b>, <b>QStash deliver</b> и deferred retry windows; очищай snapshot только если реальный контур уже quiet.\n';
+      }
+      text += '\n';
     }
   }
 

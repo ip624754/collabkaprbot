@@ -63,6 +63,7 @@ const NOTIFY_TIMEOUT_MS = 5000; // best-effort Telegram notifications in cron
 // If Redis is unavailable, we fall back to a DB fuse stored on the broadcast row.
 const BC_COOLDOWN_TTL_SEC = 24 * 60 * 60; // keep state for ops visibility (bounded)
 const BC_PENDING_SNAPSHOT_TTL_SEC = 30 * 60; // 30 min snapshot for /api/health (Redis-only)
+const BC_PENDING_SNAPSHOT_STALE_AFTER_SEC = 10 * 60; // operator warning threshold; visibility only
 const BC_COOLDOWN_UNTIL_KEY = k(['broadcast', 'cooldown_until']);
 const BC_COOLDOWN_BROADCAST_ID_KEY = k(['broadcast', 'cooldown_broadcast_id']);
 const BC_COOLDOWN_LAST_429_AT_KEY = k(['broadcast', 'last_429_at']);
@@ -305,6 +306,7 @@ async function writeBroadcastPendingSnapshot(broadcastId, pendingCount) {
         ts: new Date().toISOString(),
         broadcast_id: Number(broadcastId) || null,
         pending_count: Number(pendingCount) || 0,
+        stale_after_sec: BC_PENDING_SNAPSHOT_STALE_AFTER_SEC,
       },
       { ex: BC_PENDING_SNAPSHOT_TTL_SEC }
     );
