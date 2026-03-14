@@ -4667,3 +4667,24 @@ QA
 - При slow-path loader всё ещё появляется, но только по факту задержки.
 - При timeout/error fallback остаётся прежний `⚠️ Каталог брендов отвечает слишком долго...` экран.
 - `scripts/smoke-creator-brands-home-open-contract.js` проходит на source snapshot.
+
+
+## STEP458 — brand application accept SQL hardening + preflight wiring
+
+Дата: 2026-03-14
+
+Что было найдено
+- live `/api/health` показывал `mon.accept.last_status=error`, `last_error=db_error`, а retry breadcrumb всё ещё держал `could_not_determine_data_type_of_parameter_2`;
+- в `src/db/queries.js` и `markBrandApplicationAccepted()`, и `acceptBrandApplicationWithCharge()` всё ещё писали `accepted_by_user_id` в `jsonb_build_object(...)` без явного типа;
+- рядом уже существовал узкий smoke `scripts/smoke-brand-app-accept-sql-contract.js`, но он не был подключён в `package.json`/`scripts/preflight.js`, поэтому этот регресс не блокировал preflight.
+
+Что изменено
+- `markBrandApplicationAccepted()` теперь пишет `'accepted_by_user_id', $2::bigint`;
+- `acceptBrandApplicationWithCharge()` теперь пишет `'accepted_by_user_id', $2::bigint` и `'charged_cost', $3::int` внутри `jsonb_build_object(...)`;
+- в `src/bot/bot.js` добавлены узкие runtime diagnostics в catch-блоки accept click-path (`app-load failed` / `accept failed`) с `appId`, actor/brand ids, `e.code`, `e.message`, `cid`;
+- `scripts/smoke-brand-app-accept-sql-contract.js` подключён в `package.json` и `scripts/preflight.js`, чтобы типизация accept-SQL стала обязательным smoke-контрактом.
+
+Почему это важно
+- это тот же класс PostgreSQL-bug, который уже бил stage-mutation path: нетипизированный параметр внутри `jsonb_build_object(...)`;
+- теперь accept-path закрыт не только фиксом, но и регрессионным стоп-контрактом в preflight;
+- prod triage по accept больше не прячется за голым `db_error` без контекста.
