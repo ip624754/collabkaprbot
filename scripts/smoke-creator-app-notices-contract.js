@@ -42,11 +42,11 @@ assert.ok(
     botSrc.includes("const outKb = creatorBrandAppNoticeKb(appId, brandUserId, {") &&
     botSrc.includes("const outKb = creatorBrandAppNoticeKb(app.id, brandUserId, {") &&
     botSrc.includes("kind: 'reply'") &&
-    botSrc.includes("kind: 'sent'") &&
+    botSrc.includes("const deliveryKind = (targetsMap.size === 0)") &&
+    botSrc.includes("return renderBrandAppCardForCreator(ctx, u.id, appId, {") &&
     botSrc.includes("deliveryLine: ackLine") &&
-    botSrc.includes("reply_markup: creatorBrandAppNoticeKb(appId, brandUserId, {") &&
     botSrc.includes(".text(creatorBrandAppDialogButtonLabel(appId), `a:brand_app_card|id:${appId}`)"),
-  'Expected creator-side reply notifications, template notifications, and dialog receipts to reuse the same centralized notice/CTA language'
+  'Expected creator-side reply notifications to keep centralized notice language, while creator send completion now returns into the same dialog with delivery-aware receipt state'
 );
 
 console.log('✅ smoke creator-side brand-app notices contract OK');

@@ -181,6 +181,9 @@ runNpm("smoke:creator-app-notices-contract");
 logHeader("Preflight: creator-side brand-app chat entry/fallback contract");
 runNpm("smoke:creator-app-chat-entrypoints-contract");
 
+logHeader("Preflight: creator-side brand-app reply completion contract");
+runNpm("smoke:creator-app-reply-completion-contract");
+
 logHeader("Preflight: creator-side brand-app local-context contract");
 runNpm("smoke:creator-app-local-context-contract");
 runNpm("smoke:brand-app-reply-entrypoints-contract");
