@@ -16,6 +16,10 @@ const incrWithExpire = typeof R.incrWithExpire === 'function' ? R.incrWithExpire
 // Redis key: short-lived runtime override for fallback apply.
 // Value is an object; TTL is set via EX.
 const PAY_FALLBACK_RT_KEY = k(['sys', 'pay_fallback_apply']);
+const PAY_FALLBACK_RT_MIN_TTL_SEC = 5 * 60;
+const PAY_FALLBACK_RT_MAX_TTL_SEC = 24 * 60 * 60;
+const PAY_FALLBACK_RT_ALERT_REPEAT_SEC = 2 * 60 * 60;
+const PAY_FALLBACK_RT_STALE_GRACE_SEC = 5 * 60;
 
 // Observability: payload signature issues (Redis-only counters; shown in /api/health)
 const PAY_PAYLOAD_ISSUE_TTL_SEC = 14 * 24 * 60 * 60; // 14 days
@@ -113,8 +117,37 @@ function toInt(v, d = 0) {
 
 function clampTtlSec(ttlSec) {
   const n = toInt(ttlSec, 0);
-  // 5 min .. 7 days (operator-only)
-  return Math.max(5 * 60, Math.min(n || 0, 7 * 24 * 60 * 60));
+  // 5 min .. 24 h (operator-only)
+  return Math.max(PAY_FALLBACK_RT_MIN_TTL_SEC, Math.min(n || 0, PAY_FALLBACK_RT_MAX_TTL_SEC));
+}
+
+function parseIsoMs(v) {
+  if (!v) return null;
+  try {
+    const ms = Date.parse(String(v));
+    return Number.isFinite(ms) && ms > 0 ? ms : null;
+  } catch {
+    return null;
+  }
+}
+
+function roundHours1(n) {
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 10) / 10;
+}
+
+function bucket2h(nowMs = Date.now()) {
+  return Math.floor(nowMs / (PAY_FALLBACK_RT_ALERT_REPEAT_SEC * 1000));
+}
+
+function heartbeatKey(bucket) {
+  return k(['ops', 'payments', 'fallback_apply', 'heartbeat', String(bucket || 0)]);
+}
+
+function formatHoursTail(ageSec) {
+  if (!Number.isFinite(ageSec) || ageSec < 0) return '—';
+  const h = roundHours1(ageSec / 3600);
+  return Number.isFinite(h) ? `${String(h)}h` : '—';
 }
 
 function normalizeObj(v) {
@@ -146,13 +179,29 @@ export async function getPaymentsFallbackRuntime() {
     }
 
     const enabled = !!o.enabled;
+    const at = o.at ? String(o.at) : null;
     const expAt = o.expAt ? String(o.expAt) : null;
+    const atMs = parseIsoMs(at);
+    const expMs = parseIsoMs(expAt);
+
+    let ageSec = null;
+    if (atMs !== null) ageSec = Math.max(0, Math.round((Date.now() - atMs) / 1000));
+
+    let leftSec = Number.isFinite(ttlSec) ? Math.max(0, Number(ttlSec)) : null;
+    if (leftSec === null && expMs !== null) {
+      leftSec = Math.max(0, Math.round((expMs - Date.now()) / 1000));
+    }
+
+    const hoursActive = Number.isFinite(ageSec) ? roundHours1(ageSec / 3600) : null;
     return {
       enabled,
       key: PAY_FALLBACK_RT_KEY,
-      at: o.at ? String(o.at) : null,
+      at,
       expAt,
       ttlSec: Number.isFinite(ttlSec) ? ttlSec : null,
+      leftSec,
+      ageSec,
+      hoursActive,
       byTgId: o.byTgId ? Number(o.byTgId) : null,
       byUser: o.byUser ? String(o.byUser) : null,
       reason: o.reason ? String(o.reason) : null,
@@ -199,6 +248,85 @@ export async function setPaymentsFallbackRuntime({
   } catch {
     return { ok: false, enabled: false, error: 'redis_unavailable' };
   }
+}
+
+export function getPaymentsFallbackGuardrailConfig() {
+  return {
+    minTtlSec: PAY_FALLBACK_RT_MIN_TTL_SEC,
+    maxTtlSec: PAY_FALLBACK_RT_MAX_TTL_SEC,
+    alertRepeatSec: PAY_FALLBACK_RT_ALERT_REPEAT_SEC,
+  };
+}
+
+export async function enforcePaymentsFallbackRuntimeGuardrails({ source = 'cron' } = {}) {
+  const rt = await getPaymentsFallbackRuntime();
+  if (!rt?.enabled) return { ok: true, enabled: false, skipped: 'disabled' };
+
+  const nowMs = Date.now();
+  const expMs = parseIsoMs(rt.expAt);
+  const ageSec = Number.isFinite(rt.ageSec) ? Number(rt.ageSec) : null;
+  const staleExpired = expMs !== null && expMs <= nowMs;
+  const staleHardCap = ageSec !== null && ageSec > (PAY_FALLBACK_RT_MAX_TTL_SEC + PAY_FALLBACK_RT_STALE_GRACE_SEC);
+
+  if (staleExpired || staleHardCap) {
+    const off = await setPaymentsFallbackRuntime({ enabled: false });
+    try {
+      await queueOpsDigestSafe({
+        group: 'ops',
+        reason: 'payments_fallback_apply_runtime_auto_disabled',
+        title: 'Payments fallback runtime auto-disabled',
+        kind: 'payments',
+        payload: '',
+        extra: [
+          `source=${String(source || 'cron').slice(0, 40)}`,
+          `why=${staleExpired ? 'expired' : 'hard_cap'}`,
+          `active=${formatHoursTail(ageSec)}`,
+          rt.expAt ? `until=${String(rt.expAt).slice(0, 19)}` : '',
+          rt.byUser ? `by=${String(rt.byUser).slice(0, 80)}` : (rt.byTgId ? `by=tg:${rt.byTgId}` : ''),
+          rt.reason ? `reason=${String(rt.reason).slice(0, 120)}` : '',
+        ].filter(Boolean),
+        dedupId: staleExpired ? 'pay_fb:auto_off:expired' : 'pay_fb:auto_off:hard_cap',
+      });
+    } catch {
+      // ignore
+    }
+    return { ok: !!off?.ok, enabled: false, autoDisabled: true, why: staleExpired ? 'expired' : 'hard_cap' };
+  }
+
+  const bucket = bucket2h(nowMs);
+  let reserved = false;
+  try {
+    reserved = !!(await redis.set(heartbeatKey(bucket), '1', { nx: true, ex: PAY_FALLBACK_RT_ALERT_REPEAT_SEC }));
+  } catch {
+    reserved = false;
+  }
+
+  if (!reserved) {
+    return { ok: true, enabled: true, alertQueued: false, ageSec, hoursActive: rt.hoursActive };
+  }
+
+  try {
+    await queueOpsDigestSafe({
+      group: 'ops',
+      reason: 'payments_fallback_apply_runtime_enabled',
+      title: 'Payments fallback runtime still enabled',
+      kind: 'payments',
+      payload: '',
+      extra: [
+        `source=${String(source || 'cron').slice(0, 40)}`,
+        `active=${formatHoursTail(ageSec)}`,
+        Number.isFinite(rt.leftSec) ? `left=~${formatHoursTail(Math.max(0, Number(rt.leftSec || 0)))}` : '',
+        rt.expAt ? `until=${String(rt.expAt).slice(0, 19)}` : '',
+        rt.byUser ? `by=${String(rt.byUser).slice(0, 80)}` : (rt.byTgId ? `by=tg:${rt.byTgId}` : ''),
+        rt.reason ? `reason=${String(rt.reason).slice(0, 120)}` : '',
+      ].filter(Boolean),
+      dedupId: `pay_fb:heartbeat:${bucket}`,
+    });
+  } catch {
+    // ignore
+  }
+
+  return { ok: true, enabled: true, alertQueued: true, ageSec, hoursActive: rt.hoursActive };
 }
 
 export async function isPaymentsFallbackApplyEnabled() {
