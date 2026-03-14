@@ -37006,6 +37006,7 @@ async function adminHardSkipHitsExport(reasonFilter = 'all', limit = ADMIN_HS_HI
 
 async function renderAdminHardSkipHome(ctx, page = 0) {
   const p = Math.max(0, Number(page || 0) || 0);
+  const ttlDays = envInt('BROADCAST_HARD_SKIP_TTL_DAYS', 90, { min: 1, max: 365 });
   const recent = await adminHardSkipRecent(p);
   let text = '🧱 <b>Hard-skip (dead chats)</b>\n\n';
   text += 'Это список TG ID, для которых рассылка пропускает отправку (permanent errors: blocked / chat not found / deactivated).\n';
