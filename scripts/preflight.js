@@ -185,6 +185,9 @@ runNpm("smoke:brand-app-reply-entrypoints-contract");
 logHeader("Preflight: empty / no-history / first-message states contract");
 runNpm("smoke:empty-state-contract");
 
+logHeader("Preflight: creator catalog open-path contract");
+runNpm("smoke:creator-brands-home-open-contract");
+
 logHeader("Preflight: actions registry");
 runNpm("actions:check");
 
