@@ -1,4 +1,5 @@
-import { CFG } from '../src/lib/config.js'; 
+import { CFG } from '../src/lib/config.js';
+import { getPaymentsFallbackGuardrailConfig, getPaymentsFallbackRuntime } from '../src/lib/paymentsOps.js'; 
 
 // Simple health endpoint (no secrets).
 // Must never throw (fail-open), even if Redis is unavailable.
@@ -45,6 +46,8 @@ export default async function handler(_req, res) {
       fallback_apply_env_enabled: !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED,
       fallback_apply_runtime_enabled: null,
       fallback_apply_effective: null,
+      fallback_apply_age_sec: null,
+      fallback_apply_hours_active: null,
       fallback_apply_runtime: null,
       payload_hmac_key_configured: !!String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim(),
       payload_hmac_key_len: String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim().length,
@@ -413,28 +416,12 @@ try {
 
 // Payments ops (Redis-only): runtime fallback flag + payload signature issue counters.
     try {
-      const rtKey = k(['sys', 'pay_fallback_apply']);
-      const v = await redis.get(rtKey);
-      let obj = (v && typeof v === 'object' && !Array.isArray(v)) ? v : null;
-      if (!obj && typeof v === 'string') {
-        try {
-          const o2 = JSON.parse(v);
-          if (o2 && typeof o2 === 'object' && !Array.isArray(o2)) obj = o2;
-        } catch {
-          // ignore
-        }
-      }
-
-      let ttlSec = null;
-      try {
-        if (typeof redis.ttl === 'function') ttlSec = Number(await redis.ttl(rtKey));
-      } catch {
-        ttlSec = null;
-      }
-
-      const runtimeEnabled = !!(obj && obj.enabled);
+      const rt = await getPaymentsFallbackRuntime();
+      const runtimeEnabled = !!rt?.enabled;
       base.payments.fallback_apply_runtime_enabled = runtimeEnabled;
       base.payments.fallback_apply_effective = !!(base.payments.fallback_apply_env_enabled || runtimeEnabled);
+      base.payments.fallback_apply_age_sec = Number.isFinite(rt?.ageSec) ? Number(rt.ageSec) : null;
+      base.payments.fallback_apply_hours_active = Number.isFinite(rt?.hoursActive) ? Number(rt.hoursActive) : null;
       // For convenience, reflect effective state in legacy field too.
       base.payments.fallback_apply_enabled = base.payments.fallback_apply_effective;
 
@@ -443,13 +430,19 @@ try {
       );
 
       if (runtimeEnabled) {
+        const guard = getPaymentsFallbackGuardrailConfig();
         base.payments.fallback_apply_runtime = {
-          at: obj?.at || null,
-          expAt: obj?.expAt || null,
-          ttlSec: Number.isFinite(ttlSec) ? ttlSec : (obj?.ttlSec || null),
-          byTgId: obj?.byTgId || null,
-          byUser: obj?.byUser || null,
-          reason: obj?.reason || null,
+          at: rt?.at || null,
+          expAt: rt?.expAt || null,
+          ttlSec: Number.isFinite(rt?.ttlSec) ? Number(rt.ttlSec) : null,
+          leftSec: Number.isFinite(rt?.leftSec) ? Number(rt.leftSec) : null,
+          ageSec: Number.isFinite(rt?.ageSec) ? Number(rt.ageSec) : null,
+          hoursActive: Number.isFinite(rt?.hoursActive) ? Number(rt.hoursActive) : null,
+          alertRepeatSec: Number.isFinite(guard?.alertRepeatSec) ? Number(guard.alertRepeatSec) : null,
+          maxTtlSec: Number.isFinite(guard?.maxTtlSec) ? Number(guard.maxTtlSec) : null,
+          byTgId: rt?.byTgId || null,
+          byUser: rt?.byUser || null,
+          reason: rt?.reason || null,
         };
       } else {
         base.payments.fallback_apply_runtime = null;
