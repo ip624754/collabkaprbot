@@ -202,3 +202,26 @@ Staging проверка деградаций:
 Когда вернёшься:
 - см. `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`
 - см. `docs/22_IG_GRAPH_OAUTH_2026.md`
+
+
+## STEP476 — Broadcast stale visibility + tiny atomicity hardening
+- Kept the existing broadcast fan-out / pending snapshot model, but made stale pending-state visible to the operator instead of leaving it as a blind Redis blob.
+- `src/bot/cron.js` now writes `stale_after_sec` into the Redis-only `broadcast.pending_deliveries` snapshot (current threshold: ~10 min; visibility only, not an auto-stop).
+- `/api/health` now enriches `broadcast.pending_deliveries` with:
+  - `age_sec`
+  - `stale_after_sec`
+  - `stale`
+- Admin operator surfaces now show the same state:
+  - `🧰 Админка → Операции` renders pending snapshot age and a clear stale warning/guidance block;
+  - `🧹 Clear pending snapshot` confirm screen now shows age + STALE marker before an operator clears the Redis-only snapshot.
+- Tiny atomicity hardening: broadcast global 429 distinct-user tracking no longer does raw `SADD` + `EXPIRE` in sequence.
+  - Added Redis helper `saddCardWithExpire(...)` (Lua atomic `SADD + EXPIRE + SCARD` with safe fallback).
+  - `api/qstash/broadcast-deliver.js` now uses this helper for the short rolling `429users` set.
+- Added source guard `scripts/smoke-broadcast-429-atomicity-contract.js` and wired it into `package.json` + `scripts/preflight.js`.
+- Scope is operator visibility + tiny Redis atomicity hardening only. No DB schema changes, no audience/routing changes, no new hot-path DB reads.
+
+QA
+- `node --check` passes on changed JS files (`src/lib/redis.js`, `api/qstash/broadcast-deliver.js`, `src/bot/cron.js`, `api/health.js`, `src/bot/adminOpsText.js`, `src/bot/bot.js`, `scripts/smoke-admin-ops-render.js`, `scripts/smoke-broadcast-429-atomicity-contract.js`, `scripts/preflight.js`).
+- `node scripts/smoke-admin-ops-render.js` passes.
+- `node scripts/smoke-broadcast-429-atomicity-contract.js` passes.
+- Full deps/runtime smoke remains blocked in this workspace without installable npm dependencies.
