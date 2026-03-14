@@ -43,6 +43,7 @@
     "smoke:admin-user-card-note-contract": "node scripts/smoke-admin-user-card-note-contract.js",
     "smoke:admin-audit-metrics-moderators-contract": "node scripts/smoke-admin-audit-metrics-moderators-contract.js",
     "smoke:broadcast-local-db-fuse": "node scripts/smoke-broadcast-local-db-fuse.js",
+    "smoke:broadcast-429-atomicity-contract": "node scripts/smoke-broadcast-429-atomicity-contract.js",
     "smoke:payments-autoheal-chain-contract": "node scripts/smoke-payments-autoheal-chain-contract.js",
     "smoke:official-publish-check-now-contract": "node scripts/smoke-official-publish-check-now-contract.js",
     "smoke:start-role-gate-contract": "node scripts/smoke-start-role-gate-contract.js",
