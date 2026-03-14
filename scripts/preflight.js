@@ -231,6 +231,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): actions registry", "actions:check"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
+  ["Preflight (source-only): runtime-grade Stars payment validation", "test:runtime-stars-payment-validation"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],
   ["Preflight (source-only): redis atomicity grep gate", "lint:redis-atomic"],
   ["Preflight (source-only): redis TTL hygiene gate", "lint:redis-ttl"],
