@@ -11029,6 +11029,8 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
   const counts = await db.countBrandLeadsByStatus(wsId);
   const leads = await db.listBrandLeads(wsId, st, limit, offset);
+  const total = Number(counts?.[st] || 0);
+  const hasMultiplePages = total > limit;
 
   const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
   const roleHint = (!isOwner && isCurator && !isAdmin)
@@ -11037,34 +11039,19 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
 
   let text = `📨 <b>Заявки брендов</b>`;
   text += `
-Показываю последние движения по заявкам брендов в этот канал.`;
+Последние входящие заявки в этот канал.`;
+  const summaryMeta = hasMultiplePages
+    ? `${escapeHtml(channel)} · ${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)} · всего ${total} · стр ${p + 1}`
+    : `${escapeHtml(channel)} · ${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)} · всего ${total}`;
   text += `
-<i>${escapeHtml(channel)} · ${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)} · ${leads.length} на странице · стр ${p + 1}</i>`;
+<i>${summaryMeta}</i>`;
   if (roleHint) text += `
 ${roleHint}`;
 
   if (leads.length) {
     text += `
 
-`;
-    for (const l of leads) {
-      const whoRaw = l.brand_username ? '@' + String(l.brand_username).replace(/^@/, '') : (String(l.brand_name || '').trim() || 'Бренд');
-      const who = clipText(whoRaw, 32);
-      const rowStatus = normLeadStatus(l.status);
-      const stTitle = (LEAD_STATUSES[rowStatus] || LEAD_STATUSES.new).title;
-      const when = l.updated_at ? fmtTs(l.updated_at) : (l.created_at ? fmtTs(l.created_at) : '—');
-      const msg = String(l.message || '').replace(/\s+/g, ' ').trim();
-      const short = clipText(msg || '—', 56);
-      const icon = leadStatusIcon(rowStatus);
-      text += `${icon} <b>${escapeHtml(who)}</b>
-`;
-      text += `<i>${escapeHtml(stTitle)} · #${l.id} · ${escapeHtml(when)}</i>
-`;
-      text += `${escapeHtml(short)}
-
-`;
-    }
-    text += `Открой заявку: там статус, последние сообщения, заметки и действия.`;
+Открой заявку: там статус, последние сообщения, заметки и действия.`;
   } else {
     text += `
 
@@ -11103,6 +11090,7 @@ ${roleHint}`;
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
 }
+
 
 // -----------------------------
 // Curator Inbox (aggregate leads across all workspaces)
@@ -13785,38 +13773,26 @@ async function renderCreatorApplications(ctx, creatorUserId, page = 0) {
 
   const hasNext = apps.length > limit;
   const items = apps.slice(0, limit);
+  const hasMultiplePages = total > limit;
 
   const stIcon = { new: '🆕', in_progress: '💬', closed: '✅', spam: '🗑' };
 
   let text = `📨 <b>Мои заявки</b>
 `;
-  text += `<i>Показываю последние движения по твоим заявкам к брендам.</i>
+  text += `Последние заявки к брендам.
 `;
-  text += `<i>Всего: ${total} · стр ${p + 1}</i>
+  const summaryMeta = hasMultiplePages
+    ? `всего ${total} · стр ${p + 1}`
+    : `всего ${total}`;
+  text += `<i>${summaryMeta}</i>
 
 `;
 
   if (!items.length) {
-    text += `Заявок пока нет.\n\n💡 Чтобы подать заявку — открой 🏷 Каталог брендов → выбери бренд → 📝 Оставить заявку.`;
-  } else {
-    for (const a of items) {
-      const brandName = String(a.brand_name || '').trim();
-      const brandUsername = String(a.brand_username || '').trim().replace(/^@/, '');
-      const brand = brandName || (brandUsername ? '@' + brandUsername : 'Бренд');
-      const st = normLeadStatus(a.status);
-      const icon = stIcon[st] || '❓';
-      const stTitle = (LEAD_STATUSES[st] || LEAD_STATUSES.new).title;
-      const when = a.updated_at ? fmtTs(a.updated_at) : '—';
-      const msg = String(a.message || '').replace(/\s+/g, ' ').trim();
-      const short = clipText(msg || '—', 56);
-      text += `${icon} <b>${escapeHtml(brand)}</b>
-`;
-      text += `<i>${escapeHtml(stTitle)} · #${a.id} · ${escapeHtml(when)}</i>
-`;
-      text += `<code>${escapeHtml(short)}</code>
+    text += `Заявок пока нет.
 
-`;
-    }
+💡 Чтобы подать заявку — открой 🏷 Каталог брендов → выбери бренд → 📝 Оставить заявку.`;
+  } else {
     text += `<i>Открой карточку: там статус, ответ бренда и история.</i>`;
   }
 
@@ -13840,6 +13816,7 @@ async function renderCreatorApplications(ctx, creatorUserId, page = 0) {
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
+
 
 
 
