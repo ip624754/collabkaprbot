@@ -12,22 +12,38 @@ const ROOT = path.resolve(__dirname, '..');
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
 
+const fnStart = botSrc.indexOf('async function renderWsLeadsList(');
+const fnEnd = botSrc.indexOf('// -----------------------------\n// Curator Inbox', fnStart);
+assert.ok(fnStart >= 0 && fnEnd > fnStart, 'Expected renderWsLeadsList function block to exist');
+const fnSrc = botSrc.slice(fnStart, fnEnd);
+
 assert.ok(
-  botSrc.includes('📨 <b>Заявки брендов</b>') &&
-    botSrc.includes('Показываю последние движения по заявкам брендов в этот канал.') &&
-    botSrc.includes('Открой заявку: там статус, последние сообщения, заметки и действия.'),
-  'Expected creator-side brand-leads list to expose a compact signal-first header with a clear open-card hint'
+  fnSrc.includes('📨 <b>Заявки брендов</b>') &&
+    fnSrc.includes('Последние входящие заявки в этот канал.') &&
+    fnSrc.includes('Открой заявку: там статус, последние сообщения, заметки и действия.') &&
+    fnSrc.includes('const total = Number(counts?.[st] || 0);') &&
+    fnSrc.includes('const hasMultiplePages = total > limit;') &&
+    fnSrc.includes('const summaryMeta = hasMultiplePages') &&
+    fnSrc.includes('всего ${total}') &&
+    fnSrc.includes('стр ${p + 1}'),
+  'Expected creator-side brand-leads list to expose a short summary-only header with page context only when pagination is real'
 );
 
 assert.ok(
-  botSrc.includes("const whoRaw = l.brand_username ? '@' + String(l.brand_username).replace(/^@/, '')") &&
-    botSrc.includes("const short = clipText(msg || '—', 56);") &&
-    botSrc.includes('text += `${icon} <b>${escapeHtml(who)}</b>') &&
-    botSrc.includes('text += `<i>${escapeHtml(stTitle)} · #${l.id} · ${escapeHtml(when)}</i>') &&
-    botSrc.includes("const btnLabel = clipText(`${leadStatusIcon(l.status)} ${whoShort} · #${l.id}`, 50);") &&
-    botSrc.includes("if (p > 0) kb.row().text('⬅️ Назад', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p - 1}${rPart}`);") &&
-    botSrc.includes("if (p > 0) kb.text('➡️ Далее', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p + 1}${rPart}`);"),
-  'Expected creator-side brand-leads list rows/buttons to emphasize brand + status + updated-at, with readable pagination labels'
+  !fnSrc.includes('text += `${icon} <b>${escapeHtml(who)}</b>') &&
+    !fnSrc.includes('text += `<i>${escapeHtml(stTitle)} · #${l.id} · ${escapeHtml(when)}</i>') &&
+    !fnSrc.includes('text += `${escapeHtml(short)}') &&
+    !fnSrc.includes("const short = clipText(msg || '—', 56);") &&
+    !fnSrc.includes("const stTitle = (LEAD_STATUSES[rowStatus] || LEAD_STATUSES.new).title;"),
+  'Expected creator-side brand-leads list to stop rendering a duplicated text dump above the interactive buttons'
+);
+
+assert.ok(
+  fnSrc.includes("const btnLabel = clipText(`${leadStatusIcon(l.status)} ${whoShort} · #${l.id}`, 50);") &&
+    fnSrc.includes("if (p > 0) kb.row().text('⬅️ Назад', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p - 1}${rPart}`);") &&
+    fnSrc.includes("if (p > 0) kb.text('➡️ Далее', `a:ws_leads|w:${wsId}|s:${leadStatusToCb(st)}|p:${p + 1}${rPart}`);") &&
+    fnSrc.includes('disable_web_page_preview: true'),
+  'Expected creator-side brand-leads list buttons/pagination to remain the only primary list representation'
 );
 
 assert.ok(
@@ -39,7 +55,7 @@ assert.ok(
     botSrc.includes('📝 <b>Последние заметки</b>') &&
     botSrc.includes('Показаны последние 3 из ${thread.length}.') &&
     botSrc.includes('Кураторский режим: ручной ответ недоступен — используй шаблоны, статус и заметки.'),
-  'Expected creator-side brand-lead dialog cards to be signal-first, with short what-now/state blocks and only the last 3 messages/notes'
+  'Expected creator-side brand-lead dialog cards to stay signal-first, with short what-now/state blocks and only the last 3 messages/notes'
 );
 
 assert.ok(
