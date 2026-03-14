@@ -1,3 +1,25 @@
+**STEP456:** Runtime sweep + QA-contract refresh — no product-runtime logic changes. Ran a broad snapshot-level verification pass across the cleaned creator → brand applications / accept / reply / deal / lead / empty-state / footer-return chain. Result: all targeted source-level runtime checks pass on the STEP455 snapshot except full `scripts/preflight.js`, which still fails fast only because the uploaded archive is a bare checkout without local `node_modules` (`@upstash/qstash`, `@upstash/redis`, `dotenv`, `grammy`, `pg`, `pino`). During the sweep, 4 legacy smoke scripts were found to be stale after STEP439–455 vocabulary/helper cleanup and were refreshed without changing product behavior: `smoke-brand-inbox-accept-contract.js`, `smoke-contacts-brand-pass-contract.js`, `smoke-what-next-backnav-contract.js`, and `smoke-brand-app-ops-copy-contract.js`. They now assert the current helper-based / context-correct contracts instead of old literal labels and pre-helper markers. Added `docs/ops/02_RUNTIME_SWEEP_STEP456.md` as the operator/runtime report separating what is confirmed on snapshot now vs what still requires live Telegram post-deploy verification.
+
+**STEP450:** Brand-side application/deal notice cleanup — tightened brand-side service notices around creator → brand application flow so inbound notifications and fallback receipts now speak the same `✉️ Заявка #… / 📌 Стадия сделки` language already established in STEP439–445, without touching accept/charge semantics, manager access, or adding new DB reads in hot UI paths. Added shared helpers (`brandAppOpenButtonLabel()`, `brandAppDealButtonLabel()`, `brandAppNoticeWhatNext()`, `brandAppNoticeKb()`, `buildBrandAppServiceNoticeText()`) so new application notifications, creator reply notifications, and brand reply/deal fallback receipts no longer drift between `📨 Открыть заявку`, `📥 Открыть в Inbox`, generic back buttons, and mismatched callback copy. Brand-side notifications now show a compact “что дальше” line and, when the application is already in work, a direct `📌 Стадия сделки` CTA next to the application itself. Template/manual reply fallbacks now reuse the same what-next language and entrypoints, and the template-send callback text was corrected from `✅ Отправлено бренду` to `✅ Отправлено креатору`. Existing STEP439–449 application/deal/lead contracts remain unchanged.
+
+**STEP449:** Brand-side lead follow-up cleanup — tightened the brand-side post-action layer after `✍️ Ответить` / `🔓 Контакты` so follow-up screens now speak the same `💬 Диалог #… / 🪟 Витрина креатора / 🔓 Контакты на витрине …` language already established in STEP448, without touching accept/charge, lead-write semantics, or adding new DB reads in hot UI paths. Added a shared `brandLeadWhatNextText()` helper so the opened brand lead dialog, the post-reply receipt, and the post-unlock contact-pack use one consistent “что дальше” copy instead of drifting between generic `💬 Диалог`, generic vitrina wording, and standalone contact-pack text. After a brand reply, the receipt now keeps the operator inside the same lead context with `💬 Диалог #…`, `🪟 Витрина креатора`, and `🔓 Контакты на витрине …` CTAs. After contact unlock from a lead context, the compact contact-pack now includes the same lead-context follow-up hint plus a return row back into `💬 Диалог #…` and the same creator vitrina, so the post-action layer reads as one system rather than a separate generic unlock receipt. Existing STEP439–448 application/deal/inbox/vitrina contracts remain unchanged.
+
+**STEP448:** Brand-side lead entrypoints cleanup — tightened the brand-side entry layer around `💬 Диалог / 🪟 Витрина / 🔓 Контакты` in the brand-lead flow so the path from brand reply notifications → lead dialog → read-only vitrina → contact unlock now reads as one system, without touching accept/charge, lead-write semantics, or adding new DB reads in hot UI paths. Centralized brand-side label helpers now keep one shared vocabulary in lead context (`💬 Диалог #…`, `🪟 Витрина креатора`, `🔓 Контакты на витрине …`), while the opened brand lead dialog uses the same labels in both copy and CTA buttons. Read-only vitrina / unlock / pending / no-contacts screens now inherit the same lead-context labels and pass `brandLeadId` through their return path so back/open actions no longer mix generic `Витрина` / `Контакты` wording with lead-specific screens. Existing brand lead mutation, Inbox density, and STEP439–447 application/deal contracts remain unchanged.
+
+**STEP447:** Creator-side lead entrypoints cleanup — tightened the entry layer around creator-side `📨 Заявки брендов` so the path from channel/curator workspace → notification/receipt → lead card now reads as one system with STEP446, without touching accept/charge, lead-write query semantics, or adding new DB reads in hot UI paths. Workspace and curator screens now use the same `📨 Заявки брендов` vocabulary with explicit hints that this is the entry into the list, cards, and dialogs for brand requests. Creator-side receipts/notifications no longer mix `👀 Открыть`, `Открыть заявку`, and plain `Заявки`: they now use centralized labels (`🔎 Заявка #…` and `📨 К заявкам`) so the operator sees one stable mental model when jumping into a lead card or returning to the list. The cleaned creator-side lead dialog from STEP446 remains unchanged; this step is entrypoint vocabulary + navigation clarity only.
+
+**STEP446:** Creator-side brand-leads Inbox / dialog cleanup — tightened the creator-side `📨 Заявки брендов` flow into the same signal-first Telegram system as STEP440–445, without touching accept/charge, lead-write query semantics, or adding new DB reads in hot UI paths. The lead list now uses a compact header (`📨 Заявки брендов`), a short line explaining that it shows the latest movement across brand requests into the channel, readable rows focused on brand → status → updated-at → clipped request preview, and full pagination labels (`⬅️ Назад` / `➡️ Далее`). The opened creator-side lead dialog is no longer a dense dump: it now shows a compact header, a short `💡 Сейчас` line, a state block, clipped request/reply previews, only the last 3 thread messages, and only the last 3 internal notes with explicit count hints when more history exists. Template-send/status actions now rerender the same card with a clear inline flash (`Шаблон отправлен: …` / `Статус обновлён: …`) so changes remain visible inside the card. Brand-side symmetry from STEP445 and application/deal contracts from STEP439–444 remain intact.
+
+**STEP445:** Brand-side `📥 Inbox` / thread-open cleanup — tightened the brand Inbox into the same signal-first Telegram system as STEP440–444, without touching accept/charge, brand-pass charging rules, or adding new DB reads in hot UI paths. The Inbox list now uses a compact header (`📥 Inbox`), a short line explaining that it shows the latest movement across dialogues/applications, readable rows focused on participant → current handling/state → updated-at → clipped last-message preview, and full pagination labels (`⬅️ Назад` / `➡️ Далее`). The opened thread screen is no longer a dense dump: it now shows a compact header, a short `💡 Сейчас` line, a state block (`status / triage / stage / reply / retry / charge`), a clipped offer line, and only the last 3 messages with an explicit count hint when more history exists. Stage/triage actions now rerender the same thread with a clear inline flash (`Стадия: …` / `Обработка: …`) so changes stay visible inside the card. STEP439 local/global contracts and STEP440–444 application/deal symmetry remain intact.
+
+**STEP444:** Brand-side `📨 Заявки от креаторов` list cleanup — tightened the incoming brand applications list into the same signal-first list style as STEP443, without touching accept/charge, manager access semantics, or adding DB reads. The list now leads with a compact header (`📨 Заявки от креаторов`), a short line explaining that it shows the latest movement across incoming creator applications, and readable rows focused on creator → status → updated-at → clipped message preview. Quick-open buttons now match the row wording (`icon + creator + #id`), pagination stays on full labels (`⬅️ Назад` / `➡️ Далее`), and the list explicitly says that opening the card reveals the application, reply, history, and actions. Creator-side symmetry from STEP442–443 and brand-side card/deal contracts from STEP439–441 remain intact.
+
+**STEP443:** Creator-side `📨 Мои заявки` list cleanup — tightened the creator applications list into the same signal-first style as STEP440–442, without touching accept/charge, creator-send mutation paths, or adding DB reads. The list now leads with a compact header (`📨 Мои заявки`), a short line explaining that it shows the latest movement across the user’s brand applications, and readable rows focused on brand → status → updated-at → clipped message preview. Quick-open buttons now match the row wording (`icon + brand + #id`), pagination uses full labels (`⬅️ Назад` / `➡️ Далее`), and the list explicitly tells the user that opening the card reveals status, brand reply, and thread history. Brand-side application/deal contracts from STEP439–442 remain intact.
+
+**STEP442:** Creator-side application dialog density reduction + signal-first reply clarity — tightened the creator-facing `✉️ Диалог по заявке` card into the same signal-first Telegram shape used in STEP440–441, without touching accept/charge, creator-send mutation semantics, or adding DB reads. The creator card now shows a compact header (`✉️ Диалог по заявке #…` + current status), a short `💡 Сейчас` line, clipped previews for the creator’s original application and the latest brand reply, and only the last 3 thread messages with an explicit count hint when more history exists. The old long explanatory copy was reduced to one honest line: before accept, the reply button is unavailable; after accept, messages stay inside this bot. Brand-side application/deal contracts from STEP439–441 remain intact.
+
+**STEP441:** Brand application card density reduction + status signal hardening — tightened the brand-side application card into a decision-first Telegram screen without changing accept/charge business logic or adding DB reads. The view now uses a compact header (`✉️ Заявка #…` + current status), a short `💡 Сейчас` line, clipped application/reply previews, and only the last 3 dialogue messages with an explicit count hint when more history exists. Internal brand status actions are visually marked when active, and pressing `В работу / Закрыть / Спам` now produces an inline confirmation (`Статус обновлён: old → new`) via callback toast plus rerender flash, so state changes do not disappear inside a dense wall of text. Deal-stage/local-back contracts from STEP439 and deal-card cleanup from STEP440 remain intact.
+
 **STEP440:** Deal card density reduction + stage signal hardening — tightened the brand deal card into a signal-first Telegram screen without touching accept/charge or adding DB reads. The deal view now shows a compact header (`📌 Сделка #…` + current stage), a short `💡 Сейчас` line describing the next sensible action for that stage, clipped application/reply previews, and only the last 3 dialogue messages instead of a long dump. Stage buttons now visually mark the active state, and pressing a stage produces an explicit confirmation (`Стадия обновлена: old → new`) via callback toast plus an inline flash on rerender, so status changes no longer disappear inside a dense wall of text. Local/global navigation from STEP439 stays intact, no migrations were added, and the core brand application accept/charge/reply flow remains unchanged.
 
 **STEP439:** Deals stage transition fix + context-correct navigation + clearer labels — fixed the deal-stage mutation path so stage buttons in deal cards no longer silently fail on PostgreSQL parameter typing inside `jsonb_build_object(...)`; `setBrandApplicationDealStage()` now casts `set_by_user_id` explicitly. At the UX layer, local deal access from a brand application is no longer mislabeled as a global CRM jump: `📌 В сделках` becomes `📌 Стадия сделки`, deal cards show a short local-context hint (`Это стадия сделки по этой заявке.`), and local `⬅️ Назад` returns to the originating application card instead of jumping into the global `📌 Сделки` section. Brand application/deal list pagination is also made human-readable with `⬅️ Назад / ➡️ Далее`, without changing core application accept/charge/reply logic or the global deals section entrypoint.
@@ -1446,3 +1468,83 @@ Auto-heal safeguards + ops alerts:
 - Verification is treated as **account-level**, not per-channel DB truth. The quick entrypoint now lives in `Настройки канала` as `✅ Верификация аккаунта`, with copy clarifying that it is one verification for the creator account.
 - `ws_profile` no longer duplicates the verification button; the profile screen stays focused on profile editing only.
 - Runtime business logic, schema and current-channel resolver were not changed.
+
+
+## STEP451 — Creator-side application notices / receipts cleanup
+- Creator-facing service notices around brand applications now use one shared vocabulary layer:
+  - `✉️ Диалог #...`
+  - `💬 Написать бренду`
+  - `📨 Мои заявки`
+- Added shared helpers in `src/bot/bot.js` for creator-side application notice surfaces:
+  - `creatorBrandAppDialogButtonLabel()`
+  - `creatorBrandAppReplyButtonLabel()`
+  - `creatorBrandAppListButtonLabel()`
+  - `creatorBrandAppNoticeWhatNext()`
+  - `creatorBrandAppNoticeKb()`
+  - `buildCreatorBrandAppServiceNoticeText()`
+- This unified creator-side notice/receipt language is now used in three places:
+  - brand accepted → creator notification
+  - brand replied / template replied → creator notification
+  - creator replied → local creator receipt / follow-up
+- Scope is UI copy + CTA consistency only. No accept/charge semantics, no DB schema changes, no new hot-path DB reads.
+
+
+## STEP452 — Creator-side `💬 Написать бренду` entry / fallback / error-recovery cleanup
+- Creator-side chat-open surface around brand applications is now aligned to the same one-vocabulary model as STEP451 notices.
+- Added shared helpers in `src/bot/bot.js` for this layer:
+  - `creatorBrandAppChatRecoveryKb()`
+  - `buildCreatorBrandAppChatPromptText()`
+  - `buildCreatorBrandAppChatRecoveryText()`
+- The same prompt / recovery language is now used in three places:
+  - normal entry into `💬 Написать бренду`
+  - degraded fallback when input mode cannot be opened
+  - error/recovery replies for missing id, validation failures, rate-limit, not-found / no-access, and not-yet-accepted guard
+- Added source-level smoke `scripts/smoke-creator-app-chat-entrypoints-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+- Scope is entry / fallback / recovery copy + CTA consistency only. No accept/charge semantics, no DB schema changes, no new hot-path DB reads.
+
+
+## STEP453 — Brand-side `✍️ Ответить креатору` entry / fallback / error-recovery cleanup
+- Brand-side reply-open surface around creator applications / deal dialogs is now aligned to the same one-vocabulary model as STEP452 creator-side chat-open.
+- Added shared helpers in `src/bot/bot.js` for this layer:
+  - `brandAppReplyButtonLabel()`
+  - `brandAppReplyRecoveryKb()`
+  - `buildBrandAppReplyPromptText()`
+  - `buildBrandAppReplyRecoveryText()`
+- The same prompt / recovery language is now used in four places:
+  - normal entry into brand-side `✍️ Ответить креатору` from application card
+  - normal entry into brand-side `✍️ Ответить креатору` from local deal view
+  - degraded fallback when input mode cannot be opened
+  - recovery replies for missing id, validation failures, rate-limit, not-found / no-access, not-yet-accepted guard, missing creator TG id, and open-error fallback handlers
+- Added source-level smoke `scripts/smoke-brand-app-reply-entrypoints-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+- Scope is entry / fallback / recovery copy + CTA consistency only. No accept/charge semantics, no DB schema changes, no new hot-path DB reads.
+
+## STEP454 — Empty / no-history / first-message states cleanup
+- Application / deal / dialog cards now keep the same `💬 Последние сообщения` section even when the history is still empty.
+- Added shared empty-state helpers in `src/bot/bot.js` for the currently cleaned surfaces:
+  - `brandAppThreadEmptyStateText()`
+  - `creatorBrandAppThreadEmptyStateText()`
+  - `creatorLeadThreadEmptyStateText()`
+  - `brandLeadThreadEmptyStateText()`
+- The goal is not new logic, but honest first-state guidance:
+  - brand-side application card explains what to do before the first message
+  - local deal view explains how to send the first message/template
+  - creator-side application dialog explains accepted vs not-yet-accepted empty history
+  - creator/brand lead dialogs explain how the first reply appears in the same screen
+- Added source-level smoke `scripts/smoke-empty-state-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+- Scope is empty-state copy + CTA clarity only. No accept/charge semantics, no DB schema changes, no new hot-path DB reads.
+
+
+
+## STEP455 — Footer / back / list-return consistency pass
+- Added shared footer/list-return label helpers for the cleaned creator ↔ brand application/deal flows:
+  - `brandAppListReturnButtonLabel()` → `📨 К заявкам`
+  - `brandDealsListReturnButtonLabel()` → `📌 К сделкам`
+  - `creatorBrandAppListReturnButtonLabel()` → `📨 К заявкам`
+- Applied contextual return labels instead of generic `⬅️ Назад` in the key cleaned screens:
+  - brand application card footer now returns via `📨 К заявкам`
+  - brand local deal view now returns via `📌 К сделкам` or concrete `✉️ Заявка #...` when opened from an application
+  - creator application dialog card now returns via `📨 К заявкам`
+  - creator-side lead dialog now returns via `📨 К заявкам`
+  - brand-side lead dialog now also exposes a contextual `📨 К заявкам` return path instead of menu/home only
+- Added source-level smoke `scripts/smoke-footer-back-consistency-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+- Scope is footer/back/list-return labeling only. No accept/charge semantics, no DB schema changes, no new hot-path DB reads.
