@@ -1,6 +1,6 @@
 import { CFG } from '../../src/lib/config.js';
 import { queueOpsDigestSafe } from '../../src/lib/opsDigest.js';
-import { redis, k, incrWithExpireOnFirst } from '../../src/lib/redis.js';
+import { redis, k, incrWithExpireOnFirst, saddCardWithExpire } from '../../src/lib/redis.js';
 import * as db from '../../src/db/queries.js';
 import { getBot } from '../../src/bot/bot.js';
 import {
@@ -98,9 +98,7 @@ async function bumpBroadcast429DistinctUsers(broadcastId, userId) {
   try {
     const key = broadcast429DistinctUsersKey(broadcastId);
     const ttlSec = getGlobal429WindowSec();
-    await redis.sadd(key, String(userId));
-    await redis.expire(key, ttlSec);
-    const n = await redis.scard(key);
+    const n = await saddCardWithExpire(key, String(userId), ttlSec);
     return Number(n) || 0;
   } catch {
     return 0;
