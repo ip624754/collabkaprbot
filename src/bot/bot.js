@@ -13570,6 +13570,8 @@ ${extra}${hint} Кредит спишется, а заявка появится 
       return;
     }
 
+    try { console.warn('[brand_app_accept] app-load failed', { appId: aid, actorUserId, cid: ctx.state?.cid || null, code: String(e?.code || ''), message: String(e?.message || e) }); } catch {}
+    try { console.warn('[brand_app_accept] accept failed', { appId: aid, actorUserId, brandUserId, cid: ctx.state?.cid || null, code: String(e?.code || ''), message: String(e?.message || e) }); } catch {}
     await setMonAcceptDiag({ source: 'click',  status: 'error', errorCode: 'db_error', appId: aid });
 
     try { await ctx.answerCallbackQuery({ text: 'Не удалось обработать. Попробуй ещё раз.', show_alert: true }); } catch {}
