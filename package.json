@@ -80,6 +80,7 @@
     "smoke:creator-brands-home-open-contract": "node scripts/smoke-creator-brands-home-open-contract.js",
     "smoke:creator-app-reply-completion-contract": "node scripts/smoke-creator-app-reply-completion-contract.js",
     "smoke:creator-app-reply-runtime-guard-contract": "node scripts/smoke-creator-app-reply-runtime-guard-contract.js",
+    "smoke:new-dialog-terminology-contract": "node scripts/smoke-new-dialog-terminology-contract.js",
     "preflight:source": "node scripts/preflight.js source",
     "preflight:deps": "node scripts/preflight.js deps"
   },
