@@ -7006,7 +7006,7 @@ async function sendBrandApplyDraft(ctx, u, brandUserId, backPage, opts = {}) {
 <b>Текст:</b>
 ${escapeHtml(msg)}`;
 
-  const kbNotif = brandAppNoticeKb(res.id, { status: 'new', page: 0, dismiss: false });
+  const kbNotif = brandAppNoticeKb(res.id, { status: 'new', page: 0, kind: 'new_app', dismiss: false });
 
   // Recipients: owner + managers always; super-admin ops copy only when explicitly enabled.
   const brandRecipients = new Set();
@@ -11754,6 +11754,13 @@ function brandAppOpenButtonLabel(appId = 0) {
   return id ? `✉️ Заявка #${id}` : '✉️ Заявка';
 }
 
+function brandAppNoticeOpenButtonLabel(appId = 0, kind = 'reply') {
+  const id = Math.max(0, Number(appId || 0));
+  const noticeKind = String(kind || 'reply').trim().toLowerCase();
+  if (noticeKind === 'new_app') return brandAppOpenButtonLabel(id);
+  return id ? `💬 Диалог #${id}` : '💬 Диалог';
+}
+
 function brandAppDealButtonLabel() {
   return '📌 Стадия сделки';
 }
@@ -11766,8 +11773,8 @@ function brandDealsListReturnButtonLabel() {
   return '📌 К сделкам';
 }
 
-function brandAppNoticeWhatNext(appId = 0, status = 'new', dealStage = '') {
-  const openLabel = brandAppOpenButtonLabel(appId);
+function brandAppNoticeWhatNext(appId = 0, status = 'new', dealStage = '', kind = 'reply') {
+  const openLabel = brandAppNoticeOpenButtonLabel(appId, kind);
   const dealLabel = brandAppDealButtonLabel();
   const st = normLeadStatus(status);
   const ds = String(dealStage || '').trim() ? normDealStage(dealStage) : '';
@@ -11782,10 +11789,11 @@ function brandAppNoticeKb(appId = 0, opts = {}) {
   const status = normLeadStatus(opts.status || 'new');
   const dealStageRaw = String(opts.dealStage || '').trim();
   const dealStage = dealStageRaw ? normDealStage(dealStageRaw) : '';
+  const kind = String(opts.kind || 'reply').trim().toLowerCase();
   const dismiss = opts.dismiss !== false;
   const kb = new InlineKeyboard();
 
-  kb.text(brandAppOpenButtonLabel(appId), `a:brand_app_view|id:${Number(appId || 0)}|s:${leadStatusToCb(status)}|p:${page}`);
+  kb.text(brandAppNoticeOpenButtonLabel(appId, kind), `a:brand_app_view|id:${Number(appId || 0)}|s:${leadStatusToCb(status)}|p:${page}`);
   if (status !== 'new' || dealStage) {
     kb.text(brandAppDealButtonLabel(), `a:brand_deal_view|id:${Number(appId || 0)}|st:${dealStage || 'negotiation'}|p:0|ab:${leadStatusToCb(status)}.${page}`);
   }
@@ -11807,7 +11815,7 @@ function buildBrandAppServiceNoticeText({ appId = 0, kind = 'reply', brandName =
   const stageLine = dealStage ? `📌 Сделка: <b>${escapeHtml(dealStageTitle(dealStage))}</b>
 ` : '';
   const preview = clipText(String(body || '').replace(/\s+/g, ' ').trim(), kind === 'new_app' ? 900 : 700);
-  const whatNext = brandAppNoticeWhatNext(id, status, dealStage);
+  const whatNext = brandAppNoticeWhatNext(id, status, dealStage, kind);
 
   return `${title}
 
@@ -13099,7 +13107,7 @@ async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = {
     await ctx.reply(
       `❌ Не удалось отправить сообщение креатору.
 
-💡 Сейчас: ${brandAppNoticeWhatNext(app.id, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app))}
+💡 Сейчас: ${brandAppNoticeWhatNext(app.id, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app), 'reply')}
 
 Возможно, он ещё не нажимал /start.`,
       {
@@ -13455,6 +13463,7 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
       status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
       page: Math.max(0, Number(back.page || 0)),
       dealStage: getAppDealStage(app),
+      kind: 'reply',
       dismiss: false
     });
     if (botLink) kb.row().url('🔗 Ссылка креатору (/start)', botLink);
@@ -13466,7 +13475,7 @@ async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
       `Причина: <i>${escapeHtml(reason)}</i>
 
 ` +
-      `💡 Сейчас: ${escapeHtml(brandAppNoticeWhatNext(app.id, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app)))}
+      `💡 Сейчас: ${escapeHtml(brandAppNoticeWhatNext(app.id, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app), 'reply'))}
 
 ` +
       `<b>Текст ответа (можно скопировать):</b>
@@ -13520,12 +13529,13 @@ ${escapeHtml(replyText)}`;
       await ctx.reply(
         `✅ Отправлено.
 
-💡 Сейчас: ${brandAppNoticeWhatNext(appId, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app))}`,
+💡 Сейчас: ${brandAppNoticeWhatNext(appId, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app), 'reply')}`,
         {
           reply_markup: brandAppNoticeKb(appId, {
             status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
             page: Math.max(0, Number(back.page || 0)),
             dealStage: getAppDealStage(app),
+            kind: 'reply',
             dismiss: false
           })
         }
@@ -13850,7 +13860,6 @@ function buildCreatorBrandAppSendReceiptBlock(input = null) {
   if (!input || typeof input !== 'object') return '';
 
   const kind = String(input.kind || 'sent').trim().toLowerCase();
-  const delivery = String(input.deliveryLine || '').trim();
 
   let title = '✅ <b>Сообщение отправлено бренду</b>';
   let body = 'Сообщение добавлено в этот диалог. Ниже уже видна обновлённая история.';
@@ -13865,10 +13874,8 @@ function buildCreatorBrandAppSendReceiptBlock(input = null) {
     body = 'Сообщение сохранено в диалоге, но уведомление бренду сейчас не доставлено.';
   }
 
-  const deliveryLine = delivery ? `
-🔔 ${escapeHtml(delivery)}` : '';
   return `${title}
-${escapeHtml(body)}${deliveryLine}`;
+${escapeHtml(body)}`;
 }
 
 async function renderBrandAppCardForCreator(ctx, actorUserId, appId, opts = {}) {
@@ -21243,12 +21250,13 @@ if (exp.type === 'brand_apply') {
             status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
             page: Math.max(0, Number(exp.backPage || 0)),
             dealStage: getAppDealStage(app),
+            kind: 'reply',
             dismiss: false
           });
           return ctx.reply(
             `✅ Ответ доставлен креатору.
 
-💡 Сейчас: ${brandAppNoticeWhatNext(appId, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app))}`,
+💡 Сейчас: ${brandAppNoticeWhatNext(appId, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app), 'reply')}`,
             { reply_markup: doneKb }
           );
         }
@@ -21272,7 +21280,7 @@ if (exp.type === 'brand_apply') {
         `Причина: <b>${escapeHtml(String(deliveryReason || 'ошибка отправки'))}</b>
 
 ` +
-        `💡 Сейчас: ${escapeHtml(brandAppNoticeWhatNext(appId, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app)))}
+        `💡 Сейчас: ${escapeHtml(brandAppNoticeWhatNext(appId, normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status), getAppDealStage(app), 'reply'))}
 
 ` +
         `Текст (скопируй):
@@ -21459,6 +21467,7 @@ if (exp.type === 'brand_deals_search') {
         status: appStatusForNotice,
         page: 0,
         dealStage,
+        kind: 'reply',
         dismiss: true
       });
 
@@ -21489,15 +21498,6 @@ if (exp.type === 'brand_deals_search') {
       } catch {}
 
       await clearExpectText(ctx.from.id);
-      const hasManagers2 = Array.from(targetsMap.values()).some(r => r.role === 'manager');
-      const whoNotified2 = hasManagers2 ? 'владелец + менеджеры' : 'владелец';
-
-      const ackLine = (targetsMap.size === 0)
-        ? 'Уведомление не отправлено: у бренда не найден tg_id.'
-        : (delivered > 0)
-          ? `Уведомление (${whoNotified2}): ${delivered}/${targetsMap.size}`
-          : 'Уведомление не доставлено: ошибка отправки.';
-
       const deliveryKind = (targetsMap.size === 0)
         ? 'no_targets'
         : (delivered > 0)
@@ -21506,8 +21506,7 @@ if (exp.type === 'brand_deals_search') {
 
       return renderBrandAppCardForCreator(ctx, u.id, appId, {
         sendReceipt: {
-          kind: deliveryKind,
-          deliveryLine: ackLine
+          kind: deliveryKind
         }
       });
     }
