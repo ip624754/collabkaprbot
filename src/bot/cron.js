@@ -751,12 +751,12 @@ async function issueIntroRetryCredits() {
               Number(tgId),
               `🎟 <b>Retry credit начислен</b>
 
-По одному из интро не было ответа ${Number(
+По одному из новых диалогов не было ответа ${Number(
                 CFG.INTRO_RETRY_AFTER_HOURS || 24
               )}ч — мы вернули тебе 1 Retry credit.
 Действует ${Number(
                 CFG.INTRO_RETRY_EXPIRES_DAYS || 7
-              )} дней и списывается автоматически при следующем интро.`,
+              )} дней и списывается автоматически при следующем новом диалоге.`,
               { parse_mode: 'HTML', reply_markup: kb }
             ),
             NOTIFY_TIMEOUT_MS,

@@ -16617,13 +16617,13 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
 
   const trialLine = !meta.brand_trial_granted && trialCredits > 0
     ? `
-🎁 Тест-бонус на старт: <b>${trialCredits}</b> кредит(ов) на первые интро (выдаётся 1 раз).
+🎁 Тест-бонус на старт: <b>${trialCredits}</b> кредит(ов) на первые новые диалоги (выдаётся 1 раз).
 `
     : '';
 
   const limitLine = dailyLimit > 0
     ? `
-📆 Лимит интро (новых диалогов) в день: <b>${dailyLimit}</b> (сегодня использовано: <b>${usedToday}</b>).
+📆 Лимит новых диалогов в день: <b>${dailyLimit}</b> (сегодня использовано: <b>${usedToday}</b>).
 `
     : '';
 
@@ -16632,21 +16632,21 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
   const verifyHintLine = (CFG.VERIFICATION_ENABLED && !isVerified && verifiedLimit > unverifiedLimit)
     ? `
 
-✅ Пройди <b>верификацию</b>, чтобы увеличить лимит до <b>${verifiedLimit}</b> интро (новых диалогов)/день.
-<i>Оплата интро всё равно идёт кредитами — верификация не отменяет списания.</i>
+✅ Пройди <b>верификацию</b>, чтобы увеличить лимит до <b>${verifiedLimit}</b> новых диалогов в день.
+<i>Открытие новых диалогов всё равно оплачивается кредитами — верификация не отменяет списания.</i>
 `
     : '';
 
   const text = `🔒 <b>Нужны кредиты</b>
 
-<b>Кредиты</b> = Stars для интро.
+<b>Кредиты</b> = Stars для новых диалогов.
 
 <b>Как работает:</b>
-• 💬 Интро = новый диалог: <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}
+• 💬 Новый диалог: <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}
 • Переписка внутри открытого диалога — бесплатна
 • Лимит считается только на <b>новые</b> диалоги (ответы без ограничений)
 
-<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+<i>ℹ️ Stars тратятся только на новые диалоги. Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')} (на одну витрину).
 👥 Раздел «Менеджеры бренда» открывается после покупки Brand Plan.
@@ -16664,7 +16664,7 @@ ${brandPassTrialLineHtml(credits)}
   }
   for (const p of BRAND_PACKS) {
     const intros = Math.max(1, Math.floor(Number(p.credits || 0) / Math.max(1, cost)));
-    kb.text(`⭐ ${p.title} · ≈ ${intros} ${ruPlural(intros,'интро-диалог','интро-диалога','интро-диалогов')}`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
+    kb.text(`⭐ ${p.title} · ≈ ${intros} ${ruPlural(intros,'новый диалог','новых диалога','новых диалогов')}`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
   }
   kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching (подбор офферов)', `a:match_home|ws:${wsId}`).row();
   kbNavRow(kb, `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
@@ -17056,7 +17056,7 @@ ${brandPassTrialLineHtml(credits)}
 🎟 Повторные кредиты: <b>${retry}</b>
 
 <b>Как работает:</b>
-• 💬 Интро = новый диалог: <b>${introCost}</b> ${ruPlural(introCost,'кредит','кредита','кредитов')}
+• 💬 Новый диалог: <b>${introCost}</b> ${ruPlural(introCost,'кредит','кредита','кредитов')}
 • Переписка внутри открытого диалога — бесплатна
 • ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}
 
@@ -17100,15 +17100,15 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
 ${brandPassBalanceLineHtml(credits)}
 ${brandPassUnlocksLineHtml(credits)}
 ${brandPassTrialLineHtml(credits)}
-<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+<i>ℹ️ Stars тратятся только на новые диалоги. Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 <b>Старт</b> · ${startPl.stars}⭐️/мес
-• ${startPl.credits} кредитов (интро)
+• ${startPl.credits} кредитов на новые диалоги
 • CRM-стадии в диалогах
 • До 3 менеджеров
 
 <b>Про</b> · ${proPl.stars}⭐️/мес
-• ${proPl.credits} кредитов (интро)
+• ${proPl.credits} кредитов на новые диалоги
 • CRM-стадии + менеджеры
 
 <b>Включено в подписку</b>
@@ -17246,7 +17246,7 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
       `${includedLine}
 
 ` +
-      `<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+      `<i>ℹ️ Stars тратятся только на новые диалоги. Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 <i>Не путать с «🎯 Подбор в ленте» — это отдельный фильтр.</i>
 
@@ -17303,7 +17303,7 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
       `${includedLine}
 
 ` +
-      `<i>ℹ️ Stars тратятся только на новые диалоги (интро). Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+      `<i>ℹ️ Stars тратятся только на новые диалоги. Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
 <i>Не путать с «🎯 Подбор в ленте» — это отдельный фильтр.</i>
 
@@ -23098,7 +23098,7 @@ if (payload?.type === 'bxo') {
 Для брендов
 • 🔎 Поиск креаторов → фильтры → кампании (сохранённые поиски)
 • 📩 Запрос можно отправить прямо из списка или из витрины
-• Всё дальше в TG: интро, дедлайны, материалы
+• Всё дальше в TG: новые диалоги, дедлайны, материалы
 
 UGC vs Интеграция
 🎬 UGC — контент без аудитории (важно качество/вкус)
@@ -24781,7 +24781,7 @@ ${escapeHtml(safeText)}
       const descrLines = [];
       if (prod.scope === 'brand') {
         descrLines.push(`Brand Plan Pro на ${dur} дней.`);
-        if (credits > 0) descrLines.push(`💳 +${credits} кредитов (интро).`);
+        if (credits > 0) descrLines.push(`💳 +${credits} кредитов на новые диалоги.`);
       } else {
         descrLines.push(`PRO на ${dur} дней (для выбранного канала).`);
       }
@@ -25420,10 +25420,10 @@ cid: ${cid}`, { reply_markup: kb });
       const text =
         `🔒 <b>Контакты на витрине скрыты</b>
 
-<b>Кредиты</b> = Stars для интро.
+<b>Кредиты</b> = Stars для новых диалогов.
 
 Кредиты тратятся на:
-• 💬 Интро = новый диалог: <b>${introCost}</b> ${ruPlural(introCost, 'кредит', 'кредита', 'кредитов')}
+• 💬 Новый диалог: <b>${introCost}</b> ${ruPlural(introCost, 'кредит', 'кредита', 'кредитов')}
 • ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST, 'кредит', 'кредита', 'кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS, 'день', 'дня', 'дней')}
 
 Переписка внутри открытого диалога — бесплатна.
@@ -28682,7 +28682,7 @@ ${link}`;
       const label = planDef.title;
       await sendStarsInvoice(ctx, {
         title: `Brand Plan · ${label} · ${CFG.BRAND_PLAN_DURATION_DAYS} дней`,
-        description: `Подписка ${label}: ${planDef.credits} кредитов (интро) + CRM + менеджеры + Smart Matching (10 каналов/мес) + Featured (7 дней/мес).`,
+        description: `Подписка ${label}: ${planDef.credits} кредитов на новые диалоги + CRM + менеджеры + Smart Matching (10 каналов/мес) + Featured (7 дней/мес).`,
         payload,
         amount: stars,
         backCb: `a:brand_plan|ws:${wsId}|ret:${ret}`,
@@ -32819,7 +32819,7 @@ ${hint} Открой «📥 Inbox» или нажми «🔄 Обновить» 
         const lim = Number(res.dailyLimit || 0);
         const used = Number(res.dailyUsed || 0);
         db.trackEvent('intro_blocked_daily_limit', { userId: actorUserId, wsId: wsId || null, meta: { offerId, lim, used } });
-        try { await ctx.answerCallbackQuery({ text: `Лимит интро (новых диалогов) на сегодня: ${lim} (использовано: ${used}). Попробуй завтра.`, show_alert: true }); } catch {}
+        try { await ctx.answerCallbackQuery({ text: `Лимит новых диалогов на сегодня: ${lim} (использовано: ${used}). Попробуй завтра.`, show_alert: true }); } catch {}
         return;
       }
 
@@ -32888,7 +32888,7 @@ if (p.a === 'a:bx_retry_help') {
   const expD = Number(CFG.INTRO_RETRY_EXPIRES_DAYS || 7);
   await ctx.answerCallbackQuery({
     show_alert: true,
-    text: `Повторный кредит: если бренд написал, а ответа нет ${afterH}h → бот выдаёт 1 повторный кредит (действует ${expD}d). Следующий интро-диалог откроется без списания кредитов.`
+    text: `Повторный кредит: если бренд написал, а ответа нет ${afterH}h → бот выдаёт 1 повторный кредит (действует ${expD}d). Следующий новый диалог откроется без списания кредитов.`
   });
   return;
 }
@@ -36021,15 +36021,15 @@ async function renderVerifyHome(ctx, userRow) {
   const verifiedLimit = Math.max(0, Number(CFG.INTRO_DAILY_LIMIT || 0));
   const unverifiedLimit = Math.max(0, Number(CFG.INTRO_DAILY_LIMIT_UNVERIFIED || 0));
   const brandLimitLine = (verifiedLimit > unverifiedLimit && verifiedLimit > 0)
-    ? `• Лимит интро в день: <b>${unverifiedLimit}</b> → <b>${verifiedLimit}</b>`
-    : `• Более высокий лимит интро (после одобрения)`;
+    ? `• Лимит новых диалогов в день: <b>${unverifiedLimit}</b> → <b>${verifiedLimit}</b>`
+    : `• Более высокий лимит новых диалогов (после одобрения)`;
   const benefits = modeKind === 'brand'
     ? `
 
 <b>Преимущества</b>:
 ${brandLimitLine}
 • Больше доверия и выше шанс ответа
-• Интро = новый диалог (переписка бесплатна)
+• Новый диалог открывается кредитами, переписка дальше бесплатна
 `
     : `
 
@@ -37727,7 +37727,7 @@ async function renderAdminFounderTexts(ctx) {
     'Разыгрываем 2 подписки Brand Plan PRO на 30 дней!',
     '',
     'Что получишь:',
-    '• 50 кредитов на интро с блогерами',
+    '• 50 кредитов на новые диалоги с блогерами',
     '• Smart Match (10 каналов/мес)',
     '• Featured размещение (7 дней)',
     '',
