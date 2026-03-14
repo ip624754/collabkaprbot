@@ -92,8 +92,11 @@ export function buildAdminOpsText({
         const reason = rt.reason ? escapeHtml(String(rt.reason).slice(0, 120)) : '—';
         const at = fmtTs(rt.at);
         const until = rt.expAt ? fmtTs(rt.expAt) : '—';
-        text += `• runtime: since <b>${escapeHtml(at)}</b>; until <b>${escapeHtml(until)}</b>; by <b>${by}</b>; reason: <i>${reason}</i>\n`;
+        const activeTail = Number.isFinite(rt.hoursActive) ? `; active ~<b>${escapeHtml(String(rt.hoursActive))}</b>h` : '';
+        text += `• runtime: since <b>${escapeHtml(at)}</b>; until <b>${escapeHtml(until)}</b>${activeTail}; by <b>${by}</b>; reason: <i>${reason}</i>\n`;
       }
+
+      text += '• ops reminder: каждые ~2h, пока runtime ON\n';
 
       text += '• выключить: ⚙️ <b>Админка → Система</b> → <b>Payments fallback apply</b> → runtime OFF\n\n';
     }

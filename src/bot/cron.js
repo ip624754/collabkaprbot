@@ -15,7 +15,7 @@ import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
-import { isPaymentsFallbackApplyEnabled } from '../lib/paymentsOps.js';
+import { enforcePaymentsFallbackRuntimeGuardrails, isPaymentsFallbackApplyEnabled } from '../lib/paymentsOps.js';
 import {
   qstashPublishJSON,
   getQStashDeliveryUrl,
@@ -1035,6 +1035,9 @@ export async function giveawaysTick() {
     const official = await expireOfficialPosts();
     const retry = await issueIntroRetryCredits();
     const payheal = await autoHealOrphanedPayments();
+    try {
+      await enforcePaymentsFallbackRuntimeGuardrails({ source: 'cron.giveawaysTick' });
+    } catch {}
     // Best-effort ops digest flush (anti-spam). Sends at most once per OPS_ALERT_SUMMARY_MIN.
     try {
       await flushOpsAlerts(getBot().api, 'ops');

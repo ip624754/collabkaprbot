@@ -24,7 +24,7 @@ import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import { registerStarsPaymentsHandlers } from './payments/starsHandlers.js';
 import { queueOpsAlert, flushOpsAlerts } from './opsAlerts.js';
-import { getPaymentsFallbackApplyState, isPaymentsFallbackApplyEnabled, setPaymentsFallbackRuntime } from '../lib/paymentsOps.js';
+import { getPaymentsFallbackApplyState, getPaymentsFallbackGuardrailConfig, isPaymentsFallbackApplyEnabled, setPaymentsFallbackRuntime } from '../lib/paymentsOps.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement, sha256Hex } from './prng.js';
@@ -36642,6 +36642,7 @@ async function renderAdminSystem(ctx) {
       } catch {}
     }
     fbRtLabel = leftSec === null ? 'ON' : `ON (~${fmtWait(leftSec)})`;
+    if (Number.isFinite(fbRt.hoursActive)) fbRtLabel += ` • active ~${fbRt.hoursActive}h`;
   }
 
   const founderState = await getFounderSaleState();
@@ -36693,6 +36694,7 @@ async function renderAdminSystem(ctx) {
 
 async function renderAdminPaymentsFallback(ctx, toast = '') {
   const st = await getPaymentsFallbackApplyState();
+  const guard = getPaymentsFallbackGuardrailConfig();
   const envOn = !!st.envEnabled;
   const rt = st.runtime || {};
   const rtOn = !!st.runtimeEnabled;
@@ -36716,10 +36718,13 @@ async function renderAdminPaymentsFallback(ctx, toast = '') {
   text += `ENV: <b>${envOn ? 'ON' : 'OFF'}</b>\n`;
   text += `RUNTIME: <b>${rtOn ? 'ON' : 'OFF'}</b>`;
   if (rtOn && leftSec !== null) text += ` (ещё ~${escapeHtml(fmtWait(leftSec))})`;
-  text += `\n\n`;
+  text += `\n`;
+  if (rtOn && Number.isFinite(rt.hoursActive)) text += `ACTIVE: <b>~${escapeHtml(String(rt.hoursActive))}h</b>\n`;
+  if (rtOn) text += `OPS REMINDER: каждые ~${escapeHtml(fmtWait(Number(guard.alertRepeatSec || 0) || 0))} пока runtime ON\n`;
+  text += `\n`;
 
   text += `Когда включено: при успешном Stars-платеже, если Redis pay_* сессия истекла, бот может применить оплату по invoice payload (строго по правилам безопасности).\n\n`;
-  text += `Рекомендация: держать <b>OFF</b> и включать <b>временно</b> только при инциденте.\n\n`;
+  text += `Рекомендация: держать <b>OFF</b> и включать <b>временно</b> только при инциденте. Runtime всегда bounded TTL и не должен жить дольше <b>${escapeHtml(fmtWait(Number(guard.maxTtlSec || 0) || 0))}</b>.\n\n`;
 
   if (rtOn) {
     const by = rt.byUser ? String(rt.byUser) : (rt.byTgId ? `tg:${rt.byTgId}` : '—');
