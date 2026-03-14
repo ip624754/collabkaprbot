@@ -2118,6 +2118,7 @@ function notifyReplyKb({ openCb, replyCb, replyLabel = '💬 Ответить' }
     kb.text(replyLabel, replyCb).row();
   }
   kb.row().text('🗑 Убрать', 'a:nd');
+  kb.row().text(creatorLeadListButtonLabel(), `a:ws_leads|w:${realWsId}|s:${leadStatusToCb(st)}|p:0`);
   kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   return kb;
 }
@@ -11320,6 +11321,11 @@ ${replyEsc}`;
 ${threadBlock}`;
     if (thread.length > 3) text += `
 <i>Показаны последние 3 из ${thread.length}.</i>`;
+  } else {
+    text += `
+
+💬 <b>Последние сообщения</b>
+${escapeHtml(creatorLeadThreadEmptyStateText(st, { canManualReply }))}`;
   }
 
   if (notesLast.length) {
@@ -11419,7 +11425,7 @@ ${lines}`;
   }
 
   kb.text('🗑 Удалить', `a:lead_del_q|id:${lead.id}|w:${wsId}|s:${leadStatusToCb(back.status)}|p:${back.page}${rPart}`).row();
-  kbNavRow(kb, listCb);
+  kb.row().text(creatorLeadListButtonLabel(), listCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
   try {
@@ -11513,7 +11519,13 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
   }
 
   if (threadBlock) {
-    text += `\n<b>Последние сообщения:</b>\n${threadBlock}`;
+    text += `
+<b>Последние сообщения:</b>
+${threadBlock}`;
+  } else {
+    text += `
+<b>Последние сообщения:</b>
+${escapeHtml(brandLeadThreadEmptyStateText({ contactsUnlocked }))}`;
   }
 
   const kb = new InlineKeyboard();
@@ -11537,6 +11549,7 @@ async function renderBrandLeadDialog(ctx, brandUserId, leadId, wsId = 0) {
     kb.text(contactsLabel, `a:wsp_contact_req|ws:${realWsId}|r:bl|l:${id}`);
   }
 
+  kb.row().text(creatorLeadListButtonLabel(), `a:ws_leads|w:${realWsId}|s:${leadStatusToCb(st)}|p:0`);
   kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -11730,6 +11743,14 @@ function brandAppDealButtonLabel() {
   return '📌 Стадия сделки';
 }
 
+function brandAppListReturnButtonLabel() {
+  return '📨 К заявкам';
+}
+
+function brandDealsListReturnButtonLabel() {
+  return '📌 К сделкам';
+}
+
 function brandAppNoticeWhatNext(appId = 0, status = 'new', dealStage = '') {
   const openLabel = brandAppOpenButtonLabel(appId);
   const dealLabel = brandAppDealButtonLabel();
@@ -11781,6 +11802,167 @@ ${creatorLine}${brandLine}${stageLine}💡 <b>Сейчас:</b> ${escapeHtml(wha
 ${escapeHtml(preview || '—')}`;
 }
 
+
+function brandAppReplyButtonLabel() {
+  return '✍️ Ответить креатору';
+}
+
+function brandAppReplyRecoveryKb(opts = {}) {
+  const primaryLabel = String(opts.primaryLabel || '').trim();
+  const primaryCb = String(opts.primaryCb || '').trim();
+  const secondaryLabel = String(opts.secondaryLabel || '').trim();
+  const secondaryCb = String(opts.secondaryCb || '').trim();
+  const retryLabel = String(opts.retryLabel || '').trim();
+  const retryCb = String(opts.retryCb || '').trim();
+  const safeMode = opts.safeMode === true;
+  const showReset = opts.showReset === true;
+  const showHelp = opts.showHelp === true;
+  const kb = new InlineKeyboard();
+
+  if (primaryLabel && primaryCb) kb.text(primaryLabel, primaryCb);
+  if (retryLabel && retryCb) kb.text(retryLabel, retryCb);
+  if ((primaryLabel && primaryCb) || (retryLabel && retryCb)) kb.row();
+
+  if (secondaryLabel && secondaryCb) kb.text(secondaryLabel, secondaryCb);
+  if (secondaryLabel && secondaryCb) kb.row();
+
+  if (showHelp) kb.text('🧭 Помощь', 's:help');
+  if (showReset) kb.text('🔄 Сбросить ввод', 's:reset_input');
+  if (showHelp || showReset) kb.row();
+
+  kb.text(safeMode ? '📋 Меню (безопасный режим)' : '📋 Меню', safeMode ? 's:menu' : 'a:menu');
+  kb.text('🏠 Home', safeMode ? 's:home' : 'a:home');
+  return kb;
+}
+
+function buildBrandAppReplyPromptText({ appId = 0, creatorName = '', subjectLabel = '', contextLabel = '', secondaryLabel = '' } = {}) {
+  const id = Math.max(0, Number(appId || 0));
+  const subject = String(subjectLabel || '').trim() || `заявке #${id}`;
+  const context = String(contextLabel || '').trim() || brandAppOpenButtonLabel(id);
+  const secondary = String(secondaryLabel || '').trim() || '📝 Заявки';
+  const creatorLine = creatorName ? `🧑‍🎨 Креатор: <b>${escapeHtml(String(creatorName))}</b>\n` : '';
+
+  return `✍️ <b>Ответить креатору по ${escapeHtml(subject)}</b>
+
+${creatorLine}💡 <b>Сейчас:</b> Напиши одно сообщение — я отправлю его креатору и сохраню в текущем диалоге.
+
+<i>Если передумаешь — открой «${escapeHtml(context)}» или вернись в «${escapeHtml(secondary)}».</i>`;
+}
+
+function buildBrandAppReplyRecoveryText({ appId = 0, kind = 'open_error', subjectLabel = '', contextLabel = '', secondaryLabel = '', replyLabel = '' } = {}) {
+  const id = Math.max(0, Number(appId || 0));
+  const subject = String(subjectLabel || '').trim() || `заявке #${id}`;
+  const context = String(contextLabel || '').trim() || brandAppOpenButtonLabel(id);
+  const secondary = String(secondaryLabel || '').trim() || '📝 Заявки';
+  const reply = String(replyLabel || '').trim() || brandAppReplyButtonLabel();
+
+  if (kind === 'not_accepted') {
+    return `⏳ <b>Заявка #${id} ещё не принята</b>
+
+💡 <b>Сейчас:</b> Открой «${escapeHtml(context)}», нажми «✅ Принять», а потом снова используй «${escapeHtml(reply)}».`;
+  }
+
+  if (kind === 'degraded') {
+    return `⛔ <b>Сейчас нельзя открыть ввод ответа по ${escapeHtml(subject)}</b>
+
+${DEGRADED_COPY.line}
+
+💡 <b>Сейчас:</b> Открой «${escapeHtml(context)}» или вернись в «${escapeHtml(secondary)}».`;
+  }
+
+  if (kind === 'missing_id') {
+    return `⚠️ <b>Не удалось открыть ввод ответа</b>
+
+💡 <b>Сейчас:</b> Вернись в «${escapeHtml(secondary)}», открой нужный экран заново и снова нажми «${escapeHtml(reply)}».`;
+  }
+
+  if (kind === 'not_found') {
+    return `⚠️ <b>${escapeHtml(subject)} больше недоступна</b>
+
+💡 <b>Сейчас:</b> Вернись в «${escapeHtml(secondary)}» и открой актуальную карточку ещё раз.`;
+  }
+
+  if (kind === 'no_access') {
+    return `⛔ <b>Нет доступа к этой заявке</b>
+
+💡 <b>Сейчас:</b> Вернись в «${escapeHtml(secondary)}» и открой только свои рабочие заявки.`;
+  }
+
+  if (kind === 'rate_limit') {
+    return `⏳ <b>Слишком часто</b>
+
+💡 <b>Сейчас:</b> Подожди пару минут и снова отправь ответ. Текущий экран остаётся тем же: «${escapeHtml(context)}».`;
+  }
+
+  if (kind === 'too_short') {
+    return `⚠️ <b>Ответ слишком короткий</b>
+
+💡 <b>Сейчас:</b> Напиши чуть подробнее или вернись в «${escapeHtml(context)}».`;
+  }
+
+  if (kind === 'too_long') {
+    return `⚠️ <b>Ответ слишком длинный</b>
+
+💡 <b>Сейчас:</b> Укороти текст до 2000 символов и отправь снова.`;
+  }
+
+  if (kind == 'no_creator_tg') {
+    return `⚠️ <b>Не удалось отправить ответ</b>
+
+💡 <b>Сейчас:</b> У креатора нет Telegram-контакта для доставки. Открой «${escapeHtml(context)}» и проверь карточку заявки.`;
+  }
+
+  return `⚠️ <b>Не удалось открыть ввод ответа по ${escapeHtml(subject)}</b>
+
+💡 <b>Сейчас:</b> Открой «${escapeHtml(context)}» ещё раз или вернись в «${escapeHtml(secondary)}».`;
+}
+
+
+function brandAppThreadEmptyStateText(status, opts = {}) {
+  const st = normLeadStatus(status);
+  const pending = opts.pending === true;
+  const role = String(opts.role || 'app').trim().toLowerCase();
+  const dealStage = opts.dealStage ? normDealStage(opts.dealStage) : '';
+
+  if (role === 'deal') {
+    if (dealStage === 'lost') return 'Истории пока нет. Сделка остановлена до первого сообщения.';
+    if (dealStage === 'done') return 'Истории пока нет. Сделка завершена без переписки в этой карточке.';
+    return 'Истории пока нет. Нажми «✍️ Ответить» или «⚡ Шаблоны» — первое сообщение появится здесь.';
+  }
+
+  if (pending) return 'Истории пока нет. Дождись завершения принятия и открой карточку ещё раз.';
+  if (st === 'new') return 'Истории пока нет. Сначала реши, принимать ли заявку.';
+  if (st === 'in_progress') return 'Истории пока нет. Нажми «✍️ Ответить креатору» или «⚡ Шаблоны» — первое сообщение появится здесь.';
+  if (st === 'closed') return 'Истории пока нет. Заявка закрыта без переписки в этой карточке.';
+  if (st === 'spam') return 'Истории пока нет. Заявка скрыта до начала переписки.';
+  return 'Истории пока нет. Первое сообщение появится здесь.';
+}
+
+function creatorBrandAppThreadEmptyStateText(status) {
+  const st = normLeadStatus(status);
+  if (st === 'new') return 'Истории пока нет. Бренд ещё не принял заявку — дождись решения здесь.';
+  if (st === 'in_progress') return 'Истории пока нет. Нажми «💬 Написать бренду» — первое сообщение появится здесь.';
+  if (st === 'closed') return 'Истории пока нет. Диалог закрыт без сообщений.';
+  if (st === 'spam') return 'Истории пока нет. Бренд не продолжил эту заявку.';
+  return 'Истории пока нет. Первое сообщение появится здесь.';
+}
+
+function creatorLeadThreadEmptyStateText(status, opts = {}) {
+  const st = normLeadStatus(status);
+  const canManualReply = opts.canManualReply !== false;
+
+  if (st === 'closed') return 'Истории пока нет. Диалог закрыт без сообщений.';
+  if (st === 'spam') return 'Истории пока нет. Диалог скрыт как спам до первого сообщения.';
+  if (canManualReply) return 'Истории пока нет. Нажми «✍️ Ответить» или «⚡ Шаблоны» — первое сообщение появится здесь.';
+  return 'Истории пока нет. Используй шаблоны, статус или заметку — первое сообщение появится здесь.';
+}
+
+function brandLeadThreadEmptyStateText(opts = {}) {
+  const contactsUnlocked = opts.contactsUnlocked === true;
+  if (contactsUnlocked) return 'Истории пока нет. Нажми «✍️ Ответить» — первое сообщение появится в этом диалоге.';
+  return 'Истории пока нет. Нажми «✍️ Ответить» — первое сообщение появится здесь, а витрина и контакты останутся рядом.';
+}
+
 function creatorBrandAppWhatNow(status) {
   const st = normLeadStatus(status);
   if (st === 'new') return 'дождаться решения бренда; кнопка ответа появится после принятия заявки';
@@ -11802,6 +11984,111 @@ function creatorBrandAppReplyButtonLabel() {
 
 function creatorBrandAppListButtonLabel() {
   return '📨 Мои заявки';
+}
+
+function creatorBrandAppListReturnButtonLabel() {
+  return '📨 К заявкам';
+}
+
+function creatorBrandAppChatRecoveryKb(appId = 0, brandUserId = 0, opts = {}) {
+  const id = Math.max(0, Number(appId || 0));
+  const brandId = Math.max(0, Number(brandUserId || 0));
+  const safeMode = opts.safeMode === true;
+  const showReply = opts.showReply === true && id > 0;
+  const showReset = opts.showReset === true;
+  const showHelp = opts.showHelp === true;
+  const showDialog = opts.showDialog !== false && id > 0;
+  const kb = new InlineKeyboard();
+
+  if (showDialog) kb.text(creatorBrandAppDialogButtonLabel(id), `a:brand_app_card|id:${id}`);
+  if (showReply) kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${id}`);
+  if (showDialog || showReply) kb.row();
+
+  if (brandId) kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandId}|p:0`);
+  kb.text(creatorBrandAppListButtonLabel(), 'a:my_apps|p:0');
+  kb.row();
+
+  if (showHelp) kb.text('🧭 Помощь', 's:help');
+  if (showReset) kb.text('🔄 Сбросить ввод', 's:reset_input');
+  if (showHelp || showReset) kb.row();
+
+  kb.text(safeMode ? '📋 Меню (безопасный режим)' : '📋 Меню', safeMode ? 's:menu' : 'a:menu');
+  kb.text('🏠 Home', safeMode ? 's:home' : 'a:home');
+  return kb;
+}
+
+function buildCreatorBrandAppChatPromptText({ appId = 0, brandName = '' } = {}) {
+  const id = Math.max(0, Number(appId || 0));
+  const dialogLabel = creatorBrandAppDialogButtonLabel(id);
+  const listLabel = creatorBrandAppListButtonLabel();
+  const brandLine = brandName ? `🏷 Бренд: <b>${escapeHtml(String(brandName))}</b>\n` : '';
+
+  return `💬 <b>Написать бренду по заявке #${id}</b>
+
+${brandLine}💡 <b>Сейчас:</b> Напиши одно сообщение — я добавлю его в «${escapeHtml(dialogLabel)}» и доставлю бренду внутри этого бота.
+
+<i>Если передумаешь — открой «${escapeHtml(dialogLabel)}» или вернись в «${escapeHtml(listLabel)}».</i>`;
+}
+
+function buildCreatorBrandAppChatRecoveryText({ appId = 0, kind = 'open_error' } = {}) {
+  const id = Math.max(0, Number(appId || 0));
+  const dialogLabel = creatorBrandAppDialogButtonLabel(id);
+  const replyLabel = creatorBrandAppReplyButtonLabel();
+  const listLabel = creatorBrandAppListButtonLabel();
+
+  if (kind === 'not_accepted') {
+    return `⏳ <b>Бренд ещё не принял заявку #${id}</b>
+
+💡 <b>Сейчас:</b> Открой «${escapeHtml(dialogLabel)}» и дождись решения бренда. Кнопка «${escapeHtml(replyLabel)}» появится после принятия.`;
+  }
+
+  if (kind === 'degraded') {
+    return `⛔ <b>Сейчас нельзя открыть ввод по заявке #${id}</b>
+
+${DEGRADED_COPY.line}
+
+💡 <b>Сейчас:</b> Открой «${escapeHtml(dialogLabel)}» или вернись в «${escapeHtml(listLabel)}».`;
+  }
+
+  if (kind === 'missing_id') {
+    return `⚠️ <b>Не удалось открыть ввод сообщения</b>
+
+💡 <b>Сейчас:</b> Вернись в «${escapeHtml(listLabel)}», открой заявку заново и снова нажми «${escapeHtml(replyLabel)}».`;
+  }
+
+  if (kind === 'not_found') {
+    return `⚠️ <b>Заявка больше недоступна</b>
+
+💡 <b>Сейчас:</b> Вернись в «${escapeHtml(listLabel)}» и открой актуальную заявку ещё раз.`;
+  }
+
+  if (kind === 'no_access') {
+    return `⛔ <b>Нет доступа к этой заявке</b>
+
+💡 <b>Сейчас:</b> Вернись в «${escapeHtml(listLabel)}» и открой только свои заявки.`;
+  }
+
+  if (kind === 'rate_limit') {
+    return `⏳ <b>Слишком часто</b>
+
+💡 <b>Сейчас:</b> Подожди пару минут и снова отправь сообщение. Диалог по заявке остаётся тем же: «${escapeHtml(dialogLabel)}».`;
+  }
+
+  if (kind === 'too_short') {
+    return `⚠️ <b>Сообщение слишком короткое</b>
+
+💡 <b>Сейчас:</b> Напиши чуть подробнее или вернись в «${escapeHtml(dialogLabel)}».`;
+  }
+
+  if (kind === 'too_long') {
+    return `⚠️ <b>Сообщение слишком длинное</b>
+
+💡 <b>Сейчас:</b> Укороти текст до 2000 символов и отправь снова.`;
+  }
+
+  return `⚠️ <b>Не удалось открыть чат по заявке #${id}</b>
+
+💡 <b>Сейчас:</b> Открой «${escapeHtml(dialogLabel)}» ещё раз или вернись в «${escapeHtml(listLabel)}».`;
 }
 
 function creatorBrandAppNoticeWhatNext(appId = 0, status = 'new') {
@@ -12218,6 +12505,7 @@ async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'neg
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
   const stage = getAppDealStage(app) || 'negotiation';
+  const st = normLeadStatus(app.status);
   const backCtx = brandDealBackCtx(back);
   const appBackCb = backCtx.appStatus ? brandDealAppBackCb(app.id, backCtx) : `a:brand_app_view|id:${app.id}|s:${normLeadStatus(app.status)}|p:0`;
   const backExtra = brandDealAppBackPart(backCtx);
@@ -12283,6 +12571,11 @@ ${threadBlock}`;
       text += `
 <i>Показаны последние 3 из ${thread.length}.</i>`;
     }
+  } else {
+    text += `
+
+💬 <b>Последние сообщения</b>
+${escapeHtml(brandAppThreadEmptyStateText(st, { role: 'deal', dealStage: stage }))}`;
   }
 
   const kb = new InlineKeyboard()
@@ -12297,7 +12590,7 @@ ${threadBlock}`;
     .text('✍️ Ответить', `a:brand_deal_reply|id:${app.id}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .text('⚡ Шаблоны', `a:brand_deal_tpls|id:${app.id}|b:${backCtx.stage}|p:${backCtx.page}${backExtra}`)
     .row()
-    .text('✉️ Открыть заявку', appBackCb)
+    .text(brandAppOpenButtonLabel(app.id), appBackCb)
     .row();
 
   if (access.isManager) {
@@ -12305,9 +12598,10 @@ ${threadBlock}`;
   }
 
   if (backCtx.appStatus) {
-    kb.text('⬅️ Назад', appBackCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+    kb.text(brandAppOpenButtonLabel(app.id), appBackCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   } else {
-    kbNavRow(kb, `a:brand_deals|ws:0|st:${backCtx.stage}|p:${backCtx.page}`);
+    kb.text(brandDealsListReturnButtonLabel(), `a:brand_deals|ws:0|st:${backCtx.stage}|p:${backCtx.page}`)
+      .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   }
 
   try {
@@ -12415,6 +12709,11 @@ ${threadBlock}`;
       text += `
 <i>Показаны последние 3 из ${thread.length}.</i>`;
     }
+  } else {
+    text += `
+
+💬 <b>Последние сообщения</b>
+${escapeHtml(brandAppThreadEmptyStateText(st, { pending: acceptPending, dealStage }))}`;
   }
 
   if (st === 'new') {
@@ -12480,7 +12779,9 @@ ${threadBlock}`;
       .text('🗑 Удалить', `a:brand_app_del_q|id:${app.id}|s:${back.status}|p:${back.page}`);
   }
 
-  kbNavRow(kb, `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`);
+  kb.row()
+    .text(brandAppListReturnButtonLabel(), `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`)
+    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -12510,30 +12811,66 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
   if (!access.ok) return;
 
   const who = app.creator_username ? '@' + String(app.creator_username).replace(/^@/, '') : (app.creator_tg_id ? `id:${app.creator_tg_id}` : 'creator');
+  const backCb = `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`;
+  const listCb = `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`;
+  const replyCb = `a:brand_app_reply|id:${app.id}|s:${back.status}|p:${back.page}`;
 
-  await setExpectText(ctx.from.id, {
-    type: 'brand_app_reply',
-    appId: Number(app.id),
-    brandUserId,
-    creatorTgId: Number(app.creator_tg_id || 0),
-    creatorUsername: app.creator_username ? String(app.creator_username).replace(/^@/, '') : null,
-    backCb: `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`,
-    backStatus: back.status,
-    backPage: back.page
+  try {
+    await setExpectText(ctx.from.id, {
+      type: 'brand_app_reply',
+      appId: Number(app.id),
+      brandUserId,
+      creatorTgId: Number(app.creator_tg_id || 0),
+      creatorUsername: app.creator_username ? String(app.creator_username).replace(/^@/, '') : null,
+      backCb,
+      backStatus: back.status,
+      backPage: back.page,
+      subjectLabel: `заявке #${app.id}`,
+      contextLabel: brandAppOpenButtonLabel(app.id),
+      secondaryLabel: '📝 Заявки',
+      secondaryCb: listCb,
+      replyLabel: brandAppReplyButtonLabel(),
+      replyCb
+    });
+  } catch {
+    const kb = brandAppReplyRecoveryKb({
+      primaryLabel: brandAppOpenButtonLabel(app.id),
+      primaryCb: backCb,
+      secondaryLabel: '📝 Заявки',
+      secondaryCb: listCb,
+      safeMode: true,
+      showHelp: true,
+      showReset: true
+    });
+    const msg = buildBrandAppReplyRecoveryText({
+      appId: app.id,
+      kind: 'degraded',
+      subjectLabel: `заявке #${app.id}`,
+      contextLabel: brandAppOpenButtonLabel(app.id),
+      secondaryLabel: '📝 Заявки',
+      replyLabel: brandAppReplyButtonLabel()
+    });
+    try {
+      await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    } catch {
+      await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    }
+    return;
+  }
+
+  const kb = brandAppReplyRecoveryKb({
+    primaryLabel: brandAppOpenButtonLabel(app.id),
+    primaryCb: backCb,
+    secondaryLabel: '📝 Заявки',
+    secondaryCb: listCb
   });
-
-  const kb = new InlineKeyboard()
-    .text('⬅️ Назад', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
-    .text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-
-  const text =
-    `✍️ <b>Ответ креатору</b>
-
-` +
-    `Заявка #${app.id} от <b>${escapeHtml(who)}</b>
-
-` +
-    `Напиши ответ одним сообщением — я отправлю его креатору.`;
+  const text = buildBrandAppReplyPromptText({
+    appId: app.id,
+    creatorName: who,
+    subjectLabel: `заявке #${app.id}`,
+    contextLabel: brandAppOpenButtonLabel(app.id),
+    secondaryLabel: '📝 Заявки'
+  });
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -12551,31 +12888,85 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
   if (!access.ok) return;
 
   const creatorTgId = Number(app.creator_tg_id || 0);
-  if (!creatorTgId) return ctx.reply('⚠️ У креатора нет TG id.');
+  const backCb = brandDealViewCb(app.id, back);
+  const appBackCb = brandDealAppBackCb(app.id, back);
+  const replyCb = `a:brand_deal_reply|id:${app.id}|b:${back.stage}|p:${back.page}${back.ab ? `|ab:${back.ab}` : ''}`;
+  if (!creatorTgId) {
+    const kb = brandAppReplyRecoveryKb({
+      primaryLabel: brandAppDealButtonLabel(),
+      primaryCb: backCb,
+      secondaryLabel: '✉️ Открыть заявку',
+      secondaryCb: appBackCb
+    });
+    return ctx.reply(buildBrandAppReplyRecoveryText({
+      appId: app.id,
+      kind: 'no_creator_tg',
+      subjectLabel: `сделке #${app.id}`,
+      contextLabel: brandAppDealButtonLabel(),
+      secondaryLabel: '✉️ Открыть заявку',
+      replyLabel: brandAppReplyButtonLabel()
+    }), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  }
 
   const who = app.creator_username ? '@' + String(app.creator_username).replace(/^@/, '') : (app.creator_tg_id ? `id:${app.creator_tg_id}` : 'creator');
 
-  const backCb = brandDealViewCb(app.id, back);
+  try {
+    await setExpectText(ctx.from.id, {
+      type: 'brand_app_reply',
+      appId: Number(app.id),
+      brandUserId: Number(brandUserId),
+      creatorTgId: Number(creatorTgId),
+      creatorUsername: app.creator_username || null,
+      backCb,
+      backStatus: String(back.stage || 'negotiation'),
+      backPage: Math.max(0, Number(back.page || 0)),
+      subjectLabel: `сделке #${app.id}`,
+      contextLabel: brandAppDealButtonLabel(),
+      secondaryLabel: '✉️ Открыть заявку',
+      secondaryCb: appBackCb,
+      replyLabel: brandAppReplyButtonLabel(),
+      replyCb
+    });
+  } catch {
+    const kb = brandAppReplyRecoveryKb({
+      primaryLabel: brandAppDealButtonLabel(),
+      primaryCb: backCb,
+      secondaryLabel: '✉️ Открыть заявку',
+      secondaryCb: appBackCb,
+      safeMode: true,
+      showHelp: true,
+      showReset: true
+    });
+    const msg = buildBrandAppReplyRecoveryText({
+      appId: app.id,
+      kind: 'degraded',
+      subjectLabel: `сделке #${app.id}`,
+      contextLabel: brandAppDealButtonLabel(),
+      secondaryLabel: '✉️ Открыть заявку',
+      replyLabel: brandAppReplyButtonLabel()
+    });
+    try {
+      await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    } catch {
+      await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+    }
+    return;
+  }
 
-  await setExpectText(ctx.from.id, {
-    type: 'brand_app_reply',
-    appId: Number(app.id),
-    brandUserId: Number(brandUserId),
-    creatorTgId: Number(creatorTgId),
-    creatorUsername: app.creator_username || null,
-    backCb
+  const kb = brandAppReplyRecoveryKb({
+    primaryLabel: brandAppDealButtonLabel(),
+    primaryCb: backCb,
+    secondaryLabel: '✉️ Открыть заявку',
+    secondaryCb: appBackCb
   });
 
-  const kb = navKb(backCb);
-
-  const text =
-    `✍️ <b>Ответ креатору</b>
-
-` +
-    `Сделка #${app.id} · <b>${escapeHtml(String(who))}</b>
-
-` +
-    `Напиши ответ одним сообщением — я отправлю его креатору.`;
+  const text = buildBrandAppReplyPromptText({
+    appId: app.id,
+    creatorName: String(who),
+    subjectLabel: `сделке #${app.id}`,
+    contextLabel: brandAppDealButtonLabel(),
+    secondaryLabel: '✉️ Открыть заявку'
+  });
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -13491,6 +13882,11 @@ ${threadBlock}`;
       text += `
 <i>Показаны последние 3 из ${thread.length}.</i>`;
     }
+  } else {
+    text += `
+
+💬 <b>Последние сообщения</b>
+${escapeHtml(creatorBrandAppThreadEmptyStateText(st))}`;
   }
 
   if (st === 'new') {
@@ -13506,8 +13902,7 @@ ${threadBlock}`;
   const kb = new InlineKeyboard();
   if (st !== 'new') kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${app.id}`).row();
   kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`).row();
-  kb.text(`⬅️ ${creatorBrandAppListButtonLabel()}`, 'a:my_apps|p:0').text('📋 Меню', 'a:menu').row();
-  kb.text('🏠 Home', 'a:home');
+  kb.text(creatorBrandAppListReturnButtonLabel(), 'a:my_apps|p:0').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -13533,7 +13928,7 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
   const st = normLeadStatus(app.status);
   if (st === 'new') {
     try { await ctx.answerCallbackQuery({ text: 'Бренд ещё не принял заявку.' }); } catch {}
-    // Не оставляем пользователя в ‘тишине’: открываем карточку заявки с подсказкой.
+    // Не оставляем пользователя в тишине: открываем карточку заявки с тем же локальным контекстом.
     await renderBrandAppCardForCreator(ctx, actorUserId, appId);
     return;
   }
@@ -13541,19 +13936,12 @@ async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
   try {
     await setExpectText(ctx.from.id, { type: 'brand_app_chat_send', appId: Number(app.id) });
   } catch (e) {
-    const kb = new InlineKeyboard()
-      .text('📨 Открыть заявку', `a:brand_app_card|id:${app.id}`)
-      .row()
-      .text('📋 Меню (безопасный режим)', 's:menu')
-      .text('🏠 Home', 's:home')
-      .row()
-      .text('🧭 Помощь', 's:help')
-      .text('🔄 Сбросить ввод', 's:reset_input');
-    const msg = `⛔ <b>Сейчас нельзя открыть чат</b>
-
-${DEGRADED_COPY.line}
-
-${DEGRADED_COPY.tips}`;
+    const kb = creatorBrandAppChatRecoveryKb(app.id, brandUserId, {
+      safeMode: true,
+      showHelp: true,
+      showReset: true
+    });
+    const msg = buildCreatorBrandAppChatRecoveryText({ appId: app.id, kind: 'degraded' });
     try {
       await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb });
     } catch {
@@ -13562,18 +13950,8 @@ ${DEGRADED_COPY.tips}`;
     return;
   }
 
-  const kb = new InlineKeyboard()
-    .text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`)
-    .text(creatorBrandAppDialogButtonLabel(app.id), `a:brand_app_card|id:${app.id}`);
-
-  // Keep context: Back goes to the dialog card (not straight to main menu)
-  kbNavRow(kb, `a:brand_app_card|id:${app.id}`);
-
-  const text =
-    `💬 <b>Сообщение бренду</b>\n\n` +
-    `Бренд: <b>${escapeHtml(brandName)}</b>\n` +
-    `Заявка: #${app.id}\n\n` +
-	    `Напиши сообщение одним текстом — я доставлю его бренду во входящие (Inbox) в этом боте.`;
+  const kb = creatorBrandAppChatRecoveryKb(app.id, brandUserId);
+  const text = buildCreatorBrandAppChatPromptText({ appId: app.id, brandName });
 
   try {
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -20541,17 +20919,99 @@ if (exp.type === 'brand_apply') {
 
       if (!appId || !brandUserId) {
         await clearExpectText(ctx.from.id);
-        return ctx.reply('⚠️ Не удалось отправить ответ: отсутствуют данные заявки.');
+        return ctx.reply(buildBrandAppReplyRecoveryText({ kind: 'missing_id' }), {
+          parse_mode: 'HTML',
+          reply_markup: brandAppReplyRecoveryKb({
+            secondaryLabel: '📝 Заявки',
+            secondaryCb: 'a:brand_apps|ws:0|s:in_progress|p:0'
+          })
+        });
       }
 
-      if (reply.length < 2) return ctx.reply('⚠️ Ответ слишком короткий.');
-      if (reply.length > 2000) return ctx.reply('⚠️ Слишком длинно. Укороти до 2000 символов.');
+      if (reply.length < 2) {
+        await setExpectText(ctx.from.id, exp);
+        return ctx.reply(buildBrandAppReplyRecoveryText({
+          appId,
+          kind: 'too_short',
+          subjectLabel: String(exp.subjectLabel || ''),
+          contextLabel: String(exp.contextLabel || ''),
+          secondaryLabel: String(exp.secondaryLabel || ''),
+          replyLabel: String(exp.replyLabel || '')
+        }), {
+          parse_mode: 'HTML',
+          reply_markup: brandAppReplyRecoveryKb({
+            primaryLabel: String(exp.contextLabel || ''),
+            primaryCb: String(exp.backCb || ''),
+            secondaryLabel: String(exp.secondaryLabel || ''),
+            secondaryCb: String(exp.secondaryCb || ''),
+            retryLabel: String(exp.replyLabel || brandAppReplyButtonLabel()),
+            retryCb: String(exp.replyCb || ''),
+            showReset: true
+          })
+        });
+      }
+      if (reply.length > 2000) {
+        await setExpectText(ctx.from.id, exp);
+        return ctx.reply(buildBrandAppReplyRecoveryText({
+          appId,
+          kind: 'too_long',
+          subjectLabel: String(exp.subjectLabel || ''),
+          contextLabel: String(exp.contextLabel || ''),
+          secondaryLabel: String(exp.secondaryLabel || ''),
+          replyLabel: String(exp.replyLabel || '')
+        }), {
+          parse_mode: 'HTML',
+          reply_markup: brandAppReplyRecoveryKb({
+            primaryLabel: String(exp.contextLabel || ''),
+            primaryCb: String(exp.backCb || ''),
+            secondaryLabel: String(exp.secondaryLabel || ''),
+            secondaryCb: String(exp.secondaryCb || ''),
+            retryLabel: String(exp.replyLabel || brandAppReplyButtonLabel()),
+            retryCb: String(exp.replyCb || ''),
+            showReset: true
+          })
+        });
+      }
 
       // Server-side guard (STEP317): reply is allowed only after ✅ Принять.
       const app = await getBrandAppForActorSafe(ctx, u.id, appId);
       if (!app) {
         await clearExpectText(ctx.from.id);
-        return ctx.reply('⚠️ Заявка не найдена или нет доступа.');
+        return ctx.reply(buildBrandAppReplyRecoveryText({
+          appId,
+          kind: 'not_found',
+          subjectLabel: String(exp.subjectLabel || ''),
+          contextLabel: String(exp.contextLabel || ''),
+          secondaryLabel: String(exp.secondaryLabel || ''),
+          replyLabel: String(exp.replyLabel || '')
+        }), {
+          parse_mode: 'HTML',
+          reply_markup: brandAppReplyRecoveryKb({
+            primaryLabel: String(exp.contextLabel || ''),
+            primaryCb: String(exp.backCb || ''),
+            secondaryLabel: String(exp.secondaryLabel || ''),
+            secondaryCb: String(exp.secondaryCb || '')
+          })
+        });
+      }
+      if (Number(app.brand_user_id || 0) !== Number(brandUserId || 0)) {
+        await clearExpectText(ctx.from.id);
+        return ctx.reply(buildBrandAppReplyRecoveryText({
+          appId,
+          kind: 'no_access',
+          subjectLabel: String(exp.subjectLabel || ''),
+          contextLabel: String(exp.contextLabel || ''),
+          secondaryLabel: String(exp.secondaryLabel || ''),
+          replyLabel: String(exp.replyLabel || '')
+        }), {
+          parse_mode: 'HTML',
+          reply_markup: brandAppReplyRecoveryKb({
+            primaryLabel: String(exp.contextLabel || ''),
+            primaryCb: String(exp.backCb || ''),
+            secondaryLabel: String(exp.secondaryLabel || ''),
+            secondaryCb: String(exp.secondaryCb || '')
+          })
+        });
       }
       if (normLeadStatus(app.status) === 'new') {
         await clearExpectText(ctx.from.id);
@@ -20568,7 +21028,24 @@ if (exp.type === 'brand_apply') {
           });
         } catch {
           const backCb = String(exp.backCb || `a:brand_app_view|id:${appId}|s:in_progress|p:0`);
-          await ctx.reply('⚠️ Бренд ещё не принял заявку. Нажми ✅ Принять в карточке.', { reply_markup: navKb(backCb) });
+          await ctx.reply(buildBrandAppReplyRecoveryText({
+            appId,
+            kind: 'not_accepted',
+            subjectLabel: String(exp.subjectLabel || ''),
+            contextLabel: String(exp.contextLabel || brandAppOpenButtonLabel(appId)),
+            secondaryLabel: String(exp.secondaryLabel || ''),
+            replyLabel: String(exp.replyLabel || brandAppReplyButtonLabel())
+          }), {
+            parse_mode: 'HTML',
+            reply_markup: brandAppReplyRecoveryKb({
+              primaryLabel: String(exp.contextLabel || brandAppOpenButtonLabel(appId)),
+              primaryCb: backCb,
+              secondaryLabel: String(exp.secondaryLabel || ''),
+              secondaryCb: String(exp.secondaryCb || ''),
+              retryLabel: String(exp.replyLabel || brandAppReplyButtonLabel()),
+              retryCb: String(exp.replyCb || '')
+            })
+          });
         }
         return;
       }
@@ -20578,7 +21055,22 @@ if (exp.type === 'brand_apply') {
       const creatorTgId = Number(app.creator_tg_id || 0);
       if (!creatorTgId) {
         await clearExpectText(ctx.from.id);
-        return ctx.reply('⚠️ Не удалось отправить ответ: у креатора нет TG id.');
+        return ctx.reply(buildBrandAppReplyRecoveryText({
+          appId,
+          kind: 'no_creator_tg',
+          subjectLabel: String(exp.subjectLabel || ''),
+          contextLabel: String(exp.contextLabel || ''),
+          secondaryLabel: String(exp.secondaryLabel || ''),
+          replyLabel: String(exp.replyLabel || '')
+        }), {
+          parse_mode: 'HTML',
+          reply_markup: brandAppReplyRecoveryKb({
+            primaryLabel: String(exp.contextLabel || ''),
+            primaryCb: String(exp.backCb || ''),
+            secondaryLabel: String(exp.secondaryLabel || ''),
+            secondaryCb: String(exp.secondaryCb || '')
+          })
+        });
       }
 
       // Rate-limit: 5 replies / 5 min per brand per app
@@ -20586,7 +21078,25 @@ if (exp.type === 'brand_apply') {
         const rl = await rateLimit(k(['rl', 'app_reply', brandUserId, appId]), { limit: 5, windowSec: 5 * 60 });
         if (!rl.ok && !rl.allowed) {
           await setExpectText(ctx.from.id, exp);
-          return ctx.reply('⏳ Слишком часто. Подожди пару минут.');
+          return ctx.reply(buildBrandAppReplyRecoveryText({
+            appId,
+            kind: 'rate_limit',
+            subjectLabel: String(exp.subjectLabel || ''),
+            contextLabel: String(exp.contextLabel || ''),
+            secondaryLabel: String(exp.secondaryLabel || ''),
+            replyLabel: String(exp.replyLabel || '')
+          }), {
+            parse_mode: 'HTML',
+            reply_markup: brandAppReplyRecoveryKb({
+              primaryLabel: String(exp.contextLabel || ''),
+              primaryCb: String(exp.backCb || ''),
+              secondaryLabel: String(exp.secondaryLabel || ''),
+              secondaryCb: String(exp.secondaryCb || ''),
+              retryLabel: String(exp.replyLabel || brandAppReplyButtonLabel()),
+              retryCb: String(exp.replyCb || ''),
+              showReset: true
+            })
+          });
         }
       } catch {}
 
@@ -20772,33 +21282,65 @@ if (exp.type === 'brand_deals_search') {
 
       if (!appId) {
         await clearExpectText(ctx.from.id);
-        return ctx.reply('⚠️ Не удалось отправить сообщение: нет id заявки.');
+        return ctx.reply(buildCreatorBrandAppChatRecoveryText({ kind: 'missing_id' }), {
+          parse_mode: 'HTML',
+          reply_markup: creatorBrandAppChatRecoveryKb(0, 0, { showDialog: false })
+        });
       }
 
-      if (msg.length < 2) return ctx.reply('⚠️ Сообщение слишком короткое.');
-      if (msg.length > 2000) return ctx.reply('⚠️ Слишком длинно. Укороти до 2000 символов.');
+      if (msg.length < 2) {
+        await setExpectText(ctx.from.id, exp);
+        return ctx.reply(buildCreatorBrandAppChatRecoveryText({ appId, kind: 'too_short' }), {
+          parse_mode: 'HTML',
+          reply_markup: creatorBrandAppChatRecoveryKb(appId, 0, { showReply: true, showReset: true })
+        });
+      }
+      if (msg.length > 2000) {
+        await setExpectText(ctx.from.id, exp);
+        return ctx.reply(buildCreatorBrandAppChatRecoveryText({ appId, kind: 'too_long' }), {
+          parse_mode: 'HTML',
+          reply_markup: creatorBrandAppChatRecoveryKb(appId, 0, { showReply: true, showReset: true })
+        });
+      }
 
       // Rate-limit: 5 messages / 5 min per creator per app
       try {
         const rl = await rateLimit(k(['rl', 'app_chat', u.id, appId]), { limit: 5, windowSec: 5 * 60 });
         if (!rl.ok && !rl.allowed) {
           await setExpectText(ctx.from.id, exp);
-          return ctx.reply('⏳ Слишком часто. Подожди пару минут.');
+          return ctx.reply(buildCreatorBrandAppChatRecoveryText({ appId, kind: 'rate_limit' }), {
+            parse_mode: 'HTML',
+            reply_markup: creatorBrandAppChatRecoveryKb(appId, 0, { showReply: true, showReset: true })
+          });
         }
       } catch {}
 
       await safeDeleteIncomingUserMessage(ctx);
 
       const app = await getBrandAppForActorSafe(ctx, u.id, appId);
-      if (!app) { await clearExpectText(ctx.from.id); return ctx.reply('⚠️ Заявка не найдена.'); }
-      if (Number(app.creator_user_id) !== Number(u.id)) { await clearExpectText(ctx.from.id); return ctx.reply('Нет доступа.'); }
+      if (!app) {
+        await clearExpectText(ctx.from.id);
+        return ctx.reply(buildCreatorBrandAppChatRecoveryText({ appId, kind: 'not_found' }), {
+          parse_mode: 'HTML',
+          reply_markup: creatorBrandAppChatRecoveryKb(appId, 0)
+        });
+      }
+      if (Number(app.creator_user_id) !== Number(u.id)) {
+        await clearExpectText(ctx.from.id);
+        return ctx.reply(buildCreatorBrandAppChatRecoveryText({ appId, kind: 'no_access' }), {
+          parse_mode: 'HTML',
+          reply_markup: creatorBrandAppChatRecoveryKb(appId, 0)
+        });
+      }
 
       // Server-side guard (STEP317): creator can chat only after brand accepted (status != new).
       if (normLeadStatus(app.status) === 'new') {
         await clearExpectText(ctx.from.id);
         try { await ctx.answerCallbackQuery({ text: 'Бренд ещё не принял заявку.' }); } catch {}
-        await renderBrandAppCardForCreator(ctx, u.id, appId);
-        return;
+        return ctx.reply(buildCreatorBrandAppChatRecoveryText({ appId, kind: 'not_accepted' }), {
+          parse_mode: 'HTML',
+          reply_markup: creatorBrandAppChatRecoveryKb(appId, Number(app.brand_user_id || 0))
+        });
       }
 
       const brandUserId = Number(app.brand_user_id);
@@ -25426,11 +25968,31 @@ if (p.a === 'a:brand_deal_view') {
 	  return;
 	}
 if (p.a === 'a:brand_deal_reply') {
-  await ctx.answerCallbackQuery();
+  try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   const back = { stage: String(p.b || p.st || 'negotiation'), page: Math.max(0, Number(p.p || 0)), ab: String(p.ab || '') };
   if (!appId) return;
-  await startBrandDealReply(ctx, u.id, appId, back);
+  try {
+    await startBrandDealReply(ctx, u.id, appId, back);
+  } catch (e) {
+    try { console.warn('[brand_deal_reply] unhandled', { appId, back, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    const backCb = brandDealViewCb(appId, back);
+    const kb = brandAppReplyRecoveryKb({
+      primaryLabel: brandAppDealButtonLabel(),
+      primaryCb: backCb,
+      secondaryLabel: '✉️ Открыть заявку',
+      secondaryCb: brandDealAppBackCb(appId, back)
+    });
+    const msg = buildBrandAppReplyRecoveryText({
+      appId,
+      kind: 'open_error',
+      subjectLabel: `сделке #${appId}`,
+      contextLabel: brandAppDealButtonLabel(),
+      secondaryLabel: '✉️ Открыть заявку',
+      replyLabel: brandAppReplyButtonLabel()
+    });
+    try { await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); } catch { await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
+  }
   return;
 }
 
@@ -25556,7 +26118,26 @@ if (p.a === 'a:brand_app_reply') {
   try { await ctx.answerCallbackQuery(); } catch {}
   const appId = Number(p.id || 0);
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
-  await startBrandAppReply(ctx, u.id, appId, back);
+  try {
+    await startBrandAppReply(ctx, u.id, appId, back);
+  } catch (e) {
+    try { console.warn('[brand_app_reply] open unhandled', { appId, back, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+    const kb = brandAppReplyRecoveryKb({
+      primaryLabel: brandAppOpenButtonLabel(appId),
+      primaryCb: `a:brand_app_view|id:${appId}|s:${back.status}|p:${back.page}`,
+      secondaryLabel: '📝 Заявки',
+      secondaryCb: `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`
+    });
+    const msg = buildBrandAppReplyRecoveryText({
+      appId,
+      kind: 'open_error',
+      subjectLabel: `заявке #${appId}`,
+      contextLabel: brandAppOpenButtonLabel(appId),
+      secondaryLabel: '📝 Заявки',
+      replyLabel: brandAppReplyButtonLabel()
+    });
+    try { await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); } catch { await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
+  }
   return;
 }
 
@@ -25649,13 +26230,9 @@ if (p.a === 'a:brand_app_chat') {
     await startBrandAppChatForCreator(ctx, u.id, appId);
   } catch (e) {
     try { console.warn('[brand_app_chat] unhandled', { appId, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
-    const kb = new InlineKeyboard()
-      .text(creatorBrandAppDialogButtonLabel(appId), `a:brand_app_card|id:${appId}`)
-      .row()
-      .text('📋 Меню', 'a:menu')
-      .text('🏠 Home', 'a:home');
-    const msg = '⚠️ Не удалось открыть чат. Попробуй ещё раз или открой заявку заново.';
-    try { await safeEditOrReply(ctx, msg, { reply_markup: kb }); } catch { await ctx.reply(msg, { reply_markup: kb }); }
+    const kb = creatorBrandAppChatRecoveryKb(appId, 0);
+    const msg = buildCreatorBrandAppChatRecoveryText({ appId, kind: 'open_error' });
+    try { await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb }); } catch { await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb }); }
   }
   return;
 }
