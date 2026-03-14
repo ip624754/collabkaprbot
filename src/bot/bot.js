@@ -3128,35 +3128,28 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
         ? 'Менеджер бренда'
         : uiModeHuman(uiMode);
 
-  let hint = '';
-  // Active brand hint requires DB access; keep it out of the hot Home hub render.
-  if (curMode) hint += `
-• Режим куратора: <b>ВКЛ</b>`;
-
-  let mapText =
+  const homeBody =
     (effective === 'brand' || effective === 'brand_manager')
-      ? `
-<b>Карта</b>
-• 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
-• 📥 Inbox — диалоги и заявки
-• 🎛 Фильтры — уточни подбор креаторов
-`
-      : `
-<b>Карта</b>
-• 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы
-• 📥 Inbox → 📣 Мои каналы → выбери канал → 📥 Inbox
-• 📨 Заявки → 📣 Мои каналы → выбери канал → 📨 Заявки брендов
-• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
-`;
+      ? `Режим: <b>${escapeHtml(modeLabel)}</b>
 
-  if (effective === 'curator') {
-    mapText = `
-<b>Карта</b>
-• 🧹 Кабинет куратора — рабочий хаб
-• 🔓 Обычный режим — вернуться в Creator/Brand
-`;
-  }
+🎬 Офферы — лента и поиск креаторов.
+📥 Inbox — диалоги и новые заявки.
+🎛 Фильтры — уточнить подбор креаторов.
 
+Выбери раздел ниже.`
+      : effective === 'curator'
+        ? `Режим: <b>${escapeHtml(modeLabel)}</b>
+
+🧹 Кабинет куратора — рабочий хаб.
+🔓 Обычный режим — вернуться в Creator / Brand.
+
+Выбери раздел ниже.`
+        : `Режим: <b>${escapeHtml(modeLabel)}</b>
+
+📣 Мои каналы — офферы, Inbox и заявки брендов.
+🏷 Каталог брендов — найти бренд и оставить заявку.
+
+Выбери раздел ниже.`;
 
   const quickStart60 = opts?.quickStart60 ? (() => {
     const title = '⚡️ <b>Первые 60 секунд</b>';
@@ -3181,8 +3174,8 @@ ${trialLine}
     }
     // creator
     return `${title}
-• Нажми «📣 Мои каналы» → выбери канал
-• Затем «🎬 UGC / Офферы» → заполни витрину/профиль
+• Открой «📣 Мои каналы» и выбери канал
+• Затем открой «🎬 UGC / Офферы» и заполни витрину / профиль
 
 `;
   })() : '';
@@ -3190,8 +3183,9 @@ ${trialLine}
   const bannerText = showHint
     ? `
 <b>Быстрый старт</b>
-• Выбери режим ниже → откроется хаб роли (📋 Меню)
-• Дальше следуй по “Карте” (офферы / диалоги / заявки / каталог)
+• Выбери режим ниже, если хочешь переключиться
+• Основные разделы уже доступны кнопками на этом экране
+
 `
     : '';
 
@@ -3213,12 +3207,7 @@ ${trialLine}
     founderBanner +
     quickStart60 +
     bannerText +
-    mapText +
-    `Выбери режим работы.
-
-` +
-    `Текущий режим: <b>${escapeHtml(modeLabel)}</b>` +
-    hint;
+    homeBody;
 
   const bCreator = `${effective === 'creator' ? '✅ ' : ''}✨ Creator / канал`;
   const bBrand = `${effective === 'brand' ? '✅ ' : ''}🏷 Бренд`;
@@ -3371,12 +3360,18 @@ async function renderRoleSelection(ctx, u, opts = {}) {
   const edit = opts.edit === true;
 
   const text =
-    `❓ <b>Ты бренд или креатор?</b>
+    `🏠 <b>Добро пожаловать</b>
 
 ` +
-    `Выбери роль ниже — я настрою меню под тебя.
+    `Выбери, как хочешь работать:
+
 ` +
-    `<i>Роль можно переключить позже на «🏠 Home».</i>`;
+    `✨ Creator / канал — офферы, Inbox и заявки брендов через твои каналы.
+` +
+    `🏷 Бренд — лента креаторов, Inbox, заявки и фильтры.
+
+` +
+    `<i>Режим можно поменять позже на «🏠 Home».</i>`;
 
   const kb = new InlineKeyboard()
     .text('🏢 Бренд / Заказчик', 'a:home_mode|m:brand')
