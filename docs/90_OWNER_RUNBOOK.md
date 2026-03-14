@@ -37,6 +37,8 @@
 
 ### 3.1 `/api/health`
 
+Открыл health и хочешь действовать без раскопок — сначала смотри `docs/ops/02_HEALTH_ONE_SCREEN.md`.
+
 #### Что смотреть в health (сигналы деградации)
 - Redis: `redis.read_ok` / `redis.write_ok` + `last_error`
 - Payments: `payments.payload_hmac_minlen_ok`, `payments.fallback_apply_effective`, `payments.fallback_apply_hours_active`
@@ -44,7 +46,9 @@
 - QStash: `qstash.reschedule_failed`, `qstash.official_publish_stuck`
 - New hardening watchlist: local DB fuse, orphaned autoheal chain, manual official verify
 
-Cookbook: `docs/94_PROD_READINESS_PACK.md`.
+Первый быстрый слой: `docs/ops/02_HEALTH_ONE_SCREEN.md`.
+
+Глубокий cookbook: `docs/94_PROD_READINESS_PACK.md`.
 
 Открываешь раз в день (или после деплоя):
 - `system_status` + `no_go_reasons[]` (если NO_GO — делай то, что написано в `hint`)
@@ -151,7 +155,8 @@ Staging проверка деградаций:
 
 ## 8) Если “что-то сломалось”
 
-> Операторская “шпаргалка” по симптомам: `docs/94_PROD_READINESS_PACK.md` → **3.0 Матрица микрофиксов**.
+> Первый быстрый one-screen слой: `docs/ops/02_HEALTH_ONE_SCREEN.md`.
+> Глубокая матрица микрофиксов и длинные сценарии: `docs/94_PROD_READINESS_PACK.md` → **3.0 Матрица микрофиксов**.
 > Payments хвосты (missing session): там же → **3.5 runtime fallback apply** (включать только временно).
 
 

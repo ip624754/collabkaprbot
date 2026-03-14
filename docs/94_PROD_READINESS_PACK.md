@@ -3,6 +3,7 @@
 Цель: одна “операторская” точка правды — **как понять, что прод зелёный**, и **что делать при деградациях** (Redis/Neon/QStash/Payments), без угадываний.
 
 Ссылки:
+- Operator one-screen: `docs/ops/02_HEALTH_ONE_SCREEN.md`
 - Запуск за 30 минут: `docs/91_PROD_LAUNCH_30MIN.md`
 - ENV baseline: `docs/92_PROD_ENV_BASELINE.md`
 - Deploy checklist: `docs/93_PROD_DEPLOY_CHECKLIST.md`

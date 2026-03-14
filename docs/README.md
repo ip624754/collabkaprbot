@@ -64,7 +64,7 @@
 ## 2.5) Owner docs (для управления продом)
 - `90_OWNER_RUNBOOK.md` — шпаргалка владельца: деплой/ENV/migrations/cron/health/инциденты
 - `ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий incident playbook
-- `ops/02_HEALTH_ONE_SCREEN.md` — one-screen guide: как читать `/api/health` сверху вниз
+- `ops/02_HEALTH_ONE_SCREEN.md` — canonical operator one-screen: `trigger → symptom → /api/health field → safe action → rollback`
 - `ops/03_LIVE_RUNTIME_PASS_STEP471.md` — ручной Telegram runtime pass после STEP470–471 (списки + dialog-flow + терминология)
 
 ## 3) Protocol / Process (как работаем)
@@ -92,6 +92,7 @@
 - Новый операторский пакет: `94_PROD_READINESS_PACK.md` (GO/NO‑GO через `system_status/no_go_reasons` + матрица микрофиксов + runtime fallback runbook + `pending_deliveries`/`ops.digest_preview` + hard-skip отчёт + staging fault‑injection).
 - Навигационный контракт what-next/back-nav теперь зафиксирован отдельным source-level smoke (`smoke:what-next-backnav-contract`) и синхронизирован с `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md`.
 - Добавлен one-screen guide `docs/ops/02_HEALTH_ONE_SCREEN.md` для `/api/health` и обновлён NotebookLM audit baseline STEP430.
+- Обновлён `docs/ops/02_HEALTH_ONE_SCREEN.md`: теперь это боевой operator matrix `trigger → symptom → field → safe action → rollback`, а не только top-down health cheat-sheet.
 
 
 ## Аудит (NotebookLM / внешняя проверка)
@@ -106,4 +107,4 @@
 - `docs/94_PROD_READINESS_PACK.md` — GO/NO‑GO + incident cookbook
 
 - `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий what-to-do playbook после hardening шагов 403–405.
-- `docs/ops/02_HEALTH_ONE_SCREEN.md` — one-screen guide по `/api/health` (STEP429).
+- `docs/ops/02_HEALTH_ONE_SCREEN.md` — canonical operator one-screen / circuit breakers matrix (STEP479).

@@ -1,4 +1,4 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP474 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP479 baseline
 
 Цель: чтобы новый чат **сразу продолжил текущий процесс**, а не начинал проект заново.
 
@@ -17,9 +17,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP474 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP479 baseline)**
 
-Продолжаем не с нуля, а от **STEP474 baseline**.
+Продолжаем не с нуля, а от **STEP479 baseline**.
 
 Текущий цикл был не про новые фичи, а про **stability + clarity + context correctness + repo hygiene** в ядре:
 - creator → brand applications
@@ -58,6 +58,8 @@
 - **STEP475** — payments fallback guardrails (bounded runtime toggle, age/heartbeat, stale cleanup visibility)
 - **STEP476** — broadcast stale visibility + tiny 429 atomicity hardening
 - **STEP477** — IG parked hard gate (source/preflight guard that blocks silent return to active deploy surface)
+- **STEP478** — runtime-grade Stars payment validation integration test on the strict payment path
+- **STEP479** — ops one-screen / circuit breakers refresh (`docs/ops/02_HEALTH_ONE_SCREEN.md`)
 
 ### Что сейчас уже не надо делать
 
@@ -109,7 +111,7 @@
 ### Как работать в новом чате
 
 Новый чат должен:
-- подтвердить, что продолжает от STEP474, а не с нуля
+- подтвердить, что продолжает от STEP479, а не с нуля
 - прочитать docs как обычно
 - кратко перечислить, что уже стабилизировано
 - отдельно назвать, что подтверждено source/snapshot-level
@@ -117,7 +119,7 @@
 - не предлагать новый redesign
 - следующим ходом делать только:
   - live runtime triage
-  - или **STEP475+ micro-hotfix** по реальному хвосту
+  - или **STEP480+ micro-hotfix** по реальному хвосту
 
 ### Что нельзя делать
 
@@ -133,8 +135,8 @@
 ### Какой должен быть первый ответ ассистента
 
 Ожидаемый формат:
-- подтвердить, что baseline = STEP474
-- кратко перечислить, что было стабилизировано в STEP433–474
+- подтвердить, что baseline = STEP479
+- кратко перечислить, что было стабилизировано в STEP433–479
 - отдельно назвать:
   - что подтверждено source/snapshot-level
   - что ещё нужно проверить живьём в Telegram
