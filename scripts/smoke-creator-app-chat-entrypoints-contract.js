@@ -16,9 +16,9 @@ assert.ok(
   botSrc.includes('function creatorBrandAppChatRecoveryKb(appId = 0, brandUserId = 0, opts = {}) {') &&
     botSrc.includes("function buildCreatorBrandAppChatPromptText({ appId = 0, brandName = '' } = {}) {") &&
     botSrc.includes("function buildCreatorBrandAppChatRecoveryText({ appId = 0, kind = 'open_error' } = {}) {") &&
-    botSrc.includes("return `💬 <b>Написать бренду по заявке #${id}</b>") &&
-    botSrc.includes("return `⛔ <b>Сейчас нельзя открыть ввод по заявке #${id}</b>") &&
-    botSrc.includes("return `⚠️ <b>Не удалось открыть чат по заявке #${id}</b>"),
+    botSrc.includes("return `✍️ <b>Ответ бренду по заявке #${id}</b>") &&
+    botSrc.includes("return `⛔ <b>Сейчас нельзя открыть ввод ответа по заявке #${id}</b>") &&
+    botSrc.includes("return `⚠️ <b>Не удалось открыть ответ по заявке #${id}</b>"),
   'Expected creator-side brand-app chat entry/fallback helpers to centralize prompt and recovery copy'
 );
 

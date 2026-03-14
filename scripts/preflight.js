@@ -139,9 +139,6 @@ runNpm("smoke:brand-app-ops-copy-contract");
 logHeader("Preflight: brand application accept UX / post-accept flow contract");
 runNpm("smoke:brand-app-accept-ux-contract");
 
-logHeader("Preflight: brand application template preview dedupe contract");
-runNpm("smoke:brand-app-preview-dedupe-contract");
-
 logHeader("Preflight: brand deal stage + navigation contract");
 runNpm("smoke:brand-deal-stage-nav-contract");
 
@@ -183,6 +180,9 @@ runNpm("smoke:creator-app-notices-contract");
 
 logHeader("Preflight: creator-side brand-app chat entry/fallback contract");
 runNpm("smoke:creator-app-chat-entrypoints-contract");
+
+logHeader("Preflight: creator-side brand-app local-context contract");
+runNpm("smoke:creator-app-local-context-contract");
 runNpm("smoke:brand-app-reply-entrypoints-contract");
 
 logHeader("Preflight: empty / no-history / first-message states contract");

@@ -20,7 +20,7 @@ assert.ok(
     botSrc.includes("function creatorBrandAppNoticeKb(appId = 0, brandUserId = 0, opts = {}) {") &&
     botSrc.includes("function buildCreatorBrandAppServiceNoticeText({ appId = 0, kind = 'reply', brandName = '', body = '', status = 'new', deliveryLine = '' } = {}) {") &&
     botSrc.includes("return id ? `✉️ Диалог #${id}` : '✉️ Диалог';") &&
-    botSrc.includes("return '💬 Написать бренду';") &&
+    botSrc.includes("return '✍️ Ответить бренду';") &&
     botSrc.includes("return '📨 Мои заявки';") &&
     botSrc.includes("return `Открой «${dialogLabel}» или нажми «${replyLabel}». Все сообщения идут внутри этого бота.`;"),
   'Expected creator-side brand-app notices to centralize dialog/open/reply/list vocabulary and what-next copy'

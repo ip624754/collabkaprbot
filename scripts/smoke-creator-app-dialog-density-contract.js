@@ -35,7 +35,7 @@ assert.ok(
 );
 
 assert.ok(
-  botSrc.includes('Пока бренд не принял заявку — кнопка «💬 Написать бренду» появится после принятия.') &&
+  botSrc.includes('Пока бренд не принял заявку — кнопка «✍️ Ответить бренду» появится после принятия.') &&
     botSrc.includes('Сообщения идут внутри этого бота — без перехода в личку.') &&
     botSrc.includes("function creatorBrandAppReplyButtonLabel() {") &&
     botSrc.includes("if (st !== 'new') kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${app.id}`).row();"),

@@ -24,7 +24,7 @@ assert.ok(
 assert.ok(
   botSrc.includes('function creatorBrandAppThreadEmptyStateText(status) {') &&
     botSrc.includes('Истории пока нет. Бренд ещё не принял заявку — дождись решения здесь.') &&
-    botSrc.includes('Истории пока нет. Нажми «💬 Написать бренду» — первое сообщение появится здесь.') &&
+    botSrc.includes('Истории пока нет. Нажми «✍️ Ответить бренду» — первое сообщение появится в этом диалоге.') &&
     botSrc.includes('creatorBrandAppThreadEmptyStateText(st)'),
   'Expected creator-side application dialogs to explain the first-message / not-yet-accepted state instead of showing a blank history area'
 );
