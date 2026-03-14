@@ -17,17 +17,19 @@ assert.ok(
     botSrc.includes("let title = '✅ <b>Сообщение отправлено бренду</b>';") &&
     botSrc.includes("title = '⚠️ <b>Сообщение добавлено в диалог</b>';") &&
     botSrc.includes("const receiptBlock = buildCreatorBrandAppSendReceiptBlock(opts.sendReceipt || null);") &&
-    botSrc.includes("text += `\\n\\n${receiptBlock}`;"),
-  'Expected creator application dialog to support an explicit post-send receipt block inside the same dialog surface'
+    botSrc.includes("text += `\\n\\n${receiptBlock}`;") &&
+    !botSrc.includes('🔔 Уведомление (') &&
+    !botSrc.includes('deliveryLine: ackLine'),
+  'Expected creator application dialog receipt to stay user-facing without internal delivery counters'
 );
 
 assert.ok(
   botSrc.includes('После отправки я сразу верну тебя в этот диалог.') &&
     botSrc.includes("return renderBrandAppCardForCreator(ctx, u.id, appId, {") &&
     botSrc.includes("const deliveryKind = (targetsMap.size === 0)") &&
-    botSrc.includes("kind: deliveryKind,") &&
-    botSrc.includes("deliveryLine: ackLine"),
-  'Expected creator reply send flow to promise and actually return into the same application dialog with delivery-aware receipt state'
+    botSrc.includes("kind: deliveryKind") &&
+    !botSrc.includes("const ackLine ="),
+  'Expected creator reply send flow to return into the same application dialog without exposing notify telemetry in the receipt'
 );
 
 console.log('✅ smoke creator-side application reply completion contract OK');
