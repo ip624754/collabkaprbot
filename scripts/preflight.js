@@ -671,6 +671,21 @@ if (fs.existsSync(startRoleGateContractSmokePath)) {
   console.warn("[preflight] scripts/smoke-start-role-gate-contract.js not found (skipping)");
 }
 
+logHeader("Preflight: smoke brand application accept SQL contract");
+const brandAppAcceptSqlSmokePath = path.join(ROOT, "scripts", "smoke-brand-app-accept-sql-contract.js");
+if (fs.existsSync(brandAppAcceptSqlSmokePath)) {
+  const res = spawnSync(process.execPath, [brandAppAcceptSqlSmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-brand-app-accept-sql-contract.js not found (skipping)");
+}
+
 logHeader("Preflight: smoke ws channel disconnect contract");
 const wsChannelDisconnectSmokePath = path.join(ROOT, "scripts", "smoke-ws-channel-disconnect-contract.js");
 if (fs.existsSync(wsChannelDisconnectSmokePath)) {
