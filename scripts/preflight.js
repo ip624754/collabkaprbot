@@ -195,6 +195,7 @@ function buildNodeCheckList() {
 
 const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): ENV baseline contract", "smoke:env-baseline-contract"],
+  ["Preflight (source-only): IG parked deploy-surface hard gate", "smoke:ig-parked-hard-gate"],
   ["Preflight (source-only): creator current-channel contract", "smoke:creator-current-channel-contract"],
   ["Preflight (source-only): Telegram share URL compatibility contract", "smoke:share-url-compat-contract"],
   ["Preflight (source-only): Brand Inbox accept-point contract", "smoke:brand-inbox-accept-contract"],
