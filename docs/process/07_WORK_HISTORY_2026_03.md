@@ -1,3 +1,44 @@
+## STEP479 — Ops one-screen / circuit breakers refresh
+- Reworked `docs/ops/02_HEALTH_ONE_SCREEN.md` from a generic top-down `/api/health` cheat-sheet into the canonical operator one-screen matrix: `trigger → symptom → /api/health field → safe action → rollback/toggle`.
+- The refreshed one-screen now covers only the current live watchlist: Redis degraded, broadcast pending snapshot staleness, broadcast DB overload / cooldown, payments runtime fallback, payments HMAC / payload issues, QStash reschedule failures, official publish stuck, and hard-skip spikes.
+- Synced the docs surface around it so operators and new chats see the same first move:
+  - `docs/README.md`
+  - `docs/90_OWNER_RUNBOOK.md`
+  - `docs/94_PROD_READINESS_PACK.md`
+  - `docs/15_NEW_CHAT_HANDOFF.md`
+  - `docs/00_CURRENT_STATE.md`
+- Scope is docs/operator-layer only: no runtime code, DB schema, callback routing, payment semantics, or deploy surface changed.
+
+QA
+- Manual docs consistency pass across the updated files.
+- Verified the one-screen matrix matches the currently exposed health/admin watchlist added in STEP475–STEP478.
+- No source/runtime code changed in this step, so no new Node/runtime checks were required.
+
+## STEP478 — runtime-grade Stars payment validation integration
+- Added `scripts/test-runtime-stars-payment-validation.js` as a real runtime-grade integration test for strict Telegram Stars invoice payload validation.
+- The test imports live `src/bot/bot.js` via Node `registerHooks()` and stubs only external packages (`grammy`, `pg`, `@upstash/redis`, `pino`, `dotenv/config`), so the critical money path can execute even in bare source snapshots without local `node_modules`.
+- Covered supported invoice families and key failure modes: `pro`, `brand_pass` (canonical + legacy numeric credits token), `brand_plan` alias compatibility, `matching`, `featured`, `official_publish`, `founder`, `payer_mismatch`, `bad_currency`, `amount_mismatch`, and `bad_payload_chars`.
+- Wired the new runtime test into `package.json` and `scripts/preflight.js` source-only preflight.
+- Goal: catch runtime/module-load/business-logic regressions in the strict Stars payment entry path that source/grep contract smokes do not detect.
+
+## STEP477 — IG parked hard gate
+- Added `scripts/smoke-ig-parked-hard-gate.js` and wired it into `package.json` + `scripts/preflight.js` so parked Instagram OAuth cannot silently re-enter the active deploy surface.
+- The new source guard fails if `api/ig/oauth/*` returns under active `api/`, if `src/lib/igOAuth.js` / `src/lib/cryptoBox.js` reappear in active runtime, if `vercel.json` starts rewriting IG OAuth back into deploy surface, or if active code imports `_ig_oauth_parked/*` directly.
+- Strengthened `_ig_oauth_parked/README.md` with the hard-gate rule so repo audits and future revival work see the same invariant inside the parked subtree itself.
+- Scope is source/deploy-surface safety only: no callback, DB, broadcast, or payment runtime behavior changed.
+
+## STEP476 — Broadcast stale visibility + tiny 429 atomicity hardening
+- Added pending broadcast snapshot stale metadata (`age_sec`, `stale_after_sec`, `stale`) so `/api/health`, `🧰 Админка → Операции`, and `🧹 Clear pending snapshot` expose when the Redis pending snapshot is old/stuck instead of making operators infer it indirectly.
+- `src/bot/cron.js` now stamps `stale_after_sec` into the pending snapshot payload written to Redis.
+- Added `saddCardWithExpire(...)` in `src/lib/redis.js` and moved the rolling broadcast `429users` cooldown window in `api/qstash/broadcast-deliver.js` from raw `SADD + EXPIRE` to one atomic Redis Lua helper.
+- Updated source guards around Admin/Ops + Redis atomicity; no DB schema changes, no audience/routing changes, no money-path changes, and no new hot-path DB reads.
+
+## STEP475 — Payments fallback guardrails
+- Hardened the existing runtime payments fallback operator toggle without changing payment apply semantics: `src/lib/paymentsOps.js` now clamps runtime windows to 5 min .. 24 h, derives age/active-hours data, and emits a Redis-only reminder heartbeat while runtime fallback stays ON.
+- Added best-effort stale zombie cleanup for expired / over-cap runtime fallback state from the regular cron tick path, and surfaced `payments.fallback_apply_age_sec` + `payments.fallback_apply_hours_active` in `/api/health`.
+- Updated Admin → Ops, `🧯 Payments fallback apply`, and `⚙️ Админка → Система` so operators see active-hours, bounded TTL, and reminder context instead of a blind ON/OFF switch.
+- Scope is operator safety only: no DB schema changes, no payment validation changes, and no new hot-path DB reads.
+
 ## STEP474 — IG OAuth parked-lib relocation + handoff canon refresh
 - Moved parked Instagram OAuth helper modules out of the active runtime tree: `src/lib/cryptoBox.js` → `_ig_oauth_parked/lib/cryptoBox.js`, `src/lib/igOAuth.js` → `_ig_oauth_parked/lib/igOAuth.js`.
 - Repointed `_ig_oauth_parked/api/ig/oauth/start.js` and `_ig_oauth_parked/api/ig/oauth/callback.js` to import from the new parked-local `_ig_oauth_parked/lib/*` paths, so the entire IG OAuth branch is self-contained and clearly outside active production runtime.
@@ -4989,3 +5030,50 @@ Why:
 - This is hygiene-only work: no runtime logic, callbacks, DB queries, money paths, or hot UI surfaces changed.
 - Source-only verification after removal remains green.
 
+
+
+## STEP475 — Payments fallback guardrails
+- Kept the existing runtime fallback model (ENV OR runtime TTL) but hardened the operator surface around it instead of changing money semantics.
+- `src/lib/paymentsOps.js` now:
+  - clamps runtime fallback TTL to the intended bounded window `5 min .. 24 h`;
+  - derives `ageSec / hoursActive / leftSec` for the runtime flag;
+  - emits a Redis-only ops reminder roughly every 2 hours while runtime fallback remains ON;
+  - auto-disables a stale zombie runtime flag if it somehow survives past expiry / hard-cap, and writes a guardrail ops event.
+- `src/bot/cron.js` now runs the guardrail heartbeat from the regular tick path (best-effort only).
+- `/api/health` now exposes `payments.fallback_apply_age_sec` and `payments.fallback_apply_hours_active`, plus richer runtime guard metadata (`leftSec`, `alertRepeatSec`, `maxTtlSec`).
+- Admin surfaces were tightened without changing routing:
+  - `⚙️ Админка → Система` shows runtime active-hours when fallback is ON;
+  - `🧰 Админка → Операции` now shows active-hours + reminder cadence in the fallback warning block;
+  - `🧯 Payments fallback apply` screen now shows active-hours, reminder cadence, and explicit bounded-TTL wording.
+- Updated source guards: `scripts/smoke-admin-payments-fallback-contract.js`, `scripts/smoke-admin-ops-render.js`, `scripts/smoke-health-admin-shape.js`.
+- Scope is operator-safety / observability only. No DB schema changes, no payment apply rule changes, no new hot-path DB reads.
+
+QA
+- `node --check` passes on changed JS files (`src/lib/paymentsOps.js`, `src/lib/opsDigest.js`, `api/health.js`, `src/bot/adminOpsText.js`, `src/bot/cron.js`, `src/bot/bot.js`).
+- `node scripts/smoke-admin-payments-fallback-contract.js` passes.
+- `node scripts/smoke-admin-ops-render.js` passes.
+- `node scripts/smoke-admin-system-contract.js` passes.
+- Full dependency/runtime smoke was not runnable in this workspace because `npm install` is blocked by registry auth (`E401`), so runtime checks that require external packages remain a live follow-up after installable deps are available.
+
+
+## STEP476 — Broadcast stale visibility + tiny atomicity hardening
+- Kept the existing broadcast fan-out / pending snapshot model, but made stale pending-state visible to the operator instead of leaving it as a blind Redis blob.
+- `src/bot/cron.js` now writes `stale_after_sec` into the Redis-only `broadcast.pending_deliveries` snapshot (current threshold: ~10 min; visibility only, not an auto-stop).
+- `/api/health` now enriches `broadcast.pending_deliveries` with:
+  - `age_sec`
+  - `stale_after_sec`
+  - `stale`
+- Admin operator surfaces now show the same state:
+  - `🧰 Админка → Операции` renders pending snapshot age and a clear stale warning/guidance block;
+  - `🧹 Clear pending snapshot` confirm screen now shows age + STALE marker before an operator clears the Redis-only snapshot.
+- Tiny atomicity hardening: broadcast global 429 distinct-user tracking no longer does raw `SADD` + `EXPIRE` in sequence.
+  - Added Redis helper `saddCardWithExpire(...)` (Lua atomic `SADD + EXPIRE + SCARD` with safe fallback).
+  - `api/qstash/broadcast-deliver.js` now uses this helper for the short rolling `429users` set.
+- Added source guard `scripts/smoke-broadcast-429-atomicity-contract.js` and wired it into `package.json` + `scripts/preflight.js`.
+- Scope is operator visibility + tiny Redis atomicity hardening only. No DB schema changes, no audience/routing changes, no new hot-path DB reads.
+
+QA
+- `node --check` passes on changed JS files (`src/lib/redis.js`, `api/qstash/broadcast-deliver.js`, `src/bot/cron.js`, `api/health.js`, `src/bot/adminOpsText.js`, `src/bot/bot.js`, `scripts/smoke-admin-ops-render.js`, `scripts/smoke-broadcast-429-atomicity-contract.js`, `scripts/preflight.js`).
+- `node scripts/smoke-admin-ops-render.js` passes.
+- `node scripts/smoke-broadcast-429-atomicity-contract.js` passes.
+- Full deps/runtime smoke remains blocked in this workspace without installable npm dependencies.
