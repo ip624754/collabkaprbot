@@ -66,7 +66,15 @@
     "smoke:creator-leads-density-contract": "node scripts/smoke-creator-leads-density-contract.js",
     "smoke:creator-leads-entrypoints-contract": "node scripts/smoke-creator-leads-entrypoints-contract.js",
     "smoke:brand-apps-list-density-contract": "node scripts/smoke-brand-apps-list-density-contract.js",
-    "smoke:brand-inbox-density-contract": "node scripts/smoke-brand-inbox-density-contract.js"
+    "smoke:brand-inbox-density-contract": "node scripts/smoke-brand-inbox-density-contract.js",
+    "smoke:brand-lead-entrypoints-contract": "node scripts/smoke-brand-lead-entrypoints-contract.js",
+    "smoke:brand-lead-followups-contract": "node scripts/smoke-brand-lead-followups-contract.js",
+    "smoke:brand-app-notices-contract": "node scripts/smoke-brand-app-notices-contract.js",
+    "smoke:creator-app-notices-contract": "node scripts/smoke-creator-app-notices-contract.js",
+    "smoke:creator-app-chat-entrypoints-contract": "node scripts/smoke-creator-app-chat-entrypoints-contract.js",
+    "smoke:brand-app-reply-entrypoints-contract": "node scripts/smoke-brand-app-reply-entrypoints-contract.js",
+    "smoke:empty-state-contract": "node scripts/smoke-empty-state-contract.js",
+    "smoke:footer-back-consistency-contract": "node scripts/smoke-footer-back-consistency-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
