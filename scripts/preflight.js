@@ -738,5 +738,20 @@ if (fs.existsSync(igInvPath)) {
 }
 
 
+logHeader("Preflight: smoke footer/back/list-return consistency contract");
+const footerBackConsistencySmokePath = path.join(ROOT, "scripts", "smoke-footer-back-consistency-contract.js");
+if (fs.existsSync(footerBackConsistencySmokePath)) {
+  const res = spawnSync(process.execPath, [footerBackConsistencySmokePath], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+} else {
+  console.warn("[preflight] scripts/smoke-footer-back-consistency-contract.js not found (skipping)");
+}
+
 // eslint-disable-next-line no-console
 console.log("\n✅ Preflight OK");

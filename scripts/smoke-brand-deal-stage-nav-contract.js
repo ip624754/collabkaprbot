@@ -26,8 +26,8 @@ assert.ok(
 assert.ok(
   botSrc.includes("<i>Это стадия сделки по этой заявке.</i>") &&
     botSrc.includes("if (backCtx.appStatus) {") &&
-    botSrc.includes("kb.text('⬅️ Назад', appBackCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');"),
-  'Expected deal view opened from an application to keep local context with a short hint and a back button returning to that application'
+    botSrc.includes("kb.text(brandAppOpenButtonLabel(app.id), appBackCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');"),
+  'Expected deal view opened from an application to keep local context with a short hint and a concrete application-return footer'
 );
 assert.ok(
   botSrc.includes("if (hasPrev) kb.text('⬅️ Назад', `a:brand_apps|ws:0|s:${st}|p:${p - 1}`);") &&
