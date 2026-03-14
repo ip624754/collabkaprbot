@@ -14,9 +14,9 @@ const botSrc = fs.readFileSync(botPath, 'utf8');
 
 assert.ok(
   botSrc.includes('📥 <b>Inbox</b>') &&
-    botSrc.includes('Показываю последние движения по диалогам и заявкам.') &&
+    botSrc.includes('Здесь появляются новые диалоги и свежие сообщения.') &&
     botSrc.includes('Открой диалог: там статус, стадия, последние сообщения и действия.'),
-  'Expected brand Inbox list to expose a compact signal-first header and a clear open-dialog hint'
+  'Expected Inbox list to expose a compact header, a human-readable description, and a clear open-dialog hint'
 );
 
 assert.ok(
@@ -46,4 +46,13 @@ assert.ok(
   'Expected stage/triage changes in brand Inbox threads to rerender with a clear inline flash state'
 );
 
+
+
+assert.ok(
+  botSrc.includes('if (rows.length) {') &&
+    botSrc.includes('Пока здесь пусто.') &&
+    botSrc.includes('Новый диалог появится, когда кто-то напишет первым.') &&
+    botSrc.includes('Если переписка идёт внутри заявки, открой её карточку.'),
+  'Expected Inbox empty-state to hide noisy page counters and explain what appears here in plain language'
+);
 console.log('✅ smoke brand Inbox density contract OK');
