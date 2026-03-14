@@ -13156,6 +13156,15 @@ function kbTplIconPicker(kb, templates, mkCb, perRow = 3) {
   return kb;
 }
 
+function templateLabelByKey(templates, key, fallback = '—') {
+  const wanted = String(key || '').trim();
+  if (!wanted) return String(fallback);
+  const hit = Array.isArray(templates)
+    ? templates.find((t) => String(t?.key || '').trim() === wanted)
+    : null;
+  return String(hit?.label || fallback);
+}
+
 async function renderTemplatePreviewFlow(ctx, actorUserId, kind, id, key, backCb) {
   const k = String(kind || '').toLowerCase().trim();
   if (k === 'brand_app' || k === 'app' || k === 'apps') {
@@ -13239,18 +13248,26 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
       `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
   }
 
+  const currentTemplateLabel = templateLabelByKey(BRAND_APP_TPLS, key, '⚡ Быстрый ответ');
+
   let text =
     `🧾 <b>Предпросмотр</b>\n` +
     `<i>Это сообщение уйдёт креатору. Нажми “📨 Отправить”.</i>\n\n` +
+    `<b>Шаблон:</b> ${escapeHtml(currentTemplateLabel)}\n\n` +
     outText;
 
+  if (text.length > 3900) {
+    text =
+      `🧾 <b>Предпросмотр</b>\n\n` +
+      `<b>Шаблон:</b> ${escapeHtml(currentTemplateLabel)}\n\n` +
+      outText;
+  }
   if (text.length > 3900) text = outText;
 
   const kb = new InlineKeyboard();
-  kbTplIconPicker(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`, 3);
   kb.text('📨 Отправить', `a:brand_app_tpl_send|id:${app.id}|k:${String(key || 'discuss')}|s:${back.status}|p:${back.page}`)
     .row()
-    .text('🔄 Выбрать другой', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
+    .text('🔁 Выбрать другой', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
     .text('✍️ Ответить', `a:brand_app_reply|id:${app.id}|s:${back.status}|p:${back.page}`);
 
   kbNavRow(kb, `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`);
@@ -13570,8 +13587,6 @@ ${extra}${hint} Кредит спишется, а заявка появится 
       return;
     }
 
-    try { console.warn('[brand_app_accept] app-load failed', { appId: aid, actorUserId, cid: ctx.state?.cid || null, code: String(e?.code || ''), message: String(e?.message || e) }); } catch {}
-    try { console.warn('[brand_app_accept] accept failed', { appId: aid, actorUserId, brandUserId, cid: ctx.state?.cid || null, code: String(e?.code || ''), message: String(e?.message || e) }); } catch {}
     await setMonAcceptDiag({ source: 'click',  status: 'error', errorCode: 'db_error', appId: aid });
 
     try { await ctx.answerCallbackQuery({ text: 'Не удалось обработать. Попробуй ещё раз.', show_alert: true }); } catch {}
