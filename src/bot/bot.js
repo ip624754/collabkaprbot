@@ -12049,7 +12049,7 @@ function buildCreatorBrandAppChatPromptText({ appId = 0, brandName = '' } = {}) 
 
   return `✍️ <b>Ответ бренду по заявке #${id}</b>
 
-${brandLine}💡 <b>Сейчас:</b> Напиши одно сообщение — я добавлю его в «${escapeHtml(dialogLabel)}» и доставлю бренду внутри этого бота.
+${brandLine}💡 <b>Сейчас:</b> Напиши одно сообщение — я добавлю его в «${escapeHtml(dialogLabel)}» и доставлю бренду внутри этого бота. После отправки я сразу верну тебя в этот диалог.
 
 <i>Если передумаешь — нажми «${escapeHtml(dialogBackLabel)}» или вернись в «${escapeHtml(listLabel)}».</i>`;
 }
@@ -13835,7 +13835,32 @@ async function renderCreatorApplications(ctx, creatorUserId, page = 0) {
 
 
 
-async function renderBrandAppCardForCreator(ctx, actorUserId, appId) {
+function buildCreatorBrandAppSendReceiptBlock(input = null) {
+  if (!input || typeof input !== 'object') return '';
+
+  const kind = String(input.kind || 'sent').trim().toLowerCase();
+  const delivery = String(input.deliveryLine || '').trim();
+
+  let title = '✅ <b>Сообщение отправлено бренду</b>';
+  let body = 'Сообщение добавлено в этот диалог. Ниже уже видна обновлённая история.';
+
+  if (kind === 'partial') {
+    body = 'Сообщение добавлено в этот диалог и доставлено бренду. Уведомление дошло не всем получателям бренда.';
+  } else if (kind === 'no_targets') {
+    title = '⚠️ <b>Сообщение добавлено в диалог</b>';
+    body = 'Сообщение сохранено в диалоге, но у бренда не найден Telegram-контакт для уведомления.';
+  } else if (kind === 'notify_failed') {
+    title = '⚠️ <b>Сообщение добавлено в диалог</b>';
+    body = 'Сообщение сохранено в диалоге, но уведомление бренду сейчас не доставлено.';
+  }
+
+  const deliveryLine = delivery ? `
+🔔 ${escapeHtml(delivery)}` : '';
+  return `${title}
+${escapeHtml(body)}${deliveryLine}`;
+}
+
+async function renderBrandAppCardForCreator(ctx, actorUserId, appId, opts = {}) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
 
@@ -13881,10 +13906,12 @@ async function renderBrandAppCardForCreator(ctx, actorUserId, appId) {
 ` +
     `🕒 <code>${escapeHtml(when)}</code>`;
 
-  text += `
+  const receiptBlock = buildCreatorBrandAppSendReceiptBlock(opts.sendReceipt || null);
+  if (receiptBlock) {
+    text += `\n\n${receiptBlock}`;
+  }
 
-💡 <b>Сейчас</b>
-${escapeHtml(creatorBrandAppWhatNow(st))}`;
+  text += `\n\n💡 <b>Сейчас</b>\n${escapeHtml(creatorBrandAppWhatNow(st))}`;
 
   if (st !== 'new') {
     text += `
@@ -21460,21 +21487,17 @@ if (exp.type === 'brand_deals_search') {
           ? `Уведомление (${whoNotified2}): ${delivered}/${targetsMap.size}`
           : 'Уведомление не доставлено: ошибка отправки.';
 
-      const ackText = buildCreatorBrandAppServiceNoticeText({
-        appId,
-        kind: 'sent',
-        brandName,
-        status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
-        deliveryLine: ackLine
-      });
+      const deliveryKind = (targetsMap.size === 0)
+        ? 'no_targets'
+        : (delivered > 0)
+          ? (delivered < targetsMap.size ? 'partial' : 'sent')
+          : 'notify_failed';
 
-      return ctx.reply(ackText, {
-        parse_mode: 'HTML',
-        reply_markup: creatorBrandAppNoticeKb(appId, brandUserId, {
-          status: normLeadStatus(app.status) === 'new' ? 'in_progress' : normLeadStatus(app.status),
-          dismiss: false
-        }),
-        disable_web_page_preview: true
+      return renderBrandAppCardForCreator(ctx, u.id, appId, {
+        sendReceipt: {
+          kind: deliveryKind,
+          deliveryLine: ackLine
+        }
       });
     }
 
