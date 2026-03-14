@@ -4642,43 +4642,28 @@ QA
 - Brand lead dialog now has contextual `📨 К заявкам` return path plus `📋 Меню / 🏠 Home`.
 - `scripts/smoke-footer-back-consistency-contract.js` passes on the source snapshot.
 
-## STEP456 — Runtime sweep + QA-contract refresh
+## STEP457 — Creator brand catalog open-path cleanup
 
 Что сделано
-- Выполнен широкий snapshot-level runtime sweep по уже очищенной цепочке без product-runtime изменений:
-  - creator → brand application
-  - accept / post-accept application screens
-  - reply туда/обратно
-  - local deal stage / local-global back-context
-  - creator leads / brand leads
-  - contact unlock / follow-ups
-  - empty / no-history / first-message states
-  - footer / list-return consistency
-- Прогнаны source-level проверки на STEP455 snapshot: syntax checks, application/deal/lead smokes, notice/fallback smokes, empty-state / footer consistency, registry/lint/redact/public-contact/redis/portable-path gates.
-- Результат sweep: все targeted snapshot/runtime checks зелёные, кроме полного `scripts/preflight.js`, который fail-fast останавливается только потому, что uploaded snapshot bare и без локальных `node_modules`.
-- В ходе sweep выявлены 4 stale smoke contracts, дававшие ложный red после vocabulary/helper cleanup STEP439–455. Обновлены без product behavior changes:
-  - `scripts/smoke-brand-inbox-accept-contract.js`
-  - `scripts/smoke-contacts-brand-pass-contract.js`
-  - `scripts/smoke-what-next-backnav-contract.js`
-  - `scripts/smoke-brand-app-ops-copy-contract.js`
-- Добавлен операторский отчёт `docs/ops/02_RUNTIME_SWEEP_STEP456.md` с разделением:
-  - что подтверждено на snapshot сейчас
-  - что ещё требует live Telegram verification после деплоя
+- Убрали eager intermediate edit в creator-side `🏷 Каталог брендов`: на normal-path больше не показываем `⏳ Открываю каталог брендов…` на каждый тап.
+- `a:brands_home` теперь сначала даёт короткий callback-toast `Открываю каталог…`, а затем сразу рендерит каталог через существующий `renderBrandsDirectory(...)`.
+- Добавлен delayed slow-loader: только если каталог не успел открыться примерно за 700ms, показываем тот же `⏳ Открываю каталог брендов…` экран.
+- Timeout/error fallback сохранён без изменения: при реальной задержке по-прежнему остаётся `⚠️ Каталог брендов отвечает слишком долго...` с возвратом в тот же entrypoint.
+- Добавлен source-level smoke `scripts/smoke-creator-brands-home-open-contract.js`, wired в `package.json` и `scripts/preflight.js`.
 
 Почему
-- После STEP439–455 UI/runtime vocabulary и helper-layer сильно обновились, но часть старых smoke scripts всё ещё ожидала старые literal labels/markers (`💬 Написать бренду`, direct contact-unlock literal, pre-helper notif marker, старые back/open literals).
-- Эти падения выглядели как runtime regression, хотя по факту были QA-contract drift после легитимной очистки UI/entry/follow-up layers.
-- STEP456 закрывает именно этот drift: продукт не меняется, но QA/runtime sweep снова становится честным и оператор-friendly.
+- Видимое “мигание” в creator `🏷 Каталог брендов` было не ощущением, а прямым следствием двух подряд edit-переходов: сначала в loading screen, потом в сам каталог.
+- Это было допустимо как старый anti-silence shim, но после STEP440–455 уже выбивалось из общей signal-first модели и выглядело как legacy UX-шов.
+- STEP457 не меняет каталог как продукт и не трогает hot-path данные; он просто делает normal-path одношаговым, а loader оставляет только для реального slow-path.
 
 Инварианты
 - No accept / charge / credits logic changes.
-- No mutation-layer changes.
-- No DB schema changes.
-- No new hot-path DB reads.
-- No IA redesign.
+- No catalog data/query changes.
+- No new DB reads in hot UI paths.
+- No changes to catalog timeout fallback semantics.
 
 QA
-- Snapshot-level runtime sweep: все targeted checks проходят.
-- Единственный remaining red — `scripts/preflight.js`, и он объясним/ожидаем: bare checkout without `node_modules`.
-- True live/runtime still must be confirmed post-deploy inside Telegram for networked/operator paths (accept click, bidirectional replies, local deal stage transitions, contact unlock receipts, footer returns, empty states in actual chat rendering).
-
+- Быстрый open-path `🏷 Каталог брендов` больше не обязан показывать intermediate loading edit.
+- При slow-path loader всё ещё появляется, но только по факту задержки.
+- При timeout/error fallback остаётся прежний `⚠️ Каталог брендов отвечает слишком долго...` экран.
+- `scripts/smoke-creator-brands-home-open-contract.js` проходит на source snapshot.
