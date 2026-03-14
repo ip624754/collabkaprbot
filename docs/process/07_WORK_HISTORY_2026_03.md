@@ -1,3 +1,274 @@
+**STEP472:** Home copy cleanup + first-run / returning split — normalized the home/entry copy into a short role-aware product screen instead of a route map. `renderHomeHub(...)` no longer renders the `Карта` block, arrow chains, or the old `Выбери режим работы / Текущий режим` tail; creator home now says `Режим: Креатор` plus brief lines for `📣 Мои каналы` and `🏷 Каталог брендов`, brand home says `Режим: Бренд` plus brief lines for `🎬 Офферы`, `📥 Inbox`, and `🎛 Фильтры`, and curator home keeps the same pattern. The one-time home hint and creator quick-start text were rewritten so they no longer refer to “Карта” or show `→` route chains on the home screen. The existing first-run role gate was also refreshed into a short welcome split (`🏠 Добро пожаловать`) that briefly explains Creator vs Brand while keeping the same safe role-pick callbacks. Added `scripts/smoke-home-copy-contract.js`, updated `scripts/smoke-start-role-gate-contract.js`, and wired the new guard into `package.json` + `scripts/preflight.js`. Scope is copy + source-guard only; no callback, DB, or hot-path behavior changes.
+
+## STEP471 — New-dialog terminology consistency pass + live runtime pass runbook
+
+После STEP470 snapshot уже был source-clean, но в active user-facing copy всё ещё оставались смешанные формулировки вокруг платного открытия новой переписки: где-то интерфейс уже говорил `Новый диалог`, а где-то ещё жил старый гибрид `Интро = новый диалог`. Это не ломало ядро, но нарушало Durov-clean language и мешало держать одну продуктовую терминологию.
+
+Что сделано:
+- brand-pass / buy-credits / contact-unlock / verification / retry-credit / Stars auto-apply copy переведены на один user-facing термин: `Новый диалог`;
+- формулы вида `Кредиты = Stars для интро`, `💬 Интро = новый диалог`, `Лимит интро`, `интро-диалог` заменены на прямые human-readable формулировки про новые диалоги;
+- внутренние compat-имена (`INTRO_*`, `mon.intro`) оставлены без изменений, чтобы не трогать env/runtime metrics;
+- добавлен source-level guard `scripts/smoke-new-dialog-terminology-contract.js`, подключённый в `package.json` и `scripts/preflight.js`, чтобы старый mixed wording не вернулся в активный код;
+- добавлен `docs/ops/03_LIVE_RUNTIME_PASS_STEP471.md` — ручной runbook для Telegram live-pass по очищенным list screens и dialog-flow после STEP470–471.
+
+Что не менялось:
+- accept / charge / reply / deal mutations;
+- callback routing;
+- hot-path DB/query surface;
+- internal env/config metric names.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check src/bot/cron.js`
+- `node --check src/bot/payments/starsHandlers.js`
+- `node --check scripts/preflight.js`
+- `node scripts/smoke-new-dialog-terminology-contract.js`
+- `node scripts/preflight.js source`
+
+Итог:
+- активный UX больше не смешивает `Интро` и `Новый диалог`;
+- source-level guard это фиксирует;
+- live runtime pass вынесен в отдельный runbook, чтобы product verification после deploy проходила по одной понятной схеме.
+
+## STEP470 — remaining list dedupe pass (`📨 Мои заявки` + `📨 Заявки брендов`)
+
+После STEP466 brand-side список `📨 Заявки от креаторов` уже стал summary-first, но на creator-side ещё оставались два экрана с тем же UX-хвостом:
+- `📨 Мои заявки` сначала печатали длинный текстовый список brand/status/date/preview, а потом почти тот же список повторялся кнопками;
+- `📨 Заявки брендов` делали то же самое для brand leads внутри канала.
+
+Что сделано:
+- `renderCreatorApplications()` переведён на summary-only header: `📨 Мои заявки` + `Последние заявки к брендам.` + `всего N` и `стр N` только когда pagination реально нужна;
+- из `📨 Мои заявки` удалён верхний текстовый dump строк списка — остаётся только helper `Открой карточку: там статус, ответ бренда и история.` и единый интерактивный список кнопок;
+- `renderWsLeadsList()` переведён на тот же паттерн: `📨 Заявки брендов` + `Последние входящие заявки в этот канал.` + channel/status/total meta, без верхнего повторного текстового списка;
+- empty-state copy, фильтр-табы, open-card callbacks, pagination semantics и все dialog/card/status paths оставлены без изменений.
+
+Smoke / QA:
+- обновлены `scripts/smoke-creator-apps-list-density-contract.js` и `scripts/smoke-creator-leads-density-contract.js` под новый summary-only contract;
+- дополнительно перепроверены соседние guards (`smoke-brand-apps-list-density`, `smoke-creator-app-chat-entrypoints`, `smoke-creator-app-local-context`, `smoke-creator-app-dialog-density`, `smoke-creator-leads-entrypoints`) — без регрессий.
+
+Инварианты:
+- никаких новых DB reads в hot UI paths;
+- никакой смены callback surface;
+- карточки заявок / reply flows / deal paths не менялись;
+- цель шага — только убрать верхний текстовый дубль и оставить один чистый интерактивный список.
+
+## STEP469 — preflight split (`source-only` / `deps/runtime`)
+
+Что сделано:
+- `scripts/preflight.js` переписан в mode-aware виде: `full`, `source`, `deps`.
+- В `package.json` добавлены скрипты `preflight:source` и `preflight:deps`; `qa:fast` теперь указывает на source-only прогон.
+- Source-only stage теперь проходит на bare snapshot без `node_modules` и не маскирует поздние source drift checks.
+- Dependency-bound проверки вынесены в deps/runtime stage:
+  - `scripts/smoke-health-admin-shape.js`
+  - `scripts/smoke-fault-injection.js`
+  - `scripts/smoke-degraded-rate-limit.js`
+- Full preflight сначала проходит source-only sweep, затем честно падает на missing deps, если локальные пакеты не установлены.
+
+Проверки:
+- `node --check scripts/preflight.js`
+- `node scripts/preflight.js source` → OK на bare snapshot
+- `node scripts/preflight.js deps` → explicit missing-deps fail
+- `npm run preflight` → source-only stage проходит, затем deps-stage падает с понятной подсказкой
+
+Риск регрессий: **низкий** (preflight/package/docs only; runtime bot logic, DB, callbacks и hot UI paths не менялись).
+
+## STEP466 — Brand applications list dedupe + density cleanup
+
+После STEP444 экран `📨 Заявки от креаторов` уже был рабочим, но в live UX всё ещё ощущался как портянка: сверху рендерился длинный текстовый перечень тех же заявок, которые ниже уже повторялись интерактивными кнопками. Это утяжеляло скролл, размазывало роль экрана и делало список менее Telegram-native.
+
+Что сделано:
+- из верхней карточки убран текстовый dump `creator → status → updated-at → preview`;
+- верхний блок ужат до summary-only copy: `Последние входящие заявки к бренду.` + компактная строка `бренд · статус · всего N`, с `стр N` только когда pagination реально нужна;
+- helper `Открой карточку: там заявка, ответ, история и действия.` сохранён как единственный follow-up hint;
+- фильтр-ряд, интерактивный список кнопок, open-card path, pagination callbacks и footer semantics не менялись;
+- обновлён smoke `scripts/smoke-brand-apps-list-density-contract.js`, чтобы верхний текстовый дубль не вернулся в следующих шагах.
+
+Итог: экран `📨 Заявки от креаторов` снова стал list-first / signal-first — один компактный summary-блок сверху и один основной интерактивный список ниже, без второго текстового слоя и без расширения query-surface в hot path.
+
+## STEP465 — Inbox empty-state wording cleanup
+
+Контекст / проблема:
+После STEP445 и STEP464 сам `📥 Inbox` уже был рабочим, но пустой экран всё ещё звучал слишком системно и местами путал операторов:
+- строка `Показываю последние движения по диалогам и заявкам.` читалась как внутреннее описание, а не как user-facing empty state;
+- при пустом списке показывалось `стр 1 · на странице 0`, что выглядело шумно и слегка багоподобно;
+- пояснение `💬 Интро = новый диалог. Бренду нужны кредиты, креатору — просто отвечать здесь.` было слишком внутренним и не отвечало простыми словами, что именно появится в Inbox и почему он сейчас пуст.
+
+Что сделано:
+- `renderBxInbox()` получил более спокойный human-readable header: `Здесь появляются новые диалоги и свежие сообщения.`;
+- page counters (`стр … · на странице …`) теперь показываются только когда в списке реально есть строки; при пустом Inbox они не рендерятся;
+- empty-state copy переписан в plain language:
+  - `Пока здесь пусто.`
+  - `Новый диалог появится, когда кто-то напишет первым.`
+  - `Если переписка идёт внутри заявки, открой её карточку.`
+- обновлён source-level smoke `scripts/smoke-brand-inbox-density-contract.js`, чтобы новый empty-state wording и отсутствие пустой пагинации были зафиксированы контрактом.
+
+Что не менялось:
+- non-empty Inbox layout и row semantics;
+- thread-open actions / stage / triage controls;
+- creator ↔ brand application reply loop;
+- accept / charge / deals / DB-query paths.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node scripts/smoke-brand-inbox-density-contract.js`
+
+Итог:
+- пустой Inbox теперь объясняет состояние по-человечески;
+- исчез лишний шум `на странице 0`;
+- экран яснее разделяет Inbox и локальную переписку внутри карточки заявки без redesign и без изменения runtime-логики.
+
+## STEP463 — Creator application reply runtime guard hotfix
+
+Контекст / проблема:
+После STEP462 creator-side reply UX уже стал понятнее по тексту и intended flow, но в live runtime всё ещё происходил критичный сбой именно в момент отправки сообщения из `✍️ Ответить бренду`:
+- сообщение креатора успевало записаться в thread заявки;
+- затем код входил в notify-step для brand owner / managers;
+- там вызывался `safeBrandManagers(...)`, но такого helper'а в `src/bot/bot.js` не существовало;
+- в результате на live message path падал `ReferenceError: safeBrandManagers is not defined`;
+- из-за этого оператор видел сломанную completion-semantics: сообщение вроде появлялось в истории, но бот не доходил до planned same-dialog rerender и пользователь ощущал, что его выбрасывает в generic menu/fallback.
+
+Что сделано:
+- added missing helper `safeBrandManagers(primaryFn, fallbackFn)` рядом с другими safe wrappers (`safeBrandProfiles`, `safeBrandApplications`);
+- helper degrades only on missing `brand_managers` relation and otherwise rethrows, so we preserve existing fail-loud behavior for real runtime errors;
+- existing creator reply fanout path now safely calls `safeBrandManagers(() => db.listBrandManagers(brandUserId), async () => [])`;
+- `buildCreatorBrandAppChatPromptText(...)` strengthened the composer copy: it now explicitly tells the user to type a normal message in the Telegram input field below and send it;
+- added source smoke `scripts/smoke-creator-app-reply-runtime-guard-contract.js`, wired into `package.json` + `scripts/preflight.js`, so both the defined guard helper and the explicit composer guidance are protected by preflight.
+
+Что не менялось:
+- no accept / charge / deal logic changes;
+- no Inbox IA merge;
+- no callback-key redesign;
+- no new DB reads in hot UI paths;
+- append-to-thread and notify semantics otherwise unchanged.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node scripts/smoke-creator-app-reply-runtime-guard-contract.js`
+- `node scripts/smoke-creator-app-reply-completion-contract.js`
+- `node scripts/smoke-creator-app-chat-entrypoints-contract.js`
+- `node scripts/smoke-creator-app-local-context-contract.js`
+
+Итог:
+- найден и закрыт не UX-мираж, а реальный live runtime blocker;
+- creator reply path больше не должен падать после append из-за undefined helper;
+- completion-flow теперь имеет шанс дойти до intended same-dialog rerender, а сам composer яснее объясняет, куда именно вводить текст.
+
+## STEP462 — Creator application reply post-send completion cleanup
+
+Контекст / проблема:
+После STEP460 creator-side application dialog/composer/open-brand flow уже стал чище, но сам момент отправки сообщения из `✍️ Ответить бренду` всё ещё ощущался размыто:
+- composer объяснял, что нужно написать одно сообщение, но не обещал явно, что после отправки пользователь вернётся в тот же диалог;
+- успешная отправка заканчивалась отдельным service-notice экраном с menu-ish кнопками, из-за чего было неочевидно, ушло ли сообщение и где теперь искать обновлённый диалог;
+- при таком flow оператору могло казаться, что после send его выбрасывает из локального контекста, хотя сам data-path записи в thread уже работал корректно.
+
+Что сделано:
+- `buildCreatorBrandAppChatPromptText(...)` усилен фразой `После отправки я сразу верну тебя в этот диалог.` — composer теперь заранее объясняет completion semantics;
+- added `buildCreatorBrandAppSendReceiptBlock(...)` для inline completion inside the same dialog surface;
+- `renderBrandAppCardForCreator(...)` now accepts `opts.sendReceipt` and can prepend a compact success/warning receipt block before the normal dialog content;
+- successful `expectText: brand_app_chat_send` no longer returns a separate generic creator notice screen. Instead it now:
+  - computes delivery-aware receipt kind (`sent` / `partial` / `no_targets` / `notify_failed`);
+  - rerenders the same creator application dialog via `renderBrandAppCardForCreator(...)`;
+  - shows the updated thread immediately under a clear inline receipt (`✅ Сообщение отправлено бренду` or `⚠️ Сообщение добавлено в диалог` when notification delivery had issues);
+- added source smoke `scripts/smoke-creator-app-reply-completion-contract.js`, wired into `package.json` + `scripts/preflight.js`.
+
+Что не менялось:
+- append-to-thread mutation and brand notification fanout semantics unchanged;
+- no accept/charge/deal changes;
+- no Inbox/applications IA merge;
+- no new DB reads in hot UI paths.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node scripts/smoke-creator-app-reply-completion-contract.js`
+- `node scripts/smoke-creator-app-chat-entrypoints-contract.js`
+- `node scripts/smoke-creator-app-local-context-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-creator-app-notices-contract.js`
+
+Итог:
+- creator reply flow now ends where the user expects: in the same `✉️ Диалог по заявке #...`;
+- post-send state is explicit and visible in-place, without a generic detour;
+- local context stays intact and the operator can immediately verify that the message really went into the thread.
+
+## STEP461 — New-chat docs kernel refresh (prompt v3 + STEP460 handoff)
+
+Контекст / проблема:
+После STEP433–460 сам процесс работы уже стал дисциплинированным, но canonical new-chat docs всё ещё были чуть смешаны по ролям: часть правил жила в prompt, часть — в handoff, часть — только в живой переписке. Из-за этого новый чат мог либо недополучить текущий стабилизационный baseline, либо переусложнить себе роль длинным runtime context прямо в core prompt. Отдельно пользователь попросил явно добавить стиль Павла Дурова не как лозунг, а как Telegram-native product discipline.
+
+Что сделано:
+- `docs/17_START_NEW_CHAT_PROMPT.md` переписан как canonical behavior kernel v3:
+  - explicit operating style **Jobs / Vitalik / Woz / Durov**;
+  - docs-first reading order;
+  - audit → minimal patch → QA → artifacts workflow;
+  - hard bans on redesign-by-default, broken local-return semantics, hidden state creep and “health/log = enough” thinking;
+  - отдельный акцент на Telegram-native clarity, signal-first UX и local-context-first navigation;
+- `docs/15_NEW_CHAT_HANDOFF.md` обновлён под **STEP460 baseline**:
+  - чётко отделяет, что стабилизировано в STEP433–460, от того, что ещё требует live Telegram runtime verification;
+  - прямо запрещает reopen новой архитектуры, needless accept/charge rewrites и cosmetic cleanup without evidence;
+  - фиксирует, что следующий ход должен быть только runtime triage или реальный micro-hotfix;
+- `docs/00_BOOT.md` синхронизирован под стиль **Jobs/Vitalik/Woz/Durov**;
+- `docs/README.md` уточняет, что `17_START_NEW_CHAT_PROMPT.md` = canonical behavior kernel, а `15_NEW_CHAT_HANDOFF.md` = canonical baseline context for new chats.
+
+Что не менялось:
+- runtime / bot logic;
+- DB schema / migrations;
+- callbacks / routing / hot-path reads;
+- accept / charge / deals / inbox / catalog flows.
+
+Проверки:
+- ручная сверка `docs/17_START_NEW_CHAT_PROMPT.md` и `docs/15_NEW_CHAT_HANDOFF.md` на разделение ролей: kernel vs live baseline;
+- ручная сверка `docs/README.md` и `docs/00_BOOT.md` на discoverability и sync;
+- diff-check: docs-only change, без runtime/code surface.
+
+Итог:
+- будущие чаты получают более чистый старт: один файл задаёт **как думать и работать**, второй — **где именно сейчас стоит проект**;
+- стиль Дурова включён не декларативно, а как Telegram-native UX discipline;
+- surface area intentionally docs-only.
+
+## STEP460 — Creator application dialog / composer / local-return clarity pass
+
+Контекст / проблема:
+После STEP452–459 creator-side `📨 Мои заявки` уже были рабочими и безопасными, но post-accept conversation path всё ещё оставлял UX-хвосты:
+- CTA `💬 Написать бренду` звучал так, будто откроется готовый чат, хотя фактически пользователь попадал в input-mode экран;
+- на экране ввода рядом с локальным return всё ещё оставался `🪟 Открыть бренд`, из-за чего composer ощущался как ещё один навигационный хаб, а не как режим ответа;
+- `🪟 Открыть бренд` из creator application context уводил в глобальный каталоговый path с generic `⬅️ Назад к списку`, поэтому терялось ощущение, что это всё одна и та же заявка/диалог;
+- в итоге при пустом `📥 Inbox` и живом диалоге внутри `📨 Мои заявки` у оператора возникало ощущение, будто flow недоделан, хотя data-path сам по себе был корректным.
+
+Что сделано:
+- reply CTA в creator application flow relabel: `💬 Написать бренду` → `✍️ Ответить бренду`;
+- `creatorBrandAppWhatNow(...)` и `creatorBrandAppThreadEmptyStateText(...)` теперь явно говорят, что первое сообщение появится в этом же диалоге;
+- opened creator application card добавляет короткую строку `Диалог по этой заявке идёт здесь, внутри этого бота.` — без redesign и без новых reads;
+- добавлены локальные return helpers:
+  - `creatorBrandAppDialogReturnButtonLabel(appId)` → `⬅️ К диалогу #...`;
+  - `creatorBrandAppCardReturnButtonLabel(appId)` → `⬅️ К заявке #...`;
+  - `creatorBrandAppOpenBrandCallback(brandUserId, appId, backPage)` → creator-side open-brand callback с локальным app-context;
+- composer/input-mode keyboard (`creatorBrandAppChatRecoveryKb`) теперь local-first:
+  - `⬅️ К диалогу #...`;
+  - `📨 К заявкам`;
+  - `📋 Меню`;
+  - `🏠 Home`;
+  - `🪟 Открыть бренд` removed from the normal composer surface (оставлен только как opt-in flag для edge recovery, не используется в обычном flow);
+- creator-side open-brand jumps from application context now pass `ba:<appId>` into `a:brand_dir_open`, and `renderBrandDirectoryCard(...)` uses that context to show `⬅️ К заявке #...` instead of `⬅️ Назад к списку`;
+- same contextual open-brand callback reused in creator-side service notices and in the legacy accepted-more surface, so local return semantics no longer differ by entrypoint;
+- added source smoke `scripts/smoke-creator-app-local-context-contract.js`, wired into `package.json` + `scripts/preflight.js`.
+
+Что не менялось:
+- Inbox / leads / applications IA are still separate branches; no attempt to merge them into a universal Inbox;
+- accept / charge / credits / DB mutation layer untouched;
+- no new schema, no new hot-path DB reads, no changes to working brand-side flows.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/preflight.js`
+- `node scripts/smoke-creator-app-chat-entrypoints-contract.js`
+- `node scripts/smoke-creator-app-local-context-contract.js`
+- `node scripts/smoke-creator-app-dialog-density-contract.js`
+- `node scripts/smoke-creator-app-notices-contract.js`
+- `node scripts/smoke-empty-state-contract.js`
+- `node scripts/smoke-brand-app-accept-ux-contract.js`
+
 ## STEP450 — Brand-side application/deal notice cleanup (`accept / reply / deal updates`)
 
 Контекст / проблема:
@@ -4669,48 +4940,36 @@ QA
 - `scripts/smoke-creator-brands-home-open-contract.js` проходит на source snapshot.
 
 
-## STEP458 — Brand application accept SQL typing hardening
+## STEP464 — Reply receipt + brand notice wording cleanup
+- Creator-side application reply receipt is now strictly user-facing:
+  - keeps `✅ Сообщение отправлено бренду` / warning variants when the dialog updated but notification did not fully deliver;
+  - no longer shows internal delivery telemetry such as owner/manager counters in the normal UX.
+- Brand-side application notice surfaces now distinguish between two contexts:
+  - `new_app` notices keep `✉️ Заявка #...` wording;
+  - reply / ongoing-work notices switch the primary CTA to `💬 Диалог #...`.
+- Added notice-specific helper `brandAppNoticeOpenButtonLabel(...)` and threaded the `kind` through `brandAppNoticeWhatNext(...)` + `brandAppNoticeKb(...)` so wording changes stay local to notice surfaces and do not rewrite brand application card / deal card CTA language.
+- Updated source-level smoke coverage in `scripts/smoke-brand-app-notices-contract.js` and `scripts/smoke-creator-app-reply-completion-contract.js`.
+- Scope is wording / receipt cleanup only. No accept/charge/deal mutations, no DB schema changes, no new hot-path DB reads.
 
-Что сделано
-- Добили accept-family SQL typing в brand applications: оставшиеся JSONB mutation paths больше не оставляют PostgreSQL-параметры без явного типа в live accept flow.
-- Узко усилили runtime diagnostics вокруг `a:brand_app_accept`, чтобы в мониторе/логах следующий сбой не схлопывался в безликий `db_error` без контекста.
-- Подключили dedicated source-smoke для accept SQL contract в обязательный preflight, чтобы именно этот класс регрессии перестал быть «подготовлен, но не включён».
 
-Почему
-- Live `/api/health` уже показывал, что accept click доходит до runtime, но падает внутри DB layer: `mon.accept.last_status=error`, `mon.retry.last_error=could_not_determine_data_type_of_parameter_2`.
-- Значит проблема была не в Telegram button path и не в доставке заявки, а в хвосте accept SQL family после STEP437.
+## STEP467 — accept SQL family hardening
+- Hardened `src/db/queries.js` accept meta writes by explicitly casting `jsonb_build_object(...)` parameters in both `markBrandApplicationAccepted()` and `acceptBrandApplicationWithCharge()`:
+  - `'accepted_by_user_id', $2::bigint`
+  - `'charged_cost', $3::int`
+- Kept the legacy helper in place but removed the latent type-resolution tail instead of leaving an untyped exported path near the money/accept critical surface.
+- Wired `scripts/smoke-brand-app-accept-sql-contract.js` into `package.json` and `scripts/preflight.js` so future source sweeps fail fast on this exact regression.
+- No UX or callback routing changes. No new DB reads in hot UI paths.
 
-Инварианты
-- No change to accept/charge business semantics.
-- No new DB reads in hot UI paths.
-- Credits continue to charge exactly once on the successful accept path.
+## STEP468 — stale smoke sync sweep
 
-QA
-- `✅ Принять` больше не должен оставлять заявку в `new` из-за PG typing error.
-- `/api/health` больше не должен показывать новый `could_not_determine_data_type_of_parameter_2` после успешного accept.
-- Source-smoke для accept SQL contract проходит в preflight.
+Scope: docs/source-contract only. No runtime logic, DB queries, callback routing, or money-path changes.
 
-## STEP459 — Brand quick-reply preview dedupe cleanup
+What changed:
+- synced stale smoke expectations for creator brand-app notices to the current local dialog / open-brand / list-return model;
+- synced what-next/backnav smoke to the accepted-more local open-brand callback with app-context return;
+- synced workspace/channel disconnect smoke to the current channel-first creator menu model (brand mode switch remains in creator root menu, not in current-channel screen);
+- synced brand-app template smoke to the current picker/preview layout and labels in source.
 
-Что сделано
-- Второй экран quick replies после `✅ Принял — дальше` очищен до реального preview/confirm step: duplicate template-switch row удалён из brand application preview.
-- Preview теперь явно показывает строку `Шаблон: …`, чтобы бренд видел, какой шаблон выбран, не возвращая второй экран к роли «ещё один picker».
-- На confirm-экране оставлены только действия по смыслу: `📨 Отправить`, `🔁 Выбрать другой`, `✍️ Ответить`, плюс стандартный footer.
-- Добавлен source-smoke `scripts/smoke-brand-app-preview-dedupe-contract.js`, wired в `package.json` и `scripts/preflight.js`.
-
-Почему
-- Когда preview-экран снова показывал template-switch controls, второй экран ощущался как дубль первого и размывал роли flow `выбор шаблона → подтверждение`.
-- Для Telegram-native UX здесь чище один выборочный экран и один confirm-экран, чем повторный picker внутри preview.
-
-Инварианты
-- Сам preview-step сохранён.
-- `📨 Отправить` остаётся единственным explicit send action.
-- `🔁 Выбрать другой` возвращает в template picker, а не меняет шаблон прямо на confirm-экране.
-- No accept / charge / deals / callback payload changes.
-- No new DB reads in hot UI paths.
-
-QA
-- После выбора quick template бренд попадает в preview как и раньше.
-- На preview-экране больше нет duplicate template-switch rows.
-- Видна строка `Шаблон: ...` для текущего quick reply.
-- `📨 Отправить`, `🔁 Выбрать другой`, `✍️ Ответить` и footer работают как раньше.
+Why:
+- source-smoke drift had accumulated across STEP459–467 and was reporting old contracts instead of the current product state.
+- this step restores trust in source guards before the next preflight/dependency split.
