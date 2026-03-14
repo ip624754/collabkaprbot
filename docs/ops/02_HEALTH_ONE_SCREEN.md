@@ -1,137 +1,61 @@
-# 02 — `/api/health` one-screen operator guide (STEP429)
+# 02 — `/api/health` + circuit breakers one-screen (STEP479)
 
-Короткая шпаргалка: что смотреть в `/api/health` **сверху вниз**, без импровизации.
+Это короткий **боевой operator-layer**: открыл `/api/health` или Admin → Ops, увидел симптом, сделал **ровно один safe step**, потом сразу перепроверил health.
 
-## 1) Сначала смотри только это
-1. `ok`
-2. `system_status`
-3. `no_go_reasons[]`
-4. `ops.digest_preview`
+## 1) Как пользоваться этим файлом
+1. Сначала смотри только `system_status`, `no_go_reasons[]`, `ops.digest_preview`.
+2. Потом найди свой симптом в матрице ниже.
+3. Сделай **один** safe action.
+4. Сразу обнови `/api/health`.
+5. Только если симптом не ушёл — иди глубже в runbook/logs.
 
-Правило: если `system_status = NO_GO`, сначала прочитай `no_go_reasons[].hint`, а не жми кнопки “на удачу”.
-
----
-
-## 2) Что означает каждый верхний блок
-
-### `ok`
-- `true` — endpoint жив, JSON собрался.
-- `false` / exception — сначала infra/debug, а не ручные replays.
-
-### `system_status`
-- `GO` — baseline выглядит безопасно.
-- `NO_GO` — есть явный стоп-фактор для релиза / трафика.
-
-### `no_go_reasons[]`
-Это список **конкретных причин**, почему сейчас нельзя считать прод зелёным.
-Ищи поля:
-- `code`
-- `value`
-- `threshold`
-- `hint`
-
-`hint` — это первый безопасный ход.
-
-### `ops.digest_preview`
-Это короткая operator-сводка: последние причины, топ-спайки, свежие тревоги.
-Если нужен свежий срез после инцидента — в админке жми `🧾 Flush ops digest`.
+Правило: **не лечить прод “на удачу” ручными повторами, если health уже показывает protective mode / cooldown / fallback banner.**
 
 ---
 
-## 3) Дальше смотри по контурам
+## 2) Матрица: trigger → symptom → field → safe action → rollback
 
-### Redis
-Смотри:
-- `redis.read_ok`
-- `redis.write_ok`
-- `redis.latency_ms`
-- `redis.last_error`
+| Trigger | Symptom / что видно | `/api/health` / Admin поле | Safe action | Rollback / toggle |
+|---|---|---|---|---|
+| Redis degraded | Красный баннер, массовые операции ведут себя осторожно, tick может откладываться | `redis.read_ok`, `redis.write_ok`, `redis.last_error`, `broadcast.tick_deferred_redis.*` | **Не запускать** новые большие broadcast / fan-out. Сначала восстановить Redis/Upstash. | Отдельного toggle нет. Возврат = дождаться `redis.read_ok=true` и `redis.write_ok=true`. |
+| Broadcast pending snapshot stale | `pending_count` висит, age большой, в Admin → Ops есть STALE warning | `broadcast.pending_deliveries.pending_count`, `age_sec`, `stale_after_sec`, `stale` | Проверить `ops.digest_preview`, `broadcast.db_overload`, hard-skip всплески. **Не стартовать** новые большие рассылки до стабилизации. | Только если snapshot явно мусорный: `🧹 Clear pending snapshot`. Не использовать как первую реакцию. |
+| Broadcast DB overload / cooldown | Доставка не ускоряется, возможны `429 + Retry-After`, local fuse/cooldown | `broadcast.db_overload.*`, `retry_after_sec`, `cooldown_until`, `local_fuse_active` | Дать системе “остыть”, не жать manual replay/deliver, проверить Neon/DB pressure. | Не форсить обход fuse. Возврат = после спада counters и исчезновения cooldown. |
+| Payments fallback apply enabled | В Ops/System виден fallback banner, money path идёт через аварийный safe path | `payments.fallback_apply_runtime_enabled`, `payments.fallback_apply_effective`, `payments.fallback_apply_hours_active` | Если это **не осознанный инцидент** — сразу выключить runtime fallback. Если инцидент — держать только time-boxed окно и наблюдать. | Admin → `⚙️ Система` → `🧯 Payments fallback apply` → `🧹 Disable`. |
+| Payments HMAC / payload problem | Оплаты приходят с bad sig / bad format / unsigned, либо HMAC key short/missing | `payments.payload_hmac_key_configured`, `payments.payload_hmac_minlen_ok`, `payments.payload_issues_today.*` | Это **NO-GO**. Исправить ENV / подпись / payload format. **Не лечить fallback apply.** | Rollback = вернуть рабочий ENV/deploy baseline. |
+| QStash reschedule failed | Переотложенные задачи не уходят как должны, в Ops красный/жёлтый баннер | `qstash.reschedule_failed.*` | Проверить QStash keys/signing/delivery path. До стабилизации снизить активность массовых/публикационных контуров. | При затяжном сбое — временно держать контур в более ручном режиме; спорные runtime фичи выключить. |
+| Official publish stuck | Публикация застряла в `PUBLISHING`, хочется “нажать ещё раз” | `qstash.official_publish_stuck.*` + карточка публикации | Сначала `🩺 Проверить статус`, дождаться verify/self-heal. **Не republish вручную первым ходом.** | При необходимости продуктовый rollback: `OFFICIAL_PUBLISH_ENABLED=false` до разбора. |
+| Hard-skip spike | Доставка режется по `bot_blocked / chat_not_found / user_deactivated`, метрика всплеснула | Admin → `⚙️ Система` → `🧱 Hard-skip`, экспорт последних причин | Посмотреть reasons/export, отличить нормальный мусор чатов от новой ошибки доставки. | Точечный rollback только адресный: не снимать массово hard-skip без причины. |
 
-Если Redis degraded:
-- не запускай массовые операции;
-- mutating callbacks должны оставаться fail-closed;
-- сначала восстанови Redis, потом трогай рассылки/ручные apply.
+---
 
-### Payments
-Смотри:
-- `payments.payload_hmac_key_configured`
-- `payments.payload_hmac_minlen_ok`
-- `payments.fallback_apply_env_enabled`
-- `payments.fallback_apply_runtime_enabled`
-- `payments.fallback_apply_effective`
-- `payments.payload_issues_today.*`
+## 3) Быстрый порядок чтения `/api/health`
 
-Первый safe action:
-- если fallback effective включён без инцидента — выключить runtime fallback в админке;
-- если HMAC key не configured / слишком короткий — это **NO-GO**, лечится ENV + redeploy.
-
-### Broadcast
-Смотри:
-- `broadcast.pending_deliveries`
-- `broadcast.db_overload.*`
-- `broadcast.tick_deferred_redis.*`
-- `broadcast.cooldown_until` / `retry_after_sec`
-
-Первый safe action:
-- при overload / cooldown не стартуй новые рассылки;
-- дай системе самой short-circuit / reschedule path отработать.
-
-### QStash / Official Publish
-Смотри:
-- `qstash.reschedule_failed.*`
-- `qstash.official_publish_stuck.*`
-- `broadcast.pending_deliveries` вместе с qstash counters
-
-Первый safe action:
-- для stuck publish сначала `🩺 Проверить статус`, а не republish;
-- для reschedule failed — проверить QStash keys / delivery path, а не дёргать ручные повторы пачками.
-
-### Ops / Audit visibility
-Смотри:
+### Сначала всегда
+- `ok`
+- `system_status`
+- `no_go_reasons[]`
 - `ops.digest_preview`
-- `audit.buffer.*` (если есть)
-- operator banners в Admin → Ops
 
-Первый safe action:
-- если есть красный баннер в админке, действуй по нему раньше, чем по логам.
-
----
-
-## 4) Быстрые safe actions по симптомам
-
-### `system_status = NO_GO`
-1. Прочитать `no_go_reasons[].hint`.
-2. Не звать пользователей и не запускать новые mass actions.
-3. Устранить ровно верхнюю причину, потом обновить `/api/health`.
-
-### `payments.fallback_apply_effective = true`
-1. Убедиться, что это осознанный инцидентный режим.
-2. Если нет — выключить runtime fallback.
-3. Проверить, что effective снова `false`.
-
-### `broadcast.pending_deliveries.pending_count` завис
-1. Посмотреть `db_overload`, `tick_deferred_redis`, `ops.digest_preview`.
-2. Проверить Hard-skip HITs report.
-3. Не стартовать новые большие broadcast.
-
-### `qstash.official_publish_stuck.today_count > 0`
-1. Открыть карточку публикации.
-2. Нажать `🩺 Проверить статус`.
-3. Не делать republish до verify/self-heal.
+### Потом по контурам
+- **Redis:** `redis.read_ok`, `redis.write_ok`, `latency_ms`, `last_error`
+- **Payments:** `payload_hmac_minlen_ok`, `fallback_apply_effective`, `fallback_apply_hours_active`, `payload_issues_today.*`
+- **Broadcast:** `pending_deliveries`, `db_overload.*`, `tick_deferred_redis.*`
+- **QStash / publish:** `reschedule_failed.*`, `official_publish_stuck.*`
 
 ---
 
-## 5) Чего не делать
+## 4) Чего не делать
 - Не лечить `NO_GO` ручными реплеями “на всякий случай”.
-- Не включать fallback apply как универсальную кнопку починки.
-- Не давить новые рассылки во время cooldown / DB overload.
+- Не включать `Payments fallback apply` как универсальную кнопку починки.
+- Не давить новые большие broadcast во время `stale` / `db_overload` / `cooldown`.
 - Не обходить `🩺 Проверить статус` ручной перепубликацией.
+- Не чистить `pending snapshot` первым действием, если не проверены overload / hard-skip / ops digest.
 
 ---
 
-## 6) Связанные документы
+## 5) Куда идти глубже, если one-screen не хватило
 - `docs/90_OWNER_RUNBOOK.md`
-- `docs/91_PROD_LAUNCH_30MIN.md`
 - `docs/94_PROD_READINESS_PACK.md`
 - `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md`
-- `docs/process/10_RELEASE_PREFLIGHT.md`
+- `docs/19_OFFICIAL_PUBLISH_IDEMPOTENCY.md`
+- `docs/91_PROD_LAUNCH_30MIN.md`
