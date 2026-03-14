@@ -65,6 +65,7 @@
 - `90_OWNER_RUNBOOK.md` — шпаргалка владельца: деплой/ENV/migrations/cron/health/инциденты
 - `ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий incident playbook
 - `ops/02_HEALTH_ONE_SCREEN.md` — one-screen guide: как читать `/api/health` сверху вниз
+- `ops/03_LIVE_RUNTIME_PASS_STEP471.md` — ручной Telegram runtime pass после STEP470–471 (списки + dialog-flow + терминология)
 
 ## 3) Protocol / Process (как работаем)
 Папка: `docs/process/`
@@ -82,7 +83,7 @@
 ## Как использовать в новом чате
 Сначала используй `17_START_NEW_CHAT_PROMPT.md` как ядро правил работы, затем `15_NEW_CHAT_HANDOFF.md` как живой baseline текущего цикла.
 
-## Что нового в текущем snapshot (2026-03-13)
+## Что нового в текущем snapshot (2026-03-14)
 - Платежи: fallback apply exactly‑once (DB lock) + safety visibility (HMAC minlen + баннеры в Admin→Ops).
 - Giveaways: winners draw в REPEATABLE READ + audit метаданные воспроизводимости.
 - Broadcast: DB overload load‑shedding (429+Retry‑After) + метрики в health + баннеры в админке; tick fail‑closed при Redis degraded.
