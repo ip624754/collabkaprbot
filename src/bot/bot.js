@@ -24117,12 +24117,24 @@ if (p.a === 'a:support_write') {
 
 // Brand Directory (Creator)
 if (p.a === 'a:brands_home') {
-      try { await ctx.answerCallbackQuery(); } catch {}
+  try { await ctx.answerCallbackQuery({ text: 'Открываю каталог…' }); } catch { try { await ctx.answerCallbackQuery(); } catch {} }
   const page = Math.max(0, Number(p.p || 0));
-  await safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') });
+  let settled = false;
+  let slowLoaderId = null;
   try {
+    slowLoaderId = setTimeout(async () => {
+      if (settled) return;
+      try {
+        await safeEditOrReply(ctx, '⏳ Открываю каталог брендов…', { reply_markup: navKb('a:menu') });
+      } catch {}
+    }, 700);
+
     await withTimeout(renderBrandsDirectory(ctx, ctx.from.id, { page, edit: true, legacyUserId: u.id }), 12000, 'brands.home');
+    settled = true;
+    if (slowLoaderId) clearTimeout(slowLoaderId);
   } catch (e) {
+    settled = true;
+    if (slowLoaderId) clearTimeout(slowLoaderId);
     const cid = ctx.state?.cid || null;
     const label = (e && (e.label || e.stepId)) ? String(e.label || e.stepId) : String((e && e.message) ? e.message : 'unknown');
     try { console.warn('[brands_home] timeout/error', { cid, page, label, err: errInfo(e) }); } catch {}
