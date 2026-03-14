@@ -3672,7 +3672,7 @@ function kbBrandAppAcceptedDone(appId, brandUserId) {
 function kbBrandAppAcceptedMore(appId, brandUserId) {
   const kb = new InlineKeyboard();
   kb.text(creatorBrandAppDialogButtonLabel(appId), `a:brand_app_card|id:${appId}`).row();
-  kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`).row();
+  kb.text('🪟 Открыть бренд', creatorBrandAppOpenBrandCallback(brandUserId, appId, 0)).row();
   kb.text(creatorBrandAppListButtonLabel(), 'a:my_apps|p:0').row();
   kb.text('⬅️ Назад', `a:brand_app_accepted_done|id:${appId}|u:${brandUserId}`).row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
@@ -6662,7 +6662,10 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
 async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   const brandUserId = Number(params.brandUserId || 0);
   const backPage = Math.max(0, Number(params.backPage || 0));
+  const brandAppId = Math.max(0, Number(params.brandAppId || 0));
   const edit = !!params.edit;
+  const backCb = brandAppId > 0 ? `a:brand_app_card|id:${brandAppId}` : `a:brands_home|p:${backPage}`;
+  const backLabel = brandAppId > 0 ? creatorBrandAppCardReturnButtonLabel(brandAppId) : '⬅️ Назад к списку';
   if (!brandUserId) return;
 
   const prof = await safeBrandProfiles(
@@ -6677,7 +6680,8 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
   }
   if (!prof) {
     const kb = new InlineKeyboard();
-    kbNavRow(kb, `a:brands_home|p:${backPage}`);
+    kb.text(backLabel, backCb).row();
+    kb.text('📋 Меню', 'a:menu');
     if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, '⚠️ Бренд не найден.', { reply_markup: kb });
     else await ctx.reply('⚠️ Бренд не найден.', { reply_markup: kb });
     return;
@@ -6733,7 +6737,7 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
 
   kb.text('📝 Оставить заявку', `a:brand_apply|u:${brandUserId}|p:${backPage}`).row();
 
-  kb.text('⬅️ Назад к списку', `a:brands_home|p:${backPage}`).row();
+  kb.text(backLabel, backCb).row();
   kb.text('📋 Меню', 'a:menu');
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
@@ -11941,7 +11945,7 @@ function brandAppThreadEmptyStateText(status, opts = {}) {
 function creatorBrandAppThreadEmptyStateText(status) {
   const st = normLeadStatus(status);
   if (st === 'new') return 'Истории пока нет. Бренд ещё не принял заявку — дождись решения здесь.';
-  if (st === 'in_progress') return 'Истории пока нет. Нажми «💬 Написать бренду» — первое сообщение появится здесь.';
+  if (st === 'in_progress') return 'Истории пока нет. Нажми «✍️ Ответить бренду» — первое сообщение появится в этом диалоге.';
   if (st === 'closed') return 'Истории пока нет. Диалог закрыт без сообщений.';
   if (st === 'spam') return 'Истории пока нет. Бренд не продолжил эту заявку.';
   return 'Истории пока нет. Первое сообщение появится здесь.';
@@ -11966,7 +11970,7 @@ function brandLeadThreadEmptyStateText(opts = {}) {
 function creatorBrandAppWhatNow(status) {
   const st = normLeadStatus(status);
   if (st === 'new') return 'дождаться решения бренда; кнопка ответа появится после принятия заявки';
-  if (st === 'in_progress') return 'открыть чат и ответить бренду прямо в этом боте';
+  if (st === 'in_progress') return 'нажать «✍️ Ответить бренду» и отправить сообщение в этот диалог';
   if (st === 'closed') return 'диалог завершён; следи за обновлениями, если бренд вернётся';
   if (st === 'spam') return 'заявка скрыта брендом; новых сообщений по ней, скорее всего, не будет';
   return 'следить за ответом бренда по этой заявке';
@@ -11979,7 +11983,25 @@ function creatorBrandAppDialogButtonLabel(appId = 0) {
 }
 
 function creatorBrandAppReplyButtonLabel() {
-  return '💬 Написать бренду';
+  return '✍️ Ответить бренду';
+}
+
+function creatorBrandAppDialogReturnButtonLabel(appId = 0) {
+  const id = Math.max(0, Number(appId || 0));
+  return id ? `⬅️ К диалогу #${id}` : '⬅️ К диалогу';
+}
+
+function creatorBrandAppCardReturnButtonLabel(appId = 0) {
+  const id = Math.max(0, Number(appId || 0));
+  return id ? `⬅️ К заявке #${id}` : '⬅️ К заявке';
+}
+
+function creatorBrandAppOpenBrandCallback(brandUserId = 0, appId = 0, backPage = 0) {
+  const brandId = Math.max(0, Number(brandUserId || 0));
+  const id = Math.max(0, Number(appId || 0));
+  const page = Math.max(0, Number(backPage || 0));
+  if (!brandId) return '';
+  return id ? `a:brand_dir_open|u:${brandId}|p:${page}|ba:${id}` : `a:brand_dir_open|u:${brandId}|p:${page}`;
 }
 
 function creatorBrandAppListButtonLabel() {
@@ -11998,14 +12020,15 @@ function creatorBrandAppChatRecoveryKb(appId = 0, brandUserId = 0, opts = {}) {
   const showReset = opts.showReset === true;
   const showHelp = opts.showHelp === true;
   const showDialog = opts.showDialog !== false && id > 0;
+  const showBrandOpen = opts.showBrandOpen === true && brandId > 0;
   const kb = new InlineKeyboard();
 
-  if (showDialog) kb.text(creatorBrandAppDialogButtonLabel(id), `a:brand_app_card|id:${id}`);
+  if (showDialog) kb.text(creatorBrandAppDialogReturnButtonLabel(id), `a:brand_app_card|id:${id}`);
   if (showReply) kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${id}`);
   if (showDialog || showReply) kb.row();
 
-  if (brandId) kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandId}|p:0`);
-  kb.text(creatorBrandAppListButtonLabel(), 'a:my_apps|p:0');
+  if (showBrandOpen) kb.text('🪟 Открыть бренд', creatorBrandAppOpenBrandCallback(brandId, id, 0));
+  kb.text(creatorBrandAppListReturnButtonLabel(), 'a:my_apps|p:0');
   kb.row();
 
   if (showHelp) kb.text('🧭 Помощь', 's:help');
@@ -12020,21 +12043,23 @@ function creatorBrandAppChatRecoveryKb(appId = 0, brandUserId = 0, opts = {}) {
 function buildCreatorBrandAppChatPromptText({ appId = 0, brandName = '' } = {}) {
   const id = Math.max(0, Number(appId || 0));
   const dialogLabel = creatorBrandAppDialogButtonLabel(id);
-  const listLabel = creatorBrandAppListButtonLabel();
+  const dialogBackLabel = creatorBrandAppDialogReturnButtonLabel(id);
+  const listLabel = creatorBrandAppListReturnButtonLabel();
   const brandLine = brandName ? `🏷 Бренд: <b>${escapeHtml(String(brandName))}</b>\n` : '';
 
-  return `💬 <b>Написать бренду по заявке #${id}</b>
+  return `✍️ <b>Ответ бренду по заявке #${id}</b>
 
 ${brandLine}💡 <b>Сейчас:</b> Напиши одно сообщение — я добавлю его в «${escapeHtml(dialogLabel)}» и доставлю бренду внутри этого бота.
 
-<i>Если передумаешь — открой «${escapeHtml(dialogLabel)}» или вернись в «${escapeHtml(listLabel)}».</i>`;
+<i>Если передумаешь — нажми «${escapeHtml(dialogBackLabel)}» или вернись в «${escapeHtml(listLabel)}».</i>`;
 }
 
 function buildCreatorBrandAppChatRecoveryText({ appId = 0, kind = 'open_error' } = {}) {
   const id = Math.max(0, Number(appId || 0));
   const dialogLabel = creatorBrandAppDialogButtonLabel(id);
+  const dialogBackLabel = creatorBrandAppDialogReturnButtonLabel(id);
   const replyLabel = creatorBrandAppReplyButtonLabel();
-  const listLabel = creatorBrandAppListButtonLabel();
+  const listLabel = creatorBrandAppListReturnButtonLabel();
 
   if (kind === 'not_accepted') {
     return `⏳ <b>Бренд ещё не принял заявку #${id}</b>
@@ -12043,15 +12068,15 @@ function buildCreatorBrandAppChatRecoveryText({ appId = 0, kind = 'open_error' }
   }
 
   if (kind === 'degraded') {
-    return `⛔ <b>Сейчас нельзя открыть ввод по заявке #${id}</b>
+    return `⛔ <b>Сейчас нельзя открыть ввод ответа по заявке #${id}</b>
 
 ${DEGRADED_COPY.line}
 
-💡 <b>Сейчас:</b> Открой «${escapeHtml(dialogLabel)}» или вернись в «${escapeHtml(listLabel)}».`;
+💡 <b>Сейчас:</b> Нажми «${escapeHtml(dialogBackLabel)}» или вернись в «${escapeHtml(listLabel)}».`;
   }
 
   if (kind === 'missing_id') {
-    return `⚠️ <b>Не удалось открыть ввод сообщения</b>
+    return `⚠️ <b>Не удалось открыть экран ответа</b>
 
 💡 <b>Сейчас:</b> Вернись в «${escapeHtml(listLabel)}», открой заявку заново и снова нажми «${escapeHtml(replyLabel)}».`;
   }
@@ -12077,7 +12102,7 @@ ${DEGRADED_COPY.line}
   if (kind === 'too_short') {
     return `⚠️ <b>Сообщение слишком короткое</b>
 
-💡 <b>Сейчас:</b> Напиши чуть подробнее или вернись в «${escapeHtml(dialogLabel)}».`;
+💡 <b>Сейчас:</b> Напиши чуть подробнее или нажми «${escapeHtml(dialogBackLabel)}».`;
   }
 
   if (kind === 'too_long') {
@@ -12086,9 +12111,9 @@ ${DEGRADED_COPY.line}
 💡 <b>Сейчас:</b> Укороти текст до 2000 символов и отправь снова.`;
   }
 
-  return `⚠️ <b>Не удалось открыть чат по заявке #${id}</b>
+  return `⚠️ <b>Не удалось открыть ответ по заявке #${id}</b>
 
-💡 <b>Сейчас:</b> Открой «${escapeHtml(dialogLabel)}» ещё раз или вернись в «${escapeHtml(listLabel)}».`;
+💡 <b>Сейчас:</b> Нажми «${escapeHtml(dialogBackLabel)}» или вернись в «${escapeHtml(listLabel)}».`;
 }
 
 function creatorBrandAppNoticeWhatNext(appId = 0, status = 'new') {
@@ -12112,7 +12137,7 @@ function creatorBrandAppNoticeKb(appId = 0, brandUserId = 0, opts = {}) {
   if (showReply) kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${Number(appId || 0)}`);
   kb.row();
 
-  if (brandUserId) kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${Number(brandUserId || 0)}|p:0`);
+  if (brandUserId) kb.text('🪟 Открыть бренд', creatorBrandAppOpenBrandCallback(Number(brandUserId || 0), Number(appId || 0), 0));
   kb.text(creatorBrandAppListButtonLabel(), 'a:my_apps|p:0');
 
   if (dismiss) kb.row().text('🗑 Убрать', 'a:nd');
@@ -12994,7 +13019,7 @@ async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage:
     `Сделка #${app.id} от <b>${escapeHtml(String(who))}</b>
 
 ` +
-    `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”. После отправки у креатора появится кнопка “💬 Написать бренду”.`;
+    `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”. После отправки у креатора появится кнопка “✍️ Ответить бренду”.`;
 
   const backCb = brandDealViewCb(app.id, back);
 
@@ -13156,15 +13181,6 @@ function kbTplIconPicker(kb, templates, mkCb, perRow = 3) {
   return kb;
 }
 
-function templateLabelByKey(templates, key, fallback = '—') {
-  const wanted = String(key || '').trim();
-  if (!wanted) return String(fallback);
-  const hit = Array.isArray(templates)
-    ? templates.find((t) => String(t?.key || '').trim() === wanted)
-    : null;
-  return String(hit?.label || fallback);
-}
-
 async function renderTemplatePreviewFlow(ctx, actorUserId, kind, id, key, backCb) {
   const k = String(kind || '').toLowerCase().trim();
   if (k === 'brand_app' || k === 'app' || k === 'apps') {
@@ -13206,7 +13222,7 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
     const text =
       `⚡ <b>Быстрые ответы</b>\n\n` +
       `Заявка #${app.id} от <b>${escapeHtml(String(who))}</b>\n\n` +
-      `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”. После отправки у креатора появится кнопка “💬 Написать бренду”.`;
+      `Выбери шаблон → откроется предпросмотр → нажми “📨 Отправить”. После отправки у креатора появится кнопка “✍️ Ответить бренду”.`;
 
     const kb = new InlineKeyboard();
     kbTplList(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`);
@@ -13248,26 +13264,18 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
       `\n\n<b>Сообщение:</b>\n${escapeHtml(replyText)}`;
   }
 
-  const currentTemplateLabel = templateLabelByKey(BRAND_APP_TPLS, key, '⚡ Быстрый ответ');
-
   let text =
     `🧾 <b>Предпросмотр</b>\n` +
     `<i>Это сообщение уйдёт креатору. Нажми “📨 Отправить”.</i>\n\n` +
-    `<b>Шаблон:</b> ${escapeHtml(currentTemplateLabel)}\n\n` +
     outText;
 
-  if (text.length > 3900) {
-    text =
-      `🧾 <b>Предпросмотр</b>\n\n` +
-      `<b>Шаблон:</b> ${escapeHtml(currentTemplateLabel)}\n\n` +
-      outText;
-  }
   if (text.length > 3900) text = outText;
 
   const kb = new InlineKeyboard();
+  kbTplIconPicker(kb, BRAND_APP_TPLS, (tplKey) => `a:brand_app_tpl|id:${app.id}|k:${tplKey}|s:${back.status}|p:${back.page}`, 3);
   kb.text('📨 Отправить', `a:brand_app_tpl_send|id:${app.id}|k:${String(key || 'discuss')}|s:${back.status}|p:${back.page}`)
     .row()
-    .text('🔁 Выбрать другой', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
+    .text('🔄 Выбрать другой', `a:brand_app_tpls|id:${app.id}|s:${back.status}|p:${back.page}`)
     .text('✍️ Ответить', `a:brand_app_reply|id:${app.id}|s:${back.status}|p:${back.page}`);
 
   kbNavRow(kb, `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`);
@@ -13878,6 +13886,12 @@ async function renderBrandAppCardForCreator(ctx, actorUserId, appId) {
 💡 <b>Сейчас</b>
 ${escapeHtml(creatorBrandAppWhatNow(st))}`;
 
+  if (st !== 'new') {
+    text += `
+
+<i>Диалог по этой заявке идёт здесь, внутри этого бота.</i>`;
+  }
+
   text += `
 
 📝 <b>Твоя заявка</b>
@@ -13909,7 +13923,7 @@ ${escapeHtml(creatorBrandAppThreadEmptyStateText(st))}`;
   if (st === 'new') {
     text += `
 
-⏳ <i>Пока бренд не принял заявку — кнопка «💬 Написать бренду» появится после принятия.</i>`;
+⏳ <i>Пока бренд не принял заявку — кнопка «✍️ Ответить бренду» появится после принятия.</i>`;
   } else {
     text += `
 
@@ -13918,7 +13932,7 @@ ${escapeHtml(creatorBrandAppThreadEmptyStateText(st))}`;
 
   const kb = new InlineKeyboard();
   if (st !== 'new') kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${app.id}`).row();
-  kb.text('🪟 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:0`).row();
+  kb.text('🪟 Открыть бренд', creatorBrandAppOpenBrandCallback(brandUserId, app.id, 0)).row();
   kb.text(creatorBrandAppListReturnButtonLabel(), 'a:my_apps|p:0').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
   try {
@@ -24282,7 +24296,8 @@ if (p.a === 'a:brand_dir_open') {
       try { await ctx.answerCallbackQuery(); } catch {}
   const brandUserId = Number(p.u || 0);
   const backPage = Math.max(0, Number(p.p || 0));
-  await renderBrandDirectoryCard(ctx, ctx.from.id, { brandUserId, backPage, edit: true, legacyUserId: u.id });
+  const brandAppId = Math.max(0, Number(p.ba || 0));
+  await renderBrandDirectoryCard(ctx, ctx.from.id, { brandUserId, backPage, brandAppId, edit: true, legacyUserId: u.id });
   return;
 }
 
