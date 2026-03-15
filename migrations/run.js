@@ -1,205 +1,195 @@
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { pool } from '../src/db/pool.js';
-import {
-  ensureSchemaMigrationsTable,
-  getLiveSchemaAdoptionStatus,
-  listAppliedSchemaMigrations,
-} from '../src/db/schemaMigrations.js';
+
+// =====================================================
+// Migration runner (Jobs/Vitalik/Woz):
+// - Deterministic ordering
+// - Exactly-once application (schema_migrations table)
+// - Checksums to prevent "silent edits" of old migrations
+// - SQL checksum normalization (LF + trimEnd) to avoid false mismatches
+//   from CRLF/LF conversions or trailing newline-only edits.
+// - Each migration runs in its own transaction
+// =====================================================
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const MIGRATION_NAME_RE = /^(\d+)_.*\.sql$/;
-const ADVISORY_LOCK_KEY = 20260315003n;
+const MIGRATIONS_TABLE = 'schema_migrations';
 
-function sha256(text) {
-  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+// IMPORTANT (fail-fast): only files matching `NNN..._name.sql` are allowed in migrations/
+// This prevents accidental placement of scripts like `00_mark_all_applied.sql` into migrations/
+// which could otherwise be executed on a fresh DB.
+const MIGRATION_FILE_RE = /^\d{3,}_.+\.sql$/i;
+
+function sha256Hex(s) {
+  return crypto
+    .createHash('sha256')
+    .update(String(s || ''), 'utf8')
+    .digest('hex');
 }
 
-function loadMigrationFiles() {
-  const files = fs.readdirSync(__dirname)
-    .filter((f) => MIGRATION_NAME_RE.test(f))
+function normalizeEolToLf(s) {
+  // Canonicalize Windows/Mac line endings to LF.
+  return String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+function normalizeSqlForChecksum(sql) {
+  // Canonical checksum basis:
+  // 1) normalize EOLs to LF
+  // 2) drop trailing whitespace/newlines at EOF only
+  // NOTE: we do NOT strip whitespace inside the file.
+  return normalizeEolToLf(sql).trimEnd();
+}
+
+function checksumCandidates(sqlRaw) {
+  const raw = String(sqlRaw || '');
+  const lf = normalizeEolToLf(raw);
+  const lfTrim = lf.trimEnd();
+  const crlf = lf.replace(/\n/g, '\r\n');
+  const crlfTrim = lfTrim.replace(/\n/g, '\r\n');
+
+  // Backward-compatible candidates:
+  // - raw current file (whatever EOLs it has now)
+  // - canonical LF / canonical CRLF
+  // - normalized LF (trimEnd)
+  // - normalized LF with 1..3 trailing \n (common "final newline" toggles)
+  // - normalized CRLF with 1..3 trailing \r\n
+  const c = {
+    raw: sha256Hex(raw),
+    lf: sha256Hex(lf),
+    crlf: sha256Hex(crlf),
+    norm: sha256Hex(lfTrim),
+    norm_lf1: sha256Hex(lfTrim + '\n'),
+    norm_lf2: sha256Hex(lfTrim + '\n\n'),
+    norm_lf3: sha256Hex(lfTrim + '\n\n\n'),
+    norm_crlf1: sha256Hex(crlfTrim + '\r\n'),
+    norm_crlf2: sha256Hex(crlfTrim + '\r\n\r\n'),
+    norm_crlf3: sha256Hex(crlfTrim + '\r\n\r\n\r\n')
+  };
+
+  return {
+    candidates: c
+  };
+}
+
+async function ensureMigrationsTable() {
+  await pool.query(
+    `
+    CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      checksum TEXT NOT NULL,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    `
+  );
+}
+
+async function getApplied(name) {
+  const r = await pool.query(
+    `SELECT name, checksum, applied_at FROM ${MIGRATIONS_TABLE} WHERE name = $1`,
+    [name]
+  );
+  return r.rows?.[0] || null;
+}
+
+async function run() {
+  const args = new Set(process.argv.slice(2));
+  const dryRun = args.has('--dry-run');
+
+  await ensureMigrationsTable();
+
+  const dirEntries = fs.readdirSync(__dirname);
+
+  // Fail fast if any `.sql` file does NOT match the strict migration naming rule.
+  // If someone accidentally copies `migration_pack/*.sql` into `migrations/`, we want to stop.
+  const rogueSql = dirEntries
+    .filter((f) => String(f).toLowerCase().endsWith('.sql'))
+    .filter((f) => !MIGRATION_FILE_RE.test(f))
     .sort();
 
-  const seenSeq = new Set();
+  if (rogueSql.length) {
+    throw new Error(
+      `[MIGRATIONS] Unsafe .sql files detected in migrations/ (refusing to run).\n` +
+        `Allowed pattern: NNN..._name.sql (>=3 digits, e.g. 041_example.sql).\n` +
+        `Move these files out of migrations/ (usually to migration_pack/):\n` +
+        rogueSql.map((x) => `- ${x}`).join('\n')
+    );
+  }
 
-  return files.map((filename) => {
-    const match = filename.match(MIGRATION_NAME_RE);
-    const seq = match?.[1] || '';
-    if (seenSeq.has(seq)) {
-      throw new Error(`Duplicate migration prefix detected: ${seq}`);
-    }
-    seenSeq.add(seq);
+  const files = dirEntries.filter((f) => MIGRATION_FILE_RE.test(f)).sort();
 
-    const fullpath = path.join(__dirname, filename);
-    const sql = fs.readFileSync(fullpath, 'utf8');
-    if (!sql.trim()) {
-      throw new Error(`Migration is empty: ${filename}`);
-    }
+  let applied = 0;
+  let skipped = 0;
 
-    return {
-      filename,
-      fullpath,
-      seq,
-      sql,
-      checksum: sha256(sql),
-    };
-  });
-}
+  for (const f of files) {
+    const fullPath = path.join(__dirname, f);
+    const sqlRaw = fs.readFileSync(fullPath, 'utf8');
 
-function buildPlan(files, appliedRows) {
-  const appliedMap = new Map(appliedRows.map((row) => [row.filename, row]));
-  const alreadyApplied = [];
-  const pending = [];
+    const { candidates } = checksumCandidates(sqlRaw);
+    const checksumToStore = candidates.norm;
 
-  for (const file of files) {
-    const applied = appliedMap.get(file.filename);
-    if (!applied) {
-      pending.push(file);
+    const prev = await getApplied(f);
+    if (prev) {
+      const expected = String(prev.checksum || '');
+      const ok = Object.values(candidates).includes(expected);
+
+      if (!ok) {
+        throw new Error(
+          `[MIGRATIONS] Checksum mismatch for ${f}.\n` +
+            `This indicates an old migration file was edited.\n` +
+            `Expected: ${expected}\n` +
+            `Actual(raw):  ${candidates.raw}\n` +
+            `Actual(LF):   ${candidates.lf}\n` +
+            `Actual(CRLF): ${candidates.crlf}\n` +
+            `Actual(norm): ${candidates.norm}`
+        );
+      }
+
+      skipped += 1;
       continue;
     }
 
-    if (applied.checksum !== file.checksum) {
-      throw new Error(
-        `Migration drift detected for ${file.filename}: checksum mismatch with schema_migrations record.`
-      );
+    if (dryRun) {
+      console.log(`[MIGRATIONS] (dry-run) would apply: ${f}`);
+      continue;
     }
 
-    alreadyApplied.push(file.filename);
-  }
-
-  return { alreadyApplied, pending };
-}
-
-function printPlan(plan) {
-  console.log(`Already applied: ${plan.alreadyApplied.length}`);
-  console.log(`Pending: ${plan.pending.length}`);
-  if (plan.pending.length) {
-    for (const file of plan.pending) {
-      console.log(`- ${file.filename}`);
-    }
-  }
-}
-
-function printAdoptionStatus(adoption) {
-  console.log(`Live schema adoptable: ${adoption.eligible ? 'yes' : 'no'}`);
-  console.log(`Markers checked: ${adoption.checked_markers}`);
-  if (adoption.missing_markers.length) {
-    console.log('Missing markers:');
-    for (const marker of adoption.missing_markers) {
-      console.log(`- ${marker}`);
-    }
-  } else {
-    console.log(`Recovery command: ${adoption.command}`);
-  }
-}
-
-async function runPending(client, plan) {
-  for (const file of plan.pending) {
-    console.log(`Running ${file.filename}`);
-    await client.query('BEGIN');
+    console.log(`[MIGRATIONS] Applying: ${f}`);
+    const client = await pool.connect();
     try {
-      await client.query(file.sql);
+      await client.query('BEGIN');
+      await client.query(sqlRaw);
       await client.query(
-        `insert into schema_migrations (filename, checksum) values ($1, $2)`,
-        [file.filename, file.checksum]
+        `INSERT INTO ${MIGRATIONS_TABLE}(name, checksum) VALUES ($1, $2)`,
+        [f, checksumToStore]
       );
       await client.query('COMMIT');
-    } catch (error) {
+      applied += 1;
+    } catch (e) {
       try {
         await client.query('ROLLBACK');
       } catch {}
-      throw new Error(`Failed migration ${file.filename}: ${error.message}`);
-    }
-  }
-}
-
-async function adoptLiveSchema(client, files, appliedRows, adoption) {
-  if (appliedRows.length) {
-    throw new Error('schema_migrations already contains rows. Use npm run migrate instead of migrate:adopt-live.');
-  }
-
-  if (!adoption.eligible) {
-    const details = adoption.missing_markers.join(', ') || 'unknown';
-    throw new Error(`Live schema adoption blocked. Missing markers: ${details}`);
-  }
-
-  await client.query('BEGIN');
-  try {
-    for (const file of files) {
-      await client.query(
-        `insert into schema_migrations (filename, checksum)
-         values ($1, $2)
-         on conflict (filename) do nothing`,
-        [file.filename, file.checksum]
-      );
-    }
-    await client.query('COMMIT');
-  } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {}
-    throw new Error(`Failed to adopt live schema into schema_migrations: ${error.message}`);
-  }
-
-  console.log(`Adopted existing live schema into schema_migrations tracking (${files.length} file(s)).`);
-}
-
-async function main() {
-  const args = new Set(process.argv.slice(2));
-  const statusOnly = args.has('--status') || args.has('--plan');
-  const adoptLive = args.has('--adopt-live');
-  const files = loadMigrationFiles();
-  const client = await pool.connect();
-
-  try {
-    await client.query('select pg_advisory_lock($1::bigint)', [ADVISORY_LOCK_KEY.toString()]);
-    await ensureSchemaMigrationsTable(client);
-
-    const appliedRows = await listAppliedSchemaMigrations(client);
-    const adoption = await getLiveSchemaAdoptionStatus(client);
-
-    if (adoptLive) {
-      printAdoptionStatus(adoption);
-      await adoptLiveSchema(client, files, appliedRows, adoption);
-      return;
-    }
-
-    const plan = buildPlan(files, appliedRows);
-    printPlan(plan);
-
-    if (!appliedRows.length) {
-      printAdoptionStatus(adoption);
-    }
-
-    if (statusOnly) {
-      return;
-    }
-
-    if (!plan.pending.length) {
-      console.log('No pending migrations.');
-      return;
-    }
-
-    await runPending(client, plan);
-    console.log(`Migrations complete. Applied ${plan.pending.length} file(s).`);
-  } finally {
-    try {
-      await client.query('select pg_advisory_unlock($1::bigint)', [ADVISORY_LOCK_KEY.toString()]);
-    } catch {}
-    try {
+      throw e;
+    } finally {
       client.release();
-    } catch {}
-    try {
-      await pool.end();
-    } catch {}
+    }
   }
+
+  if (!dryRun) {
+    console.log(`[MIGRATIONS] Complete. applied=${applied} skipped=${skipped}`);
+  }
+
+  await pool.end();
 }
 
-main().catch((error) => {
-  console.error(error);
+run().catch(async (e) => {
+  console.error(e);
+  try {
+    await pool.end();
+  } catch {}
   process.exit(1);
 });
