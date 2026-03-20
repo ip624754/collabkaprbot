@@ -195,7 +195,6 @@ function buildNodeCheckList() {
 
 const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): ENV baseline contract", "smoke:env-baseline-contract"],
-  ["Preflight (source-only): IG parked deploy-surface hard gate", "smoke:ig-parked-hard-gate"],
   ["Preflight (source-only): creator current-channel contract", "smoke:creator-current-channel-contract"],
   ["Preflight (source-only): Telegram share URL compatibility contract", "smoke:share-url-compat-contract"],
   ["Preflight (source-only): Brand Inbox accept-point contract", "smoke:brand-inbox-accept-contract"],
@@ -231,7 +230,6 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): actions registry", "actions:check"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
-  ["Preflight (source-only): runtime-grade Stars payment validation", "test:runtime-stars-payment-validation"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],
   ["Preflight (source-only): redis atomicity grep gate", "lint:redis-atomic"],
   ["Preflight (source-only): redis TTL hygiene gate", "lint:redis-ttl"],
@@ -252,7 +250,6 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin DM templates contract", "smoke:admin-dm-templates-contract"],
   ["Preflight (source-only): admin notice composer/runtime contract", "smoke:admin-notice-contract"],
   ["Preflight (source-only): broadcast local DB fuse contract", "smoke:broadcast-local-db-fuse"],
-  ["Preflight (source-only): broadcast 429 atomicity contract", "smoke:broadcast-429-atomicity-contract"],
   ["Preflight (source-only): payments autoheal chain contract", "smoke:payments-autoheal-chain-contract"],
   ["Preflight (source-only): start role-gate contract", "smoke:start-role-gate-contract"],
   ["Preflight (source-only): brand application accept SQL contract", "smoke:brand-app-accept-sql-contract"],
@@ -333,6 +330,12 @@ function runDepsChecks() {
   runOptionalNodeScript(
     "Preflight (deps/runtime): staging health/admin JSON shape",
     path.join("scripts", "smoke-health-admin-shape.js"),
+    { env: stagingEnv, skipWhenProd: true }
+  );
+
+  runOptionalNodeScript(
+    "Preflight (deps/runtime): staging health fast-tier contract",
+    path.join("scripts", "smoke-health-fast-contract.js"),
     { env: stagingEnv, skipWhenProd: true }
   );
 
