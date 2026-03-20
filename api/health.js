@@ -1,10 +1,66 @@
-import { CFG } from '../src/lib/config.js';
-import { getPaymentsFallbackGuardrailConfig, getPaymentsFallbackRuntime } from '../src/lib/paymentsOps.js'; 
+import { CFG } from '../src/lib/config.js'; 
+
+function resolveHealthTier(req) {
+  try {
+    const direct = req?.query && typeof req.query === 'object'
+      ? (req.query.tier ?? req.query.view ?? (req.query.fast ? 'fast' : null))
+      : null;
+    const rawDirect = String(direct || '').trim().toLowerCase();
+    if (rawDirect === 'fast' || rawDirect === 'ops' || rawDirect === 'operator') return 'fast';
+    if (rawDirect === 'full') return 'full';
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (typeof req?.url === 'string' && req.url) {
+      const u = new URL(req.url, 'http://localhost');
+      const raw = String(
+        u.searchParams.get('tier')
+          || u.searchParams.get('view')
+          || (u.searchParams.has('fast') ? 'fast' : '')
+      ).trim().toLowerCase();
+      if (raw === 'fast' || raw === 'ops' || raw === 'operator') return 'fast';
+      if (raw === 'full') return 'full';
+    }
+  } catch {
+    // ignore
+  }
+
+  return 'full';
+}
+
+function attachHealthTier(out, tier) {
+  const next = { ...out, health_tier: tier === 'fast' ? 'fast' : 'full' };
+  if (tier === 'fast') {
+    next.operator_fast_path = {
+      full_tier_available: true,
+      included_sections: ['redis', 'support', 'ops', 'payments', 'system_status', 'no_go_reasons'],
+      omitted_sections: ['cron', 'broadcast', 'qstash', 'mon', 'ref', 'audit'],
+      note: 'Fast operator summary. Open /api/health without tier=fast for full drill-down.',
+    };
+  }
+  return next;
+}
+
+function buildFastHealthOut(base) {
+  return attachHealthTier({
+    ok: base.ok,
+    ts: base.ts,
+    env: base.env,
+    redis: base.redis,
+    support: base.support,
+    ops: base.ops,
+    payments: base.payments,
+  }, 'fast');
+}
 
 // Simple health endpoint (no secrets).
 // Must never throw (fail-open), even if Redis is unavailable.
 export default async function handler(_req, res) {
+  const healthTier = resolveHealthTier(_req);
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Health-Tier', healthTier);
 
   const now = new Date();
   const day = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
@@ -46,8 +102,6 @@ export default async function handler(_req, res) {
       fallback_apply_env_enabled: !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED,
       fallback_apply_runtime_enabled: null,
       fallback_apply_effective: null,
-      fallback_apply_age_sec: null,
-      fallback_apply_hours_active: null,
       fallback_apply_runtime: null,
       payload_hmac_key_configured: !!String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim(),
       payload_hmac_key_len: String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim().length,
@@ -132,18 +186,6 @@ export default async function handler(_req, res) {
     };
   }
 
-  function parseAgeSecFromIso(ts) {
-    const raw = ts ? String(ts) : '';
-    if (!raw) return null;
-    try {
-      const ms = Date.parse(raw);
-      if (!Number.isFinite(ms) || ms <= 0) return null;
-      return Math.max(0, Math.round((Date.now() - ms) / 1000));
-    } catch {
-      return null;
-    }
-  }
-
   function makeBroadcastBase() {
     return {
       cooldown_until: null,
@@ -176,7 +218,8 @@ export default async function handler(_req, res) {
     base.redis.write_ok = false;
     base.redis.latency_ms = null;
     base.redis.last_error = 'not_configured';
-    const out = { ...base, cron: makeCronBase(false), broadcast: makeBroadcastBase(), ref: makeRefBase(), audit: auditBase };
+    const fullOut = attachHealthTier({ ...base, cron: makeCronBase(false), broadcast: makeBroadcastBase(), ref: makeRefBase(), audit: auditBase }, healthTier);
+    const out = healthTier === 'fast' ? buildFastHealthOut(base) : fullOut;
     const st = computeSystemStatus(out);
     out.system_status = st.system_status;
     out.no_go_reasons = st.no_go_reasons;
@@ -428,12 +471,28 @@ try {
 
 // Payments ops (Redis-only): runtime fallback flag + payload signature issue counters.
     try {
-      const rt = await getPaymentsFallbackRuntime();
-      const runtimeEnabled = !!rt?.enabled;
+      const rtKey = k(['sys', 'pay_fallback_apply']);
+      const v = await redis.get(rtKey);
+      let obj = (v && typeof v === 'object' && !Array.isArray(v)) ? v : null;
+      if (!obj && typeof v === 'string') {
+        try {
+          const o2 = JSON.parse(v);
+          if (o2 && typeof o2 === 'object' && !Array.isArray(o2)) obj = o2;
+        } catch {
+          // ignore
+        }
+      }
+
+      let ttlSec = null;
+      try {
+        if (typeof redis.ttl === 'function') ttlSec = Number(await redis.ttl(rtKey));
+      } catch {
+        ttlSec = null;
+      }
+
+      const runtimeEnabled = !!(obj && obj.enabled);
       base.payments.fallback_apply_runtime_enabled = runtimeEnabled;
       base.payments.fallback_apply_effective = !!(base.payments.fallback_apply_env_enabled || runtimeEnabled);
-      base.payments.fallback_apply_age_sec = Number.isFinite(rt?.ageSec) ? Number(rt.ageSec) : null;
-      base.payments.fallback_apply_hours_active = Number.isFinite(rt?.hoursActive) ? Number(rt.hoursActive) : null;
       // For convenience, reflect effective state in legacy field too.
       base.payments.fallback_apply_enabled = base.payments.fallback_apply_effective;
 
@@ -442,19 +501,13 @@ try {
       );
 
       if (runtimeEnabled) {
-        const guard = getPaymentsFallbackGuardrailConfig();
         base.payments.fallback_apply_runtime = {
-          at: rt?.at || null,
-          expAt: rt?.expAt || null,
-          ttlSec: Number.isFinite(rt?.ttlSec) ? Number(rt.ttlSec) : null,
-          leftSec: Number.isFinite(rt?.leftSec) ? Number(rt.leftSec) : null,
-          ageSec: Number.isFinite(rt?.ageSec) ? Number(rt.ageSec) : null,
-          hoursActive: Number.isFinite(rt?.hoursActive) ? Number(rt.hoursActive) : null,
-          alertRepeatSec: Number.isFinite(guard?.alertRepeatSec) ? Number(guard.alertRepeatSec) : null,
-          maxTtlSec: Number.isFinite(guard?.maxTtlSec) ? Number(guard.maxTtlSec) : null,
-          byTgId: rt?.byTgId || null,
-          byUser: rt?.byUser || null,
-          reason: rt?.reason || null,
+          at: obj?.at || null,
+          expAt: obj?.expAt || null,
+          ttlSec: Number.isFinite(ttlSec) ? ttlSec : (obj?.ttlSec || null),
+          byTgId: obj?.byTgId || null,
+          byUser: obj?.byUser || null,
+          reason: obj?.reason || null,
         };
       } else {
         base.payments.fallback_apply_runtime = null;
@@ -472,6 +525,15 @@ try {
       base.payments.payload_issues_today = out;
     } catch {
       // ignore
+    }
+
+    if (healthTier === 'fast') {
+      const out = buildFastHealthOut(base);
+      const st = computeSystemStatus(out);
+      out.system_status = st.system_status;
+      out.no_go_reasons = st.no_go_reasons;
+      res.status(200).json(out);
+      return;
     }
 
     // Monetization breadcrumbs (Redis-only)
@@ -599,16 +661,10 @@ try {
           if (snap && typeof snap === 'object') {
             const bid = Number(snap.broadcast_id ?? snap.broadcastId) || null;
             const pc = Number(snap.pending_count ?? snap.pendingCount ?? snap.pending) || 0;
-            const ts = snap.ts || null;
-            const ageSec = parseAgeSecFromIso(ts);
-            const staleAfterSec = Math.max(60, Number(snap.stale_after_sec ?? snap.staleAfterSec) || 10 * 60);
             broadcast.pending_deliveries = {
-              ts,
+              ts: snap.ts || null,
               broadcast_id: bid,
               pending_count: pc,
-              age_sec: Number.isFinite(ageSec) ? ageSec : null,
-              stale_after_sec: staleAfterSec,
-              stale: Number.isFinite(ageSec) ? ageSec > staleAfterSec : false,
             };
           } else {
             broadcast.pending_deliveries = null;
@@ -901,7 +957,7 @@ try {
       // ignore
     }
 
-    const out = {
+    const out = attachHealthTier({
 
       ...base,
       cron: {
@@ -915,7 +971,7 @@ try {
       ref,
       audit,
 
-    };
+    }, healthTier);
     const st = computeSystemStatus(out);
     out.system_status = st.system_status;
     out.no_go_reasons = st.no_go_reasons;
@@ -927,7 +983,7 @@ try {
     base.redis.latency_ms = null;
     base.redis.last_error = 'redis_unavailable';
 
-    const out = {
+    const fullOut = attachHealthTier({
 
       ...base,
       cron: { ...makeCronBase(true), error: 'redis_unavailable' },
@@ -935,7 +991,8 @@ try {
       ref: makeRefBase(),
       audit: auditBase,
 
-    };
+    }, healthTier);
+    const out = healthTier === 'fast' ? buildFastHealthOut(base) : fullOut;
     const st = computeSystemStatus(out);
     out.system_status = st.system_status;
     out.no_go_reasons = st.no_go_reasons;
