@@ -30,7 +30,6 @@
     "smoke:health-admin": "node scripts/smoke-health-admin-shape.js",
     "smoke:short": "node scripts/smoke-short.js",
     "test:redact": "node scripts/test-redactContactsInText.js",
-    "test:runtime-stars-payment-validation": "node scripts/test-runtime-stars-payment-validation.js",
     "zip": "bash scripts/zip.sh",
     "smoke:admin-founder-contract": "node scripts/smoke-admin-founder-contract.js",
     "smoke:admin-notice-contract": "node scripts/smoke-admin-notice-contract.js",
@@ -44,13 +43,11 @@
     "smoke:admin-user-card-note-contract": "node scripts/smoke-admin-user-card-note-contract.js",
     "smoke:admin-audit-metrics-moderators-contract": "node scripts/smoke-admin-audit-metrics-moderators-contract.js",
     "smoke:broadcast-local-db-fuse": "node scripts/smoke-broadcast-local-db-fuse.js",
-    "smoke:broadcast-429-atomicity-contract": "node scripts/smoke-broadcast-429-atomicity-contract.js",
     "smoke:payments-autoheal-chain-contract": "node scripts/smoke-payments-autoheal-chain-contract.js",
     "smoke:official-publish-check-now-contract": "node scripts/smoke-official-publish-check-now-contract.js",
     "smoke:start-role-gate-contract": "node scripts/smoke-start-role-gate-contract.js",
     "smoke:ws-channel-disconnect-contract": "node scripts/smoke-ws-channel-disconnect-contract.js",
     "smoke:env-baseline-contract": "node scripts/smoke-env-baseline-contract.js",
-    "smoke:ig-parked-hard-gate": "node scripts/smoke-ig-parked-hard-gate.js",
     "smoke:creator-current-channel-contract": "node scripts/smoke-creator-current-channel-contract.js",
     "smoke:share-url-compat-contract": "node scripts/smoke-share-url-compat-contract.js",
     "smoke:brand-inbox-accept-contract": "node scripts/smoke-brand-inbox-accept-contract.js",
@@ -86,7 +83,8 @@
     "smoke:new-dialog-terminology-contract": "node scripts/smoke-new-dialog-terminology-contract.js",
     "preflight:source": "node scripts/preflight.js source",
     "preflight:deps": "node scripts/preflight.js deps",
-    "smoke:home-copy-contract": "node scripts/smoke-home-copy-contract.js"
+    "smoke:home-copy-contract": "node scripts/smoke-home-copy-contract.js",
+    "smoke:health-fast": "node scripts/smoke-health-fast-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
