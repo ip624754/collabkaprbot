@@ -5031,3 +5031,25 @@ QA:
 - checked that the canonical prompt file still points to the same docs canon (`README`, `00_BOOT`, `00_CURRENT_STATE`, `91_PROD_LAUNCH_30MIN`, `15_NEW_CHAT_HANDOFF`);
 - checked that the handoff now references STEP476 baseline and explicitly covers STEP475 + STEP476;
 - confirmed scope is docs-only and introduces no source/runtime behavior changes.
+
+## STEP477 — Telegram UI pattern reuse canon
+
+Scope: docs / reusable architecture canon only. No runtime logic, DB queries, callbacks, money paths, or hot UI surfaces changed.
+
+What changed:
+- added `docs/25_TELEGRAM_UI_PATTERN_REUSE.md` as a dedicated reusable note for cloning the current Collabka Telegram UI style in another bot;
+- documented the actual invariant set behind the current UX rather than just copying prompt text: single-surface callback router, edit-first rendering, explicit `ret` return-context, `Back` vs `Menu` vs `Home`, push-vs-edit layering for service/receipt flows, DB-light hot menu paths, and durable-vs-ephemeral state separation;
+- updated `docs/README.md` so the file is discoverable from the docs canon;
+- refreshed `docs/15_NEW_CHAT_HANDOFF.md` to STEP477 baseline and added a direct pointer to the reuse doc for future new-chat continuations;
+- updated `docs/00_CURRENT_STATE.md` so repo snapshots explicitly record the existence and purpose of this reuse canon.
+
+Why:
+- the pattern had already been implemented in source and explained ad hoc in chat, but there was no single canonical repo doc that captured how and why the UI feels static, clean, and non-spammy;
+- future chats and adjacent bot projects need a repeatable explanation of the architecture, not just a one-off prose answer;
+- the original idea of placing this under `docs/18_*` would have collided with the already occupied `docs/18_NEON_COST_SAVING_AUDIT_THROTTLE.md`, so the canon was added as `docs/25_TELEGRAM_UI_PATTERN_REUSE.md` to avoid breaking older doc references.
+
+QA:
+- confirmed the new doc points to the real source anchors (`src/bot/bot.js`, `src/bot/helpers.js`, `src/bot/actionRegistry.js`, `docs/spec/20_HOME_HUB_SPEC.md`, `docs/spec/21_MENU_SPEC.md`);
+- confirmed docs canon/index now exposes the new file;
+- confirmed handoff baseline now references STEP477 and includes the reuse-doc path for follow-up chats;
+- confirmed scope is docs-only and introduces no runtime/source behavior change.
