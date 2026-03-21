@@ -5011,3 +5011,23 @@ Why:
 - This is hygiene-only work: no runtime logic, callbacks, DB queries, money paths, or hot UI surfaces changed.
 - Source-only verification after removal remains green.
 
+
+## STEP476 — canonical new-chat prompt upgrade
+
+Scope: docs / handoff kernel only. No runtime logic, DB queries, callbacks, money paths, or hot UI surfaces changed.
+
+What changed:
+- replaced the old `docs/17_START_NEW_CHAT_PROMPT.md` kernel with a stronger Russian main prompt for the next chats;
+- upgraded the protocol from `Jobs / Vitalik / Woz / Durov` to `Jobs / Vitalik / Woz / Durov / Toly / Armani / samczsun / Hasu`;
+- made the operating contract explicit: baseline-first, docs-canon-first, then `audit -> patch -> QA -> artifacts`;
+- strengthened anti-regression language, source-vs-runtime separation, risk framing, exploit/edge-case thinking, and strict definition of done;
+- refreshed `docs/15_NEW_CHAT_HANDOFF.md` from STEP474 to STEP476 baseline so the new chat lands on the real latest context, including STEP475 health fast-tier and STEP476 prompt-kernel updates.
+
+Why:
+- the previous prompt was still useful, but too narrow for the current repo maturity and did not fully encode risk framing, adversarial review, presentation discipline, and truthful status boundaries;
+- the handoff baseline had drifted behind the real archive state and needed to be brought in line before the next continuation chat.
+
+QA:
+- checked that the canonical prompt file still points to the same docs canon (`README`, `00_BOOT`, `00_CURRENT_STATE`, `91_PROD_LAUNCH_30MIN`, `15_NEW_CHAT_HANDOFF`);
+- checked that the handoff now references STEP476 baseline and explicitly covers STEP475 + STEP476;
+- confirmed scope is docs-only and introduces no source/runtime behavior changes.
