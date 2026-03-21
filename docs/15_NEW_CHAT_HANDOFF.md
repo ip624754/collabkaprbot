@@ -1,4 +1,4 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP479 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP476 baseline
 
 Цель: чтобы новый чат **сразу продолжил текущий процесс**, а не начинал проект заново.
 
@@ -17,9 +17,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP479 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP476 baseline)**
 
-Продолжаем не с нуля, а от **STEP479 baseline**.
+Продолжаем не с нуля, а от **STEP476 baseline**.
 
 Текущий цикл был не про новые фичи, а про **stability + clarity + context correctness + repo hygiene** в ядре:
 - creator → brand applications
@@ -29,7 +29,7 @@
 - lead / dialog / list / notice consistency
 - Telegram-native density cleanup без redesign
 - source-guard / preflight honesty
-- docs / handoff / repo hygiene
+- docs / handoff / repo hygiene / operator health clarity / prompt kernel refresh
 
 ### Что уже критично стабилизировано
 
@@ -55,11 +55,8 @@
 - **STEP472** — home copy cleanup + first-run / returning split
 - **STEP473** — repo hygiene cleanup (removed confirmed stale files)
 - **STEP474** — parked IG OAuth libs moved out of active `src/lib` into `_ig_oauth_parked/`, handoff/docs canon refresh
-- **STEP475** — payments fallback guardrails (bounded runtime toggle, age/heartbeat, stale cleanup visibility)
-- **STEP476** — broadcast stale visibility + tiny 429 atomicity hardening
-- **STEP477** — IG parked hard gate (source/preflight guard that blocks silent return to active deploy surface)
-- **STEP478** — runtime-grade Stars payment validation integration test on the strict payment path
-- **STEP479** — ops one-screen / circuit breakers refresh (`docs/ops/02_HEALTH_ONE_SCREEN.md`)
+- **STEP475** — `/api/health` two-tier contract: full-tier kept intact, added fast operator tier (`?tier=fast`, `?view=ops`, `?view=operator`) with `X-Health-Tier` header
+- **STEP476** — upgraded canonical new-chat prompt kernel in `docs/17_START_NEW_CHAT_PROMPT.md`: stronger anti-regression, audit/patch/QA/artifacts discipline, explicit source-vs-runtime separation, added Toly / Armani / samczsun / Hasu lenses
 
 ### Что сейчас уже не надо делать
 
@@ -82,9 +79,8 @@
 - source-only regression sweep и честный deps/runtime split
 - role-aware home и short first-run split
 - repo hygiene / docs kernel / current handoff canon
-- payments fallback guardrails / bounded runtime toggle visibility
-- broadcast pending snapshot stale visibility / atomic 429 rolling window helper
-- IG parked deploy-surface hard gate
+- operator health fast-path / one-screen ops summary contract
+- stronger start-new-chat behavior kernel for follow-up work
 
 ### Что ещё требует live runtime verification
 
@@ -107,11 +103,12 @@
 - creator application local return (`⬅️ К диалогу #…` / `⬅️ К заявке #…`)
 - home / first-run copy in real Telegram
 - latest list cleanups (`📨 Мои заявки`, `📨 Заявки брендов`, `📨 Заявки от креаторов`)
+- `/api/health?tier=fast` against live deploy: header + summary contract + no heavy drill-down blocks in operator fast-path
 
 ### Как работать в новом чате
 
 Новый чат должен:
-- подтвердить, что продолжает от STEP479, а не с нуля
+- подтвердить, что продолжает от STEP476, а не с нуля
 - прочитать docs как обычно
 - кратко перечислить, что уже стабилизировано
 - отдельно назвать, что подтверждено source/snapshot-level
@@ -119,7 +116,7 @@
 - не предлагать новый redesign
 - следующим ходом делать только:
   - live runtime triage
-  - или **STEP480+ micro-hotfix** по реальному хвосту
+  - или **STEP477+ micro-hotfix** по реальному хвосту
 
 ### Что нельзя делать
 
@@ -130,13 +127,12 @@
 - не ломать локальный контекст возврата
 - не менять working terminology без причины
 - не возвращать parked IG OAuth helpers в active `src/lib/*` без отдельного revival-плана
-- не возвращать parked IG OAuth routes в active `api/ig/oauth/*` без отдельного revival-step
 
 ### Какой должен быть первый ответ ассистента
 
 Ожидаемый формат:
-- подтвердить, что baseline = STEP479
-- кратко перечислить, что было стабилизировано в STEP433–479
+- подтвердить, что baseline = STEP476
+- кратко перечислить, что было стабилизировано в STEP433–476
 - отдельно назвать:
   - что подтверждено source/snapshot-level
   - что ещё нужно проверить живьём в Telegram
@@ -149,7 +145,8 @@
 
 ## 3) Мини-smoke, который ассистент должен предложить
 
-- `/api/health` (ok / mon.accept / cron / audit)
+- `/api/health` full-tier (legacy operator JSON)
+- `/api/health?tier=fast` fast-tier operator summary + `X-Health-Tier` header
 - creator → brand application → brand accept → creator reply → brand reply
 - local `📌 Стадия сделки` → stage transition → local back
 - `🏷 Каталог брендов` fast path без blink
@@ -164,10 +161,12 @@
 `docs/17_START_NEW_CHAT_PROMPT.md`
 
 Он является canonical behavior kernel:
-- Jobs / Vitalik / Woz / Durov
-- docs-first
+- Jobs / Vitalik / Woz / Durov / Toly / Armani / samczsun / Hasu
+- docs-first + baseline-first
+- audit → patch → QA → artifacts
 - small-surface-area patching
 - Telegram-native clarity
+- strict source-vs-runtime separation
 - local-context-first UX
 
 ---
