@@ -8,6 +8,7 @@
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
 - `15_NEW_CHAT_HANDOFF.md` — copy‑paste handoff для старта нового чата (canonical baseline context)
 - `17_START_NEW_CHAT_PROMPT.md` — готовый промпт для старта нового чата (canonical behavior kernel, v3)
+- `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 
 ## 1) Текущее состояние (source of truth)
 - `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (**source of truth**)
@@ -64,7 +65,7 @@
 ## 2.5) Owner docs (для управления продом)
 - `90_OWNER_RUNBOOK.md` — шпаргалка владельца: деплой/ENV/migrations/cron/health/инциденты
 - `ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий incident playbook
-- `ops/02_HEALTH_ONE_SCREEN.md` — canonical operator one-screen: `trigger → symptom → /api/health field → safe action → rollback`
+- `ops/02_HEALTH_ONE_SCREEN.md` — one-screen guide: как читать `/api/health` сверху вниз
 - `ops/03_LIVE_RUNTIME_PASS_STEP471.md` — ручной Telegram runtime pass после STEP470–471 (списки + dialog-flow + терминология)
 
 ## 3) Protocol / Process (как работаем)
@@ -74,6 +75,7 @@
 - `scripts/lint-footer-nav.js` — авто‑проверка footer‑навигации (запуск: `npm run lint:nav`)
 - `docs/process/06_AUDIT_STEP94_HARDCORE.md` — reference аудит (не source of truth)
 - `docs/process/07_WORK_HISTORY_2026_03.md` — timeline по шагам/решениям (актуально)
+- `25_TELEGRAM_UI_PATTERN_REUSE.md` — отдельный reusable doc: как повторить Collabka UI-паттерн в другом Telegram-боте без потери архитектурных инвариантов
 - `docs/process/07_WORK_HISTORY_2026_02.md` — архив (предыдущий период)
 - `docs/process/08_AUDIT_CLOSEOUT_2026_02.md` — закрытие внешнего аудита (findings→fixes + мини‑QA)
 - `docs/process/03_legacy_tech_spec_collabka_v1_0_3.md` — базовая техспека (legacy reference)
@@ -92,7 +94,6 @@
 - Новый операторский пакет: `94_PROD_READINESS_PACK.md` (GO/NO‑GO через `system_status/no_go_reasons` + матрица микрофиксов + runtime fallback runbook + `pending_deliveries`/`ops.digest_preview` + hard-skip отчёт + staging fault‑injection).
 - Навигационный контракт what-next/back-nav теперь зафиксирован отдельным source-level smoke (`smoke:what-next-backnav-contract`) и синхронизирован с `docs/24_WHAT_NEXT_BLOCKS_STYLEGUIDE.md`.
 - Добавлен one-screen guide `docs/ops/02_HEALTH_ONE_SCREEN.md` для `/api/health` и обновлён NotebookLM audit baseline STEP430.
-- Обновлён `docs/ops/02_HEALTH_ONE_SCREEN.md`: теперь это боевой operator matrix `trigger → symptom → field → safe action → rollback`, а не только top-down health cheat-sheet.
 
 
 ## Аудит (NotebookLM / внешняя проверка)
@@ -107,4 +108,4 @@
 - `docs/94_PROD_READINESS_PACK.md` — GO/NO‑GO + incident cookbook
 
 - `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий what-to-do playbook после hardening шагов 403–405.
-- `docs/ops/02_HEALTH_ONE_SCREEN.md` — canonical operator one-screen / circuit breakers matrix (STEP479).
+- `docs/ops/02_HEALTH_ONE_SCREEN.md` — one-screen guide по `/api/health` (STEP429).

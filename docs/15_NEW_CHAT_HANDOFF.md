@@ -1,4 +1,4 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP476 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP477 baseline
 
 Цель: чтобы новый чат **сразу продолжил текущий процесс**, а не начинал проект заново.
 
@@ -17,9 +17,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP476 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP477 baseline)**
 
-Продолжаем не с нуля, а от **STEP476 baseline**.
+Продолжаем не с нуля, а от **STEP477 baseline**.
 
 Текущий цикл был не про новые фичи, а про **stability + clarity + context correctness + repo hygiene** в ядре:
 - creator → brand applications
@@ -57,6 +57,7 @@
 - **STEP474** — parked IG OAuth libs moved out of active `src/lib` into `_ig_oauth_parked/`, handoff/docs canon refresh
 - **STEP475** — `/api/health` two-tier contract: full-tier kept intact, added fast operator tier (`?tier=fast`, `?view=ops`, `?view=operator`) with `X-Health-Tier` header
 - **STEP476** — upgraded canonical new-chat prompt kernel in `docs/17_START_NEW_CHAT_PROMPT.md`: stronger anti-regression, audit/patch/QA/artifacts discipline, explicit source-vs-runtime separation, added Toly / Armani / samczsun / Hasu lenses
+- **STEP477** — added `docs/25_TELEGRAM_UI_PATTERN_REUSE.md`: canonical reusable note on how the Collabka single-surface Telegram UI works and how to reproduce it in another bot without losing Back/Menu/Home, `ret`, edit-first, and push-vs-edit invariants
 
 ### Что сейчас уже не надо делать
 
@@ -81,6 +82,7 @@
 - repo hygiene / docs kernel / current handoff canon
 - operator health fast-path / one-screen ops summary contract
 - stronger start-new-chat behavior kernel for follow-up work
+- canonical reusable UI-pattern doc for cloning the Collabka Telegram navigation model in another bot
 
 ### Что ещё требует live runtime verification
 
@@ -116,7 +118,7 @@
 - не предлагать новый redesign
 - следующим ходом делать только:
   - live runtime triage
-  - или **STEP477+ micro-hotfix** по реальному хвосту
+  - или **STEP478+ micro-hotfix** по реальному хвосту
 
 ### Что нельзя делать
 
@@ -131,8 +133,8 @@
 ### Какой должен быть первый ответ ассистента
 
 Ожидаемый формат:
-- подтвердить, что baseline = STEP476
-- кратко перечислить, что было стабилизировано в STEP433–476
+- подтвердить, что baseline = STEP477
+- кратко перечислить, что было стабилизировано в STEP433–477
 - отдельно назвать:
   - что подтверждено source/snapshot-level
   - что ещё нужно проверить живьём в Telegram
@@ -152,6 +154,22 @@
 - `🏷 Каталог брендов` fast path без blink
 - creator application flow: `✍️ Ответить бренду` → composer → `⬅️ К диалогу #…` / `📨 К заявкам`
 - home / first-run copy: creator, brand, new user role gate
+
+---
+
+## 3.5) Reuse doc для другого Telegram-бота
+
+Если задача в новом чате — **повторить именно Collabka-style UI-паттерн** в другом боте, используй дополнительно:
+- `docs/25_TELEGRAM_UI_PATTERN_REUSE.md`
+
+Этот файл объясняет не только текст промпта, а именно архитектурную модель:
+- single-surface Telegram UI
+- `safeEditOrReply(...)` / edit-first rendering
+- `Back` vs `Menu` vs `Home`
+- explicit `ret` / local return-context
+- push new UI surface для receipts/service-origin flows
+- durable truth vs ephemeral UI state
+- DB-light menu paths
 
 ---
 
