@@ -1,3 +1,26 @@
+## STEP479 — Selection surface inventory + pilot target freeze
+
+Что сделано:
+- Добавлен `docs/27_SELECTION_SURFACE_INVENTORY_STEP479.md` как source-level inventory активных creator/brand-facing selection surfaces в STEP478 baseline.
+- Каждая видимая selection surface размечена по типу: `multi-select`, `single-choice`, `toggle`, либо `not for rollout`.
+- Для каждой surface зафиксированы actor, render/callback cluster, текущая apply semantics и оценка rollout-risk.
+- Заморожены первые 2 low-risk pilot targets для будущего runtime rollout selection contract:
+  - `Workspace Profile → 🎬 Форматы` — pilot A (multi-select)
+  - `Workspace Profile → 🧩 Режим` — pilot B (single-choice)
+- Явно исключены из первого rollout brand/catalog/BX filters, deal/reply/applications/accept flows, unlock/spend/paywall paths и operator/admin toggles.
+
+Почему так:
+- selection contract уже канонизирован в STEP478;
+- следующий шаг должен быть узким и обратимым;
+- runtime rollout безопаснее начинать с bounded creator profile settings, а не с catalog/search paths из текущего live-watchlist.
+
+Проверки:
+- source sweep по `src/bot/bot.js` + action/callback surfaces
+- docs canon sync: `README`, `00_CURRENT_STATE`, `15_NEW_CHAT_HANDOFF`
+- runtime logic / callbacks / DB reads / money paths не менялись
+
+Риск регрессий: **низкий** (docs/source only; runtime untouched).
+
 ## STEP475 — Two-tier /api/health + fast-path operator summary
 
 Почему:
@@ -5053,3 +5076,24 @@ QA:
 - confirmed docs canon/index now exposes the new file;
 - confirmed handoff baseline now references STEP477 and includes the reuse-doc path for follow-up chats;
 - confirmed scope is docs-only and introduces no runtime/source behavior change.
+
+
+## STEP478 — selection UI contract canon
+
+Scope: docs / UI standard only. No runtime logic, DB queries, callbacks, money paths, or hot UI surfaces changed.
+
+What changed:
+- added `docs/26_SELECTION_UI_CONTRACT_RU.md` as the canonical Russian selection-surface standard for Collabka picker/filter/profile-selector screens;
+- locked the visual separation between `мультивыбор`, `один выбор`, `вкл/выкл`, and ordinary action/navigation rows so future menus do not mix selection state with actions;
+- fixed the standard layout rules: paired sibling options, full-width long/high-risk rows, and a dedicated bottom action block for `Сохранить / Применить / Очистить / Назад / Меню / Домой`;
+- updated `docs/README.md`, `docs/00_CURRENT_STATE.md`, and `docs/15_NEW_CHAT_HANDOFF.md` so the new contract becomes part of the docs canon and future chat baselines.
+
+Why:
+- selection-heavy Telegram surfaces degrade quickly when checkboxes, radio-style state, toggles, actions, and navigation are mixed into one undifferentiated inline grid;
+- the current repo already has a strong single-surface navigation model, but there was no dedicated canonical file for selection semantics on Russian user-facing menus;
+- future picker/filter/profile work needs one stable contract instead of re-deciding button semantics screen by screen.
+
+QA:
+- confirmed the new doc is docs-only and introduces no source/runtime behavior changes;
+- confirmed docs canon/index now exposes the new file;
+- confirmed handoff baseline now points to STEP478 and includes the new selection-contract doc for follow-up chats.
