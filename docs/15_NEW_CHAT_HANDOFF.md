@@ -1,4 +1,4 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP479 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP480 baseline
 
 Цель: чтобы новый чат **сразу продолжил текущий процесс**, а не начинал проект заново.
 
@@ -17,9 +17,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP479 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP480 baseline)**
 
-Продолжаем не с нуля, а от **STEP479 baseline**.
+Продолжаем не с нуля, а от **STEP480 baseline**.
 
 Текущий цикл был не про новые фичи, а про **stability + clarity + context correctness + repo hygiene** в ядре:
 - creator → brand applications
@@ -60,6 +60,7 @@
 - **STEP477** — added `docs/25_TELEGRAM_UI_PATTERN_REUSE.md`: canonical reusable note on how the Collabka single-surface Telegram UI works and how to reproduce it in another bot without losing Back/Menu/Home, `ret`, edit-first, and push-vs-edit invariants
 - **STEP478** — added `docs/26_SELECTION_UI_CONTRACT_RU.md`: canonical Russian selection UI contract for picker/filter surfaces (`мультивыбор`, `один выбор`, `вкл/выкл`, separate bottom action block) so future Collabka menus do not mix selection, actions, and navigation
 - **STEP479** — added `docs/27_SELECTION_SURFACE_INVENTORY_STEP479.md`: source-level inventory of active selection surfaces + frozen first pilot targets (`Workspace Profile → 🎬 Форматы`, `Workspace Profile → 🧩 Режим`) for future low-risk runtime rollout
+- **STEP480** — implemented the first runtime selection pilot on those same two creator-side profile surfaces: `🎬 Форматы` now uses checkbox-style multi-select markers (`☑️/⬜️`) with a separated clear row, and `🧩 Режим` now uses radio-style single-choice markers (`🔘/⚪️`) with instant apply preserved; added `scripts/smoke-selection-pilot-contract.js` and wired it into source preflight
 
 ### Что сейчас уже не надо делать
 
@@ -71,7 +72,7 @@
 
 ### Что уже стабилизировано
 
-- selection contract canon + source inventory + frozen pilot targets (runtime rollout ещё не применён)
+- selection contract canon + source inventory + first runtime pilot already applied on `Workspace Profile → 🎬 Форматы` and `Workspace Profile → 🧩 Режим`
 - accept / charge ядро
 - local vs global deal context
 - list / card / dialog density на обеих сторонах
@@ -110,12 +111,12 @@
 - home / first-run copy in real Telegram
 - latest list cleanups (`📨 Мои заявки`, `📨 Заявки брендов`, `📨 Заявки от креаторов`)
 - `/api/health?tier=fast` against live deploy: header + summary contract + no heavy drill-down blocks in operator fast-path
-- any new picker/filter/profile-selector surface against `docs/26_SELECTION_UI_CONTRACT_RU.md` before runtime rollout
+- any new picker/filter/profile-selector surface against `docs/26_SELECTION_UI_CONTRACT_RU.md` before expanding rollout beyond the STEP480 pilot
 
 ### Как работать в новом чате
 
 Новый чат должен:
-- подтвердить, что продолжает от STEP478, а не с нуля
+- подтвердить, что продолжает от STEP480, а не с нуля
 - прочитать docs как обычно
 - кратко перечислить, что уже стабилизировано
 - отдельно назвать, что подтверждено source/snapshot-level
@@ -123,7 +124,7 @@
 - не предлагать новый redesign
 - следующим ходом делать только:
   - live runtime triage
-  - или **STEP478+ micro-hotfix** по реальному хвосту
+  - или **STEP480+ micro-hotfix** по реальному хвосту
 
 ### Что нельзя делать
 
@@ -138,7 +139,7 @@
 ### Какой должен быть первый ответ ассистента
 
 Ожидаемый формат:
-- подтвердить, что baseline = STEP478
+- подтвердить, что baseline = STEP480
 - кратко перечислить, что было стабилизировано в STEP433–478
 - отдельно назвать:
   - что подтверждено source/snapshot-level

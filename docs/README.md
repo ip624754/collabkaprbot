@@ -11,6 +11,7 @@
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 - `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout
+- STEP480 runtime pilot applied on creator-side `Workspace Profile → 🎬 Форматы` (checkbox-style multi-select) and `Workspace Profile → 🧩 Режим` (radio-style single-choice); see `00_CURRENT_STATE.md` + `process/07_WORK_HISTORY_2026_03.md` for rollout details
 
 ## 1) Текущее состояние (source of truth)
 - `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (**source of truth**)
