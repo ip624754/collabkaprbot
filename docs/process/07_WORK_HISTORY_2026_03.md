@@ -1,3 +1,25 @@
+## STEP480 — selection UI pilot runtime implementation
+
+Что сделано:
+- Реализован первый runtime rollout selection UI contract на 2 low-risk creator-side profile surfaces из STEP479 inventory.
+- `Workspace Profile → 🎬 Форматы` переведён на checkbox-style multi-select contract: явные `☑️/⬜️` state markers, один формат в строке для длинных labels, отдельная нижняя action-row `🧹 Очистить`, сохранены instant apply и локальный footer `⬅️ Назад / 📋 Меню / 🏠 Home`.
+- `Workspace Profile → 🧩 Режим` переведён на radio-style single-choice contract: явные `🔘/⚪️` active-option markers, сохранены instant apply и тот же локальный footer без лишнего `Сохранить`.
+- Добавлены узкие helper-функции `checkboxGridLabel(...)` и `activeOptionGridLabel(...)` для pilot-only reuse внутри `src/bot/bot.js`.
+- Добавлен `scripts/smoke-selection-pilot-contract.js`; smoke подключён в `package.json` и в source-only preflight.
+
+Почему так:
+- STEP479 уже зафиксировал эти 2 экрана как safest pilot surfaces.
+- Нужен был реальный runtime rollout без broad sweep по catalog/brand/BX filters.
+- Selection contract должен был войти в живой бот через bounded profile-settings path, не задевая accept/reply/stage/unlock/money контуры.
+
+Проверки:
+- `node --check src/bot/bot.js`
+- `node --check scripts/smoke-selection-pilot-contract.js`
+- `node scripts/smoke-selection-pilot-contract.js`
+- source preflight / syntax sweep after patch
+
+Риск регрессий: **низкий** — pilot ограничен 2 creator-side profile surfaces; callbacks не расширены; DB reads не добавлены; critical money/deal/reply/runtime paths не тронуты.
+
 ## STEP479 — Selection surface inventory + pilot target freeze
 
 Что сделано:
