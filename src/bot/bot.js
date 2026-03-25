@@ -24,7 +24,7 @@ import { parseSponsorsFromText, sponsorToChatId } from './sponsorParse.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import { registerStarsPaymentsHandlers } from './payments/starsHandlers.js';
 import { queueOpsAlert, flushOpsAlerts } from './opsAlerts.js';
-import { getPaymentsFallbackApplyState, getPaymentsFallbackGuardrailConfig, isPaymentsFallbackApplyEnabled, setPaymentsFallbackRuntime } from '../lib/paymentsOps.js';
+import { getPaymentsFallbackApplyState, isPaymentsFallbackApplyEnabled, setPaymentsFallbackRuntime } from '../lib/paymentsOps.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
 import { makeSeed, makeXorShift32, sampleWithoutReplacement, sha256Hex } from './prng.js';
@@ -8403,6 +8403,14 @@ const PROFILE_MODE_LABELS = {
   both: 'Оба (канал + UGC)'
 };
 
+function checkboxGridLabel(on, title) {
+  return `${on ? '☑️' : '⬜️'} ${title}`;
+}
+
+function activeOptionGridLabel(on, title) {
+  return `${on ? '🔘' : '⚪️'} ${title}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // №4 Матчинг профилей (каталог витрин по нишам/форматам) — минимальный UX
 // Brand → выбирает фильтры → получает список → открывает витрину → оставляет заявку
@@ -10351,17 +10359,26 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
   const cur = String(ws.profile_mode || 'both');
 
   const kb = new InlineKeyboard()
-    .text(`${cur === 'channel' ? '✅ ' : ''}Канал`, `a:ws_prof_mode_set|ws:${wsId}|m:channel`)
-    .text(`${cur === 'ugc' ? '✅ ' : ''}UGC`, `a:ws_prof_mode_set|ws:${wsId}|m:ugc`)
+    .text(activeOptionGridLabel(cur === 'channel', 'Канал'), `a:ws_prof_mode_set|ws:${wsId}|m:channel`)
+    .text(activeOptionGridLabel(cur === 'ugc', 'UGC'), `a:ws_prof_mode_set|ws:${wsId}|m:ugc`)
     .row()
-    .text(`${cur === 'both' ? '✅ ' : ''}Оба`, `a:ws_prof_mode_set|ws:${wsId}|m:both`);
+    .text(activeOptionGridLabel(cur === 'both', 'Оба'), `a:ws_prof_mode_set|ws:${wsId}|m:both`);
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   const text =
-    `🧩 <b>Режим профиля</b>\n\n` +
-    `• <b>Канал</b> — интеграции/посты в TG\n` +
-    `• <b>UGC</b> — контент без аудитории (файлы)\n` +
-    `• <b>Оба</b> — лучше по РФ-рынку\n\n` +
+    `🧩 <b>Режим профиля</b>
+
+` +
+    `Текущий выбор отмечен. Нажатие применяется сразу.
+
+` +
+    `• <b>Канал</b> — интеграции и посты в Telegram
+` +
+    `• <b>UGC</b> — контент без аудитории (файлы)
+` +
+    `• <b>Оба</b> — канал + UGC в одном профиле
+
+` +
     `Сейчас: <b>${escapeHtml(PROFILE_MODE_LABELS[cur] || PROFILE_MODE_LABELS.both)}</b>`;
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
@@ -10371,6 +10388,8 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
     await ctx.reply(text, extra);
   }
 }
+
+
 
 
 async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
@@ -10417,21 +10436,21 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
   const selected = Array.isArray(ws.profile_formats) ? ws.profile_formats.map(String) : [];
   const kb = new InlineKeyboard();
 
-  PROFILE_FORMATS.forEach((it, i) => {
+  PROFILE_FORMATS.forEach((it) => {
     const on = selected.includes(it.key);
-    kb.text(`${on ? '✅ ' : ''}${it.title}`, `a:ws_prof_fmt_t|ws:${wsId}|f:${it.key}`);
-    if (i % 2 === 1) kb.row();
+    kb.text(checkboxGridLabel(on, it.title), `a:ws_prof_fmt_t|ws:${wsId}|f:${it.key}`).row();
   });
 
-  kb.row()
-    .text('🧹 Очистить', `a:ws_prof_fmt_clear|ws:${wsId}`)
-    .text('✅ Готово', `a:ws_profile|ws:${wsId}`);
-
+  kb.row().text('🧹 Очистить', `a:ws_prof_fmt_clear|ws:${wsId}`);
   kbNavRow(kb, `a:ws_profile|ws:${wsId}`);
 
   const text =
-    `🎬 <b>Форматы</b> (максимум 5)\n\n` +
-    `Выбери форматы — так брендам проще сделать быстрый заказ.\n\n` +
+    `🎬 <b>Форматы</b> (максимум 5)
+
+` +
+    `Можно выбрать несколько вариантов. Нажатие применяется сразу, текущий выбор отмечен.
+
+` +
     `Сейчас: <b>${escapeHtml(fmtMatrix(selected, PROFILE_FORMATS))}</b>`;
 
   const extra = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
@@ -10441,6 +10460,8 @@ async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
     await ctx.reply(text, extra);
   }
 }
+
+
 
 
 async function renderWsPublicProfile(ctx, wsId, opts = {}) {
@@ -29091,10 +29112,7 @@ if (p.a === 'a:match_home') {
       } else {
         const ts = st.snap.ts ? `<code>${escapeHtml(String(st.snap.ts).slice(0, 19))}</code>` : '—';
         const bid = st.snap.broadcast_id ? `<b>#${st.snap.broadcast_id}</b>` : '—';
-        const ageSec = Number.isFinite(st.snap.age_sec) ? Number(st.snap.age_sec) : null;
-        const ageTail = ageSec !== null ? `; age ~<b>${fmtWait(ageSec)}</b>` : '';
-        const staleTail = st.snap.stale ? ' <b>⚠️ STALE</b>' : '';
-        text += `Текущий snapshot: broadcast ${bid}; pending <b>${st.snap.pending_count}</b>; ts ${ts}${ageTail}${staleTail}\n`;
+        text += `Текущий snapshot: broadcast ${bid}; pending <b>${st.snap.pending_count}</b>; ts ${ts}\n`;
       }
       const kb = new InlineKeyboard()
         .text('✅ Очистить snapshot', 'a:admin_ops_pending_clear_do')
@@ -36356,18 +36374,6 @@ async function renderAdminHome(ctx) {
 }
 
 
-function adminParseIsoAgeSec(ts) {
-  const raw = ts ? String(ts) : '';
-  if (!raw) return null;
-  try {
-    const ms = Date.parse(raw);
-    if (!Number.isFinite(ms) || ms <= 0) return null;
-    return Math.max(0, Math.round((Date.now() - ms) / 1000));
-  } catch {
-    return null;
-  }
-}
-
 async function adminGetBroadcastPendingSnapshot() {
   try {
     const snapRaw = await redis.get(k(['broadcast', 'pending_deliveries']));
@@ -36377,20 +36383,14 @@ async function adminGetBroadcastPendingSnapshot() {
       try { snap = JSON.parse(snapRaw); } catch { snap = null; }
     }
     if (!snap || typeof snap !== 'object') return { ok: true, snap: null };
-    const ts = snap.ts ? String(snap.ts) : '';
     const bid = Number(snap.broadcast_id ?? snap.broadcastId) || 0;
     const pc = Number(snap.pending_count ?? snap.pendingCount ?? snap.pending) || 0;
-    const ageSec = adminParseIsoAgeSec(ts);
-    const staleAfterSec = Math.max(60, Number(snap.stale_after_sec ?? snap.staleAfterSec) || 10 * 60);
     return {
       ok: true,
       snap: {
-        ts,
+        ts: snap.ts ? String(snap.ts) : '',
         broadcast_id: bid > 0 ? bid : 0,
         pending_count: pc,
-        age_sec: Number.isFinite(ageSec) ? ageSec : null,
-        stale_after_sec: staleAfterSec,
-        stale: Number.isFinite(ageSec) ? ageSec > staleAfterSec : false,
       },
     };
   } catch (e) {
@@ -36663,7 +36663,6 @@ async function renderAdminSystem(ctx) {
       } catch {}
     }
     fbRtLabel = leftSec === null ? 'ON' : `ON (~${fmtWait(leftSec)})`;
-    if (Number.isFinite(fbRt.hoursActive)) fbRtLabel += ` • active ~${fbRt.hoursActive}h`;
   }
 
   const founderState = await getFounderSaleState();
@@ -36715,7 +36714,6 @@ async function renderAdminSystem(ctx) {
 
 async function renderAdminPaymentsFallback(ctx, toast = '') {
   const st = await getPaymentsFallbackApplyState();
-  const guard = getPaymentsFallbackGuardrailConfig();
   const envOn = !!st.envEnabled;
   const rt = st.runtime || {};
   const rtOn = !!st.runtimeEnabled;
@@ -36739,13 +36737,10 @@ async function renderAdminPaymentsFallback(ctx, toast = '') {
   text += `ENV: <b>${envOn ? 'ON' : 'OFF'}</b>\n`;
   text += `RUNTIME: <b>${rtOn ? 'ON' : 'OFF'}</b>`;
   if (rtOn && leftSec !== null) text += ` (ещё ~${escapeHtml(fmtWait(leftSec))})`;
-  text += `\n`;
-  if (rtOn && Number.isFinite(rt.hoursActive)) text += `ACTIVE: <b>~${escapeHtml(String(rt.hoursActive))}h</b>\n`;
-  if (rtOn) text += `OPS REMINDER: каждые ~${escapeHtml(fmtWait(Number(guard.alertRepeatSec || 0) || 0))} пока runtime ON\n`;
-  text += `\n`;
+  text += `\n\n`;
 
   text += `Когда включено: при успешном Stars-платеже, если Redis pay_* сессия истекла, бот может применить оплату по invoice payload (строго по правилам безопасности).\n\n`;
-  text += `Рекомендация: держать <b>OFF</b> и включать <b>временно</b> только при инциденте. Runtime всегда bounded TTL и не должен жить дольше <b>${escapeHtml(fmtWait(Number(guard.maxTtlSec || 0) || 0))}</b>.\n\n`;
+  text += `Рекомендация: держать <b>OFF</b> и включать <b>временно</b> только при инциденте.\n\n`;
 
   if (rtOn) {
     const by = rt.byUser ? String(rt.byUser) : (rt.byTgId ? `tg:${rt.byTgId}` : '—');
@@ -37006,7 +37001,6 @@ async function adminHardSkipHitsExport(reasonFilter = 'all', limit = ADMIN_HS_HI
 
 async function renderAdminHardSkipHome(ctx, page = 0) {
   const p = Math.max(0, Number(page || 0) || 0);
-  const ttlDays = envInt('BROADCAST_HARD_SKIP_TTL_DAYS', 90, { min: 1, max: 365 });
   const recent = await adminHardSkipRecent(p);
   let text = '🧱 <b>Hard-skip (dead chats)</b>\n\n';
   text += 'Это список TG ID, для которых рассылка пропускает отправку (permanent errors: blocked / chat not found / deactivated).\n';
