@@ -9,6 +9,8 @@
 - `15_NEW_CHAT_HANDOFF.md` — copy‑paste handoff для старта нового чата (canonical baseline context)
 - `17_START_NEW_CHAT_PROMPT.md` — готовый промпт для старта нового чата (canonical behavior kernel, v3)
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
+- `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
+- `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout
 
 ## 1) Текущее состояние (source of truth)
 - `00_CURRENT_STATE.md` — единый snapshot по архитектуре/инфре/контрактам (**source of truth**)

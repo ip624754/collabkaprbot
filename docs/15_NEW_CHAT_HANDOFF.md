@@ -1,4 +1,4 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP477 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP479 baseline
 
 Цель: чтобы новый чат **сразу продолжил текущий процесс**, а не начинал проект заново.
 
@@ -17,9 +17,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP477 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP479 baseline)**
 
-Продолжаем не с нуля, а от **STEP477 baseline**.
+Продолжаем не с нуля, а от **STEP479 baseline**.
 
 Текущий цикл был не про новые фичи, а про **stability + clarity + context correctness + repo hygiene** в ядре:
 - creator → brand applications
@@ -58,6 +58,8 @@
 - **STEP475** — `/api/health` two-tier contract: full-tier kept intact, added fast operator tier (`?tier=fast`, `?view=ops`, `?view=operator`) with `X-Health-Tier` header
 - **STEP476** — upgraded canonical new-chat prompt kernel in `docs/17_START_NEW_CHAT_PROMPT.md`: stronger anti-regression, audit/patch/QA/artifacts discipline, explicit source-vs-runtime separation, added Toly / Armani / samczsun / Hasu lenses
 - **STEP477** — added `docs/25_TELEGRAM_UI_PATTERN_REUSE.md`: canonical reusable note on how the Collabka single-surface Telegram UI works and how to reproduce it in another bot without losing Back/Menu/Home, `ret`, edit-first, and push-vs-edit invariants
+- **STEP478** — added `docs/26_SELECTION_UI_CONTRACT_RU.md`: canonical Russian selection UI contract for picker/filter surfaces (`мультивыбор`, `один выбор`, `вкл/выкл`, separate bottom action block) so future Collabka menus do not mix selection, actions, and navigation
+- **STEP479** — added `docs/27_SELECTION_SURFACE_INVENTORY_STEP479.md`: source-level inventory of active selection surfaces + frozen first pilot targets (`Workspace Profile → 🎬 Форматы`, `Workspace Profile → 🧩 Режим`) for future low-risk runtime rollout
 
 ### Что сейчас уже не надо делать
 
@@ -69,6 +71,7 @@
 
 ### Что уже стабилизировано
 
+- selection contract canon + source inventory + frozen pilot targets (runtime rollout ещё не применён)
 - accept / charge ядро
 - local vs global deal context
 - list / card / dialog density на обеих сторонах
@@ -83,6 +86,7 @@
 - operator health fast-path / one-screen ops summary contract
 - stronger start-new-chat behavior kernel for follow-up work
 - canonical reusable UI-pattern doc for cloning the Collabka Telegram navigation model in another bot
+- canonical Russian selection-surface contract for future picker/filter/profile-selector screens
 
 ### Что ещё требует live runtime verification
 
@@ -106,11 +110,12 @@
 - home / first-run copy in real Telegram
 - latest list cleanups (`📨 Мои заявки`, `📨 Заявки брендов`, `📨 Заявки от креаторов`)
 - `/api/health?tier=fast` against live deploy: header + summary contract + no heavy drill-down blocks in operator fast-path
+- any new picker/filter/profile-selector surface against `docs/26_SELECTION_UI_CONTRACT_RU.md` before runtime rollout
 
 ### Как работать в новом чате
 
 Новый чат должен:
-- подтвердить, что продолжает от STEP476, а не с нуля
+- подтвердить, что продолжает от STEP478, а не с нуля
 - прочитать docs как обычно
 - кратко перечислить, что уже стабилизировано
 - отдельно назвать, что подтверждено source/snapshot-level
@@ -133,8 +138,8 @@
 ### Какой должен быть первый ответ ассистента
 
 Ожидаемый формат:
-- подтвердить, что baseline = STEP477
-- кратко перечислить, что было стабилизировано в STEP433–477
+- подтвердить, что baseline = STEP478
+- кратко перечислить, что было стабилизировано в STEP433–478
 - отдельно назвать:
   - что подтверждено source/snapshot-level
   - что ещё нужно проверить живьём в Telegram
@@ -161,6 +166,7 @@
 
 Если задача в новом чате — **повторить именно Collabka-style UI-паттерн** в другом боте, используй дополнительно:
 - `docs/25_TELEGRAM_UI_PATTERN_REUSE.md`
+- `docs/26_SELECTION_UI_CONTRACT_RU.md`
 
 Этот файл объясняет не только текст промпта, а именно архитектурную модель:
 - single-surface Telegram UI
@@ -196,3 +202,4 @@
 - `docs/93_PROD_DEPLOY_CHECKLIST.md`
 - `docs/94_PROD_READINESS_PACK.md`
 - `docs/ops/03_LIVE_RUNTIME_PASS_STEP471.md`
+- `docs/26_SELECTION_UI_CONTRACT_RU.md`
