@@ -6380,6 +6380,28 @@ function brandDirFilterSummary(f) {
     ` · Бюджет: ${budLabel} · Цели: ${goalsLabel} · Требования: ${reqLabel}`;
 }
 
+function brandDirFilterSummaryLines(f) {
+  const catLabel = f.category ? (BX_CATEGORIES.find((x) => x.key === f.category)?.label || f.category) : 'Все';
+  const typeLabel = f.offerType ? brandDirTypeLabel(f.offerType) : 'Все';
+  const compLabel = f.compensationType ? brandDirCompLabel(f.compensationType) : 'Все';
+  const budLabel = f.budgetBucket ? brandBudgetBucketTitle(f.budgetBucket) : 'Все';
+  const goalsLabel = f.goalsTags?.length ? `${f.goalsTags.length} тег(а)` : 'Все';
+  const reqLabel = f.reqTags?.length ? `${f.reqTags.length} тег(а)` : 'Все';
+
+  return [
+    `Категория: ${catLabel}`,
+    `Формат: ${typeLabel}`,
+    `Оплата: ${compLabel}`,
+    `Бюджет: ${budLabel}`,
+    `Цели: ${goalsLabel}`,
+    `Требования: ${reqLabel}`,
+  ];
+}
+
+function brandDirFilterSummaryLinesHtml(f) {
+  return brandDirFilterSummaryLines(f).map((line) => escapeHtml(line)).join('\n');
+}
+
 function brandDirFiltersKb(f, page = 0) {
   const kb = new InlineKeyboard();
 
@@ -6516,15 +6538,21 @@ async function renderBrandDirFilters(ctx, viewerUserId, params = {}) {
     matchCount = null;
   }
 
+  const matchBlock = matchCount !== null ? `Найдено брендов: <b>${matchCount}</b>
+
+` : '';
+
   const text = `🎛 <b>Фильтры брендов</b>
-<i>Режим: 🎬 Креатор · Ты ищешь: 🏷 бренды</i>
-<i>Фильтруем бренды по тому, что бренд заполнил в профиле.</i>
 
-${escapeHtml(brandDirFilterSummary(f))}
-${matchCount !== null ? `
-Совпадений брендов: <b>${matchCount}</b>` : ''}
+Режим: 🎬 Креатор
+Каталог: 🏷 Бренды
 
-<i>Настройки применяются к каталогу сразу. Нажми «📋 Показать бренды», чтобы увидеть выдачу.</i>`;
+<i>Фильтры работают по данным из профиля бренда.</i>
+
+${brandDirFilterSummaryLinesHtml(f)}
+
+${matchBlock}<i>Фильтры применяются сразу.</i>
+<i>Нажми «📋 Показать бренды», чтобы открыть список.</i>`;
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
@@ -6626,22 +6654,29 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
   const items = list.slice(0, PAGE_SIZE);
 
   const hasActiveFilters = !!(f.category || f.offerType || f.compensationType || f.budgetBucket || (f.goalsTags && f.goalsTags.length) || (f.reqTags && f.reqTags.length));
-  let text = `🏷 <b>Каталог брендов</b>\n<i>Режим: 🎬 Креатор · Ты ищешь: 🏷 бренды</i>\n\n` +
-    `Фильтры брендов: <b>${escapeHtml(brandDirFilterSummary(f))}</b>\n\n` +
-    `<i>Фильтры берутся из настроек брендов (профиль → 🧩 Форматы + расширенный профиль: 💠 Бюджет/🎯 Цели/📎 Требования).</i>\n\n` +
-    `Показываю бренды с заполненным профилем (4/4).\n\n`;
+  let text = `🏷 <b>Каталог брендов</b>
+
+Режим: 🎬 Креатор
+Каталог: 🏷 Бренды
+
+<i>Показываем бренды по данным из их профиля.</i>
+
+${brandDirFilterSummaryLinesHtml(f)}
+
+`;
 
   if (!items.length) {
     if (hasActiveFilters) {
-      text += `Ничего не найдено под выбранные фильтры.\n\n` +
-        `💡 Фильтры строятся по настройкам брендов. Если бренд не выбрал «🧩 Форматы» (и при необходимости не заполнил 💠 Бюджет/🎯 Цели/📎 Требования), он может не попасть в выдачу.\n\n` +
-        `Попробуй ослабить фильтры или нажми «♻️ Сброс».`;
+      text += `По этим фильтрам бренды пока не найдены.
+
+Ослабь 1–2 фильтра или нажми «♻️ Сброс».`;
     } else {
-      text += `Пока брендов нет.\n\n` +
-        `Если ты бренд — заполни профиль (4/4), тогда ты появишься в каталоге.`;
+      text += `Пока брендов нет.
+
+Если ты бренд — заполни профиль, и тогда появишься в каталоге.`;
     }
   } else {
-    text += `Выбери бренд:`;
+    text += `Выбери бренд из списка:`;
   }
 
   const kb = new InlineKeyboard();
@@ -14620,6 +14655,24 @@ function bxFilterSummary(f) {
   return parts.join(' · ');
 }
 
+function bxFilterSummaryLines(f) {
+  return [
+    `Категория: ${bxAnyLabel(f.category, 'cat')}`,
+    `Формат: ${bxAnyLabel(f.offerType, 'type')}`,
+    `Оплата: ${bxAnyLabel(f.compensationType, 'comp')}`,
+    `Цели: ${bxTagsLabel(f.goalsTags, 'goals')}`,
+    `Требования: ${bxTagsLabel(f.reqTags, 'req')}`,
+  ];
+}
+
+function bxFilterSummaryLinesHtml(f) {
+  return bxFilterSummaryLines(f).map((line) => escapeHtml(line)).join('\n');
+}
+
+function hasActiveBxFilter(f) {
+  return !!(f?.category || f?.offerType || f?.compensationType || (Array.isArray(f?.goalsTags) && f.goalsTags.length) || (Array.isArray(f?.reqTags) && f.reqTags.length));
+}
+
 function bxBrandOnlyNoticeKb() {
   return new InlineKeyboard()
     .text('🏷 Каталог брендов', 'a:brands_home|p:0')
@@ -14691,7 +14744,7 @@ function bxSmartPrefillText(next, info, totalAll, totalFiltered) {
   const hint = totalFiltered === 0
     ? `
 
-💡 Сейчас <b>0</b> результатов. Попробуй «🎛 Фильтры креаторов» или «♻️ Сбросить» (всё).`
+💡 По этим фильтрам сейчас нет результатов. Попробуй «🎛 Фильтры креаторов» или «♻️ Сбросить».`
     : '';
 
   return `🎯 <b>Подбор в ленте</b>
@@ -14842,8 +14895,11 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
   const featured = await db.listActiveFeatured(CFG.FEATURED_MAX_SLOTS);
 
   const header = `📰 <b>Лента креаторов</b>
-<i>Режим: 🏷 Бренд · Ты ищешь: 🎬 креаторов</i>
-<tg-spoiler>Фильтры: ${escapeHtml(bxFilterSummary(filter))}</tg-spoiler>`;
+
+Режим: 🏷 Бренд
+Лента: 🎬 Креаторы
+
+<tg-spoiler>${bxFilterSummaryLinesHtml(filter)}</tg-spoiler>`;
 
   const featLines = featured.map((f) => {
     const title = (f.title || 'Featured').toString();
@@ -14877,13 +14933,19 @@ ${escapeHtml(bxTypeLabel(o.offer_type))} · ${escapeHtml(bxCompLabel(o.compensat
 Канал: ${escapeHtml(ch)}${o.creator_verified ? ' ✅' : ''}`;
   });
 
+  const zeroState = hasActiveBxFilter(filter)
+    ? `По этим фильтрам креаторы пока не найдены.
+
+Ослабь 1–2 фильтра или нажми «♻️ Сбросить».`
+    : 'Пока офферов нет.';
+
   const text = `${header}
 
 ${featLines.length ? `🔥 <b>Featured</b>
 
 ${featLines.join('\n\n')}
 
-` : ''}${offerLines.length ? offerLines.join('\n\n') : 'Пока нет офферов по этим фильтрам.'}`;
+` : ''}${offerLines.length ? offerLines.join('\n\n') : zeroState}`;
 
   const kb = new InlineKeyboard();
 
@@ -15237,13 +15299,17 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
 
   const f = await getBxFilterScoped(ctx.from.id, ownerUserId, wsNum);
   const text = `🎛 <b>Фильтры креаторов</b>
-<i>Режим: 🏷 Бренд · Ты ищешь: 🎬 креаторов</i>
-<i>Фильтруем креаторов по тому, что они указали в оффере.</i>
-<i>Для тегов: совпадение по любому из выбранных.</i>
 
-${escapeHtml(bxFilterSummary(f))}
+Режим: 🏷 Бренд
+Лента: 🎬 Креаторы
 
-<i>Настройки применяются к ленте сразу. Нажми «📋 Показать креаторов», чтобы увидеть выдачу.</i>`;
+<i>Фильтры работают по данным из оффера креатора.</i>
+<i>Для тегов достаточно совпадения по любому выбранному значению.</i>
+
+${bxFilterSummaryLinesHtml(f)}
+
+<i>Фильтры применяются сразу.</i>
+<i>Нажми «📋 Показать креаторов», чтобы открыть ленту.</i>`;
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
     reply_markup: bxFiltersKb(wsNum, f, page, opts)
