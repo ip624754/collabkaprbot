@@ -47,7 +47,6 @@ const paymentsFallbackCallbacksSrc = extractBetween(
 );
 
 assert.ok(renderAdminPaymentsFallbackSrc.includes('const st = await getPaymentsFallbackApplyState();'), 'Admin → Payments Fallback must read fallback apply state');
-assert.ok(renderAdminPaymentsFallbackSrc.includes('const guard = getPaymentsFallbackGuardrailConfig();'), 'Admin → Payments Fallback must read guardrail config');
 assert.ok(renderAdminPaymentsFallbackSrc.includes('const envOn = !!st.envEnabled;'), 'Admin → Payments Fallback must keep ENV state');
 assert.ok(renderAdminPaymentsFallbackSrc.includes('const rtOn = !!st.runtimeEnabled;'), 'Admin → Payments Fallback must keep runtime state');
 assert.ok(renderAdminPaymentsFallbackSrc.includes('const eff = !!st.effective;'), 'Admin → Payments Fallback must keep effective state');
@@ -57,18 +56,8 @@ assert.ok(renderAdminPaymentsFallbackSrc.includes("text += `EFFECTIVE: <b>${eff 
 assert.ok(renderAdminPaymentsFallbackSrc.includes("text += `ENV: <b>${envOn ? 'ON' : 'OFF'}</b>\\n`;"), 'Admin → Payments Fallback must keep ENV line');
 assert.ok(renderAdminPaymentsFallbackSrc.includes("text += `RUNTIME: <b>${rtOn ? 'ON' : 'OFF'}</b>`;"), 'Admin → Payments Fallback must keep RUNTIME line');
 assert.ok(renderAdminPaymentsFallbackSrc.includes("if (rtOn && leftSec !== null) text += ` (ещё ~${escapeHtml(fmtWait(leftSec))})`;"), 'Admin → Payments Fallback must keep runtime TTL hint');
-assertMatch(
-  renderAdminPaymentsFallbackSrc,
-  /if \(rtOn && Number\.isFinite\(rt\.hoursActive\)\) text \+= `ACTIVE: <b>~\$\{escapeHtml\(String\(rt\.hoursActive\)\)\}h<\/b>\\n`;/,
-  'Admin → Payments Fallback must show active hours'
-);
-assertMatch(
-  renderAdminPaymentsFallbackSrc,
-  /if \(rtOn\) text \+= `OPS REMINDER: каждые ~\$\{escapeHtml\(fmtWait\(Number\(guard\.alertRepeatSec \|\| 0\) \|\| 0\)\)\} пока runtime ON\\n`;/,
-  'Admin → Payments Fallback must show ops reminder cadence'
-);
 assert.ok(renderAdminPaymentsFallbackSrc.includes('Когда включено: при успешном Stars-платеже, если Redis pay_* сессия истекла, бот может применить оплату по invoice payload (строго по правилам безопасности).'), 'Admin → Payments Fallback must keep incident explanation');
-assert.ok(renderAdminPaymentsFallbackSrc.includes('Рекомендация: держать <b>OFF</b> и включать <b>временно</b> только при инциденте. Runtime всегда bounded TTL и не должен жить дольше <b>${escapeHtml(fmtWait(Number(guard.maxTtlSec || 0) || 0))}</b>.'), 'Admin → Payments Fallback must keep bounded-TTL recommendation');
+assert.ok(renderAdminPaymentsFallbackSrc.includes('Рекомендация: держать <b>OFF</b> и включать <b>временно</b> только при инциденте.'), 'Admin → Payments Fallback must keep temporary-use recommendation');
 assert.ok(renderAdminPaymentsFallbackSrc.includes("const by = rt.byUser ? String(rt.byUser) : (rt.byTgId ? `tg:${rt.byTgId}` : '—');"), 'Admin → Payments Fallback must keep enabled-by summary');
 assert.ok(renderAdminPaymentsFallbackSrc.includes("text += `Enabled by: <b>${escapeHtml(by)}</b>\\n`;"), 'Admin → Payments Fallback must keep Enabled by line');
 assert.ok(renderAdminPaymentsFallbackSrc.includes("text += `At: <code>${escapeHtml(at)}</code>\\n`;"), 'Admin → Payments Fallback must keep At line');

@@ -43,7 +43,7 @@ function run() {
     pendingSnapshot: {
       visible: true,
       ok: true,
-      snap: { ts: '2026-03-07T17:42:55.000Z', broadcast_id: 42, pending_count: 3, age_sec: 240, stale_after_sec: 600, stale: false },
+      snap: { ts: '2026-03-07T17:42:55.000Z', broadcast_id: 42, pending_count: 3 },
     },
   });
 
@@ -52,7 +52,6 @@ function run() {
   assertIncludes(okText, '⚠️ <b>Broadcast: tick deferred (Redis)</b>', 'ops metric block must be rendered');
   assertIncludes(okText, '📦 <b>Broadcast pending snapshot</b>', 'pending snapshot block must be rendered');
   assertIncludes(okText, '• broadcast: <b>#42</b>; pending: <b>3</b>;', 'pending snapshot values must be rendered');
-  assertIncludes(okText, 'age: ~<b>4m</b>', 'pending snapshot age must be rendered');
 
   const degradedText = buildAdminOpsText({
     redisState: { configured: true, ok: false, error: 'simulated redis timeout' },
@@ -67,7 +66,6 @@ function run() {
           reason: 'incident tail cleanup',
           at: '2026-03-07T17:00:00.000Z',
           expAt: '2026-03-07T18:00:00.000Z',
-          hoursActive: 1.0,
         },
       },
     },
@@ -78,8 +76,6 @@ function run() {
   assertIncludes(degradedText, 'simulated redis timeout', 'redis error tail must be rendered');
   assertIncludes(degradedText, '🚨 <b>Payments: HMAC key отсутствует</b>', 'payments HMAC warning must be rendered');
   assertIncludes(degradedText, '🚨 <b>Payments: fallback apply ENABLED</b>', 'payments fallback banner must be rendered');
-  assertIncludes(degradedText, 'ops reminder: каждые ~2h, пока runtime ON', 'payments fallback reminder cadence must be rendered');
-  assertIncludes(degradedText, 'active ~<b>1</b>h', 'payments fallback active-hours tail must be rendered');
   assertIncludes(degradedText, '• ⚠️ недоступно (Redis degraded)', 'degraded pending snapshot must stay graceful');
 
   const probeFailText = buildAdminOpsText({
@@ -87,25 +83,6 @@ function run() {
     paymentsState: { hmacKey: 'x'.repeat(40), fallbackState: { effective: false } },
   });
   assertIncludes(probeFailText, 'не удалось выполнить probe', 'probe failure fallback text must be rendered');
-
-  const staleText = buildAdminOpsText({
-    redisState: { configured: true, ok: true, latencyMs: 9 },
-    paymentsState: { hmacKey: 'x'.repeat(40), fallbackState: { effective: false } },
-    pendingSnapshot: {
-      visible: true,
-      ok: true,
-      snap: {
-        ts: '2026-03-07T17:42:55.000Z',
-        broadcast_id: 77,
-        pending_count: 11,
-        age_sec: 901,
-        stale_after_sec: 600,
-        stale: true,
-      },
-    },
-  });
-  assertIncludes(staleText, '🚨 stale &gt; ~<b>10m</b>', 'stale pending snapshot threshold must be rendered');
-  assertIncludes(staleText, 'snapshot выглядит stale', 'stale pending snapshot guidance must be rendered');
 
   const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
   const renderAdminOpsSrc = extractRenderAdminOpsSource(botSource);

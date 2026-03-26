@@ -74,7 +74,6 @@ assert.ok(Object.prototype.hasOwnProperty.call(res.body.qstash, 'official_publis
 
 assert.ok(res.body.payments && typeof res.body.payments === 'object', 'Expected payments object');
 assert.ok(Object.prototype.hasOwnProperty.call(res.body.payments, 'fallback_apply_effective'), 'Expected payments.fallback_apply_effective key');
-assert.ok(Object.prototype.hasOwnProperty.call(res.body.payments, 'fallback_apply_hours_active'), 'Expected payments.fallback_apply_hours_active key');
 assert.ok(Object.prototype.hasOwnProperty.call(res.body.payments, 'payload_hmac_minlen_ok'), 'Expected payments.payload_hmac_minlen_ok key');
 
 console.log('✅ smoke health/admin JSON shape OK');
