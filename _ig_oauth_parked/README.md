@@ -14,7 +14,3 @@
 Правило:
 - не импортировать этот subtree в active bot/runtime без отдельного revival-step;
 - если IG OAuth возвращается, это должно быть отдельным шагом с явным docs/spec/QA обновлением.
-
-
-Hard gate:
-- source preflight runs `scripts/smoke-ig-parked-hard-gate.js`; it must fail if `api/ig/oauth/*` returns to active deploy surface, if `src/lib/igOAuth.js` / `src/lib/cryptoBox.js` reappear, or if active source starts importing `_ig_oauth_parked/*` directly.
