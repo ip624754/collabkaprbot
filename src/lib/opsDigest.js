@@ -52,9 +52,7 @@ function isErrorishReason(reason) {
     r.includes('failed') ||
     r.includes('exception') ||
     r.includes('panic') ||
-    r.includes('invalid') ||
-    r.includes('no_go') ||
-    r.includes('fallback_apply')
+    r.includes('invalid')
   );
 }
 
