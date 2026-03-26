@@ -85,7 +85,8 @@
     "preflight:deps": "node scripts/preflight.js deps",
     "smoke:home-copy-contract": "node scripts/smoke-home-copy-contract.js",
     "smoke:selection-pilot-contract": "node scripts/smoke-selection-pilot-contract.js",
-    "smoke:health-fast": "node scripts/smoke-health-fast-contract.js"
+    "smoke:health-fast": "node scripts/smoke-health-fast-contract.js",
+    "smoke:copy-wave1-contract": "node scripts/smoke-copy-wave1-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

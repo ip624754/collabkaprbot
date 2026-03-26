@@ -1,0 +1,21 @@
+docs/00_CURRENT_STATE.md — added STEP424–STEP427 source-of-truth entries
+
+docs/process/07_WORK_HISTORY_2026_03.md — added STEP427 worklog for the combined STEP424–STEP427 runtime-contract smoke package
+
+docs/process/10_RELEASE_PREFLIGHT.md — documented the four new preflight smoke guards and what to inspect when they fail
+
+package.json — added npm scripts for the new smoke checks
+
+scripts/preflight.js — wired the four new runtime-contract smokes into mandatory preflight
+
+scripts/smoke-brand-inbox-accept-contract.js — source-level regression guard for Brand Inbox accept-point / post-accept action surface
+
+scripts/smoke-contacts-brand-pass-contract.js — source-level regression guard for contacts unlock anti-bypass and Brand Pass reveal priority
+
+scripts/smoke-no-channel-gate-contract.js — source-level regression guard for giveaway and brand-application no-channel recovery gates
+
+scripts/smoke-input-mode-contract.js — source-level regression guard for explicit input-mode, cancel/reset, preview and structured-contact clear flows
+
+STEP427_changed_files.txt — this manifest
+
+STEP427_QA_checklist.md — QA checklist for STEP427
