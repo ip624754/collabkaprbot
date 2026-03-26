@@ -226,6 +226,20 @@ UI-переходы у нас живут на compact callback protocol.
 
 ---
 
+
+## Дополнение: selection surfaces
+
+Для экранов, где пользователь не просто ходит по меню, а **выбирает значения**, использовать отдельный канонический файл:
+- `docs/26_SELECTION_UI_CONTRACT_RU.md`
+
+Этот файл фиксирует, как в Collabka различаются:
+- `мультивыбор`
+- `один выбор`
+- `вкл/выкл`
+- обычные action/navigation rows
+
+То есть `25_*` объясняет общую архитектуру single-surface Telegram UI, а `26_*` — отдельный контракт именно для picker/filter/profile-selector surfaces.
+
 ## 10) Разделение durable truth и ephemeral UI state
 
 Это обязательный слой, если хочется повторить паттерн правильно.

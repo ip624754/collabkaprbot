@@ -37,18 +37,14 @@
 
 ### 3.1 `/api/health`
 
-Открыл health и хочешь действовать без раскопок — сначала смотри `docs/ops/02_HEALTH_ONE_SCREEN.md`.
-
 #### Что смотреть в health (сигналы деградации)
 - Redis: `redis.read_ok` / `redis.write_ok` + `last_error`
-- Payments: `payments.payload_hmac_minlen_ok`, `payments.fallback_apply_effective`, `payments.fallback_apply_hours_active`
+- Payments: `payments.payload_hmac_minlen_ok`, `payments.fallback_apply_effective`
 - Broadcast: `broadcast.db_overload`, `broadcast.tick_deferred_redis`, `broadcast.pending_deliveries`
 - QStash: `qstash.reschedule_failed`, `qstash.official_publish_stuck`
 - New hardening watchlist: local DB fuse, orphaned autoheal chain, manual official verify
 
-Первый быстрый слой: `docs/ops/02_HEALTH_ONE_SCREEN.md`.
-
-Глубокий cookbook: `docs/94_PROD_READINESS_PACK.md`.
+Cookbook: `docs/94_PROD_READINESS_PACK.md`.
 
 Открываешь раз в день (или после деплоя):
 - `system_status` + `no_go_reasons[]` (если NO_GO — делай то, что написано в `hint`)
@@ -155,8 +151,7 @@ Staging проверка деградаций:
 
 ## 8) Если “что-то сломалось”
 
-> Первый быстрый one-screen слой: `docs/ops/02_HEALTH_ONE_SCREEN.md`.
-> Глубокая матрица микрофиксов и длинные сценарии: `docs/94_PROD_READINESS_PACK.md` → **3.0 Матрица микрофиксов**.
+> Операторская “шпаргалка” по симптомам: `docs/94_PROD_READINESS_PACK.md` → **3.0 Матрица микрофиксов**.
 > Payments хвосты (missing session): там же → **3.5 runtime fallback apply** (включать только временно).
 
 
@@ -185,8 +180,7 @@ Staging проверка деградаций:
 ### 9.2 Большой хвост orphaned payments
 1) Открой `/api/health` и проверь payments block.
 2) Помни: first batch идёт из cron, хвост может продолжаться bounded chain-drain worker'ом.
-3) Не включай runtime `Payments fallback apply` без явного инцидента и причины. Если включил — смотри `payments.fallback_apply_hours_active` и не держи окно дольше, чем нужно.
-4) Пока runtime fallback ON, в Admin → Ops должен оставаться reminder-блок; после отключения он должен исчезнуть.
+3) Не включай runtime `Payments fallback apply` без явного инцидента и причины.
 4) Если хвост не уменьшается — смотри ops alert / qstash worker logs, а не пытайся “передёргивать” apply вручную массово.
 
 ### 9.3 Official Publish stuck in `PUBLISHING`
@@ -207,26 +201,3 @@ Staging проверка деградаций:
 Когда вернёшься:
 - см. `docs/23_IG_CONNECT_WORKLOG_AND_RESUME.md`
 - см. `docs/22_IG_GRAPH_OAUTH_2026.md`
-
-
-## STEP476 — Broadcast stale visibility + tiny atomicity hardening
-- Kept the existing broadcast fan-out / pending snapshot model, but made stale pending-state visible to the operator instead of leaving it as a blind Redis blob.
-- `src/bot/cron.js` now writes `stale_after_sec` into the Redis-only `broadcast.pending_deliveries` snapshot (current threshold: ~10 min; visibility only, not an auto-stop).
-- `/api/health` now enriches `broadcast.pending_deliveries` with:
-  - `age_sec`
-  - `stale_after_sec`
-  - `stale`
-- Admin operator surfaces now show the same state:
-  - `🧰 Админка → Операции` renders pending snapshot age and a clear stale warning/guidance block;
-  - `🧹 Clear pending snapshot` confirm screen now shows age + STALE marker before an operator clears the Redis-only snapshot.
-- Tiny atomicity hardening: broadcast global 429 distinct-user tracking no longer does raw `SADD` + `EXPIRE` in sequence.
-  - Added Redis helper `saddCardWithExpire(...)` (Lua atomic `SADD + EXPIRE + SCARD` with safe fallback).
-  - `api/qstash/broadcast-deliver.js` now uses this helper for the short rolling `429users` set.
-- Added source guard `scripts/smoke-broadcast-429-atomicity-contract.js` and wired it into `package.json` + `scripts/preflight.js`.
-- Scope is operator visibility + tiny Redis atomicity hardening only. No DB schema changes, no audience/routing changes, no new hot-path DB reads.
-
-QA
-- `node --check` passes on changed JS files (`src/lib/redis.js`, `api/qstash/broadcast-deliver.js`, `src/bot/cron.js`, `api/health.js`, `src/bot/adminOpsText.js`, `src/bot/bot.js`, `scripts/smoke-admin-ops-render.js`, `scripts/smoke-broadcast-429-atomicity-contract.js`, `scripts/preflight.js`).
-- `node scripts/smoke-admin-ops-render.js` passes.
-- `node scripts/smoke-broadcast-429-atomicity-contract.js` passes.
-- Full deps/runtime smoke remains blocked in this workspace without installable npm dependencies.

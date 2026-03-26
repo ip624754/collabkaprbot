@@ -1,4 +1,4 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP480 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP482A baseline
 
 Цель: чтобы новый чат **сразу продолжил текущий процесс**, а не начинал проект заново.
 
@@ -17,9 +17,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP480 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP482A baseline)**
 
-Продолжаем не с нуля, а от **STEP480 baseline**.
+Продолжаем не с нуля, а от **STEP482A baseline**.
 
 Текущий цикл был не про новые фичи, а про **stability + clarity + context correctness + repo hygiene** в ядре:
 - creator → brand applications
@@ -61,6 +61,8 @@
 - **STEP478** — added `docs/26_SELECTION_UI_CONTRACT_RU.md`: canonical Russian selection UI contract for picker/filter surfaces (`мультивыбор`, `один выбор`, `вкл/выкл`, separate bottom action block) so future Collabka menus do not mix selection, actions, and navigation
 - **STEP479** — added `docs/27_SELECTION_SURFACE_INVENTORY_STEP479.md`: source-level inventory of active selection surfaces + frozen first pilot targets (`Workspace Profile → 🎬 Форматы`, `Workspace Profile → 🧩 Режим`) for future low-risk runtime rollout
 - **STEP480** — implemented the first runtime selection pilot on those same two creator-side profile surfaces: `🎬 Форматы` now uses checkbox-style multi-select markers (`☑️/⬜️`) with a separated clear row, and `🧩 Режим` now uses radio-style single-choice markers (`🔘/⚪️`) with instant apply preserved; added `scripts/smoke-selection-pilot-contract.js` and wired it into source preflight
+- **STEP481** — added `docs/28_TELEGRAM_COPY_CLARITY_SWEEP_STEP481.md`: source-first copy review of active creator/brand-facing Telegram screens, with explicit tags for `robotized / dense / ambiguous / needs newline / zero-state hint`, concrete rewrite candidates for brand/catalog/BX filter screens, and a frozen narrow runtime hotfix scope for text-only cleanup
+- **STEP482A** — applied the first narrow runtime Telegram copy hotfix wave on brand/catalog/BX filter surfaces only: split dense headers into short lines, moved glued filter summaries to multiline blocks, removed robotized phrases (`увидеть выдачу`, `Совпадений брендов`, internal-mechanics explanations), shortened zero-state copy, and added the source guard `scripts/smoke-copy-wave1-contract.js`
 
 ### Что сейчас уже не надо делать
 
@@ -139,7 +141,7 @@
 ### Какой должен быть первый ответ ассистента
 
 Ожидаемый формат:
-- подтвердить, что baseline = STEP480
+- подтвердить, что baseline = STEP482A
 - кратко перечислить, что было стабилизировано в STEP433–478
 - отдельно назвать:
   - что подтверждено source/snapshot-level
