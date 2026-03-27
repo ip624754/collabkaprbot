@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">KOL Deal temporary brand mark</title>
+  <desc id="desc">Abstract premium mark with a rounded badge and linked signal shapes.</desc>
+  <defs>
+    <linearGradient id="bg" x1="16" y1="16" x2="112" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#65f0ff"/>
+      <stop offset="1" stop-color="#4ef2c7"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="104" height="104" rx="32" fill="url(#bg)"/>
+  <path d="M40 39.5h28.5c11 0 18.7 7.8 18.7 18.9 0 10.6-7.5 18.7-18.2 18.7H57.4c-2.5 0-4 1.8-4 4.2v7.2H40V39.5Zm13.4 13v12.9h14.7c3.9 0 6.4-2.6 6.4-6.4 0-3.8-2.6-6.5-6.5-6.5H53.4Z" fill="#04101c" opacity="0.92"/>
+  <circle cx="83.5" cy="82.5" r="8.5" fill="#04101c" opacity="0.92"/>
+</svg>
