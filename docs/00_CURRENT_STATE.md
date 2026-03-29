@@ -1670,3 +1670,9 @@ Auto-heal safeguards + ops alerts:
 
 
 - STEP489: landing icon hardening fixed oversized/sprawled icon rendering by switching landing icon surfaces from external SVG image refs to inline sprite usage with stricter size guards.
+
+
+## STEP490 — Landing icon render hotfix
+- Landing section icons moved from inline sprite SVG to fixed-size CSS background glyphs backed by local `assets/icons/landing/*.svg`.
+- Goal: eliminate live icon overflow/giant render drift without changing landing layout, copy, gallery or FAQ behavior.
+- Landing gallery/modal contract remains the current baseline.

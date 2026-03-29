@@ -262,3 +262,7 @@ Live note:
 
 
 - STEP489: landing icon hardening only; no landing structure change, no bot runtime change. Inline icon sprite + size guards fixed icon overflow/sprawl on live landing.
+
+
+## STEP490 note
+- Landing icon system is hardened via fixed-size CSS background glyphs; do not reintroduce inline sprite icons in landing cards/labels without checking live overflow behavior first.

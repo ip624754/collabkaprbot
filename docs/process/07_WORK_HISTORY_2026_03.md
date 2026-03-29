@@ -5256,3 +5256,9 @@ QA:
 - replaced landing external SVG icon image refs with inline sprite usage
 - hardened icon sizing for micro/icon pill/accordion/screen meta icons
 - updated landing smoke contract to prevent emoji/icon regressions
+
+
+## STEP490 — Landing icon render hotfix
+- Replaced unstable inline sprite icon usage in landing section labels/cards with deterministic CSS background glyphs using local SVG assets.
+- Hardened gallery/accordion/screen-head overflow behavior.
+- Updated landing smoke contract.

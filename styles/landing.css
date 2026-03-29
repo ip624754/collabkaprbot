@@ -33,7 +33,28 @@ body {
 a { color: inherit; text-decoration: none; }
 img { max-width: 100%; display: block; }
 .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.icon-glyph {
+  display: inline-block;
+  vertical-align: middle;
+  flex: 0 0 auto;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-color: transparent;
+}
 .icon-svg { display: inline-block; vertical-align: middle; flex: 0 0 auto; width: 1em; height: 1em; overflow: visible; fill: none; stroke: #eaf1ff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.icon-glyph-building2 { background-image: url('/assets/icons/landing/building2.svg'); }
+.icon-glyph-clapperboard { background-image: url('/assets/icons/landing/clapperboard.svg'); }
+.icon-glyph-workflow { background-image: url('/assets/icons/landing/workflow.svg'); }
+.icon-glyph-store { background-image: url('/assets/icons/landing/store.svg'); }
+.icon-glyph-newspaper { background-image: url('/assets/icons/landing/newspaper.svg'); }
+.icon-glyph-mail { background-image: url('/assets/icons/landing/mail.svg'); }
+.icon-glyph-messages-square { background-image: url('/assets/icons/landing/messages-square.svg'); }
+.icon-glyph-square-kanban { background-image: url('/assets/icons/landing/square-kanban.svg'); }
+.icon-glyph-life-buoy { background-image: url('/assets/icons/landing/life-buoy.svg'); }
+.icon-glyph-house { background-image: url('/assets/icons/landing/house.svg'); }
+.icon-glyph-sliders-horizontal { background-image: url('/assets/icons/landing/sliders-horizontal.svg'); }
 
 .page-shell {
   position: relative;
@@ -416,6 +437,7 @@ h1 {
 .accordion-card { overflow: hidden; }
 .accordion-toggle {
   width: 100%;
+  min-width: 0;
   background: transparent;
   border: 0;
   color: var(--text);
@@ -434,6 +456,16 @@ h1 {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex: 1 1 auto;
+}
+.accordion-label > span:last-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.accordion-label > span:last-child,
+.screen-head > span:first-of-type {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .accordion-icon {
   width: 18px;
@@ -482,9 +514,12 @@ h1 {
   display: flex;
   overflow: hidden;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
   color: var(--accent-2);
   margin-bottom: 14px;
+  min-width: 0;
+  flex-wrap: nowrap;
 }
 .screen-icon {
   width: 16px;
@@ -501,6 +536,7 @@ h1 {
 }
 .screen-head .screen-badge {
   margin-left: auto;
+  flex: 0 0 auto;
   padding: 6px 10px;
   border-radius: 999px;
   background: rgba(95,149,255,0.14);
@@ -681,6 +717,7 @@ h1 {
 }
 .screen-frame img {
   position: relative;
+  display: block;
   z-index: 1;
   max-height: 300px;
   width: auto;

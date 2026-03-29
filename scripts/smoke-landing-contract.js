@@ -64,10 +64,6 @@ const requiredChunks = [
   '/assets/screenshots/catalog-live-shot.png',
   '/assets/screenshots/filters-live-shot.png',
   '/assets/screenshots/deal-live-shot.png',
-  'class="icon-sprite"',
-  'id="icon-building2"',
-  'id="icon-store"',
-  'id="icon-messages-square"',
   'accordion-label',
   'screen-icon',
 ];
@@ -93,27 +89,28 @@ for (const chunk of forbiddenEmojiChunks) {
 }
 
 
-const requiredUseRefs = [
-  '#icon-building2',
-  '#icon-clapperboard',
-  '#icon-workflow',
-  '#icon-store',
-  '#icon-newspaper',
-  '#icon-mail',
-  '#icon-messages-square',
-  '#icon-square-kanban',
-  '#icon-life-buoy',
-  '#icon-house',
-  '#icon-sliders-horizontal',
-];
-for (const ref of requiredUseRefs) {
-  assert(html.includes(ref), `index.html missing icon use ref: ${ref}`);
-}
-assert(!html.includes('/assets/icons/landing/'), 'index.html should not depend on external landing icon <img> refs after STEP489 hardening');
-
 const css = fs.readFileSync(cssPath, 'utf8');
 assert(css.includes('.surface-modal'), 'landing.css missing modal styles');
 assert(css.includes('.screen-card-gallery'), 'landing.css missing gallery card styles');
+
+const requiredIconGlyphs = [
+  'icon-glyph-building2',
+  'icon-glyph-clapperboard',
+  'icon-glyph-workflow',
+  'icon-glyph-store',
+  'icon-glyph-newspaper',
+  'icon-glyph-mail',
+  'icon-glyph-messages-square',
+  'icon-glyph-square-kanban',
+  'icon-glyph-life-buoy',
+  'icon-glyph-house',
+  'icon-glyph-sliders-horizontal',
+];
+for (const glyph of requiredIconGlyphs) {
+  assert(html.includes(glyph), `index.html missing icon glyph class: ${glyph}`);
+  assert(css.includes(`.${glyph}`), `landing.css missing icon glyph rule: ${glyph}`);
+}
+assert(!html.includes('class="icon-sprite"'), 'index.html should not ship inline icon sprite after STEP490');
 
 const js = fs.readFileSync(jsPath, 'utf8');
 assert(js.includes('SURFACE_CONTENT'), 'landing.js missing modal content map');
