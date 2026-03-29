@@ -64,9 +64,10 @@ const requiredChunks = [
   '/assets/screenshots/catalog-live-shot.png',
   '/assets/screenshots/filters-live-shot.png',
   '/assets/screenshots/deal-live-shot.png',
-  '/assets/icons/landing/building2.svg',
-  '/assets/icons/landing/store.svg',
-  '/assets/icons/landing/messages-square.svg',
+  'class="icon-sprite"',
+  'id="icon-building2"',
+  'id="icon-store"',
+  'id="icon-messages-square"',
   'accordion-label',
   'screen-icon',
 ];
@@ -90,6 +91,25 @@ const forbiddenEmojiChunks = ['🏢', '🎬', '🧭', '🏷 Каталог бр�
 for (const chunk of forbiddenEmojiChunks) {
   assert(!html.includes(chunk), `index.html still contains legacy emoji chunk: ${chunk}`);
 }
+
+
+const requiredUseRefs = [
+  '#icon-building2',
+  '#icon-clapperboard',
+  '#icon-workflow',
+  '#icon-store',
+  '#icon-newspaper',
+  '#icon-mail',
+  '#icon-messages-square',
+  '#icon-square-kanban',
+  '#icon-life-buoy',
+  '#icon-house',
+  '#icon-sliders-horizontal',
+];
+for (const ref of requiredUseRefs) {
+  assert(html.includes(ref), `index.html missing icon use ref: ${ref}`);
+}
+assert(!html.includes('/assets/icons/landing/'), 'index.html should not depend on external landing icon <img> refs after STEP489 hardening');
 
 const css = fs.readFileSync(cssPath, 'utf8');
 assert(css.includes('.surface-modal'), 'landing.css missing modal styles');

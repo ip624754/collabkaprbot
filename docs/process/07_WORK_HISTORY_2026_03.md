@@ -5250,3 +5250,9 @@ QA:
 
 
 [STEP488] Landing icon system polish: replaced emoji landing icons with a consistent SVG icon set, added /assets/icons/landing/*.svg, and tightened landing icon spacing/styling without changing section structure or CTA behavior.
+
+
+## STEP489 — Landing icon hardening
+- replaced landing external SVG icon image refs with inline sprite usage
+- hardened icon sizing for micro/icon pill/accordion/screen meta icons
+- updated landing smoke contract to prevent emoji/icon regressions

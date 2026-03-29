@@ -258,4 +258,7 @@ Live note:
 - browser verification required after deploy for gallery symmetry, modal open/close on desktop/mobile, and reduced clutter inside the screens section.
 
 
-[STEP488] Landing icon system polish: replaced emoji landing icons with a consistent SVG icon set, added /assets/icons/landing/*.svg, and tightened landing icon spacing/styling without changing section structure or CTA behavior.
+[STEP489] Landing icon system polish: replaced emoji landing icons with a consistent SVG icon set, added /assets/icons/landing/*.svg, and tightened landing icon spacing/styling without changing section structure or CTA behavior.
+
+
+- STEP489: landing icon hardening only; no landing structure change, no bot runtime change. Inline icon sprite + size guards fixed icon overflow/sprawl on live landing.

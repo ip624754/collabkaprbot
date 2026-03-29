@@ -32,6 +32,8 @@ body {
 
 a { color: inherit; text-decoration: none; }
 img { max-width: 100%; display: block; }
+.icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.icon-svg { display: inline-block; vertical-align: middle; flex: 0 0 auto; width: 1em; height: 1em; overflow: visible; fill: none; stroke: #eaf1ff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 .page-shell {
   position: relative;
@@ -262,6 +264,10 @@ h1 {
 .micro-icon {
   width: 15px;
   height: 15px;
+  min-width: 15px;
+  min-height: 15px;
+  max-width: 15px;
+  max-height: 15px;
   flex: 0 0 auto;
   opacity: 0.92;
 }
@@ -357,6 +363,7 @@ h1 {
 .mini-card p,
 .screen-card p { margin: 10px 0 0; }
 .icon-pill {
+  overflow: hidden;
   width: 44px;
   height: 44px;
   border-radius: 14px;
@@ -370,6 +377,10 @@ h1 {
 .landing-icon {
   width: 20px;
   height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  max-width: 20px;
+  max-height: 20px;
   display: block;
   opacity: 0.96;
 }
@@ -419,6 +430,7 @@ h1 {
 }
 .accordion-label {
   display: inline-flex;
+  overflow: hidden;
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -426,6 +438,10 @@ h1 {
 .accordion-icon {
   width: 18px;
   height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  max-width: 18px;
+  max-height: 18px;
   flex: 0 0 auto;
   opacity: 0.94;
 }
@@ -464,6 +480,7 @@ h1 {
 }
 .screen-head {
   display: flex;
+  overflow: hidden;
   align-items: center;
   gap: 10px;
   color: var(--accent-2);
@@ -472,8 +489,15 @@ h1 {
 .screen-icon {
   width: 16px;
   height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  max-width: 16px;
+  max-height: 16px;
   flex: 0 0 auto;
   opacity: 0.94;
+}
+.screen-head > span:first-of-type {
+  min-width: 0;
 }
 .screen-head .screen-badge {
   margin-left: auto;

@@ -1666,4 +1666,7 @@ Auto-heal safeguards + ops alerts:
 - Scope is landing-only. Bot runtime, callbacks, DB, monetization, accept/reply/stage paths untouched.
 
 
-[STEP488] Landing icon system polish: replaced emoji landing icons with a consistent SVG icon set, added /assets/icons/landing/*.svg, and tightened landing icon spacing/styling without changing section structure or CTA behavior.
+[STEP489] Landing icon system polish: replaced emoji landing icons with a consistent SVG icon set, added /assets/icons/landing/*.svg, and tightened landing icon spacing/styling without changing section structure or CTA behavior.
+
+
+- STEP489: landing icon hardening fixed oversized/sprawled icon rendering by switching landing icon surfaces from external SVG image refs to inline sprite usage with stricter size guards.

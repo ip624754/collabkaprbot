@@ -121,3 +121,5 @@
 
 
 [STEP488] Landing icon system polish: replaced emoji landing icons with a consistent SVG icon set, added /assets/icons/landing/*.svg, and tightened landing icon spacing/styling without changing section structure or CTA behavior.
+
+- `36_LANDING_ICON_HARDENING_STEP489.md` — landing icon overflow fix via inline SVG sprite and size hardening.
