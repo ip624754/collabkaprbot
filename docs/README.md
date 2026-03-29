@@ -13,6 +13,7 @@
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout
 - `28_TELEGRAM_COPY_CLARITY_SWEEP_STEP481.md` — source-first review user-facing Telegram copy: где текст роботизирован, плотный, двусмысленный или требует новой строки / zero-state hint before narrow runtime hotfix
 - `29_COPY_HOTFIX_WAVE1_STEP482A.md` — runtime copy hotfix wave 1: brand/catalog/BX filter screens + nearby zero-state/helper lines, without callback/DB/money changes
+- `30_LANDING_IMPLEMENTATION_STEP484.md` — public landing runtime implementation: русский one-page вход в Collabka PR + FAQ + CTA в бот
 - STEP480 runtime pilot applied on creator-side `Workspace Profile → 🎬 Форматы` (checkbox-style multi-select) and `Workspace Profile → 🧩 Режим` (radio-style single-choice); see `00_CURRENT_STATE.md` + `process/07_WORK_HISTORY_2026_03.md` for rollout details
 
 ## 1) Текущее состояние (source of truth)
@@ -51,6 +52,7 @@
 - `docs/public/09_use_cases_ru.md` — сценарии/кейсы применения
 - `docs/public/10_brand_plan_explainer_ru.md` — простое объяснение Brand Plan/кредитов
 - `docs/public/11_feeds_and_discovery_ru.md` — где “лента/витрина/каталог” (простое объяснение)
+- public landing runtime files live in repo root: `index.html`, `styles/landing.css`, `scripts/landing.js`, `assets/brand/*`, `assets/screenshots/*`
 
 
 ## 1.7) Smoke tests (в корне репо)

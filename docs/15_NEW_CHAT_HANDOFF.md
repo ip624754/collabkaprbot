@@ -1,4 +1,4 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP482A baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP484 baseline
 
 Цель: чтобы новый чат **сразу продолжил текущий процесс**, а не начинал проект заново.
 
@@ -17,9 +17,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP482A baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP484 baseline)**
 
-Продолжаем не с нуля, а от **STEP482A baseline**.
+Продолжаем не с нуля, а от **STEP484 baseline**.
 
 Текущий цикл был не про новые фичи, а про **stability + clarity + context correctness + repo hygiene** в ядре:
 - creator → brand applications
@@ -63,6 +63,8 @@
 - **STEP480** — implemented the first runtime selection pilot on those same two creator-side profile surfaces: `🎬 Форматы` now uses checkbox-style multi-select markers (`☑️/⬜️`) with a separated clear row, and `🧩 Режим` now uses radio-style single-choice markers (`🔘/⚪️`) with instant apply preserved; added `scripts/smoke-selection-pilot-contract.js` and wired it into source preflight
 - **STEP481** — added `docs/28_TELEGRAM_COPY_CLARITY_SWEEP_STEP481.md`: source-first copy review of active creator/brand-facing Telegram screens, with explicit tags for `robotized / dense / ambiguous / needs newline / zero-state hint`, concrete rewrite candidates for brand/catalog/BX filter screens, and a frozen narrow runtime hotfix scope for text-only cleanup
 - **STEP482A** — applied the first narrow runtime Telegram copy hotfix wave on brand/catalog/BX filter surfaces only: split dense headers into short lines, moved glued filter summaries to multiline blocks, removed robotized phrases (`увидеть выдачу`, `Совпадений брендов`, internal-mechanics explanations), shortened zero-state copy, and added the source guard `scripts/smoke-copy-wave1-contract.js`
+- **STEP483** — added `docs/spec/STEP483_LANDING_FAQ_SPEC_RU.md`: Russian source spec for a one-page public landing + FAQ, with fixed structure, tone boundary, CTA rules, FAQ scope, and “what not to promise” limits
+- **STEP484** — implemented the public Russian landing in repo root (`index.html`, `styles/landing.css`, `scripts/landing.js`, assets/*) with Hero, roles, workflow, inside-bot accordion, why-better block, screen previews, FAQ, final CTA, and `scripts/smoke-landing-contract.js`
 
 ### Что сейчас уже не надо делать
 
@@ -206,3 +208,6 @@
 - `docs/94_PROD_READINESS_PACK.md`
 - `docs/ops/03_LIVE_RUNTIME_PASS_STEP471.md`
 - `docs/26_SELECTION_UI_CONTRACT_RU.md`
+
+
+- Added public Russian landing + FAQ in repo root (`index.html`, `styles/landing.css`, `scripts/landing.js`, assets) as the lowest-cost conversion/explainer layer before entering `@collabkaprbot`; public-site only, no bot runtime changes.

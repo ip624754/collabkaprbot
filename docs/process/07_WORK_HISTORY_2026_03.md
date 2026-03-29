@@ -1,3 +1,25 @@
+## STEP481 — Telegram copy clarity sweep (source-first)
+
+Scope: docs / source review only. No runtime logic, callbacks, DB reads, money paths, or hot UI surfaces changed.
+
+What changed:
+- added `docs/28_TELEGRAM_COPY_CLARITY_SWEEP_STEP481.md` as a source-first review of active creator/brand-facing Telegram copy in `src/bot/bot.js`;
+- marked where current copy is too robotic, too dense, too line-compressed, slightly unnatural, or missing a useful zero-state / next-step hint;
+- concentrated P1 findings on catalog/filter surfaces (`renderBrandDirFilters`, `renderBrandsDirectory`, `renderBxFilters`, related single-choice and multi-pick sub-screens), because that is where wording and line density now produce the most UX noise;
+- explicitly kept the fresh STEP480 selection-pilot copy (`🧩 Режим`, `🎬 Форматы`) as a good baseline, so the next runtime wave does not over-edit already clear screens;
+- froze a narrow next runtime scope: text-only hotfix wave for brand/catalog/BX filters and nearby notices, without touching accept/reply/unlock/payment paths.
+
+Why:
+- live screenshots showed that the product logic is readable, but some texts still sound system-like, overpacked, or slightly robotic, especially in filter/catalog headers and zero-result explanations;
+- the repo already has a strong navigation/selection contract, so the next clarity gain should come from wording and line-break cleanup, not from another UI architecture move;
+- doing a source-first sweep before runtime patching reduces the risk of broad “copy churn” and keeps the next hotfix narrow and deliberate.
+
+QA:
+- confirmed STEP481 is docs/source only;
+- confirmed the new sweep doc points to active runtime surfaces and explicitly distinguishes “fix now” vs “keep as baseline”;
+- confirmed docs canon/index, current-state snapshot, and new-chat handoff now reference the new copy-sweep source of truth.
+
+
 ## STEP480 — selection UI pilot runtime implementation
 
 Что сделано:
@@ -5119,3 +5141,68 @@ QA:
 - confirmed the new doc is docs-only and introduces no source/runtime behavior changes;
 - confirmed docs canon/index now exposes the new file;
 - confirmed handoff baseline now points to STEP478 and includes the new selection-contract doc for follow-up chats.
+
+
+## STEP482A — Telegram copy hotfix wave 1
+
+Scope: narrow runtime copy/layout cleanup only for brand/catalog/BX filter screens and the closest zero-state/helper lines. No callback contract changes, DB schema changes, extra hot-path reads, or monetization changes.
+
+What changed:
+- rewrote `renderBrandDirFilters(...)` header and helper copy into shorter human Russian; split `Режим` and `Каталог` into separate lines; replaced dense one-line filter summary with multiline summary; `Совпадений брендов` -> `Найдено брендов`; `увидеть выдачу` -> `открыть список`;
+- rewrote `renderBrandsDirectory(...)` header and no-results copy to remove internal-mechanics/`4/4` wording and give a short next-step hint;
+- rewrote `renderBxFilters(...)` header/helper copy into separate lines with multiline summary and clearer tag-matching hint;
+- rewrote `renderBxFeed(...)` no-results state into a short actionable message;
+- softened `bxSmartPrefillText(...)` zero-results helper wording;
+- added `scripts/smoke-copy-wave1-contract.js` and wired it into `package.json` + `scripts/preflight.js` so these exact copy regressions are guarded in source-only QA.
+
+Why:
+- STEP481 already mapped the main copy smells in brand/catalog/BX filters: robotic phrasing, dense one-line summaries, and weak zero-state guidance;
+- this step applies only wave 1 where user-perceived clarity gain is high and regression surface is low.
+
+QA:
+- `node --check src/bot/bot.js`
+- `npm run smoke:copy-wave1-contract`
+- `npm run smoke:selection-pilot-contract`
+- `npm run actions:check`
+- `npm run check:package-lock`
+- source-only preflight still has the pre-existing `.env.example` baseline issue and is not attributed to STEP482A.
+
+
+## STEP483 — landing / FAQ spec (RU)
+
+Scope: docs/spec only. No runtime bot changes.
+
+What changed:
+- added `docs/spec/STEP483_LANDING_FAQ_SPEC_RU.md` as the Russian landing/FAQ source spec for Collabka PR;
+- locked the public one-page structure: Hero, roles, workflow, inside-bot accordion, why-better block, preview surfaces, FAQ, final CTA;
+- fixed the tone boundary: Russian product copy, Telegram-first framing, no crypto/invest tone, no SaaS jargon, no false promises.
+
+Why:
+- Collabka needed a cheap explanation/conversion layer before `/start`, especially for first-time visitors from outside Telegram;
+- the project already had strong bot/runtime docs and public docs, but no single canonical landing spec tied to the actual current Telegram-first product.
+
+QA:
+- docs/spec only;
+- no runtime/source logic changed at this step.
+
+## STEP484 — public landing runtime implementation (RU)
+
+Scope: public-site files only. No bot runtime, callback, DB, monetization, accept/reply/unlock, or hot-path query changes.
+
+What changed:
+- added `index.html`, `styles/landing.css`, and `scripts/landing.js` in repo root as the new Russian one-page landing for Collabka PR;
+- added brand/favicon assets from the approved Collabka logo set and one live Telegram filter screenshot under `assets/brand/*`, `assets/favicon/*`, and `assets/screenshots/*`;
+- implemented sections: Hero, roles, 4-step workflow, expandable `Что внутри бота`, `Почему это удобнее обычного Telegram-хаоса`, screen previews, FAQ, and repeated CTA to `https://t.me/collabkaprbot`;
+- added `docs/30_LANDING_IMPLEMENTATION_STEP484.md` as the runtime record;
+- added `scripts/smoke-landing-contract.js` and wired it into `package.json` + `scripts/preflight.js` so the landing cannot silently lose core sections/CTA/copy.
+
+Why:
+- landing/FAQ is the cheapest honest conversion layer for new users who need to understand what the bot does before opening Telegram;
+- the implementation reuses the lightweight static-landing approach instead of introducing a new web stack or backend.
+
+QA:
+- `node --check scripts/landing.js`
+- `npm run smoke:landing-contract`
+- `npm run check:package-lock`
+- `node --check scripts/preflight.js`
+- public-site only; no bot runtime behavior changed.

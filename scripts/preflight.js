@@ -225,6 +225,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): home copy contract", "smoke:home-copy-contract"],
   ["Preflight (source-only): selection pilot contract", "smoke:selection-pilot-contract"],
   ["Preflight (source-only): Telegram copy hotfix wave 1 contract", "smoke:copy-wave1-contract"],
+  ["Preflight (source-only): public landing contract", "smoke:landing-contract"],
   ["Preflight (source-only): creator-side brand-app local-context contract", "smoke:creator-app-local-context-contract"],
   ["Preflight (source-only): brand-side brand-app reply entrypoints contract", "smoke:brand-app-reply-entrypoints-contract"],
   ["Preflight (source-only): empty / no-history / first-message states contract", "smoke:empty-state-contract"],
