@@ -1,3 +1,10 @@
+## STEP491 — OG preview implementation
+- Added a dedicated social preview pack under `assets/social/` with a primary 1200x630 OG card, alt variant, and WEBP exports.
+- Updated `index.html` with full Open Graph + Twitter card metadata pointing to the dedicated preview image instead of the logo.
+- Added reusable generation prompt at `docs/assets/STEP491_OG_PREVIEW_PROMPT.txt`.
+- Extended landing smoke so OG/Twitter card metadata and social assets are covered by source checks.
+- Scope: landing/share-preview only; no bot runtime or workflow logic changed.
+
 ## STEP481 — Telegram copy clarity sweep (source-first)
 
 Scope: docs / source review only. No runtime logic, callbacks, DB reads, money paths, or hot UI surfaces changed.

@@ -126,3 +126,5 @@
 
 
 - `docs/37_LANDING_ICON_RENDER_HOTFIX_STEP490.md` — landing icon overflow/giant render hotfix using fixed-size CSS glyphs.
+
+- `37_OG_PREVIEW_STEP491.md` — OG preview/social card implementation for landing share previews.

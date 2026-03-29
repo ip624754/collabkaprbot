@@ -1,0 +1,86 @@
+STEP491 — Collabka PR OG preview prompt
+
+Goal:
+Generate a premium Open Graph social preview card for the public landing page of Collabka PR.
+
+Output:
+1200x630 px
+landscape
+static composition
+high readability at small preview size
+
+Language:
+Russian
+
+Product:
+Collabka PR — Telegram bot for brand and creator collaborations inside Telegram.
+
+Style:
+dark premium SaaS landing
+deep navy / near-black background
+subtle cold blue radial glow
+minimal, product-grade, trustworthy
+clean spacing
+no emoji
+no stock-photo feeling
+no crypto-hype
+no phone mockup
+no browser chrome
+no noisy screenshot collage
+
+Layout:
+Left side = text block
+Right side = compact product-style UI fragment
+
+Left block:
+- small Collabka logo mark at top-left
+- title: "Collabka PR"
+- subtitle: "Находите друг друга и ведите сотрудничество в одном боте"
+- supporting line near bottom: "Каталог · заявки · диалоги · стадии сделки"
+- tiny bottom label: "@collabkaprbot"
+
+Typography:
+- large bold title
+- soft white main text
+- calmer light-blue subtitle/supporting text
+- premium spacing
+- no paragraph clutter
+- no extra text
+
+Right-side fragment:
+- elegant rounded dark product panel
+- stylized Telegram-native UI fragment
+- one compact "Каталог брендов" card
+- one compact "Диалог" card
+- a few small chips / pills
+- one subtle accent button
+- should suggest a real product workflow
+- should remain visually secondary to the title
+- do NOT use a raw Telegram screenshot
+
+Color palette:
+- near-black / deep navy background
+- soft white text
+- muted icy-blue accents
+- subtle blue glow
+- restrained contrast hierarchy
+
+Text to render exactly:
+Collabka PR
+Находите друг друга и ведите сотрудничество в одном боте
+Каталог · заявки · диалоги · стадии сделки
+@collabkaprbot
+
+Do not:
+- add extra headlines
+- add English UI words
+- use emoji
+- use fake browser/device frames
+- use literal handshake illustration
+- overload the image with features
+- turn it into a poster
+
+Desired impression:
+premium Russian-language Telegram product
+clean, sharp, trustworthy
+strong as Telegram/social link preview
