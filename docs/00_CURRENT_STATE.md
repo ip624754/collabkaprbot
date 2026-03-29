@@ -1655,3 +1655,10 @@ Auto-heal safeguards + ops alerts:
 - Landing accordions (`Что внутри бота`, `FAQ`) now ship closed by default.
 - Added `.accordion-panel-inner` wrapper to prevent collapsed-state text bleed.
 - Narrow landing-only hotfix; bot runtime, callbacks, DB, money paths untouched.
+
+
+## STEP486 — Landing visual polish pack
+- Rebuilt landing section `Как это выглядит` around four polished product cards derived from real Telegram bot screens: `Домашняя`, `Каталог брендов`, `Фильтры брендов`, and `Диалог и стадия сделки`.
+- Removed placeholder schematic previews from that section and switched the landing to product-grade screenshot compositions only.
+- Added new assets under `assets/screenshots/*-surface-polished.png` and tightened landing smoke so the old raw/placeholder visuals do not silently return.
+- Scope is landing-only. Bot runtime, callbacks, DB, monetization, accept/reply/stage paths untouched.

@@ -224,3 +224,20 @@ What changed:
 
 Live note:
 - manual browser verification required after deploy for `Что внутри бота` and `FAQ`.
+
+
+## STEP486 — Landing visual polish pack
+
+Status: source-confirmed.
+
+What changed:
+- `Как это выглядит` now uses four polished product cards built from real bot screens instead of mixed raw/schematic placeholders.
+- New polished landing assets:
+  - `home-surface-polished.png`
+  - `catalog-surface-polished.png`
+  - `filters-surface-polished.png`
+  - `deal-surface-polished.png`
+- Landing smoke now guards against returning to placeholder preview cards or the old raw screenshot reference.
+
+Live note:
+- browser verification required after deploy for the landing visuals only.

@@ -5213,3 +5213,11 @@ QA:
 - Fixed landing accordion regression where cards shipped expanded by default.
 - Fixed collapsed-panel text bleed by adding `accordion-panel-inner` wrapper and min-height-safe CSS.
 - Updated landing smoke to guard against default-open accordion state.
+
+
+## STEP486 — Landing visual polish pack
+
+- Rebuilt landing block `Как это выглядит` using four product-grade visuals derived from real Telegram screens (`Домашняя`, `Каталог брендов`, `Фильтры брендов`, `Диалог и стадия сделки`).
+- Removed placeholder preview cards from the landing and upgraded the section to screenshot-based polished compositions.
+- Added new screenshot assets and updated landing smoke to pin the new visual contract.
+- Scope stayed landing-only. No bot runtime or data-path changes.

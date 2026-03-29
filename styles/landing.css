@@ -440,6 +440,16 @@ h1 {
   color: var(--accent-2);
   margin-bottom: 14px;
 }
+.screen-head .screen-badge {
+  margin-left: auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(95,149,255,0.14);
+  color: #dfe9ff;
+  font-size: 0.78rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
 .screen-dot {
   width: 10px;
   height: 10px;
@@ -448,8 +458,18 @@ h1 {
   box-shadow: 0 0 18px rgba(95,149,255,0.55);
 }
 .screen-card img {
+  display: block;
+  width: 100%;
+  height: auto;
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.36);
+  background: #0a1222;
+}
+.product-shot img {
+  background:
+    radial-gradient(circle at top right, rgba(95,149,255,0.22), transparent 48%),
+    linear-gradient(180deg, rgba(16, 28, 48, 0.96), rgba(10, 16, 28, 0.98));
 }
 .screen-preview {
   min-height: 260px;

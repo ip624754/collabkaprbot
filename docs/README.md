@@ -116,3 +116,5 @@
 
 - `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md` — короткий what-to-do playbook после hardening шагов 403–405.
 - `docs/ops/02_HEALTH_ONE_SCREEN.md` — one-screen guide по `/api/health` (STEP429).
+
+- `docs/33_LANDING_VISUAL_POLISH_STEP486.md` — landing visual polish pack for the `Как это выглядит` section (real-screen product cards)

@@ -18,9 +18,14 @@ const cssPath = path.join(ROOT, 'styles', 'landing.css');
 const jsPath = path.join(ROOT, 'scripts', 'landing.js');
 const logoWhite = path.join(ROOT, 'assets', 'brand', 'collabka-mark-white.png');
 const logoBlue = path.join(ROOT, 'assets', 'brand', 'collabka-mark-blue.png');
-const screenshot = path.join(ROOT, 'assets', 'screenshots', 'brand-filters-live.png');
+const screenshots = [
+  path.join(ROOT, 'assets', 'screenshots', 'home-surface-polished.png'),
+  path.join(ROOT, 'assets', 'screenshots', 'catalog-surface-polished.png'),
+  path.join(ROOT, 'assets', 'screenshots', 'filters-surface-polished.png'),
+  path.join(ROOT, 'assets', 'screenshots', 'deal-surface-polished.png'),
+];
 
-for (const p of [htmlPath, cssPath, jsPath, logoWhite, logoBlue, screenshot]) {
+for (const p of [htmlPath, cssPath, jsPath, logoWhite, logoBlue, ...screenshots]) {
   assert(fs.existsSync(p), `required file missing: ${path.relative(ROOT, p)}`);
 }
 
@@ -47,6 +52,13 @@ for (const id of sectionIds) {
 
 assert(!html.includes('accordion-card open'), 'index.html must not ship accordion cards opened by default');
 assert(!html.includes('aria-expanded="true"'), 'index.html must not ship accordions with aria-expanded=true by default');
-assert(html.includes('accordion-panel-inner'), 'index.html missing accordion inner wrapper required for collapsed-state clipping');
+assert(html.includes('/assets/screenshots/home-surface-polished.png'), 'index.html missing polished home visual');
+assert(html.includes('/assets/screenshots/catalog-surface-polished.png'), 'index.html missing polished catalog visual');
+assert(html.includes('/assets/screenshots/filters-surface-polished.png'), 'index.html missing polished filters visual');
+assert(html.includes('/assets/screenshots/deal-surface-polished.png'), 'index.html missing polished deal visual');
+assert(!html.includes('brand-filters-live.png'), 'index.html should not ship old raw screenshot in screens section');
+assert(!html.includes('screen-preview-home'), 'index.html should not ship placeholder preview cards after STEP486');
+assert(!html.includes('screen-preview-list'), 'index.html should not ship placeholder preview cards after STEP486');
+assert(!html.includes('screen-preview-dialog'), 'index.html should not ship placeholder preview cards after STEP486');
 
 console.log('[smoke:landing-contract] OK');
