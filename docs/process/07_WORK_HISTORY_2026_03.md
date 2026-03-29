@@ -5221,3 +5221,29 @@ QA:
 - Removed placeholder preview cards from the landing and upgraded the section to screenshot-based polished compositions.
 - Added new screenshot assets and updated landing smoke to pin the new visual contract.
 - Scope stayed landing-only. No bot runtime or data-path changes.
+
+
+## STEP487 — Landing surface gallery / modal polish
+
+Scope: landing-only. No bot runtime, callbacks, DB, monetization, or workflow-path changes.
+
+What changed:
+- Replaced the overloaded screenshot cards in `Как это выглядит` with a cleaner gallery contract: each card now shows only a short title, a badge, one real screenshot, and a 1–2 line caption.
+- Added a dedicated modal/lightbox viewer so the full explanation is no longer forced inside the grid. Each modal now shows a large screenshot plus structured copy blocks: `Что видно`, `Почему это важно`, `Следующий шаг`.
+- Switched the screens section from the STEP486 polished-composition assets to four direct live screenshots wrapped in a unified dark product frame:
+  - `home-live-shot.png`
+  - `catalog-live-shot.png`
+  - `filters-live-shot.png`
+  - `deal-live-shot.png`
+- Narrowed `Диалог и стадия сделки` to one strong working-card screenshot instead of a two-shot composite, reducing visual clutter.
+- Updated `scripts/landing.js` to support gallery-card click/tap/keyboard open, modal Esc/backdrop close, focus return, and a simple focus trap.
+- Updated `scripts/smoke-landing-contract.js` so the screens block is pinned to the new gallery + modal contract and does not silently regress to the old inline/polished-preview layout.
+
+Why:
+- The screens block had become visually denser than the rest of the landing because cards were trying to be preview + explanation + zoom area at once.
+- A gallery + modal split keeps the grid symmetric and premium while still letting users inspect the product properly.
+
+QA:
+- `node --check scripts/landing.js`
+- `node scripts/smoke-landing-contract.js`
+- landing-only step; live browser verification still required after deploy.

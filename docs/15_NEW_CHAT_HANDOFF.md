@@ -241,3 +241,18 @@ What changed:
 
 Live note:
 - browser verification required after deploy for the landing visuals only.
+
+
+## STEP487 — Landing surface gallery / modal polish
+
+Status: source-confirmed.
+
+What changed:
+- `Как это выглядит` now uses a gallery + modal contract instead of trying to keep full explanation inside each grid card.
+- Each of the four surfaces (`Домашняя`, `Каталог брендов`, `Фильтры брендов`, `Диалог и стадия сделки`) now renders as one symmetric preview card with one real screenshot.
+- Clicking a card opens a dedicated modal with a larger screenshot plus three short explanation blocks: `Что видно`, `Почему это важно`, `Следующий шаг`.
+- `Диалог и стадия сделки` now uses one strong real working-card screenshot instead of a two-screen composite.
+- Landing JS now supports click/tap open, Esc/backdrop close, focus return, and a simple focus trap.
+
+Live note:
+- browser verification required after deploy for gallery symmetry, modal open/close on desktop/mobile, and reduced clutter inside the screens section.

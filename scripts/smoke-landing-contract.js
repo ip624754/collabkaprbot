@@ -19,10 +19,10 @@ const jsPath = path.join(ROOT, 'scripts', 'landing.js');
 const logoWhite = path.join(ROOT, 'assets', 'brand', 'collabka-mark-white.png');
 const logoBlue = path.join(ROOT, 'assets', 'brand', 'collabka-mark-blue.png');
 const screenshots = [
-  path.join(ROOT, 'assets', 'screenshots', 'home-surface-polished.png'),
-  path.join(ROOT, 'assets', 'screenshots', 'catalog-surface-polished.png'),
-  path.join(ROOT, 'assets', 'screenshots', 'filters-surface-polished.png'),
-  path.join(ROOT, 'assets', 'screenshots', 'deal-surface-polished.png'),
+  path.join(ROOT, 'assets', 'screenshots', 'home-live-shot.png'),
+  path.join(ROOT, 'assets', 'screenshots', 'catalog-live-shot.png'),
+  path.join(ROOT, 'assets', 'screenshots', 'filters-live-shot.png'),
+  path.join(ROOT, 'assets', 'screenshots', 'deal-live-shot.png'),
 ];
 
 for (const p of [htmlPath, cssPath, jsPath, logoWhite, logoBlue, ...screenshots]) {
@@ -40,6 +40,16 @@ const requiredChunks = [
   'Открыть бота',
   'https://t.me/collabkaprbot',
   'Коллаборации брендов и креаторов внутри Telegram',
+  'surface-modal',
+  'screen-card-gallery',
+  'data-surface="home"',
+  'data-surface="catalog"',
+  'data-surface="filters"',
+  'data-surface="deal"',
+  '/assets/screenshots/home-live-shot.png',
+  '/assets/screenshots/catalog-live-shot.png',
+  '/assets/screenshots/filters-live-shot.png',
+  '/assets/screenshots/deal-live-shot.png',
 ];
 for (const chunk of requiredChunks) {
   assert(html.includes(chunk), `index.html missing required chunk: ${chunk}`);
@@ -47,18 +57,23 @@ for (const chunk of requiredChunks) {
 
 const sectionIds = ['hero', 'roles', 'how-it-works', 'inside-bot', 'why-better', 'screens', 'faq', 'final-cta'];
 for (const id of sectionIds) {
-  assert(html.includes(`id=\"${id}\"`), `index.html missing section id ${id}`);
+  assert(html.includes(`id="${id}"`), `index.html missing section id ${id}`);
 }
 
 assert(!html.includes('accordion-card open'), 'index.html must not ship accordion cards opened by default');
 assert(!html.includes('aria-expanded="true"'), 'index.html must not ship accordions with aria-expanded=true by default');
-assert(html.includes('/assets/screenshots/home-surface-polished.png'), 'index.html missing polished home visual');
-assert(html.includes('/assets/screenshots/catalog-surface-polished.png'), 'index.html missing polished catalog visual');
-assert(html.includes('/assets/screenshots/filters-surface-polished.png'), 'index.html missing polished filters visual');
-assert(html.includes('/assets/screenshots/deal-surface-polished.png'), 'index.html missing polished deal visual');
-assert(!html.includes('brand-filters-live.png'), 'index.html should not ship old raw screenshot in screens section');
-assert(!html.includes('screen-preview-home'), 'index.html should not ship placeholder preview cards after STEP486');
-assert(!html.includes('screen-preview-list'), 'index.html should not ship placeholder preview cards after STEP486');
-assert(!html.includes('screen-preview-dialog'), 'index.html should not ship placeholder preview cards after STEP486');
+assert(!html.includes('home-surface-polished.png'), 'screens gallery should not use old polished home asset');
+assert(!html.includes('catalog-surface-polished.png'), 'screens gallery should not use old polished catalog asset');
+assert(!html.includes('filters-surface-polished.png'), 'screens gallery should not use old polished filters asset');
+assert(!html.includes('deal-surface-polished.png'), 'screens gallery should not use old polished deal asset');
+
+const css = fs.readFileSync(cssPath, 'utf8');
+assert(css.includes('.surface-modal'), 'landing.css missing modal styles');
+assert(css.includes('.screen-card-gallery'), 'landing.css missing gallery card styles');
+
+const js = fs.readFileSync(jsPath, 'utf8');
+assert(js.includes('SURFACE_CONTENT'), 'landing.js missing modal content map');
+assert(js.includes('openSurfaceModal'), 'landing.js missing modal open logic');
+assert(js.includes('closeSurfaceModal'), 'landing.js missing modal close logic');
 
 console.log('[smoke:landing-contract] OK');

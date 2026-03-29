@@ -235,44 +235,52 @@
         <section id="screens" class="section reveal">
           <div class="section-header">
             <h2>Как это выглядит</h2>
-            <p>Живые экраны из бота, собранные в чистые продуктовые карточки, чтобы сразу понять flow.</p>
+            <p>Нажмите на карточку, чтобы открыть крупный экран и короткое пояснение без лишнего шума.</p>
           </div>
-          <div class="screens-grid">
-            <article class="screen-card screen-card-image product-shot">
+          <div class="screens-grid screens-gallery">
+            <article class="screen-card screen-card-gallery" data-surface="home" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Открыть подробный просмотр экрана Домашняя">
               <div class="screen-head">
                 <span class="screen-dot"></span>
                 <span>Домашняя</span>
                 <span class="screen-badge">Живой экран</span>
               </div>
-              <img src="/assets/screenshots/home-surface-polished.png" alt="Домашняя Collabka PR с быстрым стартом и основными разделами" />
-              <p>Первые 60 секунд, выбор роли и основные разделы читаются без перегруза и лишних веток.</p>
+              <div class="screen-frame">
+                <img src="/assets/screenshots/home-live-shot.png" alt="Домашняя Collabka PR с быстрым стартом и основными разделами" />
+              </div>
+              <p>Старт, выбор роли и основные разделы без лишнего шума.</p>
             </article>
-            <article class="screen-card screen-card-image product-shot">
+            <article class="screen-card screen-card-gallery" data-surface="catalog" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Открыть подробный просмотр экрана Каталог брендов">
               <div class="screen-head">
                 <span class="screen-dot"></span>
                 <span>Каталог брендов</span>
                 <span class="screen-badge">Живой экран</span>
               </div>
-              <img src="/assets/screenshots/catalog-surface-polished.png" alt="Каталог брендов в Collabka PR с понятным нулевым результатом" />
-              <p>Каталог не уводит в тупик: контекст, активные фильтры и следующий шаг видны сразу.</p>
+              <div class="screen-frame">
+                <img src="/assets/screenshots/catalog-live-shot.png" alt="Каталог брендов в Collabka PR с понятным нулевым результатом" />
+              </div>
+              <p>Нулевой результат и следующий шаг видны сразу, без тупика.</p>
             </article>
-            <article class="screen-card screen-card-image product-shot">
+            <article class="screen-card screen-card-gallery" data-surface="filters" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Открыть подробный просмотр экрана Фильтры брендов">
               <div class="screen-head">
                 <span class="screen-dot"></span>
                 <span>Фильтры брендов</span>
                 <span class="screen-badge">Живой экран</span>
               </div>
-              <img src="/assets/screenshots/filters-surface-polished.png" alt="Фильтры брендов в Collabka PR, собранные в продуктовую карточку" />
-              <p>Параметры читаются быстро, а действия вынесены вниз — экран ощущается собранным и рабочим.</p>
+              <div class="screen-frame">
+                <img src="/assets/screenshots/filters-live-shot.png" alt="Фильтры брендов в Collabka PR" />
+              </div>
+              <p>Параметры читаются быстро, а действия стоят там, где их ждёшь.</p>
             </article>
-            <article class="screen-card screen-card-image product-shot">
+            <article class="screen-card screen-card-gallery" data-surface="deal" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Открыть подробный просмотр экрана Диалог и стадия сделки">
               <div class="screen-head">
                 <span class="screen-dot"></span>
                 <span>Диалог и стадия сделки</span>
                 <span class="screen-badge">Живой flow</span>
               </div>
-              <img src="/assets/screenshots/deal-surface-polished.png" alt="Диалог, рабочая карточка заявки и список заявок в Collabka PR" />
-              <p>Заявка, рабочая карточка и список заявок живут в одном контуре — без потери контекста и статуса.</p>
+              <div class="screen-frame">
+                <img src="/assets/screenshots/deal-live-shot.png" alt="Рабочая карточка заявки и стадия сделки в Collabka PR" />
+              </div>
+              <p>Заявка, статус и действия собраны в одном рабочем контуре.</p>
             </article>
           </div>
         </section>
@@ -367,6 +375,37 @@
         <a class="footer-link" href="https://t.me/collabkaprbot" target="_blank" rel="noopener noreferrer">Открыть бота</a>
       </footer>
     </div>
+
+      <div class="surface-modal" id="surface-modal" aria-hidden="true">
+        <div class="surface-modal-backdrop" data-modal-close></div>
+        <div class="surface-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="surface-modal-title">
+          <button class="surface-modal-close" type="button" data-modal-close aria-label="Закрыть просмотр">×</button>
+          <div class="surface-modal-grid">
+            <div class="surface-modal-media">
+              <div class="surface-modal-frame">
+                <img id="surface-modal-image" src="" alt="" />
+              </div>
+            </div>
+            <div class="surface-modal-copy">
+              <p class="surface-modal-kicker" id="surface-modal-kicker"></p>
+              <h3 id="surface-modal-title"></h3>
+              <p class="surface-modal-subtitle" id="surface-modal-subtitle"></p>
+              <div class="surface-modal-block">
+                <div class="surface-modal-label">Что видно</div>
+                <ul id="surface-modal-visible"></ul>
+              </div>
+              <div class="surface-modal-block">
+                <div class="surface-modal-label">Почему это важно</div>
+                <p id="surface-modal-why"></p>
+              </div>
+              <div class="surface-modal-block">
+                <div class="surface-modal-label">Следующий шаг</div>
+                <p id="surface-modal-next"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     <script src="/scripts/landing.js"></script>
   </body>
 </html>
