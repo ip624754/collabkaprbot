@@ -25,7 +25,21 @@ const screenshots = [
   path.join(ROOT, 'assets', 'screenshots', 'deal-live-shot.png'),
 ];
 
-for (const p of [htmlPath, cssPath, jsPath, logoWhite, logoBlue, ...screenshots]) {
+const icons = [
+  path.join(ROOT, 'assets', 'icons', 'landing', 'building2.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'clapperboard.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'workflow.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'store.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'newspaper.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'mail.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'messages-square.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'square-kanban.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'life-buoy.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'house.svg'),
+  path.join(ROOT, 'assets', 'icons', 'landing', 'sliders-horizontal.svg'),
+];
+
+for (const p of [htmlPath, cssPath, jsPath, logoWhite, logoBlue, ...screenshots, ...icons]) {
   assert(fs.existsSync(p), `required file missing: ${path.relative(ROOT, p)}`);
 }
 
@@ -50,6 +64,11 @@ const requiredChunks = [
   '/assets/screenshots/catalog-live-shot.png',
   '/assets/screenshots/filters-live-shot.png',
   '/assets/screenshots/deal-live-shot.png',
+  '/assets/icons/landing/building2.svg',
+  '/assets/icons/landing/store.svg',
+  '/assets/icons/landing/messages-square.svg',
+  'accordion-label',
+  'screen-icon',
 ];
 for (const chunk of requiredChunks) {
   assert(html.includes(chunk), `index.html missing required chunk: ${chunk}`);
@@ -66,6 +85,11 @@ assert(!html.includes('home-surface-polished.png'), 'screens gallery should not 
 assert(!html.includes('catalog-surface-polished.png'), 'screens gallery should not use old polished catalog asset');
 assert(!html.includes('filters-surface-polished.png'), 'screens gallery should not use old polished filters asset');
 assert(!html.includes('deal-surface-polished.png'), 'screens gallery should not use old polished deal asset');
+
+const forbiddenEmojiChunks = ['🏢', '🎬', '🧭', '🏷 Каталог брендов', '📰 Лента креаторов', '📨 Заявки', '💬 Диалоги', '📌 Стадии сделки', '🆘 Поддержка'];
+for (const chunk of forbiddenEmojiChunks) {
+  assert(!html.includes(chunk), `index.html still contains legacy emoji chunk: ${chunk}`);
+}
 
 const css = fs.readFileSync(cssPath, 'utf8');
 assert(css.includes('.surface-modal'), 'landing.css missing modal styles');

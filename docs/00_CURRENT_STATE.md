@@ -1664,3 +1664,6 @@ Auto-heal safeguards + ops alerts:
 - Removed placeholder schematic previews from that section and switched the landing to product-grade screenshot compositions only.
 - Added new assets under `assets/screenshots/*-surface-polished.png` and tightened landing smoke so the old raw/placeholder visuals do not silently return.
 - Scope is landing-only. Bot runtime, callbacks, DB, monetization, accept/reply/stage paths untouched.
+
+
+[STEP488] Landing icon system polish: replaced emoji landing icons with a consistent SVG icon set, added /assets/icons/landing/*.svg, and tightened landing icon spacing/styling without changing section structure or CTA behavior.

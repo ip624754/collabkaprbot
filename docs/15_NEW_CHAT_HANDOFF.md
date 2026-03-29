@@ -256,3 +256,6 @@ What changed:
 
 Live note:
 - browser verification required after deploy for gallery symmetry, modal open/close on desktop/mobile, and reduced clutter inside the screens section.
+
+
+[STEP488] Landing icon system polish: replaced emoji landing icons with a consistent SVG icon set, added /assets/icons/landing/*.svg, and tightened landing icon spacing/styling without changing section structure or CTA behavior.

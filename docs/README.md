@@ -118,3 +118,6 @@
 - `docs/ops/02_HEALTH_ONE_SCREEN.md` — one-screen guide по `/api/health` (STEP429).
 
 - `docs/33_LANDING_VISUAL_POLISH_STEP486.md` — landing visual polish pack for the `Как это выглядит` section (real-screen product cards)
+
+
+[STEP488] Landing icon system polish: replaced emoji landing icons with a consistent SVG icon set, added /assets/icons/landing/*.svg, and tightened landing icon spacing/styling without changing section structure or CTA behavior.
