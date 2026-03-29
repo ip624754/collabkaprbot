@@ -5206,3 +5206,10 @@ QA:
 - `npm run check:package-lock`
 - `node --check scripts/preflight.js`
 - public-site only; no bot runtime behavior changed.
+
+
+## STEP485 — Landing accordion hotfix
+
+- Fixed landing accordion regression where cards shipped expanded by default.
+- Fixed collapsed-panel text bleed by adding `accordion-panel-inner` wrapper and min-height-safe CSS.
+- Updated landing smoke to guard against default-open accordion state.

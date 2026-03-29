@@ -1648,3 +1648,10 @@ Auto-heal safeguards + ops alerts:
 - `bxSmartPrefillText(...)` zero-results helper now uses friendlier wording.
 - Added source-level smoke `scripts/smoke-copy-wave1-contract.js`, wired into `package.json` and `scripts/preflight.js`.
 - Scope is copy/layout only. No callback contract changes, no DB schema changes, no extra hot-path DB reads, no money-path changes.
+
+
+## STEP485 — Landing accordion hotfix
+
+- Landing accordions (`Что внутри бота`, `FAQ`) now ship closed by default.
+- Added `.accordion-panel-inner` wrapper to prevent collapsed-state text bleed.
+- Narrow landing-only hotfix; bot runtime, callbacks, DB, money paths untouched.

@@ -211,3 +211,16 @@
 
 
 - Added public Russian landing + FAQ in repo root (`index.html`, `styles/landing.css`, `scripts/landing.js`, assets) as the lowest-cost conversion/explainer layer before entering `@collabkaprbot`; public-site only, no bot runtime changes.
+
+
+## STEP485 — Landing accordion hotfix
+
+Status: source-confirmed.
+
+What changed:
+- landing accordion cards no longer render open by default;
+- hidden accordion copy no longer bleeds out of collapsed cards;
+- scope stayed landing-only (`index.html`, `styles/landing.css`, landing smoke).
+
+Live note:
+- manual browser verification required after deploy for `Что внутри бота` and `FAQ`.

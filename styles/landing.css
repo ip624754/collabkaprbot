@@ -415,10 +415,13 @@ h1 {
 .accordion-panel {
   display: grid;
   grid-template-rows: 0fr;
+  min-height: 0;
   transition: grid-template-rows 180ms ease;
 }
-.accordion-panel > div,
-.accordion-panel > p { overflow: hidden; }
+.accordion-panel-inner {
+  min-height: 0;
+  overflow: hidden;
+}
 .accordion-panel p {
   margin: 0;
   padding: 0 22px 20px;

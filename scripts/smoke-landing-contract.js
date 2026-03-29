@@ -42,7 +42,11 @@ for (const chunk of requiredChunks) {
 
 const sectionIds = ['hero', 'roles', 'how-it-works', 'inside-bot', 'why-better', 'screens', 'faq', 'final-cta'];
 for (const id of sectionIds) {
-  assert(html.includes(`id="${id}"`), `index.html missing section id ${id}`);
+  assert(html.includes(`id=\"${id}\"`), `index.html missing section id ${id}`);
 }
+
+assert(!html.includes('accordion-card open'), 'index.html must not ship accordion cards opened by default');
+assert(!html.includes('aria-expanded="true"'), 'index.html must not ship accordions with aria-expanded=true by default');
+assert(html.includes('accordion-panel-inner'), 'index.html missing accordion inner wrapper required for collapsed-state clipping');
 
 console.log('[smoke:landing-contract] OK');
