@@ -1,4 +1,4 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP491 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP493 baseline
 
 Цель: чтобы новый чат **сразу продолжил текущий процесс**, а не начинал проект заново.
 
@@ -17,9 +17,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP491 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP493 baseline)**
 
-Продолжаем не с нуля, а от **STEP491 baseline**.
+Продолжаем не с нуля, а от **STEP493 baseline**.
 
 Текущий цикл был не про новые фичи, а про **stability + clarity + context correctness + repo hygiene** в ядре:
 - creator → brand applications

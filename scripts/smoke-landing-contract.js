@@ -107,6 +107,9 @@ for (const chunk of forbiddenEmojiChunks) {
 const css = fs.readFileSync(cssPath, 'utf8');
 assert(css.includes('.surface-modal'), 'landing.css missing modal styles');
 assert(css.includes('.screen-card-gallery'), 'landing.css missing gallery card styles');
+assert(css.includes('.section-header::before'), 'landing.css missing section intro accent rule');
+assert(css.includes('.accordion-card.open .accordion-panel-inner'), 'landing.css missing accordion panel micro-motion rule');
+assert(css.includes('.info-card:hover::before'), 'landing.css missing card spotlight hover rule');
 
 const requiredIconGlyphs = [
   'icon-glyph-building2',

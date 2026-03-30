@@ -5269,3 +5269,9 @@ QA:
 - Replaced unstable inline sprite icon usage in landing section labels/cards with deterministic CSS background glyphs using local SVG assets.
 - Hardened gallery/accordion/screen-head overflow behavior.
 - Updated landing smoke contract.
+
+
+## STEP493 — Landing premium micro-polish
+- Applied a narrow landing-only visual polish pass: subtle spotlight/depth on informational cards, calmer FAQ accordion plasticity, and tighter section-header hierarchy/spacing.
+- No landing architecture changes: hero, CTA structure, gallery/modal, FAQ structure, and OG/share layer remain intact.
+- Added landing smoke assertions so the section-intro accent line, card spotlight, and accordion open-state motion cannot silently disappear.
