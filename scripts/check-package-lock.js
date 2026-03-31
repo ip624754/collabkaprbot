@@ -37,6 +37,12 @@ for (const name of pkgNames) {
     console.error(`[package-lock] version drift for ${name}: package.json=${pkgDeps[name]} package-lock=${lockDeps[name]}`);
     process.exit(2);
   }
+
+  const depPkg = lock.packages?.[`node_modules/${name}`];
+  if (!depPkg || typeof depPkg !== 'object' || !String(depPkg.version || '').trim()) {
+    console.error(`[package-lock] missing resolved package entry for ${name} in lock.packages`);
+    process.exit(2);
+  }
 }
 
 console.log('[package-lock] OK');

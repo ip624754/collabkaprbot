@@ -5275,3 +5275,25 @@ QA:
 - Applied a narrow landing-only visual polish pass: subtle spotlight/depth on informational cards, calmer FAQ accordion plasticity, and tighter section-header hierarchy/spacing.
 - No landing architecture changes: hero, CTA structure, gallery/modal, FAQ structure, and OG/share layer remain intact.
 - Added landing smoke assertions so the section-intro accent line, card spotlight, and accordion open-state motion cannot silently disappear.
+
+## STEP494 — release-consistency restore
+
+Scope: release/docs/tooling only. No bot runtime, callbacks, DB schema, monetization, accept/reply/unlock, or hot-path query changes.
+
+What changed:
+- restored the missing root `.env.example` with the current prod/release baseline keys and safe defaults (`APP_ENV=prod`, `BRAND_APP_SUPERADMIN_COPY_ENABLED=1`, payments fallback OFF, parked IG flags OFF);
+- rebuilt `package-lock.json` from the current `package.json` so `npm ci` is valid again for the FULL baseline snapshot;
+- hardened `scripts/check-package-lock.js` so it now fails not only on root dependency drift, but also when direct dependencies are missing resolved `lock.packages` entries (the exact truncated-lock failure mode caught in STEP494 audit);
+- wired `check:package-lock` into `scripts/preflight.js` source-only stage immediately after the env-baseline smoke;
+- updated `README.md` release note wording so the repo no longer implies lockfile generation is optional for deterministic installs.
+
+Why:
+- STEP493 FULL archive looked release-ready, but bare snapshot QA had two silent consistency failures: `.env.example` was missing, and `package-lock.json` was too truncated for `npm ci`;
+- without a source-level lockfile gate, future archives could appear “green” while still being non-installable for operators/auditors.
+
+QA:
+- `node scripts/check-package-lock.js`
+- `npm ci --ignore-scripts`
+- `npm run preflight:source`
+- live runtime verification still not part of this step.
+

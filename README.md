@@ -3,7 +3,7 @@
 ## Release v1.2.9
 - Hotfix: moved dev polling out of `/api` into `scripts/dev-polling.js` (prevents serverless endpoint exposure).
 - Added P1 improvements: analytics events + **👑 Админка → 📈 Метрики**, rate limits (flag), onboarding v2 (flag), presets/templates, verification CTA in paywall.
-- Recommended: generate `package-lock.json` for deterministic installs (`npm install --package-lock-only`).
+- Release consistency: keep committed `package-lock.json` in sync with `package.json`; source preflight now checks this contract before deeper smoke runs.
 
 UGC/Collab CRM в Telegram:
 - Workspaces = ваши каналы (профиль создателя)
