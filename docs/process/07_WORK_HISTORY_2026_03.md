@@ -1,3 +1,8 @@
+## STEP495 — OG preview refresh and cleanup
+- Replaced the previous OG/social preview asset pack with the newly approved polished preview visual under stable names `assets/social/collabka-og.png` and `assets/social/collabka-og.webp`.
+- Removed legacy `collabka-og-1200x630*` and `*-alt*` assets to keep the repo clean and avoid stale share-preview variants.
+- Updated `index.html` and `scripts/smoke-landing-contract.js` so Open Graph / Twitter image references and source QA match the new primary asset contract and actual dimensions (`1730x908`).
+
 ## STEP491 — OG preview implementation
 - Added a dedicated social preview pack under `assets/social/` with a primary 1200x630 OG card, alt variant, and WEBP exports.
 - Updated `index.html` with full Open Graph + Twitter card metadata pointing to the dedicated preview image instead of the logo.
@@ -5275,25 +5280,3 @@ QA:
 - Applied a narrow landing-only visual polish pass: subtle spotlight/depth on informational cards, calmer FAQ accordion plasticity, and tighter section-header hierarchy/spacing.
 - No landing architecture changes: hero, CTA structure, gallery/modal, FAQ structure, and OG/share layer remain intact.
 - Added landing smoke assertions so the section-intro accent line, card spotlight, and accordion open-state motion cannot silently disappear.
-
-## STEP494 — release-consistency restore
-
-Scope: release/docs/tooling only. No bot runtime, callbacks, DB schema, monetization, accept/reply/unlock, or hot-path query changes.
-
-What changed:
-- restored the missing root `.env.example` with the current prod/release baseline keys and safe defaults (`APP_ENV=prod`, `BRAND_APP_SUPERADMIN_COPY_ENABLED=1`, payments fallback OFF, parked IG flags OFF);
-- rebuilt `package-lock.json` from the current `package.json` so `npm ci` is valid again for the FULL baseline snapshot;
-- hardened `scripts/check-package-lock.js` so it now fails not only on root dependency drift, but also when direct dependencies are missing resolved `lock.packages` entries (the exact truncated-lock failure mode caught in STEP494 audit);
-- wired `check:package-lock` into `scripts/preflight.js` source-only stage immediately after the env-baseline smoke;
-- updated `README.md` release note wording so the repo no longer implies lockfile generation is optional for deterministic installs.
-
-Why:
-- STEP493 FULL archive looked release-ready, but bare snapshot QA had two silent consistency failures: `.env.example` was missing, and `package-lock.json` was too truncated for `npm ci`;
-- without a source-level lockfile gate, future archives could appear “green” while still being non-installable for operators/auditors.
-
-QA:
-- `node scripts/check-package-lock.js`
-- `npm ci --ignore-scripts`
-- `npm run preflight:source`
-- live runtime verification still not part of this step.
-
