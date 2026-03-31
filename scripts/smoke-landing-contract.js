@@ -26,8 +26,8 @@ const screenshots = [
 ];
 
 const socialAssets = [
-  path.join(ROOT, 'assets', 'social', 'collabka-og.png'),
-  path.join(ROOT, 'assets', 'social', 'collabka-og.webp'),
+  path.join(ROOT, 'assets', 'social', 'collabka-og-1200x630.png'),
+  path.join(ROOT, 'assets', 'social', 'collabka-og-1200x630.webp'),
 ];
 
 const ogPrompt = path.join(ROOT, 'docs', 'assets', 'STEP491_OG_PREVIEW_PROMPT.txt');
@@ -52,12 +52,12 @@ for (const p of [htmlPath, cssPath, jsPath, logoWhite, logoBlue, ...screenshots,
 
 const html = fs.readFileSync(htmlPath, 'utf8');
 const requiredChunks = [
-  'property="og:image" content="https://collabkaprbot.vercel.app/assets/social/collabka-og.png"',
-  'property="og:image:width" content="1730"',
-  'property="og:image:height" content="908"',
+  'property="og:image" content="https://collabkaprbot.vercel.app/assets/social/collabka-og-1200x630.png"',
+  'property="og:image:width" content="1200"',
+  'property="og:image:height" content="630"',
   'property="og:image:alt" content="Collabka PR — коллаборации брендов и креаторов внутри Telegram"',
   'name="twitter:card" content="summary_large_image"',
-  'name="twitter:image" content="https://collabkaprbot.vercel.app/assets/social/collabka-og.png"',
+  'name="twitter:image" content="https://collabkaprbot.vercel.app/assets/social/collabka-og-1200x630.png"',
   'Collabka PR — находите друг друга и ведите сотрудничество в одном боте',
   'Кому подходит',
   'Как это работает',

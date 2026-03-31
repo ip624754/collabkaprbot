@@ -1,7 +1,8 @@
-## STEP495 — OG preview refresh and cleanup
-- Replaced the previous OG/social preview asset pack with the newly approved polished preview visual under stable names `assets/social/collabka-og.png` and `assets/social/collabka-og.webp`.
-- Removed legacy `collabka-og-1200x630*` and `*-alt*` assets to keep the repo clean and avoid stale share-preview variants.
-- Updated `index.html` and `scripts/smoke-landing-contract.js` so Open Graph / Twitter image references and source QA match the new primary asset contract and actual dimensions (`1730x908`).
+## STEP496 — OG asset finalize and cleanup
+- Replaced the canonical landing OG assets with the approved exact 1200x630 PNG and matching WEBP under stable filenames.
+- Removed `assets/social/collabka-og-1200x630-alt.png` and `.webp` from the repo.
+- Simplified `scripts/smoke-landing-contract.js` so it only requires the shipping OG pair.
+- Updated current-state and OG preview docs to reflect the simplified single-asset social contract.
 
 ## STEP491 — OG preview implementation
 - Added a dedicated social preview pack under `assets/social/` with a primary 1200x630 OG card, alt variant, and WEBP exports.
