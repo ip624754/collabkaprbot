@@ -7,6 +7,9 @@
     { "source": "/api/cron/broadcast-tick", "destination": "/api/cron_router?job=broadcast-tick" },
     { "source": "/api/cron/giveaways-tick", "destination": "/api/cron_router?job=giveaways-tick" },
     { "source": "/api/cron/ig-verify-tick", "destination": "/api/cron_router?job=ig-verify-tick" },
-    { "source": "/api/cron/audit-flush-tick", "destination": "/api/cron_router?job=audit-flush-tick" }
+    { "source": "/api/cron/audit-flush-tick", "destination": "/api/cron_router?job=audit-flush-tick" },
+
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/admin/(.*)", "destination": "/admin.html" }
   ]
 }

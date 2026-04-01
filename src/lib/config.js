@@ -278,6 +278,24 @@ export const CFG = {
     process.env.PUBLIC_BASE_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ''),
 
+  // Admin web sidecar (optional, owner/operator only)
+  ADMIN_WEB_ENABLED: parseBoolSafe(process.env.ADMIN_WEB_ENABLED, false),
+  ADMIN_WEB_SECRET: process.env.ADMIN_WEB_SECRET || '',
+  ADMIN_WEB_SESSION_SECRET: process.env.ADMIN_WEB_SESSION_SECRET || '',
+  ADMIN_WEB_APPROVER_TG_IDS: parseCsvNums(process.env.ADMIN_WEB_APPROVER_TG_IDS || process.env.SUPER_ADMIN_TG_IDS || DEFAULT_SUPER_ADMINS),
+  ADMIN_WEB_LOGIN_TTL_SEC: (() => {
+    const n = parseIntSafe(process.env.ADMIN_WEB_LOGIN_TTL_SEC, 300);
+    return Math.max(60, Math.min(n, 1800));
+  })(),
+  ADMIN_WEB_SESSION_TTL_SEC: (() => {
+    const n = parseIntSafe(process.env.ADMIN_WEB_SESSION_TTL_SEC, 8 * 60 * 60);
+    return Math.max(600, Math.min(n, 24 * 60 * 60));
+  })(),
+  ADMIN_WEB_IDLE_TIMEOUT_SEC: (() => {
+    const n = parseIntSafe(process.env.ADMIN_WEB_IDLE_TIMEOUT_SEC, 30 * 60);
+    return Math.max(300, Math.min(n, 8 * 60 * 60));
+  })(),
+
   // QStash (optional): broadcast fan-out in serverless-safe way
   QSTASH_BROADCAST_PARALLELISM: (() => {
     const n = parseIntSafe(process.env.QSTASH_BROADCAST_PARALLELISM, 8);
@@ -473,6 +491,12 @@ export function assertEnv() {
     if (!CFG.IG_TOKEN_ENC_KEY_VALID) missing.push('IG_TOKEN_ENC_KEY (hex64 or base64>=32 bytes)');
   }
 
+  if (CFG.ADMIN_WEB_ENABLED) {
+    if (!CFG.PUBLIC_BASE_URL) missing.push('PUBLIC_BASE_URL');
+    if (!CFG.ADMIN_WEB_SECRET) missing.push('ADMIN_WEB_SECRET');
+    if (!CFG.ADMIN_WEB_SESSION_SECRET) missing.push('ADMIN_WEB_SESSION_SECRET');
+    if (!CFG.ADMIN_WEB_APPROVER_TG_IDS?.length) missing.push('ADMIN_WEB_APPROVER_TG_IDS or SUPER_ADMIN_TG_IDS');
+  }
 
   if (missing.length) {
     throw new Error(`Missing env: ${missing.join(', ')}`);

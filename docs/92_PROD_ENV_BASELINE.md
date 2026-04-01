@@ -47,6 +47,15 @@
 - `QSTASH_NEXT_SIGNING_KEY=<set>`
 - `QSTASH_RETRY_MAX=5`
 
+### Admin Web sidecar (optional)
+- `ADMIN_WEB_ENABLED=0`
+- `ADMIN_WEB_SECRET=<set-if-enabled>`
+- `ADMIN_WEB_SESSION_SECRET=<set-if-enabled>`
+- `ADMIN_WEB_APPROVER_TG_IDS=<set-if-enabled-or-use-super-admins>`
+- `ADMIN_WEB_LOGIN_TTL_SEC=300`
+- `ADMIN_WEB_SESSION_TTL_SEC=28800`
+- `ADMIN_WEB_IDLE_TIMEOUT_SEC=1800`
+
 ### Payments (Stars)
 - `PAYMENTS_PROVIDER_TOKEN=<set>`
 - `PAYMENTS_PAYLOAD_HMAC_KEY=<32+ bytes secret>`
