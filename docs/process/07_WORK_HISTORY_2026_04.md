@@ -106,3 +106,22 @@ Acceptance / notes:
 - added founder-only `/admin/founder` read surface and split sidebar navigation into `Оператор` and `Founder`;
 - added `getFounderSummary()` read model with founder-safe auth/session policy, Founder Sale snapshot, control boundaries, warnings, hints, and recent founder audit;
 - added `scripts/smoke-admin-web-founder-contract.js` and wired it into package + source preflight.
+
+
+## STEP508 — Notices / Comms usable v2
+
+Date: 2026-04-02
+
+Scope:
+- upgraded `/admin/comms` from a read-only diagnostics page into a safe operator workspace while staying inside the existing hobby-safe collapsed API surface;
+- extended `src/lib/adminWeb/readModels.js` so `getCommsSummary()` now returns drafts, recent notices, outbox snapshot, warnings, hints, and recent comms audit in one aggregated snapshot;
+- added `src/lib/adminWeb/comms.js` with safe write helpers for `create_notice_draft`, `update_notice_draft`, and founder-only `test_send_notice`;
+- extended `api/admin-web-write.js` with the new comms actions while keeping live send/retry/queue controls out of scope;
+- rebuilt the `/admin/comms` UI in `scripts/admin-web.js` so the page now includes a drafts list, inline editor, preview, founder-only test-send button, recent notices, outbox snapshot, and comms audit;
+- updated `styles/admin-web.css` for the draft editor / preview presentation;
+- strengthened `scripts/smoke-admin-web-comms-contract.js` to cover the new v2 contract.
+
+Acceptance / notes:
+- comms workspace remains hobby-safe: one read request on load, explicit writes only, no polling, no cron dependency, no route explosion;
+- internal draft label/title reuses `broadcasts.draft_caption` for text-only web-admin drafts to avoid a migration in this step;
+- live send stays out of scope and founder-only `test_send_notice` sends the preview only to the current founder Telegram actor.

@@ -370,3 +370,26 @@ body {
 }
 
 .aw-mini-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.aw-row-between {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.aw-preview-card strong {
+  margin-top: 10px;
+  font-size: 22px;
+}
+.aw-preview-card small {
+  margin-top: 4px;
+}
+.aw-preview-body {
+  margin-top: 12px;
+  white-space: pre-wrap;
+  color: var(--text);
+  line-height: 1.5;
+  border: 1px solid rgba(132,176,255,0.12);
+  background: rgba(255,255,255,0.03);
+  border-radius: 16px;
+  padding: 14px;
+}

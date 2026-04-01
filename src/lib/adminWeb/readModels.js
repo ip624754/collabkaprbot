@@ -367,7 +367,20 @@ function commsOverallState(summary = {}) {
   return 'ok';
 }
 
-function buildCommsWarnings(summary = {}) {
+function normalizeCommsAudience(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ all: 'all', brands: 'brands', creators: 'creators', curators: 'curators', managers: 'managers' })[key] || 'all';
+}
+
+function buildDraftTitle(row = {}) {
+  const explicit = String(row.draft_caption || '').trim();
+  if (explicit) return explicit.slice(0, 80);
+  const text = String(row.draft_text || '').trim();
+  if (!text) return 'Untitled draft';
+  return text.split(/\n+/)[0].trim().slice(0, 80) || 'Untitled draft';
+}
+
+function buildCommsWarnings(summary = {}, extra = {}) {
   const warnings = [];
   if (!summary.available) {
     warnings.push({ level: 'warning', message: 'Comms workspace недоступен.', source: 'comms' });
@@ -377,31 +390,48 @@ function buildCommsWarnings(summary = {}) {
   if (Number(summary.blocked || 0) > 0) warnings.push({ level: 'warning', message: `Есть blocked deliveries: ${Number(summary.blocked || 0)}`, source: 'outbox' });
   if (Number(summary.failed || 0) > 0) warnings.push({ level: 'warning', message: `Есть failed deliveries: ${Number(summary.failed || 0)}`, source: 'outbox' });
   if (Number(summary.deferred || 0) > 0 || Number(summary.quarantined || 0) > 0) warnings.push({ level: 'warning', message: `Есть deferred/quarantined retries: ${Number(summary.deferred || 0) + Number(summary.quarantined || 0)}`, source: 'outbox' });
+  if (Number(extra.draftsWithoutTest || 0) > 0) warnings.push({ level: 'info', message: `Есть draft без founder test-send: ${Number(extra.draftsWithoutTest || 0)}`, source: 'drafts' });
   if (!warnings.length) warnings.push({ level: 'info', message: 'Явных comms-предупреждений нет.', source: 'comms' });
   return warnings;
 }
 
-function buildCommsHints(summary = {}) {
+function buildCommsHints(summary = {}, extra = {}) {
   if (!summary.available) {
     return [{ kind: 'warning', message: 'Broadcasts / outbox таблицы недоступны. Проверь schema и runtime baseline.' }];
   }
   const hints = [];
-  if (Number(summary.active || 0) > 0) hints.push({ kind: 'warning', message: 'Есть активные notices. Для действий использовать bot/admin fallback, web surface остаётся read-only.' });
-  if (Number(summary.drafts || 0) > 0) hints.push({ kind: 'info', message: 'Есть PENDING notices. Это полезный read-only срез перед ручным запуском из bot/admin.' });
-  if (Number(summary.blocked || 0) > 0 || Number(summary.failed || 0) > 0) hints.push({ kind: 'warning', message: 'Есть blocked / failed deliveries. Проверь outbox и operator fallback в Telegram-admin.' });
-  if (!hints.length) hints.push({ kind: 'info', message: 'Read-only режим: notices и outbox выглядят стабильно.' });
-  return hints.slice(0, 3);
+  if (Number(summary.active || 0) > 0) hints.push({ kind: 'warning', message: 'Есть активные notices. Live send по-прежнему остаётся вне web и должен идти через bot/admin fallback.' });
+  if (Number(summary.drafts || 0) > 0) hints.push({ kind: 'info', message: 'Drafts можно править в web и проверять через founder test-send без live mass send.' });
+  if (Number(summary.blocked || 0) > 0 || Number(summary.failed || 0) > 0) hints.push({ kind: 'warning', message: 'Есть blocked / failed deliveries. Проверь outbox snapshot и operator fallback в Telegram-admin.' });
+  if (Number(extra.recentTestSends || 0) > 0) hints.push({ kind: 'info', message: `Недавние founder test-sends: ${Number(extra.recentTestSends || 0)}.` });
+  if (!hints.length) hints.push({ kind: 'info', message: 'Drafts, notices и outbox выглядят спокойно. Web workspace остаётся safe и read-first.' });
+  return hints.slice(0, 4);
 }
 
 export async function getCommsSummary() {
   const out = {
     updatedAt: new Date().toISOString(),
     overall: { state: 'unknown', label: 'Данные пока недоступны' },
-    summary: { total: 0, drafts: 0, active: 0, doneRecent: 0, blocked: 0, warnings: 0 },
+    summary: {
+      drafts: 0,
+      recentNotices: 0,
+      outboxPending: 0,
+      outboxWarnings: 0,
+      recentTestSends: 0,
+      warnings: 0,
+      total: 0,
+      active: 0,
+      doneRecent: 0,
+      blocked: 0,
+    },
     warnings: [{ level: 'info', message: 'Notice rows пока отсутствуют.', source: 'comms' }],
-    groups: { queued: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0 },
+    drafts: [],
+    recentNotices: [],
+    outbox: { queued: 0, processing: 0, warning: 0, failed: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0 },
+    hints: [{ kind: 'info', message: 'Live send из web отключён. Используйте draft preview и founder test-send.' }],
+    recentAdminAudit: [],
     recentBroadcasts: [],
-    hints: [{ kind: 'info', message: 'Read-only режим: для любых live-send / retries использовать bot/admin fallback.' }],
+    groups: { queued: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0 },
   };
 
   let summary = {
@@ -473,7 +503,7 @@ export async function getCommsSummary() {
     // keep defaults
   }
 
-  let recentBroadcasts = [];
+  let recentRows = [];
   if (summary.available) {
     try {
       const r = await pool.query(`
@@ -482,25 +512,29 @@ export async function getCommsSummary() {
           u.tg_username,
           coalesce(st.sent, 0)::int as sent_count,
           coalesce(st.queued, 0)::int as queued_count,
-          coalesce(st.blocked, 0)::int as blocked_count
+          coalesce(st.blocked, 0)::int as blocked_count,
+          coalesce(st.failed, 0)::int as failed_count
         from broadcasts b
         left join users u on u.id = b.created_by_user_id
         left join lateral (
           select
             count(*) filter (where status = 'sent') as sent,
             count(*) filter (where status = 'queued') as queued,
-            count(*) filter (where status = 'blocked') as blocked
+            count(*) filter (where status = 'blocked') as blocked,
+            count(*) filter (where status = 'failed') as failed
           from broadcast_sent_log sl
           where sl.broadcast_id = b.id
         ) st on true
-        order by b.created_at desc
-        limit 12
+        order by b.updated_at desc, b.id desc
+        limit 20
       `);
-      recentBroadcasts = Array.isArray(r.rows) ? r.rows.map((row) => ({
+      recentRows = Array.isArray(r.rows) ? r.rows.map((row) => ({
         id: Number(row.id || 0),
         status: normalizeBroadcastStatus(row.status),
-        audience: String(row.audience || 'all').trim().toLowerCase(),
+        audience: normalizeCommsAudience(row.audience),
         kind: String(row.draft_type || '').trim() || 'notice',
+        title: buildDraftTitle(row),
+        bodyText: String(row.draft_text || '').trim(),
         preview: String(row.draft_text || row.draft_caption || '').trim().slice(0, 140),
         totalCount: Number(row.total_count || 0),
         createdByLabel: row.tg_username ? `@${String(row.tg_username).trim()}` : 'operator',
@@ -510,38 +544,62 @@ export async function getCommsSummary() {
           sent: Number(row.sent_count || 0),
           queued: Number(row.queued_count || 0),
           blocked: Number(row.blocked_count || 0),
+          failed: Number(row.failed_count || 0),
         },
       })) : [];
     } catch {
-      recentBroadcasts = [];
+      recentRows = [];
     }
   }
+
+  const drafts = recentRows.filter((item) => item.status === 'pending').slice(0, 8);
+  const recentNotices = recentRows.filter((item) => item.status !== 'pending').slice(0, 10);
+  const recentAdminAudit = (await getRecentAdminWebAudit(20)).filter((item) => String(item?.section || '') === 'comms');
+  const recentTestSends = recentAdminAudit.filter((item) => String(item?.action || '') === 'test_send_notice').length;
+  const warnings = buildCommsWarnings(summary, { draftsWithoutTest: drafts.length && !recentTestSends ? drafts.length : 0 });
 
   out.updatedAt = summary.latestEventAt || out.updatedAt;
   out.overall = {
     state: commsOverallState(summary),
     label: summary.available
-      ? (commsOverallState(summary) === 'ok' ? 'Notices и outbox выглядят стабильно' : 'Есть comms-сигналы, требующие проверки')
+      ? (commsOverallState(summary) === 'ok' ? 'Drafts, notices и outbox выглядят стабильно' : 'Есть comms-сигналы, требующие проверки')
       : 'Comms диагностика недоступна',
   };
   out.summary = {
+    drafts: drafts.length,
+    recentNotices: recentNotices.length,
+    outboxPending: Number(summary.queued || 0) + Number(summary.deferred || 0) + Number(summary.quarantined || 0),
+    outboxWarnings: Number(summary.blocked || 0) + Number(summary.failed || 0),
+    recentTestSends,
+    warnings: warnings.filter((item) => String(item.level || '') !== 'info').length,
     total: summary.total,
-    drafts: summary.drafts,
     active: summary.active,
     doneRecent: summary.doneRecent,
     blocked: Number(summary.blocked || 0) + Number(summary.failed || 0),
-    warnings: Number(summary.errors || 0) + Number(summary.stopped || 0) + Number(summary.cooldownActive || 0) + Number(summary.blocked || 0) + Number(summary.failed || 0) + Number(summary.deferred || 0) + Number(summary.quarantined || 0),
+  };
+  out.warnings = warnings;
+  out.drafts = drafts;
+  out.recentNotices = recentNotices;
+  out.recentBroadcasts = recentRows;
+  out.outbox = {
+    queued: Number(summary.queued || 0),
+    processing: Number(summary.deferred || 0),
+    warning: Number(summary.blocked || 0) + Number(summary.quarantined || 0),
+    failed: Number(summary.failed || 0),
+    sent: Number(summary.sent || 0),
+    blocked: Number(summary.blocked || 0),
+    deferred: Number(summary.deferred || 0),
+    quarantined: Number(summary.quarantined || 0),
   };
   out.groups = {
-    queued: summary.queued,
-    sent: summary.sent,
-    blocked: Number(summary.blocked || 0) + Number(summary.failed || 0),
-    deferred: summary.deferred,
-    quarantined: summary.quarantined,
+    queued: out.outbox.queued,
+    sent: out.outbox.sent,
+    blocked: out.outbox.blocked + out.outbox.failed,
+    deferred: out.outbox.deferred,
+    quarantined: out.outbox.quarantined,
   };
-  out.warnings = buildCommsWarnings(summary);
-  out.recentBroadcasts = recentBroadcasts;
-  out.hints = buildCommsHints(summary);
+  out.hints = buildCommsHints(summary, { recentTestSends });
+  out.recentAdminAudit = recentAdminAudit.slice(0, 8);
   return out;
 }
 

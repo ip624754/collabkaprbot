@@ -493,40 +493,98 @@ function commsAudienceLabel(value) {
 
 function commsStatusClass(value) {
   const key = String(value || '').trim().toLowerCase();
-  if (key === 'done') return 'good';
-  if (key === 'running' || key === 'paused' || key === 'pending') return 'warn';
-  if (key === 'error' || key === 'stopped' || key === 'blocked') return 'bad';
+  if (key === 'done' || key === 'sent') return 'good';
+  if (key === 'running' || key === 'paused' || key === 'pending' || key === 'queued') return 'warn';
+  if (key === 'error' || key === 'stopped' || key === 'blocked' || key === 'failed') return 'bad';
   return '';
 }
 
 function commsStatusLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ pending: 'pending', running: 'running', paused: 'paused', done: 'done', error: 'error', stopped: 'stopped', blocked: 'blocked', unknown: 'unknown' })[key] || (key || 'unknown');
+  return ({ pending: 'draft', running: 'running', paused: 'paused', done: 'done', error: 'error', stopped: 'stopped', blocked: 'blocked', sent: 'sent', failed: 'failed', queued: 'queued', unknown: 'unknown' })[key] || (key || 'unknown');
+}
+
+function normalizeCommsEditorState(model) {
+  const drafts = Array.isArray(model?.drafts) ? model.drafts : [];
+  const cur = window.__commsState || {};
+  const hasDraft = cur.draftId && drafts.some((item) => String(item.id) === String(cur.draftId));
+  if (cur.initialized && (hasDraft || !cur.draftId)) {
+    return {
+      initialized: true,
+      draftId: cur.draftId || '',
+      title: cur.title || '',
+      audience: cur.audience || 'all',
+      bodyText: cur.bodyText || '',
+    };
+  }
+  if (drafts.length) {
+    const first = drafts[0];
+    return {
+      initialized: true,
+      draftId: String(first.id || ''),
+      title: first.title || '',
+      audience: first.audience || 'all',
+      bodyText: first.bodyText || '',
+    };
+  }
+  return { initialized: true, draftId: '', title: '', audience: 'all', bodyText: '' };
+}
+
+function seedCommsEditorFromDraft(draft) {
+  window.__commsState = {
+    initialized: true,
+    draftId: String(draft?.id || ''),
+    title: draft?.title || '',
+    audience: draft?.audience || 'all',
+    bodyText: draft?.bodyText || '',
+  };
+}
+
+function resetCommsEditor() {
+  window.__commsState = { initialized: true, draftId: '', title: '', audience: 'all', bodyText: '' };
+}
+
+function syncCommsPreview() {
+  const title = document.getElementById('draftTitleInput')?.value?.trim() || 'Новый draft';
+  const audience = document.getElementById('draftAudienceInput')?.value || 'all';
+  const bodyText = document.getElementById('draftBodyInput')?.value?.trim() || 'Текст notice пока пустой.';
+  const titleNode = document.getElementById('draftPreviewTitle');
+  const metaNode = document.getElementById('draftPreviewMeta');
+  const bodyNode = document.getElementById('draftPreviewBody');
+  if (titleNode) titleNode.textContent = title;
+  if (metaNode) metaNode.textContent = `Audience · ${commsAudienceLabel(audience)}`;
+  if (bodyNode) bodyNode.textContent = bodyText;
 }
 
 function commsView(model) {
   const summary = model.summary || {};
   const warnings = Array.isArray(model.warnings) ? model.warnings : [];
-  const recentBroadcasts = Array.isArray(model.recentBroadcasts) ? model.recentBroadcasts : [];
-  const groups = model.groups || {};
+  const drafts = Array.isArray(model.drafts) ? model.drafts : [];
+  const recentNotices = Array.isArray(model.recentNotices) ? model.recentNotices : [];
+  const outbox = model.outbox || {};
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const overall = model.overall || { state: 'unknown', label: 'Данные пока недоступны' };
-  return shell('Comms', 'Read-only workspace для notices, outbox-сигналов и статусов доставки.', `
+  const recentAdminAudit = Array.isArray(model.recentAdminAudit) ? model.recentAdminAudit : [];
+  const editor = normalizeCommsEditorState(model);
+  window.__commsPageData = model;
+  window.__commsState = editor;
+  const isFounder = !!window.__adminSession?.isFounder;
+  return shell('Comms', 'Workspace для draft notices, preview и founder test-send без live mass send.', `
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
-          <h2>Сводка коммуникаций</h2>
+          <h2>Comms workspace</h2>
           <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)}</p>
         </div>
         <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
-        <div class="aw-card aw-runtime-card"><span>Total notices</span><strong>${Number(summary.total || 0)}</strong><small>Все broadcast rows</small></div>
-        <div class="aw-card aw-runtime-card"><span>Drafts</span><strong class="aw-status ${Number(summary.drafts || 0) > 0 ? 'warn' : 'good'}">${Number(summary.drafts || 0)}</strong><small>PENDING / waiting to start</small></div>
-        <div class="aw-card aw-runtime-card"><span>Active</span><strong class="aw-status ${Number(summary.active || 0) > 0 ? 'warn' : 'good'}">${Number(summary.active || 0)}</strong><small>RUNNING / PAUSED</small></div>
-        <div class="aw-card aw-runtime-card"><span>Recent done</span><strong>${Number(summary.doneRecent || 0)}</strong><small>DONE за 7 дней</small></div>
-        <div class="aw-card aw-runtime-card"><span>Outbox blocked</span><strong class="aw-status ${Number(summary.blocked || 0) > 0 ? 'bad' : 'good'}">${Number(summary.blocked || 0)}</strong><small>blocked / failed</small></div>
-        <div class="aw-card aw-runtime-card"><span>Warnings</span><strong class="aw-status ${Number(summary.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.warnings || 0)}</strong><small>cooldown / stalled / fallback</small></div>
+        <div class="aw-card aw-runtime-card"><span>Drafts</span><strong>${Number(summary.drafts || 0)}</strong><small>Можно редактировать и preview</small></div>
+        <div class="aw-card aw-runtime-card"><span>Recent notices</span><strong>${Number(summary.recentNotices || 0)}</strong><small>Недавние notices</small></div>
+        <div class="aw-card aw-runtime-card"><span>Outbox pending</span><strong class="aw-status ${Number(summary.outboxPending || 0) > 0 ? 'warn' : 'good'}">${Number(summary.outboxPending || 0)}</strong><small>queued / processing</small></div>
+        <div class="aw-card aw-runtime-card"><span>Outbox warnings</span><strong class="aw-status ${Number(summary.outboxWarnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.outboxWarnings || 0)}</strong><small>warning / failed</small></div>
+        <div class="aw-card aw-runtime-card"><span>Founder test sends</span><strong>${Number(summary.recentTestSends || 0)}</strong><small>Последние audit-сигналы</small></div>
+        <div class="aw-card aw-runtime-card"><span>Comms warnings</span><strong class="aw-status ${Number(summary.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.warnings || 0)}</strong><small>Read-first snapshot</small></div>
       </div>
     </section>
 
@@ -543,45 +601,109 @@ function commsView(model) {
     </section>
 
     <div class="aw-split aw-section aw-runtime-layout">
-      <section class="aw-surface aw-stack">
-        <h2>Recent notices</h2>
-        <div class="aw-table-wrap">
-          <table class="aw-table">
-            <thead>
-              <tr>
-                <th>Notice</th>
-                <th>Audience</th>
-                <th>Status</th>
-                <th>Outbox</th>
-                <th>Preview</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${recentBroadcasts.length ? recentBroadcasts.map((item) => `
+      <section class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <div class="aw-runtime-head">
+            <div>
+              <h2>Drafts</h2>
+              <p class="aw-muted">Safe draft workspace: create / update / preview. Live send из web выключен.</p>
+            </div>
+            <div class="aw-actions">
+              <button class="aw-button ghost" id="newDraftBtn">Новый draft</button>
+            </div>
+          </div>
+          <div class="aw-list">
+            ${drafts.length ? drafts.map((item) => `
+              <div class="aw-list-item">
+                <div class="aw-row-between">
+                  <div>
+                    <strong>${escapeHtml(item.title || 'Untitled draft')}</strong>
+                    <small>${escapeHtml(commsAudienceLabel(item.audience))} · ${formatDate(item.updatedAt)} · ${escapeHtml(item.createdByLabel || 'operator')}</small>
+                  </div>
+                  <div class="aw-actions">
+                    <span class="aw-status ${commsStatusClass(item.status)}">${escapeHtml(commsStatusLabel(item.status))}</span>
+                    <button class="aw-button secondary" data-edit-draft="${Number(item.id || 0)}" data-draft-title="${encodeURIComponent(item.title || '')}" data-draft-audience="${encodeURIComponent(item.audience || 'all')}" data-draft-body="${encodeURIComponent(item.bodyText || '')}">Открыть</button>
+                  </div>
+                </div>
+                <small>${escapeHtml(item.preview || 'Черновик без текста')}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Drafts пока отсутствуют.</div>'}
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <div class="aw-runtime-head">
+            <div>
+              <h2>${editor.draftId ? 'Редактирование draft' : 'Новый draft'}</h2>
+              <p class="aw-muted">Сохраняется только по явному действию. Blank body не допускается.</p>
+            </div>
+            ${editor.draftId ? `<span class="aw-chip">draft #${escapeHtml(editor.draftId)}</span>` : '<span class="aw-chip">new</span>'}
+          </div>
+          <input id="draftIdInput" type="hidden" value="${escapeHtml(editor.draftId || '')}" />
+          <div class="aw-stack aw-gap-xs">
+            <label class="aw-muted" for="draftTitleInput">Внутренний label</label>
+            <input id="draftTitleInput" class="aw-input" maxlength="120" placeholder="Например: April creator notice" value="${escapeHtml(editor.title || '')}" />
+          </div>
+          <div class="aw-stack aw-gap-xs">
+            <label class="aw-muted" for="draftAudienceInput">Audience</label>
+            <select id="draftAudienceInput" class="aw-select">
+              ${['all','brands','creators','curators','managers'].map((item) => `<option value="${item}" ${editor.audience === item ? 'selected' : ''}>${item}</option>`).join('')}
+            </select>
+          </div>
+          <div class="aw-stack aw-gap-xs">
+            <label class="aw-muted" for="draftBodyInput">Body</label>
+            <textarea id="draftBodyInput" class="aw-textarea" maxlength="4000" placeholder="Текст notice для preview и founder test-send">${escapeHtml(editor.bodyText || '')}</textarea>
+          </div>
+          <div class="aw-actions">
+            <button class="aw-button" id="saveDraftBtn">${editor.draftId ? 'Сохранить draft' : 'Создать draft'}</button>
+            ${isFounder ? `<button class="aw-button secondary" id="testSendDraftBtn" ${editor.draftId ? '' : 'disabled'}>Founder test send</button>` : ''}
+          </div>
+          <div class="aw-card aw-preview-card">
+            <span>Preview</span>
+            <strong id="draftPreviewTitle">${escapeHtml(editor.title || 'Новый draft')}</strong>
+            <small id="draftPreviewMeta">Audience · ${escapeHtml(commsAudienceLabel(editor.audience || 'all'))}</small>
+            <div class="aw-preview-body" id="draftPreviewBody">${escapeHtml(editor.bodyText || 'Текст notice пока пустой.')}</div>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Recent notices</h2>
+          <div class="aw-table-wrap">
+            <table class="aw-table">
+              <thead>
                 <tr>
-                  <td><strong>#${Number(item.id || 0)}</strong><small>${escapeHtml(item.createdByLabel || 'operator')} · ${formatDate(item.createdAt)}</small></td>
-                  <td>${escapeHtml(commsAudienceLabel(item.audience))}</td>
-                  <td><span class="aw-status ${commsStatusClass(item.status)}">${escapeHtml(commsStatusLabel(item.status))}</span></td>
-                  <td><small>sent ${Number(item.outbox?.sent || 0)} · queued ${Number(item.outbox?.queued || 0)} · blocked ${Number(item.outbox?.blocked || 0)}</small></td>
-                  <td><small>${escapeHtml(item.preview || 'Черновик без текста')}</small></td>
-                  <td>${formatDate(item.updatedAt)}</td>
+                  <th>Notice</th>
+                  <th>Audience</th>
+                  <th>Status</th>
+                  <th>Outbox</th>
+                  <th>Updated</th>
                 </tr>
-              `).join('') : '<tr><td colspan="6" class="aw-empty">Notice rows пока отсутствуют.</td></tr>'}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                ${recentNotices.length ? recentNotices.map((item) => `
+                  <tr>
+                    <td><strong>${escapeHtml(item.title || `#${Number(item.id || 0)}`)}</strong><small>${escapeHtml(item.preview || 'Без текста')} · ${escapeHtml(item.createdByLabel || 'operator')}</small></td>
+                    <td>${escapeHtml(commsAudienceLabel(item.audience))}</td>
+                    <td><span class="aw-status ${commsStatusClass(item.status)}">${escapeHtml(commsStatusLabel(item.status))}</span></td>
+                    <td><small>sent ${Number(item.outbox?.sent || 0)} · queued ${Number(item.outbox?.queued || 0)} · failed ${Number(item.outbox?.failed || 0)}</small></td>
+                    <td>${formatDate(item.updatedAt)}</td>
+                  </tr>
+                `).join('') : '<tr><td colspan="5" class="aw-empty">Recent notices пока отсутствуют.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <aside class="aw-stack">
         <section class="aw-surface aw-stack">
-          <h2>Outbox groups</h2>
+          <h2>Outbox snapshot</h2>
           <div class="aw-list">
-            <div class="aw-list-item"><strong>queued</strong><small>${Number(groups.queued || 0)}</small></div>
-            <div class="aw-list-item"><strong>sent</strong><small>${Number(groups.sent || 0)}</small></div>
-            <div class="aw-list-item"><strong>blocked</strong><small>${Number(groups.blocked || 0)}</small></div>
-            <div class="aw-list-item"><strong>deferred</strong><small>${Number(groups.deferred || 0)}</small></div>
-            <div class="aw-list-item"><strong>quarantined</strong><small>${Number(groups.quarantined || 0)}</small></div>
+            <div class="aw-list-item"><strong>queued</strong><small>${Number(outbox.queued || 0)}</small></div>
+            <div class="aw-list-item"><strong>processing</strong><small>${Number(outbox.processing || 0)}</small></div>
+            <div class="aw-list-item"><strong>warning</strong><small>${Number(outbox.warning || 0)}</small></div>
+            <div class="aw-list-item"><strong>failed</strong><small>${Number(outbox.failed || 0)}</small></div>
+            <div class="aw-list-item"><strong>sent</strong><small>${Number(outbox.sent || 0)}</small></div>
           </div>
         </section>
 
@@ -594,6 +716,18 @@ function commsView(model) {
                 <small>${escapeHtml(item.message || '')}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Последние comms-действия</h2>
+          <div class="aw-list">
+            ${recentAdminAudit.length ? recentAdminAudit.map((item) => `
+              <div class="aw-list-item">
+                <strong>${escapeHtml(item.action || 'unknown')}</strong>
+                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || 'fallback'}${item.targetId ? ` · notice ${escapeHtml(item.targetId)}` : ''}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока нет действий.</div>'}
           </div>
         </section>
       </aside>
@@ -907,7 +1041,72 @@ function bindShell() {
     window.__loginState = { error: 'Все web-сессии отозваны. Войди заново.' };
     render();
   });
+
+  app.querySelectorAll('[data-edit-draft]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      seedCommsEditorFromDraft({
+        id: btn.getAttribute('data-edit-draft') || '',
+        title: decodeURIComponent(btn.getAttribute('data-draft-title') || ''),
+        audience: decodeURIComponent(btn.getAttribute('data-draft-audience') || 'all'),
+        bodyText: decodeURIComponent(btn.getAttribute('data-draft-body') || ''),
+      });
+      app.innerHTML = commsView(window.__commsPageData || {});
+      bindShell();
+    });
+  });
+
+  document.getElementById('newDraftBtn')?.addEventListener('click', () => {
+    resetCommsEditor();
+    app.innerHTML = commsView(window.__commsPageData || {});
+    bindShell();
+  });
+
+  const updateCommsEditorState = () => {
+    window.__commsState = {
+      initialized: true,
+      draftId: document.getElementById('draftIdInput')?.value || '',
+      title: document.getElementById('draftTitleInput')?.value || '',
+      audience: document.getElementById('draftAudienceInput')?.value || 'all',
+      bodyText: document.getElementById('draftBodyInput')?.value || '',
+    };
+    syncCommsPreview();
+  };
+  document.getElementById('draftTitleInput')?.addEventListener('input', updateCommsEditorState);
+  document.getElementById('draftAudienceInput')?.addEventListener('change', updateCommsEditorState);
+  document.getElementById('draftBodyInput')?.addEventListener('input', updateCommsEditorState);
+
+  document.getElementById('saveDraftBtn')?.addEventListener('click', async () => {
+    updateCommsEditorState();
+    const payload = {
+      draftId: window.__commsState?.draftId || '',
+      title: window.__commsState?.title || '',
+      audience: window.__commsState?.audience || 'all',
+      bodyText: window.__commsState?.bodyText || '',
+    };
+    const action = payload.draftId ? 'update_notice_draft' : 'create_notice_draft';
+    const res = await api(`/api/admin-web-write?action=${action}`, { method: 'POST', body: JSON.stringify(payload) });
+    if (!res.ok) {
+      alert(`Не удалось сохранить draft: ${res.data?.error || 'unknown'}`);
+      return;
+    }
+    if (res.data?.draft) seedCommsEditorFromDraft(res.data.draft);
+    await render();
+  });
+
+  document.getElementById('testSendDraftBtn')?.addEventListener('click', async () => {
+    const draftId = document.getElementById('draftIdInput')?.value || '';
+    if (!draftId) return;
+    if (!confirm('Founder test send отправит preview notice в твой Telegram. Продолжить?')) return;
+    const res = await api('/api/admin-web-write?action=test_send_notice', { method: 'POST', body: JSON.stringify({ draftId }) });
+    if (!res.ok) {
+      alert(`Не удалось выполнить test send: ${res.data?.error || 'unknown'}`);
+      return;
+    }
+    alert('Founder test send отправлен в Telegram.');
+    await render();
+  });
 }
+
 
 function bindLogin() {
   document.getElementById('startLoginBtn')?.addEventListener('click', async () => {

@@ -9,10 +9,14 @@ const js = read('scripts/admin-web.js');
 for (const token of [
   '/admin/comms',
   '/api/admin-web-read?section=comms',
-  'Comms workspace',
+  'create_notice_draft',
+  'update_notice_draft',
+  'test_send_notice',
+  'Drafts',
   'Recent notices',
-  'Outbox groups',
-  'Явных comms-предупреждений нет.',
+  'Outbox snapshot',
+  'Founder test send',
+  'Последние comms-действия',
 ]) {
   assert.ok(js.includes(token), `comms UI must include ${token}`);
 }
@@ -20,15 +24,36 @@ for (const token of [
 const models = read('src/lib/adminWeb/readModels.js');
 for (const token of [
   'export async function getCommsSummary()',
-  'recentBroadcasts',
-  'buildCommsWarnings',
-  'buildCommsHints',
-  'normalizeBroadcastStatus',
+  'recentNotices',
+  'recentAdminAudit',
+  'draftsWithoutTest',
+  'recentTestSends',
 ]) {
   assert.ok(models.includes(token), `comms read model must include ${token}`);
 }
 
+const comms = read('src/lib/adminWeb/comms.js');
+for (const token of [
+  'createNoticeDraftForActor',
+  'updateNoticeDraftForActor',
+  'testSendNoticeDraftToActor',
+  'create_notice_draft',
+  'test_send_notice',
+]) {
+  assert.ok(comms.includes(token), `comms write helper must include ${token}`);
+}
+
 const apiRead = read('api/admin-web-read.js');
 assert.ok(apiRead.includes("section === 'comms'"), 'admin-web-read must handle comms section');
+
+const apiWrite = read('api/admin-web-write.js');
+for (const token of [
+  "action === 'create_notice_draft'",
+  "action === 'update_notice_draft'",
+  "action === 'test_send_notice'",
+  "founder_only",
+]) {
+  assert.ok(apiWrite.includes(token), `admin-web-write must include ${token}`);
+}
 
 console.log('✅ smoke admin-web comms contract OK');
