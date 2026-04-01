@@ -265,7 +265,7 @@ function runtimeView(model) {
 }
 
 async function ensureSession() {
-  const res = await api('/api/admin-web/auth/me');
+  const res = await api('/api/admin-web-auth?action=me');
   if (!res.ok) {
     window.__adminSession = null;
     return null;
@@ -287,22 +287,22 @@ async function render() {
     return render();
   }
   if (route.page === 'overview') {
-    const res = await api('/api/admin-web/overview');
+    const res = await api('/api/admin-web-read?section=overview');
     app.innerHTML = overviewView(res.data.data || {});
   } else if (route.page === 'users') {
     const state = window.__usersState || { q: '', segment: 'all' };
     const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', limit: '20', page: '0' });
-    const res = await api(`/api/admin-web/users?${params}`);
+    const res = await api(`/api/admin-web-read?section=users&${params}`);
     app.innerHTML = usersView(res.data.data || { items: [] });
   } else if (route.page === 'userDetail') {
-    const res = await api(`/api/admin-web/user?id=${encodeURIComponent(route.userId)}`);
+    const res = await api(`/api/admin-web-read?section=user&id=${encodeURIComponent(route.userId)}`);
     if (!res.ok) {
       app.innerHTML = shell('User not found', 'Проверь user_id и попробуй снова.', `<div class="aw-surface aw-empty">User card not found.</div>`, session);
     } else {
       app.innerHTML = userDetailView(res.data.data || {});
     }
   } else if (route.page === 'runtime') {
-    const res = await api('/api/admin-web/runtime');
+    const res = await api('/api/admin-web-read?section=runtime');
     app.innerHTML = runtimeView(res.data.data || {});
   }
   bindShell();
@@ -323,7 +323,7 @@ function bindLinks() {
 function bindShell() {
   bindLinks();
   document.getElementById('logoutBtn')?.addEventListener('click', async () => {
-    await api('/api/admin-web/auth/logout', { method: 'POST' });
+    await api('/api/admin-web-auth?action=logout', { method: 'POST' });
     history.replaceState({}, '', '/admin/login');
     window.__loginState = {};
     render();
@@ -346,13 +346,13 @@ function bindShell() {
   document.getElementById('saveNoteBtn')?.addEventListener('click', async () => {
     const userId = document.getElementById('saveNoteBtn').getAttribute('data-user-id');
     const text = document.getElementById('noteText')?.value || '';
-    const res = await api('/api/admin-web/user-note', { method: 'POST', body: JSON.stringify({ userId, action: 'set', text }) });
+    const res = await api('/api/admin-web-write?action=set_note', { method: 'POST', body: JSON.stringify({ userId, text }) });
     if (!res.ok) alert(`Не удалось сохранить note: ${res.data?.error || 'unknown'}`);
     else render();
   });
   document.getElementById('clearNoteBtn')?.addEventListener('click', async () => {
     const userId = document.getElementById('clearNoteBtn').getAttribute('data-user-id');
-    const res = await api('/api/admin-web/user-note', { method: 'POST', body: JSON.stringify({ userId, action: 'clear' }) });
+    const res = await api('/api/admin-web-write?action=clear_note', { method: 'POST', body: JSON.stringify({ userId }) });
     if (!res.ok) alert(`Не удалось очистить note: ${res.data?.error || 'unknown'}`);
     else render();
   });
@@ -361,7 +361,7 @@ function bindShell() {
 function bindLogin() {
   document.getElementById('startLoginBtn')?.addEventListener('click', async () => {
     const secret = document.getElementById('secretInput')?.value || '';
-    const res = await api('/api/admin-web/auth/start', { method: 'POST', body: JSON.stringify({ secret }) });
+    const res = await api('/api/admin-web-auth?action=start', { method: 'POST', body: JSON.stringify({ secret }) });
     if (!res.ok) {
       window.__loginState = { error: res.data?.error || 'login_failed' };
       return render();
@@ -372,7 +372,7 @@ function bindLogin() {
   document.getElementById('verifyCodeBtn')?.addEventListener('click', async () => {
     const challengeId = window.__loginState?.challengeId || '';
     const code = document.getElementById('otpInput')?.value || '';
-    const res = await api('/api/admin-web/auth/verify-code', { method: 'POST', body: JSON.stringify({ challengeId, code }) });
+    const res = await api('/api/admin-web-auth?action=verify_code', { method: 'POST', body: JSON.stringify({ challengeId, code }) });
     if (!res.ok) {
       window.__loginState = { challengeId, error: res.data?.error || 'invalid_code' };
       return render();
@@ -384,7 +384,7 @@ function bindLogin() {
   document.getElementById('checkStatusBtn')?.addEventListener('click', async () => {
     const challengeId = window.__loginState?.challengeId || '';
     if (!challengeId) return;
-    const res = await api(`/api/admin-web/auth/status?challengeId=${encodeURIComponent(challengeId)}`);
+    const res = await api(`/api/admin-web-auth?action=status&challengeId=${encodeURIComponent(challengeId)}`);
     if (!res.ok) {
       window.__loginState = { challengeId, error: res.data?.error || 'status_failed' };
       return render();

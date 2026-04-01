@@ -96,7 +96,7 @@ export function buildDecisionUrl(challengeId, decision, actorTgId) {
   const actor = Number(actorTgId || 0) || 0;
   const payload = `${challengeId}:${decision}:${actor}:${exp}`;
   const sig = hmacSha256(getSigningSecret(), payload);
-  return `${base}/api/admin-web/auth/decision?challengeId=${encodeURIComponent(challengeId)}&decision=${encodeURIComponent(decision)}&actor=${actor}&exp=${exp}&sig=${sig}`;
+  return `${base}/api/admin-web-auth?action=decision&challengeId=${encodeURIComponent(challengeId)}&decision=${encodeURIComponent(decision)}&actor=${actor}&exp=${exp}&sig=${sig}`;
 }
 
 export async function getChallenge(challengeId) {

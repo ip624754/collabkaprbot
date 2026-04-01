@@ -7,8 +7,8 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 const API_DIR = path.join(ROOT, 'api');
 
-const WARN_BUDGET = Number.parseInt(process.env.VERCEL_HOBBY_FUNCTION_BUDGET_WARN || '9', 10);
-const FAIL_BUDGET = Number.parseInt(process.env.VERCEL_HOBBY_FUNCTION_BUDGET_FAIL || '11', 10);
+const WARN_BUDGET = Number.parseInt(process.env.VERCEL_HOBBY_FUNCTION_BUDGET_WARN || '10', 10);
+const MAX_BUDGET = Number.parseInt(process.env.VERCEL_HOBBY_FUNCTION_BUDGET_MAX || '12', 10);
 const EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts']);
 const IGNORE_DIRS = new Set([
   '_ig_oauth_parked',
@@ -50,12 +50,12 @@ const files = walkFiles(API_DIR)
 const count = files.length;
 console.log(`[function-budget] Deployable API entrypoints: ${count}`);
 for (const f of files) console.log(` - ${f}`);
-console.log(`[function-budget] warn>=${WARN_BUDGET}, fail>=${FAIL_BUDGET} (Hobby hard limit is 12)`);
+console.log(`[function-budget] warn>=${WARN_BUDGET}, max=${MAX_BUDGET} (Hobby hard limit is 12)`);
 
-if (count >= FAIL_BUDGET) {
+if (count > MAX_BUDGET) {
   console.error(
     `\n[function-budget] FAIL: ${count} deployable api entrypoints detected. ` +
-    `This is too close to / beyond the Vercel Hobby limit. Reduce api/* entrypoints before deploy.`
+    `This exceeds the Vercel Hobby limit of 12. Reduce api/* entrypoints before deploy.`
   );
   process.exit(2);
 }
@@ -63,7 +63,7 @@ if (count >= FAIL_BUDGET) {
 if (count >= WARN_BUDGET) {
   console.warn(
     `\n[function-budget] WARNING: ${count} deployable api entrypoints detected. ` +
-    `You are approaching the Vercel Hobby limit; keep parked/disabled routes out of api/.`
+    `You are approaching the Vercel Hobby limit; keep parked/disabled routes out of api/ and collapse handler surfaces early.`
   );
 }
 

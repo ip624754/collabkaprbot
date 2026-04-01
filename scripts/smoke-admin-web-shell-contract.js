@@ -13,18 +13,9 @@ function assertExists(rel) {
 assertExists('admin.html');
 assertExists('styles/admin-web.css');
 assertExists('scripts/admin-web.js');
-assertExists('api/admin-web/auth/start.js');
-assertExists('api/admin-web/auth/status.js');
-assertExists('api/admin-web/auth/verify-code.js');
-assertExists('api/admin-web/auth/me.js');
-assertExists('api/admin-web/auth/logout.js');
-assertExists('api/admin-web/auth/revoke-all.js');
-assertExists('api/admin-web/auth/decision.js');
-assertExists('api/admin-web/overview.js');
-assertExists('api/admin-web/users.js');
-assertExists('api/admin-web/user.js');
-assertExists('api/admin-web/user-note.js');
-assertExists('api/admin-web/runtime.js');
+assertExists('api/admin-web-auth.js');
+assertExists('api/admin-web-read.js');
+assertExists('api/admin-web-write.js');
 assertExists('src/lib/adminWeb/auth.js');
 assertExists('src/lib/adminWeb/readModels.js');
 assertExists('src/lib/adminWeb/notes.js');
@@ -52,9 +43,12 @@ assert.ok(html.includes('/styles/admin-web.css'), 'admin shell must reference ad
 assert.ok(html.includes('/scripts/admin-web.js'), 'admin shell must reference admin js');
 
 const js = read('scripts/admin-web.js');
-for (const token of ['/api/admin-web/overview', '/api/admin-web/users', '/api/admin-web/user', '/api/admin-web/runtime']) {
+for (const token of ['/api/admin-web-read?section=overview', '/api/admin-web-read?section=users', '/api/admin-web-read?section=user', '/api/admin-web-read?section=runtime']) {
   assert.ok(js.includes(token), `admin web JS must call ${token}`);
 }
 assert.ok(js.includes('No polling') || js.includes('no polling') || js.includes('manual'), 'admin web JS should present manual-refresh / no-polling operator UX');
 
 console.log('✅ smoke admin-web-shell contract OK');
+
+assert.ok(!exists('api/admin-web/overview.js'), 'legacy split admin-web routes must be removed from api/');
+assert.ok(!exists('api/admin-web/auth/start.js'), 'legacy split auth routes must be removed from api/');

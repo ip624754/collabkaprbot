@@ -17,6 +17,7 @@
     "lint:nav": "node scripts/lint-footer-nav.js",
     "lint:portable-paths": "node scripts/lint-portable-paths.js",
     "check:package-lock": "node scripts/check-package-lock.js",
+    "check:function-budget": "node scripts/check-function-budget.js",
     "lint:public-contacts": "node scripts/lint-public-contacts.js",
     "lint:redis-atomic": "node scripts/lint-redis-atomic.js",
     "lint:redis-exports": "node scripts/lint-redis-exports.js",
