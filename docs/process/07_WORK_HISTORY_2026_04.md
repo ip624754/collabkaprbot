@@ -98,3 +98,11 @@ Scope:
 Acceptance / notes:
 - scope stays read-only only: no live send, no retries, no payment mutations, no founder-dangerous controls;
 - page remains hobby-safe: one primary read request, no polling, no cron dependency, function budget unchanged at 11 deployable entrypoints.
+
+
+## STEP507 — Founder controls split
+- added founder-aware admin-web session helpers (`isFounderActorTgId`, `requireFounderSession`) and exposed `isFounder` in `/api/admin-web-auth?action=me`;
+- made `revoke_all` founder-only and logged it as `founder/revoke_all_sessions`;
+- added founder-only `/admin/founder` read surface and split sidebar navigation into `Оператор` and `Founder`;
+- added `getFounderSummary()` read model with founder-safe auth/session policy, Founder Sale snapshot, control boundaries, warnings, hints, and recent founder audit;
+- added `scripts/smoke-admin-web-founder-contract.js` and wired it into package + source preflight.

@@ -100,6 +100,7 @@ function routeInfo() {
   if (parts[1] === 'runtime') return { page: 'runtime' };
   if (parts[1] === 'payments') return { page: 'payments' };
   if (parts[1] === 'comms') return { page: 'comms' };
+  if (parts[1] === 'founder') return { page: 'founder' };
   return { page: 'overview' };
 }
 
@@ -120,18 +121,20 @@ function shell(title, subtitle, body, session) {
           </div>
         </div>
         <nav class="aw-nav">
+          <div class="aw-nav-group-label">Оператор</div>
           ${navLink('/admin', 'Overview', route.page === 'overview')}
           ${navLink('/admin/users', 'Users', route.page === 'users' || route.page === 'userDetail')}
           ${navLink('/admin/runtime', 'Runtime', route.page === 'runtime')}
           ${navLink('/admin/payments', 'Payments', route.page === 'payments')}
           ${navLink('/admin/comms', 'Comms', route.page === 'comms')}
+          ${session?.isFounder ? `<div class="aw-nav-group-label">Founder</div>${navLink('/admin/founder', 'Founder', route.page === 'founder')}` : ''}
         </nav>
       </aside>
       <main class="aw-main">
         <div class="aw-topbar">
           <div class="aw-topbar-left">
             <span class="aw-chip">${escapeHtml(title)}</span>
-            <span class="aw-chip">env · operator</span>
+            <span class="aw-chip">env · ${session?.isFounder ? 'founder' : 'operator'}</span>
           </div>
           <div class="aw-topbar-right">
             <span class="aw-chip">TG ${Number(session?.actorTgId || 0) || 'fallback'}</span>
@@ -598,6 +601,107 @@ function commsView(model) {
   `, window.__adminSession || {});
 }
 
+
+function founderView(model) {
+  const founder = model.founder || {};
+  const sessionPolicy = model.sessionPolicy || {};
+  const founderSale = model.founderSale || {};
+  const controls = model.controls || {};
+  const snapshots = model.snapshots || {};
+  const warnings = Array.isArray(model.warnings) ? model.warnings : [];
+  const hints = Array.isArray(model.hints) ? model.hints : [];
+  const recentAudit = Array.isArray(model.recentFounderAudit) ? model.recentFounderAudit : [];
+  return shell('Founder', 'Founder-only control surface: split from operator UI, read-first and hobby-safe.', `
+    <section class="aw-surface aw-section aw-stack">
+      <div class="aw-runtime-head">
+        <div>
+          <h2>Founder access</h2>
+          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)}</p>
+        </div>
+        <div class="aw-runtime-overall ${founder.allowed ? 'good' : 'warn'}">${founder.allowed ? 'FOUNDER READY' : 'OPERATOR SESSION'} · TG ${Number(founder.actorTgId || 0) || 'fallback'}</div>
+      </div>
+      <div class="aw-grid-cards aw-runtime-cards">
+        <div class="aw-card aw-runtime-card"><span>Auth/session</span><strong class="aw-status good">OK</strong><small>login ${Number(sessionPolicy.loginTtlSec || 0)}s · session ${Number(sessionPolicy.sessionTtlSec || 0)}s</small></div>
+        <div class="aw-card aw-runtime-card"><span>Idle timeout</span><strong>${Math.round(Number(sessionPolicy.idleTimeoutSec || 0) / 60) || 0}m</strong><small>manual refresh only</small></div>
+        <div class="aw-card aw-runtime-card"><span>Approvers</span><strong>${Number(sessionPolicy.approversCount || 0)}</strong><small>Telegram approvers configured</small></div>
+        <div class="aw-card aw-runtime-card"><span>Founder Sale</span><strong class="aw-status ${founderSale.enabled ? 'good' : 'warn'}">${founderSale.enabled ? 'ON' : 'OFF'}</strong><small>${escapeHtml(founderSale.deadline || 'Без дедлайна')}</small></div>
+      </div>
+    </section>
+
+    <div class="aw-split aw-section aw-runtime-layout">
+      <section class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Founder controls split</h2>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong>Web founder action</strong><small>${controls.canRevokeAllSessions ? 'Разрешён только revoke all sessions.' : 'Founder action недоступен в этой сессии.'}</small></div>
+            <div class="aw-list-item"><strong>Bot-only danger zone</strong><small>${Array.isArray(controls.botOnlyControls) ? controls.botOnlyControls.join(' · ') : '—'}</small></div>
+          </div>
+          <div class="aw-actions">
+            <button class="aw-button danger" id="revokeAllBtn" ${controls.canRevokeAllSessions ? '' : 'disabled'}>Revoke all web sessions</button>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Founder sale</h2>
+          <div class="aw-mini-grid aw-mini-grid-3">
+            <div class="aw-mini-card"><span>Brand 3m</span><strong>${Number(founderSale.brand3mPrice || 0)}</strong><small>${Number(founderSale.brand3mCredits || 0)} credits</small></div>
+            <div class="aw-mini-card"><span>Brand 12m</span><strong>${Number(founderSale.brand12mPrice || 0)}</strong><small>${Number(founderSale.brand12mCredits || 0)} credits</small></div>
+            <div class="aw-mini-card"><span>Creator 12m</span><strong>${Number(founderSale.creator12mPrice || 0)}</strong><small>founder price</small></div>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Founder warnings</h2>
+          <div class="aw-list">
+            ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных founder-предупреждений нет.', source: 'founder' }]).map((item) => `
+              <div class="aw-list-item aw-warning-item">
+                <strong class="${warningTone(item.level)}">${escapeHtml(item.message || '—')}</strong>
+                <small>${escapeHtml(item.source || 'founder')}</small>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+      </section>
+
+      <aside class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Founder hints</h2>
+          <div class="aw-list">
+            ${hints.length ? hints.map((item) => `
+              <div class="aw-list-item">
+                <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
+                <small>${escapeHtml(item.message || '')}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Founder snapshot</h2>
+          <div class="aw-mini-grid aw-mini-grid-2">
+            <div class="aw-mini-card"><span>Users</span><strong>${Number(snapshots.usersTotal || 0)}</strong></div>
+            <div class="aw-mini-card"><span>Runtime</span><strong>${escapeHtml(runtimeStateLabel(snapshots.runtimeState || 'unknown'))}</strong></div>
+            <div class="aw-mini-card"><span>Payment warnings</span><strong>${Number(snapshots.paymentWarnings || 0)}</strong></div>
+            <div class="aw-mini-card"><span>Comms warnings</span><strong>${Number(snapshots.commsWarnings || 0)}</strong></div>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Последние founder-действия</h2>
+          <div class="aw-list">
+            ${recentAudit.length ? recentAudit.map((item) => `
+              <div class="aw-list-item">
+                <strong>${escapeHtml(item.action || 'unknown')}</strong>
+                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || 'fallback'}${item.targetId ? ` · ${escapeHtml(item.targetId)}` : ''}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+      </aside>
+    </div>
+  `, window.__adminSession || {});
+}
+
 function runtimeView(model) {
   const services = model.services || {};
   const warnings = Array.isArray(model.warnings) ? model.warnings : [];
@@ -733,6 +837,13 @@ async function render() {
   } else if (route.page === 'comms') {
     const res = await api('/api/admin-web-read?section=comms');
     app.innerHTML = commsView(res.data.data || {});
+  } else if (route.page === 'founder') {
+    const res = await api('/api/admin-web-read?section=founder');
+    if (!res.ok) {
+      app.innerHTML = shell('Founder', 'Founder-only control surface.', `<div class="aw-surface aw-empty">Founder surface недоступен для текущей сессии.</div>`, session);
+    } else {
+      app.innerHTML = founderView(res.data.data || {});
+    }
   }
   bindShell();
 }
@@ -784,6 +895,17 @@ function bindShell() {
     const res = await api('/api/admin-web-write?action=clear_note', { method: 'POST', body: JSON.stringify({ userId }) });
     if (!res.ok) alert(`Не удалось очистить note: ${res.data?.error || 'unknown'}`);
     else render();
+  });
+  document.getElementById('revokeAllBtn')?.addEventListener('click', async () => {
+    if (!confirm('Revoke all web sessions? Текущая founder-сессия тоже будет закрыта.')) return;
+    const res = await api('/api/admin-web-auth?action=revoke_all', { method: 'POST' });
+    if (!res.ok) {
+      alert(`Не удалось выполнить revoke: ${res.data?.error || 'unknown'}`);
+      return render();
+    }
+    history.replaceState({}, '', '/admin/login');
+    window.__loginState = { error: 'Все web-сессии отозваны. Войди заново.' };
+    render();
   });
 }
 

@@ -1,4 +1,4 @@
-import { approveChallenge, appendAdminWebAudit, clearAuthCookie, createLoginChallenge, getChallenge, getSession, isAdminWebReady, issueSession, logout, requireSession, revokeAllSessions, verifyChallengeCode } from '../src/lib/adminWeb/auth.js';
+import { approveChallenge, appendAdminWebAudit, clearAuthCookie, createLoginChallenge, getChallenge, getSession, isAdminWebReady, isFounderActorTgId, issueSession, logout, requireFounderSession, requireSession, revokeAllSessions, verifyChallengeCode } from '../src/lib/adminWeb/auth.js';
 import { getSearchParam, html, json, readJsonBody, timingSafeEq } from '../src/lib/adminWeb/common.js';
 import { CFG } from '../src/lib/config.js';
 
@@ -74,7 +74,7 @@ export default async function handler(req, res) {
     if (!isAdminWebReady()) return json(res, 503, { ok: false, error: 'admin_web_not_configured' });
     const session = await getSession(req);
     if (!session) return json(res, 401, { ok: false, error: 'unauthorized' });
-    return json(res, 200, { ok: true, session: { actorTgId: Number(session.actorTgId || 0) || 0, expiresAt: session.expiresAt || 0, issuedAt: session.issuedAt || 0 } });
+    return json(res, 200, { ok: true, session: { actorTgId: Number(session.actorTgId || 0) || 0, isFounder: isFounderActorTgId(session.actorTgId), expiresAt: session.expiresAt || 0, issuedAt: session.issuedAt || 0 } });
   }
 
   if (action === 'logout') {
@@ -85,12 +85,12 @@ export default async function handler(req, res) {
 
   if (action === 'revoke_all') {
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
-    const session = await requireSession(req, res);
+    const session = await requireFounderSession(req, res);
     if (!session) return;
     const result = await revokeAllSessions();
     clearAuthCookie(res);
     if (result.ok) {
-      await appendAdminWebAudit({ section: 'auth', action: 'revoke_all', actorTgId: session.actorTgId, targetType: 'session', targetId: 'all' });
+      await appendAdminWebAudit({ section: 'founder', action: 'revoke_all_sessions', actorTgId: session.actorTgId, targetType: 'session', targetId: 'all', reason: 'founder_split' });
     }
     return json(res, result.ok ? 200 : 500, result);
   }

@@ -2,7 +2,8 @@ import { pool } from '../../db/pool.js';
 import { getAdminMetricsSnapshot, listUsersDirectory, getUserCardById } from '../../db/queries.js';
 import { getAdminUserNote, getAdminUserNotesBulk } from './notes.js';
 import { getRuntimeSummary } from './runtime.js';
-import { getRecentAdminWebAudit } from './auth.js';
+import { getRecentAdminWebAudit, isFounderActorTgId } from './auth.js';
+import { CFG } from '../config.js';
 
 function buildUserSegment(row) {
   if (row?.has_brand_profile || row?.brand_plan || Number(row?.brand_credits || 0) > 0) return 'brand';
@@ -542,4 +543,65 @@ export async function getCommsSummary() {
   out.recentBroadcasts = recentBroadcasts;
   out.hints = buildCommsHints(summary);
   return out;
+}
+
+
+export async function getFounderSummary(actorTgId = 0) {
+  const founder = isFounderActorTgId(actorTgId);
+  const runtime = await getRuntimeSummary();
+  const overview = await getOverviewSummary();
+  const payments = await getPaymentsSummary();
+  const comms = await getCommsSummary();
+  const recentAudit = await getRecentAdminWebAudit(12);
+
+  const founderWarnings = [];
+  if (!founder) founderWarnings.push({ level: 'warning', message: 'Founder-only control surface доступен только для SUPER_ADMIN.', source: 'founder' });
+  if (!CFG.FOUNDER_SALE_ENABLED) founderWarnings.push({ level: 'info', message: 'Founder Sale сейчас выключен.', source: 'founder_sale' });
+  if (!CFG.PUBLIC_BASE_URL) founderWarnings.push({ level: 'warning', message: 'PUBLIC_BASE_URL missing — approve / signed links будут ограничены.', source: 'config' });
+  if (!runtime?.services?.qstash || String(runtime.services.qstash.state || '') === 'missing') founderWarnings.push({ level: 'warning', message: 'QStash не настроен — publish/retry founder surfaces ограничены.', source: 'qstash' });
+  if (!founderWarnings.length) founderWarnings.push({ level: 'info', message: 'Явных founder-предупреждений нет.', source: 'founder' });
+
+  const founderHints = [
+    { kind: founder ? 'info' : 'warning', message: founder ? 'Founder surface отделён от обычного operator UX. Dangerous actions не смешиваются с read-first панелью.' : 'Текущая web-сессия не founder-класса. Read surfaces остаются доступны, founder actions скрыты.' },
+    { kind: 'info', message: 'Revoke all web sessions остаётся единственным founder action в STEP507. Остальные risky controls — bot-only.' },
+    { kind: 'info', message: 'Founder Sale и auth/session policy читаются здесь как отдельный founder layer, без writes в runtime/config.' },
+  ];
+
+  return {
+    updatedAt: new Date().toISOString(),
+    founder: {
+      allowed: founder,
+      actorTgId: Number(actorTgId || 0) || 0,
+      roleLabel: founder ? 'founder' : 'operator',
+    },
+    sessionPolicy: {
+      loginTtlSec: Number(CFG.ADMIN_WEB_LOGIN_TTL_SEC || 0),
+      sessionTtlSec: Number(CFG.ADMIN_WEB_SESSION_TTL_SEC || 0),
+      idleTimeoutSec: Number(CFG.ADMIN_WEB_IDLE_TIMEOUT_SEC || 0),
+      approversCount: Array.isArray(CFG.ADMIN_WEB_APPROVER_TG_IDS) ? CFG.ADMIN_WEB_APPROVER_TG_IDS.length : 0,
+    },
+    founderSale: {
+      enabled: !!CFG.FOUNDER_SALE_ENABLED,
+      deadline: CFG.FOUNDER_SALE_DEADLINE || '',
+      brand3mPrice: Number(CFG.FOUNDER_BRAND_3M_PRICE || 0),
+      brand12mPrice: Number(CFG.FOUNDER_BRAND_12M_PRICE || 0),
+      creator12mPrice: Number(CFG.FOUNDER_CREATOR_12M_PRICE || 0),
+      brand3mCredits: Number(CFG.FOUNDER_BRAND_3M_CREDITS || 0),
+      brand12mCredits: Number(CFG.FOUNDER_BRAND_12M_CREDITS || 0),
+    },
+    controls: {
+      canRevokeAllSessions: founder,
+      dangerousWritesInWeb: false,
+      botOnlyControls: ['payments writes', 'deal mutation', 'channel rebind', 'live dialog actions'],
+    },
+    snapshots: {
+      usersTotal: Number(overview?.cards?.usersTotal || 0),
+      paymentWarnings: Number(payments?.summary?.warnings || 0),
+      runtimeState: String(runtime?.overall?.state || 'unknown'),
+      commsWarnings: Number(comms?.summary?.warnings || 0),
+    },
+    warnings: founderWarnings,
+    hints: founderHints,
+    recentFounderAudit: (Array.isArray(recentAudit) ? recentAudit : []).filter((item) => ['founder', 'auth', 'system'].includes(String(item?.section || '')) || String(item?.action || '').includes('revoke')).slice(0, 10),
+  };
 }

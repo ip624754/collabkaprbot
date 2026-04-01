@@ -25,6 +25,15 @@ function getSessionTtlSec() {
   return Math.max(600, Number(CFG.ADMIN_WEB_SESSION_TTL_SEC || 28800));
 }
 
+export function isFounderActorTgId(actorTgId) {
+  const tgId = Number(actorTgId || 0) || 0;
+  return tgId > 0 && Array.isArray(CFG.SUPER_ADMIN_TG_IDS) && CFG.SUPER_ADMIN_TG_IDS.includes(tgId);
+}
+
+export function isFounderSession(session) {
+  return !!session && isFounderActorTgId(session.actorTgId);
+}
+
 export function isAdminWebReady() {
   return !!CFG.ADMIN_WEB_ENABLED && !!String(CFG.ADMIN_WEB_SECRET || '').trim() && !!String(CFG.ADMIN_WEB_SESSION_SECRET || '').trim();
 }
@@ -150,7 +159,9 @@ export async function verifyChallengeCode(challengeId, code) {
   if (sha256(String(code || '')) !== String(cur.codeHash || '')) {
     return { ok: false, error: 'invalid_code' };
   }
-  const next = await updateChallenge(challengeId, { status: 'approved', approvedByTgId: 0, approvedAt: Date.now(), approvedBy: 'telegram_code_fallback' });
+  const approverIds = getAdminApproverIds();
+  const approvedByTgId = approverIds.length === 1 ? Number(approverIds[0] || 0) || 0 : 0;
+  const next = await updateChallenge(challengeId, { status: 'approved', approvedByTgId, approvedAt: Date.now(), approvedBy: 'telegram_code_fallback' });
   return { ok: !!next, error: next ? null : 'challenge_update_failed' };
 }
 
@@ -225,6 +236,16 @@ export async function requireSession(req, res) {
     return null;
   }
   await touchSession(session);
+  return session;
+}
+
+export async function requireFounderSession(req, res) {
+  const session = await requireSession(req, res);
+  if (!session) return null;
+  if (!isFounderSession(session)) {
+    json(res, 403, { ok: false, error: 'founder_only' });
+    return null;
+  }
   return session;
 }
 

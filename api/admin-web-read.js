@@ -1,6 +1,6 @@
-import { requireSession } from '../src/lib/adminWeb/auth.js';
+import { requireFounderSession, requireSession } from '../src/lib/adminWeb/auth.js';
 import { getSearchParam, json } from '../src/lib/adminWeb/common.js';
-import { getCommsSummary, getOverviewSummary, getPaymentsSummary, getUserDetail, getUsersList } from '../src/lib/adminWeb/readModels.js';
+import { getCommsSummary, getFounderSummary, getOverviewSummary, getPaymentsSummary, getUserDetail, getUsersList } from '../src/lib/adminWeb/readModels.js';
 import { getRuntimeSummary } from '../src/lib/adminWeb/runtime.js';
 
 export default async function handler(req, res) {
@@ -36,6 +36,12 @@ export default async function handler(req, res) {
   }
   if (section === 'comms') {
     const data = await getCommsSummary();
+    return json(res, 200, { ok: true, data });
+  }
+  if (section === 'founder') {
+    const founderSession = await requireFounderSession(req, res);
+    if (!founderSession) return;
+    const data = await getFounderSummary(founderSession.actorTgId);
     return json(res, 200, { ok: true, data });
   }
   if (section === 'runtime') {
