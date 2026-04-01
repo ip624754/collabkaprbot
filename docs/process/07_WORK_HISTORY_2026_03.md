@@ -1,3 +1,8 @@
+## STEP497 — OG meta/share contract restore
+- Restored `index.html` Open Graph and Twitter image tags to the actual shipping canonical asset `assets/social/collabka-og-1200x630.png`.
+- Restored `og:image:width` / `og:image:height` to `1200` / `630` so meta matches the real asset dimensions.
+- Fixed the preview regression caused by filename drift (`collabka-og.png` reference with no matching file in the repo).
+
 ## STEP496 — OG asset finalize and cleanup
 - Replaced the canonical landing OG assets with the approved exact 1200x630 PNG and matching WEBP under stable filenames.
 - Removed `assets/social/collabka-og-1200x630-alt.png` and `.webp` from the repo.
