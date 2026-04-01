@@ -1,18 +1,3 @@
-## STEP503 — User Card polish + operator usability
-
-Что сделано:
-- `/admin/users/[id]` polished into a stronger operator screen with clearer header, denser summary badges, stronger `Аккаунт и доступ` and `Активность` blocks, and inline note UX feedback;
-- Users list state (`q`, `segment`) now lives in URL params and survives drilldown/back navigation;
-- `userDetail` read model extended with `stateHint`, account/access summaries, normalized recent admin trace, and safer note metadata for render;
-- note writes now normalize blank text to clear, and audit rows use `set_user_note` / `clear_user_note` with `oldJson` / `newJson`;
-- stale split admin routes under `api/admin-web/` removed so the repo stays aligned with the collapsed Hobby-safe API surface;
-- added/strengthened smoke coverage for the user-card contract and wired it into source preflight.
-
-Что важно:
-- still one primary read request for the page;
-- no polling, no cron dependency, no risky writes;
-- operator value increases without widening money-path, deal-path, or founder-dangerous scope.
-
 ## STEP501A — Admin-web WHATWG URL cleanup
 
 Date: 2026-04-01
@@ -65,3 +50,19 @@ Acceptance / notes:
 
 Collateral low-risk fix:
 - `index.html` синхронизирован с реально существующим OG asset `assets/social/collabka-og-1200x630.png` и width/height `1200x630`, потому что в пользовательском baseline repo оставался stale meta path `collabka-og.png`.
+
+
+## STEP504 — Runtime / founder diagnostics polish
+
+Date: 2026-04-01
+
+Scope:
+- expanded `src/lib/adminWeb/runtime.js` from a narrow `notes` snapshot into a normalized founder/operator diagnostics read model with `updatedAt`, `overall`, `services`, `configPresence`, `warnings`, `hints`, and `recentRuntimeEvents`;
+- preserved legacy lightweight runtime fields (`db.ok`, `redis.ok`, `notes`, etc.) so Overview/runtime consumers do not regress while the page evolves;
+- rebuilt the `/admin/runtime` UI in `scripts/admin-web.js` + `styles/admin-web.css` around one read-only snapshot: overall state, service cards, warnings strip, env/config presence matrix, hints, and recent runtime signals;
+- added `scripts/smoke-admin-web-runtime-contract.js`, wired it into `package.json` and `scripts/preflight.js`;
+- removed stale split admin-web route files (`api/admin-web/user.js`, `api/admin-web/users.js`, `api/admin-web/auth/status.js`, `api/admin-web/auth/decision.js`) again to keep the repo at the Vercel Hobby-safe 11-function surface.
+
+Acceptance / notes:
+- Runtime stays read-first and hobby-safe: one primary read request, no polling, no cron dependency, and no new writes;
+- secrets / env values are intentionally not exposed; only safe presence/status summaries are rendered.

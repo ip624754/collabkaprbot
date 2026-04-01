@@ -293,37 +293,58 @@ body {
   .aw-mini-grid-3 { grid-template-columns: 1fr; }
   .aw-user-title { font-size: 30px; }
 }
-
-.aw-user-kicker {
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-.aw-mini-grid-5 {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-.aw-note-meta {
+.aw-card small {
+  display: block;
+  margin-top: 8px;
   color: var(--muted);
-  font-size: 13px;
   line-height: 1.45;
 }
-.aw-inline-status {
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 14px;
-  border: 1px solid transparent;
+.aw-card-subtle {
+  margin-top: 8px;
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.45;
 }
-.aw-inline-status.is-success {
-  color: #dcfff0;
-  background: rgba(82, 214, 161, 0.12);
-  border-color: rgba(82, 214, 161, 0.2);
+.aw-runtime-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
 }
-.aw-inline-status.is-error {
-  color: #ffd9e2;
-  background: rgba(255, 107, 139, 0.12);
-  border-color: rgba(255, 107, 139, 0.22);
+.aw-runtime-overall {
+  border: 1px solid var(--line-strong);
+  background: rgba(255,255,255,0.04);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 13px;
 }
+.aw-runtime-layout { align-items: start; }
+.aw-config-grid {
+  display: grid;
+  gap: 10px;
+}
+.aw-config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(132,176,255,0.12);
+  background: rgba(255,255,255,0.03);
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+.aw-config-key {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.aw-config-state {
+  text-align: right;
+  font-size: 13px;
+}
+.aw-warning-item strong { margin-bottom: 4px; }
 @media (max-width: 1024px) {
-  .aw-mini-grid-5 { grid-template-columns: 1fr 1fr; }
+  .aw-runtime-overall { width: 100%; }
+  .aw-config-row { grid-template-columns: 1fr; }
+  .aw-config-state { text-align: left; }
 }

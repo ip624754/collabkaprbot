@@ -1,0 +1,17 @@
+STEP504 changed/new files:
+
+docs/00_CURRENT_STATE.md
+docs/55_WEB_ADMIN_RUNTIME_POLISH_STEP504.md
+docs/56_WEB_ADMIN_RUNTIME_DATA_CONTRACT_STEP504.md
+docs/process/07_WORK_HISTORY_2026_04.md
+package.json
+scripts/admin-web.js
+scripts/preflight.js
+scripts/smoke-admin-web-runtime-contract.js
+scripts/smoke-admin-web-shell-contract.js
+src/lib/adminWeb/runtime.js
+styles/admin-web.css
+
+STEP504 deleted files:
+
+api/admin-web

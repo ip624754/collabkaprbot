@@ -90,8 +90,8 @@
     "smoke:copy-wave1-contract": "node scripts/smoke-copy-wave1-contract.js",
     "smoke:landing-contract": "node scripts/smoke-landing-contract.js",
     "smoke:admin-web-shell-contract": "node scripts/smoke-admin-web-shell-contract.js",
-    "smoke:admin-web-user-card-contract": "node scripts/smoke-admin-web-user-card-contract.js",
-    "smoke:admin-web-whatwg-url-contract": "node scripts/smoke-admin-web-whatwg-url-contract.js"
+    "smoke:admin-web-whatwg-url-contract": "node scripts/smoke-admin-web-whatwg-url-contract.js",
+    "smoke:admin-web-runtime-contract": "node scripts/smoke-admin-web-runtime-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

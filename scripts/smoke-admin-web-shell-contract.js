@@ -52,3 +52,9 @@ console.log('✅ smoke admin-web-shell contract OK');
 
 assert.ok(!exists('api/admin-web/overview.js'), 'legacy split admin-web routes must be removed from api/');
 assert.ok(!exists('api/admin-web/auth/start.js'), 'legacy split auth routes must be removed from api/');
+
+
+assert.ok(!exists('api/admin-web/user.js'), 'legacy split admin-web user route must be removed from api/');
+assert.ok(!exists('api/admin-web/users.js'), 'legacy split admin-web users route must be removed from api/');
+assert.ok(!exists('api/admin-web/auth/status.js'), 'legacy split admin-web auth status route must be removed from api/');
+assert.ok(!exists('api/admin-web/auth/decision.js'), 'legacy split admin-web auth decision route must be removed from api/');

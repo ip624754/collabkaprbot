@@ -1,6 +1,7 @@
 const app = document.getElementById('app');
 
 const BRAND_LOGO = '/assets/brand/collabka-mark-blue.png';
+const ADMIN_OPERATOR_REFRESH_MODE = 'manual refresh only';
 
 function escapeHtml(input) {
   return String(input || '')
@@ -36,14 +37,40 @@ function segmentLabel(value) {
 function signalLabel(value) {
   const key = String(value || '').trim().toLowerCase();
   return ({
-    creator: 'креатор',
-    brand: 'бренд',
-    curator: 'куратор',
-    manager: 'менеджер',
-    moderator: 'модератор',
-    workspace_connected: 'workspace подключён',
-    channel_connected: 'канал подключён',
+    creator: 'creator',
+    brand: 'brand',
+    curator: 'curator',
+    manager: 'manager',
+    moderator: 'moderator',
+    workspace_connected: 'workspace connected',
+    channel_connected: 'channel connected',
   })[key] || key || '—';
+}
+
+function runtimeStateClass(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'ok' || key === 'configured') return 'good';
+  if (key === 'degraded' || key === 'warning') return 'warn';
+  if (key === 'missing' || key === 'error') return 'bad';
+  return '';
+}
+
+function runtimeStateLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ ok: 'ОК', degraded: 'Нужна проверка', missing: 'Не настроено', unknown: 'Статус неизвестен' })[key] || (key || '—');
+}
+
+function configPresenceLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ configured: 'configured', missing: 'missing', optional: 'optional', not_enabled: 'not enabled' })[key] || (key || '—');
+}
+
+function warningTone(level) {
+  const key = String(level || '').trim().toLowerCase();
+  if (key === 'error') return 'aw-status bad';
+  if (key === 'warning' || key === 'warn') return 'aw-status warn';
+  if (key === 'info') return 'aw-status good';
+  return 'aw-status';
 }
 
 function pathParts() {
@@ -58,38 +85,6 @@ function routeInfo() {
   if (parts[1] === 'users') return { page: 'users' };
   if (parts[1] === 'runtime') return { page: 'runtime' };
   return { page: 'overview' };
-}
-
-function currentSearch() {
-  return new URLSearchParams(location.search || '');
-}
-
-function getUsersStateFromUrl() {
-  const params = currentSearch();
-  return {
-    q: String(params.get('q') || '').trim(),
-    segment: String(params.get('segment') || 'all').trim() || 'all',
-  };
-}
-
-function buildUsersHref(state = {}) {
-  const params = new URLSearchParams();
-  const q = String(state.q || '').trim();
-  const segment = String(state.segment || 'all').trim() || 'all';
-  if (q) params.set('q', q);
-  if (segment && segment !== 'all') params.set('segment', segment);
-  const qs = params.toString();
-  return qs ? `/admin/users?${qs}` : '/admin/users';
-}
-
-function buildUserDetailHref(userId, state = {}) {
-  const params = new URLSearchParams();
-  const q = String(state.q || '').trim();
-  const segment = String(state.segment || 'all').trim() || 'all';
-  if (q) params.set('q', q);
-  if (segment && segment !== 'all') params.set('segment', segment);
-  const qs = params.toString();
-  return qs ? `/admin/users/${encodeURIComponent(String(userId || ''))}?${qs}` : `/admin/users/${encodeURIComponent(String(userId || ''))}`;
 }
 
 function navLink(href, label, active) {
@@ -219,9 +214,9 @@ function usersView(model) {
   return shell('Users', 'Search + segment filter + user card drilldown.', `
     <section class="aw-surface">
       <div class="aw-toolbar">
-        <input id="usersSearch" class="aw-input inline" placeholder="Поиск: username / tg_id / user id" value="${escapeHtml(getUsersStateFromUrl().q || '')}" />
+        <input id="usersSearch" class="aw-input inline" placeholder="Поиск: username / tg_id / user id" value="${escapeHtml(window.__usersState?.q || '')}" />
         <select id="usersSegment" class="aw-select inline">
-          ${[['all','Все'],['brands','Brands'],['creators','Creators'],['curators','Curators'],['managers','Managers']].map(([v,l]) => `<option value="${v}" ${getUsersStateFromUrl().segment === v ? 'selected' : ''}>${l}</option>`).join('')}
+          ${[['all','Все'],['brands','Brands'],['creators','Creators'],['curators','Curators'],['managers','Managers']].map(([v,l]) => `<option value="${v}" ${window.__usersState?.segment === v ? 'selected' : ''}>${l}</option>`).join('')}
         </select>
         <button class="aw-button secondary" id="applyUsersFilters">Применить</button>
       </div>
@@ -263,37 +258,33 @@ function userDetailView(model) {
   const activity = model.activity || {};
   const note = model.note || {};
   const recentAudit = Array.isArray(model.recentAdminAudit) ? model.recentAdminAudit : [];
-  const usersState = getUsersStateFromUrl();
-  const backHref = buildUsersHref(usersState);
   const displayName = user.displayName || (user.username ? '@' + user.username : 'user #' + (user.id || '—'));
+  const workspaceLabel = Array.isArray(access.workspaces) && access.workspaces.length
+    ? access.workspaces.map((w) => `${w.title || 'workspace'}${w.channel_username ? ` · @${String(w.channel_username).replace(/^@/, '')}` : ''}`).join(' · ')
+    : 'Нет привязанных workspace.';
+  const curatorLabel = Array.isArray(access.curatorIn) && access.curatorIn.length
+    ? access.curatorIn.map((w) => w.title || 'workspace').join(' · ')
+    : 'Нет curator membership.';
   const noteMeta = [];
   if (note.updatedAt) noteMeta.push(`Обновлено: ${formatDate(note.updatedAt)}`);
-  if (note.updatedByLabel) noteMeta.push(note.updatedByLabel);
-  else if (note.byAdminTgId) noteMeta.push(`TG ${note.byAdminTgId}`);
-  const noteFlash = window.__noteFlash || null;
-  const noteFlashMarkup = noteFlash
-    ? `<div class="aw-inline-status ${noteFlash.kind === 'error' ? 'is-error' : 'is-success'}">${escapeHtml(noteFlash.text || '')}</div>`
-    : '';
+  if (note.byAdminTgId) noteMeta.push(`TG ${note.byAdminTgId}`);
 
-  return shell('Пользователь', 'Полезный операторский drilldown: профиль → доступ → активность → заметка.', `
+  return shell('Пользователь', 'User card usable v1: summary → access → activity → operator note.', `
     <section class="aw-surface aw-user-hero aw-stack">
-      <a href="${backHref}" data-link class="aw-inline-back">← Назад к списку</a>
+      <a href="/admin/users" data-link class="aw-inline-back">← К списку пользователей</a>
       <div class="aw-user-head">
         <div class="aw-stack aw-gap-xs">
-          <div class="aw-user-kicker">${escapeHtml(user.stateHint || 'Операторский срез по пользователю')}</div>
           <h2 class="aw-user-title">${escapeHtml(displayName)}</h2>
-          <div class="aw-user-subline">${user.username ? '@' + escapeHtml(user.username) + ' · ' : ''}tg_id ${user.tgId || '—'} · user_id ${user.id || '—'} · создан ${formatDate(user.createdAt)}</div>
+          <div class="aw-user-subline">tg_id ${user.tgId || '—'} · user_id ${user.id || '—'} · ${escapeHtml(segmentLabel(user.segment))} · создан ${formatDate(user.createdAt)}</div>
         </div>
         <div class="aw-badges">
           <span class="aw-badge">${escapeHtml(segmentLabel(user.segment))}</span>
-          <span class="aw-badge ${user.status === 'banned' ? 'is-bad' : 'is-good'}">${user.status === 'banned' ? 'заблокирован' : 'активен'}</span>
-          ${account.plan ? `<span class="aw-badge">${escapeHtml(account.plan)}</span>` : ''}
-          ${access.hasChannel ? `<span class="aw-badge is-good">канал есть</span>` : `<span class="aw-badge">канала нет</span>`}
+          <span class="aw-badge ${user.status === 'banned' ? 'is-bad' : 'is-good'}">${user.status === 'banned' ? 'banned' : 'active'}</span>
+          ${user.username ? `<span class="aw-badge">@${escapeHtml(user.username)}</span>` : ''}
         </div>
       </div>
-      <div class="aw-mini-grid aw-mini-grid-5">
-        <div class="aw-mini-card"><span>Сегмент</span><strong>${escapeHtml(segmentLabel(user.segment))}</strong></div>
-        <div class="aw-mini-card"><span>План</span><strong>${escapeHtml(account.planLabel || account.plan || '—')}</strong></div>
+      <div class="aw-mini-grid">
+        <div class="aw-mini-card"><span>План</span><strong>${escapeHtml(account.plan || '—')}</strong></div>
         <div class="aw-mini-card"><span>Credits</span><strong>${Number(account.credits || 0)}</strong></div>
         <div class="aw-mini-card"><span>Workspace</span><strong>${access.hasWorkspace ? 'есть' : 'нет'}</strong></div>
         <div class="aw-mini-card"><span>Канал</span><strong>${access.hasChannel ? 'подключён' : 'нет'}</strong></div>
@@ -309,21 +300,21 @@ function userDetailView(model) {
             <dt>Username</dt><dd>${user.username ? '@' + escapeHtml(user.username) : '—'}</dd>
             <dt>TG ID</dt><dd>${user.tgId || '—'}</dd>
             <dt>User ID</dt><dd>${user.id || '—'}</dd>
-            <dt>Сегмент</dt><dd>${escapeHtml(segmentLabel(user.segment))}</dd>
-            <dt>Статус</dt><dd>${escapeHtml(user.statusLabel || (user.status === 'banned' ? 'заблокирован' : 'активен'))}</dd>
-            <dt>Создан</dt><dd>${formatDate(user.createdAt)}</dd>
-            <dt>Обновлён</dt><dd>${formatDate(user.updatedAt)}</dd>
+            <dt>Segment</dt><dd>${escapeHtml(segmentLabel(user.segment))}</dd>
+            <dt>Статус</dt><dd>${user.status === 'banned' ? `banned · ${formatDate(user.bannedAt)}` : 'active'}</dd>
+            <dt>План</dt><dd>${escapeHtml(account.plan || '—')} ${account.planUntil ? `· до ${formatDate(account.planUntil)}` : ''}</dd>
+            <dt>Credits</dt><dd>${escapeHtml(account.creditsLabel || 'no credits')}</dd>
           </dl>
         </section>
 
         <section class="aw-surface aw-stack">
-          <h2>Аккаунт и доступ</h2>
+          <h2>Доступ и сигналы</h2>
           <div class="aw-list">
-            <div class="aw-list-item"><strong>План и credits</strong><small>${escapeHtml(account.summary || 'План и credits не заданы.')}</small></div>
             <div class="aw-list-item"><strong>Signals</strong><small>${Array.isArray(access.signals) && access.signals.length ? access.signals.map(signalLabel).join(' · ') : 'Нет выраженных signals.'}</small></div>
-            <div class="aw-list-item"><strong>Workspace / channel</strong><small>${escapeHtml(access.summary || 'Нет привязанных workspace и channel signals.')}</small></div>
-            <div class="aw-list-item"><strong>Curator / manager context</strong><small>${escapeHtml(access.roleSummary || 'Дополнительных operator signals нет.')}</small></div>
+            <div class="aw-list-item"><strong>Workspaces</strong><small>${escapeHtml(workspaceLabel)}</small></div>
+            <div class="aw-list-item"><strong>Curator in</strong><small>${escapeHtml(curatorLabel)}</small></div>
             <div class="aw-list-item"><strong>Brand profile</strong><small>${access.brandProfile?.brand_name ? escapeHtml(access.brandProfile.brand_name) : '—'}</small></div>
+            <div class="aw-list-item"><strong>Channel signal</strong><small>${access.hasChannel ? escapeHtml(access.channelLabel || 'Есть канал') : 'Нет канала'}</small></div>
           </div>
         </section>
 
@@ -335,9 +326,9 @@ function userDetailView(model) {
             <div class="aw-mini-card"><span>Payments</span><strong>${Number(activity.lightCounters?.payments || 0)}</strong></div>
           </div>
           <div class="aw-list">
-            <div class="aw-list-item"><strong>Recent summary</strong><small>${escapeHtml(activity.recentSummary || 'Пока нет заметной активности.')}</small></div>
+            <div class="aw-list-item"><strong>Recent summary</strong><small>${escapeHtml(activity.recentSummary || 'Нет выраженных сигналов активности.')}</small></div>
             <div class="aw-list-item"><strong>Последнее изменение</strong><small>${formatDate(activity.lastSeenAt)}</small></div>
-            <div class="aw-list-item"><strong>Последний важный сигнал</strong><small>${activity.lastImportantActionLabel ? escapeHtml(activity.lastImportantActionLabel) : formatDate(activity.lastImportantAction)}</small></div>
+            <div class="aw-list-item"><strong>Последний важный сигнал</strong><small>${formatDate(activity.lastImportantAction)}</small></div>
           </div>
         </section>
       </section>
@@ -346,8 +337,7 @@ function userDetailView(model) {
         <section class="aw-surface aw-stack">
           <h2>Заметка оператора</h2>
           <textarea id="noteText" class="aw-textarea" maxlength="1000" placeholder="Внутренняя заметка для owner/admin">${escapeHtml(note.text || '')}</textarea>
-          <div class="aw-note-meta">${noteMeta.length ? escapeHtml(noteMeta.join(' · ')) : 'Заметка пока не добавлена.'}</div>
-          ${noteFlashMarkup}
+          <div class="aw-muted">${noteMeta.length ? escapeHtml(noteMeta.join(' · ')) : 'Заметка пока не добавлена.'}</div>
           <div class="aw-actions">
             <button class="aw-button" id="saveNoteBtn" data-user-id="${user.id}">Сохранить</button>
             <button class="aw-button secondary" id="clearNoteBtn" data-user-id="${user.id}">Очистить</button>
@@ -359,8 +349,8 @@ function userDetailView(model) {
           <div class="aw-list">
             ${recentAudit.length ? recentAudit.map((item) => `
               <div class="aw-list-item">
-                <strong>${escapeHtml(item.actionLabel || item.action || 'unknown')}</strong>
-                <small>${formatDate(item.ts)} · ${escapeHtml(item.actorLabel || ('TG ' + (Number(item.actorTgId || 0) || 'fallback')))}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
+                <strong>${escapeHtml(item.action || 'unknown')}</strong>
+                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || 'fallback'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -371,20 +361,93 @@ function userDetailView(model) {
 }
 
 
+
 function runtimeView(model) {
-  return shell('Runtime', 'Single snapshot endpoint. No polling, no cron dependency.', `
-    <div class="aw-grid-cards">
-      <div class="aw-card"><span>DB</span><strong class="aw-status ${model.db?.ok ? 'good' : 'bad'}">${model.db?.ok ? 'OK' : 'FAIL'}</strong></div>
-      <div class="aw-card"><span>Redis</span><strong class="aw-status ${model.redis?.ok ? 'good' : 'bad'}">${model.redis?.configured ? (model.redis?.ok ? 'OK' : 'FAIL') : 'OFF'}</strong></div>
-      <div class="aw-card"><span>Admin web</span><strong>${model.adminWebConfigured ? 'READY' : 'MISSING'}</strong></div>
-      <div class="aw-card"><span>PUBLIC_BASE_URL</span><strong>${model.publicBaseUrl ? 'SET' : 'MISS'}</strong></div>
-    </div>
-    <section class="aw-surface aw-section">
-      <h2>Notes</h2>
-      <div class="aw-list">
-        ${(Array.isArray(model.notes) && model.notes.length ? model.notes : ['Нет замечаний.']).map((item) => `<div class="aw-list-item">${escapeHtml(item)}</div>`).join('')}
+  const services = model.services || {};
+  const warnings = Array.isArray(model.warnings) ? model.warnings : [];
+  const configPresence = Array.isArray(model.configPresence) ? model.configPresence : [];
+  const hints = Array.isArray(model.hints) ? model.hints : [];
+  const recentEvents = Array.isArray(model.recentRuntimeEvents) ? model.recentRuntimeEvents : [];
+  const overall = model.overall || { state: 'unknown', label: 'Статус неизвестен' };
+  return shell('Runtime', 'Короткий диагностический срез инфраструктуры, конфигурации и сервисных зависимостей.', `
+    <section class="aw-surface aw-section aw-stack">
+      <div class="aw-runtime-head">
+        <div>
+          <h2>Общий статус</h2>
+          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)}</p>
+        </div>
+        <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
+      </div>
+      <div class="aw-grid-cards aw-runtime-cards">
+        ${[
+          ['DB', services.db],
+          ['Redis', services.redis],
+          ['QStash', services.qstash],
+          ['Payments', services.payments],
+          ['Config', services.config],
+          ['Admin Web', services.adminWeb],
+        ].map(([label, item]) => `
+          <div class="aw-card aw-runtime-card">
+            <span>${escapeHtml(label)}</span>
+            <strong class="aw-status ${runtimeStateClass(item?.state)}">${escapeHtml(runtimeStateLabel(item?.state))}</strong>
+            <small>${escapeHtml(item?.label || 'Данные пока недоступны.')}</small>
+            <div class="aw-card-subtle">${escapeHtml(item?.hint || '')}</div>
+          </div>
+        `).join('')}
       </div>
     </section>
+
+    <section class="aw-surface aw-section aw-stack">
+      <h2>Предупреждения</h2>
+      <div class="aw-list">
+        ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных предупреждений нет', source: 'runtime' }]).map((item) => `
+          <div class="aw-list-item aw-warning-item">
+            <strong class="${warningTone(item.level)}">${escapeHtml(item.message || '—')}</strong>
+            <small>${escapeHtml(item.source || 'runtime')}</small>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+
+    <div class="aw-split aw-section aw-runtime-layout">
+      <section class="aw-surface aw-stack">
+        <h2>Конфигурация</h2>
+        <div class="aw-config-grid">
+          ${configPresence.map((item) => `
+            <div class="aw-config-row">
+              <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
+              <div class="aw-config-state aw-status ${runtimeStateClass(item.state === 'configured' ? 'ok' : (item.state === 'missing' ? 'missing' : (item.state === 'optional' ? 'unknown' : 'unknown')))}">${escapeHtml(configPresenceLabel(item.state))}</div>
+            </div>
+          `).join('') || '<div class="aw-empty">Данные пока недоступны.</div>'}
+        </div>
+      </section>
+
+      <aside class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Подсказки</h2>
+          <div class="aw-list">
+            ${hints.length ? hints.map((item) => `
+              <div class="aw-list-item">
+                <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
+                <small>${escapeHtml(item.message || '')}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Последние runtime-сигналы</h2>
+          <div class="aw-list">
+            ${recentEvents.length ? recentEvents.map((item) => `
+              <div class="aw-list-item">
+                <strong class="${warningTone(item.kind)}">${escapeHtml(item.message || '—')}</strong>
+                <small>${escapeHtml(item.source || 'runtime')} · ${formatDate(item.at)}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+      </aside>
+    </div>
   `, window.__adminSession || {});
 }
 
@@ -400,7 +463,6 @@ async function ensureSession() {
 
 async function render() {
   const route = routeInfo();
-  if (route.page !== 'userDetail') window.__noteFlash = null;
   if (route.page === 'login') {
     app.innerHTML = loginView(window.__loginState || {});
     bindLogin();
@@ -415,7 +477,7 @@ async function render() {
     const res = await api('/api/admin-web-read?section=overview');
     app.innerHTML = overviewView(res.data.data || {});
   } else if (route.page === 'users') {
-    const state = getUsersStateFromUrl();
+    const state = window.__usersState || { q: '', segment: 'all' };
     const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', limit: '20', page: '0' });
     const res = await api(`/api/admin-web-read?section=users&${params}`);
     app.innerHTML = usersView(res.data.data || { items: [] });
@@ -455,51 +517,31 @@ function bindShell() {
   });
   document.getElementById('refreshBtn')?.addEventListener('click', () => render());
   document.getElementById('applyUsersFilters')?.addEventListener('click', () => {
-    const nextState = {
+    window.__usersState = {
       q: document.getElementById('usersSearch')?.value || '',
       segment: document.getElementById('usersSegment')?.value || 'all',
     };
-    history.pushState({}, '', buildUsersHref(nextState));
     render();
   });
   app.querySelectorAll('[data-user-row]').forEach((row) => {
     row.addEventListener('click', () => {
       const id = row.getAttribute('data-user-row');
-      history.pushState({}, '', buildUserDetailHref(id, getUsersStateFromUrl()));
+      history.pushState({}, '', `/admin/users/${id}`);
       render();
     });
   });
-  document.getElementById('saveNoteBtn')?.addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    const userId = btn.getAttribute('data-user-id');
+  document.getElementById('saveNoteBtn')?.addEventListener('click', async () => {
+    const userId = document.getElementById('saveNoteBtn').getAttribute('data-user-id');
     const text = document.getElementById('noteText')?.value || '';
-    window.__noteFlash = null;
-    btn.disabled = true;
-    const clearBtn = document.getElementById('clearNoteBtn');
-    if (clearBtn) clearBtn.disabled = true;
-    const action = String(text || '').trim() ? 'set_note' : 'clear_note';
-    const res = await api(`/api/admin-web-write?action=${action}`, { method: 'POST', body: JSON.stringify({ userId, text }) });
-    if (!res.ok) {
-      window.__noteFlash = { kind: 'error', text: `Не удалось сохранить заметку: ${res.data?.error || 'unknown'}` };
-    } else {
-      window.__noteFlash = { kind: 'success', text: action === 'clear_note' ? 'Заметка очищена.' : 'Заметка сохранена.' };
-    }
-    render();
+    const res = await api('/api/admin-web-write?action=set_note', { method: 'POST', body: JSON.stringify({ userId, text }) });
+    if (!res.ok) alert(`Не удалось сохранить note: ${res.data?.error || 'unknown'}`);
+    else render();
   });
-  document.getElementById('clearNoteBtn')?.addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    const userId = btn.getAttribute('data-user-id');
-    window.__noteFlash = null;
-    btn.disabled = true;
-    const saveBtn = document.getElementById('saveNoteBtn');
-    if (saveBtn) saveBtn.disabled = true;
+  document.getElementById('clearNoteBtn')?.addEventListener('click', async () => {
+    const userId = document.getElementById('clearNoteBtn').getAttribute('data-user-id');
     const res = await api('/api/admin-web-write?action=clear_note', { method: 'POST', body: JSON.stringify({ userId }) });
-    if (!res.ok) {
-      window.__noteFlash = { kind: 'error', text: `Не удалось очистить заметку: ${res.data?.error || 'unknown'}` };
-    } else {
-      window.__noteFlash = { kind: 'success', text: 'Заметка очищена.' };
-    }
-    render();
+    if (!res.ok) alert(`Не удалось очистить note: ${res.data?.error || 'unknown'}`);
+    else render();
   });
 }
 
