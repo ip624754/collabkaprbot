@@ -256,6 +256,8 @@ export async function appendAdminWebAudit(entry = {}) {
     targetType: String(entry.targetType || ''),
     targetId: String(entry.targetId || ''),
     reason: String(entry.reason || ''),
+    oldJson: entry.oldJson ?? null,
+    newJson: entry.newJson ?? null,
   };
   const key = auditKey();
   const lua = `
@@ -271,12 +273,20 @@ export async function appendAdminWebAudit(entry = {}) {
   }
 }
 
-export async function getRecentAdminWebAudit(limit = 10) {
+export async function getRecentAdminWebAudit(limit = 10, filters = {}) {
   try {
     const raw = await redis.lrange(auditKey(), 0, Math.max(0, Number(limit || 10) - 1));
-    return (Array.isArray(raw) ? raw : []).map((item) => {
+    const items = (Array.isArray(raw) ? raw : []).map((item) => {
       try { return typeof item === 'string' ? JSON.parse(item) : item; } catch { return null; }
     }).filter(Boolean);
+    const targetType = String(filters?.targetType || '').trim();
+    const targetId = String(filters?.targetId || '').trim();
+    if (!targetType && !targetId) return items;
+    return items.filter((item) => {
+      if (targetType && String(item?.targetType || '') !== targetType) return false;
+      if (targetId && String(item?.targetId || '') !== targetId) return false;
+      return true;
+    });
   } catch {
     return [];
   }

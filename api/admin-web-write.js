@@ -6,24 +6,50 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
   const session = await requireSession(req, res);
   if (!session) return;
+
   const body = await readJsonBody(req);
   const action = String(req.query?.action || body.action || '').trim().toLowerCase();
 
   if (action === 'set_note' || action === 'clear_note') {
     const userId = Number(body.userId || 0) || 0;
     if (!userId) return json(res, 400, { ok: false, error: 'user_id_required' });
+
     const oldNote = await getAdminUserNote(userId);
-    if (action === 'clear_note') {
+    const rawText = String(body.text || body.note || '').replace(/\r/g, '').trim();
+
+    if (action === 'clear_note' || !rawText) {
       const ok = await clearAdminUserNote(userId);
       if (!ok) return json(res, 500, { ok: false, error: 'clear_failed' });
-      await appendAdminWebAudit({ section: 'users', action: 'clear_note', actorTgId: session.actorTgId, targetType: 'user', targetId: String(userId), reason: 'web_admin' });
+      await appendAdminWebAudit({
+        section: 'users',
+        action: 'clear_user_note',
+        actorTgId: session.actorTgId,
+        targetType: 'user',
+        targetId: String(userId),
+        reason: oldNote?.text ? 'clear' : 'noop_clear',
+        oldJson: oldNote || null,
+        newJson: null,
+      });
       return json(res, 200, { ok: true });
     }
-    const text = String(body.text || '').trim();
-    if (!text) return json(res, 400, { ok: false, error: 'note_text_required' });
-    const ok = await setAdminUserNote(userId, text, { byAdminTgId: session.actorTgId, byAdminUsername: '' });
+
+    const ok = await setAdminUserNote(userId, rawText, {
+      byAdminTgId: session.actorTgId,
+      byAdminUsername: `tg:${Number(session.actorTgId || 0) || 0}`,
+    });
     if (!ok) return json(res, 500, { ok: false, error: 'set_failed' });
-    await appendAdminWebAudit({ section: 'users', action: 'set_note', actorTgId: session.actorTgId, targetType: 'user', targetId: String(userId), reason: oldNote?.text ? 'update' : 'create' });
+
+    const newNote = await getAdminUserNote(userId);
+    await appendAdminWebAudit({
+      section: 'users',
+      action: 'set_user_note',
+      actorTgId: session.actorTgId,
+      targetType: 'user',
+      targetId: String(userId),
+      reason: oldNote?.text ? 'update' : 'create',
+      oldJson: oldNote || null,
+      newJson: newNote || null,
+    });
     return json(res, 200, { ok: true });
   }
 

@@ -28,6 +28,24 @@ function formatDate(value) {
   return d.toLocaleString('ru-RU');
 }
 
+function segmentLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ brand: 'бренд', creator: 'креатор', curator: 'куратор', manager: 'менеджер', user: 'пользователь' })[key] || (key || 'пользователь');
+}
+
+function signalLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({
+    creator: 'creator',
+    brand: 'brand',
+    curator: 'curator',
+    manager: 'manager',
+    moderator: 'moderator',
+    workspace_connected: 'workspace connected',
+    channel_connected: 'channel connected',
+  })[key] || key || '—';
+}
+
 function pathParts() {
   return location.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
 }
@@ -208,44 +226,113 @@ function usersView(model) {
 
 function userDetailView(model) {
   const user = model.user || {};
+  const account = model.account || {};
+  const access = model.access || {};
+  const activity = model.activity || {};
   const note = model.note || {};
-  return shell('User Card', 'Read-heavy drilldown + safe note write.', `
-    <div class="aw-split">
-      <section class="aw-surface aw-stack">
-        <h2>${escapeHtml(user.username ? '@' + user.username : 'user #' + user.id)}</h2>
-        <dl class="aw-kv">
-          <dt>User ID</dt><dd>${user.id || '—'}</dd>
-          <dt>TG ID</dt><dd>${user.tgId || '—'}</dd>
-          <dt>Brand plan</dt><dd>${escapeHtml(user.brandPlan || '—')}</dd>
-          <dt>Brand credits</dt><dd>${user.brandCredits || 0}</dd>
-          <dt>Banned</dt><dd>${user.bannedAt ? formatDate(user.bannedAt) : 'нет'}</dd>
-          <dt>Created</dt><dd>${formatDate(user.createdAt)}</dd>
-        </dl>
-        <div class="aw-list">
-          <div class="aw-list-item"><strong>Flags</strong><small>${user.flags?.isCreator ? 'creator ' : ''}${user.flags?.hasBrandProfile ? 'brand ' : ''}${user.flags?.isCurator ? 'curator ' : ''}${user.flags?.isModerator ? 'moderator ' : ''}${user.flags?.isManager ? 'manager ' : ''}</small></div>
-          <div class="aw-list-item"><strong>Workspaces</strong><small>${Array.isArray(user.workspaces) && user.workspaces.length ? user.workspaces.map((w) => `${w.title || 'workspace'} (${w.channel_username || 'no @'})`).join(' · ') : '—'}</small></div>
-          <div class="aw-list-item"><strong>Curator in</strong><small>${Array.isArray(user.curatorIn) && user.curatorIn.length ? user.curatorIn.map((w) => w.title || 'workspace').join(' · ') : '—'}</small></div>
-          <div class="aw-list-item"><strong>Brand profile</strong><small>${user.brandProfile?.brand_name ? escapeHtml(user.brandProfile.brand_name) : '—'}</small></div>
+  const recentAudit = Array.isArray(model.recentAdminAudit) ? model.recentAdminAudit : [];
+  const displayName = user.displayName || (user.username ? '@' + user.username : 'user #' + (user.id || '—'));
+  const workspaceLabel = Array.isArray(access.workspaces) && access.workspaces.length
+    ? access.workspaces.map((w) => `${w.title || 'workspace'}${w.channel_username ? ` · @${String(w.channel_username).replace(/^@/, '')}` : ''}`).join(' · ')
+    : 'Нет привязанных workspace.';
+  const curatorLabel = Array.isArray(access.curatorIn) && access.curatorIn.length
+    ? access.curatorIn.map((w) => w.title || 'workspace').join(' · ')
+    : 'Нет curator membership.';
+  const noteMeta = [];
+  if (note.updatedAt) noteMeta.push(`Обновлено: ${formatDate(note.updatedAt)}`);
+  if (note.byAdminTgId) noteMeta.push(`TG ${note.byAdminTgId}`);
+
+  return shell('Пользователь', 'User card usable v1: summary → access → activity → operator note.', `
+    <section class="aw-surface aw-user-hero aw-stack">
+      <a href="/admin/users" data-link class="aw-inline-back">← К списку пользователей</a>
+      <div class="aw-user-head">
+        <div class="aw-stack aw-gap-xs">
+          <h2 class="aw-user-title">${escapeHtml(displayName)}</h2>
+          <div class="aw-user-subline">tg_id ${user.tgId || '—'} · user_id ${user.id || '—'} · ${escapeHtml(segmentLabel(user.segment))} · создан ${formatDate(user.createdAt)}</div>
         </div>
-        <div class="aw-list-item">
-          <strong>Payment summary light</strong>
-          <small>total ${model.paymentLight?.total || 0} · applied ${model.paymentLight?.applied || 0} · pending ${model.paymentLight?.pending || 0} · last ${formatDate(model.paymentLight?.lastPaymentAt)}</small>
+        <div class="aw-badges">
+          <span class="aw-badge">${escapeHtml(segmentLabel(user.segment))}</span>
+          <span class="aw-badge ${user.status === 'banned' ? 'is-bad' : 'is-good'}">${user.status === 'banned' ? 'banned' : 'active'}</span>
+          ${user.username ? `<span class="aw-badge">@${escapeHtml(user.username)}</span>` : ''}
         </div>
+      </div>
+      <div class="aw-mini-grid">
+        <div class="aw-mini-card"><span>План</span><strong>${escapeHtml(account.plan || '—')}</strong></div>
+        <div class="aw-mini-card"><span>Credits</span><strong>${Number(account.credits || 0)}</strong></div>
+        <div class="aw-mini-card"><span>Workspace</span><strong>${access.hasWorkspace ? 'есть' : 'нет'}</strong></div>
+        <div class="aw-mini-card"><span>Канал</span><strong>${access.hasChannel ? 'подключён' : 'нет'}</strong></div>
+      </div>
+    </section>
+
+    <div class="aw-split aw-user-layout">
+      <section class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Профиль</h2>
+          <dl class="aw-kv aw-kv-compact">
+            <dt>Display</dt><dd>${escapeHtml(displayName)}</dd>
+            <dt>Username</dt><dd>${user.username ? '@' + escapeHtml(user.username) : '—'}</dd>
+            <dt>TG ID</dt><dd>${user.tgId || '—'}</dd>
+            <dt>User ID</dt><dd>${user.id || '—'}</dd>
+            <dt>Segment</dt><dd>${escapeHtml(segmentLabel(user.segment))}</dd>
+            <dt>Статус</dt><dd>${user.status === 'banned' ? `banned · ${formatDate(user.bannedAt)}` : 'active'}</dd>
+            <dt>План</dt><dd>${escapeHtml(account.plan || '—')} ${account.planUntil ? `· до ${formatDate(account.planUntil)}` : ''}</dd>
+            <dt>Credits</dt><dd>${escapeHtml(account.creditsLabel || 'no credits')}</dd>
+          </dl>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Доступ и сигналы</h2>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong>Signals</strong><small>${Array.isArray(access.signals) && access.signals.length ? access.signals.map(signalLabel).join(' · ') : 'Нет выраженных signals.'}</small></div>
+            <div class="aw-list-item"><strong>Workspaces</strong><small>${escapeHtml(workspaceLabel)}</small></div>
+            <div class="aw-list-item"><strong>Curator in</strong><small>${escapeHtml(curatorLabel)}</small></div>
+            <div class="aw-list-item"><strong>Brand profile</strong><small>${access.brandProfile?.brand_name ? escapeHtml(access.brandProfile.brand_name) : '—'}</small></div>
+            <div class="aw-list-item"><strong>Channel signal</strong><small>${access.hasChannel ? escapeHtml(access.channelLabel || 'Есть канал') : 'Нет канала'}</small></div>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Активность</h2>
+          <div class="aw-mini-grid aw-mini-grid-3">
+            <div class="aw-mini-card"><span>Owned workspaces</span><strong>${Number(activity.lightCounters?.workspacesOwned || 0)}</strong></div>
+            <div class="aw-mini-card"><span>Curator in</span><strong>${Number(activity.lightCounters?.curatorIn || 0)}</strong></div>
+            <div class="aw-mini-card"><span>Payments</span><strong>${Number(activity.lightCounters?.payments || 0)}</strong></div>
+          </div>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong>Recent summary</strong><small>${escapeHtml(activity.recentSummary || 'Нет выраженных сигналов активности.')}</small></div>
+            <div class="aw-list-item"><strong>Последнее изменение</strong><small>${formatDate(activity.lastSeenAt)}</small></div>
+            <div class="aw-list-item"><strong>Последний важный сигнал</strong><small>${formatDate(activity.lastImportantAction)}</small></div>
+          </div>
+        </section>
       </section>
-      <aside class="aw-surface aw-stack">
-        <h2>Admin Note</h2>
-        <textarea id="noteText" class="aw-textarea" placeholder="Внутренняя заметка для owner/admin">${escapeHtml(note.text || '')}</textarea>
-        <div class="aw-muted">Stored Redis-only, safe v1 write.</div>
-        <div class="aw-actions">
-          <button class="aw-button" id="saveNoteBtn" data-user-id="${user.id}">Сохранить</button>
-          <button class="aw-button secondary" id="clearNoteBtn" data-user-id="${user.id}">Очистить</button>
-          <a href="/admin/users" data-link class="aw-button ghost">Назад к списку</a>
-        </div>
-        <div class="aw-login-help">Updated: ${formatDate(note.updatedAt)}</div>
+
+      <aside class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Заметка оператора</h2>
+          <textarea id="noteText" class="aw-textarea" maxlength="1000" placeholder="Внутренняя заметка для owner/admin">${escapeHtml(note.text || '')}</textarea>
+          <div class="aw-muted">${noteMeta.length ? escapeHtml(noteMeta.join(' · ')) : 'Заметка пока не добавлена.'}</div>
+          <div class="aw-actions">
+            <button class="aw-button" id="saveNoteBtn" data-user-id="${user.id}">Сохранить</button>
+            <button class="aw-button secondary" id="clearNoteBtn" data-user-id="${user.id}">Очистить</button>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Последние admin-действия</h2>
+          <div class="aw-list">
+            ${recentAudit.length ? recentAudit.map((item) => `
+              <div class="aw-list-item">
+                <strong>${escapeHtml(item.action || 'unknown')}</strong>
+                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || 'fallback'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
       </aside>
     </div>
   `, window.__adminSession || {});
 }
+
 
 function runtimeView(model) {
   return shell('Runtime', 'Single snapshot endpoint. No polling, no cron dependency.', `
@@ -297,7 +384,7 @@ async function render() {
   } else if (route.page === 'userDetail') {
     const res = await api(`/api/admin-web-read?section=user&id=${encodeURIComponent(route.userId)}`);
     if (!res.ok) {
-      app.innerHTML = shell('User not found', 'Проверь user_id и попробуй снова.', `<div class="aw-surface aw-empty">User card not found.</div>`, session);
+      app.innerHTML = shell('Пользователь не найден', 'Проверь user_id и попробуй снова.', `<div class="aw-surface aw-empty"><a href="/admin/users" data-link class="aw-inline-back">← К списку пользователей</a><div class="aw-empty">Карточка пользователя не найдена.</div></div>`, session);
     } else {
       app.innerHTML = userDetailView(res.data.data || {});
     }

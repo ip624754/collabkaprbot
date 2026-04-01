@@ -1,5 +1,20 @@
 # Work History — 2026-04
 
+## STEP501 — Web Admin User Card usable v1
+
+Что сделано:
+- upgraded `/admin/users/[id]` into a read-first operator card with summary header, profile, access/signals, activity, operator note, and recent admin-action blocks;
+- `src/lib/adminWeb/readModels.js` extended `getUserDetail(...)` to return one aggregated `userDetail` snapshot with `account`, `access`, `activity`, `note`, and `recentAdminAudit` sections;
+- `api/admin-web-write.js` hardened note writes: blank input now normalizes to clear, audit actions are emitted as `set_user_note` / `clear_user_note`, and old/new note snapshots are attached to the audit payload;
+- `scripts/admin-web.js` user card UX rebuilt around one useful operator drilldown instead of a thin raw dump;
+- added `scripts/smoke-admin-web-user-card-contract.js`, wired into `package.json` + `scripts/preflight.js`;
+- removed stale legacy `api/admin-web/*` split handlers from the uploaded baseline so repo state once again matches the STEP500A Hobby-safe collapsed contract.
+
+Что важно:
+- scope stays hobby-safe and read-first: one primary read request, no polling, no cron dependency;
+- no dangerous writes were added: no payments, no deal mutations, no channel rebinding, no segment/plan edits;
+- Telegram-admin remains the fallback/control surface; web admin only gains a stronger read/useful drilldown layer.
+
 ## STEP500A — Web Admin Hobby-safe API collapse
 
 Что сделано:
