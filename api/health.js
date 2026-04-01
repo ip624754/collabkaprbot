@@ -2,17 +2,6 @@ import { CFG } from '../src/lib/config.js';
 
 function resolveHealthTier(req) {
   try {
-    const direct = req?.query && typeof req.query === 'object'
-      ? (req.query.tier ?? req.query.view ?? (req.query.fast ? 'fast' : null))
-      : null;
-    const rawDirect = String(direct || '').trim().toLowerCase();
-    if (rawDirect === 'fast' || rawDirect === 'ops' || rawDirect === 'operator') return 'fast';
-    if (rawDirect === 'full') return 'full';
-  } catch {
-    // ignore
-  }
-
-  try {
     if (typeof req?.url === 'string' && req.url) {
       const u = new URL(req.url, 'http://localhost');
       const raw = String(

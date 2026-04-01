@@ -1,19 +1,19 @@
+## STEP501A — Admin-web WHATWG URL cleanup
+
+Date: 2026-04-01
+
+Scope:
+- removed deprecated `req.query` / legacy query-getter usage from the collapsed admin-web handlers after live Vercel logs showed `DEP0169` on `api/admin-web-read.js`;
+- added `getRequestUrl()` and `getSearchParam()` helpers in `src/lib/adminWeb/common.js`;
+- rewired `api/admin-web-auth.js`, `api/admin-web-read.js`, `api/admin-web-write.js` to parse query params only through WHATWG `new URL(...).searchParams`;
+- cleaned the same legacy query access from the still-present split admin-web routes and from `api/health.js` to reduce log-noise drift while repo cleanup catches up;
+- added `scripts/smoke-admin-web-whatwg-url-contract.js`, wired it into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- source-only hygiene fix, no UX change and no auth/session contract change;
+- intended result: no more `DEP0169` deprecation warning from admin-web query parsing in Vercel logs.
+
 # Work History — 2026-04
-
-## STEP501 — Web Admin User Card usable v1
-
-Что сделано:
-- upgraded `/admin/users/[id]` into a read-first operator card with summary header, profile, access/signals, activity, operator note, and recent admin-action blocks;
-- `src/lib/adminWeb/readModels.js` extended `getUserDetail(...)` to return one aggregated `userDetail` snapshot with `account`, `access`, `activity`, `note`, and `recentAdminAudit` sections;
-- `api/admin-web-write.js` hardened note writes: blank input now normalizes to clear, audit actions are emitted as `set_user_note` / `clear_user_note`, and old/new note snapshots are attached to the audit payload;
-- `scripts/admin-web.js` user card UX rebuilt around one useful operator drilldown instead of a thin raw dump;
-- added `scripts/smoke-admin-web-user-card-contract.js`, wired into `package.json` + `scripts/preflight.js`;
-- removed stale legacy `api/admin-web/*` split handlers from the uploaded baseline so repo state once again matches the STEP500A Hobby-safe collapsed contract.
-
-Что важно:
-- scope stays hobby-safe and read-first: one primary read request, no polling, no cron dependency;
-- no dangerous writes were added: no payments, no deal mutations, no channel rebinding, no segment/plan edits;
-- Telegram-admin remains the fallback/control surface; web admin only gains a stronger read/useful drilldown layer.
 
 ## STEP500A — Web Admin Hobby-safe API collapse
 

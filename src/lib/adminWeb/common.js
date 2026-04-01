@@ -103,6 +103,31 @@ export function getAdminWebBaseUrl() {
   return String(CFG.PUBLIC_BASE_URL || '').replace(/\/$/, '');
 }
 
+
+export function getRequestUrl(req) {
+  const host = String(req?.headers?.host || 'localhost');
+  const proto = String(req?.headers?.['x-forwarded-proto'] || 'https');
+  const raw = String(req?.url || '/');
+  return new URL(raw, `${proto}://${host}`);
+}
+
+export function getSearchParam(req, key, fallback = '') {
+  try {
+    const value = getRequestUrl(req).searchParams.get(String(key || ''));
+    return value == null ? fallback : value;
+  } catch {
+    return fallback;
+  }
+}
+
+export function hasSearchParam(req, key) {
+  try {
+    return getRequestUrl(req).searchParams.has(String(key || ''));
+  } catch {
+    return false;
+  }
+}
+
 export function escapeHtml(input) {
   return String(input || '')
     .replace(/&/g, '&amp;')

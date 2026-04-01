@@ -1,5 +1,5 @@
 import { approveChallenge, appendAdminWebAudit, clearAuthCookie, createLoginChallenge, getChallenge, getSession, isAdminWebReady, issueSession, logout, requireSession, revokeAllSessions, verifyChallengeCode } from '../src/lib/adminWeb/auth.js';
-import { html, json, readJsonBody, timingSafeEq } from '../src/lib/adminWeb/common.js';
+import { getSearchParam, html, json, readJsonBody, timingSafeEq } from '../src/lib/adminWeb/common.js';
 import { CFG } from '../src/lib/config.js';
 
 function page(title, body) {
@@ -7,9 +7,7 @@ function page(title, body) {
 }
 
 function getAction(req) {
-  const fromQuery = String(req.query?.action || '').trim().toLowerCase();
-  if (fromQuery) return fromQuery;
-  return '';
+  return String(getSearchParam(req, 'action', '') || '').trim().toLowerCase();
 }
 
 export default async function handler(req, res) {
@@ -17,11 +15,11 @@ export default async function handler(req, res) {
 
   if (action === 'decision') {
     if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method_not_allowed' });
-    const challengeId = String(req.query?.challengeId || '').trim();
-    const decision = String(req.query?.decision || '').trim();
-    const actor = Number(req.query?.actor || 0) || 0;
-    const exp = Number(req.query?.exp || 0) || 0;
-    const sig = String(req.query?.sig || '').trim();
+    const challengeId = String(getSearchParam(req, 'challengeId', '') || '').trim();
+    const decision = String(getSearchParam(req, 'decision', '') || '').trim();
+    const actor = Number(getSearchParam(req, 'actor', '0') || 0) || 0;
+    const exp = Number(getSearchParam(req, 'exp', '0') || 0) || 0;
+    const sig = String(getSearchParam(req, 'sig', '') || '').trim();
     const result = await approveChallenge({ challengeId, decision, actorTgId: actor, exp, sig });
     if (!result.ok) return html(res, 400, page('Не удалось обработать вход', `Причина: ${String(result.error || 'unknown')}`));
     if (decision === 'deny') return html(res, 200, page('Вход отклонён', 'Этот login challenge помечен как denied.'));
@@ -41,7 +39,7 @@ export default async function handler(req, res) {
 
   if (action === 'status') {
     if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method_not_allowed' });
-    const challengeId = String(req.query?.challengeId || '').trim();
+    const challengeId = String(getSearchParam(req, 'challengeId', '') || '').trim();
     if (!challengeId) return json(res, 400, { ok: false, error: 'challenge_id_required' });
     const challenge = await getChallenge(challengeId);
     if (!challenge) return json(res, 404, { ok: false, error: 'challenge_not_found' });
