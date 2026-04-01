@@ -1699,3 +1699,11 @@ Auto-heal safeguards + ops alerts:
 - Overview now has a direct entry-point into the payments surface through the payment alerts card.
 - Added source smoke `scripts/smoke-admin-web-payments-contract.js`, wired into `package.json` and `scripts/preflight.js`.
 - Scope is read-only only: no retries, no overrides, no credits mutation, no payout/release controls.
+
+
+## STEP506 — Web Admin comms workspace v1
+- Added `/admin/comms` as a read-only founder/operator communications surface.
+- Added `section=comms` in `api/admin-web-read.js` and `getCommsSummary()` in `src/lib/adminWeb/readModels.js`.
+- Comms page now exposes: overall status, warnings strip, recent notices table, outbox groups, and hints.
+- Overview now links into the comms workspace.
+- Scope stays read-only and Hobby-safe: one primary read request, no polling, no cron dependency, no new write actions.

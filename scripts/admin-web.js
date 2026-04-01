@@ -99,6 +99,7 @@ function routeInfo() {
   if (parts[1] === 'users') return { page: 'users' };
   if (parts[1] === 'runtime') return { page: 'runtime' };
   if (parts[1] === 'payments') return { page: 'payments' };
+  if (parts[1] === 'comms') return { page: 'comms' };
   return { page: 'overview' };
 }
 
@@ -123,6 +124,7 @@ function shell(title, subtitle, body, session) {
           ${navLink('/admin/users', 'Users', route.page === 'users' || route.page === 'userDetail')}
           ${navLink('/admin/runtime', 'Runtime', route.page === 'runtime')}
           ${navLink('/admin/payments', 'Payments', route.page === 'payments')}
+          ${navLink('/admin/comms', 'Comms', route.page === 'comms')}
         </nav>
       </aside>
       <main class="aw-main">
@@ -196,6 +198,10 @@ function overviewView(model) {
       <div class="aw-card"><span>Giveaways active</span><strong>${cards.giveawaysActive || 0}</strong></div>
       <a href="/admin/payments" data-link class="aw-card aw-card-link"><span>Payment alerts</span><strong>${cards.paymentAlerts || 0}</strong><small>Открыть payment surface</small></a>
       <div class="aw-card"><span>Runtime warnings</span><strong>${cards.runtimeWarnings || 0}</strong></div>
+    </div>
+    <div class="aw-actions aw-overview-links">
+      <a href="/admin/payments" data-link class="aw-button ghost">Payments surface</a>
+      <a href="/admin/comms" data-link class="aw-button ghost">Comms workspace</a>
     </div>
     <div class="aw-split aw-section">
       <section class="aw-surface aw-stack">
@@ -477,6 +483,121 @@ function paymentsView(model) {
   `, window.__adminSession || {});
 }
 
+function commsAudienceLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ all: 'all', brands: 'brands', creators: 'creators', curators: 'curators', managers: 'managers' })[key] || (key || 'all');
+}
+
+function commsStatusClass(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'done') return 'good';
+  if (key === 'running' || key === 'paused' || key === 'pending') return 'warn';
+  if (key === 'error' || key === 'stopped' || key === 'blocked') return 'bad';
+  return '';
+}
+
+function commsStatusLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ pending: 'pending', running: 'running', paused: 'paused', done: 'done', error: 'error', stopped: 'stopped', blocked: 'blocked', unknown: 'unknown' })[key] || (key || 'unknown');
+}
+
+function commsView(model) {
+  const summary = model.summary || {};
+  const warnings = Array.isArray(model.warnings) ? model.warnings : [];
+  const recentBroadcasts = Array.isArray(model.recentBroadcasts) ? model.recentBroadcasts : [];
+  const groups = model.groups || {};
+  const hints = Array.isArray(model.hints) ? model.hints : [];
+  const overall = model.overall || { state: 'unknown', label: 'Данные пока недоступны' };
+  return shell('Comms', 'Read-only workspace для notices, outbox-сигналов и статусов доставки.', `
+    <section class="aw-surface aw-section aw-stack">
+      <div class="aw-runtime-head">
+        <div>
+          <h2>Сводка коммуникаций</h2>
+          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)}</p>
+        </div>
+        <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
+      </div>
+      <div class="aw-grid-cards aw-runtime-cards">
+        <div class="aw-card aw-runtime-card"><span>Total notices</span><strong>${Number(summary.total || 0)}</strong><small>Все broadcast rows</small></div>
+        <div class="aw-card aw-runtime-card"><span>Drafts</span><strong class="aw-status ${Number(summary.drafts || 0) > 0 ? 'warn' : 'good'}">${Number(summary.drafts || 0)}</strong><small>PENDING / waiting to start</small></div>
+        <div class="aw-card aw-runtime-card"><span>Active</span><strong class="aw-status ${Number(summary.active || 0) > 0 ? 'warn' : 'good'}">${Number(summary.active || 0)}</strong><small>RUNNING / PAUSED</small></div>
+        <div class="aw-card aw-runtime-card"><span>Recent done</span><strong>${Number(summary.doneRecent || 0)}</strong><small>DONE за 7 дней</small></div>
+        <div class="aw-card aw-runtime-card"><span>Outbox blocked</span><strong class="aw-status ${Number(summary.blocked || 0) > 0 ? 'bad' : 'good'}">${Number(summary.blocked || 0)}</strong><small>blocked / failed</small></div>
+        <div class="aw-card aw-runtime-card"><span>Warnings</span><strong class="aw-status ${Number(summary.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.warnings || 0)}</strong><small>cooldown / stalled / fallback</small></div>
+      </div>
+    </section>
+
+    <section class="aw-surface aw-section aw-stack">
+      <h2>Предупреждения</h2>
+      <div class="aw-list">
+        ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных comms-предупреждений нет.', source: 'comms' }]).map((item) => `
+          <div class="aw-list-item aw-warning-item">
+            <strong class="${warningTone(item.level)}">${escapeHtml(item.message || '—')}</strong>
+            <small>${escapeHtml(item.source || 'comms')}</small>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+
+    <div class="aw-split aw-section aw-runtime-layout">
+      <section class="aw-surface aw-stack">
+        <h2>Recent notices</h2>
+        <div class="aw-table-wrap">
+          <table class="aw-table">
+            <thead>
+              <tr>
+                <th>Notice</th>
+                <th>Audience</th>
+                <th>Status</th>
+                <th>Outbox</th>
+                <th>Preview</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recentBroadcasts.length ? recentBroadcasts.map((item) => `
+                <tr>
+                  <td><strong>#${Number(item.id || 0)}</strong><small>${escapeHtml(item.createdByLabel || 'operator')} · ${formatDate(item.createdAt)}</small></td>
+                  <td>${escapeHtml(commsAudienceLabel(item.audience))}</td>
+                  <td><span class="aw-status ${commsStatusClass(item.status)}">${escapeHtml(commsStatusLabel(item.status))}</span></td>
+                  <td><small>sent ${Number(item.outbox?.sent || 0)} · queued ${Number(item.outbox?.queued || 0)} · blocked ${Number(item.outbox?.blocked || 0)}</small></td>
+                  <td><small>${escapeHtml(item.preview || 'Черновик без текста')}</small></td>
+                  <td>${formatDate(item.updatedAt)}</td>
+                </tr>
+              `).join('') : '<tr><td colspan="6" class="aw-empty">Notice rows пока отсутствуют.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Outbox groups</h2>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong>queued</strong><small>${Number(groups.queued || 0)}</small></div>
+            <div class="aw-list-item"><strong>sent</strong><small>${Number(groups.sent || 0)}</small></div>
+            <div class="aw-list-item"><strong>blocked</strong><small>${Number(groups.blocked || 0)}</small></div>
+            <div class="aw-list-item"><strong>deferred</strong><small>${Number(groups.deferred || 0)}</small></div>
+            <div class="aw-list-item"><strong>quarantined</strong><small>${Number(groups.quarantined || 0)}</small></div>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Подсказки</h2>
+          <div class="aw-list">
+            ${hints.length ? hints.map((item) => `
+              <div class="aw-list-item">
+                <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
+                <small>${escapeHtml(item.message || '')}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+      </aside>
+    </div>
+  `, window.__adminSession || {});
+}
+
 function runtimeView(model) {
   const services = model.services || {};
   const warnings = Array.isArray(model.warnings) ? model.warnings : [];
@@ -609,6 +730,9 @@ async function render() {
   } else if (route.page === 'payments') {
     const res = await api('/api/admin-web-read?section=payments');
     app.innerHTML = paymentsView(res.data.data || {});
+  } else if (route.page === 'comms') {
+    const res = await api('/api/admin-web-read?section=comms');
+    app.innerHTML = commsView(res.data.data || {});
   }
   bindShell();
 }

@@ -82,3 +82,19 @@ Scope:
 Acceptance / notes:
 - scope is read-only only: no retries, overrides, credits mutation, payout/release controls, or any other payment write action;
 - page remains hobby-safe: one primary read request, no polling, no cron dependency.
+
+
+## STEP506 — Comms / Notices workspace v1
+
+Date: 2026-04-02
+
+Scope:
+- added `/admin/comms` as a read-only founder/operator communications workspace inside the web-admin shell;
+- extended `api/admin-web-read.js` with `section=comms`;
+- implemented aggregated `getCommsSummary()` in `src/lib/adminWeb/readModels.js` using `broadcasts` + `broadcast_sent_log` snapshots;
+- added a direct Overview entry-point into the comms workspace;
+- added `scripts/smoke-admin-web-comms-contract.js`, wired it into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only only: no live send, no retries, no payment mutations, no founder-dangerous controls;
+- page remains hobby-safe: one primary read request, no polling, no cron dependency, function budget unchanged at 11 deployable entrypoints.

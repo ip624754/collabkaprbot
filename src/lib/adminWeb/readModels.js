@@ -348,3 +348,198 @@ export async function getPaymentsSummary() {
   return out;
 }
 
+
+function normalizeBroadcastStatus(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  if (raw === 'PENDING' || raw === 'DRAFT') return 'pending';
+  if (raw === 'RUNNING') return 'running';
+  if (raw === 'PAUSED') return 'paused';
+  if (raw === 'DONE') return 'done';
+  if (raw === 'ERROR') return 'error';
+  if (raw === 'STOPPED') return 'stopped';
+  return 'unknown';
+}
+
+function commsOverallState(summary = {}) {
+  if (!summary.available) return 'unknown';
+  if (Number(summary.blocked || 0) > 0 || Number(summary.failed || 0) > 0 || Number(summary.deferred || 0) > 0 || Number(summary.quarantined || 0) > 0 || Number(summary.cooldownActive || 0) > 0 || Number(summary.active || 0) > 0) return 'degraded';
+  return 'ok';
+}
+
+function buildCommsWarnings(summary = {}) {
+  const warnings = [];
+  if (!summary.available) {
+    warnings.push({ level: 'warning', message: 'Comms workspace недоступен.', source: 'comms' });
+    return warnings;
+  }
+  if (Number(summary.cooldownActive || 0) > 0) warnings.push({ level: 'warning', message: `Есть active cooldown notices: ${Number(summary.cooldownActive || 0)}`, source: 'broadcasts' });
+  if (Number(summary.blocked || 0) > 0) warnings.push({ level: 'warning', message: `Есть blocked deliveries: ${Number(summary.blocked || 0)}`, source: 'outbox' });
+  if (Number(summary.failed || 0) > 0) warnings.push({ level: 'warning', message: `Есть failed deliveries: ${Number(summary.failed || 0)}`, source: 'outbox' });
+  if (Number(summary.deferred || 0) > 0 || Number(summary.quarantined || 0) > 0) warnings.push({ level: 'warning', message: `Есть deferred/quarantined retries: ${Number(summary.deferred || 0) + Number(summary.quarantined || 0)}`, source: 'outbox' });
+  if (!warnings.length) warnings.push({ level: 'info', message: 'Явных comms-предупреждений нет.', source: 'comms' });
+  return warnings;
+}
+
+function buildCommsHints(summary = {}) {
+  if (!summary.available) {
+    return [{ kind: 'warning', message: 'Broadcasts / outbox таблицы недоступны. Проверь schema и runtime baseline.' }];
+  }
+  const hints = [];
+  if (Number(summary.active || 0) > 0) hints.push({ kind: 'warning', message: 'Есть активные notices. Для действий использовать bot/admin fallback, web surface остаётся read-only.' });
+  if (Number(summary.drafts || 0) > 0) hints.push({ kind: 'info', message: 'Есть PENDING notices. Это полезный read-only срез перед ручным запуском из bot/admin.' });
+  if (Number(summary.blocked || 0) > 0 || Number(summary.failed || 0) > 0) hints.push({ kind: 'warning', message: 'Есть blocked / failed deliveries. Проверь outbox и operator fallback в Telegram-admin.' });
+  if (!hints.length) hints.push({ kind: 'info', message: 'Read-only режим: notices и outbox выглядят стабильно.' });
+  return hints.slice(0, 3);
+}
+
+export async function getCommsSummary() {
+  const out = {
+    updatedAt: new Date().toISOString(),
+    overall: { state: 'unknown', label: 'Данные пока недоступны' },
+    summary: { total: 0, drafts: 0, active: 0, doneRecent: 0, blocked: 0, warnings: 0 },
+    warnings: [{ level: 'info', message: 'Notice rows пока отсутствуют.', source: 'comms' }],
+    groups: { queued: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0 },
+    recentBroadcasts: [],
+    hints: [{ kind: 'info', message: 'Read-only режим: для любых live-send / retries использовать bot/admin fallback.' }],
+  };
+
+  let summary = {
+    available: false,
+    total: 0,
+    drafts: 0,
+    active: 0,
+    doneRecent: 0,
+    errors: 0,
+    stopped: 0,
+    cooldownActive: 0,
+    queued: 0,
+    sent: 0,
+    blocked: 0,
+    deferred: 0,
+    quarantined: 0,
+    failed: 0,
+    latestEventAt: null,
+  };
+
+  try {
+    const r = await pool.query(`
+      with bc as (
+        select
+          count(*)::int as total,
+          count(*) filter (where upper(status) = 'PENDING')::int as drafts,
+          count(*) filter (where upper(status) in ('RUNNING','PAUSED'))::int as active,
+          count(*) filter (where upper(status) = 'DONE' and created_at >= now() - interval '7 days')::int as done_recent,
+          count(*) filter (where upper(status) = 'ERROR')::int as errors,
+          count(*) filter (where upper(status) = 'STOPPED')::int as stopped,
+          count(*) filter (where cooldown_until is not null and cooldown_until > now())::int as cooldown_active,
+          max(updated_at) as latest_broadcast_at
+        from broadcasts
+      ), sl as (
+        select
+          count(*) filter (where status = 'queued')::int as queued,
+          count(*) filter (where status = 'sent')::int as sent,
+          count(*) filter (where status = 'blocked')::int as blocked,
+          count(*) filter (where status = 'deferred')::int as deferred,
+          count(*) filter (where status = 'quarantined')::int as quarantined,
+          count(*) filter (where status = 'failed')::int as failed,
+          max(sent_at) as latest_sent_at
+        from broadcast_sent_log
+      )
+      select
+        bc.total, bc.drafts, bc.active, bc.done_recent, bc.errors, bc.stopped, bc.cooldown_active, bc.latest_broadcast_at,
+        sl.queued, sl.sent, sl.blocked, sl.deferred, sl.quarantined, sl.failed, sl.latest_sent_at
+      from bc cross join sl
+    `);
+    const row = r.rows?.[0] || {};
+    summary = {
+      available: true,
+      total: Number(row.total || 0),
+      drafts: Number(row.drafts || 0),
+      active: Number(row.active || 0),
+      doneRecent: Number(row.done_recent || 0),
+      errors: Number(row.errors || 0),
+      stopped: Number(row.stopped || 0),
+      cooldownActive: Number(row.cooldown_active || 0),
+      queued: Number(row.queued || 0),
+      sent: Number(row.sent || 0),
+      blocked: Number(row.blocked || 0),
+      deferred: Number(row.deferred || 0),
+      quarantined: Number(row.quarantined || 0),
+      failed: Number(row.failed || 0),
+      latestEventAt: row.latest_sent_at || row.latest_broadcast_at || null,
+    };
+  } catch {
+    // keep defaults
+  }
+
+  let recentBroadcasts = [];
+  if (summary.available) {
+    try {
+      const r = await pool.query(`
+        select
+          b.id, b.status, b.audience, b.draft_type, b.draft_text, b.draft_caption, b.total_count, b.created_at, b.updated_at,
+          u.tg_username,
+          coalesce(st.sent, 0)::int as sent_count,
+          coalesce(st.queued, 0)::int as queued_count,
+          coalesce(st.blocked, 0)::int as blocked_count
+        from broadcasts b
+        left join users u on u.id = b.created_by_user_id
+        left join lateral (
+          select
+            count(*) filter (where status = 'sent') as sent,
+            count(*) filter (where status = 'queued') as queued,
+            count(*) filter (where status = 'blocked') as blocked
+          from broadcast_sent_log sl
+          where sl.broadcast_id = b.id
+        ) st on true
+        order by b.created_at desc
+        limit 12
+      `);
+      recentBroadcasts = Array.isArray(r.rows) ? r.rows.map((row) => ({
+        id: Number(row.id || 0),
+        status: normalizeBroadcastStatus(row.status),
+        audience: String(row.audience || 'all').trim().toLowerCase(),
+        kind: String(row.draft_type || '').trim() || 'notice',
+        preview: String(row.draft_text || row.draft_caption || '').trim().slice(0, 140),
+        totalCount: Number(row.total_count || 0),
+        createdByLabel: row.tg_username ? `@${String(row.tg_username).trim()}` : 'operator',
+        createdAt: row.created_at || null,
+        updatedAt: row.updated_at || null,
+        outbox: {
+          sent: Number(row.sent_count || 0),
+          queued: Number(row.queued_count || 0),
+          blocked: Number(row.blocked_count || 0),
+        },
+      })) : [];
+    } catch {
+      recentBroadcasts = [];
+    }
+  }
+
+  out.updatedAt = summary.latestEventAt || out.updatedAt;
+  out.overall = {
+    state: commsOverallState(summary),
+    label: summary.available
+      ? (commsOverallState(summary) === 'ok' ? 'Notices и outbox выглядят стабильно' : 'Есть comms-сигналы, требующие проверки')
+      : 'Comms диагностика недоступна',
+  };
+  out.summary = {
+    total: summary.total,
+    drafts: summary.drafts,
+    active: summary.active,
+    doneRecent: summary.doneRecent,
+    blocked: Number(summary.blocked || 0) + Number(summary.failed || 0),
+    warnings: Number(summary.errors || 0) + Number(summary.stopped || 0) + Number(summary.cooldownActive || 0) + Number(summary.blocked || 0) + Number(summary.failed || 0) + Number(summary.deferred || 0) + Number(summary.quarantined || 0),
+  };
+  out.groups = {
+    queued: summary.queued,
+    sent: summary.sent,
+    blocked: Number(summary.blocked || 0) + Number(summary.failed || 0),
+    deferred: summary.deferred,
+    quarantined: summary.quarantined,
+  };
+  out.warnings = buildCommsWarnings(summary);
+  out.recentBroadcasts = recentBroadcasts;
+  out.hints = buildCommsHints(summary);
+  return out;
+}
