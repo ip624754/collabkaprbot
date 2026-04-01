@@ -348,3 +348,13 @@ body {
   .aw-config-row { grid-template-columns: 1fr; }
   .aw-config-state { text-align: left; }
 }
+
+.aw-card-link {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+.aw-card-link:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}

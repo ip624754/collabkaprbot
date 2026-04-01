@@ -65,6 +65,20 @@ function configPresenceLabel(value) {
   return ({ configured: 'configured', missing: 'missing', optional: 'optional', not_enabled: 'not enabled' })[key] || (key || '—');
 }
 
+
+function paymentStatusClass(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'success') return 'good';
+  if (key === 'pending') return 'warn';
+  if (key === 'failed' || key === 'fallback') return 'bad';
+  return '';
+}
+
+function paymentStatusLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ success: 'success', pending: 'pending', failed: 'failed', fallback: 'fallback', unknown: 'unknown' })[key] || (key || 'unknown');
+}
+
 function warningTone(level) {
   const key = String(level || '').trim().toLowerCase();
   if (key === 'error') return 'aw-status bad';
@@ -84,6 +98,7 @@ function routeInfo() {
   if (parts[1] === 'users' && parts[2]) return { page: 'userDetail', userId: parts[2] };
   if (parts[1] === 'users') return { page: 'users' };
   if (parts[1] === 'runtime') return { page: 'runtime' };
+  if (parts[1] === 'payments') return { page: 'payments' };
   return { page: 'overview' };
 }
 
@@ -107,6 +122,7 @@ function shell(title, subtitle, body, session) {
           ${navLink('/admin', 'Overview', route.page === 'overview')}
           ${navLink('/admin/users', 'Users', route.page === 'users' || route.page === 'userDetail')}
           ${navLink('/admin/runtime', 'Runtime', route.page === 'runtime')}
+          ${navLink('/admin/payments', 'Payments', route.page === 'payments')}
         </nav>
       </aside>
       <main class="aw-main">
@@ -178,7 +194,7 @@ function overviewView(model) {
       <div class="aw-card"><span>Workspaces</span><strong>${cards.workspacesTotal || 0}</strong></div>
       <div class="aw-card"><span>Offers active</span><strong>${cards.offersActive || 0}</strong></div>
       <div class="aw-card"><span>Giveaways active</span><strong>${cards.giveawaysActive || 0}</strong></div>
-      <div class="aw-card"><span>Payment alerts</span><strong>${cards.paymentAlerts || 0}</strong></div>
+      <a href="/admin/payments" data-link class="aw-card aw-card-link"><span>Payment alerts</span><strong>${cards.paymentAlerts || 0}</strong><small>Открыть payment surface</small></a>
       <div class="aw-card"><span>Runtime warnings</span><strong>${cards.runtimeWarnings || 0}</strong></div>
     </div>
     <div class="aw-split aw-section">
@@ -362,6 +378,105 @@ function userDetailView(model) {
 
 
 
+
+function paymentsView(model) {
+  const summary = model.summary || {};
+  const warnings = Array.isArray(model.warnings) ? model.warnings : [];
+  const recentPayments = Array.isArray(model.recentPayments) ? model.recentPayments : [];
+  const groups = model.groups || {};
+  const hints = Array.isArray(model.hints) ? model.hints : [];
+  const overall = model.overall || { state: 'unknown', label: 'Данные пока недоступны' };
+  return shell('Payments', 'Read-only срез платежной активности, fallback-сигналов и проблемных кейсов.', `
+    <section class="aw-surface aw-section aw-stack">
+      <div class="aw-runtime-head">
+        <div>
+          <h2>Платёжный статус</h2>
+          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)}</p>
+        </div>
+        <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
+      </div>
+      <div class="aw-grid-cards aw-runtime-cards">
+        <div class="aw-card aw-runtime-card"><span>Total payments</span><strong>${Number(summary.total || 0)}</strong><small>Все события</small></div>
+        <div class="aw-card aw-runtime-card"><span>Recent payments</span><strong>${Number(summary.recent || 0)}</strong><small>Последние 7 дней</small></div>
+        <div class="aw-card aw-runtime-card"><span>Successful</span><strong class="aw-status good">${Number(summary.successful || 0)}</strong><small>Применены</small></div>
+        <div class="aw-card aw-runtime-card"><span>Pending</span><strong class="aw-status warn">${Number(summary.pending || 0)}</strong><small>Требуют внимания</small></div>
+        <div class="aw-card aw-runtime-card"><span>Warnings</span><strong class="aw-status ${Number(summary.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.warnings || 0)}</strong><small>Fallback / failed / stale</small></div>
+        <div class="aw-card aw-runtime-card"><span>Needs review</span><strong class="aw-status ${Number(summary.needsReview || 0) > 0 ? 'bad' : 'good'}">${Number(summary.needsReview || 0)}</strong><small>Founder/operator review</small></div>
+      </div>
+    </section>
+
+    <section class="aw-surface aw-section aw-stack">
+      <h2>Предупреждения</h2>
+      <div class="aw-list">
+        ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных payment-предупреждений нет.', source: 'payments' }]).map((item) => `
+          <div class="aw-list-item aw-warning-item">
+            <strong class="${warningTone(item.level)}">${escapeHtml(item.message || '—')}</strong>
+            <small>${escapeHtml(item.source || 'payments')}</small>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+
+    <div class="aw-split aw-section aw-runtime-layout">
+      <section class="aw-surface aw-stack">
+        <h2>Последние платежи</h2>
+        <div class="aw-table-wrap">
+          <table class="aw-table">
+            <thead>
+              <tr>
+                <th>Payment</th>
+                <th>User</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recentPayments.length ? recentPayments.map((item) => `
+                <tr>
+                  <td><strong>#${Number(item.id || 0)}</strong><small>user_id ${Number(item.userId || 0) || '—'} · tg_id ${Number(item.tgId || 0) || '—'}</small></td>
+                  <td>${escapeHtml(item.displayName || '—')}</td>
+                  <td>${escapeHtml(item.kind || 'payment')}</td>
+                  <td>${escapeHtml(item.amountLabel || '—')}</td>
+                  <td><span class="aw-status ${paymentStatusClass(item.status)}">${escapeHtml(paymentStatusLabel(item.status))}</span></td>
+                  <td>${formatDate(item.createdAt)}</td>
+                  <td>${formatDate(item.updatedAt)}</td>
+                </tr>
+              `).join('') : '<tr><td colspan="7" class="aw-empty">Платёжных событий пока нет.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Status groups</h2>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong>success</strong><small>${Number(groups.success || 0)}</small></div>
+            <div class="aw-list-item"><strong>pending</strong><small>${Number(groups.pending || 0)}</small></div>
+            <div class="aw-list-item"><strong>failed</strong><small>${Number(groups.failed || 0)}</small></div>
+            <div class="aw-list-item"><strong>fallback</strong><small>${Number(groups.fallback || 0)}</small></div>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Подсказки</h2>
+          <div class="aw-list">
+            ${hints.length ? hints.map((item) => `
+              <div class="aw-list-item">
+                <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
+                <small>${escapeHtml(item.message || '')}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+      </aside>
+    </div>
+  `, window.__adminSession || {});
+}
+
 function runtimeView(model) {
   const services = model.services || {};
   const warnings = Array.isArray(model.warnings) ? model.warnings : [];
@@ -491,6 +606,9 @@ async function render() {
   } else if (route.page === 'runtime') {
     const res = await api('/api/admin-web-read?section=runtime');
     app.innerHTML = runtimeView(res.data.data || {});
+  } else if (route.page === 'payments') {
+    const res = await api('/api/admin-web-read?section=payments');
+    app.innerHTML = paymentsView(res.data.data || {});
   }
   bindShell();
 }

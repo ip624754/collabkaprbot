@@ -31,6 +31,40 @@ function buildAccessSignals(row) {
   return out;
 }
 
+
+function normalizePaymentStatus(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  if (raw === 'APPLIED' || raw === 'SUCCESS') return 'success';
+  if (raw === 'RECEIVED' || raw === 'APPLYING' || raw === 'PENDING' || raw === 'PROCESSING') return 'pending';
+  if (raw === 'ORPHANED' || raw === 'FALLBACK') return 'fallback';
+  if (raw === 'ERROR' || raw === 'FAILED') return 'failed';
+  return 'unknown';
+}
+
+function paymentStatusLabel(value) {
+  const key = normalizePaymentStatus(value);
+  return ({ success: 'success', pending: 'pending', failed: 'failed', fallback: 'fallback', unknown: 'unknown' })[key] || 'unknown';
+}
+
+function paymentOverallState(summary = {}) {
+  if (!summary.available) return 'unknown';
+  if (Number(summary.failed || 0) > 0 || Number(summary.fallback || 0) > 0 || Number(summary.pendingOld || 0) > 0) return 'degraded';
+  return 'ok';
+}
+
+function buildPaymentWarnings(summary = {}) {
+  const warnings = [];
+  if (!summary.available) {
+    warnings.push({ level: 'warning', message: 'Платёжная диагностика недоступна.', source: 'payments' });
+    return warnings;
+  }
+  if (Number(summary.fallback || 0) > 0) warnings.push({ level: 'warning', message: `Есть fallback-платежи: ${Number(summary.fallback || 0)}`, source: 'payments' });
+  if (Number(summary.failed || 0) > 0) warnings.push({ level: 'warning', message: `Есть failed-платежи: ${Number(summary.failed || 0)}`, source: 'payments' });
+  if (Number(summary.pendingOld || 0) > 0) warnings.push({ level: 'warning', message: `Есть pending старше порога: ${Number(summary.pendingOld || 0)}`, source: 'payments' });
+  if (!warnings.length) warnings.push({ level: 'info', message: 'Явных payment-предупреждений нет.', source: 'payments' });
+  return warnings;
+}
+
 function buildActivitySummary(user, paymentLight) {
   const parts = [];
   const workspaceCount = Array.isArray(user?._workspaces) ? user._workspaces.length : 0;
@@ -38,67 +72,7 @@ function buildActivitySummary(user, paymentLight) {
   if (workspaceCount > 0) parts.push(`владелец ${workspaceCount} workspace` + (workspaceCount > 1 ? 's' : ''));
   if (curatorCount > 0) parts.push(`куратор в ${curatorCount}`);
   if (Number(paymentLight?.total || 0) > 0) parts.push(`платежей ${Number(paymentLight.total || 0)}`);
-  return parts.length ? parts.join(' · ') : 'Пока нет заметной активности.';
-}
-
-function buildStateHint(user, account, access, paymentLight) {
-  const hints = [];
-  if (user?.banned_at) return 'Пользователь заблокирован — проверяй operator context аккуратно.';
-  if (access?.hasWorkspace) hints.push('Есть рабочий workspace');
-  if (access?.hasChannel) hints.push('есть channel signal');
-  if (Number(account?.credits || 0) > 0) hints.push(`${Number(account.credits || 0)} credits`);
-  if (Number(paymentLight?.pending || 0) > 0) hints.push(`pending payments ${Number(paymentLight.pending || 0)}`);
-  return hints.length ? hints.join(' · ') : 'Базовый пользовательский контекст без явных рисков.';
-}
-
-function buildAccessSummary({ workspaces = [], curatorIn = [], hasChannel = false, channelLabel = '', brandProfile = null }) {
-  if (workspaces.length && hasChannel) {
-    return `Есть ${workspaces.length} workspace, channel signal: ${channelLabel || 'подключён'}.`;
-  }
-  if (workspaces.length) return `Есть ${workspaces.length} workspace, но channel signal нет.`;
-  if (curatorIn.length) return `Curator context в ${curatorIn.length} workspace.`;
-  if (brandProfile?.brand_name) return `Есть brand profile: ${brandProfile.brand_name}.`;
-  return 'Нет workspace / channel / curator signals.';
-}
-
-function buildRoleSummary(user, curatorIn = []) {
-  const parts = [];
-  if (user?.is_manager) parts.push('manager');
-  if (user?.is_moderator) parts.push('moderator');
-  if (user?.is_curator || curatorIn.length) parts.push(`curator in ${curatorIn.length || 1}`);
-  return parts.length ? parts.join(' · ') : 'Дополнительных operator signals нет.';
-}
-
-function buildPlanLabel(plan, planUntil) {
-  const value = String(plan || '').trim();
-  if (!value) return '—';
-  if (!planUntil) return value;
-  return `${value} · до ${new Date(planUntil).toISOString().slice(0, 10)}`;
-}
-
-function mapAuditActionLabel(action) {
-  const key = String(action || '').trim().toLowerCase();
-  return ({
-    set_user_note: 'Сохранена заметка',
-    clear_user_note: 'Очищена заметка',
-    logout: 'Выход из web-admin',
-    revoke_all: 'Сброс web-сессий',
-  })[key] || key || 'Действие';
-}
-
-function mapActorLabel(item) {
-  const tgId = Number(item?.actorTgId || 0) || 0;
-  return tgId ? `TG ${tgId}` : 'fallback';
-}
-
-function normalizeRecentAdminAudit(items = []) {
-  return (Array.isArray(items) ? items : [])
-    .filter((item) => String(item?.action || '').trim())
-    .map((item) => ({
-      ...item,
-      actionLabel: mapAuditActionLabel(item.action),
-      actorLabel: mapActorLabel(item),
-    }));
+  return parts.length ? parts.join(' · ') : 'Нет выраженных сигналов активности.';
 }
 
 export async function getOverviewSummary() {
@@ -196,7 +170,7 @@ export async function getUserDetail(userId) {
   const channelLabel = hasChannel
     ? workspaces.filter((w) => w?.channel_id || w?.channel_username).map((w) => w.channel_username ? `@${String(w.channel_username).replace(/^@/, '')}` : `channel ${w.channel_id}`).join(' · ')
     : '';
-  const recentAdminAudit = normalizeRecentAdminAudit(await getRecentAdminWebAudit(12, { targetType: 'user', targetId: String(user.id) }));
+  const recentAdminAudit = await getRecentAdminWebAudit(12, { targetType: 'user', targetId: String(user.id) });
 
   const detail = {
     user: {
@@ -208,9 +182,7 @@ export async function getUserDetail(userId) {
       updatedAt: user.updated_at || null,
       bannedAt: user.banned_at || null,
       status: user.banned_at ? 'banned' : 'active',
-      statusLabel: user.banned_at ? 'заблокирован' : 'активен',
       segment,
-      stateHint: buildStateHint(user, { plan: user.brand_plan || '', credits: Number(user.brand_credits || 0) }, { hasWorkspace: workspaces.length > 0, hasChannel }, paymentLight),
       flags: {
         isCreator: !!user.is_creator,
         isCurator: !!user.is_curator,
@@ -225,12 +197,8 @@ export async function getUserDetail(userId) {
     account: {
       plan: user.brand_plan || '',
       planUntil: user.brand_plan_until || null,
-      planLabel: buildPlanLabel(user.brand_plan || '', user.brand_plan_until || null),
       credits: Number(user.brand_credits || 0),
-      creditsLabel: Number(user.brand_credits || 0) > 0 ? `${Number(user.brand_credits || 0)} credits` : '0 credits',
-      summary: Number(user.brand_credits || 0) > 0
-        ? `${buildPlanLabel(user.brand_plan || '', user.brand_plan_until || null)} · ${Number(user.brand_credits || 0)} credits`
-        : `${buildPlanLabel(user.brand_plan || '', user.brand_plan_until || null)} · credits нет`,
+      creditsLabel: Number(user.brand_credits || 0) > 0 ? `${Number(user.brand_credits || 0)} credits` : 'no credits',
     },
     access: {
       hasWorkspace: workspaces.length > 0,
@@ -241,22 +209,19 @@ export async function getUserDetail(userId) {
       hasBrandProfile: !!user.has_brand_profile,
       brandProfile: user._brand_profile || null,
       signals,
-      summary: buildAccessSummary({ workspaces, curatorIn, hasChannel, channelLabel, brandProfile: user._brand_profile || null }),
-      roleSummary: buildRoleSummary(user, curatorIn),
     },
     activity: {
       createdAt: user.created_at || null,
       lastSeenAt: user.updated_at || user.created_at || null,
       recentSummary: buildActivitySummary(user, paymentLight),
       lastImportantAction: paymentLight.lastPaymentAt || user.updated_at || user.created_at || null,
-      lastImportantActionLabel: paymentLight.lastPaymentAt ? `Последний платёж: ${paymentLight.lastPaymentAt}` : '',
       lightCounters: {
         workspacesOwned: workspaces.length,
         curatorIn: curatorIn.length,
         payments: Number(paymentLight.total || 0),
       },
     },
-    note: note ? { ...note, updatedByLabel: note.byAdminUsername ? `@${String(note.byAdminUsername).replace(/^@/, '')}` : (Number(note.byAdminTgId || 0) ? `TG ${Number(note.byAdminTgId || 0)}` : '') } : null,
+    note,
     paymentLight,
     recentAdminAudit,
     // Back-compat fields for STEP499 shell until STEP501 UI fully replaces them everywhere.
@@ -264,5 +229,122 @@ export async function getUserDetail(userId) {
   };
 
   return detail;
+}
+
+
+
+export async function getPaymentsSummary() {
+  const out = {
+    updatedAt: new Date().toISOString(),
+    overall: { state: 'unknown', label: 'Данные пока недоступны' },
+    summary: { total: 0, recent: 0, successful: 0, pending: 0, warnings: 0, needsReview: 0 },
+    warnings: [{ level: 'info', message: 'Платёжных событий пока нет.', source: 'payments' }],
+    groups: { success: 0, pending: 0, failed: 0, fallback: 0 },
+    recentPayments: [],
+    hints: [{ kind: 'info', message: 'Read-only режим: для любых ручных действий использовать bot/admin fallback.' }],
+  };
+
+  let summary = {
+    available: false,
+    total: 0,
+    recent: 0,
+    successful: 0,
+    pending: 0,
+    failed: 0,
+    fallback: 0,
+    pendingOld: 0,
+    latestEventAt: null,
+  };
+
+  try {
+    const r = await pool.query(
+      `select
+         count(*)::int as total,
+         count(*) filter (where created_at >= now() - interval '7 days')::int as recent,
+         count(*) filter (where upper(status) = 'APPLIED')::int as successful,
+         count(*) filter (where upper(status) in ('RECEIVED','APPLYING','PENDING','PROCESSING'))::int as pending,
+         count(*) filter (where upper(status) in ('ERROR','FAILED'))::int as failed,
+         count(*) filter (where upper(status) in ('ORPHANED','FALLBACK'))::int as fallback,
+         count(*) filter (where upper(status) in ('RECEIVED','APPLYING','PENDING','PROCESSING') and created_at < now() - interval '30 minutes')::int as pending_old,
+         max(updated_at) as latest_event_at
+       from payments`
+    );
+    summary = {
+      available: true,
+      total: Number(r.rows?.[0]?.total || 0),
+      recent: Number(r.rows?.[0]?.recent || 0),
+      successful: Number(r.rows?.[0]?.successful || 0),
+      pending: Number(r.rows?.[0]?.pending || 0),
+      failed: Number(r.rows?.[0]?.failed || 0),
+      fallback: Number(r.rows?.[0]?.fallback || 0),
+      pendingOld: Number(r.rows?.[0]?.pending_old || 0),
+      latestEventAt: r.rows?.[0]?.latest_event_at || null,
+    };
+  } catch {
+    // keep safe defaults
+  }
+
+  let recentPayments = [];
+  if (summary.available) {
+    try {
+      const r = await pool.query(
+        `select p.id, p.user_id, p.kind, p.currency, p.total_amount, p.status, p.created_at, p.updated_at,
+                u.tg_id, u.tg_username
+           from payments p
+      left join users u on u.id = p.user_id
+          order by p.created_at desc
+          limit 12`
+      );
+      recentPayments = Array.isArray(r.rows)
+        ? r.rows.map((row) => ({
+            id: Number(row.id || 0),
+            userId: Number(row.user_id || 0),
+            tgId: Number(row.tg_id || 0),
+            username: row.tg_username || '',
+            displayName: row.tg_username ? `@${String(row.tg_username).trim()}` : `user #${Number(row.user_id || 0) || '—'}`,
+            kind: String(row.kind || '').trim() || 'payment',
+            amountLabel: `${Number(row.total_amount || 0)} ${String(row.currency || '').trim() || 'XTR'}`,
+            status: paymentStatusLabel(row.status),
+            createdAt: row.created_at || null,
+            updatedAt: row.updated_at || null,
+          }))
+        : [];
+    } catch {
+      recentPayments = [];
+    }
+  }
+
+  out.updatedAt = summary.latestEventAt || out.updatedAt;
+  out.overall = {
+    state: paymentOverallState(summary),
+    label: summary.available
+      ? (paymentOverallState(summary) === 'ok' ? 'Платёжная поверхность выглядит стабильно' : 'Есть сигналы, требующие проверки')
+      : 'Платёжная диагностика недоступна',
+  };
+  out.summary = {
+    total: summary.total,
+    recent: summary.recent,
+    successful: summary.successful,
+    pending: summary.pending,
+    warnings: Number(summary.failed || 0) + Number(summary.fallback || 0) + Number(summary.pendingOld || 0),
+    needsReview: Number(summary.failed || 0) + Number(summary.fallback || 0) + Number(summary.pendingOld || 0),
+  };
+  out.groups = {
+    success: summary.successful,
+    pending: summary.pending,
+    failed: summary.failed,
+    fallback: summary.fallback,
+  };
+  out.warnings = buildPaymentWarnings(summary);
+  out.recentPayments = recentPayments;
+  out.hints = [
+    {
+      kind: out.overall.state === 'ok' ? 'info' : 'warning',
+      message: out.overall.state === 'ok'
+        ? 'Read-only режим: для ручных действий использовать bot/admin fallback.'
+        : 'Есть payment-сигналы для founder/operator проверки. Web surface остаётся read-only.',
+    },
+  ];
+  return out;
 }
 

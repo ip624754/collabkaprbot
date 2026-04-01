@@ -1690,3 +1690,12 @@ Auto-heal safeguards + ops alerts:
 - Landing section icons moved from inline sprite SVG to fixed-size CSS background glyphs backed by local `assets/icons/landing/*.svg`.
 - Goal: eliminate live icon overflow/giant render drift without changing landing layout, copy, gallery or FAQ behavior.
 - Landing gallery/modal contract remains the current baseline.
+
+
+## STEP505 — Web Admin payments read surface v1
+- Added `/admin/payments` as a read-only founder/operator payments surface.
+- Added `section=payments` in `api/admin-web-read.js` and aggregated `getPaymentsSummary()` in `src/lib/adminWeb/readModels.js`.
+- Payments page now shows summary cards, warnings strip, recent payments table, grouped counts, and hints without exposing any write action.
+- Overview now has a direct entry-point into the payments surface through the payment alerts card.
+- Added source smoke `scripts/smoke-admin-web-payments-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+- Scope is read-only only: no retries, no overrides, no credits mutation, no payout/release controls.

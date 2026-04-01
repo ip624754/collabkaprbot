@@ -66,3 +66,19 @@ Scope:
 Acceptance / notes:
 - Runtime stays read-first and hobby-safe: one primary read request, no polling, no cron dependency, and no new writes;
 - secrets / env values are intentionally not exposed; only safe presence/status summaries are rendered.
+
+
+## STEP505 — Payments read surface v1
+
+Date: 2026-04-01
+
+Scope:
+- added `/admin/payments` as a read-only founder/operator payments surface in web admin;
+- extended `api/admin-web-read.js` with `section=payments` and implemented aggregated `getPaymentsSummary()` in `src/lib/adminWeb/readModels.js`;
+- normalized payment statuses into `success / pending / failed / fallback / unknown` and exposed summary cards, warning groups, grouped counts, and recent payment rows;
+- added direct entry from Overview via the `Payment alerts` card;
+- added `scripts/smoke-admin-web-payments-contract.js`, wired it into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope is read-only only: no retries, overrides, credits mutation, payout/release controls, or any other payment write action;
+- page remains hobby-safe: one primary read request, no polling, no cron dependency.

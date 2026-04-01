@@ -91,7 +91,8 @@
     "smoke:landing-contract": "node scripts/smoke-landing-contract.js",
     "smoke:admin-web-shell-contract": "node scripts/smoke-admin-web-shell-contract.js",
     "smoke:admin-web-whatwg-url-contract": "node scripts/smoke-admin-web-whatwg-url-contract.js",
-    "smoke:admin-web-runtime-contract": "node scripts/smoke-admin-web-runtime-contract.js"
+    "smoke:admin-web-runtime-contract": "node scripts/smoke-admin-web-runtime-contract.js",
+    "smoke:admin-web-payments-contract": "node scripts/smoke-admin-web-payments-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
