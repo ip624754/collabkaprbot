@@ -1,3 +1,18 @@
+## STEP503 — User Card polish + operator usability
+
+Что сделано:
+- `/admin/users/[id]` polished into a stronger operator screen with clearer header, denser summary badges, stronger `Аккаунт и доступ` and `Активность` blocks, and inline note UX feedback;
+- Users list state (`q`, `segment`) now lives in URL params and survives drilldown/back navigation;
+- `userDetail` read model extended with `stateHint`, account/access summaries, normalized recent admin trace, and safer note metadata for render;
+- note writes now normalize blank text to clear, and audit rows use `set_user_note` / `clear_user_note` with `oldJson` / `newJson`;
+- stale split admin routes under `api/admin-web/` removed so the repo stays aligned with the collapsed Hobby-safe API surface;
+- added/strengthened smoke coverage for the user-card contract and wired it into source preflight.
+
+Что важно:
+- still one primary read request for the page;
+- no polling, no cron dependency, no risky writes;
+- operator value increases without widening money-path, deal-path, or founder-dangerous scope.
+
 ## STEP501A — Admin-web WHATWG URL cleanup
 
 Date: 2026-04-01

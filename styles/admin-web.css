@@ -293,3 +293,37 @@ body {
   .aw-mini-grid-3 { grid-template-columns: 1fr; }
   .aw-user-title { font-size: 30px; }
 }
+
+.aw-user-kicker {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.aw-mini-grid-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.aw-note-meta {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.aw-inline-status {
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid transparent;
+}
+.aw-inline-status.is-success {
+  color: #dcfff0;
+  background: rgba(82, 214, 161, 0.12);
+  border-color: rgba(82, 214, 161, 0.2);
+}
+.aw-inline-status.is-error {
+  color: #ffd9e2;
+  background: rgba(255, 107, 139, 0.12);
+  border-color: rgba(255, 107, 139, 0.22);
+}
+@media (max-width: 1024px) {
+  .aw-mini-grid-5 { grid-template-columns: 1fr 1fr; }
+}

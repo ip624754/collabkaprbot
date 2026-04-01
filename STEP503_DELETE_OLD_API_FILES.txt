@@ -1,0 +1,4 @@
+api/admin-web/auth/decision.js
+api/admin-web/auth/status.js
+api/admin-web/user.js
+api/admin-web/users.js
