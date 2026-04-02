@@ -1029,6 +1029,39 @@ function renderUsersPaginationControls(meta = {}, position = 'top') {
   `;
 }
 
+
+function renderUsersTableHead(title, detail = '') {
+  return `<div class="aw-users-table-head"><strong>${escapeHtml(title)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}</div>`;
+}
+
+function renderUsersTableMetaStrip({ pagination = {}, currentSliceLabel = '', sortMeta = {}, cohortMeta = {}, activePresetMeta = {}, basketCount = 0, pinCount = 0, recentExport = null, recentCopy = null } = {}) {
+  const total = Math.max(0, Number(pagination.total || 0) || 0);
+  const mainLabel = total > 0
+    ? `Показаны ${Math.max(0, Number(pagination.fromRow || 0) || 0)}–${Math.max(0, Number(pagination.toRow || 0) || 0)} из ${total}`
+    : 'Результатов нет';
+  const sliceBits = [
+    String(currentSliceLabel || 'Все пользователи').trim(),
+    String(sortMeta?.label || 'Новые сверху').trim(),
+    String(cohortMeta?.label || 'Все').trim(),
+    String(activePresetMeta?.label || 'Custom slice').trim(),
+  ].filter(Boolean);
+  return `
+    <section class="aw-users-table-meta-strip">
+      <div class="aw-users-table-meta-main">
+        <span class="aw-users-table-kicker">Users header / meta strip polish · STEP529: users row height / table density polish · STEP530: users column priority compression</span>
+        <strong>${escapeHtml(mainLabel)}</strong>
+        <small>${escapeHtml(sliceBits.join(' · '))}</small>
+      </div>
+      <div class="aw-users-table-meta-chips">
+        <span class="aw-basket-pill">Корзина: <strong>${Math.max(0, Number(basketCount || 0) || 0)}</strong></span>
+        <span class="aw-basket-pill">Pins: <strong>${Math.max(0, Number(pinCount || 0) || 0)}</strong></span>
+        <span class="aw-basket-pill">Экспорт: <strong>${escapeHtml(recentExport?.ts ? formatDate(recentExport.ts) : '—')}</strong></span>
+        <span class="aw-basket-pill">Copy: <strong>${escapeHtml(recentCopy?.ts ? formatDate(recentCopy.ts) : '—')}</strong></span>
+      </div>
+    </section>
+  `;
+}
+
 function usersPlanMeta(item = {}) {
   const plan = String(item?.brandPlan || '').trim();
   if (!plan) return { label: 'без плана', tone: 'is-muted', detail: 'План не активирован' };
@@ -1357,6 +1390,17 @@ function usersView(model) {
   const allVisibleSelected = !!items.length && items.every((item) => isUserInBasket(item.userId));
   const topPagination = renderUsersPaginationControls(pagination, 'top');
   const bottomPagination = renderUsersPaginationControls(pagination, 'bottom');
+  const usersTableMetaStrip = renderUsersTableMetaStrip({
+    pagination,
+    currentSliceLabel,
+    sortMeta,
+    cohortMeta,
+    activePresetMeta,
+    basketCount: basketIds.length,
+    pinCount: pinIds.length,
+    recentExport,
+    recentCopy,
+  });
   return shell('Пользователи', 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.', `
     <section class="aw-surface aw-stack">
       <div class="aw-users-sticky-controls">
@@ -1594,21 +1638,19 @@ function usersView(model) {
 
       </div>
 
-      <div class="aw-toolbar-note">
-        <span class="aw-muted">STEP529: users row height / table density polish — базовая плотность строки сохранена; STEP530: users column priority compression — сегмент / план / сигналы / активность собраны компактнее, чтобы средняя ширина окна читалась чище без новой логики.</span>
-      </div>
+      ${usersTableMetaStrip}
 
       <div class="aw-table-wrap aw-users-table-wrap aw-users-table-density aw-users-table-priority">
         <table class="aw-table aw-users-table aw-users-table-density aw-users-table-priority">
           <thead>
             <tr>
               <th class="aw-table-check"><input type="checkbox" id="toggleVisibleUsers" ${allVisibleSelected ? 'checked' : ''} ${items.length ? '' : 'disabled'} /></th>
-              <th>Пользователь</th>
-              <th>Сегмент</th>
-              <th>План</th>
-              <th>Сигналы</th>
-              <th>Активность</th>
-              <th>Создан</th>
+              <th>${renderUsersTableHead('Пользователь', 'id · quick actions')}</th>
+              <th>${renderUsersTableHead('Сегмент', 'роль · профиль')}</th>
+              <th>${renderUsersTableHead('План', 'план · credits')}</th>
+              <th>${renderUsersTableHead('Сигналы', 'priority chips')}</th>
+              <th>${renderUsersTableHead('Активность', 'freshness · время')}</th>
+              <th>${renderUsersTableHead('Создан', 'дата · время')}</th>
             </tr>
           </thead>
           <tbody>

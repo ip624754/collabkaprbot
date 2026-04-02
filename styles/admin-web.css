@@ -235,6 +235,58 @@ body {
   flex-wrap: wrap;
   align-items: center;
 }
+.aw-users-table-meta-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(132,176,255,0.12);
+  background: rgba(9, 18, 37, 0.78);
+  border-radius: 18px;
+  padding: 12px 14px;
+}
+.aw-users-table-meta-main {
+  display: grid;
+  gap: 3px;
+}
+.aw-users-table-kicker {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.aw-users-table-meta-main strong {
+  font-size: 15px;
+  line-height: 1.2;
+}
+.aw-users-table-meta-main small {
+  color: var(--soft);
+  margin-top: 0;
+}
+.aw-users-table-meta-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+.aw-users-table-head {
+  display: grid;
+  gap: 2px;
+}
+.aw-users-table-head strong {
+  font-size: 12px;
+  line-height: 1.1;
+  color: var(--soft);
+}
+.aw-users-table-head small {
+  font-size: 10px;
+  line-height: 1.15;
+  color: rgba(201, 220, 255, 0.62);
+  font-weight: 500;
+}
+
 .aw-pagination-size {
   display: inline-flex;
   gap: 8px;
@@ -563,6 +615,7 @@ body {
   border: 1px solid rgba(132,176,255,0.10);
   border-radius: 18px;
   background: rgba(6, 12, 24, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
 }
  table.aw-table {
   width: 100%;
@@ -579,8 +632,11 @@ body {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: rgba(9, 18, 37, 0.96);
-  backdrop-filter: blur(8px);
+  background: rgba(9, 18, 37, 0.98);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(132,176,255,0.18);
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 .aw-table td small { display: block; color: var(--soft); margin-top: 4px; }
 .aw-table tr:hover { background: rgba(255,255,255,0.02); }
@@ -803,6 +859,8 @@ body {
   .aw-users-sticky-controls { position: static; }
   .aw-users-sticky-shell { padding: 12px; }
   .aw-users-table-wrap { max-height: none; }
+  .aw-users-table-meta-strip { padding: 12px; }
+  .aw-users-table-meta-chips { justify-content: flex-start; }
   .aw-compare-card-meta { grid-template-columns: 1fr; }
   .aw-split { grid-template-columns: 1fr; }
 }

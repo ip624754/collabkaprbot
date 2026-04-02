@@ -1,3 +1,17 @@
+## STEP531 — Users header / meta strip polish
+
+Date: 2026-04-03
+
+Scope:
+- tightened the last visible header layer of `/admin/users` without changing any server/data contract or adding new operator logic;
+- replaced the raw step-note above the table with a compact meta strip that summarizes the current slice, sort/cohort/preset context, and quick basket/pins/export/copy state;
+- upgraded the table header row into a clearer micro-hierarchy with short title + hint labels for each column, so `Пользователь / Сегмент / План / Сигналы / Активность / Создан` read faster on medium-width operator windows;
+- added `scripts/smoke-admin-web-users-header-meta-strip-contract.js` and wired the new alias into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays UI-only and reversible: no write-path changes, no SQL changes, no route changes, no export/bulk/compare contract changes;
+- goal is cleaner scan-speed and table-entry discipline, not new operator power.
+
 ## STEP530 — Users column priority compression
 
 Date: 2026-04-03
