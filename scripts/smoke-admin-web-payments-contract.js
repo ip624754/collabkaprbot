@@ -9,9 +9,12 @@ const js = read('scripts/admin-web.js');
 for (const token of [
   '/admin/payments',
   '/api/admin-web-read?section=payments',
+  '/api/admin-web-read?section=payment',
   'Payments',
   'Последние платежи',
   'Status groups',
+  'Payment detail',
+  'Последние payment-сигналы',
   'Явных payment-предупреждений нет.',
 ]) {
   assert.ok(js.includes(token), `payments UI must include ${token}`);
@@ -20,8 +23,10 @@ for (const token of [
 const models = read('src/lib/adminWeb/readModels.js');
 for (const token of [
   'export async function getPaymentsSummary()',
+  'export async function getPaymentDetail(',
   'recentPayments',
   'buildPaymentWarnings',
+  'buildPaymentEventTrace',
   'groups:',
   'needsReview',
 ]) {
@@ -30,5 +35,6 @@ for (const token of [
 
 const apiRead = read('api/admin-web-read.js');
 assert.ok(apiRead.includes("section === 'payments'"), 'admin-web-read must handle payments section');
+assert.ok(apiRead.includes("section === 'payment'"), 'admin-web-read must handle payment detail section');
 
 console.log('✅ smoke admin-web payments contract OK');

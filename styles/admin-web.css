@@ -169,6 +169,7 @@ body {
 .aw-table th { color: var(--soft); font-size: 13px; font-weight: 600; }
 .aw-table td small { display: block; color: var(--soft); margin-top: 4px; }
 .aw-table tr:hover { background: rgba(255,255,255,0.02); }
+.aw-table tr[data-user-row], .aw-table tr[data-payment-row] { cursor: pointer; }
 .aw-note-dot {
   display: inline-block;
   width: 8px;

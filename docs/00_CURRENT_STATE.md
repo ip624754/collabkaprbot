@@ -1711,3 +1711,10 @@ Auto-heal safeguards + ops alerts:
 - Comms page now exposes: overall status, warnings strip, recent notices table, outbox groups, and hints.
 - Overview now links into the comms workspace.
 - Scope stays read-only and Hobby-safe: one primary read request, no polling, no cron dependency, no new write actions.
+
+## STEP509 — Payments drilldown polish
+- `/admin/payments` now supports drilldown into a read-only payment detail route.
+- Added `section=payment` to `api/admin-web-read.js` and `getPaymentDetail()` to `src/lib/adminWeb/readModels.js`.
+- Payments list rows are now clickable and preserve back-to-list context through a `back` query param.
+- Payment detail shows linked user context, payment summary, diagnostics, light event trace, hints, and recent admin audit without exposing provider payloads or adding any write actions.
+- Source smoke `scripts/smoke-admin-web-payments-contract.js` now covers both list and detail contracts.

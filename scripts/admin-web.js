@@ -79,6 +79,16 @@ function paymentStatusLabel(value) {
   return ({ success: 'success', pending: 'pending', failed: 'failed', fallback: 'fallback', unknown: 'unknown' })[key] || (key || 'unknown');
 }
 
+
+function paymentDetailBackHref() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const back = params.get('back');
+    if (back && String(back).startsWith('/admin/payments')) return back;
+  } catch {}
+  return '/admin/payments';
+}
+
 function warningTone(level) {
   const key = String(level || '').trim().toLowerCase();
   if (key === 'error') return 'aw-status bad';
@@ -98,6 +108,7 @@ function routeInfo() {
   if (parts[1] === 'users' && parts[2]) return { page: 'userDetail', userId: parts[2] };
   if (parts[1] === 'users') return { page: 'users' };
   if (parts[1] === 'runtime') return { page: 'runtime' };
+  if (parts[1] === 'payments' && parts[2]) return { page: 'paymentDetail', paymentId: parts[2] };
   if (parts[1] === 'payments') return { page: 'payments' };
   if (parts[1] === 'comms') return { page: 'comms' };
   if (parts[1] === 'founder') return { page: 'founder' };
@@ -125,7 +136,7 @@ function shell(title, subtitle, body, session) {
           ${navLink('/admin', 'Overview', route.page === 'overview')}
           ${navLink('/admin/users', 'Users', route.page === 'users' || route.page === 'userDetail')}
           ${navLink('/admin/runtime', 'Runtime', route.page === 'runtime')}
-          ${navLink('/admin/payments', 'Payments', route.page === 'payments')}
+          ${navLink('/admin/payments', 'Payments', route.page === 'payments' || route.page === 'paymentDetail')}
           ${navLink('/admin/comms', 'Comms', route.page === 'comms')}
           ${session?.isFounder ? `<div class="aw-nav-group-label">Founder</div>${navLink('/admin/founder', 'Founder', route.page === 'founder')}` : ''}
         </nav>
@@ -444,7 +455,7 @@ function paymentsView(model) {
             </thead>
             <tbody>
               ${recentPayments.length ? recentPayments.map((item) => `
-                <tr>
+                <tr data-payment-row="${Number(item.id || 0)}">
                   <td><strong>#${Number(item.id || 0)}</strong><small>user_id ${Number(item.userId || 0) || '—'} · tg_id ${Number(item.tgId || 0) || '—'}</small></td>
                   <td>${escapeHtml(item.displayName || '—')}</td>
                   <td>${escapeHtml(item.kind || 'payment')}</td>
@@ -477,6 +488,108 @@ function paymentsView(model) {
               <div class="aw-list-item">
                 <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
                 <small>${escapeHtml(item.message || '')}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+      </aside>
+    </div>
+  `, window.__adminSession || {});
+}
+
+
+function paymentDetailView(model) {
+  const payment = model.payment || {};
+  const user = model.user || {};
+  const diagnostics = model.diagnostics || { state: 'unknown', label: 'Данные пока недоступны', hint: 'Проверь payment/runtime surfaces.' };
+  const events = Array.isArray(model.events) ? model.events : [];
+  const hints = Array.isArray(model.hints) ? model.hints : [];
+  const recentAdminAudit = Array.isArray(model.recentAdminAudit) ? model.recentAdminAudit : [];
+  const backHref = paymentDetailBackHref();
+  return shell('Payment detail', 'Read-only payment drilldown для founder/operator проверки.', `
+    <section class="aw-surface aw-user-hero aw-stack">
+      <a href="${escapeHtml(backHref)}" data-link class="aw-inline-back">← К списку платежей</a>
+      <div class="aw-user-head">
+        <div class="aw-stack aw-gap-xs">
+          <h2 class="aw-user-title">#${Number(payment.id || 0) || '—'}</h2>
+          <div class="aw-user-subline">${escapeHtml(payment.kind || 'payment')} · ${escapeHtml(payment.source || 'payments')} · создан ${formatDate(payment.createdAt)} · обновлён ${formatDate(payment.updatedAt)}</div>
+        </div>
+        <div class="aw-badges">
+          <span class="aw-badge ${paymentStatusClass(payment.status)}">${escapeHtml(paymentStatusLabel(payment.status))}</span>
+          <span class="aw-badge">${escapeHtml(payment.amountLabel || '—')}</span>
+        </div>
+      </div>
+      <div class="aw-mini-grid aw-mini-grid-3">
+        <div class="aw-mini-card"><span>Статус</span><strong class="aw-status ${paymentStatusClass(payment.status)}">${escapeHtml(paymentStatusLabel(payment.status))}</strong></div>
+        <div class="aw-mini-card"><span>Amount</span><strong>${escapeHtml(payment.amountLabel || '—')}</strong></div>
+        <div class="aw-mini-card"><span>Source</span><strong>${escapeHtml(payment.source || 'payments')}</strong></div>
+      </div>
+    </section>
+
+    <div class="aw-split aw-user-layout">
+      <section class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Связанный пользователь</h2>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong>${escapeHtml(user.displayName || '—')}</strong><small>${user.username ? '@' + escapeHtml(user.username) + ' · ' : ''}tg_id ${Number(user.tgId || 0) || '—'} · user_id ${Number(user.id || 0) || '—'}</small></div>
+            <div class="aw-actions">${user.link ? `<a href="${escapeHtml(user.link)}" data-link class="aw-button ghost">Открыть user card</a>` : ''}</div>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Сводка платежа</h2>
+          <dl class="aw-kv aw-kv-compact">
+            <dt>Payment ID</dt><dd>${Number(payment.id || 0) || '—'}</dd>
+            <dt>Type</dt><dd>${escapeHtml(payment.kind || 'payment')}</dd>
+            <dt>Source</dt><dd>${escapeHtml(payment.source || 'payments')}</dd>
+            <dt>Amount</dt><dd>${escapeHtml(payment.amountLabel || '—')}</dd>
+            <dt>Status</dt><dd><span class="aw-status ${paymentStatusClass(payment.status)}">${escapeHtml(paymentStatusLabel(payment.status))}</span></dd>
+            <dt>Created</dt><dd>${formatDate(payment.createdAt)}</dd>
+            <dt>Updated</dt><dd>${formatDate(payment.updatedAt)}</dd>
+          </dl>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Диагностика</h2>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong class="${warningTone(diagnostics.state === 'ok' ? 'info' : 'warning')}">${escapeHtml(diagnostics.label || '—')}</strong><small>${escapeHtml(diagnostics.hint || 'Проверь payment/runtime/user surfaces.')}</small></div>
+            ${payment.note ? `<div class="aw-list-item"><strong>Служебная note</strong><small>${escapeHtml(payment.note)}</small></div>` : ''}
+          </div>
+        </section>
+      </section>
+
+      <aside class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Последние payment-сигналы</h2>
+          <div class="aw-list">
+            ${events.length ? events.map((item) => `
+              <div class="aw-list-item">
+                <strong>${escapeHtml(item.label || item.kind || 'event')}</strong>
+                <small>${escapeHtml(item.kind || 'payment_event')} · ${formatDate(item.at)}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Подсказки</h2>
+          <div class="aw-list">
+            ${hints.length ? hints.map((item) => `
+              <div class="aw-list-item">
+                <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
+                <small>${escapeHtml(item.message || '')}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Последние admin-действия</h2>
+          <div class="aw-list">
+            ${recentAdminAudit.length ? recentAdminAudit.map((item) => `
+              <div class="aw-list-item">
+                <strong>${escapeHtml(item.action || 'unknown')}</strong>
+                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || 'fallback'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -968,6 +1081,13 @@ async function render() {
   } else if (route.page === 'payments') {
     const res = await api('/api/admin-web-read?section=payments');
     app.innerHTML = paymentsView(res.data.data || {});
+  } else if (route.page === 'paymentDetail') {
+    const res = await api(`/api/admin-web-read?section=payment&id=${encodeURIComponent(route.paymentId)}`);
+    if (!res.ok) {
+      app.innerHTML = shell('Платёж не найден', 'Проверь payment id и попробуй снова.', `<div class="aw-surface aw-empty"><a href="/admin/payments" data-link class="aw-inline-back">← К списку платежей</a><div class="aw-empty">Карточка платежа не найдена.</div></div>`, session);
+    } else {
+      app.innerHTML = paymentDetailView(res.data.data || {});
+    }
   } else if (route.page === 'comms') {
     const res = await api('/api/admin-web-read?section=comms');
     app.innerHTML = commsView(res.data.data || {});
@@ -1014,6 +1134,14 @@ function bindShell() {
     row.addEventListener('click', () => {
       const id = row.getAttribute('data-user-row');
       history.pushState({}, '', `/admin/users/${id}`);
+      render();
+    });
+  });
+  app.querySelectorAll('[data-payment-row]').forEach((row) => {
+    row.addEventListener('click', () => {
+      const id = row.getAttribute('data-payment-row');
+      const back = encodeURIComponent(`${location.pathname}${location.search}`);
+      history.pushState({}, '', `/admin/payments/${id}?back=${back}`);
       render();
     });
   });

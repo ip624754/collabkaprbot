@@ -125,3 +125,18 @@ Acceptance / notes:
 - comms workspace remains hobby-safe: one read request on load, explicit writes only, no polling, no cron dependency, no route explosion;
 - internal draft label/title reuses `broadcasts.draft_caption` for text-only web-admin drafts to avoid a migration in this step;
 - live send stays out of scope and founder-only `test_send_notice` sends the preview only to the current founder Telegram actor.
+
+## STEP509 — Payments drilldown polish
+
+Date: 2026-04-02
+
+Scope:
+- extended `/admin/payments` with clickable row drilldown into a read-only payment detail view;
+- added `section=payment` to `api/admin-web-read.js`;
+- implemented `getPaymentDetail()` in `src/lib/adminWeb/readModels.js` with safe payment summary, linked user context, normalized diagnostics, light event trace, and recent admin audit;
+- updated `scripts/admin-web.js` to support `/admin/payments/[id]` plus back-to-list preservation through a `back` query param;
+- extended `scripts/smoke-admin-web-payments-contract.js` so source preflight now covers both payments list and payment detail contracts.
+
+Acceptance / notes:
+- step stays strictly read-only: no retries, overrides, credits mutation, payout controls, or raw provider payload leakage;
+- hobby-safe contract preserved: one main read on list, one main read on detail, no polling, no cron dependency, no new API entrypoints.

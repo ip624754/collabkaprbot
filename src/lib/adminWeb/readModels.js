@@ -234,6 +234,55 @@ export async function getUserDetail(userId) {
 
 
 
+
+function buildPaymentRow(row = {}) {
+  const userId = Number(row.user_id || 0) || 0;
+  const username = String(row.tg_username || '').trim();
+  return {
+    id: Number(row.id || 0),
+    userId,
+    tgId: Number(row.tg_id || 0),
+    username,
+    displayName: username ? `@${username}` : `user #${userId || '—'}`,
+    kind: String(row.kind || '').trim() || 'payment',
+    source: String(row.currency || '').trim() === 'XTR' ? 'telegram_stars' : 'payments',
+    amountLabel: `${Number(row.total_amount || 0)} ${String(row.currency || '').trim() || 'XTR'}`,
+    status: paymentStatusLabel(row.status),
+    note: String(row.note || '').trim(),
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+    appliedAt: row.applied_at || null,
+    applyingAt: row.applying_at || null,
+  };
+}
+
+function buildPaymentDetailDiagnostics(payment = {}) {
+  const status = paymentStatusLabel(payment.status);
+  if (status === 'success') return { state: 'ok', label: 'Платёж завершён успешно', hint: 'Дополнительных действий не требуется.' };
+  if (status === 'pending') return { state: 'degraded', label: 'Платёж ожидает завершения', hint: 'Проверь user context, recent events и Telegram-admin fallback.' };
+  if (status === 'fallback') return { state: 'degraded', label: 'Есть fallback-сигнал', hint: 'Нужна founder/operator проверка через payment + user surfaces.' };
+  if (status === 'failed') return { state: 'degraded', label: 'Платёж завершился с ошибкой', hint: 'Нужна operator проверка причины и bot/admin follow-up.' };
+  return { state: 'unknown', label: 'Статус платежа не нормализован', hint: 'Проверь row status и runtime diagnostics.' };
+}
+
+function buildPaymentEventTrace(row = {}) {
+  const events = [];
+  const createdAt = row.created_at || null;
+  const applyingAt = row.applying_at || null;
+  const appliedAt = row.applied_at || null;
+  const updatedAt = row.updated_at || null;
+  if (createdAt) events.push({ kind: 'payment_created', label: 'Создан', at: createdAt });
+  if (applyingAt) events.push({ kind: 'payment_applying', label: 'Перешёл в applying', at: applyingAt });
+  if (appliedAt) events.push({ kind: 'payment_applied', label: 'Применён', at: appliedAt });
+  if (!appliedAt && updatedAt && updatedAt !== createdAt) {
+    const statusLabel = paymentStatusLabel(row.status);
+    events.push({ kind: `payment_${statusLabel}`, label: `Последний статус: ${statusLabel}`, at: updatedAt });
+  }
+  const note = String(row.note || '').trim();
+  if (note) events.push({ kind: 'payment_note', label: note.slice(0, 160), at: updatedAt || createdAt || null });
+  return events.slice(0, 10);
+}
+
 export async function getPaymentsSummary() {
   const out = {
     updatedAt: new Date().toISOString(),
@@ -289,27 +338,14 @@ export async function getPaymentsSummary() {
   if (summary.available) {
     try {
       const r = await pool.query(
-        `select p.id, p.user_id, p.kind, p.currency, p.total_amount, p.status, p.created_at, p.updated_at,
+        `select p.id, p.user_id, p.kind, p.currency, p.total_amount, p.status, p.note, p.created_at, p.updated_at, p.applying_at, p.applied_at,
                 u.tg_id, u.tg_username
            from payments p
       left join users u on u.id = p.user_id
           order by p.created_at desc
           limit 12`
       );
-      recentPayments = Array.isArray(r.rows)
-        ? r.rows.map((row) => ({
-            id: Number(row.id || 0),
-            userId: Number(row.user_id || 0),
-            tgId: Number(row.tg_id || 0),
-            username: row.tg_username || '',
-            displayName: row.tg_username ? `@${String(row.tg_username).trim()}` : `user #${Number(row.user_id || 0) || '—'}`,
-            kind: String(row.kind || '').trim() || 'payment',
-            amountLabel: `${Number(row.total_amount || 0)} ${String(row.currency || '').trim() || 'XTR'}`,
-            status: paymentStatusLabel(row.status),
-            createdAt: row.created_at || null,
-            updatedAt: row.updated_at || null,
-          }))
-        : [];
+      recentPayments = Array.isArray(r.rows) ? r.rows.map(buildPaymentRow) : [];
     } catch {
       recentPayments = [];
     }
@@ -347,6 +383,58 @@ export async function getPaymentsSummary() {
     },
   ];
   return out;
+}
+
+export async function getPaymentDetail(paymentId) {
+  const id = Number(paymentId || 0) || 0;
+  if (!id) return null;
+  let row = null;
+  try {
+    const r = await pool.query(
+      `select p.id, p.user_id, p.kind, p.currency, p.total_amount, p.status, p.note,
+              p.created_at, p.updated_at, p.applying_at, p.applied_at,
+              u.tg_id, u.tg_username
+         from payments p
+    left join users u on u.id = p.user_id
+        where p.id = $1
+        limit 1`,
+      [id]
+    );
+    row = r.rows?.[0] || null;
+  } catch {
+    row = null;
+  }
+  if (!row) return null;
+  const payment = buildPaymentRow(row);
+  const diagnostics = buildPaymentDetailDiagnostics(payment);
+  const recentAdminAudit = await getRecentAdminWebAudit(8, { targetType: 'payment', targetId: String(payment.id) });
+  return {
+    updatedAt: payment.updatedAt || payment.createdAt || new Date().toISOString(),
+    payment: {
+      id: payment.id,
+      kind: payment.kind,
+      source: payment.source,
+      amountLabel: payment.amountLabel,
+      status: payment.status,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+      note: payment.note || '',
+    },
+    user: {
+      id: payment.userId,
+      tgId: payment.tgId,
+      username: payment.username || '',
+      displayName: payment.displayName,
+      link: payment.userId ? `/admin/users/${payment.userId}` : '',
+    },
+    diagnostics,
+    events: buildPaymentEventTrace(row),
+    hints: [
+      { kind: diagnostics.state === 'ok' ? 'info' : 'warning', message: diagnostics.hint },
+      { kind: 'info', message: 'Read-only режим: ручные действия выполняются через bot/admin fallback.' },
+    ],
+    recentAdminAudit,
+  };
 }
 
 

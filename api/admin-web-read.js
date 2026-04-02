@@ -1,6 +1,6 @@
 import { requireFounderSession, requireSession } from '../src/lib/adminWeb/auth.js';
 import { getSearchParam, json } from '../src/lib/adminWeb/common.js';
-import { getCommsSummary, getFounderSummary, getOverviewSummary, getPaymentsSummary, getUserDetail, getUsersList } from '../src/lib/adminWeb/readModels.js';
+import { getCommsSummary, getFounderSummary, getOverviewSummary, getPaymentDetail, getPaymentsSummary, getUserDetail, getUsersList } from '../src/lib/adminWeb/readModels.js';
 import { getRuntimeSummary } from '../src/lib/adminWeb/runtime.js';
 
 export default async function handler(req, res) {
@@ -32,6 +32,13 @@ export default async function handler(req, res) {
 
   if (section === 'payments') {
     const data = await getPaymentsSummary();
+    return json(res, 200, { ok: true, data });
+  }
+  if (section === 'payment') {
+    const id = Number(getSearchParam(req, 'id', '0') || 0) || 0;
+    if (!id) return json(res, 400, { ok: false, error: 'payment_id_required' });
+    const data = await getPaymentDetail(id);
+    if (!data) return json(res, 404, { ok: false, error: 'payment_not_found' });
     return json(res, 200, { ok: true, data });
   }
   if (section === 'comms') {
