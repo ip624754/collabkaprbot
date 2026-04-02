@@ -1,5 +1,5 @@
 import { pool } from '../../db/pool.js';
-import { getAdminMetricsSnapshot, listUsersDirectory, getUserCardById, normalizeUsersDirectoryFilters, getUsersDirectoryCohortCounters } from '../../db/queries.js';
+import { getAdminMetricsSnapshot, listUsersDirectory, getUserCardById, normalizeUsersDirectoryFilters, getUsersDirectoryCohortCounters, getUsersDirectoryByIds } from '../../db/queries.js';
 import { getAdminUserNote, getAdminUserNotesBulk } from './notes.js';
 import { getRuntimeSummary } from './runtime.js';
 import { getRecentAdminWebAudit, isFounderActorTgId } from './auth.js';
@@ -34,6 +34,26 @@ function buildAccessSignals(row) {
   return out;
 }
 
+
+function isOlderThanDays(value, days = 30) {
+  if (!value) return false;
+  const ts = new Date(value).getTime();
+  if (Number.isNaN(ts)) return false;
+  return ts < (Date.now() - (Number(days || 0) * 24 * 60 * 60 * 1000));
+}
+
+function compareProblemDescriptor(user = {}, paymentLight = {}, meta = {}) {
+  if (user?.banned_at) return 'banned';
+  if (Number(paymentLight?.total || 0) > 0 && !meta?.hasChannel) return 'paid-no-channel';
+  if (user?.brand_plan && !meta?.hasChannel) return 'plan-no-channel';
+  if (Number(user?.brand_credits || 0) > 0 && isOlderThanDays(meta?.lastKnownActivityAt || meta?.last_known_activity_at, 30)) return 'stale-credits';
+  if (isOlderThanDays(meta?.lastKnownActivityAt || meta?.last_known_activity_at, 90)) return 'stale-90d';
+  return '';
+}
+
+function isDormantPayerMeta(paymentLight = {}, meta = {}) {
+  return Number(paymentLight?.total || 0) > 0 && isOlderThanDays(meta?.lastKnownActivityAt || meta?.last_known_activity_at, 30);
+}
 
 function normalizePaymentStatus(value) {
   const raw = String(value || '').trim().toUpperCase();
@@ -106,7 +126,7 @@ function compareSignalChips(user, paymentLight = {}, note = null) {
 async function getPinnedUsersCompareCards(userIdsRaw = []) {
   const userIds = normalizeUsersPinIds(userIdsRaw);
   if (!userIds.length) return [];
-  const [users, notesMap, paymentsResult] = await Promise.all([
+  const [users, notesMap, paymentsResult, directoryRows] = await Promise.all([
     Promise.all(userIds.map((userId) => getUserCardById(userId))),
     getAdminUserNotesBulk(userIds),
     pool.query(
@@ -116,11 +136,18 @@ async function getPinnedUsersCompareCards(userIdsRaw = []) {
         group by user_id`,
       [userIds]
     ).catch(() => ({ rows: [] })),
+    getUsersDirectoryByIds(userIds).catch(() => []),
   ]);
 
   const paymentMap = new Map((paymentsResult?.rows || []).map((row) => [Number(row.user_id || 0), {
     total: Number(row.total || 0),
     lastPaymentAt: row.last_payment_at || null,
+  }]));
+  const directoryMap = new Map((directoryRows || []).map((row) => [Number(row.user_id || 0), {
+    hasChannel: !!row.has_channel,
+    paymentsCount: Number(row.payments_count || 0),
+    problemScore: Number(row.problem_score || 0),
+    lastKnownActivityAt: row.last_known_activity_at || row.updated_at || row.created_at || null,
   }]));
 
   const byId = new Map();
@@ -135,7 +162,11 @@ async function getPinnedUsersCompareCards(userIdsRaw = []) {
     const curatorIn = Array.isArray(user._curator_in) ? user._curator_in : [];
     const paymentLight = paymentMap.get(Number(user.id || 0)) || { total: 0, lastPaymentAt: null };
     const note = notesMap.get(Number(user.id || 0)) || null;
+    const directoryMeta = directoryMap.get(Number(user.id || 0)) || {};
     const segment = buildUserSegment(user);
+    const hasChannel = Object.prototype.hasOwnProperty.call(directoryMeta, 'hasChannel') ? directoryMeta.hasChannel : workspaces.some((w) => w?.channel_id || w?.channel_username);
+    const lastKnownActivityAt = directoryMeta.lastKnownActivityAt || user.updated_at || user.created_at || null;
+    const problemDesc = compareProblemDescriptor(user, paymentLight, { hasChannel, lastKnownActivityAt });
     return {
       userId: Number(user.id || 0),
       tgId: Number(user.tg_id || 0) || 0,
@@ -146,14 +177,17 @@ async function getPinnedUsersCompareCards(userIdsRaw = []) {
       status: user.banned_at ? 'banned' : 'active',
       plan: user.brand_plan || '',
       credits: Number(user.brand_credits || 0),
-      hasChannel: workspaces.some((w) => w?.channel_id || w?.channel_username),
+      hasChannel,
       workspaceCount: workspaces.length,
       curatorCount: curatorIn.length,
-      paymentsCount: Number(paymentLight.total || 0),
+      paymentsCount: Number(paymentLight.total || directoryMeta.paymentsCount || 0),
       lastPaymentAt: paymentLight.lastPaymentAt || null,
-      lastKnownActivityAt: user.updated_at || user.created_at || null,
+      lastKnownActivityAt,
       notePreview: note?.text ? String(note.text).slice(0, 160) : '',
       signalChips: compareSignalChips(user, paymentLight, note),
+      problemScore: Number(directoryMeta.problemScore || 0),
+      problemDesc,
+      isDormantPayer: isDormantPayerMeta(paymentLight, { lastKnownActivityAt }),
     };
   }).filter(Boolean);
 }

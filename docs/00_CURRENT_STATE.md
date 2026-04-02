@@ -1,3 +1,5 @@
+**STEP526:** Users compare drill actions polish — strengthened the `/admin/users` compare surface so pinned sets now turn into real operator follow-up handles instead of passive side-by-side cards. The compare rail now exposes safe actions for `CSV pinned snapshot`, `copy pinned tg_id`, `copy pinned usernames`, `copy pinned user_id`, plus one-click `open top problem` / `open dormant payer` drill moves for the currently pinned set. Everything stays deliberately narrow and read-only: export reuses the existing audited `users_export` path with `ids_snapshot`, copy reuses the audited `users_bulk` path with explicit ids, and open-actions only route into the already existing user card.
+
 **STEP525:** Users compare / pin rail — added a narrow compare surface to `/admin/users` so operators can temporarily pin 2–5 user cards and review them side-by-side without losing the current working slice. Pin state now rides inside the existing URL-backed users state-contract (`pins=...`), survives refresh/reopen together with the active slice, and feeds a compact compare rail with identity, status/segment, plan/credits/channel/payments, recent activity, and note preview. Scope stays deliberately read-only: no new write paths, no DB persistence, no new route family — just a faster manual ops review layer on top of the existing users control plane.
 
 **STEP524:** Users URL-persisted working views — upgraded `/admin/users` so the full users state-contract now lives in the page URL instead of only in in-memory SPA state. The active search / segment / filter rail / sort / cohort / page / page-size slice now survives refresh and reopen, can be copied as a shareable admin link, and is reused as the back-link when drilling into `/admin/users/[id]`. Scope stays deliberately narrow and read-only: no backend persistence, no new write paths, no new route family — only URL-backed continuity on top of the existing users control plane.
@@ -1778,6 +1780,18 @@ Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
 
+
+
+## STEP526 — Users compare drill actions polish
+- Strengthened the existing `Users compare / pin rail` with a compact drill-actions layer in `scripts/admin-web.js`, so pinned sets can now immediately `export`, `copy tg_id / usernames / user_id`, and open the most relevant pinned card (`top problem` or `dormant payer`) without manual reconfiguration.
+- Reused the existing audited `users_bulk` contract for pinned-copy actions by passing explicit pinned ids through the same `section=users_bulk` path; no new write surfaces or destructive bulk actions were introduced.
+- Extended `src/lib/adminWeb/usersExport.js` and `api/admin-web-read.js` so the existing `users_export` path now also supports explicit-id snapshots (`ids_snapshot`) for safe `CSV pinned snapshot` exports with audit metadata.
+- Enriched compare-card read models with `problemScore`, `problemDesc`, and `isDormantPayer` in `src/lib/adminWeb/readModels.js`, keeping all heuristics transparent and based only on already existing users-directory signals.
+- Added compare drill-action styling plus `scripts/smoke-admin-web-users-compare-drill-actions-contract.js`, wired into `package.json`.
+
+Acceptance / notes:
+- Scope stays read-only and reversible: no backend mutations, no destructive bulk, no DB persistence, no new route family, no public-flow changes.
+- Compare drill actions intentionally operate only on the bounded pinned set (max 5 users), preserving the lightweight ops-review character of the compare rail.
 
 
 ## STEP525 — Users compare / pin rail

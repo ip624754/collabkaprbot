@@ -42,10 +42,13 @@ export default async function handler(req, res) {
     return json(res, 200, { ok: true, data });
   }
   if (section === 'users_export') {
+    const idsRaw = String(getSearchParam(req, 'ids', '') || '').trim();
+    const userIds = idsRaw ? idsRaw.split(',').map((value) => Number(value || 0) || 0).filter((value) => value > 0) : [];
     const exportPayload = await buildUsersCsvExport({
       scope: getSearchParam(req, 'scope', 'current'),
       currentSegment: getSearchParam(req, 'segment', 'all'),
       q: getSearchParam(req, 'q', ''),
+      userIds,
       filters: {
         planState: getSearchParam(req, 'plan_state', 'all'),
         creditsState: getSearchParam(req, 'credits_state', 'all'),
@@ -61,13 +64,14 @@ export default async function handler(req, res) {
       action: 'export_users_csv',
       actorTgId: session.actorTgId,
       targetType: 'users_export',
-      targetId: `${exportPayload.scope}:${exportPayload.segment}`,
-      reason: `scope=${exportPayload.scope};segment=${exportPayload.segment};q=${exportPayload.search || '-'};plan=${exportPayload.filters?.planState || 'all'};credits=${exportPayload.filters?.creditsState || 'all'};channel=${exportPayload.filters?.channelState || 'all'};activity=${exportPayload.filters?.activityWindow || 'all'};payments=${exportPayload.filters?.paymentsState || 'all'};sort=${exportPayload.filters?.sortBy || 'created_desc'};cohort=${exportPayload.filters?.cohortView || 'all'};rows=${exportPayload.rowsCount};truncated=${exportPayload.truncated ? 1 : 0}`,
+      targetId: `${exportPayload.scope}:${exportPayload.segment}:${Array.isArray(exportPayload.userIds) ? exportPayload.userIds.length : 0}`,
+      reason: `scope=${exportPayload.scope};segment=${exportPayload.segment};q=${exportPayload.search || '-'};plan=${exportPayload.filters?.planState || 'all'};credits=${exportPayload.filters?.creditsState || 'all'};channel=${exportPayload.filters?.channelState || 'all'};activity=${exportPayload.filters?.activityWindow || 'all'};payments=${exportPayload.filters?.paymentsState || 'all'};sort=${exportPayload.filters?.sortBy || 'created_desc'};cohort=${exportPayload.filters?.cohortView || 'all'};rows=${exportPayload.rowsCount};truncated=${exportPayload.truncated ? 1 : 0};ids=${Array.isArray(exportPayload.userIds) ? exportPayload.userIds.length : 0}`,
       oldJson: null,
       newJson: {
         filename: exportPayload.filename,
         rows: exportPayload.rowsCount,
         truncated: exportPayload.truncated,
+        ids: Array.isArray(exportPayload.userIds) ? exportPayload.userIds.length : 0,
       },
     });
     return sendCsv(res, exportPayload.filename, exportPayload.csv);

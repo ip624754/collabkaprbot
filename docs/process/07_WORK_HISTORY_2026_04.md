@@ -1,3 +1,17 @@
+## STEP526 — Users compare drill actions polish
+
+Date: 2026-04-03
+
+Scope:
+- strengthened the existing compare rail in `/admin/users` with a small drill-actions block for `CSV pinned snapshot`, `copy pinned tg_id / usernames / user_id`, and one-click open moves for `top problem` / `dormant payer`;
+- reused the existing audited `users_bulk` path for pinned-copy actions and extended the existing `users_export` path with `ids_snapshot` support for pinned exports;
+- enriched compare-card read models with transparent `problemScore`, `problemDesc`, and `isDormantPayer` signals so pinned drill actions stay explainable and bounded;
+- added dedicated smoke coverage in `scripts/smoke-admin-web-users-compare-drill-actions-contract.js` and wired the new smoke alias into `package.json`.
+
+Acceptance / notes:
+- scope stays read-only and reversible: no backend mutations, no destructive bulk, no DB persistence, no new route family, no public-flow changes;
+- pinned drill actions intentionally stay bounded to the same compare-set limit (max 5 users) and reuse already existing safe contracts instead of introducing new operator magic.
+
 ## STEP525 — Users compare / pin rail
 
 Date: 2026-04-02

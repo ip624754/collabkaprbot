@@ -638,7 +638,7 @@ function usersBulkModeLabel(value) {
 
 function basketSourceLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return key === 'basket' ? 'корзина' : 'текущий фильтр';
+  return key === 'basket' ? 'корзина' : key === 'pins' ? 'pinned set' : 'текущий фильтр';
 }
 
 const USERS_STATE_DEFAULTS = {
@@ -1118,6 +1118,69 @@ function renderUsersInlineChips(chips = []) {
   `).join('');
 }
 
+function compareCardLabel(item = {}) {
+  return String(item.displayName || `user #${Number(item.userId || 0) || '—'}`).trim();
+}
+
+function compareDrillTarget(compareRail = {}, kind = 'top_problem') {
+  const cards = Array.isArray(compareRail.cards) ? compareRail.cards.slice() : [];
+  if (!cards.length) return null;
+  if (kind === 'dormant_payer') {
+    return cards
+      .filter((item) => !!item.isDormantPayer)
+      .sort((a, b) => (Number(b.paymentsCount || 0) - Number(a.paymentsCount || 0))
+        || (new Date(a.lastKnownActivityAt || 0).getTime() - new Date(b.lastKnownActivityAt || 0).getTime())
+        || (Number(a.userId || 0) - Number(b.userId || 0)))[0] || null;
+  }
+  return cards
+    .filter((item) => Number(item.problemScore || 0) > 0 || String(item.problemDesc || '').trim())
+    .sort((a, b) => (Number(b.problemScore || 0) - Number(a.problemScore || 0))
+      || (Number(b.paymentsCount || 0) - Number(a.paymentsCount || 0))
+      || (new Date(a.lastKnownActivityAt || 0).getTime() - new Date(b.lastKnownActivityAt || 0).getTime())
+      || (Number(a.userId || 0) - Number(b.userId || 0)))[0] || null;
+}
+
+function renderUsersCompareDrillActions(compareRail = {}) {
+  const cards = Array.isArray(compareRail.cards) ? compareRail.cards : [];
+  if (!cards.length) return '';
+  const topProblem = compareDrillTarget(compareRail, 'top_problem');
+  const dormantPayer = compareDrillTarget(compareRail, 'dormant_payer');
+  return `
+    <div class="aw-action-grid aw-compare-drill-grid">
+      <button class="aw-action-card" data-users-compare-action="export_pins">
+        <span>Экспорт</span>
+        <strong>CSV pinned snapshot</strong>
+        <small>Скачать ровно закреплённый набор без потери текущего working slice и без новой route family.</small>
+      </button>
+      <button class="aw-action-card" data-users-compare-action="copy_pins_tg_ids">
+        <span>Copy</span>
+        <strong>Pinned tg_id</strong>
+        <small>Скопировать tg_id по pinned set через тот же audited bulk contract.</small>
+      </button>
+      <button class="aw-action-card" data-users-compare-action="copy_pins_usernames">
+        <span>Copy</span>
+        <strong>Pinned usernames</strong>
+        <small>Скопировать usernames по закреплённым user cards без ручной сборки корзины.</small>
+      </button>
+      <button class="aw-action-card" data-users-compare-action="copy_pins_user_ids">
+        <span>Copy</span>
+        <strong>Pinned user_id</strong>
+        <small>Собрать internal user_id по тому же pinned set для ручных ops follow-up шагов.</small>
+      </button>
+      <button class="aw-action-card" data-users-compare-action="open_top_problem" ${topProblem ? '' : 'disabled'}>
+        <span>Open</span>
+        <strong>${escapeHtml(topProblem ? `Top problem · ${compareCardLabel(topProblem)}` : 'Top problem · none')}</strong>
+        <small>${escapeHtml(topProblem ? `Открыть закреплённую карточку с максимальным attention/problem score (${topProblem.problemDesc || 'attention'}).` : 'Сейчас среди pins нет явного problem target.')}</small>
+      </button>
+      <button class="aw-action-card" data-users-compare-action="open_dormant_payer" ${dormantPayer ? '' : 'disabled'}>
+        <span>Open</span>
+        <strong>${escapeHtml(dormantPayer ? `Dormant payer · ${compareCardLabel(dormantPayer)}` : 'Dormant payer · none')}</strong>
+        <small>${escapeHtml(dormantPayer ? `Открыть закреплённого dormant payer без ручного поиска по compare rail.` : 'Сейчас среди pins нет dormant payer по contract 30d.')}</small>
+      </button>
+    </div>
+  `;
+}
+
 function renderUsersCompareCards(compareRail = {}) {
   const cards = Array.isArray(compareRail.cards) ? compareRail.cards : [];
   if (!cards.length) {
@@ -1155,6 +1218,7 @@ function renderUsersCompareCards(compareRail = {}) {
         <div class="aw-list aw-compare-card-meta">
           <div class="aw-list-item"><strong>Последняя активность</strong><small>${escapeHtml(formatDate(item.lastKnownActivityAt))}</small></div>
           <div class="aw-list-item"><strong>Последний платёж</strong><small>${escapeHtml(formatDate(item.lastPaymentAt))}</small></div>
+          <div class="aw-list-item"><strong>Attention</strong><small>${escapeHtml(item.problemDesc ? `${item.problemDesc} · score ${Number(item.problemScore || 0)}` : item.isDormantPayer ? 'dormant payer' : 'major flags not detected')}</small></div>
           <div class="aw-list-item"><strong>Workspace / curator</strong><small>${escapeHtml(`owned ${Number(item.workspaceCount || 0)} · curator ${Number(item.curatorCount || 0)}`)}</small></div>
           <div class="aw-list-item"><strong>Note</strong><small>${escapeHtml(item.notePreview || 'Пока без operator note.')}</small></div>
         </div>
@@ -1391,7 +1455,12 @@ function usersView(model) {
         </div>
         <div class="aw-toolbar-note">
           <span class="aw-muted">Pins теперь живут в users URL state и переживают refresh / reopen вместе с текущим working slice.</span>
-          <span class="aw-muted">Rail остаётся read-only: сравнение использует только уже существующие user-card signals, note и payment/workspace summary.</span>
+          <span class="aw-muted">STEP526: compare drill actions polish — pinned set теперь сразу умеет export/copy/open через уже существующие safe contracts.</span>
+        </div>
+        ${renderUsersCompareDrillActions(compareRail)}
+        <div class="aw-toolbar-note">
+          <span class="aw-muted">Compare drill actions не вводят destructive bulk: export и copy идут через уже существующие audited users_export / users_bulk paths.</span>
+          <span class="aw-muted">Open actions только открывают одну закреплённую карточку по pinned set heuristic — top problem или dormant payer.</span>
         </div>
         <div class="aw-compare-grid">
           ${renderUsersCompareCards(compareRail)}
@@ -2395,6 +2464,7 @@ async function render() {
     const paginationSize = Number(model?.pagination?.pageSize ?? state.pageSize ?? 20) || 20;
     const comparePinIds = normalizeUsersPinIds(model?.compareRail?.pinIds || state.pinIds || []);
     window.__usersState = normalizeUsersState({ ...state, page: paginationPage, pageSize: paginationSize, pinIds: comparePinIds });
+    window.__usersCompareRail = model?.compareRail || { maxPins: 5, pinIds: comparePinIds, cards: [] };
     syncUsersUrlState(window.__usersState, { replace: true });
     app.innerHTML = usersView(model);
   } else if (route.page === 'userDetail') {
@@ -2470,21 +2540,33 @@ function setUsersStateExact(overrides = {}) {
   window.__usersState = { ...getUsersState(), ...(overrides || {}) };
 }
 
-async function runUsersExportAction(scope = 'current') {
+async function runUsersExportAction(scope = 'current', opts = {}) {
   const state = readUsersControlsState();
+  const ids = normalizeUsersPinIds(opts?.ids || []);
   const params = new URLSearchParams({ section: 'users_export', scope, segment: state.segment, q: state.q, plan_state: state.planState, credits_state: state.creditsState, channel_state: state.channelState, activity_window: state.activityWindow, payments_state: state.paymentsState, sort_by: state.sortBy, cohort_view: state.cohortView });
-  await downloadCsv(`/api/admin-web-read?${params.toString()}`, `users_${scope}.csv`);
+  if (ids.length) params.set('ids', ids.join(','));
+  await downloadCsv(`/api/admin-web-read?${params.toString()}`, `users_${ids.length ? 'pins' : scope}.csv`);
   render();
 }
 
-async function runUsersBulkCopyAction(mode = 'tg_ids', source = 'current') {
+async function runUsersPinnedExportAction() {
+  const ids = getUsersPinIds();
+  if (!ids.length) {
+    alert('Пока нет pinned users. Сначала закрепи 2–5 user cards.');
+    return;
+  }
+  await runUsersExportAction('current', { ids });
+}
+
+async function runUsersBulkCopyAction(mode = 'tg_ids', source = 'current', opts = {}) {
   const state = readUsersControlsState();
+  const idsOverride = normalizeUsersPinIds(opts?.ids || []);
   window.__usersBulkState = { mode, source };
   const params = new URLSearchParams({ section: 'users_bulk', mode, segment: state.segment, q: state.q, plan_state: state.planState, credits_state: state.creditsState, channel_state: state.channelState, activity_window: state.activityWindow, payments_state: state.paymentsState, sort_by: state.sortBy, cohort_view: state.cohortView });
-  if (source === 'basket') {
-    const ids = getUsersBasketIds();
+  if (source === 'basket' || idsOverride.length) {
+    const ids = idsOverride.length ? idsOverride : getUsersBasketIds();
     if (!ids.length) {
-      alert('Корзина пуста. Сначала отметь пользователей в таблице.');
+      alert(idsOverride.length ? 'Pinned set пуст. Сначала закрепи user cards.' : 'Корзина пуста. Сначала отметь пользователей в таблице.');
       return;
     }
     params.set('ids', ids.join(','));
@@ -2505,6 +2587,36 @@ async function runUsersBulkCopyAction(mode = 'tg_ids', source = 'current') {
     return;
   }
   alert(`Скопировано: ${payload.rowsCount || 0} строк (${usersBulkModeLabel(payload.mode)} · ${basketSourceLabel(source)}).`);
+  render();
+}
+
+async function runUsersPinnedBulkCopyAction(mode = 'tg_ids') {
+  const ids = getUsersPinIds();
+  if (!ids.length) {
+    alert('Пока нет pinned users. Сначала закрепи 2–5 user cards.');
+    return;
+  }
+  await runUsersBulkCopyAction(mode, 'pins', { ids });
+}
+
+function getUsersCompareRailModel() {
+  const rail = window.__usersCompareRail || {};
+  return {
+    maxPins: Number(rail.maxPins || 5) || 5,
+    pinIds: normalizeUsersPinIds(rail.pinIds || []),
+    cards: Array.isArray(rail.cards) ? rail.cards : [],
+  };
+}
+
+function openUsersCompareDrillTarget(kind = 'top_problem') {
+  const compareRail = getUsersCompareRailModel();
+  const target = compareDrillTarget(compareRail, kind);
+  if (!target?.userId) {
+    alert(kind === 'dormant_payer' ? 'Сейчас среди pins нет dormant payer по contract 30d.' : 'Сейчас среди pins нет problem target.');
+    return;
+  }
+  const back = encodeURIComponent(buildUsersListHref(getUsersState()));
+  history.pushState({}, '', `/admin/users/${Number(target.userId || 0)}?back=${back}`);
   render();
 }
 
@@ -2652,6 +2764,38 @@ function bindShell() {
         }
       } catch (err) {
         alert(`Не удалось выполнить follow-up action: ${err?.message || 'unknown'}`);
+      }
+    });
+  });
+  app.querySelectorAll('[data-users-compare-action]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const action = button.getAttribute('data-users-compare-action') || '';
+      try {
+        if (action === 'export_pins') {
+          await runUsersPinnedExportAction();
+          return;
+        }
+        if (action === 'copy_pins_tg_ids') {
+          await runUsersPinnedBulkCopyAction('tg_ids');
+          return;
+        }
+        if (action === 'copy_pins_usernames') {
+          await runUsersPinnedBulkCopyAction('usernames');
+          return;
+        }
+        if (action === 'copy_pins_user_ids') {
+          await runUsersPinnedBulkCopyAction('user_ids');
+          return;
+        }
+        if (action === 'open_top_problem') {
+          openUsersCompareDrillTarget('top_problem');
+          return;
+        }
+        if (action === 'open_dormant_payer') {
+          openUsersCompareDrillTarget('dormant_payer');
+        }
+      } catch (err) {
+        alert(`Не удалось выполнить compare drill action: ${err?.message || 'unknown'}`);
       }
     });
   });

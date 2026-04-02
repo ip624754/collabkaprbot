@@ -1,8 +1,15 @@
-import { exportUsersDirectory, normalizeUsersDirectoryFilters } from '../../db/queries.js';
+import { exportUsersDirectory, getUsersDirectoryByIds, normalizeUsersDirectoryFilters } from '../../db/queries.js';
 import { getAdminUserNotesBulk } from './notes.js';
 import { CFG } from '../config.js';
 
 const ALLOWED_SEGMENTS = ['all', 'brands', 'creators', 'curators', 'managers'];
+
+
+function normalizeIds(idsRaw = []) {
+  return Array.from(new Set((Array.isArray(idsRaw) ? idsRaw : String(idsRaw || '').split(','))
+    .map((value) => Number(value || 0) || 0)
+    .filter((value) => value > 0))).slice(0, 500);
+}
 
 export function normalizeUsersExportScope(scopeRaw = 'current', currentSegmentRaw = 'all') {
   const scope = String(scopeRaw || 'current').trim().toLowerCase();
@@ -87,15 +94,32 @@ function buildFilenameTag(resolved = {}, q = '') {
     ? `current_${resolved.segment}`
     : resolved.scope === 'audit_snapshot'
       ? 'audit_snapshot'
-      : resolved.segment;
+      : resolved.scope === 'ids_snapshot'
+        ? 'ids_snapshot'
+        : resolved.segment;
   return `${base}${q ? '_search' : ''}`;
 }
 
-export async function buildUsersCsvExport({ scope = 'current', currentSegment = 'all', q = '', filters = {} } = {}) {
-  const resolved = normalizeUsersExportScope(scope, currentSegment);
+export async function buildUsersCsvExport({ scope = 'current', currentSegment = 'all', q = '', filters = {}, userIds = [] } = {}) {
+  const normalizedIds = normalizeIds(userIds);
   const search = String(q || '').trim();
+  const resolved = normalizedIds.length
+    ? { scope: 'ids_snapshot', segment: 'all', scopeLabel: 'ids_snapshot', segmentLabel: 'all' }
+    : normalizeUsersExportScope(scope, currentSegment);
   const normalizedFilters = normalizeUsersDirectoryFilters({ segment: resolved.segment, ...(filters || {}) });
-  const { rows, truncated, filters: appliedFilters } = await exportUsersDirectory(resolved.segment, search, normalizedFilters);
+  let rows = [];
+  let truncated = false;
+  let appliedFilters = normalizedFilters;
+  if (normalizedIds.length) {
+    const fetched = await getUsersDirectoryByIds(normalizedIds);
+    const byId = new Map((fetched || []).map((row) => [Number(row.user_id || 0), row]));
+    rows = normalizedIds.map((id) => byId.get(Number(id || 0))).filter(Boolean);
+  } else {
+    const exportResult = await exportUsersDirectory(resolved.segment, search, normalizedFilters);
+    rows = Array.isArray(exportResult?.rows) ? exportResult.rows : [];
+    truncated = !!exportResult?.truncated;
+    appliedFilters = exportResult?.filters || normalizedFilters;
+  }
   const noteMap = await getAdminUserNotesBulk((rows || []).map((row) => Number(row.user_id || 0)));
 
   const header = [
@@ -148,7 +172,7 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
   });
 
   const ts = new Date().toISOString().slice(0, 10);
-  const cohortTag = (appliedFilters?.cohortView || normalizedFilters?.cohortView || 'all') !== 'all' ? `_${appliedFilters?.cohortView || normalizedFilters?.cohortView || 'all'}` : '';
+  const cohortTag = resolved.scope === 'ids_snapshot' ? '_pinned' : (appliedFilters?.cohortView || normalizedFilters?.cohortView || 'all') !== 'all' ? `_${appliedFilters?.cohortView || normalizedFilters?.cohortView || 'all'}` : '';
   const filename = `users_${buildFilenameTag(resolved, search)}${cohortTag}_${ts}.csv`;
   const csv = '\uFEFF' + header + '\n' + csvRows.join('\n');
 
