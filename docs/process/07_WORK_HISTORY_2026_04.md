@@ -1,3 +1,17 @@
+## STEP530 — Users column priority compression
+
+Date: 2026-04-03
+
+Scope:
+- tightened the middle columns of `/admin/users` for medium-width operator windows without changing the underlying users contract or any write surface;
+- compressed `Segment` into compact badges, compressed `Plan / credits` into a tighter plan cell, bounded `Signals` to priority chips with overflow, and moved `Last activity` into a cleaner inline chip + timestamp rhythm;
+- added `aw-users-table-priority` CSS sizing plus compact meta helpers so the table feels cleaner and more adult on realistic widths instead of only on very wide screens;
+- added `scripts/smoke-admin-web-users-column-priority-contract.js` and wired the new source smoke into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays UI-only and reversible: no new write paths, no SQL changes, no route changes, no export/bulk/compare contract changes;
+- goal is cleaner column hierarchy and scan-speed, not new operator power.
+
 ## STEP529 — Users row height / table density polish
 
 Date: 2026-04-03

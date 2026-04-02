@@ -1065,6 +1065,49 @@ function usersSignalsDetail(item = {}) {
   return parts.join(' · ');
 }
 
+function usersSignalsCompactDetail(item = {}) {
+  const parts = [];
+  if (Number(item?.problemScore || 0) > 0) parts.push(`risk ${Number(item.problemScore || 0)}`);
+  if (Number(item?.paymentsCount || 0) > 0) parts.push(`${Number(item.paymentsCount || 0)} pay`);
+  if (item.flags?.hasChannel) parts.push('channel');
+  if (item.flags?.isBanned) parts.push('banned');
+  if (!parts.length) return 'без активных signals';
+  return parts.join(' · ');
+}
+
+function usersSignalsPriorityChips(item = {}) {
+  const chips = usersSignalChips(item);
+  if (!Array.isArray(chips) || !chips.length) return [];
+  const maxVisible = 4;
+  if (chips.length <= maxVisible) return chips;
+  return [...chips.slice(0, maxVisible - 1), { label: `+${chips.length - (maxVisible - 1)}`, tone: 'is-muted is-overflow' }];
+}
+
+function usersSegmentBadges(item = {}) {
+  const badges = [
+    { label: segmentLabel(item.segment || 'user'), tone: 'is-accent is-segment' },
+  ];
+  if (item.flags?.hasBrandProfile) badges.push({ label: 'profile', tone: 'is-soft' });
+  if (item.flags?.isManager) badges.push({ label: 'manager', tone: 'is-soft' });
+  if (item.flags?.isModerator) badges.push({ label: 'mod', tone: 'is-warn' });
+  return badges;
+}
+
+function usersPlanMicroMeta(item = {}) {
+  const plan = usersPlanMeta(item);
+  const credits = usersCreditsMeta(item);
+  const pieces = [];
+  if (item?.brandPlanUntil) pieces.push(`до ${formatDatePart(item.brandPlanUntil)}`);
+  if (!Number(item?.brandCredits || 0)) pieces.push('credits 0');
+  if (!pieces.length) return plan.detail || credits.detail || '—';
+  return pieces.join(' · ');
+}
+
+function usersActivityInlineLabel(item = {}) {
+  if (!item?.lastKnownActivityAt) return '—';
+  return `${formatDatePart(item.lastKnownActivityAt)} · ${formatTimePart(item.lastKnownActivityAt)}`;
+}
+
 function usersActivityMeta(item = {}) {
   if (!item?.lastKnownActivityAt) {
     return {
@@ -1552,19 +1595,19 @@ function usersView(model) {
       </div>
 
       <div class="aw-toolbar-note">
-        <span class="aw-muted">STEP529: users row height / table density polish — компактнее ритм строки, меньше повторов и больше полезных строк на экран без потери scan-speed.</span>
+        <span class="aw-muted">STEP529: users row height / table density polish — базовая плотность строки сохранена; STEP530: users column priority compression — сегмент / план / сигналы / активность собраны компактнее, чтобы средняя ширина окна читалась чище без новой логики.</span>
       </div>
 
-      <div class="aw-table-wrap aw-users-table-wrap aw-users-table-density">
-        <table class="aw-table aw-users-table aw-users-table-density">
+      <div class="aw-table-wrap aw-users-table-wrap aw-users-table-density aw-users-table-priority">
+        <table class="aw-table aw-users-table aw-users-table-density aw-users-table-priority">
           <thead>
             <tr>
               <th class="aw-table-check"><input type="checkbox" id="toggleVisibleUsers" ${allVisibleSelected ? 'checked' : ''} ${items.length ? '' : 'disabled'} /></th>
               <th>Пользователь</th>
               <th>Сегмент</th>
-              <th>План / credits</th>
+              <th>План</th>
               <th>Сигналы</th>
-              <th>Last activity</th>
+              <th>Активность</th>
               <th>Создан</th>
             </tr>
           </thead>
@@ -1573,7 +1616,8 @@ function usersView(model) {
               const planMeta = usersPlanMeta(item);
               const creditsMeta = usersCreditsMeta(item);
               const activityMeta = usersActivityMeta(item);
-              const signalChips = usersSignalChips(item);
+              const signalChips = usersSignalsPriorityChips(item);
+              const segmentBadges = usersSegmentBadges(item);
               return `
               <tr data-user-row="${item.userId}">
                 <td class="aw-table-check">
@@ -1593,36 +1637,36 @@ function usersView(model) {
                   </div>
                 </td>
                 <td>
-                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense">
-                    <strong class="aw-cell-title aw-cell-title-dense">${escapeHtml(segmentLabel(item.segment || 'user'))}</strong>
-                    <small>${item.flags?.hasBrandProfile ? 'brand profile' : 'без brand profile'}</small>
+                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense aw-segment-cell">
+                    <div class="aw-inline-chips aw-inline-chips-tight aw-inline-chips-dense">${renderUsersInlineChips(segmentBadges)}</div>
+                    <small class="aw-cell-meta-inline">${item.flags?.hasBrandProfile ? 'есть профиль бренда' : 'базовый профиль'}</small>
                   </div>
                 </td>
                 <td>
-                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense">
+                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense aw-plan-cell">
                     <div class="aw-inline-chips aw-inline-chips-tight aw-inline-chips-dense">
                       <span class="aw-stat-chip aw-stat-chip-dense ${escapeHtml(planMeta.tone)}">${escapeHtml(planMeta.label)}</span>
                       <span class="aw-stat-chip aw-stat-chip-dense ${escapeHtml(creditsMeta.tone)}">${escapeHtml(creditsMeta.label)}</span>
                     </div>
-                    <small>${escapeHtml(planMeta.detail)} / ${escapeHtml(creditsMeta.detail)}</small>
+                    <small class="aw-cell-meta-inline">${escapeHtml(usersPlanMicroMeta(item))}</small>
                   </div>
                 </td>
                 <td>
-                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense">
-                    <div class="aw-inline-chips aw-inline-chips-dense">${renderUsersInlineChips(signalChips)}</div>
-                    <small>${escapeHtml(usersSignalsDetail(item))}</small>
+                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense aw-signals-cell">
+                    <div class="aw-inline-chips aw-inline-chips-tight aw-inline-chips-dense">${renderUsersInlineChips(signalChips)}</div>
+                    <small class="aw-cell-meta-inline">${escapeHtml(usersSignalsCompactDetail(item))}</small>
                   </div>
                 </td>
                 <td>
-                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense">
-                    <div class="aw-inline-chips aw-inline-chips-tight aw-inline-chips-dense">
+                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense aw-activity-cell">
+                    <div class="aw-activity-inline">
                       <span class="aw-stat-chip aw-stat-chip-dense ${escapeHtml(activityMeta.tone)}">${escapeHtml(activityMeta.label)}</span>
+                      <small class="aw-cell-meta-inline">${escapeHtml(usersActivityInlineLabel(item))}</small>
                     </div>
-                    <small>${escapeHtml(activityMeta.detail)}</small>
                   </div>
                 </td>
                 <td>
-                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense aw-cell-stack-compact">
+                  <div class="aw-cell-stack aw-cell-stack-tight aw-cell-stack-dense aw-cell-stack-compact aw-created-cell">
                     <strong class="aw-cell-title aw-cell-title-dense">${escapeHtml(formatDatePart(item.createdAt))}</strong>
                     <small>${escapeHtml(formatTimePart(item.createdAt))}</small>
                   </div>
