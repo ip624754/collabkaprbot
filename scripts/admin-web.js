@@ -746,10 +746,10 @@ async function copyUsersWorkingViewUrl() {
   const href = buildUsersListHref(readUsersControlsState(), { absolute: true });
   const copied = await copyTextToClipboard(href);
   if (!copied) {
-    alert('Не удалось скопировать ссылку на текущий срез Users.');
+    alert('Не удалось скопировать ссылку на текущий срез пользователей.');
     return;
   }
-  alert('Ссылка на текущий срез Users скопирована.');
+  alert('Ссылка на текущий срез пользователей скопирована.');
 }
 
 function activeWindowLabel(value) {
@@ -762,11 +762,11 @@ function activeWindowLabel(value) {
 
 function usersSortMeta(value = 'created_desc') {
   const key = String(value || '').trim().toLowerCase();
-  if (key === 'activity_desc') return { label: 'Свежие сверху', detail: 'Сортировка по последней активности ↓' };
-  if (key === 'activity_asc') return { label: 'Тихие сверху', detail: 'Сначала пользователи без свежих сигналов' };
-  if (key === 'payments_desc') return { label: 'Платящие сверху', detail: 'Сортировка по числу платежей ↓' };
-  if (key === 'problem_desc') return { label: 'Проблемные сверху', detail: 'Блок / платили без канала / план без канала / залежавшиеся кредиты' };
-  return { label: 'Новые сверху', detail: 'Сортировка по created_at ↓' };
+  if (key === 'activity_desc') return { label: 'Свежие сверху', detail: 'По последней активности ↓' };
+  if (key === 'activity_asc') return { label: 'Тихие сверху', detail: 'Сначала без свежих сигналов' };
+  if (key === 'payments_desc') return { label: 'Платящие сверху', detail: 'По числу платежей ↓' };
+  if (key === 'problem_desc') return { label: 'Проблемные сверху', detail: 'Блок · без канала после оплаты/плана · залежавшиеся кредиты' };
+  return { label: 'Новые сверху', detail: 'По дате создания ↓' };
 }
 
 function usersPriorityPresets() {
@@ -786,7 +786,7 @@ function usersCohortMeta(value = 'all') {
   if (key === 'plan_no_channel') return { label: 'План без канала', detail: 'Есть план, но канал не подключён' };
   if (key === 'fresh_brands') return { label: 'Живые бренды', detail: 'Бренды с живым сигналом за последние 30 дней' };
   if (key === 'quiet_creators') return { label: 'Тихие креаторы', detail: 'Креаторы без свежего сигнала 30+ дней' };
-  return { label: 'Все пользователи', detail: 'Без предустановленного cohort view' };
+  return { label: 'Все пользователи', detail: 'Без активной когорты' };
 }
 
 function usersCohortPresets() {
@@ -806,11 +806,11 @@ function usersCohortCounterCards(counters = {}, currentCohortView = 'all') {
     const value = Math.max(0, Number(counters?.[item.id] || 0));
     const meta = usersCohortMeta(item.id);
     return `
-      <button class="aw-cohort-counter-card ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">
+      <div class="aw-cohort-counter-card ${currentCohortView === item.id ? 'is-active' : ''}">
         <span>${escapeHtml(meta.label)}</span>
         <strong>${value}</strong>
         <small>${escapeHtml(meta.detail)}</small>
-      </button>
+      </div>
     `;
   }).join('');
 }
@@ -820,7 +820,7 @@ function usersOperatorPresets() {
     {
       id: 'all_new',
       label: 'Все · новые',
-      detail: 'Чистый базовый срез без хвостов cohort/filter, чтобы быстро вернуться к общей картине.',
+      detail: 'Чистый базовый срез без лишних фильтров, чтобы быстро вернуться к общей картине.',
       state: {
         q: '',
         segment: 'all',
@@ -836,7 +836,7 @@ function usersOperatorPresets() {
     {
       id: 'dormant_payers_followup',
       label: 'Спящие плательщики',
-      detail: 'Платили, но давно не было сигнала. Удобно для ручного follow-up и возврата.',
+      detail: 'Платили, но давно не было сигнала. Удобно для ручного разбора и возврата.',
       state: {
         q: '',
         segment: 'all',
@@ -852,7 +852,7 @@ function usersOperatorPresets() {
     {
       id: 'paid_no_channel_followup',
       label: 'Платили без канала',
-      detail: 'Есть платежи, но канал не подключён. Быстрый операторский срез для activation gap.',
+      detail: 'Есть платежи, но канал не подключён. Быстрый операторский срез для разбора провала активации.',
       state: {
         q: '',
         segment: 'all',
@@ -868,7 +868,7 @@ function usersOperatorPresets() {
     {
       id: 'plan_no_channel_followup',
       label: 'План без канала',
-      detail: 'Есть план, но канал не подключён. Чистый рабочий срез для brand activation.',
+      detail: 'Есть план, но канал не подключён. Чистый рабочий срез для активации брендов.',
       state: {
         q: '',
         segment: 'brands',
@@ -884,7 +884,7 @@ function usersOperatorPresets() {
     {
       id: 'fresh_brands_watch',
       label: 'Живые бренды',
-      detail: 'Живые бренды за 30 дней. Хорошо для проверки входящего потока и handoff-ready сегмента.',
+      detail: 'Живые бренды за 30 дней. Удобно для проверки входящего потока и готового к разбору сегмента.',
       state: {
         q: '',
         segment: 'brands',
@@ -900,7 +900,7 @@ function usersOperatorPresets() {
     {
       id: 'quiet_creators_watch',
       label: 'Тихие креаторы',
-      detail: 'Креаторы без свежих сигналов. Удобно для reactivation и ручного отбора.',
+      detail: 'Креаторы без свежих сигналов. Удобно для реактивации и ручного отбора.',
       state: {
         q: '',
         segment: 'creators',
@@ -1057,14 +1057,11 @@ function renderUsersTableMetaStrip({ pagination = {}, currentSliceLabel = '', so
     : 'Результатов нет';
   const sliceBits = [
     String(currentSliceLabel || 'Все пользователи').trim(),
-    String(sortMeta?.label || 'Новые сверху').trim(),
-    String(cohortMeta?.label || 'Все').trim(),
-    String(activePresetMeta?.label || 'Свой срез').trim(),
   ].filter(Boolean);
   return `
     <section class="aw-users-table-meta-strip">
       <div class="aw-users-table-meta-main">
-        <span class="aw-users-table-kicker">Раздел Users · STEP529: плотность строк таблицы · STEP530: приоритет колонок</span>
+        <span class="aw-users-table-kicker">Пользователи · рабочий список</span>
         <strong>${escapeHtml(mainLabel)}</strong>
         <small>${escapeHtml(sliceBits.join(' · '))}</small>
       </div>
@@ -1247,27 +1244,27 @@ function renderUsersCompareDrillActions(compareRail = {}) {
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="copy_pins_tg_ids">
         <span>Копировать</span>
         <strong>tg_id закреплённых</strong>
-        <small>Скопировать tg_id по pinned set через тот же audited bulk contract.</small>
+        <small>Скопировать tg_id закреплённого набора через тот же проверяемый bulk-контракт.</small>
       </button>
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="copy_pins_usernames">
         <span>Копировать</span>
         <strong>usernames закреплённых</strong>
-        <small>Скопировать usernames по закреплённым user cards без ручной сборки корзины.</small>
+        <small>Скопировать usernames по закреплённым карточкам без ручной сборки корзины.</small>
       </button>
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="copy_pins_user_ids">
         <span>Копировать</span>
         <strong>user_id закреплённых</strong>
-        <small>Собрать internal user_id по тому же pinned set для ручных ops follow-up шагов.</small>
+        <small>Собрать user_id того же закреплённого набора для ручных рабочих шагов.</small>
       </button>
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="open_top_problem" ${topProblem ? '' : 'disabled'}>
         <span>Открыть</span>
-        <strong>${escapeHtml(topProblem ? `Top problem · ${compareCardLabel(topProblem)}` : 'Top problem · none')}</strong>
-        <small>${escapeHtml(topProblem ? `Открыть закреплённую карточку с максимальным attention/problem score (${topProblem.problemDesc || 'attention'}).` : 'Сейчас среди pins нет явного problem target.')}</small>
+        <strong>${escapeHtml(topProblem ? `Проблемный сверху · ${compareCardLabel(topProblem)}` : 'Проблемный сверху · нет')}</strong>
+        <small>${escapeHtml(topProblem ? `Открыть закреплённую карточку с максимальным проблемным приоритетом (${topProblem.problemDesc || 'внимание'}).` : 'Сейчас среди закреплённых нет явной проблемной цели.')}</small>
       </button>
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="open_dormant_payer" ${dormantPayer ? '' : 'disabled'}>
         <span>Открыть</span>
         <strong>${escapeHtml(dormantPayer ? `Спящий плательщик · ${compareCardLabel(dormantPayer)}` : 'Спящий плательщик · нет')}</strong>
-        <small>${escapeHtml(dormantPayer ? `Открыть закреплённого dormant payer без ручного поиска по compare rail.` : 'Сейчас среди pins нет dormant payer по contract 30d.')}</small>
+        <small>${escapeHtml(dormantPayer ? 'Открыть закреплённого спящего плательщика без ручного поиска по блоку сравнения.' : 'Сейчас среди закреплённых нет спящего плательщика по правилу 30 дней.')}</small>
       </button>
     </div>
   `;
@@ -1276,7 +1273,7 @@ function renderUsersCompareDrillActions(compareRail = {}) {
 function renderUsersCompareCards(compareRail = {}) {
   const cards = Array.isArray(compareRail.cards) ? compareRail.cards : [];
   if (!cards.length) {
-    return `<div class="aw-empty aw-compare-empty">Закрепи 2–5 user cards, чтобы рядом сравнивать сегмент, план, signals, payments и operator note без тяжёлого перехода между карточками.</div>`;
+    return `<div class="aw-empty aw-compare-empty">Закрепи 2–5 карточек, чтобы рядом сравнивать сегмент, план, сигналы, платежи и заметку оператора без тяжёлого перехода между карточками.</div>`;
   }
   return cards.map((item) => {
     const pinPayload = escapeHtml(JSON.stringify({
@@ -1417,7 +1414,7 @@ function usersView(model) {
     recentExport,
     recentCopy,
   });
-  return shell('Пользователи', 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.', `
+  return shell('Пользователи', 'Плотный операторский список: фильтры, экспорт, безопасные утилиты и быстрый переход в карточку.', `
     <section class="aw-surface aw-stack">
       <div class="aw-users-sticky-controls">
         <div class="aw-users-sticky-shell">
@@ -1438,7 +1435,7 @@ function usersView(model) {
           </div>
           <div class="aw-users-sticky-state">
             <div class="aw-basket-pill">Срез: <strong>${escapeHtml(currentSliceLabel)}</strong></div>
-            <div class="aw-basket-pill">Sort: <strong>${escapeHtml(sortMeta.label)}</strong></div>
+            <div class="aw-basket-pill">Сортировка: <strong>${escapeHtml(sortMeta.label)}</strong></div>
             <div class="aw-basket-pill">Когорта: <strong>${escapeHtml(cohortMeta.label)}</strong></div>
             <div class="aw-basket-pill">Пресет: <strong>${escapeHtml(activePresetMeta.label)}</strong></div>
             <div class="aw-basket-pill">Корзина: <strong>${basketIds.length}</strong> / ${Number(bulkMeta.basketMaxRows || 500)}</div>
@@ -1453,21 +1450,15 @@ function usersView(model) {
           <div class="aw-utility-head">
             <div>
               <strong>Сортировка и приоритет</strong>
-              <span>Быстро поднимает наверх самые свежие, самые платящие, самые тихие и самые проблемные сегменты без новых мутаций.</span>
+              <span>Нажми чип — порядок применится сразу и зафиксируется в текущем срезе.</span>
             </div>
-            <div class="aw-basket-pill">Порядок: <strong>${escapeHtml(sortMeta.label)}</strong></div>
           </div>
-          <div class="aw-priority-row">
-            <div class="aw-priority-pills">
-              ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
-            </div>
-            <select id="usersSortBy" class="aw-select inline">
-              ${[['created_desc','Сортировка: новые сверху'],['activity_desc','Сортировка: свежие сверху'],['payments_desc','Сортировка: платящие сверху'],['activity_asc','Сортировка: тихие сверху'],['problem_desc','Сортировка: проблемные сверху']].map(([v,l]) => `<option value="${v}" ${currentSortBy === v ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
+          <div class="aw-priority-pills aw-priority-pills-main">
+            ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}" aria-pressed="${currentSortBy === item.id ? 'true' : 'false'}">${escapeHtml(item.label)}</button>`).join('')}
           </div>
-          <div class="aw-toolbar-note">
-            <span class="aw-muted">${escapeHtml(sortMeta.detail)}</span>
-            <span class="aw-muted">problem = блок / платили без канала / план без канала / залежавшиеся кредиты</span>
+          <div class="aw-toolbar-note aw-toolbar-note-compact">
+            <span class="aw-muted">Текущий порядок: ${escapeHtml(sortMeta.label)}.</span>
+            <span class="aw-muted">${escapeHtml(sortMeta.detail)}.</span>
           </div>
         </section>
 
@@ -1476,19 +1467,18 @@ function usersView(model) {
           <div class="aw-utility-head">
             <div>
               <strong>Когорты и готовые срезы</strong>
-              <span>Маленькие счётчики по когортам над chips, чтобы панель быстрее читалась как контрольная плоскость.</span>
+              <span>Счётчики сверху только показывают объём. Саму когорту выбирай чипами ниже.</span>
             </div>
-            <div class="aw-basket-pill">Когорта: <strong>${escapeHtml(cohortMeta.label)}</strong></div>
           </div>
           <div class="aw-cohort-topline">
             ${usersCohortCounterCards(cohortTopline, currentCohortView)}
           </div>
-          <div class="aw-toolbar-note">
-            <span class="aw-muted">Мини-topline считает cohort-срезы на сервере по тому же users-contract, но без активного фильтра когорты.</span>
-            <span class="aw-muted">Это сохраняет chips полезными: даже при активной когорте ты видишь полный рабочий расклад по текущему набору search / segment / filters.</span>
+          <div class="aw-priority-pills aw-priority-pills-main">
+            ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}" aria-pressed="${currentCohortView === item.id ? 'true' : 'false'}">${escapeHtml(item.label)}</button>`).join('')}
           </div>
-          <div class="aw-priority-pills">
-            ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+          <div class="aw-toolbar-note aw-toolbar-note-compact">
+            <span class="aw-muted">Текущая когорта: ${escapeHtml(cohortMeta.label)}.</span>
+            <span class="aw-muted">Счётчики не меняют срез и не дублируют управление.</span>
           </div>
         </section>
 
@@ -1496,20 +1486,14 @@ function usersView(model) {
           <div class="aw-utility-head">
             <div>
               <strong>Сохранённые операторские пресеты</strong>
-              <span>Быстрые рабочие пресеты поверх текущего state-contract: один клик возвращает к реально нужным операторским срезам без ручной сборки контролов.</span>
+              <span>Нажми карточку — весь рабочий срез переключится сразу. Активный пресет показывается в верхней строке состояния.</span>
             </div>
-            <div class="aw-basket-pill">Пресет: <strong>${escapeHtml(activePresetMeta.label)}</strong></div>
-          </div>
-          <div class="aw-toolbar-note">
-            <span class="aw-muted">Встроенные пресеты намеренно read-only: они просто выставляют уже существующие search / segment / filter / sort / cohort-контролы.</span>
-            <span class="aw-muted">Любой ручной сдвиг после этого переводит экран в свой срез, но к пресету можно вернуться одним кликом.</span>
           </div>
           <div class="aw-preset-grid">
             ${renderUsersOperatorPresetCards(activePresetId)}
           </div>
-          <div class="aw-toolbar-note">
-            <span class="aw-muted">Активный пресет: ${escapeHtml(activePresetMeta.label)}</span>
-            <span class="aw-muted">${escapeHtml(activePresetMeta.detail)}</span>
+          <div class="aw-toolbar-note aw-toolbar-note-compact">
+            <span class="aw-muted">После ручного изменения контролов экран становится своим срезом.</span>
           </div>
         </section>
 
@@ -1519,7 +1503,6 @@ function usersView(model) {
               <strong>Фильтры среза</strong>
               <span>Фильтры только для чтения: план / кредиты / канал / активность / платежи.</span>
             </div>
-            <div class="aw-basket-pill">Срез: <strong>${escapeHtml(currentSliceLabel)}</strong></div>
           </div>
           <div class="aw-filter-grid">
             <select id="usersPlanState" class="aw-select inline">
@@ -1539,7 +1522,7 @@ function usersView(model) {
             </select>
           </div>
           <div class="aw-toolbar-note">
-            <span class="aw-muted">Фильтры работают и для списка, и для CSV / bulk copy. Активность = latest known signal по user/account/payments/workspace-поверхностям.</span>
+            <span class="aw-muted">Фильтры работают и для списка, и для CSV / копирования. Активность считается по последнему известному сигналу из user/account/payments/workspace-поверхностей.</span>
           </div>
         </section>
 
@@ -1547,7 +1530,7 @@ function usersView(model) {
           <div class="aw-basket-pill">Строки: <strong>${pagination.total > 0 ? `${pagination.fromRow}–${pagination.toRow}` : '0'}</strong> / ${pagination.total}</div>
           <div class="aw-basket-pill">На странице: <strong>${pagination.pageSize}</strong></div>
           <div class="aw-users-url-meta">
-            <div class="aw-basket-pill">URL-срезы Users: <strong>ON</strong></div>
+            <div class="aw-basket-pill">URL-срез: <strong>ON</strong></div>
             <button class="aw-button ghost" data-users-copy-view-url>Скопировать ссылку на срез</button>
           </div>
         </div>
@@ -1558,22 +1541,20 @@ function usersView(model) {
         <div class="aw-utility-head">
           <div>
             <strong>Сравнение и закрепление</strong>
-            <span>Временно закрепляет 2–5 карточек пользователей для side-by-side review без тяжёлого redesign и без новых write-path.</span>
+            <span>Временно закрепляй до ${Number(compareRail.maxPins || 5)} карточек для быстрого параллельного разбора.</span>
           </div>
           <div class="aw-users-compare-actions">
-            <div class="aw-basket-pill">Закреплено: <strong>${pinIds.length}</strong> / ${Number(compareRail.maxPins || 5)}</div>
             <button class="aw-button ghost" id="clearUsersPinsBtn" ${pinIds.length ? '' : 'disabled'}>Очистить закрепление</button>
           </div>
         </div>
         <div class="aw-toolbar-note aw-toolbar-note-compact">
-          <span class="aw-muted">Закрепления живут в URL-state users и переживают refresh / reopen вместе с текущим рабочим срезом.</span>
-          <span class="aw-muted">STEP526: compare drill actions polish — закреплённый набор по-прежнему умеет export/copy/open через уже существующие safe contracts.</span>
-          <span class="aw-muted">STEP527: compare density polish — rail стал компактнее и больше не лезет поверх соседних секций при scroll.</span>
+          <span class="aw-muted">Закрепления живут в URL-срезе и переживают обновление страницы и повторное открытие.</span>
+          <span class="aw-muted">Экспорт, копирование и открытие идут через уже существующие безопасные контракты.</span>
         </div>
         ${renderUsersCompareDrillActions(compareRail)}
         <div class="aw-toolbar-note">
-          <span class="aw-muted">Действия из сравнения не вводят destructive bulk: export и copy идут через уже существующие audited users_export / users_bulk paths.</span>
-          <span class="aw-muted">Кнопки открытия только открывают одну закреплённую карточку по heuristic закреплённого набора — top problem или спящий плательщик.</span>
+          <span class="aw-muted">Действия из сравнения не вводят опасные bulk-операции: экспорт и копирование идут через уже существующие проверяемые users_export / users_bulk пути.</span>
+          <span class="aw-muted">Кнопки открытия лишь переводят в одну закреплённую карточку по логике набора — самый проблемный или спящий плательщик.</span>
         </div>
         <div class="aw-compare-grid">
           ${renderUsersCompareCards(compareRail)}
@@ -1584,45 +1565,44 @@ function usersView(model) {
         <div class="aw-utility-head">
           <div>
             <strong>Готовые действия по срезу</strong>
-            <span>Готовые follow-up-действия по текущему cohort/filter-срезу: export, copy tg_id, copy usernames и быстрые рабочие переходы без ручной перенастройки контролов.</span>
+            <span>Быстрые действия по текущему срезу: экспорт, копирование и рабочие переходы без ручной перенастройки контролов.</span>
           </div>
-          <div class="aw-basket-pill">Срез: <strong>${escapeHtml(currentSliceLabel)}</strong></div>
         </div>
         <div class="aw-action-grid">
           <button class="aw-action-card" data-users-followup="export_current">
             <span>Экспорт</span>
             <strong>CSV текущего среза</strong>
-            <small>Скачать текущий search / segment / filter / cohort с уже активной сортировкой.</small>
+            <small>Скачать текущий срез с уже активной сортировкой.</small>
           </button>
           <button class="aw-action-card" data-users-followup="copy_tg_ids">
             <span>Копировать</span>
             <strong>tg_id</strong>
-            <small>Быстро собрать tg_id по текущему срезу и сразу положить в буфер обмена.</small>
+            <small>Быстро собрать tg_id по текущему срезу и сразу положить в буфер.</small>
           </button>
           <button class="aw-action-card" data-users-followup="copy_usernames">
             <span>Копировать</span>
             <strong>usernames</strong>
-            <small>Скопировать usernames по тому же рабочему срезу без переключения bulk rail вручную.</small>
+            <small>Скопировать usernames по тому же рабочему срезу без ручного переключения блока утилит.</small>
           </button>
           <button class="aw-action-card" data-users-followup="open_top_problem_users">
             <span>Открыть</span>
             <strong>Проблемные сверху</strong>
-            <small>Переключить приоритет на problem_desc и открыть самых проблемных без сброса остальных фильтров.</small>
+            <small>Переключить сортировку на проблемных и открыть верх карточек без сброса остальных фильтров.</small>
           </button>
           <button class="aw-action-card" data-users-followup="open_dormant_payers">
             <span>Открыть</span>
             <strong>Спящие плательщики · ${Math.max(0, Number(cohortTopline?.dormant_payers || 0))}</strong>
-            <small>Включить когорту спящих плательщиков и поднять наверх тех, кого логично разбирать в follow-up.</small>
+            <small>Включить когорту спящих плательщиков и поднять наверх тех, кого логично разбирать дальше.</small>
           </button>
         </div>
         <div class="aw-toolbar-note">
-          <span class="aw-muted">Блок готовых действий не вводит новых мутаций: он переиспользует уже существующие export / bulk / priority / cohort-contracts.</span>
-          <span class="aw-muted">Copy-действия идут через тот же admin-web audit trail, что и основной блок утилит для списков.</span>
+          <span class="aw-muted">Блок готовых действий не вводит новых мутаций: он переиспользует уже существующие безопасные контракты списка пользователей.</span>
+          <span class="aw-muted">Копирование идёт через тот же audit trail, что и основной блок утилит.</span>
         </div>
       </section>
 
       <div class="aw-toolbar-note">
-        <span class="aw-muted">CSV · до ${Number(exportMeta.maxRows || 10000)} строк · audit trail включён</span>
+        <span class="aw-muted">CSV · до ${Number(exportMeta.maxRows || 10000)} строк · аудит включён</span>
         ${recentExport ? `<span class="aw-muted">Последняя выгрузка: ${escapeHtml(formatDate(recentExport.ts))} · TG ${Number(recentExport.actorTgId || 0) || '—'}</span>` : '<span class="aw-muted">Выгрузок из web-admin пока не было.</span>'}
       </div>
 

@@ -116,7 +116,8 @@
     "smoke:admin-web-users-table-density-contract": "node scripts/smoke-admin-web-users-table-density-contract.js",
     "smoke:admin-web-users-column-priority-contract": "node scripts/smoke-admin-web-users-column-priority-contract.js",
     "smoke:admin-web-users-header-meta-strip-contract": "node scripts/smoke-admin-web-users-header-meta-strip-contract.js",
-    "smoke:admin-web-users-copy-unification-contract": "node scripts/smoke-admin-web-users-copy-unification-contract.js"
+    "smoke:admin-web-users-copy-unification-contract": "node scripts/smoke-admin-web-users-copy-unification-contract.js",
+    "smoke:admin-web-users-interaction-clarity-contract": "node scripts/smoke-admin-web-users-interaction-clarity-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

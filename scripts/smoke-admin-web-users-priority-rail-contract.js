@@ -22,9 +22,8 @@ assert.ok(apiRead.includes('sort_by'), 'admin-web read API must include sort_by 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
   'Сортировка и приоритет',
-  'usersSortBy',
   'data-users-priority',
-  'problem = блок / платили без канала / план без канала / залежавшиеся кредиты',
+  'Нажми чип — порядок применится сразу и зафиксируется в текущем срезе.',
   'Платящие',
   'Проблемные',
 ]) {

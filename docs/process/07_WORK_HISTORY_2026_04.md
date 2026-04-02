@@ -1,3 +1,18 @@
+## STEP533 — Users interaction clarity / duplicate-state compression
+
+Date: 2026-04-03
+
+Scope:
+- turned the sort and cohort rails on `/admin/users` into visibly one-click controls: priority chips now act as the primary sort control, while cohort counters stay informational and the real cohort selection lives only in the chips below;
+- removed repeated local active-state badges inside section bodies (`Порядок`, local `Когорта`, local `Пресет`, local `Срез`, local `Закреплено`) so the sticky state strip remains the single source of truth for the current working slice;
+- shortened and russified the section copy across priority / cohort / presets / compare / follow-up, and removed internal step-noise from the table meta strip in favor of a cleaner `Пользователи · рабочий список` label;
+- added `scripts/smoke-admin-web-users-interaction-clarity-contract.js`, refreshed the older priority-rail smoke, and kept the whole change UI-only: no SQL changes, no new write paths, no route-family expansion.
+
+Acceptance / notes:
+- clicking a sort chip or cohort chip now applies the state immediately and keeps the active chip visually fixed;
+- cohort counters are now informational only, which removes the old “clicked something, but what exactly changed?” ambiguity;
+- the screen is shorter, quieter, and more obviously stateful without losing any existing export/bulk/compare capability.
+
 ## STEP532 — Users section copy unification + banned_at schema guard
 
 Date: 2026-04-03

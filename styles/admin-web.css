@@ -166,6 +166,9 @@ body {
   justify-content: space-between;
   margin-top: -4px;
 }
+.aw-toolbar-note-compact {
+  gap: 8px 12px;
+}
 
 .aw-users-sticky-controls {
   position: sticky;
@@ -336,7 +339,7 @@ body {
 }
 .aw-preset-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 10px;
 }
 .aw-preset-card {
@@ -344,11 +347,11 @@ body {
   border: 1px solid rgba(132,176,255,0.14);
   background: rgba(255,255,255,0.035);
   border-radius: 16px;
-  padding: 12px 14px;
+  padding: 11px 13px;
   color: var(--text);
   cursor: pointer;
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 .aw-preset-card:hover {
   border-color: rgba(132,176,255,0.26);
@@ -370,7 +373,7 @@ body {
 }
 .aw-preset-card small {
   color: var(--muted);
-  line-height: 1.45;
+  line-height: 1.35;
 }
 .aw-action-ready-rail {
   border: 1px solid rgba(132,176,255,0.16);
@@ -447,10 +450,9 @@ body {
   border-radius: 16px;
   padding: 12px;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
   color: inherit;
 }
-.aw-cohort-counter-card:hover,
 .aw-cohort-counter-card.is-active {
   border-color: rgba(73,176,255,0.3);
   background: rgba(73,176,255,0.1);
@@ -483,6 +485,9 @@ body {
   gap: 8px;
   flex-wrap: wrap;
 }
+.aw-priority-pills-main {
+  align-items: center;
+}
 .aw-priority-pill {
   border: 1px solid rgba(132,176,255,0.14);
   background: rgba(255,255,255,0.035);
@@ -491,6 +496,7 @@ body {
   padding: 8px 12px;
   font: inherit;
   cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
 }
 .aw-priority-pill.is-active,
 .aw-priority-pill:hover {

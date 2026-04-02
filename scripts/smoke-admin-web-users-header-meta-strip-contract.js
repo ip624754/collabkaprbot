@@ -7,7 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Раздел Users · STEP529: плотность строк таблицы · STEP530: приоритет колонок',
+  'Пользователи · рабочий список',
   'renderUsersTableMetaStrip',
   'renderUsersTableHead',
   'aw-users-table-meta-strip',
