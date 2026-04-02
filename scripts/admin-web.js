@@ -1147,32 +1147,32 @@ function renderUsersCompareDrillActions(compareRail = {}) {
   const dormantPayer = compareDrillTarget(compareRail, 'dormant_payer');
   return `
     <div class="aw-action-grid aw-compare-drill-grid">
-      <button class="aw-action-card" data-users-compare-action="export_pins">
+      <button class="aw-action-card aw-action-card-compact" data-users-compare-action="export_pins">
         <span>Экспорт</span>
         <strong>CSV pinned snapshot</strong>
-        <small>Скачать ровно закреплённый набор без потери текущего working slice и без новой route family.</small>
+        <small>Закреплённый набор без потери текущего working slice.</small>
       </button>
-      <button class="aw-action-card" data-users-compare-action="copy_pins_tg_ids">
+      <button class="aw-action-card aw-action-card-compact" data-users-compare-action="copy_pins_tg_ids">
         <span>Copy</span>
         <strong>Pinned tg_id</strong>
         <small>Скопировать tg_id по pinned set через тот же audited bulk contract.</small>
       </button>
-      <button class="aw-action-card" data-users-compare-action="copy_pins_usernames">
+      <button class="aw-action-card aw-action-card-compact" data-users-compare-action="copy_pins_usernames">
         <span>Copy</span>
         <strong>Pinned usernames</strong>
         <small>Скопировать usernames по закреплённым user cards без ручной сборки корзины.</small>
       </button>
-      <button class="aw-action-card" data-users-compare-action="copy_pins_user_ids">
+      <button class="aw-action-card aw-action-card-compact" data-users-compare-action="copy_pins_user_ids">
         <span>Copy</span>
         <strong>Pinned user_id</strong>
         <small>Собрать internal user_id по тому же pinned set для ручных ops follow-up шагов.</small>
       </button>
-      <button class="aw-action-card" data-users-compare-action="open_top_problem" ${topProblem ? '' : 'disabled'}>
+      <button class="aw-action-card aw-action-card-compact" data-users-compare-action="open_top_problem" ${topProblem ? '' : 'disabled'}>
         <span>Open</span>
         <strong>${escapeHtml(topProblem ? `Top problem · ${compareCardLabel(topProblem)}` : 'Top problem · none')}</strong>
         <small>${escapeHtml(topProblem ? `Открыть закреплённую карточку с максимальным attention/problem score (${topProblem.problemDesc || 'attention'}).` : 'Сейчас среди pins нет явного problem target.')}</small>
       </button>
-      <button class="aw-action-card" data-users-compare-action="open_dormant_payer" ${dormantPayer ? '' : 'disabled'}>
+      <button class="aw-action-card aw-action-card-compact" data-users-compare-action="open_dormant_payer" ${dormantPayer ? '' : 'disabled'}>
         <span>Open</span>
         <strong>${escapeHtml(dormantPayer ? `Dormant payer · ${compareCardLabel(dormantPayer)}` : 'Dormant payer · none')}</strong>
         <small>${escapeHtml(dormantPayer ? `Открыть закреплённого dormant payer без ручного поиска по compare rail.` : 'Сейчас среди pins нет dormant payer по contract 30d.')}</small>
@@ -1317,7 +1317,8 @@ function usersView(model) {
   return shell('Пользователи', 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.', `
     <section class="aw-surface aw-stack">
       <div class="aw-users-sticky-controls">
-        <div class="aw-toolbar aw-toolbar-users aw-toolbar-users-sticky">
+        <div class="aw-users-sticky-shell">
+          <div class="aw-toolbar aw-toolbar-users aw-toolbar-users-sticky">
           <div class="aw-toolbar-main">
             <input id="usersSearch" class="aw-input inline" placeholder="Поиск: username / tg_id / user id" value="${escapeHtml(currentSearch)}" />
             <select id="usersSegment" class="aw-select inline">
@@ -1331,8 +1332,20 @@ function usersView(model) {
             </select>
             <button class="aw-button" id="exportUsersBtn">Экспорт</button>
           </div>
+          </div>
+          <div class="aw-users-sticky-state">
+            <div class="aw-basket-pill">Slice: <strong>${escapeHtml(currentSliceLabel)}</strong></div>
+            <div class="aw-basket-pill">Sort: <strong>${escapeHtml(sortMeta.label)}</strong></div>
+            <div class="aw-basket-pill">Cohort: <strong>${escapeHtml(cohortMeta.label)}</strong></div>
+            <div class="aw-basket-pill">Preset: <strong>${escapeHtml(activePresetMeta.label)}</strong></div>
+            <div class="aw-basket-pill">Корзина: <strong>${basketIds.length}</strong> / ${Number(bulkMeta.basketMaxRows || 500)}</div>
+            <div class="aw-basket-pill">Pins: <strong>${pinIds.length}</strong> / ${Number(compareRail.maxPins || 5)}</div>
+            <div class="aw-basket-pill">Страница: <strong>${escapeHtml(pagination.pageLabel)}</strong></div>
+          </div>
         </div>
+      </div>
 
+      <div class="aw-users-rails-stack">
         <section class="aw-priority-rail">
           <div class="aw-utility-head">
             <div>
@@ -1428,10 +1441,7 @@ function usersView(model) {
         </section>
 
         <div class="aw-users-sticky-meta">
-          <div class="aw-basket-pill">Страница: <strong>${escapeHtml(pagination.pageLabel)}</strong></div>
           <div class="aw-basket-pill">Строки: <strong>${pagination.total > 0 ? `${pagination.fromRow}–${pagination.toRow}` : '0'}</strong> / ${pagination.total}</div>
-          <div class="aw-basket-pill">Корзина: <strong>${basketIds.length}</strong> / ${Number(bulkMeta.basketMaxRows || 500)}</div>
-          <div class="aw-basket-pill">Pins: <strong>${pinIds.length}</strong> / ${Number(compareRail.maxPins || 5)}</div>
           <div class="aw-basket-pill">На странице: <strong>${pagination.pageSize}</strong></div>
           <div class="aw-users-url-meta">
             <div class="aw-basket-pill">Users URL-persisted working views: <strong>ON</strong></div>
@@ -1440,9 +1450,8 @@ function usersView(model) {
         </div>
 
         ${topPagination}
-      </div>
 
-      <section class="aw-compare-rail">
+      <section class="aw-compare-rail aw-compare-rail-density">
         <div class="aw-utility-head">
           <div>
             <strong>Users compare / pin rail</strong>
@@ -1453,9 +1462,10 @@ function usersView(model) {
             <button class="aw-button ghost" id="clearUsersPinsBtn" ${pinIds.length ? '' : 'disabled'}>Очистить pins</button>
           </div>
         </div>
-        <div class="aw-toolbar-note">
-          <span class="aw-muted">Pins теперь живут в users URL state и переживают refresh / reopen вместе с текущим working slice.</span>
-          <span class="aw-muted">STEP526: compare drill actions polish — pinned set теперь сразу умеет export/copy/open через уже существующие safe contracts.</span>
+        <div class="aw-toolbar-note aw-toolbar-note-compact">
+          <span class="aw-muted">Pins живут в users URL state и переживают refresh / reopen вместе с текущим working slice.</span>
+          <span class="aw-muted">STEP526: compare drill actions polish — pinned set по-прежнему умеет export/copy/open через уже существующие safe contracts.</span>
+          <span class="aw-muted">STEP527: compare density polish — rail стал компактнее и больше не лезет поверх соседних секций при scroll.</span>
         </div>
         ${renderUsersCompareDrillActions(compareRail)}
         <div class="aw-toolbar-note">
@@ -1538,6 +1548,8 @@ function usersView(model) {
           ${recentCopy ? `<span class="aw-muted">Последнее копирование: ${escapeHtml(formatDate(recentCopy.ts))} · TG ${Number(recentCopy.actorTgId || 0) || '—'}</span>` : '<span class="aw-muted">Копирований bulk utility пока не было.</span>'}
         </div>
       </section>
+
+      </div>
 
       <div class="aw-table-wrap aw-users-table-wrap">
         <table class="aw-table aw-users-table">

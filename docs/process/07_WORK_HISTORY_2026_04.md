@@ -1,3 +1,17 @@
+## STEP527 — Users compare density polish + sticky overlap fix
+
+Date: 2026-04-03
+
+Scope:
+- reduced the effective sticky layer in `/admin/users` from a large multi-rail stack to a compact sticky shell containing only search / segment / export plus current slice meta, while keeping the larger rails in normal document flow;
+- fixed the visible overlay-on-scroll behavior reported during live visual review, where the oversized sticky block could visually sit on top of lower sections while the page moved underneath;
+- tightened the compare rail from STEP525–526 with denser drill-action cards, smaller compare-card spacing, and a two-column compare meta layout for faster side-by-side scan speed on the real operator window size;
+- added `scripts/smoke-admin-web-users-compare-density-contract.js` and wired the new source smoke alias into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only and reversible: no new write paths, no DB persistence changes, no public-flow changes;
+- the goal is layout safety and scan-speed, not new operator power: the same compare/export/bulk contracts remain in place, just with cleaner behavior during long scroll sessions.
+
 ## STEP526 — Users compare drill actions polish
 
 Date: 2026-04-03
