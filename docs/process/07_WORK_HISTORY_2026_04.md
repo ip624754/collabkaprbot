@@ -1,5 +1,20 @@
 # Work History — 2026-04
 
+## STEP516 — Users table hierarchy polish
+
+Date: 2026-04-02
+
+Scope:
+- tightened `/admin/users` row hierarchy so user identity, compact stats, signals, activity, and created time scan in a cleaner order;
+- split `Last activity` out into its own dedicated column and rendered freshness as compact status chips with exact timestamp detail;
+- replaced the noisier mixed text lines with compact stat chips for plan, credits, note presence, and signal roles;
+- added dedicated users-table polish styles in `styles/admin-web.css`;
+- added `scripts/smoke-admin-web-users-hierarchy-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- UI-only step: no SQL changes, no route changes, no write-surface expansion;
+- intent is scan-speed and discipline, not new data or new ops mutations.
+
 ## STEP515 — Users filter rail v2
 
 Date: 2026-04-02

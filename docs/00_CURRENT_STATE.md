@@ -1,3 +1,5 @@
+**STEP516:** Users table hierarchy polish — tightened the `/admin/users` list into a more disciplined operator surface without touching the server contract from STEP513–515. The table now has a stronger scan order: user identity first, compact plan/credits chips second, signal chips third, and an explicit `Last activity` column with freshness + exact timestamp detail. Created time is also split into cleaner date/time micro-hierarchy, so the page reads less like a raw directory dump and more like a control-plane list. Scope is UI-only and reversible: no SQL changes, no route changes, no write-surface expansion.
+
 **STEP515:** Users filter rail v2 — extended `/admin/users` with a second, analysis-oriented filter layer so the same page can cut the user base by plan, credits, channel presence, recent activity (7/30/90 days), and payments yes/no without introducing any new write paths. The filter state now flows through list render, CSV export, and bulk-copy utilities via one normalized server contract in `src/db/queries.js`, backed by a shared `meta` lateral that exposes `has_channel`, `has_payments`, and `last_known_activity_at`. Operators can now treat Users as a real audit/ops surface rather than just a directory: the table shows richer quick signals, exports include channel/payment/activity fields, and audit reasons preserve the applied filter rail. Scope stays read-only and bounded: no destructive bulk actions, no background jobs, no public-bot flow changes.
 
 **STEP513:** Users export + audit snapshot — upgraded `/admin/users` from a pure list into a usable ops/audit surface without adding a new API route family. The collapsed read handler now supports `section=users_export`, which returns an attachment CSV for either the current filtered view or one of the predefined export scopes (`audit snapshot`, `all`, `brands`, `creators`, `curators`, `managers`). The users page now shows an explicit export control, a bounded export note (`до 10 000 строк`), and the latest export timestamp/actor from admin-web audit. CSV generation is centralized in `src/lib/adminWeb/usersExport.js`, and every download appends an audit entry with actor, scope, filters, rows count, and truncation flag, so exports are no longer invisible operator actions. Scope stays deliberately narrow and hobby-safe: CSV only, no XLSX/PDF, no background jobs, no bulk mutations, and no user-facing flow changes.
@@ -1763,6 +1765,17 @@ Auto-heal safeguards + ops alerts:
 Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
+
+
+## STEP516 — Users table hierarchy polish
+- Rebuilt the `/admin/users` row layout so the list now has a clearer scan order: identity → compact stats → signals → `Last activity` → created time.
+- Added compact stat chips in `scripts/admin-web.js` for plan, credits, note presence, signal roles, and activity freshness; split `Last activity` into its own explicit column.
+- Added dedicated styling in `styles/admin-web.css` (`aw-users-table`, `aw-user-cell`, `aw-inline-chips`, `aw-stat-chip`) so the list reads as a denser operator control surface instead of a raw directory.
+- Added `scripts/smoke-admin-web-users-hierarchy-contract.js`, wired into `package.json` and source preflight.
+
+Acceptance / notes:
+- UI-only step: no SQL changes, no new API reads/writes, no public-flow impact.
+- The goal is scan speed and hierarchy discipline, not new data or new mutations.
 
 
 ## STEP515 — Users filter rail v2

@@ -113,6 +113,20 @@ function formatDate(value) {
   return d.toLocaleString('ru-RU');
 }
 
+function formatDatePart(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('ru-RU');
+}
+
+function formatTimePart(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
 function segmentLabel(value) {
   const key = String(value || '').trim().toLowerCase();
   return ({ brand: 'бренд', creator: 'креатор', curator: 'куратор', manager: 'менеджер', user: 'пользователь' })[key] || (key || 'пользователь');
@@ -602,26 +616,81 @@ function activeWindowLabel(value) {
   return 'no recent signal';
 }
 
-function usersSignalSummary(item = {}) {
-  const signals = [];
-  if (item.flags?.isCreator) signals.push('creator');
-  if (item.flags?.hasBrandProfile) signals.push('brand');
-  if (item.flags?.isModerator) signals.push('moderator');
-  if (item.flags?.isManager) signals.push('manager');
-  if (item.flags?.hasChannel) signals.push('channel');
-  if (item.flags?.hasPayments) signals.push('paid');
-  return signals.length ? signals.join(' · ') : '—';
+function usersPlanMeta(item = {}) {
+  const plan = String(item?.brandPlan || '').trim();
+  if (!plan) return { label: 'без плана', tone: 'is-muted', detail: 'План не активирован' };
+  const until = item?.brandPlanUntil ? `до ${formatDate(item.brandPlanUntil)}` : 'Активный план';
+  return { label: plan, tone: 'is-accent', detail: until };
 }
 
-function usersActivityLabel(item = {}) {
-  if (!item?.lastKnownActivityAt) return 'Нет недавнего сигнала';
-  const thenTs = new Date(item.lastKnownActivityAt).getTime();
-  if (!Number.isFinite(thenTs)) return 'Нет недавнего сигнала';
-  const ageDays = (Date.now() - thenTs) / 86400000;
-  if (ageDays <= 7) return 'active 7d';
-  if (ageDays <= 30) return 'active 30d';
-  if (ageDays <= 90) return 'active 90d';
-  return 'older than 90d';
+function usersCreditsMeta(item = {}) {
+  const credits = Number(item?.brandCredits || 0);
+  if (credits > 0) return { label: `${credits} credits`, tone: 'is-good', detail: 'Есть баланс' };
+  return { label: '0 credits', tone: 'is-muted', detail: 'Баланс пуст' };
+}
+
+function usersSignalChips(item = {}) {
+  const chips = [];
+  if (item.flags?.isCreator) chips.push({ label: 'creator', tone: 'is-accent' });
+  if (item.flags?.hasBrandProfile) chips.push({ label: 'brand', tone: 'is-soft' });
+  if (item.flags?.isModerator) chips.push({ label: 'moderator', tone: 'is-warn' });
+  if (item.flags?.isManager) chips.push({ label: 'manager', tone: 'is-soft' });
+  if (item.flags?.hasChannel) chips.push({ label: 'channel', tone: 'is-good' });
+  if (item.flags?.hasPayments) chips.push({ label: 'paid', tone: 'is-good' });
+  return chips;
+}
+
+function usersActivityMeta(item = {}) {
+  if (!item?.lastKnownActivityAt) {
+    return {
+      label: 'нет сигнала',
+      tone: 'is-muted',
+      detail: 'Недавняя активность не найдена',
+    };
+  }
+  const then = new Date(item.lastKnownActivityAt);
+  const thenTs = then.getTime();
+  if (!Number.isFinite(thenTs)) {
+    return {
+      label: 'нет сигнала',
+      tone: 'is-muted',
+      detail: 'Дата активности повреждена',
+    };
+  }
+  const ageMs = Math.max(0, Date.now() - thenTs);
+  const ageHours = ageMs / 3600000;
+  const ageDays = ageMs / 86400000;
+  let label = 'сегодня';
+  let tone = 'is-good';
+  if (ageHours < 24) {
+    label = 'сегодня';
+    tone = 'is-good';
+  } else if (ageDays <= 7) {
+    label = `${Math.max(1, Math.floor(ageDays))}д назад`;
+    tone = 'is-good';
+  } else if (ageDays <= 30) {
+    label = `${Math.floor(ageDays)}д назад`;
+    tone = 'is-warn';
+  } else if (ageDays <= 90) {
+    label = `${Math.floor(ageDays)}д назад`;
+    tone = 'is-soft';
+  } else {
+    label = '90д+';
+    tone = 'is-muted';
+  }
+  return {
+    label,
+    tone,
+    detail: formatDate(item.lastKnownActivityAt),
+  };
+}
+
+function renderUsersInlineChips(chips = []) {
+  const safe = Array.isArray(chips) ? chips.filter(Boolean) : [];
+  if (!safe.length) return '<span class="aw-stat-chip is-muted">—</span>';
+  return safe.map((chip) => `
+    <span class="aw-stat-chip ${escapeHtml(chip.tone || '')}">${escapeHtml(chip.label || '—')}</span>
+  `).join('');
 }
 
 function userRowPayload(item = {}) {
@@ -654,7 +723,7 @@ function usersView(model) {
   const bulkMode = window.__usersBulkState?.mode || 'tg_ids';
   const basketIds = getUsersBasketIds();
   const allVisibleSelected = !!items.length && items.every((item) => isUserInBasket(item.userId));
-  return shell('Пользователи', 'Поиск, сегментный фильтр, drilldown в user card, CSV export и safe bulk utilities для ops/audit.', `
+  return shell('Пользователи', 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.', `
     <section class="aw-surface aw-stack">
       <div class="aw-toolbar aw-toolbar-users">
         <div class="aw-toolbar-main">
@@ -732,33 +801,79 @@ function usersView(model) {
       </section>
 
       <div class="aw-table-wrap">
-        <table class="aw-table">
+        <table class="aw-table aw-users-table">
           <thead>
             <tr>
               <th class="aw-table-check"><input type="checkbox" id="toggleVisibleUsers" ${allVisibleSelected ? 'checked' : ''} ${items.length ? '' : 'disabled'} /></th>
               <th>Пользователь</th>
               <th>Сегмент</th>
-              <th>План / кредиты</th>
-              <th>Signals</th>
+              <th>План / credits</th>
+              <th>Сигналы</th>
+              <th>Last activity</th>
               <th>Создан</th>
             </tr>
           </thead>
           <tbody>
-            ${items.length ? items.map((item) => `
+            ${items.length ? items.map((item) => {
+              const planMeta = usersPlanMeta(item);
+              const creditsMeta = usersCreditsMeta(item);
+              const activityMeta = usersActivityMeta(item);
+              const signalChips = usersSignalChips(item);
+              return `
               <tr data-user-row="${item.userId}">
                 <td class="aw-table-check">
                   <input type="checkbox" class="aw-row-check" data-user-check='${userRowPayload(item)}' ${isUserInBasket(item.userId) ? 'checked' : ''} />
                 </td>
                 <td>
-                  <strong>${escapeHtml(item.username ? '@' + item.username : 'user #' + item.userId)}</strong>
-                  <small>user_id ${item.userId} · tg_id ${item.tgId || '—'} ${item.hasNote ? '· <span class="aw-note-dot"></span> note' : ''}</small>
+                  <div class="aw-user-cell">
+                    <div class="aw-user-primary">
+                      <strong>${escapeHtml(item.username ? '@' + item.username : 'user #' + item.userId)}</strong>
+                      ${item.hasNote ? '<span class="aw-stat-chip is-soft"><span class="aw-note-dot"></span> note</span>' : ''}
+                    </div>
+                    <small>user_id ${item.userId} · tg_id ${item.tgId || '—'}</small>
+                    <div class="aw-inline-chips aw-inline-chips-tight">
+                      <span class="aw-stat-chip ${escapeHtml(planMeta.tone)}">${escapeHtml(planMeta.label)}</span>
+                      <span class="aw-stat-chip ${escapeHtml(creditsMeta.tone)}">${escapeHtml(creditsMeta.label)}</span>
+                    </div>
+                  </div>
                 </td>
-                <td>${escapeHtml(segmentLabel(item.segment || 'user'))}</td>
-                <td>${escapeHtml(item.brandPlan || '—')}<small>${item.brandCredits ? item.brandCredits + ' credits' : 'no credits'}</small></td>
-                <td>${escapeHtml(usersSignalSummary(item))}<small>${item.flags?.hasChannel ? 'канал подключён' : 'канала нет'} · ${item.flags?.hasPayments ? 'payments yes' : 'payments no'} · ${escapeHtml(usersActivityLabel(item))}</small></td>
-                <td>${formatDate(item.createdAt)}</td>
+                <td>
+                  <div class="aw-cell-stack aw-cell-stack-tight">
+                    <strong class="aw-cell-title">${escapeHtml(segmentLabel(item.segment || 'user'))}</strong>
+                    <small>${item.flags?.hasBrandProfile ? 'Есть brand profile' : 'Без brand profile'}</small>
+                  </div>
+                </td>
+                <td>
+                  <div class="aw-cell-stack aw-cell-stack-tight">
+                    <div class="aw-inline-chips aw-inline-chips-tight">
+                      <span class="aw-stat-chip ${escapeHtml(planMeta.tone)}">${escapeHtml(planMeta.label)}</span>
+                      <span class="aw-stat-chip ${escapeHtml(creditsMeta.tone)}">${escapeHtml(creditsMeta.label)}</span>
+                    </div>
+                    <small>${escapeHtml(planMeta.detail)} · ${escapeHtml(creditsMeta.detail)}</small>
+                  </div>
+                </td>
+                <td>
+                  <div class="aw-cell-stack aw-cell-stack-tight">
+                    <div class="aw-inline-chips">${renderUsersInlineChips(signalChips)}</div>
+                    <small>${item.flags?.hasChannel ? 'Канал подключён' : 'Канал не подключён'} · ${item.flags?.hasPayments ? 'Есть платежи' : 'Платежей нет'}</small>
+                  </div>
+                </td>
+                <td>
+                  <div class="aw-cell-stack aw-cell-stack-tight">
+                    <div class="aw-inline-chips aw-inline-chips-tight">
+                      <span class="aw-stat-chip ${escapeHtml(activityMeta.tone)}">${escapeHtml(activityMeta.label)}</span>
+                    </div>
+                    <small>${escapeHtml(activityMeta.detail)}</small>
+                  </div>
+                </td>
+                <td>
+                  <div class="aw-cell-stack aw-cell-stack-tight">
+                    <strong class="aw-cell-title">${escapeHtml(formatDatePart(item.createdAt))}</strong>
+                    <small>${escapeHtml(formatTimePart(item.createdAt))}</small>
+                  </div>
+                </td>
               </tr>
-            `).join('') : '<tr><td colspan="6" class="aw-empty">Ничего не найдено.</td></tr>'}
+            `}).join('') : '<tr><td colspan="7" class="aw-empty">Ничего не найдено.</td></tr>'}
           </tbody>
         </table>
       </div>
