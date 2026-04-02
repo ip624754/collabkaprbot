@@ -52,24 +52,53 @@ async function downloadCsv(url, fallbackName = 'export.csv') {
 async function copyTextToClipboard(text) {
   const value = String(text || '');
   if (!value) return false;
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return true;
-    }
-  } catch {}
   const area = document.createElement('textarea');
   area.value = value;
   area.setAttribute('readonly', 'readonly');
   area.style.position = 'fixed';
   area.style.opacity = '0';
   area.style.pointerEvents = 'none';
+  area.style.left = '-9999px';
   document.body.appendChild(area);
+  area.focus();
   area.select();
   let ok = false;
   try { ok = document.execCommand('copy'); } catch {}
   area.remove();
-  return ok;
+  if (ok) return true;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+function ensureToastHost() {
+  let host = document.getElementById('awToastHost');
+  if (host) return host;
+  host = document.createElement('div');
+  host.id = 'awToastHost';
+  host.className = 'aw-toast-host';
+  document.body.appendChild(host);
+  return host;
+}
+
+function showToast(message, variant = 'info', opts = {}) {
+  const host = ensureToastHost();
+  const toast = document.createElement('div');
+  toast.className = `aw-toast is-${variant}`;
+  toast.innerHTML = `<strong>${variant === 'error' ? 'Ошибка' : variant === 'success' ? 'Готово' : 'Статус'}</strong><span>${escapeHtml(String(message || '').trim())}</span>`;
+  host.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('is-visible'));
+  const ttl = Math.max(1800, Number(opts.ttl || 2600) || 2600);
+  const remove = () => {
+    toast.classList.remove('is-visible');
+    setTimeout(() => toast.remove(), 180);
+  };
+  toast.addEventListener('click', remove);
+  setTimeout(remove, ttl);
 }
 
 function getUsersBasketMap() {
@@ -746,10 +775,10 @@ async function copyUsersWorkingViewUrl() {
   const href = buildUsersListHref(readUsersControlsState(), { absolute: true });
   const copied = await copyTextToClipboard(href);
   if (!copied) {
-    alert('Не удалось скопировать ссылку на текущий срез пользователей.');
+    showToast('Не удалось скопировать ссылку на текущий срез Users.', 'error');
     return;
   }
-  alert('Ссылка на текущий срез пользователей скопирована.');
+  showToast('Ссылка на текущий срез Users скопирована.', 'success');
 }
 
 function activeWindowLabel(value) {
@@ -762,11 +791,11 @@ function activeWindowLabel(value) {
 
 function usersSortMeta(value = 'created_desc') {
   const key = String(value || '').trim().toLowerCase();
-  if (key === 'activity_desc') return { label: 'Свежие сверху', detail: 'По последней активности ↓' };
-  if (key === 'activity_asc') return { label: 'Тихие сверху', detail: 'Сначала без свежих сигналов' };
-  if (key === 'payments_desc') return { label: 'Платящие сверху', detail: 'По числу платежей ↓' };
-  if (key === 'problem_desc') return { label: 'Проблемные сверху', detail: 'Блок · без канала после оплаты/плана · залежавшиеся кредиты' };
-  return { label: 'Новые сверху', detail: 'По дате создания ↓' };
+  if (key === 'activity_desc') return { label: 'Свежие сверху', detail: 'Сортировка по последней активности ↓' };
+  if (key === 'activity_asc') return { label: 'Тихие сверху', detail: 'Сначала пользователи без свежих сигналов' };
+  if (key === 'payments_desc') return { label: 'Платящие сверху', detail: 'Сортировка по числу платежей ↓' };
+  if (key === 'problem_desc') return { label: 'Проблемные сверху', detail: 'Блок / платили без канала / план без канала / залежавшиеся кредиты' };
+  return { label: 'Новые сверху', detail: 'Сортировка по created_at ↓' };
 }
 
 function usersPriorityPresets() {
@@ -786,7 +815,7 @@ function usersCohortMeta(value = 'all') {
   if (key === 'plan_no_channel') return { label: 'План без канала', detail: 'Есть план, но канал не подключён' };
   if (key === 'fresh_brands') return { label: 'Живые бренды', detail: 'Бренды с живым сигналом за последние 30 дней' };
   if (key === 'quiet_creators') return { label: 'Тихие креаторы', detail: 'Креаторы без свежего сигнала 30+ дней' };
-  return { label: 'Все пользователи', detail: 'Без активной когорты' };
+  return { label: 'Все пользователи', detail: 'Без предустановленного cohort view' };
 }
 
 function usersCohortPresets() {
@@ -806,11 +835,11 @@ function usersCohortCounterCards(counters = {}, currentCohortView = 'all') {
     const value = Math.max(0, Number(counters?.[item.id] || 0));
     const meta = usersCohortMeta(item.id);
     return `
-      <div class="aw-cohort-counter-card ${currentCohortView === item.id ? 'is-active' : ''}">
+      <button class="aw-cohort-counter-card ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">
         <span>${escapeHtml(meta.label)}</span>
         <strong>${value}</strong>
         <small>${escapeHtml(meta.detail)}</small>
-      </div>
+      </button>
     `;
   }).join('');
 }
@@ -820,7 +849,7 @@ function usersOperatorPresets() {
     {
       id: 'all_new',
       label: 'Все · новые',
-      detail: 'Чистый базовый срез без лишних фильтров, чтобы быстро вернуться к общей картине.',
+      detail: 'Чистый базовый срез без хвостов cohort/filter, чтобы быстро вернуться к общей картине.',
       state: {
         q: '',
         segment: 'all',
@@ -836,7 +865,7 @@ function usersOperatorPresets() {
     {
       id: 'dormant_payers_followup',
       label: 'Спящие плательщики',
-      detail: 'Платили, но давно не было сигнала. Удобно для ручного разбора и возврата.',
+      detail: 'Платили, но давно не было сигнала. Удобно для ручного follow-up и возврата.',
       state: {
         q: '',
         segment: 'all',
@@ -852,7 +881,7 @@ function usersOperatorPresets() {
     {
       id: 'paid_no_channel_followup',
       label: 'Платили без канала',
-      detail: 'Есть платежи, но канал не подключён. Быстрый операторский срез для разбора провала активации.',
+      detail: 'Есть платежи, но канал не подключён. Быстрый операторский срез для activation gap.',
       state: {
         q: '',
         segment: 'all',
@@ -868,7 +897,7 @@ function usersOperatorPresets() {
     {
       id: 'plan_no_channel_followup',
       label: 'План без канала',
-      detail: 'Есть план, но канал не подключён. Чистый рабочий срез для активации брендов.',
+      detail: 'Есть план, но канал не подключён. Чистый рабочий срез для brand activation.',
       state: {
         q: '',
         segment: 'brands',
@@ -884,7 +913,7 @@ function usersOperatorPresets() {
     {
       id: 'fresh_brands_watch',
       label: 'Живые бренды',
-      detail: 'Живые бренды за 30 дней. Удобно для проверки входящего потока и готового к разбору сегмента.',
+      detail: 'Живые бренды за 30 дней. Хорошо для проверки входящего потока и handoff-ready сегмента.',
       state: {
         q: '',
         segment: 'brands',
@@ -900,7 +929,7 @@ function usersOperatorPresets() {
     {
       id: 'quiet_creators_watch',
       label: 'Тихие креаторы',
-      detail: 'Креаторы без свежих сигналов. Удобно для реактивации и ручного отбора.',
+      detail: 'Креаторы без свежих сигналов. Удобно для reactivation и ручного отбора.',
       state: {
         q: '',
         segment: 'creators',
@@ -950,10 +979,11 @@ function detectUsersOperatorPreset(state = {}) {
 
 function renderUsersOperatorPresetCards(currentPresetId = 'custom') {
   return usersOperatorPresets().map((preset) => `
-    <button class="aw-preset-card ${currentPresetId === preset.id ? 'is-active' : ''}" data-users-preset="${escapeHtml(preset.id)}">
+    <button type="button" class="aw-preset-card ${currentPresetId === preset.id ? 'is-active' : ''}" data-users-preset="${escapeHtml(preset.id)}">
       <span class="aw-preset-kicker">Срез</span>
       <strong>${escapeHtml(preset.label)}</strong>
       <small>${escapeHtml(preset.detail)}</small>
+      <span class="aw-preset-cta">${currentPresetId === preset.id ? 'Активен' : 'Применить срез'}</span>
     </button>
   `).join('');
 }
@@ -1057,11 +1087,14 @@ function renderUsersTableMetaStrip({ pagination = {}, currentSliceLabel = '', so
     : 'Результатов нет';
   const sliceBits = [
     String(currentSliceLabel || 'Все пользователи').trim(),
+    String(sortMeta?.label || 'Новые сверху').trim(),
+    String(cohortMeta?.label || 'Все').trim(),
+    String(activePresetMeta?.label || 'Свой срез').trim(),
   ].filter(Boolean);
   return `
     <section class="aw-users-table-meta-strip">
       <div class="aw-users-table-meta-main">
-        <span class="aw-users-table-kicker">Пользователи · рабочий список</span>
+        <span class="aw-users-table-kicker">Раздел Users · STEP529: плотность строк таблицы · STEP530: приоритет колонок</span>
         <strong>${escapeHtml(mainLabel)}</strong>
         <small>${escapeHtml(sliceBits.join(' · '))}</small>
       </div>
@@ -1244,27 +1277,27 @@ function renderUsersCompareDrillActions(compareRail = {}) {
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="copy_pins_tg_ids">
         <span>Копировать</span>
         <strong>tg_id закреплённых</strong>
-        <small>Скопировать tg_id закреплённого набора через тот же проверяемый bulk-контракт.</small>
+        <small>Скопировать tg_id по pinned set через тот же audited bulk contract.</small>
       </button>
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="copy_pins_usernames">
         <span>Копировать</span>
         <strong>usernames закреплённых</strong>
-        <small>Скопировать usernames по закреплённым карточкам без ручной сборки корзины.</small>
+        <small>Скопировать usernames по закреплённым user cards без ручной сборки корзины.</small>
       </button>
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="copy_pins_user_ids">
         <span>Копировать</span>
         <strong>user_id закреплённых</strong>
-        <small>Собрать user_id того же закреплённого набора для ручных рабочих шагов.</small>
+        <small>Собрать internal user_id по тому же pinned set для ручных ops follow-up шагов.</small>
       </button>
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="open_top_problem" ${topProblem ? '' : 'disabled'}>
         <span>Открыть</span>
-        <strong>${escapeHtml(topProblem ? `Проблемный сверху · ${compareCardLabel(topProblem)}` : 'Проблемный сверху · нет')}</strong>
-        <small>${escapeHtml(topProblem ? `Открыть закреплённую карточку с максимальным проблемным приоритетом (${topProblem.problemDesc || 'внимание'}).` : 'Сейчас среди закреплённых нет явной проблемной цели.')}</small>
+        <strong>${escapeHtml(topProblem ? `Top problem · ${compareCardLabel(topProblem)}` : 'Top problem · none')}</strong>
+        <small>${escapeHtml(topProblem ? `Открыть закреплённую карточку с максимальным attention/problem score (${topProblem.problemDesc || 'attention'}).` : 'Сейчас среди pins нет явного problem target.')}</small>
       </button>
       <button class="aw-action-card aw-action-card-compact" data-users-compare-action="open_dormant_payer" ${dormantPayer ? '' : 'disabled'}>
         <span>Открыть</span>
         <strong>${escapeHtml(dormantPayer ? `Спящий плательщик · ${compareCardLabel(dormantPayer)}` : 'Спящий плательщик · нет')}</strong>
-        <small>${escapeHtml(dormantPayer ? 'Открыть закреплённого спящего плательщика без ручного поиска по блоку сравнения.' : 'Сейчас среди закреплённых нет спящего плательщика по правилу 30 дней.')}</small>
+        <small>${escapeHtml(dormantPayer ? `Открыть закреплённого dormant payer без ручного поиска по compare rail.` : 'Сейчас среди pins нет dormant payer по contract 30d.')}</small>
       </button>
     </div>
   `;
@@ -1273,7 +1306,7 @@ function renderUsersCompareDrillActions(compareRail = {}) {
 function renderUsersCompareCards(compareRail = {}) {
   const cards = Array.isArray(compareRail.cards) ? compareRail.cards : [];
   if (!cards.length) {
-    return `<div class="aw-empty aw-compare-empty">Закрепи 2–5 карточек, чтобы рядом сравнивать сегмент, план, сигналы, платежи и заметку оператора без тяжёлого перехода между карточками.</div>`;
+    return `<div class="aw-empty aw-compare-empty">Закрепи 2–5 user cards, чтобы рядом сравнивать сегмент, план, signals, payments и operator note без тяжёлого перехода между карточками.</div>`;
   }
   return cards.map((item) => {
     const pinPayload = escapeHtml(JSON.stringify({
@@ -1414,7 +1447,7 @@ function usersView(model) {
     recentExport,
     recentCopy,
   });
-  return shell('Пользователи', 'Плотный операторский список: фильтры, экспорт, безопасные утилиты и быстрый переход в карточку.', `
+  return shell('Пользователи', 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.', `
     <section class="aw-surface aw-stack">
       <div class="aw-users-sticky-controls">
         <div class="aw-users-sticky-shell">
@@ -1450,15 +1483,17 @@ function usersView(model) {
           <div class="aw-utility-head">
             <div>
               <strong>Сортировка и приоритет</strong>
-              <span>Нажми чип — порядок применится сразу и зафиксируется в текущем срезе.</span>
+              <span>Быстро поднимает наверх самые свежие, самые платящие, самые тихие и самые проблемные сегменты без новых мутаций.</span>
             </div>
           </div>
-          <div class="aw-priority-pills aw-priority-pills-main">
-            ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}" aria-pressed="${currentSortBy === item.id ? 'true' : 'false'}">${escapeHtml(item.label)}</button>`).join('')}
+          <div class="aw-priority-row">
+            <div class="aw-priority-pills">
+              ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+            </div>
           </div>
-          <div class="aw-toolbar-note aw-toolbar-note-compact">
-            <span class="aw-muted">Текущий порядок: ${escapeHtml(sortMeta.label)}.</span>
-            <span class="aw-muted">${escapeHtml(sortMeta.detail)}.</span>
+          <div class="aw-toolbar-note">
+            <span class="aw-muted">${escapeHtml(sortMeta.detail)}</span>
+            <span class="aw-muted">problem = блок / платили без канала / план без канала / залежавшиеся кредиты</span>
           </div>
         </section>
 
@@ -1467,18 +1502,17 @@ function usersView(model) {
           <div class="aw-utility-head">
             <div>
               <strong>Когорты и готовые срезы</strong>
-              <span>Счётчики сверху только показывают объём. Саму когорту выбирай чипами ниже.</span>
+              <span>Маленькие счётчики по когортам над chips, чтобы панель быстрее читалась как контрольная плоскость.</span>
             </div>
-          </div>
+            </div>
           <div class="aw-cohort-topline">
             ${usersCohortCounterCards(cohortTopline, currentCohortView)}
           </div>
-          <div class="aw-priority-pills aw-priority-pills-main">
-            ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}" aria-pressed="${currentCohortView === item.id ? 'true' : 'false'}">${escapeHtml(item.label)}</button>`).join('')}
+          <div class="aw-toolbar-note">
+            <span class="aw-muted">Счётчики выше только показывают картину, а сами chips ниже сразу переключают рабочую когорту.</span>
           </div>
-          <div class="aw-toolbar-note aw-toolbar-note-compact">
-            <span class="aw-muted">Текущая когорта: ${escapeHtml(cohortMeta.label)}.</span>
-            <span class="aw-muted">Счётчики не меняют срез и не дублируют управление.</span>
+          <div class="aw-priority-pills">
+            ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
           </div>
         </section>
 
@@ -1486,14 +1520,14 @@ function usersView(model) {
           <div class="aw-utility-head">
             <div>
               <strong>Сохранённые операторские пресеты</strong>
-              <span>Нажми карточку — весь рабочий срез переключится сразу. Активный пресет показывается в верхней строке состояния.</span>
+              <span>Карточки ниже сразу переключают рабочий срез без ручной сборки контролов.</span>
             </div>
+            </div>
+          <div class="aw-toolbar-note">
+            <span class="aw-muted">Карточка среза переключает состояние сразу. Любой ручной сдвиг после этого переводит экран в свой срез.</span>
           </div>
           <div class="aw-preset-grid">
             ${renderUsersOperatorPresetCards(activePresetId)}
-          </div>
-          <div class="aw-toolbar-note aw-toolbar-note-compact">
-            <span class="aw-muted">После ручного изменения контролов экран становится своим срезом.</span>
           </div>
         </section>
 
@@ -1503,7 +1537,7 @@ function usersView(model) {
               <strong>Фильтры среза</strong>
               <span>Фильтры только для чтения: план / кредиты / канал / активность / платежи.</span>
             </div>
-          </div>
+            </div>
           <div class="aw-filter-grid">
             <select id="usersPlanState" class="aw-select inline">
               ${[['all','План: все'],['with_plan','План: есть'],['no_plan','План: нет']].map(([v,l]) => `<option value="${v}" ${currentPlanState === v ? 'selected' : ''}>${l}</option>`).join('')}
@@ -1522,7 +1556,7 @@ function usersView(model) {
             </select>
           </div>
           <div class="aw-toolbar-note">
-            <span class="aw-muted">Фильтры работают и для списка, и для CSV / копирования. Активность считается по последнему известному сигналу из user/account/payments/workspace-поверхностей.</span>
+            <span class="aw-muted">Фильтры работают и для списка, и для CSV / bulk copy. Активность = latest known signal по user/account/payments/workspace-поверхностям.</span>
           </div>
         </section>
 
@@ -1530,7 +1564,7 @@ function usersView(model) {
           <div class="aw-basket-pill">Строки: <strong>${pagination.total > 0 ? `${pagination.fromRow}–${pagination.toRow}` : '0'}</strong> / ${pagination.total}</div>
           <div class="aw-basket-pill">На странице: <strong>${pagination.pageSize}</strong></div>
           <div class="aw-users-url-meta">
-            <div class="aw-basket-pill">URL-срез: <strong>ON</strong></div>
+            <div class="aw-basket-pill">URL-срезы Users: <strong>ON</strong></div>
             <button class="aw-button ghost" data-users-copy-view-url>Скопировать ссылку на срез</button>
           </div>
         </div>
@@ -1541,20 +1575,21 @@ function usersView(model) {
         <div class="aw-utility-head">
           <div>
             <strong>Сравнение и закрепление</strong>
-            <span>Временно закрепляй до ${Number(compareRail.maxPins || 5)} карточек для быстрого параллельного разбора.</span>
+            <span>Временно закрепляет 2–5 карточек пользователей для side-by-side review без тяжёлого redesign и без новых write-path.</span>
           </div>
           <div class="aw-users-compare-actions">
+            <div class="aw-basket-pill">Закреплено: <strong>${pinIds.length}</strong> / ${Number(compareRail.maxPins || 5)}</div>
             <button class="aw-button ghost" id="clearUsersPinsBtn" ${pinIds.length ? '' : 'disabled'}>Очистить закрепление</button>
           </div>
         </div>
         <div class="aw-toolbar-note aw-toolbar-note-compact">
-          <span class="aw-muted">Закрепления живут в URL-срезе и переживают обновление страницы и повторное открытие.</span>
-          <span class="aw-muted">Экспорт, копирование и открытие идут через уже существующие безопасные контракты.</span>
+          <span class="aw-muted">Закрепления живут в URL-state users и переживают refresh / reopen вместе с текущим рабочим срезом.</span>
+          <span class="aw-muted">Закрепи 2–5 карточек, чтобы рядом сравнивать профиль, сигналы и платежный контекст без постоянных переходов.</span>
         </div>
         ${renderUsersCompareDrillActions(compareRail)}
         <div class="aw-toolbar-note">
-          <span class="aw-muted">Действия из сравнения не вводят опасные bulk-операции: экспорт и копирование идут через уже существующие проверяемые users_export / users_bulk пути.</span>
-          <span class="aw-muted">Кнопки открытия лишь переводят в одну закреплённую карточку по логике набора — самый проблемный или спящий плательщик.</span>
+          <span class="aw-muted">Действия из сравнения не вводят destructive bulk: export и copy идут через уже существующие audited users_export / users_bulk paths.</span>
+          <span class="aw-muted">Кнопки открытия только открывают одну закреплённую карточку по heuristic закреплённого набора — top problem или спящий плательщик.</span>
         </div>
         <div class="aw-compare-grid">
           ${renderUsersCompareCards(compareRail)}
@@ -1565,44 +1600,44 @@ function usersView(model) {
         <div class="aw-utility-head">
           <div>
             <strong>Готовые действия по срезу</strong>
-            <span>Быстрые действия по текущему срезу: экспорт, копирование и рабочие переходы без ручной перенастройки контролов.</span>
+            <span>Готовые follow-up-действия по текущему cohort/filter-срезу: export, copy tg_id, copy usernames и быстрые рабочие переходы без ручной перенастройки контролов.</span>
           </div>
-        </div>
+          </div>
         <div class="aw-action-grid">
           <button class="aw-action-card" data-users-followup="export_current">
             <span>Экспорт</span>
             <strong>CSV текущего среза</strong>
-            <small>Скачать текущий срез с уже активной сортировкой.</small>
+            <small>Скачать текущий search / segment / filter / cohort с уже активной сортировкой.</small>
           </button>
           <button class="aw-action-card" data-users-followup="copy_tg_ids">
             <span>Копировать</span>
             <strong>tg_id</strong>
-            <small>Быстро собрать tg_id по текущему срезу и сразу положить в буфер.</small>
+            <small>Быстро собрать tg_id по текущему срезу и сразу положить в буфер обмена.</small>
           </button>
           <button class="aw-action-card" data-users-followup="copy_usernames">
             <span>Копировать</span>
             <strong>usernames</strong>
-            <small>Скопировать usernames по тому же рабочему срезу без ручного переключения блока утилит.</small>
+            <small>Скопировать usernames по тому же рабочему срезу без переключения bulk rail вручную.</small>
           </button>
           <button class="aw-action-card" data-users-followup="open_top_problem_users">
             <span>Открыть</span>
             <strong>Проблемные сверху</strong>
-            <small>Переключить сортировку на проблемных и открыть верх карточек без сброса остальных фильтров.</small>
+            <small>Переключить приоритет на problem_desc и открыть самых проблемных без сброса остальных фильтров.</small>
           </button>
           <button class="aw-action-card" data-users-followup="open_dormant_payers">
             <span>Открыть</span>
             <strong>Спящие плательщики · ${Math.max(0, Number(cohortTopline?.dormant_payers || 0))}</strong>
-            <small>Включить когорту спящих плательщиков и поднять наверх тех, кого логично разбирать дальше.</small>
+            <small>Включить когорту спящих плательщиков и поднять наверх тех, кого логично разбирать в follow-up.</small>
           </button>
         </div>
         <div class="aw-toolbar-note">
-          <span class="aw-muted">Блок готовых действий не вводит новых мутаций: он переиспользует уже существующие безопасные контракты списка пользователей.</span>
-          <span class="aw-muted">Копирование идёт через тот же audit trail, что и основной блок утилит.</span>
+          <span class="aw-muted">Блок готовых действий не вводит новых мутаций: он переиспользует уже существующие export / bulk / priority / cohort-contracts.</span>
+          <span class="aw-muted">Copy-действия идут через тот же admin-web audit trail, что и основной блок утилит для списков.</span>
         </div>
       </section>
 
       <div class="aw-toolbar-note">
-        <span class="aw-muted">CSV · до ${Number(exportMeta.maxRows || 10000)} строк · аудит включён</span>
+        <span class="aw-muted">CSV · до ${Number(exportMeta.maxRows || 10000)} строк · audit trail включён</span>
         ${recentExport ? `<span class="aw-muted">Последняя выгрузка: ${escapeHtml(formatDate(recentExport.ts))} · TG ${Number(recentExport.actorTgId || 0) || '—'}</span>` : '<span class="aw-muted">Выгрузок из web-admin пока не было.</span>'}
       </div>
 
@@ -1612,8 +1647,7 @@ function usersView(model) {
             <strong>Утилиты для списков</strong>
             <span>Без мутаций: быстрые списки для ручной операторской работы и аудита.</span>
           </div>
-          <div class="aw-basket-pill">Корзина: <strong>${basketIds.length}</strong> / ${Number(bulkMeta.basketMaxRows || 500)}</div>
-        </div>
+          </div>
         <div class="aw-toolbar aw-toolbar-utility">
           <select id="usersBulkSource" class="aw-select inline">
             <option value="current" ${bulkSource === 'current' ? 'selected' : ''}>Источник: текущий фильтр</option>
@@ -2643,13 +2677,14 @@ async function runUsersExportAction(scope = 'current', opts = {}) {
   const params = new URLSearchParams({ section: 'users_export', scope, segment: state.segment, q: state.q, plan_state: state.planState, credits_state: state.creditsState, channel_state: state.channelState, activity_window: state.activityWindow, payments_state: state.paymentsState, sort_by: state.sortBy, cohort_view: state.cohortView });
   if (ids.length) params.set('ids', ids.join(','));
   await downloadCsv(`/api/admin-web-read?${params.toString()}`, `users_${ids.length ? 'pins' : scope}.csv`);
+  showToast(ids.length ? 'CSV по закреплённому набору подготовлен.' : 'CSV по текущему срезу подготовлен.', 'success');
   render();
 }
 
 async function runUsersPinnedExportAction() {
   const ids = getUsersPinIds();
   if (!ids.length) {
-    alert('Пока нет pinned users. Сначала закрепи 2–5 user cards.');
+    showToast('Пока нет закреплённых карточек. Сначала закрепи 2–5 пользователей.', 'info');
     return;
   }
   await runUsersExportAction('current', { ids });
@@ -2663,34 +2698,34 @@ async function runUsersBulkCopyAction(mode = 'tg_ids', source = 'current', opts 
   if (source === 'basket' || idsOverride.length) {
     const ids = idsOverride.length ? idsOverride : getUsersBasketIds();
     if (!ids.length) {
-      alert(idsOverride.length ? 'Закреплённый набор пуст. Сначала закрепи карточки пользователей.' : 'Корзина пуста. Сначала отметь пользователей в таблице.');
+      showToast(idsOverride.length ? 'Закреплённый набор пуст. Сначала закрепи карточки пользователей.' : 'Корзина пуста. Сначала отметь пользователей в таблице.', 'info');
       return;
     }
     params.set('ids', ids.join(','));
   }
   const res = await api(`/api/admin-web-read?${params.toString()}`);
   if (!res.ok) {
-    alert(`Не удалось собрать список: ${res.data?.error || 'unknown'}`);
+    showToast(`Не удалось собрать список: ${res.data?.error || 'unknown'}`, 'error');
     return;
   }
   const payload = res.data?.data || {};
   if (!String(payload.text || '').trim()) {
-    alert('Пустой результат: для выбранного режима нет данных.');
+    showToast('Пустой результат: для выбранного режима нет данных.', 'info');
     return;
   }
   const copied = await copyTextToClipboard(payload.text || '');
   if (!copied) {
-    alert('Не удалось скопировать в буфер обмена.');
+    showToast('Не удалось скопировать в буфер обмена.', 'error');
     return;
   }
-  alert(`Скопировано: ${payload.rowsCount || 0} строк (${usersBulkModeLabel(payload.mode)} · ${basketSourceLabel(source)}).`);
+  showToast(`Скопировано: ${payload.rowsCount || 0} строк (${usersBulkModeLabel(payload.mode)} · ${basketSourceLabel(source)}).`, 'success');
   render();
 }
 
 async function runUsersPinnedBulkCopyAction(mode = 'tg_ids') {
   const ids = getUsersPinIds();
   if (!ids.length) {
-    alert('Пока нет pinned users. Сначала закрепи 2–5 user cards.');
+    showToast('Пока нет закреплённых карточек. Сначала закрепи 2–5 пользователей.', 'info');
     return;
   }
   await runUsersBulkCopyAction(mode, 'pins', { ids });
@@ -2709,7 +2744,7 @@ function openUsersCompareDrillTarget(kind = 'top_problem') {
   const compareRail = getUsersCompareRailModel();
   const target = compareDrillTarget(compareRail, kind);
   if (!target?.userId) {
-    alert(kind === 'dormant_payer' ? 'Сейчас среди pins нет dormant payer по contract 30d.' : 'Сейчас среди pins нет problem target.');
+    showToast(kind === 'dormant_payer' ? 'Сейчас среди закреплённых нет спящего плательщика.' : 'Сейчас среди закреплённых нет проблемного пользователя.', 'info');
     return;
   }
   const back = encodeURIComponent(buildUsersListHref(getUsersState()));
@@ -2721,26 +2756,26 @@ async function runUserRowCopyAction(item = {}, mode = 'tg_ids') {
   const state = readUsersControlsState();
   const userId = Number(item?.userId || 0) || 0;
   if (!userId) {
-    alert('Не удалось определить user_id для row action.');
+    showToast('Не удалось определить пользователя для действия по строке.', 'error');
     return;
   }
   const params = new URLSearchParams({ section: 'users_bulk', mode, ids: String(userId), segment: state.segment, q: state.q, plan_state: state.planState, credits_state: state.creditsState, channel_state: state.channelState, activity_window: state.activityWindow, payments_state: state.paymentsState, sort_by: state.sortBy, cohort_view: state.cohortView });
   const res = await api(`/api/admin-web-read?${params.toString()}`);
   if (!res.ok) {
-    alert(`Не удалось собрать row quick action: ${res.data?.error || 'unknown'}`);
+    showToast(`Не удалось собрать действие по строке: ${res.data?.error || 'unknown'}`, 'error');
     return;
   }
   const payload = res.data?.data || {};
   if (!String(payload.text || '').trim()) {
-    alert('Пустой результат: в этой строке нет данных для копирования.');
+    showToast('В этой строке нет данных для копирования.', 'info');
     return;
   }
   const copied = await copyTextToClipboard(payload.text || '');
   if (!copied) {
-    alert('Не удалось скопировать в буфер обмена.');
+    showToast('Не удалось скопировать в буфер обмена.', 'error');
     return;
   }
-  alert(`Скопировано из строки: ${usersBulkModeLabel(payload.mode)}.`);
+  showToast(`Скопировано из строки: ${usersBulkModeLabel(payload.mode)}.`, 'success');
   render();
 }
 
@@ -2763,14 +2798,18 @@ function bindShell() {
   });
   app.querySelectorAll('[data-users-priority]').forEach((button) => {
     button.addEventListener('click', () => {
-      setUsersStateFromControls({ sortBy: button.getAttribute('data-users-priority') || 'created_desc', page: 0 });
+      const sortBy = button.getAttribute('data-users-priority') || 'created_desc';
+      setUsersStateFromControls({ sortBy, page: 0 });
       render();
+      showToast(`Сортировка: ${usersSortMeta(sortBy).label}.`, 'success', { ttl: 1800 });
     });
   });
   app.querySelectorAll('[data-users-cohort]').forEach((button) => {
     button.addEventListener('click', () => {
-      setUsersStateFromControls({ cohortView: button.getAttribute('data-users-cohort') || 'all', page: 0 });
+      const cohortView = button.getAttribute('data-users-cohort') || 'all';
+      setUsersStateFromControls({ cohortView, page: 0 });
       render();
+      showToast(`Когорта: ${usersCohortMeta(cohortView).label}.`, 'success', { ttl: 1800 });
     });
   });
   app.querySelectorAll('[data-users-preset]').forEach((button) => {
@@ -2785,6 +2824,7 @@ function bindShell() {
         pinIds: getUsersPinIds(),
       };
       render();
+      showToast(`Применён пресет: ${preset.label}.`, 'success', { ttl: 1800 });
     });
   });
   document.getElementById('exportUsersBtn')?.addEventListener('click', async () => {
@@ -2792,7 +2832,7 @@ function bindShell() {
     try {
       await runUsersExportAction(scope);
     } catch (err) {
-      alert(`Не удалось выгрузить CSV: ${err?.message || 'unknown'}`);
+      showToast(`Не удалось выгрузить CSV: ${err?.message || 'unknown'}`, 'error');
     }
   });
   document.getElementById('copyUsersBulkBtn')?.addEventListener('click', async () => {
@@ -2860,7 +2900,7 @@ function bindShell() {
           render();
         }
       } catch (err) {
-        alert(`Не удалось выполнить follow-up action: ${err?.message || 'unknown'}`);
+        showToast(`Не удалось выполнить действие по срезу: ${err?.message || 'unknown'}`, 'error');
       }
     });
   });
@@ -2892,7 +2932,7 @@ function bindShell() {
           openUsersCompareDrillTarget('dormant_payer');
         }
       } catch (err) {
-        alert(`Не удалось выполнить compare drill action: ${err?.message || 'unknown'}`);
+        showToast(`Не удалось выполнить действие из сравнения: ${err?.message || 'unknown'}`, 'error');
       }
     });
   });
@@ -2957,7 +2997,7 @@ function bindShell() {
         if (action === 'toggle_pin') {
           const result = toggleUsersPin(item);
           if (!result.ok && result.reason === 'pin_limit') {
-            alert('В compare rail можно закрепить до 5 user cards.');
+            showToast('В сравнении можно держать до 5 закреплённых карточек.', 'info');
             return;
           }
           render();
@@ -2968,7 +3008,7 @@ function bindShell() {
           render();
         }
       } catch (err) {
-        alert(`Не удалось выполнить row action: ${err?.message || 'unknown'}`);
+        showToast(`Не удалось выполнить действие по строке: ${err?.message || 'unknown'}`, 'error');
       }
     });
   });

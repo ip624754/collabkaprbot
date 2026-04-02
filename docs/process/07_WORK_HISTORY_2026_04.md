@@ -1,17 +1,18 @@
-## STEP533 — Users interaction clarity / duplicate-state compression
+
+## STEP533A — Users final interaction hotfix
 
 Date: 2026-04-03
 
 Scope:
-- turned the sort and cohort rails on `/admin/users` into visibly one-click controls: priority chips now act as the primary sort control, while cohort counters stay informational and the real cohort selection lives only in the chips below;
-- removed repeated local active-state badges inside section bodies (`Порядок`, local `Когорта`, local `Пресет`, local `Срез`, local `Закреплено`) so the sticky state strip remains the single source of truth for the current working slice;
-- shortened and russified the section copy across priority / cohort / presets / compare / follow-up, and removed internal step-noise from the table meta strip in favor of a cleaner `Пользователи · рабочий список` label;
-- added `scripts/smoke-admin-web-users-interaction-clarity-contract.js`, refreshed the older priority-rail smoke, and kept the whole change UI-only: no SQL changes, no new write paths, no route-family expansion.
+- removed duplicate local state badges inside `Users` rails so the top meta strip remains the one clear source of truth for sort / cohort / preset / basket / pins / page state;
+- replaced noisy browser `alert()` success paths in common Users actions with lightweight in-app toasts and changed copy flow to execCommand-first clipboard copying to reduce browser permission prompts;
+- clarified preset-card affordance (`Применить срез`) and shortened section copy in preset / compare / follow-up / bulk blocks;
+- kept the step UI-only and read-only, with a new smoke contract for the final Users interaction hotfix.
 
 Acceptance / notes:
-- clicking a sort chip or cohort chip now applies the state immediately and keeps the active chip visually fixed;
-- cohort counters are now informational only, which removes the old “clicked something, but what exactly changed?” ambiguity;
-- the screen is shorter, quieter, and more obviously stateful without losing any existing export/bulk/compare capability.
+- no SQL changes;
+- no route or write-path changes;
+- intended as the last Users polish layer before moving focus to Runtime.
 
 ## STEP532 — Users section copy unification + banned_at schema guard
 
