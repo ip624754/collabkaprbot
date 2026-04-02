@@ -958,6 +958,13 @@ function renderUsersOperatorPresetCards(currentPresetId = 'custom') {
   `).join('');
 }
 
+function renderUsersOperatorPresetPills(currentPresetId = 'custom') {
+  return usersOperatorPresets().map((preset) => `
+    <button class="aw-preset-pill ${currentPresetId === preset.id ? 'is-active' : ''}" data-users-preset="${escapeHtml(preset.id)}" title="${escapeHtml(preset.detail)}">
+      ${escapeHtml(preset.label)}
+    </button>
+  `).join('');
+}
 
 function usersActionSliceLabel(state = {}) {
   const bits = [];
@@ -1345,111 +1352,122 @@ function usersView(model) {
         </div>
       </div>
 
-      <div class="aw-users-rails-stack">
-        <section class="aw-priority-rail">
-          <div class="aw-utility-head">
+      <div class="aw-users-rails-stack aw-users-rails-compressed">
+        <section class="aw-users-rail-group aw-users-rail-group-primary">
+          <div class="aw-users-rail-group-head">
             <div>
-              <strong>Users sort / priority rail</strong>
-              <span>Быстро поднимает наверх самые свежие, самые платящие, самые тихие и самые проблемные сегменты без новых мутаций.</span>
+              <strong>Level 1 · рабочий срез</strong>
+              <span>Сначала собери slice: sort, cohort и filter rail. Без лишних пояснений и без новой логики.</span>
             </div>
-            <div class="aw-basket-pill">Порядок: <strong>${escapeHtml(sortMeta.label)}</strong></div>
-          </div>
-          <div class="aw-priority-row">
-            <div class="aw-priority-pills">
-              ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+            <div class="aw-users-group-pills">
+              <div class="aw-basket-pill">Slice: <strong>${escapeHtml(currentSliceLabel)}</strong></div>
+              <div class="aw-basket-pill">Sort: <strong>${escapeHtml(sortMeta.label)}</strong></div>
+              <div class="aw-basket-pill">Cohort: <strong>${escapeHtml(cohortMeta.label)}</strong></div>
             </div>
-            <select id="usersSortBy" class="aw-select inline">
-              ${[['created_desc','Сортировка: новые сверху'],['activity_desc','Сортировка: свежие сверху'],['payments_desc','Сортировка: платящие сверху'],['activity_asc','Сортировка: тихие сверху'],['problem_desc','Сортировка: проблемные сверху']].map(([v,l]) => `<option value="${v}" ${currentSortBy === v ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
           </div>
-          <div class="aw-toolbar-note">
-            <span class="aw-muted">${escapeHtml(sortMeta.detail)}</span>
-            <span class="aw-muted">problem = banned / paid-no-channel / plan-no-channel / stale credits</span>
+          <div class="aw-users-primary-grid">
+            <section class="aw-priority-rail aw-rail-card aw-rail-card-compact">
+              <div class="aw-utility-head aw-utility-head-compact">
+                <div>
+                  <strong>Users sort / priority rail</strong>
+                  <span>${escapeHtml(sortMeta.detail)}</span>
+                </div>
+              </div>
+              <div class="aw-priority-row">
+                <div class="aw-priority-pills">
+                  ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+                </div>
+                <select id="usersSortBy" class="aw-select inline">
+                  ${[['created_desc','Сортировка: новые сверху'],['activity_desc','Сортировка: свежие сверху'],['payments_desc','Сортировка: платящие сверху'],['activity_asc','Сортировка: тихие сверху'],['problem_desc','Сортировка: проблемные сверху']].map(([v,l]) => `<option value="${v}" ${currentSortBy === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+              </div>
+              <div class="aw-toolbar-note aw-toolbar-note-compact">
+                <span class="aw-muted">problem = banned / paid-no-channel / plan-no-channel / stale credits</span>
+              </div>
+            </section>
+
+            <section class="aw-cohort-rail aw-rail-card aw-rail-card-compact">
+              <!-- usersCohortView · Cohort view идёт через тот же server contract -->
+              <div class="aw-utility-head aw-utility-head-compact">
+                <div>
+                  <strong>Users operator cohort chips / saved views</strong>
+                  <span>Mini topline и cohort chips на том же users-contract.</span>
+                </div>
+              </div>
+              <div class="aw-cohort-topline aw-cohort-topline-compact">
+                ${usersCohortCounterCards(cohortTopline, currentCohortView)}
+              </div>
+              <div class="aw-priority-pills">
+                ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+              </div>
+            </section>
+
+            <section class="aw-filter-rail aw-rail-card aw-rail-card-compact">
+              <div class="aw-utility-head aw-utility-head-compact">
+                <div>
+                  <strong>Filter rail v2</strong>
+                  <span>Read-only фильтры для анализа: план / credits / канал / активность / payments.</span>
+                </div>
+              </div>
+              <div class="aw-filter-grid aw-filter-grid-compact">
+                <select id="usersPlanState" class="aw-select inline">
+                  ${[['all','План: все'],['with_plan','План: есть'],['no_plan','План: нет']].map(([v,l]) => `<option value="${v}" ${currentPlanState === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+                <select id="usersCreditsState" class="aw-select inline">
+                  ${[['all','Credits: все'],['with_credits','Credits: есть'],['no_credits','Credits: нет']].map(([v,l]) => `<option value="${v}" ${currentCreditsState === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+                <select id="usersChannelState" class="aw-select inline">
+                  ${[['all','Канал: все'],['with_channel','Канал: есть'],['no_channel','Канал: нет']].map(([v,l]) => `<option value="${v}" ${currentChannelState === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+                <select id="usersActivityWindow" class="aw-select inline">
+                  ${[['all','Активность: любая'],['7d','Активность: 7 дней'],['30d','Активность: 30 дней'],['90d','Активность: 90 дней']].map(([v,l]) => `<option value="${v}" ${currentActivityWindow === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+                <select id="usersPaymentsState" class="aw-select inline">
+                  ${[['all','Payments: все'],['with_payments','Payments: yes'],['no_payments','Payments: no']].map(([v,l]) => `<option value="${v}" ${currentPaymentsState === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+              </div>
+              <div class="aw-toolbar-note aw-toolbar-note-compact">
+                <span class="aw-muted">Фильтры сразу живут и для списка, и для CSV / bulk copy.</span>
+              </div>
+            </section>
           </div>
         </section>
 
-        <section class="aw-cohort-rail">
-          <!-- usersCohortView · Cohort view идёт через тот же server contract -->
-          <div class="aw-utility-head">
+        <section class="aw-users-rail-group aw-users-rail-group-secondary">
+          <div class="aw-users-rail-group-head">
             <div>
-              <strong>Users operator cohort chips / saved views</strong>
-              <span>Users cohort counters / mini topline: теперь с маленькими счётчиками над chips, чтобы панель быстрее читалась как control plane.</span>
+              <strong>Level 2 · operator helpers</strong>
+              <span>Presets, URL-backed working view и pagination — быстро вернуть known-good ops-срез без ручной пересборки.</span>
             </div>
-            <div class="aw-basket-pill">Cohort: <strong>${escapeHtml(cohortMeta.label)}</strong></div>
+            <div class="aw-users-group-pills">
+              <div class="aw-basket-pill">Preset: <strong>${escapeHtml(activePresetMeta.label)}</strong></div>
+              <div class="aw-basket-pill">Строки: <strong>${pagination.total > 0 ? `${pagination.fromRow}–${pagination.toRow}` : '0'}</strong> / ${pagination.total}</div>
+              <div class="aw-basket-pill">На странице: <strong>${pagination.pageSize}</strong></div>
+            </div>
           </div>
-          <div class="aw-cohort-topline">
-            ${usersCohortCounterCards(cohortTopline, currentCohortView)}
-          </div>
-          <div class="aw-toolbar-note">
-            <span class="aw-muted">Mini topline считает cohort-срезы на сервере по тому же users-contract, но без активного cohort filter.</span>
-            <span class="aw-muted">Это сохраняет chips полезными: даже при активном cohort ты видишь полный рабочий расклад по текущему search / segment / filter rail.</span>
-          </div>
-          <div class="aw-priority-pills">
-            ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+          <section class="aw-preset-rail aw-preset-rail-compact">
+            <div class="aw-utility-head aw-utility-head-compact">
+              <div>
+                <strong>Users saved operator presets</strong>
+                <span>Встроенные read-only presets поверх текущего state-contract.</span>
+              </div>
+              <div class="aw-users-url-meta">
+                <div class="aw-basket-pill">Users URL-persisted working views: <strong>ON</strong></div>
+                <button class="aw-button ghost" data-users-copy-view-url>Скопировать ссылку на срез</button>
+              </div>
+            </div>
+            <div class="aw-preset-pills">
+              ${renderUsersOperatorPresetPills(activePresetId)}
+            </div>
+            <div class="aw-toolbar-note aw-toolbar-note-compact">
+              <span class="aw-muted">Активный preset: ${escapeHtml(activePresetMeta.label)}</span>
+              <span class="aw-muted">${escapeHtml(activePresetMeta.detail)}</span>
+            </div>
+          </section>
+          <div class="aw-users-secondary-meta">
+            ${topPagination}
           </div>
         </section>
-
-        <section class="aw-preset-rail">
-          <div class="aw-utility-head">
-            <div>
-              <strong>Users saved operator presets</strong>
-              <span>Быстрые рабочие presets поверх текущего state-contract: один клик возвращает к реально нужным ops-срезам без ручной сборки контролов.</span>
-            </div>
-            <div class="aw-basket-pill">Preset: <strong>${escapeHtml(activePresetMeta.label)}</strong></div>
-          </div>
-          <div class="aw-toolbar-note">
-            <span class="aw-muted">Встроенные presets намеренно read-only: они просто выставляют уже существующие search / segment / filter / sort / cohort контролы.</span>
-            <span class="aw-muted">Любой ручной сдвиг после этого переводит экран в custom slice, но к preset можно вернуться одним кликом.</span>
-          </div>
-          <div class="aw-preset-grid">
-            ${renderUsersOperatorPresetCards(activePresetId)}
-          </div>
-          <div class="aw-toolbar-note">
-            <span class="aw-muted">Активный preset: ${escapeHtml(activePresetMeta.label)}</span>
-            <span class="aw-muted">${escapeHtml(activePresetMeta.detail)}</span>
-          </div>
-        </section>
-
-        <section class="aw-filter-rail">
-          <div class="aw-utility-head">
-            <div>
-              <strong>Filter rail v2</strong>
-              <span>Read-only фильтры для анализа: план / credits / канал / активность / payments.</span>
-            </div>
-            <div class="aw-basket-pill">Slice: <strong>${escapeHtml(currentSliceLabel)}</strong></div>
-          </div>
-          <div class="aw-filter-grid">
-            <select id="usersPlanState" class="aw-select inline">
-              ${[['all','План: все'],['with_plan','План: есть'],['no_plan','План: нет']].map(([v,l]) => `<option value="${v}" ${currentPlanState === v ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
-            <select id="usersCreditsState" class="aw-select inline">
-              ${[['all','Credits: все'],['with_credits','Credits: есть'],['no_credits','Credits: нет']].map(([v,l]) => `<option value="${v}" ${currentCreditsState === v ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
-            <select id="usersChannelState" class="aw-select inline">
-              ${[['all','Канал: все'],['with_channel','Канал: есть'],['no_channel','Канал: нет']].map(([v,l]) => `<option value="${v}" ${currentChannelState === v ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
-            <select id="usersActivityWindow" class="aw-select inline">
-              ${[['all','Активность: любая'],['7d','Активность: 7 дней'],['30d','Активность: 30 дней'],['90d','Активность: 90 дней']].map(([v,l]) => `<option value="${v}" ${currentActivityWindow === v ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
-            <select id="usersPaymentsState" class="aw-select inline">
-              ${[['all','Payments: все'],['with_payments','Payments: yes'],['no_payments','Payments: no']].map(([v,l]) => `<option value="${v}" ${currentPaymentsState === v ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
-          </div>
-          <div class="aw-toolbar-note">
-            <span class="aw-muted">Фильтры работают и для списка, и для CSV / bulk copy. Activity = latest known signal в user/account/payments/workspace surfaces.</span>
-          </div>
-        </section>
-
-        <div class="aw-users-sticky-meta">
-          <div class="aw-basket-pill">Строки: <strong>${pagination.total > 0 ? `${pagination.fromRow}–${pagination.toRow}` : '0'}</strong> / ${pagination.total}</div>
-          <div class="aw-basket-pill">На странице: <strong>${pagination.pageSize}</strong></div>
-          <div class="aw-users-url-meta">
-            <div class="aw-basket-pill">Users URL-persisted working views: <strong>ON</strong></div>
-            <button class="aw-button ghost" data-users-copy-view-url>Скопировать ссылку на срез</button>
-          </div>
-        </div>
-
-        ${topPagination}
 
       <section class="aw-compare-rail aw-compare-rail-density">
         <div class="aw-utility-head">
@@ -1485,28 +1503,28 @@ function usersView(model) {
           </div>
           <div class="aw-basket-pill">Slice: <strong>${escapeHtml(currentSliceLabel)}</strong></div>
         </div>
-        <div class="aw-action-grid">
-          <button class="aw-action-card" data-users-followup="export_current">
+        <div class="aw-action-grid aw-action-grid-compact">
+          <button class="aw-action-card aw-action-card-compact" data-users-followup="export_current">
             <span>Экспорт</span>
             <strong>CSV current slice</strong>
             <small>Скачать текущий search / segment / filter / cohort с уже активной сортировкой.</small>
           </button>
-          <button class="aw-action-card" data-users-followup="copy_tg_ids">
+          <button class="aw-action-card aw-action-card-compact" data-users-followup="copy_tg_ids">
             <span>Copy</span>
             <strong>tg_id</strong>
             <small>Быстро собрать tg_id по текущему срезу и сразу положить в буфер обмена.</small>
           </button>
-          <button class="aw-action-card" data-users-followup="copy_usernames">
+          <button class="aw-action-card aw-action-card-compact" data-users-followup="copy_usernames">
             <span>Copy</span>
             <strong>usernames</strong>
             <small>Скопировать usernames по тому же working slice без переключения bulk rail вручную.</small>
           </button>
-          <button class="aw-action-card" data-users-followup="open_top_problem_users">
+          <button class="aw-action-card aw-action-card-compact" data-users-followup="open_top_problem_users">
             <span>Open</span>
             <strong>Top problem users</strong>
             <small>Переключить приоритет на problem_desc и открыть самых проблемных без сброса остальных фильтров.</small>
           </button>
-          <button class="aw-action-card" data-users-followup="open_dormant_payers">
+          <button class="aw-action-card aw-action-card-compact" data-users-followup="open_dormant_payers">
             <span>Open</span>
             <strong>Dormant payers · ${Math.max(0, Number(cohortTopline?.dormant_payers || 0))}</strong>
             <small>Включить cohort Dormant payers и поднять наверх тех, кого логично разбирать в follow-up.</small>

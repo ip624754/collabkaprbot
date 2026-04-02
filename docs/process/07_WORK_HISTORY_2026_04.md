@@ -1,3 +1,18 @@
+## STEP528 — Users rails hierarchy compression
+
+Date: 2026-04-03
+
+Scope:
+- reorganized the upper `/admin/users` rails into two explicit priority levels instead of a long same-weight stack;
+- Level 1 now contains only slice-building controls (`sort / priority`, `cohort`, `filter rail`) in a compact 3-card grid;
+- Level 2 now contains operator helpers (`saved presets`, `URL-backed working view`, `pagination`) in a smaller secondary cluster;
+- replaced the tall preset-card grid with compact preset pills and tightened the follow-up cards so the page consumes less vertical space without changing behavior;
+- added `scripts/smoke-admin-web-users-rails-hierarchy-contract.js` and wired it into `package.json` + `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only and reversible: no new write paths, no DB changes, no route-family changes, no public-flow changes;
+- goal is hierarchy discipline and vertical compression only; all existing users contracts (URL state, presets, compare, export, bulk, follow-up) remain unchanged.
+
 ## STEP527 — Users compare density polish + sticky overlap fix
 
 Date: 2026-04-03
