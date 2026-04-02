@@ -1,17 +1,16 @@
-## STEP528 — Users rails hierarchy compression
+## STEP529 — Users row height / table density polish
 
 Date: 2026-04-03
 
 Scope:
-- reorganized the upper `/admin/users` rails into two explicit priority levels instead of a long same-weight stack;
-- Level 1 now contains only slice-building controls (`sort / priority`, `cohort`, `filter rail`) in a compact 3-card grid;
-- Level 2 now contains operator helpers (`saved presets`, `URL-backed working view`, `pagination`) in a smaller secondary cluster;
-- replaced the tall preset-card grid with compact preset pills and tightened the follow-up cards so the page consumes less vertical space without changing behavior;
-- added `scripts/smoke-admin-web-users-rails-hierarchy-contract.js` and wired it into `package.json` + `scripts/preflight.js`.
+- tightened the `/admin/users` table row rhythm so more useful rows fit on the real operator viewport without removing any of the existing read-only operator controls;
+- removed redundant plan/credits chips from the identity cell, compressed row quick actions, and switched the ids line to a denser inline `user_id / tg_id` meta row;
+- reduced table padding, chip size, and cell gaps so the list scans faster while keeping the same columns, same export/bulk/compare contracts, and the same overall shell;
+- added `scripts/smoke-admin-web-users-table-density-contract.js` and wired the new alias into `package.json` and `scripts/preflight.js`.
 
 Acceptance / notes:
-- scope stays read-only and reversible: no new write paths, no DB changes, no route-family changes, no public-flow changes;
-- goal is hierarchy discipline and vertical compression only; all existing users contracts (URL state, presets, compare, export, bulk, follow-up) remain unchanged.
+- scope stays UI-only and reversible: no write-path changes, no SQL changes, no route changes, no server-contract expansion;
+- goal is purely denser scan-speed on the working viewport, not new operator power or hidden behavior changes.
 
 ## STEP527 — Users compare density polish + sticky overlap fix
 

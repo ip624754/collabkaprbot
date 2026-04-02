@@ -113,7 +113,7 @@
     "smoke:admin-web-users-compare-pin-rail-contract": "node scripts/smoke-admin-web-users-compare-pin-rail-contract.js",
     "smoke:admin-web-users-compare-drill-actions-contract": "node scripts/smoke-admin-web-users-compare-drill-actions-contract.js",
     "smoke:admin-web-users-compare-density-contract": "node scripts/smoke-admin-web-users-compare-density-contract.js",
-    "smoke:admin-web-users-rails-hierarchy-contract": "node scripts/smoke-admin-web-users-rails-hierarchy-contract.js"
+    "smoke:admin-web-users-table-density-contract": "node scripts/smoke-admin-web-users-table-density-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
