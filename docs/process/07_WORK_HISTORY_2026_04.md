@@ -1,4 +1,21 @@
 
+
+## STEP511 — Web Admin login step split + approve auto-return
+
+Date: 2026-04-02
+
+Scope:
+- fixed the remaining web-admin login UX loop while preserving the existing auth contract (`secret -> Telegram approve/code -> session`);
+- rebuilt `/admin/login` into two explicit phases so a live challenge shows only the verify surface (`Telegram approve / code`) and no longer visually asks for the secret again;
+- added an immediate login-status recheck on persisted challenge return and a login-route session check so approved sessions go straight into `/admin` instead of lingering on the login form;
+- upgraded the Telegram approve decision page to auto-return back into `/admin/login?challenge=...` after approval so the browser can complete the handoff with less operator friction;
+- refreshed `scripts/smoke-admin-web-login-contract.js` to guard the stricter login contract source-side.
+
+Acceptance / notes:
+- no new API entrypoints, no migrations, and no auth-model expansion;
+- session issuance semantics stay unchanged: approved challenge or valid OTP only;
+- polling remains login-page-only and is not expanded into general admin page polling.
+
 ## STEP510A — Web Admin login flow hardening + docs canon restore
 
 Date: 2026-04-02

@@ -12,10 +12,12 @@ for (const token of [
   'LOGIN_STATE_KEY',
   'readPersistedLoginState()',
   'writeLoginState(',
-  'startLoginStatusPolling()',
+  'startLoginStatusPolling({ immediate: true })',
   'checkLoginChallengeStatus({ silent: true })',
   "params.set('challenge', next.challengeId)",
-  'Challenge уже создан. Оставь это окно открытым',
+  'Secret уже принят. Снова вводить его не нужно',
+  'Шаг 2 — Telegram approve / code',
+  'ensureSession()',
   'resetChallengeBtn',
   'newChallengeBtn',
 ]) {
@@ -26,6 +28,8 @@ for (const token of [
   'reusedApprovedChallenge',
   'Вернуться в веб-админку',
   'Веб-админка может автоматически подтянуть этот статус',
+  'http-equiv="refresh"',
+  'Сейчас окно само вернётся в веб-админку и завершит вход',
 ]) {
   assert.ok(authApi.includes(token), `api/admin-web-auth.js must include ${token}`);
 }

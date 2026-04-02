@@ -238,10 +238,13 @@ async function checkLoginChallengeStatus({ silent = false } = {}) {
   return { ok: true, status };
 }
 
-function startLoginStatusPolling() {
+function startLoginStatusPolling({ immediate = false } = {}) {
   stopLoginStatusPolling();
   const challengeId = String(getLoginState()?.challengeId || '').trim();
   if (!challengeId) return;
+  if (immediate) {
+    Promise.resolve().then(() => checkLoginChallengeStatus({ silent: true })).catch(() => {});
+  }
   loginStatusTimer = window.setInterval(() => {
     if (document.visibilityState === 'hidden') return;
     checkLoginChallengeStatus({ silent: true });
@@ -298,6 +301,7 @@ function shell(title, subtitle, body, session) {
 
 function loginView(state = {}) {
   const hasChallenge = !!state.challengeId;
+  const stepTitle = hasChallenge ? 'Шаг 2 — Telegram approve / code' : 'Шаг 1 — admin secret';
   return `
     <div class="aw-login">
       <div class="aw-login-card">
@@ -311,25 +315,34 @@ function loginView(state = {}) {
         <h1>Вход в web-админку</h1>
         <p>Hobby-safe operator console: secret → Telegram approve / code → session.</p>
         <div class="aw-login-grid">
+          <div class="aw-step-chip">${escapeHtml(stepTitle)}</div>
           ${state.error ? `<div class="aw-error">${escapeHtml(state.error)}</div>` : ''}
-          ${hasChallenge ? `<div class="aw-info">Challenge уже создан. Оставь это окно открытым: approve подтягивается автоматически. Можно также ввести fallback code из Telegram.</div>` : ''}
-          <input id="secretInput" class="aw-input" placeholder="Admin secret" autocomplete="off" ${hasChallenge ? 'disabled' : ''} />
-          <div class="aw-actions">
-            ${hasChallenge
-              ? `<button class="aw-button secondary" id="newChallengeBtn">Запросить новый вход</button><button class="aw-button ghost" id="resetChallengeBtn">Сбросить challenge</button>`
-              : `<button class="aw-button" id="startLoginBtn">Запросить вход</button>`}
-          </div>
-          <div id="challengeBox" style="display:${hasChallenge ? 'block' : 'none'}">
-            <p class="aw-login-help">Challenge: <code id="challengeCodeBox">${escapeHtml(state.challengeId || '')}</code></p>
-            <p class="aw-login-help">Проверь Telegram approve или введи одноразовый код ниже.</p>
-            <div class="aw-login-grid">
+          ${hasChallenge ? `
+            <div class="aw-info">Secret уже принят. Снова вводить его не нужно: подтверди вход в Telegram или вставь одноразовый код.</div>
+            <div class="aw-login-phase aw-login-phase-verify">
+              <div class="aw-login-meta">
+                <span class="aw-login-meta-label">Challenge</span>
+                <code id="challengeCodeBox">${escapeHtml(state.challengeId || '')}</code>
+              </div>
+              <p class="aw-login-help">Оставь это окно открытым. После approve сессия подтянется автоматически. Если переходишь из Telegram, вход должен закрыться без повторного ввода secret.</p>
               <input id="otpInput" class="aw-input" placeholder="Telegram code" autocomplete="one-time-code" />
               <div class="aw-actions">
                 <button class="aw-button secondary" id="verifyCodeBtn">Ввести код</button>
                 <button class="aw-button ghost" id="checkStatusBtn">Проверить approve</button>
               </div>
+              <div class="aw-actions aw-actions-topline">
+                <button class="aw-button ghost" id="newChallengeBtn">Запросить новый вход</button>
+                <button class="aw-button ghost" id="resetChallengeBtn">Сбросить challenge</button>
+              </div>
             </div>
-          </div>
+          ` : `
+            <div class="aw-login-phase aw-login-phase-request">
+              <input id="secretInput" class="aw-input" placeholder="Admin secret" autocomplete="off" />
+              <div class="aw-actions">
+                <button class="aw-button" id="startLoginBtn">Запросить вход</button>
+              </div>
+            </div>
+          `}
           <p class="aw-login-help">Без approve/code доступ к admin pages не открывается.</p>
         </div>
       </div>
@@ -1226,9 +1239,15 @@ async function render() {
   const route = routeInfo();
   if (route.page === 'login') {
     readPersistedLoginState();
+    const session = await ensureSession();
+    if (session) {
+      clearLoginState();
+      history.replaceState({}, '', '/admin');
+      return render();
+    }
     app.innerHTML = loginView(getLoginState());
     bindLogin();
-    if (getLoginState()?.challengeId) startLoginStatusPolling();
+    if (getLoginState()?.challengeId) startLoginStatusPolling({ immediate: true });
     else stopLoginStatusPolling();
     return;
   }
@@ -1428,11 +1447,13 @@ function bindLogin() {
 
   document.getElementById('newChallengeBtn')?.addEventListener('click', () => {
     clearLoginState();
+    history.replaceState({}, '', '/admin/login');
     render();
   });
 
   document.getElementById('resetChallengeBtn')?.addEventListener('click', () => {
     clearLoginState();
+    history.replaceState({}, '', '/admin/login');
     render();
   });
 
