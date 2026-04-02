@@ -1724,3 +1724,26 @@ Auto-heal safeguards + ops alerts:
 - Payments list rows are now clickable and preserve back-to-list context through a `back` query param.
 - Payment detail shows linked user context, payment summary, diagnostics, light event trace, hints, and recent admin audit without exposing provider payloads or adding any write actions.
 - Source smoke `scripts/smoke-admin-web-payments-contract.js` now covers both list and detail contracts.
+
+## STEP511 — Web Admin login step split / auto-return polish
+- `/admin/login` now stays explicitly two-phase: first `secret`, then `Telegram approve / code`.
+- After challenge creation the UI no longer implies that the secret must be entered again.
+- Returning from Telegram approve now lands back on web-admin and re-checks the approved challenge automatically.
+- Added `scripts/smoke-admin-web-login-contract.js` coverage for the split-step contract.
+- Scope is login-flow UX / auth handshake polish only. No new auth method, no route expansion, no DB changes.
+
+## STEP512 — Operator Control Surface
+- Added shared runtime adapter `src/lib/operatorControls.js` so web-admin and Telegram admin read the same Redis-backed control state.
+- Added web-admin `section=control_surface` read contract and a compact top status bar rendered across authenticated admin pages.
+- Overview now shows a dedicated `Operator control surface` snapshot plus recent toggle audit events.
+- Telegram `Админка → Control Surface` now exposes a disciplined safe-toggle set:
+  - `Web-admin login`
+  - `Приём платежей`
+  - `Автовыдача платежей`
+  - `Match/Feat auto-apply`
+  - `QStash fan-out`
+  - `Payments fallback` as separate incident-mode tool.
+- Toggle changes now append an operator audit trail (`who / what / when`), and fallback on/off events are also logged.
+- New web-admin login requests can be intentionally paused by operator toggle without changing the existing session contract.
+- Added source smoke `scripts/smoke-admin-control-surface-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+- Scope is operator-control/read-plane polish only. No DB migrations, no public flow changes, no destructive admin writes.

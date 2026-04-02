@@ -2,6 +2,7 @@ import { CFG } from '../config.js';
 import { redis, k } from '../redis.js';
 import { clearCookie, getAdminWebBaseUrl, getClientIp, hmacSha256, json, nowIso, parseCookies, randomCode, randomId, setCookie, sha256, shortUa, timingSafeEq } from './common.js';
 import { notifyLoginChallenge, getAdminApproverIds } from './telegram.js';
+import { isAdminWebLoginEnabled } from '../operatorControls.js';
 
 const COOKIE_NAME = 'collabka_admin_session';
 
@@ -45,6 +46,9 @@ function getSigningSecret() {
 export async function createLoginChallenge(req) {
   if (!isAdminWebReady()) {
     return { ok: false, status: 503, error: 'admin_web_not_configured' };
+  }
+  if (!(await isAdminWebLoginEnabled())) {
+    return { ok: false, status: 503, error: 'admin_web_login_paused' };
   }
   const approverIds = getAdminApproverIds();
   if (!approverIds.length) return { ok: false, status: 503, error: 'approvers_not_configured' };

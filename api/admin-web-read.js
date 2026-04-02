@@ -2,6 +2,7 @@ import { requireFounderSession, requireSession } from '../src/lib/adminWeb/auth.
 import { getSearchParam, json } from '../src/lib/adminWeb/common.js';
 import { getCommsSummary, getFounderSummary, getOverviewSummary, getPaymentDetail, getPaymentsSummary, getUserDetail, getUsersList } from '../src/lib/adminWeb/readModels.js';
 import { getRuntimeSummary } from '../src/lib/adminWeb/runtime.js';
+import { getOperatorControlSnapshot } from '../src/lib/operatorControls.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method_not_allowed' });
@@ -53,6 +54,10 @@ export default async function handler(req, res) {
   }
   if (section === 'runtime') {
     const data = await getRuntimeSummary();
+    return json(res, 200, { ok: true, data });
+  }
+  if (section === 'control_surface') {
+    const data = await getOperatorControlSnapshot({ limit: 12 });
     return json(res, 200, { ok: true, data });
   }
   return json(res, 400, { ok: false, error: 'unknown_section' });

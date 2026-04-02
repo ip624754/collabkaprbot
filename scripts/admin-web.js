@@ -65,6 +65,95 @@ function configPresenceLabel(value) {
   return ({ configured: 'configured', missing: 'missing', optional: 'optional', not_enabled: 'not enabled' })[key] || (key || '—');
 }
 
+function controlToneClass(item = {}) {
+  const tone = String(item?.tone || item?.state || '').trim().toLowerCase();
+  if (tone === 'good' || tone === 'on') return 'is-good';
+  if (tone === 'warn' || tone === 'incident') return 'is-warn';
+  if (tone === 'bad' || tone === 'off') return 'is-off';
+  return '';
+}
+
+function controlAuditActorLabel(item = {}) {
+  const username = String(item?.actorUsername || '').trim();
+  if (username) return `@${username.replace(/^@/, '')}`;
+  const tgId = Number(item?.actorTgId || 0) || 0;
+  if (tgId > 0) return `tg:${tgId}`;
+  return '—';
+}
+
+function controlAuditValueLabel(value) {
+  if (value === true) return 'ON';
+  if (value === false) return 'OFF';
+  if (value === null || value === undefined || value === '') return '—';
+  return String(value);
+}
+
+function controlAuditSummary(item = {}) {
+  const label = String(item?.label || item?.controlId || 'Control');
+  return `${label}: ${controlAuditValueLabel(item?.previousValue)} → ${controlAuditValueLabel(item?.nextValue)}`;
+}
+
+function renderControlStatusBar() {
+  const controlSurface = window.__controlSurface || {};
+  const items = Array.isArray(controlSurface.items) ? controlSurface.items : [];
+  const audit = Array.isArray(controlSurface.audit) ? controlSurface.audit : [];
+  if (!items.length) return '';
+  const last = audit[0] || null;
+  return `
+    <section class="aw-statusbar">
+      <div class="aw-statusbar-head">
+        <strong>Control plane</strong>
+        <span>ручное обновление · единый runtime source</span>
+      </div>
+      <div class="aw-statusbar-chips">
+        ${items.map((item) => `
+          <div class="aw-control-chip ${controlToneClass(item)}">
+            <span>${escapeHtml(item.shortLabel || item.label || 'Control')}</span>
+            <strong>${escapeHtml(item.stateLabel || (item.value ? 'ON' : 'OFF'))}</strong>
+          </div>
+        `).join('')}
+      </div>
+      ${last ? `<div class="aw-statusbar-foot">Последнее изменение: <strong>${escapeHtml(controlAuditSummary(last))}</strong> · ${escapeHtml(controlAuditActorLabel(last))} · ${escapeHtml(formatDate(last.ts))}</div>` : ''}
+    </section>
+  `;
+}
+
+function renderControlSurfaceSection() {
+  const controlSurface = window.__controlSurface || {};
+  const items = Array.isArray(controlSurface.items) ? controlSurface.items : [];
+  const audit = Array.isArray(controlSurface.audit) ? controlSurface.audit : [];
+  if (!items.length) return '';
+  return `
+    <div class="aw-split aw-section aw-control-layout">
+      <section class="aw-surface aw-stack">
+        <h2>Operator control surface</h2>
+        <div class="aw-list">
+          ${items.map((item) => `
+            <div class="aw-list-item aw-control-list-item">
+              <div class="aw-control-list-head">
+                <strong>${escapeHtml(item.label || item.shortLabel || 'Control')}</strong>
+                <span class="aw-status ${String(item.tone || '').trim().toLowerCase()}">${escapeHtml(item.stateLabel || (item.value ? 'ON' : 'OFF'))}</span>
+              </div>
+              <small>Scope: ${escapeHtml(item.scope || 'system')} · changed by ${escapeHtml(item.changedBy || '—')} · ${escapeHtml(formatDate(item.changedAt))}</small>
+              ${item.id === 'payments_fallback' ? `<small>env ${item.envEnabled ? 'ON' : 'OFF'} · runtime ${escapeHtml(item.runtimeLabel || 'OFF')}</small>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </section>
+      <section class="aw-surface aw-stack">
+        <h2>Последние переключения</h2>
+        <div class="aw-list">
+          ${audit.length ? audit.map((item) => `
+            <div class="aw-list-item">
+              <strong>${escapeHtml(controlAuditSummary(item))}</strong>
+              <small>${escapeHtml(controlAuditActorLabel(item))} · ${escapeHtml(formatDate(item.ts))}${item.note ? ` · ${escapeHtml(item.note)}` : ''}</small>
+            </div>
+          `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+        </div>
+      </section>
+    </div>
+  `;
+}
 
 function paymentStatusClass(value) {
   const key = String(value || '').trim().toLowerCase();
@@ -148,6 +237,7 @@ function authErrorLabel(code) {
     challenge_id_required: 'Не найден challenge для проверки.',
     denied: 'Вход отклонён в Telegram.',
     status_failed: 'Не удалось проверить статус approve.',
+    admin_web_login_paused: 'Новые web-login запросы временно остановлены оператором.',
     login_failed: 'Не удалось запросить вход.',
   })[key] || (key ? `Ошибка: ${key}` : 'Произошла ошибка входа.');
 }
@@ -281,7 +371,7 @@ function shell(title, subtitle, body, session) {
         <div class="aw-topbar">
           <div class="aw-topbar-left">
             <span class="aw-chip">${escapeHtml(title)}</span>
-            <span class="aw-chip">env · ${session?.isFounder ? 'founder' : 'operator'}</span>
+            <span class="aw-chip">mode · ${session?.isFounder ? 'founder' : 'operator'}</span>
           </div>
           <div class="aw-topbar-right">
             <span class="aw-chip">TG ${Number(session?.actorTgId || 0) || 'fallback'}</span>
@@ -289,6 +379,7 @@ function shell(title, subtitle, body, session) {
             <button class="aw-button ghost" id="logoutBtn">Выйти</button>
           </div>
         </div>
+        ${renderControlStatusBar()}
         <div class="aw-page-head">
           <h1>${escapeHtml(title)}</h1>
           <p>${escapeHtml(subtitle)}</p>
@@ -367,6 +458,7 @@ function overviewView(model) {
       <a href="/admin/payments" data-link class="aw-button ghost">Payments surface</a>
       <a href="/admin/comms" data-link class="aw-button ghost">Comms workspace</a>
     </div>
+    ${renderControlSurfaceSection()}
     <div class="aw-split aw-section">
       <section class="aw-surface aw-stack">
         <h2>Runtime snapshot</h2>
@@ -1235,6 +1327,12 @@ async function ensureSession() {
   return window.__adminSession;
 }
 
+async function ensureControlSurface() {
+  const res = await api('/api/admin-web-read?section=control_surface');
+  window.__controlSurface = res.ok ? (res.data.data || {}) : null;
+  return window.__controlSurface;
+}
+
 async function render() {
   const route = routeInfo();
   if (route.page === 'login') {
@@ -1257,8 +1355,10 @@ async function render() {
     history.replaceState({}, '', '/admin/login');
     return render();
   }
+  await ensureControlSurface();
   if (route.page === 'overview') {
     const res = await api('/api/admin-web-read?section=overview');
+    if (res.data?.data?.runtime?.controlSurface) window.__controlSurface = res.data.data.runtime.controlSurface;
     app.innerHTML = overviewView(res.data.data || {});
   } else if (route.page === 'users') {
     const state = window.__usersState || { q: '', segment: 'all' };
@@ -1274,6 +1374,7 @@ async function render() {
     }
   } else if (route.page === 'runtime') {
     const res = await api('/api/admin-web-read?section=runtime');
+    if (res.data?.data?.controlSurface) window.__controlSurface = res.data.data.controlSurface;
     app.innerHTML = runtimeView(res.data.data || {});
   } else if (route.page === 'payments') {
     const res = await api('/api/admin-web-read?section=payments');

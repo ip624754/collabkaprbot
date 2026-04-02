@@ -236,6 +236,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin web comms contract", "smoke:admin-web-comms-contract"],
   ["Preflight (source-only): admin web founder contract", "smoke:admin-web-founder-contract"],
   ["Preflight (source-only): admin web login contract", "smoke:admin-web-login-contract"],
+  ["Preflight (source-only): admin control surface contract", "smoke:admin-control-surface-contract"],
   ["Preflight (source-only): creator-side brand-app local-context contract", "smoke:creator-app-local-context-contract"],
   ["Preflight (source-only): brand-side brand-app reply entrypoints contract", "smoke:brand-app-reply-entrypoints-contract"],
   ["Preflight (source-only): empty / no-history / first-message states contract", "smoke:empty-state-contract"],

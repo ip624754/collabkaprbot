@@ -395,3 +395,61 @@ body {
   border-radius: 16px;
   padding: 14px;
 }
+.aw-statusbar {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(9, 17, 36, 0.76);
+  box-shadow: 0 18px 46px rgba(0,0,0,0.22);
+}
+.aw-statusbar-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.aw-statusbar-head strong { font-size: 15px; }
+.aw-statusbar-head span,
+.aw-statusbar-foot {
+  color: var(--soft);
+  font-size: 13px;
+}
+.aw-statusbar-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+.aw-control-chip {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(132, 176, 255, 0.16);
+  background: rgba(255,255,255,0.03);
+}
+.aw-control-chip span {
+  color: var(--soft);
+  font-size: 12px;
+}
+.aw-control-chip strong {
+  font-size: 16px;
+}
+.aw-control-chip.is-good { border-color: rgba(82, 214, 161, 0.28); }
+.aw-control-chip.is-warn { border-color: rgba(255, 209, 102, 0.34); }
+.aw-control-chip.is-off { border-color: rgba(255, 107, 139, 0.28); }
+.aw-control-layout { align-items: start; }
+.aw-control-list-item small {
+  display: block;
+  color: var(--soft);
+  margin-top: 6px;
+}
+.aw-control-list-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}

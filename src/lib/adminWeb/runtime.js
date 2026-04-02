@@ -1,6 +1,7 @@
 import { CFG } from '../config.js';
 import { pingDb } from '../../db/pool.js';
 import { redis, k } from '../redis.js';
+import { getOperatorControlSnapshot } from '../operatorControls.js';
 
 function nowIso() {
   return new Date().toISOString();
@@ -179,6 +180,16 @@ export async function getRuntimeSummary() {
   if (paymentsFallbackEnabled && !paymentsHmacConfigured) {
     pushWarning(out.warnings, 'warning', 'Payments fallback без HMAC key', 'payments');
     pushHint(out.hints, 'warning', 'Добавь PAYMENTS_PAYLOAD_HMAC_KEY, если fallback path должен быть защищён от forged payloads.');
+  }
+
+  out.controlSurface = await getOperatorControlSnapshot({ limit: 12 });
+  if (out.controlSurface?.byId?.admin_web_login && !out.controlSurface.byId.admin_web_login.value) {
+    pushWarning(out.warnings, 'warning', 'Новые web-admin login запросы paused оператором', 'admin_web');
+    pushHint(out.hints, 'info', 'Вход в web-admin можно быстро вернуть через Telegram → Админка → Система.');
+  }
+  if (out.controlSurface?.byId?.payments_fallback?.value) {
+    pushWarning(out.warnings, 'info', 'Payments fallback runtime override сейчас активен', 'payments');
+    pushHint(out.hints, 'info', 'Fallback mode стоит держать временным и отключать после инцидента.');
   }
 
   if (!out.warnings.length) {

@@ -41,6 +41,7 @@ import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
 import { qstashPublishJSON, getQStashDeliveryUrl, getQStashLibHealth } from '../lib/qstash.js';
+import { appendOperatorControlAudit, getOperatorControlSnapshot, setOperatorControlToggle } from '../lib/operatorControls.js';
 
 let BOT;
 
@@ -31517,13 +31518,26 @@ ${DEGRADED_COPY.line}
       return;
     }
 
+    // Admin: Web-admin login gate
+    if (p.a === 'a:admin_web_login_toggle') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      await ctx.answerCallbackQuery();
+      const control = await getOperatorControlSnapshot({ limit: 1 });
+      const cur = !!control?.byId?.admin_web_login?.value;
+      await setOperatorControlToggle('admin_web_login', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
+      await renderAdminSystem(ctx);
+      return;
+    }
+
     // Admin: Payments toggles / ledger
     if (p.a === 'a:admin_pay_accept_toggle') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      const cur = await getSysBool(SYS_KEYS.pay_accept, CFG.PAYMENTS_ACCEPT_DEFAULT);
-      await setSysBool(SYS_KEYS.pay_accept, !cur);
+      const control = await getOperatorControlSnapshot({ limit: 1 });
+      const cur = !!control?.byId?.pay_accept?.value;
+      await setOperatorControlToggle('pay_accept', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
       await renderAdminSystem(ctx);
       return;
     }
@@ -31531,8 +31545,9 @@ ${DEGRADED_COPY.line}
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      const cur = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
-      await setSysBool(SYS_KEYS.pay_auto_apply, !cur);
+      const control = await getOperatorControlSnapshot({ limit: 1 });
+      const cur = !!control?.byId?.pay_auto_apply?.value;
+      await setOperatorControlToggle('pay_auto_apply', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
       await renderAdminSystem(ctx);
       return;
     }
@@ -31557,6 +31572,17 @@ ${DEGRADED_COPY.line}
         await renderAdminPaymentsFallback(ctx, '⚠️ Redis недоступен — не удалось включить.');
         return;
       }
+      await appendOperatorControlAudit({
+        controlId: 'payments_fallback',
+        label: 'Payments fallback',
+        actorTgId: Number(ctx.from.id || 0) || 0,
+        actorUsername: ctx.from?.username || '',
+        action: 'toggle',
+        previousValue: false,
+        nextValue: true,
+        note: `telegram_admin:${reason}`,
+        extra: { ttlSec: Number(r.ttlSec || ttl) || ttl },
+      });
       await renderAdminPaymentsFallback(ctx, `✅ Включено на ~${fmtWait(Number(r.ttlSec || ttl) || ttl)}.`);
       return;
     }
@@ -31569,6 +31595,16 @@ ${DEGRADED_COPY.line}
         await renderAdminPaymentsFallback(ctx, '⚠️ Redis недоступен — не удалось выключить.');
         return;
       }
+      await appendOperatorControlAudit({
+        controlId: 'payments_fallback',
+        label: 'Payments fallback',
+        actorTgId: Number(ctx.from.id || 0) || 0,
+        actorUsername: ctx.from?.username || '',
+        action: 'toggle',
+        previousValue: true,
+        nextValue: false,
+        note: 'telegram_admin:disable',
+      });
       await renderAdminPaymentsFallback(ctx, '🧹 Выключено.');
       return;
     }
@@ -31577,8 +31613,9 @@ ${DEGRADED_COPY.line}
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      const cur = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
-      await setSysBool(SYS_KEYS.matchfeat_auto_apply, !cur);
+      const control = await getOperatorControlSnapshot({ limit: 1 });
+      const cur = !!control?.byId?.matchfeat_auto_apply?.value;
+      await setOperatorControlToggle('matchfeat_auto_apply', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
       await renderAdminSystem(ctx);
       return;
     }
@@ -31588,8 +31625,9 @@ ${DEGRADED_COPY.line}
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
-      const cur = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
-      await setSysBool(SYS_KEYS.broadcast_qstash_fanout, !cur);
+      const control = await getOperatorControlSnapshot({ limit: 1 });
+      const cur = !!control?.byId?.broadcast_qstash_fanout?.value;
+      await setOperatorControlToggle('broadcast_qstash_fanout', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
       await renderAdminSystem(ctx);
       return;
     }
@@ -36705,54 +36743,62 @@ async function renderAdminComms(ctx) {
 }
 
 
+function operatorAuditActorLabel(entry = {}) {
+  const username = String(entry?.actorUsername || '').trim();
+  if (username) return `@${username.replace(/^@/, '')}`;
+  const tgId = Number(entry?.actorTgId || 0) || 0;
+  if (tgId > 0) return `tg:${tgId}`;
+  return '—';
+}
+
+function operatorControlChangeLine(entry = {}) {
+  const label = String(entry?.label || entry?.controlId || 'control');
+  const prev = entry?.previousValue === true ? 'ON' : entry?.previousValue === false ? 'OFF' : '—';
+  const next = entry?.nextValue === true ? 'ON' : entry?.nextValue === false ? 'OFF' : '—';
+  return `${label}: ${prev} → ${next}`;
+}
+
 async function renderAdminSystem(ctx) {
   // Access is checked in the callback handler via isSuperAdminTg().
-  const payAccept = await getSysBool(SYS_KEYS.pay_accept, CFG.PAYMENTS_ACCEPT_DEFAULT);
-  const payAutoApply = await getSysBool(SYS_KEYS.pay_auto_apply, CFG.PAYMENTS_AUTO_APPLY_DEFAULT);
-  const mfAutoApply = await getSysBool(SYS_KEYS.matchfeat_auto_apply, true);
-  const bcFanout = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);
-
-  const payFb = await getPaymentsFallbackApplyState();
-  const fbEnv = !!payFb.envEnabled;
-  const fbRt = payFb.runtime || {};
-  const fbRtOn = !!payFb.runtimeEnabled;
-  const fbEff = !!payFb.effective;
-
-  let fbRtLabel = 'OFF';
-  if (fbRtOn) {
-    let leftSec = null;
-    if (Number.isFinite(fbRt.ttlSec) && fbRt.ttlSec !== null) leftSec = Number(fbRt.ttlSec);
-    if (leftSec === null && fbRt.expAt) {
-      try {
-        const ms = Date.parse(String(fbRt.expAt));
-        if (Number.isFinite(ms) && ms > 0) leftSec = Math.max(0, Math.round((ms - Date.now()) / 1000));
-      } catch {}
-    }
-    fbRtLabel = leftSec === null ? 'ON' : `ON (~${fmtWait(leftSec)})`;
-  }
+  const control = await getOperatorControlSnapshot({ limit: 6 });
+  const byId = control?.byId || {};
+  const payAccept = !!byId.pay_accept?.value;
+  const payAutoApply = !!byId.pay_auto_apply?.value;
+  const mfAutoApply = !!byId.matchfeat_auto_apply?.value;
+  const bcFanout = !!byId.broadcast_qstash_fanout?.value;
+  const webLogin = !!byId.admin_web_login?.value;
+  const fallback = byId.payments_fallback || { value: false, envEnabled: false, runtimeLabel: 'OFF' };
 
   const founderState = await getFounderSaleState();
   const founderOn = !!founderState.effective?.enabled;
   const founderActive = !!founderState.active;
   const founderUntil = founderState.deadlineLabel || '—';
+  const lastAudit = Array.isArray(control?.audit) && control.audit.length ? control.audit[0] : null;
 
-  let text = '⚙️ Админка → Система\n\n';
+  let text = '⚙️ Админка → Control Surface\n\n';
+  text += `Web-admin login: ${webLogin ? 'ON' : 'OFF'}\n`;
   text += `Платежи: прием ${payAccept ? 'ON' : 'OFF'} • автовыдача ${payAutoApply ? 'ON' : 'OFF'}\n`;
   text += `Match/Feat auto-apply: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
-  text += `Payments fallback apply: ${fbEff ? 'ON' : 'OFF'} (env ${fbEnv ? 'ON' : 'OFF'} • runtime ${fbRtLabel})\n`;
+  text += `Payments fallback apply: ${fallback.value ? 'ON' : 'OFF'} (env ${fallback.envEnabled ? 'ON' : 'OFF'} • runtime ${fallback.runtimeLabel || 'OFF'})\n`;
   text += `Broadcast fan-out (QStash): ${bcFanout ? 'ON' : 'OFF'}\n`;
   text += `Founder Sale: ${founderOn ? 'ON' : 'OFF'} • ${founderActive ? 'ACTIVE' : 'INACTIVE'} • до ${founderUntil}${founderState.hasOverride ? ' (ADMIN)' : ''}\n`;
+  if (lastAudit) {
+    text += `\nПоследнее изменение: ${operatorControlChangeLine(lastAudit)}\n`;
+    text += `Кто: ${operatorAuditActorLabel(lastAudit)} • ${fmtTs(lastAudit.ts)}\n`;
+  }
 
   const kb = new InlineKeyboard()
+
+    .text(`🔐 Web login: ${webLogin ? 'ON' : 'OFF'}`, 'a:admin_web_login_toggle')
     .text(`💳 Прием: ${payAccept ? 'ON' : 'OFF'}`, 'a:admin_pay_accept_toggle')
+    .row()
     .text(`⚙️ Автовыдача: ${payAutoApply ? 'ON' : 'OFF'}`, 'a:admin_pay_auto_toggle')
-    .row()
     .text(`🎯🔥 Match/Feat: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
-    .text(`🧯 Fallback: ${fbEff ? 'ON' : 'OFF'}`, 'a:admin_pay_fb')
     .row()
-    .text(`📣 QStash fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
+    .text(`🧯 Fallback: ${fallback.value ? 'ON' : 'OFF'}`, 'a:admin_pay_fb')
+    .text(`📣 Fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
+    .row()
     .text('🛰 QStash статус', 'a:admin_qstash_status')
-    .row()
     .text('🧱 Hard-skip (dead chats)', 'a:hs_home|p:0')
     .row()
     .text('🔥 Founder Sale', 'a:admin_founder')
@@ -36769,6 +36815,7 @@ async function renderAdminSystem(ctx) {
 
   await safeEditOrReply(ctx, text, { reply_markup: kb });
 }
+
 
 
 // =====================================================

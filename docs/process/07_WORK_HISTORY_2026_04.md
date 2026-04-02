@@ -220,3 +220,37 @@ Acceptance / notes:
 - step remains strictly read-only and hobby-safe;
 - no new API entrypoints, no polling, no cron dependency, no retries/overrides/payout controls;
 - follow-up guidance is constrained to safe next steps: payment detail → user card → runtime → bot/admin fallback.
+
+## STEP511 — Web-admin login step split / auto-return polish
+
+Date: 2026-04-02
+
+Scope:
+- locked the web-admin login surface into a clear two-step contract: `secret` first, then `Telegram approve / code` only;
+- removed the visual loop where the user could think the secret was required again after challenge creation;
+- made the Telegram approve page auto-return into web-admin so the browser can re-check the approved challenge and mint the session without another secret entry;
+- extended source smoke coverage for the split-step login contract.
+
+Acceptance / notes:
+- auth contract stays the same (`secret -> Telegram approve/code -> session`);
+- no new auth method, no DB changes, no route explosion.
+
+
+## STEP512 — Operator Control Surface
+
+Date: 2026-04-02
+
+Scope:
+- added shared Redis-backed operator control adapter `src/lib/operatorControls.js` so Telegram admin and web-admin read one source of truth;
+- added `section=control_surface` to `api/admin-web-read.js` and embedded the same snapshot into `src/lib/adminWeb/runtime.js`;
+- added a compact web-admin status bar plus Overview control/audit block in `scripts/admin-web.js` and `styles/admin-web.css`;
+- rebuilt Telegram `Админка → Система` into a clearer `Control Surface` snapshot with safe toggles for web-login, payments accept, payments auto-apply, Match/Feat auto-apply, QStash fan-out, and payments fallback incident mode;
+- added operator audit trail for toggle changes, including explicit fallback on/off audit events;
+- guarded new web-admin login requests by the operator `Web-admin login` toggle;
+- added `scripts/smoke-admin-control-surface-contract.js`, wired into package + source preflight, and refreshed the admin-system smoke contract.
+
+Acceptance / notes:
+- no DB migrations;
+- no public-user flow changes;
+- no destructive write actions added to web-admin;
+- auth/session model preserved, with one new operator pause gate for fresh web-admin login requests.

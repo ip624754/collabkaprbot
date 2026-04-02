@@ -96,7 +96,8 @@
     "smoke:admin-web-payments-followup-contract": "node scripts/smoke-admin-web-payments-followup-contract.js",
     "smoke:admin-web-comms-contract": "node scripts/smoke-admin-web-comms-contract.js",
     "smoke:admin-web-founder-contract": "node scripts/smoke-admin-web-founder-contract.js",
-    "smoke:admin-web-login-contract": "node scripts/smoke-admin-web-login-contract.js"
+    "smoke:admin-web-login-contract": "node scripts/smoke-admin-web-login-contract.js",
+    "smoke:admin-control-surface-contract": "node scripts/smoke-admin-control-surface-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
