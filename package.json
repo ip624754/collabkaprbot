@@ -102,6 +102,7 @@
     "smoke:admin-web-users-filter-rail-contract": "node scripts/smoke-admin-web-users-filter-rail-contract.js",
     "smoke:admin-web-users-hierarchy-contract": "node scripts/smoke-admin-web-users-hierarchy-contract.js",
     "smoke:admin-web-users-priority-rail-contract": "node scripts/smoke-admin-web-users-priority-rail-contract.js",
+    "smoke:admin-web-users-cohort-rail-contract": "node scripts/smoke-admin-web-users-cohort-rail-contract.js",
     "smoke:admin-control-surface-contract": "node scripts/smoke-admin-control-surface-contract.js"
   },
   "dependencies": {

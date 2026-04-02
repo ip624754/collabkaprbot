@@ -111,6 +111,7 @@ export async function getUsersList(params = {}) {
     activityWindow: params.activityWindow || 'all',
     paymentsState: params.paymentsState || 'all',
     sortBy: params.sortBy || 'created_desc',
+    cohortView: params.cohortView || 'all',
   });
   const q = String(params.q || '').trim();
   const limit = Math.max(1, Math.min(50, Number(params.limit) || 20));

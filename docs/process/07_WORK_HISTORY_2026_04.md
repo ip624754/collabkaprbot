@@ -1,5 +1,20 @@
 # Work History — 2026-04
 
+## STEP518 — Users operator cohort chips / saved views
+
+Date: 2026-04-02
+
+Scope:
+- added `Users operator cohort chips / saved views` next to the sort / priority rail in `/admin/users`;
+- introduced built-in cohort views for `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`;
+- extended the normalized users-directory contract with `cohortView`, reused across list render, CSV export, bulk copy, and admin-web audit reasons;
+- kept cohort SQL bounded to existing baseline signals only (`payments_count`, `has_channel`, `brand_plan`, `last_known_activity_at`, creator/brand presence);
+- added `scripts/smoke-admin-web-users-cohort-rail-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only and reversible: no new write paths, no background jobs, no persistence for custom views;
+- cohort views are intentionally built-in and transparent, not a hidden scoring or recommendation engine.
+
 ## STEP517 — Users sort / priority rail
 
 Date: 2026-04-02

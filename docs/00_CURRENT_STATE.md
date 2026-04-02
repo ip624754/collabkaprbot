@@ -1,3 +1,5 @@
+**STEP518:** Users operator cohort chips / saved views — extended `/admin/users` with a narrow cohort-view layer that sits next to the priority rail and stays on the same read-only contract as list / CSV export / bulk copy / audit. Operators now get one-click working views for `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`, plus a matching `Saved view` selector. The normalized users-directory contract in `src/db/queries.js` now carries `cohortView`, so the same cohort slice stays consistent across web list order, CSV output, copied ids/usernames, and admin-web audit reasons. Scope stays deliberately bounded: no new write paths, no background jobs, no public-flow changes, no persistence layer for custom views — only disciplined built-in operator cohorts.
+
 **STEP516:** Users table hierarchy polish — tightened the `/admin/users` list into a more disciplined operator surface without touching the server contract from STEP513–515. The table now has a stronger scan order: user identity first, compact plan/credits chips second, signal chips third, and an explicit `Last activity` column with freshness + exact timestamp detail. Created time is also split into cleaner date/time micro-hierarchy, so the page reads less like a raw directory dump and more like a control-plane list. Scope is UI-only and reversible: no SQL changes, no route changes, no write-surface expansion.
 
 **STEP515:** Users filter rail v2 — extended `/admin/users` with a second, analysis-oriented filter layer so the same page can cut the user base by plan, credits, channel presence, recent activity (7/30/90 days), and payments yes/no without introducing any new write paths. The filter state now flows through list render, CSV export, and bulk-copy utilities via one normalized server contract in `src/db/queries.js`, backed by a shared `meta` lateral that exposes `has_channel`, `has_payments`, and `last_known_activity_at`. Operators can now treat Users as a real audit/ops surface rather than just a directory: the table shows richer quick signals, exports include channel/payment/activity fields, and audit reasons preserve the applied filter rail. Scope stays read-only and bounded: no destructive bulk actions, no background jobs, no public-bot flow changes.
@@ -1766,6 +1768,13 @@ Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
 
+
+## STEP518 — Users operator cohort chips / saved views
+- Added a dedicated `Users operator cohort chips / saved views` rail to `/admin/users`, positioned next to the sort / priority rail, with built-in cohort views for `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`.
+- Extended the normalized users-directory contract with `cohortView`, shared across list render, CSV export, bulk-copy payloads, and admin-web audit reasons so operator slices stay consistent across all read surfaces.
+- Added bounded SQL cohort predicates in `src/db/queries.js` using only existing baseline signals (`payments_count`, `has_channel`, `brand_plan`, `last_known_activity_at`, creator/brand presence) instead of introducing a new analytics layer.
+- Updated CSV export to include `cohort_view` metadata and cohort-aware filenames, and updated bulk/export audit reasons to record the active cohort alongside filters and sort order.
+- Added `scripts/smoke-admin-web-users-cohort-rail-contract.js` and wired it into `package.json` + `scripts/preflight.js`.
 
 ## STEP517 — Users sort / priority rail
 - Added a dedicated `Users sort / priority rail` to `/admin/users` with one-click presets for `Новые`, `Свежие`, `Платящие`, `Тихие`, and `Проблемные`, plus an explicit `usersSortBy` select for the same contract.

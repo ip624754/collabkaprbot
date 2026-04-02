@@ -100,6 +100,7 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
 
   const header = [
     'sort_by',
+    'cohort_view',
     'user_id',
     'tg_id',
     'username',
@@ -124,6 +125,7 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
     const hasNote = noteMap.has(Number(row.user_id || 0));
     return [
       csvEsc(appliedFilters?.sortBy || normalizedFilters?.sortBy || 'created_desc'),
+      csvEsc(appliedFilters?.cohortView || normalizedFilters?.cohortView || 'all'),
       Number(row.user_id || 0),
       Number(row.tg_id || 0) || '',
       csvEsc(row.tg_username || ''),
@@ -146,7 +148,8 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
   });
 
   const ts = new Date().toISOString().slice(0, 10);
-  const filename = `users_${buildFilenameTag(resolved, search)}_${ts}.csv`;
+  const cohortTag = (appliedFilters?.cohortView || normalizedFilters?.cohortView || 'all') !== 'all' ? `_${appliedFilters?.cohortView || normalizedFilters?.cohortView || 'all'}` : '';
+  const filename = `users_${buildFilenameTag(resolved, search)}${cohortTag}_${ts}.csv`;
   const csv = '\uFEFF' + header + '\n' + csvRows.join('\n');
 
   return {

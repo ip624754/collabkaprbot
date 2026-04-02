@@ -606,6 +606,7 @@ function getUsersState() {
     activityWindow: state.activityWindow || 'all',
     paymentsState: state.paymentsState || 'all',
     sortBy: state.sortBy || 'created_desc',
+    cohortView: state.cohortView || 'all',
   };
 }
 
@@ -633,6 +634,27 @@ function usersPriorityPresets() {
     { id: 'payments_desc', label: 'Платящие' },
     { id: 'activity_asc', label: 'Тихие' },
     { id: 'problem_desc', label: 'Проблемные' },
+  ];
+}
+
+function usersCohortMeta(value = 'all') {
+  const key = String(value || 'all').trim().toLowerCase();
+  if (key === 'dormant_payers') return { label: 'Dormant payers', detail: 'Есть платежи, но нет свежего сигнала 30+ дней' };
+  if (key === 'paid_no_channel') return { label: 'Paid no channel', detail: 'Платили, но канал так и не подключён' };
+  if (key === 'plan_no_channel') return { label: 'Plan no channel', detail: 'Есть план, но канал не подключён' };
+  if (key === 'fresh_brands') return { label: 'Fresh brands', detail: 'Бренды с живым сигналом за последние 30 дней' };
+  if (key === 'quiet_creators') return { label: 'Quiet creators', detail: 'Креаторы без свежего сигнала 30+ дней' };
+  return { label: 'Все пользователи', detail: 'Без предустановленного cohort view' };
+}
+
+function usersCohortPresets() {
+  return [
+    { id: 'all', label: 'Все' },
+    { id: 'dormant_payers', label: 'Dormant payers' },
+    { id: 'paid_no_channel', label: 'Paid no channel' },
+    { id: 'plan_no_channel', label: 'Plan no channel' },
+    { id: 'fresh_brands', label: 'Fresh brands' },
+    { id: 'quiet_creators', label: 'Quiet creators' },
   ];
 }
 
@@ -752,9 +774,12 @@ function usersView(model) {
   const currentActivityWindow = usersState.activityWindow || filterMeta.activityWindow || 'all';
   const currentPaymentsState = usersState.paymentsState || filterMeta.paymentsState || 'all';
   const currentSortBy = usersState.sortBy || filterMeta.sortBy || 'created_desc';
+  const currentCohortView = usersState.cohortView || filterMeta.cohortView || 'all';
   const bulkSource = window.__usersBulkState?.source || 'current';
   const sortMeta = usersSortMeta(currentSortBy);
+  const cohortMeta = usersCohortMeta(currentCohortView);
   const priorityPresets = usersPriorityPresets();
+  const cohortPresets = usersCohortPresets();
   const bulkMode = window.__usersBulkState?.mode || 'tg_ids';
   const basketIds = getUsersBasketIds();
   const allVisibleSelected = !!items.length && items.every((item) => isUserInBasket(item.userId));
@@ -794,6 +819,28 @@ function usersView(model) {
         <div class="aw-toolbar-note">
           <span class="aw-muted">${escapeHtml(sortMeta.detail)}</span>
           <span class="aw-muted">problem = banned / paid-no-channel / plan-no-channel / stale credits</span>
+        </div>
+      </section>
+
+      <section class="aw-cohort-rail">
+        <div class="aw-utility-head">
+          <div>
+            <strong>Users operator cohort chips / saved views</strong>
+            <span>Быстрые рабочие cohort-view для аудита, follow-up и ручной ops-работы без новых мутаций.</span>
+          </div>
+          <div class="aw-basket-pill">Cohort: <strong>${escapeHtml(cohortMeta.label)}</strong></div>
+        </div>
+        <div class="aw-priority-row">
+          <div class="aw-priority-pills">
+            ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+          </div>
+          <select id="usersCohortView" class="aw-select inline">
+            ${[['all','Saved view: все пользователи'],['dormant_payers','Saved view: Dormant payers'],['paid_no_channel','Saved view: Paid no channel'],['plan_no_channel','Saved view: Plan no channel'],['fresh_brands','Saved view: Fresh brands'],['quiet_creators','Saved view: Quiet creators']].map(([v,l]) => `<option value="${v}" ${currentCohortView === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="aw-toolbar-note">
+          <span class="aw-muted">${escapeHtml(cohortMeta.detail)}</span>
+          <span class="aw-muted">Cohort view идёт через тот же server contract, что list / CSV / bulk / audit trail.</span>
         </div>
       </section>
 
@@ -1771,7 +1818,7 @@ async function render() {
     app.innerHTML = overviewView(res.data.data || {});
   } else if (route.page === 'users') {
     const state = getUsersState();
-    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', sort_by: state.sortBy || 'created_desc', limit: '20', page: '0' });
+    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', sort_by: state.sortBy || 'created_desc', cohort_view: state.cohortView || 'all', limit: '20', page: '0' });
     const res = await api(`/api/admin-web-read?section=users&${params}`);
     app.innerHTML = usersView(res.data.data || { items: [] });
   } else if (route.page === 'userDetail') {
@@ -1840,6 +1887,7 @@ function bindShell() {
       activityWindow: document.getElementById('usersActivityWindow')?.value || 'all',
       paymentsState: document.getElementById('usersPaymentsState')?.value || 'all',
       sortBy: document.getElementById('usersSortBy')?.value || 'created_desc',
+      cohortView: document.getElementById('usersCohortView')?.value || 'all',
     };
     render();
   });
@@ -1854,6 +1902,23 @@ function bindShell() {
         activityWindow: document.getElementById('usersActivityWindow')?.value || 'all',
         paymentsState: document.getElementById('usersPaymentsState')?.value || 'all',
         sortBy: button.getAttribute('data-users-priority') || 'created_desc',
+        cohortView: document.getElementById('usersCohortView')?.value || 'all',
+      };
+      render();
+    });
+  });
+  app.querySelectorAll('[data-users-cohort]').forEach((button) => {
+    button.addEventListener('click', () => {
+      window.__usersState = {
+        q: document.getElementById('usersSearch')?.value || '',
+        segment: document.getElementById('usersSegment')?.value || 'all',
+        planState: document.getElementById('usersPlanState')?.value || 'all',
+        creditsState: document.getElementById('usersCreditsState')?.value || 'all',
+        channelState: document.getElementById('usersChannelState')?.value || 'all',
+        activityWindow: document.getElementById('usersActivityWindow')?.value || 'all',
+        paymentsState: document.getElementById('usersPaymentsState')?.value || 'all',
+        sortBy: document.getElementById('usersSortBy')?.value || 'created_desc',
+        cohortView: button.getAttribute('data-users-cohort') || 'all',
       };
       render();
     });
@@ -1868,7 +1933,8 @@ function bindShell() {
     const activityWindow = document.getElementById('usersActivityWindow')?.value || 'all';
     const paymentsState = document.getElementById('usersPaymentsState')?.value || 'all';
     const sortBy = document.getElementById('usersSortBy')?.value || 'created_desc';
-    const params = new URLSearchParams({ section: 'users_export', scope, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState, sort_by: sortBy });
+    const cohortView = document.getElementById('usersCohortView')?.value || 'all';
+    const params = new URLSearchParams({ section: 'users_export', scope, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState, sort_by: sortBy, cohort_view: cohortView });
     try {
       await downloadCsv(`/api/admin-web-read?${params.toString()}`, `users_${scope}.csv`);
       render();
@@ -1887,8 +1953,9 @@ function bindShell() {
     const activityWindow = document.getElementById('usersActivityWindow')?.value || 'all';
     const paymentsState = document.getElementById('usersPaymentsState')?.value || 'all';
     const sortBy = document.getElementById('usersSortBy')?.value || 'created_desc';
+    const cohortView = document.getElementById('usersCohortView')?.value || 'all';
     window.__usersBulkState = { mode, source };
-    const params = new URLSearchParams({ section: 'users_bulk', mode, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState, sort_by: sortBy });
+    const params = new URLSearchParams({ section: 'users_bulk', mode, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState, sort_by: sortBy, cohort_view: cohortView });
     if (source === 'basket') {
       const ids = getUsersBasketIds();
       if (!ids.length) {

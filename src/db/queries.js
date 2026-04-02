@@ -442,6 +442,7 @@ const USERS_DIRECTORY_CHANNEL_STATES = ['all', 'with_channel', 'no_channel'];
 const USERS_DIRECTORY_ACTIVITY_WINDOWS = ['all', '7d', '30d', '90d'];
 const USERS_DIRECTORY_PAYMENTS_STATES = ['all', 'with_payments', 'no_payments'];
 const USERS_DIRECTORY_SORTS = ['created_desc', 'activity_desc', 'activity_asc', 'payments_desc', 'problem_desc'];
+const USERS_DIRECTORY_COHORTS = ['all', 'dormant_payers', 'paid_no_channel', 'plan_no_channel', 'fresh_brands', 'quiet_creators'];
 
 const USERS_DIRECTORY_META_SQL = `
   left join lateral (
@@ -482,6 +483,7 @@ export function normalizeUsersDirectoryFilters(input = {}) {
   const activityWindowRaw = String(input.activityWindow || input.activity || 'all').trim().toLowerCase();
   const paymentsStateRaw = String(input.paymentsState || input.payments || 'all').trim().toLowerCase();
   const sortByRaw = String(input.sortBy || input.sort || 'created_desc').trim().toLowerCase();
+  const cohortViewRaw = String(input.cohortView || input.cohort || 'all').trim().toLowerCase();
 
   return {
     segment,
@@ -491,6 +493,7 @@ export function normalizeUsersDirectoryFilters(input = {}) {
     activityWindow: USERS_DIRECTORY_ACTIVITY_WINDOWS.includes(activityWindowRaw) ? activityWindowRaw : 'all',
     paymentsState: USERS_DIRECTORY_PAYMENTS_STATES.includes(paymentsStateRaw) ? paymentsStateRaw : 'all',
     sortBy: USERS_DIRECTORY_SORTS.includes(sortByRaw) ? sortByRaw : 'created_desc',
+    cohortView: USERS_DIRECTORY_COHORTS.includes(cohortViewRaw) ? cohortViewRaw : 'all',
   };
 }
 
@@ -553,6 +556,27 @@ function buildUsersDirectorySqlParts({ filterRaw = 'all', qRaw = '', filtersRaw 
 
   if (normalized.paymentsState === 'with_payments') where.push(`meta.payments_count > 0`);
   else if (normalized.paymentsState === 'no_payments') where.push(`meta.payments_count = 0`);
+
+  if (normalized.cohortView === 'dormant_payers') {
+    where.push(`meta.payments_count > 0`);
+    where.push(`meta.last_known_activity_at < now() - interval '30 days'`);
+  } else if (normalized.cohortView === 'paid_no_channel') {
+    where.push(`meta.payments_count > 0`);
+    where.push(`meta.has_channel = false`);
+  } else if (normalized.cohortView === 'plan_no_channel') {
+    where.push(`u.brand_plan is not null`);
+    where.push(`meta.has_channel = false`);
+  } else if (normalized.cohortView === 'fresh_brands') {
+    where.push(`(
+      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
+      or u.brand_plan is not null
+      or coalesce(u.brand_credits,0) > 0
+    )`);
+    where.push(`meta.last_known_activity_at >= now() - interval '30 days'`);
+  } else if (normalized.cohortView === 'quiet_creators') {
+    where.push(`exists (select 1 from workspaces w where w.owner_user_id = u.id)`);
+    where.push(`meta.last_known_activity_at < now() - interval '30 days'`);
+  }
 
   const activityDays = normalized.activityWindow === '7d' ? 7
     : normalized.activityWindow === '30d' ? 30
