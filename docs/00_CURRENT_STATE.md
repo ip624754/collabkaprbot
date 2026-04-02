@@ -1,3 +1,5 @@
+**STEP523:** Users saved operator presets — added a compact built-in preset rail to `/admin/users` so operators can jump back to real working slices in one click instead of manually rebuilding the same search/segment/filter/sort/cohort combinations. The new layer is intentionally narrow and read-only: it only replays the existing state-contract with presets like `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`, while visibly falling back to `Custom slice` as soon as the operator drifts away from a preset. No new backend mutations, no DB persistence, no custom user-defined views — just a faster way to return to the most useful ops slices on top of the existing users control plane.
+
 **STEP522:** Users sticky table controls / pagination polish — tightened `/admin/users` for longer manual ops sessions without adding any new write paths. The page now keeps its filter/sort/cohort control stack visually pinned, adds a bounded page-size + pagination contract, and renders the users table inside its own scrollable surface with sticky headers. Pagination now uses the real filtered total from the server contract, so operators can move through large slices while keeping basket state, current sort/cohort choice, and scan context stable. Scope stays read-only and reversible: no mutations, no background jobs, no custom persistence, just a steadier control-plane shell around the existing users directory.
 
 **STEP520:** Users action-ready follow-up rail — added a compact operator block to `/admin/users` so the most common follow-up moves now sit directly next to the sort/cohort rails instead of forcing manual control changes. The new rail is intentionally narrow and reuses only existing safe contracts: `CSV current slice`, `copy tg_id`, `copy usernames`, `open top problem users`, and `open dormant payers`. Copy/export actions still flow through the same audited bulk/export handlers, while the open-actions only switch the already existing sort/cohort state. Scope remains read-only and copy-only: no new write paths, no background jobs, no custom persistence, just a faster operator follow-up layer over the existing users control plane.
@@ -1772,6 +1774,17 @@ Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
 
+
+
+## STEP523 — Users saved operator presets
+- Added a dedicated `Users saved operator presets` rail to `/admin/users`, positioned between the cohort rail and filter rail, so operators can return to the most useful working slices in one click instead of rebuilding the same control combinations manually.
+- Presets stay intentionally read-only and simply replay the existing users state-contract (`q`, `segment`, `planState`, `creditsState`, `channelState`, `activityWindow`, `paymentsState`, `sortBy`, `cohortView`) with built-in slices for `Все · новые`, `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`.
+- Added active preset detection in `scripts/admin-web.js`, so the page shows the current built-in preset when the state matches one exactly and falls back to `Custom slice` as soon as the operator manually drifts away from that preset.
+- Added compact preset-card styling in `styles/admin-web.css` and a new source smoke guard `scripts/smoke-admin-web-users-saved-presets-contract.js`, wired into `package.json` and source preflight.
+
+Acceptance / notes:
+- Scope stays read-only and reversible: no backend mutations, no new route family, no DB persistence for custom views, no public-flow changes.
+- Presets intentionally reset search/page to a clean working slice so operators can get back to a known cohort/filter state in one click.
 
 
 ## STEP522 — Users sticky table controls / pagination polish

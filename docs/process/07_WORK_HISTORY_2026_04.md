@@ -1,3 +1,18 @@
+## STEP523 — Users saved operator presets
+
+Date: 2026-04-02
+
+Scope:
+- added a compact `Users saved operator presets` rail to `/admin/users` so operators can jump back to the most useful working slices in one click instead of rebuilding filters/sort/cohort manually;
+- built the presets entirely on top of the existing users state-contract with no backend persistence and no new write paths;
+- added built-in operator presets for `Все · новые`, `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`;
+- added active preset detection plus a visible `Custom slice` fallback when the current controls no longer match one of the built-in presets exactly;
+- added dedicated styles in `styles/admin-web.css` and a new source smoke guard `scripts/smoke-admin-web-users-saved-presets-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only and reversible: no backend mutations, no custom saved-view persistence, no public-flow changes;
+- presets intentionally reset search/page to a clean working slice so the operator gets back to a known ops view in one click.
+
 # Work History — 2026-04
 
 ## STEP522 — Users sticky table controls / pagination polish

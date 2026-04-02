@@ -677,6 +677,149 @@ function usersCohortCounterCards(counters = {}, currentCohortView = 'all') {
   }).join('');
 }
 
+function usersOperatorPresets() {
+  return [
+    {
+      id: 'all_new',
+      label: 'Все · новые',
+      detail: 'Чистый базовый срез без cohort/filter хвостов, чтобы быстро вернуться к общей картине.',
+      state: {
+        q: '',
+        segment: 'all',
+        planState: 'all',
+        creditsState: 'all',
+        channelState: 'all',
+        activityWindow: 'all',
+        paymentsState: 'all',
+        sortBy: 'created_desc',
+        cohortView: 'all',
+      },
+    },
+    {
+      id: 'dormant_payers_followup',
+      label: 'Dormant payers',
+      detail: 'Платили, но давно не было сигнала. Удобно для ручного follow-up и возврата.',
+      state: {
+        q: '',
+        segment: 'all',
+        planState: 'all',
+        creditsState: 'all',
+        channelState: 'all',
+        activityWindow: 'all',
+        paymentsState: 'with_payments',
+        sortBy: 'payments_desc',
+        cohortView: 'dormant_payers',
+      },
+    },
+    {
+      id: 'paid_no_channel_followup',
+      label: 'Paid no channel',
+      detail: 'Есть платежи, но канал не подключён. Быстрый ops-срез для activation gap.',
+      state: {
+        q: '',
+        segment: 'all',
+        planState: 'all',
+        creditsState: 'all',
+        channelState: 'no_channel',
+        activityWindow: 'all',
+        paymentsState: 'with_payments',
+        sortBy: 'problem_desc',
+        cohortView: 'paid_no_channel',
+      },
+    },
+    {
+      id: 'plan_no_channel_followup',
+      label: 'Plan no channel',
+      detail: 'Есть план, но канал не подключён. Чистый рабочий срез для brand activation.',
+      state: {
+        q: '',
+        segment: 'brands',
+        planState: 'with_plan',
+        creditsState: 'all',
+        channelState: 'no_channel',
+        activityWindow: 'all',
+        paymentsState: 'all',
+        sortBy: 'problem_desc',
+        cohortView: 'plan_no_channel',
+      },
+    },
+    {
+      id: 'fresh_brands_watch',
+      label: 'Fresh brands',
+      detail: 'Живые бренды за 30 дней. Хорошо для проверки входящего потока и handoff-ready сегмента.',
+      state: {
+        q: '',
+        segment: 'brands',
+        planState: 'all',
+        creditsState: 'all',
+        channelState: 'all',
+        activityWindow: '30d',
+        paymentsState: 'all',
+        sortBy: 'activity_desc',
+        cohortView: 'fresh_brands',
+      },
+    },
+    {
+      id: 'quiet_creators_watch',
+      label: 'Quiet creators',
+      detail: 'Креаторы без свежих сигналов. Удобно для reactivation и ручного отбора.',
+      state: {
+        q: '',
+        segment: 'creators',
+        planState: 'all',
+        creditsState: 'all',
+        channelState: 'all',
+        activityWindow: 'all',
+        paymentsState: 'all',
+        sortBy: 'activity_asc',
+        cohortView: 'quiet_creators',
+      },
+    },
+  ];
+}
+
+function usersOperatorPresetMeta(presetId = 'all_new') {
+  const key = String(presetId || 'all_new').trim().toLowerCase();
+  return usersOperatorPresets().find((item) => item.id === key) || usersOperatorPresets()[0];
+}
+
+function detectUsersOperatorPreset(state = {}) {
+  const current = {
+    q: String(state.q || '').trim(),
+    segment: String(state.segment || 'all').trim().toLowerCase(),
+    planState: String(state.planState || 'all').trim().toLowerCase(),
+    creditsState: String(state.creditsState || 'all').trim().toLowerCase(),
+    channelState: String(state.channelState || 'all').trim().toLowerCase(),
+    activityWindow: String(state.activityWindow || 'all').trim().toLowerCase(),
+    paymentsState: String(state.paymentsState || 'all').trim().toLowerCase(),
+    sortBy: String(state.sortBy || 'created_desc').trim().toLowerCase(),
+    cohortView: String(state.cohortView || 'all').trim().toLowerCase(),
+  };
+  const found = usersOperatorPresets().find((preset) => {
+    const target = preset.state || {};
+    return current.q === String(target.q || '').trim()
+      && current.segment === String(target.segment || 'all').trim().toLowerCase()
+      && current.planState === String(target.planState || 'all').trim().toLowerCase()
+      && current.creditsState === String(target.creditsState || 'all').trim().toLowerCase()
+      && current.channelState === String(target.channelState || 'all').trim().toLowerCase()
+      && current.activityWindow === String(target.activityWindow || 'all').trim().toLowerCase()
+      && current.paymentsState === String(target.paymentsState || 'all').trim().toLowerCase()
+      && current.sortBy === String(target.sortBy || 'created_desc').trim().toLowerCase()
+      && current.cohortView === String(target.cohortView || 'all').trim().toLowerCase();
+  });
+  return found?.id || 'custom';
+}
+
+function renderUsersOperatorPresetCards(currentPresetId = 'custom') {
+  return usersOperatorPresets().map((preset) => `
+    <button class="aw-preset-card ${currentPresetId === preset.id ? 'is-active' : ''}" data-users-preset="${escapeHtml(preset.id)}">
+      <span class="aw-preset-kicker">Preset</span>
+      <strong>${escapeHtml(preset.label)}</strong>
+      <small>${escapeHtml(preset.detail)}</small>
+    </button>
+  `).join('');
+}
+
 
 function usersActionSliceLabel(state = {}) {
   const bits = [];
@@ -897,6 +1040,20 @@ function usersView(model) {
   const cohortMeta = usersCohortMeta(currentCohortView);
   const priorityPresets = usersPriorityPresets();
   const cohortPresets = usersCohortPresets();
+  const activePresetId = detectUsersOperatorPreset({
+    q: currentSearch,
+    segment: currentSegment,
+    planState: currentPlanState,
+    creditsState: currentCreditsState,
+    channelState: currentChannelState,
+    activityWindow: currentActivityWindow,
+    paymentsState: currentPaymentsState,
+    sortBy: currentSortBy,
+    cohortView: currentCohortView,
+  });
+  const activePresetMeta = activePresetId === 'custom'
+    ? { label: 'Custom slice', detail: 'Текущий state отличается от встроенных presets.' }
+    : usersOperatorPresetMeta(activePresetId);
   const bulkMode = window.__usersBulkState?.mode || 'tg_ids';
   const basketIds = getUsersBasketIds();
   const allVisibleSelected = !!items.length && items.every((item) => isUserInBasket(item.userId));
@@ -961,6 +1118,27 @@ function usersView(model) {
           </div>
           <div class="aw-priority-pills">
             ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+          </div>
+        </section>
+
+        <section class="aw-preset-rail">
+          <div class="aw-utility-head">
+            <div>
+              <strong>Users saved operator presets</strong>
+              <span>Быстрые рабочие presets поверх текущего state-contract: один клик возвращает к реально нужным ops-срезам без ручной сборки контролов.</span>
+            </div>
+            <div class="aw-basket-pill">Preset: <strong>${escapeHtml(activePresetMeta.label)}</strong></div>
+          </div>
+          <div class="aw-toolbar-note">
+            <span class="aw-muted">Встроенные presets намеренно read-only: они просто выставляют уже существующие search / segment / filter / sort / cohort контролы.</span>
+            <span class="aw-muted">Любой ручной сдвиг после этого переводит экран в custom slice, но к preset можно вернуться одним кликом.</span>
+          </div>
+          <div class="aw-preset-grid">
+            ${renderUsersOperatorPresetCards(activePresetId)}
+          </div>
+          <div class="aw-toolbar-note">
+            <span class="aw-muted">Активный preset: ${escapeHtml(activePresetMeta.label)}</span>
+            <span class="aw-muted">${escapeHtml(activePresetMeta.detail)}</span>
           </div>
         </section>
 
@@ -2163,6 +2341,19 @@ function bindShell() {
   app.querySelectorAll('[data-users-cohort]').forEach((button) => {
     button.addEventListener('click', () => {
       setUsersStateFromControls({ cohortView: button.getAttribute('data-users-cohort') || 'all', page: 0 });
+      render();
+    });
+  });
+  app.querySelectorAll('[data-users-preset]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const presetId = button.getAttribute('data-users-preset') || 'all_new';
+      const preset = usersOperatorPresetMeta(presetId);
+      const pageSize = getUsersState().pageSize || 20;
+      window.__usersState = {
+        ...preset.state,
+        page: 0,
+        pageSize,
+      };
       render();
     });
   });
