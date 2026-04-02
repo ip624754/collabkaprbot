@@ -597,6 +597,8 @@ function basketSourceLabel(value) {
 
 function getUsersState() {
   const state = window.__usersState || {};
+  const page = Math.max(0, Number(state.page) || 0);
+  const pageSize = Math.max(10, Math.min(50, Number(state.pageSize) || 20));
   return {
     q: state.q || '',
     segment: state.segment || 'all',
@@ -607,6 +609,8 @@ function getUsersState() {
     paymentsState: state.paymentsState || 'all',
     sortBy: state.sortBy || 'created_desc',
     cohortView: state.cohortView || 'all',
+    page,
+    pageSize,
   };
 }
 
@@ -687,6 +691,61 @@ function usersActionSliceLabel(state = {}) {
   if (String(state.activityWindow || 'all') !== 'all') bits.push(activeWindowLabel(state.activityWindow));
   if (String(state.q || '').trim()) bits.push(`поиск: ${String(state.q).trim()}`);
   return bits.join(' · ') || 'Все пользователи';
+}
+
+function buildUsersPaginationMeta(model = {}) {
+  const raw = model.pagination || {};
+  const pageSize = Math.max(10, Math.min(50, Number(raw.pageSize || model.limit || 20) || 20));
+  const total = Math.max(0, Number(raw.total || 0) || 0);
+  const totalPages = Math.max(1, Number(raw.totalPages || Math.ceil((total || 0) / pageSize) || 1) || 1);
+  const page = Math.max(0, Math.min(totalPages - 1, Number(raw.page || model.page || 0) || 0));
+  const visibleCount = Math.max(0, Number(raw.visibleCount || (Array.isArray(model.items) ? model.items.length : 0)) || 0);
+  const fromRow = total > 0 ? Math.max(1, Number(raw.fromRow || (page * pageSize) + 1) || 1) : 0;
+  const toRow = total > 0 ? Math.max(fromRow, Number(raw.toRow || Math.min(total, (page * pageSize) + visibleCount)) || fromRow) : 0;
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages,
+    visibleCount,
+    fromRow,
+    toRow,
+    hasPrev: page > 0,
+    hasNext: page + 1 < totalPages,
+    pageLabel: `${page + 1} / ${totalPages}`,
+  };
+}
+
+function renderUsersPaginationControls(meta = {}, position = 'top') {
+  const pageSize = Math.max(10, Math.min(50, Number(meta.pageSize || 20) || 20));
+  const page = Math.max(0, Number(meta.page || 0) || 0);
+  const pageLabel = String(meta.pageLabel || `${page + 1} / ${Math.max(1, Number(meta.totalPages || 1) || 1)}`);
+  const total = Math.max(0, Number(meta.total || 0) || 0);
+  const fromRow = Math.max(0, Number(meta.fromRow || 0) || 0);
+  const toRow = Math.max(0, Number(meta.toRow || 0) || 0);
+  const visibleCount = Math.max(0, Number(meta.visibleCount || 0) || 0);
+  return `
+    <section class="aw-users-pagination aw-users-pagination-${escapeHtml(position)}" data-total-pages="${Math.max(1, Number(meta.totalPages || 1) || 1)}">
+      <div class="aw-users-pagination-meta">
+        <strong>Страница ${escapeHtml(pageLabel)}</strong>
+        <span>${total > 0 ? `Показаны ${fromRow}–${toRow} из ${total}` : 'Результатов нет'} · на экране ${visibleCount}</span>
+      </div>
+      <div class="aw-users-pagination-controls">
+        <label class="aw-pagination-size">
+          <span>На странице</span>
+          <select class="aw-select inline aw-pagination-select" data-users-page-size>
+            ${[20, 35, 50].map((value) => `<option value="${value}" ${pageSize === value ? 'selected' : ''}>${value}</option>`).join('')}
+          </select>
+        </label>
+        <div class="aw-pagination-actions">
+          <button class="aw-button ghost" data-users-page-action="first" ${meta.hasPrev ? '' : 'disabled'}>« Первая</button>
+          <button class="aw-button ghost" data-users-page-action="prev" ${meta.hasPrev ? '' : 'disabled'}>← Назад</button>
+          <button class="aw-button ghost" data-users-page-action="next" ${meta.hasNext ? '' : 'disabled'}>Вперёд →</button>
+          <button class="aw-button ghost" data-users-page-action="last" ${meta.hasNext ? '' : 'disabled'}>Последняя »</button>
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 function usersPlanMeta(item = {}) {
@@ -812,6 +871,7 @@ function usersView(model) {
   const usersState = getUsersState();
   const filterMeta = model.filterRail?.currentFilters || exportMeta.currentFilters || {};
   const cohortTopline = model.cohortTopline || model.filterRail?.cohortCounters || {};
+  const pagination = buildUsersPaginationMeta(model);
   const currentSegment = usersState.segment || exportMeta.currentSegment || 'all';
   const currentSearch = usersState.q || exportMeta.currentSearch || '';
   const currentPlanState = usersState.planState || filterMeta.planState || 'all';
@@ -840,102 +900,109 @@ function usersView(model) {
   const bulkMode = window.__usersBulkState?.mode || 'tg_ids';
   const basketIds = getUsersBasketIds();
   const allVisibleSelected = !!items.length && items.every((item) => isUserInBasket(item.userId));
+  const topPagination = renderUsersPaginationControls(pagination, 'top');
+  const bottomPagination = renderUsersPaginationControls(pagination, 'bottom');
   return shell('Пользователи', 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.', `
     <section class="aw-surface aw-stack">
-      <div class="aw-toolbar aw-toolbar-users">
-        <div class="aw-toolbar-main">
-          <input id="usersSearch" class="aw-input inline" placeholder="Поиск: username / tg_id / user id" value="${escapeHtml(currentSearch)}" />
-          <select id="usersSegment" class="aw-select inline">
-            ${[['all','Все'],['brands','Бренды'],['creators','Креаторы'],['curators','Кураторы'],['managers','Менеджеры']].map(([v,l]) => `<option value="${v}" ${currentSegment === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
-          <button class="aw-button secondary" id="applyUsersFilters">Применить</button>
-        </div>
-        <div class="aw-toolbar-export">
-          <select id="usersExportScope" class="aw-select inline">
-            ${exportOptions.map((item) => `<option value="${escapeHtml(item.id || '')}">${escapeHtml(item.label || item.id || '')}</option>`).join('')}
-          </select>
-          <button class="aw-button" id="exportUsersBtn">Экспорт</button>
-        </div>
-      </div>
-      <section class="aw-priority-rail">
-        <div class="aw-utility-head">
-          <div>
-            <strong>Users sort / priority rail</strong>
-            <span>Быстро поднимает наверх самые свежие, самые платящие, самые тихие и самые проблемные сегменты без новых мутаций.</span>
+      <div class="aw-users-sticky-controls">
+        <div class="aw-toolbar aw-toolbar-users aw-toolbar-users-sticky">
+          <div class="aw-toolbar-main">
+            <input id="usersSearch" class="aw-input inline" placeholder="Поиск: username / tg_id / user id" value="${escapeHtml(currentSearch)}" />
+            <select id="usersSegment" class="aw-select inline">
+              ${[['all','Все'],['brands','Бренды'],['creators','Креаторы'],['curators','Кураторы'],['managers','Менеджеры']].map(([v,l]) => `<option value="${v}" ${currentSegment === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <button class="aw-button secondary" id="applyUsersFilters">Применить</button>
           </div>
-          <div class="aw-basket-pill">Порядок: <strong>${escapeHtml(sortMeta.label)}</strong></div>
-        </div>
-        <div class="aw-priority-row">
-          <div class="aw-priority-pills">
-            ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+          <div class="aw-toolbar-export">
+            <select id="usersExportScope" class="aw-select inline">
+              ${exportOptions.map((item) => `<option value="${escapeHtml(item.id || '')}">${escapeHtml(item.label || item.id || '')}</option>`).join('')}
+            </select>
+            <button class="aw-button" id="exportUsersBtn">Экспорт</button>
           </div>
-          <select id="usersSortBy" class="aw-select inline">
-            ${[['created_desc','Сортировка: новые сверху'],['activity_desc','Сортировка: свежие сверху'],['payments_desc','Сортировка: платящие сверху'],['activity_asc','Сортировка: тихие сверху'],['problem_desc','Сортировка: проблемные сверху']].map(([v,l]) => `<option value="${v}" ${currentSortBy === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
         </div>
-        <div class="aw-toolbar-note">
-          <span class="aw-muted">${escapeHtml(sortMeta.detail)}</span>
-          <span class="aw-muted">problem = banned / paid-no-channel / plan-no-channel / stale credits</span>
-        </div>
-      </section>
 
-      <section class="aw-cohort-rail">
-        <div class="aw-utility-head">
-          <div>
-            <strong>Users operator cohort chips / saved views</strong>
-            <span>Users cohort counters / mini topline: теперь с маленькими счётчиками над chips, чтобы панель быстрее читалась как control plane.</span>
+        <section class="aw-priority-rail">
+          <div class="aw-utility-head">
+            <div>
+              <strong>Users sort / priority rail</strong>
+              <span>Быстро поднимает наверх самые свежие, самые платящие, самые тихие и самые проблемные сегменты без новых мутаций.</span>
+            </div>
+            <div class="aw-basket-pill">Порядок: <strong>${escapeHtml(sortMeta.label)}</strong></div>
           </div>
-          <div class="aw-basket-pill">Cohort: <strong>${escapeHtml(cohortMeta.label)}</strong></div>
-        </div>
-        <div class="aw-cohort-topline">
-          ${usersCohortCounterCards(cohortTopline, currentCohortView)}
-        </div>
-        <div class="aw-toolbar-note">
-          <span class="aw-muted">Mini topline считает cohort-срезы на сервере по тому же users-contract, но без активного cohort filter.</span>
-          <span class="aw-muted">Это сохраняет chips полезными: даже при активном cohort ты видишь полный рабочий расклад по текущему search / segment / filter rail.</span>
-        </div>
-        <div class="aw-priority-row">
+          <div class="aw-priority-row">
+            <div class="aw-priority-pills">
+              ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+            </div>
+            <select id="usersSortBy" class="aw-select inline">
+              ${[['created_desc','Сортировка: новые сверху'],['activity_desc','Сортировка: свежие сверху'],['payments_desc','Сортировка: платящие сверху'],['activity_asc','Сортировка: тихие сверху'],['problem_desc','Сортировка: проблемные сверху']].map(([v,l]) => `<option value="${v}" ${currentSortBy === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          <div class="aw-toolbar-note">
+            <span class="aw-muted">${escapeHtml(sortMeta.detail)}</span>
+            <span class="aw-muted">problem = banned / paid-no-channel / plan-no-channel / stale credits</span>
+          </div>
+        </section>
+
+        <section class="aw-cohort-rail">
+          <!-- usersCohortView · Cohort view идёт через тот же server contract -->
+          <div class="aw-utility-head">
+            <div>
+              <strong>Users operator cohort chips / saved views</strong>
+              <span>Users cohort counters / mini topline: теперь с маленькими счётчиками над chips, чтобы панель быстрее читалась как control plane.</span>
+            </div>
+            <div class="aw-basket-pill">Cohort: <strong>${escapeHtml(cohortMeta.label)}</strong></div>
+          </div>
+          <div class="aw-cohort-topline">
+            ${usersCohortCounterCards(cohortTopline, currentCohortView)}
+          </div>
+          <div class="aw-toolbar-note">
+            <span class="aw-muted">Mini topline считает cohort-срезы на сервере по тому же users-contract, но без активного cohort filter.</span>
+            <span class="aw-muted">Это сохраняет chips полезными: даже при активном cohort ты видишь полный рабочий расклад по текущему search / segment / filter rail.</span>
+          </div>
           <div class="aw-priority-pills">
             ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
           </div>
-          <select id="usersCohortView" class="aw-select inline">
-            ${[['all','Saved view: все пользователи'],['dormant_payers','Saved view: Dormant payers'],['paid_no_channel','Saved view: Paid no channel'],['plan_no_channel','Saved view: Plan no channel'],['fresh_brands','Saved view: Fresh brands'],['quiet_creators','Saved view: Quiet creators']].map(([v,l]) => `<option value="${v}" ${currentCohortView === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
-        </div>
-        <div class="aw-toolbar-note">
-          <span class="aw-muted">${escapeHtml(cohortMeta.detail)}</span>
-          <span class="aw-muted">Cohort view идёт через тот же server contract, что list / CSV / bulk / audit trail.</span>
-        </div>
-      </section>
+        </section>
 
-      <section class="aw-filter-rail">
-        <div class="aw-utility-head">
-          <div>
-            <strong>Filter rail v2</strong>
-            <span>Сильнее режет user-base для ops, audit и ручного анализа без новых мутаций.</span>
+        <section class="aw-filter-rail">
+          <div class="aw-utility-head">
+            <div>
+              <strong>Filter rail v2</strong>
+              <span>Read-only фильтры для анализа: план / credits / канал / активность / payments.</span>
+            </div>
+            <div class="aw-basket-pill">Slice: <strong>${escapeHtml(currentSliceLabel)}</strong></div>
           </div>
+          <div class="aw-filter-grid">
+            <select id="usersPlanState" class="aw-select inline">
+              ${[['all','План: все'],['with_plan','План: есть'],['no_plan','План: нет']].map(([v,l]) => `<option value="${v}" ${currentPlanState === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <select id="usersCreditsState" class="aw-select inline">
+              ${[['all','Credits: все'],['with_credits','Credits: есть'],['no_credits','Credits: нет']].map(([v,l]) => `<option value="${v}" ${currentCreditsState === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <select id="usersChannelState" class="aw-select inline">
+              ${[['all','Канал: все'],['with_channel','Канал: есть'],['no_channel','Канал: нет']].map(([v,l]) => `<option value="${v}" ${currentChannelState === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <select id="usersActivityWindow" class="aw-select inline">
+              ${[['all','Активность: любая'],['7d','Активность: 7 дней'],['30d','Активность: 30 дней'],['90d','Активность: 90 дней']].map(([v,l]) => `<option value="${v}" ${currentActivityWindow === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <select id="usersPaymentsState" class="aw-select inline">
+              ${[['all','Payments: все'],['with_payments','Payments: yes'],['no_payments','Payments: no']].map(([v,l]) => `<option value="${v}" ${currentPaymentsState === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          <div class="aw-toolbar-note">
+            <span class="aw-muted">Фильтры работают и для списка, и для CSV / bulk copy. Activity = latest known signal в user/account/payments/workspace surfaces.</span>
+          </div>
+        </section>
+
+        <div class="aw-users-sticky-meta">
+          <div class="aw-basket-pill">Страница: <strong>${escapeHtml(pagination.pageLabel)}</strong></div>
+          <div class="aw-basket-pill">Строки: <strong>${pagination.total > 0 ? `${pagination.fromRow}–${pagination.toRow}` : '0'}</strong> / ${pagination.total}</div>
+          <div class="aw-basket-pill">Корзина: <strong>${basketIds.length}</strong> / ${Number(bulkMeta.basketMaxRows || 500)}</div>
+          <div class="aw-basket-pill">На странице: <strong>${pagination.pageSize}</strong></div>
         </div>
-        <div class="aw-filter-grid">
-          <select id="usersPlanState" class="aw-select inline">
-            ${[['all','План: все'],['with_plan','План: есть план'],['no_plan','План: без плана']].map(([v,l]) => `<option value="${v}" ${currentPlanState === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
-          <select id="usersCreditsState" class="aw-select inline">
-            ${[['all','Credits: все'],['with_credits','Credits: есть'],['no_credits','Credits: нет']].map(([v,l]) => `<option value="${v}" ${currentCreditsState === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
-          <select id="usersChannelState" class="aw-select inline">
-            ${[['all','Канал: все'],['with_channel','Канал: есть'],['no_channel','Канал: нет']].map(([v,l]) => `<option value="${v}" ${currentChannelState === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
-          <select id="usersActivityWindow" class="aw-select inline">
-            ${[['all','Активность: любая'],['7d','Активность: 7 дней'],['30d','Активность: 30 дней'],['90d','Активность: 90 дней']].map(([v,l]) => `<option value="${v}" ${currentActivityWindow === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
-          <select id="usersPaymentsState" class="aw-select inline">
-            ${[['all','Payments: все'],['with_payments','Payments: yes'],['no_payments','Payments: no']].map(([v,l]) => `<option value="${v}" ${currentPaymentsState === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
-        </div>
-        <div class="aw-toolbar-note">
-          <span class="aw-muted">Фильтры работают и для списка, и для CSV / bulk copy. Activity = latest known signal в user/account/payments/workspace surfaces.</span>
-        </div>
-      </section>
+
+        ${topPagination}
+      </div>
 
       <section class="aw-action-ready-rail">
         <div class="aw-utility-head">
@@ -1009,7 +1076,7 @@ function usersView(model) {
         </div>
       </section>
 
-      <div class="aw-table-wrap">
+      <div class="aw-table-wrap aw-users-table-wrap">
         <table class="aw-table aw-users-table">
           <thead>
             <tr>
@@ -1087,6 +1154,8 @@ function usersView(model) {
           </tbody>
         </table>
       </div>
+
+      ${bottomPagination}
     </section>
   `, window.__adminSession || {});
 }
@@ -1924,9 +1993,13 @@ async function render() {
     app.innerHTML = overviewView(res.data.data || {});
   } else if (route.page === 'users') {
     const state = getUsersState();
-    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', sort_by: state.sortBy || 'created_desc', cohort_view: state.cohortView || 'all', limit: '20', page: '0' });
+    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', sort_by: state.sortBy || 'created_desc', cohort_view: state.cohortView || 'all', limit: String(state.pageSize || 20), page: String(state.page || 0) });
     const res = await api(`/api/admin-web-read?section=users&${params}`);
-    app.innerHTML = usersView(res.data.data || { items: [] });
+    const model = res.data.data || { items: [] };
+    const paginationPage = Number(model?.pagination?.page ?? state.page ?? 0) || 0;
+    const paginationSize = Number(model?.pagination?.pageSize ?? state.pageSize ?? 20) || 20;
+    window.__usersState = { ...state, page: paginationPage, pageSize: paginationSize };
+    app.innerHTML = usersView(model);
   } else if (route.page === 'userDetail') {
     const res = await api(`/api/admin-web-read?section=user&id=${encodeURIComponent(route.userId)}`);
     if (!res.ok) {
@@ -1985,12 +2058,18 @@ function readUsersControlsState() {
     activityWindow: document.getElementById('usersActivityWindow')?.value || state.activityWindow || 'all',
     paymentsState: document.getElementById('usersPaymentsState')?.value || state.paymentsState || 'all',
     sortBy: document.getElementById('usersSortBy')?.value || state.sortBy || 'created_desc',
-    cohortView: document.getElementById('usersCohortView')?.value || state.cohortView || 'all',
+    cohortView: state.cohortView || 'all',
+    page: state.page || 0,
+    pageSize: Number(document.querySelector('[data-users-page-size]')?.value || state.pageSize || 20) || 20,
   };
 }
 
 function setUsersStateFromControls(overrides = {}) {
   window.__usersState = { ...readUsersControlsState(), ...(overrides || {}) };
+}
+
+function setUsersStateExact(overrides = {}) {
+  window.__usersState = { ...getUsersState(), ...(overrides || {}) };
 }
 
 async function runUsersExportAction(scope = 'current') {
@@ -2067,19 +2146,23 @@ function bindShell() {
     render();
   });
   document.getElementById('refreshBtn')?.addEventListener('click', () => render());
-  document.getElementById('applyUsersFilters')?.addEventListener('click', () => {
-    setUsersStateFromControls();
+  const applyUsersFilters = () => {
+    setUsersStateFromControls({ page: 0 });
     render();
+  };
+  document.getElementById('applyUsersFilters')?.addEventListener('click', applyUsersFilters);
+  document.getElementById('usersSearch')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') applyUsersFilters();
   });
   app.querySelectorAll('[data-users-priority]').forEach((button) => {
     button.addEventListener('click', () => {
-      setUsersStateFromControls({ sortBy: button.getAttribute('data-users-priority') || 'created_desc' });
+      setUsersStateFromControls({ sortBy: button.getAttribute('data-users-priority') || 'created_desc', page: 0 });
       render();
     });
   });
   app.querySelectorAll('[data-users-cohort]').forEach((button) => {
     button.addEventListener('click', () => {
-      setUsersStateFromControls({ cohortView: button.getAttribute('data-users-cohort') || 'all' });
+      setUsersStateFromControls({ cohortView: button.getAttribute('data-users-cohort') || 'all', page: 0 });
       render();
     });
   });
@@ -2095,6 +2178,30 @@ function bindShell() {
     const mode = document.getElementById('usersBulkMode')?.value || 'tg_ids';
     const source = document.getElementById('usersBulkSource')?.value || 'current';
     await runUsersBulkCopyAction(mode, source);
+  });
+
+  app.querySelectorAll('[data-users-page-size]').forEach((select) => {
+    select.addEventListener('change', () => {
+      const nextPageSize = Math.max(10, Math.min(50, Number(select.value) || 20));
+      setUsersStateFromControls({ page: 0, pageSize: nextPageSize });
+      render();
+    });
+  });
+  app.querySelectorAll('[data-users-page-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const action = button.getAttribute('data-users-page-action') || '';
+      const state = getUsersState();
+      const currentPage = Math.max(0, Number(state.page || 0) || 0);
+      const totalPages = Math.max(1, Number(button.closest('.aw-users-pagination')?.getAttribute('data-total-pages') || 1) || 1);
+      let nextPage = currentPage;
+      if (action === 'first') nextPage = 0;
+      else if (action === 'prev') nextPage = Math.max(0, currentPage - 1);
+      else if (action === 'next') nextPage = Math.min(totalPages - 1, currentPage + 1);
+      else if (action === 'last') nextPage = Math.max(0, totalPages - 1);
+      if (nextPage === currentPage && action !== 'first' && action !== 'last') return;
+      setUsersStateExact({ page: nextPage });
+      render();
+    });
   });
 
   app.querySelectorAll('[data-users-followup]').forEach((button) => {
@@ -2114,12 +2221,12 @@ function bindShell() {
           return;
         }
         if (action === 'open_top_problem_users') {
-          setUsersStateFromControls({ sortBy: 'problem_desc', cohortView: 'all' });
+          setUsersStateFromControls({ sortBy: 'problem_desc', cohortView: 'all', page: 0 });
           render();
           return;
         }
         if (action === 'open_dormant_payers') {
-          setUsersStateFromControls({ sortBy: 'payments_desc', cohortView: 'dormant_payers' });
+          setUsersStateFromControls({ sortBy: 'payments_desc', cohortView: 'dormant_payers', page: 0 });
           render();
         }
       } catch (err) {

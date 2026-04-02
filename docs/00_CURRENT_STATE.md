@@ -1,3 +1,5 @@
+**STEP522:** Users sticky table controls / pagination polish — tightened `/admin/users` for longer manual ops sessions without adding any new write paths. The page now keeps its filter/sort/cohort control stack visually pinned, adds a bounded page-size + pagination contract, and renders the users table inside its own scrollable surface with sticky headers. Pagination now uses the real filtered total from the server contract, so operators can move through large slices while keeping basket state, current sort/cohort choice, and scan context stable. Scope stays read-only and reversible: no mutations, no background jobs, no custom persistence, just a steadier control-plane shell around the existing users directory.
+
 **STEP520:** Users action-ready follow-up rail — added a compact operator block to `/admin/users` so the most common follow-up moves now sit directly next to the sort/cohort rails instead of forcing manual control changes. The new rail is intentionally narrow and reuses only existing safe contracts: `CSV current slice`, `copy tg_id`, `copy usernames`, `open top problem users`, and `open dormant payers`. Copy/export actions still flow through the same audited bulk/export handlers, while the open-actions only switch the already existing sort/cohort state. Scope remains read-only and copy-only: no new write paths, no background jobs, no custom persistence, just a faster operator follow-up layer over the existing users control plane.
 
 **STEP519:** Users cohort counters / mini topline — strengthened `/admin/users` into a more legible control plane by adding small server-backed cohort counters above the existing cohort chips. The same working cohorts (`Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, `Quiet creators`) are now counted once on the server using the same bounded users contract, but without the currently active cohort filter, so operators can still see the full working breakdown while drilling into one slice. The UI now renders this as a clickable mini topline that shares the same cohort actions as the chips below. Scope stays read-only and narrow: no new write paths, no background jobs, no custom persistence, only a clearer operator topline over the existing cohort layer.
@@ -1769,6 +1771,19 @@ Auto-heal safeguards + ops alerts:
 Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
+
+
+
+## STEP522 — Users sticky table controls / pagination polish
+- Added a sticky control stack to `/admin/users` so the main operator rails (search/segment, sort, cohort, filter rail, and basket/page meta) stay visually pinned during longer manual ops sessions instead of drifting off-screen.
+- Added a bounded pagination contract to the users read model: the page now requests and renders `page`, `pageSize`, `total`, `totalPages`, `fromRow`, and `toRow` instead of hardcoding one 20-row slice.
+- Upgraded `listUsersDirectory()` with filtered `count(*) over()` total tracking and surfaced that through `getUsersList()` as `pagination`, while keeping the step read-only and inside the existing users contract.
+- Added top/bottom pagination controls, page-size switching (20 / 35 / 50), and sticky table headers; the users list now scrolls inside its own surface via `aw-users-table-wrap` for steadier scan-work.
+- Added `scripts/smoke-admin-web-users-sticky-pagination-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- Scope stays read-only: no new mutations, no background jobs, no public-flow changes, no custom persistence.
+- Basket state remains client-side and continues to work across page navigation inside the same admin-web session.
 
 
 ## STEP521 — Users row quick actions

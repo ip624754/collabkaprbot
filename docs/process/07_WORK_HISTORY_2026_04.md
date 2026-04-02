@@ -1,5 +1,20 @@
 # Work History — 2026-04
 
+## STEP522 — Users sticky table controls / pagination polish
+
+Date: 2026-04-02
+
+Scope:
+- added a sticky control stack to `/admin/users` so search / segment, sort rail, cohort rail, filter rail, and basket/page meta stay visible during long manual ops sessions;
+- extended the users read contract with real pagination metadata (`page`, `pageSize`, `total`, `totalPages`, `fromRow`, `toRow`) instead of a fixed single 20-row slice;
+- upgraded `listUsersDirectory()` to surface filtered totals via `count(*) over()` and passed that through `getUsersList()` to the admin-web shell;
+- added top/bottom pagination controls, page-size switching (20 / 35 / 50), and sticky table headers inside a bounded `aw-users-table-wrap` surface;
+- added `scripts/smoke-admin-web-users-sticky-pagination-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only and reversible: no new write paths, no background jobs, no public-flow changes;
+- basket state stays client-side and continues to work while moving through paginated slices inside the same web-admin session.
+
 ## STEP520 — Users action-ready follow-up rail
 
 Date: 2026-04-02

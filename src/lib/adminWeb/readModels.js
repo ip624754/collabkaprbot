@@ -114,7 +114,7 @@ export async function getUsersList(params = {}) {
     cohortView: params.cohortView || 'all',
   });
   const q = String(params.q || '').trim();
-  const limit = Math.max(1, Math.min(50, Number(params.limit) || 20));
+  const limit = Math.max(10, Math.min(50, Number(params.limit) || 20));
   const page = Math.max(0, Number(params.page) || 0);
   const offset = page * limit;
 
@@ -123,6 +123,11 @@ export async function getUsersList(params = {}) {
     getUsersDirectoryCohortCounters(filters.segment, q, filters),
   ]);
   const rows = Array.isArray(listResult?.rows) ? listResult.rows : [];
+  const total = Math.max(0, Number(rows[0]?.total_count ?? listResult?.total ?? 0) || 0);
+  const totalPages = Math.max(1, Math.ceil((total || 0) / limit) || 1);
+  const pageClamped = Math.min(page, Math.max(0, totalPages - 1));
+  const fromRow = total > 0 ? (pageClamped * limit) + 1 : 0;
+  const toRow = total > 0 ? Math.min(total, (pageClamped * limit) + rows.length) : 0;
   const noteMap = await getAdminUserNotesBulk(rows.map((x) => x.user_id));
 
   const items = rows.map((row) => {
@@ -165,9 +170,20 @@ export async function getUsersList(params = {}) {
 
   return {
     items,
-    page,
+    page: pageClamped,
     limit,
-    hasNext: rows.length === limit,
+    hasNext: pageClamped + 1 < totalPages,
+    pagination: {
+      page: pageClamped,
+      pageSize: limit,
+      total,
+      totalPages,
+      fromRow,
+      toRow,
+      hasPrev: pageClamped > 0,
+      hasNext: pageClamped + 1 < totalPages,
+      visibleCount: rows.length,
+    },
     exportOptions: getUsersExportOptions(),
     bulkOptions: getUsersBulkOptions(),
     exportMeta: {

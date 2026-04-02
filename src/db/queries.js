@@ -693,7 +693,8 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
        exists (select 1 from brand_managers bm where bm.manager_user_id = u.id) as is_manager,
-       exists (select 1 from brand_profiles bp where bp.user_id = u.id) as has_brand_profile
+       exists (select 1 from brand_profiles bp where bp.user_id = u.id) as has_brand_profile,
+       count(*) over()::int as total_count
      from users u
      ${USERS_DIRECTORY_META_SQL}
      ${parts.whereSql}
