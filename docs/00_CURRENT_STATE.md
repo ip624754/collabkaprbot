@@ -1771,6 +1771,17 @@ Acceptance / notes:
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
 
 
+## STEP521 — Users row quick actions
+- Added compact row quick actions directly inside the user identity cell in `/admin/users`: `Карточка`, `tg_id`, `username`, and `В корзину` / `В корзине`.
+- Reused the existing `/admin/users/[id]` route for card open, the audited `section=users_bulk` path for single-row copy actions, and the existing client-side selection basket contract for basket toggle.
+- Added minimal dedicated styling in `styles/admin-web.css` (`aw-row-actions`, `aw-row-action`) so the new actions stay scan-friendly and do not introduce a new noisy column.
+- Added `scripts/smoke-admin-web-users-row-actions-contract.js`, wired into `package.json` and source preflight.
+
+Acceptance / notes:
+- Scope stays read-only / copy-only: no destructive actions, no backend write expansion, no public-flow changes.
+- Row click remains intact; quick actions simply make the most common operator moves explicit and faster.
+
+
 ## STEP520 — Users action-ready follow-up rail
 
 - added a compact operator follow-up block to `/admin/users` with ready-made actions for `CSV current slice`, `copy tg_id`, `copy usernames`, `open top problem users`, and `open dormant payers`;

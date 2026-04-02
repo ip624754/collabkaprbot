@@ -371,3 +371,18 @@ Acceptance / notes:
 - no public-user flow changes;
 - no destructive write actions added to web-admin;
 - auth/session model preserved, with one new operator pause gate for fresh web-admin login requests.
+
+## STEP521 — Users row quick actions
+
+Date: 2026-04-02
+
+Scope:
+- added compact row-level quick actions directly inside the user identity cell in `/admin/users`;
+- exposed explicit buttons for `Карточка`, `tg_id`, `username`, and `В корзину` / `В корзине` without adding a new table column;
+- reused the existing user detail route, the audited `section=users_bulk` read path for single-row copy actions, and the existing selection basket contract;
+- added `scripts/smoke-admin-web-users-row-actions-contract.js` and wired it into `package.json` + `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only / copy-only;
+- no new write paths, no destructive bulk actions, no public-flow changes;
+- row click still works, but the most common operator moves are now explicit and faster to discover.

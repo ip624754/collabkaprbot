@@ -389,6 +389,34 @@ body {
 .aw-user-primary strong {
   line-height: 1.1;
 }
+.aw-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.aw-row-action {
+  appearance: none;
+  border: 1px solid rgba(132, 176, 255, 0.14);
+  background: rgba(255,255,255,0.025);
+  color: var(--soft);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+}
+.aw-row-action:hover,
+.aw-row-action.is-active {
+  color: var(--text);
+  border-color: rgba(73, 176, 255, 0.28);
+  background: rgba(73, 176, 255, 0.10);
+}
+.aw-row-action[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .aw-cell-stack {
   display: grid;
   gap: 8px;

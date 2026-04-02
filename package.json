@@ -105,7 +105,8 @@
     "smoke:admin-web-users-cohort-rail-contract": "node scripts/smoke-admin-web-users-cohort-rail-contract.js",
     "smoke:admin-control-surface-contract": "node scripts/smoke-admin-control-surface-contract.js",
     "smoke:admin-web-users-cohort-counters-contract": "node scripts/smoke-admin-web-users-cohort-counters-contract.js",
-    "smoke:admin-web-users-followup-rail-contract": "node scripts/smoke-admin-web-users-followup-rail-contract.js"
+    "smoke:admin-web-users-followup-rail-contract": "node scripts/smoke-admin-web-users-followup-rail-contract.js",
+    "smoke:admin-web-users-row-actions-contract": "node scripts/smoke-admin-web-users-row-actions-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

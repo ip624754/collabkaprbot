@@ -787,6 +787,20 @@ function userRowPayload(item = {}) {
   }));
 }
 
+function renderUserRowQuickActions(item = {}) {
+  const payload = userRowPayload(item);
+  const inBasket = isUserInBasket(item.userId);
+  const username = String(item.username || '').trim();
+  return `
+    <div class="aw-row-actions">
+      <button class="aw-row-action" data-user-quick="open_card" data-user-quick-payload='${payload}'>Карточка</button>
+      <button class="aw-row-action" data-user-quick="copy_tg_id" data-user-quick-payload='${payload}'>tg_id</button>
+      <button class="aw-row-action" data-user-quick="copy_username" data-user-quick-payload='${payload}' ${username ? '' : 'disabled'}>${username ? 'username' : 'username —'}</button>
+      <button class="aw-row-action ${inBasket ? 'is-active' : ''}" data-user-quick="toggle_basket" data-user-quick-payload='${payload}'>${inBasket ? 'В корзине' : 'В корзину'}</button>
+    </div>
+  `;
+}
+
 function usersView(model) {
   const items = Array.isArray(model.items) ? model.items : [];
   const exportOptions = Array.isArray(model.exportOptions) ? model.exportOptions : [];
@@ -1030,6 +1044,7 @@ function usersView(model) {
                       <span class="aw-stat-chip ${escapeHtml(planMeta.tone)}">${escapeHtml(planMeta.label)}</span>
                       <span class="aw-stat-chip ${escapeHtml(creditsMeta.tone)}">${escapeHtml(creditsMeta.label)}</span>
                     </div>
+                    ${renderUserRowQuickActions(item)}
                   </div>
                 </td>
                 <td>
@@ -2016,6 +2031,33 @@ async function runUsersBulkCopyAction(mode = 'tg_ids', source = 'current') {
   render();
 }
 
+async function runUserRowCopyAction(item = {}, mode = 'tg_ids') {
+  const state = readUsersControlsState();
+  const userId = Number(item?.userId || 0) || 0;
+  if (!userId) {
+    alert('Не удалось определить user_id для row action.');
+    return;
+  }
+  const params = new URLSearchParams({ section: 'users_bulk', mode, ids: String(userId), segment: state.segment, q: state.q, plan_state: state.planState, credits_state: state.creditsState, channel_state: state.channelState, activity_window: state.activityWindow, payments_state: state.paymentsState, sort_by: state.sortBy, cohort_view: state.cohortView });
+  const res = await api(`/api/admin-web-read?${params.toString()}`);
+  if (!res.ok) {
+    alert(`Не удалось собрать row quick action: ${res.data?.error || 'unknown'}`);
+    return;
+  }
+  const payload = res.data?.data || {};
+  if (!String(payload.text || '').trim()) {
+    alert('Пустой результат: в этой строке нет данных для копирования.');
+    return;
+  }
+  const copied = await copyTextToClipboard(payload.text || '');
+  if (!copied) {
+    alert('Не удалось скопировать в буфер обмена.');
+    return;
+  }
+  alert(`Скопировано из строки: ${usersBulkModeLabel(payload.mode)}.`);
+  render();
+}
+
 function bindShell() {
   bindLinks();
   document.getElementById('logoutBtn')?.addEventListener('click', async () => {
@@ -2120,6 +2162,35 @@ function bindShell() {
         setUsersBasketItem(item, !!input.checked);
       } catch {}
       render();
+    });
+  });
+  app.querySelectorAll('[data-user-quick]').forEach((button) => {
+    button.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const item = JSON.parse(button.getAttribute('data-user-quick-payload') || '{}');
+        const action = button.getAttribute('data-user-quick') || '';
+        if (action === 'open_card') {
+          history.pushState({}, '', `/admin/users/${Number(item.userId || 0) || 0}`);
+          render();
+          return;
+        }
+        if (action === 'copy_tg_id') {
+          await runUserRowCopyAction(item, 'tg_ids');
+          return;
+        }
+        if (action === 'copy_username') {
+          await runUserRowCopyAction(item, 'usernames');
+          return;
+        }
+        if (action === 'toggle_basket') {
+          setUsersBasketItem(item, !isUserInBasket(item.userId));
+          render();
+        }
+      } catch (err) {
+        alert(`Не удалось выполнить row action: ${err?.message || 'unknown'}`);
+      }
     });
   });
   app.querySelectorAll('[data-user-row]').forEach((row) => {
