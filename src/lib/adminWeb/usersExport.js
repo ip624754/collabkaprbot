@@ -99,6 +99,7 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
   const noteMap = await getAdminUserNotesBulk((rows || []).map((row) => Number(row.user_id || 0)));
 
   const header = [
+    'sort_by',
     'user_id',
     'tg_id',
     'username',
@@ -113,6 +114,8 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
     'brand_credits_spent',
     'has_channel',
     'has_payments',
+    'payments_count',
+    'problem_score',
     'last_known_activity_msk',
     'has_note',
   ].join(',');
@@ -120,6 +123,7 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
   const csvRows = (rows || []).map((row) => {
     const hasNote = noteMap.has(Number(row.user_id || 0));
     return [
+      csvEsc(appliedFilters?.sortBy || normalizedFilters?.sortBy || 'created_desc'),
       Number(row.user_id || 0),
       Number(row.tg_id || 0) || '',
       csvEsc(row.tg_username || ''),
@@ -134,6 +138,8 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
       Number(row.brand_credits_spent || 0),
       row.has_channel ? '1' : '0',
       row.has_payments ? '1' : '0',
+      Number(row.payments_count || 0),
+      Number(row.problem_score || 0),
       csvEsc(msk(row.last_known_activity_at)),
       hasNote ? '1' : '0',
     ].join(',');

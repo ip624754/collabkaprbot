@@ -441,6 +441,7 @@ const USERS_DIRECTORY_CREDITS_STATES = ['all', 'with_credits', 'no_credits'];
 const USERS_DIRECTORY_CHANNEL_STATES = ['all', 'with_channel', 'no_channel'];
 const USERS_DIRECTORY_ACTIVITY_WINDOWS = ['all', '7d', '30d', '90d'];
 const USERS_DIRECTORY_PAYMENTS_STATES = ['all', 'with_payments', 'no_payments'];
+const USERS_DIRECTORY_SORTS = ['created_desc', 'activity_desc', 'activity_asc', 'payments_desc', 'problem_desc'];
 
 const USERS_DIRECTORY_META_SQL = `
   left join lateral (
@@ -451,7 +452,8 @@ const USERS_DIRECTORY_META_SQL = `
         where w.owner_user_id = u.id
           and (w.channel_id is not null or nullif(trim(coalesce(w.channel_username, '')), '') is not null)
       ) as has_channel,
-      exists (select 1 from payments p where p.user_id = u.id) as has_payments,
+      coalesce((select count(*)::int from payments p where p.user_id = u.id), 0) as payments_count,
+      (select max(p.created_at) from payments p where p.user_id = u.id) as last_payment_at,
       greatest(
         coalesce(u.updated_at, u.created_at),
         coalesce((select max(p.created_at) from payments p where p.user_id = u.id), '-infinity'::timestamptz),
@@ -462,6 +464,14 @@ const USERS_DIRECTORY_META_SQL = `
       ) as last_known_activity_at
   ) meta on true`;
 
+const USERS_DIRECTORY_PROBLEM_SCORE_SQL = `
+  (case when u.banned_at is not null then 100 else 0 end
+   + case when meta.payments_count > 0 and meta.has_channel = false then 35 else 0 end
+   + case when u.brand_plan is not null and meta.has_channel = false then 25 else 0 end
+   + case when coalesce(u.brand_credits,0) > 0 and meta.last_known_activity_at < now() - interval '30 days' then 15 else 0 end
+   + case when meta.last_known_activity_at < now() - interval '90 days' then 10 else 0 end)
+`;
+
 export function normalizeUsersDirectoryFilters(input = {}) {
   const segmentRaw = String(input.segment || input.filter || 'all').trim().toLowerCase();
   const segment = USERS_DIRECTORY_SEGMENTS.includes(segmentRaw) ? segmentRaw : 'all';
@@ -471,6 +481,7 @@ export function normalizeUsersDirectoryFilters(input = {}) {
   const channelStateRaw = String(input.channelState || input.channel || 'all').trim().toLowerCase();
   const activityWindowRaw = String(input.activityWindow || input.activity || 'all').trim().toLowerCase();
   const paymentsStateRaw = String(input.paymentsState || input.payments || 'all').trim().toLowerCase();
+  const sortByRaw = String(input.sortBy || input.sort || 'created_desc').trim().toLowerCase();
 
   return {
     segment,
@@ -479,7 +490,24 @@ export function normalizeUsersDirectoryFilters(input = {}) {
     channelState: USERS_DIRECTORY_CHANNEL_STATES.includes(channelStateRaw) ? channelStateRaw : 'all',
     activityWindow: USERS_DIRECTORY_ACTIVITY_WINDOWS.includes(activityWindowRaw) ? activityWindowRaw : 'all',
     paymentsState: USERS_DIRECTORY_PAYMENTS_STATES.includes(paymentsStateRaw) ? paymentsStateRaw : 'all',
+    sortBy: USERS_DIRECTORY_SORTS.includes(sortByRaw) ? sortByRaw : 'created_desc',
   };
+}
+
+function buildUsersDirectoryOrderSql(normalized = {}) {
+  if (normalized.sortBy === 'activity_desc') {
+    return `order by meta.last_known_activity_at desc nulls last, u.created_at desc`;
+  }
+  if (normalized.sortBy === 'activity_asc') {
+    return `order by meta.last_known_activity_at asc nulls first, u.created_at desc`;
+  }
+  if (normalized.sortBy === 'payments_desc') {
+    return `order by meta.payments_count desc, meta.last_payment_at desc nulls last, meta.last_known_activity_at desc nulls last, u.created_at desc`;
+  }
+  if (normalized.sortBy === 'problem_desc') {
+    return `order by ${USERS_DIRECTORY_PROBLEM_SCORE_SQL} desc, meta.last_known_activity_at asc nulls first, meta.payments_count desc, u.created_at desc`;
+  }
+  return `order by u.created_at desc`;
 }
 
 function buildUsersDirectorySqlParts({ filterRaw = 'all', qRaw = '', filtersRaw = {}, startIndex = 1 } = {}) {
@@ -523,8 +551,8 @@ function buildUsersDirectorySqlParts({ filterRaw = 'all', qRaw = '', filtersRaw 
   if (normalized.channelState === 'with_channel') where.push(`meta.has_channel = true`);
   else if (normalized.channelState === 'no_channel') where.push(`meta.has_channel = false`);
 
-  if (normalized.paymentsState === 'with_payments') where.push(`meta.has_payments = true`);
-  else if (normalized.paymentsState === 'no_payments') where.push(`meta.has_payments = false`);
+  if (normalized.paymentsState === 'with_payments') where.push(`meta.payments_count > 0`);
+  else if (normalized.paymentsState === 'no_payments') where.push(`meta.payments_count = 0`);
 
   const activityDays = normalized.activityWindow === '7d' ? 7
     : normalized.activityWindow === '30d' ? 30
@@ -574,10 +602,14 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
        u.updated_at,
        u.brand_plan,
        u.brand_plan_until,
+       u.banned_at,
        coalesce(u.brand_credits,0)::int as brand_credits,
        meta.has_channel,
-       meta.has_payments,
+       (meta.payments_count > 0) as has_payments,
+       meta.payments_count,
+       meta.last_payment_at,
        meta.last_known_activity_at,
+       ${USERS_DIRECTORY_PROBLEM_SCORE_SQL} as problem_score,
        exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
@@ -586,7 +618,7 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
      from users u
      ${USERS_DIRECTORY_META_SQL}
      ${parts.whereSql}
-     order by u.created_at desc
+     ${buildUsersDirectoryOrderSql(parts.normalized)}
      limit $1 offset $2`,
     params
   );
@@ -612,8 +644,11 @@ export async function getUsersDirectoryByIds(userIdsRaw = []) {
        coalesce(u.brand_credits,0)::int as brand_credits,
        coalesce(u.brand_credits_spent,0)::int as brand_credits_spent,
        meta.has_channel,
-       meta.has_payments,
+       (meta.payments_count > 0) as has_payments,
+       meta.payments_count,
+       meta.last_payment_at,
        meta.last_known_activity_at,
+       ${USERS_DIRECTORY_PROBLEM_SCORE_SQL} as problem_score,
        exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
@@ -655,8 +690,11 @@ export async function exportUsersDirectory(filterRaw = 'all', qRaw = '', filters
        coalesce(u.brand_credits,0)::int as brand_credits,
        coalesce(u.brand_credits_spent,0)::int as brand_credits_spent,
        meta.has_channel,
-       meta.has_payments,
+       (meta.payments_count > 0) as has_payments,
+       meta.payments_count,
+       meta.last_payment_at,
        meta.last_known_activity_at,
+       ${USERS_DIRECTORY_PROBLEM_SCORE_SQL} as problem_score,
        exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
@@ -665,7 +703,7 @@ export async function exportUsersDirectory(filterRaw = 'all', qRaw = '', filters
      from users u
      ${USERS_DIRECTORY_META_SQL}
      ${parts.whereSql}
-     order by u.created_at desc
+     ${buildUsersDirectoryOrderSql(parts.normalized)}
      limit $1`,
     params
   );

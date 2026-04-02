@@ -1,5 +1,5 @@
 import { pool } from '../../db/pool.js';
-import { getAdminMetricsSnapshot, listUsersDirectory, getUserCardById } from '../../db/queries.js';
+import { getAdminMetricsSnapshot, listUsersDirectory, getUserCardById, normalizeUsersDirectoryFilters } from '../../db/queries.js';
 import { getAdminUserNote, getAdminUserNotesBulk } from './notes.js';
 import { getRuntimeSummary } from './runtime.js';
 import { getRecentAdminWebAudit, isFounderActorTgId } from './auth.js';
@@ -110,6 +110,7 @@ export async function getUsersList(params = {}) {
     channelState: params.channelState || 'all',
     activityWindow: params.activityWindow || 'all',
     paymentsState: params.paymentsState || 'all',
+    sortBy: params.sortBy || 'created_desc',
   });
   const q = String(params.q || '').trim();
   const limit = Math.max(1, Math.min(50, Number(params.limit) || 20));
@@ -131,7 +132,11 @@ export async function getUsersList(params = {}) {
       lastKnownActivityAt: row.last_known_activity_at || row.updated_at || row.created_at || null,
       brandPlan: row.brand_plan || '',
       brandPlanUntil: row.brand_plan_until || null,
+      bannedAt: row.banned_at || null,
       brandCredits: Number(row.brand_credits || 0),
+      paymentsCount: Number(row.payments_count || 0),
+      lastPaymentAt: row.last_payment_at || null,
+      problemScore: Number(row.problem_score || 0),
       segment: buildUserSegment(row),
       flags: {
         hasChannel: !!row.has_channel,
@@ -141,6 +146,7 @@ export async function getUsersList(params = {}) {
         isModerator: !!row.is_moderator,
         isManager: !!row.is_manager,
         hasBrandProfile: !!row.has_brand_profile,
+        isBanned: !!row.banned_at,
       },
       hasNote: !!note,
       notePreview: note?.text ? String(note.text).slice(0, 120) : '',

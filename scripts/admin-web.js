@@ -605,6 +605,7 @@ function getUsersState() {
     channelState: state.channelState || 'all',
     activityWindow: state.activityWindow || 'all',
     paymentsState: state.paymentsState || 'all',
+    sortBy: state.sortBy || 'created_desc',
   };
 }
 
@@ -614,6 +615,25 @@ function activeWindowLabel(value) {
   if (key === '30d') return 'active 30d';
   if (key === '90d') return 'active 90d';
   return 'no recent signal';
+}
+
+function usersSortMeta(value = 'created_desc') {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'activity_desc') return { label: 'Свежие сверху', detail: 'Сортировка по последней активности ↓' };
+  if (key === 'activity_asc') return { label: 'Тихие сверху', detail: 'Сначала пользователи без свежих сигналов' };
+  if (key === 'payments_desc') return { label: 'Платящие сверху', detail: 'Сортировка по числу платежей ↓' };
+  if (key === 'problem_desc') return { label: 'Проблемные сверху', detail: 'Banned / paid-no-channel / plan-no-channel / stale credits' };
+  return { label: 'Новые сверху', detail: 'Сортировка по created_at ↓' };
+}
+
+function usersPriorityPresets() {
+  return [
+    { id: 'created_desc', label: 'Новые' },
+    { id: 'activity_desc', label: 'Свежие' },
+    { id: 'payments_desc', label: 'Платящие' },
+    { id: 'activity_asc', label: 'Тихие' },
+    { id: 'problem_desc', label: 'Проблемные' },
+  ];
 }
 
 function usersPlanMeta(item = {}) {
@@ -631,13 +651,25 @@ function usersCreditsMeta(item = {}) {
 
 function usersSignalChips(item = {}) {
   const chips = [];
+  if (item.flags?.isBanned) chips.push({ label: 'banned', tone: 'is-warn' });
   if (item.flags?.isCreator) chips.push({ label: 'creator', tone: 'is-accent' });
   if (item.flags?.hasBrandProfile) chips.push({ label: 'brand', tone: 'is-soft' });
   if (item.flags?.isModerator) chips.push({ label: 'moderator', tone: 'is-warn' });
   if (item.flags?.isManager) chips.push({ label: 'manager', tone: 'is-soft' });
   if (item.flags?.hasChannel) chips.push({ label: 'channel', tone: 'is-good' });
-  if (item.flags?.hasPayments) chips.push({ label: 'paid', tone: 'is-good' });
+  if (Number(item?.paymentsCount || 0) > 0) chips.push({ label: `pay x${Math.min(99, Number(item.paymentsCount || 0))}`, tone: 'is-good' });
+  if (Number(item?.problemScore || 0) >= 60) chips.push({ label: 'risk', tone: 'is-warn' });
+  else if (Number(item?.problemScore || 0) > 0) chips.push({ label: 'attention', tone: 'is-soft' });
   return chips;
+}
+
+function usersSignalsDetail(item = {}) {
+  const parts = [];
+  parts.push(item.flags?.hasChannel ? 'Канал подключён' : 'Канал не подключён');
+  parts.push(Number(item?.paymentsCount || 0) > 0 ? `Платежей ${Number(item.paymentsCount || 0)}` : 'Платежей нет');
+  if (Number(item?.problemScore || 0) > 0) parts.push(`ops-risk ${Number(item.problemScore || 0)}`);
+  if (item.flags?.isBanned) parts.push('Статус: banned');
+  return parts.join(' · ');
 }
 
 function usersActivityMeta(item = {}) {
@@ -719,7 +751,10 @@ function usersView(model) {
   const currentChannelState = usersState.channelState || filterMeta.channelState || 'all';
   const currentActivityWindow = usersState.activityWindow || filterMeta.activityWindow || 'all';
   const currentPaymentsState = usersState.paymentsState || filterMeta.paymentsState || 'all';
+  const currentSortBy = usersState.sortBy || filterMeta.sortBy || 'created_desc';
   const bulkSource = window.__usersBulkState?.source || 'current';
+  const sortMeta = usersSortMeta(currentSortBy);
+  const priorityPresets = usersPriorityPresets();
   const bulkMode = window.__usersBulkState?.mode || 'tg_ids';
   const basketIds = getUsersBasketIds();
   const allVisibleSelected = !!items.length && items.every((item) => isUserInBasket(item.userId));
@@ -740,6 +775,28 @@ function usersView(model) {
           <button class="aw-button" id="exportUsersBtn">Экспорт</button>
         </div>
       </div>
+      <section class="aw-priority-rail">
+        <div class="aw-utility-head">
+          <div>
+            <strong>Users sort / priority rail</strong>
+            <span>Быстро поднимает наверх самые свежие, самые платящие, самые тихие и самые проблемные сегменты без новых мутаций.</span>
+          </div>
+          <div class="aw-basket-pill">Порядок: <strong>${escapeHtml(sortMeta.label)}</strong></div>
+        </div>
+        <div class="aw-priority-row">
+          <div class="aw-priority-pills">
+            ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+          </div>
+          <select id="usersSortBy" class="aw-select inline">
+            ${[['created_desc','Сортировка: новые сверху'],['activity_desc','Сортировка: свежие сверху'],['payments_desc','Сортировка: платящие сверху'],['activity_asc','Сортировка: тихие сверху'],['problem_desc','Сортировка: проблемные сверху']].map(([v,l]) => `<option value="${v}" ${currentSortBy === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="aw-toolbar-note">
+          <span class="aw-muted">${escapeHtml(sortMeta.detail)}</span>
+          <span class="aw-muted">problem = banned / paid-no-channel / plan-no-channel / stale credits</span>
+        </div>
+      </section>
+
       <section class="aw-filter-rail">
         <div class="aw-utility-head">
           <div>
@@ -855,7 +912,7 @@ function usersView(model) {
                 <td>
                   <div class="aw-cell-stack aw-cell-stack-tight">
                     <div class="aw-inline-chips">${renderUsersInlineChips(signalChips)}</div>
-                    <small>${item.flags?.hasChannel ? 'Канал подключён' : 'Канал не подключён'} · ${item.flags?.hasPayments ? 'Есть платежи' : 'Платежей нет'}</small>
+                    <small>${escapeHtml(usersSignalsDetail(item))}</small>
                   </div>
                 </td>
                 <td>
@@ -1714,7 +1771,7 @@ async function render() {
     app.innerHTML = overviewView(res.data.data || {});
   } else if (route.page === 'users') {
     const state = getUsersState();
-    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', limit: '20', page: '0' });
+    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', sort_by: state.sortBy || 'created_desc', limit: '20', page: '0' });
     const res = await api(`/api/admin-web-read?section=users&${params}`);
     app.innerHTML = usersView(res.data.data || { items: [] });
   } else if (route.page === 'userDetail') {
@@ -1782,8 +1839,24 @@ function bindShell() {
       channelState: document.getElementById('usersChannelState')?.value || 'all',
       activityWindow: document.getElementById('usersActivityWindow')?.value || 'all',
       paymentsState: document.getElementById('usersPaymentsState')?.value || 'all',
+      sortBy: document.getElementById('usersSortBy')?.value || 'created_desc',
     };
     render();
+  });
+  app.querySelectorAll('[data-users-priority]').forEach((button) => {
+    button.addEventListener('click', () => {
+      window.__usersState = {
+        q: document.getElementById('usersSearch')?.value || '',
+        segment: document.getElementById('usersSegment')?.value || 'all',
+        planState: document.getElementById('usersPlanState')?.value || 'all',
+        creditsState: document.getElementById('usersCreditsState')?.value || 'all',
+        channelState: document.getElementById('usersChannelState')?.value || 'all',
+        activityWindow: document.getElementById('usersActivityWindow')?.value || 'all',
+        paymentsState: document.getElementById('usersPaymentsState')?.value || 'all',
+        sortBy: button.getAttribute('data-users-priority') || 'created_desc',
+      };
+      render();
+    });
   });
   document.getElementById('exportUsersBtn')?.addEventListener('click', async () => {
     const scope = document.getElementById('usersExportScope')?.value || 'current';
@@ -1794,7 +1867,8 @@ function bindShell() {
     const channelState = document.getElementById('usersChannelState')?.value || 'all';
     const activityWindow = document.getElementById('usersActivityWindow')?.value || 'all';
     const paymentsState = document.getElementById('usersPaymentsState')?.value || 'all';
-    const params = new URLSearchParams({ section: 'users_export', scope, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState });
+    const sortBy = document.getElementById('usersSortBy')?.value || 'created_desc';
+    const params = new URLSearchParams({ section: 'users_export', scope, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState, sort_by: sortBy });
     try {
       await downloadCsv(`/api/admin-web-read?${params.toString()}`, `users_${scope}.csv`);
       render();
@@ -1812,8 +1886,9 @@ function bindShell() {
     const channelState = document.getElementById('usersChannelState')?.value || 'all';
     const activityWindow = document.getElementById('usersActivityWindow')?.value || 'all';
     const paymentsState = document.getElementById('usersPaymentsState')?.value || 'all';
+    const sortBy = document.getElementById('usersSortBy')?.value || 'created_desc';
     window.__usersBulkState = { mode, source };
-    const params = new URLSearchParams({ section: 'users_bulk', mode, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState });
+    const params = new URLSearchParams({ section: 'users_bulk', mode, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState, sort_by: sortBy });
     if (source === 'basket') {
       const ids = getUsersBasketIds();
       if (!ids.length) {

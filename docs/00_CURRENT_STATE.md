@@ -1767,6 +1767,18 @@ Acceptance / notes:
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
 
 
+## STEP517 — Users sort / priority rail
+- Added a dedicated `Users sort / priority rail` to `/admin/users` with one-click presets for `Новые`, `Свежие`, `Платящие`, `Тихие`, and `Проблемные`, plus an explicit `usersSortBy` select for the same contract.
+- Extended the normalized users-directory filter contract with `sortBy`; list, CSV export, and bulk-copy read paths now share the same ordering instead of diverging silently.
+- Upgraded the shared users SQL meta projection with `payments_count`, `last_payment_at`, and a bounded `problem_score`, then reused the same order contract in `listUsersDirectory()` and `exportUsersDirectory()`.
+- Surfaced stronger row hints in the users table (`pay xN`, `banned`, `risk / attention`) so the new sort modes remain explainable and operator-readable.
+- Added `scripts/smoke-admin-web-users-priority-rail-contract.js`, wired into `package.json` and source preflight.
+
+Acceptance / notes:
+- Scope stays read-only: no new write surfaces, no user mutations, no background jobs, no public-flow changes.
+- `problem_desc` is intentionally conservative and transparent: banned / paid-no-channel / plan-no-channel / stale credits.
+
+
 ## STEP516 — Users table hierarchy polish
 - Rebuilt the `/admin/users` row layout so the list now has a clearer scan order: identity → compact stats → signals → `Last activity` → created time.
 - Added compact stat chips in `scripts/admin-web.js` for plan, credits, note presence, signal roles, and activity freshness; split `Last activity` into its own explicit column.
