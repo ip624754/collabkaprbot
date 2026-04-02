@@ -1,3 +1,17 @@
+## STEP525 — Users compare / pin rail
+
+Date: 2026-04-02
+
+Scope:
+- extended the existing URL-backed users state-contract with `pins=...`, so temporary compare selections now survive refresh / reopen alongside the current users slice;
+- added a compact `Users compare / pin rail` to `/admin/users` with side-by-side compare cards, `Очистить pins`, and row-level `Pin / Pinned` quick actions;
+- built compare cards from already existing user-card, note, workspace, and payments summary data with no new write paths and no separate compare page;
+- added dedicated styles plus `scripts/smoke-admin-web-users-compare-pin-rail-contract.js`, wired into `package.json` and source preflight.
+
+Acceptance / notes:
+- scope stays read-only and reversible: no backend mutations, no DB persistence for compare state, no public-flow changes;
+- compare is intentionally bounded to 5 users and meant for temporary manual ops review, not long-lived saved boards.
+
 ## STEP524 — Users URL-persisted working views
 
 Date: 2026-04-02

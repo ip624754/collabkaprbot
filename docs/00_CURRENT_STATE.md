@@ -1,3 +1,5 @@
+**STEP525:** Users compare / pin rail — added a narrow compare surface to `/admin/users` so operators can temporarily pin 2–5 user cards and review them side-by-side without losing the current working slice. Pin state now rides inside the existing URL-backed users state-contract (`pins=...`), survives refresh/reopen together with the active slice, and feeds a compact compare rail with identity, status/segment, plan/credits/channel/payments, recent activity, and note preview. Scope stays deliberately read-only: no new write paths, no DB persistence, no new route family — just a faster manual ops review layer on top of the existing users control plane.
+
 **STEP524:** Users URL-persisted working views — upgraded `/admin/users` so the full users state-contract now lives in the page URL instead of only in in-memory SPA state. The active search / segment / filter rail / sort / cohort / page / page-size slice now survives refresh and reopen, can be copied as a shareable admin link, and is reused as the back-link when drilling into `/admin/users/[id]`. Scope stays deliberately narrow and read-only: no backend persistence, no new write paths, no new route family — only URL-backed continuity on top of the existing users control plane.
 
 **STEP523:** Users saved operator presets — added a compact built-in preset rail to `/admin/users` so operators can jump back to real working slices in one click instead of manually rebuilding the same search/segment/filter/sort/cohort combinations. The new layer is intentionally narrow and read-only: it only replays the existing state-contract with presets like `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`, while visibly falling back to `Custom slice` as soon as the operator drifts away from a preset. No new backend mutations, no DB persistence, no custom user-defined views — just a faster way to return to the most useful ops slices on top of the existing users control plane.
@@ -1776,6 +1778,17 @@ Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
 
+
+
+## STEP525 — Users compare / pin rail
+- Extended the existing users URL state-contract with `pins=...`, so temporary compare selections now survive refresh / reopen together with the current search / filter / sort / cohort slice.
+- Added a compact `Users compare / pin rail` above the table in `scripts/admin-web.js`, including `Очистить pins`, side-by-side compare cards, and row-level `Pin / Pinned` quick actions without introducing a separate compare page.
+- Added lightweight compare-card data assembly in `src/lib/adminWeb/readModels.js` using existing user-card, note, workspace, and payment summary signals; no new write paths and no DB persistence were introduced.
+- Added compare-rail styling in `styles/admin-web.css` plus `scripts/smoke-admin-web-users-compare-pin-rail-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- Scope stays read-only and reversible: no backend mutations, no background jobs, no custom compare storage, no public-flow changes.
+- Compare is intentionally bounded to 5 users and designed for temporary manual ops review, not long-lived saved review boards.
 
 
 ## STEP524 — Users URL-persisted working views

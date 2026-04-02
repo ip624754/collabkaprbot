@@ -37,6 +37,7 @@ export default async function handler(req, res) {
       cohortView: getSearchParam(req, 'cohort_view', 'all'),
       limit: getSearchParam(req, 'limit', '20'),
       page: getSearchParam(req, 'page', '0'),
+      pinIds: getSearchParam(req, 'pins', ''),
     });
     return json(res, 200, { ok: true, data });
   }

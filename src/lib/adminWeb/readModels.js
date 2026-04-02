@@ -78,6 +78,86 @@ function buildActivitySummary(user, paymentLight) {
   return parts.length ? parts.join(' · ') : 'Нет выраженных сигналов активности.';
 }
 
+function normalizeUsersPinIds(raw = []) {
+  const values = Array.isArray(raw) ? raw : String(raw || '').split(',');
+  const out = [];
+  for (const value of values) {
+    const num = Number(value || 0) || 0;
+    if (!num || out.includes(num)) continue;
+    out.push(num);
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+
+function compareSignalChips(user, paymentLight = {}, note = null) {
+  const chips = [];
+  if (user?.is_creator) chips.push({ label: 'creator', tone: 'is-accent' });
+  if (user?.has_brand_profile) chips.push({ label: 'brand', tone: 'is-accent' });
+  if (user?.is_curator) chips.push({ label: 'curator', tone: 'is-soft' });
+  if (user?.is_manager) chips.push({ label: 'manager', tone: 'is-soft' });
+  if (user?.is_moderator) chips.push({ label: 'moderator', tone: 'is-soft' });
+  if (Array.isArray(user?._workspaces) && user._workspaces.some((w) => w?.channel_id || w?.channel_username)) chips.push({ label: 'channel', tone: 'is-good' });
+  if (Number(paymentLight?.total || 0) > 0) chips.push({ label: `pay x${Number(paymentLight.total || 0)}`, tone: 'is-good' });
+  if (note?.text) chips.push({ label: 'note', tone: 'is-soft' });
+  return chips.slice(0, 6);
+}
+
+async function getPinnedUsersCompareCards(userIdsRaw = []) {
+  const userIds = normalizeUsersPinIds(userIdsRaw);
+  if (!userIds.length) return [];
+  const [users, notesMap, paymentsResult] = await Promise.all([
+    Promise.all(userIds.map((userId) => getUserCardById(userId))),
+    getAdminUserNotesBulk(userIds),
+    pool.query(
+      `select user_id, count(*)::int as total, max(created_at) as last_payment_at
+         from payments
+        where user_id = any($1::int[])
+        group by user_id`,
+      [userIds]
+    ).catch(() => ({ rows: [] })),
+  ]);
+
+  const paymentMap = new Map((paymentsResult?.rows || []).map((row) => [Number(row.user_id || 0), {
+    total: Number(row.total || 0),
+    lastPaymentAt: row.last_payment_at || null,
+  }]));
+
+  const byId = new Map();
+  users.forEach((user) => {
+    if (user?.id) byId.set(Number(user.id || 0), user);
+  });
+
+  return userIds.map((userId) => {
+    const user = byId.get(Number(userId || 0));
+    if (!user) return null;
+    const workspaces = Array.isArray(user._workspaces) ? user._workspaces : [];
+    const curatorIn = Array.isArray(user._curator_in) ? user._curator_in : [];
+    const paymentLight = paymentMap.get(Number(user.id || 0)) || { total: 0, lastPaymentAt: null };
+    const note = notesMap.get(Number(user.id || 0)) || null;
+    const segment = buildUserSegment(user);
+    return {
+      userId: Number(user.id || 0),
+      tgId: Number(user.tg_id || 0) || 0,
+      username: user.tg_username || '',
+      displayName: buildDisplayName(user),
+      segment,
+      segmentLabel: ({ brand: 'бренд', creator: 'креатор', curator: 'куратор', manager: 'менеджер', user: 'пользователь' })[segment] || 'пользователь',
+      status: user.banned_at ? 'banned' : 'active',
+      plan: user.brand_plan || '',
+      credits: Number(user.brand_credits || 0),
+      hasChannel: workspaces.some((w) => w?.channel_id || w?.channel_username),
+      workspaceCount: workspaces.length,
+      curatorCount: curatorIn.length,
+      paymentsCount: Number(paymentLight.total || 0),
+      lastPaymentAt: paymentLight.lastPaymentAt || null,
+      lastKnownActivityAt: user.updated_at || user.created_at || null,
+      notePreview: note?.text ? String(note.text).slice(0, 160) : '',
+      signalChips: compareSignalChips(user, paymentLight, note),
+    };
+  }).filter(Boolean);
+}
+
 export async function getOverviewSummary() {
   const metrics = await getAdminMetricsSnapshot(7);
   const runtime = await getRuntimeSummary();
@@ -116,11 +196,13 @@ export async function getUsersList(params = {}) {
   const q = String(params.q || '').trim();
   const limit = Math.max(10, Math.min(50, Number(params.limit) || 20));
   const page = Math.max(0, Number(params.page) || 0);
+  const pinIds = normalizeUsersPinIds(params.pinIds || params.pins || []);
   const offset = page * limit;
 
-  const [listResult, cohortCounters] = await Promise.all([
+  const [listResult, cohortCounters, compareCards] = await Promise.all([
     listUsersDirectory(filters.segment, limit, offset, q, filters),
     getUsersDirectoryCohortCounters(filters.segment, q, filters),
+    getPinnedUsersCompareCards(pinIds),
   ]);
   const rows = Array.isArray(listResult?.rows) ? listResult.rows : [];
   const total = Math.max(0, Number(rows[0]?.total_count ?? listResult?.total ?? 0) || 0);
@@ -213,6 +295,11 @@ export async function getUsersList(params = {}) {
       cohortCounters: cohortCounters || { all: 0 },
     },
     cohortTopline: cohortCounters || { all: 0 },
+    compareRail: {
+      maxPins: 5,
+      pinIds,
+      cards: compareCards || [],
+    },
   };
 }
 

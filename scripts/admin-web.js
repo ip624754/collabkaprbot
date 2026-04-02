@@ -106,6 +106,43 @@ function clearUsersBasket() {
   getUsersBasketMap().clear();
 }
 
+function normalizeUsersPinIds(raw = []) {
+  const values = Array.isArray(raw) ? raw : String(raw || '').split(',');
+  const out = [];
+  for (const value of values) {
+    const num = Number(value || 0) || 0;
+    if (!num || out.includes(num)) continue;
+    out.push(num);
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+
+function getUsersPinIds() {
+  return normalizeUsersPinIds(getUsersState().pinIds || []);
+}
+
+function isUserPinned(userId) {
+  return getUsersPinIds().includes(Number(userId || 0) || 0);
+}
+
+function setUsersPinIds(pinIds = []) {
+  window.__usersState = normalizeUsersState({ ...getUsersState(), pinIds: normalizeUsersPinIds(pinIds), page: 0 });
+}
+
+function toggleUsersPin(item = {}) {
+  const userId = Number(item?.userId || 0) || 0;
+  if (!userId) return { ok: false, reason: 'user_id_required' };
+  const current = getUsersPinIds();
+  if (current.includes(userId)) {
+    setUsersPinIds(current.filter((value) => value !== userId));
+    return { ok: true, pinned: false };
+  }
+  if (current.length >= 5) return { ok: false, reason: 'pin_limit' };
+  setUsersPinIds([...current, userId]);
+  return { ok: true, pinned: true };
+}
+
 function formatDate(value) {
   if (!value) return '—';
   const d = new Date(value);
@@ -616,6 +653,7 @@ const USERS_STATE_DEFAULTS = {
   cohortView: 'all',
   page: 0,
   pageSize: 20,
+  pinIds: [],
 };
 
 function normalizeUsersState(raw = {}) {
@@ -634,6 +672,7 @@ function normalizeUsersState(raw = {}) {
     cohortView: String(state.cohortView || state.cohort_view || USERS_STATE_DEFAULTS.cohortView).trim() || USERS_STATE_DEFAULTS.cohortView,
     page,
     pageSize,
+    pinIds: normalizeUsersPinIds(state.pinIds || state.pin_ids || state.pins || USERS_STATE_DEFAULTS.pinIds),
   };
 }
 
@@ -656,6 +695,7 @@ function readUsersStateFromUrl(search = location.search) {
     if (params.has('cohort_view')) next.cohortView = params.get('cohort_view') || 'all';
     if (params.has('page')) next.page = params.get('page') || '0';
     if (params.has('limit')) next.pageSize = params.get('limit') || '20';
+    if (params.has('pins')) next.pinIds = params.get('pins') || '';
     return normalizeUsersState(next);
   } catch {
     return normalizeUsersState({});
@@ -676,6 +716,7 @@ function buildUsersListHref(state = getUsersState(), { absolute = false } = {}) 
   if (normalized.cohortView !== USERS_STATE_DEFAULTS.cohortView) params.set('cohort_view', normalized.cohortView);
   if (normalized.page > 0) params.set('page', String(normalized.page));
   if (normalized.pageSize !== USERS_STATE_DEFAULTS.pageSize) params.set('limit', String(normalized.pageSize));
+  if (normalized.pinIds.length) params.set('pins', normalized.pinIds.join(','));
   const relative = `/admin/users${params.toString() ? `?${params.toString()}` : ''}`;
   if (!absolute) return relative;
   try {
@@ -1077,6 +1118,55 @@ function renderUsersInlineChips(chips = []) {
   `).join('');
 }
 
+function renderUsersCompareCards(compareRail = {}) {
+  const cards = Array.isArray(compareRail.cards) ? compareRail.cards : [];
+  if (!cards.length) {
+    return `<div class="aw-empty aw-compare-empty">Закрепи 2–5 user cards, чтобы рядом сравнивать сегмент, план, signals, payments и operator note без тяжёлого перехода между карточками.</div>`;
+  }
+  return cards.map((item) => {
+    const pinPayload = escapeHtml(JSON.stringify({
+      userId: Number(item.userId || 0) || 0,
+      tgId: Number(item.tgId || 0) || 0,
+      username: String(item.username || '').trim(),
+      segment: String(item.segment || '').trim(),
+    }));
+    const signalChips = Array.isArray(item.signalChips) ? item.signalChips : [];
+    return `
+      <article class="aw-compare-card">
+        <div class="aw-compare-card-head">
+          <div class="aw-stack aw-gap-xs">
+            <strong class="aw-cell-title">${escapeHtml(item.displayName || ('user #' + (item.userId || '—')))}</strong>
+            <small>user_id ${Number(item.userId || 0) || '—'} · tg_id ${Number(item.tgId || 0) || '—'}${item.username ? ` · @${escapeHtml(item.username)}` : ''}</small>
+          </div>
+          <div class="aw-inline-chips aw-inline-chips-tight">
+            <span class="aw-stat-chip is-soft">${escapeHtml(item.segmentLabel || 'пользователь')}</span>
+            <span class="aw-stat-chip ${item.status === 'banned' ? 'is-warn' : 'is-good'}">${item.status === 'banned' ? 'banned' : 'active'}</span>
+          </div>
+        </div>
+        <div class="aw-inline-chips aw-inline-chips-tight">
+          <span class="aw-stat-chip ${item.plan ? 'is-accent' : 'is-muted'}">${escapeHtml(item.plan ? `plan · ${item.plan}` : 'plan · none')}</span>
+          <span class="aw-stat-chip ${Number(item.credits || 0) > 0 ? 'is-good' : 'is-muted'}">${escapeHtml(`credits · ${Number(item.credits || 0)}`)}</span>
+          <span class="aw-stat-chip ${item.hasChannel ? 'is-good' : 'is-warn'}">${item.hasChannel ? 'channel · yes' : 'channel · no'}</span>
+          <span class="aw-stat-chip ${Number(item.paymentsCount || 0) > 0 ? 'is-good' : 'is-muted'}">${escapeHtml(`pay x${Number(item.paymentsCount || 0)}`)}</span>
+        </div>
+        <div class="aw-inline-chips aw-inline-chips-tight">
+          ${renderUsersInlineChips(signalChips)}
+        </div>
+        <div class="aw-list aw-compare-card-meta">
+          <div class="aw-list-item"><strong>Последняя активность</strong><small>${escapeHtml(formatDate(item.lastKnownActivityAt))}</small></div>
+          <div class="aw-list-item"><strong>Последний платёж</strong><small>${escapeHtml(formatDate(item.lastPaymentAt))}</small></div>
+          <div class="aw-list-item"><strong>Workspace / curator</strong><small>${escapeHtml(`owned ${Number(item.workspaceCount || 0)} · curator ${Number(item.curatorCount || 0)}`)}</small></div>
+          <div class="aw-list-item"><strong>Note</strong><small>${escapeHtml(item.notePreview || 'Пока без operator note.')}</small></div>
+        </div>
+        <div class="aw-actions aw-actions-tight">
+          <button class="aw-button ghost" data-user-quick="open_card" data-user-quick-payload='${pinPayload}'>Открыть</button>
+          <button class="aw-button ghost" data-user-quick="toggle_pin" data-user-quick-payload='${pinPayload}'>Убрать</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
 function userRowPayload(item = {}) {
   return escapeHtml(JSON.stringify({
     userId: Number(item.userId || 0) || 0,
@@ -1089,10 +1179,12 @@ function userRowPayload(item = {}) {
 function renderUserRowQuickActions(item = {}) {
   const payload = userRowPayload(item);
   const inBasket = isUserInBasket(item.userId);
+  const isPinned = isUserPinned(item.userId);
   const username = String(item.username || '').trim();
   return `
     <div class="aw-row-actions">
       <button class="aw-row-action" data-user-quick="open_card" data-user-quick-payload='${payload}'>Карточка</button>
+      <button class="aw-row-action ${isPinned ? 'is-active' : ''}" data-user-quick="toggle_pin" data-user-quick-payload='${payload}'>${isPinned ? 'Pinned' : 'Pin'}</button>
       <button class="aw-row-action" data-user-quick="copy_tg_id" data-user-quick-payload='${payload}'>tg_id</button>
       <button class="aw-row-action" data-user-quick="copy_username" data-user-quick-payload='${payload}' ${username ? '' : 'disabled'}>${username ? 'username' : 'username —'}</button>
       <button class="aw-row-action ${inBasket ? 'is-active' : ''}" data-user-quick="toggle_basket" data-user-quick-payload='${payload}'>${inBasket ? 'В корзине' : 'В корзину'}</button>
@@ -1152,6 +1244,8 @@ function usersView(model) {
     ? { label: 'Custom slice', detail: 'Текущий state отличается от встроенных presets.' }
     : usersOperatorPresetMeta(activePresetId);
   const bulkMode = window.__usersBulkState?.mode || 'tg_ids';
+  const compareRail = model.compareRail || { maxPins: 5, pinIds: getUsersPinIds(), cards: [] };
+  const pinIds = Array.isArray(compareRail.pinIds) ? compareRail.pinIds : getUsersPinIds();
   const basketIds = getUsersBasketIds();
   const allVisibleSelected = !!items.length && items.every((item) => isUserInBasket(item.userId));
   const topPagination = renderUsersPaginationControls(pagination, 'top');
@@ -1273,6 +1367,7 @@ function usersView(model) {
           <div class="aw-basket-pill">Страница: <strong>${escapeHtml(pagination.pageLabel)}</strong></div>
           <div class="aw-basket-pill">Строки: <strong>${pagination.total > 0 ? `${pagination.fromRow}–${pagination.toRow}` : '0'}</strong> / ${pagination.total}</div>
           <div class="aw-basket-pill">Корзина: <strong>${basketIds.length}</strong> / ${Number(bulkMeta.basketMaxRows || 500)}</div>
+          <div class="aw-basket-pill">Pins: <strong>${pinIds.length}</strong> / ${Number(compareRail.maxPins || 5)}</div>
           <div class="aw-basket-pill">На странице: <strong>${pagination.pageSize}</strong></div>
           <div class="aw-users-url-meta">
             <div class="aw-basket-pill">Users URL-persisted working views: <strong>ON</strong></div>
@@ -1282,6 +1377,26 @@ function usersView(model) {
 
         ${topPagination}
       </div>
+
+      <section class="aw-compare-rail">
+        <div class="aw-utility-head">
+          <div>
+            <strong>Users compare / pin rail</strong>
+            <span>Временно закрепляет 2–5 user cards для side-by-side ops review без тяжёлого redesign и без новых write-path.</span>
+          </div>
+          <div class="aw-users-compare-actions">
+            <div class="aw-basket-pill">Pinned: <strong>${pinIds.length}</strong> / ${Number(compareRail.maxPins || 5)}</div>
+            <button class="aw-button ghost" id="clearUsersPinsBtn" ${pinIds.length ? '' : 'disabled'}>Очистить pins</button>
+          </div>
+        </div>
+        <div class="aw-toolbar-note">
+          <span class="aw-muted">Pins теперь живут в users URL state и переживают refresh / reopen вместе с текущим working slice.</span>
+          <span class="aw-muted">Rail остаётся read-only: сравнение использует только уже существующие user-card signals, note и payment/workspace summary.</span>
+        </div>
+        <div class="aw-compare-grid">
+          ${renderUsersCompareCards(compareRail)}
+        </div>
+      </section>
 
       <section class="aw-action-ready-rail">
         <div class="aw-utility-head">
@@ -2273,12 +2388,13 @@ async function render() {
   } else if (route.page === 'users') {
     const state = hydrateUsersStateFromLocation();
     syncUsersUrlState(state, { replace: true });
-    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', sort_by: state.sortBy || 'created_desc', cohort_view: state.cohortView || 'all', limit: String(state.pageSize || 20), page: String(state.page || 0) });
+    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', sort_by: state.sortBy || 'created_desc', cohort_view: state.cohortView || 'all', limit: String(state.pageSize || 20), page: String(state.page || 0), pins: normalizeUsersPinIds(state.pinIds || []).join(',') });
     const res = await api(`/api/admin-web-read?section=users&${params}`);
     const model = res.data.data || { items: [] };
     const paginationPage = Number(model?.pagination?.page ?? state.page ?? 0) || 0;
     const paginationSize = Number(model?.pagination?.pageSize ?? state.pageSize ?? 20) || 20;
-    window.__usersState = normalizeUsersState({ ...state, page: paginationPage, pageSize: paginationSize });
+    const comparePinIds = normalizeUsersPinIds(model?.compareRail?.pinIds || state.pinIds || []);
+    window.__usersState = normalizeUsersState({ ...state, page: paginationPage, pageSize: paginationSize, pinIds: comparePinIds });
     syncUsersUrlState(window.__usersState, { replace: true });
     app.innerHTML = usersView(model);
   } else if (route.page === 'userDetail') {
@@ -2342,6 +2458,7 @@ function readUsersControlsState() {
     cohortView: state.cohortView || 'all',
     page: state.page || 0,
     pageSize: Number(document.querySelector('[data-users-page-size]')?.value || state.pageSize || 20) || 20,
+    pinIds: normalizeUsersPinIds(state.pinIds || []),
   };
 }
 
@@ -2456,6 +2573,7 @@ function bindShell() {
         ...preset.state,
         page: 0,
         pageSize,
+        pinIds: getUsersPinIds(),
       };
       render();
     });
@@ -2477,6 +2595,10 @@ function bindShell() {
     button.addEventListener('click', async () => {
       await copyUsersWorkingViewUrl();
     });
+  });
+  document.getElementById('clearUsersPinsBtn')?.addEventListener('click', () => {
+    setUsersPinIds([]);
+    render();
   });
 
   app.querySelectorAll('[data-users-page-size]').forEach((select) => {
@@ -2589,6 +2711,15 @@ function bindShell() {
         }
         if (action === 'copy_username') {
           await runUserRowCopyAction(item, 'usernames');
+          return;
+        }
+        if (action === 'toggle_pin') {
+          const result = toggleUsersPin(item);
+          if (!result.ok && result.reason === 'pin_limit') {
+            alert('В compare rail можно закрепить до 5 user cards.');
+            return;
+          }
+          render();
           return;
         }
         if (action === 'toggle_basket') {

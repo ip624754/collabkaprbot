@@ -432,6 +432,55 @@ body {
 .aw-utility-head strong { display: block; font-size: 15px; }
 .aw-utility-head span { color: var(--muted); font-size: 13px; }
 .aw-toolbar-utility { margin-bottom: 0; }
+.aw-users-compare-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.aw-compare-rail {
+  border: 1px solid rgba(132,176,255,0.12);
+  background: rgba(255,255,255,0.025);
+  border-radius: 18px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+.aw-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.aw-compare-card {
+  border: 1px solid rgba(132,176,255,0.12);
+  background: rgba(255,255,255,0.03);
+  border-radius: 18px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+.aw-compare-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+.aw-compare-card-meta {
+  gap: 8px;
+}
+.aw-compare-card-meta .aw-list-item {
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+.aw-compare-empty {
+  min-height: 84px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+.aw-actions-tight {
+  gap: 8px;
+}
 .aw-basket-pill {
   border: 1px solid rgba(132,176,255,0.16);
   background: rgba(8, 18, 38, 0.7);
