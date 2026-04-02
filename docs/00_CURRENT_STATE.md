@@ -1,3 +1,5 @@
+**STEP520:** Users action-ready follow-up rail — added a compact operator block to `/admin/users` so the most common follow-up moves now sit directly next to the sort/cohort rails instead of forcing manual control changes. The new rail is intentionally narrow and reuses only existing safe contracts: `CSV current slice`, `copy tg_id`, `copy usernames`, `open top problem users`, and `open dormant payers`. Copy/export actions still flow through the same audited bulk/export handlers, while the open-actions only switch the already existing sort/cohort state. Scope remains read-only and copy-only: no new write paths, no background jobs, no custom persistence, just a faster operator follow-up layer over the existing users control plane.
+
 **STEP519:** Users cohort counters / mini topline — strengthened `/admin/users` into a more legible control plane by adding small server-backed cohort counters above the existing cohort chips. The same working cohorts (`Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, `Quiet creators`) are now counted once on the server using the same bounded users contract, but without the currently active cohort filter, so operators can still see the full working breakdown while drilling into one slice. The UI now renders this as a clickable mini topline that shares the same cohort actions as the chips below. Scope stays read-only and narrow: no new write paths, no background jobs, no custom persistence, only a clearer operator topline over the existing cohort layer.
 
 **STEP516:** Users table hierarchy polish — tightened the `/admin/users` list into a more disciplined operator surface without touching the server contract from STEP513–515. The table now has a stronger scan order: user identity first, compact plan/credits chips second, signal chips third, and an explicit `Last activity` column with freshness + exact timestamp detail. Created time is also split into cleaner date/time micro-hierarchy, so the page reads less like a raw directory dump and more like a control-plane list. Scope is UI-only and reversible: no SQL changes, no route changes, no write-surface expansion.
@@ -1768,6 +1770,13 @@ Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
 
+
+## STEP520 — Users action-ready follow-up rail
+
+- added a compact operator follow-up block to `/admin/users` with ready-made actions for `CSV current slice`, `copy tg_id`, `copy usernames`, `open top problem users`, and `open dormant payers`;
+- reused only existing safe contracts: `users_export`, `users_bulk`, `sortBy=problem_desc`, and `cohortView=dormant_payers` + `sortBy=payments_desc`;
+- kept the new layer read/copy-only and reused the same admin-web audit trail for copy/export actions;
+- added `scripts/smoke-admin-web-users-followup-rail-contract.js` and wired it into `package.json` + `scripts/preflight.js`.
 
 ## STEP519 — Users cohort counters / mini topline
 - Added a server-backed `Users cohort counters / mini topline` above the existing cohort chips in `/admin/users`, so operators get immediate small counters for `Все`, `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`.

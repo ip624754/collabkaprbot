@@ -190,6 +190,48 @@ body {
   display: grid;
   gap: 12px;
 }
+.aw-action-ready-rail {
+  border: 1px solid rgba(132,176,255,0.16);
+  background: rgba(255,255,255,0.032);
+  border-radius: 18px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+.aw-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.aw-action-card {
+  border: 1px solid rgba(132,176,255,0.13);
+  background: rgba(255,255,255,0.03);
+  border-radius: 16px;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.aw-action-card:hover {
+  border-color: rgba(73,176,255,0.32);
+  background: rgba(73,176,255,0.11);
+}
+.aw-action-card span {
+  display: block;
+  color: var(--soft);
+  font-size: 12px;
+}
+.aw-action-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 16px;
+}
+.aw-action-card small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.4;
+}
 .aw-cohort-topline {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

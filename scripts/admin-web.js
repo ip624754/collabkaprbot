@@ -673,6 +673,22 @@ function usersCohortCounterCards(counters = {}, currentCohortView = 'all') {
   }).join('');
 }
 
+
+function usersActionSliceLabel(state = {}) {
+  const bits = [];
+  const segment = String(state.segment || 'all').trim().toLowerCase();
+  if (segment !== 'all') bits.push(segmentLabel(segment));
+  if (String(state.cohortView || 'all').trim().toLowerCase() !== 'all') bits.push(usersCohortMeta(state.cohortView).label);
+  bits.push(usersSortMeta(state.sortBy || 'created_desc').label);
+  if (String(state.planState || 'all') !== 'all') bits.push(String(state.planState || '').replace(/^with_/, '').replace(/^no_/, 'без '));
+  if (String(state.creditsState || 'all') !== 'all') bits.push(String(state.creditsState || '').replace(/^with_/, '').replace(/^no_/, 'без '));
+  if (String(state.channelState || 'all') !== 'all') bits.push(String(state.channelState || '').replace(/^with_/, '').replace(/^no_/, 'без '));
+  if (String(state.paymentsState || 'all') !== 'all') bits.push(String(state.paymentsState || '').replace(/^with_/, '').replace(/^no_/, 'без '));
+  if (String(state.activityWindow || 'all') !== 'all') bits.push(activeWindowLabel(state.activityWindow));
+  if (String(state.q || '').trim()) bits.push(`поиск: ${String(state.q).trim()}`);
+  return bits.join(' · ') || 'Все пользователи';
+}
+
 function usersPlanMeta(item = {}) {
   const plan = String(item?.brandPlan || '').trim();
   if (!plan) return { label: 'без плана', tone: 'is-muted', detail: 'План не активирован' };
@@ -791,6 +807,17 @@ function usersView(model) {
   const currentPaymentsState = usersState.paymentsState || filterMeta.paymentsState || 'all';
   const currentSortBy = usersState.sortBy || filterMeta.sortBy || 'created_desc';
   const currentCohortView = usersState.cohortView || filterMeta.cohortView || 'all';
+  const currentSliceLabel = usersActionSliceLabel({
+    q: currentSearch,
+    segment: currentSegment,
+    planState: currentPlanState,
+    creditsState: currentCreditsState,
+    channelState: currentChannelState,
+    activityWindow: currentActivityWindow,
+    paymentsState: currentPaymentsState,
+    sortBy: currentSortBy,
+    cohortView: currentCohortView,
+  });
   const bulkSource = window.__usersBulkState?.source || 'current';
   const sortMeta = usersSortMeta(currentSortBy);
   const cohortMeta = usersCohortMeta(currentCohortView);
@@ -893,6 +920,47 @@ function usersView(model) {
         </div>
         <div class="aw-toolbar-note">
           <span class="aw-muted">Фильтры работают и для списка, и для CSV / bulk copy. Activity = latest known signal в user/account/payments/workspace surfaces.</span>
+        </div>
+      </section>
+
+      <section class="aw-action-ready-rail">
+        <div class="aw-utility-head">
+          <div>
+            <strong>Users action-ready follow-up rail</strong>
+            <span>Готовые follow-up действия по текущему cohort/filter slice: export, copy tg_id, copy usernames и быстрые рабочие переходы без ручной перенастройки контролов.</span>
+          </div>
+          <div class="aw-basket-pill">Slice: <strong>${escapeHtml(currentSliceLabel)}</strong></div>
+        </div>
+        <div class="aw-action-grid">
+          <button class="aw-action-card" data-users-followup="export_current">
+            <span>Экспорт</span>
+            <strong>CSV current slice</strong>
+            <small>Скачать текущий search / segment / filter / cohort с уже активной сортировкой.</small>
+          </button>
+          <button class="aw-action-card" data-users-followup="copy_tg_ids">
+            <span>Copy</span>
+            <strong>tg_id</strong>
+            <small>Быстро собрать tg_id по текущему срезу и сразу положить в буфер обмена.</small>
+          </button>
+          <button class="aw-action-card" data-users-followup="copy_usernames">
+            <span>Copy</span>
+            <strong>usernames</strong>
+            <small>Скопировать usernames по тому же working slice без переключения bulk rail вручную.</small>
+          </button>
+          <button class="aw-action-card" data-users-followup="open_top_problem_users">
+            <span>Open</span>
+            <strong>Top problem users</strong>
+            <small>Переключить приоритет на problem_desc и открыть самых проблемных без сброса остальных фильтров.</small>
+          </button>
+          <button class="aw-action-card" data-users-followup="open_dormant_payers">
+            <span>Open</span>
+            <strong>Dormant payers · ${Math.max(0, Number(cohortTopline?.dormant_payers || 0))}</strong>
+            <small>Включить cohort Dormant payers и поднять наверх тех, кого логично разбирать в follow-up.</small>
+          </button>
+        </div>
+        <div class="aw-toolbar-note">
+          <span class="aw-muted">Action-ready rail не вводит новых мутаций: он переиспользует уже существующие export / bulk / priority / cohort contracts.</span>
+          <span class="aw-muted">Copy действия идут через тот же admin-web audit trail, что и основной Bulk utility rail.</span>
         </div>
       </section>
 
@@ -1891,6 +1959,63 @@ function bindLinks() {
   });
 }
 
+function readUsersControlsState() {
+  const state = getUsersState();
+  return {
+    q: document.getElementById('usersSearch')?.value || state.q || '',
+    segment: document.getElementById('usersSegment')?.value || state.segment || 'all',
+    planState: document.getElementById('usersPlanState')?.value || state.planState || 'all',
+    creditsState: document.getElementById('usersCreditsState')?.value || state.creditsState || 'all',
+    channelState: document.getElementById('usersChannelState')?.value || state.channelState || 'all',
+    activityWindow: document.getElementById('usersActivityWindow')?.value || state.activityWindow || 'all',
+    paymentsState: document.getElementById('usersPaymentsState')?.value || state.paymentsState || 'all',
+    sortBy: document.getElementById('usersSortBy')?.value || state.sortBy || 'created_desc',
+    cohortView: document.getElementById('usersCohortView')?.value || state.cohortView || 'all',
+  };
+}
+
+function setUsersStateFromControls(overrides = {}) {
+  window.__usersState = { ...readUsersControlsState(), ...(overrides || {}) };
+}
+
+async function runUsersExportAction(scope = 'current') {
+  const state = readUsersControlsState();
+  const params = new URLSearchParams({ section: 'users_export', scope, segment: state.segment, q: state.q, plan_state: state.planState, credits_state: state.creditsState, channel_state: state.channelState, activity_window: state.activityWindow, payments_state: state.paymentsState, sort_by: state.sortBy, cohort_view: state.cohortView });
+  await downloadCsv(`/api/admin-web-read?${params.toString()}`, `users_${scope}.csv`);
+  render();
+}
+
+async function runUsersBulkCopyAction(mode = 'tg_ids', source = 'current') {
+  const state = readUsersControlsState();
+  window.__usersBulkState = { mode, source };
+  const params = new URLSearchParams({ section: 'users_bulk', mode, segment: state.segment, q: state.q, plan_state: state.planState, credits_state: state.creditsState, channel_state: state.channelState, activity_window: state.activityWindow, payments_state: state.paymentsState, sort_by: state.sortBy, cohort_view: state.cohortView });
+  if (source === 'basket') {
+    const ids = getUsersBasketIds();
+    if (!ids.length) {
+      alert('Корзина пуста. Сначала отметь пользователей в таблице.');
+      return;
+    }
+    params.set('ids', ids.join(','));
+  }
+  const res = await api(`/api/admin-web-read?${params.toString()}`);
+  if (!res.ok) {
+    alert(`Не удалось собрать список: ${res.data?.error || 'unknown'}`);
+    return;
+  }
+  const payload = res.data?.data || {};
+  if (!String(payload.text || '').trim()) {
+    alert('Пустой результат: для выбранного режима нет данных.');
+    return;
+  }
+  const copied = await copyTextToClipboard(payload.text || '');
+  if (!copied) {
+    alert('Не удалось скопировать в буфер обмена.');
+    return;
+  }
+  alert(`Скопировано: ${payload.rowsCount || 0} строк (${usersBulkModeLabel(payload.mode)} · ${basketSourceLabel(source)}).`);
+  render();
+}
+
 function bindShell() {
   bindLinks();
   document.getElementById('logoutBtn')?.addEventListener('click', async () => {
@@ -1901,66 +2026,25 @@ function bindShell() {
   });
   document.getElementById('refreshBtn')?.addEventListener('click', () => render());
   document.getElementById('applyUsersFilters')?.addEventListener('click', () => {
-    window.__usersState = {
-      q: document.getElementById('usersSearch')?.value || '',
-      segment: document.getElementById('usersSegment')?.value || 'all',
-      planState: document.getElementById('usersPlanState')?.value || 'all',
-      creditsState: document.getElementById('usersCreditsState')?.value || 'all',
-      channelState: document.getElementById('usersChannelState')?.value || 'all',
-      activityWindow: document.getElementById('usersActivityWindow')?.value || 'all',
-      paymentsState: document.getElementById('usersPaymentsState')?.value || 'all',
-      sortBy: document.getElementById('usersSortBy')?.value || 'created_desc',
-      cohortView: document.getElementById('usersCohortView')?.value || 'all',
-    };
+    setUsersStateFromControls();
     render();
   });
   app.querySelectorAll('[data-users-priority]').forEach((button) => {
     button.addEventListener('click', () => {
-      window.__usersState = {
-        q: document.getElementById('usersSearch')?.value || '',
-        segment: document.getElementById('usersSegment')?.value || 'all',
-        planState: document.getElementById('usersPlanState')?.value || 'all',
-        creditsState: document.getElementById('usersCreditsState')?.value || 'all',
-        channelState: document.getElementById('usersChannelState')?.value || 'all',
-        activityWindow: document.getElementById('usersActivityWindow')?.value || 'all',
-        paymentsState: document.getElementById('usersPaymentsState')?.value || 'all',
-        sortBy: button.getAttribute('data-users-priority') || 'created_desc',
-        cohortView: document.getElementById('usersCohortView')?.value || 'all',
-      };
+      setUsersStateFromControls({ sortBy: button.getAttribute('data-users-priority') || 'created_desc' });
       render();
     });
   });
   app.querySelectorAll('[data-users-cohort]').forEach((button) => {
     button.addEventListener('click', () => {
-      window.__usersState = {
-        q: document.getElementById('usersSearch')?.value || '',
-        segment: document.getElementById('usersSegment')?.value || 'all',
-        planState: document.getElementById('usersPlanState')?.value || 'all',
-        creditsState: document.getElementById('usersCreditsState')?.value || 'all',
-        channelState: document.getElementById('usersChannelState')?.value || 'all',
-        activityWindow: document.getElementById('usersActivityWindow')?.value || 'all',
-        paymentsState: document.getElementById('usersPaymentsState')?.value || 'all',
-        sortBy: document.getElementById('usersSortBy')?.value || 'created_desc',
-        cohortView: button.getAttribute('data-users-cohort') || 'all',
-      };
+      setUsersStateFromControls({ cohortView: button.getAttribute('data-users-cohort') || 'all' });
       render();
     });
   });
   document.getElementById('exportUsersBtn')?.addEventListener('click', async () => {
     const scope = document.getElementById('usersExportScope')?.value || 'current';
-    const q = document.getElementById('usersSearch')?.value || '';
-    const segment = document.getElementById('usersSegment')?.value || 'all';
-    const planState = document.getElementById('usersPlanState')?.value || 'all';
-    const creditsState = document.getElementById('usersCreditsState')?.value || 'all';
-    const channelState = document.getElementById('usersChannelState')?.value || 'all';
-    const activityWindow = document.getElementById('usersActivityWindow')?.value || 'all';
-    const paymentsState = document.getElementById('usersPaymentsState')?.value || 'all';
-    const sortBy = document.getElementById('usersSortBy')?.value || 'created_desc';
-    const cohortView = document.getElementById('usersCohortView')?.value || 'all';
-    const params = new URLSearchParams({ section: 'users_export', scope, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState, sort_by: sortBy, cohort_view: cohortView });
     try {
-      await downloadCsv(`/api/admin-web-read?${params.toString()}`, `users_${scope}.csv`);
-      render();
+      await runUsersExportAction(scope);
     } catch (err) {
       alert(`Не удалось выгрузить CSV: ${err?.message || 'unknown'}`);
     }
@@ -1968,42 +2052,38 @@ function bindShell() {
   document.getElementById('copyUsersBulkBtn')?.addEventListener('click', async () => {
     const mode = document.getElementById('usersBulkMode')?.value || 'tg_ids';
     const source = document.getElementById('usersBulkSource')?.value || 'current';
-    const q = document.getElementById('usersSearch')?.value || '';
-    const segment = document.getElementById('usersSegment')?.value || 'all';
-    const planState = document.getElementById('usersPlanState')?.value || 'all';
-    const creditsState = document.getElementById('usersCreditsState')?.value || 'all';
-    const channelState = document.getElementById('usersChannelState')?.value || 'all';
-    const activityWindow = document.getElementById('usersActivityWindow')?.value || 'all';
-    const paymentsState = document.getElementById('usersPaymentsState')?.value || 'all';
-    const sortBy = document.getElementById('usersSortBy')?.value || 'created_desc';
-    const cohortView = document.getElementById('usersCohortView')?.value || 'all';
-    window.__usersBulkState = { mode, source };
-    const params = new URLSearchParams({ section: 'users_bulk', mode, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState, sort_by: sortBy, cohort_view: cohortView });
-    if (source === 'basket') {
-      const ids = getUsersBasketIds();
-      if (!ids.length) {
-        alert('Корзина пуста. Сначала отметь пользователей в таблице.');
-        return;
+    await runUsersBulkCopyAction(mode, source);
+  });
+
+  app.querySelectorAll('[data-users-followup]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const action = button.getAttribute('data-users-followup') || '';
+      try {
+        if (action === 'export_current') {
+          await runUsersExportAction('current');
+          return;
+        }
+        if (action === 'copy_tg_ids') {
+          await runUsersBulkCopyAction('tg_ids', 'current');
+          return;
+        }
+        if (action === 'copy_usernames') {
+          await runUsersBulkCopyAction('usernames', 'current');
+          return;
+        }
+        if (action === 'open_top_problem_users') {
+          setUsersStateFromControls({ sortBy: 'problem_desc', cohortView: 'all' });
+          render();
+          return;
+        }
+        if (action === 'open_dormant_payers') {
+          setUsersStateFromControls({ sortBy: 'payments_desc', cohortView: 'dormant_payers' });
+          render();
+        }
+      } catch (err) {
+        alert(`Не удалось выполнить follow-up action: ${err?.message || 'unknown'}`);
       }
-      params.set('ids', ids.join(','));
-    }
-    const res = await api(`/api/admin-web-read?${params.toString()}`);
-    if (!res.ok) {
-      alert(`Не удалось собрать список: ${res.data?.error || 'unknown'}`);
-      return;
-    }
-    const payload = res.data?.data || {};
-    if (!String(payload.text || '').trim()) {
-      alert('Пустой результат: для выбранного режима нет данных.');
-      return;
-    }
-    const copied = await copyTextToClipboard(payload.text || '');
-    if (!copied) {
-      alert('Не удалось скопировать в буфер обмена.');
-      return;
-    }
-    alert(`Скопировано: ${payload.rowsCount || 0} строк (${usersBulkModeLabel(payload.mode)} · ${basketSourceLabel(source)}).`);
-    render();
+    });
   });
   document.getElementById('selectVisibleUsersBtn')?.addEventListener('click', () => {
     const rows = app.querySelectorAll('[data-user-check]');

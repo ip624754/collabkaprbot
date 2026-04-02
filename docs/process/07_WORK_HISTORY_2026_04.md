@@ -1,5 +1,19 @@
 # Work History — 2026-04
 
+## STEP520 — Users action-ready follow-up rail
+
+Date: 2026-04-02
+
+Scope:
+- added a compact `Users action-ready follow-up rail` to `/admin/users` so operators can trigger the most common next moves without manually reconfiguring the export/bulk/priority controls;
+- reused only the existing safe users contracts: `CSV current slice`, `copy tg_id`, `copy usernames`, `open top problem users`, and `open dormant payers`;
+- extracted small client helpers in `scripts/admin-web.js` so export and bulk-copy actions share one contract across the main buttons and the new follow-up block;
+- added dedicated styles in `styles/admin-web.css` and a new source smoke guard `scripts/smoke-admin-web-users-followup-rail-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only / copy-only: no new write paths, no destructive bulk actions, no background jobs, no persistence for custom views;
+- copy/export actions keep using the same existing admin-web audit trail as STEP513–514.
+
 ## STEP519 — Users cohort counters / mini topline
 
 Date: 2026-04-02
