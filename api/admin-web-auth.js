@@ -2,8 +2,8 @@ import { approveChallenge, appendAdminWebAudit, clearAuthCookie, createLoginChal
 import { getSearchParam, html, json, readJsonBody, timingSafeEq } from '../src/lib/adminWeb/common.js';
 import { CFG } from '../src/lib/config.js';
 
-function page(title, body) {
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#071021;color:#eef3ff;display:grid;place-items:center;min-height:100vh;padding:24px}.card{max-width:560px;background:rgba(12,21,44,.88);border:1px solid rgba(133,177,255,.25);border-radius:20px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.35)}h1{margin:0 0 10px;font-size:28px}p{margin:8px 0;color:#bfc9e6;line-height:1.5}</style></head><body><div class="card"><h1>${title}</h1><p>${body}</p><p>Можно вернуться в веб-админку и обновить статус входа.</p></div></body></html>`;
+function page(title, body, ctaHtml = '') {
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#071021;color:#eef3ff;display:grid;place-items:center;min-height:100vh;padding:24px}.card{max-width:560px;background:rgba(12,21,44,.88);border:1px solid rgba(133,177,255,.25);border-radius:20px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.35)}h1{margin:0 0 10px;font-size:28px}p{margin:8px 0;color:#bfc9e6;line-height:1.5}.actions{margin-top:18px;display:flex;gap:12px;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 16px;border-radius:12px;background:rgba(42,84,170,.35);border:1px solid rgba(133,177,255,.28);color:#eef3ff;text-decoration:none;font-weight:600}</style></head><body><div class="card"><h1>${title}</h1><p>${body}</p><p>Можно вернуться в веб-админку и обновить статус входа.</p>${ctaHtml ? `<div class="actions">${ctaHtml}</div>` : ''}</div></body></html>`;
 }
 
 function getAction(req) {
@@ -21,9 +21,11 @@ export default async function handler(req, res) {
     const exp = Number(getSearchParam(req, 'exp', '0') || 0) || 0;
     const sig = String(getSearchParam(req, 'sig', '') || '').trim();
     const result = await approveChallenge({ challengeId, decision, actorTgId: actor, exp, sig });
-    if (!result.ok) return html(res, 400, page('Не удалось обработать вход', `Причина: ${String(result.error || 'unknown')}`));
-    if (decision === 'deny') return html(res, 200, page('Вход отклонён', 'Этот login challenge помечен как denied.'));
-    return html(res, 200, page('Вход подтверждён', 'Challenge помечен как approved.'));
+    const returnHref = `${String(CFG.PUBLIC_BASE_URL || '').replace(/\/$/, '')}/admin/login?challenge=${encodeURIComponent(challengeId)}`;
+    const returnLink = CFG.PUBLIC_BASE_URL ? `<a class="btn" href="${returnHref}">Вернуться в веб-админку</a>` : '';
+    if (!result.ok) return html(res, 400, page('Не удалось обработать вход', `Причина: ${String(result.error || 'unknown')}`, returnLink));
+    if (decision === 'deny') return html(res, 200, page('Вход отклонён', 'Этот login challenge помечен как denied.', returnLink));
+    return html(res, 200, page('Вход подтверждён', 'Challenge помечен как approved. Веб-админка может автоматически подтянуть этот статус.', returnLink));
   }
 
   if (action === 'start') {
@@ -63,7 +65,15 @@ export default async function handler(req, res) {
     const code = String(body.code || '').trim();
     if (!challengeId || !code) return json(res, 400, { ok: false, error: 'challenge_and_code_required' });
     const verified = await verifyChallengeCode(challengeId, code);
-    if (!verified.ok) return json(res, 401, { ok: false, error: verified.error || 'invalid_code' });
+    if (!verified.ok) {
+      const challenge = await getChallenge(challengeId);
+      if (challenge && String(challenge.status || '') === 'approved') {
+        const issued = await issueSession(res, challengeId);
+        if (!issued.ok) return json(res, 500, { ok: false, error: issued.error || 'session_issue_failed' });
+        return json(res, 200, { ok: true, reusedApprovedChallenge: true });
+      }
+      return json(res, 401, { ok: false, error: verified.error || 'invalid_code' });
+    }
     const issued = await issueSession(res, challengeId);
     if (!issued.ok) return json(res, 500, { ok: false, error: issued.error || 'session_issue_failed' });
     return json(res, 200, { ok: true });

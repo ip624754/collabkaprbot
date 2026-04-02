@@ -216,6 +216,7 @@ body {
 .aw-login-grid { display: grid; gap: 14px; margin-top: 18px; }
 .aw-login-help { font-size: 14px; color: var(--soft); }
 .aw-error { color: #ffd4de; background: rgba(255, 107, 139, 0.12); border: 1px solid rgba(255,107,139,0.2); border-radius: 14px; padding: 12px 14px; }
+.aw-info { color: #dce7ff; background: rgba(93, 144, 255, 0.10); border: 1px solid rgba(132,176,255,0.22); border-radius: 14px; padding: 12px 14px; }
 .aw-muted { color: var(--muted); }
 .aw-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .aw-empty { color: var(--soft); padding: 18px 0; }

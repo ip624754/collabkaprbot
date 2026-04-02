@@ -1,3 +1,21 @@
+
+## STEP510A — Web Admin login flow hardening + docs canon restore
+
+Date: 2026-04-02
+
+Scope:
+- hardened the web-admin login UX so a pending login challenge survives refresh/return to page via `sessionStorage` + `?challenge=` URL state;
+- added auto-polling of approve status while the login page is waiting for Telegram confirmation, so desktop login can complete without a manual `Проверить approve` loop;
+- normalized raw auth errors (`invalid_code`, `challenge_expired`, etc.) into clear RU operator labels;
+- changed `verify_code` to gracefully reuse an already-approved challenge instead of failing with confusing `invalid_code` when approve happened first;
+- improved the Telegram decision landing page with a direct return-link back to `/admin/login?challenge=...`;
+- restored docs canon after sale-prep drift by adding missing STEP502/STEP503 docs and refreshing work-history/current-state continuity.
+
+Acceptance / notes:
+- auth model is unchanged: secret → Telegram approve/code → session;
+- no new API entrypoints and no non-login polling were introduced;
+- added `scripts/smoke-admin-web-login-contract.js` so the hardened login contract is now source-guarded.
+
 ## STEP501A — Admin-web WHATWG URL cleanup
 
 Date: 2026-04-01
@@ -50,6 +68,33 @@ Acceptance / notes:
 
 Collateral low-risk fix:
 - `index.html` синхронизирован с реально существующим OG asset `assets/social/collabka-og-1200x630.png` и width/height `1200x630`, потому что в пользовательском baseline repo оставался stale meta path `collabka-og.png`.
+
+
+## STEP502 — Overview polish + metrics light
+
+Date: 2026-04-02
+
+Scope:
+- upgraded `/admin` from a shell snapshot into a stronger founder/operator cockpit with `Last updated`, segment split, light metrics, a clearer warnings strip, and a more useful recent admin-web audit block;
+- extended the overview read model so one `section=overview` response now carries summary cards, segment counters, bounded metrics, warnings, and recent audit in one hobby-safe snapshot;
+- kept the page strictly read-first: no polling, no cron dependency, no new dangerous actions.
+
+Acceptance / notes:
+- Overview stays hobby-safe and answers four founder questions quickly: system state, audience split, warnings, and where to drill next;
+- no charts or heavy analytics were introduced in this step.
+
+## STEP503 — User Card polish + operator usability
+
+Date: 2026-04-02
+
+Scope:
+- strengthened `/admin/users/[id]` into a real operator screen with a denser header, account/access summary, recent activity summary, stronger note UX, and recent admin actions trace;
+- preserved list context on back navigation via URL state (`q` / `segment`) so drilldown no longer resets the operator's place in the list;
+- normalized note write behaviour (`blank => clear`) and tightened note audit semantics around `set_user_note` / `clear_user_note`.
+
+Acceptance / notes:
+- one user-card load still equals one `section=user` read request;
+- the step stays hobby-safe and does not add payments/plan/segment mutation.
 
 
 ## STEP504 — Runtime / founder diagnostics polish

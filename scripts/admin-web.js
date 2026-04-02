@@ -128,6 +128,126 @@ function routeInfo() {
   return { page: 'overview' };
 }
 
+const LOGIN_STATE_KEY = 'collabka_admin_login_state_v1';
+let loginStatusTimer = null;
+
+function authErrorLabel(code) {
+  const key = String(code || '').trim().toLowerCase();
+  return ({
+    invalid_secret: 'Неверный admin secret.',
+    admin_web_disabled: 'Web-админка сейчас отключена.',
+    admin_web_not_configured: 'Web-админка настроена не полностью.',
+    admin_web_secret_missing: 'ADMIN_WEB_SECRET не задан.',
+    approvers_not_configured: 'Не настроены approver TG ids.',
+    telegram_notify_failed: 'Не удалось отправить запрос подтверждения в Telegram.',
+    challenge_and_code_required: 'Нужны challenge и одноразовый код.',
+    invalid_code: 'Неверный одноразовый код.',
+    challenge_not_found: 'Challenge не найден. Запроси новый вход.',
+    challenge_expired: 'Challenge истёк. Запроси новый вход.',
+    challenge_not_pending: 'Этот challenge уже обработан. Проверь approve или запроси новый вход.',
+    challenge_id_required: 'Не найден challenge для проверки.',
+    denied: 'Вход отклонён в Telegram.',
+    status_failed: 'Не удалось проверить статус approve.',
+    login_failed: 'Не удалось запросить вход.',
+  })[key] || (key ? `Ошибка: ${key}` : 'Произошла ошибка входа.');
+}
+
+function getLoginState() {
+  return window.__loginState || {};
+}
+
+function readPersistedLoginState() {
+  let stored = {};
+  try {
+    stored = JSON.parse(sessionStorage.getItem(LOGIN_STATE_KEY) || '{}') || {};
+  } catch {
+    stored = {};
+  }
+  const params = new URLSearchParams(location.search);
+  const challengeId = String(params.get('challenge') || stored.challengeId || '').trim();
+  const merged = { ...stored, challengeId };
+  if (challengeId) window.__loginState = merged;
+  else if (!window.__loginState) window.__loginState = {};
+  return getLoginState();
+}
+
+function writeLoginState(state = {}) {
+  const next = { ...(state || {}) };
+  if (!next.challengeId) delete next.challengeId;
+  if (!next.error) delete next.error;
+  window.__loginState = next;
+  try {
+    if (Object.keys(next).length) sessionStorage.setItem(LOGIN_STATE_KEY, JSON.stringify(next));
+    else sessionStorage.removeItem(LOGIN_STATE_KEY);
+  } catch {}
+  const params = new URLSearchParams(location.search);
+  if (next.challengeId) params.set('challenge', next.challengeId);
+  else params.delete('challenge');
+  const q = params.toString();
+  const target = `/admin/login${q ? `?${q}` : ''}`;
+  if (`${location.pathname}${location.search}` !== target) history.replaceState({}, '', target);
+}
+
+function clearLoginState() {
+  writeLoginState({});
+}
+
+function stopLoginStatusPolling() {
+  if (loginStatusTimer) {
+    window.clearInterval(loginStatusTimer);
+    loginStatusTimer = null;
+  }
+}
+
+async function checkLoginChallengeStatus({ silent = false } = {}) {
+  const challengeId = String(getLoginState()?.challengeId || '').trim();
+  if (!challengeId) return { ok: false, error: 'challenge_id_required' };
+  const res = await api(`/api/admin-web-auth?action=status&challengeId=${encodeURIComponent(challengeId)}`);
+  if (!res.ok) {
+    const error = authErrorLabel(res.data?.error || 'status_failed');
+    if (!silent) {
+      writeLoginState({ challengeId, error });
+      render();
+    }
+    return { ok: false, error };
+  }
+  const status = String(res.data?.status || 'pending');
+  if (status === 'approved') {
+    stopLoginStatusPolling();
+    clearLoginState();
+    history.replaceState({}, '', '/admin');
+    await render();
+    return { ok: true, status };
+  }
+  if (status === 'denied') {
+    stopLoginStatusPolling();
+    writeLoginState({ challengeId, error: authErrorLabel('denied') });
+    if (!silent) render();
+    return { ok: false, status };
+  }
+  if (status === 'expired') {
+    stopLoginStatusPolling();
+    writeLoginState({ challengeId, error: authErrorLabel('challenge_expired') });
+    if (!silent) render();
+    return { ok: false, status };
+  }
+  if (!silent) {
+    writeLoginState({ challengeId, error: 'Approve ещё не подтверждён. Окно само проверяет статус каждые несколько секунд.' });
+    render();
+  }
+  return { ok: true, status };
+}
+
+function startLoginStatusPolling() {
+  stopLoginStatusPolling();
+  const challengeId = String(getLoginState()?.challengeId || '').trim();
+  if (!challengeId) return;
+  loginStatusTimer = window.setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    checkLoginChallengeStatus({ silent: true });
+  }, 2500);
+}
+
 function navLink(href, label, active) {
   return `<a href="${href}" data-link class="${active ? 'is-active' : ''}">${label}</a>`;
 }
@@ -177,6 +297,7 @@ function shell(title, subtitle, body, session) {
 }
 
 function loginView(state = {}) {
+  const hasChallenge = !!state.challengeId;
   return `
     <div class="aw-login">
       <div class="aw-login-card">
@@ -191,11 +312,14 @@ function loginView(state = {}) {
         <p>Hobby-safe operator console: secret → Telegram approve / code → session.</p>
         <div class="aw-login-grid">
           ${state.error ? `<div class="aw-error">${escapeHtml(state.error)}</div>` : ''}
-          <input id="secretInput" class="aw-input" placeholder="Admin secret" autocomplete="off" />
+          ${hasChallenge ? `<div class="aw-info">Challenge уже создан. Оставь это окно открытым: approve подтягивается автоматически. Можно также ввести fallback code из Telegram.</div>` : ''}
+          <input id="secretInput" class="aw-input" placeholder="Admin secret" autocomplete="off" ${hasChallenge ? 'disabled' : ''} />
           <div class="aw-actions">
-            <button class="aw-button" id="startLoginBtn">Запросить вход</button>
+            ${hasChallenge
+              ? `<button class="aw-button secondary" id="newChallengeBtn">Запросить новый вход</button><button class="aw-button ghost" id="resetChallengeBtn">Сбросить challenge</button>`
+              : `<button class="aw-button" id="startLoginBtn">Запросить вход</button>`}
           </div>
-          <div id="challengeBox" style="display:${state.challengeId ? 'block' : 'none'}">
+          <div id="challengeBox" style="display:${hasChallenge ? 'block' : 'none'}">
             <p class="aw-login-help">Challenge: <code id="challengeCodeBox">${escapeHtml(state.challengeId || '')}</code></p>
             <p class="aw-login-help">Проверь Telegram approve или введи одноразовый код ниже.</p>
             <div class="aw-login-grid">
@@ -1101,10 +1225,14 @@ async function ensureSession() {
 async function render() {
   const route = routeInfo();
   if (route.page === 'login') {
-    app.innerHTML = loginView(window.__loginState || {});
+    readPersistedLoginState();
+    app.innerHTML = loginView(getLoginState());
     bindLogin();
+    if (getLoginState()?.challengeId) startLoginStatusPolling();
+    else stopLoginStatusPolling();
     return;
   }
+  stopLoginStatusPolling();
   const session = await ensureSession();
   if (!session) {
     history.replaceState({}, '', '/admin/login');
@@ -1291,45 +1419,43 @@ function bindLogin() {
     const secret = document.getElementById('secretInput')?.value || '';
     const res = await api('/api/admin-web-auth?action=start', { method: 'POST', body: JSON.stringify({ secret }) });
     if (!res.ok) {
-      window.__loginState = { error: res.data?.error || 'login_failed' };
+      writeLoginState({ error: authErrorLabel(res.data?.error || 'login_failed') });
       return render();
     }
-    window.__loginState = { challengeId: res.data.challengeId };
+    writeLoginState({ challengeId: res.data.challengeId });
+    await render();
+  });
+
+  document.getElementById('newChallengeBtn')?.addEventListener('click', () => {
+    clearLoginState();
     render();
   });
+
+  document.getElementById('resetChallengeBtn')?.addEventListener('click', () => {
+    clearLoginState();
+    render();
+  });
+
   document.getElementById('verifyCodeBtn')?.addEventListener('click', async () => {
-    const challengeId = window.__loginState?.challengeId || '';
+    const challengeId = String(getLoginState()?.challengeId || '').trim();
     const code = document.getElementById('otpInput')?.value || '';
     const res = await api('/api/admin-web-auth?action=verify_code', { method: 'POST', body: JSON.stringify({ challengeId, code }) });
     if (!res.ok) {
-      window.__loginState = { challengeId, error: res.data?.error || 'invalid_code' };
+      const statusCheck = await checkLoginChallengeStatus({ silent: true });
+      if (statusCheck.ok && statusCheck.status === 'approved') return;
+      writeLoginState({ challengeId, error: authErrorLabel(res.data?.error || 'invalid_code') });
       return render();
     }
+    clearLoginState();
     history.replaceState({}, '', '/admin');
-    window.__loginState = {};
     render();
   });
+
   document.getElementById('checkStatusBtn')?.addEventListener('click', async () => {
-    const challengeId = window.__loginState?.challengeId || '';
-    if (!challengeId) return;
-    const res = await api(`/api/admin-web-auth?action=status&challengeId=${encodeURIComponent(challengeId)}`);
-    if (!res.ok) {
-      window.__loginState = { challengeId, error: res.data?.error || 'status_failed' };
-      return render();
-    }
-    if (res.data?.status === 'approved') {
-      history.replaceState({}, '', '/admin');
-      window.__loginState = {};
-      return render();
-    }
-    if (res.data?.status === 'denied') {
-      window.__loginState = { error: 'Вход отклонён в Telegram.' };
-      return render();
-    }
-    window.__loginState = { challengeId, error: 'Approve ещё не подтверждён. Попробуй снова.' };
-    render();
+    await checkLoginChallengeStatus({ silent: false });
   });
 }
 
 window.addEventListener('popstate', () => render());
+window.addEventListener('beforeunload', () => stopLoginStatusPolling());
 render();
