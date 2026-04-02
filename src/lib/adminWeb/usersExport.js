@@ -1,4 +1,4 @@
-import { exportUsersDirectory } from '../../db/queries.js';
+import { exportUsersDirectory, normalizeUsersDirectoryFilters } from '../../db/queries.js';
 import { getAdminUserNotesBulk } from './notes.js';
 import { CFG } from '../config.js';
 
@@ -91,10 +91,11 @@ function buildFilenameTag(resolved = {}, q = '') {
   return `${base}${q ? '_search' : ''}`;
 }
 
-export async function buildUsersCsvExport({ scope = 'current', currentSegment = 'all', q = '' } = {}) {
+export async function buildUsersCsvExport({ scope = 'current', currentSegment = 'all', q = '', filters = {} } = {}) {
   const resolved = normalizeUsersExportScope(scope, currentSegment);
   const search = String(q || '').trim();
-  const { rows, truncated } = await exportUsersDirectory(resolved.segment, search);
+  const normalizedFilters = normalizeUsersDirectoryFilters({ segment: resolved.segment, ...(filters || {}) });
+  const { rows, truncated, filters: appliedFilters } = await exportUsersDirectory(resolved.segment, search, normalizedFilters);
   const noteMap = await getAdminUserNotesBulk((rows || []).map((row) => Number(row.user_id || 0)));
 
   const header = [
@@ -110,6 +111,9 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
     'brand_plan_until_msk',
     'brand_credits',
     'brand_credits_spent',
+    'has_channel',
+    'has_payments',
+    'last_known_activity_msk',
     'has_note',
   ].join(',');
 
@@ -128,6 +132,9 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
       csvEsc(msk(row.brand_plan_until)),
       Number(row.brand_credits || 0),
       Number(row.brand_credits_spent || 0),
+      row.has_channel ? '1' : '0',
+      row.has_payments ? '1' : '0',
+      csvEsc(msk(row.last_known_activity_at)),
       hasNote ? '1' : '0',
     ].join(',');
   });
@@ -145,6 +152,7 @@ export async function buildUsersCsvExport({ scope = 'current', currentSegment = 
     segment: resolved.segment,
     search,
     scopeLabel: resolved.scopeLabel,
+    filters: appliedFilters || normalizedFilters,
   };
 }
 

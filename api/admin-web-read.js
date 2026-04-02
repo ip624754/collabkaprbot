@@ -28,6 +28,11 @@ export default async function handler(req, res) {
     const data = await getUsersList({
       q: getSearchParam(req, 'q', ''),
       segment: getSearchParam(req, 'segment', 'all'),
+      planState: getSearchParam(req, 'plan_state', 'all'),
+      creditsState: getSearchParam(req, 'credits_state', 'all'),
+      channelState: getSearchParam(req, 'channel_state', 'all'),
+      activityWindow: getSearchParam(req, 'activity_window', 'all'),
+      paymentsState: getSearchParam(req, 'payments_state', 'all'),
       limit: getSearchParam(req, 'limit', '20'),
       page: getSearchParam(req, 'page', '0'),
     });
@@ -38,6 +43,13 @@ export default async function handler(req, res) {
       scope: getSearchParam(req, 'scope', 'current'),
       currentSegment: getSearchParam(req, 'segment', 'all'),
       q: getSearchParam(req, 'q', ''),
+      filters: {
+        planState: getSearchParam(req, 'plan_state', 'all'),
+        creditsState: getSearchParam(req, 'credits_state', 'all'),
+        channelState: getSearchParam(req, 'channel_state', 'all'),
+        activityWindow: getSearchParam(req, 'activity_window', 'all'),
+        paymentsState: getSearchParam(req, 'payments_state', 'all'),
+      },
     });
     await appendAdminWebAudit({
       section: 'users',
@@ -45,7 +57,7 @@ export default async function handler(req, res) {
       actorTgId: session.actorTgId,
       targetType: 'users_export',
       targetId: `${exportPayload.scope}:${exportPayload.segment}`,
-      reason: `scope=${exportPayload.scope};segment=${exportPayload.segment};q=${exportPayload.search || '-'};rows=${exportPayload.rowsCount};truncated=${exportPayload.truncated ? 1 : 0}`,
+      reason: `scope=${exportPayload.scope};segment=${exportPayload.segment};q=${exportPayload.search || '-'};plan=${exportPayload.filters?.planState || 'all'};credits=${exportPayload.filters?.creditsState || 'all'};channel=${exportPayload.filters?.channelState || 'all'};activity=${exportPayload.filters?.activityWindow || 'all'};payments=${exportPayload.filters?.paymentsState || 'all'};rows=${exportPayload.rowsCount};truncated=${exportPayload.truncated ? 1 : 0}`,
       oldJson: null,
       newJson: {
         filename: exportPayload.filename,
@@ -63,6 +75,13 @@ export default async function handler(req, res) {
       currentSegment: getSearchParam(req, 'segment', 'all'),
       q: getSearchParam(req, 'q', ''),
       userIds,
+      filters: {
+        planState: getSearchParam(req, 'plan_state', 'all'),
+        creditsState: getSearchParam(req, 'credits_state', 'all'),
+        channelState: getSearchParam(req, 'channel_state', 'all'),
+        activityWindow: getSearchParam(req, 'activity_window', 'all'),
+        paymentsState: getSearchParam(req, 'payments_state', 'all'),
+      },
     });
     await appendAdminWebAudit({
       section: 'users',
@@ -70,7 +89,7 @@ export default async function handler(req, res) {
       actorTgId: session.actorTgId,
       targetType: 'users_bulk',
       targetId: `${payload.mode}:${payload.source}`,
-      reason: `mode=${payload.mode};source=${payload.source};segment=${payload.segment};q=${payload.search || '-'};rows=${payload.rowsCount};truncated=${payload.truncated ? 1 : 0};ids=${payload.userIds.length}`,
+      reason: `mode=${payload.mode};source=${payload.source};segment=${payload.segment};q=${payload.search || '-'};plan=${payload.filters?.planState || 'all'};credits=${payload.filters?.creditsState || 'all'};channel=${payload.filters?.channelState || 'all'};activity=${payload.filters?.activityWindow || 'all'};payments=${payload.filters?.paymentsState || 'all'};rows=${payload.rowsCount};truncated=${payload.truncated ? 1 : 0};ids=${payload.userIds.length}`,
       oldJson: null,
       newJson: {
         mode: payload.mode,

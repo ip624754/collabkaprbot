@@ -1,4 +1,4 @@
-import { exportUsersDirectory, getUsersDirectoryByIds } from '../../db/queries.js';
+import { exportUsersDirectory, getUsersDirectoryByIds, normalizeUsersDirectoryFilters } from '../../db/queries.js';
 
 const ALLOWED_MODES = ['tg_ids', 'usernames', 'user_ids'];
 
@@ -41,10 +41,11 @@ export function getUsersBulkOptions() {
   ];
 }
 
-export async function buildUsersBulkPayload({ mode = 'tg_ids', currentSegment = 'all', q = '', userIds = [] } = {}) {
+export async function buildUsersBulkPayload({ mode = 'tg_ids', currentSegment = 'all', q = '', userIds = [], filters = {} } = {}) {
   const resolvedMode = normalizeMode(mode);
   const normalizedIds = normalizeIds(userIds);
   const search = String(q || '').trim();
+  const normalizedFilters = normalizeUsersDirectoryFilters({ segment: currentSegment, ...(filters || {}) });
 
   let rows = [];
   let truncated = false;
@@ -53,7 +54,7 @@ export async function buildUsersBulkPayload({ mode = 'tg_ids', currentSegment = 
     rows = await getUsersDirectoryByIds(normalizedIds);
     source = 'selection_basket';
   } else {
-    const result = await exportUsersDirectory(currentSegment, search);
+    const result = await exportUsersDirectory(normalizedFilters.segment, search, normalizedFilters);
     rows = Array.isArray(result?.rows) ? result.rows : [];
     truncated = !!result?.truncated;
   }
@@ -74,7 +75,7 @@ export async function buildUsersBulkPayload({ mode = 'tg_ids', currentSegment = 
     mode: resolvedMode,
     modeLabel: modeLabel(resolvedMode),
     source,
-    segment: String(currentSegment || 'all').trim().toLowerCase() || 'all',
+    segment: normalizedFilters.segment,
     search,
     userIds: normalizedIds,
     text,
@@ -82,6 +83,7 @@ export async function buildUsersBulkPayload({ mode = 'tg_ids', currentSegment = 
     rowsSourceCount: rows.length,
     truncated,
     preview: values.slice(0, 5),
+    filters: normalizedFilters,
   };
 }
 

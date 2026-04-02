@@ -1,5 +1,20 @@
 # Work History — 2026-04
 
+## STEP515 — Users filter rail v2
+
+Date: 2026-04-02
+
+Scope:
+- added `Filter rail v2` to `/admin/users` so operators can filter by plan presence, credits presence, channel presence, recent activity window (7/30/90 days), and payments yes/no;
+- unified list, CSV export, and bulk-copy state through one normalized filter contract in `src/db/queries.js`;
+- added shared user meta projection (`has_channel`, `has_payments`, `last_known_activity_at`) and surfaced richer quick signals directly in the users table;
+- extended CSV export with channel/payment/activity columns and preserved the applied filter rail inside admin-web audit reasons;
+- added `scripts/smoke-admin-web-users-filter-rail-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only and bounded;
+- activity filter intentionally avoids optional analytics tables and relies only on baseline schema surfaces already used in prod.
+
 ## STEP514 — Users bulk utility rail
 
 Date: 2026-04-02

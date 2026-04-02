@@ -1,4 +1,4 @@
-**STEP514:** Users bulk utility rail — strengthened `/admin/users` with a safe operator bulk layer on top of the STEP513 export surface. The page now adds a non-destructive `Bulk utility rail` with copy actions for `tg_id`, `usernames`, and `user_id`, plus a lightweight selection basket for manual ops work across visible user rows. The collapsed read handler now supports `section=users_bulk`, backed by `src/lib/adminWeb/usersBulk.js`, so the same bounded filter contract (up to 10 000 rows for current-filter copies, up to 500 explicit ids for basket copies) is used for text generation and audit logging. Every copy action now appends admin-web audit with actor, mode, source (`current_filter` vs `selection_basket`), filters, row count, and preview, while the users page surfaces the latest copy timestamp/actor. Scope stays intentionally narrow and safe: copy-only utilities, no destructive bulk actions, no user mutations, no background jobs, and no changes to public bot flows.
+**STEP515:** Users filter rail v2 — extended `/admin/users` with a second, analysis-oriented filter layer so the same page can cut the user base by plan, credits, channel presence, recent activity (7/30/90 days), and payments yes/no without introducing any new write paths. The filter state now flows through list render, CSV export, and bulk-copy utilities via one normalized server contract in `src/db/queries.js`, backed by a shared `meta` lateral that exposes `has_channel`, `has_payments`, and `last_known_activity_at`. Operators can now treat Users as a real audit/ops surface rather than just a directory: the table shows richer quick signals, exports include channel/payment/activity fields, and audit reasons preserve the applied filter rail. Scope stays read-only and bounded: no destructive bulk actions, no background jobs, no public-bot flow changes.
 
 **STEP513:** Users export + audit snapshot — upgraded `/admin/users` from a pure list into a usable ops/audit surface without adding a new API route family. The collapsed read handler now supports `section=users_export`, which returns an attachment CSV for either the current filtered view or one of the predefined export scopes (`audit snapshot`, `all`, `brands`, `creators`, `curators`, `managers`). The users page now shows an explicit export control, a bounded export note (`до 10 000 строк`), and the latest export timestamp/actor from admin-web audit. CSV generation is centralized in `src/lib/adminWeb/usersExport.js`, and every download appends an audit entry with actor, scope, filters, rows count, and truncation flag, so exports are no longer invisible operator actions. Scope stays deliberately narrow and hobby-safe: CSV only, no XLSX/PDF, no background jobs, no bulk mutations, and no user-facing flow changes.
 
@@ -1763,3 +1763,15 @@ Auto-heal safeguards + ops alerts:
 Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
+
+
+## STEP515 — Users filter rail v2
+- Added a second `Filter rail v2` layer to `/admin/users` with explicit operator filters for `есть план / нет плана`, `есть кредиты / нет`, `есть канал / нет`, `активность 7/30/90`, and `payments yes/no`.
+- Unified list, CSV export, and bulk-copy filtering through `normalizeUsersDirectoryFilters()` + shared SQL parts in `src/db/queries.js` so every read path uses the same bounded contract.
+- Added a lateral `meta` projection for `has_channel`, `has_payments`, and `last_known_activity_at`; the users table now surfaces stronger quick signals without adding any write actions.
+- CSV exports now include `has_channel`, `has_payments`, and `last_known_activity_msk`, while admin-web audit reasons preserve the applied filter rail.
+- Added `scripts/smoke-admin-web-users-filter-rail-contract.js`, wired into `package.json` and source preflight.
+
+Acceptance / notes:
+- Scope stays read-only: no destructive bulk actions, no background jobs, no new public bot flows.
+- `activity` is defined as latest known signal across user/account/workspace/payment surfaces already present in the baseline schema; no dependency on optional analytics tables.

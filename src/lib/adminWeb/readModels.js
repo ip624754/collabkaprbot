@@ -103,13 +103,21 @@ export async function getOverviewSummary() {
 }
 
 export async function getUsersList(params = {}) {
-  const segment = String(params.segment || 'all').toLowerCase();
+  const filters = normalizeUsersDirectoryFilters({
+    segment: params.segment || 'all',
+    planState: params.planState || 'all',
+    creditsState: params.creditsState || 'all',
+    channelState: params.channelState || 'all',
+    activityWindow: params.activityWindow || 'all',
+    paymentsState: params.paymentsState || 'all',
+  });
   const q = String(params.q || '').trim();
   const limit = Math.max(1, Math.min(50, Number(params.limit) || 20));
   const page = Math.max(0, Number(params.page) || 0);
   const offset = page * limit;
 
-  const rows = await listUsersDirectory(segment, limit, offset, q);
+  const listResult = await listUsersDirectory(filters.segment, limit, offset, q, filters);
+  const rows = Array.isArray(listResult?.rows) ? listResult.rows : [];
   const noteMap = await getAdminUserNotesBulk(rows.map((x) => x.user_id));
 
   const items = rows.map((row) => {
@@ -119,11 +127,15 @@ export async function getUsersList(params = {}) {
       tgId: Number(row.tg_id || 0),
       username: row.tg_username || '',
       createdAt: row.created_at || null,
+      updatedAt: row.updated_at || null,
+      lastKnownActivityAt: row.last_known_activity_at || row.updated_at || row.created_at || null,
       brandPlan: row.brand_plan || '',
       brandPlanUntil: row.brand_plan_until || null,
       brandCredits: Number(row.brand_credits || 0),
       segment: buildUserSegment(row),
       flags: {
+        hasChannel: !!row.has_channel,
+        hasPayments: !!row.has_payments,
         isCreator: !!row.is_creator,
         isCurator: !!row.is_curator,
         isModerator: !!row.is_moderator,
@@ -150,8 +162,9 @@ export async function getUsersList(params = {}) {
     bulkOptions: getUsersBulkOptions(),
     exportMeta: {
       maxRows: 10000,
-      currentSegment: segment,
+      currentSegment: filters.segment,
       currentSearch: q,
+      currentFilters: filters,
       recentExport: recentExport ? {
         ts: recentExport.ts || null,
         actorTgId: Number(recentExport.actorTgId || 0) || 0,
@@ -160,13 +173,17 @@ export async function getUsersList(params = {}) {
     },
     bulkMeta: {
       basketMaxRows: 500,
-      currentSegment: segment,
+      currentSegment: filters.segment,
       currentSearch: q,
+      currentFilters: filters,
       recentCopy: recentBulkCopy ? {
         ts: recentBulkCopy.ts || null,
         actorTgId: Number(recentBulkCopy.actorTgId || 0) || 0,
         reason: String(recentBulkCopy.reason || ''),
       } : null,
+    },
+    filterRail: {
+      currentFilters: filters,
     },
   };
 }

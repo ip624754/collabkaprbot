@@ -581,6 +581,49 @@ function basketSourceLabel(value) {
   return key === 'basket' ? 'корзина' : 'текущий фильтр';
 }
 
+function getUsersState() {
+  const state = window.__usersState || {};
+  return {
+    q: state.q || '',
+    segment: state.segment || 'all',
+    planState: state.planState || 'all',
+    creditsState: state.creditsState || 'all',
+    channelState: state.channelState || 'all',
+    activityWindow: state.activityWindow || 'all',
+    paymentsState: state.paymentsState || 'all',
+  };
+}
+
+function activeWindowLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === '7d') return 'active 7d';
+  if (key === '30d') return 'active 30d';
+  if (key === '90d') return 'active 90d';
+  return 'no recent signal';
+}
+
+function usersSignalSummary(item = {}) {
+  const signals = [];
+  if (item.flags?.isCreator) signals.push('creator');
+  if (item.flags?.hasBrandProfile) signals.push('brand');
+  if (item.flags?.isModerator) signals.push('moderator');
+  if (item.flags?.isManager) signals.push('manager');
+  if (item.flags?.hasChannel) signals.push('channel');
+  if (item.flags?.hasPayments) signals.push('paid');
+  return signals.length ? signals.join(' · ') : '—';
+}
+
+function usersActivityLabel(item = {}) {
+  if (!item?.lastKnownActivityAt) return 'Нет недавнего сигнала';
+  const thenTs = new Date(item.lastKnownActivityAt).getTime();
+  if (!Number.isFinite(thenTs)) return 'Нет недавнего сигнала';
+  const ageDays = (Date.now() - thenTs) / 86400000;
+  if (ageDays <= 7) return 'active 7d';
+  if (ageDays <= 30) return 'active 30d';
+  if (ageDays <= 90) return 'active 90d';
+  return 'older than 90d';
+}
+
 function userRowPayload(item = {}) {
   return escapeHtml(JSON.stringify({
     userId: Number(item.userId || 0) || 0,
@@ -598,8 +641,15 @@ function usersView(model) {
   const bulkMeta = model.bulkMeta || {};
   const recentExport = exportMeta.recentExport || null;
   const recentCopy = bulkMeta.recentCopy || null;
-  const currentSegment = window.__usersState?.segment || exportMeta.currentSegment || 'all';
-  const currentSearch = window.__usersState?.q || exportMeta.currentSearch || '';
+  const usersState = getUsersState();
+  const filterMeta = model.filterRail?.currentFilters || exportMeta.currentFilters || {};
+  const currentSegment = usersState.segment || exportMeta.currentSegment || 'all';
+  const currentSearch = usersState.q || exportMeta.currentSearch || '';
+  const currentPlanState = usersState.planState || filterMeta.planState || 'all';
+  const currentCreditsState = usersState.creditsState || filterMeta.creditsState || 'all';
+  const currentChannelState = usersState.channelState || filterMeta.channelState || 'all';
+  const currentActivityWindow = usersState.activityWindow || filterMeta.activityWindow || 'all';
+  const currentPaymentsState = usersState.paymentsState || filterMeta.paymentsState || 'all';
   const bulkSource = window.__usersBulkState?.source || 'current';
   const bulkMode = window.__usersBulkState?.mode || 'tg_ids';
   const basketIds = getUsersBasketIds();
@@ -621,6 +671,35 @@ function usersView(model) {
           <button class="aw-button" id="exportUsersBtn">Экспорт</button>
         </div>
       </div>
+      <section class="aw-filter-rail">
+        <div class="aw-utility-head">
+          <div>
+            <strong>Filter rail v2</strong>
+            <span>Сильнее режет user-base для ops, audit и ручного анализа без новых мутаций.</span>
+          </div>
+        </div>
+        <div class="aw-filter-grid">
+          <select id="usersPlanState" class="aw-select inline">
+            ${[['all','План: все'],['with_plan','План: есть план'],['no_plan','План: без плана']].map(([v,l]) => `<option value="${v}" ${currentPlanState === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <select id="usersCreditsState" class="aw-select inline">
+            ${[['all','Credits: все'],['with_credits','Credits: есть'],['no_credits','Credits: нет']].map(([v,l]) => `<option value="${v}" ${currentCreditsState === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <select id="usersChannelState" class="aw-select inline">
+            ${[['all','Канал: все'],['with_channel','Канал: есть'],['no_channel','Канал: нет']].map(([v,l]) => `<option value="${v}" ${currentChannelState === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <select id="usersActivityWindow" class="aw-select inline">
+            ${[['all','Активность: любая'],['7d','Активность: 7 дней'],['30d','Активность: 30 дней'],['90d','Активность: 90 дней']].map(([v,l]) => `<option value="${v}" ${currentActivityWindow === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <select id="usersPaymentsState" class="aw-select inline">
+            ${[['all','Payments: все'],['with_payments','Payments: yes'],['no_payments','Payments: no']].map(([v,l]) => `<option value="${v}" ${currentPaymentsState === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="aw-toolbar-note">
+          <span class="aw-muted">Фильтры работают и для списка, и для CSV / bulk copy. Activity = latest known signal в user/account/payments/workspace surfaces.</span>
+        </div>
+      </section>
+
       <div class="aw-toolbar-note">
         <span class="aw-muted">CSV · до ${Number(exportMeta.maxRows || 10000)} строк · audit trail включён</span>
         ${recentExport ? `<span class="aw-muted">Последняя выгрузка: ${escapeHtml(formatDate(recentExport.ts))} · TG ${Number(recentExport.actorTgId || 0) || '—'}</span>` : '<span class="aw-muted">Выгрузок из web-admin пока не было.</span>'}
@@ -676,7 +755,7 @@ function usersView(model) {
                 </td>
                 <td>${escapeHtml(segmentLabel(item.segment || 'user'))}</td>
                 <td>${escapeHtml(item.brandPlan || '—')}<small>${item.brandCredits ? item.brandCredits + ' credits' : 'no credits'}</small></td>
-                <td>${item.flags?.isCreator ? 'creator ' : ''}${item.flags?.hasBrandProfile ? 'brand ' : ''}${item.flags?.isModerator ? 'moderator ' : ''}</td>
+                <td>${escapeHtml(usersSignalSummary(item))}<small>${item.flags?.hasChannel ? 'канал подключён' : 'канала нет'} · ${item.flags?.hasPayments ? 'payments yes' : 'payments no'} · ${escapeHtml(usersActivityLabel(item))}</small></td>
                 <td>${formatDate(item.createdAt)}</td>
               </tr>
             `).join('') : '<tr><td colspan="6" class="aw-empty">Ничего не найдено.</td></tr>'}
@@ -1519,8 +1598,8 @@ async function render() {
     if (res.data?.data?.runtime?.controlSurface) window.__controlSurface = res.data.data.runtime.controlSurface;
     app.innerHTML = overviewView(res.data.data || {});
   } else if (route.page === 'users') {
-    const state = window.__usersState || { q: '', segment: 'all' };
-    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', limit: '20', page: '0' });
+    const state = getUsersState();
+    const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', limit: '20', page: '0' });
     const res = await api(`/api/admin-web-read?section=users&${params}`);
     app.innerHTML = usersView(res.data.data || { items: [] });
   } else if (route.page === 'userDetail') {
@@ -1583,6 +1662,11 @@ function bindShell() {
     window.__usersState = {
       q: document.getElementById('usersSearch')?.value || '',
       segment: document.getElementById('usersSegment')?.value || 'all',
+      planState: document.getElementById('usersPlanState')?.value || 'all',
+      creditsState: document.getElementById('usersCreditsState')?.value || 'all',
+      channelState: document.getElementById('usersChannelState')?.value || 'all',
+      activityWindow: document.getElementById('usersActivityWindow')?.value || 'all',
+      paymentsState: document.getElementById('usersPaymentsState')?.value || 'all',
     };
     render();
   });
@@ -1590,7 +1674,12 @@ function bindShell() {
     const scope = document.getElementById('usersExportScope')?.value || 'current';
     const q = document.getElementById('usersSearch')?.value || '';
     const segment = document.getElementById('usersSegment')?.value || 'all';
-    const params = new URLSearchParams({ section: 'users_export', scope, segment, q });
+    const planState = document.getElementById('usersPlanState')?.value || 'all';
+    const creditsState = document.getElementById('usersCreditsState')?.value || 'all';
+    const channelState = document.getElementById('usersChannelState')?.value || 'all';
+    const activityWindow = document.getElementById('usersActivityWindow')?.value || 'all';
+    const paymentsState = document.getElementById('usersPaymentsState')?.value || 'all';
+    const params = new URLSearchParams({ section: 'users_export', scope, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState });
     try {
       await downloadCsv(`/api/admin-web-read?${params.toString()}`, `users_${scope}.csv`);
       render();
@@ -1603,8 +1692,13 @@ function bindShell() {
     const source = document.getElementById('usersBulkSource')?.value || 'current';
     const q = document.getElementById('usersSearch')?.value || '';
     const segment = document.getElementById('usersSegment')?.value || 'all';
+    const planState = document.getElementById('usersPlanState')?.value || 'all';
+    const creditsState = document.getElementById('usersCreditsState')?.value || 'all';
+    const channelState = document.getElementById('usersChannelState')?.value || 'all';
+    const activityWindow = document.getElementById('usersActivityWindow')?.value || 'all';
+    const paymentsState = document.getElementById('usersPaymentsState')?.value || 'all';
     window.__usersBulkState = { mode, source };
-    const params = new URLSearchParams({ section: 'users_bulk', mode, segment, q });
+    const params = new URLSearchParams({ section: 'users_bulk', mode, segment, q, plan_state: planState, credits_state: creditsState, channel_state: channelState, activity_window: activityWindow, payments_state: paymentsState });
     if (source === 'basket') {
       const ids = getUsersBasketIds();
       if (!ids.length) {

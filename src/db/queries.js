@@ -435,51 +435,135 @@ export async function getUserTgIdByUserId(userId) {
 
 // Users directory (admin)
 // Filters: all | brands | creators | curators | managers
-export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offsetRaw = 0, qRaw = '') {
-  const filter = String(filterRaw || 'all').toLowerCase();
-  const limit = Math.max(1, Math.min(50, Number(limitRaw) || 20));
-  const offset = Math.max(0, Number(offsetRaw) || 0);
+const USERS_DIRECTORY_SEGMENTS = ['all', 'brands', 'creators', 'curators', 'managers'];
+const USERS_DIRECTORY_PLAN_STATES = ['all', 'with_plan', 'no_plan'];
+const USERS_DIRECTORY_CREDITS_STATES = ['all', 'with_credits', 'no_credits'];
+const USERS_DIRECTORY_CHANNEL_STATES = ['all', 'with_channel', 'no_channel'];
+const USERS_DIRECTORY_ACTIVITY_WINDOWS = ['all', '7d', '30d', '90d'];
+const USERS_DIRECTORY_PAYMENTS_STATES = ['all', 'with_payments', 'no_payments'];
 
+const USERS_DIRECTORY_META_SQL = `
+  left join lateral (
+    select
+      exists (
+        select 1
+        from workspaces w
+        where w.owner_user_id = u.id
+          and (w.channel_id is not null or nullif(trim(coalesce(w.channel_username, '')), '') is not null)
+      ) as has_channel,
+      exists (select 1 from payments p where p.user_id = u.id) as has_payments,
+      greatest(
+        coalesce(u.updated_at, u.created_at),
+        coalesce((select max(p.created_at) from payments p where p.user_id = u.id), '-infinity'::timestamptz),
+        coalesce((select max(w.created_at) from workspaces w where w.owner_user_id = u.id), '-infinity'::timestamptz),
+        coalesce((select max(wc.created_at) from workspace_curators wc where wc.user_id = u.id), '-infinity'::timestamptz),
+        coalesce((select max(bm.created_at) from brand_managers bm where bm.manager_user_id = u.id), '-infinity'::timestamptz),
+        coalesce((select max(coalesce(bp.updated_at, bp.created_at)) from brand_profiles bp where bp.user_id = u.id), '-infinity'::timestamptz)
+      ) as last_known_activity_at
+  ) meta on true`;
+
+export function normalizeUsersDirectoryFilters(input = {}) {
+  const segmentRaw = String(input.segment || input.filter || 'all').trim().toLowerCase();
+  const segment = USERS_DIRECTORY_SEGMENTS.includes(segmentRaw) ? segmentRaw : 'all';
+
+  const planStateRaw = String(input.planState || input.plan || 'all').trim().toLowerCase();
+  const creditsStateRaw = String(input.creditsState || input.credits || 'all').trim().toLowerCase();
+  const channelStateRaw = String(input.channelState || input.channel || 'all').trim().toLowerCase();
+  const activityWindowRaw = String(input.activityWindow || input.activity || 'all').trim().toLowerCase();
+  const paymentsStateRaw = String(input.paymentsState || input.payments || 'all').trim().toLowerCase();
+
+  return {
+    segment,
+    planState: USERS_DIRECTORY_PLAN_STATES.includes(planStateRaw) ? planStateRaw : 'all',
+    creditsState: USERS_DIRECTORY_CREDITS_STATES.includes(creditsStateRaw) ? creditsStateRaw : 'all',
+    channelState: USERS_DIRECTORY_CHANNEL_STATES.includes(channelStateRaw) ? channelStateRaw : 'all',
+    activityWindow: USERS_DIRECTORY_ACTIVITY_WINDOWS.includes(activityWindowRaw) ? activityWindowRaw : 'all',
+    paymentsState: USERS_DIRECTORY_PAYMENTS_STATES.includes(paymentsStateRaw) ? paymentsStateRaw : 'all',
+  };
+}
+
+function buildUsersDirectorySqlParts({ filterRaw = 'all', qRaw = '', filtersRaw = {}, startIndex = 1 } = {}) {
+  const normalized = normalizeUsersDirectoryFilters({ segment: filterRaw, ...(filtersRaw || {}) });
   const q0 = String(qRaw || '').trim();
   const q = q0.replace(/^@/, '').toLowerCase();
 
   const where = [];
-  if (filter === 'brands') {
+  const params = [];
+  let paramIndex = Math.max(1, Number(startIndex) || 1);
+  const addParam = (value) => {
+    params.push(value);
+    const ref = `$${paramIndex}`;
+    paramIndex += 1;
+    return ref;
+  };
+
+  if (normalized.segment === 'brands') {
     where.push(`(
       exists (select 1 from brand_profiles bp where bp.user_id = u.id)
       or u.brand_plan is not null
       or coalesce(u.brand_credits,0) > 0
     )`);
-  } else if (filter === 'creators') {
+  } else if (normalized.segment === 'creators') {
     where.push(`exists (select 1 from workspaces w where w.owner_user_id = u.id)`);
-  } else if (filter === 'curators') {
+  } else if (normalized.segment === 'curators') {
     where.push(`(
       exists (select 1 from workspace_curators wc where wc.user_id = u.id)
       or exists (select 1 from network_moderators nm where nm.user_id = u.id)
     )`);
-  } else if (filter === 'managers') {
+  } else if (normalized.segment === 'managers') {
     where.push(`exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`);
   }
 
-  // Search (optional):
-  // - numeric: match tg_id OR user id
-  // - string: match username (case-insensitive, partial)
-  const params = [limit, offset];
+  if (normalized.planState === 'with_plan') where.push(`u.brand_plan is not null`);
+  else if (normalized.planState === 'no_plan') where.push(`u.brand_plan is null`);
+
+  if (normalized.creditsState === 'with_credits') where.push(`coalesce(u.brand_credits,0) > 0`);
+  else if (normalized.creditsState === 'no_credits') where.push(`coalesce(u.brand_credits,0) = 0`);
+
+  if (normalized.channelState === 'with_channel') where.push(`meta.has_channel = true`);
+  else if (normalized.channelState === 'no_channel') where.push(`meta.has_channel = false`);
+
+  if (normalized.paymentsState === 'with_payments') where.push(`meta.has_payments = true`);
+  else if (normalized.paymentsState === 'no_payments') where.push(`meta.has_payments = false`);
+
+  const activityDays = normalized.activityWindow === '7d' ? 7
+    : normalized.activityWindow === '30d' ? 30
+    : normalized.activityWindow === '90d' ? 90
+    : 0;
+  if (activityDays > 0) {
+    where.push(`meta.last_known_activity_at >= now() - interval '${activityDays} days'`);
+  }
+
   if (q) {
     if (/^\d+$/.test(q)) {
-      const n = Number(q);
-      params.push(n);
-      params.push(n);
-      const i = params.length - 1; // points to first of the two just pushed (tg_id)
-      where.push(`(u.tg_id = $${i} or u.id = $${i + 1})`);
+      const tgRef = addParam(Number(q));
+      const userRef = addParam(Number(q));
+      where.push(`(u.tg_id = ${tgRef} or u.id = ${userRef})`);
     } else {
-      params.push(`%${q}%`);
-      const i = params.length;
-      where.push(`lower(coalesce(u.tg_username,'')) like $${i}`);
+      const likeRef = addParam(`%${q}%`);
+      where.push(`lower(coalesce(u.tg_username,'')) like ${likeRef}`);
     }
   }
 
-  const whereSql = where.length ? `where ${where.join(' and ')}` : '';
+  return {
+    normalized,
+    params,
+    q,
+    whereSql: where.length ? `where ${where.join(' and ')}` : '',
+  };
+}
+
+export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offsetRaw = 0, qRaw = '', filtersRaw = {}) {
+  const limit = Math.max(1, Math.min(50, Number(limitRaw) || 20));
+  const offset = Math.max(0, Number(offsetRaw) || 0);
+  const params = [limit, offset];
+  const parts = buildUsersDirectorySqlParts({
+    filterRaw,
+    qRaw,
+    filtersRaw,
+    startIndex: 3,
+  });
+  params.push(...parts.params);
 
   const r = await pool.query(
     `select
@@ -487,22 +571,26 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
        u.tg_id,
        u.tg_username,
        u.created_at,
+       u.updated_at,
        u.brand_plan,
        u.brand_plan_until,
        coalesce(u.brand_credits,0)::int as brand_credits,
-
+       meta.has_channel,
+       meta.has_payments,
+       meta.last_known_activity_at,
        exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
        exists (select 1 from brand_managers bm where bm.manager_user_id = u.id) as is_manager,
        exists (select 1 from brand_profiles bp where bp.user_id = u.id) as has_brand_profile
      from users u
-     ${whereSql}
+     ${USERS_DIRECTORY_META_SQL}
+     ${parts.whereSql}
      order by u.created_at desc
      limit $1 offset $2`,
     params
   );
-  return r.rows || [];
+  return { rows: r.rows || [], filters: parts.normalized };
 }
 
 export async function getUsersDirectoryByIds(userIdsRaw = []) {
@@ -523,12 +611,16 @@ export async function getUsersDirectoryByIds(userIdsRaw = []) {
        u.brand_plan_until,
        coalesce(u.brand_credits,0)::int as brand_credits,
        coalesce(u.brand_credits_spent,0)::int as brand_credits_spent,
+       meta.has_channel,
+       meta.has_payments,
+       meta.last_known_activity_at,
        exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
        exists (select 1 from brand_managers bm where bm.manager_user_id = u.id) as is_manager,
        exists (select 1 from brand_profiles bp where bp.user_id = u.id) as has_brand_profile
      from users u
+     ${USERS_DIRECTORY_META_SQL}
      where u.id = any($1::int[])
      order by u.created_at desc`,
     [ids]
@@ -540,47 +632,15 @@ export async function getUsersDirectoryByIds(userIdsRaw = []) {
  * Admin: export users for CSV (same filters as listUsersDirectory, but up to 10 000 rows).
  * Returns flat rows with all fields needed for CSV.
  */
-export async function exportUsersDirectory(filterRaw = 'all', qRaw = '') {
-  const filter = String(filterRaw || 'all').toLowerCase();
+export async function exportUsersDirectory(filterRaw = 'all', qRaw = '', filtersRaw = {}) {
   const MAX_EXPORT = 10000;
-
-  const q0 = String(qRaw || '').trim();
-  const q = q0.replace(/^@/, '').toLowerCase();
-
-  const where = [];
-  if (filter === 'brands') {
-    where.push(`(
-      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
-      or u.brand_plan is not null
-      or coalesce(u.brand_credits,0) > 0
-    )`);
-  } else if (filter === 'creators') {
-    where.push(`exists (select 1 from workspaces w where w.owner_user_id = u.id)`);
-  } else if (filter === 'curators') {
-    where.push(`(
-      exists (select 1 from workspace_curators wc where wc.user_id = u.id)
-      or exists (select 1 from network_moderators nm where nm.user_id = u.id)
-    )`);
-  } else if (filter === 'managers') {
-    where.push(`exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`);
-  }
-
-  const params = [MAX_EXPORT];
-  if (q) {
-    if (/^\d+$/.test(q)) {
-      const n = Number(q);
-      params.push(n);
-      params.push(n);
-      const i = params.length - 1;
-      where.push(`(u.tg_id = $${i} or u.id = $${i + 1})`);
-    } else {
-      params.push(`%${q}%`);
-      const i = params.length;
-      where.push(`lower(coalesce(u.tg_username,'')) like $${i}`);
-    }
-  }
-
-  const whereSql = where.length ? `where ${where.join(' and ')}` : '';
+  const parts = buildUsersDirectorySqlParts({
+    filterRaw,
+    qRaw,
+    filtersRaw,
+    startIndex: 2,
+  });
+  const params = [MAX_EXPORT, ...parts.params];
 
   const r = await pool.query(
     `select
@@ -594,20 +654,27 @@ export async function exportUsersDirectory(filterRaw = 'all', qRaw = '') {
        u.brand_plan_until,
        coalesce(u.brand_credits,0)::int as brand_credits,
        coalesce(u.brand_credits_spent,0)::int as brand_credits_spent,
+       meta.has_channel,
+       meta.has_payments,
+       meta.last_known_activity_at,
        exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
        exists (select 1 from brand_managers bm where bm.manager_user_id = u.id) as is_manager,
        exists (select 1 from brand_profiles bp where bp.user_id = u.id) as has_brand_profile
      from users u
-     ${whereSql}
+     ${USERS_DIRECTORY_META_SQL}
+     ${parts.whereSql}
      order by u.created_at desc
      limit $1`,
     params
   );
-  return { rows: r.rows || [], truncated: (r.rows || []).length >= MAX_EXPORT };
+  return {
+    rows: r.rows || [],
+    truncated: (r.rows || []).length >= MAX_EXPORT,
+    filters: parts.normalized,
+  };
 }
-
 
 /**
  * Admin: full user card by internal user id.

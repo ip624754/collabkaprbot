@@ -166,6 +166,19 @@ body {
   justify-content: space-between;
   margin-top: -4px;
 }
+.aw-filter-rail {
+  border: 1px solid rgba(132,176,255,0.12);
+  background: rgba(255,255,255,0.02);
+  border-radius: 18px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+.aw-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
 .aw-utility-rail {
   border: 1px solid rgba(132,176,255,0.12);
   background: rgba(255,255,255,0.025);
