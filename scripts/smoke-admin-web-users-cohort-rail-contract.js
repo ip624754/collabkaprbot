@@ -23,12 +23,12 @@ assert.ok(apiRead.includes('cohort_view'), 'admin-web read API must include coho
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Users operator cohort chips / saved views',
+  'Когорты и готовые срезы',
   'usersCohortView',
   'data-users-cohort',
-  'Dormant payers',
-  'Quiet creators',
-  'Cohort view идёт через тот же server contract',
+  'Спящие плательщики',
+  'Тихие креаторы',
+  'usersCohortView · Cohort view идёт через тот же server contract',
 ]) {
   assert.ok(webJs.includes(token), `admin-web users cohort rail UI must include ${token}`);
 }

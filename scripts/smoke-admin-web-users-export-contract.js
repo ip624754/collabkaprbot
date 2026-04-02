@@ -50,6 +50,8 @@ for (const token of [
 }
 
 const queries = read('src/db/queries.js');
-assert.ok(queries.includes('u.banned_at,'), 'exportUsersDirectory query must expose banned_at for CSV status');
+for (const token of ['hasUsersBannedAtColumn', 'usersDirectoryBannedAtSelectSql', 'buildUsersDirectoryProblemScoreSql']) {
+  assert.ok(queries.includes(token), `users export queries must include ${token}`);
+}
 
 console.log('✅ smoke admin-web users export contract OK');

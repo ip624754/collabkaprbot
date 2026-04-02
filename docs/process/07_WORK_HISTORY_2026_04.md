@@ -1,3 +1,17 @@
+## STEP532 — Users section copy unification + banned_at schema guard
+
+Date: 2026-04-03
+
+Scope:
+- unified the visible `/admin/users` copy so the rails, cohort labels, saved presets, compare/follow-up blocks, meta strip, and table micro-hints no longer mix Russian operator wording with leftover English UI labels;
+- fixed the real production runtime error `column u.banned_at does not exist` by adding a rolling-upgrade-safe users-directory schema guard in `src/db/queries.js`;
+- users list/export/compare queries now check whether `users.banned_at` exists and degrade to `null::timestamptz as banned_at` + a bounded problem-score expression when the column is absent, so `/admin/users` keeps loading without requiring an immediate schema migration;
+- added `scripts/smoke-admin-web-users-copy-unification-contract.js` and refreshed adjacent users smoke guards to match the unified RU admin copy and the new schema-safe export/query contract.
+
+Acceptance / notes:
+- scope stays narrow and mostly read-only: no new write paths, no new route family, no required DB migration just to restore the users directory;
+- banned status still works on deployments where the column exists, while older deployments degrade safely to `active` instead of crashing the whole users surface.
+
 ## STEP531 — Users header / meta strip polish
 
 Date: 2026-04-03

@@ -7,7 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Users saved operator presets',
+  'Сохранённые операторские пресеты',
   'data-users-preset',
   'usersOperatorPresets',
   'detectUsersOperatorPreset',

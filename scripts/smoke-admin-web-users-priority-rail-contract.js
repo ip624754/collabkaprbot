@@ -21,10 +21,10 @@ assert.ok(apiRead.includes('sort_by'), 'admin-web read API must include sort_by 
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Users sort / priority rail',
+  'Сортировка и приоритет',
   'usersSortBy',
   'data-users-priority',
-  'problem = banned / paid-no-channel / plan-no-channel / stale credits',
+  'problem = блок / платили без канала / план без канала / залежавшиеся кредиты',
   'Платящие',
   'Проблемные',
 ]) {

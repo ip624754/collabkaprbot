@@ -7,7 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Users compare / pin rail',
+  'Сравнение и закрепление',
   'normalizeUsersPinIds',
   'toggleUsersPin',
   'renderUsersCompareCards',

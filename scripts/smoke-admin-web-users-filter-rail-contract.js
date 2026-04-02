@@ -32,13 +32,13 @@ for (const token of [
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Filter rail v2',
+  'Фильтры среза',
   'usersPlanState',
   'usersCreditsState',
   'usersChannelState',
   'usersActivityWindow',
   'usersPaymentsState',
-  'active 7d',
+  'активность 7д',
 ]) {
   assert.ok(webJs.includes(token), `admin-web users UI must include ${token}`);
 }

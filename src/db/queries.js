@@ -498,13 +498,43 @@ const USERS_DIRECTORY_META_SQL = `
       ) as last_known_activity_at
   ) meta on true`;
 
-const USERS_DIRECTORY_PROBLEM_SCORE_SQL = `
-  (case when u.banned_at is not null then 100 else 0 end
-   + case when meta.payments_count > 0 and meta.has_channel = false then 35 else 0 end
-   + case when u.brand_plan is not null and meta.has_channel = false then 25 else 0 end
-   + case when coalesce(u.brand_credits,0) > 0 and meta.last_known_activity_at < now() - interval '30 days' then 15 else 0 end
-   + case when meta.last_known_activity_at < now() - interval '90 days' then 10 else 0 end)
-`;
+let USERS_BANNED_AT_COLUMN_CACHE = null;
+
+export async function hasUsersBannedAtColumn() {
+  if (typeof USERS_BANNED_AT_COLUMN_CACHE === 'boolean') return USERS_BANNED_AT_COLUMN_CACHE;
+  try {
+    const r = await pool.query(
+      `select 1 as ok
+       from information_schema.columns
+       where table_name='users'
+         and column_name='banned_at'
+       limit 1`
+    );
+    USERS_BANNED_AT_COLUMN_CACHE = r.rows.length > 0;
+  } catch (err) {
+    console.warn('[db] hasUsersBannedAtColumn check failed; degrading users-directory to banned_at-safe mode', err?.message || err);
+    USERS_BANNED_AT_COLUMN_CACHE = false;
+  }
+  return USERS_BANNED_AT_COLUMN_CACHE;
+}
+
+function usersDirectoryBannedAtSelectSql(hasBannedAtColumn, alias = 'u') {
+  return hasBannedAtColumn ? `${alias}.banned_at as banned_at` : `null::timestamptz as banned_at`;
+}
+
+function usersDirectoryBannedAtPresenceSql(hasBannedAtColumn, alias = 'u') {
+  return hasBannedAtColumn ? `${alias}.banned_at is not null` : `false`;
+}
+
+function buildUsersDirectoryProblemScoreSql(hasBannedAtColumn) {
+  return `
+    (case when ${usersDirectoryBannedAtPresenceSql(hasBannedAtColumn)} then 100 else 0 end
+     + case when meta.payments_count > 0 and meta.has_channel = false then 35 else 0 end
+     + case when u.brand_plan is not null and meta.has_channel = false then 25 else 0 end
+     + case when coalesce(u.brand_credits,0) > 0 and meta.last_known_activity_at < now() - interval '30 days' then 15 else 0 end
+     + case when meta.last_known_activity_at < now() - interval '90 days' then 10 else 0 end)
+  `;
+}
 
 export function normalizeUsersDirectoryFilters(input = {}) {
   const segmentRaw = String(input.segment || input.filter || 'all').trim().toLowerCase();
@@ -530,7 +560,7 @@ export function normalizeUsersDirectoryFilters(input = {}) {
   };
 }
 
-function buildUsersDirectoryOrderSql(normalized = {}) {
+function buildUsersDirectoryOrderSql(normalized = {}, hasBannedAtColumn = true) {
   if (normalized.sortBy === 'activity_desc') {
     return `order by meta.last_known_activity_at desc nulls last, u.created_at desc`;
   }
@@ -541,7 +571,7 @@ function buildUsersDirectoryOrderSql(normalized = {}) {
     return `order by meta.payments_count desc, meta.last_payment_at desc nulls last, meta.last_known_activity_at desc nulls last, u.created_at desc`;
   }
   if (normalized.sortBy === 'problem_desc') {
-    return `order by ${USERS_DIRECTORY_PROBLEM_SCORE_SQL} desc, meta.last_known_activity_at asc nulls first, meta.payments_count desc, u.created_at desc`;
+    return `order by ${buildUsersDirectoryProblemScoreSql(hasBannedAtColumn)} desc, meta.last_known_activity_at asc nulls first, meta.payments_count desc, u.created_at desc`;
   }
   return `order by u.created_at desc`;
 }
@@ -661,6 +691,7 @@ export async function getUsersDirectoryCohortCounters(filterRaw = 'all', qRaw = 
 }
 
 export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offsetRaw = 0, qRaw = '', filtersRaw = {}) {
+  const hasBannedAtColumn = await hasUsersBannedAtColumn();
   const limit = Math.max(1, Math.min(50, Number(limitRaw) || 20));
   const offset = Math.max(0, Number(offsetRaw) || 0);
   const params = [limit, offset];
@@ -681,14 +712,14 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
        u.updated_at,
        u.brand_plan,
        u.brand_plan_until,
-       u.banned_at,
+       ${usersDirectoryBannedAtSelectSql(hasBannedAtColumn)},
        coalesce(u.brand_credits,0)::int as brand_credits,
        meta.has_channel,
        (meta.payments_count > 0) as has_payments,
        meta.payments_count,
        meta.last_payment_at,
        meta.last_known_activity_at,
-       ${USERS_DIRECTORY_PROBLEM_SCORE_SQL} as problem_score,
+       ${buildUsersDirectoryProblemScoreSql(hasBannedAtColumn)} as problem_score,
        exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
@@ -698,7 +729,7 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
      from users u
      ${USERS_DIRECTORY_META_SQL}
      ${parts.whereSql}
-     ${buildUsersDirectoryOrderSql(parts.normalized)}
+     ${buildUsersDirectoryOrderSql(parts.normalized, hasBannedAtColumn)}
      limit $1 offset $2`,
     params
   );
@@ -706,6 +737,7 @@ export async function listUsersDirectory(filterRaw = 'all', limitRaw = 20, offse
 }
 
 export async function getUsersDirectoryByIds(userIdsRaw = []) {
+  const hasBannedAtColumn = await hasUsersBannedAtColumn();
   const ids = Array.from(new Set((Array.isArray(userIdsRaw) ? userIdsRaw : [userIdsRaw])
     .map((value) => Number(value || 0) || 0)
     .filter((value) => value > 0))).slice(0, 500);
@@ -718,7 +750,7 @@ export async function getUsersDirectoryByIds(userIdsRaw = []) {
        u.tg_username,
        u.created_at,
        u.updated_at,
-       u.banned_at,
+       ${usersDirectoryBannedAtSelectSql(hasBannedAtColumn)},
        u.brand_plan,
        u.brand_plan_until,
        coalesce(u.brand_credits,0)::int as brand_credits,
@@ -728,7 +760,7 @@ export async function getUsersDirectoryByIds(userIdsRaw = []) {
        meta.payments_count,
        meta.last_payment_at,
        meta.last_known_activity_at,
-       ${USERS_DIRECTORY_PROBLEM_SCORE_SQL} as problem_score,
+       ${buildUsersDirectoryProblemScoreSql(hasBannedAtColumn)} as problem_score,
        exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
@@ -748,6 +780,7 @@ export async function getUsersDirectoryByIds(userIdsRaw = []) {
  * Returns flat rows with all fields needed for CSV.
  */
 export async function exportUsersDirectory(filterRaw = 'all', qRaw = '', filtersRaw = {}) {
+  const hasBannedAtColumn = await hasUsersBannedAtColumn();
   const MAX_EXPORT = 10000;
   const parts = buildUsersDirectorySqlParts({
     filterRaw,
@@ -764,7 +797,7 @@ export async function exportUsersDirectory(filterRaw = 'all', qRaw = '', filters
        u.tg_username,
        u.created_at,
        u.updated_at,
-       u.banned_at,
+       ${usersDirectoryBannedAtSelectSql(hasBannedAtColumn)},
        u.brand_plan,
        u.brand_plan_until,
        coalesce(u.brand_credits,0)::int as brand_credits,
@@ -774,7 +807,7 @@ export async function exportUsersDirectory(filterRaw = 'all', qRaw = '', filters
        meta.payments_count,
        meta.last_payment_at,
        meta.last_known_activity_at,
-       ${USERS_DIRECTORY_PROBLEM_SCORE_SQL} as problem_score,
+       ${buildUsersDirectoryProblemScoreSql(hasBannedAtColumn)} as problem_score,
        exists (select 1 from workspaces w where w.owner_user_id = u.id) as is_creator,
        exists (select 1 from workspace_curators wc where wc.user_id = u.id) as is_curator,
        exists (select 1 from network_moderators nm where nm.user_id = u.id) as is_moderator,
@@ -783,7 +816,7 @@ export async function exportUsersDirectory(filterRaw = 'all', qRaw = '', filters
      from users u
      ${USERS_DIRECTORY_META_SQL}
      ${parts.whereSql}
-     ${buildUsersDirectoryOrderSql(parts.normalized)}
+     ${buildUsersDirectoryOrderSql(parts.normalized, hasBannedAtColumn)}
      limit $1`,
     params
   );

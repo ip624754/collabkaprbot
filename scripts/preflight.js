@@ -253,6 +253,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin web users table density polish contract", "smoke:admin-web-users-table-density-contract"],
   ["Preflight (source-only): admin web users column priority compression contract", "smoke:admin-web-users-column-priority-contract"],
   ["Preflight (source-only): admin web users header / meta strip polish contract", "smoke:admin-web-users-header-meta-strip-contract"],
+  ["Preflight (source-only): admin web users copy unification + schema guard contract", "smoke:admin-web-users-copy-unification-contract"],
   ["Preflight (source-only): admin control surface contract", "smoke:admin-control-surface-contract"],
   ["Preflight (source-only): creator-side brand-app local-context contract", "smoke:creator-app-local-context-contract"],
   ["Preflight (source-only): brand-side brand-app reply entrypoints contract", "smoke:brand-app-reply-entrypoints-contract"],

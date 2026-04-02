@@ -7,7 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Users action-ready follow-up rail',
+  'Готовые действия по срезу',
   'data-users-followup',
   'open_top_problem_users',
   'open_dormant_payers',
