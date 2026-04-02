@@ -3,6 +3,7 @@ import { getSearchParam, json } from '../src/lib/adminWeb/common.js';
 import { getCommsSummary, getFounderSummary, getOverviewSummary, getPaymentDetail, getPaymentsSummary, getUserDetail, getUsersList } from '../src/lib/adminWeb/readModels.js';
 import { getRuntimeSummary } from '../src/lib/adminWeb/runtime.js';
 import { buildUsersCsvExport } from '../src/lib/adminWeb/usersExport.js';
+import { buildUsersBulkPayload } from '../src/lib/adminWeb/usersBulk.js';
 import { getOperatorControlSnapshot } from '../src/lib/operatorControls.js';
 
 function sendCsv(res, filename, body) {
@@ -53,6 +54,32 @@ export default async function handler(req, res) {
       },
     });
     return sendCsv(res, exportPayload.filename, exportPayload.csv);
+  }
+  if (section === 'users_bulk') {
+    const idsRaw = String(getSearchParam(req, 'ids', '') || '').trim();
+    const userIds = idsRaw ? idsRaw.split(',').map((value) => Number(value || 0) || 0).filter((value) => value > 0) : [];
+    const payload = await buildUsersBulkPayload({
+      mode: getSearchParam(req, 'mode', 'tg_ids'),
+      currentSegment: getSearchParam(req, 'segment', 'all'),
+      q: getSearchParam(req, 'q', ''),
+      userIds,
+    });
+    await appendAdminWebAudit({
+      section: 'users',
+      action: 'copy_users_bulk',
+      actorTgId: session.actorTgId,
+      targetType: 'users_bulk',
+      targetId: `${payload.mode}:${payload.source}`,
+      reason: `mode=${payload.mode};source=${payload.source};segment=${payload.segment};q=${payload.search || '-'};rows=${payload.rowsCount};truncated=${payload.truncated ? 1 : 0};ids=${payload.userIds.length}`,
+      oldJson: null,
+      newJson: {
+        mode: payload.mode,
+        source: payload.source,
+        rows: payload.rowsCount,
+        preview: payload.preview,
+      },
+    });
+    return json(res, 200, { ok: true, data: payload });
   }
   if (section === 'user') {
     const id = Number(getSearchParam(req, 'id', '0') || 0) || 0;

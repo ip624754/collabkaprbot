@@ -1,4 +1,19 @@
+# Work History — 2026-04
 
+## STEP514 — Users bulk utility rail
+
+Date: 2026-04-02
+
+Scope:
+- added a safe `Bulk utility rail` to `/admin/users` for quick operator copies of `tg_id`, `usernames`, and `user_id` without introducing destructive bulk actions;
+- introduced `src/lib/adminWeb/usersBulk.js` plus `section=users_bulk` in the collapsed read handler so current-filter copies and selection-basket copies share one bounded server contract;
+- added checkbox selection + lightweight `корзина` in the users table for manual ops work on explicitly chosen rows;
+- logged every copy action through `appendAdminWebAudit()` with actor, mode, source, filters, row count, truncation flag, and preview;
+- added `scripts/smoke-admin-web-users-bulk-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays copy-only and low-risk: no destructive bulk writes, no user mutations, no background jobs, no public-flow changes;
+- current-filter copies stay bounded by the existing 10 000-row cap, basket lookups by 500 explicit ids.
 
 ## STEP511 — Web Admin login step split + approve auto-return
 
@@ -47,9 +62,6 @@ Scope:
 Acceptance / notes:
 - source-only hygiene fix, no UX change and no auth/session contract change;
 - intended result: no more `DEP0169` deprecation warning from admin-web query parsing in Vercel logs.
-
-# Work History — 2026-04
-
 
 ## STEP513 — Users export + audit snapshot
 

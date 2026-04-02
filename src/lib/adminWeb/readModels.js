@@ -5,6 +5,7 @@ import { getRuntimeSummary } from './runtime.js';
 import { getRecentAdminWebAudit, isFounderActorTgId } from './auth.js';
 import { CFG } from '../config.js';
 import { getUsersExportOptions } from './usersExport.js';
+import { getUsersBulkOptions } from './usersBulk.js';
 
 function buildUserSegment(row) {
   if (row?.has_brand_profile || row?.brand_plan || Number(row?.brand_credits || 0) > 0) return 'brand';
@@ -134,8 +135,11 @@ export async function getUsersList(params = {}) {
     };
   });
 
-  const recentExport = (await getRecentAdminWebAudit(20))
+  const recentAudit = await getRecentAdminWebAudit(24);
+  const recentExport = recentAudit
     .find((item) => String(item?.section || '') === 'users' && String(item?.action || '') === 'export_users_csv') || null;
+  const recentBulkCopy = recentAudit
+    .find((item) => String(item?.section || '') === 'users' && String(item?.action || '') === 'copy_users_bulk') || null;
 
   return {
     items,
@@ -143,6 +147,7 @@ export async function getUsersList(params = {}) {
     limit,
     hasNext: rows.length === limit,
     exportOptions: getUsersExportOptions(),
+    bulkOptions: getUsersBulkOptions(),
     exportMeta: {
       maxRows: 10000,
       currentSegment: segment,
@@ -151,6 +156,16 @@ export async function getUsersList(params = {}) {
         ts: recentExport.ts || null,
         actorTgId: Number(recentExport.actorTgId || 0) || 0,
         reason: String(recentExport.reason || ''),
+      } : null,
+    },
+    bulkMeta: {
+      basketMaxRows: 500,
+      currentSegment: segment,
+      currentSearch: q,
+      recentCopy: recentBulkCopy ? {
+        ts: recentBulkCopy.ts || null,
+        actorTgId: Number(recentBulkCopy.actorTgId || 0) || 0,
+        reason: String(recentBulkCopy.reason || ''),
       } : null,
     },
   };

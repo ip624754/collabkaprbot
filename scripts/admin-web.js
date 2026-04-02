@@ -49,6 +49,63 @@ async function downloadCsv(url, fallbackName = 'export.csv') {
   setTimeout(() => URL.revokeObjectURL(href), 1500);
 }
 
+async function copyTextToClipboard(text) {
+  const value = String(text || '');
+  if (!value) return false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {}
+  const area = document.createElement('textarea');
+  area.value = value;
+  area.setAttribute('readonly', 'readonly');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  area.style.pointerEvents = 'none';
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch {}
+  area.remove();
+  return ok;
+}
+
+function getUsersBasketMap() {
+  if (!(window.__usersBasket instanceof Map)) window.__usersBasket = new Map();
+  return window.__usersBasket;
+}
+
+function basketCount() {
+  return getUsersBasketMap().size;
+}
+
+function isUserInBasket(userId) {
+  return getUsersBasketMap().has(Number(userId || 0) || 0);
+}
+
+function setUsersBasketItem(item, checked) {
+  const basket = getUsersBasketMap();
+  const userId = Number(item?.userId || 0) || 0;
+  if (!userId) return;
+  if (checked) basket.set(userId, {
+    userId,
+    tgId: Number(item?.tgId || 0) || 0,
+    username: String(item?.username || '').trim(),
+    segment: String(item?.segment || '').trim(),
+  });
+  else basket.delete(userId);
+}
+
+function getUsersBasketIds() {
+  return Array.from(getUsersBasketMap().keys()).sort((a, b) => a - b);
+}
+
+function clearUsersBasket() {
+  getUsersBasketMap().clear();
+}
+
 function formatDate(value) {
   if (!value) return '—';
   const d = new Date(value);
@@ -514,14 +571,40 @@ function overviewView(model) {
   `, window.__adminSession || {});
 }
 
+function usersBulkModeLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ tg_ids: 'tg_id', usernames: 'usernames', user_ids: 'user_id' })[key] || (key || 'данные');
+}
+
+function basketSourceLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return key === 'basket' ? 'корзина' : 'текущий фильтр';
+}
+
+function userRowPayload(item = {}) {
+  return escapeHtml(JSON.stringify({
+    userId: Number(item.userId || 0) || 0,
+    tgId: Number(item.tgId || 0) || 0,
+    username: String(item.username || '').trim(),
+    segment: String(item.segment || '').trim(),
+  }));
+}
+
 function usersView(model) {
   const items = Array.isArray(model.items) ? model.items : [];
   const exportOptions = Array.isArray(model.exportOptions) ? model.exportOptions : [];
+  const bulkOptions = Array.isArray(model.bulkOptions) ? model.bulkOptions : [];
   const exportMeta = model.exportMeta || {};
+  const bulkMeta = model.bulkMeta || {};
   const recentExport = exportMeta.recentExport || null;
+  const recentCopy = bulkMeta.recentCopy || null;
   const currentSegment = window.__usersState?.segment || exportMeta.currentSegment || 'all';
   const currentSearch = window.__usersState?.q || exportMeta.currentSearch || '';
-  return shell('Пользователи', 'Поиск, сегментный фильтр, drilldown в user card и CSV export для ops/audit.', `
+  const bulkSource = window.__usersBulkState?.source || 'current';
+  const bulkMode = window.__usersBulkState?.mode || 'tg_ids';
+  const basketIds = getUsersBasketIds();
+  const allVisibleSelected = !!items.length && items.every((item) => isUserInBasket(item.userId));
+  return shell('Пользователи', 'Поиск, сегментный фильтр, drilldown в user card, CSV export и safe bulk utilities для ops/audit.', `
     <section class="aw-surface aw-stack">
       <div class="aw-toolbar aw-toolbar-users">
         <div class="aw-toolbar-main">
@@ -542,10 +625,38 @@ function usersView(model) {
         <span class="aw-muted">CSV · до ${Number(exportMeta.maxRows || 10000)} строк · audit trail включён</span>
         ${recentExport ? `<span class="aw-muted">Последняя выгрузка: ${escapeHtml(formatDate(recentExport.ts))} · TG ${Number(recentExport.actorTgId || 0) || '—'}</span>` : '<span class="aw-muted">Выгрузок из web-admin пока не было.</span>'}
       </div>
+
+      <section class="aw-utility-rail">
+        <div class="aw-utility-head">
+          <div>
+            <strong>Bulk utility rail</strong>
+            <span>Без мутаций: быстрые списки для ручной ops-работы и аудита.</span>
+          </div>
+          <div class="aw-basket-pill">Корзина: <strong>${basketIds.length}</strong> / ${Number(bulkMeta.basketMaxRows || 500)}</div>
+        </div>
+        <div class="aw-toolbar aw-toolbar-utility">
+          <select id="usersBulkSource" class="aw-select inline">
+            <option value="current" ${bulkSource === 'current' ? 'selected' : ''}>Источник: текущий фильтр</option>
+            <option value="basket" ${bulkSource === 'basket' ? 'selected' : ''}>Источник: корзина</option>
+          </select>
+          <select id="usersBulkMode" class="aw-select inline">
+            ${bulkOptions.map((item) => `<option value="${escapeHtml(item.id || '')}" ${bulkMode === item.id ? 'selected' : ''}>${escapeHtml(item.label || item.id || '')}</option>`).join('')}
+          </select>
+          <button class="aw-button secondary" id="copyUsersBulkBtn">Копировать</button>
+          <button class="aw-button ghost" id="selectVisibleUsersBtn">${allVisibleSelected ? 'Снять текущую страницу' : 'Выбрать текущую страницу'}</button>
+          <button class="aw-button ghost" id="clearUsersBasketBtn">Очистить корзину</button>
+        </div>
+        <div class="aw-toolbar-note">
+          <span class="aw-muted">Текущий фильтр копирует весь срез до 10 000 строк. Корзина — вручную отобранные пользователи на web-страницах.</span>
+          ${recentCopy ? `<span class="aw-muted">Последнее копирование: ${escapeHtml(formatDate(recentCopy.ts))} · TG ${Number(recentCopy.actorTgId || 0) || '—'}</span>` : '<span class="aw-muted">Копирований bulk utility пока не было.</span>'}
+        </div>
+      </section>
+
       <div class="aw-table-wrap">
         <table class="aw-table">
           <thead>
             <tr>
+              <th class="aw-table-check"><input type="checkbox" id="toggleVisibleUsers" ${allVisibleSelected ? 'checked' : ''} ${items.length ? '' : 'disabled'} /></th>
               <th>Пользователь</th>
               <th>Сегмент</th>
               <th>План / кредиты</th>
@@ -556,6 +667,9 @@ function usersView(model) {
           <tbody>
             ${items.length ? items.map((item) => `
               <tr data-user-row="${item.userId}">
+                <td class="aw-table-check">
+                  <input type="checkbox" class="aw-row-check" data-user-check='${userRowPayload(item)}' ${isUserInBasket(item.userId) ? 'checked' : ''} />
+                </td>
                 <td>
                   <strong>${escapeHtml(item.username ? '@' + item.username : 'user #' + item.userId)}</strong>
                   <small>user_id ${item.userId} · tg_id ${item.tgId || '—'} ${item.hasNote ? '· <span class="aw-note-dot"></span> note' : ''}</small>
@@ -565,7 +679,7 @@ function usersView(model) {
                 <td>${item.flags?.isCreator ? 'creator ' : ''}${item.flags?.hasBrandProfile ? 'brand ' : ''}${item.flags?.isModerator ? 'moderator ' : ''}</td>
                 <td>${formatDate(item.createdAt)}</td>
               </tr>
-            `).join('') : '<tr><td colspan="5" class="aw-empty">Ничего не найдено.</td></tr>'}
+            `).join('') : '<tr><td colspan="6" class="aw-empty">Ничего не найдено.</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -1484,8 +1598,79 @@ function bindShell() {
       alert(`Не удалось выгрузить CSV: ${err?.message || 'unknown'}`);
     }
   });
+  document.getElementById('copyUsersBulkBtn')?.addEventListener('click', async () => {
+    const mode = document.getElementById('usersBulkMode')?.value || 'tg_ids';
+    const source = document.getElementById('usersBulkSource')?.value || 'current';
+    const q = document.getElementById('usersSearch')?.value || '';
+    const segment = document.getElementById('usersSegment')?.value || 'all';
+    window.__usersBulkState = { mode, source };
+    const params = new URLSearchParams({ section: 'users_bulk', mode, segment, q });
+    if (source === 'basket') {
+      const ids = getUsersBasketIds();
+      if (!ids.length) {
+        alert('Корзина пуста. Сначала отметь пользователей в таблице.');
+        return;
+      }
+      params.set('ids', ids.join(','));
+    }
+    const res = await api(`/api/admin-web-read?${params.toString()}`);
+    if (!res.ok) {
+      alert(`Не удалось собрать список: ${res.data?.error || 'unknown'}`);
+      return;
+    }
+    const payload = res.data?.data || {};
+    if (!String(payload.text || '').trim()) {
+      alert('Пустой результат: для выбранного режима нет данных.');
+      return;
+    }
+    const copied = await copyTextToClipboard(payload.text || '');
+    if (!copied) {
+      alert('Не удалось скопировать в буфер обмена.');
+      return;
+    }
+    alert(`Скопировано: ${payload.rowsCount || 0} строк (${usersBulkModeLabel(payload.mode)} · ${basketSourceLabel(source)}).`);
+    render();
+  });
+  document.getElementById('selectVisibleUsersBtn')?.addEventListener('click', () => {
+    const rows = app.querySelectorAll('[data-user-check]');
+    const shouldSelect = !Array.from(rows).every((input) => input.checked);
+    rows.forEach((input) => {
+      input.checked = shouldSelect;
+      try {
+        const item = JSON.parse(input.getAttribute('data-user-check') || '{}');
+        setUsersBasketItem(item, shouldSelect);
+      } catch {}
+    });
+    render();
+  });
+  document.getElementById('toggleVisibleUsers')?.addEventListener('change', (e) => {
+    const checked = !!e.target?.checked;
+    app.querySelectorAll('[data-user-check]').forEach((input) => {
+      input.checked = checked;
+      try {
+        const item = JSON.parse(input.getAttribute('data-user-check') || '{}');
+        setUsersBasketItem(item, checked);
+      } catch {}
+    });
+    render();
+  });
+  document.getElementById('clearUsersBasketBtn')?.addEventListener('click', () => {
+    clearUsersBasket();
+    render();
+  });
+  app.querySelectorAll('[data-user-check]').forEach((input) => {
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('change', () => {
+      try {
+        const item = JSON.parse(input.getAttribute('data-user-check') || '{}');
+        setUsersBasketItem(item, !!input.checked);
+      } catch {}
+      render();
+    });
+  });
   app.querySelectorAll('[data-user-row]').forEach((row) => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', (e) => {
+      if (e.target?.closest('input,button,a,label,select,textarea')) return;
       const id = row.getAttribute('data-user-row');
       history.pushState({}, '', `/admin/users/${id}`);
       render();

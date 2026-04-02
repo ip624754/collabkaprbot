@@ -98,6 +98,7 @@
     "smoke:admin-web-founder-contract": "node scripts/smoke-admin-web-founder-contract.js",
     "smoke:admin-web-login-contract": "node scripts/smoke-admin-web-login-contract.js",
     "smoke:admin-web-users-export-contract": "node scripts/smoke-admin-web-users-export-contract.js",
+    "smoke:admin-web-users-bulk-contract": "node scripts/smoke-admin-web-users-bulk-contract.js",
     "smoke:admin-control-surface-contract": "node scripts/smoke-admin-control-surface-contract.js"
   },
   "dependencies": {
