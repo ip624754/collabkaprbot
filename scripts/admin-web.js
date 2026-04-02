@@ -658,6 +658,21 @@ function usersCohortPresets() {
   ];
 }
 
+function usersCohortCounterCards(counters = {}, currentCohortView = 'all') {
+  const presets = usersCohortPresets();
+  return presets.map((item) => {
+    const value = Math.max(0, Number(counters?.[item.id] || 0));
+    const meta = usersCohortMeta(item.id);
+    return `
+      <button class="aw-cohort-counter-card ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">
+        <span>${escapeHtml(meta.label)}</span>
+        <strong>${value}</strong>
+        <small>${escapeHtml(meta.detail)}</small>
+      </button>
+    `;
+  }).join('');
+}
+
 function usersPlanMeta(item = {}) {
   const plan = String(item?.brandPlan || '').trim();
   if (!plan) return { label: 'без плана', tone: 'is-muted', detail: 'План не активирован' };
@@ -766,6 +781,7 @@ function usersView(model) {
   const recentCopy = bulkMeta.recentCopy || null;
   const usersState = getUsersState();
   const filterMeta = model.filterRail?.currentFilters || exportMeta.currentFilters || {};
+  const cohortTopline = model.cohortTopline || model.filterRail?.cohortCounters || {};
   const currentSegment = usersState.segment || exportMeta.currentSegment || 'all';
   const currentSearch = usersState.q || exportMeta.currentSearch || '';
   const currentPlanState = usersState.planState || filterMeta.planState || 'all';
@@ -826,9 +842,16 @@ function usersView(model) {
         <div class="aw-utility-head">
           <div>
             <strong>Users operator cohort chips / saved views</strong>
-            <span>Быстрые рабочие cohort-view для аудита, follow-up и ручной ops-работы без новых мутаций.</span>
+            <span>Users cohort counters / mini topline: теперь с маленькими счётчиками над chips, чтобы панель быстрее читалась как control plane.</span>
           </div>
           <div class="aw-basket-pill">Cohort: <strong>${escapeHtml(cohortMeta.label)}</strong></div>
+        </div>
+        <div class="aw-cohort-topline">
+          ${usersCohortCounterCards(cohortTopline, currentCohortView)}
+        </div>
+        <div class="aw-toolbar-note">
+          <span class="aw-muted">Mini topline считает cohort-срезы на сервере по тому же users-contract, но без активного cohort filter.</span>
+          <span class="aw-muted">Это сохраняет chips полезными: даже при активном cohort ты видишь полный рабочий расклад по текущему search / segment / filter rail.</span>
         </div>
         <div class="aw-priority-row">
           <div class="aw-priority-pills">

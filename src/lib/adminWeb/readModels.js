@@ -1,5 +1,5 @@
 import { pool } from '../../db/pool.js';
-import { getAdminMetricsSnapshot, listUsersDirectory, getUserCardById, normalizeUsersDirectoryFilters } from '../../db/queries.js';
+import { getAdminMetricsSnapshot, listUsersDirectory, getUserCardById, normalizeUsersDirectoryFilters, getUsersDirectoryCohortCounters } from '../../db/queries.js';
 import { getAdminUserNote, getAdminUserNotesBulk } from './notes.js';
 import { getRuntimeSummary } from './runtime.js';
 import { getRecentAdminWebAudit, isFounderActorTgId } from './auth.js';
@@ -118,7 +118,10 @@ export async function getUsersList(params = {}) {
   const page = Math.max(0, Number(params.page) || 0);
   const offset = page * limit;
 
-  const listResult = await listUsersDirectory(filters.segment, limit, offset, q, filters);
+  const [listResult, cohortCounters] = await Promise.all([
+    listUsersDirectory(filters.segment, limit, offset, q, filters),
+    getUsersDirectoryCohortCounters(filters.segment, q, filters),
+  ]);
   const rows = Array.isArray(listResult?.rows) ? listResult.rows : [];
   const noteMap = await getAdminUserNotesBulk(rows.map((x) => x.user_id));
 
@@ -191,7 +194,9 @@ export async function getUsersList(params = {}) {
     },
     filterRail: {
       currentFilters: filters,
+      cohortCounters: cohortCounters || { all: 0 },
     },
+    cohortTopline: cohortCounters || { all: 0 },
   };
 }
 

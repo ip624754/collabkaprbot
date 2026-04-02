@@ -1,5 +1,20 @@
 # Work History — 2026-04
 
+## STEP519 — Users cohort counters / mini topline
+
+Date: 2026-04-02
+
+Scope:
+- added a small server-backed `Users cohort counters / mini topline` above the existing cohort chips in `/admin/users`;
+- introduced `getUsersDirectoryCohortCounters()` so the same built-in cohort slices are counted once on the server under the current search / segment / filter rail;
+- intentionally kept counters independent from the active cohort selection, so chips stay useful even when the list is already drilled into one cohort;
+- surfaced the counters as clickable mini cards in `scripts/admin-web.js` and added dedicated styling in `styles/admin-web.css`;
+- added `scripts/smoke-admin-web-users-cohort-counters-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only and bounded: no new writes, no background jobs, no persistence layer for custom views;
+- the goal is faster operator scan-speed and topline clarity, not a new analytics subsystem.
+
 ## STEP518 — Users operator cohort chips / saved views
 
 Date: 2026-04-02

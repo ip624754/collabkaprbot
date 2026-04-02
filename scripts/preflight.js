@@ -242,6 +242,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin web users hierarchy polish contract", "smoke:admin-web-users-hierarchy-contract"],
   ["Preflight (source-only): admin web users priority rail contract", "smoke:admin-web-users-priority-rail-contract"],
   ["Preflight (source-only): admin web users cohort rail contract", "smoke:admin-web-users-cohort-rail-contract"],
+  ["Preflight (source-only): admin web users cohort counters contract", "smoke:admin-web-users-cohort-counters-contract"],
   ["Preflight (source-only): admin control surface contract", "smoke:admin-control-surface-contract"],
   ["Preflight (source-only): creator-side brand-app local-context contract", "smoke:creator-app-local-context-contract"],
   ["Preflight (source-only): brand-side brand-app reply entrypoints contract", "smoke:brand-app-reply-entrypoints-contract"],

@@ -444,6 +444,39 @@ const USERS_DIRECTORY_PAYMENTS_STATES = ['all', 'with_payments', 'no_payments'];
 const USERS_DIRECTORY_SORTS = ['created_desc', 'activity_desc', 'activity_asc', 'payments_desc', 'problem_desc'];
 const USERS_DIRECTORY_COHORTS = ['all', 'dormant_payers', 'paid_no_channel', 'plan_no_channel', 'fresh_brands', 'quiet_creators'];
 
+const USERS_DIRECTORY_COHORT_WHERE = {
+  dormant_payers: [
+    `meta.payments_count > 0`,
+    `meta.last_known_activity_at < now() - interval '30 days'`,
+  ],
+  paid_no_channel: [
+    `meta.payments_count > 0`,
+    `meta.has_channel = false`,
+  ],
+  plan_no_channel: [
+    `u.brand_plan is not null`,
+    `meta.has_channel = false`,
+  ],
+  fresh_brands: [
+    `(
+      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
+      or u.brand_plan is not null
+      or coalesce(u.brand_credits,0) > 0
+    )`,
+    `meta.last_known_activity_at >= now() - interval '30 days'`,
+  ],
+  quiet_creators: [
+    `exists (select 1 from workspaces w where w.owner_user_id = u.id)`,
+    `meta.last_known_activity_at < now() - interval '30 days'`,
+  ],
+};
+
+function getUsersDirectoryCohortWhereClauses(cohortView = 'all') {
+  const key = String(cohortView || 'all').trim().toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(USERS_DIRECTORY_COHORT_WHERE, key)) return [];
+  return Array.isArray(USERS_DIRECTORY_COHORT_WHERE[key]) ? [...USERS_DIRECTORY_COHORT_WHERE[key]] : [];
+}
+
 const USERS_DIRECTORY_META_SQL = `
   left join lateral (
     select
@@ -557,26 +590,7 @@ function buildUsersDirectorySqlParts({ filterRaw = 'all', qRaw = '', filtersRaw 
   if (normalized.paymentsState === 'with_payments') where.push(`meta.payments_count > 0`);
   else if (normalized.paymentsState === 'no_payments') where.push(`meta.payments_count = 0`);
 
-  if (normalized.cohortView === 'dormant_payers') {
-    where.push(`meta.payments_count > 0`);
-    where.push(`meta.last_known_activity_at < now() - interval '30 days'`);
-  } else if (normalized.cohortView === 'paid_no_channel') {
-    where.push(`meta.payments_count > 0`);
-    where.push(`meta.has_channel = false`);
-  } else if (normalized.cohortView === 'plan_no_channel') {
-    where.push(`u.brand_plan is not null`);
-    where.push(`meta.has_channel = false`);
-  } else if (normalized.cohortView === 'fresh_brands') {
-    where.push(`(
-      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
-      or u.brand_plan is not null
-      or coalesce(u.brand_credits,0) > 0
-    )`);
-    where.push(`meta.last_known_activity_at >= now() - interval '30 days'`);
-  } else if (normalized.cohortView === 'quiet_creators') {
-    where.push(`exists (select 1 from workspaces w where w.owner_user_id = u.id)`);
-    where.push(`meta.last_known_activity_at < now() - interval '30 days'`);
-  }
+  where.push(...getUsersDirectoryCohortWhereClauses(normalized.cohortView));
 
   const activityDays = normalized.activityWindow === '7d' ? 7
     : normalized.activityWindow === '30d' ? 30
@@ -602,6 +616,47 @@ function buildUsersDirectorySqlParts({ filterRaw = 'all', qRaw = '', filtersRaw 
     params,
     q,
     whereSql: where.length ? `where ${where.join(' and ')}` : '',
+  };
+}
+
+export async function getUsersDirectoryCohortCounters(filterRaw = 'all', qRaw = '', filtersRaw = {}) {
+  const baseFilters = normalizeUsersDirectoryFilters({ segment: filterRaw, ...(filtersRaw || {}), cohortView: 'all' });
+  const parts = buildUsersDirectorySqlParts({
+    filterRaw: baseFilters.segment,
+    qRaw,
+    filtersRaw: baseFilters,
+    startIndex: 1,
+  });
+
+  const dormantSql = getUsersDirectoryCohortWhereClauses('dormant_payers').join(' and ');
+  const paidNoChannelSql = getUsersDirectoryCohortWhereClauses('paid_no_channel').join(' and ');
+  const planNoChannelSql = getUsersDirectoryCohortWhereClauses('plan_no_channel').join(' and ');
+  const freshBrandsSql = getUsersDirectoryCohortWhereClauses('fresh_brands').join(' and ');
+  const quietCreatorsSql = getUsersDirectoryCohortWhereClauses('quiet_creators').join(' and ');
+
+  const r = await pool.query(
+    `select
+       count(*)::int as total_count,
+       count(*) filter (where ${dormantSql})::int as dormant_payers_count,
+       count(*) filter (where ${paidNoChannelSql})::int as paid_no_channel_count,
+       count(*) filter (where ${planNoChannelSql})::int as plan_no_channel_count,
+       count(*) filter (where ${freshBrandsSql})::int as fresh_brands_count,
+       count(*) filter (where ${quietCreatorsSql})::int as quiet_creators_count
+     from users u
+     ${USERS_DIRECTORY_META_SQL}
+     ${parts.whereSql}`,
+    parts.params
+  );
+
+  const row = r.rows?.[0] || {};
+  return {
+    scopeFilters: baseFilters,
+    all: Number(row.total_count || 0),
+    dormant_payers: Number(row.dormant_payers_count || 0),
+    paid_no_channel: Number(row.paid_no_channel_count || 0),
+    plan_no_channel: Number(row.plan_no_channel_count || 0),
+    fresh_brands: Number(row.fresh_brands_count || 0),
+    quiet_creators: Number(row.quiet_creators_count || 0),
   };
 }
 

@@ -1,4 +1,4 @@
-**STEP518:** Users operator cohort chips / saved views — extended `/admin/users` with a narrow cohort-view layer that sits next to the priority rail and stays on the same read-only contract as list / CSV export / bulk copy / audit. Operators now get one-click working views for `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`, plus a matching `Saved view` selector. The normalized users-directory contract in `src/db/queries.js` now carries `cohortView`, so the same cohort slice stays consistent across web list order, CSV output, copied ids/usernames, and admin-web audit reasons. Scope stays deliberately bounded: no new write paths, no background jobs, no public-flow changes, no persistence layer for custom views — only disciplined built-in operator cohorts.
+**STEP519:** Users cohort counters / mini topline — strengthened `/admin/users` into a more legible control plane by adding small server-backed cohort counters above the existing cohort chips. The same working cohorts (`Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, `Quiet creators`) are now counted once on the server using the same bounded users contract, but without the currently active cohort filter, so operators can still see the full working breakdown while drilling into one slice. The UI now renders this as a clickable mini topline that shares the same cohort actions as the chips below. Scope stays read-only and narrow: no new write paths, no background jobs, no custom persistence, only a clearer operator topline over the existing cohort layer.
 
 **STEP516:** Users table hierarchy polish — tightened the `/admin/users` list into a more disciplined operator surface without touching the server contract from STEP513–515. The table now has a stronger scan order: user identity first, compact plan/credits chips second, signal chips third, and an explicit `Last activity` column with freshness + exact timestamp detail. Created time is also split into cleaner date/time micro-hierarchy, so the page reads less like a raw directory dump and more like a control-plane list. Scope is UI-only and reversible: no SQL changes, no route changes, no write-surface expansion.
 
@@ -1767,6 +1767,17 @@ Auto-heal safeguards + ops alerts:
 Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
+
+
+## STEP519 — Users cohort counters / mini topline
+- Added a server-backed `Users cohort counters / mini topline` above the existing cohort chips in `/admin/users`, so operators get immediate small counters for `Все`, `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`.
+- Added `getUsersDirectoryCohortCounters()` in `src/db/queries.js`, reusing the same bounded users-directory contract and cohort predicates but intentionally forcing `cohortView=all` for the aggregate pass so the counters keep showing the full working breakdown even when one cohort is active in the list below.
+- Extended `getUsersList()` in `src/lib/adminWeb/readModels.js` to return `cohortTopline` / `filterRail.cohortCounters`, then rendered those counters as clickable mini cards in `scripts/admin-web.js` with dedicated styling in `styles/admin-web.css`.
+- Added `scripts/smoke-admin-web-users-cohort-counters-contract.js`, wired into `package.json` and source preflight.
+
+Acceptance / notes:
+- Scope stays read-only and reversible: no new write paths, no background jobs, no custom saved-view persistence.
+- Counters follow the current search / segment / filter rail, but deliberately ignore the currently active `cohortView` so the operator still sees the full cohort distribution while drilling into one slice.
 
 
 ## STEP518 — Users operator cohort chips / saved views

@@ -190,6 +190,41 @@ body {
   display: grid;
   gap: 12px;
 }
+.aw-cohort-topline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.aw-cohort-counter-card {
+  border: 1px solid rgba(132,176,255,0.12);
+  background: rgba(255,255,255,0.03);
+  border-radius: 16px;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.aw-cohort-counter-card:hover,
+.aw-cohort-counter-card.is-active {
+  border-color: rgba(73,176,255,0.3);
+  background: rgba(73,176,255,0.1);
+}
+.aw-cohort-counter-card span {
+  display: block;
+  color: var(--soft);
+  font-size: 12px;
+}
+.aw-cohort-counter-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+}
+.aw-cohort-counter-card small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.35;
+}
 .aw-priority-row {
   display: flex;
   gap: 10px;
