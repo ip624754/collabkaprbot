@@ -1,3 +1,18 @@
+## STEP524 — Users URL-persisted working views
+
+Date: 2026-04-02
+
+Scope:
+- upgraded `/admin/users` so the active users state-contract now persists into the page URL and no longer depends only on in-memory SPA state;
+- added client helpers to read state from `location.search`, normalize it, rebuild canonical users list links, and sync the current working slice back into the URL;
+- added a visible `Users URL-persisted working views` status plus `Скопировать ссылку на срез` inside the sticky controls area;
+- changed user-card drilldowns to carry a `back=` link built from the current users slice, so operator return lands on the same filtered/paginated view;
+- added `scripts/smoke-admin-web-users-url-persisted-views-contract.js`, wired into `package.json` and source preflight.
+
+Acceptance / notes:
+- scope stays read-only and reversible: no backend persistence, no new write paths, no new route family, no public-flow changes;
+- refresh / reopen / shareable admin links now reopen the same users slice without relying on ephemeral page memory.
+
 ## STEP523 — Users saved operator presets
 
 Date: 2026-04-02

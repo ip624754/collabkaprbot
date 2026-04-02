@@ -1,3 +1,5 @@
+**STEP524:** Users URL-persisted working views — upgraded `/admin/users` so the full users state-contract now lives in the page URL instead of only in in-memory SPA state. The active search / segment / filter rail / sort / cohort / page / page-size slice now survives refresh and reopen, can be copied as a shareable admin link, and is reused as the back-link when drilling into `/admin/users/[id]`. Scope stays deliberately narrow and read-only: no backend persistence, no new write paths, no new route family — only URL-backed continuity on top of the existing users control plane.
+
 **STEP523:** Users saved operator presets — added a compact built-in preset rail to `/admin/users` so operators can jump back to real working slices in one click instead of manually rebuilding the same search/segment/filter/sort/cohort combinations. The new layer is intentionally narrow and read-only: it only replays the existing state-contract with presets like `Dormant payers`, `Paid no channel`, `Plan no channel`, `Fresh brands`, and `Quiet creators`, while visibly falling back to `Custom slice` as soon as the operator drifts away from a preset. No new backend mutations, no DB persistence, no custom user-defined views — just a faster way to return to the most useful ops slices on top of the existing users control plane.
 
 **STEP522:** Users sticky table controls / pagination polish — tightened `/admin/users` for longer manual ops sessions without adding any new write paths. The page now keeps its filter/sort/cohort control stack visually pinned, adds a bounded page-size + pagination contract, and renders the users table inside its own scrollable surface with sticky headers. Pagination now uses the real filtered total from the server contract, so operators can move through large slices while keeping basket state, current sort/cohort choice, and scan context stable. Scope stays read-only and reversible: no mutations, no background jobs, no custom persistence, just a steadier control-plane shell around the existing users directory.
@@ -1774,6 +1776,18 @@ Acceptance / notes:
 - `current filter` copies stay bounded by the existing 10 000-row export cap; basket copies are bounded to 500 explicit ids.
 - Scope stays non-destructive: copy-only utilities, no bulk edits, no payout/payment mutations, no public-flow changes.
 
+
+
+## STEP524 — Users URL-persisted working views
+- Upgraded `/admin/users` so the current users state-contract (`q`, `segment`, filter rail, `sortBy`, `cohortView`, `page`, `pageSize`) is mirrored into the page URL instead of living only in `window.__usersState`.
+- Added client helpers in `scripts/admin-web.js` to read users state from URL, normalize it, rebuild canonical users list links, and sync the current working slice back into `location.search` without introducing any backend persistence.
+- Added a visible `Users URL-persisted working views` status + `Скопировать ссылку на срез` action in the sticky controls area so operators can quickly reuse or share the exact same admin slice.
+- User-card drilldowns now carry a `back=` link built from the active users slice, so returning from `/admin/users/[id]` lands back on the same filtered/paginated working view instead of resetting to the base list.
+- Added `scripts/smoke-admin-web-users-url-persisted-views-contract.js`, wired into `package.json` and `scripts/preflight.js`.
+
+Acceptance / notes:
+- Scope stays read-only and reversible: no DB persistence, no backend write expansion, no new route family, no public-flow changes.
+- The URL is now the transport for working views, so refresh / reopen / shareable admin links all reopen the same users slice without relying on ephemeral page memory.
 
 
 ## STEP523 — Users saved operator presets

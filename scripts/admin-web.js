@@ -289,6 +289,15 @@ function paymentDetailBackHref() {
   return '/admin/payments';
 }
 
+function userDetailBackHref() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const back = params.get('back');
+    if (back && String(back).startsWith('/admin/users')) return back;
+  } catch {}
+  return buildUsersListHref(getUsersState());
+}
+
 function warningTone(level) {
   const key = String(level || '').trim().toLowerCase();
   if (key === 'error') return 'aw-status bad';
@@ -458,7 +467,7 @@ function shell(title, subtitle, body, session) {
         <nav class="aw-nav">
           <div class="aw-nav-group-label">Оператор</div>
           ${navLink('/admin', 'Overview', route.page === 'overview')}
-          ${navLink('/admin/users', 'Users', route.page === 'users' || route.page === 'userDetail')}
+          ${navLink(route.page === 'userDetail' ? userDetailBackHref() : buildUsersListHref(getUsersState()), 'Users', route.page === 'users' || route.page === 'userDetail')}
           ${navLink('/admin/runtime', 'Runtime', route.page === 'runtime')}
           ${navLink('/admin/payments', 'Payments', route.page === 'payments' || route.page === 'paymentDetail')}
           ${navLink('/admin/comms', 'Comms', route.page === 'comms')}
@@ -595,23 +604,111 @@ function basketSourceLabel(value) {
   return key === 'basket' ? 'корзина' : 'текущий фильтр';
 }
 
-function getUsersState() {
-  const state = window.__usersState || {};
+const USERS_STATE_DEFAULTS = {
+  q: '',
+  segment: 'all',
+  planState: 'all',
+  creditsState: 'all',
+  channelState: 'all',
+  activityWindow: 'all',
+  paymentsState: 'all',
+  sortBy: 'created_desc',
+  cohortView: 'all',
+  page: 0,
+  pageSize: 20,
+};
+
+function normalizeUsersState(raw = {}) {
+  const state = raw || {};
   const page = Math.max(0, Number(state.page) || 0);
-  const pageSize = Math.max(10, Math.min(50, Number(state.pageSize) || 20));
+  const pageSize = Math.max(10, Math.min(50, Number(state.pageSize || state.limit) || 20));
   return {
-    q: state.q || '',
-    segment: state.segment || 'all',
-    planState: state.planState || 'all',
-    creditsState: state.creditsState || 'all',
-    channelState: state.channelState || 'all',
-    activityWindow: state.activityWindow || 'all',
-    paymentsState: state.paymentsState || 'all',
-    sortBy: state.sortBy || 'created_desc',
-    cohortView: state.cohortView || 'all',
+    q: String(state.q || '').trim(),
+    segment: String(state.segment || USERS_STATE_DEFAULTS.segment).trim() || USERS_STATE_DEFAULTS.segment,
+    planState: String(state.planState || state.plan_state || USERS_STATE_DEFAULTS.planState).trim() || USERS_STATE_DEFAULTS.planState,
+    creditsState: String(state.creditsState || state.credits_state || USERS_STATE_DEFAULTS.creditsState).trim() || USERS_STATE_DEFAULTS.creditsState,
+    channelState: String(state.channelState || state.channel_state || USERS_STATE_DEFAULTS.channelState).trim() || USERS_STATE_DEFAULTS.channelState,
+    activityWindow: String(state.activityWindow || state.activity_window || USERS_STATE_DEFAULTS.activityWindow).trim() || USERS_STATE_DEFAULTS.activityWindow,
+    paymentsState: String(state.paymentsState || state.payments_state || USERS_STATE_DEFAULTS.paymentsState).trim() || USERS_STATE_DEFAULTS.paymentsState,
+    sortBy: String(state.sortBy || state.sort_by || USERS_STATE_DEFAULTS.sortBy).trim() || USERS_STATE_DEFAULTS.sortBy,
+    cohortView: String(state.cohortView || state.cohort_view || USERS_STATE_DEFAULTS.cohortView).trim() || USERS_STATE_DEFAULTS.cohortView,
     page,
     pageSize,
   };
+}
+
+function getUsersState() {
+  return normalizeUsersState(window.__usersState || {});
+}
+
+function readUsersStateFromUrl(search = location.search) {
+  try {
+    const params = new URLSearchParams(search || '');
+    const next = {};
+    if (params.has('q')) next.q = params.get('q') || '';
+    if (params.has('segment')) next.segment = params.get('segment') || 'all';
+    if (params.has('plan_state')) next.planState = params.get('plan_state') || 'all';
+    if (params.has('credits_state')) next.creditsState = params.get('credits_state') || 'all';
+    if (params.has('channel_state')) next.channelState = params.get('channel_state') || 'all';
+    if (params.has('activity_window')) next.activityWindow = params.get('activity_window') || 'all';
+    if (params.has('payments_state')) next.paymentsState = params.get('payments_state') || 'all';
+    if (params.has('sort_by')) next.sortBy = params.get('sort_by') || 'created_desc';
+    if (params.has('cohort_view')) next.cohortView = params.get('cohort_view') || 'all';
+    if (params.has('page')) next.page = params.get('page') || '0';
+    if (params.has('limit')) next.pageSize = params.get('limit') || '20';
+    return normalizeUsersState(next);
+  } catch {
+    return normalizeUsersState({});
+  }
+}
+
+function buildUsersListHref(state = getUsersState(), { absolute = false } = {}) {
+  const normalized = normalizeUsersState(state);
+  const params = new URLSearchParams();
+  if (normalized.q) params.set('q', normalized.q);
+  if (normalized.segment !== USERS_STATE_DEFAULTS.segment) params.set('segment', normalized.segment);
+  if (normalized.planState !== USERS_STATE_DEFAULTS.planState) params.set('plan_state', normalized.planState);
+  if (normalized.creditsState !== USERS_STATE_DEFAULTS.creditsState) params.set('credits_state', normalized.creditsState);
+  if (normalized.channelState !== USERS_STATE_DEFAULTS.channelState) params.set('channel_state', normalized.channelState);
+  if (normalized.activityWindow !== USERS_STATE_DEFAULTS.activityWindow) params.set('activity_window', normalized.activityWindow);
+  if (normalized.paymentsState !== USERS_STATE_DEFAULTS.paymentsState) params.set('payments_state', normalized.paymentsState);
+  if (normalized.sortBy !== USERS_STATE_DEFAULTS.sortBy) params.set('sort_by', normalized.sortBy);
+  if (normalized.cohortView !== USERS_STATE_DEFAULTS.cohortView) params.set('cohort_view', normalized.cohortView);
+  if (normalized.page > 0) params.set('page', String(normalized.page));
+  if (normalized.pageSize !== USERS_STATE_DEFAULTS.pageSize) params.set('limit', String(normalized.pageSize));
+  const relative = `/admin/users${params.toString() ? `?${params.toString()}` : ''}`;
+  if (!absolute) return relative;
+  try {
+    return new URL(relative, location.origin).toString();
+  } catch {
+    return `${location.origin}${relative}`;
+  }
+}
+
+function syncUsersUrlState(state = getUsersState(), { replace = true } = {}) {
+  const target = buildUsersListHref(state);
+  const current = `${location.pathname}${location.search}`;
+  if (current === target) return target;
+  const method = replace ? 'replaceState' : 'pushState';
+  history[method]({}, '', target);
+  return target;
+}
+
+function hydrateUsersStateFromLocation() {
+  const base = getUsersState();
+  const urlState = readUsersStateFromUrl(location.search);
+  window.__usersState = normalizeUsersState({ ...base, ...urlState });
+  return getUsersState();
+}
+
+async function copyUsersWorkingViewUrl() {
+  const href = buildUsersListHref(readUsersControlsState(), { absolute: true });
+  const copied = await copyTextToClipboard(href);
+  if (!copied) {
+    alert('Не удалось скопировать ссылку на текущий users slice.');
+    return;
+  }
+  alert('Ссылка на текущий users slice скопирована.');
 }
 
 function activeWindowLabel(value) {
@@ -1177,6 +1274,10 @@ function usersView(model) {
           <div class="aw-basket-pill">Строки: <strong>${pagination.total > 0 ? `${pagination.fromRow}–${pagination.toRow}` : '0'}</strong> / ${pagination.total}</div>
           <div class="aw-basket-pill">Корзина: <strong>${basketIds.length}</strong> / ${Number(bulkMeta.basketMaxRows || 500)}</div>
           <div class="aw-basket-pill">На странице: <strong>${pagination.pageSize}</strong></div>
+          <div class="aw-users-url-meta">
+            <div class="aw-basket-pill">Users URL-persisted working views: <strong>ON</strong></div>
+            <button class="aw-button ghost" data-users-copy-view-url>Скопировать ссылку на срез</button>
+          </div>
         </div>
 
         ${topPagination}
@@ -1358,7 +1459,7 @@ function userDetailView(model) {
 
   return shell('Пользователь', 'User card usable v1: summary → access → activity → operator note.', `
     <section class="aw-surface aw-user-hero aw-stack">
-      <a href="/admin/users" data-link class="aw-inline-back">← К списку пользователей</a>
+      <a href="${escapeHtml(userDetailBackHref())}" data-link class="aw-inline-back">← К списку пользователей</a>
       <div class="aw-user-head">
         <div class="aw-stack aw-gap-xs">
           <h2 class="aw-user-title">${escapeHtml(displayName)}</h2>
@@ -2170,18 +2271,20 @@ async function render() {
     if (res.data?.data?.runtime?.controlSurface) window.__controlSurface = res.data.data.runtime.controlSurface;
     app.innerHTML = overviewView(res.data.data || {});
   } else if (route.page === 'users') {
-    const state = getUsersState();
+    const state = hydrateUsersStateFromLocation();
+    syncUsersUrlState(state, { replace: true });
     const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', sort_by: state.sortBy || 'created_desc', cohort_view: state.cohortView || 'all', limit: String(state.pageSize || 20), page: String(state.page || 0) });
     const res = await api(`/api/admin-web-read?section=users&${params}`);
     const model = res.data.data || { items: [] };
     const paginationPage = Number(model?.pagination?.page ?? state.page ?? 0) || 0;
     const paginationSize = Number(model?.pagination?.pageSize ?? state.pageSize ?? 20) || 20;
-    window.__usersState = { ...state, page: paginationPage, pageSize: paginationSize };
+    window.__usersState = normalizeUsersState({ ...state, page: paginationPage, pageSize: paginationSize });
+    syncUsersUrlState(window.__usersState, { replace: true });
     app.innerHTML = usersView(model);
   } else if (route.page === 'userDetail') {
     const res = await api(`/api/admin-web-read?section=user&id=${encodeURIComponent(route.userId)}`);
     if (!res.ok) {
-      app.innerHTML = shell('Пользователь не найден', 'Проверь user_id и попробуй снова.', `<div class="aw-surface aw-empty"><a href="/admin/users" data-link class="aw-inline-back">← К списку пользователей</a><div class="aw-empty">Карточка пользователя не найдена.</div></div>`, session);
+      app.innerHTML = shell('Пользователь не найден', 'Проверь user_id и попробуй снова.', `<div class="aw-surface aw-empty"><a href="${escapeHtml(userDetailBackHref())}" data-link class="aw-inline-back">← К списку пользователей</a><div class="aw-empty">Карточка пользователя не найдена.</div></div>`, session);
     } else {
       app.innerHTML = userDetailView(res.data.data || {});
     }
@@ -2370,6 +2473,11 @@ function bindShell() {
     const source = document.getElementById('usersBulkSource')?.value || 'current';
     await runUsersBulkCopyAction(mode, source);
   });
+  app.querySelectorAll('[data-users-copy-view-url]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      await copyUsersWorkingViewUrl();
+    });
+  });
 
   app.querySelectorAll('[data-users-page-size]').forEach((select) => {
     select.addEventListener('change', () => {
@@ -2470,7 +2578,8 @@ function bindShell() {
         const item = JSON.parse(button.getAttribute('data-user-quick-payload') || '{}');
         const action = button.getAttribute('data-user-quick') || '';
         if (action === 'open_card') {
-          history.pushState({}, '', `/admin/users/${Number(item.userId || 0) || 0}`);
+          const back = encodeURIComponent(buildUsersListHref(getUsersState()));
+          history.pushState({}, '', `/admin/users/${Number(item.userId || 0) || 0}?back=${back}`);
           render();
           return;
         }
@@ -2495,7 +2604,8 @@ function bindShell() {
     row.addEventListener('click', (e) => {
       if (e.target?.closest('input,button,a,label,select,textarea')) return;
       const id = row.getAttribute('data-user-row');
-      history.pushState({}, '', `/admin/users/${id}`);
+      const back = encodeURIComponent(buildUsersListHref(getUsersState()));
+      history.pushState({}, '', `/admin/users/${id}?back=${back}`);
       render();
     });
   });

@@ -185,6 +185,12 @@ body {
   flex-wrap: wrap;
   align-items: center;
 }
+.aw-users-url-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .aw-users-pagination {
   display: flex;
   gap: 12px;
