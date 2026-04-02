@@ -79,6 +79,19 @@ function paymentStatusLabel(value) {
   return ({ success: 'success', pending: 'pending', failed: 'failed', fallback: 'fallback', unknown: 'unknown' })[key] || (key || 'unknown');
 }
 
+function paymentFollowUpClass(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'ok') return 'good';
+  if (key === 'watch' || key === 'review') return 'warn';
+  if (key === 'urgent') return 'bad';
+  return '';
+}
+
+function paymentFollowUpLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ ok: 'без действий', watch: 'наблюдать', review: 'проверить', urgent: 'срочно' })[key] || (key || '—');
+}
+
 
 function paymentDetailBackHref() {
   try {
@@ -404,6 +417,8 @@ function paymentsView(model) {
   const warnings = Array.isArray(model.warnings) ? model.warnings : [];
   const recentPayments = Array.isArray(model.recentPayments) ? model.recentPayments : [];
   const groups = model.groups || {};
+  const followUpGroups = model.followUpGroups || {};
+  const followUpQueue = Array.isArray(model.followUpQueue) ? model.followUpQueue : [];
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const overall = model.overall || { state: 'unknown', label: 'Данные пока недоступны' };
   return shell('Payments', 'Read-only срез платежной активности, fallback-сигналов и проблемных кейсов.', `
@@ -449,6 +464,7 @@ function paymentsView(model) {
                 <th>Type</th>
                 <th>Amount</th>
                 <th>Status</th>
+                <th>Follow-up</th>
                 <th>Created</th>
                 <th>Updated</th>
               </tr>
@@ -461,16 +477,40 @@ function paymentsView(model) {
                   <td>${escapeHtml(item.kind || 'payment')}</td>
                   <td>${escapeHtml(item.amountLabel || '—')}</td>
                   <td><span class="aw-status ${paymentStatusClass(item.status)}">${escapeHtml(paymentStatusLabel(item.status))}</span></td>
+                  <td><span class="aw-status ${paymentFollowUpClass(item.followUp?.level)}">${escapeHtml(item.followUp?.label || paymentFollowUpLabel(item.followUp?.level))}</span><small>${escapeHtml(item.followUp?.reason || '')}</small></td>
                   <td>${formatDate(item.createdAt)}</td>
                   <td>${formatDate(item.updatedAt)}</td>
                 </tr>
-              `).join('') : '<tr><td colspan="7" class="aw-empty">Платёжных событий пока нет.</td></tr>'}
+              `).join('') : '<tr><td colspan="8" class="aw-empty">Платёжных событий пока нет.</td></tr>'}
             </tbody>
           </table>
         </div>
       </section>
 
       <aside class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Operator follow-up</h2>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong>без действий</strong><small>${Number(followUpGroups.noAction || 0)}</small></div>
+            <div class="aw-list-item"><strong>наблюдать</strong><small>${Number(followUpGroups.watch || 0)}</small></div>
+            <div class="aw-list-item"><strong>проверить</strong><small>${Number(followUpGroups.review || 0)}</small></div>
+            <div class="aw-list-item"><strong>срочно</strong><small>${Number(followUpGroups.urgent || 0)}</small></div>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Кейсы для follow-up</h2>
+          <div class="aw-list">
+            ${followUpQueue.length ? followUpQueue.map((item) => `
+              <div class="aw-list-item">
+                <strong>${escapeHtml(item.displayName || `payment #${Number(item.id || 0)}`)}</strong>
+                <small>#${Number(item.id || 0)} · ${escapeHtml(item.amountLabel || '—')} · ${escapeHtml(item.followUp?.reason || '')}</small>
+                <div class="aw-actions"><a href="/admin/payments/${Number(item.id || 0)}?back=${encodeURIComponent('/admin/payments')}" data-link class="aw-button ghost">Открыть</a></div>
+              </div>
+            `).join('') : '<div class="aw-empty">Сейчас нет кейсов для follow-up.</div>'}
+          </div>
+        </section>
+
         <section class="aw-surface aw-stack">
           <h2>Status groups</h2>
           <div class="aw-list">
@@ -502,6 +542,7 @@ function paymentDetailView(model) {
   const payment = model.payment || {};
   const user = model.user || {};
   const diagnostics = model.diagnostics || { state: 'unknown', label: 'Данные пока недоступны', hint: 'Проверь payment/runtime surfaces.' };
+  const followUp = model.followUp || { level: 'review', label: 'Проверить', reason: 'Нет follow-up summary.', nextStep: 'Проверь payment signals и user card.' };
   const events = Array.isArray(model.events) ? model.events : [];
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const recentAdminAudit = Array.isArray(model.recentAdminAudit) ? model.recentAdminAudit : [];
@@ -516,13 +557,14 @@ function paymentDetailView(model) {
         </div>
         <div class="aw-badges">
           <span class="aw-badge ${paymentStatusClass(payment.status)}">${escapeHtml(paymentStatusLabel(payment.status))}</span>
+          <span class="aw-badge ${paymentFollowUpClass(followUp.level)}">${escapeHtml(followUp.label || paymentFollowUpLabel(followUp.level))}</span>
           <span class="aw-badge">${escapeHtml(payment.amountLabel || '—')}</span>
         </div>
       </div>
       <div class="aw-mini-grid aw-mini-grid-3">
         <div class="aw-mini-card"><span>Статус</span><strong class="aw-status ${paymentStatusClass(payment.status)}">${escapeHtml(paymentStatusLabel(payment.status))}</strong></div>
+        <div class="aw-mini-card"><span>Follow-up</span><strong class="aw-status ${paymentFollowUpClass(followUp.level)}">${escapeHtml(followUp.label || '—')}</strong></div>
         <div class="aw-mini-card"><span>Amount</span><strong>${escapeHtml(payment.amountLabel || '—')}</strong></div>
-        <div class="aw-mini-card"><span>Source</span><strong>${escapeHtml(payment.source || 'payments')}</strong></div>
       </div>
     </section>
 
@@ -547,6 +589,14 @@ function paymentDetailView(model) {
             <dt>Created</dt><dd>${formatDate(payment.createdAt)}</dd>
             <dt>Updated</dt><dd>${formatDate(payment.updatedAt)}</dd>
           </dl>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Operator follow-up</h2>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong class="aw-status ${paymentFollowUpClass(followUp.level)}">${escapeHtml(followUp.label || '—')}</strong><small>${escapeHtml(followUp.reason || 'Проверь payment signals.')}</small></div>
+            <div class="aw-list-item"><strong>Следующий шаг</strong><small>${escapeHtml(followUp.nextStep || 'Проверь user card и runtime surfaces.')}</small></div>
+          </div>
         </section>
 
         <section class="aw-surface aw-stack">

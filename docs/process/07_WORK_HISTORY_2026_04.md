@@ -140,3 +140,21 @@ Scope:
 Acceptance / notes:
 - step stays strictly read-only: no retries, overrides, credits mutation, payout controls, or raw provider payload leakage;
 - hobby-safe contract preserved: one main read on list, one main read on detail, no polling, no cron dependency, no new API entrypoints.
+
+
+## STEP510 — Payments/operator follow-up hints polish
+
+Date: 2026-04-02
+
+Scope:
+- extended the payments read surface with normalized operator follow-up semantics;
+- added `followUpGroups` and `followUpQueue` to `getPaymentsSummary()`;
+- added `followUp` to `getPaymentDetail()`;
+- polished `/admin/payments` so rows now show a follow-up state and the sidebar surfaces a compact queue of cases;
+- polished `/admin/payments/[id]` with a dedicated `Operator follow-up` block;
+- added `scripts/smoke-admin-web-payments-followup-contract.js` and wired it into package + source preflight.
+
+Acceptance / notes:
+- step remains strictly read-only and hobby-safe;
+- no new API entrypoints, no polling, no cron dependency, no retries/overrides/payout controls;
+- follow-up guidance is constrained to safe next steps: payment detail → user card → runtime → bot/admin fallback.

@@ -283,6 +283,131 @@ function buildPaymentEventTrace(row = {}) {
   return events.slice(0, 10);
 }
 
+function minutesSince(ts) {
+  const time = ts ? new Date(ts).getTime() : 0;
+  if (!time || Number.isNaN(time)) return null;
+  return Math.max(0, Math.round((Date.now() - time) / 60000));
+}
+
+function buildPaymentFollowUp(payment = {}) {
+  const status = paymentStatusLabel(payment.status);
+  const staleMinutes = minutesSince(payment.updatedAt || payment.createdAt);
+  if (status === 'success') {
+    return {
+      level: 'ok',
+      label: 'Без действий',
+      reason: 'Платёж завершён успешно.',
+      nextStep: 'Дополнительных действий не требуется.',
+      needsReview: false,
+      queueBucket: 'no_action',
+    };
+  }
+  if (status === 'pending') {
+    if ((staleMinutes || 0) >= 30) {
+      return {
+        level: 'urgent',
+        label: 'Нужен follow-up',
+        reason: `Pending дольше ${staleMinutes} мин.`,
+        nextStep: 'Проверь user card, runtime и payment signals; если кейс не двигается — follow-up через bot/admin fallback.',
+        needsReview: true,
+        queueBucket: 'urgent',
+      };
+    }
+    return {
+      level: 'watch',
+      label: 'Наблюдать',
+      reason: 'Платёж ещё обрабатывается.',
+      nextStep: 'Обнови позже и следи за recent payment events.',
+      needsReview: false,
+      queueBucket: 'watch',
+    };
+  }
+  if (status === 'fallback') {
+    return {
+      level: 'review',
+      label: 'Проверить founder/operator',
+      reason: 'Есть fallback-сигнал.',
+      nextStep: 'Сверь user context, credits path и runtime warnings; ручные действия только через bot/admin fallback.',
+      needsReview: true,
+      queueBucket: 'review',
+    };
+  }
+  if (status === 'failed') {
+    return {
+      level: 'urgent',
+      label: 'Нужен разбор',
+      reason: 'Платёж завершился с ошибкой.',
+      nextStep: 'Проверь user card, runtime и последние payment-сигналы; дальше — operator follow-up через bot/admin fallback.',
+      needsReview: true,
+      queueBucket: 'urgent',
+    };
+  }
+  return {
+    level: 'review',
+    label: 'Проверить статус',
+    reason: 'Статус не нормализован.',
+    nextStep: 'Проверь payment row и runtime diagnostics.',
+    needsReview: true,
+    queueBucket: 'review',
+  };
+}
+
+function buildPaymentFollowUpGroups(summary = {}) {
+  const pending = Number(summary.pending || 0);
+  const pendingOld = Number(summary.pendingOld || 0);
+  const failed = Number(summary.failed || 0);
+  const fallback = Number(summary.fallback || 0);
+  return {
+    noAction: Number(summary.successful || 0),
+    watch: Math.max(0, pending - pendingOld),
+    review: fallback,
+    urgent: failed + pendingOld,
+  };
+}
+
+function buildPaymentFollowUpQueue(items = []) {
+  const priority = { urgent: 3, review: 2, watch: 1, ok: 0 };
+  return items
+    .filter((item) => item?.followUp?.level && item.followUp.level !== 'ok')
+    .sort((a, b) => {
+      const pa = priority[a.followUp.level] || 0;
+      const pb = priority[b.followUp.level] || 0;
+      if (pa !== pb) return pb - pa;
+      return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
+    })
+    .slice(0, 6)
+    .map((item) => ({
+      id: item.id,
+      displayName: item.displayName,
+      status: item.status,
+      amountLabel: item.amountLabel,
+      followUp: item.followUp,
+      updatedAt: item.updatedAt,
+    }));
+}
+
+function buildPaymentOperatorHints(summary = {}, followUpGroups = {}) {
+  const hints = [];
+  if (!summary.available) {
+    hints.push({ kind: 'warning', message: 'Платёжная диагностика недоступна. Проверь DB/runtime surface.' });
+    return hints;
+  }
+  if (Number(followUpGroups.urgent || 0) > 0) {
+    hints.push({ kind: 'warning', message: `Есть кейсы для срочного follow-up: ${Number(followUpGroups.urgent || 0)}.` });
+  }
+  if (Number(followUpGroups.review || 0) > 0) {
+    hints.push({ kind: 'warning', message: `Есть fallback-кейсы для founder/operator проверки: ${Number(followUpGroups.review || 0)}.` });
+  }
+  if (Number(followUpGroups.watch || 0) > 0) {
+    hints.push({ kind: 'info', message: `Есть pending-кейсы под наблюдением: ${Number(followUpGroups.watch || 0)}.` });
+  }
+  if (!hints.length) {
+    hints.push({ kind: 'info', message: 'Платёжный follow-up выглядит спокойно. Read-only режим сохраняется.' });
+  }
+  hints.push({ kind: 'info', message: 'Если кейс застрял, сначала открой payment detail, потом user card, и только потом иди в bot/admin fallback.' });
+  return hints.slice(0, 4);
+}
+
 export async function getPaymentsSummary() {
   const out = {
     updatedAt: new Date().toISOString(),
@@ -290,6 +415,8 @@ export async function getPaymentsSummary() {
     summary: { total: 0, recent: 0, successful: 0, pending: 0, warnings: 0, needsReview: 0 },
     warnings: [{ level: 'info', message: 'Платёжных событий пока нет.', source: 'payments' }],
     groups: { success: 0, pending: 0, failed: 0, fallback: 0 },
+    followUpGroups: { noAction: 0, watch: 0, review: 0, urgent: 0 },
+    followUpQueue: [],
     recentPayments: [],
     hints: [{ kind: 'info', message: 'Read-only режим: для любых ручных действий использовать bot/admin fallback.' }],
   };
@@ -345,7 +472,10 @@ export async function getPaymentsSummary() {
           order by p.created_at desc
           limit 12`
       );
-      recentPayments = Array.isArray(r.rows) ? r.rows.map(buildPaymentRow) : [];
+      recentPayments = Array.isArray(r.rows) ? r.rows.map((row) => {
+        const payment = buildPaymentRow(row);
+        return { ...payment, followUp: buildPaymentFollowUp(payment) };
+      }) : [];
     } catch {
       recentPayments = [];
     }
@@ -372,16 +502,11 @@ export async function getPaymentsSummary() {
     failed: summary.failed,
     fallback: summary.fallback,
   };
+  out.followUpGroups = buildPaymentFollowUpGroups(summary);
   out.warnings = buildPaymentWarnings(summary);
   out.recentPayments = recentPayments;
-  out.hints = [
-    {
-      kind: out.overall.state === 'ok' ? 'info' : 'warning',
-      message: out.overall.state === 'ok'
-        ? 'Read-only режим: для ручных действий использовать bot/admin fallback.'
-        : 'Есть payment-сигналы для founder/operator проверки. Web surface остаётся read-only.',
-    },
-  ];
+  out.followUpQueue = buildPaymentFollowUpQueue(recentPayments);
+  out.hints = buildPaymentOperatorHints(summary, out.followUpGroups);
   return out;
 }
 
@@ -407,6 +532,7 @@ export async function getPaymentDetail(paymentId) {
   if (!row) return null;
   const payment = buildPaymentRow(row);
   const diagnostics = buildPaymentDetailDiagnostics(payment);
+  const followUp = buildPaymentFollowUp(payment);
   const recentAdminAudit = await getRecentAdminWebAudit(8, { targetType: 'payment', targetId: String(payment.id) });
   return {
     updatedAt: payment.updatedAt || payment.createdAt || new Date().toISOString(),
@@ -428,8 +554,10 @@ export async function getPaymentDetail(paymentId) {
       link: payment.userId ? `/admin/users/${payment.userId}` : '',
     },
     diagnostics,
+    followUp,
     events: buildPaymentEventTrace(row),
     hints: [
+      { kind: followUp.level === 'urgent' || followUp.level === 'review' ? 'warning' : 'info', message: followUp.nextStep },
       { kind: diagnostics.state === 'ok' ? 'info' : 'warning', message: diagnostics.hint },
       { kind: 'info', message: 'Read-only режим: ручные действия выполняются через bot/admin fallback.' },
     ],
