@@ -22,6 +22,33 @@ async function api(url, opts = {}) {
   return { ok: res.ok && data?.ok !== false, status: res.status, data };
 }
 
+function parseFilenameFromDisposition(value) {
+  const header = String(value || '');
+  const utf8 = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8?.[1]) {
+    try { return decodeURIComponent(utf8[1]); } catch {}
+  }
+  const plain = header.match(/filename="?([^";]+)"?/i);
+  return plain?.[1] ? plain[1] : '';
+}
+
+async function downloadCsv(url, fallbackName = 'export.csv') {
+  const res = await fetch(url, { credentials: 'same-origin' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || 'download_failed');
+  }
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = parseFilenameFromDisposition(res.headers.get('content-disposition')) || fallbackName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1500);
+}
+
 function formatDate(value) {
   if (!value) return '—';
   const d = new Date(value);
@@ -489,24 +516,41 @@ function overviewView(model) {
 
 function usersView(model) {
   const items = Array.isArray(model.items) ? model.items : [];
-  return shell('Users', 'Search + segment filter + user card drilldown.', `
-    <section class="aw-surface">
-      <div class="aw-toolbar">
-        <input id="usersSearch" class="aw-input inline" placeholder="Поиск: username / tg_id / user id" value="${escapeHtml(window.__usersState?.q || '')}" />
-        <select id="usersSegment" class="aw-select inline">
-          ${[['all','Все'],['brands','Brands'],['creators','Creators'],['curators','Curators'],['managers','Managers']].map(([v,l]) => `<option value="${v}" ${window.__usersState?.segment === v ? 'selected' : ''}>${l}</option>`).join('')}
-        </select>
-        <button class="aw-button secondary" id="applyUsersFilters">Применить</button>
+  const exportOptions = Array.isArray(model.exportOptions) ? model.exportOptions : [];
+  const exportMeta = model.exportMeta || {};
+  const recentExport = exportMeta.recentExport || null;
+  const currentSegment = window.__usersState?.segment || exportMeta.currentSegment || 'all';
+  const currentSearch = window.__usersState?.q || exportMeta.currentSearch || '';
+  return shell('Пользователи', 'Поиск, сегментный фильтр, drilldown в user card и CSV export для ops/audit.', `
+    <section class="aw-surface aw-stack">
+      <div class="aw-toolbar aw-toolbar-users">
+        <div class="aw-toolbar-main">
+          <input id="usersSearch" class="aw-input inline" placeholder="Поиск: username / tg_id / user id" value="${escapeHtml(currentSearch)}" />
+          <select id="usersSegment" class="aw-select inline">
+            ${[['all','Все'],['brands','Бренды'],['creators','Креаторы'],['curators','Кураторы'],['managers','Менеджеры']].map(([v,l]) => `<option value="${v}" ${currentSegment === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <button class="aw-button secondary" id="applyUsersFilters">Применить</button>
+        </div>
+        <div class="aw-toolbar-export">
+          <select id="usersExportScope" class="aw-select inline">
+            ${exportOptions.map((item) => `<option value="${escapeHtml(item.id || '')}">${escapeHtml(item.label || item.id || '')}</option>`).join('')}
+          </select>
+          <button class="aw-button" id="exportUsersBtn">Экспорт</button>
+        </div>
+      </div>
+      <div class="aw-toolbar-note">
+        <span class="aw-muted">CSV · до ${Number(exportMeta.maxRows || 10000)} строк · audit trail включён</span>
+        ${recentExport ? `<span class="aw-muted">Последняя выгрузка: ${escapeHtml(formatDate(recentExport.ts))} · TG ${Number(recentExport.actorTgId || 0) || '—'}</span>` : '<span class="aw-muted">Выгрузок из web-admin пока не было.</span>'}
       </div>
       <div class="aw-table-wrap">
         <table class="aw-table">
           <thead>
             <tr>
-              <th>User</th>
-              <th>Segment</th>
-              <th>Plan / credits</th>
+              <th>Пользователь</th>
+              <th>Сегмент</th>
+              <th>План / кредиты</th>
               <th>Signals</th>
-              <th>Created</th>
+              <th>Создан</th>
             </tr>
           </thead>
           <tbody>
@@ -516,7 +560,7 @@ function usersView(model) {
                   <strong>${escapeHtml(item.username ? '@' + item.username : 'user #' + item.userId)}</strong>
                   <small>user_id ${item.userId} · tg_id ${item.tgId || '—'} ${item.hasNote ? '· <span class="aw-note-dot"></span> note' : ''}</small>
                 </td>
-                <td>${escapeHtml(item.segment || 'user')}</td>
+                <td>${escapeHtml(segmentLabel(item.segment || 'user'))}</td>
                 <td>${escapeHtml(item.brandPlan || '—')}<small>${item.brandCredits ? item.brandCredits + ' credits' : 'no credits'}</small></td>
                 <td>${item.flags?.isCreator ? 'creator ' : ''}${item.flags?.hasBrandProfile ? 'brand ' : ''}${item.flags?.isModerator ? 'moderator ' : ''}</td>
                 <td>${formatDate(item.createdAt)}</td>
@@ -1427,6 +1471,18 @@ function bindShell() {
       segment: document.getElementById('usersSegment')?.value || 'all',
     };
     render();
+  });
+  document.getElementById('exportUsersBtn')?.addEventListener('click', async () => {
+    const scope = document.getElementById('usersExportScope')?.value || 'current';
+    const q = document.getElementById('usersSearch')?.value || '';
+    const segment = document.getElementById('usersSegment')?.value || 'all';
+    const params = new URLSearchParams({ section: 'users_export', scope, segment, q });
+    try {
+      await downloadCsv(`/api/admin-web-read?${params.toString()}`, `users_${scope}.csv`);
+      render();
+    } catch (err) {
+      alert(`Не удалось выгрузить CSV: ${err?.message || 'unknown'}`);
+    }
   });
   app.querySelectorAll('[data-user-row]').forEach((row) => {
     row.addEventListener('click', () => {

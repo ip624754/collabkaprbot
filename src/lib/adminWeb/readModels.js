@@ -4,6 +4,7 @@ import { getAdminUserNote, getAdminUserNotesBulk } from './notes.js';
 import { getRuntimeSummary } from './runtime.js';
 import { getRecentAdminWebAudit, isFounderActorTgId } from './auth.js';
 import { CFG } from '../config.js';
+import { getUsersExportOptions } from './usersExport.js';
 
 function buildUserSegment(row) {
   if (row?.has_brand_profile || row?.brand_plan || Number(row?.brand_credits || 0) > 0) return 'brand';
@@ -133,7 +134,26 @@ export async function getUsersList(params = {}) {
     };
   });
 
-  return { items, page, limit, hasNext: rows.length === limit };
+  const recentExport = (await getRecentAdminWebAudit(20))
+    .find((item) => String(item?.section || '') === 'users' && String(item?.action || '') === 'export_users_csv') || null;
+
+  return {
+    items,
+    page,
+    limit,
+    hasNext: rows.length === limit,
+    exportOptions: getUsersExportOptions(),
+    exportMeta: {
+      maxRows: 10000,
+      currentSegment: segment,
+      currentSearch: q,
+      recentExport: recentExport ? {
+        ts: recentExport.ts || null,
+        actorTgId: Number(recentExport.actorTgId || 0) || 0,
+        reason: String(recentExport.reason || ''),
+      } : null,
+    },
+  };
 }
 
 export async function getUserDetail(userId) {

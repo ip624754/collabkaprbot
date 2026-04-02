@@ -558,6 +558,7 @@ export async function exportUsersDirectory(filterRaw = 'all', qRaw = '') {
        u.tg_username,
        u.created_at,
        u.updated_at,
+       u.banned_at,
        u.brand_plan,
        u.brand_plan_until,
        coalesce(u.brand_credits,0)::int as brand_credits,

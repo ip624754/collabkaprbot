@@ -144,6 +144,28 @@ body {
   box-shadow: var(--shadow);
 }
 .aw-toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+
+.aw-toolbar-users {
+  justify-content: space-between;
+  align-items: center;
+}
+.aw-toolbar-main, .aw-toolbar-export {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.aw-toolbar-export {
+  margin-left: auto;
+}
+.aw-toolbar-note {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: -4px;
+}
 .aw-input, .aw-select, .aw-textarea {
   width: 100%;
   border: 1px solid var(--line-strong);

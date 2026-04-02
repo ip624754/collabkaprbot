@@ -1,8 +1,17 @@
-import { requireFounderSession, requireSession } from '../src/lib/adminWeb/auth.js';
+import { appendAdminWebAudit, requireFounderSession, requireSession } from '../src/lib/adminWeb/auth.js';
 import { getSearchParam, json } from '../src/lib/adminWeb/common.js';
 import { getCommsSummary, getFounderSummary, getOverviewSummary, getPaymentDetail, getPaymentsSummary, getUserDetail, getUsersList } from '../src/lib/adminWeb/readModels.js';
 import { getRuntimeSummary } from '../src/lib/adminWeb/runtime.js';
+import { buildUsersCsvExport } from '../src/lib/adminWeb/usersExport.js';
 import { getOperatorControlSnapshot } from '../src/lib/operatorControls.js';
+
+function sendCsv(res, filename, body) {
+  res.status(200);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Disposition', `attachment; filename="${String(filename || 'export.csv').replace(/"/g, '')}"`);
+  res.send(body);
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method_not_allowed' });
@@ -22,6 +31,28 @@ export default async function handler(req, res) {
       page: getSearchParam(req, 'page', '0'),
     });
     return json(res, 200, { ok: true, data });
+  }
+  if (section === 'users_export') {
+    const exportPayload = await buildUsersCsvExport({
+      scope: getSearchParam(req, 'scope', 'current'),
+      currentSegment: getSearchParam(req, 'segment', 'all'),
+      q: getSearchParam(req, 'q', ''),
+    });
+    await appendAdminWebAudit({
+      section: 'users',
+      action: 'export_users_csv',
+      actorTgId: session.actorTgId,
+      targetType: 'users_export',
+      targetId: `${exportPayload.scope}:${exportPayload.segment}`,
+      reason: `scope=${exportPayload.scope};segment=${exportPayload.segment};q=${exportPayload.search || '-'};rows=${exportPayload.rowsCount};truncated=${exportPayload.truncated ? 1 : 0}`,
+      oldJson: null,
+      newJson: {
+        filename: exportPayload.filename,
+        rows: exportPayload.rowsCount,
+        truncated: exportPayload.truncated,
+      },
+    });
+    return sendCsv(res, exportPayload.filename, exportPayload.csv);
   }
   if (section === 'user') {
     const id = Number(getSearchParam(req, 'id', '0') || 0) || 0;

@@ -50,6 +50,22 @@ Acceptance / notes:
 
 # Work History — 2026-04
 
+
+## STEP513 — Users export + audit snapshot
+
+Date: 2026-04-02
+
+Scope:
+- added `section=users_export` to the collapsed `api/admin-web-read.js` surface so `/admin/users` can download CSV without opening a new route family;
+- introduced `src/lib/adminWeb/usersExport.js` for scope normalization (`current`, `audit snapshot`, `all`, `brands`, `creators`, `curators`, `managers`) and CSV generation;
+- upgraded the users page toolbar with a disciplined export control plus latest export hint from admin-web audit;
+- logged every CSV download through `appendAdminWebAudit()` with actor, scope, filters, rows count, and truncation flag;
+- added `scripts/smoke-admin-web-users-export-contract.js` and wired it into `package.json` + `scripts/preflight.js`.
+
+Acceptance / notes:
+- CSV export stays bounded by the existing `exportUsersDirectory()` 10 000-row cap;
+- scope remains low-risk and hobby-safe: no XLSX/PDF, no background jobs, no destructive bulk actions, no user mutations, no public-flow changes.
+
 ## STEP500A — Web Admin Hobby-safe API collapse
 
 Что сделано:
