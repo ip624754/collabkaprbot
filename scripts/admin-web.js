@@ -2448,7 +2448,6 @@ function paymentsView(model) {
   const reviewBuckets = Array.isArray(model.reviewBuckets) ? model.reviewBuckets : [];
   const actionRail = Array.isArray(model.actionRail) ? model.actionRail : [];
   const followUpQueue = Array.isArray(model.followUpQueue) ? model.followUpQueue : [];
-  const compactPaymentsLayout = recentPayments.length === 0 && followUpQueue.length === 0;
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const overall = model.overall || { state: 'unknown', label: 'Данные пока недоступны' };
   return sectionShell('payments', `
@@ -2512,7 +2511,7 @@ function paymentsView(model) {
       </div>
     </section>
 
-    <div class="aw-split aw-section aw-runtime-layout aw-payments-layout ${compactPaymentsLayout ? 'is-compact' : ''}">
+    <div class="aw-split aw-section aw-runtime-layout aw-payments-layout">
       <section class="aw-stack">
         <section class="aw-surface aw-stack">
           <h2>Кейсы для ручного review</h2>
@@ -2979,7 +2978,6 @@ function founderView(model) {
   const warnings = Array.isArray(model.warnings) ? model.warnings : [];
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const recentAudit = Array.isArray(model.recentFounderAudit) ? model.recentFounderAudit : [];
-  const compactFounderLayout = recentAudit.length === 0;
   return sectionShell('founder', `
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
@@ -2997,7 +2995,7 @@ function founderView(model) {
       </div>
     </section>
 
-    <div class="aw-split aw-section aw-runtime-layout aw-founder-layout ${compactFounderLayout ? 'is-compact' : ''}">
+    <div class="aw-split aw-section aw-runtime-layout">
       <section class="aw-stack">
         <section class="aw-surface aw-stack">
           <h2>Founder controls split</h2>
@@ -3208,88 +3206,90 @@ function runtimeView(model) {
       <div class="aw-runtime-footnote">Очереди не мутируются из Runtime: это только read-first слой для backlog / retry / cooldown разборов.</div>
     </section>
 
-    <section class="aw-surface aw-section aw-stack">
-      <div class="aw-runtime-head">
-        <div>
-          <h2>Control plane snapshot</h2>
-          <p class="aw-muted">Без write-path действий: только текущее runtime-состояние safe toggles.</p>
-        </div>
-        <div class="aw-runtime-overall ${Number(model.controlSnapshot?.pausedCount || 0) > 0 || Number(model.controlSnapshot?.incidentModes || 0) > 0 ? 'warn' : 'good'}">paused ${Number(model.controlSnapshot?.pausedCount || 0)} · incident ${Number(model.controlSnapshot?.incidentModes || 0)}</div>
-      </div>
-      <div class="aw-runtime-controls-grid">
-        ${controls.length ? controls.map((item) => `
-          <div class="aw-card aw-runtime-control-card">
-            <span>${escapeHtml(item.label || 'Control')}</span>
-            <div class="aw-runtime-card-head">
-              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
-              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
-            </div>
-            <small>Текущее состояние: ${escapeHtml(item.stateLabel || '—')}</small>
-            <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
-            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь смысл этого toggle в control surface.')}</div>
-            <div class="aw-card-subtle">${item.changedAt ? `updated ${escapeHtml(formatDate(item.changedAt))}` : 'без явного runtime override'}</div>
-          </div>
-        `).join('') : '<div class="aw-empty">Control surface пока недоступен.</div>'}
-      </div>
-      <div class="aw-runtime-footnote">${lastAudit ? `Последний operator change: ${escapeHtml(controlAuditSummary(lastAudit))} · ${escapeHtml(controlAuditActorLabel(lastAudit))} · ${escapeHtml(formatDate(lastAudit.ts))}` : 'Последних operator changes пока нет.'}</div>
-    </section>
-
-    <div class="aw-runtime-sidebar-grid aw-section">
+    <div class="aw-split aw-section aw-runtime-layout">
       <section class="aw-surface aw-stack">
         <div class="aw-runtime-head">
           <div>
-            <h2>Конфигурация</h2>
-            <p class="aw-muted">Presence matrix без утечки значений секретов.</p>
+            <h2>Control plane snapshot</h2>
+            <p class="aw-muted">Без write-path действий: только текущее runtime-состояние safe toggles.</p>
           </div>
-          <div class="aw-runtime-overall ${Number(configSummary.missing || 0) > 0 ? 'warn' : 'good'}">missing ${Number(configSummary.missing || 0)} · info ${Number(configSummary.infoOnly || 0)}</div>
+          <div class="aw-runtime-overall ${Number(model.controlSnapshot?.pausedCount || 0) > 0 || Number(model.controlSnapshot?.incidentModes || 0) > 0 ? 'warn' : 'good'}">paused ${Number(model.controlSnapshot?.pausedCount || 0)} · incident ${Number(model.controlSnapshot?.incidentModes || 0)}</div>
         </div>
-        <div class="aw-config-grid">
-          ${configPresence.map((item) => `
-            <div class="aw-config-row">
-              <div class="aw-config-main">
-                <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
-                <div class="aw-config-meta">${escapeHtml(item.meaning || '')}</div>
-                <div class="aw-config-meta"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Обнови Runtime после изменения env.')}</div>
+        <div class="aw-runtime-controls-grid">
+          ${controls.length ? controls.map((item) => `
+            <div class="aw-card aw-runtime-control-card">
+              <span>${escapeHtml(item.label || 'Control')}</span>
+              <div class="aw-runtime-card-head">
+                <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
+                <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
               </div>
-              <div class="aw-config-state-wrap">
-                <div class="aw-config-state aw-status ${runtimeStateClass(item.toneState || item.state)}">${escapeHtml(configPresenceLabel(item.state))}</div>
-                <small>${escapeHtml(item.semanticLabel || runtimeStateLabel(item.toneState || item.state))}</small>
-              </div>
+              <small>Текущее состояние: ${escapeHtml(item.stateLabel || '—')}</small>
+              <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
+              <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь смысл этого toggle в control surface.')}</div>
+              <div class="aw-card-subtle">${item.changedAt ? `updated ${escapeHtml(formatDate(item.changedAt))}` : 'без явного runtime override'}</div>
             </div>
-          `).join('') || '<div class="aw-empty">Данные пока недоступны.</div>'}
+          `).join('') : '<div class="aw-empty">Control surface пока недоступен.</div>'}
         </div>
+        <div class="aw-runtime-footnote">${lastAudit ? `Последний operator change: ${escapeHtml(controlAuditSummary(lastAudit))} · ${escapeHtml(controlAuditActorLabel(lastAudit))} · ${escapeHtml(formatDate(lastAudit.ts))}` : 'Последних operator changes пока нет.'}</div>
       </section>
 
-      <section class="aw-surface aw-stack">
-        <h2>Как читать этот экран</h2>
-        <div class="aw-list">
-          <div class="aw-list-item"><strong>Paused ≠ silent bug</strong><small>Если toggle paused оператором, это control-plane режим. Сначала пойми, зачем он был включён, и только потом ищи поломку.</small></div>
-          <div class="aw-list-item"><strong>Missing ≠ degraded</strong><small>Missing — это setup-gap и env/runbook задача. Degraded — рабочий контур с сигналом, который просит ручную проверку.</small></div>
-          <div class="aw-list-item"><strong>Users vs Runtime</strong><small>Users нужен для разбора людей и срезов. Runtime — для понимания состояния контуров, очередей, retry и конфигурации.</small></div>
-          ${hints.length ? hints.map((item) => `
-            <div class="aw-list-item">
-              <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
-              <small>${escapeHtml(item.message || '')}</small>
+      <aside class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <div class="aw-runtime-head">
+            <div>
+              <h2>Конфигурация</h2>
+              <p class="aw-muted">Presence matrix без утечки значений секретов.</p>
             </div>
-          `).join('') : ''}
-        </div>
-        <div class="aw-actions aw-help-actions">
-          <a href="/admin/help" data-link class="aw-button ghost">Открыть Помощь</a>
-        </div>
-      </section>
+            <div class="aw-runtime-overall ${Number(configSummary.missing || 0) > 0 ? 'warn' : 'good'}">missing ${Number(configSummary.missing || 0)} · info ${Number(configSummary.infoOnly || 0)}</div>
+          </div>
+          <div class="aw-config-grid">
+            ${configPresence.map((item) => `
+              <div class="aw-config-row">
+                <div class="aw-config-main">
+                  <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
+                  <div class="aw-config-meta">${escapeHtml(item.meaning || '')}</div>
+                  <div class="aw-config-meta"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Обнови Runtime после изменения env.')}</div>
+                </div>
+                <div class="aw-config-state-wrap">
+                  <div class="aw-config-state aw-status ${runtimeStateClass(item.toneState || item.state)}">${escapeHtml(configPresenceLabel(item.state))}</div>
+                  <small>${escapeHtml(item.semanticLabel || runtimeStateLabel(item.toneState || item.state))}</small>
+                </div>
+              </div>
+            `).join('') || '<div class="aw-empty">Данные пока недоступны.</div>'}
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Как читать этот экран</h2>
+          <div class="aw-list">
+            <div class="aw-list-item"><strong>Paused ≠ silent bug</strong><small>Если toggle paused оператором, это control-plane режим. Сначала пойми, зачем он был включён, и только потом ищи поломку.</small></div>
+            <div class="aw-list-item"><strong>Missing ≠ degraded</strong><small>Missing — это setup-gap и env/runbook задача. Degraded — рабочий контур с сигналом, который просит ручную проверку.</small></div>
+            <div class="aw-list-item"><strong>Users vs Runtime</strong><small>Users нужен для разбора людей и срезов. Runtime — для понимания состояния контуров, очередей, retry и конфигурации.</small></div>
+            ${hints.length ? hints.map((item) => `
+              <div class="aw-list-item">
+                <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
+                <small>${escapeHtml(item.message || '')}</small>
+              </div>
+            `).join('') : ''}
+          </div>
+          <div class="aw-actions aw-help-actions">
+            <a href="/admin/help" data-link class="aw-button ghost">Открыть Помощь</a>
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Последние runtime-сигналы</h2>
+          <div class="aw-list">
+            ${recentEvents.length ? recentEvents.map((item) => `
+              <div class="aw-list-item">
+                <strong class="${warningTone(item.kind)}">${escapeHtml(item.message || '—')}</strong>
+                <small>${escapeHtml(sourceLabel(item.source || 'runtime'))} · ${formatDate(item.at)}</small>
+              </div>
+            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+      </aside>
     </div>
-
-    <section class="aw-surface aw-section aw-stack">
-      <h2>Последние runtime-сигналы</h2>
-      <div class="aw-list">
-        ${recentEvents.length ? recentEvents.map((item) => `
-          <div class="aw-list-item">
-            <strong class="${warningTone(item.kind)}">${escapeHtml(item.message || '—')}</strong>
-            <small>${escapeHtml(sourceLabel(item.source || 'runtime'))} · ${formatDate(item.at)}</small>
-          </div>
-        `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
-      </div>
-    </section>
   `, window.__adminSession || {});
 }
 

@@ -1,14 +1,3 @@
-## STEP535I — Admin-web layout balance + optional-gap semantics fix
-- Fixed the misleading global `Не настроено` status on Overview / Founder by adjusting `src/lib/adminWeb/runtime.js`: missing QStash is now treated as an informational / optional gap (`unknown`) instead of escalating the whole runtime overview to `missing`. This keeps real degraded runtime signals visible without pretending the whole admin shell is unconfigured.
-- Rebalanced sparse-page layouts in `scripts/admin-web.js`: Runtime now uses a full-width control-plane block plus a smaller two-column config/help layer and a separate recent-signals section; Payments and Founder fall back to a single-column layout when the left-side dataset is empty, which removes the large dead-blue voids seen on the real screen.
-- Fixed the oversized type / drifting card rhythm in `styles/admin-web.css` by scoping large metric typography to direct metric values only (`.aw-card > strong`) and explicitly resetting nested `strong` inside subtle helper text. This removes the giant `Следующий шаг` headings and keeps cards from visually spilling out of their boxes.
-- Added `scripts/smoke-admin-web-layout-polish-contract.js`, refreshed asset cache-bust to `step535i`, and updated the existing shell/overview/users/sidebar/runtime cache-bust contracts to the new version.
-
-Acceptance / notes:
-- Overview / Founder no longer mark the whole surface as `Не настроено` just because QStash is absent for optional publish/retry flows;
-- sparse `Runtime / Payments / Founder` screens keep a tighter visual balance on real desktops instead of leaving large empty blue columns;
-- still requires live browser verification after deploy for final viewport feel, especially on the operator’s actual desktop width.
-
 ## STEP535H — Payments review clarity + action rail
 - Reworked `/admin/payments` from a flat status table into a clearer review plane in `scripts/admin-web.js`: summary cards now separate applied / manual review / stuck / watchlist counts, and the page opens with explicit `Review buckets` plus a `Next-action rail`.
 - Extended `src/lib/adminWeb/readModels.js` with `reviewBuckets` and `actionRail`, while keeping the surface read-only and reusing the existing follow-up model / payment detail drilldown. The follow-up queue now carries `userId` so operators can move from payment detail to user card honestly instead of guessing.
