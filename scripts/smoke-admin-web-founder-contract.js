@@ -23,11 +23,13 @@ const apiAuth = read('api/admin-web-auth.js');
 const models = read('src/lib/adminWeb/readModels.js');
 
 ok(js.includes("/admin/founder"), 'founder route missing in admin shell');
-ok(js.includes('Founder-only control surface'), 'founder page copy missing');
+ok(js.includes('Фаундерский read-first слой'), 'founder page copy missing');
 ok(js.includes('revokeAllBtn'), 'founder revoke button missing');
 ok(auth.includes('isFounderActorTgId'), 'founder actor helper missing');
 ok(auth.includes('requireFounderSession'), 'founder session guard missing');
 ok(apiRead.includes("section === 'founder'"), 'founder read section missing');
 ok(apiAuth.includes('requireFounderSession(req, res)'), 'revoke_all must require founder session');
 ok(models.includes('export async function getFounderSummary'), 'founder read model missing');
-console.log('OK: admin web founder controls split contract');
+ok(js.includes('Следующий фаундер-шаг'), 'founder action rail missing');
+ok(js.includes('Границы этой поверхности'), 'founder boundaries surface missing');
+console.log('OK: admin web founder clarity contract');

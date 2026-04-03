@@ -7,7 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'STEP527: compare density polish',
+  'Временно закрепляет 2–5 карточек пользователей',
   'aw-users-sticky-shell',
   'aw-users-rails-stack',
   'aw-compare-rail-density',

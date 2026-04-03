@@ -7,12 +7,12 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const js = read('scripts/admin-web.js');
 for (const token of [
-  'Payments review plane',
-  'Review buckets',
-  'Next-action rail',
-  'Кейсы для ручного review',
-  'Payment detail',
-  'User card',
+  'Платёжный обзор',
+  'Корзины разбора',
+  'Следующий шаг',
+  'Кейсы для ручного разбора',
+  'Платёжная карточка',
+  'Карточка пользователя',
 ]) {
   assert.ok(js.includes(token), `payments review UI must include ${token}`);
 }

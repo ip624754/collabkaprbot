@@ -1114,16 +1114,16 @@ export async function getFounderSummary(actorTgId = 0) {
   const recentAudit = await getRecentAdminWebAudit(12);
 
   const founderWarnings = [];
-  if (!founder) founderWarnings.push({ level: 'warning', message: 'Founder-only control surface доступен только для SUPER_ADMIN.', source: 'founder' });
+  if (!founder) founderWarnings.push({ level: 'warning', message: 'Фаундерский слой доступен только для SUPER_ADMIN.', source: 'founder' });
   if (!CFG.FOUNDER_SALE_ENABLED) founderWarnings.push({ level: 'info', message: 'Founder Sale сейчас выключен.', source: 'founder_sale' });
   if (!CFG.PUBLIC_BASE_URL) founderWarnings.push({ level: 'warning', message: 'PUBLIC_BASE_URL missing — approve / signed links будут ограничены.', source: 'config' });
-  if (!runtime?.services?.qstash || String(runtime.services.qstash.state || '') === 'missing') founderWarnings.push({ level: 'warning', message: 'QStash не настроен — publish/retry founder surfaces ограничены.', source: 'qstash' });
-  if (!founderWarnings.length) founderWarnings.push({ level: 'info', message: 'Явных founder-предупреждений нет.', source: 'founder' });
+  if (!runtime?.services?.qstash || String(runtime.services.qstash.state || '') === 'missing') founderWarnings.push({ level: 'warning', message: 'QStash не настроен — publish/retry founder-слой ограничен.', source: 'qstash' });
+  if (!founderWarnings.length) founderWarnings.push({ level: 'info', message: 'Явных фаундер-предупреждений нет.', source: 'founder' });
 
   const founderHints = [
-    { kind: founder ? 'info' : 'warning', message: founder ? 'Founder surface отделён от обычного operator UX. Dangerous actions не смешиваются с read-first панелью.' : 'Текущая web-сессия не founder-класса. Read surfaces остаются доступны, founder actions скрыты.' },
-    { kind: 'info', message: 'Revoke all web sessions остаётся единственным founder action в STEP507. Остальные risky controls — bot-only.' },
-    { kind: 'info', message: 'Founder Sale и auth/session policy читаются здесь как отдельный founder layer, без writes в runtime/config.' },
+    { kind: founder ? 'info' : 'warning', message: founder ? 'Фаундерский слой отделён от обычного operator UX. Опасные действия не смешиваются с read-first панелью.' : 'Текущая web-сессия не фаундер-класса. Read surfaces остаются доступны, а фаундерские действия скрыты.' },
+    { kind: 'info', message: 'Завершение всех web-сессий остаётся единственным фаундерским web-action в STEP507. Остальные risky controls — bot-only.' },
+    { kind: 'info', message: 'Founder Sale и auth/session policy читаются здесь как отдельный founder-layer, без writes в runtime/config.' },
   ];
 
   return {
@@ -1151,7 +1151,7 @@ export async function getFounderSummary(actorTgId = 0) {
     controls: {
       canRevokeAllSessions: founder,
       dangerousWritesInWeb: false,
-      botOnlyControls: ['payments writes', 'deal mutation', 'channel rebind', 'live dialog actions'],
+      botOnlyControls: ['payment writes', 'deal mutation', 'channel rebind', 'live dialog actions'],
     },
     snapshots: {
       usersTotal: Number(overview?.cards?.usersTotal || 0),

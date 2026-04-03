@@ -27,10 +27,10 @@ for (const token of [
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Users cohort counters / mini topline',
+  'Маленькие счётчики по когортам',
   'usersCohortCounterCards',
   'aw-cohort-topline',
-  'Mini topline считает cohort-срезы на сервере',
+  'Счётчики выше только показывают картину',
 ]) {
   assert.ok(webJs.includes(token), `admin-web users cohort counters UI must include ${token}`);
 }

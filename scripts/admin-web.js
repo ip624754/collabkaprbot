@@ -371,7 +371,7 @@ function sourceLabel(value) {
     admin_web: 'Web-admin',
     config: 'Конфигурация',
     runtime: 'Runtime',
-    controls: 'Control plane',
+    controls: 'Управление',
   })[key] || (value || 'Runtime');
 }
 
@@ -399,7 +399,7 @@ function controlAuditValueLabel(value) {
 }
 
 function controlAuditSummary(item = {}) {
-  const label = String(item?.label || item?.controlId || 'Control');
+  const label = String(item?.label || item?.controlId || 'Контрол');
   return `${label}: ${controlAuditValueLabel(item?.previousValue)} → ${controlAuditValueLabel(item?.nextValue)}`;
 }
 
@@ -412,13 +412,13 @@ function renderControlStatusBar() {
   return `
     <section class="aw-statusbar">
       <div class="aw-statusbar-head">
-        <strong>Control plane</strong>
+        <strong>Контрольная плоскость</strong>
         <span>ручное обновление · единый runtime source</span>
       </div>
       <div class="aw-statusbar-chips">
         ${items.map((item) => `
           <div class="aw-control-chip ${controlToneClass(item)}">
-            <span>${escapeHtml(item.shortLabel || item.label || 'Control')}</span>
+            <span>${escapeHtml(item.shortLabel || item.label || 'Контрол')}</span>
             <strong>${escapeHtml(item.stateLabel || (item.value ? 'ON' : 'OFF'))}</strong>
           </div>
         `).join('')}
@@ -436,15 +436,15 @@ function renderControlSurfaceSection() {
   return `
     <div class="aw-split aw-section aw-control-layout">
       <section class="aw-surface aw-stack">
-        <h2>Operator control surface</h2>
+        <h2>Операторские переключатели</h2>
         <div class="aw-list">
           ${items.map((item) => `
             <div class="aw-list-item aw-control-list-item">
               <div class="aw-control-list-head">
-                <strong>${escapeHtml(item.label || item.shortLabel || 'Control')}</strong>
+                <strong>${escapeHtml(item.label || item.shortLabel || 'Контрол')}</strong>
                 <span class="aw-status ${String(item.tone || '').trim().toLowerCase()}">${escapeHtml(item.stateLabel || (item.value ? 'ON' : 'OFF'))}</span>
               </div>
-              <small>Scope: ${escapeHtml(item.scope || 'system')} · changed by ${escapeHtml(item.changedBy || '—')} · ${escapeHtml(formatDate(item.changedAt))}</small>
+              <small>Контур: ${escapeHtml(item.scope || 'system')} · изменил ${escapeHtml(item.changedBy || '—')} · ${escapeHtml(formatDate(item.changedAt))}</small>
               ${item.id === 'payments_fallback' ? `<small>env ${item.envEnabled ? 'ON' : 'OFF'} · runtime ${escapeHtml(item.runtimeLabel || 'OFF')}</small>` : ''}
             </div>
           `).join('')}
@@ -475,7 +475,7 @@ function paymentStatusClass(value) {
 
 function paymentStatusLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ success: 'success', pending: 'pending', failed: 'failed', fallback: 'fallback', unknown: 'unknown' })[key] || (key || 'unknown');
+  return ({ success: 'успех', pending: 'ожидает', failed: 'ошибка', fallback: 'fallback', unknown: 'неизвестно' })[key] || (key || 'неизвестно');
 }
 
 function paymentFollowUpClass(value) {
@@ -525,7 +525,7 @@ function pathParts() {
 const SECTION_MANIFEST = {
   overview: {
     key: 'overview',
-    label: 'Overview',
+    label: 'Обзор',
     subtitle: 'Командный cockpit: главный статус, следующий owner-шаг и короткие workspace-снимки без live-шума.',
     route: '/admin',
     group: 'operator',
@@ -534,7 +534,7 @@ const SECTION_MANIFEST = {
   },
   users: {
     key: 'users',
-    label: 'Users',
+    label: 'Пользователи',
     subtitle: 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.',
     route: '/admin/users',
     group: 'operator',
@@ -543,7 +543,7 @@ const SECTION_MANIFEST = {
   },
   runtime: {
     key: 'runtime',
-    label: 'Runtime',
+    label: 'Система',
     subtitle: 'Общий статус системы, incident strip и опорный runtime-срез без write-path действий.',
     route: '/admin/runtime',
     group: 'operator',
@@ -552,20 +552,20 @@ const SECTION_MANIFEST = {
   },
   payments: {
     key: 'payments',
-    label: 'Payments',
-    subtitle: 'Read-only срез платежной активности, fallback-сигналов и проблемных кейсов.',
+    label: 'Платежи',
+    subtitle: 'Read-only срез платёжной активности, fallback-сигналов и проблемных кейсов.',
     route: '/admin/payments',
     group: 'operator',
-    navCaption: 'монетизация и review',
+    navCaption: 'монетизация и разбор',
     visible: () => true,
   },
   comms: {
     key: 'comms',
-    label: 'Comms',
-    subtitle: 'Workspace для draft notices, preview и founder test-send без live mass send.',
+    label: 'Коммуникации',
+    subtitle: 'Контур драфтов, предпросмотра и фаундерской тест-отправки без live mass send.',
     route: '/admin/comms',
     group: 'operator',
-    navCaption: 'драфты и preview',
+    navCaption: 'драфты и предпросмотр',
     visible: () => true,
   },
   help: {
@@ -579,18 +579,18 @@ const SECTION_MANIFEST = {
   },
   founder: {
     key: 'founder',
-    label: 'Founder',
-    subtitle: 'Founder-only control surface: split from operator UI, read-first and hobby-safe.',
+    label: 'Фаундер',
+    subtitle: 'Фаундерский read-first слой: отдельный от operator UI и без опасных web-write действий.',
     route: '/admin/founder',
     group: 'founder',
-    navCaption: 'owner-only controls',
+    navCaption: 'фаундерские контроли',
     visible: (session = {}) => !!session?.isFounder,
   },
 };
 
 const SECTION_GROUP_LABELS = {
   operator: 'Оператор',
-  founder: 'Founder',
+  founder: 'Фаундер',
 };
 
 function routeInfo() {
@@ -809,10 +809,10 @@ function shell(title, subtitle, body, session, pageKey = '') {
         <div class="aw-topbar">
           <div class="aw-topbar-left">
             <span class="aw-chip">${escapeHtml(resolvedTitle)}</span>
-            <span class="aw-chip">mode · ${session?.isFounder ? 'founder' : 'operator'}</span>
+            <span class="aw-chip">режим · ${session?.isFounder ? 'фаундер' : 'оператор'}</span>
           </div>
           <div class="aw-topbar-right">
-            <span class="aw-chip">TG ${Number(session?.actorTgId || 0) || 'fallback'}</span>
+            <span class="aw-chip">TG ${Number(session?.actorTgId || 0) || '—'}</span>
             <button class="aw-button secondary" id="refreshBtn">Обновить</button>
             <button class="aw-button ghost" id="logoutBtn">Выйти</button>
           </div>
@@ -892,7 +892,7 @@ function helpView(session) {
         <div class="aw-help-list">
           <div class="aw-list-item"><strong>1. Вход</strong><small>Открой ссылку админки, введи secret один раз, затем подтверди вход в Telegram или вставь одноразовый code.</small></div>
           <div class="aw-list-item"><strong>2. Обновление</strong><small>Панель не делает auto-polling. Используй кнопку <b>Обновить</b>, когда хочешь подтянуть свежий snapshot.</small></div>
-          <div class="aw-list-item"><strong>3. Рабочий ритм</strong><small>Для разбора людей чаще всего стартуем с <b>Users</b>. Для общей системной картины — <b>Runtime</b>. Для платёжных кейсов — <b>Payments</b>.</small></div>
+          <div class="aw-list-item"><strong>3. Рабочий ритм</strong><small>Для разбора людей чаще всего стартуем с <b>Пользователи</b>. Для общей системной картины — <b>Runtime</b>. Для платёжных кейсов — <b>Платежи</b>.</small></div>
         </div>
       </section>
 
@@ -905,7 +905,7 @@ function helpView(session) {
           <div class="aw-list-item"><strong>Корзина и закрепление</strong><small>Корзина — временный набор для copy/export. Закрепление — до 5 карточек для side-by-side сравнения без потери текущего среза.</small></div>
         </div>
         <div class="aw-actions aw-help-actions">
-          <a href="/admin/users" data-link class="aw-button ghost">Открыть Users</a>
+          <a href="/admin/users" data-link class="aw-button ghost">Открыть пользователей</a>
         </div>
       </section>
 
@@ -936,7 +936,7 @@ function helpView(session) {
         <div class="aw-help-list">
           <div class="aw-list-item"><strong>Нажал пресет — что должно измениться?</strong><small>Должны сразу перестроиться active card/chip, верхний meta strip, URL и follow-up label текущего среза. Если toast пришёл, а активное состояние не обновилось — это UX-баг синхронизации, а не новая логика.</small></div>
           <div class="aw-list-item"><strong>Почему copy иногда открывает ручной режим?</strong><small>Некоторые браузеры режут автокопирование. Тогда панель честно открывает fallback для ручного copy/download вместо молчаливого провала.</small></div>
-          <div class="aw-list-item"><strong>Когда нужен Runtime, а когда Users?</strong><small>Users — когда разбираешь людей и рабочие срезы. Runtime — когда нужно понять, что происходит с системой, очередями, retry и конфигурацией.</small></div>
+          <div class="aw-list-item"><strong>Когда нужен Runtime, а когда раздел пользователей?</strong><small>Пользователи — когда разбираешь людей и рабочие срезы. Runtime — когда нужно понять, что происходит с системой, очередями, retry и конфигурацией.</small></div>
           <div class="aw-list-item"><strong>Что делать, если состояние кажется устаревшим?</strong><small>Нажми <b>Обновить</b>. Панель намеренно read-first и manual-refresh-only, чтобы не выдавать optimistic видимость live-state.</small></div>
         </div>
       </section>
@@ -1101,15 +1101,15 @@ function overviewCommandWorkspace(model = {}) {
           <strong class="aw-status ${runtimeStateClass(status.state)}">${escapeHtml(runtimeStateLabel(status.state))}</strong>
         </div>
         <div class="aw-overview-mini-grid">
-          <div class="aw-mini-card"><span>Users</span><strong>${Number(cards.usersTotal || 0)}</strong></div>
-          <div class="aw-mini-card"><span>Workspaces</span><strong>${Number(cards.workspacesTotal || 0)}</strong></div>
-          <div class="aw-mini-card"><span>Offers active</span><strong>${Number(cards.offersActive || 0)}</strong></div>
-          <div class="aw-mini-card"><span>Giveaways active</span><strong>${Number(cards.giveawaysActive || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Пользователи</span><strong>${Number(cards.usersTotal || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Рабочие поверхности</span><strong>${Number(cards.workspacesTotal || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Активные офферы</span><strong>${Number(cards.offersActive || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Активные гивы</span><strong>${Number(cards.giveawaysActive || 0)}</strong></div>
         </div>
         <div class="aw-list">
-          <div class="aw-list-item"><strong>Runtime overall</strong><small>${escapeHtml(runtimeStateLabel(overall.state || status.state))} · ${escapeHtml(overall.label || status.label)}</small></div>
-          <div class="aw-list-item"><strong>Payment alerts</strong><small>${Number(cards.paymentAlerts || 0)} требуют ручного просмотра.</small></div>
-          <div class="aw-list-item"><strong>Manual refresh only</strong><small>Overview намеренно не делает live-polling и не притворяется realtime-консолью.</small></div>
+          <div class="aw-list-item"><strong>Общий runtime-статус</strong><small>${escapeHtml(runtimeStateLabel(overall.state || status.state))} · ${escapeHtml(overall.label || status.label)}</small></div>
+          <div class="aw-list-item"><strong>Платёжные сигналы</strong><small>${Number(cards.paymentAlerts || 0)} требуют ручного просмотра.</small></div>
+          <div class="aw-list-item"><strong>Только ручное обновление</strong><small>Overview намеренно не делает live-polling и не притворяется realtime-консолью.</small></div>
         </div>
       </section>
       <section class="aw-surface aw-stack">
@@ -1122,7 +1122,7 @@ function overviewCommandWorkspace(model = {}) {
         </div>
         <div class="aw-actions aw-overview-actions">
           <a href="${next.href}" data-link class="aw-button">${escapeHtml(next.cta)}</a>
-          <a href="/admin/users" data-link class="aw-button ghost">Открыть Users</a>
+          <a href="/admin/users" data-link class="aw-button ghost">Открыть пользователей</a>
         </div>
       </section>
     </div>
@@ -1142,7 +1142,7 @@ function overviewPaymentsWorkspace(model = {}) {
         <h2>Payments / monetization snapshot</h2>
         <p class="aw-surface-note">Короткий owner-снимок monetization truth без проваливания в длинный платежный экран.</p>
         <div class="aw-overview-mini-grid">
-          <div class="aw-mini-card"><span>Payment alerts</span><strong>${Number(cards.paymentAlerts || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Платёжные сигналы</span><strong>${Number(cards.paymentAlerts || 0)}</strong></div>
           <div class="aw-mini-card"><span>Applied</span><strong>${stats.applied}</strong></div>
           <div class="aw-mini-card"><span>Pending</span><strong>${stats.pending}</strong></div>
           <div class="aw-mini-card"><span>Need review</span><strong>${stats.review}</strong></div>
@@ -1178,7 +1178,7 @@ function overviewActivityWorkspace(model = {}) {
           ${audit.length ? audit.map((item) => `
             <div class="aw-list-item">
               <strong>${escapeHtml(item.action || 'unknown')}</strong>
-              <small>${escapeHtml(item.section || '')} · actor ${Number(item.actorTgId || 0) || 'fallback'} · ${formatDate(item.ts)}</small>
+              <small>${escapeHtml(item.section || '')} · TG ${Number(item.actorTgId || 0) || '—'} · ${formatDate(item.ts)}</small>
             </div>
           `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
         </div>
@@ -1220,9 +1220,9 @@ function overviewView(model) {
           <span class="aw-status ${runtimeStateClass(status.state)}">${escapeHtml(runtimeStateLabel(status.state))}</span>
         </div>
         <div class="aw-overview-mini-grid">
-          <div class="aw-mini-card"><span>Users</span><strong>${Number(cards.usersTotal || 0)}</strong></div>
-          <div class="aw-mini-card"><span>Offers active</span><strong>${Number(cards.offersActive || 0)}</strong></div>
-          <div class="aw-mini-card"><span>Payment alerts</span><strong>${Number(cards.paymentAlerts || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Пользователи</span><strong>${Number(cards.usersTotal || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Активные офферы</span><strong>${Number(cards.offersActive || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Платёжные сигналы</span><strong>${Number(cards.paymentAlerts || 0)}</strong></div>
           <div class="aw-mini-card"><span>Runtime warnings</span><strong>${Number(cards.runtimeWarnings || 0)}</strong></div>
         </div>
       </section>
@@ -2493,7 +2493,7 @@ function userDetailView(model) {
             ${recentAudit.length ? recentAudit.map((item) => `
               <div class="aw-list-item">
                 <strong>${escapeHtml(item.action || 'unknown')}</strong>
-                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || 'fallback'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
+                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -2524,29 +2524,29 @@ function paymentsView(model) {
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
-          <h2>Payments review plane</h2>
-          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)} · read-first monetization review</p>
+          <h2>Платёжный обзор</h2>
+          <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)} · read-first разбор платёжной поверхности</p>
         </div>
         <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
-        <div class="aw-card aw-runtime-card aw-metric-card"><span>Total payments</span><strong>${Number(summary.total || 0)}</strong><small>все события</small></div>
-        <div class="aw-card aw-runtime-card aw-metric-card"><span>Recent payments</span><strong>${Number(summary.recent || 0)}</strong><small>последние 7 дней</small></div>
-        <div class="aw-card aw-runtime-card aw-metric-card"><span>Already applied</span><strong class="aw-status good">${Number(summary.successful || 0)}</strong><small>успешно применены</small></div>
-        <div class="aw-card aw-runtime-card aw-metric-card"><span>Manual review</span><strong class="aw-status ${Number(followUpGroups.review || 0) > 0 ? 'warn' : 'good'}">${Number(followUpGroups.review || 0)}</strong><small>fallback / founder review</small></div>
-        <div class="aw-card aw-runtime-card aw-metric-card"><span>Stuck / needs check</span><strong class="aw-status ${Number(followUpGroups.urgent || 0) > 0 ? 'bad' : 'good'}">${Number(followUpGroups.urgent || 0)}</strong><small>failed + old pending</small></div>
-        <div class="aw-card aw-runtime-card aw-metric-card"><span>Watchlist</span><strong class="aw-status ${Number(followUpGroups.watch || 0) > 0 ? 'info' : 'good'}">${Number(followUpGroups.watch || 0)}</strong><small>pending без срочного follow-up</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Всего платежей</span><strong>${Number(summary.total || 0)}</strong><small>все события</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Недавние платежи</span><strong>${Number(summary.recent || 0)}</strong><small>последние 7 дней</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Уже применены</span><strong class="aw-status good">${Number(summary.successful || 0)}</strong><small>успешно применены</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Ручной разбор</span><strong class="aw-status ${Number(followUpGroups.review || 0) > 0 ? 'warn' : 'good'}">${Number(followUpGroups.review || 0)}</strong><small>fallback / фаундерский разбор</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Застряло / проверить</span><strong class="aw-status ${Number(followUpGroups.urgent || 0) > 0 ? 'bad' : 'good'}">${Number(followUpGroups.urgent || 0)}</strong><small>failed + старые pending</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Под наблюдением</span><strong class="aw-status ${Number(followUpGroups.watch || 0) > 0 ? 'info' : 'good'}">${Number(followUpGroups.watch || 0)}</strong><small>pending без срочного follow-up</small></div>
       </div>
     </section>
 
     <div class="aw-overview-workspace-grid aw-section">
       <section class="aw-surface aw-stack">
-        <h2>Review buckets</h2>
-        <p class="aw-surface-note">Сначала ручной review, потом stuck / watch, а историю держим ниже как журнал.</p>
+        <h2>Корзины разбора</h2>
+        <p class="aw-surface-note">Сначала ручной разбор, потом stuck / watch, а историю держим ниже как журнал.</p>
         <div class="aw-overview-mini-grid">
           ${reviewBuckets.length ? reviewBuckets.map((item) => `
             <div class="aw-mini-card">
-              <span>${escapeHtml(item.label || 'Bucket')}</span>
+              <span>${escapeHtml(item.label || 'Корзина')}</span>
               <strong class="aw-status ${String(item.tone || 'info')}">${Number(item.count || 0)}</strong>
               <small>${escapeHtml(item.help || '')}</small>
             </div>
@@ -2554,14 +2554,14 @@ function paymentsView(model) {
         </div>
       </section>
       <section class="aw-surface aw-stack">
-        <h2>Next-action rail</h2>
+        <h2>Следующий шаг</h2>
         <div class="aw-list">
           ${actionRail.length ? actionRail.map((item) => `
             <div class="aw-list-item">
               <strong class="aw-status ${String(item.tone || 'info')}">${escapeHtml(item.label || 'Следующий шаг')}</strong>
               <small>${escapeHtml(item.body || '')}</small>
             </div>
-          `).join('') : '<div class="aw-empty">Action rail пока пуст.</div>'}
+          `).join('') : '<div class="aw-empty">Блок следующего шага пока пуст.</div>'}
         </div>
         <div class="aw-actions aw-overview-actions">
           ${actionRail.map((item) => `<a href="${escapeHtml(item.href || '/admin/payments')}" data-link class="aw-button ${item.key === 'stay_payments' ? '' : 'ghost'}">${escapeHtml(item.cta || 'Открыть')}</a>`).join('')}
@@ -2584,7 +2584,7 @@ function paymentsView(model) {
     <div class="aw-split aw-section aw-runtime-layout aw-payments-layout ${compactPaymentsLayout ? 'is-compact' : ''}">
       <section class="aw-stack">
         <section class="aw-surface aw-stack">
-          <h2>Кейсы для ручного review</h2>
+          <h2>Кейсы для ручного разбора</h2>
           <div class="aw-list">
             ${followUpQueue.length ? followUpQueue.map((item) => `
               <div class="aw-list-item">
@@ -2596,29 +2596,29 @@ function paymentsView(model) {
                   <span class="aw-status ${paymentFollowUpClass(item.followUp?.level)}">${escapeHtml(item.followUp?.label || paymentFollowUpLabel(item.followUp?.level))}</span>
                 </div>
                 <div class="aw-actions">
-                  <a href="/admin/payments/${Number(item.id || 0)}?back=${encodeURIComponent('/admin/payments')}" data-link class="aw-button ghost">Payment detail</a>
-                  ${Number(item.userId || 0) > 0 ? `<a href="/admin/users/${Number(item.userId || 0)}?back=${encodeURIComponent('/admin/payments')}" data-link class="aw-button ghost">User card</a>` : ''}
+                  <a href="/admin/payments/${Number(item.id || 0)}?back=${encodeURIComponent('/admin/payments')}" data-link class="aw-button ghost">Платёжная карточка</a>
+                  ${Number(item.userId || 0) > 0 ? `<a href="/admin/users/${Number(item.userId || 0)}?back=${encodeURIComponent('/admin/payments')}" data-link class="aw-button ghost">Карточка пользователя</a>` : ''}
                 </div>
               </div>
-            `).join('') : '<div class="aw-empty">Сейчас нет кейсов для ручного review.</div>'}
+            `).join('') : '<div class="aw-empty">Сейчас нет кейсов для ручного разбора.</div>'}
           </div>
         </section>
 
         <section class="aw-surface aw-stack">
           <h2>Последние платежи</h2>
-          <p class="aw-muted">Журнал ниже не главный сигнал: сначала buckets / review rail, потом уже история.</p>
+          <p class="aw-muted">Журнал ниже не главный сигнал: сначала корзины разбора и следующий шаг, потом уже история.</p>
           <div class="aw-table-wrap">
             <table class="aw-table">
               <thead>
                 <tr>
-                  <th>Payment</th>
-                  <th>User</th>
-                  <th>Type</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Follow-up</th>
-                  <th>Created</th>
-                  <th>Updated</th>
+                  <th>Платёж</th>
+                  <th>Пользователь</th>
+                  <th>Тип</th>
+                  <th>Сумма</th>
+                  <th>Статус</th>
+                  <th>Следующий шаг</th>
+                  <th>Создан</th>
+                  <th>Обновлён</th>
                 </tr>
               </thead>
               <tbody>
@@ -2642,7 +2642,7 @@ function paymentsView(model) {
 
       <aside class="aw-stack">
         <section class="aw-surface aw-stack ${followUpAllZero ? 'is-compact-empty' : ''}">
-          <h2>Operator follow-up</h2>
+          <h2>Операторский follow-up</h2>
           <div class="aw-side-stat-grid ${followUpAllZero ? 'is-all-zero' : ''}">
             <div class="aw-side-stat-card"><span>без действий</span><strong>${Number(followUpGroups.noAction || 0)}</strong></div>
             <div class="aw-side-stat-card"><span>наблюдать</span><strong>${Number(followUpGroups.watch || 0)}</strong></div>
@@ -2653,11 +2653,11 @@ function paymentsView(model) {
         </section>
 
         <section class="aw-surface aw-stack ${statusGroupsAllZero ? 'is-compact-empty' : ''}">
-          <h2>Status groups</h2>
+          <h2>Группы статусов</h2>
           <div class="aw-side-stat-grid ${statusGroupsAllZero ? 'is-all-zero' : ''}">
-            <div class="aw-side-stat-card"><span>success</span><strong>${Number(groups.success || 0)}</strong></div>
-            <div class="aw-side-stat-card"><span>pending</span><strong>${Number(groups.pending || 0)}</strong></div>
-            <div class="aw-side-stat-card"><span>failed</span><strong>${Number(groups.failed || 0)}</strong></div>
+            <div class="aw-side-stat-card"><span>успех</span><strong>${Number(groups.success || 0)}</strong></div>
+            <div class="aw-side-stat-card"><span>ожидает</span><strong>${Number(groups.pending || 0)}</strong></div>
+            <div class="aw-side-stat-card"><span>ошибка</span><strong>${Number(groups.failed || 0)}</strong></div>
             <div class="aw-side-stat-card"><span>fallback</span><strong>${Number(groups.fallback || 0)}</strong></div>
           </div>
           ${statusGroupsAllZero ? '<div class="aw-empty aw-empty-compact">Группы статусов пока без напряжения.</div>' : ''}
@@ -2734,7 +2734,7 @@ function paymentDetailView(model) {
         </section>
 
         <section class="aw-surface aw-stack">
-          <h2>Operator follow-up</h2>
+          <h2>Операторский follow-up</h2>
           <div class="aw-list">
             <div class="aw-list-item"><strong class="aw-status ${paymentFollowUpClass(followUp.level)}">${escapeHtml(followUp.label || '—')}</strong><small>${escapeHtml(followUp.reason || 'Проверь payment signals.')}</small></div>
             <div class="aw-list-item"><strong>Следующий шаг</strong><small>${escapeHtml(followUp.nextStep || 'Проверь user card и runtime surfaces.')}</small></div>
@@ -2781,14 +2781,14 @@ function paymentDetailView(model) {
             ${recentAdminAudit.length ? recentAdminAudit.map((item) => `
               <div class="aw-list-item">
                 <strong>${escapeHtml(item.action || 'unknown')}</strong>
-                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || 'fallback'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
+                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
         </section>
       </aside>
     </div>
-  `, window.__adminSession || {}, { title: 'Payment detail', subtitle: 'Read-only payment drilldown для founder/operator проверки.' });
+  `, window.__adminSession || {}, { title: 'Платёжная карточка', subtitle: 'Read-only payment drilldown для founder/operator проверки.' });
 }
 
 function commsAudienceLabel(value) {
@@ -2879,7 +2879,7 @@ function commsView(model) {
       <div class="aw-runtime-head">
         <div>
           <h2>Comms workspace</h2>
-          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)}</p>
+          <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)}</p>
         </div>
         <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
       </div>
@@ -2979,9 +2979,9 @@ function commsView(model) {
                 <tr>
                   <th>Notice</th>
                   <th>Audience</th>
-                  <th>Status</th>
+                  <th>Статус</th>
                   <th>Outbox</th>
-                  <th>Updated</th>
+                  <th>Обновлён</th>
                 </tr>
               </thead>
               <tbody>
@@ -3030,7 +3030,7 @@ function commsView(model) {
             ${recentAdminAudit.length ? recentAdminAudit.map((item) => `
               <div class="aw-list-item">
                 <strong>${escapeHtml(item.action || 'unknown')}</strong>
-                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || 'fallback'}${item.targetId ? ` · notice ${escapeHtml(item.targetId)}` : ''}</small>
+                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.targetId ? ` · notice ${escapeHtml(item.targetId)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока нет действий.</div>'}
           </div>
@@ -3056,48 +3056,72 @@ function founderView(model) {
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
-          <h2>Founder access</h2>
-          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)}</p>
+          <h2>Доступ фаундера</h2>
+          <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)}</p>
         </div>
-        <div class="aw-runtime-overall ${founder.allowed ? 'good' : 'warn'}">${founder.allowed ? 'FOUNDER READY' : 'OPERATOR SESSION'} · TG ${Number(founder.actorTgId || 0) || 'fallback'}</div>
+        <div class="aw-runtime-overall ${founder.allowed ? 'good' : 'warn'}">${founder.allowed ? 'ФАУНДЕР-СЕССИЯ' : 'ОПЕРАТОРСКАЯ СЕССИЯ'} · TG ${Number(founder.actorTgId || 0) || '—'}</div>
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
-        <div class="aw-card aw-runtime-card"><span>Auth/session</span><strong class="aw-status good">OK</strong><small>login ${Number(sessionPolicy.loginTtlSec || 0)}s · session ${Number(sessionPolicy.sessionTtlSec || 0)}s</small></div>
-        <div class="aw-card aw-runtime-card"><span>Idle timeout</span><strong>${Math.round(Number(sessionPolicy.idleTimeoutSec || 0) / 60) || 0}m</strong><small>manual refresh only</small></div>
-        <div class="aw-card aw-runtime-card"><span>Approvers</span><strong>${Number(sessionPolicy.approversCount || 0)}</strong><small>Telegram approvers configured</small></div>
+        <div class="aw-card aw-runtime-card"><span>Авторизация и сессия</span><strong class="aw-status good">OK</strong><small>логин ${Number(sessionPolicy.loginTtlSec || 0)}с · сессия ${Number(sessionPolicy.sessionTtlSec || 0)}с</small></div>
+        <div class="aw-card aw-runtime-card"><span>Таймаут бездействия</span><strong>${Math.round(Number(sessionPolicy.idleTimeoutSec || 0) / 60) || 0}м</strong><small>только ручное обновление</small></div>
+        <div class="aw-card aw-runtime-card"><span>Аппруверы</span><strong>${Number(sessionPolicy.approversCount || 0)}</strong><small>Telegram-аппруверы настроены</small></div>
         <div class="aw-card aw-runtime-card"><span>Founder Sale</span><strong class="aw-status ${founderSale.enabled ? 'good' : 'warn'}">${founderSale.enabled ? 'ON' : 'OFF'}</strong><small>${escapeHtml(founderSale.deadline || 'Без дедлайна')}</small></div>
       </div>
     </section>
 
+    <div class="aw-overview-workspace-grid aw-section">
+      <section class="aw-surface aw-stack">
+        <h2>Следующий фаундер-шаг</h2>
+        <div class="aw-list">
+          <div class="aw-list-item"><strong class="aw-status ${founder.allowed ? 'good' : 'warn'}">${founder.allowed ? 'Можно действовать' : 'Только read-first режим'}</strong><small>${founder.allowed ? 'Сначала смотри предупреждения и границы, потом используй только безопасные web-контроли.' : 'В этой сессии доступен только обзор фаундер-слоя без опасных действий.'}</small></div>
+          <div class="aw-list-item"><strong>Когда идти в Runtime</strong><small>Если предупреждение связано с QStash, PUBLIC_BASE_URL или системным деградом, сначала открой Runtime и проверь базовый системный контур.</small></div>
+          <div class="aw-list-item"><strong>Когда идти в Telegram</strong><small>Если нужен risky control, publish-path или bot-only мутация, не лечи это из web-admin — переходи в Telegram admin.</small></div>
+        </div>
+        <div class="aw-actions aw-overview-actions">
+          <a href="/admin/founder" data-link class="aw-button">Фаундер-слой</a>
+          <a href="/admin/runtime" data-link class="aw-button ghost">Открыть Runtime</a>
+          <a href="/admin/help" data-link class="aw-button ghost">Открыть помощь</a>
+        </div>
+      </section>
+      <section class="aw-surface aw-stack">
+        <h2>Границы этой поверхности</h2>
+        <div class="aw-list">
+          <div class="aw-list-item"><strong>Что можно делать здесь</strong><small>Смотреть предупреждения, policy, сессионные лимиты и безопасно завершать web-сессии.</small></div>
+          <div class="aw-list-item"><strong>Чего тут нет специально</strong><small>Нет runtime/config writes, нет payment writes, нет publish-path действий и нет широких destructive bulk-мутaций.</small></div>
+          <div class="aw-list-item"><strong>Главный принцип</strong><small>Фаундер-слой остаётся отдельным read-first экраном: опасные действия не смешиваются с обычным operator UX.</small></div>
+        </div>
+      </section>
+    </div>
+
     <div class="aw-split aw-section aw-runtime-layout aw-founder-layout ${compactFounderLayout ? 'is-compact' : ''}">
       <section class="aw-stack">
         <section class="aw-surface aw-stack">
-          <h2>Founder controls split</h2>
+          <h2>Границы фаундер-контуров</h2>
           <div class="aw-list">
-            <div class="aw-list-item"><strong>Web founder action</strong><small>${controls.canRevokeAllSessions ? 'Разрешён только revoke all sessions.' : 'Founder action недоступен в этой сессии.'}</small></div>
-            <div class="aw-list-item"><strong>Bot-only danger zone</strong><small>${Array.isArray(controls.botOnlyControls) ? controls.botOnlyControls.join(' · ') : '—'}</small></div>
+            <div class="aw-list-item"><strong>Безопасное web-действие</strong><small>${controls.canRevokeAllSessions ? 'Разрешено только завершение всех web-сессий.' : 'Фаундерское web-действие недоступно в этой сессии.'}</small></div>
+            <div class="aw-list-item"><strong>Только через бота</strong><small>${Array.isArray(controls.botOnlyControls) ? controls.botOnlyControls.join(' · ') : '—'}</small></div>
           </div>
           <div class="aw-actions">
-            <button class="aw-button danger" id="revokeAllBtn" ${controls.canRevokeAllSessions ? '' : 'disabled'}>Revoke all web sessions</button>
+            <button class="aw-button danger" id="revokeAllBtn" ${controls.canRevokeAllSessions ? '' : 'disabled'}>Завершить все web-сессии</button>
           </div>
         </section>
 
         <section class="aw-surface aw-stack">
-          <h2>Founder sale</h2>
+          <h2>Параметры founder sale</h2>
           <div class="aw-mini-grid aw-mini-grid-3">
-            <div class="aw-mini-card"><span>Brand 3m</span><strong>${Number(founderSale.brand3mPrice || 0)}</strong><small>${Number(founderSale.brand3mCredits || 0)} credits</small></div>
-            <div class="aw-mini-card"><span>Brand 12m</span><strong>${Number(founderSale.brand12mPrice || 0)}</strong><small>${Number(founderSale.brand12mCredits || 0)} credits</small></div>
-            <div class="aw-mini-card"><span>Creator 12m</span><strong>${Number(founderSale.creator12mPrice || 0)}</strong><small>founder price</small></div>
+            <div class="aw-mini-card"><span>Brand 3m</span><strong>${Number(founderSale.brand3mPrice || 0)}</strong><small>${Number(founderSale.brand3mCredits || 0)} кредитов</small></div>
+            <div class="aw-mini-card"><span>Brand 12m</span><strong>${Number(founderSale.brand12mPrice || 0)}</strong><small>${Number(founderSale.brand12mCredits || 0)} кредитов</small></div>
+            <div class="aw-mini-card"><span>Creator 12m</span><strong>${Number(founderSale.creator12mPrice || 0)}</strong><small>фаундерская цена</small></div>
           </div>
         </section>
 
         <section class="aw-surface aw-stack">
-          <h2>Founder warnings</h2>
+          <h2>Предупреждения фаундера</h2>
           <div class="aw-list">
             ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных founder-предупреждений нет.', source: 'founder' }]).map((item) => `
               <div class="aw-list-item aw-warning-item">
                 <strong class="${warningTone(item.level)}">${escapeHtml(item.message || '—')}</strong>
-                <small>${escapeHtml(item.source || 'founder')}</small>
+                <small>${escapeHtml(item.source || 'фаундер')}</small>
               </div>
             `).join('')}
           </div>
@@ -3106,7 +3130,7 @@ function founderView(model) {
 
       <aside class="aw-stack">
         <section class="aw-surface aw-stack ${founderHintsCompact ? 'is-compact-empty' : ''}">
-          <h2>Founder hints</h2>
+          <h2>Как пользоваться этой поверхностью</h2>
           <div class="aw-list">
             ${hints.length ? hints.map((item) => `
               <div class="aw-list-item">
@@ -3118,12 +3142,12 @@ function founderView(model) {
         </section>
 
         <section class="aw-surface aw-stack">
-          <h2>Founder snapshot</h2>
+          <h2>Сводка по системе</h2>
           <div class="aw-mini-grid aw-mini-grid-2">
-            <div class="aw-mini-card"><span>Users</span><strong>${Number(snapshots.usersTotal || 0)}</strong></div>
+            <div class="aw-mini-card"><span>Пользователи</span><strong>${Number(snapshots.usersTotal || 0)}</strong></div>
             <div class="aw-mini-card"><span>Runtime</span><strong>${escapeHtml(runtimeStateLabel(snapshots.runtimeState || 'unknown'))}</strong></div>
-            <div class="aw-mini-card"><span>Payment warnings</span><strong>${Number(snapshots.paymentWarnings || 0)}</strong></div>
-            <div class="aw-mini-card"><span>Comms warnings</span><strong>${Number(snapshots.commsWarnings || 0)}</strong></div>
+            <div class="aw-mini-card"><span>Платёжные сигналы</span><strong>${Number(snapshots.paymentWarnings || 0)}</strong></div>
+            <div class="aw-mini-card"><span>Сигналы comms</span><strong>${Number(snapshots.commsWarnings || 0)}</strong></div>
           </div>
         </section>
 
@@ -3133,7 +3157,7 @@ function founderView(model) {
             ${recentAudit.length ? recentAudit.map((item) => `
               <div class="aw-list-item">
                 <strong>${escapeHtml(item.action || 'unknown')}</strong>
-                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || 'fallback'}${item.targetId ? ` · ${escapeHtml(item.targetId)}` : ''}</small>
+                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.targetId ? ` · ${escapeHtml(item.targetId)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -3283,7 +3307,7 @@ function runtimeView(model) {
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
-          <h2>Control plane snapshot</h2>
+          <h2>Снимок управления</h2>
           <p class="aw-muted">Без write-path действий: только текущее runtime-состояние safe toggles.</p>
         </div>
         <div class="aw-runtime-overall ${Number(model.controlSnapshot?.pausedCount || 0) > 0 || Number(model.controlSnapshot?.incidentModes || 0) > 0 ? 'warn' : 'good'}">paused ${Number(model.controlSnapshot?.pausedCount || 0)} · incident ${Number(model.controlSnapshot?.incidentModes || 0)}</div>
@@ -3299,11 +3323,11 @@ function runtimeView(model) {
             <small>Текущее состояние: ${escapeHtml(item.stateLabel || '—')}</small>
             <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
             <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь смысл этого toggle в control surface.')}</div>
-            <div class="aw-card-subtle">${item.changedAt ? `updated ${escapeHtml(formatDate(item.changedAt))}` : 'без явного runtime override'}</div>
+            <div class="aw-card-subtle">${item.changedAt ? `обновлено ${escapeHtml(formatDate(item.changedAt))}` : 'без явного runtime override'}</div>
           </div>
         `).join('') : '<div class="aw-empty">Control surface пока недоступен.</div>'}
       </div>
-      <div class="aw-runtime-footnote">${lastAudit ? `Последний operator change: ${escapeHtml(controlAuditSummary(lastAudit))} · ${escapeHtml(controlAuditActorLabel(lastAudit))} · ${escapeHtml(formatDate(lastAudit.ts))}` : 'Последних operator changes пока нет.'}</div>
+      <div class="aw-runtime-footnote">${lastAudit ? `Последнее изменение: ${escapeHtml(controlAuditSummary(lastAudit))} · ${escapeHtml(controlAuditActorLabel(lastAudit))} · ${escapeHtml(formatDate(lastAudit.ts))}` : 'Переключений пока не было.'}</div>
     </section>
 
     <div class="aw-runtime-sidebar-grid aw-section">
@@ -3894,7 +3918,7 @@ function bindShell() {
     else render();
   });
   document.getElementById('revokeAllBtn')?.addEventListener('click', async () => {
-    if (!confirm('Revoke all web sessions? Текущая founder-сессия тоже будет закрыта.')) return;
+    if (!confirm('Завершить все web-сессии? Текущая фаундер-сессия тоже будет закрыта.')) return;
     const res = await api('/api/admin-web-auth?action=revoke_all', { method: 'POST' });
     if (!res.ok) {
       alert(`Не удалось выполнить revoke: ${res.data?.error || 'unknown'}`);
@@ -3959,13 +3983,13 @@ function bindShell() {
   document.getElementById('testSendDraftBtn')?.addEventListener('click', async () => {
     const draftId = document.getElementById('draftIdInput')?.value || '';
     if (!draftId) return;
-    if (!confirm('Founder test send отправит preview notice в твой Telegram. Продолжить?')) return;
+    if (!confirm('Тест-отправка фаундера пришлёт preview notice в твой Telegram. Продолжить?')) return;
     const res = await api('/api/admin-web-write?action=test_send_notice', { method: 'POST', body: JSON.stringify({ draftId }) });
     if (!res.ok) {
       alert(`Не удалось выполнить test send: ${res.data?.error || 'unknown'}`);
       return;
     }
-    alert('Founder test send отправлен в Telegram.');
+    alert('Тест-отправка фаундера отправлена в Telegram.');
     await render();
   });
 }

@@ -1,3 +1,11 @@
+## STEP535K — Founder control clarity + admin RU consistency
+
+- локализован section-manifest web-admin для ключевых user-facing разделов (`Обзор`, `Пользователи`, `Система`, `Платежи`, `Коммуникации`, `Фаундер`) без изменения route contract;
+- `/admin/founder` переведён в более явный founder-layer: добавлены `Следующий фаундер-шаг` и `Границы этой поверхности`, усилен safe-vs-bot-only boundary contract, а revoke-all action сохранён как единственный web founder action;
+- `/admin/payments` дочищен по admin copy до более русскоязычного review-plane (`Платёжный обзор`, `Корзины разбора`, `Следующий шаг`, `Группы статусов`, `Платёжная карточка`, `Карточка пользователя`);
+- founder warnings / hints в `src/lib/adminWeb/readModels.js` приведены к более честной founder-only формулировке без изменения founder guards или control logic;
+- admin shell asset cache-bust поднят до `step535k`; smoke contracts founder/payments/overview/asset cache-bust обновлены под новый copy contract.
+
 ## STEP535J — Desktop density + interaction feedback polish
 - Tightened the desktop feel of sparse admin-web sections in `styles/admin-web.css` and `scripts/admin-web.js`: empty Founder/Payments side panels now compact earlier, sidebar helper actions no longer stretch vertically, and zero-state follow-up/status summaries in Payments render as denser stat tiles instead of tall empty stacks.
 - Added a clearer interaction contract across the shell: `scripts/admin-web.js` now attaches lightweight press/confirm feedback to admin buttons/cards, and Users selection surfaces gained stronger persistent active-state cues via `aria-pressed`, differentiated color treatments, and an explicit state line inside slice action cards.

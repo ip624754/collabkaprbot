@@ -1,3 +1,19 @@
+## STEP535K — Founder control clarity + admin RU consistency
+
+Date: 2026-04-03
+
+Scope:
+- доведён `/admin/founder` до более явной founder-only поверхности: добавлены блоки `Следующий фаундер-шаг` и `Границы этой поверхности`, усилено разделение safe web action vs bot-only control layer;
+- section manifest web-admin локализован для ключевых admin labels, чтобы sidebar / page titles меньше спорили с договорённостью `админка по-русски`;
+- `/admin/payments` дочищен по copy до более русскоязычного review-plane без изменения read-model / money-path contract;
+- founder warnings / hints в `src/lib/adminWeb/readModels.js` переведены в более честный RU founder contract;
+- обновлены founder/payments/overview/cache-bust smoke contracts и asset cache-bust поднят до `step535k`.
+
+Acceptance / notes:
+- шаг остаётся read-model / copy / layout only: founder guards, revoke semantics, runtime/config writes и money-path не менялись;
+- цель — читаемость founder-layer и RU consistency, а не расширение founder powers или новый control backend.
+
+
 ## STEP534 — Runtime status hierarchy / incident strip
 
 Date: 2026-04-03
