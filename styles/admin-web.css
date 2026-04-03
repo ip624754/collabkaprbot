@@ -1328,6 +1328,7 @@ body {
 .aw-badge.is-good { color: var(--good); }
 .aw-badge.is-warn { color: #ffd36a; }
 .aw-badge.is-bad { color: var(--bad); }
+.aw-badge.is-info { color: var(--info); }
 .aw-mini-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

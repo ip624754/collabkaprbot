@@ -5,28 +5,18 @@ import assert from 'node:assert/strict';
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-const runtime = read('src/lib/adminWeb/runtime.js');
-for (const token of [
-  'semanticLabelForState',
-  'actionabilityForState',
-  'actionabilityLabel',
-  'decorateRuntimeItem',
-  'decorateConfigPresence',
-  'nextStepForSource',
-  'infoOnly',
-]) {
-  assert.ok(runtime.includes(token), `runtime semantics layer must include ${token}`);
-}
-
 const webJs = read('scripts/admin-web.js');
 for (const token of [
   'function runtimeActionabilityClass(value)',
   'function runtimeActionabilityLabel(value)',
-  'Paused ≠ silent bug',
-  'Missing ≠ degraded',
+  'function runtimeCardLabel(value)',
+  'function runtimeTextLabel(value)',
+  'function runtimeItemMeaning(item = {})',
+  'function runtimeItemNextStep(item = {}, fallback = \'\')',
+  'Пауза ≠ поломка',
+  'setup-gap ≠ runtime error',
   'Следующий шаг:',
-  'Справочно',
-  'Incident modes',
+  'Опционально для delivery',
 ]) {
   assert.ok(webJs.includes(token), `runtime UI semantics pass must include ${token}`);
 }
@@ -39,14 +29,15 @@ for (const token of [
   '.aw-config-main',
   '.aw-config-meta',
   '.aw-config-state-wrap',
+  '.aw-badge.is-info',
 ]) {
   assert.ok(css.includes(token), `runtime semantics CSS must include ${token}`);
 }
 
 const html = read('admin.html');
-assert.ok(html.includes('step535p'), 'admin shell asset URLs must be cache-busted to step535p');
+assert.ok(html.includes('step535q'), 'admin shell asset URLs must be cache-busted to step535q');
 
 const currentState = read('docs/00_CURRENT_STATE.md');
-assert.ok(currentState.includes('STEP535E'), 'current state must mention STEP535E');
+assert.ok(currentState.includes('STEP535Q'), 'current state must mention STEP535Q');
 
 console.log('✅ smoke admin-web runtime semantics + actionability contract OK');

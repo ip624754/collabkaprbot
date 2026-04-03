@@ -340,7 +340,7 @@ function runtimeStateClass(value) {
 
 function runtimeStateLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ ok: 'OK', degraded: 'Нужна проверка', missing: 'Не настроено', unknown: 'Справочно', warning: 'Нужна проверка', error: 'Не настроено', info: 'Справочно' })[key] || (key || '—');
+  return ({ ok: 'OK', degraded: 'Нужна проверка', missing: 'Не настроено', unknown: 'Справочно', warning: 'Нужна проверка', error: 'Не настроено', info: 'Справочно', optional: 'Опционально', not_enabled: 'Не включено' })[key] || (key || '—');
 }
 
 function runtimeActionabilityClass(value) {
@@ -358,7 +358,7 @@ function runtimeActionabilityLabel(value) {
 
 function configPresenceLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ configured: 'настроено', missing: 'отсутствует', optional: 'справочно', not_enabled: 'не включено' })[key] || (key || '—');
+  return ({ configured: 'настроено', missing: 'отсутствует', optional: 'опционально', not_enabled: 'не включено' })[key] || (key || '—');
 }
 
 function sourceLabel(value) {
@@ -414,6 +414,115 @@ function founderTextLabel(value) {
     .replace(/owner-grade/gi, 'фаундерский')
     .replace(/web-action/gi, 'web-действие')
     .replace(/web-sessions/gi, 'web-сессии');
+}
+
+function runtimeCardLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({
+    db: 'База данных',
+    redis: 'Redis',
+    delivery: 'Доставка / QStash',
+    payments: 'Платежи',
+    'web-admin': 'Web-админка',
+    config: 'Конфигурация',
+    runtime: 'Система',
+    controls: 'Контуры управления',
+    'active backlog': 'Активная очередь',
+    'retry problems': 'Проблемы retry',
+    'cooling windows': 'Окна охлаждения',
+    'ops digest': 'Сводка ops',
+    'audit buffer': 'Буфер аудита',
+    'broadcast / delivery': 'Рассылка / доставка',
+    'retry monitor': 'Монитор retry',
+    'last retry': 'Последний retry',
+    'official publish stuck': 'Застревание publish',
+    'qstash reschedule_failed': 'QStash reschedule_failed',
+    qstash: 'QStash',
+    'retry signal': 'Сигнал retry',
+    'paused controls': 'Паузы контуров',
+    'incident modes': 'Инцидентные режимы',
+  })[key] || runtimeTextLabel(value || 'Контур');
+}
+
+function runtimeTextLabel(value) {
+  return founderTextLabel(value)
+    .replace(/Last updated:/gi, 'Обновлено:')
+    .replace(/operator toggles OFF/gi, 'оператор не ставил контур на паузу')
+    .replace(/runtime overrides/gi, 'runtime override-режимы')
+    .replace(/pending \+ inflight \+ stuck counts/gi, 'pending + inflight + stuck')
+    .replace(/lanes без обязательного сигнала/gi, 'контуры без обязательного сигнала')
+    .replace(/lanes without mandatory signal/gi, 'контуры без обязательного сигнала')
+    .replace(/DB configured/gi, 'База настроена')
+    .replace(/Redis configured/gi, 'Redis настроен')
+    .replace(/QStash not configured/gi, 'QStash не настроен')
+    .replace(/Core config present/gi, 'Базовый конфиг найден')
+    .replace(/Payments fallback disabled/gi, 'Fallback платежей выключен')
+    .replace(/Admin web auth configured/gi, 'Web-авторизация настроена')
+    .replace(/last retry error/gi, 'последняя ошибка retry')
+    .replace(/last retry returned error/gi, 'последний retry вернул ошибку')
+    .replace(/Retry signal/gi, 'Сигнал retry')
+    .replace(/Retry status/gi, 'статус retry')
+    .replace(/Backlog, retry cooldown and stuck-signals without write-path actions\./gi, 'Backlog, retry cooldown и stuck-сигналы без write-path действий.')
+    .replace(/retry cooldown/gi, 'retry cooldown')
+    .replace(/requeue cooldown/gi, 'requeue cooldown')
+    .replace(/read-admin/gi, 'read-admin')
+    .replace(/setup gaps \/ missing env/gi, 'setup-gap / missing env')
+    .replace(/unknown \/ optional \/ no signal/gi, 'unknown / optional / no signal')
+    .replace(/no signal/gi, 'без сигнала')
+    .replace(/last sent not recorded/gi, 'последняя отправка не зафиксирована')
+    .replace(/queue 0 · inflight 0/gi, 'очередь 0 · inflight 0')
+    .replace(/official publish stuck/gi, 'official publish stuck');
+}
+
+function runtimeItemHasProfileContactDrift(item = {}) {
+  const hay = [item.label, item.title, item.summary, item.message, item.detail, item.note, item.meaning, item.nextStep, item.action].join(' ').toLowerCase();
+  return hay.includes('column_profile_contact_does_not_exist') || hay.includes('profile_contact');
+}
+
+function runtimeItemIsQstashOptional(item = {}) {
+  const hay = [item.key, item.label, item.title, item.summary, item.message, item.detail, item.note, item.meaning].join(' ').toLowerCase();
+  return hay.includes('qstash_token') || hay.includes('qstash_current_signing_key') || (hay.includes('qstash') && hay.includes('not configured'));
+}
+
+function runtimeItemMeaning(item = {}) {
+  if (runtimeItemHasProfileContactDrift(item)) {
+    return 'Похоже на schema/query drift: retry-контур обращается к legacy-полю profile_contact и уже спорит с текущей схемой.';
+  }
+  if (runtimeItemIsQstashOptional(item)) {
+    return 'Для базового admin v1 это не блокер, но publish/delivery/retry контуры будут ограничены, пока QStash env не задан.';
+  }
+  return runtimeTextLabel(item.meaning || item.message || item.detail || item.hint || '');
+}
+
+function runtimeItemNextStep(item = {}, fallback = '') {
+  if (runtimeItemHasProfileContactDrift(item)) {
+    return 'Проверь source-level retry handler / SQL / воркер, где ещё используется profile_contact, и выровняй код со схемой БД.';
+  }
+  if (runtimeItemIsQstashOptional(item)) {
+    return 'Если delivery/retry реально нужен, добавь QSTASH_TOKEN и QSTASH_CURRENT_SIGNING_KEY в env и обнови Runtime. Если нет — оставь этот контур как опциональный.';
+  }
+  return runtimeTextLabel(item.nextStep || item.action || fallback || 'Обнови Runtime вручную и сверяй соседние сигналы.');
+}
+
+function runtimeItemSummary(item = {}, fallback = '') {
+  return runtimeTextLabel(item.summary || item.title || fallback || '—');
+}
+
+function runtimeItemDetail(item = {}, fallback = '') {
+  if (runtimeItemHasProfileContactDrift(item)) {
+    return 'Сигнал не про QStash env сам по себе: ошибка выглядит как реальный source/schema drift в retry-контуре.';
+  }
+  return runtimeTextLabel(item.detail || item.message || fallback || '');
+}
+
+function runtimeConfigBadgeLabel(item = {}) {
+  if (runtimeItemIsQstashOptional(item)) return 'Опционально для delivery';
+  return '';
+}
+
+function runtimeConfigSemanticLabel(item = {}) {
+  if (runtimeItemIsQstashOptional(item)) return 'Опционально';
+  return runtimeTextLabel(item.semanticLabel || runtimeStateLabel(item.toneState || item.state));
 }
 
 function controlToneClass(item = {}) {
@@ -2713,7 +2822,7 @@ function paymentsView(model) {
           <h2>Платёжный обзор</h2>
           <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)} · read-first разбор платёжной поверхности</p>
         </div>
-        <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
+        <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeTextLabel(runtimeStateLabel(overall.state)))} · ${escapeHtml(runtimeTextLabel(overall.label || ''))}</div>
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
         <div class="aw-card aw-runtime-card aw-metric-card"><span>Всего платежей</span><strong>${Number(summary.total || 0)}</strong><small>все события</small></div>
@@ -3067,7 +3176,7 @@ function commsView(model) {
           <h2>Comms workspace</h2>
           <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)}</p>
         </div>
-        <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
+        <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeTextLabel(runtimeStateLabel(overall.state)))} · ${escapeHtml(runtimeTextLabel(overall.label || ''))}</div>
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
         <div class="aw-card aw-runtime-card"><span>Drafts</span><strong>${Number(summary.drafts || 0)}</strong><small>Можно редактировать и preview</small></div>
@@ -3423,29 +3532,29 @@ function runtimeView(model) {
       <div class="aw-runtime-head">
         <div>
           <h2>Общий статус</h2>
-          <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)} · ручной снимок только для чтения</p>
+          <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)} · ручной read-first снимок</p>
         </div>
-        <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
+        <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeTextLabel(runtimeStateLabel(overall.state)))} · ${escapeHtml(runtimeTextLabel(overall.label || ''))}</div>
       </div>
       <div class="aw-runtime-summary-grid">
         <div class="aw-mini-card"><span>OK</span><strong class="aw-status good">${Number(summaryCards.ok || 0)}</strong><small>контуры без явного действия</small></div>
         <div class="aw-mini-card"><span>Нужна проверка</span><strong class="aw-status ${Number(summaryCards.check || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.check || 0)}</strong><small>degraded / paused / incident</small></div>
         <div class="aw-mini-card"><span>Не настроено</span><strong class="aw-status ${Number(summaryCards.setup || 0) > 0 ? 'bad' : 'good'}">${Number(summaryCards.setup || 0)}</strong><small>setup gaps / missing env</small></div>
         <div class="aw-mini-card"><span>Справочно</span><strong class="aw-status ${Number(summaryCards.info || 0) > 0 ? 'info' : 'good'}">${Number(summaryCards.info || 0)}</strong><small>unknown / optional / no signal</small></div>
-        <div class="aw-mini-card"><span>Paused controls</span><strong class="aw-status ${Number(summaryCards.pausedControls || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.pausedControls || 0)}</strong><small>operator toggles OFF</small></div>
-        <div class="aw-mini-card"><span>Incident modes</span><strong class="aw-status ${Number(summaryCards.incidentModes || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.incidentModes || 0)}</strong><small>runtime overrides</small></div>
+        <div class="aw-mini-card"><span>Паузы контуров</span><strong class="aw-status ${Number(summaryCards.pausedControls || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.pausedControls || 0)}</strong><small>оператор не выключал критичные тумблеры</small></div>
+        <div class="aw-mini-card"><span>Инцидентные режимы</span><strong class="aw-status ${Number(summaryCards.incidentModes || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.incidentModes || 0)}</strong><small>runtime override-режимы</small></div>
       </div>
       <div class="aw-runtime-topline-grid">
         ${statusHierarchy.length ? statusHierarchy.map((item) => `
           <div class="aw-card aw-runtime-topline-card">
-            <div class="aw-runtime-topline-label">${escapeHtml(item.label || 'Контур')}</div>
+            <div class="aw-runtime-topline-label">${escapeHtml(runtimeCardLabel(item.label || 'Контур'))}</div>
             <div class="aw-runtime-card-head">
-              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
-              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(runtimeTextLabel(item.semanticLabel || runtimeStateLabel(item.state)))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(runtimeTextLabel(item.actionLabel || runtimeActionabilityLabel(item.actionability)))}</span>
             </div>
-            <small>${escapeHtml(item.summary || 'Данные пока недоступны.')}</small>
-            <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
-            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Обнови Runtime вручную и сверяй соседние сигналы.')}</div>
+            <small>${escapeHtml(runtimeItemSummary(item, 'Данные пока недоступны.'))}</small>
+            <div class="aw-card-subtle">${escapeHtml(runtimeItemMeaning(item))}</div>
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(runtimeItemNextStep(item, 'Обнови Runtime вручную и сверяй соседние сигналы.'))}</div>
           </div>
         `).join('') : '<div class="aw-empty">Статусные контуры пока не собраны.</div>'}
       </div>
@@ -3455,14 +3564,14 @@ function runtimeView(model) {
       <div class="aw-runtime-incident ${warningTone(incident.tone || incident.state)}">
         <div class="aw-runtime-incident-main">
           <span class="aw-runtime-incident-kicker">Главный runtime-сигнал</span>
-          <h2>${escapeHtml(incident.title || 'Нужна проверка')}</h2>
-          <p>${escapeHtml(incident.message || '—')}</p>
+          <h2>${escapeHtml(runtimeTextLabel(incident.title || 'Нужна проверка'))}</h2>
+          <p>${escapeHtml(runtimeItemHasProfileContactDrift(incident) ? 'Это уже не просто config-gap: последний retry спорит с текущей схемой и требует source-level разбора.' : runtimeTextLabel(incident.message || '—'))}</p>
         </div>
         <div class="aw-runtime-incident-meta">
           <div class="aw-runtime-incident-item">
             <span>Семантика</span>
             <strong class="aw-status ${runtimeStateClass(incident.state)}">${escapeHtml(incident.semanticLabel || runtimeStateLabel(incident.state))}</strong>
-            <small>${escapeHtml(incident.sourceLabel || 'Runtime')} · ${formatDate(incident.updatedAt || model.updatedAt)}</small>
+            <small>${escapeHtml(runtimeCardLabel(incident.sourceLabel || 'Runtime'))} · ${formatDate(incident.updatedAt || model.updatedAt)}</small>
           </div>
           <div class="aw-runtime-incident-item">
             <span>Нужно ли действие</span>
@@ -3470,21 +3579,21 @@ function runtimeView(model) {
           </div>
           <div class="aw-runtime-incident-item">
             <span>Следующий шаг</span>
-            <strong>${escapeHtml(incident.action || 'Обнови страницу вручную.')}</strong>
+            <strong>${escapeHtml(runtimeItemNextStep(incident, 'Обнови страницу вручную.'))}</strong>
           </div>
         </div>
       </div>
       <div class="aw-runtime-incident-feed">
         ${(incidentFeed.length ? incidentFeed : [{ state: 'ok', semanticLabel: 'OK', actionLabel: 'Действие не нужно', title: 'Явных инцидентов нет', sourceLabel: 'Runtime', meaning: 'Контрольная полоса и соседние сигналы выглядят стабильно.', nextStep: 'Достаточно ручного refresh.' }]).map((item) => `
           <div class="aw-card aw-runtime-feed-card">
-            <span>${escapeHtml(item.sourceLabel || item.source || 'Runtime')}</span>
+            <span>${escapeHtml(runtimeCardLabel(item.sourceLabel || item.source || 'Runtime'))}</span>
             <div class="aw-runtime-card-head">
-              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
-              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(runtimeTextLabel(item.semanticLabel || runtimeStateLabel(item.state)))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(runtimeTextLabel(item.actionLabel || runtimeActionabilityLabel(item.actionability)))}</span>
             </div>
-            <small>${escapeHtml(item.title || '—')}</small>
-            <div class="aw-card-subtle">${escapeHtml(item.meaning || item.message || '')}</div>
-            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь соседние сигналы вручную.')}</div>
+            <small>${escapeHtml(runtimeItemSummary(item, '—'))}</small>
+            <div class="aw-card-subtle">${escapeHtml(runtimeItemMeaning(item))}</div>
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(runtimeItemNextStep(item, 'Сверь соседние сигналы вручную.'))}</div>
           </div>
         `).join('')}
       </div>
@@ -3496,42 +3605,42 @@ function runtimeView(model) {
           <h2>Очереди и retry</h2>
           <p class="aw-muted">Backlog, retry cooldown и stuck-сигналы без write-path действий.</p>
         </div>
-        <div class="aw-runtime-overall ${runtimeStateClass(queueOverall.state)}">${escapeHtml(runtimeStateLabel(queueOverall.state))} · ${escapeHtml(queueOverall.label || '')}</div>
+        <div class="aw-runtime-overall ${runtimeStateClass(queueOverall.state)}">${escapeHtml(runtimeTextLabel(runtimeStateLabel(queueOverall.state)))} · ${escapeHtml(runtimeTextLabel(queueOverall.label || ''))}</div>
       </div>
       <div class="aw-runtime-summary-grid">
-        <div class="aw-mini-card"><span>Active backlog</span><strong class="aw-status ${Number(queueSummary.activeBacklog || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.activeBacklog || 0)}</strong><small>pending + inflight + stuck counts</small></div>
-        <div class="aw-mini-card"><span>Retry problems</span><strong class="aw-status ${Number(queueSummary.retryProblems || 0) > 0 ? 'bad' : 'good'}">${Number(queueSummary.retryProblems || 0)}</strong><small>последний retry / QStash stuck</small></div>
-        <div class="aw-mini-card"><span>Cooling windows</span><strong class="aw-status ${Number(queueSummary.coolingWindows || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.coolingWindows || 0)}</strong><small>retry cooldown / requeue cooldown</small></div>
-        <div class="aw-mini-card"><span>Справочно</span><strong class="aw-status ${Number(queueSummary.infoOnly || 0) > 0 ? 'info' : 'good'}">${Number(queueSummary.infoOnly || 0)}</strong><small>lanes без обязательного сигнала</small></div>
+        <div class="aw-mini-card"><span>Активная очередь</span><strong class="aw-status ${Number(queueSummary.activeBacklog || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.activeBacklog || 0)}</strong><small>pending + inflight + stuck</small></div>
+        <div class="aw-mini-card"><span>Проблемы retry</span><strong class="aw-status ${Number(queueSummary.retryProblems || 0) > 0 ? 'bad' : 'good'}">${Number(queueSummary.retryProblems || 0)}</strong><small>последний retry / QStash stuck</small></div>
+        <div class="aw-mini-card"><span>Окна охлаждения</span><strong class="aw-status ${Number(queueSummary.coolingWindows || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.coolingWindows || 0)}</strong><small>retry cooldown / requeue cooldown</small></div>
+        <div class="aw-mini-card"><span>Справочно</span><strong class="aw-status ${Number(queueSummary.infoOnly || 0) > 0 ? 'info' : 'good'}">${Number(queueSummary.infoOnly || 0)}</strong><small>контуры без обязательного сигнала</small></div>
       </div>
       <div class="aw-runtime-queues-grid">
         ${queueLanes.length ? queueLanes.map((item) => `
           <div class="aw-card aw-runtime-queue-card">
-            <span>${escapeHtml(item.label || 'Lane')}</span>
+            <span>${escapeHtml(runtimeCardLabel(item.label || 'Lane'))}</span>
             <div class="aw-runtime-card-head">
-              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
-              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(runtimeTextLabel(item.semanticLabel || runtimeStateLabel(item.state)))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(runtimeTextLabel(item.actionLabel || runtimeActionabilityLabel(item.actionability)))}</span>
             </div>
-            <small>${escapeHtml(item.summary || '—')}</small>
-            <div class="aw-card-subtle">${escapeHtml(item.detail || '')}</div>
-            <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
-            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь backlog и соседние retry сигналы.')}</div>
+            <small>${escapeHtml(runtimeItemSummary(item, '—'))}</small>
+            <div class="aw-card-subtle">${escapeHtml(runtimeItemDetail(item))}</div>
+            <div class="aw-card-subtle">${escapeHtml(runtimeItemMeaning(item))}</div>
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(runtimeItemNextStep(item, 'Сверь backlog и соседние retry сигналы.'))}</div>
           </div>
         `).join('') : '<div class="aw-empty">Очереди пока недоступны.</div>'}
       </div>
       <div class="aw-runtime-retry-feed">
         ${retrySignals.length ? retrySignals.map((item) => `
           <div class="aw-card aw-runtime-feed-card">
-            <span>${escapeHtml(item.label || 'Retry signal')}</span>
+            <span>${escapeHtml(runtimeCardLabel(item.label || 'Retry signal'))}</span>
             <div class="aw-runtime-card-head">
-              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
-              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(runtimeTextLabel(item.semanticLabel || runtimeStateLabel(item.state)))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(runtimeTextLabel(item.actionLabel || runtimeActionabilityLabel(item.actionability)))}</span>
             </div>
-            <small>${escapeHtml(item.summary || '—')}</small>
-            <div class="aw-card-subtle">${escapeHtml(item.detail || '')}</div>
-            <div class="aw-card-subtle">${escapeHtml(item.meaning || '')}</div>
-            ${item.note ? `<div class="aw-card-subtle">${escapeHtml(item.note)}</div>` : ''}
-            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь retry status вручную.')}</div>
+            <small>${escapeHtml(runtimeItemSummary(item, '—'))}</small>
+            <div class="aw-card-subtle">${escapeHtml(runtimeItemDetail(item))}</div>
+            <div class="aw-card-subtle">${escapeHtml(runtimeItemMeaning(item))}</div>
+            ${item.note ? `<div class="aw-card-subtle">${escapeHtml(runtimeTextLabel(item.note))}</div>` : ''}
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(runtimeItemNextStep(item, 'Сверь retry status вручную.'))}</div>
           </div>
         `).join('') : '<div class="aw-empty">Retry signals пока пусты.</div>'}
       </div>
@@ -3542,21 +3651,21 @@ function runtimeView(model) {
       <div class="aw-runtime-head">
         <div>
           <h2>Снимок управления</h2>
-          <p class="aw-muted">Без write-path действий: только текущее runtime-состояние safe toggles.</p>
+          <p class="aw-muted">Без write-path действий: только текущее runtime-состояние безопасных тумблеров.</p>
         </div>
-        <div class="aw-runtime-overall ${Number(model.controlSnapshot?.pausedCount || 0) > 0 || Number(model.controlSnapshot?.incidentModes || 0) > 0 ? 'warn' : 'good'}">paused ${Number(model.controlSnapshot?.pausedCount || 0)} · incident ${Number(model.controlSnapshot?.incidentModes || 0)}</div>
+        <div class="aw-runtime-overall ${Number(model.controlSnapshot?.pausedCount || 0) > 0 || Number(model.controlSnapshot?.incidentModes || 0) > 0 ? 'warn' : 'good'}">паузы ${Number(model.controlSnapshot?.pausedCount || 0)} · инциденты ${Number(model.controlSnapshot?.incidentModes || 0)}</div>
       </div>
       <div class="aw-runtime-controls-grid">
         ${controls.length ? controls.map((item) => `
           <div class="aw-card aw-runtime-control-card">
-            <span>${escapeHtml(item.label || 'Control')}</span>
+            <span>${escapeHtml(runtimeCardLabel(controlSurfaceLabel(item.label || 'Control')))}</span>
             <div class="aw-runtime-card-head">
-              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
-              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(runtimeTextLabel(item.semanticLabel || runtimeStateLabel(item.state)))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(runtimeTextLabel(item.actionLabel || runtimeActionabilityLabel(item.actionability)))}</span>
             </div>
             <small>Текущее состояние: ${escapeHtml(item.stateLabel || '—')}</small>
-            <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
-            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь смысл этого toggle в control surface.')}</div>
+            <div class="aw-card-subtle">${escapeHtml(runtimeItemMeaning(item))}</div>
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(runtimeItemNextStep(item, 'Сверь смысл этого toggle в control surface.'))}</div>
             <div class="aw-card-subtle">${item.changedAt ? `обновлено ${escapeHtml(formatDate(item.changedAt))}` : 'без явного runtime override'}</div>
           </div>
         `).join('') : '<div class="aw-empty">Control surface пока недоступен.</div>'}
@@ -3569,21 +3678,22 @@ function runtimeView(model) {
         <div class="aw-runtime-head">
           <div>
             <h2>Конфигурация</h2>
-            <p class="aw-muted">Presence matrix без утечки значений секретов.</p>
+            <p class="aw-muted">Матрица присутствия env без утечки значений секретов.</p>
           </div>
-          <div class="aw-runtime-overall ${Number(configSummary.missing || 0) > 0 ? 'warn' : 'good'}">missing ${Number(configSummary.missing || 0)} · info ${Number(configSummary.infoOnly || 0)}</div>
+          <div class="aw-runtime-overall ${Number(configSummary.missing || 0) > 0 ? 'warn' : 'good'}">не настроено ${Number(configSummary.missing || 0)} · справочно ${Number(configSummary.infoOnly || 0)}</div>
         </div>
         <div class="aw-config-grid">
           ${configPresence.map((item) => `
             <div class="aw-config-row">
               <div class="aw-config-main">
                 <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
-                <div class="aw-config-meta">${escapeHtml(item.meaning || '')}</div>
-                <div class="aw-config-meta"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Обнови Runtime после изменения env.')}</div>
+                ${runtimeConfigBadgeLabel(item) ? `<div class="aw-badges"><span class="aw-badge is-info">${escapeHtml(runtimeConfigBadgeLabel(item))}</span></div>` : ''}
+                <div class="aw-config-meta">${escapeHtml(runtimeItemMeaning(item))}</div>
+                <div class="aw-config-meta"><strong>Следующий шаг:</strong> ${escapeHtml(runtimeItemNextStep(item, 'Обнови Runtime после изменения env.'))}</div>
               </div>
               <div class="aw-config-state-wrap">
                 <div class="aw-config-state aw-status ${runtimeStateClass(item.toneState || item.state)}">${escapeHtml(configPresenceLabel(item.state))}</div>
-                <small>${escapeHtml(item.semanticLabel || runtimeStateLabel(item.toneState || item.state))}</small>
+                <small>${escapeHtml(runtimeConfigSemanticLabel(item))}</small>
               </div>
             </div>
           `).join('') || '<div class="aw-empty">Данные пока недоступны.</div>'}
@@ -3593,9 +3703,10 @@ function runtimeView(model) {
       <section class="aw-surface aw-stack ${hints.length <= 1 ? 'is-compact-empty' : ''}">
         <h2>Как читать этот экран</h2>
         <div class="aw-list">
-          <div class="aw-list-item"><strong>Paused ≠ silent bug</strong><small>Если toggle paused оператором, это control-plane режим. Сначала пойми, зачем он был включён, и только потом ищи поломку.</small></div>
-          <div class="aw-list-item"><strong>Missing ≠ degraded</strong><small>Missing — это setup-gap и env/runbook задача. Degraded — рабочий контур с сигналом, который просит ручную проверку.</small></div>
-          <div class="aw-list-item"><strong>Users vs Runtime</strong><small>Users нужен для разбора людей и срезов. Runtime — для понимания состояния контуров, очередей, retry и конфигурации.</small></div>
+          <div class="aw-list-item"><strong>Пауза ≠ поломка</strong><small>Если контур paused оператором, это control-plane режим. Сначала пойми, зачем он был включён, и только потом ищи поломку.</small></div>
+          <div class="aw-list-item"><strong>setup-gap ≠ runtime error</strong><small>Missing env — это setup/runbook задача. Ошибка retry вроде profile_contact — уже source/schema drift и требует отдельного разбора.</small></div>
+          <div class="aw-list-item"><strong>Users vs Runtime</strong><small>Пользователи нужны для разбора людей и срезов. Runtime — для понимания состояния контуров, очередей, retry и конфигурации.</small></div>
+          <div class="aw-list-item"><strong>QStash для admin v1</strong><small>QSTASH_TOKEN и QSTASH_CURRENT_SIGNING_KEY сейчас опциональны для read-admin режима, но нужны для полноценных delivery / publish / retry контуров.</small></div>
           ${hints.length ? hints.map((item) => `
             <div class="aw-list-item">
               <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
@@ -3614,8 +3725,8 @@ function runtimeView(model) {
       <div class="aw-list">
         ${recentEvents.length ? recentEvents.map((item) => `
           <div class="aw-list-item">
-            <strong class="${warningTone(item.kind)}">${escapeHtml(item.message || '—')}</strong>
-            <small>${escapeHtml(sourceLabel(item.source || 'runtime'))} · ${formatDate(item.at)}</small>
+            <strong class="${warningTone(item.kind)}">${escapeHtml(runtimeItemHasProfileContactDrift(item) ? 'Последний retry спорит со схемой profile_contact' : runtimeTextLabel(item.message || '—'))}</strong>
+            <small>${escapeHtml(runtimeCardLabel(sourceLabel(item.source || 'runtime')))} · ${formatDate(item.at)}</small>
           </div>
         `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
       </div>

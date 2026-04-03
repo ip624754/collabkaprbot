@@ -30,6 +30,6 @@ const runtime = read('src/lib/adminWeb/runtime.js');
 assert.ok(runtime.includes("const qstashState = qstashConfigured ? 'ok' : 'unknown';"), 'qstash optional gap must not escalate overall runtime state to missing');
 
 const html = read('admin.html');
-assert.ok(html.includes('step535p'), 'admin shell asset URLs must be cache-busted to step535p');
+assert.ok(html.includes('step535q'), 'admin shell asset URLs must be cache-busted to step535q');
 
 console.log('✅ smoke admin-web layout polish contract OK');

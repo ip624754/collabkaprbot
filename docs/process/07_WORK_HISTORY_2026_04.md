@@ -1,3 +1,9 @@
+## STEP535Q — Runtime retry truth + QStash optionality alignment
+- separated optional QStash env gaps from the actual retry/schema failure on `/admin/runtime`, so `QSTASH_TOKEN / QSTASH_CURRENT_SIGNING_KEY` no longer visually masquerade as the same class of issue as `column_profile_contact_does_not_exist`;
+- added lightweight runtime truth helpers in `scripts/admin-web.js` (`runtimeCardLabel`, `runtimeTextLabel`, `runtimeItemMeaning`, `runtimeItemNextStep`, `runtimeConfigSemanticLabel`) and used them across hierarchy cards, incident strip, queue lanes, retry feed, config matrix, and recent runtime events;
+- the runtime screen now explicitly tells the operator that QStash is optional for read-admin v1 but required for full delivery/publish/retry contours, while `profile_contact` retry errors are treated as likely schema/query drift needing source-level fix;
+- bumped admin shell asset cache-bust to `step535q` and added a dedicated runtime truth smoke for source-level regressions.
+
 ## STEP535P — Founder RU copy consistency + final polish
 - cleaned `/admin/founder` user-facing/admin-facing copy in `scripts/admin-web.js` so the owner screen no longer mixes obvious RU/EN leftovers in headings, help text, founder safety semantics, session reset explanations, and summary labels;
 - added local RU mapping for founder-visible control-plane chips and audit summaries, keeping backend control ids untouched while making the founder page read like a finished Russian admin surface;
