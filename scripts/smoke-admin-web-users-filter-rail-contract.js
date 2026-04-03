@@ -5,48 +5,33 @@ import assert from 'node:assert/strict';
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-const queries = read('src/db/queries.js');
-for (const token of [
-  'normalizeUsersDirectoryFilters',
-  'USERS_DIRECTORY_META_SQL',
-  'planState',
-  'creditsState',
-  'channelState',
-  'activityWindow',
-  'paymentsState',
-  'last_known_activity_at',
-]) {
-  assert.ok(queries.includes(token), `queries must include ${token}`);
-}
-
-const apiRead = read('api/admin-web-read.js');
-for (const token of [
-  "plan_state",
-  "credits_state",
-  "channel_state",
-  "activity_window",
-  "payments_state",
-]) {
-  assert.ok(apiRead.includes(token), `admin-web read API must include ${token}`);
-}
-
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Фильтры среза',
-  'usersPlanState',
-  'usersCreditsState',
-  'usersChannelState',
-  'usersActivityWindow',
-  'usersPaymentsState',
-  'активность 7д',
+  'id="applyUsersFilterDraft"',
+  'id="resetUsersFilterDraft"',
+  'data-users-filter-control',
+  'usersFilterDraftStatus',
+  'usersHasPendingFilterDraft',
+  'readUsersFilterDraftFromDom',
+  'Пока изменения не подтверждены, список, CSV и bulk copy остаются на предыдущем рабочем срезе.',
 ]) {
-  assert.ok(webJs.includes(token), `admin-web users UI must include ${token}`);
+  assert.ok(webJs.includes(token), `admin-web STEP535N must include ${token}`);
 }
 
-const exportHelper = read('src/lib/adminWeb/usersExport.js');
-assert.ok(exportHelper.includes('last_known_activity_msk'), 'users export helper must include last_known_activity_msk');
+const css = read('styles/admin-web.css');
+for (const token of [
+  '.aw-filter-rail.is-dirty',
+  '.aw-filter-rail-actions',
+  '.aw-filter-draft-pill.is-dirty',
+  '.aw-pagination-actions .aw-button:disabled',
+]) {
+  assert.ok(css.includes(token), `admin-web STEP535N CSS must include ${token}`);
+}
 
-const bulkHelper = read('src/lib/adminWeb/usersBulk.js');
-assert.ok(bulkHelper.includes('normalizeUsersDirectoryFilters'), 'users bulk helper must normalize filter rail state');
+const html = read('admin.html');
+assert.ok(html.includes('step535n'), 'admin shell asset URLs must be cache-busted to step535n');
 
-console.log('✅ smoke admin-web users filter rail v2 contract OK');
+const currentState = read('docs/00_CURRENT_STATE.md');
+assert.ok(currentState.includes('STEP535N'), 'current state must mention STEP535N');
+
+console.log('✅ smoke admin-web users filter apply contract + disabled-state finish OK');

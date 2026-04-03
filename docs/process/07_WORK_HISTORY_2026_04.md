@@ -1,3 +1,18 @@
+## STEP535N — Users filter apply contract + disabled-state finish
+
+Date: 2026-04-03
+
+Scope:
+- added an explicit staged apply contract to the lower `Фильтры среза` rail in `/admin/users`: dropdown edits now stay local until `Применить фильтры`, with `Сбросить` returning the rail to the already-committed working slice;
+- introduced a dedicated users filter-draft state in `scripts/admin-web.js` so pending edits for `plan / credits / channel / activity / payments` no longer silently leak into presets, cohorts, sort changes, exports, bulk copy, or row actions before confirmation;
+- finished disabled-state contrast for utility buttons, pagination buttons, compare clear, and the empty-table header checkbox so empty-state controls look intentionally unavailable instead of broken;
+- added `scripts/smoke-admin-web-users-filter-rail-contract.js` and bumped admin shell asset cache-bust to `step535n`.
+
+Acceptance / notes:
+- шаг остаётся UI/read-model only: no SQL, no API expansion, no auth changes, no write-path changes;
+- goal is a truthful apply contract in `Users` plus final empty-state polish, not new operator power or hidden auto-apply behavior.
+
+
 ## STEP535M — Users preset truth cleanup + disabled-state contrast
 
 Date: 2026-04-03

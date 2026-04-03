@@ -1302,6 +1302,61 @@ function getUsersState() {
   return normalizeUsersState(window.__usersState || {});
 }
 
+const USERS_FILTER_DRAFT_KEYS = ['planState', 'creditsState', 'channelState', 'activityWindow', 'paymentsState'];
+
+function pickUsersFilterState(raw = {}) {
+  const source = raw || {};
+  return {
+    planState: String(source.planState || source.plan_state || USERS_STATE_DEFAULTS.planState).trim() || USERS_STATE_DEFAULTS.planState,
+    creditsState: String(source.creditsState || source.credits_state || USERS_STATE_DEFAULTS.creditsState).trim() || USERS_STATE_DEFAULTS.creditsState,
+    channelState: String(source.channelState || source.channel_state || USERS_STATE_DEFAULTS.channelState).trim() || USERS_STATE_DEFAULTS.channelState,
+    activityWindow: String(source.activityWindow || source.activity_window || USERS_STATE_DEFAULTS.activityWindow).trim() || USERS_STATE_DEFAULTS.activityWindow,
+    paymentsState: String(source.paymentsState || source.payments_state || USERS_STATE_DEFAULTS.paymentsState).trim() || USERS_STATE_DEFAULTS.paymentsState,
+  };
+}
+
+function usersFilterDraftSignature(raw = {}) {
+  const state = pickUsersFilterState(raw);
+  return USERS_FILTER_DRAFT_KEYS.map((key) => `${key}:${state[key] || ''}`).join('|');
+}
+
+function getUsersFilterDraft() {
+  if (!window.__usersFilterDraft) {
+    const committed = pickUsersFilterState(getUsersState());
+    window.__usersFilterDraft = committed;
+    window.__usersFilterDraftBaseKey = usersFilterDraftSignature(committed);
+  }
+  return pickUsersFilterState(window.__usersFilterDraft || getUsersState());
+}
+
+function setUsersFilterDraft(next = {}) {
+  const merged = pickUsersFilterState({ ...getUsersFilterDraft(), ...(next || {}) });
+  window.__usersFilterDraft = merged;
+  return merged;
+}
+
+function syncUsersFilterDraftFromState(state = getUsersState()) {
+  const committed = pickUsersFilterState(state);
+  window.__usersFilterDraft = committed;
+  window.__usersFilterDraftBaseKey = usersFilterDraftSignature(committed);
+  return committed;
+}
+
+function usersHasPendingFilterDraft(committed = getUsersState(), draft = getUsersFilterDraft()) {
+  return usersFilterDraftSignature(committed) !== usersFilterDraftSignature(draft);
+}
+
+function readUsersFilterDraftFromDom(base = getUsersFilterDraft()) {
+  return pickUsersFilterState({
+    ...base,
+    planState: document.getElementById('usersPlanState')?.value || base.planState || USERS_STATE_DEFAULTS.planState,
+    creditsState: document.getElementById('usersCreditsState')?.value || base.creditsState || USERS_STATE_DEFAULTS.creditsState,
+    channelState: document.getElementById('usersChannelState')?.value || base.channelState || USERS_STATE_DEFAULTS.channelState,
+    activityWindow: document.getElementById('usersActivityWindow')?.value || base.activityWindow || USERS_STATE_DEFAULTS.activityWindow,
+    paymentsState: document.getElementById('usersPaymentsState')?.value || base.paymentsState || USERS_STATE_DEFAULTS.paymentsState,
+  });
+}
+
 // STEP524 — Users URL-persisted working views
 function readUsersStateFromUrl(search = location.search) {
   try {
@@ -1362,11 +1417,15 @@ function hydrateUsersStateFromLocation() {
   const base = getUsersState();
   const urlState = readUsersStateFromUrl(location.search);
   window.__usersState = normalizeUsersState({ ...base, ...urlState });
-  return getUsersState();
+  const committed = getUsersState();
+  if (!window.__usersFilterDraft || String(window.__usersFilterDraftBaseKey || '') !== usersFilterDraftSignature(committed)) {
+    syncUsersFilterDraftFromState(committed);
+  }
+  return committed;
 }
 
 async function copyUsersWorkingViewUrl() {
-  const href = buildUsersListHref(readUsersControlsState(), { absolute: true });
+  const href = buildUsersListHref(getUsersState(), { absolute: true });
   const copied = await copyTextToClipboard(href, {
     title: 'Ссылка на текущий срез Users',
     hint: 'Автокопирование ссылки не сработало. Ссылка уже подготовлена: нажми Ctrl+C или скачай .txt.',
@@ -2061,11 +2120,24 @@ function usersView(model) {
   const pagination = buildUsersPaginationMeta(model);
   const currentSegment = usersState.segment || exportMeta.currentSegment || 'all';
   const currentSearch = usersState.q || exportMeta.currentSearch || '';
-  const currentPlanState = usersState.planState || filterMeta.planState || 'all';
-  const currentCreditsState = usersState.creditsState || filterMeta.creditsState || 'all';
-  const currentChannelState = usersState.channelState || filterMeta.channelState || 'all';
-  const currentActivityWindow = usersState.activityWindow || filterMeta.activityWindow || 'all';
-  const currentPaymentsState = usersState.paymentsState || filterMeta.paymentsState || 'all';
+  const committedFilterState = pickUsersFilterState({
+    planState: usersState.planState || filterMeta.planState || 'all',
+    creditsState: usersState.creditsState || filterMeta.creditsState || 'all',
+    channelState: usersState.channelState || filterMeta.channelState || 'all',
+    activityWindow: usersState.activityWindow || filterMeta.activityWindow || 'all',
+    paymentsState: usersState.paymentsState || filterMeta.paymentsState || 'all',
+  });
+  const draftFilterState = getUsersFilterDraft();
+  const currentPlanState = committedFilterState.planState;
+  const currentCreditsState = committedFilterState.creditsState;
+  const currentChannelState = committedFilterState.channelState;
+  const currentActivityWindow = committedFilterState.activityWindow;
+  const currentPaymentsState = committedFilterState.paymentsState;
+  const draftPlanState = draftFilterState.planState;
+  const draftCreditsState = draftFilterState.creditsState;
+  const draftChannelState = draftFilterState.channelState;
+  const draftActivityWindow = draftFilterState.activityWindow;
+  const draftPaymentsState = draftFilterState.paymentsState;
   const currentSortBy = usersState.sortBy || filterMeta.sortBy || 'created_desc';
   const currentCohortView = usersState.cohortView || filterMeta.cohortView || 'all';
   const currentSliceLabel = usersActionSliceLabel({
@@ -2098,6 +2170,10 @@ function usersView(model) {
   const activePresetMeta = activePresetId === 'custom'
     ? { label: 'Свой срез', detail: 'Текущий срез отличается от встроенных пресетов.' }
     : usersOperatorPresetMeta(activePresetId);
+  const filterDraftDirty = usersHasPendingFilterDraft(committedFilterState, draftFilterState);
+  const filterDraftSummary = filterDraftDirty
+    ? 'Есть несохранённые изменения. Сначала подтверди их, потом уже смотри обновлённый список.'
+    : 'Фильтры синхронизированы с текущим рабочим срезом.';
   const bulkMode = window.__usersBulkState?.mode || 'tg_ids';
   const compareRail = model.compareRail || { maxPins: 5, pinIds: getUsersPinIds(), cards: [] };
   const pinIds = Array.isArray(compareRail.pinIds) ? compareRail.pinIds : getUsersPinIds();
@@ -2208,32 +2284,38 @@ function usersView(model) {
           </div>
         </section>
 
-        <section class="aw-filter-rail">
-          <div class="aw-utility-head">
+        <section class="aw-filter-rail ${filterDraftDirty ? 'is-dirty' : 'is-clean'}">
+          <div class="aw-utility-head aw-filter-rail-head">
             <div>
               <strong>Фильтры среза</strong>
-              <span>Фильтры только для чтения: план / кредиты / канал / активность / платежи.</span>
+              <span>Фильтры только для чтения: сначала выбери значения ниже, потом явно подтверди их через кнопку применения.</span>
             </div>
+            <div class="aw-filter-rail-actions">
+              <span class="aw-basket-pill aw-filter-draft-pill ${filterDraftDirty ? 'is-dirty' : 'is-clean'}" id="usersFilterDraftStatus">${escapeHtml(filterDraftDirty ? 'Есть несохранённые изменения' : 'Фильтры синхронизированы')}</span>
+              <button class="aw-button ghost" id="resetUsersFilterDraft" ${filterDraftDirty ? '' : 'disabled'}>Сбросить</button>
+              <button class="aw-button secondary" id="applyUsersFilterDraft" ${filterDraftDirty ? '' : 'disabled'}>Применить фильтры</button>
             </div>
-          <div class="aw-filter-grid">
-            <select id="usersPlanState" class="aw-select inline">
-              ${[['all','План: все'],['with_plan','План: есть'],['no_plan','План: нет']].map(([v,l]) => `<option value="${v}" ${currentPlanState === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </div>
+          <div class="aw-filter-grid" id="usersFilterRail">
+            <select id="usersPlanState" class="aw-select inline" data-users-filter-control="planState">
+              ${[['all','План: все'],['with_plan','План: есть'],['no_plan','План: нет']].map(([v,l]) => `<option value="${v}" ${draftPlanState === v ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
-            <select id="usersCreditsState" class="aw-select inline">
-              ${[['all','Кредиты: все'],['with_credits','Кредиты: есть'],['no_credits','Кредиты: нет']].map(([v,l]) => `<option value="${v}" ${currentCreditsState === v ? 'selected' : ''}>${l}</option>`).join('')}
+            <select id="usersCreditsState" class="aw-select inline" data-users-filter-control="creditsState">
+              ${[['all','Кредиты: все'],['with_credits','Кредиты: есть'],['no_credits','Кредиты: нет']].map(([v,l]) => `<option value="${v}" ${draftCreditsState === v ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
-            <select id="usersChannelState" class="aw-select inline">
-              ${[['all','Канал: все'],['with_channel','Канал: есть'],['no_channel','Канал: нет']].map(([v,l]) => `<option value="${v}" ${currentChannelState === v ? 'selected' : ''}>${l}</option>`).join('')}
+            <select id="usersChannelState" class="aw-select inline" data-users-filter-control="channelState">
+              ${[['all','Канал: все'],['with_channel','Канал: есть'],['no_channel','Канал: нет']].map(([v,l]) => `<option value="${v}" ${draftChannelState === v ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
-            <select id="usersActivityWindow" class="aw-select inline">
-              ${[['all','Активность: любая'],['7d','Активность: 7 дней'],['30d','Активность: 30 дней'],['90d','Активность: 90 дней']].map(([v,l]) => `<option value="${v}" ${currentActivityWindow === v ? 'selected' : ''}>${l}</option>`).join('')}
+            <select id="usersActivityWindow" class="aw-select inline" data-users-filter-control="activityWindow">
+              ${[['all','Активность: любая'],['7d','Активность: 7 дней'],['30d','Активность: 30 дней'],['90d','Активность: 90 дней']].map(([v,l]) => `<option value="${v}" ${draftActivityWindow === v ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
-            <select id="usersPaymentsState" class="aw-select inline">
-              ${[['all','Платежи: все'],['with_payments','Платежи: да'],['no_payments','Платежи: нет']].map(([v,l]) => `<option value="${v}" ${currentPaymentsState === v ? 'selected' : ''}>${l}</option>`).join('')}
+            <select id="usersPaymentsState" class="aw-select inline" data-users-filter-control="paymentsState">
+              ${[['all','Платежи: все'],['with_payments','Платежи: да'],['no_payments','Платежи: нет']].map(([v,l]) => `<option value="${v}" ${draftPaymentsState === v ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
           </div>
           <div class="aw-toolbar-note">
-            <span class="aw-muted">Фильтры работают и для списка, и для CSV / bulk copy. Активность = latest known signal по user/account/payments/workspace-поверхностям.</span>
+            <span class="aw-muted" id="usersFilterDraftHint">${escapeHtml(filterDraftSummary)}</span>
+            <span class="aw-muted">Пока изменения не подтверждены, список, CSV и bulk copy остаются на предыдущем рабочем срезе.</span>
           </div>
         </section>
 
@@ -3514,14 +3596,15 @@ function bindLinks() {
 
 function readUsersControlsState() {
   const state = getUsersState();
+  const draft = readUsersFilterDraftFromDom(pickUsersFilterState(state));
   return {
     q: document.getElementById('usersSearch')?.value || state.q || '',
     segment: document.getElementById('usersSegment')?.value || state.segment || 'all',
-    planState: document.getElementById('usersPlanState')?.value || state.planState || 'all',
-    creditsState: document.getElementById('usersCreditsState')?.value || state.creditsState || 'all',
-    channelState: document.getElementById('usersChannelState')?.value || state.channelState || 'all',
-    activityWindow: document.getElementById('usersActivityWindow')?.value || state.activityWindow || 'all',
-    paymentsState: document.getElementById('usersPaymentsState')?.value || state.paymentsState || 'all',
+    planState: draft.planState,
+    creditsState: draft.creditsState,
+    channelState: draft.channelState,
+    activityWindow: draft.activityWindow,
+    paymentsState: draft.paymentsState,
     sortBy: document.getElementById('usersSortBy')?.value || state.sortBy || 'created_desc',
     cohortView: state.cohortView || 'all',
     page: state.page || 0,
@@ -3532,18 +3615,20 @@ function readUsersControlsState() {
 
 function setUsersStateFromControls(overrides = {}) {
   window.__usersState = normalizeUsersState({ ...readUsersControlsState(), ...(overrides || {}) });
+  syncUsersFilterDraftFromState(window.__usersState);
   syncUsersUrlState(window.__usersState, { replace: true });
   return getUsersState();
 }
 
 function setUsersStateExact(overrides = {}) {
   window.__usersState = normalizeUsersState({ ...getUsersState(), ...(overrides || {}) });
+  syncUsersFilterDraftFromState(window.__usersState);
   syncUsersUrlState(window.__usersState, { replace: true });
   return getUsersState();
 }
 
 async function runUsersExportAction(scope = 'current', opts = {}) {
-  const state = readUsersControlsState();
+  const state = getUsersState();
   const ids = normalizeUsersPinIds(opts?.ids || []);
   const params = new URLSearchParams({ section: 'users_export', scope, segment: state.segment, q: state.q, plan_state: state.planState, credits_state: state.creditsState, channel_state: state.channelState, activity_window: state.activityWindow, payments_state: state.paymentsState, sort_by: state.sortBy, cohort_view: state.cohortView });
   if (ids.length) params.set('ids', ids.join(','));
@@ -3562,7 +3647,7 @@ async function runUsersPinnedExportAction() {
 }
 
 async function runUsersBulkCopyAction(mode = 'tg_ids', source = 'current', opts = {}) {
-  const state = readUsersControlsState();
+  const state = getUsersState();
   const idsOverride = normalizeUsersPinIds(opts?.ids || []);
   window.__usersBulkState = { mode, source };
   const params = new URLSearchParams({ section: 'users_bulk', mode, segment: state.segment, q: state.q, plan_state: state.planState, credits_state: state.creditsState, channel_state: state.channelState, activity_window: state.activityWindow, payments_state: state.paymentsState, sort_by: state.sortBy, cohort_view: state.cohortView });
@@ -3628,7 +3713,7 @@ function openUsersCompareDrillTarget(kind = 'top_problem') {
 }
 
 async function runUserRowCopyAction(item = {}, mode = 'tg_ids') {
-  const state = readUsersControlsState();
+  const state = getUsersState();
   const userId = Number(item?.userId || 0) || 0;
   if (!userId) {
     showToast('Не удалось определить пользователя для действия по строке.', 'error');
@@ -3679,6 +3764,69 @@ function bindShell() {
     render();
   };
   document.getElementById('applyUsersFilters')?.addEventListener('click', applyUsersFilters);
+
+  const syncUsersFilterDraftUi = () => {
+    const committed = pickUsersFilterState(getUsersState());
+    const draft = readUsersFilterDraftFromDom(getUsersFilterDraft());
+    setUsersFilterDraft(draft);
+    const dirty = usersHasPendingFilterDraft(committed, draft);
+    const status = document.getElementById('usersFilterDraftStatus');
+    const hint = document.getElementById('usersFilterDraftHint');
+    const rail = document.querySelector('.aw-filter-rail');
+    const applyBtn = document.getElementById('applyUsersFilterDraft');
+    const resetBtn = document.getElementById('resetUsersFilterDraft');
+    if (status) {
+      status.textContent = dirty ? 'Есть несохранённые изменения' : 'Фильтры синхронизированы';
+      status.classList.toggle('is-dirty', dirty);
+      status.classList.toggle('is-clean', !dirty);
+    }
+    if (hint) {
+      hint.textContent = dirty
+        ? 'Есть несохранённые изменения. Сначала подтверди их, потом уже смотри обновлённый список.'
+        : 'Фильтры синхронизированы с текущим рабочим срезом.';
+    }
+    if (rail) {
+      rail.classList.toggle('is-dirty', dirty);
+      rail.classList.toggle('is-clean', !dirty);
+    }
+    if (applyBtn) applyBtn.disabled = !dirty;
+    if (resetBtn) resetBtn.disabled = !dirty;
+  };
+
+  app.querySelectorAll('[data-users-filter-control]').forEach((select) => {
+    select.addEventListener('change', () => {
+      syncUsersFilterDraftUi();
+    });
+  });
+
+  document.getElementById('resetUsersFilterDraft')?.addEventListener('click', () => {
+    const committed = syncUsersFilterDraftFromState(getUsersState());
+    const plan = document.getElementById('usersPlanState');
+    const credits = document.getElementById('usersCreditsState');
+    const channel = document.getElementById('usersChannelState');
+    const activity = document.getElementById('usersActivityWindow');
+    const payments = document.getElementById('usersPaymentsState');
+    if (plan) plan.value = committed.planState;
+    if (credits) credits.value = committed.creditsState;
+    if (channel) channel.value = committed.channelState;
+    if (activity) activity.value = committed.activityWindow;
+    if (payments) payments.value = committed.paymentsState;
+    syncUsersFilterDraftUi();
+    showToast('Фильтры среза возвращены к текущему рабочему состоянию.', 'info', { ttl: 1800 });
+  });
+
+  document.getElementById('applyUsersFilterDraft')?.addEventListener('click', () => {
+    const button = document.getElementById('applyUsersFilterDraft');
+    if (button?.disabled) return;
+    const draft = readUsersFilterDraftFromDom(getUsersFilterDraft());
+    setUsersStateExact({ ...draft, page: 0 });
+    render();
+    focusUsersWorkingSlice('filters');
+    showToast('Фильтры среза применены.', 'success', { ttl: 1800 });
+  });
+
+  syncUsersFilterDraftUi();
+
   document.getElementById('usersBulkSource')?.addEventListener('change', () => {
     const source = document.getElementById('usersBulkSource')?.value || 'current';
     const mode = document.getElementById('usersBulkMode')?.value || (window.__usersBulkState?.mode || 'tg_ids');
@@ -3696,7 +3844,7 @@ function bindShell() {
   app.querySelectorAll('[data-users-priority]').forEach((button) => {
     button.addEventListener('click', () => {
       const sortBy = button.getAttribute('data-users-priority') || 'created_desc';
-      setUsersStateFromControls({ sortBy, page: 0 });
+      setUsersStateExact({ sortBy, page: 0 });
       pulseInteractiveFeedback(button, 'confirmed');
       render();
       showToast(`Сортировка: ${usersSortMeta(sortBy).label}.`, 'success', { ttl: 1800 });
@@ -3705,7 +3853,7 @@ function bindShell() {
   app.querySelectorAll('[data-users-cohort]').forEach((button) => {
     button.addEventListener('click', () => {
       const cohortView = button.getAttribute('data-users-cohort') || 'all';
-      setUsersStateFromControls({ cohortView, page: 0 });
+      setUsersStateExact({ cohortView, page: 0 });
       pulseInteractiveFeedback(button, 'confirmed');
       render();
       showToast(`Когорта: ${usersCohortMeta(cohortView).label}.`, 'success', { ttl: 1800 });
@@ -3756,7 +3904,7 @@ function bindShell() {
   app.querySelectorAll('[data-users-page-size]').forEach((select) => {
     select.addEventListener('change', () => {
       const nextPageSize = Math.max(10, Math.min(50, Number(select.value) || 20));
-      setUsersStateFromControls({ page: 0, pageSize: nextPageSize });
+      setUsersStateExact({ page: 0, pageSize: nextPageSize });
       render();
     });
   });
@@ -3794,13 +3942,13 @@ function bindShell() {
           return;
         }
         if (action === 'open_top_problem_users') {
-          setUsersStateFromControls({ sortBy: 'problem_desc', cohortView: 'all', page: 0 });
+          setUsersStateExact({ sortBy: 'problem_desc', cohortView: 'all', page: 0 });
           pulseInteractiveFeedback(button, 'confirmed');
           render();
           return;
         }
         if (action === 'open_dormant_payers') {
-          setUsersStateFromControls({ sortBy: 'payments_desc', cohortView: 'dormant_payers', page: 0 });
+          setUsersStateExact({ sortBy: 'payments_desc', cohortView: 'dormant_payers', page: 0 });
           pulseInteractiveFeedback(button, 'confirmed');
           render();
         }

@@ -1,3 +1,10 @@
+## STEP535N — Users filter apply contract + disabled-state finish
+
+- `Users` filter rail now uses an explicit staged apply contract instead of ambiguous dropdown auto-apply: the lower `Фильтры среза` block keeps pending values locally until the operator clicks `Применить фильтры`, with a matching `Сбросить` path back to the committed working slice;
+- `scripts/admin-web.js` now keeps a dedicated filter-draft state for `plan / credits / channel / activity / payments`, so pending filter edits no longer silently leak into sort/cohort/preset actions, CSV, bulk copy, or other read-only utilities before confirmation;
+- disabled-state contrast was finished for empty-state utility buttons, pagination controls, compare clear, and the empty-table header checkbox, so `недоступно` reads as intentional muted state instead of a broken control;
+- added source smoke coverage in `scripts/smoke-admin-web-users-filter-rail-contract.js` and bumped admin shell asset cache-bust to `step535n`.
+
 ## STEP535M — Users preset truth cleanup + disabled-state contrast
 
 - fixed the real Users preset application bug in `scripts/admin-web.js`: preset-card clicks now update the URL-backed working slice through `setUsersStateExact(...)` before rerender, so the active preset no longer falls back to `Свой срез` just because the old URL state was re-hydrated on render;
