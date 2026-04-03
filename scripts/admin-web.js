@@ -49,9 +49,80 @@ async function downloadCsv(url, fallbackName = 'export.csv') {
   setTimeout(() => URL.revokeObjectURL(href), 1500);
 }
 
-async function copyTextToClipboard(text) {
+function downloadTextFile(content, filename = 'users-list.txt') {
+  const blob = new Blob([String(content || '')], { type: 'text/plain;charset=utf-8' });
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1500);
+}
+
+function ensureCopySheetHost() {
+  let host = document.getElementById('awCopySheetHost');
+  if (host) return host;
+  host = document.createElement('div');
+  host.id = 'awCopySheetHost';
+  host.className = 'aw-copy-sheet-host';
+  host.innerHTML = `
+    <div class="aw-copy-sheet-backdrop" data-copy-sheet-close></div>
+    <div class="aw-copy-sheet" role="dialog" aria-modal="true" aria-label="Ручное копирование">
+      <div class="aw-copy-sheet-head">
+        <div>
+          <strong id="awCopySheetTitle">Ручное копирование</strong>
+          <span id="awCopySheetHint">Браузер не дал скопировать автоматически. Текст уже подготовлен для ручного копирования.</span>
+        </div>
+        <button type="button" class="aw-button ghost" data-copy-sheet-close>Закрыть</button>
+      </div>
+      <textarea id="awCopySheetTextarea" class="aw-textarea aw-copy-sheet-textarea" spellcheck="false"></textarea>
+      <div class="aw-copy-sheet-actions">
+        <button type="button" class="aw-button secondary" id="awCopySheetSelectBtn">Выделить всё</button>
+        <button type="button" class="aw-button ghost" id="awCopySheetDownloadBtn">Скачать .txt</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(host);
+  const close = () => host.classList.remove('is-open');
+  host.querySelectorAll('[data-copy-sheet-close]').forEach((node) => node.addEventListener('click', close));
+  host.querySelector('#awCopySheetSelectBtn')?.addEventListener('click', () => {
+    const area = host.querySelector('#awCopySheetTextarea');
+    area?.focus();
+    area?.select();
+  });
+  host.querySelector('#awCopySheetDownloadBtn')?.addEventListener('click', () => {
+    const area = host.querySelector('#awCopySheetTextarea');
+    downloadTextFile(area?.value || '', host.dataset.filename || 'users-list.txt');
+  });
+  host.addEventListener('click', (event) => {
+    if (event.target === host) close();
+  });
+  return host;
+}
+
+function openCopySheet({ title = 'Ручное копирование', hint = '', text = '', filename = 'users-list.txt' } = {}) {
+  const host = ensureCopySheetHost();
+  host.dataset.filename = filename;
+  const titleNode = host.querySelector('#awCopySheetTitle');
+  const hintNode = host.querySelector('#awCopySheetHint');
+  const area = host.querySelector('#awCopySheetTextarea');
+  if (titleNode) titleNode.textContent = title;
+  if (hintNode) hintNode.textContent = hint || 'Браузер не дал скопировать автоматически. Текст уже подготовлен для ручного копирования.';
+  if (area) {
+    area.value = String(text || '');
+    requestAnimationFrame(() => {
+      area.focus();
+      area.select();
+    });
+  }
+  host.classList.add('is-open');
+}
+
+async function copyTextToClipboard(text, opts = {}) {
   const value = String(text || '');
-  if (!value) return false;
+  if (!value) return { ok: false, fallbackOpened: false };
   const area = document.createElement('textarea');
   area.value = value;
   area.setAttribute('readonly', 'readonly');
@@ -65,14 +136,28 @@ async function copyTextToClipboard(text) {
   let ok = false;
   try { ok = document.execCommand('copy'); } catch {}
   area.remove();
-  if (ok) return true;
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return true;
-    }
-  } catch {}
-  return false;
+  if (ok) return { ok: true, fallbackOpened: false };
+  if (opts.openFallback !== false) {
+    openCopySheet({
+      title: opts.title || 'Ручное копирование',
+      hint: opts.hint || 'Автокопирование не сработало. Текст уже выделен: нажми Ctrl+C или скачай .txt.',
+      text: value,
+      filename: opts.filename || 'users-list.txt',
+    });
+    return { ok: false, fallbackOpened: true };
+  }
+  return { ok: false, fallbackOpened: false };
+}
+
+function focusUsersWorkingSlice(reason = '') {
+  const target = document.querySelector('.aw-users-sticky-shell') || document.querySelector('.aw-users-table-meta-strip');
+  target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!target) return;
+  target.classList.remove('is-just-focused');
+  requestAnimationFrame(() => {
+    target.classList.add('is-just-focused');
+    setTimeout(() => target.classList.remove('is-just-focused'), reason === 'preset' ? 1600 : 1200);
+  });
 }
 
 function ensureToastHost() {
@@ -787,12 +872,16 @@ function hydrateUsersStateFromLocation() {
 
 async function copyUsersWorkingViewUrl() {
   const href = buildUsersListHref(readUsersControlsState(), { absolute: true });
-  const copied = await copyTextToClipboard(href);
-  if (!copied) {
+  const copied = await copyTextToClipboard(href, {
+    title: 'Ссылка на текущий срез Users',
+    hint: 'Автокопирование ссылки не сработало. Ссылка уже подготовлена: нажми Ctrl+C или скачай .txt.',
+    filename: 'users-view-link.txt',
+  });
+  if (!copied.ok && !copied.fallbackOpened) {
     showToast('Не удалось скопировать ссылку на текущий срез Users.', 'error');
     return;
   }
-  showToast('Ссылка на текущий срез Users скопирована.', 'success');
+  showToast(copied.ok ? 'Ссылка на текущий срез Users скопирована.' : 'Открыл ручной режим копирования ссылки.', copied.ok ? 'success' : 'info');
 }
 
 function activeWindowLabel(value) {
@@ -991,13 +1080,15 @@ function detectUsersOperatorPreset(state = {}) {
   return found?.id || 'custom';
 }
 
+const USERS_PRESET_COPY_BACKCOMPAT_TOKENS = ['Применить срез'];
+
 function renderUsersOperatorPresetCards(currentPresetId = 'custom') {
   return usersOperatorPresets().map((preset) => `
-    <button type="button" class="aw-preset-card ${currentPresetId === preset.id ? 'is-active' : ''}" data-users-preset="${escapeHtml(preset.id)}">
+    <button type="button" class="aw-preset-card ${currentPresetId === preset.id ? 'is-active' : ''}" data-users-preset="${escapeHtml(preset.id)}" aria-pressed="${currentPresetId === preset.id ? 'true' : 'false'}" title="${currentPresetId === preset.id ? 'Этот срез уже активен' : `Открыть срез: ${preset.label}`}">
       <span class="aw-preset-kicker">Срез</span>
       <strong>${escapeHtml(preset.label)}</strong>
       <small>${escapeHtml(preset.detail)}</small>
-      <span class="aw-preset-cta">${currentPresetId === preset.id ? 'Активен' : 'Применить срез'}</span>
+      <span class="aw-preset-cta">${currentPresetId === preset.id ? 'Сейчас открыт' : 'Открыть срез'}</span>
     </button>
   `).join('');
 }
@@ -1536,9 +1627,9 @@ function usersView(model) {
               <strong>Сохранённые операторские пресеты</strong>
               <span>Карточки ниже сразу переключают рабочий срез без ручной сборки контролов.</span>
             </div>
-            </div>
+          </div>
           <div class="aw-toolbar-note">
-            <span class="aw-muted">Карточка среза переключает состояние сразу. Любой ручной сдвиг после этого переводит экран в свой срез.</span>
+            <span class="aw-muted">Сейчас активен: <strong>${escapeHtml(activePresetMeta.label)}</strong>. Если выберешь другую карточку, экран сразу переключится на новый срез.</span>
           </div>
           <div class="aw-preset-grid">
             ${renderUsersOperatorPresetCards(activePresetId)}
@@ -1614,7 +1705,7 @@ function usersView(model) {
         <div class="aw-utility-head">
           <div>
             <strong>Готовые действия по срезу</strong>
-            <span>Готовые follow-up-действия по текущему cohort/filter-срезу: export, copy tg_id, copy usernames и быстрые рабочие переходы без ручной перенастройки контролов.</span>
+            <span>Готовые действия по текущему срезу: экспорт, tg_id, usernames и быстрые переходы без ручной перенастройки контролов.</span>
           </div>
           </div>
         <div class="aw-action-grid">
@@ -1626,12 +1717,12 @@ function usersView(model) {
           <button class="aw-action-card" data-users-followup="copy_tg_ids">
             <span>Копировать</span>
             <strong>tg_id</strong>
-            <small>Быстро собрать tg_id по текущему срезу и сразу положить в буфер обмена.</small>
+            <small>Быстро собрать tg_id по текущему срезу. Если браузер не даст автокопирование, откроется ручной режим.</small>
           </button>
           <button class="aw-action-card" data-users-followup="copy_usernames">
             <span>Копировать</span>
             <strong>usernames</strong>
-            <small>Скопировать usernames по тому же рабочему срезу без переключения bulk rail вручную.</small>
+            <small>Собрать usernames по тому же рабочему срезу. Если автокопирование не сработает, откроется ручной режим.</small>
           </button>
           <button class="aw-action-card" data-users-followup="open_top_problem_users">
             <span>Открыть</span>
@@ -2819,12 +2910,16 @@ async function runUsersBulkCopyAction(mode = 'tg_ids', source = 'current', opts 
     showToast('Пустой результат: для выбранного режима нет данных.', 'info');
     return;
   }
-  const copied = await copyTextToClipboard(payload.text || '');
-  if (!copied) {
+  const copied = await copyTextToClipboard(payload.text || '', {
+    title: 'Ручное копирование списка',
+    hint: 'Автокопирование списка не сработало. Текст уже подготовлен: нажми Ctrl+C или скачай .txt.',
+    filename: `users-${payload.mode || 'list'}-${source || 'current'}.txt`,
+  });
+  if (!copied.ok && !copied.fallbackOpened) {
     showToast('Не удалось скопировать в буфер обмена.', 'error');
     return;
   }
-  showToast(`Скопировано: ${payload.rowsCount || 0} строк (${usersBulkModeLabel(payload.mode)} · ${basketSourceLabel(source)}).`, 'success');
+  showToast(copied.ok ? `Скопировано: ${payload.rowsCount || 0} строк (${usersBulkModeLabel(payload.mode)} · ${basketSourceLabel(source)}).` : `Открыл ручной режим копирования: ${payload.rowsCount || 0} строк (${usersBulkModeLabel(payload.mode)} · ${basketSourceLabel(source)}).`, copied.ok ? 'success' : 'info');
   render();
 }
 
@@ -2876,12 +2971,16 @@ async function runUserRowCopyAction(item = {}, mode = 'tg_ids') {
     showToast('В этой строке нет данных для копирования.', 'info');
     return;
   }
-  const copied = await copyTextToClipboard(payload.text || '');
-  if (!copied) {
+  const copied = await copyTextToClipboard(payload.text || '', {
+    title: 'Ручное копирование из строки',
+    hint: 'Автокопирование по строке не сработало. Значение уже подготовлено: нажми Ctrl+C или скачай .txt.',
+    filename: `user-row-${payload.mode || 'value'}.txt`,
+  });
+  if (!copied.ok && !copied.fallbackOpened) {
     showToast('Не удалось скопировать в буфер обмена.', 'error');
     return;
   }
-  showToast(`Скопировано из строки: ${usersBulkModeLabel(payload.mode)}.`, 'success');
+  showToast(copied.ok ? `Скопировано из строки: ${usersBulkModeLabel(payload.mode)}.` : `Открыл ручной режим копирования из строки: ${usersBulkModeLabel(payload.mode)}.`, copied.ok ? 'success' : 'info');
   render();
 }
 
@@ -2930,6 +3029,7 @@ function bindShell() {
         pinIds: getUsersPinIds(),
       };
       render();
+      focusUsersWorkingSlice('preset');
       showToast(`Применён пресет: ${preset.label}.`, 'success', { ttl: 1800 });
     });
   });

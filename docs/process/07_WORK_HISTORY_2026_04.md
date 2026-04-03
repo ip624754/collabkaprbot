@@ -576,3 +576,19 @@ Acceptance / notes:
 - scope stays read-only: no retry buttons, no queue mutations, no polling, no secret leakage;
 - Runtime now explains backlog / cooldown / retry pressure without forcing operators into raw `/api/health` JSON.
 
+
+
+## STEP535A — Users preset/copy polish
+
+Date: 2026-04-03
+
+Scope:
+- tightened the remaining Users interaction ambiguity before moving further into Runtime work;
+- made preset cards read like immediate actions and added a focus return to the active working slice after preset apply;
+- added an in-app manual copy sheet for Users URL / bulk / row copy fallback instead of depending on browser permission prompts only;
+- visually calmed basket/meta pills so they stop collapsing into awkward orb-like badges on narrower widths.
+
+Acceptance / notes:
+- no backend/data contract changes;
+- no new write paths;
+- this is a pure admin-web interaction hotfix layered on top of STEP533A and STEP535.

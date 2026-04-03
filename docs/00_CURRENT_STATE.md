@@ -1933,3 +1933,11 @@ Acceptance / notes:
 Acceptance / notes:
 - Scope stays read-only: no destructive bulk actions, no background jobs, no new public bot flows.
 - `activity` is defined as latest known signal across user/account/workspace/payment surfaces already present in the baseline schema; no dependency on optional analytics tables.
+
+
+## STEP535A — Users preset/copy polish
+- sharpened `Users` preset cards so they behave like explicit one-click actions (`Открыть срез` / `Сейчас открыт`) instead of passive tiles;
+- added `focusUsersWorkingSlice()` so after preset apply the screen visibly returns attention to the active working slice;
+- replaced browser-only copy failure behavior with an in-app manual copy sheet (`awCopySheetHost`) for Users URL / bulk / row-copy flows;
+- tightened basket/meta pill styling to avoid awkward circular bubbles on narrower widths;
+- added `scripts/smoke-admin-web-users-preset-copy-polish-contract.js` and wired it into package scripts.

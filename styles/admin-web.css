@@ -181,6 +181,12 @@ body {
   background: rgba(7, 16, 33, 0.94);
   box-shadow: 0 10px 28px rgba(0,0,0,0.18);
   backdrop-filter: blur(14px);
+  transition: box-shadow .18s ease, border-color .18s ease, background .18s ease;
+}
+.aw-users-sticky-shell.is-just-focused {
+  border-color: rgba(73,176,255,0.34);
+  box-shadow: 0 0 0 1px rgba(73,176,255,0.18), 0 14px 34px rgba(0,0,0,0.22);
+  background: rgba(10, 22, 44, 0.96);
 }
 .aw-users-sticky-state,
 .aw-users-sticky-meta {
@@ -349,15 +355,16 @@ body {
   cursor: pointer;
   display: grid;
   gap: 6px;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease;
 }
 .aw-preset-card:hover {
   border-color: rgba(132,176,255,0.26);
   transform: translateY(-1px);
 }
 .aw-preset-card.is-active {
-  border-color: rgba(132,176,255,0.36);
-  background: rgba(93,144,255,0.10);
-  box-shadow: inset 0 0 0 1px rgba(132,176,255,0.12);
+  border-color: rgba(73,176,255,0.34);
+  background: rgba(73,176,255,0.12);
+  box-shadow: inset 0 0 0 1px rgba(132,176,255,0.14), 0 10px 22px rgba(0,0,0,0.14);
 }
 .aw-preset-kicker {
   color: var(--soft);
@@ -373,9 +380,19 @@ body {
   line-height: 1.45;
 }
 .aw-preset-cta {
-  margin-top: 4px;
+  margin-top: 6px;
   color: var(--soft);
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.aw-preset-cta::after {
+  content: '→';
+  opacity: 0.82;
+}
+.aw-preset-card.is-active .aw-preset-cta::after {
+  content: '•';
 }
 .aw-preset-card.is-active .aw-preset-cta {
   color: var(--text);
@@ -600,10 +617,13 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
   border: 1px solid rgba(132,176,255,0.14);
   background: rgba(8, 18, 38, 0.56);
-  border-radius: 14px;
-  padding: 7px 11px;
+  border-radius: 12px;
+  padding: 7px 12px;
+  min-height: 34px;
   color: var(--soft);
   font-size: 13px;
   line-height: 1.2;
@@ -652,6 +672,64 @@ body {
 }
 .aw-toast.is-error {
   border-color: rgba(255,116,143,0.32);
+}
+
+.aw-copy-sheet-host {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: none;
+}
+.aw-copy-sheet-host.is-open {
+  display: grid;
+  place-items: center;
+}
+.aw-copy-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 8, 18, 0.72);
+  backdrop-filter: blur(6px);
+}
+.aw-copy-sheet {
+  position: relative;
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(78vh, 760px);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(132,176,255,0.18);
+  background: rgba(7, 16, 33, 0.98);
+  box-shadow: 0 24px 70px rgba(0,0,0,0.40);
+  z-index: 1;
+}
+.aw-copy-sheet-head {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.aw-copy-sheet-head strong {
+  display: block;
+  font-size: 16px;
+}
+.aw-copy-sheet-head span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.aw-copy-sheet-textarea {
+  min-height: 240px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 13px;
+}
+.aw-copy-sheet-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 .aw-input, .aw-select, .aw-textarea {
   width: 100%;

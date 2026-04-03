@@ -119,7 +119,8 @@
     "smoke:admin-web-users-header-meta-strip-contract": "node scripts/smoke-admin-web-users-header-meta-strip-contract.js",
     "smoke:admin-web-users-copy-unification-contract": "node scripts/smoke-admin-web-users-copy-unification-contract.js",
     "smoke:admin-web-users-final-interaction-contract": "node scripts/smoke-admin-web-users-final-interaction-contract.js",
-    "smoke:admin-web-runtime-queues-contract": "node scripts/smoke-admin-web-runtime-queues-contract.js"
+    "smoke:admin-web-runtime-queues-contract": "node scripts/smoke-admin-web-runtime-queues-contract.js",
+    "smoke:admin-web-users-preset-copy-polish-contract": "node scripts/smoke-admin-web-users-preset-copy-polish-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
