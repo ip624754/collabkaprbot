@@ -45,6 +45,7 @@
     "smoke:admin-audit-metrics-moderators-contract": "node scripts/smoke-admin-audit-metrics-moderators-contract.js",
     "smoke:broadcast-local-db-fuse": "node scripts/smoke-broadcast-local-db-fuse.js",
     "smoke:payments-autoheal-chain-contract": "node scripts/smoke-payments-autoheal-chain-contract.js",
+    "smoke:contact-unlock-workspace-settings-contract": "node scripts/smoke-contact-unlock-workspace-settings-contract.js",
     "smoke:official-publish-check-now-contract": "node scripts/smoke-official-publish-check-now-contract.js",
     "smoke:start-role-gate-contract": "node scripts/smoke-start-role-gate-contract.js",
     "smoke:ws-channel-disconnect-contract": "node scripts/smoke-ws-channel-disconnect-contract.js",

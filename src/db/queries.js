@@ -1107,9 +1107,14 @@ export async function unlockWorkspaceContactsWithCredits(brandUserId, workspaceI
     const requireNonEmpty = opts?.requireNonEmptyContacts !== false;
     if (requireNonEmpty) {
       const rWs = await client.query(
-        `select channel_username, profile_contact, profile_ig, profile_portfolio_urls, profile_contacts
-         from workspaces
-         where id=$1
+        `select ws.channel_username,
+                s.profile_contact,
+                s.profile_ig,
+                s.profile_portfolio_urls,
+                s.profile_contacts
+         from workspaces ws
+         left join workspace_settings s on s.workspace_id = ws.id
+         where ws.id=$1
          limit 1`,
         [wsId]
       );
