@@ -141,17 +141,21 @@ body {
 .aw-preset-card[disabled],
 .aw-action-card[disabled],
 .aw-row-action[disabled] {
-  opacity: 0.46;
+  opacity: 0.34;
   cursor: not-allowed;
   box-shadow: none;
-  filter: none;
+  filter: saturate(0.7);
+  color: rgba(191, 201, 230, 0.48);
+  border-color: rgba(132, 176, 255, 0.08);
+  background: rgba(255,255,255,0.018);
+  pointer-events: none;
 }
 .aw-button:disabled:hover,
 .aw-preset-card[disabled]:hover,
 .aw-action-card[disabled]:hover,
 .aw-row-action[disabled]:hover {
   transform: none;
-  filter: none;
+  filter: saturate(0.7);
 }
 .aw-button,
 .aw-priority-pill,
@@ -1015,9 +1019,20 @@ body {
 }
 .aw-row-check:disabled, #toggleVisibleUsers:disabled {
   cursor: not-allowed;
-  opacity: 0.42;
-  border-color: rgba(157,198,255,0.16);
+  opacity: 0.28;
+  border-color: rgba(157,198,255,0.10);
+  background: rgba(255,255,255,0.018);
   box-shadow: none;
+  pointer-events: none;
+}
+.aw-row-check:disabled:hover, #toggleVisibleUsers:disabled:hover {
+  box-shadow: none;
+  border-color: rgba(157,198,255,0.10);
+}
+.aw-pagination-actions .aw-button:disabled {
+  color: rgba(191, 201, 230, 0.42);
+  border-color: rgba(132, 176, 255, 0.08);
+  background: rgba(255,255,255,0.015);
 }
 .aw-note-dot {
   display: inline-block;

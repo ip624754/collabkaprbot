@@ -3716,12 +3716,12 @@ function bindShell() {
       const presetId = button.getAttribute('data-users-preset') || 'all_new';
       const preset = usersOperatorPresetMeta(presetId);
       const pageSize = getUsersState().pageSize || 20;
-      window.__usersState = {
+      setUsersStateExact({
         ...preset.state,
         page: 0,
         pageSize,
         pinIds: getUsersPinIds(),
-      };
+      });
       pulseInteractiveFeedback(button, 'confirmed');
       render();
       focusUsersWorkingSlice('preset');

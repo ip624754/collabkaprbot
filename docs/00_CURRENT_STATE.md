@@ -1,3 +1,10 @@
+## STEP535M — Users preset truth cleanup + disabled-state contrast
+
+- fixed the real Users preset application bug in `scripts/admin-web.js`: preset-card clicks now update the URL-backed working slice through `setUsersStateExact(...)` before rerender, so the active preset no longer falls back to `Свой срез` just because the old URL state was re-hydrated on render;
+- kept `Свой срез` and saved presets mutually exclusive at the contract level: the active label is now derived only from the real current slice, not from a transient last-click state;
+- strengthened disabled-state contrast in `styles/admin-web.css` for empty-state utility buttons, pagination controls, and table checkboxes, so `пусто / недоступно` reads as intentionally disabled instead of looking broken;
+- added `pointer-events: none` to disabled action surfaces and a dedicated source smoke `scripts/smoke-admin-web-users-preset-truth-contract.js`; admin shell asset cache-bust поднят до `step535m`.
+
 ## STEP535L — Users action-state truth + empty-state controls
 
 - `Users` сохранённые пресеты теперь держат честный active-state: rail получил явную карточку `Свой срез`, а подсветка пресета привязана к exact match текущего рабочего среза, а не к последнему нажатию;

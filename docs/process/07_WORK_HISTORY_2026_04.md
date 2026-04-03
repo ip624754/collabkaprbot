@@ -1,3 +1,18 @@
+## STEP535M — Users preset truth cleanup + disabled-state contrast
+
+Date: 2026-04-03
+
+Scope:
+- fixed the real Users preset application bug: preset clicks now go through the URL-backed users state contract before rerender, so the active preset no longer visually falls back to `Свой срез` after a successful apply;
+- kept `Свой срез` and saved presets mutually exclusive by deriving the active label only from the current working slice instead of a transient click-confirm state;
+- strengthened disabled-state contrast for utility buttons, pagination controls, and empty-table checkboxes so `недоступно` reads as intentional disabled UI instead of a broken control;
+- added `scripts/smoke-admin-web-users-preset-truth-contract.js`, wired it into `package.json`, and bumped admin shell asset cache-bust to `step535m`.
+
+Acceptance / notes:
+- шаг остаётся UI-only: no SQL, no API contract changes, no auth changes, no write-path expansion;
+- цель — честный preset-state и понятный empty-state contrast в `Users`, без двусмысленного “горит и custom, и последний пресет” поведения.
+
+
 ## STEP535L — Users action-state truth + empty-state controls
 
 Date: 2026-04-03
