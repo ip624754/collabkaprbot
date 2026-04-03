@@ -121,7 +121,8 @@
     "smoke:admin-web-users-final-interaction-contract": "node scripts/smoke-admin-web-users-final-interaction-contract.js",
     "smoke:admin-web-runtime-queues-contract": "node scripts/smoke-admin-web-runtime-queues-contract.js",
     "smoke:admin-web-users-preset-copy-polish-contract": "node scripts/smoke-admin-web-users-preset-copy-polish-contract.js",
-    "smoke:admin-web-asset-cache-bust-contract": "node scripts/smoke-admin-web-asset-cache-bust-contract.js"
+    "smoke:admin-web-asset-cache-bust-contract": "node scripts/smoke-admin-web-asset-cache-bust-contract.js",
+    "smoke:admin-web-users-active-state-help-contract": "node scripts/smoke-admin-web-users-active-state-help-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

@@ -242,6 +242,8 @@ function isUserPinned(userId) {
 
 function setUsersPinIds(pinIds = []) {
   window.__usersState = normalizeUsersState({ ...getUsersState(), pinIds: normalizeUsersPinIds(pinIds), page: 0 });
+  syncUsersUrlState(window.__usersState, { replace: true });
+  return getUsersState();
 }
 
 function toggleUsersPin(item = {}) {
@@ -485,6 +487,7 @@ function routeInfo() {
   if (parts[1] === 'payments' && parts[2]) return { page: 'paymentDetail', paymentId: parts[2] };
   if (parts[1] === 'payments') return { page: 'payments' };
   if (parts[1] === 'comms') return { page: 'comms' };
+  if (parts[1] === 'help') return { page: 'help' };
   if (parts[1] === 'founder') return { page: 'founder' };
   return { page: 'overview' };
 }
@@ -636,6 +639,7 @@ function shell(title, subtitle, body, session) {
           ${navLink('/admin/runtime', 'Runtime', route.page === 'runtime')}
           ${navLink('/admin/payments', 'Payments', route.page === 'payments' || route.page === 'paymentDetail')}
           ${navLink('/admin/comms', 'Comms', route.page === 'comms')}
+          ${navLink('/admin/help', 'Помощь', route.page === 'help')}
           ${session?.isFounder ? `<div class="aw-nav-group-label">Founder</div>${navLink('/admin/founder', 'Founder', route.page === 'founder')}` : ''}
         </nav>
       </aside>
@@ -711,6 +715,65 @@ function loginView(state = {}) {
       </div>
     </div>
   `;
+}
+
+function helpView(session) {
+  return shell('Помощь', 'Короткая operator-справка по web-admin без длинной документации и догадок.', `
+    <div class="aw-help-grid aw-section">
+      <section class="aw-surface aw-stack aw-help-card">
+        <h2>Быстрый старт</h2>
+        <div class="aw-help-list">
+          <div class="aw-list-item"><strong>1. Вход</strong><small>Открой ссылку админки, введи secret один раз, затем подтверди вход в Telegram или вставь одноразовый code.</small></div>
+          <div class="aw-list-item"><strong>2. Обновление</strong><small>Панель не делает auto-polling. Используй кнопку <b>Обновить</b>, когда хочешь подтянуть свежий snapshot.</small></div>
+          <div class="aw-list-item"><strong>3. Рабочий ритм</strong><small>Для разбора людей чаще всего стартуем с <b>Users</b>. Для общей системной картины — <b>Runtime</b>. Для платёжных кейсов — <b>Payments</b>.</small></div>
+        </div>
+      </section>
+
+      <section class="aw-surface aw-stack aw-help-card">
+        <h2>Как читать Users</h2>
+        <div class="aw-help-list">
+          <div class="aw-list-item"><strong>Когорта</strong><small>Это быстрый готовый слой отбора: все, спящие плательщики, платили без канала, план без канала, живые бренды, тихие креаторы.</small></div>
+          <div class="aw-list-item"><strong>Пресет</strong><small>Это сохранённый рабочий срез, который сразу перестраивает сортировку и фильтры под типовой операторский сценарий.</small></div>
+          <div class="aw-list-item"><strong>Рабочий срез</strong><small>Источник истины один: текущие search / segment / filters / sort / cohort в sticky-shell и URL. Активные chips, cards и follow-up должны читать именно его.</small></div>
+          <div class="aw-list-item"><strong>Корзина и закрепление</strong><small>Корзина — временный набор для copy/export. Закрепление — до 5 карточек для side-by-side сравнения без потери текущего среза.</small></div>
+        </div>
+        <div class="aw-actions aw-help-actions">
+          <a href="/admin/users" data-link class="aw-button ghost">Открыть Users</a>
+        </div>
+      </section>
+
+      <section class="aw-surface aw-stack aw-help-card">
+        <h2>Как читать Runtime</h2>
+        <div class="aw-help-list">
+          <div class="aw-list-item"><strong>OK</strong><small>Контур выглядит штатно и не просит отдельного ручного вмешательства прямо сейчас.</small></div>
+          <div class="aw-list-item"><strong>Нужна проверка / degraded</strong><small>Есть сигнал, который стоит разобрать: очередь, retry, env-gap или зависший lane. Это ещё не всегда авария.</small></div>
+          <div class="aw-list-item"><strong>Не настроено / missing</strong><small>Контур не включён или не полностью сконфигурирован. Это повод смотреть env/runbook, а не искать баг в Users.</small></div>
+        </div>
+        <div class="aw-actions aw-help-actions">
+          <a href="/admin/runtime" data-link class="aw-button ghost">Открыть Runtime</a>
+        </div>
+      </section>
+
+      <section class="aw-surface aw-stack aw-help-card">
+        <h2>Безопасные действия</h2>
+        <div class="aw-help-list">
+          <div class="aw-list-item"><strong>Можно из web-admin</strong><small>Смотреть snapshot, разбирать пользователей, копировать списки, выгружать CSV, открывать карточки, читать runtime и payments.</small></div>
+          <div class="aw-list-item"><strong>Чего тут нет специально</strong><small>Нет широких destructive bulk-мутaций, нет скрытых массовых write-path, нет фонового auto-refresh, который бы создавал ложное ощущение live-консоли.</small></div>
+          <div class="aw-list-item"><strong>Когда идти в Telegram</strong><small>Когда задача завязана на operator-only bot flows, approve/action callbacks или на сценарии, которых web-admin сейчас честно не покрывает.</small></div>
+        </div>
+      </section>
+
+      <section class="aw-surface aw-stack aw-help-card aw-help-card-wide">
+        <h2>Частые вопросы</h2>
+        <div class="aw-help-list">
+          <div class="aw-list-item"><strong>Нажал пресет — что должно измениться?</strong><small>Должны сразу перестроиться active card/chip, верхний meta strip, URL и follow-up label текущего среза. Если toast пришёл, а активное состояние не обновилось — это UX-баг синхронизации, а не новая логика.</small></div>
+          <div class="aw-list-item"><strong>Почему copy иногда открывает ручной режим?</strong><small>Некоторые браузеры режут автокопирование. Тогда панель честно открывает fallback для ручного copy/download вместо молчаливого провала.</small></div>
+          <div class="aw-list-item"><strong>Когда нужен Runtime, а когда Users?</strong><small>Users — когда разбираешь людей и рабочие срезы. Runtime — когда нужно понять, что происходит с системой, очередями, retry и конфигурацией.</small></div>
+          <div class="aw-list-item"><strong>Что делать, если состояние кажется устаревшим?</strong><small>Нажми <b>Обновить</b>. Панель намеренно read-first и manual-refresh-only, чтобы не выдавать optimistic видимость live-state.</small></div>
+        </div>
+      </section>
+    </div>
+  `, session);
 }
 
 function overviewView(model) {
@@ -808,6 +871,7 @@ function getUsersState() {
   return normalizeUsersState(window.__usersState || {});
 }
 
+// STEP524 — Users URL-persisted working views
 function readUsersStateFromUrl(search = location.search) {
   try {
     const params = new URLSearchParams(search || '');
@@ -824,9 +888,9 @@ function readUsersStateFromUrl(search = location.search) {
     if (params.has('page')) next.page = params.get('page') || '0';
     if (params.has('limit')) next.pageSize = params.get('limit') || '20';
     if (params.has('pins')) next.pinIds = params.get('pins') || '';
-    return normalizeUsersState(next);
+    return next;
   } catch {
-    return normalizeUsersState({});
+    return {};
   }
 }
 
@@ -1708,6 +1772,10 @@ function usersView(model) {
             <span>Готовые действия по текущему срезу: экспорт, tg_id, usernames и быстрые переходы без ручной перенастройки контролов.</span>
           </div>
           </div>
+        <div class="aw-toolbar-note aw-toolbar-note-compact">
+          <span class="aw-muted">Сейчас этот блок работает по тому же рабочему срезу, который активен в sticky-shell выше.</span>
+          <span class="aw-basket-pill">Активный срез: <strong>${escapeHtml(currentSliceLabel)}</strong></span>
+        </div>
         <div class="aw-action-grid">
           <button class="aw-action-card" data-users-followup="export_current">
             <span>Экспорт</span>
@@ -2819,6 +2887,8 @@ async function render() {
   } else if (route.page === 'comms') {
     const res = await api('/api/admin-web-read?section=comms');
     app.innerHTML = commsView(res.data.data || {});
+  } else if (route.page === 'help') {
+    app.innerHTML = helpView(session);
   } else if (route.page === 'founder') {
     const res = await api('/api/admin-web-read?section=founder');
     if (!res.ok) {
@@ -2861,11 +2931,15 @@ function readUsersControlsState() {
 }
 
 function setUsersStateFromControls(overrides = {}) {
-  window.__usersState = { ...readUsersControlsState(), ...(overrides || {}) };
+  window.__usersState = normalizeUsersState({ ...readUsersControlsState(), ...(overrides || {}) });
+  syncUsersUrlState(window.__usersState, { replace: true });
+  return getUsersState();
 }
 
 function setUsersStateExact(overrides = {}) {
-  window.__usersState = { ...getUsersState(), ...(overrides || {}) };
+  window.__usersState = normalizeUsersState({ ...getUsersState(), ...(overrides || {}) });
+  syncUsersUrlState(window.__usersState, { replace: true });
+  return getUsersState();
 }
 
 async function runUsersExportAction(scope = 'current', opts = {}) {

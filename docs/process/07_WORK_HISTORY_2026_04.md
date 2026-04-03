@@ -626,3 +626,20 @@ Acceptance / notes:
 - no JS logic changes;
 - no API / DB / auth / runtime contract changes;
 - purpose is to force fresh asset fetch on the live admin shell after deploy.
+
+## STEP535D — Users active-state sync + help surface
+
+Date: 2026-04-03
+
+Scope:
+- fixed the real Users SPA state-clobber path in `scripts/admin-web.js`: URL hydration now keeps a sparse patch instead of forcing normalized defaults back over freshly selected cohort/preset/filter state;
+- made Users working-slice setters sync `window.__usersState` into the URL immediately, so rerenders keep cohort chips, preset cards, pin state, and meta strip aligned to one source of truth;
+- moved admin-web toast feedback from lower-right to upper-right content space and added a current-slice label to the follow-up action rail;
+- added a new `/admin/help` operator help surface plus sidebar item `Помощь`;
+- added `scripts/smoke-admin-web-users-active-state-help-contract.js`, wired it into `package.json` and `scripts/preflight.js`, and bumped admin-shell asset cache-bust to `step535d`.
+
+Acceptance / notes:
+- no API / DB / auth changes;
+- no new write paths;
+- requires live browser verification after deploy for final click/scroll/toast feel.
+

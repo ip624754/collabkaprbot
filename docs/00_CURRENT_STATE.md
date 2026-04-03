@@ -1,3 +1,15 @@
+## STEP535D — Users active-state sync + help surface
+- Fixed the real Users SPA state-clobber bug in `scripts/admin-web.js`: `readUsersStateFromUrl()` now returns a sparse URL patch instead of normalizing missing params back to defaults, so the current working slice no longer snaps back to the first cohort/preset on rerender.
+- Strengthened the one-source-of-truth contract for the Users working slice: `setUsersStateFromControls()`, `setUsersStateExact()`, and `setUsersPinIds()` now sync the active state into the URL immediately before rerender, which keeps cohort chips, preset cards, compare pins, and the top meta strip aligned.
+- Moved admin-web toast feedback from the lower-right corner to the upper-right content area, where it is closer to the operator gaze line and no longer collides with the lower utility zone.
+- Added a new `/admin/help` surface plus sidebar entry `Помощь`, with a short operator manual covering quick start, how to read Users, how to read Runtime, safe actions, and FAQ.
+- Added an explicit active-slice label inside `Готовые действия по срезу`, refreshed the admin shell asset cache-bust to `step535d`, and wired a new source smoke `scripts/smoke-admin-web-users-active-state-help-contract.js` into `package.json` + `scripts/preflight.js`.
+
+Acceptance / notes:
+- scope stays read-only and hobby-safe;
+- no API / DB / auth contract change;
+- still requires live browser verification after deploy for click/scroll/toast feel.
+
 ## STEP535B — Admin web CSS parser hotfix
 - Fixed a real admin-web visual regression caused by a missing closing brace in `styles/admin-web.css` inside `.aw-utility-head`.
 - Root cause: the CSS parser stopped applying later rules, so newer admin-web surfaces degraded to browser-default controls / broken card layout across `Overview`, `Runtime`, `Comms`, `Founder`, and `Users`.
@@ -1948,4 +1960,4 @@ Acceptance / notes:
 - tightened basket/meta pill styling to avoid awkward circular bubbles on narrower widths;
 - added `scripts/smoke-admin-web-users-preset-copy-polish-contract.js` and wired it into package scripts.
 
-- Web admin asset cache-bust (STEP535C): `admin.html` now references `/styles/admin-web.css?v=20260403-step535c` and `/scripts/admin-web.js?v=20260403-step535c` so fresh deploys stop reusing stale parse-broken admin assets in browser cache.
+- Web admin asset cache-bust (STEP535C): `admin.html` now references `/styles/admin-web.css?v=20260403-step535d` and `/scripts/admin-web.js?v=20260403-step535d` so fresh deploys stop reusing stale/broken admin assets in browser cache.
