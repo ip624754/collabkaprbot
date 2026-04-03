@@ -1961,3 +1961,11 @@ Acceptance / notes:
 - added `scripts/smoke-admin-web-users-preset-copy-polish-contract.js` and wired it into package scripts.
 
 - Web admin asset cache-bust (STEP535C): `admin.html` now references `/styles/admin-web.css?v=20260403-step535d` and `/scripts/admin-web.js?v=20260403-step535d` so fresh deploys stop reusing stale/broken admin assets in browser cache.
+
+
+## STEP535E — Runtime status semantics + actionability pass
+- normalized `/admin/runtime` around one operator-readable semantic model: `OK / Нужна проверка / Не настроено / Справочно` instead of a mixed raw-status feel;
+- added shared semantic helpers in `src/lib/adminWeb/runtime.js` so `statusHierarchy`, `incidentStrip`, `queueClarity`, `retrySignals`, `controlSnapshot`, and `configPresence` now all expose `semanticLabel`, `actionability`, `meaning`, and `nextStep`;
+- rebuilt Runtime cards in `scripts/admin-web.js` so every key contour answers three questions directly: what state it is in, whether action is needed, and what to check next;
+- made config presence explicitly separate required missing env from optional / not-enabled informational gaps;
+- added `scripts/smoke-admin-web-runtime-semantics-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped admin asset cache-bust to `step535e`.

@@ -303,17 +303,31 @@ function runtimeStateClass(value) {
   if (key === 'ok' || key === 'configured') return 'good';
   if (key === 'degraded' || key === 'warning') return 'warn';
   if (key === 'missing' || key === 'error') return 'bad';
+  if (key === 'unknown' || key === 'optional' || key === 'info' || key === 'not_enabled') return 'info';
   return '';
 }
 
 function runtimeStateLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ ok: 'ОК', degraded: 'Нужна проверка', missing: 'Не настроено', unknown: 'Статус неизвестен' })[key] || (key || '—');
+  return ({ ok: 'OK', degraded: 'Нужна проверка', missing: 'Не настроено', unknown: 'Справочно', warning: 'Нужна проверка', error: 'Не настроено', info: 'Справочно' })[key] || (key || '—');
+}
+
+function runtimeActionabilityClass(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'none') return 'good';
+  if (key === 'check') return 'warn';
+  if (key === 'setup') return 'bad';
+  return 'info';
+}
+
+function runtimeActionabilityLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ none: 'Действие не нужно', check: 'Нужно проверить', setup: 'Нужна настройка', info: 'Справочно' })[key] || 'Справочно';
 }
 
 function configPresenceLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ configured: 'настроено', missing: 'отсутствует', optional: 'optional', not_enabled: 'не включено' })[key] || (key || '—');
+  return ({ configured: 'настроено', missing: 'отсутствует', optional: 'справочно', not_enabled: 'не включено' })[key] || (key || '—');
 }
 
 function sourceLabel(value) {
@@ -748,6 +762,7 @@ function helpView(session) {
           <div class="aw-list-item"><strong>OK</strong><small>Контур выглядит штатно и не просит отдельного ручного вмешательства прямо сейчас.</small></div>
           <div class="aw-list-item"><strong>Нужна проверка / degraded</strong><small>Есть сигнал, который стоит разобрать: очередь, retry, env-gap или зависший lane. Это ещё не всегда авария.</small></div>
           <div class="aw-list-item"><strong>Не настроено / missing</strong><small>Контур не включён или не полностью сконфигурирован. Это повод смотреть env/runbook, а не искать баг в Users.</small></div>
+          <div class="aw-list-item"><strong>Справочно / unknown</strong><small>Сигнала или обязательной настройки сейчас просто не хватает. Это не должно выглядеть как авария само по себе.</small></div>
         </div>
         <div class="aw-actions aw-help-actions">
           <a href="/admin/runtime" data-link class="aw-button ghost">Открыть Runtime</a>
@@ -2628,7 +2643,7 @@ function founderView(model) {
 
 function runtimeView(model) {
   const statusHierarchy = Array.isArray(model.statusHierarchy) ? model.statusHierarchy : [];
-  const incident = model.incidentStrip || { state: 'info', title: 'Данные пока недоступны', message: 'Обнови страницу вручную.', sourceLabel: 'Runtime', action: 'Проверь соседние runtime сигналы.' };
+  const incident = model.incidentStrip || { state: 'info', title: 'Данные пока недоступны', message: 'Обнови страницу вручную.', sourceLabel: 'Runtime', action: 'Проверь соседние runtime сигналы.', actionLabel: 'Справочно' };
   const incidentFeed = Array.isArray(incident.feed) ? incident.feed : [];
   const controls = Array.isArray(model.controlSnapshot?.items) ? model.controlSnapshot.items : [];
   const configPresence = Array.isArray(model.configPresence) ? model.configPresence : [];
@@ -2639,6 +2654,7 @@ function runtimeView(model) {
   const configSummary = model.configSummary || {};
   const lastAudit = model.controlSnapshot?.lastAudit || null;
   const queueClarity = model.queueClarity || {};
+  const queueOverall = queueClarity.overall || { state: 'unknown', label: 'Справочно' };
   const queueSummary = queueClarity.summaryCards || {};
   const queueLanes = Array.isArray(queueClarity.lanes) ? queueClarity.lanes : [];
   const retrySignals = Array.isArray(queueClarity.retrySignals) ? queueClarity.retrySignals : [];
@@ -2652,35 +2668,45 @@ function runtimeView(model) {
         <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
       </div>
       <div class="aw-runtime-summary-grid">
-        <div class="aw-mini-card"><span>Healthy</span><strong>${Number(summaryCards.healthyServices || 0)}</strong><small>контуры в статусе ОК</small></div>
-        <div class="aw-mini-card"><span>Needs action</span><strong class="aw-status ${Number(summaryCards.needsAction || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.needsAction || 0)}</strong><small>degraded / missing</small></div>
-        <div class="aw-mini-card"><span>Warnings</span><strong class="aw-status ${Number(summaryCards.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summaryCards.warnings || 0)}</strong><small>активные runtime сигналы</small></div>
+        <div class="aw-mini-card"><span>OK</span><strong class="aw-status good">${Number(summaryCards.ok || 0)}</strong><small>контуры без явного действия</small></div>
+        <div class="aw-mini-card"><span>Нужна проверка</span><strong class="aw-status ${Number(summaryCards.check || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.check || 0)}</strong><small>degraded / paused / incident</small></div>
+        <div class="aw-mini-card"><span>Не настроено</span><strong class="aw-status ${Number(summaryCards.setup || 0) > 0 ? 'bad' : 'good'}">${Number(summaryCards.setup || 0)}</strong><small>setup gaps / missing env</small></div>
+        <div class="aw-mini-card"><span>Справочно</span><strong class="aw-status ${Number(summaryCards.info || 0) > 0 ? 'info' : 'good'}">${Number(summaryCards.info || 0)}</strong><small>unknown / optional / no signal</small></div>
         <div class="aw-mini-card"><span>Paused controls</span><strong class="aw-status ${Number(summaryCards.pausedControls || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.pausedControls || 0)}</strong><small>operator toggles OFF</small></div>
+        <div class="aw-mini-card"><span>Incident modes</span><strong class="aw-status ${Number(summaryCards.incidentModes || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.incidentModes || 0)}</strong><small>runtime overrides</small></div>
       </div>
       <div class="aw-runtime-topline-grid">
         ${statusHierarchy.length ? statusHierarchy.map((item) => `
           <div class="aw-card aw-runtime-topline-card">
             <div class="aw-runtime-topline-label">${escapeHtml(item.label || 'Контур')}</div>
-            <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(runtimeStateLabel(item.state))}</strong>
+            <div class="aw-runtime-card-head">
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+            </div>
             <small>${escapeHtml(item.summary || 'Данные пока недоступны.')}</small>
-            <div class="aw-card-subtle">${escapeHtml(item.hint || '')}</div>
+            <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Обнови Runtime вручную и сверяй соседние сигналы.')}</div>
           </div>
         `).join('') : '<div class="aw-empty">Статусные контуры пока не собраны.</div>'}
       </div>
     </section>
 
     <section class="aw-surface aw-section aw-stack">
-      <div class="aw-runtime-incident ${warningTone(incident.state)}">
+      <div class="aw-runtime-incident ${warningTone(incident.tone || incident.state)}">
         <div class="aw-runtime-incident-main">
-          <span class="aw-runtime-incident-kicker">Предупреждения · incident strip</span>
+          <span class="aw-runtime-incident-kicker">Главный runtime-сигнал</span>
           <h2>${escapeHtml(incident.title || 'Нужна проверка')}</h2>
           <p>${escapeHtml(incident.message || '—')}</p>
         </div>
         <div class="aw-runtime-incident-meta">
           <div class="aw-runtime-incident-item">
-            <span>Источник</span>
-            <strong>${escapeHtml(incident.sourceLabel || 'Runtime')}</strong>
-            <small>${formatDate(incident.updatedAt || model.updatedAt)}</small>
+            <span>Семантика</span>
+            <strong class="aw-status ${runtimeStateClass(incident.state)}">${escapeHtml(incident.semanticLabel || runtimeStateLabel(incident.state))}</strong>
+            <small>${escapeHtml(incident.sourceLabel || 'Runtime')} · ${formatDate(incident.updatedAt || model.updatedAt)}</small>
+          </div>
+          <div class="aw-runtime-incident-item">
+            <span>Нужно ли действие</span>
+            <strong class="aw-status ${runtimeActionabilityClass(incident.actionability)}">${escapeHtml(incident.actionLabel || runtimeActionabilityLabel(incident.actionability))}</strong>
           </div>
           <div class="aw-runtime-incident-item">
             <span>Следующий шаг</span>
@@ -2689,11 +2715,16 @@ function runtimeView(model) {
         </div>
       </div>
       <div class="aw-runtime-incident-feed">
-        ${(incidentFeed.length ? incidentFeed : [{ level: 'info', title: 'Явных инцидентов нет', sourceLabel: 'Runtime', message: 'Контрольная полоса и соседние сигналы выглядят стабильно.' }]).map((item) => `
+        ${(incidentFeed.length ? incidentFeed : [{ state: 'ok', semanticLabel: 'OK', actionLabel: 'Действие не нужно', title: 'Явных инцидентов нет', sourceLabel: 'Runtime', meaning: 'Контрольная полоса и соседние сигналы выглядят стабильно.', nextStep: 'Достаточно ручного refresh.' }]).map((item) => `
           <div class="aw-card aw-runtime-feed-card">
             <span>${escapeHtml(item.sourceLabel || item.source || 'Runtime')}</span>
-            <strong class="${warningTone(item.level)}">${escapeHtml(item.title || '—')}</strong>
-            <small>${escapeHtml(item.message || '')}</small>
+            <div class="aw-runtime-card-head">
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+            </div>
+            <small>${escapeHtml(item.title || '—')}</small>
+            <div class="aw-card-subtle">${escapeHtml(item.meaning || item.message || '')}</div>
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь соседние сигналы вручную.')}</div>
           </div>
         `).join('')}
       </div>
@@ -2705,22 +2736,26 @@ function runtimeView(model) {
           <h2>Очереди и retry</h2>
           <p class="aw-muted">Backlog, retry cooldown и stuck-сигналы без write-path действий.</p>
         </div>
-        <div class="aw-runtime-overall ${Number(queueSummary.retryProblems || 0) > 0 || Number(queueSummary.activeBacklog || 0) > 0 ? 'warn' : 'good'}">backlog ${Number(queueSummary.activeBacklog || 0)} · retry ${Number(queueSummary.retryProblems || 0)}</div>
+        <div class="aw-runtime-overall ${runtimeStateClass(queueOverall.state)}">${escapeHtml(runtimeStateLabel(queueOverall.state))} · ${escapeHtml(queueOverall.label || '')}</div>
       </div>
       <div class="aw-runtime-summary-grid">
         <div class="aw-mini-card"><span>Active backlog</span><strong class="aw-status ${Number(queueSummary.activeBacklog || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.activeBacklog || 0)}</strong><small>pending + inflight + stuck counts</small></div>
         <div class="aw-mini-card"><span>Retry problems</span><strong class="aw-status ${Number(queueSummary.retryProblems || 0) > 0 ? 'bad' : 'good'}">${Number(queueSummary.retryProblems || 0)}</strong><small>последний retry / QStash stuck</small></div>
         <div class="aw-mini-card"><span>Cooling windows</span><strong class="aw-status ${Number(queueSummary.coolingWindows || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.coolingWindows || 0)}</strong><small>retry cooldown / requeue cooldown</small></div>
-        <div class="aw-mini-card"><span>Unknown lanes</span><strong class="aw-status ${Number(queueSummary.pausedOrUnknown || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.pausedOrUnknown || 0)}</strong><small>disabled / no Redis data</small></div>
+        <div class="aw-mini-card"><span>Справочно</span><strong class="aw-status ${Number(queueSummary.infoOnly || 0) > 0 ? 'info' : 'good'}">${Number(queueSummary.infoOnly || 0)}</strong><small>lanes без обязательного сигнала</small></div>
       </div>
       <div class="aw-runtime-queues-grid">
         ${queueLanes.length ? queueLanes.map((item) => `
           <div class="aw-card aw-runtime-queue-card">
             <span>${escapeHtml(item.label || 'Lane')}</span>
-            <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(runtimeStateLabel(item.state))}</strong>
+            <div class="aw-runtime-card-head">
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+            </div>
             <small>${escapeHtml(item.summary || '—')}</small>
             <div class="aw-card-subtle">${escapeHtml(item.detail || '')}</div>
-            <div class="aw-card-subtle">${escapeHtml(item.hint || '')}</div>
+            <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь backlog и соседние retry сигналы.')}</div>
           </div>
         `).join('') : '<div class="aw-empty">Очереди пока недоступны.</div>'}
       </div>
@@ -2728,9 +2763,15 @@ function runtimeView(model) {
         ${retrySignals.length ? retrySignals.map((item) => `
           <div class="aw-card aw-runtime-feed-card">
             <span>${escapeHtml(item.label || 'Retry signal')}</span>
-            <strong class="${runtimeStateClass(item.state)}">${escapeHtml(item.summary || '—')}</strong>
-            <small>${escapeHtml(item.detail || '')}</small>
+            <div class="aw-runtime-card-head">
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+            </div>
+            <small>${escapeHtml(item.summary || '—')}</small>
+            <div class="aw-card-subtle">${escapeHtml(item.detail || '')}</div>
+            <div class="aw-card-subtle">${escapeHtml(item.meaning || '')}</div>
             ${item.note ? `<div class="aw-card-subtle">${escapeHtml(item.note)}</div>` : ''}
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь retry status вручную.')}</div>
           </div>
         `).join('') : '<div class="aw-empty">Retry signals пока пусты.</div>'}
       </div>
@@ -2750,8 +2791,13 @@ function runtimeView(model) {
           ${controls.length ? controls.map((item) => `
             <div class="aw-card aw-runtime-control-card">
               <span>${escapeHtml(item.label || 'Control')}</span>
-              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.stateLabel || '—')}</strong>
-              <small>${escapeHtml(item.hint || '')}</small>
+              <div class="aw-runtime-card-head">
+                <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
+                <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+              </div>
+              <small>Текущее состояние: ${escapeHtml(item.stateLabel || '—')}</small>
+              <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
+              <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь смысл этого toggle в control surface.')}</div>
               <div class="aw-card-subtle">${item.changedAt ? `updated ${escapeHtml(formatDate(item.changedAt))}` : 'без явного runtime override'}</div>
             </div>
           `).join('') : '<div class="aw-empty">Control surface пока недоступен.</div>'}
@@ -2766,27 +2812,40 @@ function runtimeView(model) {
               <h2>Конфигурация</h2>
               <p class="aw-muted">Presence matrix без утечки значений секретов.</p>
             </div>
-            <div class="aw-runtime-overall ${Number(configSummary.missing || 0) > 0 ? 'warn' : 'good'}">missing ${Number(configSummary.missing || 0)} · optional ${Number(configSummary.optional || 0)}</div>
+            <div class="aw-runtime-overall ${Number(configSummary.missing || 0) > 0 ? 'warn' : 'good'}">missing ${Number(configSummary.missing || 0)} · info ${Number(configSummary.infoOnly || 0)}</div>
           </div>
           <div class="aw-config-grid">
             ${configPresence.map((item) => `
               <div class="aw-config-row">
-                <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
-                <div class="aw-config-state aw-status ${runtimeStateClass(item.state === 'configured' ? 'ok' : (item.state === 'missing' ? 'missing' : (item.state === 'optional' ? 'unknown' : 'unknown')))}">${escapeHtml(configPresenceLabel(item.state))}</div>
+                <div class="aw-config-main">
+                  <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
+                  <div class="aw-config-meta">${escapeHtml(item.meaning || '')}</div>
+                  <div class="aw-config-meta"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Обнови Runtime после изменения env.')}</div>
+                </div>
+                <div class="aw-config-state-wrap">
+                  <div class="aw-config-state aw-status ${runtimeStateClass(item.toneState || item.state)}">${escapeHtml(configPresenceLabel(item.state))}</div>
+                  <small>${escapeHtml(item.semanticLabel || runtimeStateLabel(item.toneState || item.state))}</small>
+                </div>
               </div>
             `).join('') || '<div class="aw-empty">Данные пока недоступны.</div>'}
           </div>
         </section>
 
         <section class="aw-surface aw-stack">
-          <h2>Подсказки</h2>
+          <h2>Как читать этот экран</h2>
           <div class="aw-list">
+            <div class="aw-list-item"><strong>Paused ≠ silent bug</strong><small>Если toggle paused оператором, это control-plane режим. Сначала пойми, зачем он был включён, и только потом ищи поломку.</small></div>
+            <div class="aw-list-item"><strong>Missing ≠ degraded</strong><small>Missing — это setup-gap и env/runbook задача. Degraded — рабочий контур с сигналом, который просит ручную проверку.</small></div>
+            <div class="aw-list-item"><strong>Users vs Runtime</strong><small>Users нужен для разбора людей и срезов. Runtime — для понимания состояния контуров, очередей, retry и конфигурации.</small></div>
             ${hints.length ? hints.map((item) => `
               <div class="aw-list-item">
                 <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
                 <small>${escapeHtml(item.message || '')}</small>
               </div>
-            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+            `).join('') : ''}
+          </div>
+          <div class="aw-actions aw-help-actions">
+            <a href="/admin/help" data-link class="aw-button ghost">Открыть Помощь</a>
           </div>
         </section>
 

@@ -986,6 +986,7 @@ body {
 .aw-status.good { color: var(--good); }
 .aw-status.warn { color: var(--warn); }
 .aw-status.bad { color: var(--bad); }
+.aw-status.info { color: var(--soft); }
 .aw-login {
   min-height: 100vh;
   display: grid;
@@ -1127,6 +1128,16 @@ body {
   font-size: 13px;
 }
 .aw-runtime-layout { align-items: start; }
+.aw-runtime-card-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.aw-runtime-action {
+  font-size: 12px;
+}
 .aw-config-grid {
   display: grid;
   gap: 10px;
@@ -1135,15 +1146,34 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  align-items: center;
+  align-items: start;
   border: 1px solid rgba(132,176,255,0.12);
   background: rgba(255,255,255,0.03);
   border-radius: 16px;
   padding: 12px 14px;
 }
+.aw-config-main {
+  display: grid;
+  gap: 6px;
+}
 .aw-config-key {
   color: var(--text);
   overflow-wrap: anywhere;
+}
+.aw-config-meta {
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.aw-config-state-wrap {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+}
+.aw-config-state-wrap small {
+  color: var(--muted);
+  font-size: 12px;
 }
 .aw-config-state {
   text-align: right;
@@ -1153,7 +1183,7 @@ body {
 
 .aw-runtime-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
 }
 .aw-runtime-topline-grid,
@@ -1215,6 +1245,7 @@ body {
 }
 .aw-runtime-incident-meta {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 .aw-runtime-incident-item {
@@ -1245,7 +1276,6 @@ body {
   line-height: 1.5;
 }
 @media (max-width: 1200px) {
-  .aw-runtime-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .aw-runtime-incident { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
@@ -1254,6 +1284,7 @@ body {
 @media (max-width: 1024px) {
   .aw-runtime-overall { width: 100%; }
   .aw-config-row { grid-template-columns: 1fr; }
+  .aw-config-state-wrap { justify-items: start; text-align: left; }
   .aw-config-state { text-align: left; }
 }
 

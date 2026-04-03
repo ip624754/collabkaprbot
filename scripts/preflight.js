@@ -231,6 +231,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin web shell contract", "smoke:admin-web-shell-contract"],
   ["Preflight (source-only): admin web WHATWG URL contract", "smoke:admin-web-whatwg-url-contract"],
   ["Preflight (source-only): admin web runtime contract", "smoke:admin-web-runtime-contract"],
+  ["Preflight (source-only): admin web runtime semantics contract", "smoke:admin-web-runtime-semantics-contract"],
   ["Preflight (source-only): admin web payments contract", "smoke:admin-web-payments-contract"],
   ["Preflight (source-only): admin web payments follow-up contract", "smoke:admin-web-payments-followup-contract"],
   ["Preflight (source-only): admin web comms contract", "smoke:admin-web-comms-contract"],

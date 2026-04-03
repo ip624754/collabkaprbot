@@ -643,3 +643,20 @@ Acceptance / notes:
 - no new write paths;
 - requires live browser verification after deploy for final click/scroll/toast feel.
 
+
+
+## STEP535E — Runtime status semantics + actionability pass
+
+Date: 2026-04-03
+
+Scope:
+- added a shared semantic/actionability layer in `src/lib/adminWeb/runtime.js` so Runtime items now expose one consistent operator contract: `semanticLabel`, `actionability`, `meaning`, and `nextStep`;
+- normalized service hierarchy, incident strip, queue lanes, retry cards, control snapshot, and config presence under the same `OK / Нужна проверка / Не настроено / Справочно` reading model;
+- rebuilt `/admin/runtime` in `scripts/admin-web.js` so cards explicitly show whether action is needed and what to check next, instead of only showing raw status labels;
+- clarified that paused toggles / runtime overrides are operator modes rather than silent failures, and that optional / not-enabled config is informational rather than broken;
+- added `scripts/smoke-admin-web-runtime-semantics-contract.js`, wired it into `package.json` and `scripts/preflight.js`, and bumped admin asset cache-bust to `step535e`.
+
+Acceptance / notes:
+- scope stays read-only;
+- no new routes, no polling, no backend write-path changes;
+- requires live browser verification after deploy for final readability/feel on the real Runtime screen.

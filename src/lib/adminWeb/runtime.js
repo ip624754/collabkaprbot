@@ -91,6 +91,82 @@ function sourceLabel(value) {
   })[key] || (value || 'runtime');
 }
 
+function semanticLabelForState(state) {
+  const key = String(state || '').trim().toLowerCase();
+  return ({
+    ok: 'OK',
+    degraded: 'Нужна проверка',
+    missing: 'Не настроено',
+    unknown: 'Справочно',
+    warning: 'Нужна проверка',
+    error: 'Не настроено',
+  })[key] || (key || '—');
+}
+
+function actionabilityForState(state) {
+  const key = String(state || '').trim().toLowerCase();
+  if (key === 'ok' || key === 'configured') return 'none';
+  if (key === 'missing' || key === 'error') return 'setup';
+  if (key === 'degraded' || key === 'warning') return 'check';
+  return 'info';
+}
+
+function actionabilityLabel(mode) {
+  return ({
+    none: 'Действие не нужно',
+    check: 'Нужно проверить',
+    setup: 'Нужна настройка',
+    info: 'Справочно',
+  })[String(mode || '').trim().toLowerCase()] || 'Справочно';
+}
+
+function defaultMeaningForState(state) {
+  const key = String(state || '').trim().toLowerCase();
+  if (key === 'ok' || key === 'configured') return 'Контур выглядит штатно и не просит отдельного ручного действия прямо сейчас.';
+  if (key === 'missing' || key === 'error') return 'Контур не считается полноценно настроенным: это setup-gap, а не скрытый runtime баг.';
+  if (key === 'degraded' || key === 'warning') return 'Есть сигнал, который стоит проверить вручную; это не всегда авария, но его нельзя игнорировать.';
+  return 'Это справочный статус: данных или обязательной настройки недостаточно, но сам по себе он не равен поломке.';
+}
+
+function nextStepForSource(source, state) {
+  const src = String(source || '').trim().toLowerCase();
+  const key = String(state || '').trim().toLowerCase();
+  if (key === 'ok' || key === 'configured') return 'Достаточно держать контур под обычным наблюдением и обновлять Runtime вручную по необходимости.';
+  if (src === 'db') return 'Проверь DATABASE_URL, доступность Neon/PG и свежий /api/health?full=1.';
+  if (src === 'redis') return key === 'missing'
+    ? 'Добавь Upstash env, если нужен operator/runtime слой; иначе считай этот сигнал осознанным ограничением.'
+    : 'Проверь UPSTASH_REDIS_REST_URL / TOKEN и сетевой доступ до Upstash.';
+  if (src === 'qstash') return key === 'missing'
+    ? 'Добавь QStash env, если нужен publish/retry контур; для чистого read-admin это не авария.'
+    : 'Проверь delivery/retry контур и соседние QStash сигналы.';
+  if (src === 'payments') return 'Сверь payments fallback / HMAC guard и последние payment warnings, потом верни режим в норму.';
+  if (src === 'admin_web' || src === 'controls') return key === 'missing'
+    ? 'Проверь ADMIN_WEB_* env и PUBLIC_BASE_URL; paused toggle сам по себе не означает баг авторизации.'
+    : 'Сверь control surface и пойми, почему этот режим всё ещё нужен оператору.';
+  if (src === 'config') return 'Проверь core env baseline: BOT / PUBLIC_BASE_URL / admin-web config.';
+  if (src === 'runtime') return key === 'unknown'
+    ? 'Пока ничего не чинить: просто держи это в уме и сверяй соседние сигналы.'
+    : 'Обнови Runtime вручную и смотри соседние сигналы по тому же контуру.';
+  return key === 'missing'
+    ? 'Донастрой контур и обнови Runtime, чтобы убедиться, что сигнал ушёл.'
+    : (key === 'degraded' || key === 'warning'
+      ? 'Проверь этот контур и соседние сигналы вручную.'
+      : 'Пока достаточно ручного обновления и визуального smoke-pass.');
+}
+
+function decorateRuntimeItem(item = {}, { source = '', meaning = '', nextStep = '', actionability = '' } = {}) {
+  const state = String(item?.state || 'unknown');
+  const mode = actionability || actionabilityForState(state);
+  return {
+    ...item,
+    semanticLabel: semanticLabelForState(state),
+    actionability: mode,
+    actionLabel: actionabilityLabel(mode),
+    meaning: String(meaning || item?.meaning || defaultMeaningForState(state)),
+    nextStep: String(nextStep || item?.nextStep || nextStepForSource(source || item?.id || item?.source, state)),
+  };
+}
+
 function deriveIncidentStrip({ warnings = [], hints = [], controlSurface = null, updatedAt = null } = {}) {
   const actionableWarnings = (Array.isArray(warnings) ? warnings : []).filter((item) => String(item?.message || '') !== 'Явных предупреждений нет');
   const pausedControls = Array.isArray(controlSurface?.items)
@@ -115,7 +191,7 @@ function deriveIncidentStrip({ warnings = [], hints = [], controlSurface = null,
       level: 'warning',
       source: 'controls',
       title: `${String(item?.label || item?.shortLabel || 'Control')} paused`,
-      message: 'Оператор временно выключил часть runtime-потока. Это не ошибка, но состояние стоит помнить при разборе инцидентов.',
+      message: 'Оператор временно выключил часть runtime-потока. Это не silent bug, но состояние стоит перепроверять при каждом разборе.',
     })),
     ...(fallbackIncident ? [{
       kind: 'control',
@@ -131,6 +207,9 @@ function deriveIncidentStrip({ warnings = [], hints = [], controlSurface = null,
     return {
       state: 'ok',
       tone: 'info',
+      semanticLabel: semanticLabelForState('ok'),
+      actionability: 'none',
+      actionLabel: actionabilityLabel('none'),
       title: 'Явных инцидентов сейчас не видно',
       message: 'Базовый infra/config слой и control plane выглядят стабильно для ручной операторской работы.',
       source: 'runtime',
@@ -138,13 +217,19 @@ function deriveIncidentStrip({ warnings = [], hints = [], controlSurface = null,
       action: 'Достаточно ручного обновления и короткого визуального смоука.',
       updatedAt,
       feed: [
-        {
+        decorateRuntimeItem({
           level: 'info',
+          state: 'ok',
           title: 'Система выглядит стабильно',
           source: 'runtime',
           sourceLabel: 'Runtime',
           message: 'Нет явных degraded / missing / paused сигналов, требующих немедленного действия.',
-        },
+        }, {
+          source: 'runtime',
+          meaning: 'Ключевые runtime-контуры сейчас не спорят друг с другом и не показывают аварийную картину.',
+          nextStep: 'Достаточно ручного обновления и короткого визуального smoke-pass.',
+          actionability: 'none',
+        }),
       ],
     };
   }
@@ -154,34 +239,35 @@ function deriveIncidentStrip({ warnings = [], hints = [], controlSurface = null,
     return String(a.source || '').localeCompare(String(b.source || ''));
   })[0];
 
-  const state = primary.weight >= 3 ? 'error' : (primary.weight >= 2 ? 'warning' : 'info');
+  const state = primary.weight >= 3 ? 'missing' : (primary.weight >= 2 ? 'degraded' : 'unknown');
   const source = String(primary.source || 'runtime');
   const title = String(primary.title || primary.message || 'Нужна проверка');
 
-  let action = 'Обнови Runtime вручную и смотри соседние сигналы по тому же контуру.';
-  if (source === 'db') action = 'Проверь DATABASE_URL, доступность Neon/PG и свежий /api/health?full=1.';
-  else if (source === 'redis') action = 'Проверь Upstash env и сетевой доступ; degraded Redis влияет на control plane и часть operator state.';
-  else if (source === 'admin_web' || source === 'controls') action = 'Проверь control surface и auth/login настройки; paused toggle — это осознанное runtime-состояние, а не silent bug.';
-  else if (source === 'payments') action = 'Сверь payments fallback / HMAC guard и последние payment warnings, потом верни режим в норму.';
-  else if (source === 'qstash') action = 'Сверь QStash env и delivery/retry контур; без него publish/retry surfaces будут ограничены.';
-  else if (source === 'config') action = 'Проверь core env baseline: BOT / PUBLIC_BASE_URL / admin-web config.';
-  else if (Array.isArray(hints) && hints.length) action = String(hints[0]?.message || action);
+  let action = nextStepForSource(source, state);
+  if (Array.isArray(hints) && hints.length && source === 'runtime') action = String(hints[0]?.message || action);
 
   return {
     state,
-    tone: state,
+    tone: state === 'missing' ? 'error' : (state === 'degraded' ? 'warning' : 'info'),
+    semanticLabel: semanticLabelForState(state),
+    actionability: actionabilityForState(state),
+    actionLabel: actionabilityLabel(actionabilityForState(state)),
     title,
     message: String(primary.message || title),
     source,
     sourceLabel: sourceLabel(source),
     action,
     updatedAt,
-    feed: candidates.slice(0, 4).map((item) => ({
+    feed: candidates.slice(0, 4).map((item) => decorateRuntimeItem({
       level: String(item.level || 'info'),
+      state: item.weight >= 3 ? 'missing' : (item.weight >= 2 ? 'degraded' : 'unknown'),
       title: String(item.title || item.message || '—'),
       source: String(item.source || 'runtime'),
       sourceLabel: sourceLabel(item.source || 'runtime'),
       message: String(item.message || item.title || ''),
+    }, {
+      source: item.source || 'runtime',
+      meaning: String(item.message || item.title || ''),
     })),
   };
 }
@@ -189,13 +275,14 @@ function deriveIncidentStrip({ warnings = [], hints = [], controlSurface = null,
 function buildStatusHierarchy({ services = {}, controlSurface = null } = {}) {
   const authToggleOn = !!controlSurface?.byId?.admin_web_login?.value;
   const fallbackActive = !!controlSurface?.byId?.payments_fallback?.value;
-  return [
+  const items = [
     {
       id: 'db',
       label: 'DB',
       state: String(services.db?.state || 'unknown'),
       summary: String(services.db?.label || 'Данные пока недоступны'),
       hint: 'источник данных',
+      meaning: String(services.db?.hint || ''),
     },
     {
       id: 'redis',
@@ -203,6 +290,7 @@ function buildStatusHierarchy({ services = {}, controlSurface = null } = {}) {
       state: String(services.redis?.state || 'unknown'),
       summary: String(services.redis?.label || 'Данные пока недоступны'),
       hint: 'locks / runtime state',
+      meaning: String(services.redis?.hint || ''),
     },
     {
       id: 'qstash',
@@ -210,6 +298,7 @@ function buildStatusHierarchy({ services = {}, controlSurface = null } = {}) {
       state: String(services.qstash?.state || 'unknown'),
       summary: String(services.qstash?.label || 'Данные пока недоступны'),
       hint: 'publish / retry',
+      meaning: String(services.qstash?.hint || ''),
     },
     {
       id: 'payments',
@@ -217,6 +306,9 @@ function buildStatusHierarchy({ services = {}, controlSurface = null } = {}) {
       state: fallbackActive && services.payments?.state === 'ok' ? 'degraded' : String(services.payments?.state || 'unknown'),
       summary: fallbackActive ? 'Fallback runtime override активен' : String(services.payments?.label || 'Данные пока недоступны'),
       hint: fallbackActive ? 'incident mode' : 'apply / fallback',
+      meaning: fallbackActive
+        ? 'Активен осознанный incident fallback режим. Это не silent failure, но его нельзя держать включённым бесконечно.'
+        : String(services.payments?.hint || ''),
     },
     {
       id: 'admin_web',
@@ -224,6 +316,9 @@ function buildStatusHierarchy({ services = {}, controlSurface = null } = {}) {
       state: !authToggleOn && services.adminWeb?.state === 'ok' ? 'degraded' : String(services.adminWeb?.state || 'unknown'),
       summary: !authToggleOn ? 'Новые login запросы paused' : String(services.adminWeb?.label || 'Данные пока недоступны'),
       hint: 'auth / session',
+      meaning: !authToggleOn
+        ? 'Входной контур paused оператором. Это не баг авторизации, а сознательный control-plane режим.'
+        : String(services.adminWeb?.hint || ''),
     },
     {
       id: 'config',
@@ -231,8 +326,13 @@ function buildStatusHierarchy({ services = {}, controlSurface = null } = {}) {
       state: String(services.config?.state || 'unknown'),
       summary: String(services.config?.label || 'Данные пока недоступны'),
       hint: 'core env baseline',
+      meaning: String(services.config?.hint || ''),
     },
   ];
+  return items.map((item) => decorateRuntimeItem(item, {
+    source: item.id,
+    meaning: item.meaning,
+  }));
 }
 
 function buildControlSnapshot(controlSurface = null) {
@@ -243,18 +343,43 @@ function buildControlSnapshot(controlSurface = null) {
   return {
     pausedCount,
     incidentModes,
-    items: items.map((item) => ({
-      id: String(item?.id || 'unknown'),
-      label: String(item?.shortLabel || item?.label || 'Control'),
-      state: item?.kind === 'runtime_override'
-        ? (item?.value ? 'warning' : 'ok')
-        : (item?.value ? 'ok' : 'degraded'),
-      stateLabel: String(item?.stateLabel || (item?.value ? 'ON' : 'OFF')),
-      hint: item?.kind === 'runtime_override'
-        ? (item?.runtimeLabel ? `runtime ${String(item.runtimeLabel)}` : 'incident override')
-        : (item?.changedBy && item?.changedBy !== '—' ? `последний change: ${String(item.changedBy)}` : 'без явного override'),
-      changedAt: item?.changedAt || null,
-    })),
+    items: items.map((item) => {
+      const isRuntimeOverride = item?.kind === 'runtime_override';
+      const isActive = !!item?.value;
+      const state = isRuntimeOverride
+        ? (isActive ? 'degraded' : 'ok')
+        : (isActive ? 'ok' : 'degraded');
+      const meaning = isRuntimeOverride
+        ? (isActive
+          ? 'Инцидентный режим включён оператором. Это не поломка само по себе, а осознанный override до завершения разбора.'
+          : 'Override сейчас не активен, контур идёт в штатном режиме.')
+        : (isActive
+          ? 'Тумблер выглядит штатно включённым.'
+          : 'Контур paused оператором. Это не silent bug, но стоит понять, нужна ли пауза до сих пор.');
+      const nextStep = isRuntimeOverride
+        ? (isActive
+          ? 'Проверь, нужен ли override до сих пор, и после инцидента верни контур в обычный режим.'
+          : 'Действие не нужно: просто держи override под наблюдением.')
+        : (isActive
+          ? 'Действие не нужно, если этот тумблер и должен быть включён.'
+          : 'Сверь, что пауза поставлена сознательно, и не забывай про её операционные последствия.');
+      const actionability = isRuntimeOverride && isActive ? 'check' : (!isRuntimeOverride && !isActive ? 'check' : 'none');
+      return decorateRuntimeItem({
+        id: String(item?.id || 'unknown'),
+        label: String(item?.shortLabel || item?.label || 'Control'),
+        state,
+        stateLabel: String(item?.stateLabel || (isActive ? 'ON' : 'OFF')),
+        hint: isRuntimeOverride
+          ? (item?.runtimeLabel ? `runtime ${String(item.runtimeLabel)}` : 'incident override')
+          : (item?.changedBy && item?.changedBy !== '—' ? `последний change: ${String(item.changedBy)}` : 'без явного override'),
+        changedAt: item?.changedAt || null,
+      }, {
+        source: 'controls',
+        meaning,
+        nextStep,
+        actionability,
+      });
+    }),
     lastAudit: Array.isArray(controlSurface?.audit) ? controlSurface.audit[0] || null : null,
   };
 }
@@ -265,9 +390,37 @@ function buildConfigSummary(configPresence = []) {
     configured: items.filter((item) => item?.state === 'configured').length,
     missing: items.filter((item) => item?.state === 'missing').length,
     optional: items.filter((item) => item?.state === 'optional' || item?.state === 'not_enabled').length,
+    infoOnly: items.filter((item) => item?.toneState === 'unknown').length,
   };
 }
 
+function decorateConfigPresence(items = []) {
+  return (Array.isArray(items) ? items : []).map((item) => {
+    const state = String(item?.state || 'unknown');
+    const toneState = state === 'configured' ? 'ok' : (state === 'missing' ? 'missing' : 'unknown');
+    const meaning = state === 'configured'
+      ? 'Env найден и считается присутствующим.'
+      : (state === 'missing'
+        ? 'Required env отсутствует: это setup-gap, а не runtime деградация уже работающего контура.'
+        : (state === 'not_enabled'
+          ? 'Контур сейчас выключен флагом и поэтому не обязан иметь все env-ключи.'
+          : 'Опциональный env сейчас не является обязательным для базового read-admin режима.'));
+    const nextStep = state === 'configured'
+      ? 'Действие не нужно.'
+      : (state === 'missing'
+        ? 'Добавь env и после деплоя обнови Runtime.'
+        : (state === 'not_enabled'
+          ? 'Если хочешь включить этот контур, сначала подними флаг и связанные env.'
+          : 'Ничего не чинить срочно: просто помни, что соответствующий контур будет ограничен.'));
+    return {
+      ...item,
+      toneState,
+      semanticLabel: state === 'configured' ? 'OK' : (state === 'missing' ? 'Не настроено' : 'Справочно'),
+      meaning,
+      nextStep,
+    };
+  });
+}
 
 function dayKey() {
   return new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -328,7 +481,7 @@ function buildQueueClarity({
   const qstashWarning = rescheduleFailedCount > 0 || officialPublishStuckCount > 0;
 
   const lanes = [
-    {
+    decorateRuntimeItem({
       id: 'ops_digest',
       label: 'Ops digest',
       state: queueLaneState({ enabled: true, configured: redisConfigured, backlog: opsPending }),
@@ -336,8 +489,16 @@ function buildQueueClarity({
       detail: ops?.last_sent_at ? `last sent ${ops.last_sent_at}` : 'last sent пока не зафиксирован',
       hint: opsPending > 0 ? 'накопился ops buffer' : 'alert buffer тихий',
       backlog: opsPending,
-    },
-    {
+    }, {
+      source: 'runtime',
+      meaning: redisConfigured
+        ? (opsPending > 0 ? 'Буфер ops alert-ов не пуст: это повод проверить, не висит ли digest-фан-аут.' : 'Ops digest выглядит спокойно и не копит хвост.')
+        : 'Без Redis эта очередь остаётся только справочным ограничением: read-admin жив, но ops buffer не наблюдаем полноценно.',
+      nextStep: redisConfigured
+        ? (opsPending > 0 ? 'Сверь, почему ops buffer не опустел, и проверь соседние delivery/retry сигналы.' : 'Действие не нужно.')
+        : 'Добавь Redis, если нужен полноценный контроль ops buffer поверх read-admin.',
+    }),
+    decorateRuntimeItem({
       id: 'audit_buffer',
       label: 'Audit buffer',
       state: queueLaneState({
@@ -357,8 +518,25 @@ function buildQueueClarity({
         : 'текущий runtime не использует audit buffer',
       hint: auditWarning ? 'inflight висит слишком долго' : (auditCooldown > 0 ? 'requeue cooldown активен' : 'buffer выглядит спокойно'),
       backlog: auditBacklog + auditInflight,
-    },
-    {
+    }, {
+      source: 'runtime',
+      meaning: audit?.buffer?.enabled
+        ? (auditWarning
+          ? 'Audit inflight висит слишком долго: это уже не просто фон, а сигнал проверить buffer/requeue механику.'
+          : ((auditBacklog + auditInflight) > 0 || auditCooldown > 0)
+            ? 'Buffer не пуст или стоит в cooldown: это деградация по throughput, но не обязательно авария.'
+            : 'Audit buffer выглядит спокойно.')
+        : 'Audit buffer сейчас выключен: это не авария, а просто отсутствие этого вспомогательного контура.',
+      nextStep: audit?.buffer?.enabled
+        ? (auditWarning
+          ? 'Проверь inflight age, last flush и requeue cooldown, чтобы понять, где застрял buffer.'
+          : ((auditBacklog + auditInflight) > 0 || auditCooldown > 0)
+            ? 'Сверь backlog, inflight и cooldown; если хвост не уходит, смотри Redis и соседние очереди.'
+            : 'Действие не нужно.')
+        : 'Ничего срочно не чинить: просто помни, что текущий runtime не опирается на audit buffer.',
+      actionability: audit?.buffer?.enabled ? '' : 'info',
+    }),
+    decorateRuntimeItem({
       id: 'broadcast_delivery',
       label: 'Broadcast / delivery',
       state: queueLaneState({
@@ -377,8 +555,24 @@ function buildQueueClarity({
         : (broadcast?.last_429_at ? `last 429 ${broadcast.last_429_at}` : 'последняя доставка не зафиксирована'),
       hint: pendingDeliveries > 0 ? 'смотри pending snapshot и retry cooldown' : 'fan-out выглядит спокойно',
       backlog: pendingDeliveries,
-    },
-    {
+    }, {
+      source: 'qstash',
+      meaning: (!redisConfigured || !qstashConfigured)
+        ? 'Контур delivery ограничен настройкой: read-admin ещё жив, но publish/retry слой не считается полностью рабочим.'
+        : (pendingDeliveries > 0
+          ? 'Есть backlog по доставке: это повод проверить, почему fan-out не разгребает хвост.'
+          : (retryAfter > 0
+            ? 'Сейчас активен retry cooldown: это операторски важно, но не равняется silent failure.'
+            : 'Delivery lane выглядит спокойно.')),
+      nextStep: (!redisConfigured || !qstashConfigured)
+        ? 'Донастрой Redis/QStash, если этот delivery контур должен быть полноценно рабочим.'
+        : (pendingDeliveries > 0
+          ? 'Проверь pending snapshot, last 429 и delivery timestamps, чтобы понять источник хвоста.'
+          : (retryAfter > 0
+            ? 'Дождись окна retry или сверь, почему cooldown держится дольше обычного.'
+            : 'Действие не нужно.')),
+    }),
+    decorateRuntimeItem({
       id: 'retry_monitor',
       label: 'Retry monitor',
       state: queueLaneState({
@@ -395,48 +589,84 @@ function buildQueueClarity({
         : `reschedule_failed ${rescheduleFailedCount} · stuck ${officialPublishStuckCount}`,
       hint: retryError ? retryError : (officialPublishStuckCount > 0 ? 'есть stuck publish сигналы' : 'retry сигналов нет'),
       backlog: rescheduleFailedCount + officialPublishStuckCount,
-    },
+    }, {
+      source: 'qstash',
+      meaning: retryWarning
+        ? 'Последний retry выглядит проблемным: это уже не просто шум, а повод разобрать error/status сигнал.'
+        : (qstashWarning
+          ? 'Есть stuck/reschedule_failed сигналы: delivery контур не полностью чист.'
+          : (mon?.retry?.last_at
+            ? 'Retry monitor жив и последний сигнал не выглядит аварийным.'
+            : 'Справочно: явной retry-активности пока просто не видно.')),
+      nextStep: retryWarning
+        ? 'Сверь last retry action/status/error и соседние QStash сигналы.'
+        : (qstashWarning
+          ? 'Разбери stuck/reschedule_failed причины и посмотри, не повторяются ли они сегодня.'
+          : (mon?.retry?.last_at
+            ? 'Действие не нужно.'
+            : 'Ничего срочно не чинить: это информационная пустота, а не падение ретраев.')),
+    }),
   ];
 
   const retrySignals = [
-    {
+    decorateRuntimeItem({
       id: 'retry_last',
       label: 'Последний retry',
       state: retryWarning ? 'degraded' : (mon?.retry?.last_at ? 'ok' : 'unknown'),
       summary: mon?.retry?.last_status ? String(mon.retry.last_status) : 'нет данных',
       detail: mon?.retry?.last_at ? `${mon.retry.last_at}${mon?.retry?.last_action ? ` · ${mon.retry.last_action}` : ''}` : 'runtime retry signal пока пуст',
       note: retryError || '',
-    },
-    {
+    }, {
+      source: 'qstash',
+      meaning: retryWarning
+        ? 'Последний retry вернул problem-signal и требует ручной проверки.'
+        : (mon?.retry?.last_at ? 'Последний retry виден и сейчас не выглядит аварийным.' : 'Сигнал пустой: это справочная пустота, а не ошибка сама по себе.'),
+      nextStep: retryWarning ? 'Проверь последний retry error/status и соседние delivery сигналы.' : (mon?.retry?.last_at ? 'Действие не нужно.' : 'Ничего не чинить срочно: просто держать это в уме.'),
+    }),
+    decorateRuntimeItem({
       id: 'reschedule_failed',
       label: 'QStash reschedule_failed',
       state: rescheduleFailedCount > 0 ? 'degraded' : 'ok',
       summary: `${rescheduleFailedCount}`,
       detail: qstash?.reschedule_failed?.last_at ? `${qstash.reschedule_failed.last_at}${qstash?.reschedule_failed?.last_where ? ` · ${qstash.reschedule_failed.last_where}` : ''}` : 'сегодня не фиксировалось',
       note: qstash?.reschedule_failed?.last_payload ? String(qstash.reschedule_failed.last_payload).slice(0, 120) : '',
-    },
-    {
+    }, {
+      source: 'qstash',
+      meaning: rescheduleFailedCount > 0
+        ? 'Сегодня уже были reschedule_failed сигналы: delivery path стоит разобрать предметно.'
+        : 'Сегодня этот тип сбоя не фиксировался.',
+      nextStep: rescheduleFailedCount > 0 ? 'Проверь last_where / payload и оцени, повторяется ли причина.' : 'Действие не нужно.',
+    }),
+    decorateRuntimeItem({
       id: 'official_publish_stuck',
       label: 'Official publish stuck',
       state: officialPublishStuckCount > 0 ? 'degraded' : 'ok',
       summary: `${officialPublishStuckCount}`,
       detail: qstash?.official_publish_stuck?.last_at ? `${qstash.official_publish_stuck.last_at}${qstash?.official_publish_stuck?.last_offer_id ? ` · offer ${qstash.official_publish_stuck.last_offer_id}` : ''}` : 'сегодня не фиксировалось',
       note: qstash?.official_publish_stuck?.last_age_sec ? `age ${formatRuntimeAgeLabel(qstash.official_publish_stuck.last_age_sec)}` : '',
-    },
+    }, {
+      source: 'qstash',
+      meaning: officialPublishStuckCount > 0
+        ? 'Есть stuck publish сигналы: это повод проверить publish-lock / delivery path.'
+        : 'Сегодня stuck publish не фиксировался.',
+      nextStep: officialPublishStuckCount > 0 ? 'Сверь stuck age, offer id и соседние publish/retry сигналы.' : 'Действие не нужно.',
+    }),
   ];
 
   const activeBacklog = lanes.reduce((sum, item) => sum + (Number(item?.backlog || 0) || 0), 0);
   const retryProblems = retrySignals.filter((item) => item.state === 'degraded').length;
   const coolingWindows = [auditCooldown > 0 ? 1 : 0, retryAfter > 0 ? 1 : 0].reduce((a, b) => a + b, 0);
+  const overallState = deriveOverallState(lanes.map((item) => item.state));
   const summaryCards = {
     activeBacklog,
     retryProblems,
     coolingWindows,
-    pausedOrUnknown: lanes.filter((item) => item.state === 'unknown' || item.state === 'missing').length,
+    infoOnly: lanes.filter((item) => item.state === 'unknown').length,
   };
 
   return {
     updatedAt,
+    overall: { state: overallState, label: overallLabel(overallState) },
     summaryCards,
     lanes,
     retrySignals,
@@ -518,7 +748,7 @@ export async function getRuntimeSummary() {
     adminWeb: makeService(adminWebState, !adminWebEnabled ? 'Admin web disabled' : (adminWebState === 'ok' ? 'Admin web auth configured' : 'Admin web auth incomplete'), !adminWebEnabled ? 'Web admin выключен env-флагом.' : (adminWebState === 'ok' ? 'Secret / session / approvers настроены.' : 'Проверь ADMIN_WEB_* env и PUBLIC_BASE_URL.')),
   };
 
-  out.configPresence = [
+  out.configPresence = decorateConfigPresence([
     { key: 'BOT_TOKEN', state: keyState(botTokenConfigured) },
     { key: 'BOT_USERNAME', state: keyState(botUsernameConfigured) },
     { key: 'PUBLIC_BASE_URL', state: keyState(publicBaseUrlConfigured) },
@@ -530,7 +760,7 @@ export async function getRuntimeSummary() {
     { key: 'ADMIN_WEB_APPROVER_TG_IDS', state: keyState(adminApproversConfigured, { enabled: adminWebEnabled }) },
     { key: 'QSTASH_TOKEN / QSTASH_CURRENT_SIGNING_KEY', state: keyState(qstashConfigured, { optional: true }) },
     { key: 'PAYMENTS_PAYLOAD_HMAC_KEY', state: keyState(paymentsHmacConfigured, { optional: !paymentsFallbackEnabled }) },
-  ];
+  ]);
 
   if (!publicBaseUrlConfigured) {
     pushWarning(out.warnings, 'warning', 'PUBLIC_BASE_URL не задан', 'config');
@@ -811,10 +1041,13 @@ export async function getRuntimeSummary() {
     updatedAt,
   });
   out.summaryCards = {
-    healthyServices: out.statusHierarchy.filter((item) => item.state === 'ok').length,
-    needsAction: out.statusHierarchy.filter((item) => item.state !== 'ok').length,
+    ok: out.statusHierarchy.filter((item) => item.state === 'ok').length,
+    check: out.statusHierarchy.filter((item) => item.state === 'degraded').length,
+    setup: out.statusHierarchy.filter((item) => item.state === 'missing').length,
+    info: out.statusHierarchy.filter((item) => item.state === 'unknown').length,
     warnings: out.warnings.filter((item) => String(item?.message || '') !== 'Явных предупреждений нет').length,
     pausedControls: Number(out.controlSnapshot?.pausedCount || 0),
+    incidentModes: Number(out.controlSnapshot?.incidentModes || 0),
   };
   out.queueClarity = buildQueueClarity({
     ops: out.ops,

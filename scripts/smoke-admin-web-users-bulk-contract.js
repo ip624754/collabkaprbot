@@ -31,11 +31,11 @@ for (const token of [
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'Bulk utility rail',
+  'Утилиты для списков',
   'copyUsersBulkBtn',
   'clearUsersBasketBtn',
   'data-user-check',
-  'Копирований bulk utility пока не было.',
+  'Копирований bulk-утилит пока не было.',
 ]) {
   assert.ok(webJs.includes(token), `admin-web users bulk UI must include ${token}`);
 }

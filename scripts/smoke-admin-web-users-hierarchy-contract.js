@@ -11,7 +11,7 @@ for (const token of [
   'usersCreditsMeta',
   'usersSignalChips',
   'usersActivityMeta',
-  'Last activity',
+  'Последняя активность',
   'aw-users-table',
   'aw-stat-chip',
   'Плотный ops/audit список',
