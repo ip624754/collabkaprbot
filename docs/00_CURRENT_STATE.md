@@ -1,3 +1,14 @@
+## STEP535G — Sidebar nav noise cleanup + overview micro-polish
+- Cleaned the admin shell sidebar in `styles/admin-web.css`: nav groups now render as explicit stacked blocks, links are full-width block items, and the browser focus ring no longer leaks a second blue rail beside the active item.
+- Kept one clear active-state signal for the selected section by aligning `hover / active / focus-visible` onto the same visual contract instead of letting default outline styling compete with the filled state.
+- Prevented section labels (`ОПЕРАТОР`, `FOUNDER`) from catching the decorative/focus layer and tightened their spacing so the sidebar reads calmer against the new section-manifest shell.
+- Kept the step intentionally cosmetic: no API / DB / auth / runtime / write-path changes; only shell CSS polish plus a dedicated source smoke `scripts/smoke-admin-web-sidebar-nav-contract.js` and asset cache-bust bump to `step535g`.
+
+Acceptance / notes:
+- sidebar no longer shows the extra vertical blue rail / outline noise;
+- active section reads with one signal instead of an active-fill plus stray focus artifact;
+- still requires live browser verification after deploy for the final shell feel on the real viewport.
+
 ## STEP535F — Overview command cockpit + section contract uplift
 - Introduced a single `SECTION_MANIFEST` in `scripts/admin-web.js` so sidebar grouping, section labels, nav captions, and page subtitles now read from one admin-web contract instead of drifting separately across shell/view code.
 - Rebuilt `/admin` Overview into a tighter command cockpit: one main status, one next owner step, and three compact workspaces (`Командный обзор`, `Payments snapshot`, `Последняя активность`) without adding polling or new write paths.

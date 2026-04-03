@@ -229,6 +229,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): Telegram copy hotfix wave 1 contract", "smoke:copy-wave1-contract"],
   ["Preflight (source-only): public landing contract", "smoke:landing-contract"],
   ["Preflight (source-only): admin web shell contract", "smoke:admin-web-shell-contract"],
+  ["Preflight (source-only): admin web sidebar nav contract", "smoke:admin-web-sidebar-nav-contract"],
   ["Preflight (source-only): admin web WHATWG URL contract", "smoke:admin-web-whatwg-url-contract"],
   ["Preflight (source-only): admin web runtime contract", "smoke:admin-web-runtime-contract"],
   ["Preflight (source-only): admin web runtime semantics contract", "smoke:admin-web-runtime-semantics-contract"],

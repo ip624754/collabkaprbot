@@ -673,3 +673,19 @@ Acceptance / notes:
 - sidebar captions/subtitles are manifest-driven;
 - still requires live browser verification after deploy for final scan-speed / workspace-tab feel.
 
+
+
+## STEP535G — Sidebar nav noise cleanup + overview micro-polish
+
+Date: 2026-04-03
+
+Scope:
+- cleaned the left admin-shell sidebar so nav groups render as explicit stacked blocks instead of relying on browser inline/focus behavior;
+- made sidebar links full-width block items and unified `hover / active / focus-visible` into one visual state, which removes the stray blue rail/outline seen beside the active item on the real screen;
+- prevented section labels from catching the decorative layer, tightened nav-group spacing, and kept the pass strictly cosmetic on top of STEP535F;
+- added `scripts/smoke-admin-web-sidebar-nav-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped `admin.html` asset cache-bust to `step535g`.
+
+Acceptance / notes:
+- no API / DB / auth / runtime / write-surface changes;
+- sidebar now exposes one clear active-state signal;
+- requires live browser verification after deploy for final shell polish confirmation.
