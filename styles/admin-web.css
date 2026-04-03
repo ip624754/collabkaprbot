@@ -542,6 +542,7 @@ body {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
 .aw-utility-head strong { display: block; font-size: 15px; }
 .aw-utility-head span { color: var(--muted); font-size: 13px; }
 .aw-toolbar-utility { margin-bottom: 0; }

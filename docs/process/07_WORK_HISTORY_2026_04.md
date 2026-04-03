@@ -592,3 +592,22 @@ Acceptance / notes:
 - no backend/data contract changes;
 - no new write paths;
 - this is a pure admin-web interaction hotfix layered on top of STEP533A and STEP535.
+
+## STEP535B — Admin web CSS parser hotfix
+Date: 2026-04-03
+
+Summary
+- Fixed a real CSS parser regression in `styles/admin-web.css`: `.aw-utility-head` was missing a closing `}`.
+- Because of that single syntax error, the browser ignored the rest of the stylesheet and newer admin-web surfaces visually degraded to browser-default controls / broken layout.
+
+Files changed
+- `styles/admin-web.css`
+- `docs/00_CURRENT_STATE.md`
+- `docs/process/07_WORK_HISTORY_2026_04.md`
+
+Validation
+- Verified brace balance in `styles/admin-web.css` after the fix.
+- Re-checked that the affected selectors now live after a syntactically valid block: `aw-input`, `aw-select`, `aw-statusbar`, `aw-control-chip`, `aw-compare-*`, runtime section styling.
+
+Risk
+- Low. CSS-only hotfix; no JS, API, DB, or auth contract changes.

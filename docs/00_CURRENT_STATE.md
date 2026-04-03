@@ -1,3 +1,9 @@
+## STEP535B — Admin web CSS parser hotfix
+- Fixed a real admin-web visual regression caused by a missing closing brace in `styles/admin-web.css` inside `.aw-utility-head`.
+- Root cause: the CSS parser stopped applying later rules, so newer admin-web surfaces degraded to browser-default controls / broken card layout across `Overview`, `Runtime`, `Comms`, `Founder`, and `Users`.
+- Result: `aw-input`, `aw-select`, `aw-statusbar`, utility rails, compare surfaces, and newer runtime cards now render again under the intended admin-web design system.
+- Scope kept intentionally narrow: CSS parser fix only plus docs canon update.
+
 ## STEP535 — Runtime queues / retry clarity
 - Extended `/admin/runtime` with a dedicated queue/retry layer so operators can read backlog, cooldown, and retry pressure without jumping into raw health JSON.
 - Added `queueClarity` in `src/lib/adminWeb/runtime.js`, built from existing Redis-backed runtime signals only: ops digest pending buffer, audit buffer queue/inflight/cooldown, broadcast pending deliveries + retry cooldown, retry monitor (`mon.retry`), and QStash `reschedule_failed` / `official_publish_stuck`.
