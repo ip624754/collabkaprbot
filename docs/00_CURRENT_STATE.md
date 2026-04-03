@@ -1,3 +1,8 @@
+## STEP535P — Founder RU copy consistency + final polish
+- `/admin/founder` user-facing copy in `scripts/admin-web.js` was cleaned to a mostly Russian owner-surface contract: founder guidance, safety semantics, control descriptions, session reset confirmation, summary labels, and founder empty/error states now avoid the previous RU/EN mix.
+- founder page top control-plane chips now render through a local RU label/state mapping, so labels like `Web login`, `Pay accept`, `Auto apply`, `Fan-out`, and `Fallback` read consistently as founder-facing admin copy instead of leaking raw internal control names.
+- founder hints / warnings / recent founder actions now pass through a light copy-normalization layer before render, and the shell asset cache-bust was bumped to `step535p`; source smoke was updated to assert the new founder RU contract.
+
 ## STEP535O — Founder control safety semantics + confirmation polish
 
 - `/admin/founder` upgraded from a plain founder summary into an owner-grade control surface in `scripts/admin-web.js`: added an explicit `Семантика безопасности` layer, founder sensitivity cards, and a clearer separation between routine read-first review, cautionary policy changes, and bot-only / sensitive controls.

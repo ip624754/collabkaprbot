@@ -370,9 +370,50 @@ function sourceLabel(value) {
     payments: 'Платежи',
     admin_web: 'Web-admin',
     config: 'Конфигурация',
-    runtime: 'Runtime',
+    runtime: 'Система',
     controls: 'Управление',
-  })[key] || (value || 'Runtime');
+  })[key] || (value || 'Система');
+}
+
+function controlSurfaceLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({
+    'web login': 'Web-вход',
+    'pay accept': 'Приём платежей',
+    'auto apply': 'Автовыдача',
+    'match/feat': 'Матчинг / фичеринг',
+    'fan-out': 'Рассылка fan-out',
+    'fallback': 'Fallback-режим',
+    'web-admin login': 'Web-вход',
+    'qstash fan-out': 'QStash fan-out',
+    'payments fallback': 'Fallback платежей',
+    'match/feat auto-apply': 'Автоприменение матчинга / фичеринга',
+    'founder sale': 'Founder Sale',
+  })[key] || String(value || 'Контур');
+}
+
+function controlSurfaceStateLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({ on: 'ВКЛ', off: 'ВЫКЛ', ok: 'OK', enabled: 'ВКЛ', disabled: 'ВЫКЛ' })[key] || String(value || '—');
+}
+
+function founderTextLabel(value) {
+  return String(value || '')
+    .replace(/read-first/gi, 'только чтение')
+    .replace(/owner-only/gi, 'только для фаундера')
+    .replace(/operator UI/gi, 'операторского интерфейса')
+    .replace(/operator UX/gi, 'операторского интерфейса')
+    .replace(/web-admin/gi, 'web-админки')
+    .replace(/web-control/gi, 'web-контроль')
+    .replace(/web-write/gi, 'web-write')
+    .replace(/write-path/gi, 'write-path')
+    .replace(/bot-only/gi, 'только в Telegram')
+    .replace(/publish path/gi, 'publish-path')
+    .replace(/owner-policy/gi, 'фаундерскую политику')
+    .replace(/founder-layer/gi, 'фаундерский слой')
+    .replace(/owner-grade/gi, 'фаундерский')
+    .replace(/web-action/gi, 'web-действие')
+    .replace(/web-sessions/gi, 'web-сессии');
 }
 
 function controlToneClass(item = {}) {
@@ -392,14 +433,14 @@ function controlAuditActorLabel(item = {}) {
 }
 
 function controlAuditValueLabel(value) {
-  if (value === true) return 'ON';
-  if (value === false) return 'OFF';
+  if (value === true) return 'ВКЛ';
+  if (value === false) return 'ВЫКЛ';
   if (value === null || value === undefined || value === '') return '—';
   return String(value);
 }
 
 function controlAuditSummary(item = {}) {
-  const label = String(item?.label || item?.controlId || 'Контрол');
+  const label = controlSurfaceLabel(item?.label || item?.controlId || 'Контур');
   return `${label}: ${controlAuditValueLabel(item?.previousValue)} → ${controlAuditValueLabel(item?.nextValue)}`;
 }
 
@@ -418,8 +459,8 @@ function renderControlStatusBar() {
       <div class="aw-statusbar-chips">
         ${items.map((item) => `
           <div class="aw-control-chip ${controlToneClass(item)}">
-            <span>${escapeHtml(item.shortLabel || item.label || 'Контрол')}</span>
-            <strong>${escapeHtml(item.stateLabel || (item.value ? 'ON' : 'OFF'))}</strong>
+            <span>${escapeHtml(controlSurfaceLabel(item.shortLabel || item.label || 'Контур'))}</span>
+            <strong>${escapeHtml(controlSurfaceStateLabel(item.stateLabel || (item.value ? 'ВКЛ' : 'ВЫКЛ')))}</strong>
           </div>
         `).join('')}
       </div>
@@ -441,8 +482,8 @@ function renderControlSurfaceSection() {
           ${items.map((item) => `
             <div class="aw-list-item aw-control-list-item">
               <div class="aw-control-list-head">
-                <strong>${escapeHtml(item.label || item.shortLabel || 'Контрол')}</strong>
-                <span class="aw-status ${String(item.tone || '').trim().toLowerCase()}">${escapeHtml(item.stateLabel || (item.value ? 'ON' : 'OFF'))}</span>
+                <strong>${escapeHtml(controlSurfaceLabel(item.label || item.shortLabel || 'Контур'))}</strong>
+                <span class="aw-status ${String(item.tone || '').trim().toLowerCase()}">${escapeHtml(controlSurfaceStateLabel(item.stateLabel || (item.value ? 'ВКЛ' : 'ВЫКЛ')))}</span>
               </div>
               <small>Контур: ${escapeHtml(item.scope || 'system')} · изменил ${escapeHtml(item.changedBy || '—')} · ${escapeHtml(formatDate(item.changedAt))}</small>
               ${item.id === 'payments_fallback' ? `<small>env ${item.envEnabled ? 'ON' : 'OFF'} · runtime ${escapeHtml(item.runtimeLabel || 'OFF')}</small>` : ''}
@@ -526,7 +567,7 @@ function founderSensitivityMeta(kind = 'routine') {
   if (key === 'attention') {
     return { label: 'Нужна проверка', tone: 'is-warn', hint: 'Сначала проверь предупреждения и Runtime, потом уже меняй контур.' };
   }
-  return { label: 'Безопасно для рутины', tone: 'is-good', hint: 'Можно смотреть и использовать как обычный founder review without broad side effects.' };
+  return { label: 'Безопасно для рутины', tone: 'is-good', hint: 'Можно использовать как обычный фаундерский обзор без широких побочных эффектов.' };
 }
 
 function founderControlCards(model = {}) {
@@ -538,27 +579,27 @@ function founderControlCards(model = {}) {
       title: 'Web-сессии',
       kind: controls.canRevokeAllSessions ? 'sensitive' : 'routine',
       meaning: controls.canRevokeAllSessions
-        ? 'Единственный founder-only web-control: завершает все web-сессии, включая текущую.'
-        : 'В этой сессии опасное founder-действие недоступно; экран остаётся read-first.',
+        ? 'Единственный web-контроль для фаундера: завершает все web-сессии, включая текущую.'
+        : 'В этой сессии чувствительное фаундерское действие недоступно; экран остаётся только для чтения.',
       when: controls.canRevokeAllSessions
-        ? 'Используй только когда нужно жёстко закрыть доступ и начать новую founder-сессию.'
-        : 'Оставайся в read-first режиме и не лечи доступ через случайные web-действия.',
+        ? 'Используй только когда нужно жёстко закрыть доступ и начать новую фаундерскую сессию.'
+        : 'Оставайся в режиме только для чтения и не лечи доступ через случайные web-действия.',
     },
     {
-      title: 'Founder sale и policy',
+      title: 'Founder Sale и политика',
       kind: founderSale.enabled ? 'attention' : 'routine',
       meaning: founderSale.enabled
-        ? 'Sale сейчас включён: меняется owner-copy и коммерческая рамка некоторых поверхностей.'
-        : 'Sale выключен: блок нужен как справочная owner-политика, а не как активный режим продаж.',
-      when: 'Проверяй перед изменением позиционирования, цен или owner-решений по монетизации.',
+        ? 'Founder Sale сейчас включён: меняется коммерческая подача и рамка некоторых поверхностей.'
+        : 'Founder Sale выключен: блок нужен как справочная фаундерская политика, а не как активный режим продаж.',
+      when: 'Проверяй перед изменением позиционирования, цен или фаундерских решений по монетизации.',
     },
     {
-      title: 'Bot-only и publish path',
+      title: 'Telegram-only и publish-path',
       kind: 'sensitive',
       meaning: Array.isArray(controls.botOnlyControls) && controls.botOnlyControls.length
         ? `Через web-admin специально недоступны: ${controls.botOnlyControls.join(' · ')}.`
-        : 'Risky controls и publish-path intentionally вынесены из web-admin.',
-      when: 'Если нужен risky control, publish-path или системная мутация, переходи в Telegram admin.',
+        : 'Чувствительные контроли и publish-path намеренно вынесены из web-админки.',
+      when: 'Если нужен чувствительный контроль, publish-path или системная мутация, переходи в Telegram-админку.',
     },
   ];
 }
@@ -625,7 +666,7 @@ const SECTION_MANIFEST = {
   founder: {
     key: 'founder',
     label: 'Фаундер',
-    subtitle: 'Фаундерский read-first слой: отдельный от operator UI и без опасных web-write действий.',
+    subtitle: 'Фаундерский слой только для чтения: отдельно от операторского интерфейса и без опасных web-write действий.',
     route: '/admin/founder',
     group: 'founder',
     navCaption: 'фаундерские контроли',
@@ -964,7 +1005,7 @@ function helpView(session) {
           <div class="aw-list-item"><strong>Справочно / unknown</strong><small>Сигнала или обязательной настройки сейчас просто не хватает. Это не должно выглядеть как авария само по себе.</small></div>
         </div>
         <div class="aw-actions aw-help-actions">
-          <a href="/admin/runtime" data-link class="aw-button ghost">Открыть Runtime</a>
+          <a href="/admin/runtime" data-link class="aw-button ghost">Открыть раздел «Система»</a>
         </div>
       </section>
 
@@ -1223,7 +1264,7 @@ function overviewActivityWorkspace(model = {}) {
         <div class="aw-list">
           ${audit.length ? audit.map((item) => `
             <div class="aw-list-item">
-              <strong>${escapeHtml(item.action || 'unknown')}</strong>
+              <strong>${escapeHtml(founderTextLabel(item.action || '—'))}</strong>
               <small>${escapeHtml(item.section || '')} · TG ${Number(item.actorTgId || 0) || '—'} · ${formatDate(item.ts)}</small>
             </div>
           `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
@@ -2624,7 +2665,7 @@ function userDetailView(model) {
       <aside class="aw-stack">
         <section class="aw-surface aw-stack">
           <h2>Заметка оператора</h2>
-          <textarea id="noteText" class="aw-textarea" maxlength="1000" placeholder="Внутренняя заметка для owner/admin">${escapeHtml(note.text || '')}</textarea>
+          <textarea id="noteText" class="aw-textarea" maxlength="1000" placeholder="Внутренняя заметка для фаундера/admin">${escapeHtml(note.text || '')}</textarea>
           <div class="aw-muted">${noteMeta.length ? escapeHtml(noteMeta.join(' · ')) : 'Заметка пока не добавлена.'}</div>
           <div class="aw-actions">
             <button class="aw-button" id="saveNoteBtn" data-user-id="${user.id}">Сохранить</button>
@@ -2637,7 +2678,7 @@ function userDetailView(model) {
           <div class="aw-list">
             ${recentAudit.length ? recentAudit.map((item) => `
               <div class="aw-list-item">
-                <strong>${escapeHtml(item.action || 'unknown')}</strong>
+                <strong>${escapeHtml(founderTextLabel(item.action || '—'))}</strong>
                 <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
@@ -2719,7 +2760,7 @@ function paymentsView(model) {
       <div class="aw-list">
         ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных payment-предупреждений нет.', source: 'payments' }]).map((item) => `
           <div class="aw-list-item aw-warning-item">
-            <strong class="${warningTone(item.level)}">${escapeHtml(item.message || '—')}</strong>
+            <strong class="${warningTone(item.level)}">${escapeHtml(founderTextLabel(item.message || '—'))}</strong>
             <small>${escapeHtml(item.source || 'payments')}</small>
           </div>
         `).join('')}
@@ -2814,7 +2855,7 @@ function paymentsView(model) {
             ${hints.length ? hints.map((item) => `
               <div class="aw-list-item">
                 <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
-                <small>${escapeHtml(item.message || '')}</small>
+                <small>${escapeHtml(founderTextLabel(item.message || ''))}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -2914,7 +2955,7 @@ function paymentDetailView(model) {
             ${hints.length ? hints.map((item) => `
               <div class="aw-list-item">
                 <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
-                <small>${escapeHtml(item.message || '')}</small>
+                <small>${escapeHtml(founderTextLabel(item.message || ''))}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -2925,7 +2966,7 @@ function paymentDetailView(model) {
           <div class="aw-list">
             ${recentAdminAudit.length ? recentAdminAudit.map((item) => `
               <div class="aw-list-item">
-                <strong>${escapeHtml(item.action || 'unknown')}</strong>
+                <strong>${escapeHtml(founderTextLabel(item.action || '—'))}</strong>
                 <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
@@ -3043,7 +3084,7 @@ function commsView(model) {
       <div class="aw-list">
         ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных comms-предупреждений нет.', source: 'comms' }]).map((item) => `
           <div class="aw-list-item aw-warning-item">
-            <strong class="${warningTone(item.level)}">${escapeHtml(item.message || '—')}</strong>
+            <strong class="${warningTone(item.level)}">${escapeHtml(founderTextLabel(item.message || '—'))}</strong>
             <small>${escapeHtml(item.source || 'comms')}</small>
           </div>
         `).join('')}
@@ -3163,7 +3204,7 @@ function commsView(model) {
             ${hints.length ? hints.map((item) => `
               <div class="aw-list-item">
                 <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
-                <small>${escapeHtml(item.message || '')}</small>
+                <small>${escapeHtml(founderTextLabel(item.message || ''))}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -3174,7 +3215,7 @@ function commsView(model) {
           <div class="aw-list">
             ${recentAdminAudit.length ? recentAdminAudit.map((item) => `
               <div class="aw-list-item">
-                <strong>${escapeHtml(item.action || 'unknown')}</strong>
+                <strong>${escapeHtml(founderTextLabel(item.action || '—'))}</strong>
                 <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.targetId ? ` · notice ${escapeHtml(item.targetId)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока нет действий.</div>'}
@@ -3208,20 +3249,20 @@ function founderView(model) {
       <div class="aw-runtime-head">
         <div>
           <h2>Фаундерский доступ</h2>
-          <p class="aw-muted">Только для фаундера: read-first обзор, границы риска и один чувствительный web-контроль без скрытых write-path.</p>
+          <p class="aw-muted">Только для фаундера: обзор только для чтения, границы риска и один чувствительный web-контроль без скрытых write-path.</p>
         </div>
         <div class="aw-runtime-overall ${founder.allowed ? 'good' : 'warn'}">${founder.allowed ? 'ФАУНДЕР-СЕССИЯ' : 'ОПЕРАТОРСКАЯ СЕССИЯ'} · TG ${Number(founder.actorTgId || 0) || '—'}</div>
       </div>
       <div class="aw-badges aw-founder-badges">
         <span class="aw-badge is-good">Только для фаундера</span>
         <span class="aw-badge ${founder.allowed ? 'is-good' : 'is-warn'}">${escapeHtml(founderAllowedMeta.label)}</span>
-        <span class="aw-badge ${controls.canRevokeAllSessions ? 'is-bad' : 'is-warn'}">${controls.canRevokeAllSessions ? 'Есть чувствительное web-действие' : 'Только read-first web-режим'}</span>
+        <span class="aw-badge ${controls.canRevokeAllSessions ? 'is-bad' : 'is-warn'}">${controls.canRevokeAllSessions ? 'Есть чувствительное web-действие' : 'Только режим чтения в web'}</span>
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
         <div class="aw-card aw-runtime-card"><span>Авторизация и сессия</span><strong class="aw-status good">OK</strong><small>логин ${Number(sessionPolicy.loginTtlSec || 0)}с · сессия ${Number(sessionPolicy.sessionTtlSec || 0)}с</small></div>
         <div class="aw-card aw-runtime-card"><span>Таймаут бездействия</span><strong>${Math.round(Number(sessionPolicy.idleTimeoutSec || 0) / 60) || 0}м</strong><small>только ручное обновление</small></div>
         <div class="aw-card aw-runtime-card"><span>Telegram-аппруверы</span><strong>${Number(sessionPolicy.approversCount || 0)}</strong><small>граница для фаундерского web-входа</small></div>
-        <div class="aw-card aw-runtime-card"><span>Founder sale</span><strong class="aw-status ${founderSale.enabled ? 'warn' : 'good'}">${founderSale.enabled ? 'ВКЛ' : 'ВЫКЛ'}</strong><small>${escapeHtml(founderSale.deadline || 'Без дедлайна')}</small></div>
+        <div class="aw-card aw-runtime-card"><span>Founder Sale</span><strong class="aw-status ${founderSale.enabled ? 'warn' : 'good'}">${founderSale.enabled ? 'ВКЛ' : 'ВЫКЛ'}</strong><small>${escapeHtml(founderSale.deadline || 'Без дедлайна')}</small></div>
       </div>
     </section>
 
@@ -3229,22 +3270,22 @@ function founderView(model) {
       <section class="aw-surface aw-stack">
         <h2>Следующий фаундер-шаг</h2>
         <div class="aw-list">
-          <div class="aw-list-item"><strong class="${warningTone(founder.allowed ? 'info' : 'warning')}">${escapeHtml(founderAllowedMeta.label)}</strong><small>${founder.allowed ? 'Сначала читай предупреждения и семантику безопасности. Только потом используй фаундерское web-действие.' : 'В этой сессии фаундерское web-действие недоступно. Экран работает как owner-only read-first surface.'}</small></div>
-          <div class="aw-list-item"><strong>Когда идти в Runtime</strong><small>Если предупреждение связано с QStash, PUBLIC_BASE_URL или системным деградом, сначала открой Runtime и проверь базовый системный контур.</small></div>
-          <div class="aw-list-item"><strong>Когда идти в Telegram</strong><small>Если нужен рискованный контроль, publish-path, платёжная мутация или bot-only действие, не лечи это из web-admin — переходи в Telegram admin.</small></div>
+          <div class="aw-list-item"><strong class="${warningTone(founder.allowed ? 'info' : 'warning')}">${escapeHtml(founderAllowedMeta.label)}</strong><small>${founder.allowed ? 'Сначала читай предупреждения и семантику безопасности. Только потом используй фаундерское web-действие.' : 'В этой сессии фаундерское web-действие недоступно. Экран работает как поверхность только для чтения и только для фаундера.'}</small></div>
+          <div class="aw-list-item"><strong>Когда идти в раздел «Система»</strong><small>Если предупреждение связано с QStash, PUBLIC_BASE_URL или системным деградом, сначала открой раздел «Система» и проверь базовый контур.</small></div>
+          <div class="aw-list-item"><strong>Когда идти в Telegram</strong><small>Если нужен рискованный контроль, publish-path, платёжная мутация или действие только для Telegram, не лечи это из web-админки — переходи в Telegram-админку.</small></div>
         </div>
         <div class="aw-actions aw-overview-actions">
-          <a href="/admin/founder" data-link class="aw-button">Фаундер-слой</a>
-          <a href="/admin/runtime" data-link class="aw-button ghost">Открыть Runtime</a>
+          <a href="/admin/founder" data-link class="aw-button">Фаундер</a>
+          <a href="/admin/runtime" data-link class="aw-button ghost">Открыть раздел «Система»</a>
           <a href="/admin/help" data-link class="aw-button ghost">Открыть помощь</a>
         </div>
       </section>
       <section class="aw-surface aw-stack">
         <h2>Границы этой поверхности</h2>
         <div class="aw-list">
-          <div class="aw-list-item"><strong>Что можно делать здесь</strong><small>Смотреть предупреждения, founder-sale параметры, сессионные лимиты и при необходимости завершать все web-сессии.</small></div>
-          <div class="aw-list-item"><strong>Чего тут нет специально</strong><small>Нет runtime/config writes, нет payment writes, нет publish-path действий и нет широких destructive bulk-мутaций.</small></div>
-          <div class="aw-list-item"><strong>Главный принцип</strong><small>Фаундер-слой остаётся отдельным owner-grade экраном: опасные действия не маскируются под обычную операторскую рутину.</small></div>
+          <div class="aw-list-item"><strong>Что можно делать здесь</strong><small>Смотреть предупреждения, параметры Founder Sale, сессионные лимиты и при необходимости завершать все web-сессии.</small></div>
+          <div class="aw-list-item"><strong>Чего тут нет специально</strong><small>Нет runtime/config writes, нет платёжных write-действий, нет publish-path действий и нет широких destructive bulk-мутaций.</small></div>
+          <div class="aw-list-item"><strong>Главный принцип</strong><small>Фаундерский слой остаётся отдельным экраном фаундера: опасные действия не маскируются под обычную операторскую рутину.</small></div>
         </div>
       </section>
     </div>
@@ -3253,7 +3294,7 @@ function founderView(model) {
       <div class="aw-runtime-head">
         <div>
           <h2>Семантика безопасности</h2>
-          <p class="aw-surface-note">Каждый фаундерский контур ниже помечен по чувствительности, чтобы web-admin не выглядел как обычный экран с тумблерами.</p>
+          <p class="aw-surface-note">Каждый фаундерский контур ниже помечен по чувствительности, чтобы web-админка не выглядела как обычный экран с тумблерами.</p>
         </div>
         <span class="aw-badge is-warn">Подтверждение обязательно для чувствительных действий</span>
       </div>
@@ -3284,37 +3325,37 @@ function founderView(model) {
                 <strong>Завершить все web-сессии</strong>
                 <span class="aw-badge ${escapeHtml(revokeMeta.tone)}">${escapeHtml(revokeMeta.label)}</span>
               </div>
-              <p class="aw-surface-note">Закроет все текущие web-сессии, включая эту founder-сессию. После применения экран переведёт на повторный вход.</p>
+              <p class="aw-surface-note">Закроет все текущие web-сессии, включая эту фаундерскую сессию. После применения экран переведёт на повторный вход.</p>
               <div class="aw-list">
-                <div class="aw-list-item"><strong>На что влияет</strong><small>Только web-access слой. Не меняет runtime/env/payment состояние.</small></div>
-                <div class="aw-list-item"><strong>Когда использовать</strong><small>${controls.canRevokeAllSessions ? 'Когда нужен жёсткий фаундерский reset web-доступа или надо гарантированно закрыть чужие сессии.' : 'Сейчас фаундерское действие недоступно. Оставайся в read-first режиме и смотри предупреждения.'}</small></div>
-                <div class="aw-list-item"><strong>Bot-only контур</strong><small>${botOnlyLabel}</small></div>
+                <div class="aw-list-item"><strong>На что влияет</strong><small>Только слой web-доступа. Не меняет состояние runtime/env/payments.</small></div>
+                <div class="aw-list-item"><strong>Когда использовать</strong><small>${controls.canRevokeAllSessions ? 'Когда нужен жёсткий сброс web-доступа для фаундера или надо гарантированно закрыть чужие сессии.' : 'Сейчас фаундерское действие недоступно. Оставайся в режиме только для чтения и смотри предупреждения.'}</small></div>
+                <div class="aw-list-item"><strong>Контур только для Telegram</strong><small>${botOnlyLabel}</small></div>
               </div>
             </div>
             <div class="aw-founder-action-cta">
               <button class="aw-button danger" id="revokeAllBtn" ${controls.canRevokeAllSessions ? '' : 'disabled'} data-founder-control="revoke_all">Применить: завершить все web-сессии</button>
-              <small class="aw-runtime-footnote">Это owner-only действие с системным эффектом на доступ. Подтверждение спрашивается отдельно.</small>
+              <small class="aw-runtime-footnote">Это действие только для фаундера с системным эффектом на доступ. Подтверждение спрашивается отдельно.</small>
             </div>
           </div>
         </section>
 
         <section class="aw-surface aw-stack">
-          <h2>Параметры founder sale</h2>
-          <p class="aw-surface-note">Справочный owner-policy слой: помогает понять коммерческий режим, но сам по себе не является отдельным write-контролем в web-admin.</p>
+          <h2>Параметры Founder Sale</h2>
+          <p class="aw-surface-note">Справочный слой фаундерской политики: помогает понять коммерческий режим, но сам по себе не является отдельным write-контролем в web-админке.</p>
           <div class="aw-mini-grid aw-mini-grid-3">
-            <div class="aw-mini-card"><span>Brand 3m</span><strong>${Number(founderSale.brand3mPrice || 0)}</strong><small>${Number(founderSale.brand3mCredits || 0)} кредитов</small></div>
-            <div class="aw-mini-card"><span>Brand 12m</span><strong>${Number(founderSale.brand12mPrice || 0)}</strong><small>${Number(founderSale.brand12mCredits || 0)} кредитов</small></div>
-            <div class="aw-mini-card"><span>Creator 12m</span><strong>${Number(founderSale.creator12mPrice || 0)}</strong><small>фаундерская цена</small></div>
+            <div class="aw-mini-card"><span>Бренд · 3 мес</span><strong>${Number(founderSale.brand3mPrice || 0)}</strong><small>${Number(founderSale.brand3mCredits || 0)} кредитов</small></div>
+            <div class="aw-mini-card"><span>Бренд · 12 мес</span><strong>${Number(founderSale.brand12mPrice || 0)}</strong><small>${Number(founderSale.brand12mCredits || 0)} кредитов</small></div>
+            <div class="aw-mini-card"><span>Креатор · 12 мес</span><strong>${Number(founderSale.creator12mPrice || 0)}</strong><small>фаундерская цена</small></div>
           </div>
         </section>
 
         <section class="aw-surface aw-stack">
           <h2>Предупреждения фаундера</h2>
           <div class="aw-list">
-            ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных founder-предупреждений нет.', source: 'founder' }]).map((item) => `
+            ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных фаундерских предупреждений нет.', source: 'founder' }]).map((item) => `
               <div class="aw-list-item aw-warning-item">
-                <strong class="${warningTone(item.level)}">${escapeHtml(item.message || '—')}</strong>
-                <small>${escapeHtml(item.source || 'фаундер')}</small>
+                <strong class="${warningTone(item.level)}">${escapeHtml(founderTextLabel(item.message || '—'))}</strong>
+                <small>${escapeHtml(founderTextLabel(item.source || 'фаундер'))}</small>
               </div>
             `).join('')}
           </div>
@@ -3328,7 +3369,7 @@ function founderView(model) {
             ${hints.length ? hints.map((item) => `
               <div class="aw-list-item">
                 <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
-                <small>${escapeHtml(item.message || '')}</small>
+                <small>${escapeHtml(founderTextLabel(item.message || ''))}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -3338,19 +3379,19 @@ function founderView(model) {
           <h2>Сводка по системе</h2>
           <div class="aw-mini-grid aw-mini-grid-2">
             <div class="aw-mini-card"><span>Пользователи</span><strong>${Number(snapshots.usersTotal || 0)}</strong></div>
-            <div class="aw-mini-card"><span>Runtime</span><strong>${escapeHtml(runtimeStateLabel(snapshots.runtimeState || 'unknown'))}</strong></div>
+            <div class="aw-mini-card"><span>Система</span><strong>${escapeHtml(runtimeStateLabel(snapshots.runtimeState || 'unknown'))}</strong></div>
             <div class="aw-mini-card"><span>Платёжные сигналы</span><strong>${Number(snapshots.paymentWarnings || 0)}</strong></div>
-            <div class="aw-mini-card"><span>Сигналы comms</span><strong>${Number(snapshots.commsWarnings || 0)}</strong></div>
+            <div class="aw-mini-card"><span>Сигналы коммуникаций</span><strong>${Number(snapshots.commsWarnings || 0)}</strong></div>
           </div>
         </section>
 
         <section class="aw-surface aw-stack ${recentAudit.length === 0 ? 'is-compact-empty' : ''}">
-          <h2>Последние фаундер-действия</h2>
+          <h2>Последние действия фаундера</h2>
           <div class="aw-list">
             ${recentAudit.length ? recentAudit.map((item) => `
               <div class="aw-list-item">
-                <strong>${escapeHtml(item.action || 'unknown')}</strong>
-                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.targetId ? ` · ${escapeHtml(item.targetId)}` : ''}</small>
+                <strong>${escapeHtml(founderTextLabel(item.action || '—'))}</strong>
+                <small>${formatDate(item.ts)} · TG ${Number(item.actorTgId || 0) || '—'}${item.targetId ? ` · ${escapeHtml(item.targetId)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -3382,7 +3423,7 @@ function runtimeView(model) {
       <div class="aw-runtime-head">
         <div>
           <h2>Общий статус</h2>
-          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)} · ручной read-first снимок</p>
+          <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)} · ручной снимок только для чтения</p>
         </div>
         <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
       </div>
@@ -3558,7 +3599,7 @@ function runtimeView(model) {
           ${hints.length ? hints.map((item) => `
             <div class="aw-list-item">
               <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
-              <small>${escapeHtml(item.message || '')}</small>
+              <small>${escapeHtml(founderTextLabel(item.message || ''))}</small>
             </div>
           `).join('') : ''}
         </div>
@@ -4203,8 +4244,8 @@ function bindShell() {
     if (!(btn instanceof HTMLButtonElement) || btn.disabled) return;
     const confirmed = confirm([
       'Завершить все web-сессии сейчас?',
-      '• текущая founder-сессия тоже закроется',
-      '• это owner-only действие для web-access слоя',
+      '• текущая фаундерская сессия тоже закроется',
+      '• это действие только для фаундера и только для слоя web-доступа',
       '• после применения откроется экран входа'
     ].join('\n'));
     if (!confirmed) {
@@ -4213,7 +4254,7 @@ function bindShell() {
     }
     const originalLabel = btn.textContent || 'Применить: завершить все web-сессии';
     btn.disabled = true;
-    btn.textContent = 'Завершаем web-сессии…';
+    btn.textContent = 'Завершаем все web-сессии…';
     btn.classList.add('is-pressed');
     const res = await api('/api/admin-web-auth?action=revoke_all', { method: 'POST' });
     if (!res.ok) {
@@ -4225,7 +4266,7 @@ function bindShell() {
     }
     history.replaceState({}, '', '/admin/login');
     window.__loginState = {
-      info: 'Фаундерское действие применено: все web-сессии закрыты, включая текущую.',
+      info: 'Фаундерское действие применено: все web-сессии закрыты, включая текущую сессию.',
       error: 'Войди заново, чтобы открыть новую фаундерскую сессию.'
     };
     render();

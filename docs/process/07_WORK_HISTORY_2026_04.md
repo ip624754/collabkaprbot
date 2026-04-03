@@ -1,3 +1,8 @@
+## STEP535P — Founder RU copy consistency + final polish
+- cleaned `/admin/founder` user-facing/admin-facing copy in `scripts/admin-web.js` so the owner screen no longer mixes obvious RU/EN leftovers in headings, help text, founder safety semantics, session reset explanations, and summary labels;
+- added local RU mapping for founder-visible control-plane chips and audit summaries, keeping backend control ids untouched while making the founder page read like a finished Russian admin surface;
+- normalized founder hints / warnings / audit labels through a lightweight copy pass, refreshed `admin.html` asset cache-bust to `step535p`, and updated source smokes/docs without changing founder control handlers or backend write logic.
+
 ## STEP535O — Founder control safety semantics + confirmation polish
 
 Date: 2026-04-03
