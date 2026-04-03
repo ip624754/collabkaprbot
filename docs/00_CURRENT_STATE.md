@@ -1,8 +1,22 @@
-## STEP535S — Runtime QStash config truth + stale retry handling
-- Added QStash env keys to `src/lib/config.js` so runtime reads the same env truth as Vercel.
-- Runtime now distinguishes **QStash configured / partial / optional** instead of falling back to false `not configured`.
-- Old retry errors age out into a **stale retry signal** after 24h when there are no fresh `reschedule_failed` or `official_publish_stuck` counters.
-- This step is web-admin truth/presentation only; it does not mutate retry workers.
+## STEP535T — Web-admin baseline freeze + docs/handoff sync
+- freeze-sync completed for the current admin tranche: `Overview / Users / Система / Платежи / Фаундер / Помощь` now operate under one coherent read-first control-plane contract, with live-verified active-state/apply semantics in `Users`, clarified review semantics in `Платежи`, owner-only safety semantics in `Фаундер`, and truth-aligned runtime semantics in `Система`.
+- `docs/15_NEW_CHAT_HANDOFF.md` was rewritten from the old STEP493-era handoff into a current STEP535T baseline handoff focused on the real repo/runtime state, the stabilized admin surfaces, the remaining watchlist, and the exact next-step boundary for future chats.
+- `docs/process/07_WORK_HISTORY_2026_04.md` now explicitly records this admin tranche freeze so a new chat does not lose the project storyline again.
+- current live reading after STEP535S: QStash env is configured and now renders truthfully in Runtime; the old `profile_contact` retry is shown as a **stale signal (3d)** instead of a live incident. The backend query drift in `unlockWorkspaceContactsWithCredits()` was source-fixed in STEP535R, but a fresh successful retry path is still needed to naturally overwrite/retire the old Redis retry marker.
+- freeze watchlist:
+  - one stale source-preflight tail still exists outside this tranche: `smoke-admin-web-users-priority-rail-contract`;
+  - Runtime remains read-first and intentionally does not mutate retry/delivery state from the web layer;
+  - if `Последний retry сигнал старый` persists after a new successful monetization retry/contact-unlock flow, inspect or clear the corresponding Redis diagnostic key instead of treating it as a fresh outage.
+
+## STEP535S — Runtime QStash config truth + stale retry signal handling
+- `src/lib/config.js` now exposes the real QStash env surface to admin runtime (`QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`), so `/admin/runtime` no longer falsely reports “QStash not configured” when Vercel env is already present.
+- `src/lib/adminWeb/runtime.js` now downgrades an old retry error into a stale/info signal once it ages past 24 hours and no fresh `reschedule_failed` / `official_publish_stuck` signals accompany it, preventing a dead Redis marker from masquerading as a live degraded incident forever.
+- live verification after deploy confirmed the intended behavior: Runtime now reads QStash as configured/OK, and the old `profile_contact` retry is shown as `Последний retry сигнал старый: 3д` instead of a current outage.
+
+## STEP535R — Backend contact-unlock query drift fix
+- fixed the backend query drift in `src/db/queries.js` inside `unlockWorkspaceContactsWithCredits()`: contact fields are no longer read directly from `workspaces`, and are instead resolved through `workspace_settings` via `left join`, which matches the real contacts model used elsewhere in the repo.
+- added a targeted source smoke for this contract so the `profile_contact` legacy-column drift does not silently re-enter later.
+- important boundary: this step fixed the source-level query path, but the Runtime stale signal seen after deploy was an old retry marker recorded before the fix, not evidence that QStash env was absent.
 
 ## STEP535Q — Runtime retry truth + QStash optionality alignment
 - `/admin/runtime` in `scripts/admin-web.js` now separates the two signals the operator was conflating on the screen: optional QStash env gaps vs the real retry/schema error. The render layer now gives `QSTASH_TOKEN / QSTASH_CURRENT_SIGNING_KEY` an explicit optional-delivery meaning and a concrete next step, instead of letting it read like the same class of problem as the retry failure.

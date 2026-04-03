@@ -1,8 +1,3 @@
-## STEP535S — Runtime QStash config truth + stale retry handling
-- Patched `src/lib/config.js` to expose `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`.
-- Patched `src/lib/adminWeb/runtime.js` so stale retry errors stop looking like live incidents after 24h without fresh retry-side counters.
-- Added smoke `scripts/smoke-admin-web-runtime-stale-retry-contract.js`.
-
 ## STEP535Q — Runtime retry truth + QStash optionality alignment
 - separated optional QStash env gaps from the actual retry/schema failure on `/admin/runtime`, so `QSTASH_TOKEN / QSTASH_CURRENT_SIGNING_KEY` no longer visually masquerade as the same class of issue as `column_profile_contact_does_not_exist`;
 - added lightweight runtime truth helpers in `scripts/admin-web.js` (`runtimeCardLabel`, `runtimeTextLabel`, `runtimeItemMeaning`, `runtimeItemNextStep`, `runtimeConfigSemanticLabel`) and used them across hierarchy cards, incident strip, queue lanes, retry feed, config matrix, and recent runtime events;
@@ -828,3 +823,20 @@ Acceptance / notes:
 - optional publish/retry setup gaps no longer masquerade as full runtime misconfiguration;
 - sparse Runtime / Payments / Founder screens keep a tighter visual balance on desktop widths;
 - requires live browser verification after deploy for final shell feel on the real operator viewport.
+
+
+## STEP535T — Web-admin baseline freeze + docs/handoff sync
+
+Date: 2026-04-03
+
+Scope:
+- synced the docs canon to the real admin/control-plane baseline after the STEP535D–STEP535S tranche;
+- rewrote `docs/15_NEW_CHAT_HANDOFF.md` from the old STEP493-era handoff into a current STEP535T baseline handoff centered on the stabilized web-admin surfaces and honest watchlist;
+- prepended `docs/00_CURRENT_STATE.md` with the missing current-state sections for STEP535R / STEP535S / STEP535T, so Runtime/QStash truth, backend contact-unlock fix, and the final baseline freeze now live in the same source-of-truth file;
+- refreshed `docs/00_BOOT.md` with an explicit note that current web-admin baseline freeze = STEP535T and future chats should read current state + handoff before proposing new work.
+
+Acceptance / notes:
+- docs-only step; no code/runtime logic changes;
+- preserves the honest boundary that STEP535R fixed the backend query drift source-level while STEP535S fixed the web-admin truth-layer around QStash + stale retry signals;
+- baseline is now handoff-safe again for a new chat.
+
