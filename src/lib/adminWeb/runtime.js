@@ -450,6 +450,16 @@ function formatRuntimeAgeLabel(seconds) {
   return `${Math.round(sec / 86400)}д`;
 }
 
+function isoAgeSec(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Math.floor((Date.now() - ms) / 1000));
+}
+
+const STALE_RETRY_SIGNAL_SEC = 24 * 60 * 60;
+
 function buildQueueClarity({
   ops = {},
   audit = {},
@@ -474,11 +484,17 @@ function buildQueueClarity({
 
   const retryStatus = String(mon?.retry?.last_status || '').trim().toLowerCase();
   const retryError = String(mon?.retry?.last_error || '').trim();
-  const retryWarning = ['error', 'failed', 'fail', 'panic'].some((token) => retryStatus.includes(token)) || !!retryError;
+  const retryAgeSec = isoAgeSec(mon?.retry?.last_at);
+  const retrySignalPresent = ['error', 'failed', 'fail', 'panic'].some((token) => retryStatus.includes(token)) || !!retryError;
 
   const rescheduleFailedCount = Number(qstash?.reschedule_failed?.today_count || 0) || 0;
   const officialPublishStuckCount = Number(qstash?.official_publish_stuck?.today_count || 0) || 0;
   const qstashWarning = rescheduleFailedCount > 0 || officialPublishStuckCount > 0;
+  const retrySignalStale = !!retrySignalPresent
+    && Number.isFinite(retryAgeSec)
+    && retryAgeSec >= STALE_RETRY_SIGNAL_SEC
+    && !qstashWarning;
+  const retryWarning = retrySignalPresent && !retrySignalStale;
 
   const lanes = [
     decorateRuntimeItem({
@@ -579,32 +595,41 @@ function buildQueueClarity({
         enabled: true,
         configured: redisConfigured,
         warning: retryWarning || qstashWarning,
-        unknown: !mon?.retry?.last_at && !rescheduleFailedCount && !officialPublishStuckCount,
+        unknown: (!mon?.retry?.last_at && !rescheduleFailedCount && !officialPublishStuckCount) || retrySignalStale,
       }),
       summary: retryWarning
         ? `last retry ${retryStatus || 'error'}`
-        : (mon?.retry?.last_at ? `last retry ${mon.retry.last_status || 'ok'}` : 'retry activity пока не видно'),
+        : (retrySignalStale
+          ? `stale retry ${formatRuntimeAgeLabel(retryAgeSec)}`
+          : (mon?.retry?.last_at ? `last retry ${mon.retry.last_status || 'ok'}` : 'retry activity пока не видно')),
       detail: mon?.retry?.last_at
         ? `${mon.retry.last_at}${mon?.retry?.last_action ? ` · ${mon.retry.last_action}` : ''}`
         : `reschedule_failed ${rescheduleFailedCount} · stuck ${officialPublishStuckCount}`,
-      hint: retryError ? retryError : (officialPublishStuckCount > 0 ? 'есть stuck publish сигналы' : 'retry сигналов нет'),
+      hint: retrySignalStale
+        ? `last retry signal старше ${formatRuntimeAgeLabel(retryAgeSec)}`
+        : (retryError ? retryError : (officialPublishStuckCount > 0 ? 'есть stuck publish сигналы' : 'retry сигналов нет')),
       backlog: rescheduleFailedCount + officialPublishStuckCount,
     }, {
       source: 'qstash',
       meaning: retryWarning
         ? 'Последний retry выглядит проблемным: это уже не просто шум, а повод разобрать error/status сигнал.'
-        : (qstashWarning
-          ? 'Есть stuck/reschedule_failed сигналы: delivery контур не полностью чист.'
-          : (mon?.retry?.last_at
-            ? 'Retry monitor жив и последний сигнал не выглядит аварийным.'
-            : 'Справочно: явной retry-активности пока просто не видно.')),
+        : (retrySignalStale
+          ? 'Сигнал retry старый и не выглядит как текущий живой инцидент сам по себе: сначала отличай stale Redis-след от нового сбоя.'
+          : (qstashWarning
+            ? 'Есть stuck/reschedule_failed сигналы: delivery контур не полностью чист.'
+            : (mon?.retry?.last_at
+              ? 'Retry monitor жив и последний сигнал не выглядит аварийным.'
+              : 'Справочно: явной retry-активности пока просто не видно.'))),
       nextStep: retryWarning
         ? 'Сверь last retry action/status/error и соседние QStash сигналы.'
-        : (qstashWarning
-          ? 'Разбери stuck/reschedule_failed причины и посмотри, не повторяются ли они сегодня.'
-          : (mon?.retry?.last_at
-            ? 'Действие не нужно.'
-            : 'Ничего срочно не чинить: это информационная пустота, а не падение ретраев.')),
+        : (retrySignalStale
+          ? 'Если фикс уже задеплоен, повтори свежий retry/smoke сценарий или дождись нового сигнала, чтобы stale last_error перестал маскироваться под текущий инцидент.'
+          : (qstashWarning
+            ? 'Разбери stuck/reschedule_failed причины и посмотри, не повторяются ли они сегодня.'
+            : (mon?.retry?.last_at
+              ? 'Действие не нужно.'
+              : 'Ничего срочно не чинить: это информационная пустота, а не падение ретраев.'))),
+      actionability: retrySignalStale ? 'info' : '',
     }),
   ];
 
@@ -612,16 +637,25 @@ function buildQueueClarity({
     decorateRuntimeItem({
       id: 'retry_last',
       label: 'Последний retry',
-      state: retryWarning ? 'degraded' : (mon?.retry?.last_at ? 'ok' : 'unknown'),
-      summary: mon?.retry?.last_status ? String(mon.retry.last_status) : 'нет данных',
+      state: retryWarning ? 'degraded' : (retrySignalStale ? 'unknown' : (mon?.retry?.last_at ? 'ok' : 'unknown')),
+      summary: retrySignalStale
+        ? `stale signal · ${formatRuntimeAgeLabel(retryAgeSec)}`
+        : (mon?.retry?.last_status ? String(mon.retry.last_status) : 'нет данных'),
       detail: mon?.retry?.last_at ? `${mon.retry.last_at}${mon?.retry?.last_action ? ` · ${mon.retry.last_action}` : ''}` : 'runtime retry signal пока пуст',
-      note: retryError || '',
+      note: retrySignalStale ? `last error старше ${formatRuntimeAgeLabel(retryAgeSec)}` : (retryError || ''),
     }, {
       source: 'qstash',
       meaning: retryWarning
         ? 'Последний retry вернул problem-signal и требует ручной проверки.'
-        : (mon?.retry?.last_at ? 'Последний retry виден и сейчас не выглядит аварийным.' : 'Сигнал пустой: это справочная пустота, а не ошибка сама по себе.'),
-      nextStep: retryWarning ? 'Проверь последний retry error/status и соседние delivery сигналы.' : (mon?.retry?.last_at ? 'Действие не нужно.' : 'Ничего не чинить срочно: просто держать это в уме.'),
+        : (retrySignalStale
+          ? 'Последний retry signal старый: сначала добейся нового свежего прогона, а уже потом считай это текущим инцидентом.'
+          : (mon?.retry?.last_at ? 'Последний retry виден и сейчас не выглядит аварийным.' : 'Сигнал пустой: это справочная пустота, а не ошибка сама по себе.')),
+      nextStep: retryWarning
+        ? 'Проверь последний retry error/status и соседние delivery сигналы.'
+        : (retrySignalStale
+          ? 'Повтори свежий retry/smoke сценарий или дождись нового retry-сигнала, чтобы stale запись была перезаписана.'
+          : (mon?.retry?.last_at ? 'Действие не нужно.' : 'Ничего не чинить срочно: просто держать это в уме.')),
+      actionability: retrySignalStale ? 'info' : '',
     }),
     decorateRuntimeItem({
       id: 'reschedule_failed',
@@ -693,7 +727,12 @@ export async function getRuntimeSummary() {
   const adminSecretConfigured = !!String(CFG.ADMIN_WEB_SECRET || '').trim();
   const adminSessionConfigured = !!String(CFG.ADMIN_WEB_SESSION_SECRET || '').trim();
   const adminApproversConfigured = Array.isArray(CFG.ADMIN_WEB_APPROVER_TG_IDS) && CFG.ADMIN_WEB_APPROVER_TG_IDS.length > 0;
-  const qstashConfigured = !!String(CFG.QSTASH_TOKEN || CFG.QSTASH_CURRENT_SIGNING_KEY || '').trim();
+  const qstashUrlConfigured = !!String(CFG.QSTASH_URL || '').trim();
+  const qstashTokenConfigured = !!String(CFG.QSTASH_TOKEN || '').trim();
+  const qstashCurrentSigningConfigured = !!String(CFG.QSTASH_CURRENT_SIGNING_KEY || '').trim();
+  const qstashNextSigningConfigured = !!String(CFG.QSTASH_NEXT_SIGNING_KEY || '').trim();
+  const qstashConfigured = qstashTokenConfigured && qstashCurrentSigningConfigured;
+  const qstashPartiallyConfigured = qstashUrlConfigured || qstashTokenConfigured || qstashCurrentSigningConfigured || qstashNextSigningConfigured;
   const paymentsHmacConfigured = !!String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim();
   const paymentsFallbackEnabled = !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
 
@@ -718,7 +757,7 @@ export async function getRuntimeSummary() {
 
   const dbState = dbOk ? 'ok' : 'degraded';
   const redisState = !redisConfigured ? 'missing' : (redisOk ? 'ok' : 'degraded');
-  const qstashState = qstashConfigured ? 'ok' : 'unknown';
+  const qstashState = qstashConfigured ? 'ok' : (qstashPartiallyConfigured ? 'degraded' : 'unknown');
   const paymentsState = paymentsFallbackEnabled && !paymentsHmacConfigured
     ? 'degraded'
     : (paymentsHmacConfigured || !paymentsFallbackEnabled ? 'ok' : 'unknown');
@@ -737,12 +776,28 @@ export async function getRuntimeSummary() {
   out.adminWebConfigured = adminSecretConfigured && adminSessionConfigured;
   out.db = { ok: dbOk };
   out.redis = { configured: redisConfigured, ok: redisOk };
-  out.qstash = { configured: qstashConfigured };
+  out.qstash = {
+    configured: qstashConfigured,
+    urlConfigured: qstashUrlConfigured,
+    tokenConfigured: qstashTokenConfigured,
+    currentSigningConfigured: qstashCurrentSigningConfigured,
+    nextSigningConfigured: qstashNextSigningConfigured,
+  };
 
   out.services = {
     db: makeService(dbState, dbOk ? 'DB configured' : 'DB ping failed', dbOk ? 'Соединение выглядит рабочим.' : 'Проверь DATABASE_URL / доступность DB.'),
     redis: makeService(redisState, !redisConfigured ? 'Redis not configured' : (redisOk ? 'Redis configured' : 'Redis probe failed'), !redisConfigured ? 'Redis не обязателен для каждой поверхности, но нужен для части operator/runtime сценариев.' : (redisOk ? 'Redis выглядит рабочим.' : 'Проверь Upstash env / сеть.')),
-    qstash: makeService(qstashState, qstashConfigured ? 'QStash configured' : 'QStash not configured', qstashConfigured ? 'Фоновая доставка может работать.' : 'Для admin v1 это не блокер: publish/retry поверхности будут ограничены, но core web-admin остаётся рабочим.'),
+    qstash: makeService(
+      qstashState,
+      qstashConfigured
+        ? 'QStash configured'
+        : (qstashPartiallyConfigured ? 'QStash auth incomplete' : 'QStash not configured'),
+      qstashConfigured
+        ? 'Фоновая доставка может работать.'
+        : (qstashPartiallyConfigured
+          ? 'Часть QStash env уже задана, но publish/verify контур ещё не считается собранным полностью.'
+          : 'Для admin v1 это не блокер: publish/retry поверхности будут ограничены, но core web-admin остаётся рабочим.'),
+    ),
     payments: makeService(paymentsState, paymentsFallbackEnabled ? (paymentsHmacConfigured ? 'Payments fallback guarded' : 'Payments fallback lacks HMAC guard') : 'Payments fallback disabled', paymentsFallbackEnabled ? (paymentsHmacConfigured ? 'Fallback path защищён HMAC ключом.' : 'Проверь PAYMENTS_PAYLOAD_HMAC_KEY.') : 'Fallback path сейчас не активен.'),
     config: makeService(configState, configState === 'ok' ? 'Core config present' : 'Core config incomplete', configState === 'ok' ? 'Базовый env layer выглядит собранным.' : 'Проверь BOT / PUBLIC_BASE_URL env baseline.'),
     adminWeb: makeService(adminWebState, !adminWebEnabled ? 'Admin web disabled' : (adminWebState === 'ok' ? 'Admin web auth configured' : 'Admin web auth incomplete'), !adminWebEnabled ? 'Web admin выключен env-флагом.' : (adminWebState === 'ok' ? 'Secret / session / approvers настроены.' : 'Проверь ADMIN_WEB_* env и PUBLIC_BASE_URL.')),
@@ -758,7 +813,10 @@ export async function getRuntimeSummary() {
     { key: 'ADMIN_WEB_SECRET', state: keyState(adminSecretConfigured, { enabled: adminWebEnabled }) },
     { key: 'ADMIN_WEB_SESSION_SECRET', state: keyState(adminSessionConfigured, { enabled: adminWebEnabled }) },
     { key: 'ADMIN_WEB_APPROVER_TG_IDS', state: keyState(adminApproversConfigured, { enabled: adminWebEnabled }) },
-    { key: 'QSTASH_TOKEN / QSTASH_CURRENT_SIGNING_KEY', state: keyState(qstashConfigured, { optional: true }) },
+    { key: 'QSTASH_URL', state: keyState(qstashUrlConfigured, { optional: true }) },
+    { key: 'QSTASH_TOKEN', state: keyState(qstashTokenConfigured, { optional: true }) },
+    { key: 'QSTASH_CURRENT_SIGNING_KEY', state: keyState(qstashCurrentSigningConfigured, { optional: true }) },
+    { key: 'QSTASH_NEXT_SIGNING_KEY', state: keyState(qstashNextSigningConfigured, { optional: true }) },
     { key: 'PAYMENTS_PAYLOAD_HMAC_KEY', state: keyState(paymentsHmacConfigured, { optional: !paymentsFallbackEnabled }) },
   ]);
 
@@ -782,8 +840,8 @@ export async function getRuntimeSummary() {
     pushHint(out.hints, 'warning', 'Для web-admin нужны ADMIN_WEB_SECRET, ADMIN_WEB_SESSION_SECRET и approver TG IDs.');
   }
   if (!qstashConfigured) {
-    pushWarning(out.warnings, 'info', 'QStash не настроен', 'qstash');
-    pushHint(out.hints, 'info', 'Для admin v1 это не блокер, но publish/retry/runtime surfaces будут ограничены.');
+    pushWarning(out.warnings, qstashPartiallyConfigured ? 'warning' : 'info', qstashPartiallyConfigured ? 'QStash auth настроен не полностью' : 'QStash не настроен', 'qstash');
+    pushHint(out.hints, qstashPartiallyConfigured ? 'warning' : 'info', qstashPartiallyConfigured ? 'Проверь связку QSTASH_TOKEN + QSTASH_CURRENT_SIGNING_KEY: без неё publish/verify контур считается неполным.' : 'Для admin v1 это не блокер, но publish/retry/runtime surfaces будут ограничены.');
   }
   if (paymentsFallbackEnabled && !paymentsHmacConfigured) {
     pushWarning(out.warnings, 'warning', 'Payments fallback без HMAC key', 'payments');
@@ -989,8 +1047,18 @@ export async function getRuntimeSummary() {
   if ((Number(out.broadcastRuntime?.retry_after_sec || 0) || 0) > 0) {
     pushWarning(out.warnings, 'info', `Broadcast retry cooldown: ${formatRuntimeAgeLabel(out.broadcastRuntime.retry_after_sec)}`, 'qstash');
   }
-  if (String(out.mon?.retry?.last_error || '').trim()) {
-    pushWarning(out.warnings, 'warning', `Последний retry вернул ошибку: ${String(out.mon.retry.last_error).slice(0, 140)}`, 'runtime');
+  const retryAgeSec = isoAgeSec(out.mon?.retry?.last_at);
+  const retryErrorText = String(out.mon?.retry?.last_error || '').trim();
+  const retrySignalStale = !!retryErrorText
+    && Number.isFinite(retryAgeSec)
+    && retryAgeSec >= STALE_RETRY_SIGNAL_SEC
+    && (Number(out.qstashRuntime?.reschedule_failed?.today_count || 0) || 0) === 0
+    && (Number(out.qstashRuntime?.official_publish_stuck?.today_count || 0) || 0) === 0;
+  if (retryErrorText && !retrySignalStale) {
+    pushWarning(out.warnings, 'warning', `Последний retry вернул ошибку: ${retryErrorText.slice(0, 140)}`, 'runtime');
+  } else if (retrySignalStale) {
+    pushWarning(out.warnings, 'info', `Последний retry сигнал старый: ${formatRuntimeAgeLabel(retryAgeSec)}`, 'runtime');
+    pushHint(out.hints, 'info', 'Старый retry error не равен текущему живому инциденту: повтори свежий retry/smoke сценарий, чтобы сигнал был перезаписан или исчез.');
   }
   if ((Number(out.qstashRuntime?.reschedule_failed?.today_count || 0) || 0) > 0) {
     pushWarning(out.warnings, 'warning', `QStash reschedule_failed сегодня: ${Number(out.qstashRuntime.reschedule_failed.today_count || 0)}`, 'qstash');

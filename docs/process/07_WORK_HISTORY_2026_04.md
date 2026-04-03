@@ -1,6 +1,7 @@
-## STEP535R — Contact unlock backend query fix + QStash env truth
-
-**STEP535R:** fixed the real backend drift behind runtime retry errors like `column_profile_contact_does_not_exist` on the monetization/contact-unlock path. `src/db/queries.js` now reads `channel_username` from `workspaces` but joins `workspace_settings` for `profile_contact`, `profile_ig`, `profile_portfolio_urls`, and `profile_contacts` inside `unlockWorkspaceContactsWithCredits()`, matching the actual contacts model and avoiding false reads from the wrong table. Added `scripts/smoke-contact-unlock-workspace-settings-contract.js`, wired into `package.json` and `scripts/preflight.js`, so future regressions cannot silently reintroduce the same schema/query drift. QStash truth is now explicit: if `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, and `QSTASH_NEXT_SIGNING_KEY` are already present in Vercel, they are not the root cause of this specific runtime error — the query mismatch was.
+## STEP535S — Runtime QStash config truth + stale retry handling
+- Patched `src/lib/config.js` to expose `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`.
+- Patched `src/lib/adminWeb/runtime.js` so stale retry errors stop looking like live incidents after 24h without fresh retry-side counters.
+- Added smoke `scripts/smoke-admin-web-runtime-stale-retry-contract.js`.
 
 ## STEP535Q — Runtime retry truth + QStash optionality alignment
 - separated optional QStash env gaps from the actual retry/schema failure on `/admin/runtime`, so `QSTASH_TOKEN / QSTASH_CURRENT_SIGNING_KEY` no longer visually masquerade as the same class of issue as `column_profile_contact_does_not_exist`;

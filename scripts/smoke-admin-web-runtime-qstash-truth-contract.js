@@ -20,12 +20,12 @@ for (const token of [
 }
 
 const html = read('admin.html');
-assert.ok(html.includes('step535q'), 'admin shell asset URLs must be cache-busted to step535q');
+assert.ok(html.includes('step535s'), 'admin shell asset URLs must be cache-busted to step535s');
 
 const currentState = read('docs/00_CURRENT_STATE.md');
-assert.ok(currentState.includes('STEP535Q'), 'current state must mention STEP535Q');
+assert.ok(currentState.includes('STEP535S'), 'current state must mention STEP535S');
 
 const history = read('docs/process/07_WORK_HISTORY_2026_04.md');
-assert.ok(history.includes('STEP535Q'), 'work history must mention STEP535Q');
+assert.ok(history.includes('STEP535S'), 'work history must mention STEP535S');
 
 console.log('✅ smoke admin-web runtime QStash truth contract OK');

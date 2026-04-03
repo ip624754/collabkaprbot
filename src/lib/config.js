@@ -296,6 +296,12 @@ export const CFG = {
     return Math.max(300, Math.min(n, 8 * 60 * 60));
   })(),
 
+  // QStash delivery / signature verification (optional for read-admin, required for retry/publish paths)
+  QSTASH_URL: process.env.QSTASH_URL || '',
+  QSTASH_TOKEN: process.env.QSTASH_TOKEN || '',
+  QSTASH_CURRENT_SIGNING_KEY: process.env.QSTASH_CURRENT_SIGNING_KEY || '',
+  QSTASH_NEXT_SIGNING_KEY: process.env.QSTASH_NEXT_SIGNING_KEY || '',
+
   // QStash (optional): broadcast fan-out in serverless-safe way
   QSTASH_BROADCAST_PARALLELISM: (() => {
     const n = parseIntSafe(process.env.QSTASH_BROADCAST_PARALLELISM, 8);

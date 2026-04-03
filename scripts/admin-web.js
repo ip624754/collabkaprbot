@@ -454,7 +454,10 @@ function runtimeTextLabel(value) {
     .replace(/lanes without mandatory signal/gi, 'контуры без обязательного сигнала')
     .replace(/DB configured/gi, 'База настроена')
     .replace(/Redis configured/gi, 'Redis настроен')
+    .replace(/QStash auth incomplete/gi, 'QStash auth настроен не полностью')
     .replace(/QStash not configured/gi, 'QStash не настроен')
+    .replace(/stale retry/gi, 'старый retry-сигнал')
+    .replace(/stale signal/gi, 'старый сигнал')
     .replace(/Core config present/gi, 'Базовый конфиг найден')
     .replace(/Payments fallback disabled/gi, 'Fallback платежей выключен')
     .replace(/Admin web auth configured/gi, 'Web-авторизация настроена')
@@ -481,7 +484,11 @@ function runtimeItemHasProfileContactDrift(item = {}) {
 
 function runtimeItemIsQstashOptional(item = {}) {
   const hay = [item.key, item.label, item.title, item.summary, item.message, item.detail, item.note, item.meaning].join(' ').toLowerCase();
-  return hay.includes('qstash_token') || hay.includes('qstash_current_signing_key') || (hay.includes('qstash') && hay.includes('not configured'));
+  return hay.includes('qstash_url')
+    || hay.includes('qstash_token')
+    || hay.includes('qstash_current_signing_key')
+    || hay.includes('qstash_next_signing_key')
+    || (hay.includes('qstash') && (hay.includes('not configured') || hay.includes('auth incomplete')));
 }
 
 function runtimeItemMeaning(item = {}) {
