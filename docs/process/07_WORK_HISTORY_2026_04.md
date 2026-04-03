@@ -1,3 +1,17 @@
+## STEP534 — Runtime status hierarchy / incident strip
+
+Date: 2026-04-03
+
+Scope:
+- restructured `/admin/runtime` into a clearer status hierarchy instead of a flat diagnostics list, while keeping the same single read endpoint and no-write runtime contract;
+- `src/lib/adminWeb/runtime.js` now derives `statusHierarchy`, `incidentStrip`, `controlSnapshot`, `configSummary`, and topline `summaryCards` on top of the existing normalized runtime summary;
+- `scripts/admin-web.js` now renders Runtime as four layers: overall system status, incident strip, control-plane snapshot, and lower config/follow-up/recent-signals blocks;
+- added `scripts/smoke-admin-web-runtime-hierarchy-contract.js` and a matching npm alias so the new hierarchy/incident-strip contract is source-checked.
+
+Acceptance / notes:
+- scope stays read-only and hobby-safe: no new writes, no route expansion, no polling, no queue mutations, no secret leakage;
+- goal is operator clarity and incident triage speed, not a broad Runtime redesign or a live logs console.
+
 
 ## STEP533A — Users final interaction hotfix
 
@@ -545,3 +559,20 @@ Acceptance / notes:
 - scope stays read-only / copy-only;
 - no new write paths, no destructive bulk actions, no public-flow changes;
 - row click still works, but the most common operator moves are now explicit and faster to discover.
+
+
+## STEP535 — Runtime queues / retry clarity
+
+Date: 2026-04-03
+
+Scope:
+- extended `src/lib/adminWeb/runtime.js` with a bounded queue/retry snapshot built from existing Redis-backed runtime signals only;
+- added queue lanes for ops digest, audit buffer, broadcast delivery, and retry monitor, plus explicit retry-signal cards for `mon.retry`, `reschedule_failed`, and `official_publish_stuck`;
+- updated `scripts/admin-web.js` so `/admin/runtime` now shows `Очереди и retry` between the incident strip and lower runtime surfaces;
+- added dedicated queue/retry styling in `styles/admin-web.css`;
+- added `scripts/smoke-admin-web-runtime-queues-contract.js` and wired it into `package.json`.
+
+Acceptance / notes:
+- scope stays read-only: no retry buttons, no queue mutations, no polling, no secret leakage;
+- Runtime now explains backlog / cooldown / retry pressure without forcing operators into raw `/api/health` JSON.
+

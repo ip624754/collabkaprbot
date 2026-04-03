@@ -226,7 +226,21 @@ function runtimeStateLabel(value) {
 
 function configPresenceLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ configured: 'configured', missing: 'missing', optional: 'optional', not_enabled: 'not enabled' })[key] || (key || '—');
+  return ({ configured: 'настроено', missing: 'отсутствует', optional: 'optional', not_enabled: 'не включено' })[key] || (key || '—');
+}
+
+function sourceLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ({
+    db: 'DB',
+    redis: 'Redis',
+    qstash: 'QStash',
+    payments: 'Платежи',
+    admin_web: 'Web-admin',
+    config: 'Конфигурация',
+    runtime: 'Runtime',
+    controls: 'Control plane',
+  })[key] || (value || 'Runtime');
 }
 
 function controlToneClass(item = {}) {
@@ -2454,66 +2468,157 @@ function founderView(model) {
 }
 
 function runtimeView(model) {
-  const services = model.services || {};
-  const warnings = Array.isArray(model.warnings) ? model.warnings : [];
+  const statusHierarchy = Array.isArray(model.statusHierarchy) ? model.statusHierarchy : [];
+  const incident = model.incidentStrip || { state: 'info', title: 'Данные пока недоступны', message: 'Обнови страницу вручную.', sourceLabel: 'Runtime', action: 'Проверь соседние runtime сигналы.' };
+  const incidentFeed = Array.isArray(incident.feed) ? incident.feed : [];
+  const controls = Array.isArray(model.controlSnapshot?.items) ? model.controlSnapshot.items : [];
   const configPresence = Array.isArray(model.configPresence) ? model.configPresence : [];
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const recentEvents = Array.isArray(model.recentRuntimeEvents) ? model.recentRuntimeEvents : [];
   const overall = model.overall || { state: 'unknown', label: 'Статус неизвестен' };
-  return shell('Runtime', 'Короткий диагностический срез инфраструктуры, конфигурации и сервисных зависимостей.', `
+  const summaryCards = model.summaryCards || {};
+  const configSummary = model.configSummary || {};
+  const lastAudit = model.controlSnapshot?.lastAudit || null;
+  const queueClarity = model.queueClarity || {};
+  const queueSummary = queueClarity.summaryCards || {};
+  const queueLanes = Array.isArray(queueClarity.lanes) ? queueClarity.lanes : [];
+  const retrySignals = Array.isArray(queueClarity.retrySignals) ? queueClarity.retrySignals : [];
+  return shell('Runtime', 'Общий статус системы, incident strip и опорный runtime-срез без write-path действий.', `
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
           <h2>Общий статус</h2>
-          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)}</p>
+          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)} · ручной read-first снимок</p>
         </div>
         <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
       </div>
-      <div class="aw-grid-cards aw-runtime-cards">
-        ${[
-          ['DB', services.db],
-          ['Redis', services.redis],
-          ['QStash', services.qstash],
-          ['Payments', services.payments],
-          ['Config', services.config],
-          ['Admin Web', services.adminWeb],
-        ].map(([label, item]) => `
-          <div class="aw-card aw-runtime-card">
-            <span>${escapeHtml(label)}</span>
-            <strong class="aw-status ${runtimeStateClass(item?.state)}">${escapeHtml(runtimeStateLabel(item?.state))}</strong>
-            <small>${escapeHtml(item?.label || 'Данные пока недоступны.')}</small>
-            <div class="aw-card-subtle">${escapeHtml(item?.hint || '')}</div>
+      <div class="aw-runtime-summary-grid">
+        <div class="aw-mini-card"><span>Healthy</span><strong>${Number(summaryCards.healthyServices || 0)}</strong><small>контуры в статусе ОК</small></div>
+        <div class="aw-mini-card"><span>Needs action</span><strong class="aw-status ${Number(summaryCards.needsAction || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.needsAction || 0)}</strong><small>degraded / missing</small></div>
+        <div class="aw-mini-card"><span>Warnings</span><strong class="aw-status ${Number(summaryCards.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summaryCards.warnings || 0)}</strong><small>активные runtime сигналы</small></div>
+        <div class="aw-mini-card"><span>Paused controls</span><strong class="aw-status ${Number(summaryCards.pausedControls || 0) > 0 ? 'warn' : 'good'}">${Number(summaryCards.pausedControls || 0)}</strong><small>operator toggles OFF</small></div>
+      </div>
+      <div class="aw-runtime-topline-grid">
+        ${statusHierarchy.length ? statusHierarchy.map((item) => `
+          <div class="aw-card aw-runtime-topline-card">
+            <div class="aw-runtime-topline-label">${escapeHtml(item.label || 'Контур')}</div>
+            <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(runtimeStateLabel(item.state))}</strong>
+            <small>${escapeHtml(item.summary || 'Данные пока недоступны.')}</small>
+            <div class="aw-card-subtle">${escapeHtml(item.hint || '')}</div>
+          </div>
+        `).join('') : '<div class="aw-empty">Статусные контуры пока не собраны.</div>'}
+      </div>
+    </section>
+
+    <section class="aw-surface aw-section aw-stack">
+      <div class="aw-runtime-incident ${warningTone(incident.state)}">
+        <div class="aw-runtime-incident-main">
+          <span class="aw-runtime-incident-kicker">Предупреждения · incident strip</span>
+          <h2>${escapeHtml(incident.title || 'Нужна проверка')}</h2>
+          <p>${escapeHtml(incident.message || '—')}</p>
+        </div>
+        <div class="aw-runtime-incident-meta">
+          <div class="aw-runtime-incident-item">
+            <span>Источник</span>
+            <strong>${escapeHtml(incident.sourceLabel || 'Runtime')}</strong>
+            <small>${formatDate(incident.updatedAt || model.updatedAt)}</small>
+          </div>
+          <div class="aw-runtime-incident-item">
+            <span>Следующий шаг</span>
+            <strong>${escapeHtml(incident.action || 'Обнови страницу вручную.')}</strong>
+          </div>
+        </div>
+      </div>
+      <div class="aw-runtime-incident-feed">
+        ${(incidentFeed.length ? incidentFeed : [{ level: 'info', title: 'Явных инцидентов нет', sourceLabel: 'Runtime', message: 'Контрольная полоса и соседние сигналы выглядят стабильно.' }]).map((item) => `
+          <div class="aw-card aw-runtime-feed-card">
+            <span>${escapeHtml(item.sourceLabel || item.source || 'Runtime')}</span>
+            <strong class="${warningTone(item.level)}">${escapeHtml(item.title || '—')}</strong>
+            <small>${escapeHtml(item.message || '')}</small>
           </div>
         `).join('')}
       </div>
     </section>
 
     <section class="aw-surface aw-section aw-stack">
-      <h2>Предупреждения</h2>
-      <div class="aw-list">
-        ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных предупреждений нет', source: 'runtime' }]).map((item) => `
-          <div class="aw-list-item aw-warning-item">
-            <strong class="${warningTone(item.level)}">${escapeHtml(item.message || '—')}</strong>
-            <small>${escapeHtml(item.source || 'runtime')}</small>
-          </div>
-        `).join('')}
+      <div class="aw-runtime-head">
+        <div>
+          <h2>Очереди и retry</h2>
+          <p class="aw-muted">Backlog, retry cooldown и stuck-сигналы без write-path действий.</p>
+        </div>
+        <div class="aw-runtime-overall ${Number(queueSummary.retryProblems || 0) > 0 || Number(queueSummary.activeBacklog || 0) > 0 ? 'warn' : 'good'}">backlog ${Number(queueSummary.activeBacklog || 0)} · retry ${Number(queueSummary.retryProblems || 0)}</div>
       </div>
+      <div class="aw-runtime-summary-grid">
+        <div class="aw-mini-card"><span>Active backlog</span><strong class="aw-status ${Number(queueSummary.activeBacklog || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.activeBacklog || 0)}</strong><small>pending + inflight + stuck counts</small></div>
+        <div class="aw-mini-card"><span>Retry problems</span><strong class="aw-status ${Number(queueSummary.retryProblems || 0) > 0 ? 'bad' : 'good'}">${Number(queueSummary.retryProblems || 0)}</strong><small>последний retry / QStash stuck</small></div>
+        <div class="aw-mini-card"><span>Cooling windows</span><strong class="aw-status ${Number(queueSummary.coolingWindows || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.coolingWindows || 0)}</strong><small>retry cooldown / requeue cooldown</small></div>
+        <div class="aw-mini-card"><span>Unknown lanes</span><strong class="aw-status ${Number(queueSummary.pausedOrUnknown || 0) > 0 ? 'warn' : 'good'}">${Number(queueSummary.pausedOrUnknown || 0)}</strong><small>disabled / no Redis data</small></div>
+      </div>
+      <div class="aw-runtime-queues-grid">
+        ${queueLanes.length ? queueLanes.map((item) => `
+          <div class="aw-card aw-runtime-queue-card">
+            <span>${escapeHtml(item.label || 'Lane')}</span>
+            <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(runtimeStateLabel(item.state))}</strong>
+            <small>${escapeHtml(item.summary || '—')}</small>
+            <div class="aw-card-subtle">${escapeHtml(item.detail || '')}</div>
+            <div class="aw-card-subtle">${escapeHtml(item.hint || '')}</div>
+          </div>
+        `).join('') : '<div class="aw-empty">Очереди пока недоступны.</div>'}
+      </div>
+      <div class="aw-runtime-retry-feed">
+        ${retrySignals.length ? retrySignals.map((item) => `
+          <div class="aw-card aw-runtime-feed-card">
+            <span>${escapeHtml(item.label || 'Retry signal')}</span>
+            <strong class="${runtimeStateClass(item.state)}">${escapeHtml(item.summary || '—')}</strong>
+            <small>${escapeHtml(item.detail || '')}</small>
+            ${item.note ? `<div class="aw-card-subtle">${escapeHtml(item.note)}</div>` : ''}
+          </div>
+        `).join('') : '<div class="aw-empty">Retry signals пока пусты.</div>'}
+      </div>
+      <div class="aw-runtime-footnote">Очереди не мутируются из Runtime: это только read-first слой для backlog / retry / cooldown разборов.</div>
     </section>
 
     <div class="aw-split aw-section aw-runtime-layout">
       <section class="aw-surface aw-stack">
-        <h2>Конфигурация</h2>
-        <div class="aw-config-grid">
-          ${configPresence.map((item) => `
-            <div class="aw-config-row">
-              <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
-              <div class="aw-config-state aw-status ${runtimeStateClass(item.state === 'configured' ? 'ok' : (item.state === 'missing' ? 'missing' : (item.state === 'optional' ? 'unknown' : 'unknown')))}">${escapeHtml(configPresenceLabel(item.state))}</div>
-            </div>
-          `).join('') || '<div class="aw-empty">Данные пока недоступны.</div>'}
+        <div class="aw-runtime-head">
+          <div>
+            <h2>Control plane snapshot</h2>
+            <p class="aw-muted">Без write-path действий: только текущее runtime-состояние safe toggles.</p>
+          </div>
+          <div class="aw-runtime-overall ${Number(model.controlSnapshot?.pausedCount || 0) > 0 || Number(model.controlSnapshot?.incidentModes || 0) > 0 ? 'warn' : 'good'}">paused ${Number(model.controlSnapshot?.pausedCount || 0)} · incident ${Number(model.controlSnapshot?.incidentModes || 0)}</div>
         </div>
+        <div class="aw-runtime-controls-grid">
+          ${controls.length ? controls.map((item) => `
+            <div class="aw-card aw-runtime-control-card">
+              <span>${escapeHtml(item.label || 'Control')}</span>
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.stateLabel || '—')}</strong>
+              <small>${escapeHtml(item.hint || '')}</small>
+              <div class="aw-card-subtle">${item.changedAt ? `updated ${escapeHtml(formatDate(item.changedAt))}` : 'без явного runtime override'}</div>
+            </div>
+          `).join('') : '<div class="aw-empty">Control surface пока недоступен.</div>'}
+        </div>
+        <div class="aw-runtime-footnote">${lastAudit ? `Последний operator change: ${escapeHtml(controlAuditSummary(lastAudit))} · ${escapeHtml(controlAuditActorLabel(lastAudit))} · ${escapeHtml(formatDate(lastAudit.ts))}` : 'Последних operator changes пока нет.'}</div>
       </section>
 
       <aside class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <div class="aw-runtime-head">
+            <div>
+              <h2>Конфигурация</h2>
+              <p class="aw-muted">Presence matrix без утечки значений секретов.</p>
+            </div>
+            <div class="aw-runtime-overall ${Number(configSummary.missing || 0) > 0 ? 'warn' : 'good'}">missing ${Number(configSummary.missing || 0)} · optional ${Number(configSummary.optional || 0)}</div>
+          </div>
+          <div class="aw-config-grid">
+            ${configPresence.map((item) => `
+              <div class="aw-config-row">
+                <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
+                <div class="aw-config-state aw-status ${runtimeStateClass(item.state === 'configured' ? 'ok' : (item.state === 'missing' ? 'missing' : (item.state === 'optional' ? 'unknown' : 'unknown')))}">${escapeHtml(configPresenceLabel(item.state))}</div>
+              </div>
+            `).join('') || '<div class="aw-empty">Данные пока недоступны.</div>'}
+          </div>
+        </section>
+
         <section class="aw-surface aw-stack">
           <h2>Подсказки</h2>
           <div class="aw-list">
@@ -2532,7 +2637,7 @@ function runtimeView(model) {
             ${recentEvents.length ? recentEvents.map((item) => `
               <div class="aw-list-item">
                 <strong class="${warningTone(item.kind)}">${escapeHtml(item.message || '—')}</strong>
-                <small>${escapeHtml(item.source || 'runtime')} · ${formatDate(item.at)}</small>
+                <small>${escapeHtml(sourceLabel(item.source || 'runtime'))} · ${formatDate(item.at)}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -2541,6 +2646,7 @@ function runtimeView(model) {
     </div>
   `, window.__adminSession || {});
 }
+
 
 async function ensureSession() {
   const res = await api('/api/admin-web-auth?action=me');

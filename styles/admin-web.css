@@ -1039,6 +1039,107 @@ body {
   font-size: 13px;
 }
 .aw-warning-item strong { margin-bottom: 4px; }
+
+.aw-runtime-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.aw-runtime-topline-grid,
+.aw-runtime-controls-grid,
+.aw-runtime-incident-feed {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.aw-runtime-topline-card,
+.aw-runtime-control-card,
+.aw-runtime-feed-card {
+  min-height: 0;
+}
+
+.aw-runtime-queues-grid,
+.aw-runtime-retry-feed {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.aw-runtime-queue-card {
+  min-height: 0;
+}
+.aw-runtime-queue-card .aw-card-subtle + .aw-card-subtle {
+  margin-top: 6px;
+}
+
+.aw-runtime-topline-label {
+  color: var(--soft);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.aw-runtime-incident {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(132,176,255,0.16);
+  border-radius: 22px;
+  background: rgba(255,255,255,0.03);
+}
+.aw-runtime-incident-main h2 {
+  margin: 6px 0 8px;
+  font-size: 30px;
+}
+.aw-runtime-incident-main p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.55;
+}
+.aw-runtime-incident-kicker {
+  display: inline-block;
+  color: var(--soft);
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.aw-runtime-incident-meta {
+  display: grid;
+  gap: 12px;
+}
+.aw-runtime-incident-item {
+  border: 1px solid rgba(132,176,255,0.12);
+  background: rgba(255,255,255,0.03);
+  border-radius: 18px;
+  padding: 14px;
+}
+.aw-runtime-incident-item span {
+  display: block;
+  color: var(--soft);
+  font-size: 12px;
+}
+.aw-runtime-incident-item strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 16px;
+  line-height: 1.4;
+}
+.aw-runtime-incident-item small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+}
+.aw-runtime-footnote {
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (max-width: 1200px) {
+  .aw-runtime-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aw-runtime-incident { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .aw-runtime-summary-grid { grid-template-columns: 1fr; }
+}
 @media (max-width: 1024px) {
   .aw-runtime-overall { width: 100%; }
   .aw-config-row { grid-template-columns: 1fr; }
