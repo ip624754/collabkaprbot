@@ -1,3 +1,15 @@
+## STEP535F — Overview command cockpit + section contract uplift
+- Introduced a single `SECTION_MANIFEST` in `scripts/admin-web.js` so sidebar grouping, section labels, nav captions, and page subtitles now read from one admin-web contract instead of drifting separately across shell/view code.
+- Rebuilt `/admin` Overview into a tighter command cockpit: one main status, one next owner step, and three compact workspaces (`Командный обзор`, `Payments snapshot`, `Последняя активность`) without adding polling or new write paths.
+- Added an explicit boundary block on Overview so operators/founders can see what this surface covers and what intentionally stays in `Users`, `Runtime`, or `Payments`.
+- Overview workspace state now persists in the URL via `overview_workspace`, keeping manual refresh/back behavior honest inside the existing SPA shell.
+- Added `scripts/smoke-admin-web-overview-cockpit-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped admin shell asset cache-bust to `step535f`.
+
+Acceptance / notes:
+- scope stays read-first and hobby-safe;
+- no API / DB / auth / write-surface expansion;
+- still needs live browser verification after deploy for actual cockpit scan-speed and tab feel.
+
 ## STEP535D — Users active-state sync + help surface
 - Fixed the real Users SPA state-clobber bug in `scripts/admin-web.js`: `readUsersStateFromUrl()` now returns a sparse URL patch instead of normalizing missing params back to defaults, so the current working slice no longer snaps back to the first cohort/preset on rerender.
 - Strengthened the one-source-of-truth contract for the Users working slice: `setUsersStateFromControls()`, `setUsersStateExact()`, and `setUsersPinIds()` now sync the active state into the URL immediately before rerender, which keeps cohort chips, preset cards, compare pins, and the top meta strip aligned.

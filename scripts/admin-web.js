@@ -491,6 +491,77 @@ function pathParts() {
   return location.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
 }
 
+const SECTION_MANIFEST = {
+  overview: {
+    key: 'overview',
+    label: 'Overview',
+    subtitle: 'Командный cockpit: главный статус, следующий owner-шаг и короткие workspace-снимки без live-шума.',
+    route: '/admin',
+    group: 'operator',
+    navCaption: 'командный вход',
+    visible: () => true,
+  },
+  users: {
+    key: 'users',
+    label: 'Users',
+    subtitle: 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.',
+    route: '/admin/users',
+    group: 'operator',
+    navCaption: 'люди и срезы',
+    visible: () => true,
+  },
+  runtime: {
+    key: 'runtime',
+    label: 'Runtime',
+    subtitle: 'Общий статус системы, incident strip и опорный runtime-срез без write-path действий.',
+    route: '/admin/runtime',
+    group: 'operator',
+    navCaption: 'система и очереди',
+    visible: () => true,
+  },
+  payments: {
+    key: 'payments',
+    label: 'Payments',
+    subtitle: 'Read-only срез платежной активности, fallback-сигналов и проблемных кейсов.',
+    route: '/admin/payments',
+    group: 'operator',
+    navCaption: 'монетизация и review',
+    visible: () => true,
+  },
+  comms: {
+    key: 'comms',
+    label: 'Comms',
+    subtitle: 'Workspace для draft notices, preview и founder test-send без live mass send.',
+    route: '/admin/comms',
+    group: 'operator',
+    navCaption: 'драфты и preview',
+    visible: () => true,
+  },
+  help: {
+    key: 'help',
+    label: 'Помощь',
+    subtitle: 'Короткая operator-справка по web-admin без длинной документации и догадок.',
+    route: '/admin/help',
+    group: 'operator',
+    navCaption: 'операторский мануал',
+    visible: () => true,
+  },
+  founder: {
+    key: 'founder',
+    label: 'Founder',
+    subtitle: 'Founder-only control surface: split from operator UI, read-first and hobby-safe.',
+    route: '/admin/founder',
+    group: 'founder',
+    navCaption: 'owner-only controls',
+    visible: (session = {}) => !!session?.isFounder,
+  },
+};
+
+const SECTION_GROUP_LABELS = {
+  operator: 'Оператор',
+  founder: 'Founder',
+};
+
 function routeInfo() {
   const parts = pathParts();
   if (parts[0] !== 'admin') return { page: 'login' };
@@ -504,6 +575,36 @@ function routeInfo() {
   if (parts[1] === 'help') return { page: 'help' };
   if (parts[1] === 'founder') return { page: 'founder' };
   return { page: 'overview' };
+}
+
+function sectionKeyForRoutePage(page = '') {
+  const key = String(page || '').trim();
+  if (key === 'userDetail') return 'users';
+  if (key === 'paymentDetail') return 'payments';
+  return SECTION_MANIFEST[key] ? key : 'overview';
+}
+
+function sectionMeta(page = '', session = {}) {
+  const key = sectionKeyForRoutePage(page);
+  const meta = SECTION_MANIFEST[key] || SECTION_MANIFEST.overview;
+  return {
+    ...meta,
+    key,
+    visible: typeof meta.visible === 'function' ? meta.visible(session) : true,
+  };
+}
+
+function sectionGroups(session = {}) {
+  const groups = {};
+  for (const meta of Object.values(SECTION_MANIFEST)) {
+    if (meta.key !== sectionKeyForRoutePage(meta.key)) continue;
+    const visible = typeof meta.visible === 'function' ? meta.visible(session) : true;
+    if (!visible) continue;
+    const group = String(meta.group || 'operator');
+    if (!groups[group]) groups[group] = [];
+    groups[group].push(meta);
+  }
+  return groups;
 }
 
 const LOGIN_STATE_KEY = 'collabka_admin_login_state_v1';
@@ -630,12 +731,35 @@ function startLoginStatusPolling({ immediate = false } = {}) {
   }, 2500);
 }
 
-function navLink(href, label, active) {
-  return `<a href="${href}" data-link class="${active ? 'is-active' : ''}">${label}</a>`;
+function navLink(href, label, active, caption = '') {
+  return `<a href="${href}" data-link class="${active ? 'is-active' : ''}"><span class="aw-nav-link-copy"><strong>${escapeHtml(label)}</strong>${caption ? `<span class="aw-nav-caption">${escapeHtml(caption)}</span>` : ''}</span></a>`;
 }
 
-function shell(title, subtitle, body, session) {
+function renderSidebarNav(session = {}, route = routeInfo()) {
+  const groups = sectionGroups(session);
+  const order = ['operator', 'founder'];
+  return order.map((groupKey) => {
+    const items = Array.isArray(groups[groupKey]) ? groups[groupKey] : [];
+    if (!items.length) return '';
+    return `
+      <div class="aw-nav-group">
+        <div class="aw-nav-group-label">${escapeHtml(SECTION_GROUP_LABELS[groupKey] || groupKey)}</div>
+        ${items.map((meta) => {
+          const href = meta.key === 'users'
+            ? (route.page === 'userDetail' ? userDetailBackHref() : buildUsersListHref(getUsersState()))
+            : meta.route;
+          return navLink(href, meta.label, sectionKeyForRoutePage(route.page) === meta.key, meta.navCaption || '');
+        }).join('')}
+      </div>
+    `;
+  }).join('');
+}
+
+function shell(title, subtitle, body, session, pageKey = '') {
   const route = routeInfo();
+  const meta = sectionMeta(pageKey || route.page, session);
+  const resolvedTitle = title || meta.label || 'Overview';
+  const resolvedSubtitle = subtitle || meta.subtitle || '';
   return `
     <div class="aw-shell">
       <aside class="aw-sidebar">
@@ -647,20 +771,13 @@ function shell(title, subtitle, body, session) {
           </div>
         </div>
         <nav class="aw-nav">
-          <div class="aw-nav-group-label">Оператор</div>
-          ${navLink('/admin', 'Overview', route.page === 'overview')}
-          ${navLink(route.page === 'userDetail' ? userDetailBackHref() : buildUsersListHref(getUsersState()), 'Users', route.page === 'users' || route.page === 'userDetail')}
-          ${navLink('/admin/runtime', 'Runtime', route.page === 'runtime')}
-          ${navLink('/admin/payments', 'Payments', route.page === 'payments' || route.page === 'paymentDetail')}
-          ${navLink('/admin/comms', 'Comms', route.page === 'comms')}
-          ${navLink('/admin/help', 'Помощь', route.page === 'help')}
-          ${session?.isFounder ? `<div class="aw-nav-group-label">Founder</div>${navLink('/admin/founder', 'Founder', route.page === 'founder')}` : ''}
+          ${renderSidebarNav(session, route)}
         </nav>
       </aside>
       <main class="aw-main">
         <div class="aw-topbar">
           <div class="aw-topbar-left">
-            <span class="aw-chip">${escapeHtml(title)}</span>
+            <span class="aw-chip">${escapeHtml(resolvedTitle)}</span>
             <span class="aw-chip">mode · ${session?.isFounder ? 'founder' : 'operator'}</span>
           </div>
           <div class="aw-topbar-right">
@@ -671,13 +788,18 @@ function shell(title, subtitle, body, session) {
         </div>
         ${renderControlStatusBar()}
         <div class="aw-page-head">
-          <h1>${escapeHtml(title)}</h1>
-          <p>${escapeHtml(subtitle)}</p>
+          <h1>${escapeHtml(resolvedTitle)}</h1>
+          <p>${escapeHtml(resolvedSubtitle)}</p>
         </div>
         ${body}
       </main>
     </div>
   `;
+}
+
+function sectionShell(pageKey, body, session, overrides = {}) {
+  const meta = sectionMeta(pageKey, session);
+  return shell(overrides.title || meta.label, overrides.subtitle || meta.subtitle, body, session, pageKey);
 }
 
 function loginView(state = {}) {
@@ -732,7 +854,7 @@ function loginView(state = {}) {
 }
 
 function helpView(session) {
-  return shell('Помощь', 'Короткая operator-справка по web-admin без длинной документации и догадок.', `
+  return sectionShell('help', `
     <div class="aw-help-grid aw-section">
       <section class="aw-surface aw-stack aw-help-card">
         <h2>Быстрый старт</h2>
@@ -791,49 +913,312 @@ function helpView(session) {
   `, session);
 }
 
-function overviewView(model) {
+const OVERVIEW_WORKSPACES = ['command', 'payments', 'activity'];
+
+function normalizeOverviewWorkspace(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return OVERVIEW_WORKSPACES.includes(key) ? key : 'command';
+}
+
+function getOverviewWorkspace() {
+  try {
+    return normalizeOverviewWorkspace(new URLSearchParams(location.search).get('overview_workspace'));
+  } catch {
+    return 'command';
+  }
+}
+
+function syncOverviewWorkspace(workspace = 'command', { replace = true } = {}) {
+  const next = normalizeOverviewWorkspace(workspace);
+  const url = new URL(location.href);
+  if (next === 'command') url.searchParams.delete('overview_workspace');
+  else url.searchParams.set('overview_workspace', next);
+  const target = `${url.pathname}${url.search}`;
+  if (`${location.pathname}${location.search}` === target) return next;
+  history[replace ? 'replaceState' : 'pushState']({}, '', target);
+  return next;
+}
+
+function overviewStatusSummary(model = {}) {
+  const runtime = model.runtime || {};
+  const overall = runtime.overall || {};
+  const warnings = Number(model.cards?.runtimeWarnings || 0) || 0;
+  const paymentAlerts = Number(model.cards?.paymentAlerts || 0) || 0;
+  const controlSurface = window.__controlSurface || {};
+  const paused = Array.isArray(controlSurface.items)
+    ? controlSurface.items.filter((item) => item?.kind === 'toggle' && item?.value === false)
+    : [];
+  const state = String(overall.state || 'unknown');
+  if (state === 'missing') {
+    return {
+      state,
+      label: 'Есть незакрытый setup-gap в system/runtime слое.',
+      summary: 'Сначала выровняй missing config/runtime контур. Остальные действия вторичны, пока база не ясна.',
+      href: '/admin/runtime',
+      cta: 'Открыть Runtime',
+    };
+  }
+  if (state === 'degraded' || warnings > 0 || paused.length) {
+    return {
+      state: state === 'ok' ? 'degraded' : state,
+      label: 'Есть сигналы, которые стоит разобрать перед следующими owner-решениями.',
+      summary: paused.length
+        ? 'Часть control-plane потока сейчас intentionally paused. Сначала перепроверь Runtime и только потом иди в рабочие ручные разборы.'
+        : 'Runtime показывает degraded / warning сигнал. Сначала закрой системную неопределённость, потом переходи к точечным действиям.',
+      href: '/admin/runtime',
+      cta: 'Перейти в Runtime',
+    };
+  }
+  if (paymentAlerts > 0) {
+    return {
+      state: 'warning',
+      label: 'Система в целом выглядит стабильно, но есть платежные кейсы для ручного review.',
+      summary: 'Следующий самый полезный ход — разобрать не-applied / fallback payment сигналы, чтобы monetization truth не расходилась с UI.',
+      href: '/admin/payments',
+      cta: 'Открыть Payments',
+    };
+  }
+  return {
+    state: 'ok',
+    label: 'Базовые owner/operator контуры сейчас выглядят собранно.',
+    summary: 'Можно идти в Users для ручного разбора людей и срезов либо держать Runtime под обычным наблюдением.',
+    href: '/admin/users',
+    cta: 'Открыть Users',
+  };
+}
+
+function overviewNextStep(model = {}) {
+  const status = overviewStatusSummary(model);
   const cards = model.cards || {};
   const audit = Array.isArray(model.recentAudit) ? model.recentAudit : [];
-  const runtimeNotes = Array.isArray(model.runtime?.notes) ? model.runtime.notes : [];
-  return shell('Overview', 'Read-first owner cockpit без polling и cron-зависимости.', `
-    <div class="aw-grid-cards">
-      <div class="aw-card"><span>Users</span><strong>${cards.usersTotal || 0}</strong></div>
-      <div class="aw-card"><span>Workspaces</span><strong>${cards.workspacesTotal || 0}</strong></div>
-      <div class="aw-card"><span>Offers active</span><strong>${cards.offersActive || 0}</strong></div>
-      <div class="aw-card"><span>Giveaways active</span><strong>${cards.giveawaysActive || 0}</strong></div>
-      <a href="/admin/payments" data-link class="aw-card aw-card-link"><span>Payment alerts</span><strong>${cards.paymentAlerts || 0}</strong><small>Открыть payment surface</small></a>
-      <div class="aw-card"><span>Runtime warnings</span><strong>${cards.runtimeWarnings || 0}</strong></div>
+  if (status.href === '/admin/runtime') {
+    return {
+      title: 'Сначала Runtime check',
+      body: 'Зафиксируй, нет ли missing/degraded/paused сигнала, который делает остальные owner-решения вторичными.',
+      href: '/admin/runtime',
+      cta: 'Идти в Runtime',
+    };
+  }
+  if (Number(cards.paymentAlerts || 0) > 0) {
+    return {
+      title: 'Разобрать payment alerts',
+      body: 'Есть платежные статусы вне applied. Сначала приведи monetization snapshot в честное состояние.',
+      href: '/admin/payments',
+      cta: 'Идти в Payments',
+    };
+  }
+  if (audit.length) {
+    return {
+      title: 'Проверить последнюю operator-активность',
+      body: 'Быстро сверь, какие admin-web действия были последними, и нет ли ручного follow-up после них.',
+      href: '/admin/help',
+      cta: 'Открыть Помощь/контракт',
+    };
+  }
+  return {
+    title: 'Рабочий режим без аварийных хвостов',
+    body: 'Используй Overview как командную точку входа, а дальше переходи в Users / Payments / Runtime по конкретной задаче.',
+    href: '/admin/users',
+    cta: 'Открыть Users',
+  };
+}
+
+function overviewPaymentStats(rows = []) {
+  return (Array.isArray(rows) ? rows : []).reduce((acc, item) => {
+    const status = String(item?.status || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
+    const cnt = Number(item?.cnt || 0) || 0;
+    acc.total += cnt;
+    if (status === 'APPLIED') acc.applied += cnt;
+    else acc.review += cnt;
+    if (status === 'PENDING') acc.pending += cnt;
+    acc.byStatus.push({ status, cnt, currency: String(item?.currency || '').trim().toUpperCase() || '—' });
+    return acc;
+  }, { total: 0, applied: 0, review: 0, pending: 0, byStatus: [] });
+}
+
+function renderOverviewWorkspaceTabs(activeWorkspace = 'command') {
+  const active = normalizeOverviewWorkspace(activeWorkspace);
+  const items = [
+    { key: 'command', label: 'Командный обзор', help: 'здоровье + next step' },
+    { key: 'payments', label: 'Payments snapshot', help: 'монетизация и alerts' },
+    { key: 'activity', label: 'Последняя активность', help: 'audit + runtime notes' },
+  ];
+  return `
+    <div class="aw-workspace-tabs" role="tablist" aria-label="Overview workspace">
+      ${items.map((item) => `
+        <button class="aw-workspace-tab ${active === item.key ? 'is-active' : ''}" data-overview-workspace="${item.key}" role="tab" aria-selected="${active === item.key ? 'true' : 'false'}">
+          <span class="aw-workspace-tab-label">${escapeHtml(item.label)}</span>
+          <span class="aw-workspace-tab-help">${escapeHtml(item.help)}</span>
+        </button>
+      `).join('')}
     </div>
-    <div class="aw-actions aw-overview-links">
-      <a href="/admin/payments" data-link class="aw-button ghost">Payments surface</a>
-      <a href="/admin/comms" data-link class="aw-button ghost">Comms workspace</a>
-    </div>
-    ${renderControlSurfaceSection()}
-    <div class="aw-split aw-section">
+  `;
+}
+
+function overviewCommandWorkspace(model = {}) {
+  const cards = model.cards || {};
+  const runtime = model.runtime || {};
+  const overall = runtime.overall || {};
+  const status = overviewStatusSummary(model);
+  const next = overviewNextStep(model);
+  return `
+    <div class="aw-overview-workspace-grid aw-section">
       <section class="aw-surface aw-stack">
-        <h2>Runtime snapshot</h2>
-        <dl class="aw-kv">
-          <dt>DB</dt><dd class="aw-status ${model.runtime?.db?.ok ? 'good' : 'bad'}">${model.runtime?.db?.ok ? 'OK' : 'FAIL'}</dd>
-          <dt>Redis</dt><dd class="aw-status ${model.runtime?.redis?.ok ? 'good' : 'bad'}">${model.runtime?.redis?.configured ? (model.runtime?.redis?.ok ? 'OK' : 'FAIL') : 'NOT CONFIGURED'}</dd>
-          <dt>Admin web</dt><dd>${model.runtime?.adminWebConfigured ? 'configured' : 'missing env'}</dd>
-          <dt>PUBLIC_BASE_URL</dt><dd>${model.runtime?.publicBaseUrl ? 'configured' : 'missing'}</dd>
-        </dl>
+        <h2>Командный обзор владельца</h2>
+        <div class="aw-row-between">
+          <p class="aw-surface-note">Короткий cockpit-слой: сначала здоровье и следующий owner-шаг, потом уже детали по workspace-экранам.</p>
+          <strong class="aw-status ${runtimeStateClass(status.state)}">${escapeHtml(runtimeStateLabel(status.state))}</strong>
+        </div>
+        <div class="aw-overview-mini-grid">
+          <div class="aw-mini-card"><span>Users</span><strong>${Number(cards.usersTotal || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Workspaces</span><strong>${Number(cards.workspacesTotal || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Offers active</span><strong>${Number(cards.offersActive || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Giveaways active</span><strong>${Number(cards.giveawaysActive || 0)}</strong></div>
+        </div>
         <div class="aw-list">
-          ${(runtimeNotes.length ? runtimeNotes : ['Нет явных предупреждений']).map((item) => `<div class="aw-list-item">${escapeHtml(item)}</div>`).join('')}
+          <div class="aw-list-item"><strong>Runtime overall</strong><small>${escapeHtml(runtimeStateLabel(overall.state || status.state))} · ${escapeHtml(overall.label || status.label)}</small></div>
+          <div class="aw-list-item"><strong>Payment alerts</strong><small>${Number(cards.paymentAlerts || 0)} требуют ручного просмотра.</small></div>
+          <div class="aw-list-item"><strong>Manual refresh only</strong><small>Overview намеренно не делает live-polling и не притворяется realtime-консолью.</small></div>
         </div>
       </section>
       <section class="aw-surface aw-stack">
-        <h2>Recent admin-web audit</h2>
+        <h2>Следующие owner-шаги</h2>
+        <div class="aw-list">
+          <div class="aw-list-item"><strong>${escapeHtml(next.title)}</strong><small>${escapeHtml(next.body)}</small></div>
+          <div class="aw-list-item"><strong>Если Runtime degraded</strong><small>Сначала Runtime, потом overrides / ручные follow-up действия в других секциях.</small></div>
+          <div class="aw-list-item"><strong>Если payment alerts растут</strong><small>Иди в Payments и сверяй applied vs non-applied статусы, а не лечи это через Users.</small></div>
+          <div class="aw-list-item"><strong>Если всё спокойно</strong><small>Users становится основной рабочей точкой для людей, срезов, экспортов и точечных разборов.</small></div>
+        </div>
+        <div class="aw-actions aw-overview-actions">
+          <a href="${next.href}" data-link class="aw-button">${escapeHtml(next.cta)}</a>
+          <a href="/admin/users" data-link class="aw-button ghost">Открыть Users</a>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function overviewPaymentsWorkspace(model = {}) {
+  const cards = model.cards || {};
+  const stats = overviewPaymentStats(model.payments || []);
+  const rows = stats.byStatus.length ? stats.byStatus : [{ status: 'NO_DATA', cnt: 0, currency: '—' }];
+  const founderAction = window.__adminSession?.isFounder
+    ? '${founderAction}'
+    : '<a href="/admin/help" data-link class="aw-button ghost">Operator guide</a>';
+  return `
+    <div class="aw-overview-workspace-grid aw-section">
+      <section class="aw-surface aw-stack">
+        <h2>Payments / monetization snapshot</h2>
+        <p class="aw-surface-note">Короткий owner-снимок monetization truth без проваливания в длинный платежный экран.</p>
+        <div class="aw-overview-mini-grid">
+          <div class="aw-mini-card"><span>Payment alerts</span><strong>${Number(cards.paymentAlerts || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Applied</span><strong>${stats.applied}</strong></div>
+          <div class="aw-mini-card"><span>Pending</span><strong>${stats.pending}</strong></div>
+          <div class="aw-mini-card"><span>Need review</span><strong>${stats.review}</strong></div>
+        </div>
+        <div class="aw-list">
+          ${rows.map((item) => `<div class="aw-list-item"><strong>${escapeHtml(item.status)}</strong><small>${Number(item.cnt || 0)} · ${escapeHtml(item.currency || '—')}</small></div>`).join('')}
+        </div>
+      </section>
+      <section class="aw-surface aw-stack">
+        <h2>Что покрывает этот workspace</h2>
+        <div class="aw-list">
+          <div class="aw-list-item"><strong>Даёт owner truth</strong><small>Видно, есть ли сигналы вне applied и нужно ли идти в Payments прямо сейчас.</small></div>
+          <div class="aw-list-item"><strong>Не подменяет Payments</strong><small>Детальный разбор payment case, fallback reason и drilldown остаётся в отдельной payment surface.</small></div>
+          <div class="aw-list-item"><strong>Не лечит system issues</strong><small>Если payment проблема выглядит как infra/runtime, сначала открой Runtime и только потом Payments.</small></div>
+        </div>
+        <div class="aw-actions aw-overview-actions">
+          <a href="/admin/payments" data-link class="aw-button">Открыть Payments</a>
+          ${founderAction}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function overviewActivityWorkspace(model = {}) {
+  const audit = Array.isArray(model.recentAudit) ? model.recentAudit : [];
+  const runtimeNotes = Array.isArray(model.runtime?.notes) ? model.runtime.notes : [];
+  return `
+    <div class="aw-overview-workspace-grid aw-section">
+      <section class="aw-surface aw-stack">
+        <h2>Последняя admin-активность</h2>
         <div class="aw-list">
           ${audit.length ? audit.map((item) => `
             <div class="aw-list-item">
               <strong>${escapeHtml(item.action || 'unknown')}</strong>
               <small>${escapeHtml(item.section || '')} · actor ${Number(item.actorTgId || 0) || 'fallback'} · ${formatDate(item.ts)}</small>
             </div>
-          `).join('') : `<div class="aw-empty">Пока пусто.</div>`}
+          `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+        </div>
+      </section>
+      <section class="aw-surface aw-stack">
+        <h2>Runtime notes</h2>
+        <div class="aw-list">
+          ${(runtimeNotes.length ? runtimeNotes : ['Явных runtime notes нет']).map((item) => `<div class="aw-list-item">${escapeHtml(item)}</div>`).join('')}
+        </div>
+        <div class="aw-list-item"><strong>Обновлено</strong><small>${formatDate(model.ts || model.updatedAt)}</small></div>
+      </section>
+    </div>
+  `;
+}
+
+function overviewWorkspaceView(model = {}, workspace = 'command') {
+  const active = normalizeOverviewWorkspace(workspace);
+  if (active === 'payments') return overviewPaymentsWorkspace(model);
+  if (active === 'activity') return overviewActivityWorkspace(model);
+  return overviewCommandWorkspace(model);
+}
+
+function overviewView(model) {
+  const cards = model.cards || {};
+  const workspace = getOverviewWorkspace();
+  const status = overviewStatusSummary(model);
+  const next = overviewNextStep(model);
+  const paymentsHref = '/admin/payments';
+  const runtimeHref = '/admin/runtime';
+  return sectionShell('overview', `
+    <div class="aw-overview-hero aw-section">
+      <section class="aw-surface aw-stack aw-overview-hero-card">
+        <div class="aw-overview-eyebrow">Главный статус</div>
+        <div class="aw-row-between">
+          <div>
+            <h2>${escapeHtml(status.label)}</h2>
+            <p class="aw-surface-note">${escapeHtml(status.summary)}</p>
+          </div>
+          <span class="aw-status ${runtimeStateClass(status.state)}">${escapeHtml(runtimeStateLabel(status.state))}</span>
+        </div>
+        <div class="aw-overview-mini-grid">
+          <div class="aw-mini-card"><span>Users</span><strong>${Number(cards.usersTotal || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Offers active</span><strong>${Number(cards.offersActive || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Payment alerts</span><strong>${Number(cards.paymentAlerts || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Runtime warnings</span><strong>${Number(cards.runtimeWarnings || 0)}</strong></div>
+        </div>
+      </section>
+      <section class="aw-surface aw-stack aw-overview-hero-card">
+        <div class="aw-overview-eyebrow">Следующий owner-шаг</div>
+        <h2>${escapeHtml(next.title)}</h2>
+        <p class="aw-surface-note">${escapeHtml(next.body)}</p>
+        <div class="aw-actions aw-overview-actions">
+          <a href="${next.href}" data-link class="aw-button">${escapeHtml(next.cta)}</a>
+          <a href="${runtimeHref}" data-link class="aw-button ghost">Runtime</a>
+          <a href="${paymentsHref}" data-link class="aw-button ghost">Payments</a>
         </div>
       </section>
     </div>
+
+    <section class="aw-surface aw-stack aw-section aw-boundary-card">
+      <div class="aw-overview-eyebrow">Границы этой поверхности</div>
+      <div class="aw-list">
+        <div class="aw-list-item"><strong>Что это делает</strong><small>Даёт честную точку входа: главный статус, следующий ход и три коротких workspace-снимка.</small></div>
+        <div class="aw-list-item"><strong>Чего тут нет специально</strong><small>Нет live-polling, нет скрытых write-path, нет длинного runtime/payments drilldown внутри главной.</small></div>
+        <div class="aw-list-item"><strong>Куда идти дальше</strong><small>Users — для людей и срезов. Runtime — для system truth. Payments — для monetization review.</small></div>
+      </div>
+    </section>
+
+    ${renderOverviewWorkspaceTabs(workspace)}
+    ${overviewWorkspaceView(model, workspace)}
+    ${renderControlSurfaceSection()}
   `, window.__adminSession || {});
 }
 
@@ -1631,7 +2016,7 @@ function usersView(model) {
     recentExport,
     recentCopy,
   });
-  return shell('Пользователи', 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.', `
+  return sectionShell('users', `
     <section class="aw-surface aw-stack">
       <div class="aw-users-sticky-controls">
         <div class="aw-users-sticky-shell">
@@ -1960,7 +2345,7 @@ function userDetailView(model) {
   if (note.updatedAt) noteMeta.push(`Обновлено: ${formatDate(note.updatedAt)}`);
   if (note.byAdminTgId) noteMeta.push(`TG ${note.byAdminTgId}`);
 
-  return shell('Пользователь', 'Карточка пользователя: summary → access → activity → operator note.', `
+  return sectionShell('users', `
     <section class="aw-surface aw-user-hero aw-stack">
       <a href="${escapeHtml(userDetailBackHref())}" data-link class="aw-inline-back">← К списку пользователей</a>
       <div class="aw-user-head">
@@ -2063,7 +2448,7 @@ function paymentsView(model) {
   const followUpQueue = Array.isArray(model.followUpQueue) ? model.followUpQueue : [];
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const overall = model.overall || { state: 'unknown', label: 'Данные пока недоступны' };
-  return shell('Payments', 'Read-only срез платежной активности, fallback-сигналов и проблемных кейсов.', `
+  return sectionShell('payments', `
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
@@ -2189,7 +2574,7 @@ function paymentDetailView(model) {
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const recentAdminAudit = Array.isArray(model.recentAdminAudit) ? model.recentAdminAudit : [];
   const backHref = paymentDetailBackHref();
-  return shell('Payment detail', 'Read-only payment drilldown для founder/operator проверки.', `
+  return sectionShell('payments', `
     <section class="aw-surface aw-user-hero aw-stack">
       <a href="${escapeHtml(backHref)}" data-link class="aw-inline-back">← К списку платежей</a>
       <div class="aw-user-head">
@@ -2288,7 +2673,7 @@ function paymentDetailView(model) {
         </section>
       </aside>
     </div>
-  `, window.__adminSession || {});
+  `, window.__adminSession || {}, { title: 'Payment detail', subtitle: 'Read-only payment drilldown для founder/operator проверки.' });
 }
 
 function commsAudienceLabel(value) {
@@ -2374,7 +2759,7 @@ function commsView(model) {
   window.__commsPageData = model;
   window.__commsState = editor;
   const isFounder = !!window.__adminSession?.isFounder;
-  return shell('Comms', 'Workspace для draft notices, preview и founder test-send без live mass send.', `
+  return sectionShell('comms', `
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
@@ -2550,7 +2935,7 @@ function founderView(model) {
   const warnings = Array.isArray(model.warnings) ? model.warnings : [];
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const recentAudit = Array.isArray(model.recentFounderAudit) ? model.recentFounderAudit : [];
-  return shell('Founder', 'Founder-only control surface: split from operator UI, read-first and hobby-safe.', `
+  return sectionShell('founder', `
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
@@ -2658,7 +3043,7 @@ function runtimeView(model) {
   const queueSummary = queueClarity.summaryCards || {};
   const queueLanes = Array.isArray(queueClarity.lanes) ? queueClarity.lanes : [];
   const retrySignals = Array.isArray(queueClarity.retrySignals) ? queueClarity.retrySignals : [];
-  return shell('Runtime', 'Общий статус системы, incident strip и опорный runtime-срез без write-path действий.', `
+  return sectionShell('runtime', `
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
@@ -2951,7 +3336,7 @@ async function render() {
   } else if (route.page === 'founder') {
     const res = await api('/api/admin-web-read?section=founder');
     if (!res.ok) {
-      app.innerHTML = shell('Founder', 'Founder-only control surface.', `<div class="aw-surface aw-empty">Founder surface недоступен для текущей сессии.</div>`, session);
+      app.innerHTML = sectionShell('founder', `<div class="aw-surface aw-empty">Founder surface недоступен для текущей сессии.</div>`, session);
     } else {
       app.innerHTML = founderView(res.data.data || {});
     }
@@ -3126,6 +3511,13 @@ function bindShell() {
     render();
   });
   document.getElementById('refreshBtn')?.addEventListener('click', () => render());
+  app.querySelectorAll('[data-overview-workspace]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const nextWorkspace = button.getAttribute('data-overview-workspace') || 'command';
+      syncOverviewWorkspace(nextWorkspace, { replace: true });
+      render();
+    });
+  });
   const applyUsersFilters = () => {
     setUsersStateFromControls({ page: 0 });
     render();

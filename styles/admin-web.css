@@ -70,6 +70,23 @@ body {
   border-color: var(--line-strong);
   color: var(--text);
 }
+.aw-nav-link-copy {
+  display: grid;
+  gap: 4px;
+}
+.aw-nav-link-copy strong {
+  font-size: 14px;
+  line-height: 1.15;
+}
+.aw-nav-caption {
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.25;
+}
+.aw-nav a:hover .aw-nav-caption,
+.aw-nav a.is-active .aw-nav-caption {
+  color: var(--muted);
+}
 .aw-main {
   min-width: 0;
   padding: 24px 28px 36px;
@@ -1299,6 +1316,92 @@ body {
 }
 
 .aw-overview-links { margin-top: 14px; }
+.aw-surface-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.aw-overview-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.95fr);
+  gap: 14px;
+}
+.aw-overview-hero-card h2 {
+  margin: 0;
+}
+.aw-overview-eyebrow {
+  color: var(--soft);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.aw-boundary-card .aw-list {
+  margin-top: 4px;
+}
+.aw-overview-actions {
+  flex-wrap: wrap;
+}
+.aw-overview-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.aw-overview-workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.aw-workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+.aw-workspace-tab {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 12px 14px;
+  font: inherit;
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+  text-align: left;
+  cursor: pointer;
+}
+.aw-workspace-tab:hover {
+  border-color: var(--line-strong);
+}
+.aw-workspace-tab.is-active {
+  background: rgba(70, 123, 255, 0.12);
+  border-color: var(--line-strong);
+  box-shadow: 0 14px 36px rgba(22, 61, 128, 0.22);
+}
+.aw-workspace-tab-label {
+  font-size: 14px;
+  font-weight: 700;
+}
+.aw-workspace-tab-help {
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.25;
+}
+@media (max-width: 1100px) {
+  .aw-overview-hero,
+  .aw-overview-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 720px) {
+  .aw-overview-mini-grid {
+    grid-template-columns: 1fr;
+  }
+  .aw-workspace-tab {
+    min-width: 100%;
+  }
+}
 
 .aw-nav-group-label {
   margin: 10px 8px 4px;

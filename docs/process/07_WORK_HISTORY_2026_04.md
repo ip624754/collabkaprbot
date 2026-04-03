@@ -660,3 +660,16 @@ Acceptance / notes:
 - scope stays read-only;
 - no new routes, no polling, no backend write-path changes;
 - requires live browser verification after deploy for final readability/feel on the real Runtime screen.
+
+
+## STEP535F — Overview command cockpit + section contract uplift
+- Added a single `SECTION_MANIFEST` in `scripts/admin-web.js` so sidebar groups, labels, captions, and per-section subtitles now come from one operator/founder contract instead of scattered literals.
+- Reworked `/admin` Overview into a compact cockpit: one main status card, one next-step card, a short boundary block, and three URL-backed workspaces (`Командный обзор`, `Payments snapshot`, `Последняя активность`).
+- Kept the step deliberately read-only and hobby-safe: no API contract expansion, no new write actions, no polling, and no route-family rewrite.
+- Added `scripts/smoke-admin-web-overview-cockpit-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped `admin.html` asset cache-bust to `step535f`.
+
+Acceptance / notes:
+- Overview now reads as an actual entry cockpit instead of a flat summary page;
+- sidebar captions/subtitles are manifest-driven;
+- still requires live browser verification after deploy for final scan-speed / workspace-tab feel.
+

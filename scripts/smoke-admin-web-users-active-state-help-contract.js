@@ -8,7 +8,9 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const webJs = read('scripts/admin-web.js');
 for (const token of [
   "if (parts[1] === 'help') return { page: 'help' };",
-  "navLink('/admin/help', 'Помощь', route.page === 'help')",
+  "label: 'Помощь'",
+  "navCaption: 'операторский мануал'",
+  'function renderSidebarNav(session = {}, route = routeInfo())',
   'function helpView(session)',
   'Быстрый старт',
   'Как читать Users',
@@ -35,7 +37,7 @@ for (const token of [
 }
 
 const html = read('admin.html');
-assert.ok(html.includes('step535d'), 'admin shell asset URLs must be cache-busted to step535d');
+assert.ok(html.includes('step535f'), 'admin shell asset URLs must be cache-busted to step535f');
 
 const currentState = read('docs/00_CURRENT_STATE.md');
 assert.ok(currentState.includes('STEP535D'), 'current state must mention STEP535D');
