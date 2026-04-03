@@ -259,6 +259,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin web users copy unification + schema guard contract", "smoke:admin-web-users-copy-unification-contract"],
   ["Preflight (source-only): admin web users active-state sync + help surface contract", "smoke:admin-web-users-active-state-help-contract"],
   ["Preflight (source-only): admin web overview cockpit contract", "smoke:admin-web-overview-cockpit-contract"],
+  ["Preflight (source-only): admin web layout polish contract", "smoke:admin-web-layout-polish-contract"],
   ["Preflight (source-only): admin control surface contract", "smoke:admin-control-surface-contract"],
   ["Preflight (source-only): creator-side brand-app local-context contract", "smoke:creator-app-local-context-contract"],
   ["Preflight (source-only): brand-side brand-app reply entrypoints contract", "smoke:brand-app-reply-entrypoints-contract"],

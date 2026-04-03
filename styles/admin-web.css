@@ -152,7 +152,7 @@ body {
 .aw-page-head p { margin: 0; color: var(--muted); }
 .aw-grid-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
 }
 .aw-card {
@@ -162,8 +162,8 @@ body {
   box-shadow: var(--shadow);
   padding: 18px;
 }
-.aw-card strong { font-size: 28px; display: block; margin-top: 8px; }
-.aw-card span { color: var(--muted); font-size: 13px; }
+.aw-card > strong { font-size: 28px; display: block; margin-top: 8px; }
+.aw-card > span { color: var(--muted); font-size: 13px; }
 .aw-section { margin-top: 22px; }
 .aw-section h2 { margin: 0 0 12px; font-size: 20px; }
 .aw-surface {
@@ -1143,6 +1143,26 @@ body {
   font-size: 12px;
   line-height: 1.45;
 }
+.aw-card-subtle strong {
+  font-size: inherit;
+  display: inline;
+  margin-top: 0;
+}
+.aw-metric-card > strong {
+  font-size: 28px;
+}
+.aw-mini-card small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.aw-row-between > .aw-status,
+.aw-row-between > .aw-badge,
+.aw-row-between > .aw-runtime-overall {
+  align-self: flex-start;
+  white-space: nowrap;
+}
 .aw-runtime-head {
   display: flex;
   gap: 16px;
@@ -1220,7 +1240,7 @@ body {
 .aw-runtime-controls-grid,
 .aw-runtime-incident-feed {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
 }
 .aw-runtime-topline-card,
@@ -1364,6 +1384,17 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
+.aw-runtime-sidebar-grid,
+.aw-founder-grid,
+.aw-payments-side-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.aw-payments-layout.is-compact,
+.aw-founder-layout.is-compact {
+  grid-template-columns: 1fr;
+}
 .aw-workspace-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -1403,7 +1434,10 @@ body {
 }
 @media (max-width: 1100px) {
   .aw-overview-hero,
-  .aw-overview-workspace-grid {
+  .aw-overview-workspace-grid,
+  .aw-runtime-sidebar-grid,
+  .aw-founder-grid,
+  .aw-payments-side-grid {
     grid-template-columns: 1fr;
   }
 }

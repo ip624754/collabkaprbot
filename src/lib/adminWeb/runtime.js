@@ -718,7 +718,7 @@ export async function getRuntimeSummary() {
 
   const dbState = dbOk ? 'ok' : 'degraded';
   const redisState = !redisConfigured ? 'missing' : (redisOk ? 'ok' : 'degraded');
-  const qstashState = qstashConfigured ? 'ok' : 'missing';
+  const qstashState = qstashConfigured ? 'ok' : 'unknown';
   const paymentsState = paymentsFallbackEnabled && !paymentsHmacConfigured
     ? 'degraded'
     : (paymentsHmacConfigured || !paymentsFallbackEnabled ? 'ok' : 'unknown');
@@ -742,7 +742,7 @@ export async function getRuntimeSummary() {
   out.services = {
     db: makeService(dbState, dbOk ? 'DB configured' : 'DB ping failed', dbOk ? 'Соединение выглядит рабочим.' : 'Проверь DATABASE_URL / доступность DB.'),
     redis: makeService(redisState, !redisConfigured ? 'Redis not configured' : (redisOk ? 'Redis configured' : 'Redis probe failed'), !redisConfigured ? 'Redis не обязателен для каждой поверхности, но нужен для части operator/runtime сценариев.' : (redisOk ? 'Redis выглядит рабочим.' : 'Проверь Upstash env / сеть.')),
-    qstash: makeService(qstashState, qstashConfigured ? 'QStash configured' : 'QStash not configured', qstashConfigured ? 'Фоновая доставка может работать.' : 'Для admin v1 это не блокер, но publish/retry surfaces будут ограничены.'),
+    qstash: makeService(qstashState, qstashConfigured ? 'QStash configured' : 'QStash not configured', qstashConfigured ? 'Фоновая доставка может работать.' : 'Для admin v1 это не блокер: publish/retry поверхности будут ограничены, но core web-admin остаётся рабочим.'),
     payments: makeService(paymentsState, paymentsFallbackEnabled ? (paymentsHmacConfigured ? 'Payments fallback guarded' : 'Payments fallback lacks HMAC guard') : 'Payments fallback disabled', paymentsFallbackEnabled ? (paymentsHmacConfigured ? 'Fallback path защищён HMAC ключом.' : 'Проверь PAYMENTS_PAYLOAD_HMAC_KEY.') : 'Fallback path сейчас не активен.'),
     config: makeService(configState, configState === 'ok' ? 'Core config present' : 'Core config incomplete', configState === 'ok' ? 'Базовый env layer выглядит собранным.' : 'Проверь BOT / PUBLIC_BASE_URL env baseline.'),
     adminWeb: makeService(adminWebState, !adminWebEnabled ? 'Admin web disabled' : (adminWebState === 'ok' ? 'Admin web auth configured' : 'Admin web auth incomplete'), !adminWebEnabled ? 'Web admin выключен env-флагом.' : (adminWebState === 'ok' ? 'Secret / session / approvers настроены.' : 'Проверь ADMIN_WEB_* env и PUBLIC_BASE_URL.')),
