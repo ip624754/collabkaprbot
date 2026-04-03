@@ -8,7 +8,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const js = read('scripts/admin-web.js');
 for (const token of [
   'Operator follow-up',
-  'Кейсы для follow-up',
+  'Кейсы для ручного review',
   'Follow-up',
   'paymentFollowUpClass',
   'paymentFollowUpLabel',

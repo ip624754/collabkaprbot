@@ -97,6 +97,7 @@
     "smoke:admin-web-runtime-semantics-contract": "node scripts/smoke-admin-web-runtime-semantics-contract.js",
     "smoke:admin-web-payments-contract": "node scripts/smoke-admin-web-payments-contract.js",
     "smoke:admin-web-payments-followup-contract": "node scripts/smoke-admin-web-payments-followup-contract.js",
+    "smoke:admin-web-payments-review-contract": "node scripts/smoke-admin-web-payments-review-contract.js",
     "smoke:admin-web-comms-contract": "node scripts/smoke-admin-web-comms-contract.js",
     "smoke:admin-web-founder-contract": "node scripts/smoke-admin-web-founder-contract.js",
     "smoke:admin-web-login-contract": "node scripts/smoke-admin-web-login-contract.js",

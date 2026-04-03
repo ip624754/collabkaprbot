@@ -1,3 +1,13 @@
+## STEP535H — Payments review clarity + action rail
+- Reworked `/admin/payments` from a flat status table into a clearer review plane in `scripts/admin-web.js`: summary cards now separate applied / manual review / stuck / watchlist counts, and the page opens with explicit `Review buckets` plus a `Next-action rail`.
+- Extended `src/lib/adminWeb/readModels.js` with `reviewBuckets` and `actionRail`, while keeping the surface read-only and reusing the existing follow-up model / payment detail drilldown. The follow-up queue now carries `userId` so operators can move from payment detail to user card honestly instead of guessing.
+- Promoted `Кейсы для ручного review` above the raw history table so the payment page reads as an operator review surface first and a journal second.
+- Added `scripts/smoke-admin-web-payments-review-contract.js`, updated the existing payments smokes, wired the new contract into `package.json` + `scripts/preflight.js`, and kept the step strictly on the read-model / UX layer.
+
+Acceptance / notes:
+- money-path logic, webhook/apply/fallback code, and write contracts remain untouched;
+- still requires live browser verification after deploy for the actual scan-speed / case-triage feel on the real payments viewport.
+
 ## STEP535G — Sidebar nav noise cleanup + overview micro-polish
 - Cleaned the admin shell sidebar in `styles/admin-web.css`: nav groups now render as explicit stacked blocks, links are full-width block items, and the browser focus ring no longer leaks a second blue rail beside the active item.
 - Kept one clear active-state signal for the selected section by aligning `hover / active / focus-visible` onto the same visual contract instead of letting default outline styling compete with the filled state.

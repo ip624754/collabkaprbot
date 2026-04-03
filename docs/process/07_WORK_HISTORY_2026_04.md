@@ -689,3 +689,19 @@ Acceptance / notes:
 - no API / DB / auth / runtime / write-surface changes;
 - sidebar now exposes one clear active-state signal;
 - requires live browser verification after deploy for final shell polish confirmation.
+
+
+## STEP535H — Payments review clarity + action rail
+
+Date: 2026-04-03
+
+Scope:
+- rebuilt `/admin/payments` into a clearer review plane in `scripts/admin-web.js`, with top summary cards, `Review buckets`, a `Next-action rail`, and a dedicated `Кейсы для ручного review` section before the raw history table;
+- extended `src/lib/adminWeb/readModels.js` with `reviewBuckets` and `actionRail` while keeping the existing payment follow-up model read-only; the queue now carries `userId` so payment follow-up can honestly lead into user card drilldown;
+- added `scripts/smoke-admin-web-payments-review-contract.js`, updated the payments smoke contracts, and wired the new review smoke into `package.json` + `scripts/preflight.js`;
+- kept the pass strictly on read-model / UX clarity: no payment apply logic, webhook handling, fallback mutations, or other money-path write surfaces were changed.
+
+Acceptance / notes:
+- Payments now reads as review/control surface first and history table second;
+- operators can distinguish applied vs manual review vs stuck vs watch states in one scan;
+- still requires live browser verification after deploy for the final review-flow feel on the real viewport.

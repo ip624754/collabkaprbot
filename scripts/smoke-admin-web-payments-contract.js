@@ -12,6 +12,8 @@ for (const token of [
   '/api/admin-web-read?section=payment',
   'Payments',
   'Последние платежи',
+  'Review buckets',
+  'Next-action rail',
   'Status groups',
   'Payment detail',
   'Последние payment-сигналы',
@@ -28,6 +30,8 @@ for (const token of [
   'buildPaymentWarnings',
   'buildPaymentEventTrace',
   'groups:',
+  'reviewBuckets',
+  'actionRail',
   'needsReview',
 ]) {
   assert.ok(models.includes(token), `payments read model must include ${token}`);

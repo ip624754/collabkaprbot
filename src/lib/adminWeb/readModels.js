@@ -584,7 +584,87 @@ function buildPaymentFollowUpQueue(items = []) {
       amountLabel: item.amountLabel,
       followUp: item.followUp,
       updatedAt: item.updatedAt,
+      userId: Number(item.userId || 0) || 0,
     }));
+}
+
+function buildPaymentReviewBuckets(summary = {}, followUpGroups = {}) {
+  return [
+    {
+      key: 'applied',
+      label: 'Уже applied',
+      count: Number(summary.successful || 0),
+      help: 'успешно применённые события',
+      tone: Number(summary.successful || 0) > 0 ? 'good' : 'info',
+    },
+    {
+      key: 'manual_review',
+      label: 'Ручной review',
+      count: Number(followUpGroups.review || 0),
+      help: 'fallback / founder-operator разбор',
+      tone: Number(followUpGroups.review || 0) > 0 ? 'warn' : 'good',
+    },
+    {
+      key: 'stuck',
+      label: 'Stuck / needs check',
+      count: Number(followUpGroups.urgent || 0),
+      help: 'failed или pending старше порога',
+      tone: Number(followUpGroups.urgent || 0) > 0 ? 'bad' : 'good',
+    },
+    {
+      key: 'watch',
+      label: 'Под наблюдением',
+      count: Number(followUpGroups.watch || 0),
+      help: 'pending-кейсы без срочного follow-up',
+      tone: Number(followUpGroups.watch || 0) > 0 ? 'info' : 'good',
+    },
+    {
+      key: 'history',
+      label: 'History / info',
+      count: Math.max(0, Number(summary.total || 0) - Number(summary.recent || 0)),
+      help: 'старые события вне активного review',
+      tone: 'info',
+    },
+  ];
+}
+
+function buildPaymentActionRail(summary = {}, followUpGroups = {}) {
+  const urgent = Number(followUpGroups.urgent || 0);
+  const review = Number(followUpGroups.review || 0);
+  const watch = Number(followUpGroups.watch || 0);
+  const needsReview = urgent + review;
+  return [
+    {
+      key: 'stay_payments',
+      label: urgent > 0 || review > 0 ? 'Оставаться в Payments' : 'Payments под обычным наблюдением',
+      body: urgent > 0 || review > 0
+        ? 'Сначала разберись с non-applied / fallback / failed кейсами здесь, а не через Users.'
+        : 'Сигналов для срочного payment review сейчас нет.',
+      href: '/admin/payments',
+      cta: 'Payments review',
+      tone: needsReview > 0 ? 'warn' : 'good',
+    },
+    {
+      key: 'go_runtime',
+      label: 'Когда идти в Runtime',
+      body: urgent > 0
+        ? 'Если кейс выглядит stuck, статус не двигается или есть delivery/retry шум — сначала Runtime.'
+        : 'Runtime нужен только если payment проблема выглядит системной, а не пользовательской.',
+      href: '/admin/runtime',
+      cta: 'Открыть Runtime',
+      tone: urgent > 0 ? 'warn' : 'info',
+    },
+    {
+      key: 'go_user',
+      label: 'Когда открывать user card',
+      body: needsReview > 0 || watch > 0
+        ? 'После payment detail проверь user card: plan, credits, channel и последнюю активность.'
+        : 'User card нужен только для точечного follow-up после payment detail.',
+      href: '/admin/users',
+      cta: 'Открыть Users',
+      tone: (needsReview > 0 || watch > 0) ? 'info' : 'good',
+    },
+  ];
 }
 
 function buildPaymentOperatorHints(summary = {}, followUpGroups = {}) {
@@ -617,6 +697,8 @@ export async function getPaymentsSummary() {
     warnings: [{ level: 'info', message: 'Платёжных событий пока нет.', source: 'payments' }],
     groups: { success: 0, pending: 0, failed: 0, fallback: 0 },
     followUpGroups: { noAction: 0, watch: 0, review: 0, urgent: 0 },
+    reviewBuckets: [],
+    actionRail: [],
     followUpQueue: [],
     recentPayments: [],
     hints: [{ kind: 'info', message: 'Read-only режим: для любых ручных действий использовать bot/admin fallback.' }],
@@ -704,6 +786,8 @@ export async function getPaymentsSummary() {
     fallback: summary.fallback,
   };
   out.followUpGroups = buildPaymentFollowUpGroups(summary);
+  out.reviewBuckets = buildPaymentReviewBuckets(summary, out.followUpGroups);
+  out.actionRail = buildPaymentActionRail(summary, out.followUpGroups);
   out.warnings = buildPaymentWarnings(summary);
   out.recentPayments = recentPayments;
   out.followUpQueue = buildPaymentFollowUpQueue(recentPayments);

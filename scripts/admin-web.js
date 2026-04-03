@@ -2445,6 +2445,8 @@ function paymentsView(model) {
   const recentPayments = Array.isArray(model.recentPayments) ? model.recentPayments : [];
   const groups = model.groups || {};
   const followUpGroups = model.followUpGroups || {};
+  const reviewBuckets = Array.isArray(model.reviewBuckets) ? model.reviewBuckets : [];
+  const actionRail = Array.isArray(model.actionRail) ? model.actionRail : [];
   const followUpQueue = Array.isArray(model.followUpQueue) ? model.followUpQueue : [];
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const overall = model.overall || { state: 'unknown', label: 'Данные пока недоступны' };
@@ -2452,20 +2454,50 @@ function paymentsView(model) {
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
-          <h2>Платёжный статус</h2>
-          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)}</p>
+          <h2>Payments review plane</h2>
+          <p class="aw-muted">Last updated: ${formatDate(model.updatedAt)} · read-first monetization review</p>
         </div>
         <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeStateLabel(overall.state))} · ${escapeHtml(overall.label || '')}</div>
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
-        <div class="aw-card aw-runtime-card"><span>Total payments</span><strong>${Number(summary.total || 0)}</strong><small>Все события</small></div>
-        <div class="aw-card aw-runtime-card"><span>Recent payments</span><strong>${Number(summary.recent || 0)}</strong><small>Последние 7 дней</small></div>
-        <div class="aw-card aw-runtime-card"><span>Successful</span><strong class="aw-status good">${Number(summary.successful || 0)}</strong><small>Применены</small></div>
-        <div class="aw-card aw-runtime-card"><span>Pending</span><strong class="aw-status warn">${Number(summary.pending || 0)}</strong><small>Требуют внимания</small></div>
-        <div class="aw-card aw-runtime-card"><span>Warnings</span><strong class="aw-status ${Number(summary.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.warnings || 0)}</strong><small>Fallback / failed / stale</small></div>
-        <div class="aw-card aw-runtime-card"><span>Needs review</span><strong class="aw-status ${Number(summary.needsReview || 0) > 0 ? 'bad' : 'good'}">${Number(summary.needsReview || 0)}</strong><small>Founder/operator review</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Total payments</span><strong>${Number(summary.total || 0)}</strong><small>все события</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Recent payments</span><strong>${Number(summary.recent || 0)}</strong><small>последние 7 дней</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Already applied</span><strong class="aw-status good">${Number(summary.successful || 0)}</strong><small>успешно применены</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Manual review</span><strong class="aw-status ${Number(followUpGroups.review || 0) > 0 ? 'warn' : 'good'}">${Number(followUpGroups.review || 0)}</strong><small>fallback / founder review</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Stuck / needs check</span><strong class="aw-status ${Number(followUpGroups.urgent || 0) > 0 ? 'bad' : 'good'}">${Number(followUpGroups.urgent || 0)}</strong><small>failed + old pending</small></div>
+        <div class="aw-card aw-runtime-card aw-metric-card"><span>Watchlist</span><strong class="aw-status ${Number(followUpGroups.watch || 0) > 0 ? 'info' : 'good'}">${Number(followUpGroups.watch || 0)}</strong><small>pending без срочного follow-up</small></div>
       </div>
     </section>
+
+    <div class="aw-overview-workspace-grid aw-section">
+      <section class="aw-surface aw-stack">
+        <h2>Review buckets</h2>
+        <p class="aw-surface-note">Сначала ручной review, потом stuck / watch, а историю держим ниже как журнал.</p>
+        <div class="aw-overview-mini-grid">
+          ${reviewBuckets.length ? reviewBuckets.map((item) => `
+            <div class="aw-mini-card">
+              <span>${escapeHtml(item.label || 'Bucket')}</span>
+              <strong class="aw-status ${String(item.tone || 'info')}">${Number(item.count || 0)}</strong>
+              <small>${escapeHtml(item.help || '')}</small>
+            </div>
+          `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+        </div>
+      </section>
+      <section class="aw-surface aw-stack">
+        <h2>Next-action rail</h2>
+        <div class="aw-list">
+          ${actionRail.length ? actionRail.map((item) => `
+            <div class="aw-list-item">
+              <strong class="aw-status ${String(item.tone || 'info')}">${escapeHtml(item.label || 'Следующий шаг')}</strong>
+              <small>${escapeHtml(item.body || '')}</small>
+            </div>
+          `).join('') : '<div class="aw-empty">Action rail пока пуст.</div>'}
+        </div>
+        <div class="aw-actions aw-overview-actions">
+          ${actionRail.map((item) => `<a href="${escapeHtml(item.href || '/admin/payments')}" data-link class="aw-button ${item.key === 'stay_payments' ? '' : 'ghost'}">${escapeHtml(item.cta || 'Открыть')}</a>`).join('')}
+        </div>
+      </section>
+    </div>
 
     <section class="aw-surface aw-section aw-stack">
       <h2>Предупреждения</h2>
@@ -2479,39 +2511,63 @@ function paymentsView(model) {
       </div>
     </section>
 
-    <div class="aw-split aw-section aw-runtime-layout">
-      <section class="aw-surface aw-stack">
-        <h2>Последние платежи</h2>
-        <div class="aw-table-wrap">
-          <table class="aw-table">
-            <thead>
-              <tr>
-                <th>Payment</th>
-                <th>User</th>
-                <th>Type</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Follow-up</th>
-                <th>Created</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${recentPayments.length ? recentPayments.map((item) => `
-                <tr data-payment-row="${Number(item.id || 0)}">
-                  <td><strong>#${Number(item.id || 0)}</strong><small>user_id ${Number(item.userId || 0) || '—'} · tg_id ${Number(item.tgId || 0) || '—'}</small></td>
-                  <td>${escapeHtml(item.displayName || '—')}</td>
-                  <td>${escapeHtml(item.kind || 'payment')}</td>
-                  <td>${escapeHtml(item.amountLabel || '—')}</td>
-                  <td><span class="aw-status ${paymentStatusClass(item.status)}">${escapeHtml(paymentStatusLabel(item.status))}</span></td>
-                  <td><span class="aw-status ${paymentFollowUpClass(item.followUp?.level)}">${escapeHtml(item.followUp?.label || paymentFollowUpLabel(item.followUp?.level))}</span><small>${escapeHtml(item.followUp?.reason || '')}</small></td>
-                  <td>${formatDate(item.createdAt)}</td>
-                  <td>${formatDate(item.updatedAt)}</td>
+    <div class="aw-split aw-section aw-runtime-layout aw-payments-layout">
+      <section class="aw-stack">
+        <section class="aw-surface aw-stack">
+          <h2>Кейсы для ручного review</h2>
+          <div class="aw-list">
+            ${followUpQueue.length ? followUpQueue.map((item) => `
+              <div class="aw-list-item">
+                <div class="aw-row-between">
+                  <div>
+                    <strong>${escapeHtml(item.displayName || `payment #${Number(item.id || 0)}`)}</strong>
+                    <small>#${Number(item.id || 0)} · ${escapeHtml(item.amountLabel || '—')} · ${escapeHtml(item.followUp?.reason || '')}</small>
+                  </div>
+                  <span class="aw-status ${paymentFollowUpClass(item.followUp?.level)}">${escapeHtml(item.followUp?.label || paymentFollowUpLabel(item.followUp?.level))}</span>
+                </div>
+                <div class="aw-actions">
+                  <a href="/admin/payments/${Number(item.id || 0)}?back=${encodeURIComponent('/admin/payments')}" data-link class="aw-button ghost">Payment detail</a>
+                  ${Number(item.userId || 0) > 0 ? `<a href="/admin/users/${Number(item.userId || 0)}?back=${encodeURIComponent('/admin/payments')}" data-link class="aw-button ghost">User card</a>` : ''}
+                </div>
+              </div>
+            `).join('') : '<div class="aw-empty">Сейчас нет кейсов для ручного review.</div>'}
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Последние платежи</h2>
+          <p class="aw-muted">Журнал ниже не главный сигнал: сначала buckets / review rail, потом уже история.</p>
+          <div class="aw-table-wrap">
+            <table class="aw-table">
+              <thead>
+                <tr>
+                  <th>Payment</th>
+                  <th>User</th>
+                  <th>Type</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Follow-up</th>
+                  <th>Created</th>
+                  <th>Updated</th>
                 </tr>
-              `).join('') : '<tr><td colspan="8" class="aw-empty">Платёжных событий пока нет.</td></tr>'}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                ${recentPayments.length ? recentPayments.map((item) => `
+                  <tr data-payment-row="${Number(item.id || 0)}">
+                    <td><strong>#${Number(item.id || 0)}</strong><small>user_id ${Number(item.userId || 0) || '—'} · tg_id ${Number(item.tgId || 0) || '—'}</small></td>
+                    <td>${escapeHtml(item.displayName || '—')}</td>
+                    <td>${escapeHtml(item.kind || 'payment')}</td>
+                    <td>${escapeHtml(item.amountLabel || '—')}</td>
+                    <td><span class="aw-status ${paymentStatusClass(item.status)}">${escapeHtml(paymentStatusLabel(item.status))}</span></td>
+                    <td><span class="aw-status ${paymentFollowUpClass(item.followUp?.level)}">${escapeHtml(item.followUp?.label || paymentFollowUpLabel(item.followUp?.level))}</span><small>${escapeHtml(item.followUp?.reason || '')}</small></td>
+                    <td>${formatDate(item.createdAt)}</td>
+                    <td>${formatDate(item.updatedAt)}</td>
+                  </tr>
+                `).join('') : '<tr><td colspan="8" class="aw-empty">Платёжных событий пока нет.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <aside class="aw-stack">
@@ -2522,19 +2578,6 @@ function paymentsView(model) {
             <div class="aw-list-item"><strong>наблюдать</strong><small>${Number(followUpGroups.watch || 0)}</small></div>
             <div class="aw-list-item"><strong>проверить</strong><small>${Number(followUpGroups.review || 0)}</small></div>
             <div class="aw-list-item"><strong>срочно</strong><small>${Number(followUpGroups.urgent || 0)}</small></div>
-          </div>
-        </section>
-
-        <section class="aw-surface aw-stack">
-          <h2>Кейсы для follow-up</h2>
-          <div class="aw-list">
-            ${followUpQueue.length ? followUpQueue.map((item) => `
-              <div class="aw-list-item">
-                <strong>${escapeHtml(item.displayName || `payment #${Number(item.id || 0)}`)}</strong>
-                <small>#${Number(item.id || 0)} · ${escapeHtml(item.amountLabel || '—')} · ${escapeHtml(item.followUp?.reason || '')}</small>
-                <div class="aw-actions"><a href="/admin/payments/${Number(item.id || 0)}?back=${encodeURIComponent('/admin/payments')}" data-link class="aw-button ghost">Открыть</a></div>
-              </div>
-            `).join('') : '<div class="aw-empty">Сейчас нет кейсов для follow-up.</div>'}
           </div>
         </section>
 
