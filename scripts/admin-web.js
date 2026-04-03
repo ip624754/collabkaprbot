@@ -1,7 +1,7 @@
 const app = document.getElementById('app');
 
 const BRAND_LOGO = '/assets/brand/collabka-mark-blue.png';
-const ADMIN_OPERATOR_REFRESH_MODE = 'manual refresh only';
+const ADMIN_OPERATOR_REFRESH_MODE = 'только ручное обновление';
 
 function escapeHtml(input) {
   return String(input || '')
@@ -518,6 +518,51 @@ function warningTone(level) {
   return 'aw-status';
 }
 
+function founderSensitivityMeta(kind = 'routine') {
+  const key = String(kind || '').trim().toLowerCase();
+  if (key === 'sensitive') {
+    return { label: 'Чувствительное изменение', tone: 'is-bad', hint: 'Трогать только когда понимаешь системный эффект и готов закрыть текущую web-сессию.' };
+  }
+  if (key === 'attention') {
+    return { label: 'Нужна проверка', tone: 'is-warn', hint: 'Сначала проверь предупреждения и Runtime, потом уже меняй контур.' };
+  }
+  return { label: 'Безопасно для рутины', tone: 'is-good', hint: 'Можно смотреть и использовать как обычный founder review without broad side effects.' };
+}
+
+function founderControlCards(model = {}) {
+  const founderSale = model.founderSale || {};
+  const controls = model.controls || {};
+  const warnings = Array.isArray(model.warnings) ? model.warnings : [];
+  return [
+    {
+      title: 'Web-сессии',
+      kind: controls.canRevokeAllSessions ? 'sensitive' : 'routine',
+      meaning: controls.canRevokeAllSessions
+        ? 'Единственный founder-only web-control: завершает все web-сессии, включая текущую.'
+        : 'В этой сессии опасное founder-действие недоступно; экран остаётся read-first.',
+      when: controls.canRevokeAllSessions
+        ? 'Используй только когда нужно жёстко закрыть доступ и начать новую founder-сессию.'
+        : 'Оставайся в read-first режиме и не лечи доступ через случайные web-действия.',
+    },
+    {
+      title: 'Founder sale и policy',
+      kind: founderSale.enabled ? 'attention' : 'routine',
+      meaning: founderSale.enabled
+        ? 'Sale сейчас включён: меняется owner-copy и коммерческая рамка некоторых поверхностей.'
+        : 'Sale выключен: блок нужен как справочная owner-политика, а не как активный режим продаж.',
+      when: 'Проверяй перед изменением позиционирования, цен или owner-решений по монетизации.',
+    },
+    {
+      title: 'Bot-only и publish path',
+      kind: 'sensitive',
+      meaning: Array.isArray(controls.botOnlyControls) && controls.botOnlyControls.length
+        ? `Через web-admin специально недоступны: ${controls.botOnlyControls.join(' · ')}.`
+        : 'Risky controls и publish-path intentionally вынесены из web-admin.',
+      when: 'Если нужен risky control, publish-path или системная мутация, переходи в Telegram admin.',
+    },
+  ];
+}
+
 function pathParts() {
   return location.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
 }
@@ -850,6 +895,7 @@ function loginView(state = {}) {
         <p>Hobby-safe operator console: secret → Telegram approve / code → session.</p>
         <div class="aw-login-grid">
           <div class="aw-step-chip">${escapeHtml(stepTitle)}</div>
+          ${state.info ? `<div class="aw-info">${escapeHtml(state.info)}</div>` : ''}
           ${state.error ? `<div class="aw-error">${escapeHtml(state.error)}</div>` : ''}
           ${hasChallenge ? `
             <div class="aw-info">Secret уже принят. Снова вводить его не нужно: подтверди вход в Telegram или вставь одноразовый код.</div>
@@ -3151,20 +3197,31 @@ function founderView(model) {
   const recentAudit = Array.isArray(model.recentFounderAudit) ? model.recentFounderAudit : [];
   const compactFounderLayout = recentAudit.length === 0;
   const founderHintsCompact = hints.length <= 3;
+  const controlCards = founderControlCards(model);
+  const founderAllowedMeta = founderSensitivityMeta(founder.allowed ? 'routine' : 'attention');
+  const revokeMeta = founderSensitivityMeta(controls.canRevokeAllSessions ? 'sensitive' : 'attention');
+  const botOnlyLabel = Array.isArray(controls.botOnlyControls) && controls.botOnlyControls.length
+    ? controls.botOnlyControls.map((item) => escapeHtml(item)).join(' · ')
+    : '—';
   return sectionShell('founder', `
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
-          <h2>Доступ фаундера</h2>
-          <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)}</p>
+          <h2>Фаундерский доступ</h2>
+          <p class="aw-muted">Только для фаундера: read-first обзор, границы риска и один чувствительный web-контроль без скрытых write-path.</p>
         </div>
         <div class="aw-runtime-overall ${founder.allowed ? 'good' : 'warn'}">${founder.allowed ? 'ФАУНДЕР-СЕССИЯ' : 'ОПЕРАТОРСКАЯ СЕССИЯ'} · TG ${Number(founder.actorTgId || 0) || '—'}</div>
+      </div>
+      <div class="aw-badges aw-founder-badges">
+        <span class="aw-badge is-good">Только для фаундера</span>
+        <span class="aw-badge ${founder.allowed ? 'is-good' : 'is-warn'}">${escapeHtml(founderAllowedMeta.label)}</span>
+        <span class="aw-badge ${controls.canRevokeAllSessions ? 'is-bad' : 'is-warn'}">${controls.canRevokeAllSessions ? 'Есть чувствительное web-действие' : 'Только read-first web-режим'}</span>
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
         <div class="aw-card aw-runtime-card"><span>Авторизация и сессия</span><strong class="aw-status good">OK</strong><small>логин ${Number(sessionPolicy.loginTtlSec || 0)}с · сессия ${Number(sessionPolicy.sessionTtlSec || 0)}с</small></div>
         <div class="aw-card aw-runtime-card"><span>Таймаут бездействия</span><strong>${Math.round(Number(sessionPolicy.idleTimeoutSec || 0) / 60) || 0}м</strong><small>только ручное обновление</small></div>
-        <div class="aw-card aw-runtime-card"><span>Аппруверы</span><strong>${Number(sessionPolicy.approversCount || 0)}</strong><small>Telegram-аппруверы настроены</small></div>
-        <div class="aw-card aw-runtime-card"><span>Founder Sale</span><strong class="aw-status ${founderSale.enabled ? 'good' : 'warn'}">${founderSale.enabled ? 'ON' : 'OFF'}</strong><small>${escapeHtml(founderSale.deadline || 'Без дедлайна')}</small></div>
+        <div class="aw-card aw-runtime-card"><span>Telegram-аппруверы</span><strong>${Number(sessionPolicy.approversCount || 0)}</strong><small>граница для фаундерского web-входа</small></div>
+        <div class="aw-card aw-runtime-card"><span>Founder sale</span><strong class="aw-status ${founderSale.enabled ? 'warn' : 'good'}">${founderSale.enabled ? 'ВКЛ' : 'ВЫКЛ'}</strong><small>${escapeHtml(founderSale.deadline || 'Без дедлайна')}</small></div>
       </div>
     </section>
 
@@ -3172,9 +3229,9 @@ function founderView(model) {
       <section class="aw-surface aw-stack">
         <h2>Следующий фаундер-шаг</h2>
         <div class="aw-list">
-          <div class="aw-list-item"><strong class="aw-status ${founder.allowed ? 'good' : 'warn'}">${founder.allowed ? 'Можно действовать' : 'Только read-first режим'}</strong><small>${founder.allowed ? 'Сначала смотри предупреждения и границы, потом используй только безопасные web-контроли.' : 'В этой сессии доступен только обзор фаундер-слоя без опасных действий.'}</small></div>
+          <div class="aw-list-item"><strong class="${warningTone(founder.allowed ? 'info' : 'warning')}">${escapeHtml(founderAllowedMeta.label)}</strong><small>${founder.allowed ? 'Сначала читай предупреждения и семантику безопасности. Только потом используй фаундерское web-действие.' : 'В этой сессии фаундерское web-действие недоступно. Экран работает как owner-only read-first surface.'}</small></div>
           <div class="aw-list-item"><strong>Когда идти в Runtime</strong><small>Если предупреждение связано с QStash, PUBLIC_BASE_URL или системным деградом, сначала открой Runtime и проверь базовый системный контур.</small></div>
-          <div class="aw-list-item"><strong>Когда идти в Telegram</strong><small>Если нужен risky control, publish-path или bot-only мутация, не лечи это из web-admin — переходи в Telegram admin.</small></div>
+          <div class="aw-list-item"><strong>Когда идти в Telegram</strong><small>Если нужен рискованный контроль, publish-path, платёжная мутация или bot-only действие, не лечи это из web-admin — переходи в Telegram admin.</small></div>
         </div>
         <div class="aw-actions aw-overview-actions">
           <a href="/admin/founder" data-link class="aw-button">Фаундер-слой</a>
@@ -3185,28 +3242,65 @@ function founderView(model) {
       <section class="aw-surface aw-stack">
         <h2>Границы этой поверхности</h2>
         <div class="aw-list">
-          <div class="aw-list-item"><strong>Что можно делать здесь</strong><small>Смотреть предупреждения, policy, сессионные лимиты и безопасно завершать web-сессии.</small></div>
+          <div class="aw-list-item"><strong>Что можно делать здесь</strong><small>Смотреть предупреждения, founder-sale параметры, сессионные лимиты и при необходимости завершать все web-сессии.</small></div>
           <div class="aw-list-item"><strong>Чего тут нет специально</strong><small>Нет runtime/config writes, нет payment writes, нет publish-path действий и нет широких destructive bulk-мутaций.</small></div>
-          <div class="aw-list-item"><strong>Главный принцип</strong><small>Фаундер-слой остаётся отдельным read-first экраном: опасные действия не смешиваются с обычным operator UX.</small></div>
+          <div class="aw-list-item"><strong>Главный принцип</strong><small>Фаундер-слой остаётся отдельным owner-grade экраном: опасные действия не маскируются под обычную операторскую рутину.</small></div>
         </div>
       </section>
     </div>
 
+    <section class="aw-surface aw-section aw-stack">
+      <div class="aw-runtime-head">
+        <div>
+          <h2>Семантика безопасности</h2>
+          <p class="aw-surface-note">Каждый фаундерский контур ниже помечен по чувствительности, чтобы web-admin не выглядел как обычный экран с тумблерами.</p>
+        </div>
+        <span class="aw-badge is-warn">Подтверждение обязательно для чувствительных действий</span>
+      </div>
+      <div class="aw-runtime-summary-grid">
+        ${controlCards.map((item) => {
+          const meta = founderSensitivityMeta(item.kind);
+          return `
+            <article class="aw-mini-card aw-founder-safety-card aw-founder-safety-card--${escapeHtml(item.kind)}">
+              <div class="aw-founder-safety-head">
+                <span>${escapeHtml(item.title)}</span>
+                <span class="aw-badge ${escapeHtml(meta.tone)}">${escapeHtml(meta.label)}</span>
+              </div>
+              <strong>${escapeHtml(item.meaning)}</strong>
+              <small>${escapeHtml(item.when)}</small>
+            </article>
+          `;
+        }).join('')}
+      </div>
+    </section>
+
     <div class="aw-split aw-section aw-runtime-layout aw-founder-layout ${compactFounderLayout ? 'is-compact' : ''}">
       <section class="aw-stack">
         <section class="aw-surface aw-stack">
-          <h2>Границы фаундер-контуров</h2>
-          <div class="aw-list">
-            <div class="aw-list-item"><strong>Безопасное web-действие</strong><small>${controls.canRevokeAllSessions ? 'Разрешено только завершение всех web-сессий.' : 'Фаундерское web-действие недоступно в этой сессии.'}</small></div>
-            <div class="aw-list-item"><strong>Только через бота</strong><small>${Array.isArray(controls.botOnlyControls) ? controls.botOnlyControls.join(' · ') : '—'}</small></div>
-          </div>
-          <div class="aw-actions">
-            <button class="aw-button danger" id="revokeAllBtn" ${controls.canRevokeAllSessions ? '' : 'disabled'}>Завершить все web-сессии</button>
+          <h2>Фаундерское web-действие</h2>
+          <div class="aw-founder-action-rail aw-founder-risk-${controls.canRevokeAllSessions ? 'sensitive' : 'attention'}">
+            <div class="aw-founder-action-copy">
+              <div class="aw-founder-action-head">
+                <strong>Завершить все web-сессии</strong>
+                <span class="aw-badge ${escapeHtml(revokeMeta.tone)}">${escapeHtml(revokeMeta.label)}</span>
+              </div>
+              <p class="aw-surface-note">Закроет все текущие web-сессии, включая эту founder-сессию. После применения экран переведёт на повторный вход.</p>
+              <div class="aw-list">
+                <div class="aw-list-item"><strong>На что влияет</strong><small>Только web-access слой. Не меняет runtime/env/payment состояние.</small></div>
+                <div class="aw-list-item"><strong>Когда использовать</strong><small>${controls.canRevokeAllSessions ? 'Когда нужен жёсткий фаундерский reset web-доступа или надо гарантированно закрыть чужие сессии.' : 'Сейчас фаундерское действие недоступно. Оставайся в read-first режиме и смотри предупреждения.'}</small></div>
+                <div class="aw-list-item"><strong>Bot-only контур</strong><small>${botOnlyLabel}</small></div>
+              </div>
+            </div>
+            <div class="aw-founder-action-cta">
+              <button class="aw-button danger" id="revokeAllBtn" ${controls.canRevokeAllSessions ? '' : 'disabled'} data-founder-control="revoke_all">Применить: завершить все web-сессии</button>
+              <small class="aw-runtime-footnote">Это owner-only действие с системным эффектом на доступ. Подтверждение спрашивается отдельно.</small>
+            </div>
           </div>
         </section>
 
         <section class="aw-surface aw-stack">
           <h2>Параметры founder sale</h2>
+          <p class="aw-surface-note">Справочный owner-policy слой: помогает понять коммерческий режим, но сам по себе не является отдельным write-контролем в web-admin.</p>
           <div class="aw-mini-grid aw-mini-grid-3">
             <div class="aw-mini-card"><span>Brand 3m</span><strong>${Number(founderSale.brand3mPrice || 0)}</strong><small>${Number(founderSale.brand3mCredits || 0)} кредитов</small></div>
             <div class="aw-mini-card"><span>Brand 12m</span><strong>${Number(founderSale.brand12mPrice || 0)}</strong><small>${Number(founderSale.brand12mCredits || 0)} кредитов</small></div>
@@ -3251,7 +3345,7 @@ function founderView(model) {
         </section>
 
         <section class="aw-surface aw-stack ${recentAudit.length === 0 ? 'is-compact-empty' : ''}">
-          <h2>Последние founder-действия</h2>
+          <h2>Последние фаундер-действия</h2>
           <div class="aw-list">
             ${recentAudit.length ? recentAudit.map((item) => `
               <div class="aw-list-item">
@@ -4104,15 +4198,36 @@ function bindShell() {
     if (!res.ok) alert(`Не удалось очистить note: ${res.data?.error || 'unknown'}`);
     else render();
   });
-  document.getElementById('revokeAllBtn')?.addEventListener('click', async () => {
-    if (!confirm('Завершить все web-сессии? Текущая фаундер-сессия тоже будет закрыта.')) return;
+  document.getElementById('revokeAllBtn')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    if (!(btn instanceof HTMLButtonElement) || btn.disabled) return;
+    const confirmed = confirm([
+      'Завершить все web-сессии сейчас?',
+      '• текущая founder-сессия тоже закроется',
+      '• это owner-only действие для web-access слоя',
+      '• после применения откроется экран входа'
+    ].join('\n'));
+    if (!confirmed) {
+      showToast('Фаундерское действие отменено. Ничего не менялось.', 'info', { ttl: 1800 });
+      return;
+    }
+    const originalLabel = btn.textContent || 'Применить: завершить все web-сессии';
+    btn.disabled = true;
+    btn.textContent = 'Завершаем web-сессии…';
+    btn.classList.add('is-pressed');
     const res = await api('/api/admin-web-auth?action=revoke_all', { method: 'POST' });
     if (!res.ok) {
-      alert(`Не удалось выполнить revoke: ${res.data?.error || 'unknown'}`);
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      btn.classList.remove('is-pressed');
+      showToast(`Не удалось завершить web-сессии: ${res.data?.error || 'unknown'}`, 'error');
       return render();
     }
     history.replaceState({}, '', '/admin/login');
-    window.__loginState = { error: 'Все web-сессии отозваны. Войди заново.' };
+    window.__loginState = {
+      info: 'Фаундерское действие применено: все web-сессии закрыты, включая текущую.',
+      error: 'Войди заново, чтобы открыть новую фаундерскую сессию.'
+    };
     render();
   });
 

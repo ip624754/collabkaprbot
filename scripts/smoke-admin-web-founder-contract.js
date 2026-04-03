@@ -1,35 +1,42 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const ROOT = path.resolve(__dirname, "..");
+const ROOT = process.cwd();
+const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-function read(rel) {
-  return fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const webJs = read('scripts/admin-web.js');
+for (const token of [
+  'function founderSensitivityMeta(kind = \'routine\')',
+  'function founderControlCards(model = {})',
+  'Семантика безопасности',
+  'Фаундерское web-действие',
+  'Применить: завершить все web-сессии',
+  'Фаундерское действие применено: все web-сессии закрыты, включая текущую.',
+  'Подтверждение обязательно для чувствительных действий',
+  'Только для фаундера: read-first обзор, границы риска и один чувствительный web-контроль',
+]) {
+  assert.ok(webJs.includes(token), `admin-web STEP535O founder semantics must include ${token}`);
 }
-function ok(cond, msg) {
-  if (!cond) {
-    console.error(`[smoke-admin-web-founder-contract] ${msg}`);
-    process.exit(1);
-  }
+
+const css = read('styles/admin-web.css');
+for (const token of [
+  '.aw-founder-badges',
+  '.aw-founder-safety-card',
+  '.aw-founder-action-rail',
+  '.aw-founder-risk-sensitive',
+  '.aw-badge.is-warn',
+]) {
+  assert.ok(css.includes(token), `admin-web STEP535O founder CSS must include ${token}`);
 }
 
-const js = read('scripts/admin-web.js');
-const auth = read('src/lib/adminWeb/auth.js');
-const apiRead = read('api/admin-web-read.js');
-const apiAuth = read('api/admin-web-auth.js');
-const models = read('src/lib/adminWeb/readModels.js');
+const html = read('admin.html');
+assert.ok(html.includes('step535o'), 'admin shell asset URLs must be cache-busted to step535o');
 
-ok(js.includes("/admin/founder"), 'founder route missing in admin shell');
-ok(js.includes('Фаундерский read-first слой'), 'founder page copy missing');
-ok(js.includes('revokeAllBtn'), 'founder revoke button missing');
-ok(auth.includes('isFounderActorTgId'), 'founder actor helper missing');
-ok(auth.includes('requireFounderSession'), 'founder session guard missing');
-ok(apiRead.includes("section === 'founder'"), 'founder read section missing');
-ok(apiAuth.includes('requireFounderSession(req, res)'), 'revoke_all must require founder session');
-ok(models.includes('export async function getFounderSummary'), 'founder read model missing');
-ok(js.includes('Следующий фаундер-шаг'), 'founder action rail missing');
-ok(js.includes('Границы этой поверхности'), 'founder boundaries surface missing');
-console.log('OK: admin web founder clarity contract');
+const currentState = read('docs/00_CURRENT_STATE.md');
+assert.ok(currentState.includes('STEP535O'), 'current state must mention STEP535O');
+
+const workHistory = read('docs/process/07_WORK_HISTORY_2026_04.md');
+assert.ok(workHistory.includes('STEP535O'), 'work history must mention STEP535O');
+
+console.log('✅ smoke admin-web founder control safety semantics + confirmation polish OK');

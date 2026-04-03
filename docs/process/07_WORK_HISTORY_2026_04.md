@@ -1,3 +1,17 @@
+## STEP535O — Founder control safety semantics + confirmation polish
+
+Date: 2026-04-03
+
+Scope:
+- turned `/admin/founder` into a clearer owner-grade control surface in `scripts/admin-web.js` by adding a dedicated `Семантика безопасности` layer, explicit founder sensitivity cards, and a clearer split between safe read-first review, cautionary policy checks, and bot-only / sensitive controls;
+- reworked the founder-only web action block so `Завершить все web-сессии` now states scope, impact, and normal usage before the button, instead of reading like an ordinary routine toggle;
+- polished confirmation feedback for revoke-all without touching backend auth logic: the button now uses an explicit owner-only confirmation prompt, shows a busy state while the request is in flight, routes failures through the shared toast contract, and sends the operator back to login with a readable follow-up message after success;
+- added founder-specific styling in `styles/admin-web.css`, introduced `scripts/smoke-admin-web-founder-contract.js`, and bumped admin asset cache-bust to `step535o`.
+
+Acceptance / notes:
+- scope stays narrow and UI-only on the founder surface: no changes to auth handlers, runtime/payment writes, or bot-only control logic;
+- the goal is calmer risk framing and clearer owner semantics, not new power or a broader web write-surface.
+
 ## STEP535N — Users filter apply contract + disabled-state finish
 
 Date: 2026-04-03

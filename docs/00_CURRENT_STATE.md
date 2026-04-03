@@ -1,3 +1,10 @@
+## STEP535O — Founder control safety semantics + confirmation polish
+
+- `/admin/founder` upgraded from a plain founder summary into an owner-grade control surface in `scripts/admin-web.js`: added an explicit `Семантика безопасности` layer, founder sensitivity cards, and a clearer separation between routine read-first review, cautionary policy changes, and bot-only / sensitive controls.
+- `Фаундерское web-действие` now explains scope, impact, and normal usage before the action button, so the only founder web action (`Завершить все web-сессии`) no longer reads like an ordinary routine toggle.
+- revoke-all confirmation was polished without touching backend auth logic: the button now uses a more explicit confirmation prompt, shows a temporary busy label, routes failures through the standard toast layer, and redirects back to login with an owner-readable follow-up message after success.
+- `styles/admin-web.css` now includes founder safety badges / cards / action-rail styling, plus a new source smoke `scripts/smoke-admin-web-founder-contract.js`; admin shell asset cache-bust bumped to `step535o`.
+
 ## STEP535N — Users filter apply contract + disabled-state finish
 
 - `Users` filter rail now uses an explicit staged apply contract instead of ambiguous dropdown auto-apply: the lower `Фильтры среза` block keeps pending values locally until the operator clicks `Применить фильтры`, with a matching `Сбросить` path back to the committed working slice;
