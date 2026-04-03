@@ -11,6 +11,9 @@
   --soft: #8fa0cf;
   --accent: #49b0ff;
   --accent-2: #216fe5;
+  --accent-violet: #8e7dff;
+  --accent-mint: #57d9c0;
+  --accent-amber: #ffd166;
   --good: #52d6a1;
   --warn: #ffd166;
   --bad: #ff6b8b;
@@ -71,17 +74,19 @@ body {
   border: 1px solid transparent;
   outline: none;
   box-shadow: none;
-  transition: 0.18s ease;
+  position: relative;
+  overflow: hidden;
+  transition: transform .14s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease;
 }
 .aw-nav a:hover, .aw-nav a.is-active, .aw-nav a:focus-visible {
   background: rgba(70, 123, 255, 0.12);
   border-color: var(--line-strong);
   color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(132,176,255,0.10), 0 8px 22px rgba(15, 39, 87, 0.16);
 }
 .aw-nav a:focus,
 .aw-nav a:focus-visible {
   outline: none;
-  box-shadow: none;
 }
 .aw-nav-link-copy {
   display: grid;
@@ -132,6 +137,63 @@ body {
   box-shadow: 0 10px 24px rgba(38, 98, 200, 0.16);
 }
 .aw-button:hover { filter: brightness(1.06); }
+.aw-button,
+.aw-priority-pill,
+.aw-cohort-counter-card,
+.aw-preset-card,
+.aw-action-card,
+.aw-workspace-tab,
+.aw-row-action {
+  position: relative;
+  overflow: hidden;
+}
+.aw-button,
+.aw-priority-pill,
+.aw-cohort-counter-card,
+.aw-action-card,
+.aw-workspace-tab,
+.aw-row-action {
+  transition: transform .14s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease, filter .18s ease;
+}
+.aw-button:active,
+.aw-priority-pill:active,
+.aw-cohort-counter-card:active,
+.aw-preset-card:active,
+.aw-action-card:active,
+.aw-workspace-tab:active,
+.aw-row-action:active,
+.aw-nav a:active,
+.aw-button.is-pressed,
+.aw-priority-pill.is-pressed,
+.aw-cohort-counter-card.is-pressed,
+.aw-preset-card.is-pressed,
+.aw-action-card.is-pressed,
+.aw-workspace-tab.is-pressed,
+.aw-row-action.is-pressed,
+.aw-nav a.is-pressed {
+  transform: translateY(1px) scale(0.995);
+  filter: brightness(1.05);
+}
+.aw-button.is-confirmed,
+.aw-priority-pill.is-confirmed,
+.aw-cohort-counter-card.is-confirmed,
+.aw-preset-card.is-confirmed,
+.aw-action-card.is-confirmed,
+.aw-workspace-tab.is-confirmed,
+.aw-row-action.is-confirmed,
+.aw-nav a.is-confirmed {
+  box-shadow: 0 0 0 1px rgba(82,214,161,0.28), 0 0 0 6px rgba(82,214,161,0.08);
+}
+.aw-button:focus-visible,
+.aw-priority-pill:focus-visible,
+.aw-cohort-counter-card:focus-visible,
+.aw-preset-card:focus-visible,
+.aw-action-card:focus-visible,
+.aw-workspace-tab:focus-visible,
+.aw-row-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(73,176,255,0.34), 0 0 0 6px rgba(73,176,255,0.10);
+}
 .aw-button.secondary {
   background: rgba(255,255,255,0.04);
   box-shadow: none;
@@ -170,8 +232,11 @@ body {
   background: var(--bg-card-strong);
   border: 1px solid var(--line);
   border-radius: 20px;
-  padding: 18px;
+  padding: 16px;
   box-shadow: var(--shadow);
+}
+.aw-surface.is-compact-empty {
+  padding: 14px 16px;
 }
 .aw-toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 
@@ -392,9 +457,17 @@ body {
   transform: translateY(-1px);
 }
 .aw-preset-card.is-active {
-  border-color: rgba(73,176,255,0.34);
-  background: rgba(73,176,255,0.12);
-  box-shadow: inset 0 0 0 1px rgba(132,176,255,0.14), 0 10px 22px rgba(0,0,0,0.14);
+  border-color: rgba(87,217,192,0.42);
+  background: linear-gradient(180deg, rgba(87,217,192,0.14), rgba(73,176,255,0.09));
+  box-shadow: inset 0 0 0 1px rgba(132,176,255,0.14), 0 12px 28px rgba(12, 42, 76, 0.22), 0 0 0 1px rgba(87,217,192,0.16);
+}
+.aw-preset-card.is-active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
 }
 .aw-preset-kicker {
   color: var(--soft);
@@ -453,6 +526,19 @@ body {
   border-color: rgba(73,176,255,0.32);
   background: rgba(73,176,255,0.11);
 }
+.aw-action-card.is-active {
+  border-color: rgba(255, 209, 102, 0.42);
+  background: linear-gradient(180deg, rgba(255,209,102,0.14), rgba(73,176,255,0.08));
+  box-shadow: 0 12px 26px rgba(24, 48, 88, 0.20), inset 0 0 0 1px rgba(255,209,102,0.14);
+}
+.aw-action-card--cohort.is-active {
+  border-color: rgba(87,217,192,0.42);
+  background: linear-gradient(180deg, rgba(87,217,192,0.14), rgba(73,176,255,0.08));
+}
+.aw-action-card--utility.is-active {
+  border-color: rgba(142,125,255,0.36);
+  background: linear-gradient(180deg, rgba(142,125,255,0.12), rgba(73,176,255,0.08));
+}
 .aw-action-card span {
   display: block;
   color: var(--soft);
@@ -468,6 +554,29 @@ body {
   margin-top: 6px;
   color: var(--muted);
   line-height: 1.4;
+}
+.aw-action-card-state {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--soft);
+  font-size: 11px;
+  font-style: normal;
+}
+.aw-action-card-state::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(132,176,255,0.32);
+}
+.aw-action-card.is-active .aw-action-card-state {
+  color: var(--text);
+}
+.aw-action-card.is-active .aw-action-card-state::before {
+  background: var(--accent-amber);
+  box-shadow: 0 0 0 4px rgba(255,209,102,0.10);
 }
 .aw-action-card:disabled {
   cursor: default;
@@ -509,6 +618,9 @@ body {
 .aw-cohort-counter-card.is-active {
   border-color: rgba(73,176,255,0.3);
   background: rgba(73,176,255,0.1);
+}
+.aw-cohort-counter-card.is-active {
+  box-shadow: 0 12px 26px rgba(16, 56, 104, 0.18), inset 0 0 0 1px rgba(73,176,255,0.16);
 }
 .aw-cohort-counter-card span {
   display: block;
@@ -552,6 +664,16 @@ body {
   color: var(--text);
   border-color: rgba(73,176,255,0.32);
   background: rgba(73,176,255,0.12);
+}
+.aw-priority-pill--sort.is-active {
+  border-color: rgba(142,125,255,0.40);
+  background: linear-gradient(180deg, rgba(142,125,255,0.14), rgba(73,176,255,0.08));
+  box-shadow: 0 10px 22px rgba(22, 40, 92, 0.18);
+}
+.aw-priority-pill--cohort.is-active {
+  border-color: rgba(87,217,192,0.40);
+  background: linear-gradient(180deg, rgba(87,217,192,0.14), rgba(73,176,255,0.08));
+  box-shadow: 0 10px 22px rgba(14, 46, 74, 0.18);
 }
 .aw-filter-grid {
   display: grid;
@@ -677,7 +799,10 @@ body {
   gap: 10px;
 }
 .aw-help-actions {
-  margin-top: 2px;
+  margin-top: 0;
+}
+.aw-help-actions .aw-button {
+  align-self: flex-start;
 }
 .aw-help-card b {
   color: var(--text);
@@ -1007,11 +1132,15 @@ body {
 }
 .aw-stack { display: grid; gap: 14px; }
 .aw-list { display: grid; gap: 10px; }
+.aw-list.is-compact { gap: 8px; }
 .aw-list-item {
   border: 1px solid rgba(132,176,255,0.12);
   background: rgba(255,255,255,0.03);
   border-radius: 16px;
   padding: 12px 14px;
+}
+.aw-list-item.is-compact {
+  padding: 10px 12px;
 }
 .aw-status.good { color: var(--good); }
 .aw-status.warn { color: var(--warn); }
@@ -1038,8 +1167,9 @@ body {
 .aw-error { color: #ffd4de; background: rgba(255, 107, 139, 0.12); border: 1px solid rgba(255,107,139,0.2); border-radius: 14px; padding: 12px 14px; }
 .aw-info { color: #dce7ff; background: rgba(93, 144, 255, 0.10); border: 1px solid rgba(132,176,255,0.22); border-radius: 14px; padding: 12px 14px; }
 .aw-muted { color: var(--muted); }
-.aw-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.aw-empty { color: var(--soft); padding: 18px 0; }
+.aw-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
+.aw-empty { color: var(--soft); padding: 12px 0; }
+.aw-empty-compact { padding: 0; font-size: 13px; }
 @media (max-width: 1024px) {
   .aw-shell { grid-template-columns: 1fr; }
   .aw-sidebar { position: static; height: auto; }
@@ -1127,9 +1257,34 @@ body {
 .aw-kv-compact { grid-template-columns: 150px 1fr; }
 .aw-list-item strong { display: block; margin-bottom: 6px; }
 .aw-list-item small { color: var(--soft); display: block; line-height: 1.45; }
+.aw-side-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.aw-side-stat-card {
+  border: 1px solid rgba(132,176,255,0.12);
+  background: rgba(255,255,255,0.028);
+  border-radius: 14px;
+  padding: 12px;
+}
+.aw-side-stat-card span {
+  display: block;
+  color: var(--soft);
+  font-size: 12px;
+}
+.aw-side-stat-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+}
+.aw-side-stat-grid.is-all-zero .aw-side-stat-card {
+  padding: 10px 12px;
+}
 @media (max-width: 1024px) {
   .aw-mini-grid-3 { grid-template-columns: 1fr; }
   .aw-user-title { font-size: 30px; }
+  .aw-side-stat-grid { grid-template-columns: 1fr; }
 }
 .aw-card small {
   display: block;

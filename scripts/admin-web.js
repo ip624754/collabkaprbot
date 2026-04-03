@@ -186,6 +186,37 @@ function showToast(message, variant = 'info', opts = {}) {
   setTimeout(remove, ttl);
 }
 
+
+const INTERACTIVE_FEEDBACK_SELECTOR = [
+  '.aw-button',
+  '.aw-priority-pill',
+  '.aw-cohort-counter-card',
+  '.aw-preset-card',
+  '.aw-action-card',
+  '.aw-workspace-tab',
+  '.aw-row-action',
+  '.aw-nav a',
+].join(', ');
+
+function pulseInteractiveFeedback(node, mode = 'pressed') {
+  const target = node?.closest?.(INTERACTIVE_FEEDBACK_SELECTOR);
+  if (!target) return;
+  const className = mode === 'confirmed' ? 'is-confirmed' : 'is-pressed';
+  target.classList.remove(className);
+  requestAnimationFrame(() => target.classList.add(className));
+  setTimeout(() => target.classList.remove(className), mode === 'confirmed' ? 1700 : 180);
+}
+
+function attachInteractiveFeedback(root = document) {
+  if (!root || root.__awInteractiveFeedbackBound) return;
+  root.__awInteractiveFeedbackBound = true;
+  root.addEventListener('pointerdown', (event) => {
+    const target = event.target?.closest?.(INTERACTIVE_FEEDBACK_SELECTOR);
+    if (!target) return;
+    pulseInteractiveFeedback(target, 'pressed');
+  });
+}
+
 function getUsersBasketMap() {
   if (!(window.__usersBasket instanceof Map)) window.__usersBasket = new Map();
   return window.__usersBasket;
@@ -1402,7 +1433,7 @@ function usersCohortCounterCards(counters = {}, currentCohortView = 'all') {
     const value = Math.max(0, Number(counters?.[item.id] || 0));
     const meta = usersCohortMeta(item.id);
     return `
-      <button class="aw-cohort-counter-card ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">
+      <button class="aw-cohort-counter-card ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}" aria-pressed="${currentCohortView === item.id ? 'true' : 'false'}">
         <span>${escapeHtml(meta.label)}</span>
         <strong>${value}</strong>
         <small>${escapeHtml(meta.detail)}</small>
@@ -1587,6 +1618,66 @@ function usersActionSliceLabel(state = {}) {
   if (String(state.activityWindow || 'all') !== 'all') bits.push(activeWindowLabel(state.activityWindow));
   if (String(state.q || '').trim()) bits.push(`поиск: ${String(state.q).trim()}`);
   return bits.join(' · ') || 'Все пользователи';
+}
+
+
+function usersIsSliceActionActive(action = '', state = {}) {
+  const sortBy = String(state.sortBy || 'created_desc').trim().toLowerCase();
+  const cohortView = String(state.cohortView || 'all').trim().toLowerCase();
+  if (action === 'open_top_problem_users') return sortBy === 'problem_desc' && cohortView === 'all';
+  if (action === 'open_dormant_payers') return sortBy === 'payments_desc' && cohortView === 'dormant_payers';
+  return false;
+}
+
+function renderUsersSliceActionCards(state = {}, cohortTopline = {}) {
+  const actionCards = [
+    {
+      action: 'export_current',
+      kicker: 'Экспорт',
+      label: 'CSV текущего среза',
+      help: 'Скачать текущий search / segment / filter / cohort с уже активной сортировкой.',
+      tone: 'utility',
+    },
+    {
+      action: 'copy_tg_ids',
+      kicker: 'Копировать',
+      label: 'tg_id',
+      help: 'Быстро собрать tg_id по текущему срезу. Если браузер не даст автокопирование, откроется ручной режим.',
+      tone: 'utility',
+    },
+    {
+      action: 'copy_usernames',
+      kicker: 'Копировать',
+      label: 'usernames',
+      help: 'Собрать usernames по тому же рабочему срезу. Если автокопирование не сработает, откроется ручной режим.',
+      tone: 'utility',
+    },
+    {
+      action: 'open_top_problem_users',
+      kicker: 'Открыть',
+      label: 'Проблемные сверху',
+      help: 'Переключить приоритет на problem_desc и открыть самых проблемных без сброса остальных фильтров.',
+      tone: 'attention',
+    },
+    {
+      action: 'open_dormant_payers',
+      kicker: 'Открыть',
+      label: `Спящие плательщики · ${Math.max(0, Number(cohortTopline?.dormant_payers || 0))}`,
+      help: 'Включить когорту спящих плательщиков и поднять наверх тех, кого логично разбирать в follow-up.',
+      tone: 'cohort',
+    },
+  ];
+  return actionCards.map((item) => {
+    const isActive = usersIsSliceActionActive(item.action, state);
+    return `
+      <button class="aw-action-card aw-action-card--${escapeHtml(item.tone || 'utility')} ${isActive ? 'is-active' : ''}" data-users-followup="${escapeHtml(item.action)}" aria-pressed="${isActive ? 'true' : 'false'}">
+        <span>${escapeHtml(item.kicker || 'Действие')}</span>
+        <strong>${escapeHtml(item.label || item.action || '—')}</strong>
+        <small>${escapeHtml(item.help || '')}</small>
+        <em class="aw-action-card-state">${isActive ? 'Уже выбран в рабочем срезе' : 'Применить к текущему срезу'}</em>
+      </button>
+    `;
+  }).join('');
 }
 
 function buildUsersPaginationMeta(model = {}) {
@@ -2057,7 +2148,7 @@ function usersView(model) {
           </div>
           <div class="aw-priority-row">
             <div class="aw-priority-pills">
-              ${priorityPresets.map((item) => `<button class="aw-priority-pill ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+              ${priorityPresets.map((item) => `<button class="aw-priority-pill aw-priority-pill--sort ${currentSortBy === item.id ? 'is-active' : ''}" data-users-priority="${escapeHtml(item.id)}" aria-pressed="${currentSortBy === item.id ? 'true' : 'false'}">${escapeHtml(item.label)}</button>`).join('')}
             </div>
           </div>
           <div class="aw-toolbar-note">
@@ -2081,7 +2172,7 @@ function usersView(model) {
             <span class="aw-muted">Счётчики выше только показывают картину, а сами chips ниже сразу переключают рабочую когорту.</span>
           </div>
           <div class="aw-priority-pills">
-            ${cohortPresets.map((item) => `<button class="aw-priority-pill ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`).join('')}
+            ${cohortPresets.map((item) => `<button class="aw-priority-pill aw-priority-pill--cohort ${currentCohortView === item.id ? 'is-active' : ''}" data-users-cohort="${escapeHtml(item.id)}" aria-pressed="${currentCohortView === item.id ? 'true' : 'false'}">${escapeHtml(item.label)}</button>`).join('')}
           </div>
         </section>
 
@@ -2177,31 +2268,7 @@ function usersView(model) {
           <span class="aw-basket-pill">Активный срез: <strong>${escapeHtml(currentSliceLabel)}</strong></span>
         </div>
         <div class="aw-action-grid">
-          <button class="aw-action-card" data-users-followup="export_current">
-            <span>Экспорт</span>
-            <strong>CSV текущего среза</strong>
-            <small>Скачать текущий search / segment / filter / cohort с уже активной сортировкой.</small>
-          </button>
-          <button class="aw-action-card" data-users-followup="copy_tg_ids">
-            <span>Копировать</span>
-            <strong>tg_id</strong>
-            <small>Быстро собрать tg_id по текущему срезу. Если браузер не даст автокопирование, откроется ручной режим.</small>
-          </button>
-          <button class="aw-action-card" data-users-followup="copy_usernames">
-            <span>Копировать</span>
-            <strong>usernames</strong>
-            <small>Собрать usernames по тому же рабочему срезу. Если автокопирование не сработает, откроется ручной режим.</small>
-          </button>
-          <button class="aw-action-card" data-users-followup="open_top_problem_users">
-            <span>Открыть</span>
-            <strong>Проблемные сверху</strong>
-            <small>Переключить приоритет на problem_desc и открыть самых проблемных без сброса остальных фильтров.</small>
-          </button>
-          <button class="aw-action-card" data-users-followup="open_dormant_payers">
-            <span>Открыть</span>
-            <strong>Спящие плательщики · ${Math.max(0, Number(cohortTopline?.dormant_payers || 0))}</strong>
-            <small>Включить когорту спящих плательщиков и поднять наверх тех, кого логично разбирать в follow-up.</small>
-          </button>
+          ${renderUsersSliceActionCards(model.filters || {}, cohortTopline)}
         </div>
         <div class="aw-toolbar-note">
           <span class="aw-muted">Блок готовых действий не вводит новых мутаций: он переиспользует уже существующие export / bulk / priority / cohort-contracts.</span>
@@ -2448,6 +2515,9 @@ function paymentsView(model) {
   const reviewBuckets = Array.isArray(model.reviewBuckets) ? model.reviewBuckets : [];
   const actionRail = Array.isArray(model.actionRail) ? model.actionRail : [];
   const followUpQueue = Array.isArray(model.followUpQueue) ? model.followUpQueue : [];
+  const compactPaymentsLayout = recentPayments.length === 0 && followUpQueue.length === 0;
+  const followUpAllZero = ['noAction', 'watch', 'review', 'urgent'].every((key) => Number(followUpGroups[key] || 0) === 0);
+  const statusGroupsAllZero = ['success', 'pending', 'failed', 'fallback'].every((key) => Number(groups[key] || 0) === 0);
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const overall = model.overall || { state: 'unknown', label: 'Данные пока недоступны' };
   return sectionShell('payments', `
@@ -2511,7 +2581,7 @@ function paymentsView(model) {
       </div>
     </section>
 
-    <div class="aw-split aw-section aw-runtime-layout aw-payments-layout">
+    <div class="aw-split aw-section aw-runtime-layout aw-payments-layout ${compactPaymentsLayout ? 'is-compact' : ''}">
       <section class="aw-stack">
         <section class="aw-surface aw-stack">
           <h2>Кейсы для ручного review</h2>
@@ -2571,24 +2641,26 @@ function paymentsView(model) {
       </section>
 
       <aside class="aw-stack">
-        <section class="aw-surface aw-stack">
+        <section class="aw-surface aw-stack ${followUpAllZero ? 'is-compact-empty' : ''}">
           <h2>Operator follow-up</h2>
-          <div class="aw-list">
-            <div class="aw-list-item"><strong>без действий</strong><small>${Number(followUpGroups.noAction || 0)}</small></div>
-            <div class="aw-list-item"><strong>наблюдать</strong><small>${Number(followUpGroups.watch || 0)}</small></div>
-            <div class="aw-list-item"><strong>проверить</strong><small>${Number(followUpGroups.review || 0)}</small></div>
-            <div class="aw-list-item"><strong>срочно</strong><small>${Number(followUpGroups.urgent || 0)}</small></div>
+          <div class="aw-side-stat-grid ${followUpAllZero ? 'is-all-zero' : ''}">
+            <div class="aw-side-stat-card"><span>без действий</span><strong>${Number(followUpGroups.noAction || 0)}</strong></div>
+            <div class="aw-side-stat-card"><span>наблюдать</span><strong>${Number(followUpGroups.watch || 0)}</strong></div>
+            <div class="aw-side-stat-card"><span>проверить</span><strong>${Number(followUpGroups.review || 0)}</strong></div>
+            <div class="aw-side-stat-card"><span>срочно</span><strong>${Number(followUpGroups.urgent || 0)}</strong></div>
           </div>
+          ${followUpAllZero ? '<div class="aw-empty aw-empty-compact">Платёжный follow-up сейчас выглядит спокойным.</div>' : ''}
         </section>
 
-        <section class="aw-surface aw-stack">
+        <section class="aw-surface aw-stack ${statusGroupsAllZero ? 'is-compact-empty' : ''}">
           <h2>Status groups</h2>
-          <div class="aw-list">
-            <div class="aw-list-item"><strong>success</strong><small>${Number(groups.success || 0)}</small></div>
-            <div class="aw-list-item"><strong>pending</strong><small>${Number(groups.pending || 0)}</small></div>
-            <div class="aw-list-item"><strong>failed</strong><small>${Number(groups.failed || 0)}</small></div>
-            <div class="aw-list-item"><strong>fallback</strong><small>${Number(groups.fallback || 0)}</small></div>
+          <div class="aw-side-stat-grid ${statusGroupsAllZero ? 'is-all-zero' : ''}">
+            <div class="aw-side-stat-card"><span>success</span><strong>${Number(groups.success || 0)}</strong></div>
+            <div class="aw-side-stat-card"><span>pending</span><strong>${Number(groups.pending || 0)}</strong></div>
+            <div class="aw-side-stat-card"><span>failed</span><strong>${Number(groups.failed || 0)}</strong></div>
+            <div class="aw-side-stat-card"><span>fallback</span><strong>${Number(groups.fallback || 0)}</strong></div>
           </div>
+          ${statusGroupsAllZero ? '<div class="aw-empty aw-empty-compact">Группы статусов пока без напряжения.</div>' : ''}
         </section>
 
         <section class="aw-surface aw-stack">
@@ -2978,6 +3050,8 @@ function founderView(model) {
   const warnings = Array.isArray(model.warnings) ? model.warnings : [];
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const recentAudit = Array.isArray(model.recentFounderAudit) ? model.recentFounderAudit : [];
+  const compactFounderLayout = recentAudit.length === 0;
+  const founderHintsCompact = hints.length <= 3;
   return sectionShell('founder', `
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
@@ -2995,7 +3069,7 @@ function founderView(model) {
       </div>
     </section>
 
-    <div class="aw-split aw-section aw-runtime-layout">
+    <div class="aw-split aw-section aw-runtime-layout aw-founder-layout ${compactFounderLayout ? 'is-compact' : ''}">
       <section class="aw-stack">
         <section class="aw-surface aw-stack">
           <h2>Founder controls split</h2>
@@ -3031,7 +3105,7 @@ function founderView(model) {
       </section>
 
       <aside class="aw-stack">
-        <section class="aw-surface aw-stack">
+        <section class="aw-surface aw-stack ${founderHintsCompact ? 'is-compact-empty' : ''}">
           <h2>Founder hints</h2>
           <div class="aw-list">
             ${hints.length ? hints.map((item) => `
@@ -3053,7 +3127,7 @@ function founderView(model) {
           </div>
         </section>
 
-        <section class="aw-surface aw-stack">
+        <section class="aw-surface aw-stack ${recentAudit.length === 0 ? 'is-compact-empty' : ''}">
           <h2>Последние founder-действия</h2>
           <div class="aw-list">
             ${recentAudit.length ? recentAudit.map((item) => `
@@ -3206,90 +3280,88 @@ function runtimeView(model) {
       <div class="aw-runtime-footnote">Очереди не мутируются из Runtime: это только read-first слой для backlog / retry / cooldown разборов.</div>
     </section>
 
-    <div class="aw-split aw-section aw-runtime-layout">
+    <section class="aw-surface aw-section aw-stack">
+      <div class="aw-runtime-head">
+        <div>
+          <h2>Control plane snapshot</h2>
+          <p class="aw-muted">Без write-path действий: только текущее runtime-состояние safe toggles.</p>
+        </div>
+        <div class="aw-runtime-overall ${Number(model.controlSnapshot?.pausedCount || 0) > 0 || Number(model.controlSnapshot?.incidentModes || 0) > 0 ? 'warn' : 'good'}">paused ${Number(model.controlSnapshot?.pausedCount || 0)} · incident ${Number(model.controlSnapshot?.incidentModes || 0)}</div>
+      </div>
+      <div class="aw-runtime-controls-grid">
+        ${controls.length ? controls.map((item) => `
+          <div class="aw-card aw-runtime-control-card">
+            <span>${escapeHtml(item.label || 'Control')}</span>
+            <div class="aw-runtime-card-head">
+              <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
+              <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+            </div>
+            <small>Текущее состояние: ${escapeHtml(item.stateLabel || '—')}</small>
+            <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
+            <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь смысл этого toggle в control surface.')}</div>
+            <div class="aw-card-subtle">${item.changedAt ? `updated ${escapeHtml(formatDate(item.changedAt))}` : 'без явного runtime override'}</div>
+          </div>
+        `).join('') : '<div class="aw-empty">Control surface пока недоступен.</div>'}
+      </div>
+      <div class="aw-runtime-footnote">${lastAudit ? `Последний operator change: ${escapeHtml(controlAuditSummary(lastAudit))} · ${escapeHtml(controlAuditActorLabel(lastAudit))} · ${escapeHtml(formatDate(lastAudit.ts))}` : 'Последних operator changes пока нет.'}</div>
+    </section>
+
+    <div class="aw-runtime-sidebar-grid aw-section">
       <section class="aw-surface aw-stack">
         <div class="aw-runtime-head">
           <div>
-            <h2>Control plane snapshot</h2>
-            <p class="aw-muted">Без write-path действий: только текущее runtime-состояние safe toggles.</p>
+            <h2>Конфигурация</h2>
+            <p class="aw-muted">Presence matrix без утечки значений секретов.</p>
           </div>
-          <div class="aw-runtime-overall ${Number(model.controlSnapshot?.pausedCount || 0) > 0 || Number(model.controlSnapshot?.incidentModes || 0) > 0 ? 'warn' : 'good'}">paused ${Number(model.controlSnapshot?.pausedCount || 0)} · incident ${Number(model.controlSnapshot?.incidentModes || 0)}</div>
+          <div class="aw-runtime-overall ${Number(configSummary.missing || 0) > 0 ? 'warn' : 'good'}">missing ${Number(configSummary.missing || 0)} · info ${Number(configSummary.infoOnly || 0)}</div>
         </div>
-        <div class="aw-runtime-controls-grid">
-          ${controls.length ? controls.map((item) => `
-            <div class="aw-card aw-runtime-control-card">
-              <span>${escapeHtml(item.label || 'Control')}</span>
-              <div class="aw-runtime-card-head">
-                <strong class="aw-status ${runtimeStateClass(item.state)}">${escapeHtml(item.semanticLabel || runtimeStateLabel(item.state))}</strong>
-                <span class="aw-runtime-action aw-status ${runtimeActionabilityClass(item.actionability)}">${escapeHtml(item.actionLabel || runtimeActionabilityLabel(item.actionability))}</span>
+        <div class="aw-config-grid">
+          ${configPresence.map((item) => `
+            <div class="aw-config-row">
+              <div class="aw-config-main">
+                <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
+                <div class="aw-config-meta">${escapeHtml(item.meaning || '')}</div>
+                <div class="aw-config-meta"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Обнови Runtime после изменения env.')}</div>
               </div>
-              <small>Текущее состояние: ${escapeHtml(item.stateLabel || '—')}</small>
-              <div class="aw-card-subtle">${escapeHtml(item.meaning || item.hint || '')}</div>
-              <div class="aw-card-subtle"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Сверь смысл этого toggle в control surface.')}</div>
-              <div class="aw-card-subtle">${item.changedAt ? `updated ${escapeHtml(formatDate(item.changedAt))}` : 'без явного runtime override'}</div>
+              <div class="aw-config-state-wrap">
+                <div class="aw-config-state aw-status ${runtimeStateClass(item.toneState || item.state)}">${escapeHtml(configPresenceLabel(item.state))}</div>
+                <small>${escapeHtml(item.semanticLabel || runtimeStateLabel(item.toneState || item.state))}</small>
+              </div>
             </div>
-          `).join('') : '<div class="aw-empty">Control surface пока недоступен.</div>'}
+          `).join('') || '<div class="aw-empty">Данные пока недоступны.</div>'}
         </div>
-        <div class="aw-runtime-footnote">${lastAudit ? `Последний operator change: ${escapeHtml(controlAuditSummary(lastAudit))} · ${escapeHtml(controlAuditActorLabel(lastAudit))} · ${escapeHtml(formatDate(lastAudit.ts))}` : 'Последних operator changes пока нет.'}</div>
       </section>
 
-      <aside class="aw-stack">
-        <section class="aw-surface aw-stack">
-          <div class="aw-runtime-head">
-            <div>
-              <h2>Конфигурация</h2>
-              <p class="aw-muted">Presence matrix без утечки значений секретов.</p>
+      <section class="aw-surface aw-stack ${hints.length <= 1 ? 'is-compact-empty' : ''}">
+        <h2>Как читать этот экран</h2>
+        <div class="aw-list">
+          <div class="aw-list-item"><strong>Paused ≠ silent bug</strong><small>Если toggle paused оператором, это control-plane режим. Сначала пойми, зачем он был включён, и только потом ищи поломку.</small></div>
+          <div class="aw-list-item"><strong>Missing ≠ degraded</strong><small>Missing — это setup-gap и env/runbook задача. Degraded — рабочий контур с сигналом, который просит ручную проверку.</small></div>
+          <div class="aw-list-item"><strong>Users vs Runtime</strong><small>Users нужен для разбора людей и срезов. Runtime — для понимания состояния контуров, очередей, retry и конфигурации.</small></div>
+          ${hints.length ? hints.map((item) => `
+            <div class="aw-list-item">
+              <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
+              <small>${escapeHtml(item.message || '')}</small>
             </div>
-            <div class="aw-runtime-overall ${Number(configSummary.missing || 0) > 0 ? 'warn' : 'good'}">missing ${Number(configSummary.missing || 0)} · info ${Number(configSummary.infoOnly || 0)}</div>
-          </div>
-          <div class="aw-config-grid">
-            ${configPresence.map((item) => `
-              <div class="aw-config-row">
-                <div class="aw-config-main">
-                  <div class="aw-config-key">${escapeHtml(item.key || '—')}</div>
-                  <div class="aw-config-meta">${escapeHtml(item.meaning || '')}</div>
-                  <div class="aw-config-meta"><strong>Следующий шаг:</strong> ${escapeHtml(item.nextStep || 'Обнови Runtime после изменения env.')}</div>
-                </div>
-                <div class="aw-config-state-wrap">
-                  <div class="aw-config-state aw-status ${runtimeStateClass(item.toneState || item.state)}">${escapeHtml(configPresenceLabel(item.state))}</div>
-                  <small>${escapeHtml(item.semanticLabel || runtimeStateLabel(item.toneState || item.state))}</small>
-                </div>
-              </div>
-            `).join('') || '<div class="aw-empty">Данные пока недоступны.</div>'}
-          </div>
-        </section>
-
-        <section class="aw-surface aw-stack">
-          <h2>Как читать этот экран</h2>
-          <div class="aw-list">
-            <div class="aw-list-item"><strong>Paused ≠ silent bug</strong><small>Если toggle paused оператором, это control-plane режим. Сначала пойми, зачем он был включён, и только потом ищи поломку.</small></div>
-            <div class="aw-list-item"><strong>Missing ≠ degraded</strong><small>Missing — это setup-gap и env/runbook задача. Degraded — рабочий контур с сигналом, который просит ручную проверку.</small></div>
-            <div class="aw-list-item"><strong>Users vs Runtime</strong><small>Users нужен для разбора людей и срезов. Runtime — для понимания состояния контуров, очередей, retry и конфигурации.</small></div>
-            ${hints.length ? hints.map((item) => `
-              <div class="aw-list-item">
-                <strong class="${warningTone(item.kind === 'warning' ? 'warning' : 'info')}">${escapeHtml(item.kind === 'warning' ? 'Нужна проверка' : 'Подсказка')}</strong>
-                <small>${escapeHtml(item.message || '')}</small>
-              </div>
-            `).join('') : ''}
-          </div>
-          <div class="aw-actions aw-help-actions">
-            <a href="/admin/help" data-link class="aw-button ghost">Открыть Помощь</a>
-          </div>
-        </section>
-
-        <section class="aw-surface aw-stack">
-          <h2>Последние runtime-сигналы</h2>
-          <div class="aw-list">
-            ${recentEvents.length ? recentEvents.map((item) => `
-              <div class="aw-list-item">
-                <strong class="${warningTone(item.kind)}">${escapeHtml(item.message || '—')}</strong>
-                <small>${escapeHtml(sourceLabel(item.source || 'runtime'))} · ${formatDate(item.at)}</small>
-              </div>
-            `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
-          </div>
-        </section>
-      </aside>
+          `).join('') : ''}
+        </div>
+        <div class="aw-actions aw-help-actions">
+          <a href="/admin/help" data-link class="aw-button ghost">Открыть Помощь</a>
+        </div>
+      </section>
     </div>
+
+    <section class="aw-surface aw-section aw-stack">
+      <h2>Последние runtime-сигналы</h2>
+      <div class="aw-list">
+        ${recentEvents.length ? recentEvents.map((item) => `
+          <div class="aw-list-item">
+            <strong class="${warningTone(item.kind)}">${escapeHtml(item.message || '—')}</strong>
+            <small>${escapeHtml(sourceLabel(item.source || 'runtime'))} · ${formatDate(item.at)}</small>
+          </div>
+        `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+      </div>
+    </section>
   `, window.__adminSession || {});
 }
 
@@ -3573,6 +3645,7 @@ function bindShell() {
     button.addEventListener('click', () => {
       const sortBy = button.getAttribute('data-users-priority') || 'created_desc';
       setUsersStateFromControls({ sortBy, page: 0 });
+      pulseInteractiveFeedback(button, 'confirmed');
       render();
       showToast(`Сортировка: ${usersSortMeta(sortBy).label}.`, 'success', { ttl: 1800 });
     });
@@ -3581,6 +3654,7 @@ function bindShell() {
     button.addEventListener('click', () => {
       const cohortView = button.getAttribute('data-users-cohort') || 'all';
       setUsersStateFromControls({ cohortView, page: 0 });
+      pulseInteractiveFeedback(button, 'confirmed');
       render();
       showToast(`Когорта: ${usersCohortMeta(cohortView).label}.`, 'success', { ttl: 1800 });
     });
@@ -3596,6 +3670,7 @@ function bindShell() {
         pageSize,
         pinIds: getUsersPinIds(),
       };
+      pulseInteractiveFeedback(button, 'confirmed');
       render();
       focusUsersWorkingSlice('preset');
       showToast(`Применён пресет: ${preset.label}.`, 'success', { ttl: 1800 });
@@ -3666,11 +3741,13 @@ function bindShell() {
         }
         if (action === 'open_top_problem_users') {
           setUsersStateFromControls({ sortBy: 'problem_desc', cohortView: 'all', page: 0 });
+          pulseInteractiveFeedback(button, 'confirmed');
           render();
           return;
         }
         if (action === 'open_dormant_payers') {
           setUsersStateFromControls({ sortBy: 'payments_desc', cohortView: 'dormant_payers', page: 0 });
+          pulseInteractiveFeedback(button, 'confirmed');
           render();
         }
       } catch (err) {

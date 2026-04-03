@@ -705,3 +705,34 @@ Acceptance / notes:
 - Payments now reads as review/control surface first and history table second;
 - operators can distinguish applied vs manual review vs stuck vs watch states in one scan;
 - still requires live browser verification after deploy for the final review-flow feel on the real viewport.
+
+
+## STEP535J — Desktop density + interaction feedback polish
+
+Date: 2026-04-03
+
+Scope:
+- tightened desktop density in `styles/admin-web.css` and `scripts/admin-web.js`: sparse Payments / Founder / Runtime helper areas now compact earlier, zero-count payment side summaries render as denser stat tiles, and helper-action rows stop stretching controls vertically inside tall side panels;
+- strengthened admin-web interaction feedback by adding lightweight press/confirm pulses for clickable shell controls, plus stronger persistent active-state treatment for Users cohort counters, cohort/sort chips, saved preset cards, and slice action cards;
+- refactored Users `Готовые действия по срезу` into one render helper so state-driven actions (`problem_desc`, `dormant_payers`) stay visibly selected when already applied, instead of only showing a toast;
+- added `scripts/smoke-admin-web-density-interaction-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped `admin.html` asset cache-bust to `step535j`.
+
+Acceptance / notes:
+- no API / DB / auth / webhook / payment-write changes;
+- desktop empty-state sections read tighter, especially on the operator’s 75% zoom habit;
+- selection feedback is now more explicit across Users and shell-level controls, but the pass remains UI-only and reversible.
+
+## STEP535I — Admin-web layout balance + optional-gap semantics fix
+
+Date: 2026-04-03
+
+Scope:
+- fixed the misleading global `Не настроено` status by changing `src/lib/adminWeb/runtime.js` so optional QStash absence contributes `unknown`/informational state instead of promoting the whole runtime overview to `missing`;
+- rebalanced sparse admin-web layouts in `scripts/admin-web.js`: Runtime now splits into full-width control-plane + separate config/help/recent-signals layers, while Payments / Founder collapse to a single-column layout when their left-side dataset is empty;
+- tightened typography / card rhythm in `styles/admin-web.css` by scoping large metric text to direct card values only and neutralizing nested `strong` inside subtle helper text, which removes the oversized `Следующий шаг` headings and card overflow feel seen on the live screen;
+- added `scripts/smoke-admin-web-layout-polish-contract.js`, refreshed asset cache-bust to `step535i`, and updated existing admin-web cache-bust smokes accordingly.
+
+Acceptance / notes:
+- optional publish/retry setup gaps no longer masquerade as full runtime misconfiguration;
+- sparse Runtime / Payments / Founder screens keep a tighter visual balance on desktop widths;
+- requires live browser verification after deploy for final shell feel on the real operator viewport.

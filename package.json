@@ -126,7 +126,9 @@
     "smoke:admin-web-users-preset-copy-polish-contract": "node scripts/smoke-admin-web-users-preset-copy-polish-contract.js",
     "smoke:admin-web-asset-cache-bust-contract": "node scripts/smoke-admin-web-asset-cache-bust-contract.js",
     "smoke:admin-web-users-active-state-help-contract": "node scripts/smoke-admin-web-users-active-state-help-contract.js",
-    "smoke:admin-web-overview-cockpit-contract": "node scripts/smoke-admin-web-overview-cockpit-contract.js"
+    "smoke:admin-web-overview-cockpit-contract": "node scripts/smoke-admin-web-overview-cockpit-contract.js",
+    "smoke:admin-web-layout-polish-contract": "node scripts/smoke-admin-web-layout-polish-contract.js",
+    "smoke:admin-web-density-interaction-contract": "node scripts/smoke-admin-web-density-interaction-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
