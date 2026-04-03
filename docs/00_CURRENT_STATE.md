@@ -1947,3 +1947,5 @@ Acceptance / notes:
 - replaced browser-only copy failure behavior with an in-app manual copy sheet (`awCopySheetHost`) for Users URL / bulk / row-copy flows;
 - tightened basket/meta pill styling to avoid awkward circular bubbles on narrower widths;
 - added `scripts/smoke-admin-web-users-preset-copy-polish-contract.js` and wired it into package scripts.
+
+- Web admin asset cache-bust (STEP535C): `admin.html` now references `/styles/admin-web.css?v=20260403-step535c` and `/scripts/admin-web.js?v=20260403-step535c` so fresh deploys stop reusing stale parse-broken admin assets in browser cache.

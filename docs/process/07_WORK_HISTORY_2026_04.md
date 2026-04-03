@@ -611,3 +611,18 @@ Validation
 
 Risk
 - Low. CSS-only hotfix; no JS, API, DB, or auth contract changes.
+
+
+## STEP535C — Admin web asset cache-bust
+
+Date: 2026-04-03
+
+Scope:
+- bumped admin shell asset URLs in `admin.html` to versioned query strings for `styles/admin-web.css` and `scripts/admin-web.js`;
+- targeted the real post-STEP535B failure mode where browsers could keep rendering stale parse-broken admin assets even after the CSS brace fix shipped;
+- added a small step doc and refreshed current-state notes.
+
+Acceptance / notes:
+- no JS logic changes;
+- no API / DB / auth / runtime contract changes;
+- purpose is to force fresh asset fetch on the live admin shell after deploy.
