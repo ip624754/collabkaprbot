@@ -37,7 +37,7 @@ for (const token of [
 }
 
 const html = read('admin.html');
-assert.ok(html.includes('step535k'), 'admin shell asset URLs must be cache-busted to step535k');
+assert.ok(html.includes('step535l'), 'admin shell asset URLs must be cache-busted to step535l');
 
 const currentState = read('docs/00_CURRENT_STATE.md');
 assert.ok(currentState.includes('STEP535D'), 'current state must mention STEP535D');

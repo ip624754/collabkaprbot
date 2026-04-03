@@ -1578,7 +1578,16 @@ function detectUsersOperatorPreset(state = {}) {
 const USERS_PRESET_COPY_BACKCOMPAT_TOKENS = ['Применить срез'];
 
 function renderUsersOperatorPresetCards(currentPresetId = 'custom') {
-  return usersOperatorPresets().map((preset) => `
+  const customIsActive = currentPresetId === 'custom';
+  const customCard = `
+    <div class="aw-preset-card aw-preset-card--custom aw-preset-card--static ${customIsActive ? 'is-active' : ''}" ${customIsActive ? 'aria-current="true"' : ''}>
+      <span class="aw-preset-kicker">Срез</span>
+      <strong>Свой срез</strong>
+      <small>${escapeHtml(customIsActive ? 'Текущий рабочий срез уже отличается от сохранённых пресетов.' : 'Ручные изменения фильтров и сортировки автоматически переводят экран сюда.')}</small>
+      <span class="aw-preset-cta">${customIsActive ? 'Сейчас открыт' : 'Авто при ручных изменениях'}</span>
+    </div>
+  `;
+  return customCard + usersOperatorPresets().map((preset) => `
     <button type="button" class="aw-preset-card ${currentPresetId === preset.id ? 'is-active' : ''}" data-users-preset="${escapeHtml(preset.id)}" aria-pressed="${currentPresetId === preset.id ? 'true' : 'false'}" title="${currentPresetId === preset.id ? 'Этот срез уже активен' : `Открыть срез: ${preset.label}`}">
       <span class="aw-preset-kicker">Срез</span>
       <strong>${escapeHtml(preset.label)}</strong>
@@ -2093,7 +2102,15 @@ function usersView(model) {
   const compareRail = model.compareRail || { maxPins: 5, pinIds: getUsersPinIds(), cards: [] };
   const pinIds = Array.isArray(compareRail.pinIds) ? compareRail.pinIds : getUsersPinIds();
   const basketIds = getUsersBasketIds();
-  const allVisibleSelected = !!items.length && items.every((item) => isUserInBasket(item.userId));
+  const hasVisibleRows = items.length > 0;
+  const visibleSelectedCount = items.reduce((count, item) => count + (isUserInBasket(item.userId) ? 1 : 0), 0);
+  const allVisibleSelected = hasVisibleRows && visibleSelectedCount === items.length;
+  const someVisibleSelected = hasVisibleRows && visibleSelectedCount > 0 && !allVisibleSelected;
+  const canCopyCurrentSlice = Math.max(0, Number(pagination.total || 0) || 0) > 0;
+  const canCopyBasket = basketIds.length > 0;
+  const canRunBulkCopy = bulkSource === 'basket' ? canCopyBasket : canCopyCurrentSlice;
+  const canSelectVisibleUsers = hasVisibleRows;
+  const canClearUsersBasket = basketIds.length > 0;
   const topPagination = renderUsersPaginationControls(pagination, 'top');
   const bottomPagination = renderUsersPaginationControls(pagination, 'bottom');
   const usersTableMetaStrip = renderUsersTableMetaStrip({
@@ -2296,9 +2313,9 @@ function usersView(model) {
           <select id="usersBulkMode" class="aw-select inline">
             ${bulkOptions.map((item) => `<option value="${escapeHtml(item.id || '')}" ${bulkMode === item.id ? 'selected' : ''}>${escapeHtml(item.label || item.id || '')}</option>`).join('')}
           </select>
-          <button class="aw-button secondary" id="copyUsersBulkBtn">Копировать</button>
-          <button class="aw-button ghost" id="selectVisibleUsersBtn">${allVisibleSelected ? 'Снять текущую страницу' : 'Выбрать текущую страницу'}</button>
-          <button class="aw-button ghost" id="clearUsersBasketBtn">Очистить корзину</button>
+          <button class="aw-button secondary" id="copyUsersBulkBtn" ${canRunBulkCopy ? '' : 'disabled'} title="${escapeHtml(canRunBulkCopy ? 'Собрать выбранный список для копирования.' : (bulkSource === 'basket' ? 'Корзина пуста — копировать пока нечего.' : 'Текущий фильтр пуст — копировать пока нечего.'))}">Копировать</button>
+          <button class="aw-button ghost" id="selectVisibleUsersBtn" ${canSelectVisibleUsers ? '' : 'disabled'} title="${escapeHtml(canSelectVisibleUsers ? 'Выбрать всех пользователей на текущей странице.' : 'На текущей странице нет строк для выбора.')}">${allVisibleSelected ? 'Снять текущую страницу' : 'Выбрать текущую страницу'}</button>
+          <button class="aw-button ghost" id="clearUsersBasketBtn" ${canClearUsersBasket ? '' : 'disabled'} title="${escapeHtml(canClearUsersBasket ? 'Очистить текущую корзину пользователей.' : 'Корзина уже пуста.')}">Очистить корзину</button>
         </div>
         <div class="aw-toolbar-note">
           <span class="aw-muted">Текущий фильтр копирует весь срез до 10 000 строк. Корзина — вручную отобранные пользователи на web-страницах.</span>
@@ -2314,7 +2331,7 @@ function usersView(model) {
         <table class="aw-table aw-users-table aw-users-table-density aw-users-table-priority">
           <thead>
             <tr>
-              <th class="aw-table-check"><input type="checkbox" id="toggleVisibleUsers" ${allVisibleSelected ? 'checked' : ''} ${items.length ? '' : 'disabled'} /></th>
+              <th class="aw-table-check"><input type="checkbox" id="toggleVisibleUsers" aria-label="Выбрать текущую страницу" ${allVisibleSelected ? 'checked' : ''} data-indeterminate="${someVisibleSelected ? 'true' : 'false'}" ${hasVisibleRows ? '' : 'disabled'} /></th>
               <th>${renderUsersTableHead('Пользователь', 'id · быстрые действия')}</th>
               <th>${renderUsersTableHead('Сегмент', 'роль · профиль')}</th>
               <th>${renderUsersTableHead('План', 'план · кредиты')}</th>
@@ -3662,6 +3679,17 @@ function bindShell() {
     render();
   };
   document.getElementById('applyUsersFilters')?.addEventListener('click', applyUsersFilters);
+  document.getElementById('usersBulkSource')?.addEventListener('change', () => {
+    const source = document.getElementById('usersBulkSource')?.value || 'current';
+    const mode = document.getElementById('usersBulkMode')?.value || (window.__usersBulkState?.mode || 'tg_ids');
+    window.__usersBulkState = { source, mode };
+    render();
+  });
+  document.getElementById('usersBulkMode')?.addEventListener('change', () => {
+    const source = document.getElementById('usersBulkSource')?.value || (window.__usersBulkState?.source || 'current');
+    const mode = document.getElementById('usersBulkMode')?.value || 'tg_ids';
+    window.__usersBulkState = { source, mode };
+  });
   document.getElementById('usersSearch')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') applyUsersFilters();
   });
@@ -3709,6 +3737,8 @@ function bindShell() {
     }
   });
   document.getElementById('copyUsersBulkBtn')?.addEventListener('click', async () => {
+    const button = document.getElementById('copyUsersBulkBtn');
+    if (button?.disabled) return;
     const mode = document.getElementById('usersBulkMode')?.value || 'tg_ids';
     const source = document.getElementById('usersBulkSource')?.value || 'current';
     await runUsersBulkCopyAction(mode, source);
@@ -3812,6 +3842,8 @@ function bindShell() {
     });
   });
   document.getElementById('selectVisibleUsersBtn')?.addEventListener('click', () => {
+    const trigger = document.getElementById('selectVisibleUsersBtn');
+    if (trigger?.disabled) return;
     const rows = app.querySelectorAll('[data-user-check]');
     const shouldSelect = !Array.from(rows).every((input) => input.checked);
     rows.forEach((input) => {
@@ -3823,18 +3855,25 @@ function bindShell() {
     });
     render();
   });
-  document.getElementById('toggleVisibleUsers')?.addEventListener('change', (e) => {
-    const checked = !!e.target?.checked;
-    app.querySelectorAll('[data-user-check]').forEach((input) => {
-      input.checked = checked;
-      try {
-        const item = JSON.parse(input.getAttribute('data-user-check') || '{}');
-        setUsersBasketItem(item, checked);
-      } catch {}
+  const toggleVisibleUsers = document.getElementById('toggleVisibleUsers');
+  if (toggleVisibleUsers) {
+    toggleVisibleUsers.indeterminate = toggleVisibleUsers.getAttribute('data-indeterminate') === 'true';
+    toggleVisibleUsers.addEventListener('change', (e) => {
+      if (toggleVisibleUsers.disabled) return;
+      const checked = !!e.target?.checked;
+      app.querySelectorAll('[data-user-check]').forEach((input) => {
+        input.checked = checked;
+        try {
+          const item = JSON.parse(input.getAttribute('data-user-check') || '{}');
+          setUsersBasketItem(item, checked);
+        } catch {}
+      });
+      render();
     });
-    render();
-  });
+  }
   document.getElementById('clearUsersBasketBtn')?.addEventListener('click', () => {
+    const button = document.getElementById('clearUsersBasketBtn');
+    if (button?.disabled) return;
     clearUsersBasket();
     render();
   });

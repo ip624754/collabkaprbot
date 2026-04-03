@@ -1,3 +1,19 @@
+## STEP535L — Users action-state truth + empty-state controls
+
+Date: 2026-04-03
+
+Scope:
+- saved presets в `Users` доведены до честного active-state: добавлена явная карточка `Свой срез`, а подсветка теперь остаётся только у exact-match пресета;
+- `Утилиты для списков` получили реальные disabled-state для `Копировать`, `Выбрать текущую страницу` и `Очистить корзину`, чтобы пустые состояния не мимикрировали под рабочие action-кнопки;
+- header checkbox переведён в более явный table-selection contract с `disabled / indeterminate / checked` и custom visual-state вместо нечитабельного тёмного квадрата;
+- bulk source (`текущий фильтр` / `корзина`) теперь сразу перерисовывает rail, чтобы копирование честно следовало за выбранным источником;
+- добавлен `scripts/smoke-admin-web-users-action-state-contract.js`, asset cache-bust поднят до `step535l`.
+
+Acceptance / notes:
+- шаг UI-only: SQL, API, auth, webhook и любые write-path contracts не менялись;
+- цель — довести `Users` до полностью правдивого selection/action UX, особенно на пустых страницах и кастомных срезах.
+
+
 ## STEP535K — Founder control clarity + admin RU consistency
 
 Date: 2026-04-03

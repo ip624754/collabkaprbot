@@ -242,6 +242,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin web login contract", "smoke:admin-web-login-contract"],
   ["Preflight (source-only): admin web users export contract", "smoke:admin-web-users-export-contract"],
   ["Preflight (source-only): admin web users bulk utility contract", "smoke:admin-web-users-bulk-contract"],
+  ["Preflight (source-only): admin web users action-state truth contract", "smoke:admin-web-users-action-state-contract"],
   ["Preflight (source-only): admin web users filter rail v2 contract", "smoke:admin-web-users-filter-rail-contract"],
   ["Preflight (source-only): admin web users hierarchy polish contract", "smoke:admin-web-users-hierarchy-contract"],
   ["Preflight (source-only): admin web users priority rail contract", "smoke:admin-web-users-priority-rail-contract"],
