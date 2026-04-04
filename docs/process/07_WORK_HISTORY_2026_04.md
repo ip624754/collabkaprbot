@@ -1,3 +1,17 @@
+## STEP536 — Telegram callback ack / feedback contract hardening
+
+Date: 2026-04-04
+
+Scope:
+- narrowed the callback lifecycle contract in `src/bot/bot.js` so the bot no longer sends an unconditional early `answerCallbackQuery()` before business branches decide whether they need a real toast/alert;
+- introduced a local one-callback/one-ack guard (`_callbackAckSent`) plus a final fallback ack in `finally`, keeping spinner-close safety for edit/reply-only branches while preserving meaningful later feedback for rate-limit / stale / alert paths;
+- kept the step strictly inside bot-layer callback entry semantics: no payload schema changes, no orphan callback cleanup, no `clearExpectText` changes, no router redesign, no money/publish/support-degraded behavior changes;
+- source smoke confirmed with `node --check src/bot/bot.js`; live Telegram smoke is still required for stale token, rate-limit, banned, unknown callback, and reply-fallback paths.
+
+Acceptance / notes:
+- this step is intentionally contract-level and narrow; it prepares the ground for STEP537 orphan/stale callback cleanup without mixing scopes;
+- runtime truth remains split: source-level patch is complete, but live Telegram behavior still needs manual verification before claiming full runtime confirmation.
+
 ## STEP535Q — Runtime retry truth + QStash optionality alignment
 - separated optional QStash env gaps from the actual retry/schema failure on `/admin/runtime`, so `QSTASH_TOKEN / QSTASH_CURRENT_SIGNING_KEY` no longer visually masquerade as the same class of issue as `column_profile_contact_does_not_exist`;
 - added lightweight runtime truth helpers in `scripts/admin-web.js` (`runtimeCardLabel`, `runtimeTextLabel`, `runtimeItemMeaning`, `runtimeItemNextStep`, `runtimeConfigSemanticLabel`) and used them across hierarchy cards, incident strip, queue lanes, retry feed, config matrix, and recent runtime events;

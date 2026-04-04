@@ -23449,9 +23449,16 @@ UGC vs Интеграция
 
 // --- Callback router ---
   bot.on('callback_query:data', async (ctx) => {
-      // Make callback UX resilient: ack immediately, and keep a stable UI target for edits.
+      // Keep callback feedback honest: allow exactly one callback ack path,
+      // but still fail-safe close the spinner if a branch only edits/replies.
     const _acq = ctx.answerCallbackQuery?.bind(ctx);
-    if (_acq) ctx.answerCallbackQuery = (opts) => _acq(opts).catch(() => {});
+    let _callbackAckSent = false;
+    const _safeAck = async (opts) => {
+      if (!_acq || _callbackAckSent) return undefined;
+      _callbackAckSent = true;
+      try { return await _acq(opts); } catch { return undefined; }
+    };
+    if (_acq) ctx.answerCallbackQuery = (opts) => _safeAck(opts);
 
     // Stable UI target: if edit is impossible and we fall back to reply,
     // subsequent edits must target the new message (no orphan "⏳").
@@ -23518,9 +23525,12 @@ UGC vs Интеграция
       };
     }
 
-// Stop Telegram "loading" spinner ASAP
-    await ctx.answerCallbackQuery();
+    const _ensureCallbackAck = async () => {
+      if (_callbackAckSent) return undefined;
+      return _safeAck();
+    };
 
+    try {
   // Global per-user rate-limit: 60 actions / minute
   try {
     const tgId = Number(ctx.from?.id || 0);
@@ -36099,6 +36109,9 @@ ${actionHint}`;
 
     await dispatchCallback(ctx, p, u, { legacy, logger, safeEditOrReply, isAdmin: (c) => isSuperAdminTg(c?.from?.id) });
     return;
+    } finally {
+      await _ensureCallbackAck();
+    }
   });
 
   BOT = bot;
