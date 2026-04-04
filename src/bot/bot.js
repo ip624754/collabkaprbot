@@ -37,6 +37,7 @@ import {
 import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
+import { handleGwAccessRoute } from './routes/gwAccess.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
@@ -20363,6 +20364,27 @@ if (exp.type === 'adm_outbox_tpl_label') {
       return;
     }
 
+    if (exp.type === 'gw_access_userid') {
+      const gwId = Number(exp.gwId);
+      const m = String(ctx.message.text || '').match(/(\d{5,})/);
+      if (!m) {
+        await ctx.reply('Пришли user_id цифрами (пример: 611377976).');
+        await setExpectText(ctx.from.id, exp);
+        return;
+      }
+      const targetId = Number(m[1]);
+      await clearExpectText(ctx.from.id);
+      await renderGwAccess({
+        ctx,
+        gwId,
+        ownerUserId: u.id,
+        redis,
+        db,
+        forceRecheck: true,
+        checkUserId: targetId,
+      });
+      return;
+    }
 
 
     // Workspace folders (owner/editor)
@@ -35230,16 +35252,6 @@ ${winnersHeader}`;
       return ctx.reply(list.length ? list.map(x => '@' + x).join('\n') : 'Пока нет участников.');
     }
 
-    // 🧩 Access
-    if (p.a === 'a:gw_access') {
-      await renderGwAccess({ ctx, gwId: Number(p.i), ownerUserId: u.id, redis, db, forceRecheck: false });
-      return;
-    }
-    if (p.a === 'a:gw_access_recheck') {
-      await renderGwAccess({ ctx, gwId: Number(p.i), ownerUserId: u.id, redis, db, forceRecheck: true });
-      return;
-    }
-
     // ✅ Preflight readiness (owner)
     if (p.a === 'a:gw_preflight') {
       await ctx.answerCallbackQuery();
@@ -36153,7 +36165,22 @@ ${actionHint}`;
     return false;
   };
 
-    await dispatchCallback(ctx, p, u, { legacy, logger, safeEditOrReply, isAdmin: (c) => isSuperAdminTg(c?.from?.id) });
+    await dispatchCallback(ctx, p, u, {
+      legacy,
+      logger,
+      safeEditOrReply,
+      isAdmin: (c) => isSuperAdminTg(c?.from?.id),
+      handlers: {
+        gw_access: (ctx2, p2, u2) => handleGwAccessRoute(ctx2, p2, u2, {
+          renderGwAccess,
+          redis,
+          db,
+          safeEditOrReply,
+          navKb,
+          setExpectText,
+        }),
+      },
+    });
     return;
     } finally {
       await _ensureCallbackAck();

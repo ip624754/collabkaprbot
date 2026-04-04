@@ -8,6 +8,7 @@
   },
   "scripts": {
     "actions:check": "node scripts/actions-registry-check.js",
+    "callbacks:check": "node scripts/callback-consistency-check.js",
     "actions:dump": "node scripts/actions-registry-check.js",
     "actions:md": "node scripts/actions-registry-export-md.js --out docs/02_ACTION_KEYS_REGISTRY.md",
     "dev": "node scripts/dev-polling.js",
@@ -133,7 +134,8 @@
     "smoke:admin-web-overview-cockpit-contract": "node scripts/smoke-admin-web-overview-cockpit-contract.js",
     "smoke:admin-web-layout-polish-contract": "node scripts/smoke-admin-web-layout-polish-contract.js",
     "smoke:admin-web-density-interaction-contract": "node scripts/smoke-admin-web-density-interaction-contract.js",
-    "smoke:admin-web-users-preset-truth-contract": "node scripts/smoke-admin-web-users-preset-truth-contract.js"
+    "smoke:admin-web-users-preset-truth-contract": "node scripts/smoke-admin-web-users-preset-truth-contract.js",
+    "smoke:gw-access-route-contract": "node scripts/smoke-gw-access-route-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

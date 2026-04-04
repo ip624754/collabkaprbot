@@ -883,3 +883,33 @@ Acceptance / notes:
 - no delivery handler payload logic or retry semantics changed;
 - this step hardens truth/gating only and keeps the blast radius narrow;
 - live verification after deploy should confirm that partial QStash config reads as partial and fan-out no longer claims readiness without verify.
+
+## STEP539 — Callback consistency guard
+
+Date: 2026-04-04
+
+Scope:
+- added `scripts/callback-consistency-check.js` plus `npm run callbacks:check`, then wired the new guard into `scripts/preflight.js` so source preflight now fails if a bot-layer callback is referenced in source but is neither registered nor exact-handled / explicitly aliased;
+- kept the guard source-only and runtime-safe: no payload redesign, no router rewrite, no money/publish/support-degraded contract changes;
+- closed the two source-confirmed giveaway access callback holes required to land the guard green on the current baseline: `a:gw_access_checkme` now re-runs access verification for the current Telegram user, and `a:gw_access_user_prompt` now opens a real `user_id` prompt with `expectText` recovery instead of a dead callback surface.
+
+Acceptance / notes:
+- callback consistency is now enforced in preflight alongside the existing actions-registry check;
+- scope stays narrow and reversible;
+- live Telegram verification is still required for the giveaway access helper buttons / prompt path.
+
+## STEP540 — One safe flow extraction (gw_access callback family)
+
+Date: 2026-04-04
+
+Scope:
+- extracted the giveaway access callback family (`a:gw_access`, `a:gw_access_recheck`, `a:gw_access_checkme`, `a:gw_access_user_prompt`) from the legacy callback monolith in `src/bot/bot.js` into a dedicated runtime handler `src/bot/routes/gwAccess.js`;
+- hardened the dispatcher routing in `src/bot/routes/callbacks.js` so `gw_access` resolves before the generic `a:gw_*` family, then wired the extracted family through `handlers.gw_access` in the main `dispatchCallback(...)` call;
+- removed the legacy `gw_access*` callback block from `src/bot/bot.js` without changing giveaway access business rules, payloads, or surrounding money/publish/support-degraded semantics;
+- updated `scripts/callback-consistency-check.js` so exact-handled callbacks are discovered across the whole `src/bot` tree (not just `bot.js` + `routes/callbacks.js`), which keeps the new extracted route green under the STEP539 guard;
+- added `scripts/smoke-gw-access-route-contract.js` and `npm run smoke:gw-access-route-contract` to lock the extraction contract: dedicated route present, route ordered before generic `gw`, handler wired, legacy branches removed.
+
+Acceptance / notes:
+- source smoke is green: `node --check src/bot/bot.js`, `node --check src/bot/routes/callbacks.js`, `node --check src/bot/routes/gwAccess.js`, `callbacks:check`, `actions:check`, `smoke:gw-access-route-contract`, `preflight:source`;
+- scope stays narrow and reversible;
+- live Telegram verification is still required for the giveaway access helper buttons and `user_id` prompt path after deploy.

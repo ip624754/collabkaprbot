@@ -270,6 +270,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): empty / no-history / first-message states contract", "smoke:empty-state-contract"],
   ["Preflight (source-only): creator catalog open-path contract", "smoke:creator-brands-home-open-contract"],
   ["Preflight (source-only): actions registry", "actions:check"],
+  ["Preflight (source-only): callback consistency guard", "callbacks:check"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

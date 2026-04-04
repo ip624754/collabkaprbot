@@ -17,6 +17,7 @@ function resolveRoute(action) {
   if (a === 'a:menu' || a === 'a:main_menu' || a.startsWith('a:ui_')) return 'ui';
   if (a.startsWith('a:bx_') || a.startsWith('a:bm_')) return 'bx';
   if (a.startsWith('a:dir_') || a.startsWith('a:brand_dir_')) return 'dir';
+  if (a === 'a:gw_access' || a.startsWith('a:gw_access_')) return 'gw_access';
   if (a.startsWith('a:gw_')) return 'gw';
   if (a.startsWith('a:ws_') || a.startsWith('a:wsp_')) return 'ws';
   if (a.startsWith('a:adm_')) return 'adm';
