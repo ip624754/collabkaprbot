@@ -9,7 +9,7 @@ const html = read('admin.html');
 const css = read('styles/admin-web.css');
 const js = read('scripts/admin-web.js');
 
-assert.ok(html.includes('step543b'), 'admin shell asset URLs must be cache-busted to step543b');
+assert.ok(html.includes('step543c'), 'admin shell asset URLs must be cache-busted to step543c');
 
 for (const token of [
   'aw-mobile-nav-toggle',
@@ -32,6 +32,10 @@ for (const token of [
   '.aw-shell.is-nav-open .aw-sidebar',
   '@media (max-width: 720px)',
   '@media (max-width: 420px)',
+  'grid-template-columns: 1fr',
+  'flex-direction: column',
+  'font-size: 16px',
+  '.aw-actions .aw-button',
 ]) {
   assert.ok(css.includes(token), `mobile admin shell CSS must include ${token}`);
 }

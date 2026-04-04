@@ -33,6 +33,6 @@ for (const token of [
 }
 
 const html = read('admin.html');
-assert.ok(html.includes('step543b'), 'admin shell asset URLs must be cache-busted to step543b');
+assert.ok(html.includes('step543c'), 'admin shell asset URLs must be cache-busted to step543c');
 
 console.log('✅ smoke admin-web density/interaction contract OK');

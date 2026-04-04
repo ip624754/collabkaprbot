@@ -2105,3 +2105,10 @@ Acceptance / notes:
 - tightened Users mobile behavior without rewriting the Users surface into a card feed.
 - stacked Users filters/export controls into single-column mobile actions, made priority/cohort/preset/action rails mobile-readable, widened basket/meta pills to full-width rows, and normalized compare/pagination/table overflow behavior for narrow screens.
 - added `scripts/smoke-admin-web-users-mobile-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped the admin asset cache-bust to `step543b`.
+
+
+## STEP543C — mobile consistency follow-up
+- Mobile admin shell tightened for consistent phone-width behavior across section navigation.
+- At <=720px shell now collapses to a true 1-column layout; sidebar drawer no longer leaves a phantom 260px grid column.
+- Topbar stacks cleanly on phone widths, chips/buttons stop forcing inconsistent widths, and mobile inputs/textareas use 16px font-size to avoid iOS zoom jumps.
+- Users narrow-phone table floor reduced from 880px to 840px to reduce aggressive overflow while preserving horizontal scroll.

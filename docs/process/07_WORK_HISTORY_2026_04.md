@@ -951,3 +951,9 @@ Acceptance / notes:
 - scope: `admin.html`, `styles/admin-web.css`, `scripts/preflight.js`, `package.json`, `scripts/smoke-admin-web-users-mobile-contract.js`, docs canon.
 - tightened Users mobile layout only: stacked sticky controls/filter/export utility groups, collapsed priority/cohort/preset/action rails to phone-readable columns, made compare/meta/pagination rows wrap cleanly, and set safer table overflow rules on narrow screens without rewriting Users into a card feed.
 - updated admin asset cache-bust to `step543b`.
+
+
+## STEP543C — web-admin mobile consistency follow-up
+- Fixed mobile shell grid drift by collapsing `.aw-shell` to `1fr` under phone breakpoint so drawer nav no longer leaves a phantom desktop sidebar column.
+- Tightened phone topbar/layout consistency: stacked topbar, wrapped chips/actions, removed global narrow-phone full-width button rule, added safe overflow clipping and 16px mobile input sizing.
+- Reduced narrow-phone Users table min-width from 880px to 840px and added mobile consistency smoke coverage.

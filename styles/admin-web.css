@@ -22,6 +22,7 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: clip; }
 body {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background:
@@ -29,8 +30,9 @@ body {
     radial-gradient(circle at 76% 82%, rgba(67, 180, 255, 0.12), transparent 22%),
     linear-gradient(135deg, #060d1d 0%, #0b1630 38%, #13295b 100%);
   color: var(--text);
+  overflow-x: clip;
 }
-.aw-root { min-height: 100vh; }
+.aw-root { min-height: 100vh; overflow-x: clip; }
 .aw-shell {
   min-height: 100vh;
   display: grid;
@@ -119,8 +121,11 @@ body.is-admin-nav-open {
 }
 .aw-main {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
   padding: 24px 28px 36px;
 }
+.aw-main > * { min-width: 0; }
 .aw-topbar {
   display: flex;
   gap: 12px;
@@ -136,6 +141,11 @@ body.is-admin-nav-open {
   border-radius: 999px;
   padding: 8px 12px;
   font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  max-width: 100%;
+  white-space: normal;
 }
 .aw-button {
   appearance: none;
@@ -144,6 +154,7 @@ body.is-admin-nav-open {
   background: linear-gradient(180deg, rgba(66, 176, 255, 0.2), rgba(33, 111, 229, 0.18));
   border-radius: 14px;
   padding: 10px 14px;
+  min-height: 42px;
   font: inherit;
   cursor: pointer;
   box-shadow: 0 10px 24px rgba(38, 98, 200, 0.16);
@@ -983,6 +994,7 @@ body.is-admin-nav-open {
   color: var(--text);
   padding: 12px 14px;
   font: inherit;
+  max-width: 100%;
 }
 .aw-input.inline, .aw-select.inline { width: auto; min-width: 180px; }
 .aw-textarea { min-height: 160px; resize: vertical; }
@@ -1788,7 +1800,11 @@ body.is-admin-nav-open {
   }
 }
 @media (max-width: 720px) {
-  .aw-shell { min-height: 100vh; }
+  .aw-shell {
+    min-height: 100vh;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
   .aw-sidebar-backdrop {
     display: block;
     position: fixed;
@@ -1810,7 +1826,8 @@ body.is-admin-nav-open {
     top: 0;
     left: 0;
     bottom: 0;
-    width: min(86vw, 320px);
+    width: min(84vw, 320px);
+    max-width: calc(100vw - 24px);
     height: 100vh;
     z-index: 40;
     overflow: auto;
@@ -1824,25 +1841,65 @@ body.is-admin-nav-open {
   }
   .aw-main {
     padding: 18px 16px 28px;
+    width: 100%;
+    max-width: 100%;
   }
   .aw-topbar {
     gap: 10px;
     margin-bottom: 16px;
+    flex-direction: column;
+    align-items: stretch;
   }
   .aw-topbar-left,
   .aw-topbar-right {
     width: 100%;
     gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
   }
   .aw-topbar-right {
     justify-content: flex-start;
   }
+  .aw-topbar-left > *,
+  .aw-topbar-right > * {
+    min-width: 0;
+  }
+  .aw-topbar-left .aw-chip,
+  .aw-topbar-right .aw-chip {
+    flex: 1 1 180px;
+  }
+  .aw-topbar-right .aw-button {
+    flex: 1 1 140px;
+  }
   .aw-mobile-nav-toggle {
     display: inline-flex;
     min-height: 42px;
+    flex: 0 0 auto;
+    width: auto;
   }
   .aw-page-head { margin-bottom: 16px; }
   .aw-page-head h1 { font-size: 26px; }
+  .aw-page-head p,
+  .aw-login-help,
+  .aw-copy-sheet-head span {
+    max-width: 100%;
+  }
+  .aw-row-between,
+  .aw-copy-sheet-head,
+  .aw-statusbar-row,
+  .aw-statusbar-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .aw-copy-sheet-actions {
+    justify-content: stretch;
+  }
+  .aw-copy-sheet-actions .aw-button {
+    flex: 1 1 auto;
+  }
+  .aw-input, .aw-select, .aw-textarea, .aw-copy-sheet-textarea {
+    font-size: 16px;
+  }
   .aw-surface,
   .aw-card,
   .aw-login-card {
@@ -1999,8 +2056,15 @@ body.is-admin-nav-open {
   .aw-topbar-left,
   .aw-topbar-right { gap: 6px; }
   .aw-chip { padding: 7px 10px; font-size: 12px; }
-  .aw-button { width: 100%; }
-  .aw-users-pagination-controls .aw-button { width: 100%; }
+  .aw-actions .aw-button,
+  .aw-toolbar .aw-button,
+  .aw-toolbar-export .aw-button,
+  .aw-toolbar-utility .aw-button,
+  .aw-filter-rail-actions .aw-button,
+  .aw-users-pagination-controls .aw-button,
+  .aw-pagination-actions .aw-button,
+  .aw-users-compare-actions .aw-button,
+  .aw-copy-sheet-actions .aw-button { width: 100%; }
   .aw-page-head h1 { font-size: 23px; }
   .aw-user-title { font-size: 28px; }
   .aw-users-sticky-shell,
@@ -2021,7 +2085,7 @@ body.is-admin-nav-open {
     grid-template-columns: 1fr;
   }
   .aw-users-table {
-    min-width: 880px;
+    min-width: 840px;
   }
   .aw-cohort-counter-card strong {
     font-size: 20px;

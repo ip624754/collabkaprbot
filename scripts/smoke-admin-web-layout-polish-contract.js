@@ -30,6 +30,6 @@ const runtime = read('src/lib/adminWeb/runtime.js');
 assert.ok(runtime.includes("const qstashState = qstashConfigured ? 'ok' : (qstashPartiallyConfigured ? 'degraded' : 'unknown');"), 'qstash truth must distinguish full config, partial config and fully optional absence');
 
 const html = read('admin.html');
-assert.ok(html.includes('step543b'), 'admin shell asset URLs must be cache-busted to step543b');
+assert.ok(html.includes('step543c'), 'admin shell asset URLs must be cache-busted to step543c');
 
 console.log('✅ smoke admin-web layout polish contract OK');
