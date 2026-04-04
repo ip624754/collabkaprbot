@@ -6,7 +6,7 @@ const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const html = read('admin.html');
-assert.match(html, /\/styles\/admin-web\.css\?v=20260404-step543a/, 'admin shell must cache-bust admin css');
-assert.match(html, /\/scripts\/admin-web\.js\?v=20260404-step543a/, 'admin shell must cache-bust admin web js');
+assert.match(html, /\/styles\/admin-web\.css\?v=20260404-step543b/, 'admin shell must cache-bust admin css');
+assert.match(html, /\/scripts\/admin-web\.js\?v=20260404-step543b/, 'admin shell must cache-bust admin web js');
 
 console.log('✅ smoke admin-web asset cache-bust contract OK');

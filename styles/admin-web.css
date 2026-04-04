@@ -1780,6 +1780,12 @@ body.is-admin-nav-open {
   .aw-payments-side-grid {
     grid-template-columns: 1fr;
   }
+  .aw-preset-grid,
+  .aw-action-grid,
+  .aw-cohort-topline,
+  .aw-compare-drill-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 720px) {
   .aw-shell { min-height: 100vh; }
@@ -1888,10 +1894,89 @@ body.is-admin-nav-open {
     padding: 12px;
     gap: 12px;
   }
+  .aw-toolbar-users,
+  .aw-filter-rail-head,
+  .aw-utility-head,
+  .aw-priority-row {
+    align-items: stretch;
+  }
+  .aw-toolbar-users .aw-toolbar-main,
+  .aw-toolbar-users .aw-toolbar-export,
+  .aw-filter-rail-actions,
+  .aw-toolbar-utility,
+  .aw-pagination-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .aw-toolbar-users .aw-input.inline,
+  .aw-toolbar-users .aw-select.inline,
+  .aw-toolbar-users .aw-button,
+  .aw-filter-grid .aw-select.inline,
+  .aw-filter-rail-actions .aw-button,
+  .aw-toolbar-utility .aw-select.inline,
+  .aw-toolbar-utility .aw-button {
+    width: 100%;
+    min-width: 0;
+  }
+  .aw-filter-grid,
+  .aw-preset-grid,
+  .aw-action-grid,
+  .aw-cohort-topline,
+  .aw-compare-drill-grid,
+  .aw-priority-pills {
+    grid-template-columns: 1fr;
+  }
+  .aw-priority-pills {
+    display: grid;
+    gap: 8px;
+  }
+  .aw-priority-pill {
+    width: 100%;
+    min-height: 42px;
+    border-radius: 14px;
+    text-align: left;
+  }
+  .aw-users-sticky-state .aw-basket-pill,
+  .aw-users-sticky-meta .aw-basket-pill,
+  .aw-users-compare-actions .aw-basket-pill,
+  .aw-users-url-meta .aw-basket-pill {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .aw-users-pagination-controls,
+  .aw-pagination-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .aw-pagination-size {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .aw-users-table-meta-chips {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .aw-compare-grid {
+    grid-template-columns: 1fr;
+  }
   .aw-users-table-wrap,
   .aw-table-wrap {
     overflow: auto;
     -webkit-overflow-scrolling: touch;
+  }
+  .aw-users-table-wrap {
+    margin-inline: -2px;
+    border-radius: 16px;
+  }
+  .aw-users-table {
+    min-width: 940px;
+  }
+  .aw-row-actions,
+  .aw-row-actions-compact {
+    gap: 6px;
+  }
+  .aw-row-action {
+    min-height: 32px;
   }
   .aw-table th, .aw-table td {
     padding: 10px 9px;
@@ -1918,6 +2003,33 @@ body.is-admin-nav-open {
   .aw-users-pagination-controls .aw-button { width: 100%; }
   .aw-page-head h1 { font-size: 23px; }
   .aw-user-title { font-size: 28px; }
+  .aw-users-sticky-shell,
+  .aw-users-pagination,
+  .aw-users-table-meta-strip,
+  .aw-priority-rail,
+  .aw-cohort-rail,
+  .aw-preset-rail,
+  .aw-filter-rail,
+  .aw-compare-rail,
+  .aw-action-ready-rail,
+  .aw-utility-rail {
+    padding: 10px 11px;
+    border-radius: 16px;
+  }
+  .aw-users-pagination-controls,
+  .aw-pagination-actions {
+    grid-template-columns: 1fr;
+  }
+  .aw-users-table {
+    min-width: 880px;
+  }
+  .aw-cohort-counter-card strong {
+    font-size: 20px;
+  }
+  .aw-row-action,
+  .aw-row-actions-compact .aw-row-action {
+    padding: 5px 8px;
+  }
 }
 
 .aw-nav-group-label {

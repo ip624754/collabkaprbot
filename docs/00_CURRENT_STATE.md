@@ -2099,3 +2099,9 @@ Acceptance / notes:
 Acceptance / notes:
 - scope stays UI-only for web-admin shell/responsive behavior; no API, auth, bot-layer, or backend write-path changes;
 - live browser verification on a real phone is still required for final touch ergonomics and drawer feel.
+
+
+## STEP543B — web-admin Users mobile working-slice pass
+- tightened Users mobile behavior without rewriting the Users surface into a card feed.
+- stacked Users filters/export controls into single-column mobile actions, made priority/cohort/preset/action rails mobile-readable, widened basket/meta pills to full-width rows, and normalized compare/pagination/table overflow behavior for narrow screens.
+- added `scripts/smoke-admin-web-users-mobile-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped the admin asset cache-bust to `step543b`.

@@ -9,7 +9,7 @@ const html = read('admin.html');
 const css = read('styles/admin-web.css');
 const js = read('scripts/admin-web.js');
 
-assert.ok(html.includes('step543a'), 'admin shell asset URLs must be cache-busted to step543a');
+assert.ok(html.includes('step543b'), 'admin shell asset URLs must be cache-busted to step543b');
 
 for (const token of [
   'aw-mobile-nav-toggle',

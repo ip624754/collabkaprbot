@@ -945,3 +945,9 @@ Scope:
 Acceptance / notes:
 - scope stays web-admin UI only: no route/API/auth/backend contract changes;
 - requires manual browser + real phone verification for final touch ergonomics and viewport feel.
+
+
+## STEP543B — web-admin Users mobile working-slice pass
+- scope: `admin.html`, `styles/admin-web.css`, `scripts/preflight.js`, `package.json`, `scripts/smoke-admin-web-users-mobile-contract.js`, docs canon.
+- tightened Users mobile layout only: stacked sticky controls/filter/export utility groups, collapsed priority/cohort/preset/action rails to phone-readable columns, made compare/meta/pagination rows wrap cleanly, and set safer table overflow rules on narrow screens without rewriting Users into a card feed.
+- updated admin asset cache-bust to `step543b`.
