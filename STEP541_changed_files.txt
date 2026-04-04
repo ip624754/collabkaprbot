@@ -1,0 +1,4 @@
+src/bot/bot.js
+src/bot/gwAccess.js
+docs/00_CURRENT_STATE.md
+docs/process/07_WORK_HISTORY_2026_04.md

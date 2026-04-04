@@ -129,7 +129,6 @@ async function safeEditOrReply(ctx, text, kb) {
 export async function renderGwAccess({ ctx, gwId, ownerUserId, redis, db, forceRecheck = false, checkUserId = null }) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeAnswerCb(ctx);
     if (ctx?.callbackQuery?.id) await ctx.answerCallbackQuery({ text: 'Нет доступа.' }).catch(() => {});
     else await ctx.reply('Нет доступа.');
     return null;

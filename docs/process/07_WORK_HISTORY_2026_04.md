@@ -1,3 +1,18 @@
+## STEP541 — Callback branch feedback normalization
+
+Date: 2026-04-04
+
+Scope:
+- normalized the remaining source-confirmed branch-local double-ack collisions that survived STEP536: `a:nd` in `src/bot/bot.js`, `a:brand_app_del_do` in `src/bot/bot.js`, and the no-access branch inside `renderGwAccess(...)` in `src/bot/gwAccess.js`;
+- removed the unconditional bare callback ack from `a:nd`, so the first tap can now use one honest confirmation toast (`Нажми ещё раз, чтобы убрать уведомление.`) instead of losing it behind an earlier empty ack;
+- removed the unconditional bare callback ack from `a:brand_app_del_do`, so deny/success feedback paths (`Нет доступа.` / `🗑 Заявка удалена`) remain the only callback feedback for that branch;
+- removed the redundant `safeAnswerCb(...)` call from the giveaway-access no-access path, so `Нет доступа.` is now sent as a single final callback response there too.
+
+Acceptance / notes:
+- step stays intentionally narrow: no callback payload redesign, no router changes, no guard changes, no money/publish/support-degraded semantics touched;
+- source smoke is green: `node --check src/bot/bot.js`, `node --check src/bot/gwAccess.js`, `npm run callbacks:check`, `npm run actions:check`, `npm run preflight:source`;
+- live Telegram verification is still required for `a:nd` first/second tap UX, brand-app delete feedback visibility, and giveaway-access no-access feedback.
+
 ## STEP538 — Input-state boundary hardening
 
 Date: 2026-04-04
