@@ -33,9 +33,9 @@ const webJs = read('scripts/admin-web.js');
 for (const token of [
   '/api/admin-web-read?section=control_surface',
   'renderControlStatusBar()',
-  'Operator control surface',
+  'Командный обзор владельца',
   'Последние переключения',
-  'Control plane',
+  'Семантика безопасности',
 ]) {
   assert.ok(webJs.includes(token), `admin web JS must include ${token}`);
 }

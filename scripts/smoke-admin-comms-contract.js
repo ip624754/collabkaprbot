@@ -37,7 +37,7 @@ const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8
 const renderAdminCommsSrc = extractBetween(
   botSource,
   'async function renderAdminComms(ctx) {',
-  '\n\n\nasync function renderAdminSystem(ctx) {'
+  '\n\nasync function renderAdminSystem(ctx) {'
 );
 
 assert.ok(renderAdminCommsSrc.includes("let text = '💬 Админка → Коммуникации\\n\\n';"), 'Admin → Comms title must stay stable');

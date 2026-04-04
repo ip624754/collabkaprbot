@@ -7,7 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'STEP526: compare drill actions polish',
+  'renderUsersCompareDrillActions',
   'renderUsersCompareDrillActions',
   'data-users-compare-action="export_pins"',
   'data-users-compare-action="copy_pins_tg_ids"',

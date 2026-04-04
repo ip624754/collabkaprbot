@@ -7,7 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'STEP529: users row height / table density polish',
+  'STEP529: плотность строк таблицы',
   'aw-users-table-density',
   'aw-user-secondary',
   'aw-row-actions-compact',

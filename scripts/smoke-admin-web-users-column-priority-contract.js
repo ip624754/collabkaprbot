@@ -7,7 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [
-  'STEP530: users column priority compression',
+  'STEP530: приоритет колонок',
   'aw-users-table-priority',
   'usersSignalsPriorityChips',
   'usersSegmentBadges',

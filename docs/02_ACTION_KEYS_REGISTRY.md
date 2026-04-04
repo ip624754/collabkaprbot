@@ -5,14 +5,14 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **534**
-- Actions in registry: **534**
+- Actions in code: **535**
+- Actions in registry: **535**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
-| admin | 96 |
+| admin | 97 |
 | edit | 344 |
 | ops | 79 |
 | pay | 11 |
@@ -25,7 +25,7 @@
 | db_truth | 4 |
 | none | 173 |
 | queue_first | 2 |
-| require_redis | 355 |
+| require_redis | 356 |
 
 ## Actions table
 
@@ -124,6 +124,7 @@
 | `a:admin_users` | admin | require_redis |
 | `a:admin_users_reset` | admin | require_redis |
 | `a:admin_users_search` | admin | require_redis |
+| `a:admin_web_login_toggle` | admin | require_redis |
 | `a:aud` | edit | require_redis |
 | `a:aud_export` | edit | require_redis |
 | `a:aud_reset` | edit | require_redis |

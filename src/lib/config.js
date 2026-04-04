@@ -296,7 +296,7 @@ export const CFG = {
     return Math.max(300, Math.min(n, 8 * 60 * 60));
   })(),
 
-  // QStash delivery / signature verification (optional for read-admin, required for retry/publish paths)
+  // QStash (optional): delivery/retry/publish queues in serverless-safe way
   QSTASH_URL: process.env.QSTASH_URL || '',
   QSTASH_TOKEN: process.env.QSTASH_TOKEN || '',
   QSTASH_CURRENT_SIGNING_KEY: process.env.QSTASH_CURRENT_SIGNING_KEY || '',
