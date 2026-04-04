@@ -4148,6 +4148,43 @@ function expectBackCb(exp) {
   return 'a:menu';
 }
 
+
+const EXPECT_TEXT_EXIT_ACTIONS = new Set([
+  'a:menu',
+  'a:main_menu',
+  'a:home',
+  'a:support',
+  'a:verify_home',
+  'a:cur_home',
+  'a:mod_home',
+  'a:ws_list',
+  'a:gw_list',
+  'a:brand_team',
+  'a:folders_home',
+]);
+
+function callbackActionBase(cb) {
+  return String(cb || '').split('|')[0] || '';
+}
+
+function shouldClearExpectTextOnCallback(action, exp) {
+  if (!exp || !exp.type) return false;
+  const a = String(action || '');
+  if (!a) return false;
+  if (a === 'a:nop' || a === 'a:nd') return false;
+  if (a === 'a:support_write' || a === 'a:adm_support_reply') return false;
+  if (EXPECT_TEXT_EXIT_ACTIONS.has(a)) return true;
+  if (a.endsWith('_home')) return true;
+  if (a === 'a:ws_list_inactive') return true;
+  if (a.startsWith('a:ws_list') || a.startsWith('a:gw_list')) return true;
+  if (a.endsWith('_cancel') || a.endsWith('_cancel_q')) return true;
+
+  const backAction = callbackActionBase(expectBackCb(exp));
+  if (backAction && a === backAction) return true;
+
+  return false;
+}
+
 async function setActiveWorkspace(tgId, wsId) {
   try {
     await redis.set(k(['active_ws', tgId]), String(wsId), { ex: 30 * 24 * 3600 });
@@ -23719,8 +23756,14 @@ ${DEGRADED_COPY.tips}
       }
     }
 
-    // Cancel any pending text input step when user clicks an inline button
-    try { await clearExpectText(ctx.from.id); } catch {}
+    // STEP538: only exit input mode on explicit navigation/cancel boundaries.
+    // Do not wipe compose state on every inline click — stale taps and in-flow buttons
+    // must not silently kill support/apply/reply text sessions.
+    let _expectText = null;
+    try { _expectText = await getExpectText(ctx.from.id); } catch {}
+    if (shouldClearExpectTextOnCallback(p.a, _expectText)) {
+      try { await clearExpectText(ctx.from.id); } catch {}
+    }
 
 
     const legacy = async () => {

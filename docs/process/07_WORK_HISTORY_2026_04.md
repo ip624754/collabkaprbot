@@ -1,3 +1,17 @@
+## STEP538 — Input-state boundary hardening
+
+Date: 2026-04-04
+
+Scope:
+- removed the old unconditional `clearExpectText(ctx.from.id)` from the global callback entry in `src/bot/bot.js`; inline taps no longer nuke pending text-mode just because the user clicked any button at all;
+- introduced a narrow boundary helper `shouldClearExpectTextOnCallback(...)` plus a small exit-action set, so input-mode is cleared only on explicit leave-input surfaces: `Menu/Home`, `*_home`, `*_cancel`, current back action, and list/home escapes like `ws_list/gw_list`;
+- deliberately preserved existing branch-local clears and explicit reset paths (`brand_apply_cancel`, stateless `s:reset_input`, reply/send completion paths), keeping support/apply/reply flows intact while reducing stale-click damage;
+- verified source-level safety with `node --check src/bot/bot.js`, `npm run smoke:input-mode-contract`, `npm run actions:check`, and `npm run preflight:source`.
+
+Acceptance / notes:
+- this step hardens the callback/input boundary only; it does not broaden callback routing, does not touch money/publish/support-degraded semantics, and does not add a new CI guardrail yet (that belongs to STEP539);
+- live Telegram verification is still required for compose persistence on unrelated clicks and for honest shutdown on back/menu/cancel exits.
+
 ## STEP537 — Orphan / stale callback cleanup
 
 Date: 2026-04-04
