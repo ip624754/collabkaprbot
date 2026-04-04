@@ -1,18 +1,3 @@
-## STEP541 — Callback branch feedback normalization
-
-Date: 2026-04-04
-
-Scope:
-- normalized the remaining source-confirmed branch-local double-ack collisions that survived STEP536: `a:nd` in `src/bot/bot.js`, `a:brand_app_del_do` in `src/bot/bot.js`, and the no-access branch inside `renderGwAccess(...)` in `src/bot/gwAccess.js`;
-- removed the unconditional bare callback ack from `a:nd`, so the first tap can now use one honest confirmation toast (`Нажми ещё раз, чтобы убрать уведомление.`) instead of losing it behind an earlier empty ack;
-- removed the unconditional bare callback ack from `a:brand_app_del_do`, so deny/success feedback paths (`Нет доступа.` / `🗑 Заявка удалена`) remain the only callback feedback for that branch;
-- removed the redundant `safeAnswerCb(...)` call from the giveaway-access no-access path, so `Нет доступа.` is now sent as a single final callback response there too.
-
-Acceptance / notes:
-- step stays intentionally narrow: no callback payload redesign, no router changes, no guard changes, no money/publish/support-degraded semantics touched;
-- source smoke is green: `node --check src/bot/bot.js`, `node --check src/bot/gwAccess.js`, `npm run callbacks:check`, `npm run actions:check`, `npm run preflight:source`;
-- live Telegram verification is still required for `a:nd` first/second tap UX, brand-app delete feedback visibility, and giveaway-access no-access feedback.
-
 ## STEP538 — Input-state boundary hardening
 
 Date: 2026-04-04
@@ -928,3 +913,20 @@ Acceptance / notes:
 - source smoke is green: `node --check src/bot/bot.js`, `node --check src/bot/routes/callbacks.js`, `node --check src/bot/routes/gwAccess.js`, `callbacks:check`, `actions:check`, `smoke:gw-access-route-contract`, `preflight:source`;
 - scope stays narrow and reversible;
 - live Telegram verification is still required for the giveaway access helper buttons and `user_id` prompt path after deploy.
+
+
+## STEP542 — `gw_access` truth-boundary hardening
+
+Date: 2026-04-04
+
+Scope:
+- hardened the extracted giveaway access family without broad router changes: `a:gw_access_user_prompt` now requires Redis because the prompt opens a stateful `expectText` continuation, closing the source-confirmed UI truth mismatch from the audit;
+- removed the divergent local lifecycle helper from `src/bot/gwAccess.js` and switched the family to the project-level `safeEditOrReply` contract by injecting the shared helper through `src/bot/routes/gwAccess.js` and the direct text-submit path in `src/bot/bot.js`;
+- fixed the no-access branch in `renderGwAccess(...)` so it now sends one final `Нет доступа.` feedback instead of pre-acking bare and then attempting a second callback toast;
+- extended `scripts/smoke-gw-access-route-contract.js` so the source smoke now locks the new truth boundary: Redis-required prompt, no local helper drift, and no bare-first ack in the no-access path.
+
+Acceptance / notes:
+- scope stays narrow and reversible;
+- no giveaway payload changes, no money/publish/support-degraded logic changes, no new extraction wave;
+- live Telegram verification is still required for `🔎 Проверить по ID`, no-access feedback, and repeated `gw_access` recheck behavior after deploy.
+

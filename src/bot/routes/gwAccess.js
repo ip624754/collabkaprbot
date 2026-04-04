@@ -25,12 +25,12 @@ export async function handleGwAccessRoute(ctx, p, u, deps = {}) {
   }
 
   if (action === 'a:gw_access') {
-    await renderGwAccess({ ctx, gwId, ownerUserId, redis, db, forceRecheck: false });
+    await renderGwAccess({ ctx, gwId, ownerUserId, redis, db, safeEditOrReply, forceRecheck: false });
     return true;
   }
 
   if (action === 'a:gw_access_recheck') {
-    await renderGwAccess({ ctx, gwId, ownerUserId, redis, db, forceRecheck: true });
+    await renderGwAccess({ ctx, gwId, ownerUserId, redis, db, safeEditOrReply, forceRecheck: true });
     return true;
   }
 
@@ -41,6 +41,7 @@ export async function handleGwAccessRoute(ctx, p, u, deps = {}) {
       ownerUserId,
       redis,
       db,
+      safeEditOrReply,
       forceRecheck: true,
       checkUserId: Number(ctx?.from?.id || 0),
     });

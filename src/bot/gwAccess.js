@@ -108,30 +108,16 @@ function accessHelpText(botUsername) {
   );
 }
 
-async function safeAnswerCb(ctx) {
-  try {
-    if (ctx?.callbackQuery?.id) await ctx.answerCallbackQuery();
-  } catch {}
-}
-
-async function safeEditOrReply(ctx, text, kb) {
-  const opts = { parse_mode: 'HTML', reply_markup: kb };
-  // Prefer edit (callback), fallback to reply.
-  try {
-    if (ctx?.callbackQuery?.message) {
-      await ctx.editMessageText(text, opts);
-      return;
-    }
-  } catch {}
-  await ctx.reply(text, opts);
-}
-
-export async function renderGwAccess({ ctx, gwId, ownerUserId, redis, db, forceRecheck = false, checkUserId = null }) {
+export async function renderGwAccess({ ctx, gwId, ownerUserId, redis, db, safeEditOrReply, forceRecheck = false, checkUserId = null }) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
     if (ctx?.callbackQuery?.id) await ctx.answerCallbackQuery({ text: 'Нет доступа.' }).catch(() => {});
     else await ctx.reply('Нет доступа.');
     return null;
+  }
+
+  if (typeof safeEditOrReply !== 'function') {
+    throw new Error('gw_access.missing_safeEditOrReply');
   }
 
   const sponsorsRaw = await db.listGiveawaySponsors(gwId);
@@ -244,8 +230,7 @@ ${accessHelpText(botUsername)}`;
     .row()
     .text('⬅️ Назад', `a:gw_open|i:${gwId}`);
 
-  await safeAnswerCb(ctx);
-  await safeEditOrReply(ctx, text, kb);
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 
   await db.auditGiveaway(gwId, g.workspace_id, ownerUserId, 'gw.access_checked', {
     adminCount,

@@ -367,7 +367,7 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:gw_access": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:gw_access_checkme": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:gw_access_recheck": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
-  "a:gw_access_user_prompt": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.NONE },
+  "a:gw_access_user_prompt": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:gw_check": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:gw_confirm_push": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:gw_deadline": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS },

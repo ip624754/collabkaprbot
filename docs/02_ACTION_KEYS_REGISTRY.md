@@ -23,9 +23,9 @@
 | Guard | Count |
 |---|---:|
 | db_truth | 4 |
-| none | 173 |
+| none | 172 |
 | queue_first | 2 |
-| require_redis | 354 |
+| require_redis | 355 |
 
 ## Actions table
 
@@ -371,7 +371,7 @@
 | `a:gw_access` | ops | require_redis |
 | `a:gw_access_checkme` | ops | require_redis |
 | `a:gw_access_recheck` | ops | require_redis |
-| `a:gw_access_user_prompt` | ops | none |
+| `a:gw_access_user_prompt` | ops | require_redis |
 | `a:gw_check` | ops | require_redis |
 | `a:gw_confirm_push` | ops | require_redis |
 | `a:gw_deadline` | ops | require_redis |

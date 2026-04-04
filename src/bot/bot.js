@@ -20380,6 +20380,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
         ownerUserId: u.id,
         redis,
         db,
+        safeEditOrReply,
         forceRecheck: true,
         checkUserId: targetId,
       });
@@ -23792,6 +23793,8 @@ ${DEGRADED_COPY.tips}
 
 // NOTIFY: dismiss system notification (double-tap confirm)
 if (p.a === 'a:nd') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+
   const m = ctx.callbackQuery?.message;
   if (!m) return;
   const chatId = Number(m.chat?.id || 0);
@@ -26243,6 +26246,7 @@ if (p.a === 'a:brand_app_del_q') {
 }
 
 if (p.a === 'a:brand_app_del_do') {
+  await ctx.answerCallbackQuery();
   const appId = Number(p.id || 0);
   if (!appId) return;
   const app = await getBrandAppForActorSafe(ctx, u.id, appId);
