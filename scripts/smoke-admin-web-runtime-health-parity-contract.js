@@ -7,6 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const runtime = read('src/lib/adminWeb/runtime.js');
 const health = read('api/health.js');
+const cron = read('src/bot/cron.js');
 
 for (const token of [
   "k(['ops', 'reasons', 'qstash_reschedule_failed', 'd', day])",
@@ -29,3 +30,22 @@ for (const token of [
 }
 
 console.log('✅ smoke admin-web runtime/health parity contract OK');
+
+
+for (const token of [
+  'publish_configured',
+  'verify_configured',
+  'fully_configured',
+  'partially_configured',
+  'status',
+]) {
+  assert.ok(health.includes(token), `health parity must expose qstash config ${token}`);
+}
+
+for (const token of [
+  "reason: 'qstash_publish_missing'",
+  "reason: 'qstash_verify_missing'",
+  'getQStashConfigSnapshot()',
+]) {
+  assert.ok(cron.includes(token), `fanout parity must include ${token}`);
+}

@@ -1,4 +1,5 @@
 import { CFG } from '../src/lib/config.js'; 
+import { getQStashConfigSnapshot, isQStashLibAvailable } from '../src/lib/qstash.js';
 
 function resolveHealthTier(req) {
   try {
@@ -128,6 +129,16 @@ export default async function handler(_req, res) {
       official: { last_at: null, last_offer_id: null, last_source: null },
           },
     qstash: {
+      config: {
+        lib_available: isQStashLibAvailable(),
+        publish_configured: false,
+        verify_configured: false,
+        next_signing_key_configured: false,
+        url_configured: false,
+        fully_configured: false,
+        partially_configured: false,
+        status: 'not_configured',
+      },
       official_publish_deliver_last_at: null,
       official_publish_verify_last_at: null,
       reschedule_failed: { day, today_count: null, last_at: null, last_where: null, last_payload: null },
@@ -141,6 +152,18 @@ export default async function handler(_req, res) {
       },
           },
         };
+
+  const qstashConfig = getQStashConfigSnapshot();
+  base.qstash.config = {
+    lib_available: isQStashLibAvailable(),
+    publish_configured: qstashConfig.publishConfigured,
+    verify_configured: qstashConfig.verifyConfigured,
+    next_signing_key_configured: qstashConfig.nextSigningKeyConfigured,
+    url_configured: qstashConfig.urlConfigured,
+    fully_configured: qstashConfig.fullyConfigured,
+    partially_configured: qstashConfig.partiallyConfigured,
+    status: qstashConfig.status,
+  };
 
   const auditBase = {
     enabled: !!CFG.AUDIT_DB_ENABLED,

@@ -23,7 +23,9 @@ for (const token of [
   'recentRuntimeEvents',
   'overall',
   'deriveOverallState',
-  'QSTASH_TOKEN / QSTASH_CURRENT_SIGNING_KEY',
+  'QSTASH_TOKEN',
+  'QSTASH_CURRENT_SIGNING_KEY',
+  'QSTASH_NEXT_SIGNING_KEY',
   'PAYMENTS_PAYLOAD_HMAC_KEY',
 ]) {
   assert.ok(runtime.includes(token), `runtime summary must include ${token}`);

@@ -20,6 +20,7 @@ import {
   qstashPublishJSON,
   getQStashDeliveryUrl,
   getBroadcastFlowControl,
+  getQStashConfigSnapshot,
   isQStashLibAvailable,
 } from '../lib/qstash.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
@@ -336,19 +337,23 @@ async function incrDayCounter(key, ttlSec = CRON_LAST_RUN_TTL_SEC) {
 
 
 async function getBroadcastQStashFanoutStatus() {
-  // Hard safety: if QStash lib/token is missing, fan-out must be OFF
-  // (and cron would normally fall back to the legacy direct-send path).
+  // Hard safety: fan-out is only valid when both publish and verify contours are configured.
+  // Otherwise we would enqueue delivery work that later dies on signed callback verification.
   // IMPORTANT: if Redis is degraded, we treat fanout as UNKNOWN and the tick will be deferred (fail-closed for mass ops).
   if (!isQStashLibAvailable()) return { enabled: false, redis_ok: true, forced_off: true, reason: 'qstash_lib_missing' };
-  if (!(process.env.QSTASH_TOKEN || '')) return { enabled: false, redis_ok: true, forced_off: true, reason: 'qstash_token_missing' };
+
+  const qstashConfig = getQStashConfigSnapshot();
+  if (!qstashConfig.publishConfigured) return { enabled: false, redis_ok: true, forced_off: true, reason: 'qstash_publish_missing', qstash: qstashConfig };
+  if (!qstashConfig.verifyConfigured) return { enabled: false, redis_ok: true, forced_off: true, reason: 'qstash_verify_missing', qstash: qstashConfig };
+
   try {
     const v = await redis.get(SYS_BC_QSTASH_FANOUT_KEY);
-    if (v === null || v === undefined) return { enabled: false, redis_ok: true, forced_off: false, reason: 'flag_missing' };
+    if (v === null || v === undefined) return { enabled: false, redis_ok: true, forced_off: false, reason: 'flag_missing', qstash: qstashConfig };
     const s = String(v).trim().toLowerCase();
     const enabled = s === '1' || s === 'true' || s === 'on' || s === 'yes';
-    return { enabled, redis_ok: true, forced_off: false, reason: enabled ? 'enabled' : 'disabled' };
+    return { enabled, redis_ok: true, forced_off: false, reason: enabled ? 'enabled' : 'disabled', qstash: qstashConfig };
   } catch (e) {
-    return { enabled: false, redis_ok: false, forced_off: false, reason: 'redis_error' };
+    return { enabled: false, redis_ok: false, forced_off: false, reason: 'redis_error', qstash: qstashConfig };
   }
 }
 

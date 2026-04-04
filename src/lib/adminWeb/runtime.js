@@ -2,6 +2,7 @@ import { CFG } from '../config.js';
 import { pingDb } from '../../db/pool.js';
 import { redis, k } from '../redis.js';
 import { getOperatorControlSnapshot } from '../operatorControls.js';
+import { getQStashConfigSnapshot } from '../qstash.js';
 
 function nowIso() {
   return new Date().toISOString();
@@ -693,7 +694,13 @@ export async function getRuntimeSummary() {
   const adminSecretConfigured = !!String(CFG.ADMIN_WEB_SECRET || '').trim();
   const adminSessionConfigured = !!String(CFG.ADMIN_WEB_SESSION_SECRET || '').trim();
   const adminApproversConfigured = Array.isArray(CFG.ADMIN_WEB_APPROVER_TG_IDS) && CFG.ADMIN_WEB_APPROVER_TG_IDS.length > 0;
-  const qstashConfigured = !!String(CFG.QSTASH_TOKEN || CFG.QSTASH_CURRENT_SIGNING_KEY || '').trim();
+  const qstashConfig = getQStashConfigSnapshot();
+  const qstashPublishConfigured = !!qstashConfig.publishConfigured;
+  const qstashVerifyConfigured = !!qstashConfig.verifyConfigured;
+  const qstashNextKeyConfigured = !!qstashConfig.nextSigningKeyConfigured;
+  const qstashUrlConfigured = !!qstashConfig.urlConfigured;
+  const qstashConfigured = !!qstashConfig.fullyConfigured;
+  const qstashPartiallyConfigured = !!qstashConfig.partiallyConfigured;
   const paymentsHmacConfigured = !!String(CFG.PAYMENTS_PAYLOAD_HMAC_KEY || '').trim();
   const paymentsFallbackEnabled = !!CFG.PAYMENTS_FALLBACK_APPLY_ENABLED;
 
@@ -718,7 +725,7 @@ export async function getRuntimeSummary() {
 
   const dbState = dbOk ? 'ok' : 'degraded';
   const redisState = !redisConfigured ? 'missing' : (redisOk ? 'ok' : 'degraded');
-  const qstashState = qstashConfigured ? 'ok' : 'unknown';
+  const qstashState = qstashConfigured ? 'ok' : (qstashPartiallyConfigured ? 'degraded' : 'unknown');
   const paymentsState = paymentsFallbackEnabled && !paymentsHmacConfigured
     ? 'degraded'
     : (paymentsHmacConfigured || !paymentsFallbackEnabled ? 'ok' : 'unknown');
@@ -737,12 +744,30 @@ export async function getRuntimeSummary() {
   out.adminWebConfigured = adminSecretConfigured && adminSessionConfigured;
   out.db = { ok: dbOk };
   out.redis = { configured: redisConfigured, ok: redisOk };
-  out.qstash = { configured: qstashConfigured };
+  out.qstash = {
+    configured: qstashConfigured,
+    publishConfigured: qstashPublishConfigured,
+    verifyConfigured: qstashVerifyConfigured,
+    nextSigningKeyConfigured: qstashNextKeyConfigured,
+    urlConfigured: qstashUrlConfigured,
+    partiallyConfigured: qstashPartiallyConfigured,
+    status: qstashConfig.status,
+  };
 
   out.services = {
     db: makeService(dbState, dbOk ? 'DB configured' : 'DB ping failed', dbOk ? 'Соединение выглядит рабочим.' : 'Проверь DATABASE_URL / доступность DB.'),
     redis: makeService(redisState, !redisConfigured ? 'Redis not configured' : (redisOk ? 'Redis configured' : 'Redis probe failed'), !redisConfigured ? 'Redis не обязателен для каждой поверхности, но нужен для части operator/runtime сценариев.' : (redisOk ? 'Redis выглядит рабочим.' : 'Проверь Upstash env / сеть.')),
-    qstash: makeService(qstashState, qstashConfigured ? 'QStash configured' : 'QStash not configured', qstashConfigured ? 'Фоновая доставка может работать.' : 'Для admin v1 это не блокер: publish/retry поверхности будут ограничены, но core web-admin остаётся рабочим.'),
+    qstash: makeService(
+      qstashState,
+      qstashConfigured
+        ? 'QStash publish и verify настроены'
+        : (qstashPartiallyConfigured ? 'QStash настроен не полностью' : 'QStash not configured'),
+      qstashConfigured
+        ? 'Publish и verify контуры выглядят собранными для delivery/retry path.'
+        : (qstashPartiallyConfigured
+          ? `Publish: ${qstashPublishConfigured ? 'OK' : 'missing'} · Verify: ${qstashVerifyConfigured ? 'OK' : 'missing'}. Partial config не считается production-ready delivery контуром.`
+          : 'Для admin v1 это не блокер: publish/retry поверхности будут ограничены, но core web-admin остаётся рабочим.')
+    ),
     payments: makeService(paymentsState, paymentsFallbackEnabled ? (paymentsHmacConfigured ? 'Payments fallback guarded' : 'Payments fallback lacks HMAC guard') : 'Payments fallback disabled', paymentsFallbackEnabled ? (paymentsHmacConfigured ? 'Fallback path защищён HMAC ключом.' : 'Проверь PAYMENTS_PAYLOAD_HMAC_KEY.') : 'Fallback path сейчас не активен.'),
     config: makeService(configState, configState === 'ok' ? 'Core config present' : 'Core config incomplete', configState === 'ok' ? 'Базовый env layer выглядит собранным.' : 'Проверь BOT / PUBLIC_BASE_URL env baseline.'),
     adminWeb: makeService(adminWebState, !adminWebEnabled ? 'Admin web disabled' : (adminWebState === 'ok' ? 'Admin web auth configured' : 'Admin web auth incomplete'), !adminWebEnabled ? 'Web admin выключен env-флагом.' : (adminWebState === 'ok' ? 'Secret / session / approvers настроены.' : 'Проверь ADMIN_WEB_* env и PUBLIC_BASE_URL.')),
@@ -758,7 +783,10 @@ export async function getRuntimeSummary() {
     { key: 'ADMIN_WEB_SECRET', state: keyState(adminSecretConfigured, { enabled: adminWebEnabled }) },
     { key: 'ADMIN_WEB_SESSION_SECRET', state: keyState(adminSessionConfigured, { enabled: adminWebEnabled }) },
     { key: 'ADMIN_WEB_APPROVER_TG_IDS', state: keyState(adminApproversConfigured, { enabled: adminWebEnabled }) },
-    { key: 'QSTASH_TOKEN / QSTASH_CURRENT_SIGNING_KEY', state: keyState(qstashConfigured, { optional: true }) },
+    { key: 'QSTASH_URL', state: keyState(qstashUrlConfigured, { optional: true }) },
+    { key: 'QSTASH_TOKEN', state: keyState(qstashPublishConfigured, { optional: true }) },
+    { key: 'QSTASH_CURRENT_SIGNING_KEY', state: keyState(qstashVerifyConfigured, { optional: true }) },
+    { key: 'QSTASH_NEXT_SIGNING_KEY', state: keyState(qstashNextKeyConfigured, { optional: true }) },
     { key: 'PAYMENTS_PAYLOAD_HMAC_KEY', state: keyState(paymentsHmacConfigured, { optional: !paymentsFallbackEnabled }) },
   ]);
 
@@ -781,7 +809,10 @@ export async function getRuntimeSummary() {
     pushWarning(out.warnings, 'warning', 'Admin web auth настроен не полностью', 'admin_web');
     pushHint(out.hints, 'warning', 'Для web-admin нужны ADMIN_WEB_SECRET, ADMIN_WEB_SESSION_SECRET и approver TG IDs.');
   }
-  if (!qstashConfigured) {
+  if (qstashPartiallyConfigured) {
+    pushWarning(out.warnings, 'warning', `QStash настроен не полностью: publish ${qstashPublishConfigured ? 'ok' : 'missing'} · verify ${qstashVerifyConfigured ? 'ok' : 'missing'}`, 'qstash');
+    pushHint(out.hints, 'warning', 'Для delivery/fan-out нужен не только publish token, но и verify signing key. Partial config не считается production-ready.');
+  } else if (!qstashConfigured) {
     pushWarning(out.warnings, 'info', 'QStash не настроен', 'qstash');
     pushHint(out.hints, 'info', 'Для admin v1 это не блокер, но publish/retry/runtime surfaces будут ограничены.');
   }
@@ -1056,7 +1087,7 @@ export async function getRuntimeSummary() {
     mon: out.mon,
     qstash: out.qstashRuntime,
     redisConfigured,
-    qstashConfigured,
+    qstashConfigured: qstashConfigured,
     updatedAt,
   });
 

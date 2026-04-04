@@ -27,9 +27,9 @@ for (const token of [
 }
 
 const runtime = read('src/lib/adminWeb/runtime.js');
-assert.ok(runtime.includes("const qstashState = qstashConfigured ? 'ok' : 'unknown';"), 'qstash optional gap must not escalate overall runtime state to missing');
+assert.ok(runtime.includes("const qstashState = qstashConfigured ? 'ok' : (qstashPartiallyConfigured ? 'degraded' : 'unknown');"), 'qstash truth must distinguish full config, partial config and fully optional absence');
 
 const html = read('admin.html');
-assert.ok(html.includes('step535q'), 'admin shell asset URLs must be cache-busted to step535q');
+assert.ok(html.includes('step535w'), 'admin shell asset URLs must be cache-busted to step535w');
 
 console.log('✅ smoke admin-web layout polish contract OK');

@@ -824,7 +824,20 @@ Acceptance / notes:
 - sparse Runtime / Payments / Founder screens keep a tighter visual balance on desktop widths;
 - requires live browser verification after deploy for final shell feel on the real operator viewport.
 
-## STEP535V — Env/docs baseline sync + schema guard
-- synced `.env.example`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/92_PROD_ENV_BASELINE.md`, `docs/10_QSTASH_RUNBOOK.md`, and `docs/17_QSTASH_RUNBOOK.md` with the real env/config surface so `QSTASH_URL` is documented as optional/parity alongside `QSTASH_TOKEN` + signing keys;
-- patched `src/db/queries.js` so `unlockWorkspaceContactsWithCredits()` reads `profile_contact / profile_ig / profile_portfolio_urls / profile_contacts` from `workspace_settings` via `left join`, not directly from `workspaces`;
-- added `scripts/smoke-contact-unlock-workspace-settings-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and extended `smoke-env-baseline-contract` to keep env/docs parity honest.
+## STEP535U — Runtime/health parity + smoke green pass
+- aligned `src/lib/adminWeb/runtime.js` with `/api/health` on `ops/reasons/qstash_reschedule_failed/*` Redis keys
+- exposed `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` through `CFG`
+- refreshed stale Users smoke expectations after the staged filter/apply contract and table-density copy polish
+- added `smoke-admin-web-runtime-health-parity-contract` and wired it into `preflight:source`
+
+## STEP535W — QStash truth hardening
+- added a shared `getQStashConfigSnapshot()` helper in `src/lib/qstash.js` so publish-config, verify-config, partial/full readiness, and rotation-key presence are derived once instead of guessed separately across surfaces;
+- upgraded `src/lib/adminWeb/runtime.js` to treat QStash as `ok` only when both publish and verify are configured, surface partial config as a degraded/operator-visible state, and split config presence into `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` instead of one merged pseudo-key;
+- upgraded `api/health.js` to expose `qstash.config` (`publish_configured`, `verify_configured`, `fully_configured`, `partially_configured`, `status`) for parity with runtime;
+- hardened `src/bot/cron.js` broadcast fan-out gate so Redis flag ON is no longer enough: fan-out now fails closed when QStash verify config is missing, preventing enqueue into a contour that would die on signed callback verification;
+- added `scripts/smoke-qstash-fanout-gate-contract.js`, refreshed runtime/health parity smokes, wired the new smoke into `package.json` + `scripts/preflight.js`, and bumped admin-web asset cache-bust to `step535w`.
+
+Acceptance / notes:
+- no delivery handler payload logic or retry semantics changed;
+- this step hardens truth/gating only and keeps the blast radius narrow;
+- live verification after deploy should confirm that partial QStash config reads as partial and fan-out no longer claims readiness without verify.

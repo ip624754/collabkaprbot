@@ -455,6 +455,8 @@ function runtimeTextLabel(value) {
     .replace(/DB configured/gi, 'База настроена')
     .replace(/Redis configured/gi, 'Redis настроен')
     .replace(/QStash auth incomplete/gi, 'QStash auth настроен не полностью')
+    .replace(/QStash publish и verify настроены/gi, 'QStash publish и verify настроены')
+    .replace(/QStash настроен не полностью/gi, 'QStash настроен не полностью')
     .replace(/QStash not configured/gi, 'QStash не настроен')
     .replace(/stale retry/gi, 'старый retry-сигнал')
     .replace(/stale signal/gi, 'старый сигнал')
@@ -488,6 +490,7 @@ function runtimeItemIsQstashOptional(item = {}) {
     || hay.includes('qstash_token')
     || hay.includes('qstash_current_signing_key')
     || hay.includes('qstash_next_signing_key')
+    || hay.includes('qstash настроен не полностью')
     || (hay.includes('qstash') && (hay.includes('not configured') || hay.includes('auth incomplete')));
 }
 
@@ -496,7 +499,7 @@ function runtimeItemMeaning(item = {}) {
     return 'Похоже на schema/query drift: retry-контур обращается к legacy-полю profile_contact и уже спорит с текущей схемой.';
   }
   if (runtimeItemIsQstashOptional(item)) {
-    return 'Для базового admin v1 это не блокер, но publish/delivery/retry контуры будут ограничены, пока QStash env не задан.';
+    return 'Для базового admin v1 это не блокер, но QStash publish/verify contour должен быть собран полностью, если нужен delivery/retry.';
   }
   return runtimeTextLabel(item.meaning || item.message || item.detail || item.hint || '');
 }
@@ -506,7 +509,7 @@ function runtimeItemNextStep(item = {}, fallback = '') {
     return 'Проверь source-level retry handler / SQL / воркер, где ещё используется profile_contact, и выровняй код со схемой БД.';
   }
   if (runtimeItemIsQstashOptional(item)) {
-    return 'Если delivery/retry реально нужен, добавь QSTASH_TOKEN и QSTASH_CURRENT_SIGNING_KEY в env и обнови Runtime. Если нет — оставь этот контур как опциональный.';
+    return 'Если delivery/retry реально нужен, держи в env и publish token, и current signing key. Partial config не считается production-ready QStash контуром.';
   }
   return runtimeTextLabel(item.nextStep || item.action || fallback || 'Обнови Runtime вручную и сверяй соседние сигналы.');
 }

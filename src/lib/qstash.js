@@ -25,6 +25,25 @@ export function isQStashLibAvailable() {
   return !!Client && !!Receiver;
 }
 
+export function getQStashConfigSnapshot() {
+  const publishConfigured = !!String(CFG.QSTASH_TOKEN || '').trim();
+  const verifyConfigured = !!String(CFG.QSTASH_CURRENT_SIGNING_KEY || '').trim();
+  const nextSigningKeyConfigured = !!String(CFG.QSTASH_NEXT_SIGNING_KEY || '').trim();
+  const urlConfigured = !!String(CFG.QSTASH_URL || '').trim();
+  const fullyConfigured = publishConfigured && verifyConfigured;
+  const partiallyConfigured = !fullyConfigured && (publishConfigured || verifyConfigured || nextSigningKeyConfigured || urlConfigured);
+
+  return {
+    publishConfigured,
+    verifyConfigured,
+    nextSigningKeyConfigured,
+    urlConfigured,
+    fullyConfigured,
+    partiallyConfigured,
+    status: fullyConfigured ? 'fully_configured' : (partiallyConfigured ? 'partially_configured' : 'not_configured'),
+  };
+}
+
 export function getQStashLibHealth() {
   return {
     available: isQStashLibAvailable(),
