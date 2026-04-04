@@ -2,6 +2,39 @@ const app = document.getElementById('app');
 
 const BRAND_LOGO = '/assets/brand/collabka-mark-blue.png';
 const ADMIN_OPERATOR_REFRESH_MODE = 'только ручное обновление';
+const ADMIN_MOBILE_NAV_MEDIA = '(max-width: 720px)';
+
+function getAdminUiState() {
+  if (!window.__adminUi || typeof window.__adminUi !== 'object') window.__adminUi = { mobileNavOpen: false };
+  if (typeof window.__adminUi.mobileNavOpen !== 'boolean') window.__adminUi.mobileNavOpen = false;
+  return window.__adminUi;
+}
+
+function isAdminMobileViewport() {
+  return !!window.matchMedia?.(ADMIN_MOBILE_NAV_MEDIA).matches;
+}
+
+function syncAdminMobileNavDom() {
+  const state = getAdminUiState();
+  const shellNode = document.querySelector('.aw-shell');
+  const open = !!state.mobileNavOpen && isAdminMobileViewport();
+  if (shellNode) shellNode.classList.toggle('is-nav-open', open);
+  document.body.classList.toggle('is-admin-nav-open', open);
+  const toggle = document.querySelector('[data-mobile-nav-toggle]');
+  if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  const backdrop = document.querySelector('.aw-sidebar-backdrop');
+  if (backdrop) backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+
+function setAdminMobileNavOpen(next) {
+  const state = getAdminUiState();
+  state.mobileNavOpen = !!next;
+  syncAdminMobileNavDom();
+}
+
+function closeAdminMobileNav() {
+  setAdminMobileNavOpen(false);
+}
 
 function escapeHtml(input) {
   return String(input || '')
@@ -996,8 +1029,10 @@ function shell(title, subtitle, body, session, pageKey = '') {
   const meta = sectionMeta(pageKey || route.page, session);
   const resolvedTitle = title || meta.label || 'Overview';
   const resolvedSubtitle = subtitle || meta.subtitle || '';
+  const mobileNavOpen = !!getAdminUiState().mobileNavOpen;
   return `
-    <div class="aw-shell">
+    <div class="aw-shell ${mobileNavOpen ? 'is-nav-open' : ''}">
+      <button class="aw-sidebar-backdrop" type="button" aria-label="Закрыть навигацию" aria-hidden="${mobileNavOpen ? 'false' : 'true'}" data-mobile-nav-close></button>
       <aside class="aw-sidebar">
         <div class="aw-brand">
           <img src="${BRAND_LOGO}" alt="Collabka" />
@@ -1006,13 +1041,14 @@ function shell(title, subtitle, body, session, pageKey = '') {
             <span>Web Admin v1</span>
           </div>
         </div>
-        <nav class="aw-nav">
+        <nav class="aw-nav" id="awSidebarNav">
           ${renderSidebarNav(session, route)}
         </nav>
       </aside>
       <main class="aw-main">
         <div class="aw-topbar">
           <div class="aw-topbar-left">
+            <button class="aw-button ghost aw-mobile-nav-toggle" type="button" aria-expanded="${mobileNavOpen ? 'true' : 'false'}" aria-controls="awSidebarNav" data-mobile-nav-toggle>☰ Разделы</button>
             <span class="aw-chip">${escapeHtml(resolvedTitle)}</span>
             <span class="aw-chip">режим · ${session?.isFounder ? 'фаундер' : 'оператор'}</span>
           </div>
@@ -3763,7 +3799,9 @@ async function ensureControlSurface() {
 
 async function render() {
   const route = routeInfo();
+  if (!isAdminMobileViewport()) closeAdminMobileNav();
   if (route.page === 'login') {
+    closeAdminMobileNav();
     readPersistedLoginState();
     const session = await ensureSession();
     if (session) {
@@ -3844,6 +3882,7 @@ function bindLinks() {
       e.preventDefault();
       const href = link.getAttribute('href');
       if (!href) return;
+      closeAdminMobileNav();
       history.pushState({}, '', href);
       render();
     });
@@ -4001,6 +4040,23 @@ async function runUserRowCopyAction(item = {}, mode = 'tg_ids') {
 
 function bindShell() {
   bindLinks();
+  syncAdminMobileNavDom();
+  document.querySelector('[data-mobile-nav-toggle]')?.addEventListener('click', () => {
+    setAdminMobileNavOpen(!getAdminUiState().mobileNavOpen);
+  });
+  app.querySelectorAll('[data-mobile-nav-close]').forEach((node) => {
+    node.addEventListener('click', () => closeAdminMobileNav());
+  });
+  if (!window.__adminMobileNavListenersBound) {
+    window.__adminMobileNavListenersBound = true;
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeAdminMobileNav();
+    });
+    window.addEventListener('resize', () => {
+      if (!isAdminMobileViewport()) closeAdminMobileNav();
+      else syncAdminMobileNavDom();
+    });
+  }
   document.getElementById('logoutBtn')?.addEventListener('click', async () => {
     await api('/api/admin-web-auth?action=logout', { method: 'POST' });
     history.replaceState({}, '', '/admin/login');

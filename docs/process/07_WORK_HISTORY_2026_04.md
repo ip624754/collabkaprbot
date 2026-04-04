@@ -930,3 +930,18 @@ Acceptance / notes:
 - no giveaway payload changes, no money/publish/support-degraded logic changes, no new extraction wave;
 - live Telegram verification is still required for `🔎 Проверить по ID`, no-access feedback, and repeated `gw_access` recheck behavior after deploy.
 
+
+
+## STEP543A — web-admin mobile shell / responsive pass
+
+Date: 2026-04-04
+
+Scope:
+- added a narrow mobile-first shell pass to the web-admin: `scripts/admin-web.js` now keeps lightweight mobile-nav UI state, renders a `Разделы` toggle in the topbar, closes the drawer on route change / backdrop tap / `Escape`, and leaves desktop routing and data flow untouched;
+- updated `styles/admin-web.css` so phone widths use a real overlay sidebar instead of the previous static collapse, tightened shared topbar/page/surface spacing, and collapsed shared dense grids in overview/runtime/founder/payments into a clean single-column reading order on narrow screens;
+- kept `/admin/users` on the same information architecture while making the existing working slice mobile-tolerant only: sticky controls relax on small screens, compare rail / meta strips / pagination / actions stack cleanly, and the table remains horizontally scrollable instead of blowing up layout;
+- added `scripts/smoke-admin-web-mobile-shell-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped the admin asset cache-bust to `step543a`.
+
+Acceptance / notes:
+- scope stays web-admin UI only: no route/API/auth/backend contract changes;
+- requires manual browser + real phone verification for final touch ergonomics and viewport feel.

@@ -2087,3 +2087,15 @@ Acceptance / notes:
 - rebuilt Runtime cards in `scripts/admin-web.js` so every key contour answers three questions directly: what state it is in, whether action is needed, and what to check next;
 - made config presence explicitly separate required missing env from optional / not-enabled informational gaps;
 - added `scripts/smoke-admin-web-runtime-semantics-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped admin asset cache-bust to `step535e`.
+
+
+## STEP543A — web-admin mobile shell / responsive pass
+
+- `admin.html`, `scripts/admin-web.js`, and `styles/admin-web.css` now ship a narrow mobile-first shell pass instead of desktop-only collapse: the admin shell gets a real mobile nav toggle, overlay drawer behavior on phone widths, and route-close behavior after section switches.
+- shared responsive surfaces were tightened without changing admin routes or data contracts: topbar wraps cleanly, page heads/card paddings compress on narrow widths, multi-column overview/runtime/founder/payments grids collapse to one column in reading order, and the shared action rows/chips remain touch-usable.
+- `Users` was not rewritten into a card feed; instead the existing working slice received mobile-safe layout handling only (`sticky` relaxed on small widths, compare rail/table meta/pagination/actions stack cleanly, table overflow remains controlled instead of layout-breaking).
+- added `scripts/smoke-admin-web-mobile-shell-contract.js`, wired into `package.json` + `scripts/preflight.js`, and bumped the admin-web asset cache-bust to `step543a`.
+
+Acceptance / notes:
+- scope stays UI-only for web-admin shell/responsive behavior; no API, auth, bot-layer, or backend write-path changes;
+- live browser verification on a real phone is still required for final touch ergonomics and drawer feel.
