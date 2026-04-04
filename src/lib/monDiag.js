@@ -1,6 +1,28 @@
 import { redis, k } from './redis.js';
 
-const DIAG_TTL_SEC = 14 * 24 * 60 * 60;
+export const DIAG_TTL_SEC = 14 * 24 * 60 * 60;
+export const STALE_RETRY_SIGNAL_SEC = 24 * 60 * 60;
+
+export function parseDiagIsoMs(v) {
+  const ms = Date.parse(String(v || '').trim());
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export function diagSignalAgeSec(iso, nowIso = '') {
+  const ts = parseDiagIsoMs(iso);
+  if (!Number.isFinite(ts)) return null;
+  const nowMs = parseDiagIsoMs(nowIso) ?? Date.now();
+  if (!Number.isFinite(nowMs)) return null;
+  return Math.max(0, Math.floor((nowMs - ts) / 1000));
+}
+
+export function isDiagSignalFresh(iso, maxAgeSec = STALE_RETRY_SIGNAL_SEC, nowIso = '') {
+  const ageSec = diagSignalAgeSec(iso, nowIso);
+  if (!Number.isFinite(ageSec)) return false;
+  const ttl = Number(maxAgeSec);
+  if (!Number.isFinite(ttl) || ttl <= 0) return false;
+  return ageSec <= ttl;
+}
 
 export function toMonCode(v, maxLen = 48) {
   const s = String(v || '').toLowerCase();
@@ -37,10 +59,14 @@ export async function setMonRetryMeta({ atIso, action } = {}) {
 }
 
 export async function setMonRetryDiag({ atIso, action, status, errorCode } = {}) {
+  const at = String(atIso || '').trim() || new Date().toISOString();
+  const act = String(action || '').trim();
   const st = String(status || '').trim();
   const ec = toMonCode(errorCode);
 
   try {
+    if (at) await redis.set(k(['mon', 'retry', 'last_at']), at, { ex: DIAG_TTL_SEC });
+    if (act) await redis.set(k(['mon', 'retry', 'last_action']), act, { ex: DIAG_TTL_SEC });
     if (st) await redis.set(k(['mon', 'retry', 'last_status']), st, { ex: DIAG_TTL_SEC });
 
     // Keep old behavior: clear last_error when code is empty.

@@ -957,3 +957,17 @@ Acceptance / notes:
 - Fixed mobile shell grid drift by collapsing `.aw-shell` to `1fr` under phone breakpoint so drawer nav no longer leaves a phantom desktop sidebar column.
 - Tightened phone topbar/layout consistency: stacked topbar, wrapped chips/actions, removed global narrow-phone full-width button rule, added safe overflow clipping and 16px mobile input sizing.
 - Reduced narrow-phone Users table min-width from 880px to 840px and added mobile consistency smoke coverage.
+
+## STEP544 — Runtime retry stale-signal hardening
+
+Date: 2026-04-04
+
+Scope:
+- hardened runtime retry truth without touching QStash schedules, DB schema, or monetization business rules: `src/lib/adminWeb/runtime.js` now derives retry monitor state through a freshness gate instead of treating any non-empty `mon.retry.last_error` as a current degraded incident;
+- exported retry-signal age/freshness helpers from `src/lib/monDiag.js` and upgraded `setMonRetryDiag(...)` so each retry diag write also refreshes `last_at` / `last_action`, keeping stale-signal evaluation self-contained even when the separate meta path is absent;
+- stale retry breadcrumbs now surface as historical/info semantics (`Последний retry сигнал старый`) instead of driving the main warning lane, while fresh retry failures continue to raise degraded runtime warnings honestly;
+- added/updated `scripts/smoke-admin-web-runtime-stale-retry-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and left admin/mobile/bot/business logic untouched.
+
+Acceptance / notes:
+- source smoke is green when `smoke:admin-web-runtime-stale-retry-contract`, existing runtime/admin smokes, and `preflight:source` pass;
+- live verification is still required after deploy: refresh Overview/System and confirm stale retry warnings disappear while a fresh retry failure would still surface as warning.

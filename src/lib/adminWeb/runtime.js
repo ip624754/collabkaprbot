@@ -3,6 +3,7 @@ import { pingDb } from '../../db/pool.js';
 import { redis, k } from '../redis.js';
 import { getOperatorControlSnapshot } from '../operatorControls.js';
 import { getQStashConfigSnapshot } from '../qstash.js';
+import { STALE_RETRY_SIGNAL_SEC, diagSignalAgeSec, isDiagSignalFresh } from '../monDiag.js';
 
 function nowIso() {
   return new Date().toISOString();
@@ -451,6 +452,28 @@ function formatRuntimeAgeLabel(seconds) {
   return `${Math.round(sec / 86400)}д`;
 }
 
+function getRetrySignalSnapshot(retry = {}, updatedAt = '') {
+  const retryStatus = String(retry?.last_status || '').trim().toLowerCase();
+  const retryError = String(retry?.last_error || '').trim();
+  const retrySignalPresent = !!(String(retry?.last_at || '').trim() || retryStatus || retryError);
+  const retryAgeSec = diagSignalAgeSec(retry?.last_at, updatedAt);
+  const retrySignalFresh = retrySignalPresent
+    ? (String(retry?.last_at || '').trim() ? isDiagSignalFresh(retry?.last_at, STALE_RETRY_SIGNAL_SEC, updatedAt) : true)
+    : false;
+  const retrySignalStale = !!retrySignalPresent && !retrySignalFresh;
+  const retryErrorLike = ['error', 'failed', 'fail', 'panic'].some((token) => retryStatus.includes(token)) || !!retryError;
+  const retryWarning = retrySignalFresh && retryErrorLike;
+  return {
+    retryStatus,
+    retryError,
+    retrySignalPresent,
+    retryAgeSec,
+    retrySignalFresh,
+    retrySignalStale,
+    retryWarning,
+  };
+}
+
 function buildQueueClarity({
   ops = {},
   audit = {},
@@ -473,9 +496,13 @@ function buildQueueClarity({
   const retryAfter = Number(broadcast?.retry_after_sec || 0) || 0;
   const broadcastWarning = pendingDeliveries > 0 || retryAfter > 0 || !!broadcast?.last_429_at;
 
-  const retryStatus = String(mon?.retry?.last_status || '').trim().toLowerCase();
-  const retryError = String(mon?.retry?.last_error || '').trim();
-  const retryWarning = ['error', 'failed', 'fail', 'panic'].some((token) => retryStatus.includes(token)) || !!retryError;
+  const retrySignal = getRetrySignalSnapshot(mon?.retry, updatedAt);
+  const retryStatus = retrySignal.retryStatus;
+  const retryError = retrySignal.retryError;
+  const retryWarning = retrySignal.retryWarning;
+  const retrySignalStale = retrySignal.retrySignalStale;
+  const retrySignalPresent = retrySignal.retrySignalPresent;
+  const retryAgeSec = retrySignal.retryAgeSec;
 
   const rescheduleFailedCount = Number(qstash?.reschedule_failed?.today_count || 0) || 0;
   const officialPublishStuckCount = Number(qstash?.official_publish_stuck?.today_count || 0) || 0;
@@ -580,15 +607,21 @@ function buildQueueClarity({
         enabled: true,
         configured: redisConfigured,
         warning: retryWarning || qstashWarning,
-        unknown: !mon?.retry?.last_at && !rescheduleFailedCount && !officialPublishStuckCount,
+        unknown: (!retrySignalPresent || retrySignalStale) && !rescheduleFailedCount && !officialPublishStuckCount,
       }),
       summary: retryWarning
         ? `last retry ${retryStatus || 'error'}`
-        : (mon?.retry?.last_at ? `last retry ${mon.retry.last_status || 'ok'}` : 'retry activity пока не видно'),
+        : (retrySignalStale
+          ? 'stale retry signal'
+          : (mon?.retry?.last_at ? `last retry ${mon.retry.last_status || 'ok'}` : 'retry activity пока не видно')),
       detail: mon?.retry?.last_at
-        ? `${mon.retry.last_at}${mon?.retry?.last_action ? ` · ${mon.retry.last_action}` : ''}`
+        ? `${mon.retry.last_at}${mon?.retry?.last_action ? ` · ${mon.retry.last_action}` : ''}${Number.isFinite(retryAgeSec) ? ` · age ${formatRuntimeAgeLabel(retryAgeSec)}` : ''}`
         : `reschedule_failed ${rescheduleFailedCount} · stuck ${officialPublishStuckCount}`,
-      hint: retryError ? retryError : (officialPublishStuckCount > 0 ? 'есть stuck publish сигналы' : 'retry сигналов нет'),
+      hint: retryWarning
+        ? retryError
+        : (retrySignalStale
+          ? 'stale retry'
+          : (officialPublishStuckCount > 0 ? 'есть stuck publish сигналы' : 'retry сигналов нет')),
       backlog: rescheduleFailedCount + officialPublishStuckCount,
     }, {
       source: 'qstash',
@@ -596,16 +629,20 @@ function buildQueueClarity({
         ? 'Последний retry выглядит проблемным: это уже не просто шум, а повод разобрать error/status сигнал.'
         : (qstashWarning
           ? 'Есть stuck/reschedule_failed сигналы: delivery контур не полностью чист.'
-          : (mon?.retry?.last_at
-            ? 'Retry monitor жив и последний сигнал не выглядит аварийным.'
-            : 'Справочно: явной retry-активности пока просто не видно.')),
+          : (retrySignalStale
+            ? 'Последний retry сигнал старый: без свежих подтверждений его нужно считать историческим хвостом, а не текущей деградацией.'
+            : (mon?.retry?.last_at
+              ? 'Retry monitor жив и последний сигнал не выглядит аварийным.'
+              : 'Справочно: явной retry-активности пока просто не видно.'))),
       nextStep: retryWarning
         ? 'Сверь last retry action/status/error и соседние QStash сигналы.'
         : (qstashWarning
           ? 'Разбери stuck/reschedule_failed причины и посмотри, не повторяются ли они сегодня.'
-          : (mon?.retry?.last_at
-            ? 'Действие не нужно.'
-            : 'Ничего срочно не чинить: это информационная пустота, а не падение ретраев.')),
+          : (retrySignalStale
+            ? 'Если новых retry/QStash проблем нет, не лечи это как активный инцидент: держи как history и обнови Runtime вручную.'
+            : (mon?.retry?.last_at
+              ? 'Действие не нужно.'
+              : 'Ничего срочно не чинить: это информационная пустота, а не падение ретраев.'))),
     }),
   ];
 
@@ -613,16 +650,22 @@ function buildQueueClarity({
     decorateRuntimeItem({
       id: 'retry_last',
       label: 'Последний retry',
-      state: retryWarning ? 'degraded' : (mon?.retry?.last_at ? 'ok' : 'unknown'),
-      summary: mon?.retry?.last_status ? String(mon.retry.last_status) : 'нет данных',
-      detail: mon?.retry?.last_at ? `${mon.retry.last_at}${mon?.retry?.last_action ? ` · ${mon.retry.last_action}` : ''}` : 'runtime retry signal пока пуст',
+      state: retryWarning ? 'degraded' : (retrySignalStale ? 'unknown' : (mon?.retry?.last_at ? 'ok' : 'unknown')),
+      summary: retrySignalStale ? 'stale retry signal' : (mon?.retry?.last_status ? String(mon.retry.last_status) : 'нет данных'),
+      detail: mon?.retry?.last_at ? `${mon.retry.last_at}${mon?.retry?.last_action ? ` · ${mon.retry.last_action}` : ''}${Number.isFinite(retryAgeSec) ? ` · age ${formatRuntimeAgeLabel(retryAgeSec)}` : ''}` : 'runtime retry signal пока пуст',
       note: retryError || '',
     }, {
       source: 'qstash',
       meaning: retryWarning
         ? 'Последний retry вернул problem-signal и требует ручной проверки.'
-        : (mon?.retry?.last_at ? 'Последний retry виден и сейчас не выглядит аварийным.' : 'Сигнал пустой: это справочная пустота, а не ошибка сама по себе.'),
-      nextStep: retryWarning ? 'Проверь последний retry error/status и соседние delivery сигналы.' : (mon?.retry?.last_at ? 'Действие не нужно.' : 'Ничего не чинить срочно: просто держать это в уме.'),
+        : (retrySignalStale
+          ? 'Последний retry сигнал старый: экран должен держать его как historical breadcrumb, а не как текущую деградацию.'
+          : (mon?.retry?.last_at ? 'Последний retry виден и сейчас не выглядит аварийным.' : 'Сигнал пустой: это справочная пустота, а не ошибка сама по себе.')),
+      nextStep: retryWarning
+        ? 'Проверь последний retry error/status и соседние delivery сигналы.'
+        : (retrySignalStale
+          ? 'Если рядом нет свежих retry/QStash проблем, считай это history-хвостом и не лечи как активный инцидент.'
+          : (mon?.retry?.last_at ? 'Действие не нужно.' : 'Ничего не чинить срочно: просто держать это в уме.')),
     }),
     decorateRuntimeItem({
       id: 'reschedule_failed',
@@ -839,7 +882,7 @@ export async function getRuntimeSummary() {
   out.notes = out.warnings.map((item) => String(item.message || '')).filter(Boolean);
 
   out.ops = { pending: null, last_sent_at: null };
-  out.mon = { retry: { last_at: null, last_action: null, last_status: null, last_error: null } };
+  out.mon = { retry: { last_at: null, last_action: null, last_status: null, last_error: null, last_age_sec: null, signal_fresh: false, signal_stale: false } };
   out.qstashRuntime = {
     reschedule_failed: { day: dayKey(), today_count: 0, last_at: null, last_where: null, last_payload: null },
     official_publish_stuck: { day: dayKey(), today_count: 0, last_at: null, last_offer_id: null, last_age_sec: null, last_via: null },
@@ -883,11 +926,19 @@ export async function getRuntimeSummary() {
         k(['mon', 'retry', 'last_status']),
         k(['mon', 'retry', 'last_error']),
       ]);
+      const retryAgeSec = diagSignalAgeSec(lastAt || null, updatedAt);
+      const retrySignalPresent = !!(String(lastAt || '').trim() || String(lastStatus || '').trim() || String(lastError || '').trim());
+      const retrySignalFresh = retrySignalPresent
+        ? (String(lastAt || '').trim() ? isDiagSignalFresh(lastAt || null, STALE_RETRY_SIGNAL_SEC, updatedAt) : true)
+        : false;
       out.mon.retry = {
         last_at: lastAt || null,
         last_action: lastAction || null,
         last_status: lastStatus || null,
         last_error: lastError || null,
+        last_age_sec: Number.isFinite(retryAgeSec) ? retryAgeSec : null,
+        signal_fresh: !!retrySignalFresh,
+        signal_stale: !!(retrySignalPresent && !retrySignalFresh),
       };
     } catch {
       // ignore
@@ -1021,7 +1072,11 @@ export async function getRuntimeSummary() {
     pushWarning(out.warnings, 'info', `Broadcast retry cooldown: ${formatRuntimeAgeLabel(out.broadcastRuntime.retry_after_sec)}`, 'qstash');
   }
   if (String(out.mon?.retry?.last_error || '').trim()) {
-    pushWarning(out.warnings, 'warning', `Последний retry вернул ошибку: ${String(out.mon.retry.last_error).slice(0, 140)}`, 'runtime');
+    if (out.mon?.retry?.signal_stale) {
+      pushHint(out.hints, 'info', `Последний retry сигнал старый: ${String(out.mon.retry.last_error).slice(0, 140)}`);
+    } else {
+      pushWarning(out.warnings, 'warning', `Последний retry вернул ошибку: ${String(out.mon.retry.last_error).slice(0, 140)}`, 'runtime');
+    }
   }
   if ((Number(out.qstashRuntime?.reschedule_failed?.today_count || 0) || 0) > 0) {
     pushWarning(out.warnings, 'warning', `QStash reschedule_failed сегодня: ${Number(out.qstashRuntime.reschedule_failed.today_count || 0)}`, 'qstash');

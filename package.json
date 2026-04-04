@@ -98,6 +98,7 @@
     "smoke:admin-web-runtime-hierarchy-contract": "node scripts/smoke-admin-web-runtime-hierarchy-contract.js",
     "smoke:admin-web-runtime-semantics-contract": "node scripts/smoke-admin-web-runtime-semantics-contract.js",
     "smoke:admin-web-runtime-qstash-truth-contract": "node scripts/smoke-admin-web-runtime-qstash-truth-contract.js",
+    "smoke:admin-web-runtime-stale-retry-contract": "node scripts/smoke-admin-web-runtime-stale-retry-contract.js",
     "smoke:admin-web-payments-contract": "node scripts/smoke-admin-web-payments-contract.js",
     "smoke:admin-web-payments-followup-contract": "node scripts/smoke-admin-web-payments-followup-contract.js",
     "smoke:admin-web-payments-review-contract": "node scripts/smoke-admin-web-payments-review-contract.js",
