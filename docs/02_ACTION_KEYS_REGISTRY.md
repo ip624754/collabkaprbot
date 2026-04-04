@@ -5,15 +5,15 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **535**
-- Actions in registry: **535**
+- Actions in code: **533**
+- Actions in registry: **533**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
 | admin | 97 |
-| edit | 344 |
+| edit | 342 |
 | ops | 79 |
 | pay | 11 |
 | view | 4 |
@@ -25,7 +25,7 @@
 | db_truth | 4 |
 | none | 173 |
 | queue_first | 2 |
-| require_redis | 356 |
+| require_redis | 354 |
 
 ## Actions table
 
@@ -472,7 +472,7 @@
 | `a:nd` | ops | none |
 | `a:net_q` | edit | none |
 | `a:net_set` | edit | require_redis |
-| `a:nop` | edit | require_redis |
+| `a:nop` | edit | none |
 | `a:notice` | view | require_redis |
 | `a:off_buy` | pay | require_redis |
 | `a:off_buy_home` | pay | none |
@@ -519,14 +519,12 @@
 | `a:ws_history` | edit | require_redis |
 | `a:ws_history_export` | edit | require_redis |
 | `a:ws_ig_dm` | edit | require_redis |
-| `a:ws_ig_oauth_disconnect` | edit | none |
 | `a:ws_ig_templates` | edit | require_redis |
 | `a:ws_ig_templates_send` | edit | require_redis |
 | `a:ws_ig_verify` | edit | require_redis |
 | `a:ws_ig_verify_comment` | edit | require_redis |
 | `a:ws_ig_verify_oauth` | edit | require_redis |
 | `a:ws_ig_verify_status` | edit | none |
-| `a:ws_lead` | edit | require_redis |
 | `a:ws_leads` | edit | require_redis |
 | `a:ws_list` | edit | none |
 | `a:ws_list_inactive` | edit | none |

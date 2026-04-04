@@ -1,3 +1,17 @@
+## STEP537 — Orphan / stale callback cleanup
+
+Date: 2026-04-04
+
+Scope:
+- removed the misleading `a:ws_ig_oauth_disconnect` UI surface from the verified Instagram OAuth screen until a real disconnect handler exists, so current Telegram UI no longer promises a callback path that falls through to stale/unknown recovery;
+- fixed the lead-delete cancel path by replacing dead alias `a:ws_lead` with the working `a:lead_view` route, restoring honest back/cancel semantics from the destructive confirm surface;
+- hardened decorative callback `a:nop` into an explicit harmless no-op and relaxed its registry guard to `none`, so page-indicator taps no longer fall into stale fallback or Redis-degraded blocking;
+- updated callback registry docs to match the new source of truth; no money/publish/support-degraded/business logic changes were made.
+
+Acceptance / notes:
+- this step intentionally cleans orphan/stale callback surfaces only; it does not implement Instagram OAuth disconnect logic and does not broaden callback routing architecture;
+- live Telegram verification is still required for old stale messages and for the harmless pager/no-op behavior on deployed messages.
+
 ## STEP536 — Telegram callback ack / feedback contract hardening
 
 Date: 2026-04-04

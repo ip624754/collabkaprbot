@@ -9695,9 +9695,7 @@ async function renderWsIgVerifyStart(ctx, ownerUserId, wsId, opts = {}) {
   }
 
   const kb = new InlineKeyboard();
-  if (verified && method === 'oauth') {
-    kb.text('🔌 Отключить', `a:ws_ig_oauth_disconnect|ws:${wsId}|ret:${ret}`).row();
-  } else {
+  if (!(verified && method === 'oauth')) {
     kb.text('🔗 Подключить Instagram', `a:ws_ig_verify_oauth|ws:${wsId}|ret:${ret}`).row();
   }
 
@@ -23572,6 +23570,11 @@ UGC vs Интеграция
     };
     if (_aliasA[p.a]) p.a = _aliasA[p.a];
 
+    // Harmless decorative callback surfaces must not fall into stale/unknown recovery.
+    if (p.a === 'a:nop') {
+      return;
+    }
+
     // STEP128: Stateless fallback routing (always available, no Redis/DB)
     // Used as an escape hatch when Redis is degraded to avoid "dead-end" UI.
     if (String(p.a || '').startsWith('s:')) {
@@ -26625,7 +26628,7 @@ if (p.a === 'a:lead_del_q') {
   const wsId = Number(p.w || 0);
   const kb = new InlineKeyboard()
     .text('🗑 Удалить', `a:lead_del_do|id:${leadId}|w:${wsId}|s:${st}|p:${pg}${rPart}`)
-    .text('❌ Отмена', `a:ws_lead|id:${leadId}|w:${wsId}|s:${st}|p:${pg}${rPart}`);
+    .text('❌ Отмена', `a:lead_view|id:${leadId}|w:${wsId}|s:${st}|p:${pg}${rPart}`);
   await safeEditOrReply(ctx, '🗑 Удалить заявку из списка?\n\nОтправитель не узнает.', { reply_markup: kb });
   return;
 }
