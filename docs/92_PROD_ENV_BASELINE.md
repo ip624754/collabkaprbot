@@ -42,10 +42,13 @@
 - `UPSTASH_REDIS_REST_TOKEN=<set>`
 
 ### Upstash QStash
+- `QSTASH_URL=<optional-upstash-endpoint>`
 - `QSTASH_TOKEN=<set>`
 - `QSTASH_CURRENT_SIGNING_KEY=<set>`
 - `QSTASH_NEXT_SIGNING_KEY=<set>`
 - `QSTASH_RETRY_MAX=5`
+
+> `QSTASH_URL` не обязателен для текущего delivery URL generation (мы строим callback URL от `PUBLIC_BASE_URL`), но держим его в baseline/env docs для parity с `src/lib/config.js` и Upstash setup.
 
 ### Admin Web sidecar (optional)
 - `ADMIN_WEB_ENABLED=0`

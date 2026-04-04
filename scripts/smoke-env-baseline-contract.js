@@ -66,6 +66,7 @@ const requiredExampleKeys = [
   'BRAND_APP_SUPERADMIN_COPY_ENABLED',
   'PUBLIC_BASE_URL',
   'SUPPORT_CHAT_ID',
+  'QSTASH_URL',
   'QSTASH_TOKEN',
   'QSTASH_CURRENT_SIGNING_KEY',
   'QSTASH_NEXT_SIGNING_KEY',
@@ -108,6 +109,7 @@ assert.equal(envExample.IG_VERIFY_TICK_ENABLED, 'false', '.env.example must keep
 assertDocHas(envDoc, 'PUBLIC_BASE_URL=<set>', 'docs/92 must mention PUBLIC_BASE_URL in Core baseline');
 assertDocHas(envDoc, 'SUPER_ADMIN_TG_IDS=<set>', 'docs/92 must mention SUPER_ADMIN_TG_IDS in Core baseline');
 assertDocHas(envDoc, 'BRAND_APP_SUPERADMIN_COPY_ENABLED=1', 'docs/92 must mention BRAND_APP_SUPERADMIN_COPY_ENABLED=1 in Core baseline');
+assertDocHas(envDoc, 'QSTASH_URL=<optional-upstash-endpoint>', 'docs/92 must mention optional QSTASH_URL for env/config parity');
 assertDocHas(envDoc, 'PAYMENTS_FALLBACK_APPLY_ENABLED=0', 'docs/92 must document safe default PAYMENTS_FALLBACK_APPLY_ENABLED=0');
 assertDocHas(envDoc, 'PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0', 'docs/92 must document safe default PAYMENTS_FALLBACK_ALLOW_UNSIGNED=0');
 assertDocHas(envDoc, 'IG_OAUTH_UI_ENABLED=false', 'docs/92 must document parked IG UI baseline');

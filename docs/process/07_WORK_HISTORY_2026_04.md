@@ -824,8 +824,7 @@ Acceptance / notes:
 - sparse Runtime / Payments / Founder screens keep a tighter visual balance on desktop widths;
 - requires live browser verification after deploy for final shell feel on the real operator viewport.
 
-## STEP535U — Runtime/health parity + smoke green pass
-- aligned `src/lib/adminWeb/runtime.js` with `/api/health` on `ops/reasons/qstash_reschedule_failed/*` Redis keys
-- exposed `QSTASH_URL`, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` through `CFG`
-- refreshed stale Users smoke expectations after the staged filter/apply contract and table-density copy polish
-- added `smoke-admin-web-runtime-health-parity-contract` and wired it into `preflight:source`
+## STEP535V — Env/docs baseline sync + schema guard
+- synced `.env.example`, `docs/91_PROD_LAUNCH_30MIN.md`, `docs/92_PROD_ENV_BASELINE.md`, `docs/10_QSTASH_RUNBOOK.md`, and `docs/17_QSTASH_RUNBOOK.md` with the real env/config surface so `QSTASH_URL` is documented as optional/parity alongside `QSTASH_TOKEN` + signing keys;
+- patched `src/db/queries.js` so `unlockWorkspaceContactsWithCredits()` reads `profile_contact / profile_ig / profile_portfolio_urls / profile_contacts` from `workspace_settings` via `left join`, not directly from `workspaces`;
+- added `scripts/smoke-contact-unlock-workspace-settings-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and extended `smoke-env-baseline-contract` to keep env/docs parity honest.

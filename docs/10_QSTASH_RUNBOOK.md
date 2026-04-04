@@ -16,6 +16,12 @@
 - если его нет (например, применили hotfix zip без обновления `package.json`), то QStash‑фичи автоматически **выключаются**, но бот **не падает**
 
 
+### QSTASH_URL (optional / parity)
+Это endpoint из Upstash QStash. Для текущего baseline он не нужен для сборки callback URL (они строятся от `PUBLIC_BASE_URL`), но мы держим его в env/docs для parity с `src/lib/config.js` и удобства при future debugging/custom endpoint checks.
+
+Где взять:
+- Upstash Console → **QStash** → раздел **Endpoints / API URL** (если нужен для parity/debug).
+
 ### QSTASH_TOKEN
 Это Bearer‑token для публикации задач в QStash.
 
@@ -41,6 +47,7 @@
 Vercel → Project → **Settings → Environment Variables**:
 
 1) Добавь переменные:
+   - `QSTASH_URL` (optional / parity)
    - `QSTASH_TOKEN`
    - `QSTASH_CURRENT_SIGNING_KEY`
    - `QSTASH_NEXT_SIGNING_KEY`

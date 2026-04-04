@@ -27,7 +27,7 @@
 - `DATABASE_URL` (Neon)
 - `REDIS_URL` / `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (если используется REST)
 - `CRON_SECRET` (для `/api/cron/*`)
-- `QSTASH_TOKEN` / `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` (если используется QStash)
+- `QSTASH_URL` / `QSTASH_TOKEN` / `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` (если используется QStash; `QSTASH_URL` optional/parity)
 
 ### Telegram
 - `BOT_TOKEN`

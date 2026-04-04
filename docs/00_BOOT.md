@@ -21,10 +21,10 @@
 18) `callback_data` ≤ 64 байта: держим ключи короткими; если нужен контекст — токен → payload в Redis (TTL).
 
 19) Watchlist регрессий: см. `docs/00_CURRENT_STATE.md` → раздел «Выводы последнего регресс-аудита + watchlist».
+20) Текущий handoff-safe baseline: **STEP535V**. Перед новой работой сверяй `docs/00_CURRENT_STATE.md`, `docs/92_PROD_ENV_BASELINE.md` и `docs/15_NEW_CHAT_HANDOFF.md`.
 
 ## См. также
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (payments, кредиты/разлок, ownership-in-SQL, deep-links, cron).
 
 
 - IG OAuth parked in STEP383: `api/ig/oauth/*` removed from deploy surface to stay under Vercel Hobby function cap; Instagram remains a normal profile link/contact after unlock.
-20) Current web-admin baseline freeze = **STEP535T**: before any new chat/product step, read the top of `docs/00_CURRENT_STATE.md` and `docs/15_NEW_CHAT_HANDOFF.md` so you continue from the stabilized admin/control-plane baseline, not from the old STEP493-era handoff.

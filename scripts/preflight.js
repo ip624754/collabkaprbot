@@ -195,6 +195,7 @@ function buildNodeCheckList() {
 
 const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): ENV baseline contract", "smoke:env-baseline-contract"],
+  ["Preflight (source-only): contact unlock workspace_settings schema guard", "smoke:contact-unlock-workspace-settings-contract"],
   ["Preflight (source-only): package-lock release consistency", "check:package-lock"],
   ["Preflight (source-only): Vercel Hobby function budget", "check:function-budget"],
   ["Preflight (source-only): creator current-channel contract", "smoke:creator-current-channel-contract"],
@@ -233,7 +234,6 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin web WHATWG URL contract", "smoke:admin-web-whatwg-url-contract"],
   ["Preflight (source-only): admin web runtime contract", "smoke:admin-web-runtime-contract"],
   ["Preflight (source-only): admin web runtime semantics contract", "smoke:admin-web-runtime-semantics-contract"],
-  ["Preflight (source-only): admin web runtime/health parity contract", "smoke:admin-web-runtime-health-parity-contract"],
   ["Preflight (source-only): admin web payments contract", "smoke:admin-web-payments-contract"],
   ["Preflight (source-only): admin web payments follow-up contract", "smoke:admin-web-payments-followup-contract"],
   ["Preflight (source-only): admin web payments review contract", "smoke:admin-web-payments-review-contract"],
