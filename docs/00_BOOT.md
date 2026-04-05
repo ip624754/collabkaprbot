@@ -21,7 +21,7 @@
 18) `callback_data` ≤ 64 байта: держим ключи короткими; если нужен контекст — токен → payload в Redis (TTL).
 
 19) Watchlist регрессий: см. `docs/00_CURRENT_STATE.md` → раздел «Выводы последнего регресс-аудита + watchlist».
-20) Текущий handoff-safe baseline: **STEP535V**. Перед новой работой сверяй `docs/00_CURRENT_STATE.md`, `docs/92_PROD_ENV_BASELINE.md` и `docs/15_NEW_CHAT_HANDOFF.md`.
+20) Текущий handoff-safe baseline: **STEP545T**. Перед новой работой сверяй `docs/00_CURRENT_STATE.md`, `docs/00_BOOT.md`, `docs/15_NEW_CHAT_HANDOFF.md` и `docs/92_PROD_ENV_BASELINE.md`.
 
 ## См. также
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (payments, кредиты/разлок, ownership-in-SQL, deep-links, cron).

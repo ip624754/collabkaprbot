@@ -985,3 +985,17 @@ Scope:
 Acceptance / notes:
 - scope stays read-model/UI only: no QStash, DB, worker, or mobile layout changes;
 - live verification after deploy should confirm that Overview stops showing `Нужна проверка` / `Runtime warnings = 1` when System already reads the same runtime state as healthy.
+
+
+## STEP545T — baseline freeze + docs/handoff sync
+
+Date: 2026-04-05
+
+Scope:
+- froze the baseline after live confirmation that `System` and `Overview` now agree on runtime truth: `System = OK`, `Overview = OK`, `Runtime warnings = 0`, and the stale retry breadcrumb remains informational instead of degraded;
+- synced the docs canon to the real current baseline by updating `docs/00_CURRENT_STATE.md`, `docs/00_BOOT.md`, and fully refreshing `docs/15_NEW_CHAT_HANDOFF.md` so new chats no longer start from the stale STEP535V context;
+- kept the step docs-only: no bot-layer, runtime worker, QStash, DB, or mobile-layout code changes.
+
+Acceptance / notes:
+- this is the freeze/handoff step for the STEP536–545 wave;
+- purpose is handoff correctness and baseline clarity, not new product/runtime behavior.
