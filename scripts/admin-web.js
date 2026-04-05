@@ -1212,10 +1212,21 @@ function syncOverviewWorkspace(workspace = 'command', { replace = true } = {}) {
   return next;
 }
 
+function overviewRuntimeWarnings(model = {}) {
+  const runtime = model.runtime || {};
+  const overallState = String(runtime?.overall?.state || '').trim().toLowerCase();
+  const summaryCheck = Number(runtime?.summaryCards?.check || 0) || 0;
+  const cardWarnings = Number(model.cards?.runtimeWarnings || 0) || 0;
+  if (summaryCheck > 0) return summaryCheck;
+  if (overallState === 'missing' || overallState === 'degraded') return Math.max(1, cardWarnings);
+  if (overallState === 'ok') return 0;
+  return cardWarnings;
+}
+
 function overviewStatusSummary(model = {}) {
   const runtime = model.runtime || {};
   const overall = runtime.overall || {};
-  const warnings = Number(model.cards?.runtimeWarnings || 0) || 0;
+  const warnings = overviewRuntimeWarnings(model);
   const paymentAlerts = Number(model.cards?.paymentAlerts || 0) || 0;
   const controlSurface = window.__controlSurface || {};
   const paused = Array.isArray(controlSurface.items)
@@ -1465,7 +1476,7 @@ function overviewView(model) {
           <div class="aw-mini-card"><span>Пользователи</span><strong>${Number(cards.usersTotal || 0)}</strong></div>
           <div class="aw-mini-card"><span>Активные офферы</span><strong>${Number(cards.offersActive || 0)}</strong></div>
           <div class="aw-mini-card"><span>Платёжные сигналы</span><strong>${Number(cards.paymentAlerts || 0)}</strong></div>
-          <div class="aw-mini-card"><span>Runtime warnings</span><strong>${Number(cards.runtimeWarnings || 0)}</strong></div>
+          <div class="aw-mini-card"><span>Runtime warnings</span><strong>${overviewRuntimeWarnings(model)}</strong></div>
         </div>
       </section>
       <section class="aw-surface aw-stack aw-overview-hero-card">

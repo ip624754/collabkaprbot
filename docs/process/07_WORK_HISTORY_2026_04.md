@@ -971,3 +971,17 @@ Scope:
 Acceptance / notes:
 - source smoke is green when `smoke:admin-web-runtime-stale-retry-contract`, existing runtime/admin smokes, and `preflight:source` pass;
 - live verification is still required after deploy: refresh Overview/System and confirm stale retry warnings disappear while a fresh retry failure would still surface as warning.
+
+
+## STEP545 — Overview / Runtime truth alignment
+
+Date: 2026-04-05
+
+Scope:
+- aligned `Overview` with the canonical Runtime truth contract after STEP544: `src/lib/adminWeb/readModels.js` now derives `cards.runtimeWarnings` from `runtime.summaryCards.check` instead of raw `runtime.notes.length`, preventing stale/historical retry notes from surfacing as active warnings in the top cockpit;
+- added `overviewRuntimeWarnings(model)` in `scripts/admin-web.js` and switched Overview hero counters/status derivation to the same Runtime semantics, so `System` and `Overview` no longer disagree when Runtime is healthy but still carries historical notes;
+- added `scripts/smoke-admin-web-overview-runtime-truth-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and refreshed the admin asset cache-bust to `step545`.
+
+Acceptance / notes:
+- scope stays read-model/UI only: no QStash, DB, worker, or mobile layout changes;
+- live verification after deploy should confirm that Overview stops showing `Нужна проверка` / `Runtime warnings = 1` when System already reads the same runtime state as healthy.

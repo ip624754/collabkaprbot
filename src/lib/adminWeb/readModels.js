@@ -204,7 +204,7 @@ export async function getOverviewSummary() {
     paymentAlerts: Array.isArray(metrics?.payments)
       ? metrics.payments.filter((p) => String(p.status || '').toUpperCase() !== 'APPLIED').reduce((sum, p) => sum + Number(p.cnt || 0), 0)
       : 0,
-    runtimeWarnings: Array.isArray(runtime?.notes) ? runtime.notes.length : 0,
+    runtimeWarnings: Number(runtime?.summaryCards?.check || 0) || 0,
   };
   return {
     cards,

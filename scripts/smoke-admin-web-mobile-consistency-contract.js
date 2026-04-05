@@ -9,7 +9,7 @@ const html = read('admin.html');
 const css = read('styles/admin-web.css');
 const js = read('scripts/admin-web.js');
 
-assert.ok(html.includes('step543c'), 'admin asset URLs must be cache-busted to step543c');
+assert.ok(html.includes('step545'), 'admin asset URLs must be cache-busted to step545');
 assert.ok(js.includes('data-mobile-nav-toggle'), 'mobile nav toggle hook must stay present');
 for (const token of [
   'html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: clip; }',

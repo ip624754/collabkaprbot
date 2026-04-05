@@ -2114,3 +2114,9 @@ Acceptance / notes:
 - At <=720px shell now collapses to a true 1-column layout; sidebar drawer no longer leaves a phantom 260px grid column.
 - Topbar stacks cleanly on phone widths, chips/buttons stop forcing inconsistent widths, and mobile inputs/textareas use 16px font-size to avoid iOS zoom jumps.
 - Users narrow-phone table floor reduced from 880px to 840px to reduce aggressive overflow while preserving horizontal scroll.
+
+
+## STEP545 — Overview / Runtime truth alignment
+- `src/lib/adminWeb/readModels.js` now derives `overview.cards.runtimeWarnings` from `runtime.summaryCards.check` instead of the raw `runtime.notes.length`, so stale/historical retry notes no longer inflate the Overview warning counter.
+- `scripts/admin-web.js` now computes Overview warning severity through `overviewRuntimeWarnings(model)` using the same canonical Runtime truth: fresh degraded/missing runtime still raises warning, but a healthy Runtime with only historical notes now renders as calm/OK.
+- Added `scripts/smoke-admin-web-overview-runtime-truth-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped the admin asset cache-bust to `step545`.
