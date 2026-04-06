@@ -38346,8 +38346,11 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
 
   // Fetch one extra row to detect next page.
   const rowsAll = await db.listUsersDirectory(filter, limit + 1, offset, q);
-  const hasNext = rowsAll.length > limit;
-  const rows = rowsAll.slice(0, limit);
+  const rowsAllResolved = Array.isArray(rowsAll)
+    ? rowsAll
+    : (Array.isArray(rowsAll?.rows) ? rowsAll.rows : []);
+  const hasNext = rowsAllResolved.length > limit;
+  const rows = rowsAllResolved.slice(0, limit);
 
   const labelMap = {
     all: 'Все',
