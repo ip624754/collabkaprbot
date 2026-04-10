@@ -155,7 +155,7 @@ export async function qstashVerifySignature({ signature, body, url }) {
 export function getBroadcastFlowControl(broadcastId) {
   const bid = Number(broadcastId) || 0;
   return {
-    key: `broadcast:${bid || 'na'}`,
+    key: `broadcast.${bid || 'na'}`,
     parallelism: Number(CFG.QSTASH_BROADCAST_PARALLELISM || 8),
     ratePerSecond: Number(CFG.QSTASH_BROADCAST_RATE_PER_SEC || 20),
   };

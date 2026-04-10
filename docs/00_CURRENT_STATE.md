@@ -1,3 +1,5 @@
+**STEP553:** QStash broadcast flow-control key hotfix — fixed a narrow QStash enqueue failure in `src/lib/qstash.js` for broadcast fan-out. `getBroadcastFlowControl(broadcastId)` no longer emits `broadcast:${id}` (colon), which QStash rejects for `flowControl.key`; it now emits the same readable key in a QStash-safe format `broadcast.${id}`. Scope stays intentionally tiny: no payload changes, no recipient logic changes, no dedup redesign, no QStash schedule changes, and no broadcast/admin UX changes. Live verification still required by rerunning a real broadcast and confirming that `qstash_publish_failed` with `flowControlKey must be alphanumeric, hyphen, underscore, or period` no longer appears.
+
 **STEP551:** invite rewards live — collapsed the planned STEP550 / STEP550.1 / STEP551 path into one narrow runtime rollout on top of the existing invite layer. `src/db/queries.js` now adds a real `invite_reward_ledger`, lazy pending→confirmed processing, anti-abuse guards (`raw_open=0`, `existing/self=0`, one join reward max once, one activation reward max once), balance buckets (`Available / Pending / Redeemed`), and redeem helpers for `7d Pro / 30d Pro`. `src/bot/bot.js` upgrades the invite surface with `Collabka points`, pending/redeemed readouts, reward CTAs and confirm flow, plus a short balance line in creator/brand profile surfaces; `src/bot/actionRegistry.js` adds redeem callbacks; `migrations/046_invite_reward_ledger.sql` introduces the ledger schema. Scope stayed intentionally narrow: no cashout, no token rewards, no multi-level referral, no broad gamification. Live verification still required for migration `046_invite_reward_ledger.sql`, invite redeem flow, and role-specific Pro application target.
 
 **STEP548:** invite contacts / personal invite layer — upgraded the old generic `a:share` surface into a Telegram-native invite layer adapted from the Intro Deck canon without broad router or admin redesign. Users now get a dedicated invite screen with 3 ready text variants, primary inline `Share invite`, fallback `Show link`, fallback `Get invite card`, personal deep-links (`ii_ / il_ / ic_`), attribution on first eligible `/start`, counters `Invited / Activated`, and a recent invited list. `src/db/queries.js` now contains the invite storage/helpers and degrades honestly when the new `member_invites` migration is missing; `src/bot/helpers.js` recognizes invite start payloads; `src/bot/bot.js` adds `/invite`, inline-query share handling, upgraded `a:share`, and card/link callbacks; `INVITE_PHOTO_FILE_ID` is supported for cached-photo production sharing with public asset fallback. Scope stays intentionally narrow: no reward mechanics, no admin/web redesign, no monetization rewrite, and no bot-only truth fork. Live verification still required for BotFather inline mode plus migration `045_member_invites.sql`.
@@ -2330,4 +2332,84 @@ No invite rewards implementation should be added directly until it follows this 
 - keep anti-abuse explicit
 - keep redemption narrow and product-native
 - preserve the clean Telegram-native invite UX
+
+
+
+## 0.08) Broadcast docs pack embedded into repo (STEP552A, docs-only)
+
+### Status
+- Type: docs-only hotfix
+- Code changes: none
+- Runtime changes: none
+- Migrations: none
+- Confidence: docs/reference-level only
+
+### What was added
+The repo now contains an embedded broadcast documentation/reference pack based on the current Collabka broadcast layer.
+
+Added docs:
+- `docs/105_COLLABKA_BROADCAST_RUNBOOK_RU.md`
+- `docs/106_BROADCAST_CANON_REUSABLE_RU.md`
+- `docs/107_BROADCAST_CODE_MAP_RU.md`
+- `docs/108_BROADCAST_BUILD_ORDER_REUSABLE_RU.md`
+- `docs/examples/broadcast/*`
+
+### Purpose
+This pack exists so the broadcast layer can be:
+- operated correctly in Collabka
+- reused in future Telegram bots/projects
+- explained from admin action to delivery/runtime path without re-deriving the pattern each time
+
+### Scope boundary
+This STEP does **not** change broadcast runtime behavior.
+It only embeds the docs/examples pack into the repo so the current baseline and future projects can reuse the same runbook/canon/build-order references.
+
+### Practical rule going forward
+For broadcast-related work:
+- use `105_COLLABKA_BROADCAST_RUNBOOK_RU` for current-project operator flow
+- use `106_BROADCAST_CANON_REUSABLE_RU` for reusable design rules
+- use `107_BROADCAST_CODE_MAP_RU` to find source entrypoints
+- use `108_BROADCAST_BUILD_ORDER_REUSABLE_RU` when rebuilding the same layer in another bot/project
+- treat `docs/examples/broadcast/*` as reference examples, not live runtime source of truth
+
+## 0.09) QStash broadcast flow-control key hotfix (STEP553)
+
+### Status
+- Type: narrow runtime hotfix
+- Code changes: yes
+- Runtime changes: yes
+- Migrations: none
+- Confidence: source-confirmed; live broadcast rerun still required
+
+### Problem
+Broadcast enqueue via QStash could fail with:
+
+`flowControlKey must be alphanumeric, hyphen, underscore, or period`
+
+because `getBroadcastFlowControl(broadcastId)` emitted a key with `:` (`broadcast:${id}`), while QStash now enforces a stricter allowed charset for `flowControl.key`.
+
+### Fix
+`src/lib/qstash.js` now emits a QStash-safe key format:
+
+- before: `broadcast:${id}`
+- after: `broadcast.${id}`
+
+### Scope boundary
+This hotfix does **not** change:
+- broadcast payload/body
+- recipient iteration
+- deduplication behavior
+- QStash schedule/cadence
+- admin UI
+- invite/rewards/runtime behavior outside the broadcast enqueue key
+
+### Why this is safe
+The change only touches one service key format used for QStash flow-control grouping.
+It preserves human readability and grouping intent while removing the invalid character that caused enqueue rejection.
+
+### Live verification still required
+After deploy, rerun a real admin broadcast and confirm:
+- no new `qstash_publish_failed` for invalid `flowControlKey`
+- broadcast fan-out starts queueing normally
+- broadcast delivery progresses without this QStash validation error
 
