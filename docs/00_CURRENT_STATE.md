@@ -2124,3 +2124,132 @@ Acceptance / notes:
 - `src/lib/adminWeb/readModels.js` now derives `overview.cards.runtimeWarnings` from `runtime.summaryCards.check` instead of the raw `runtime.notes.length`, so stale/historical retry notes no longer inflate the Overview warning counter.
 - `scripts/admin-web.js` now computes Overview warning severity through `overviewRuntimeWarnings(model)` using the same canonical Runtime truth: fresh degraded/missing runtime still raises warning, but a healthy Runtime with only historical notes now renders as calm/OK.
 - Added `scripts/smoke-admin-web-overview-runtime-truth-contract.js`, wired it into `package.json` + `scripts/preflight.js`, and bumped the admin asset cache-bust to `step545`.
+
+## 0.06) Collabka invite rewards contract freeze (STEP549, docs-only)
+
+### Status
+- Type: docs-only freeze
+- Code changes: none
+- Runtime changes: none
+- Migrations: none
+- Confidence: product-spec / docs-level only
+
+### Why this freeze exists
+Collabka already has a working invite layer with:
+- Invite surface
+- personal deep links
+- invite attribution
+- counters `Invited / Activated`
+
+This freeze adds a narrow rewards contract on top of that invite layer without changing runtime behavior yet.
+
+The purpose is to prevent ad-hoc growth mechanics and lock the reward logic around meaningful referral outcomes instead of raw opens or noisy traffic.
+
+### Core principle
+Reward meaningful referral outcomes, not raw opens.
+
+This means:
+- raw open is not rewarded
+- existing-user hit is not rewarded
+- self-invite is not rewarded
+- the main reward signal is activation quality
+
+### Frozen event → points contract
+- `raw_open` → `0`
+- `existing_user_hit` → `0`
+- `self_invite` → `0`
+- `invited_joined` → `+2`
+- `invited_activated` → `+10`
+
+### Pending / confirmed rules
+Rewards are not considered final immediately.
+
+- `invited_joined`:
+  - first becomes `pending`
+  - becomes `confirmed` after 24h
+
+- `invited_activated`:
+  - first becomes `pending`
+  - becomes `confirmed` after 48h
+
+### Activation meaning for Collabka
+Default activation freeze for Collabka:
+
+- `Activated = completed profile`
+
+This is intentionally kept narrow for the first reward contract version.
+
+### Balance model
+The reward layer must be based on 3 values:
+
+- `Available points`
+- `Pending points`
+- `Redeemed points`
+
+Interpretation:
+- available = confirmed and not yet redeemed
+- pending is not spendable
+- redeemed is already consumed
+
+### Main display surfaces
+Primary surface:
+- Invite screen
+
+Invite screen should eventually show:
+- `Invited`
+- `Activated`
+- `Collabka points`
+- `Pending`
+- `Redeemed`
+- `Next reward`
+
+Secondary surface:
+- Profile
+
+Profile should only show a short balance line:
+- `Points balance`
+
+### Frozen redeem catalog
+Start narrow and product-native.
+
+Default starter catalog:
+- `100 points → 7 days Pro`
+- `250 points → 30 days Pro`
+
+No money rewards.
+No token rewards.
+No multi-level referral.
+No cashout.
+
+### Anti-abuse rules
+The following rules are part of the frozen contract:
+
+- no reward for raw open
+- no reward for self-invite
+- no reward for existing user
+- one invited user can produce join reward only once
+- one invited user can produce activation reward only once
+- pending points are not spendable
+- reward logic should rely on a ledger, not only on a single balance number
+- reward records should support statuses:
+  - `pending`
+  - `confirmed`
+  - `rejected`
+  - `redeemed`
+
+### Practical baseline decision
+Current decision for Collabka:
+
+- keep invite rewards as a future implementation layer
+- do not ship runtime reward logic yet
+- do not expand into broad gamification
+- keep the contract narrow, quality-based, and product-useful
+
+### Implementation rule going forward
+No invite rewards implementation should be added directly until it follows this frozen contract:
+
+- reward meaningful activation, not raw opens
+- keep anti-abuse explicit
+- keep redemption narrow and product-native
+- preserve the clean Telegram-native invite UX
+
