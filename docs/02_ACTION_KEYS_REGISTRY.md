@@ -5,16 +5,16 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **533**
-- Actions in registry: **533**
+- Actions in code: **549**
+- Actions in registry: **549**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
 | admin | 97 |
-| edit | 342 |
-| ops | 79 |
+| edit | 344 |
+| ops | 93 |
 | pay | 11 |
 | view | 4 |
 
@@ -22,10 +22,10 @@
 
 | Guard | Count |
 |---|---:|
-| db_truth | 4 |
-| none | 172 |
+| db_truth | 5 |
+| none | 175 |
 | queue_first | 2 |
-| require_redis | 355 |
+| require_redis | 367 |
 
 ## Actions table
 
@@ -137,8 +137,20 @@
 | `a:bc_confirm` | ops | require_redis |
 | `a:bc_list` | ops | none |
 | `a:bc_pause` | ops | require_redis |
+| `a:bc_preview` | ops | require_redis |
 | `a:bc_resume` | ops | require_redis |
+| `a:bc_send_q` | ops | require_redis |
+| `a:bc_simple_audience` | ops | require_redis |
+| `a:bc_simple_btn_clear` | ops | require_redis |
+| `a:bc_simple_btn_custom` | ops | require_redis |
+| `a:bc_simple_btn_preset` | ops | require_redis |
+| `a:bc_simple_button` | ops | require_redis |
+| `a:bc_simple_clear` | ops | require_redis |
+| `a:bc_simple_media` | ops | require_redis |
+| `a:bc_simple_media_clear` | ops | require_redis |
+| `a:bc_simple_text` | ops | require_redis |
 | `a:bc_start` | ops | require_redis |
+| `a:bc_start_adv` | ops | require_redis |
 | `a:bc_stop` | ops | require_redis |
 | `a:bc_tpl_bp` | ops | require_redis |
 | `a:bc_tpl_gw` | ops | require_redis |
@@ -500,8 +512,8 @@
 | `a:send_request_to_creator` | edit | none |
 | `a:setup` | edit | require_redis |
 | `a:share` | edit | require_redis |
-| `a:share_link` | edit | none |
 | `a:share_card` | edit | none |
+| `a:share_link` | edit | none |
 | `a:share_redeem` | ops | none |
 | `a:share_redeem_do` | ops | db_truth |
 | `a:support` | ops | none |

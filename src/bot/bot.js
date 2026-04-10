@@ -43,6 +43,7 @@ import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
 import { qstashPublishJSON, getQStashDeliveryUrl, getQStashLibHealth } from '../lib/qstash.js';
 import { appendOperatorControlAudit, getOperatorControlSnapshot, setOperatorControlToggle } from '../lib/operatorControls.js';
+import { BROADCAST_CAPTION_SAFE_LIMIT, buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
 
 let BOT;
 
@@ -19215,6 +19216,39 @@ ${escapeHtml(safeCap)}
     return;
   });
 
+  // --- Broadcast simple-media handler (photo only) ---
+  bot.on('message', async (ctx, next) => {
+    if (!ctx.from) return next();
+    const exp = await getExpectText(ctx.from.id);
+    if (!exp || String(exp.type) !== 'bc_simple_media') return next();
+
+    const isAdmin = isSuperAdminTg(ctx.from.id);
+    if (!isAdmin) { await clearExpectText(ctx.from.id); return next(); }
+
+    const msg = ctx.message || {};
+    const photo = Array.isArray(msg.photo) && msg.photo.length ? msg.photo[msg.photo.length - 1] : null;
+    if (!photo?.file_id) {
+      await ctx.reply('❌ Нужна именно картинка. Отправь фото одним сообщением.', {
+        reply_markup: new InlineKeyboard().text('⬅️ К composer', 'a:bc_start').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+      });
+      try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
+      return;
+    }
+
+    const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
+    draft.mode = 'simple';
+    draft.mediaType = 'photo';
+    draft.fileId = photo.file_id;
+    if (!draft.audience) draft.audience = 'all';
+    if (!Array.isArray(draft.buttons)) draft.buttons = [];
+    await clearExpectText(ctx.from.id);
+    await setDraft(ctx.from.id, draft, 30 * 60);
+    await ctx.reply('✅ Картинка сохранена.', {
+      reply_markup: new InlineKeyboard().text('⬅️ К composer', 'a:bc_start')
+    });
+    return;
+  });
+
   // --- Broadcast content handler (accepts text, photo, video, animation) ---
   bot.on('message', async (ctx, next) => {
     if (!ctx.from) return next();
@@ -19261,6 +19295,7 @@ ${escapeHtml(safeCap)}
       return;
     }
 
+    draft.mode = 'advanced';
     draft.buttons = [];
     draft.audience = 'all';
     await clearExpectText(ctx.from.id);
@@ -20290,6 +20325,49 @@ if (exp.type === 'adm_outbox_tpl_label') {
       return;
     }
 
+    if (exp.type === 'bc_simple_text') {
+      const isAdmin = isSuperAdminTg(tgId);
+      if (!isAdmin) { await ctx.reply('Нет доступа.'); return; }
+      const raw = String(ctx.message?.text || '');
+      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
+      draft.mode = 'simple';
+      draft.text = telegramEntitiesToHtml(raw, ctx.message?.entities || []);
+      if (!draft.audience) draft.audience = 'all';
+      if (!Array.isArray(draft.buttons)) draft.buttons = [];
+      await clearExpectText(ctx.from.id);
+      await setDraft(ctx.from.id, draft, 30 * 60);
+      await renderBroadcastSimpleComposer(ctx, '✅ Текст сохранён.');
+      return;
+    }
+
+    if (exp.type === 'bc_simple_button_input') {
+      const isAdmin = isSuperAdminTg(tgId);
+      if (!isAdmin) { await ctx.reply('Нет доступа.'); return; }
+      const raw = String(ctx.message?.text || '').trim();
+      if (!raw) {
+        await ctx.reply('Формат: <code>Текст кнопки | ссылка</code>', { parse_mode: 'HTML' });
+        try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
+        return;
+      }
+      const parts = raw.split('|').map((s) => String(s || '').trim());
+      const btnText = String(parts[0] || '').trim().slice(0, 40);
+      const btnUrlRaw = parts.slice(1).join('|').trim();
+      const btnUrl = normalizeBroadcastButtonUrlInput(btnUrlRaw);
+      if (!btnText || !btnUrl) {
+        await ctx.reply('❌ Формат: <code>Текст кнопки | https://...</code> или <code>t.me/...</code>.', { parse_mode: 'HTML' });
+        try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
+        return;
+      }
+      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
+      draft.mode = 'simple';
+      draft.buttons = [{ text: btnText, url: btnUrl }];
+      if (!draft.audience) draft.audience = 'all';
+      await clearExpectText(ctx.from.id);
+      await setDraft(ctx.from.id, draft, 30 * 60);
+      await renderBroadcastSimpleComposer(ctx, `✅ Кнопка сохранена: <b>${escapeHtml(btnText)}</b>`);
+      return;
+    }
+
     // Broadcast: template ID input (gw/bp/offer)
     if (exp.type === 'bc_btn_tpl_id') {
       const isAdmin = isSuperAdminTg(tgId);
@@ -20303,7 +20381,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       }
 
       const draft = await getDraft(ctx.from.id);
-      if (!draft || !draft.type) {
+      if (!draft || !broadcastDraftHasContent(draft)) {
         await ctx.reply('⚠️ Черновик не найден. Начни заново.', {
           reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start')
         });
@@ -20426,7 +20504,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       }
 
       const draft = await getDraft(ctx.from.id);
-      if (!draft || !draft.type) {
+      if (!draft || !broadcastDraftHasContent(draft)) {
         await ctx.reply('⚠️ Черновик не найден. Начни заново.', {
           reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start')
         });
@@ -31659,21 +31737,210 @@ ${DEGRADED_COPY.line}
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
       await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
-      // Clear any previous broadcast draft
+      try { await clearDraft(ctx.from.id); } catch {}
+      await setDraft(ctx.from.id, { mode: 'simple', audience: 'all', buttons: [] }, 30 * 60);
+      await renderBroadcastSimpleComposer(ctx);
+      return;
+    }
+
+    if (p.a === 'a:bc_start_adv') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
       try { await clearDraft(ctx.from.id); } catch {}
       await safeEditOrReply(ctx,
-        `📣 <b>Новая рассылка</b>\n\nОтправь 1 сообщение для рассылки (1 сообщение = 1 пост):\n• текст\n• фото / видео / GIF / документ (подпись — по желанию)\n\nАльбомы не поддерживаются.`,
+        `📣 <b>Новая рассылка · Advanced mode</b>
+
+Отправь 1 сообщение для рассылки (1 сообщение = 1 пост):
+• текст
+• фото / видео / GIF / документ (подпись — по желанию)
+
+Альбомы не поддерживаются.`,
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
+            .text('⬅️ Simple mode', 'a:bc_start')
             .text('❌ Отмена', 'a:bc_cancel')
-            .text('⬅️ Админка', 'a:admin_home')
             .row()
             .text('📋 Меню', 'a:menu')
             .text('🏠 Home', 'a:home')
         }
       );
       await setExpectText(ctx.from.id, { type: 'bc_content' }, 30 * 60);
+      return;
+    }
+
+    if (p.a === 'a:bc_simple_text') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      await safeEditOrReply(ctx,
+        `📝 <b>Текст рассылки</b>
+
+Отправь текст одним сообщением.
+
+• Текст можно оставить пустым, если хочешь картинку без текста
+• Длинный текст при наличии картинки будет отправлен отдельным сообщением после неё`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ К composer', 'a:bc_start')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home')
+        }
+      );
+      await setExpectText(ctx.from.id, { type: 'bc_simple_text' }, 30 * 60);
+      return;
+    }
+
+    if (p.a === 'a:bc_simple_media') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
+      const kb = new InlineKeyboard().text('⬅️ К composer', 'a:bc_start');
+      if (draft.fileId) kb.text('🧹 Убрать картинку', 'a:bc_simple_media_clear');
+      kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+      await safeEditOrReply(ctx,
+        `🖼 <b>Картинка рассылки</b>
+
+Отправь <b>одну картинку</b> следующим сообщением.
+
+Simple mode сейчас не принимает видео/GIF/документы — только фото.`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+      await setExpectText(ctx.from.id, { type: 'bc_simple_media' }, 30 * 60);
+      return;
+    }
+
+    if (p.a === 'a:bc_simple_media_clear') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery({ text: 'Картинка очищена.' });
+      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
+      delete draft.mediaType;
+      delete draft.fileId;
+      await setDraft(ctx.from.id, draft, 30 * 60);
+      await renderBroadcastSimpleComposer(ctx, '✅ Картинка удалена.');
+      return;
+    }
+
+    if (p.a === 'a:bc_simple_button') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
+      await renderBroadcastSimpleButtonPicker(ctx, draft);
+      return;
+    }
+
+    if (p.a === 'a:bc_simple_btn_preset') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      const key = String(p.k || '');
+      const preset = broadcastSimpleButtonPresets().find((x) => x.key === key);
+      if (!preset) { await ctx.answerCallbackQuery({ text: 'Preset недоступен.' }); return; }
+      await ctx.answerCallbackQuery({ text: 'Кнопка сохранена.' });
+      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
+      draft.mode = 'simple';
+      draft.buttons = [{ text: preset.label, url: preset.url }];
+      await setDraft(ctx.from.id, draft, 30 * 60);
+      await renderBroadcastSimpleComposer(ctx, `✅ Кнопка preset: <b>${escapeHtml(preset.label)}</b>`);
+      return;
+    }
+
+    if (p.a === 'a:bc_simple_btn_custom') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      await safeEditOrReply(ctx,
+        `✍️ <b>Своя кнопка</b>
+
+Отправь строку в формате:
+<code>Текст кнопки | https://...</code>
+
+Поддерживаются также:
+• <code>t.me/...</code>
+• shortcuts <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard()
+            .text('⬅️ К кнопкам', 'a:bc_simple_button')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home')
+        }
+      );
+      await setExpectText(ctx.from.id, { type: 'bc_simple_button_input' }, 30 * 60);
+      return;
+    }
+
+    if (p.a === 'a:bc_simple_btn_clear') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery({ text: 'Кнопка очищена.' });
+      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
+      draft.mode = 'simple';
+      draft.buttons = [];
+      await setDraft(ctx.from.id, draft, 30 * 60);
+      await renderBroadcastSimpleComposer(ctx, '✅ Кнопка удалена.');
+      return;
+    }
+
+    if (p.a === 'a:bc_simple_audience') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      await renderBroadcastAudiencePicker(ctx);
+      return;
+    }
+
+    if (p.a === 'a:bc_preview') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      const draft = await getDraft(ctx.from.id);
+      if (!draft || !broadcastDraftHasContent(draft)) {
+        await ctx.answerCallbackQuery({ text: 'Нет контента для preview.' });
+        return;
+      }
+      await ctx.answerCallbackQuery({ text: 'Отправляю preview…' });
+      try {
+        await sendBroadcastPreviewToOperator(ctx, draft);
+        if (String(draft.mode || '') === 'simple') await renderBroadcastSimpleComposer(ctx, '👁 Preview отправлен в этот чат отдельным сообщением.');
+        else await renderBroadcastPreview(ctx, draft, { banner: '👁 Preview отправлен в этот чат отдельным сообщением.' });
+      } catch (e) {
+        await safeEditOrReply(ctx, `⚠️ Preview не отправился: ${escapeHtml(String(e?.message || e).slice(0, 160))}`, {
+          parse_mode: 'HTML',
+          reply_markup: new InlineKeyboard().text('⬅️ К composer', String(draft?.mode || '') === 'simple' ? 'a:bc_start' : 'a:bc_btn_done')
+        });
+      }
+      return;
+    }
+
+    if (p.a === 'a:bc_send_q') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      const draft = await getDraft(ctx.from.id);
+      if (!draft || !broadcastDraftHasContent(draft)) {
+        await safeEditOrReply(ctx, '⚠️ Нет контента для отправки.', {
+          reply_markup: new InlineKeyboard().text('⬅️ К composer', 'a:bc_start').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+        });
+        return;
+      }
+      await renderBroadcastPreview(ctx, draft);
+      return;
+    }
+
+    if (p.a === 'a:bc_simple_clear') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery({ text: 'Черновик очищен.' });
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await setDraft(ctx.from.id, { mode: 'simple', audience: 'all', buttons: [] }, 30 * 60);
+      await renderBroadcastSimpleComposer(ctx, '✅ Draft очищен.');
       return;
     }
 
@@ -31684,7 +31951,7 @@ ${DEGRADED_COPY.line}
       await ctx.answerCallbackQuery();
       const aud = String(p.aud || 'all').toLowerCase();
       const draft = await getDraft(ctx.from.id);
-      if (!draft || !draft.type) {
+      if (!draft || !broadcastDraftHasContent(draft)) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
           reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
@@ -31692,7 +31959,8 @@ ${DEGRADED_COPY.line}
       }
       draft.audience = aud;
       await setDraft(ctx.from.id, draft, 30 * 60);
-      await renderBroadcastPreview(ctx, draft);
+      if (String(draft.mode || '') === 'simple') await renderBroadcastSimpleComposer(ctx, `✅ Аудитория: <b>${escapeHtml(audienceLabel(aud))}</b>`);
+      else await renderBroadcastPreview(ctx, draft, { banner: `✅ Аудитория: <b>${escapeHtml(audienceLabel(aud))}</b>` });
       return;
     }
 
@@ -31804,16 +32072,17 @@ ${DEGRADED_COPY.line}
         return;
       }
       try {
+        const payload = buildBroadcastPayloadFromDraft(draft);
         const total = await db.countBroadcastAudience(draft.audience || 'all');
         const res = await db.createBroadcastIdempotent(
           {
             createdByUserId: u2.id,
             audience: draft.audience || 'all',
-            draftType: draft.type || 'text',
-            draftText: draft.text || null,
-            draftFileId: draft.fileId || null,
-            draftCaption: draft.caption || null,
-            buttonsJson: draft.buttons && draft.buttons.length ? JSON.stringify(draft.buttons) : null,
+            draftType: payload.draftType || 'text',
+            draftText: payload.draftText || null,
+            draftFileId: payload.draftFileId || null,
+            draftCaption: payload.draftCaption || null,
+            buttonsJson: payload.buttons && payload.buttons.length ? JSON.stringify(payload.buttons) : null,
             totalCount: total,
           },
           {
@@ -36771,25 +37040,240 @@ function audienceLabel(aud) {
   return map[String(aud || 'all').toLowerCase()] || 'Все';
 }
 
+function broadcastPresetUrl(key) {
+  const bot = String(CFG.BOT_USERNAME || '').replace(/^@/, '').trim();
+  const base = String(CFG.PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
+  const botLink = bot ? `https://t.me/${bot}` : '';
+  const offersLink = bot ? `https://t.me/${bot}?start=fs_offers_a` : '';
+  const creatorFeedLink = bot ? `https://t.me/${bot}?start=fs_offers_b` : '';
+  const map = {
+    bot: botLink,
+    app: base,
+    landing: base,
+    offers: offersLink,
+    catalog: offersLink,
+    feed: creatorFeedLink || offersLink,
+  };
+  return String(map[String(key || '').trim()] || '').trim();
+}
+
+function broadcastSimpleButtonPresets() {
+  return [
+    { key: 'bot', label: 'Open bot', url: broadcastPresetUrl('bot') },
+    { key: 'app', label: 'Open app', url: broadcastPresetUrl('app') },
+    { key: 'landing', label: 'Open landing', url: broadcastPresetUrl('landing') },
+    { key: 'offers', label: 'Open offers', url: broadcastPresetUrl('offers') },
+    { key: 'catalog', label: 'Open catalog', url: broadcastPresetUrl('catalog') },
+    { key: 'feed', label: 'Open feed', url: broadcastPresetUrl('feed') },
+  ].filter((x) => x.url);
+}
+
+function normalizeBroadcastButtonUrlInput(input) {
+  const s = String(input || '').trim();
+  if (!s) return '';
+  const botUn = String(CFG.BOT_USERNAME || '').replace(/^@/, '').trim();
+  if (/^(t\.me|telegram\.me)\//i.test(s)) return `https://${s}`;
+  if (/^https?:\/\//i.test(s)) return s;
+  const m = s.match(/^(gwj|gwc|gw|gwo|bp|offer|bxo|bxth|wsp)_(\d+)$/i);
+  if (m && botUn) {
+    const token = `${String(m[1]).toLowerCase()}_${Number(m[2])}`;
+    return `https://t.me/${botUn}?start=${token}`;
+  }
+  return '';
+}
+
+function buildBroadcastPayloadFromDraft(draft) {
+  const mode = String(draft?.mode || '').trim().toLowerCase();
+  if (mode === 'simple') {
+    const mediaType = String(draft?.mediaType || '').trim().toLowerCase();
+    const fileId = String(draft?.fileId || '').trim();
+    const text = String(draft?.text || '').trim();
+    const buttons = Array.isArray(draft?.buttons) ? draft.buttons.filter((b) => b && b.text && b.url).slice(0, 1) : [];
+    if (fileId && mediaType === 'photo') {
+      const caption = text && Array.from(text).length <= BROADCAST_CAPTION_SAFE_LIMIT ? text : null;
+      return {
+        mode: 'simple',
+        draftType: 'photo',
+        draftText: text || null,
+        draftFileId: fileId,
+        draftCaption: caption,
+        buttons,
+      };
+    }
+    return {
+      mode: 'simple',
+      draftType: 'text',
+      draftText: text || null,
+      draftFileId: null,
+      draftCaption: null,
+      buttons,
+    };
+  }
+  return {
+    mode: 'advanced',
+    draftType: draft?.type || 'text',
+    draftText: draft?.text || null,
+    draftFileId: draft?.fileId || null,
+    draftCaption: draft?.caption || null,
+    buttons: Array.isArray(draft?.buttons) ? draft.buttons.filter((b) => b && b.text && b.url).slice(0, 3) : [],
+  };
+}
+
+function broadcastDraftHasContent(draft) {
+  const p = buildBroadcastPayloadFromDraft(draft || {});
+  return !!(String(p.draftText || '').trim() || String(p.draftFileId || '').trim() || String(p.draftCaption || '').trim());
+}
+
+async function sendBroadcastPreviewToOperator(ctx, draft) {
+  const payload = buildBroadcastPayloadFromDraft(draft || {});
+  const plan = buildBroadcastDeliveryPlan(
+    {
+      draft_type: payload.draftType,
+      draft_text: payload.draftText,
+      draft_file_id: payload.draftFileId,
+      draft_caption: payload.draftCaption,
+      buttons: payload.buttons,
+    },
+    { maxButtons: payload.mode === 'simple' ? 1 : 3, captionSafeLimit: BROADCAST_CAPTION_SAFE_LIMIT }
+  );
+  for (const msg of plan.messages) {
+    const opts = {};
+    if (msg.reply_markup) opts.reply_markup = msg.reply_markup;
+    if (msg.kind === 'text') {
+      opts.parse_mode = 'HTML';
+      opts.disable_web_page_preview = true;
+      await ctx.api.sendMessage(ctx.chat.id, msg.text || '', opts);
+      continue;
+    }
+    if (msg.caption) {
+      opts.caption = msg.caption;
+      opts.parse_mode = 'HTML';
+    }
+    if (msg.kind === 'photo') await ctx.api.sendPhoto(ctx.chat.id, msg.file_id, opts);
+    else if (msg.kind === 'video') await ctx.api.sendVideo(ctx.chat.id, msg.file_id, opts);
+    else if (msg.kind === 'animation') await ctx.api.sendAnimation(ctx.chat.id, msg.file_id, opts);
+    else if (msg.kind === 'document') await ctx.api.sendDocument(ctx.chat.id, msg.file_id, opts);
+  }
+}
+
+async function renderBroadcastSimpleButtonPicker(ctx, draft, banner = '') {
+  const current = Array.isArray(draft?.buttons) && draft.buttons.length ? draft.buttons[0] : null;
+  let text = `🔗 <b>Кнопка</b>
+
+Simple mode поддерживает <b>1 URL-кнопку</b>.`;
+  if (banner) text += `
+
+${banner}`;
+  if (current) text += `
+
+Текущая:
+• <b>${escapeHtml(current.text)}</b>
+<code>${escapeHtml(current.url)}</code>`;
+  else text += `
+
+Сейчас кнопка не задана.`;
+  text += `
+
+Можно выбрать preset ниже или ввести свою строку:
+<code>Текст кнопки | https://...</code>`;
+
+  const kb = new InlineKeyboard();
+  const presets = broadcastSimpleButtonPresets();
+  for (let i = 0; i < presets.length; i += 2) {
+    const a = presets[i];
+    const b = presets[i + 1];
+    if (a) kb.text(`⚡ ${a.label}`, `a:bc_simple_btn_preset|k:${a.key}`);
+    if (b) kb.text(`⚡ ${b.label}`, `a:bc_simple_btn_preset|k:${b.key}`);
+    kb.row();
+  }
+  kb.text('✍️ Своя кнопка', 'a:bc_simple_btn_custom');
+  if (current) kb.text('🧹 Очистить кнопку', 'a:bc_simple_btn_clear');
+  kb.row();
+  kb.text('⬅️ К composer', 'a:bc_start').row();
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
+async function renderBroadcastSimpleComposer(ctx, banner = '') {
+  const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
+  if (String(draft.mode || '') !== 'simple') draft.mode = 'simple';
+  if (!draft.audience) draft.audience = 'all';
+  if (!Array.isArray(draft.buttons)) draft.buttons = [];
+  await setDraft(ctx.from.id, draft, 30 * 60);
+
+  const hasText = !!String(draft.text || '').trim();
+  const hasMedia = !!(String(draft.mediaType || '') === 'photo' && String(draft.fileId || '').trim());
+  const btn = draft.buttons[0] || null;
+  let recipients = '—';
+  try { recipients = String(await db.countBroadcastAudience(draft.audience || 'all')); } catch {}
+
+  let text = `📣 <b>Новая рассылка · Simple mode</b>
+
+`;
+  if (banner) text += `${banner}
+
+`;
+  text += `📝 Текст: <b>${hasText ? 'yes' : 'no'}</b>`;
+  if (hasText) text += ` · ${escapeHtml(clipText(String(draft.text || '').replace(/\s+/g, ' '), 90))}`;
+  text += `
+`;
+  text += `🖼 Картинка: <b>${hasMedia ? 'yes' : 'no'}</b>
+`;
+  text += `🔗 Кнопка: <b>${btn ? 'yes' : 'no'}</b>`;
+  if (btn) text += ` · ${escapeHtml(btn.text)}`;
+  text += `
+`;
+  text += `👥 Аудитория: <b>${escapeHtml(audienceLabel(draft.audience || 'all'))}</b> · ${escapeHtml(String(recipients))}
+`;
+  text += `
+Simple mode поддерживает:
+• только текст
+• только картинку
+• картинку + текст
+• 1 URL-кнопку
+• 👁 честный preview перед отправкой`;
+
+  const kb = new InlineKeyboard()
+    .text(hasText ? '📝 Изменить текст' : '📝 Добавить текст', 'a:bc_simple_text')
+    .text(hasMedia ? '🖼 Обновить картинку' : '🖼 Добавить картинку', 'a:bc_simple_media')
+    .row()
+    .text(btn ? '🔗 Изменить кнопку' : '🔗 Добавить кнопку', 'a:bc_simple_button')
+    .text('👥 Аудитория', 'a:bc_simple_audience')
+    .row()
+    .text('👁 Preview', 'a:bc_preview')
+    .text('✅ Send', 'a:bc_send_q')
+    .row()
+    .text('🧹 Clear draft', 'a:bc_simple_clear')
+    .text('⚙️ Advanced mode', 'a:bc_start_adv')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+}
+
 async function renderBroadcastAudiencePicker(ctx) {
   const draft = await getDraft(ctx.from.id);
-  if (!draft || !draft.type) {
+  if (!draft || !broadcastDraftHasContent(draft)) {
     await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
       reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
     });
     return;
   }
 
-  const btnsInfo = draft.buttons && draft.buttons.length ? `\n🔗 Кнопок: ${draft.buttons.length}` : '\n🔗 Кнопок: 0';
-  let text = `📣 <b>Выбери аудиторию</b>\n\n📝 Тип: <b>${escapeHtml(draft.type)}</b>${btnsInfo}\n`;
+  const payload = buildBroadcastPayloadFromDraft(draft);
+  const btnCount = Array.isArray(payload.buttons) ? payload.buttons.length : 0;
+  let text = `📣 <b>Выбери аудиторию</b>
 
-  // Show counts for each audience
+📝 Режим: <b>${payload.mode === 'simple' ? 'simple' : 'advanced'}</b>
+🧩 Тип доставки: <b>${escapeHtml(payload.draftType || 'text')}</b>
+🔗 Кнопок: <b>${btnCount}</b>
+`;
+
   try {
     const counts = {};
-    for (const a of ['all', 'creators', 'brands', 'curators', 'managers']) {
-      counts[a] = await db.countBroadcastAudience(a);
-    }
-    text += `\n👥 Все: ${counts.all} · Креаторы: ${counts.creators} · Бренды: ${counts.brands} · Кураторы: ${counts.curators} · Менеджеры: ${counts.managers}`;
+    for (const a of ['all', 'creators', 'brands', 'curators', 'managers']) counts[a] = await db.countBroadcastAudience(a);
+    text += `
+👥 Все: ${counts.all} · Креаторы: ${counts.creators} · Бренды: ${counts.brands} · Кураторы: ${counts.curators} · Менеджеры: ${counts.managers}`;
   } catch {}
 
   const kb = new InlineKeyboard()
@@ -36801,53 +37285,65 @@ async function renderBroadcastAudiencePicker(ctx) {
     .row()
     .text('🧑‍💼 Менеджеры', 'a:bc_audience|aud:managers')
     .row()
-    .text('⬅️ Отмена', 'a:bc_cancel');
+    .text('⬅️ К composer', payload.mode === 'simple' ? 'a:bc_start' : 'a:bc_btn_done')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
-async function renderBroadcastPreview(ctx, draft) {
-  if (!draft || !draft.type) {
+async function renderBroadcastPreview(ctx, draft, { banner = '' } = {}) {
+  if (!draft || !broadcastDraftHasContent(draft)) {
     await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
       reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
     });
     return;
   }
 
+  const payload = buildBroadcastPayloadFromDraft(draft);
   let count = 0;
   try { count = await db.countBroadcastAudience(draft.audience || 'all'); } catch {}
+  const plan = buildBroadcastDeliveryPlan({
+    draft_type: payload.draftType,
+    draft_text: payload.draftText,
+    draft_file_id: payload.draftFileId,
+    draft_caption: payload.draftCaption,
+    buttons: payload.buttons,
+  }, { maxButtons: payload.mode === 'simple' ? 1 : 3, captionSafeLimit: BROADCAST_CAPTION_SAFE_LIMIT });
 
-  // Build preview keyboard (URL buttons)
-  const previewKb = new InlineKeyboard();
-  if (draft.buttons && draft.buttons.length) {
-    for (const b of draft.buttons) {
-      if (b.text && b.url) previewKb.url(b.text, b.url).row();
-    }
+  const mediaYes = payload.draftType !== 'text' && !!payload.draftFileId;
+  const buttonYes = Array.isArray(payload.buttons) && payload.buttons.length > 0;
+  let previewMsg = `👁 <b>Broadcast preview</b>\n\n`;
+  if (banner) previewMsg += `${banner}\n\n`;
+  previewMsg += `📝 Режим: <b>${payload.mode}</b>\n`;
+  previewMsg += `🖼 Media: <b>${mediaYes ? 'yes' : 'no'}</b>\n`;
+  previewMsg += `🔗 Button: <b>${buttonYes ? 'yes' : 'no'}</b>\n`;
+  previewMsg += `🧠 Routing: <b>${plan.splitLongText ? 'photo + text split' : (mediaYes ? 'single media message' : 'text message')}</b>\n`;
+  previewMsg += `👥 Аудитория: <b>${audienceLabel(draft.audience || 'all')}</b>\n`;
+  previewMsg += `📬 Получателей: <b>~${count}</b>`;
+
+  const bodyPreview = String(payload.draftText || payload.draftCaption || '').replace(/\s+/g, ' ').trim();
+  if (bodyPreview) previewMsg += `\n\n📄 Контент:\n${escapeHtml(clipText(bodyPreview, 220))}`;
+  if (buttonYes) {
+    const lines = payload.buttons.map((b) => `${b.text} → ${b.url}`).join('\n');
+    previewMsg += `\n\n🔗 Кнопки:\n<code>${escapeHtml(lines)}</code>`;
   }
+  previewMsg += `\n\nPreview отправляется отдельным сообщением в этот чат. Send создаёт реальную рассылку в outbox/queue.`;
 
-  // Show the preview message first
-  const contentText = draft.type === 'text'
-    ? (draft.text || '(пусто)')
-    : (draft.caption || '(без подписи)');
-
-  let previewMsg = `👁 <b>PREVIEW</b>\n\n${contentText}`;
-  if (draft.buttons && draft.buttons.length) {
-    previewMsg += `\n\n🔗 Кнопки:\n`;
-    for (const b of draft.buttons) {
-      previewMsg += `• <a href="${escapeHtml(b.url)}">${escapeHtml(b.text)}</a>\n`;
-    }
-  }
-
-  // Show confirmation info
-  previewMsg += `\n\n———\n📣 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>~${count}</b>\n\n⚠️ Подтверди отправку:`;
-
-  const confirmKb = new InlineKeyboard()
-    .text('✅ Отправить', 'a:bc_confirm')
-    .text('❌ Отмена', 'a:bc_cancel')
+  const kb = new InlineKeyboard()
+    .text('👁 Preview', 'a:bc_preview')
+    .text('✅ Send', 'a:bc_confirm')
     .row()
-    .text('🔄 Сменить аудиторию', 'a:bc_btn_done');
+    .text('🧹 Clear draft', payload.mode === 'simple' ? 'a:bc_simple_clear' : 'a:bc_cancel')
+    .text('👥 Аудитория', 'a:bc_simple_audience')
+    .row()
+    .text('⬅️ К composer', payload.mode === 'simple' ? 'a:bc_start' : 'a:bc_btn_done')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
 
-  await safeEditOrReply(ctx, previewMsg, { parse_mode: 'HTML', reply_markup: confirmKb });
+  await safeEditOrReply(ctx, previewMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
 async function renderBroadcastList(ctx, page = 0) {
@@ -36914,11 +37410,23 @@ async function renderBroadcastView(ctx, broadcastId) {
   const filled = Math.round(pct / 10);
   const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
 
-  let text = `${icon} <b>Рассылка #${bc.id}</b>\n\n`;
-  text += `<b>Статус:</b> ${bc.status}\n`;
-  text += `<b>Аудитория:</b> ${audienceLabel(bc.audience)}\n`;
-  text += `<b>Тип:</b> ${bc.draft_type || '—'}\n`;
-  text += `<b>Создана:</b> ${msk(bc.created_at)}\n`;
+  let btns = [];
+  try { btns = bc.buttons_json ? JSON.parse(bc.buttons_json) : []; } catch { btns = []; }
+  let text = `${icon} <b>Рассылка #${bc.id}</b>
+
+`;
+  text += `<b>Статус:</b> ${bc.status}
+`;
+  text += `<b>Аудитория:</b> ${audienceLabel(bc.audience)}
+`;
+  text += `<b>Тип:</b> ${bc.draft_type || '—'}
+`;
+  text += `<b>Media:</b> ${bc.draft_type && bc.draft_type !== 'text' ? 'yes' : 'no'}
+`;
+  text += `<b>Button:</b> ${Array.isArray(btns) && btns.length ? 'yes' : 'no'}
+`;
+  text += `<b>Создана:</b> ${msk(bc.created_at)}
+`;
   if (bc.started_at) text += `<b>Запущена:</b> ${msk(bc.started_at)}\n`;
   if (bc.finished_at) text += `<b>Завершена:</b> ${msk(bc.finished_at)}\n`;
   text += `\n<b>Прогресс:</b> [${bar}] ${pct}%\n`;

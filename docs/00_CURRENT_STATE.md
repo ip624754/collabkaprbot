@@ -1,4 +1,4 @@
-**STEP553:** QStash broadcast flow-control key hotfix — fixed a narrow QStash enqueue failure in `src/lib/qstash.js` for broadcast fan-out. `getBroadcastFlowControl(broadcastId)` no longer emits `broadcast:${id}` (colon), which QStash rejects for `flowControl.key`; it now emits the same readable key in a QStash-safe format `broadcast.${id}`. Scope stays intentionally tiny: no payload changes, no recipient logic changes, no dedup redesign, no QStash schedule changes, and no broadcast/admin UX changes. Live verification still required by rerunning a real broadcast and confirming that `qstash_publish_failed` with `flowControlKey must be alphanumeric, hyphen, underscore, or period` no longer appears.
+**STEP554:** Broadcast simple composer + honest preview — default admin broadcast path is now a clean Simple mode on top of the existing power/infra layer. Operators can compose text-only, image-only, or image + text broadcasts, optionally attach 1 URL button in Simple mode, run a real self-preview before send, and use shared smart routing (`sendMessage`, `sendPhoto` with caption, or photo + text split) that also powers runtime delivery. Advanced mode remains available as the secondary path and keeps up to 3 URL buttons. Existing queue / retry / QStash / outbox truth stays in place; no migration or broadcast-engine rewrite was introduced.
 
 **STEP551:** invite rewards live — collapsed the planned STEP550 / STEP550.1 / STEP551 path into one narrow runtime rollout on top of the existing invite layer. `src/db/queries.js` now adds a real `invite_reward_ledger`, lazy pending→confirmed processing, anti-abuse guards (`raw_open=0`, `existing/self=0`, one join reward max once, one activation reward max once), balance buckets (`Available / Pending / Redeemed`), and redeem helpers for `7d Pro / 30d Pro`. `src/bot/bot.js` upgrades the invite surface with `Collabka points`, pending/redeemed readouts, reward CTAs and confirm flow, plus a short balance line in creator/brand profile surfaces; `src/bot/actionRegistry.js` adds redeem callbacks; `migrations/046_invite_reward_ledger.sql` introduces the ledger schema. Scope stayed intentionally narrow: no cashout, no token rewards, no multi-level referral, no broad gamification. Live verification still required for migration `046_invite_reward_ledger.sql`, invite redeem flow, and role-specific Pro application target.
 
@@ -2372,6 +2372,97 @@ For broadcast-related work:
 - use `108_BROADCAST_BUILD_ORDER_REUSABLE_RU` when rebuilding the same layer in another bot/project
 - treat `docs/examples/broadcast/*` as reference examples, not live runtime source of truth
 
+## 0.10) Broadcast simple composer + honest preview (STEP554)
+
+### Status
+- Type: narrow runtime/product step
+- Code changes: yes
+- Runtime changes: yes
+- Migrations: none
+- Confidence: source-confirmed; live operator smoke still required
+
+### What changed
+Broadcasts now have a dual-mode compose contract:
+- **Simple mode** is the default path for `📣 Новая рассылка`
+- **Advanced mode** remains available as a secondary power path
+
+Simple mode supports:
+- text only
+- image only
+- image + text
+- optional **1 URL button**
+- explicit `👁 Preview`
+- send through the existing outbox/queue layer
+
+Advanced mode is preserved and capped at **up to 3 URL buttons** in the shared delivery plan.
+
+### Honest preview contract
+`👁 Preview` now sends a **real self-preview** to the operator chat instead of relying only on text description inside the composer screen.
+
+Preview uses the same routing contract as real delivery, but does **not** enqueue recipients and does **not** create a broadcast row.
+
+### Smart routing contract
+A shared delivery-plan helper is now used both by preview and real delivery:
+- text only → `sendMessage`
+- image only → `sendPhoto`
+- image + short text → `sendPhoto` with caption
+- image + long text → `sendPhoto` first, then separate text message
+- button present → attach inline keyboard to the message/split leg that should carry the CTA
+
+Simple mode uses a caption-safe threshold instead of pushing captions to the hard Telegram limit.
+
+### Draft / button contract
+Simple mode keeps a visible draft with separate operator inputs for:
+- text
+- media
+- button
+- audience
+- preview
+- send
+- clear draft
+
+Simple mode allows **1 URL button**.
+Advanced mode allows **up to 3 URL buttons**.
+
+Button presets/shortcuts were added for reuse-first operator flow:
+- Open bot
+- Open app
+- Open landing
+- Open profile
+- Open plans
+- Open catalog
+- Open offers
+- Open feed
+
+### Outbox truth polish
+Broadcast view now explicitly shows:
+- draft type
+- media: yes/no
+- button: yes/no
+- recipients / sent / failed / pending
+- created / started / finished timestamps
+
+This is an outbox/read-surface improvement only; queue/retry/runtime semantics remain the same.
+
+### Scope boundary
+This STEP does **not** change:
+- QStash fan-out architecture
+- queue/retry engine
+- outbox schema
+- broadcast recipient truth
+- album support
+- unlimited buttons
+- broad admin redesign
+
+### Live verification still required
+After deploy, operator smoke should cover at least:
+- text-only broadcast
+- image-only broadcast
+- image + short caption
+- image + long text split
+- simple mode with 1 button
+- advanced mode with existing power path still intact
+
 ## 0.09) QStash broadcast flow-control key hotfix (STEP553)
 
 ### Status
@@ -2412,4 +2503,3 @@ After deploy, rerun a real admin broadcast and confirm:
 - no new `qstash_publish_failed` for invalid `flowControlKey`
 - broadcast fan-out starts queueing normally
 - broadcast delivery progresses without this QStash validation error
-

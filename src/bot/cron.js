@@ -26,6 +26,7 @@ import {
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
 import { tgTimeoutSignal, TG_HTTP_MEDIA_TIMEOUT_MS } from '../lib/tgApi.js';
 import { flushOpsAlerts, queueOpsAlert } from './opsAlerts.js';
+import { buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
 import {
   notifyGiveawayEnded,
   notifyGiveawayWinnersReady,
@@ -1312,65 +1313,38 @@ export function extractRetryAfterSec(err) {
 }
 
 export async function sendBroadcastMessage(api, tgId, bc) {
-  const type = String(bc.draft_type || 'text');
+  const plan = buildBroadcastDeliveryPlan(bc, { maxButtons: 3, captionSafeLimit: 900 });
 
-  let btns = [];
-  try {
-    btns = bc.buttons_json ? JSON.parse(bc.buttons_json) : [];
-  } catch {
-    btns = [];
-  }
+  for (const msg of plan.messages) {
+    const opts = {};
+    if (msg.reply_markup) opts.reply_markup = msg.reply_markup;
 
-  // Build inline keyboard from URL buttons
-  let replyMarkup;
-  if (btns.length) {
-    const flat = btns
-      .filter((b) => b && b.text && b.url)
-      .slice(0, 3)
-      .map((b) => ({ text: String(b.text).slice(0, 64), url: String(b.url).slice(0, 2048) }));
-
-    const rows = [];
-    for (let i = 0; i < flat.length; i += 2) {
-      rows.push(flat.slice(i, i + 2));
-      if (rows.length >= 2) break;
+    if (msg.kind === 'text') {
+      opts.parse_mode = 'HTML';
+      await api.sendMessage(Number(tgId), msg.text || '', opts, tgTimeoutSignal());
+      continue;
     }
 
-    if (rows.length) replyMarkup = { inline_keyboard: rows };
-  }
+    if (msg.caption) {
+      opts.caption = msg.caption;
+      opts.parse_mode = 'HTML';
+    }
 
-  const opts = {};
-  if (replyMarkup) opts.reply_markup = replyMarkup;
-
-  if (type === 'text') {
-    opts.parse_mode = 'HTML';
-    await api.sendMessage(Number(tgId), bc.draft_text || '', opts, tgTimeoutSignal());
-    return;
-  }
-
-  if (bc.draft_caption) {
-    opts.caption = bc.draft_caption;
-    opts.parse_mode = 'HTML';
-  }
-
-  if (type === 'photo') {
-    await api.sendPhoto(Number(tgId), bc.draft_file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
-  } else if (type === 'video') {
-    await api.sendVideo(Number(tgId), bc.draft_file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
-  } else if (type === 'animation') {
-    await api.sendAnimation(Number(tgId), bc.draft_file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
-  } else if (type === 'document') {
-    await api.sendDocument(Number(tgId), bc.draft_file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
-  } else {
-    // Fallback: text
-    opts.parse_mode = 'HTML';
-    await api.sendMessage(
-      Number(tgId),
-      bc.draft_text || bc.draft_caption || '(empty)',
-      opts,
-      tgTimeoutSignal()
-    );
+    if (msg.kind === 'photo') {
+      await api.sendPhoto(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
+    } else if (msg.kind === 'video') {
+      await api.sendVideo(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
+    } else if (msg.kind === 'animation') {
+      await api.sendAnimation(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
+    } else if (msg.kind === 'document') {
+      await api.sendDocument(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
+    } else {
+      opts.parse_mode = 'HTML';
+      await api.sendMessage(Number(tgId), bc.draft_text || bc.draft_caption || '(empty)', opts, tgTimeoutSignal());
+    }
   }
 }
+
 
 
 export async function igVerifyTick() {
