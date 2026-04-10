@@ -1,3 +1,5 @@
+**STEP551:** invite rewards live — collapsed the planned STEP550 / STEP550.1 / STEP551 path into one narrow runtime rollout on top of the existing invite layer. `src/db/queries.js` now adds a real `invite_reward_ledger`, lazy pending→confirmed processing, anti-abuse guards (`raw_open=0`, `existing/self=0`, one join reward max once, one activation reward max once), balance buckets (`Available / Pending / Redeemed`), and redeem helpers for `7d Pro / 30d Pro`. `src/bot/bot.js` upgrades the invite surface with `Collabka points`, pending/redeemed readouts, reward CTAs and confirm flow, plus a short balance line in creator/brand profile surfaces; `src/bot/actionRegistry.js` adds redeem callbacks; `migrations/046_invite_reward_ledger.sql` introduces the ledger schema. Scope stayed intentionally narrow: no cashout, no token rewards, no multi-level referral, no broad gamification. Live verification still required for migration `046_invite_reward_ledger.sql`, invite redeem flow, and role-specific Pro application target.
+
 **STEP548:** invite contacts / personal invite layer — upgraded the old generic `a:share` surface into a Telegram-native invite layer adapted from the Intro Deck canon without broad router or admin redesign. Users now get a dedicated invite screen with 3 ready text variants, primary inline `Share invite`, fallback `Show link`, fallback `Get invite card`, personal deep-links (`ii_ / il_ / ic_`), attribution on first eligible `/start`, counters `Invited / Activated`, and a recent invited list. `src/db/queries.js` now contains the invite storage/helpers and degrades honestly when the new `member_invites` migration is missing; `src/bot/helpers.js` recognizes invite start payloads; `src/bot/bot.js` adds `/invite`, inline-query share handling, upgraded `a:share`, and card/link callbacks; `INVITE_PHOTO_FILE_ID` is supported for cached-photo production sharing with public asset fallback. Scope stays intentionally narrow: no reward mechanics, no admin/web redesign, no monetization rewrite, and no bot-only truth fork. Live verification still required for BotFather inline mode plus migration `045_member_invites.sql`.
 
 **STEP545T:** baseline freeze + docs/handoff sync — froze the baseline after live confirmation that `System` and `Overview` now agree on runtime truth: `System = OK`, `Overview = OK`, `Runtime warnings = 0`, and the old retry breadcrumb is downgraded to historical info instead of an active degraded incident. This step is docs-only: it does not change bot/runtime/admin logic, QStash, DB, or mobile layout. It synchronizes the docs canon (`00_CURRENT_STATE`, `00_BOOT`, `15_NEW_CHAT_HANDOFF`, work history) so a new chat or handoff starts from the real current baseline instead of the old STEP535V-era context. Current operational reading: bot-layer hardening wave STEP536–542 is landed, web-admin mobile + runtime truth wave STEP543A–545 is landed, and the remaining expectation is ordinary live observation rather than an open known defect.
@@ -2236,6 +2238,82 @@ The following rules are part of the frozen contract:
   - `confirmed`
   - `rejected`
   - `redeemed`
+
+
+## 0.07) Collabka invite rewards runtime (STEP551)
+
+### Status
+- Type: runtime + docs
+- Code changes: yes
+- Runtime changes: yes
+- Migrations: `046_invite_reward_ledger.sql`
+- Confidence: source-confirmed; live verification still required
+
+### What is live now
+Collabka invite rewards are now implemented on top of the existing invite layer.
+
+The runtime now supports:
+- pending invite rewards ledger
+- lazy pending → confirmed progression
+- available balance unlock
+- balance readouts in Invite + Profile
+- reward redemption into narrow Pro perks
+
+### Event → points runtime contract
+- `raw_open` → `0`
+- `existing_user_hit` → `0`
+- `self_invite` → `0`
+- `invite_join` → `+2` pending, confirm after 24h
+- `invite_activation` → `+10` pending, confirm after 48h
+
+### Activation meaning
+Current runtime activation stays aligned with the frozen contract:
+- completed brand profile (basic 4 fields), or
+- completed creator profile (title, contact, verticals, formats, portfolio, about)
+
+### Balance model
+Runtime balance now uses:
+- `Available points`
+- `Pending points`
+- `Redeemed points`
+
+Invite screen now shows:
+- `Invited`
+- `Activated`
+- `Collabka points`
+- `Pending`
+- `Redeemed`
+- `Next reward` / reward-ready state
+
+Profile surfaces now show a short balance line.
+
+### Redeem catalog now live
+- `100 points → 7 days Pro`
+- `250 points → 30 days Pro`
+
+### Current redeem target rule
+To keep the scope narrow and production-safe:
+- if the user has a brand profile → redeem applies to brand plan Pro
+- otherwise, if the user owns a workspace → redeem applies to workspace Pro on the primary owned workspace
+- otherwise fallback stays brand-plan Pro
+
+### Anti-abuse rules in runtime
+- no reward for raw open
+- no reward for self-invite
+- no reward for existing user
+- one join reward per invited user max once
+- one activation reward per invited user max once
+- pending points are not spendable
+- redeem is guarded by a DB advisory xact lock
+
+### Scope intentionally not added
+Still out of scope:
+- cashout
+- token rewards
+- money rewards
+- leaderboards
+- multi-level referral
+- broad campaign/gamification layer
 
 ### Practical baseline decision
 Current decision for Collabka:

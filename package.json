@@ -142,7 +142,8 @@
     "smoke:admin-web-users-mobile-contract": "node scripts/smoke-admin-web-users-mobile-contract.js",
     "smoke:admin-web-mobile-consistency-contract": "node scripts/smoke-admin-web-mobile-consistency-contract.js"
     ,
-    "smoke:invite-layer": "node scripts/smoke-invite-layer-contract.js"
+    "smoke:invite-layer": "node scripts/smoke-invite-layer-contract.js",
+    "smoke:invite-rewards": "node scripts/smoke-invite-rewards-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

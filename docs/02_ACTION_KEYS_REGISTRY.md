@@ -502,6 +502,8 @@
 | `a:share` | edit | require_redis |
 | `a:share_link` | edit | none |
 | `a:share_card` | edit | none |
+| `a:share_redeem` | ops | none |
+| `a:share_redeem_do` | ops | db_truth |
 | `a:support` | ops | none |
 | `a:support_push` | ops | none |
 | `a:support_write` | ops | require_redis |

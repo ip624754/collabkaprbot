@@ -7644,6 +7644,485 @@ function inviteMissingSchemaError(error) {
   return code === '42P01' || code === '42703';
 }
 
+function inviteRewardsMissingSchemaError(error) {
+  const code = String(error?.code || '');
+  return code === '42P01' || code === '42703';
+}
+
+function safeInviteJsonObject(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(String(raw));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function hasInviteValue(v) {
+  return v !== null && v !== undefined && String(v).trim().length > 0 && String(v).trim() !== '—';
+}
+
+function inviteStructuredContactsCount(obj) {
+  const o = obj && typeof obj === 'object' ? obj : {};
+  return ['tg', 'email', 'phone', 'site']
+    .map((key) => o[key])
+    .filter((value) => {
+      if (value == null) return false;
+      if (typeof value === 'string') return value.trim().length > 0;
+      if (Array.isArray(value)) return value.map((x) => String(x || '').trim()).filter(Boolean).length > 0;
+      if (typeof value === 'object') {
+        return Object.values(value).map((x) => String(x || '').trim()).filter(Boolean).length > 0;
+      }
+      return String(value).trim().length > 0;
+    }).length;
+}
+
+function inviteArrayCount(v) {
+  if (!Array.isArray(v)) return 0;
+  return v.map((x) => String(x || '').trim()).filter(Boolean).length;
+}
+
+function isBrandProfileActivationComplete(profile) {
+  if (!profile) return false;
+  const meta = safeInviteJsonObject(profile.meta);
+  const nicheDone = !!String(meta?.niche_key || '').trim() || !!String(profile.niche || '').trim();
+  return !!(
+    String(profile.brand_name || '').trim() &&
+    nicheDone &&
+    String(profile.contact || '').trim() &&
+    String(profile.brand_link || '').trim()
+  );
+}
+
+function isWorkspaceProfileActivationComplete(ws) {
+  if (!ws) return false;
+  const contactsObj = safeInviteJsonObject(ws.profile_contacts);
+  const contactOk = inviteStructuredContactsCount(contactsObj) > 0 || hasInviteValue(ws.profile_contact);
+  return !!(
+    hasInviteValue(ws.profile_title) &&
+    contactOk &&
+    inviteArrayCount(ws.profile_verticals) > 0 &&
+    inviteArrayCount(ws.profile_formats) > 0 &&
+    inviteArrayCount(ws.profile_portfolio_urls) > 0 &&
+    hasInviteValue(ws.profile_about)
+  );
+}
+
+const INVITE_REWARD_CATALOG = {
+  pro7: { key: 'pro7', rewardType: 'pro_7d', costPoints: 100, days: 7, label: '7 days Pro' },
+  pro30: { key: 'pro30', rewardType: 'pro_30d', costPoints: 250, days: 30, label: '30 days Pro' },
+};
+
+function inviteRewardCatalogEntry(rewardKey) {
+  return INVITE_REWARD_CATALOG[String(rewardKey || '').trim().toLowerCase()] || null;
+}
+
+function inviteRewardsBaseSummary() {
+  return {
+    enabled: false,
+    availablePoints: 0,
+    pendingPoints: 0,
+    redeemedPoints: 0,
+    earnedConfirmedPoints: 0,
+    canRedeemPro7: false,
+    canRedeemPro30: false,
+    nextRewardKey: 'pro7',
+    nextRewardCost: 100,
+    nextRewardLabel: '7 days Pro',
+    pointsToNextReward: 100,
+  };
+}
+
+async function insertInviteEarnRewardIfMissing(client, row, rewardType, points, confirmAfter) {
+  if (!row?.referrer_user_id || !row?.invited_user_id) return null;
+  try {
+    const result = await client.query(
+      `insert into invite_reward_ledger (
+         referrer_user_id,
+         invited_user_id,
+         invite_id,
+         invite_code,
+         entry_kind,
+         reward_type,
+         points,
+         status,
+         confirm_after,
+         meta,
+         updated_at
+       )
+       values ($1, $2, $3, $4, 'earn', $5, $6, 'pending', $7, '{}'::jsonb, now())
+       on conflict do nothing
+       returning id`,
+      [
+        Number(row.referrer_user_id),
+        Number(row.invited_user_id),
+        row.id ? Number(row.id) : null,
+        row.invite_code ? String(row.invite_code) : null,
+        String(rewardType),
+        Number(points),
+        confirmAfter ? new Date(confirmAfter) : null,
+      ]
+    );
+    return result.rows[0] || null;
+  } catch (error) {
+    if (inviteRewardsMissingSchemaError(error)) return null;
+    throw error;
+  }
+}
+
+async function backfillInviteJoinRewards(client, referrerUserId, limit = 200) {
+  const uid = Number(referrerUserId || 0);
+  if (!uid) return 0;
+  const rowsResult = await client.query(
+    `select inv.id, inv.referrer_user_id, inv.invited_user_id, inv.invite_code, inv.joined_at
+       from member_invites inv
+       left join invite_reward_ledger l
+         on l.referrer_user_id = inv.referrer_user_id
+        and l.invited_user_id = inv.invited_user_id
+        and l.entry_kind = 'earn'
+        and l.reward_type = 'invite_join'
+      where inv.referrer_user_id = $1
+        and l.id is null
+      order by inv.joined_at asc
+      limit $2`,
+    [uid, Number(limit || 200)]
+  );
+  let created = 0;
+  for (const row of rowsResult.rows || []) {
+    const joinedAt = row.joined_at ? new Date(row.joined_at) : new Date();
+    const confirmAfter = new Date(joinedAt.getTime() + 24 * 60 * 60 * 1000);
+    const inserted = await insertInviteEarnRewardIfMissing(client, row, 'invite_join', 2, confirmAfter);
+    if (inserted?.id) created += 1;
+  }
+  return created;
+}
+
+async function backfillInviteActivationRewards(client, referrerUserId, limit = 200) {
+  const uid = Number(referrerUserId || 0);
+  if (!uid) return 0;
+  const rowsResult = await client.query(
+    `select inv.id, inv.referrer_user_id, inv.invited_user_id, inv.invite_code, inv.activated_at
+       from member_invites inv
+       left join invite_reward_ledger l
+         on l.referrer_user_id = inv.referrer_user_id
+        and l.invited_user_id = inv.invited_user_id
+        and l.entry_kind = 'earn'
+        and l.reward_type = 'invite_activation'
+      where inv.referrer_user_id = $1
+        and inv.activated_at is not null
+        and l.id is null
+      order by inv.activated_at asc
+      limit $2`,
+    [uid, Number(limit || 200)]
+  );
+  let created = 0;
+  for (const row of rowsResult.rows || []) {
+    const activatedAt = row.activated_at ? new Date(row.activated_at) : new Date();
+    const confirmAfter = new Date(activatedAt.getTime() + 48 * 60 * 60 * 1000);
+    const inserted = await insertInviteEarnRewardIfMissing(client, row, 'invite_activation', 10, confirmAfter);
+    if (inserted?.id) created += 1;
+  }
+  return created;
+}
+
+async function markInviteActivatedIfEligible(invitedUserId) {
+  const uid = Number(invitedUserId || 0);
+  if (!uid) return { activated: false, invite: null };
+  const attribution = await getInviteAttributionByInvitedUserId(uid);
+  if (!attribution?.inviteId) return { activated: false, invite: null };
+
+  let activationComplete = false;
+  try {
+    const brandProfile = await getBrandProfile(uid);
+    if (isBrandProfileActivationComplete(brandProfile)) activationComplete = true;
+  } catch (error) {
+    if (!inviteMissingSchemaError(error)) throw error;
+  }
+  if (!activationComplete) {
+    const workspaces = await listWorkspaces(uid).catch(() => []);
+    activationComplete = Array.isArray(workspaces) && workspaces.some((ws) => isWorkspaceProfileActivationComplete(ws));
+  }
+  if (!activationComplete) return { activated: false, invite: attribution };
+
+  const updateResult = await pool.query(
+    `update member_invites
+        set activated_at = coalesce(activated_at, now()),
+            updated_at = now()
+      where invited_user_id = $1
+      returning id, referrer_user_id, invited_user_id, invite_code, joined_at, activated_at`,
+    [uid]
+  );
+  const row = updateResult.rows[0] || null;
+  return {
+    activated: !!row?.activated_at,
+    invite: row || {
+      id: attribution.inviteId,
+      referrer_user_id: attribution.referrerUserId,
+      invited_user_id: attribution.invitedUserId,
+      invite_code: attribution.inviteCode,
+      activated_at: attribution.activatedAt,
+      joined_at: attribution.joinedAt,
+    },
+  };
+}
+
+export async function processInviteRewardsForInvitee(invitedUserId) {
+  const uid = Number(invitedUserId || 0);
+  if (!uid) return { ok: false, enabled: false, processed: 0 };
+  try {
+    const activation = await markInviteActivatedIfEligible(uid);
+    if (activation?.invite?.referrer_user_id) {
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+        await backfillInviteJoinRewards(client, activation.invite.referrer_user_id, 50);
+        await backfillInviteActivationRewards(client, activation.invite.referrer_user_id, 50);
+        await client.query('commit');
+      } catch (error) {
+        try { await client.query('rollback'); } catch {}
+        if (!inviteRewardsMissingSchemaError(error)) throw error;
+      } finally {
+        client.release();
+      }
+    }
+    return { ok: true, enabled: true, processed: activation?.activated ? 1 : 0 };
+  } catch (error) {
+    if (inviteRewardsMissingSchemaError(error)) return { ok: false, enabled: false, processed: 0 };
+    throw error;
+  }
+}
+
+export async function processInviteRewardsForReferrer(referrerUserId, options = {}) {
+  const uid = Number(referrerUserId || 0);
+  const scanLimit = Math.max(1, Math.min(500, Number(options.limit || 200) || 200));
+  if (!uid) return { ok: false, enabled: false, processed: 0 };
+
+  try {
+    const pendingActivationResult = await pool.query(
+      `select invited_user_id
+         from member_invites
+        where referrer_user_id = $1
+          and activated_at is null
+        order by joined_at asc
+        limit $2`,
+      [uid, scanLimit]
+    );
+    for (const row of pendingActivationResult.rows || []) {
+      try { await markInviteActivatedIfEligible(row.invited_user_id); } catch {}
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const createdJoin = await backfillInviteJoinRewards(client, uid, scanLimit);
+      const createdActivation = await backfillInviteActivationRewards(client, uid, scanLimit);
+      const confirmResult = await client.query(
+        `update invite_reward_ledger
+            set status = 'confirmed',
+                confirmed_at = now(),
+                updated_at = now()
+          where referrer_user_id = $1
+            and entry_kind = 'earn'
+            and status = 'pending'
+            and confirm_after is not null
+            and confirm_after <= now()
+          returning id`,
+        [uid]
+      );
+      await client.query('commit');
+      return {
+        ok: true,
+        enabled: true,
+        processed: createdJoin + createdActivation + Number(confirmResult.rowCount || 0),
+      };
+    } catch (error) {
+      try { await client.query('rollback'); } catch {}
+      if (inviteRewardsMissingSchemaError(error)) return { ok: false, enabled: false, processed: 0 };
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    if (inviteRewardsMissingSchemaError(error)) return { ok: false, enabled: false, processed: 0 };
+    throw error;
+  }
+}
+
+export async function getInviteRewardsSummary(referrerUserId) {
+  const uid = Number(referrerUserId || 0);
+  const base = inviteRewardsBaseSummary();
+  if (!uid) return base;
+  try {
+    const result = await pool.query(
+      `select
+         coalesce(sum(points) filter (where entry_kind = 'earn' and status = 'confirmed'), 0)::int as earned_confirmed_points,
+         coalesce(sum(points) filter (where entry_kind = 'earn' and status = 'pending'), 0)::int as pending_points,
+         coalesce(sum(points) filter (where entry_kind = 'redeem' and status = 'redeemed'), 0)::int as redeemed_points
+       from invite_reward_ledger
+      where referrer_user_id = $1`,
+      [uid]
+    );
+    const row = result.rows[0] || {};
+    const earnedConfirmedPoints = Number(row.earned_confirmed_points || 0);
+    const pendingPoints = Number(row.pending_points || 0);
+    const redeemedPoints = Number(row.redeemed_points || 0);
+    const availablePoints = Math.max(0, earnedConfirmedPoints - redeemedPoints);
+
+    let nextReward = INVITE_REWARD_CATALOG.pro7;
+    let pointsToNextReward = Math.max(0, nextReward.costPoints - availablePoints);
+    if (availablePoints >= INVITE_REWARD_CATALOG.pro7.costPoints) {
+      nextReward = INVITE_REWARD_CATALOG.pro30;
+      pointsToNextReward = Math.max(0, nextReward.costPoints - availablePoints);
+    }
+
+    return {
+      enabled: true,
+      availablePoints,
+      pendingPoints,
+      redeemedPoints,
+      earnedConfirmedPoints,
+      canRedeemPro7: availablePoints >= INVITE_REWARD_CATALOG.pro7.costPoints,
+      canRedeemPro30: availablePoints >= INVITE_REWARD_CATALOG.pro30.costPoints,
+      nextRewardKey: nextReward.key,
+      nextRewardCost: nextReward.costPoints,
+      nextRewardLabel: nextReward.label,
+      pointsToNextReward,
+    };
+  } catch (error) {
+    if (inviteRewardsMissingSchemaError(error)) return base;
+    throw error;
+  }
+}
+
+async function resolveInviteRewardRedeemTarget(client, userId) {
+  const uid = Number(userId || 0);
+  if (!uid) return { kind: 'brand_plan' };
+  const userResult = await client.query(
+    `select exists (select 1 from brand_profiles bp where bp.user_id = $1) as has_brand_profile`,
+    [uid]
+  );
+  if (userResult.rows[0]?.has_brand_profile) return { kind: 'brand_plan' };
+
+  const workspaceResult = await client.query(
+    `select id
+       from workspaces
+      where owner_user_id = $1
+      order by created_at desc
+      limit 1`,
+    [uid]
+  );
+  if (workspaceResult.rows[0]?.id) return { kind: 'workspace_pro', workspaceId: Number(workspaceResult.rows[0].id) };
+  return { kind: 'brand_plan' };
+}
+
+export async function redeemInviteReward(referrerUserId, rewardKey) {
+  const uid = Number(referrerUserId || 0);
+  const reward = inviteRewardCatalogEntry(rewardKey);
+  if (!uid || !reward) return { ok: false, reason: 'invalid_reward' };
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const lockResult = await client.query(`select pg_try_advisory_xact_lock(hashtext($1)) as ok`, [`invite_reward_redeem:${uid}`]);
+    if (!lockResult.rows[0]?.ok) {
+      await client.query('rollback');
+      return { ok: false, reason: 'redeem_busy' };
+    }
+
+    await client.query(
+      `update invite_reward_ledger
+          set status = 'confirmed',
+              confirmed_at = now(),
+              updated_at = now()
+        where referrer_user_id = $1
+          and entry_kind = 'earn'
+          and status = 'pending'
+          and confirm_after is not null
+          and confirm_after <= now()`,
+      [uid]
+    );
+
+    const balanceResult = await client.query(
+      `select
+         coalesce(sum(points) filter (where entry_kind = 'earn' and status = 'confirmed'), 0)::int as earned_confirmed_points,
+         coalesce(sum(points) filter (where entry_kind = 'redeem' and status = 'redeemed'), 0)::int as redeemed_points
+       from invite_reward_ledger
+      where referrer_user_id = $1`,
+      [uid]
+    );
+    const row = balanceResult.rows[0] || {};
+    const availablePoints = Math.max(0, Number(row.earned_confirmed_points || 0) - Number(row.redeemed_points || 0));
+    if (availablePoints < reward.costPoints) {
+      await client.query('rollback');
+      return { ok: false, reason: 'insufficient_points', availablePoints, requiredPoints: reward.costPoints };
+    }
+
+    const target = await resolveInviteRewardRedeemTarget(client, uid);
+    let activatedUntil = null;
+    if (target.kind === 'workspace_pro' && Number(target.workspaceId || 0)) {
+      const wsResult = await client.query(
+        `insert into workspace_settings (workspace_id, plan, pro_until, updated_at)
+         values ($1, 'pro', now() + ($2::int || ' days')::interval, now())
+         on conflict (workspace_id) do update
+           set plan = 'pro',
+               pro_until = (
+                 case
+                   when workspace_settings.pro_until is null or workspace_settings.pro_until < now() then now()
+                   else workspace_settings.pro_until
+                 end
+               ) + ($2::int || ' days')::interval,
+               updated_at = now()
+         returning pro_until`,
+        [Number(target.workspaceId), reward.days]
+      );
+      activatedUntil = wsResult.rows[0]?.pro_until || null;
+    } else {
+      const planResult = await client.query(
+        `update users
+            set brand_plan = 'pro',
+                brand_plan_until = (
+                  case
+                    when brand_plan_until is null or brand_plan_until < now() then now()
+                    else brand_plan_until
+                  end
+                ) + ($2::int || ' days')::interval,
+                brand_plan_updated_at = now(),
+                updated_at = now()
+          where id = $1
+          returning brand_plan_until`,
+        [uid, reward.days]
+      );
+      activatedUntil = planResult.rows[0]?.brand_plan_until || null;
+    }
+
+    await client.query(
+      `insert into invite_reward_ledger (
+         referrer_user_id,
+         entry_kind,
+         reward_type,
+         points,
+         status,
+         redeemed_at,
+         confirmed_at,
+         meta,
+         updated_at
+       )
+       values ($1, 'redeem', $2, $3, 'redeemed', now(), now(), $4::jsonb, now())`,
+      [uid, reward.rewardType, reward.costPoints, JSON.stringify({ target: target.kind, workspaceId: target.workspaceId || null, days: reward.days })]
+    );
+
+    await client.query('commit');
+    return { ok: true, rewardKey: reward.key, label: reward.label, costPoints: reward.costPoints, days: reward.days, target: target.kind, workspaceId: target.workspaceId || null, activatedUntil };
+  } catch (error) {
+    try { await client.query('rollback'); } catch {}
+    if (inviteRewardsMissingSchemaError(error)) return { ok: false, reason: 'invite_rewards_schema_missing' };
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 function inviteSourceLabelPrefix(source) {
   return INVITE_PREFIX_BY_SOURCE[String(source || '').trim().toLowerCase()] || INVITE_PREFIX_BY_SOURCE.raw_link;
 }
@@ -7781,21 +8260,12 @@ export async function loadInviteSnapshotByUserId({ userId, telegramUserId, botUs
 
   if (!uid) return base;
 
-  const activatedExpr = `(
-    exists (select 1 from workspaces w where w.owner_user_id = invited.id)
-    or exists (select 1 from workspace_curators wc where wc.user_id = invited.id)
-    or exists (select 1 from brand_managers bm where bm.manager_user_id = invited.id)
-    or coalesce(invited.brand_plan, '') <> ''
-    or coalesce(invited.brand_credits, 0) > 0
-  )`;
-
   try {
     const countsResult = await pool.query(
       `select
          count(*)::int as invited_count,
-         count(*) filter (where ${activatedExpr})::int as activated_count
+         count(*) filter (where inv.activated_at is not null)::int as activated_count
        from member_invites inv
-       join users invited on invited.id = inv.invited_user_id
       where inv.referrer_user_id = $1`,
       [uid]
     );
@@ -7807,8 +8277,7 @@ export async function loadInviteSnapshotByUserId({ userId, telegramUserId, botUs
          inv.joined_at,
          inv.activated_at,
          invited.tg_id,
-         invited.tg_username,
-         case when ${activatedExpr} then true else false end as is_activated
+         invited.tg_username
        from member_invites inv
        join users invited on invited.id = inv.invited_user_id
       where inv.referrer_user_id = $1
@@ -7831,7 +8300,7 @@ export async function loadInviteSnapshotByUserId({ userId, telegramUserId, botUs
         joinedAt: row.joined_at,
         activatedAt: row.activated_at,
         displayName: buildInviteMemberLabel(row),
-        status: row.is_activated ? 'activated' : 'joined'
+        status: row.activated_at ? 'activated' : 'joined'
       })),
       reason: 'invite_snapshot_loaded'
     };
@@ -7952,9 +8421,19 @@ export async function attemptInviteAttribution({ telegramUserId, telegramUsernam
        )
        values ($1, $2, $3, $4, 'created', $5, now(), now())
        on conflict (invited_user_id) do nothing
-       returning id, joined_at, activated_at`,
+       returning id, referrer_user_id, invited_user_id, invite_code, joined_at, activated_at`,
       [referrerUser.id, invitedUser.id, parsed.inviteCode, parsed.source, parsed.raw]
     );
+
+    if (insertResult.rows[0]) {
+      try {
+        const joinedAt = insertResult.rows[0]?.joined_at ? new Date(insertResult.rows[0].joined_at) : new Date();
+        const confirmAfter = new Date(joinedAt.getTime() + 24 * 60 * 60 * 1000);
+        await insertInviteEarnRewardIfMissing(client, insertResult.rows[0], 'invite_join', 2, confirmAfter);
+      } catch (error) {
+        if (!inviteRewardsMissingSchemaError(error)) throw error;
+      }
+    }
 
     await client.query('commit');
 

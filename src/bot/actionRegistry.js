@@ -498,6 +498,8 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:share": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:share_link": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:share_card": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
+  "a:share_redeem": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.NONE },
+  "a:share_redeem_do": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.DB_TRUTH },
   // Navigation to support must be fail-open even if Redis is degraded.
   // Only the write/expectText flow requires Redis.
   "a:support": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.NONE },
