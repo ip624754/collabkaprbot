@@ -87,6 +87,116 @@ Acceptance / notes:
 - sparse `Runtime / Payments / Founder` screens keep a tighter visual balance on real desktops instead of leaving large empty blue columns;
 - still requires live browser verification after deploy for final viewport feel, especially on the operator’s actual desktop width.
 
+
+## 0.06) Collabka admin surface classification freeze (STEP547, docs-only)
+
+### Status
+- Type: docs-only freeze
+- Code changes: none
+- Runtime changes: none
+- Migrations: none
+- Confidence: snapshot-level / docs-level only
+
+### Why this freeze exists
+Collabka remains Telegram-admin-first at the current baseline.
+
+The goal of this freeze is to prevent chaotic growth of the Telegram admin layer and preserve a clear boundary between:
+- compact Telegram operator console
+- future web-admin control plane, only if/when heavier surfaces are actually needed
+
+This freeze does **not** mean “build web-admin now”.
+It means every new admin surface must first be classified before implementation.
+
+### Core contract
+- Telegram admin stays a narrow operator console
+- Web admin, if introduced later, is a full control plane
+- Backend / DB / shared actions remain the single source of truth
+- No bot-only business state
+- No separate web-vs-bot truth
+- After mutations, state must be reread from backend
+- High-risk actions must keep confirm / audit / clear blast-radius discipline
+
+### Surface labels
+All current and future admin buttons/surfaces must be classified into one of 3 labels before implementation:
+
+- `TG-safe`
+- `TG-founder-only`
+- `future-web`
+
+### TG-safe
+These are acceptable in Telegram as compact read surfaces, drilldowns, or low-risk operator entrypoints:
+
+- Users
+- Audit (short lookup / recent events)
+- Metrics (compact snapshot only)
+- `/api/health`
+- QStash status
+- Redis status
+- Broadcast pending snapshot
+- Moderators (read/list)
+- Back / Menu / Home
+
+### TG-founder-only
+These may stay in Telegram only as narrow, guarded mutation surfaces with confirm / audit / reread discipline:
+
+- Web login toggle
+- Payments receive toggle
+- Auto-apply / auto-issuance toggle
+- Match/Feat toggle
+- Fallback toggle
+- Fan-out toggle
+- Hard-skip
+- Founder Sale toggle
+- Payments manual/apply actions
+- Broadcast send/apply
+- Flush ops digest
+- Clear pending snapshot
+- Add moderator
+- Gift subscription
+
+### future-web
+These are not being moved now, but if they grow beyond a short Telegram flow they must stop expanding in Telegram and become candidates for web-admin:
+
+- Access Policy editor
+- Paid Contract editor
+- Payment Settings editor
+- Manual Overrides
+- Long-form copy editing
+- Bulk operations
+- Wide audit/history explorer
+- Heavy metrics / analytics workspace
+- Registry / queue / export surfaces
+- Advanced role/moderator management
+- Full broadcast composer / audience builder / outbox explorer
+
+### Promotion rule into future-web
+A surface should be treated as `future-web` once at least one of the following becomes true:
+
+- it needs a long form or long editor
+- it needs a wide registry / explorer / queue
+- it introduces bulk mutation
+- it has a larger blast radius
+- it requires more complex role separation
+- it becomes unsafe or awkward in a short Telegram flow
+- it increases hot-path read/load pressure in admin shell/menu
+
+### Practical decision for current baseline
+Current decision remains:
+
+- keep Collabka admin Telegram-first
+- keep sections like Админка / Операции / Коммуникации / Система in Telegram
+- do not build web-admin “just because newer projects use it”
+- only move surfaces to web when real operational pressure appears
+
+### Implementation rule going forward
+No new admin feature should be added directly into Telegram admin without first receiving one of these labels:
+
+- `TG-safe`
+- `TG-founder-only`
+- `future-web`
+
+This classification is now part of the admin-layer decision contract for Collabka.
+
 ## STEP535H — Payments review clarity + action rail
 - Reworked `/admin/payments` from a flat status table into a clearer review plane in `scripts/admin-web.js`: summary cards now separate applied / manual review / stuck / watchlist counts, and the page opens with explicit `Review buckets` plus a `Next-action rail`.
 - Extended `src/lib/adminWeb/readModels.js` with `reviewBuckets` and `actionRail`, while keeping the surface read-only and reusing the existing follow-up model / payment detail drilldown. The follow-up queue now carries `userId` so operators can move from payment detail to user card honestly instead of guessing.
