@@ -31737,6 +31737,14 @@ ${DEGRADED_COPY.line}
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
       await ctx.answerCallbackQuery();
       try { await clearExpectText(ctx.from.id); } catch {}
+      const existingDraft = await getDraft(ctx.from.id);
+      if (existingDraft && String(existingDraft.mode || '') === 'simple') {
+        if (!existingDraft.audience) existingDraft.audience = 'all';
+        if (!Array.isArray(existingDraft.buttons)) existingDraft.buttons = [];
+        await setDraft(ctx.from.id, existingDraft, 30 * 60);
+        await renderBroadcastSimpleComposer(ctx);
+        return;
+      }
       try { await clearDraft(ctx.from.id); } catch {}
       await setDraft(ctx.from.id, { mode: 'simple', audience: 'all', buttons: [] }, 30 * 60);
       await renderBroadcastSimpleComposer(ctx);
