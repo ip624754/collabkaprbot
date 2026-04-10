@@ -284,6 +284,13 @@ export function parseStartPayload(text) {
   m = t.match(/\/start\s+ig_verify(?:_([A-Za-z0-9._]{2,30}))?/i);
   if (m) return { type: 'ig_verify', handle: m[1] ? String(m[1]).trim() : null };
 
+  // Invite / referral deep-links (personal share layer):
+  // - /start ii_<code>  inline share
+  // - /start il_<code>  raw link
+  // - /start ic_<code>  invite card
+  m = t.match(/\/start\s+(ii|il|ic)_([A-Za-z0-9]+)/i);
+  if (m) return { type: 'invite', startParam: `${String(m[1] || '').toLowerCase()}_${String(m[2] || '').toUpperCase()}` };
+
   // Lightweight acquisition source markers (no business logic):
   // - /start src_tg  (shared in Telegram)
   // - /start src_ig  (shared via Instagram)

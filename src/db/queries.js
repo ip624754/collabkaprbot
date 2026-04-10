@@ -7617,3 +7617,381 @@ export async function upsertIgOAuthAccount(wsId, {
 export async function deleteIgOAuthAccount(wsId) {
   await pool.query(`delete from ig_oauth_accounts where ws_id=$1`, [Number(wsId)]);
 }
+
+// -----------------------------
+// Invite / referral layer (STEP548)
+// -----------------------------
+
+const INVITE_SOURCE_BY_PREFIX = {
+  ii: 'inline_share',
+  il: 'raw_link',
+  ic: 'invite_card',
+};
+
+const INVITE_PREFIX_BY_SOURCE = {
+  inline_share: 'ii',
+  raw_link: 'il',
+  invite_card: 'ic',
+};
+
+function normalizeInviteCode(rawCode) {
+  const value = String(rawCode || '').trim().toUpperCase();
+  return /^[A-Z0-9]+$/.test(value) ? value : null;
+}
+
+function inviteMissingSchemaError(error) {
+  const code = String(error?.code || '');
+  return code === '42P01' || code === '42703';
+}
+
+function inviteSourceLabelPrefix(source) {
+  return INVITE_PREFIX_BY_SOURCE[String(source || '').trim().toLowerCase()] || INVITE_PREFIX_BY_SOURCE.raw_link;
+}
+
+function buildInviteMemberLabel(row = {}) {
+  const username = String(row?.tg_username || '').trim().replace(/^@+/, '');
+  if (username) return `@${username}`;
+  const tgId = Number(row?.tg_id || 0);
+  if (tgId) return `User ${tgId}`;
+  return 'User';
+}
+
+export function buildInviteCodeFromTelegramUserId(telegramUserId) {
+  const numeric = Number.parseInt(String(telegramUserId || ''), 10);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return numeric.toString(36).toUpperCase();
+}
+
+export function parseInviteCodeToTelegramUserId(inviteCode) {
+  const normalized = normalizeInviteCode(inviteCode);
+  if (!normalized) return null;
+  const numeric = Number.parseInt(normalized, 36);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+export function buildInviteStartParam({ inviteCode, source = 'raw_link' } = {}) {
+  const normalized = normalizeInviteCode(inviteCode);
+  if (!normalized) return null;
+  return `${inviteSourceLabelPrefix(source)}_${normalized}`;
+}
+
+export function parseInviteStartParam(startParam) {
+  const raw = String(startParam || '').trim();
+  const match = raw.match(/^(ii|il|ic)_([A-Za-z0-9]+)$/i);
+  if (!match) return null;
+  const inviteCode = normalizeInviteCode(match[2]);
+  if (!inviteCode) return null;
+  const referrerTelegramUserId = parseInviteCodeToTelegramUserId(inviteCode);
+  if (!referrerTelegramUserId) return null;
+  const prefix = String(match[1] || '').toLowerCase();
+  return {
+    raw,
+    inviteCode,
+    prefix,
+    source: INVITE_SOURCE_BY_PREFIX[prefix] || 'raw_link',
+    referrerTelegramUserId,
+  };
+}
+
+export function buildInviteLink({ botUsername, inviteCode, source = 'raw_link' } = {}) {
+  const username = String(botUsername || '').trim().replace(/^@+/, '');
+  const startParam = buildInviteStartParam({ inviteCode, source });
+  if (!username || !startParam) return null;
+  return `https://t.me/${username}?start=${encodeURIComponent(startParam)}`;
+}
+
+export async function findUserByTelegramId(tgId) {
+  const n = Number(tgId || 0);
+  if (!n) return null;
+  const r = await pool.query(
+    `select id, tg_id, tg_username, created_at, updated_at
+       from users
+      where tg_id=$1
+      limit 1`,
+    [n]
+  );
+  return r.rows[0] || null;
+}
+
+export async function getInviteAttributionByInvitedUserId(invitedUserId) {
+  const uid = Number(invitedUserId || 0);
+  if (!uid) return null;
+  try {
+    const r = await pool.query(
+      `select inv.id as invite_id,
+              inv.referrer_user_id,
+              inv.invited_user_id,
+              inv.invite_code,
+              inv.source,
+              inv.start_param,
+              inv.joined_at,
+              inv.activated_at,
+              ref.tg_id as referrer_tg_id,
+              ref.tg_username as referrer_tg_username
+         from member_invites inv
+         join users ref on ref.id = inv.referrer_user_id
+        where inv.invited_user_id = $1
+        limit 1`,
+      [uid]
+    );
+    const row = r.rows[0];
+    if (!row) return null;
+    return {
+      inviteId: row.invite_id,
+      referrerUserId: row.referrer_user_id,
+      invitedUserId: row.invited_user_id,
+      inviteCode: row.invite_code,
+      source: row.source,
+      startParam: row.start_param,
+      joinedAt: row.joined_at,
+      activatedAt: row.activated_at,
+      invitedBy: {
+        tgId: row.referrer_tg_id,
+        tgUsername: row.referrer_tg_username || null,
+        displayName: buildInviteMemberLabel({ tg_id: row.referrer_tg_id, tg_username: row.referrer_tg_username })
+      }
+    };
+  } catch (error) {
+    if (inviteMissingSchemaError(error)) return null;
+    throw error;
+  }
+}
+
+export async function loadInviteSnapshotByUserId({ userId, telegramUserId, botUsername } = {}) {
+  const uid = Number(userId || 0);
+  const tgId = Number(telegramUserId || 0);
+  const inviteCode = buildInviteCodeFromTelegramUserId(tgId);
+  const inviteLink = buildInviteLink({ botUsername, inviteCode, source: 'raw_link' });
+  const inlineInviteLink = buildInviteLink({ botUsername, inviteCode, source: 'inline_share' });
+  const inviteCardLink = buildInviteLink({ botUsername, inviteCode, source: 'invite_card' });
+
+  const base = {
+    persistenceEnabled: false,
+    inviteCode,
+    inviteLink,
+    inlineInviteLink,
+    inviteCardLink,
+    shareInlineQuery: 'invite',
+    invitedCount: 0,
+    activatedCount: 0,
+    invitedBy: null,
+    invited: [],
+    reason: 'invite_tracking_unavailable'
+  };
+
+  if (!uid) return base;
+
+  const activatedExpr = `(
+    exists (select 1 from workspaces w where w.owner_user_id = invited.id)
+    or exists (select 1 from workspace_curators wc where wc.user_id = invited.id)
+    or exists (select 1 from brand_managers bm where bm.manager_user_id = invited.id)
+    or coalesce(invited.brand_plan, '') <> ''
+    or coalesce(invited.brand_credits, 0) > 0
+  )`;
+
+  try {
+    const countsResult = await pool.query(
+      `select
+         count(*)::int as invited_count,
+         count(*) filter (where ${activatedExpr})::int as activated_count
+       from member_invites inv
+       join users invited on invited.id = inv.invited_user_id
+      where inv.referrer_user_id = $1`,
+      [uid]
+    );
+
+    const recentResult = await pool.query(
+      `select
+         inv.id as invite_id,
+         inv.source,
+         inv.joined_at,
+         inv.activated_at,
+         invited.tg_id,
+         invited.tg_username,
+         case when ${activatedExpr} then true else false end as is_activated
+       from member_invites inv
+       join users invited on invited.id = inv.invited_user_id
+      where inv.referrer_user_id = $1
+      order by inv.joined_at desc
+      limit 5`,
+      [uid]
+    );
+
+    const invitedBy = await getInviteAttributionByInvitedUserId(uid);
+
+    return {
+      ...base,
+      persistenceEnabled: true,
+      invitedCount: Number(countsResult.rows[0]?.invited_count || 0),
+      activatedCount: Number(countsResult.rows[0]?.activated_count || 0),
+      invitedBy: invitedBy?.invitedBy || null,
+      invited: (recentResult.rows || []).map((row) => ({
+        inviteId: row.invite_id,
+        source: row.source,
+        joinedAt: row.joined_at,
+        activatedAt: row.activated_at,
+        displayName: buildInviteMemberLabel(row),
+        status: row.is_activated ? 'activated' : 'joined'
+      })),
+      reason: 'invite_snapshot_loaded'
+    };
+  } catch (error) {
+    if (inviteMissingSchemaError(error)) return base;
+    throw error;
+  }
+}
+
+export async function attemptInviteAttribution({ telegramUserId, telegramUsername = null, startParam = null } = {}) {
+  const parsed = parseInviteStartParam(startParam);
+  if (!parsed) {
+    return {
+      persistenceEnabled: false,
+      created: false,
+      ignored: true,
+      reason: 'start_param_not_invite'
+    };
+  }
+
+  const tgId = Number(telegramUserId || 0);
+  if (!tgId) {
+    return {
+      persistenceEnabled: true,
+      created: false,
+      invalid: true,
+      reason: 'invalid_telegram_user'
+    };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+
+    const existingUserResult = await client.query(
+      `select id, tg_id, tg_username
+         from users
+        where tg_id = $1
+        limit 1`,
+      [tgId]
+    );
+    const existingUser = existingUserResult.rows[0] || null;
+
+    const upsertedResult = await client.query(
+      `insert into users (tg_id, tg_username)
+       values ($1, $2)
+       on conflict (tg_id)
+       do update set tg_username = coalesce(excluded.tg_username, users.tg_username), updated_at = now()
+       returning id, tg_id, tg_username`,
+      [tgId, telegramUsername || null]
+    );
+    const invitedUser = upsertedResult.rows[0] || existingUser;
+
+    if (String(invitedUser?.tg_id || '') === String(parsed.referrerTelegramUserId)) {
+      await client.query('commit');
+      return {
+        persistenceEnabled: true,
+        created: false,
+        invalid: true,
+        reason: 'self_referral'
+      };
+    }
+
+    const existingAttributionResult = await client.query(
+      `select id from member_invites where invited_user_id = $1 limit 1`,
+      [Number(invitedUser?.id || 0)]
+    );
+    if (existingAttributionResult.rows[0]) {
+      await client.query('commit');
+      const existing = await getInviteAttributionByInvitedUserId(invitedUser.id);
+      return {
+        persistenceEnabled: true,
+        created: false,
+        alreadyLinked: true,
+        reason: 'already_linked',
+        invitedBy: existing?.invitedBy || null
+      };
+    }
+
+    if (existingUser) {
+      await client.query('commit');
+      return {
+        persistenceEnabled: true,
+        created: false,
+        existingUser: true,
+        reason: 'existing_user_not_eligible'
+      };
+    }
+
+    const referrerResult = await client.query(
+      `select id, tg_id, tg_username
+         from users
+        where tg_id = $1
+        limit 1`,
+      [parsed.referrerTelegramUserId]
+    );
+    const referrerUser = referrerResult.rows[0] || null;
+    if (!referrerUser) {
+      await client.query('commit');
+      return {
+        persistenceEnabled: true,
+        created: false,
+        invalid: true,
+        reason: 'unknown_referrer'
+      };
+    }
+
+    const insertResult = await client.query(
+      `insert into member_invites (
+         referrer_user_id,
+         invited_user_id,
+         invite_code,
+         source,
+         status,
+         start_param,
+         joined_at,
+         updated_at
+       )
+       values ($1, $2, $3, $4, 'created', $5, now(), now())
+       on conflict (invited_user_id) do nothing
+       returning id, joined_at, activated_at`,
+      [referrerUser.id, invitedUser.id, parsed.inviteCode, parsed.source, parsed.raw]
+    );
+
+    await client.query('commit');
+
+    if (!insertResult.rows[0]) {
+      const existing = await getInviteAttributionByInvitedUserId(invitedUser.id);
+      return {
+        persistenceEnabled: true,
+        created: false,
+        alreadyLinked: true,
+        reason: 'already_linked',
+        invitedBy: existing?.invitedBy || null
+      };
+    }
+
+    return {
+      persistenceEnabled: true,
+      created: true,
+      reason: 'invite_linked',
+      inviteId: insertResult.rows[0]?.id || null,
+      source: parsed.source,
+      invitedBy: {
+        tgId: referrerUser.tg_id,
+        tgUsername: referrerUser.tg_username || null,
+        displayName: buildInviteMemberLabel(referrerUser)
+      }
+    };
+  } catch (error) {
+    try { await client.query('rollback'); } catch {}
+    if (inviteMissingSchemaError(error)) {
+      return {
+        persistenceEnabled: false,
+        created: false,
+        reason: 'invite_schema_missing'
+      };
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}

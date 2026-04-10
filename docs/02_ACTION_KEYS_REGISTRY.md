@@ -500,6 +500,8 @@
 | `a:send_request_to_creator` | edit | none |
 | `a:setup` | edit | require_redis |
 | `a:share` | edit | require_redis |
+| `a:share_link` | edit | none |
+| `a:share_card` | edit | none |
 | `a:support` | ops | none |
 | `a:support_push` | ops | none |
 | `a:support_write` | ops | require_redis |

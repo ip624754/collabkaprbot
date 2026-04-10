@@ -278,6 +278,9 @@ export const CFG = {
     process.env.PUBLIC_BASE_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ''),
 
+  // Invite layer (optional): cached Telegram photo for inline/card sharing.
+  INVITE_PHOTO_FILE_ID: process.env.INVITE_PHOTO_FILE_ID || '',
+
   // Admin web sidecar (optional, owner/operator only)
   ADMIN_WEB_ENABLED: parseBoolSafe(process.env.ADMIN_WEB_ENABLED, false),
   ADMIN_WEB_SECRET: process.env.ADMIN_WEB_SECRET || '',

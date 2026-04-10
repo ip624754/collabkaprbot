@@ -2423,6 +2423,254 @@ async function trackAcqRole(tgId, role) {
 }
 
 
+
+function inviteSourceLabel(source) {
+  const s = String(source || '').trim().toLowerCase();
+  if (s === 'inline_share') return 'inline';
+  if (s === 'invite_card') return 'card';
+  return 'link';
+}
+
+function inviteFriendLine(item, index = 0) {
+  const name = String(item?.displayName || '').trim() || 'User';
+  const status = String(item?.status || '').trim().toLowerCase() === 'activated' ? 'activated' : 'joined';
+  const joinedAt = item?.joinedAt ? fmtTs(item.joinedAt) : '—';
+  return `${index + 1}. ${name} • ${status} • ${inviteSourceLabel(item?.source)} • ${joinedAt}`;
+}
+
+function buildInviteJoinAnchor(inviteUrl) {
+  const url = String(inviteUrl || '').trim();
+  return url ? `<a href="${escapeHtml(url)}">Открыть Collabka</a>` : 'Открыть Collabka';
+}
+
+function resolveInvitePhotoUrl() {
+  const base = String(CFG.PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
+  if (!base) return null;
+  return `${base}/assets/social/collabka-og-1200x630.png`;
+}
+
+function formatInviteStartNotice(result) {
+  if (!result) return null;
+  if (!result.persistenceEnabled) return 'ℹ️ Приглашение открыто, но invite-tracking сейчас недоступен.';
+  if (result.created) {
+    const inviter = result.invitedBy?.displayName || 'вашего контакта';
+    return `✅ Приглашение засчитано: вы пришли по ссылке от ${inviter}.`;
+  }
+  if (result.alreadyLinked) return 'ℹ️ Это приглашение уже было связано с вашим аккаунтом раньше.';
+  if (result.existingUser) return 'ℹ️ Invite credit засчитывается только на первом старте нового пользователя.';
+  if (result.invalid) {
+    if (result.reason === 'self_referral') return '⚠️ Нельзя использовать собственную invite-ссылку.';
+    return '⚠️ Эта invite-ссылка недействительна для зачёта.';
+  }
+  return null;
+}
+
+async function loadInviteSurfaceStateForUser(user) {
+  const snapshot = await db.loadInviteSnapshotByUserId({
+    userId: Number(user?.id || 0),
+    telegramUserId: Number(user?.tg_id || user?.tgId || 0),
+    botUsername: botUsernameNoAt(),
+  }).catch(() => null);
+
+  const fallbackInviteCode = db.buildInviteCodeFromTelegramUserId(Number(user?.tg_id || user?.tgId || 0));
+  const fallback = {
+    persistenceEnabled: false,
+    inviteCode: fallbackInviteCode,
+    inviteLink: db.buildInviteLink({ botUsername: botUsernameNoAt(), inviteCode: fallbackInviteCode, source: 'raw_link' }),
+    inlineInviteLink: db.buildInviteLink({ botUsername: botUsernameNoAt(), inviteCode: fallbackInviteCode, source: 'inline_share' }),
+    inviteCardLink: db.buildInviteLink({ botUsername: botUsernameNoAt(), inviteCode: fallbackInviteCode, source: 'invite_card' }),
+    shareInlineQuery: 'invite',
+    invitedCount: 0,
+    activatedCount: 0,
+    invitedBy: null,
+    invited: [],
+    reason: 'invite_snapshot_unavailable',
+  };
+
+  const out = { ...(snapshot || fallback) };
+  out.invitePhotoFileId = String(CFG.INVITE_PHOTO_FILE_ID || '').trim() || null;
+  out.invitePhotoUrl = resolveInvitePhotoUrl();
+  return out;
+}
+
+function inviteKeyboardMarkup(inviteState = null) {
+  const rows = [];
+  if (inviteState?.inviteLink) {
+    rows.push([{ text: '📨 Share invite', switch_inline_query: inviteState.shareInlineQuery || 'invite' }]);
+    rows.push([
+      { text: '🔗 Show link', callback_data: 'a:share_link' },
+      { text: '🧾 Get invite card', callback_data: 'a:share_card' }
+    ]);
+    rows.push([{ text: '🔄 Обновить', callback_data: 'a:share' }]);
+  }
+  rows.push([
+    { text: '📋 Меню', callback_data: 'a:menu' },
+    { text: '🏠 Home', callback_data: 'a:home' }
+  ]);
+  return { inline_keyboard: rows };
+}
+
+function renderInviteText({ inviteState = null, notice = null } = {}) {
+  const lines = [
+    '📨 <b>Invite contacts</b>',
+    '',
+    'Поделись своим персональным приглашением в любой чат Telegram.',
+    'Используй <b>Share invite</b> для самого быстрого Telegram-native сценария.'
+  ];
+
+  if (inviteState?.inviteLink) {
+    lines.push('');
+    lines.push('<b>Ваша invite-ссылка</b>');
+    lines.push(`<code>${escapeHtml(inviteState.inviteLink || '—')}</code>`);
+    lines.push('');
+    lines.push('<b>3 готовых варианта текста</b>');
+    lines.push(`1) Я нашёл полезный Telegram-бот для коллабораций брендов и креаторов. Попробуй здесь: ${buildInviteJoinAnchor(inviteState.inlineInviteLink || inviteState.inviteLink)}`);
+    lines.push(`2) Удобный бот, чтобы искать бренды, креаторов, офферы и работать прямо в Telegram. Зайти можно тут: ${buildInviteJoinAnchor(inviteState.inlineInviteLink || inviteState.inviteLink)}`);
+    lines.push(`3) Если хочешь более чистый способ находить коллаборации и вести работу в Telegram, попробуй Collabka: ${buildInviteJoinAnchor(inviteState.inlineInviteLink || inviteState.inviteLink)}`);
+    lines.push('');
+    lines.push(`<b>Invite code:</b> <code>${escapeHtml(inviteState.inviteCode || '—')}</code>`);
+    lines.push(`<b>Invited:</b> ${Number(inviteState.invitedCount || 0)}`);
+    lines.push(`<b>Activated:</b> ${Number(inviteState.activatedCount || 0)}`);
+    if (inviteState.invitedBy?.displayName) {
+      lines.push(`<b>Вы пришли от:</b> ${escapeHtml(inviteState.invitedBy.displayName)}`);
+    }
+
+    if (Array.isArray(inviteState.invited) && inviteState.invited.length) {
+      lines.push('');
+      lines.push('<b>Последние приглашённые</b>');
+      for (const [index, item] of inviteState.invited.entries()) {
+        lines.push(escapeHtml(inviteFriendLine(item, index)));
+      }
+    } else {
+      lines.push('');
+      lines.push('Пока приглашений нет. Используй Share invite для быстрого шаринга, Show link для сырой ссылки и Get invite card для пересылаемой карточки.');
+    }
+  } else {
+    lines.push('');
+    lines.push('⚠️ Invite-ссылка пока недоступна. Проверь BOT_USERNAME.');
+  }
+
+  if (!inviteState?.persistenceEnabled) {
+    lines.push('');
+    lines.push('ℹ️ Invite-tracking сейчас недоступен: ссылка работает, но counters/attribution могут не записаться, пока не применена миграция invite-layer.');
+  }
+
+  if (notice) {
+    lines.push('');
+    lines.push(escapeHtml(notice));
+  }
+
+  return lines.join('\n');
+}
+
+function renderInviteLinkText({ inviteState = null } = {}) {
+  return [
+    '🔗 <b>Your invite link</b>',
+    '',
+    'Скопируй эту ссылку и вставь её в любой чат, сторис или bio, если нужен raw link.',
+    '',
+    `<code>${escapeHtml(inviteState?.inviteLink || '—')}</code>`
+  ].join('\n');
+}
+
+function renderInviteLinkKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📨 Invite contacts', callback_data: 'a:share' }],
+      [{ text: '🏠 Home', callback_data: 'a:home' }]
+    ]
+  };
+}
+
+function renderInviteCardText({ inviteState = null } = {}) {
+  return [
+    '🤝 <b>Join me on Collabka</b>',
+    '',
+    'Коллаборации брендов и креаторов, офферы, Inbox и рабочие сценарии прямо в Telegram.',
+    '',
+    buildInviteJoinAnchor(inviteState?.inviteCardLink || inviteState?.inlineInviteLink || inviteState?.inviteLink)
+  ].join('\n');
+}
+
+function renderInviteCardKeyboard({ inviteState = null } = {}) {
+  const inviteUrl = inviteState?.inviteCardLink || inviteState?.inlineInviteLink || inviteState?.inviteLink;
+  return {
+    inline_keyboard: inviteUrl ? [[{ text: 'Open Collabka', url: inviteUrl }]] : []
+  };
+}
+
+function renderInlineInviteShareText({ inviteState = null } = {}) {
+  return [
+    'Я нашёл удобный Telegram-бот для коллабораций брендов и креаторов.',
+    'Офферы, Inbox и работа прямо в Telegram.',
+    '',
+    buildInviteJoinAnchor(inviteState?.inlineInviteLink || inviteState?.inviteLink)
+  ].join('\n');
+}
+
+function renderInlineInviteCaption({ inviteState = null } = {}) {
+  return [
+    'Коллаборации брендов и креаторов в Telegram.',
+    'Офферы, Inbox, рабочие сценарии и быстрый старт без лишнего шума.',
+    '',
+    buildInviteJoinAnchor(inviteState?.inlineInviteLink || inviteState?.inviteLink)
+  ].join('\n');
+}
+
+function buildInlineInviteResult({ inviteState = null } = {}) {
+  const replyMarkup = renderInviteCardKeyboard({ inviteState });
+  if (inviteState?.invitePhotoFileId) {
+    return {
+      type: 'photo',
+      id: 'collabka-invite-photo-cached',
+      photo_file_id: inviteState.invitePhotoFileId,
+      title: 'Share Collabka invite',
+      description: 'Share a photo invite card for Collabka',
+      caption: renderInlineInviteCaption({ inviteState }),
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup,
+    };
+  }
+  if (inviteState?.invitePhotoUrl) {
+    return {
+      type: 'photo',
+      id: 'collabka-invite-photo-url',
+      photo_url: inviteState.invitePhotoUrl,
+      thumbnail_url: inviteState.invitePhotoUrl,
+      photo_width: 1200,
+      photo_height: 630,
+      title: 'Share Collabka invite',
+      description: 'Share a photo invite card for Collabka',
+      caption: renderInlineInviteCaption({ inviteState }),
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup,
+    };
+  }
+  return {
+    type: 'article',
+    id: 'collabka-invite-article',
+    title: 'Share Collabka invite',
+    description: 'Share your personal Collabka invite into any chat',
+    input_message_content: {
+      message_text: renderInlineInviteShareText({ inviteState }),
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    },
+    reply_markup: replyMarkup,
+  };
+}
+
+async function sendInviteCardMessage(ctx, inviteState) {
+  const text = renderInviteCardText({ inviteState });
+  const reply_markup = renderInviteCardKeyboard({ inviteState });
+  const photo = String(inviteState?.invitePhotoFileId || '').trim() || String(inviteState?.invitePhotoUrl || '').trim();
+  if (photo) {
+    await ctx.api.sendPhoto(ctx.chat.id, photo, { caption: text, parse_mode: 'HTML', reply_markup });
+    return;
+  }
+  await ctx.reply(text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup });
+}
+
 async function redisGetSafe(key, ms = 1500) {
   try {
     return await withTimeout(redis.get(key), ms, `redis.get:${String(key).slice(0, 40)}`);
@@ -22887,11 +23135,26 @@ ${list}
     try {
       const rawPayload = parseStartPayload(ctx.message?.text || '');
       let payload = rawPayload;
+      let inviteStartNotice = null;
       const acqSrc = payload?.type === 'src' ? String(payload.src || '').toLowerCase() : null;
 
       // Lightweight acquisition tracking (Redis-only) and then treat as a normal /start.
       if (acqSrc) {
         await trackAcqSource(ctx.from?.id, acqSrc);
+        payload = null;
+      }
+
+      if (payload?.type === 'invite') {
+        const attribution = await db.attemptInviteAttribution({
+          telegramUserId: Number(ctx.from?.id || 0),
+          telegramUsername: ctx.from?.username || null,
+          startParam: String(payload.startParam || ''),
+        }).catch((error) => ({
+          persistenceEnabled: false,
+          created: false,
+          reason: String(error?.message || error || 'invite_error'),
+        }));
+        inviteStartNotice = formatInviteStartNotice(attribution);
         payload = null;
       }
 
@@ -23191,6 +23454,9 @@ if (payload?.type === 'bxo') {
 
     if (!hasUiModeKey) {
       await renderRoleSelection(ctx, u, { edit: false });
+      if (inviteStartNotice) {
+        await ctx.reply(inviteStartNotice);
+      }
       return;
     }
 
@@ -23200,6 +23466,9 @@ if (payload?.type === 'bxo') {
 
     // HOME HUB (Commit87): unified start screen for role switching.
     await renderHomeHub(ctx, u, flags, { edit: false, quickStart60: true });
+    if (inviteStartNotice) {
+      await ctx.reply(inviteStartNotice);
+    }
     await maybeSendBanner(ctx, 'menu', CFG.MENU_BANNER_FILE_ID);
 
     } catch (e) {
@@ -23222,6 +23491,37 @@ if (payload?.type === 'bxo') {
 
   });
 
+
+
+  bot.command('invite', async (ctx) => {
+    try { await clearExpectText(ctx.from.id); } catch {}
+    const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
+    const inviteState = await loadInviteSurfaceStateForUser(u);
+    await ctx.reply(renderInviteText({ inviteState }), {
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      reply_markup: inviteKeyboardMarkup(inviteState),
+    });
+  });
+
+  bot.inlineQuery(/^invite(?:\s+.*)?$/i, async (ctx) => {
+    try {
+      const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
+      const inviteState = await loadInviteSurfaceStateForUser(u);
+      if (!inviteState?.inviteLink) {
+        await ctx.answerInlineQuery([], { is_personal: true, cache_time: 0 });
+        return;
+      }
+      await ctx.answerInlineQuery([
+        buildInlineInviteResult({ inviteState })
+      ], {
+        is_personal: true,
+        cache_time: 0,
+      });
+    } catch {
+      await ctx.answerInlineQuery([], { is_personal: true, cache_time: 0 });
+    }
+  });
 
   bot.command('help', async (ctx) => {
     try {
@@ -23253,6 +23553,7 @@ UGC vs Интеграция
 Команды
 /start — главное меню
 /help — помощь и быстрый старт
+/invite — пригласить друзей
 /paysupport — помощь по оплате и Stars`;
 
     const kb = new InlineKeyboard()
@@ -24071,41 +24372,36 @@ if (p.a === 'a:share') {
 
   const un = botUsernameNoAt();
   if (!un) {
-    const text = `⚠️ <b>Поделиться пока нельзя</b>\n\nНе задан <code>BOT_USERNAME</code> в ENV.`;
+    const text = `⚠️ <b>Invite пока недоступен</b>\n\nНе задан <code>BOT_USERNAME</code> в ENV.`;
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
     return;
   }
 
-  const tgLink = botStartLink('src_tg');
-  const igLink = botStartLink('src_ig');
+  const inviteState = await loadInviteSurfaceStateForUser(u);
+  const text = renderInviteText({ inviteState });
+  await safeEditOrReply(ctx, text, {
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    reply_markup: inviteKeyboardMarkup(inviteState),
+  });
+  return;
+}
 
-  const shareText = 'Collabka PR — коллаборации брендов и креаторов в Telegram. Зайди в бот и напиши «креатор» или «бренд».'.trim();
-  const tgShare = tgShareUrl(tgLink, shareText);
+if (p.a === 'a:share_link') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+  const inviteState = await loadInviteSurfaceStateForUser(u);
+  await ctx.reply(renderInviteLinkText({ inviteState }), {
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    reply_markup: renderInviteLinkKeyboard(),
+  });
+  return;
+}
 
-  // If user hasn't chosen a role yet, offer a safe way back to role selection.
-  let hasUiModeKey = true;
-  try {
-    const raw = await redis.get(k(['ui_mode', ctx.from.id]));
-    hasUiModeKey = !!raw;
-  } catch {
-    hasUiModeKey = true; // fail-open
-  }
-
-
-  const text =
-    `🔗 <b>Поделиться ботом</b>\n\n` +
-    `<b>Telegram</b> (трек):\n${escapeHtml(tgLink)}\n\n` +
-    `<b>Instagram</b> (трек):\n${escapeHtml(igLink)}\n\n` +
-    `💬 Для Telegram нажми кнопку ниже — откроется окно «Поделиться».\n` +
-    `📲 Для Instagram просто скопируй ссылку и вставь в био/сторис/сообщение.`;
-
-  const kb = new InlineKeyboard();
-  if (tgShare) kb.url('💬 Поделиться в Telegram', tgShare).row();
-  if (igLink) kb.url('📲 Открыть ссылку для Instagram', igLink).row();
-  if (!hasUiModeKey) kb.row().text('⬅️ Назад', 'a:role_pick');
-  kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
+if (p.a === 'a:share_card') {
+  try { await ctx.answerCallbackQuery({ text: 'Карточка отправлена ниже. Можно переслать дальше.' }); } catch {}
+  const inviteState = await loadInviteSurfaceStateForUser(u);
+  await sendInviteCardMessage(ctx, inviteState);
   return;
 }
 
