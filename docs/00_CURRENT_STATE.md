@@ -2709,3 +2709,30 @@ Current operator contract:
 Known pre-existing drift:
 - general callback-consistency script still reports older unresolved admin outbox callbacks unrelated to this step
 - this drift is pre-existing and was not expanded by STEP564
+
+## 0.10) STEP565 — First-batch safety + next-action hints
+
+Status: implemented as a narrow operator-safety layer on top of the current broadcast composer and post-run report.
+
+What was added:
+- explicit `First-batch safety` block in broadcast preview / pre-send screen
+- strengthened success-screen guidance right after broadcast creation
+- `Next action hints` block inside broadcast detail view
+- state-aware hints for:
+  - first batch not yet seen
+  - first wave looks clean
+  - retry backlog exists
+  - skipped / failed rows require cleanup review
+
+What stays unchanged:
+- queue / retry / fan-out runtime
+- QStash delivery layer
+- broadcast storage semantics
+- outbox truth counters
+- blocked subsystem and quarantine UX
+
+Operator contract now:
+- before send, the operator sees a short safety envelope telling them to wait for the first batch and verify report truth before acting further
+- after create, the success screen already points to the first safe next actions
+- inside broadcast card, next-action hints are driven by actual post-run counters rather than static copy alone
+

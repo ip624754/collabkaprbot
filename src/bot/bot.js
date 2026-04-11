@@ -31287,7 +31287,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
       await ctx.answerCallbackQuery();
       const draft = await getDraft(ctx.from.id);
-      if (!draft || !draft.type) {
+      if (!draft || !broadcastDraftHasContent(draft)) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
           reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
@@ -31401,9 +31401,39 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
         }
 
         try { await clearDraft(ctx.from.id); } catch {}
+        const safetyLines = buildBroadcastFirstBatchSafetyText();
+        const successHints = [
+          'Сначала открой карточку и дождись первого batch.',
+          'Потом обнови report и проверь sent / retry / skipped / failed.',
+          'Только после этого решай, нужен ли следующий шаг.',
+        ];
         await safeEditOrReply(
           ctx,
-          `✅ <b>Рассылка #${bc.id} ${res?.deduped ? 'уже создана' : 'создана'}</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n<b>Post-run report</b>\n• sent: <b>0</b>\n• retry: <b>0</b>\n• skipped: <b>0</b>\n• failed: <b>0</b>\n• dominant reasons: —\n• next action: сначала открой карточку, проверь first batch и потом обнови report.\n\n⏳ Рассылка будет запущена при следующем тике cron.`,
+          `✅ <b>Рассылка #${bc.id} ${res?.deduped ? 'уже создана' : 'создана'}</b>
+
+📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>
+👥 Получателей: <b>${total}</b>
+📋 Статус: <b>PENDING</b>
+
+<b>First-batch safety</b>
+• ${escapeHtml(safetyLines[0])}
+• ${escapeHtml(safetyLines[1])}
+• ${escapeHtml(safetyLines[2])}
+
+<b>Post-run report</b>
+• sent: <b>0</b>
+• retry: <b>0</b>
+• skipped: <b>0</b>
+• failed: <b>0</b>
+• dominant reasons: —
+• next action: сначала открой карточку, проверь first batch и потом обнови report.
+
+<b>Next action hints</b>
+• ${escapeHtml(successHints[0])}
+• ${escapeHtml(successHints[1])}
+• ${escapeHtml(successHints[2])}
+
+⏳ Рассылка будет запущена при следующем тике cron.`,
           {
             parse_mode: 'HTML',
             reply_markup: (() => {
@@ -36713,6 +36743,8 @@ async function renderBroadcastPreview(ctx, draft, { banner = '' } = {}) {
   previewMsg += `🔗 Button: <b>${buttonYes ? 'yes' : 'no'}</b>
 `;
   previewMsg += `🧠 Delivery plan: <b>${escapeHtml(recap.plan.splitLongText ? 'photo + text split' : (mediaYes ? 'single media message' : 'text message'))}</b>`;
+  previewMsg += `\n\n<b>First-batch safety</b>\n`;
+  for (const line of buildBroadcastFirstBatchSafetyText()) previewMsg += `• ${escapeHtml(line)}\n`;
 
   const bodyPreview = String(recap.payload.draftText || recap.payload.draftCaption || '').replace(/\s+/g, ' ').trim();
   if (bodyPreview) previewMsg += `
@@ -36823,6 +36855,7 @@ async function renderBroadcastView(ctx, broadcastId) {
   let btns = [];
   try { btns = bc.buttons_json ? JSON.parse(bc.buttons_json) : []; } catch { btns = []; }
   const report = await buildBroadcastPostRunReport(bc, st || {});
+  const nextActionHints = buildBroadcastNextActionHints(bc, report);
 
   let text = `${icon} <b>Рассылка #${bc.id}</b>
 
@@ -36858,8 +36891,9 @@ async function renderBroadcastView(ctx, broadcastId) {
 `;
   if (pending > 0 && retry !== pending) text += `⏳ Pending total: <b>${pending}</b>
 `;
-  text += `
-${report.text}`;
+  text += `\n${report.text}`;
+  text += `\n\n<b>Next action hints</b>\n`;
+  for (const hint of nextActionHints) text += `• ${escapeHtml(hint)}\n`;
 
   const kb = new InlineKeyboard();
 
@@ -37467,6 +37501,48 @@ async function buildBroadcastPostRunReport(bc, stats) {
   text += `• next action: ${escapeHtml(nextAction)}`;
 
   return { text, sent, retry, skipped, failed, dominant, nextAction };
+}
+
+function buildBroadcastNextActionHints(bc, report) {
+  const hints = [];
+  const status = String(bc?.status || '').toUpperCase();
+  const sent = Number(report?.sent || 0) || 0;
+  const retry = Number(report?.retry || 0) || 0;
+  const skipped = Number(report?.skipped || 0) || 0;
+  const failed = Number(report?.failed || 0) || 0;
+
+  if ((status === 'PENDING' || status === 'RUNNING') && sent === 0 && retry === 0 && skipped === 0 && failed === 0) {
+    hints.push('Сначала дождись первого batch и только потом обнови report.');
+  }
+  if (sent > 0 && (status === 'PENDING' || status === 'RUNNING') && retry === 0 && skipped === 0 && failed === 0) {
+    hints.push('Первая волна идёт чисто: дождись следующего batch и не запускай повтор вслепую.');
+  }
+  if (retry > 0) {
+    hints.push('Проверь повторные попытки и не принимай решение до refresh карточки.');
+  }
+  if (skipped > 0 || failed > 0) {
+    hints.push('Если есть ошибки, открой «Пропуски/ошибки» и начни с dominant reasons.');
+  }
+  if (!hints.length && status === 'DONE') {
+    hints.push('Рассылка завершена: проверь финальный report и только потом решай про следующий запуск.');
+  }
+  if (!hints.length) hints.push(String(report?.nextAction || 'Обнови карточку и проверь report.'));
+
+  const seen = new Set();
+  return hints.filter((x) => {
+    const key = String(x || '').trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 3);
+}
+
+function buildBroadcastFirstBatchSafetyText() {
+  return [
+    'Сначала дождись первого batch, а не полной доставки.',
+    'Перед следующим действием проверь sent / retry / skipped / failed.',
+    'Не делай повторный запуск вслепую, пока не увидишь report.',
+  ];
 }
 
 function adminHardSkipHitReasonDayKey(day, reasonKey) {
