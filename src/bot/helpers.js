@@ -1,3 +1,4 @@
+import { decodeBroadcastAudience, decodeBroadcastBlockedKind, decodeButtonPresetKey } from './commsCallbacks.js';
 import crypto from 'crypto';
 
 export function escapeHtml(s) {
@@ -236,6 +237,10 @@ export function parseCb(data) {
   if (out.s) out.s = mapLeadStatus(out.s);
   if (out.st) out.st = mapLeadStatus(out.st);
   if (out.ret) out.ret = mapRet(out.ret);
+
+  if (out.a === 'a:bc_audience' && out.aud) out.aud = decodeBroadcastAudience(out.aud);
+  if (out.a === 'a:bc_simple_btn_preset' && out.k) out.k = decodeButtonPresetKey(out.k);
+  if (out.a === 'a:bc_blocked' && out.t) out.t = decodeBroadcastBlockedKind(out.t);
 
   return out;
 }

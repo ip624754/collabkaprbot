@@ -44,6 +44,7 @@ import { buildAdminOpsText } from './adminOpsText.js';
 import { qstashPublishJSON, getQStashDeliveryUrl, getQStashLibHealth } from '../lib/qstash.js';
 import { appendOperatorControlAudit, getOperatorControlSnapshot, setOperatorControlToggle } from '../lib/operatorControls.js';
 import { BROADCAST_CAPTION_SAFE_LIMIT, buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
+import { commsCb } from './commsCallbacks.js';
 
 let BOT;
 
@@ -19229,7 +19230,7 @@ ${escapeHtml(safeCap)}
     const photo = Array.isArray(msg.photo) && msg.photo.length ? msg.photo[msg.photo.length - 1] : null;
     if (!photo?.file_id) {
       await ctx.reply('❌ Нужна именно картинка. Отправь фото одним сообщением.', {
-        reply_markup: new InlineKeyboard().text('⬅️ К composer', 'a:bc_start').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+        reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart()).row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
       });
       try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
       return;
@@ -19244,7 +19245,7 @@ ${escapeHtml(safeCap)}
     await clearExpectText(ctx.from.id);
     await setDraft(ctx.from.id, draft, 30 * 60);
     await ctx.reply('✅ Картинка сохранена.', {
-      reply_markup: new InlineKeyboard().text('⬅️ К composer', 'a:bc_start')
+      reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart())
     });
     return;
   });
@@ -19285,7 +19286,7 @@ ${escapeHtml(safeCap)}
     } else {
       await ctx.reply('❌ Неподдерживаемый формат. Отправь текст, фото, видео, GIF или документ.', {
         reply_markup: new InlineKeyboard()
-          .text('❌ Отмена', 'a:bc_cancel')
+          .text('❌ Отмена', commsCb.bcCancel())
           .text('⬅️ Админка', 'a:admin_home')
           .row()
           .text('📋 Меню', 'a:menu')
@@ -19308,11 +19309,11 @@ ${escapeHtml(safeCap)}
       {
         parse_mode: 'HTML',
         reply_markup: new InlineKeyboard()
-          .text('🔗 Добавить кнопки', 'a:bc_buttons')
+          .text('🔗 Добавить кнопки', commsCb.bcButtons())
           .row()
-          .text('➡️ Без кнопок → аудитория', 'a:bc_btn_done')
+          .text('➡️ Без кнопок → аудитория', commsCb.bcBtnDone())
           .row()
-          .text('⬅️ Отмена', 'a:bc_cancel')
+          .text('⬅️ Отмена', commsCb.bcCancel())
       }
     );
     return;
@@ -19959,7 +19960,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
     .text('📌 Открыть шаблон', `a:admin_umsg_tpl_view|tid:${id}|p:0`)
     .row()
     .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
-    .text('📤 Outbox', `a:admin_outbox_v|i:${idx}|p:${page}`)
+    .text('📤 Outbox', commsCb.adminOutboxView(idx, page))
     .row();
 
   kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
@@ -20128,9 +20129,9 @@ if (exp.type === 'adm_outbox_tpl_label') {
       try { await clearExpectText(ctx.from.id); } catch {}
 
       const kb = new InlineKeyboard()
-        .text('🚀 Опубликовать', 'a:admin_notice_publish')
+        .text('🚀 Опубликовать', commsCb.adminNoticePublish())
         .row()
-        .text('⬅️ Назад', 'a:admin_notice')
+        .text('⬅️ Назад', commsCb.adminNotice())
         .row();
       kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
@@ -20170,7 +20171,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
         await setSysNotice(cur);
         try { await clearExpectText(ctx.from.id); } catch {}
 
-        const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+        const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminNotice());
         kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
         await safeEditOrReply(ctx, '🧹 CTA отключён.', { reply_markup: kb });
@@ -20216,8 +20217,8 @@ if (exp.type === 'adm_outbox_tpl_label') {
       try { await clearExpectText(ctx.from.id); } catch {}
 
       const kb = new InlineKeyboard()
-        .text('⬅️ Назад', 'a:admin_notice')
-        .text('🚀 Опубликовать', 'a:admin_notice_publish')
+        .text('⬅️ Назад', commsCb.adminNotice())
+        .text('🚀 Опубликовать', commsCb.adminNoticePublish())
         .row();
       kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
@@ -20245,7 +20246,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
         await setSysNotice(cur);
         try { await clearExpectText(ctx.from.id); } catch {}
 
-        const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+        const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminNotice());
         kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
         await safeEditOrReply(ctx, '✅ Expire отключён.', { reply_markup: kb });
@@ -20270,8 +20271,8 @@ if (exp.type === 'adm_outbox_tpl_label') {
       try { await clearExpectText(ctx.from.id); } catch {}
 
       const kb = new InlineKeyboard()
-        .text('⬅️ Назад', 'a:admin_notice')
-        .text('🚀 Опубликовать', 'a:admin_notice_publish')
+        .text('⬅️ Назад', commsCb.adminNotice())
+        .text('🚀 Опубликовать', commsCb.adminNoticePublish())
         .row();
       kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
@@ -20383,7 +20384,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       const draft = await getDraft(ctx.from.id);
       if (!draft || !broadcastDraftHasContent(draft)) {
         await ctx.reply('⚠️ Черновик не найден. Начни заново.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart())
         });
         return;
       }
@@ -20391,7 +20392,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       if (!draft.buttons) draft.buttons = [];
       if (draft.buttons.length >= 3) {
         await ctx.reply('Максимум 3 кнопки. Нажми «✅ Готово» чтобы продолжить.', {
-          reply_markup: new InlineKeyboard().text('✅ Готово', 'a:bc_btn_done').row().text('⬅️ Отмена', 'a:bc_cancel')
+          reply_markup: new InlineKeyboard().text('✅ Готово', commsCb.bcBtnDone()).row().text('⬅️ Отмена', commsCb.bcCancel())
         });
         return;
       }
@@ -20431,9 +20432,9 @@ if (exp.type === 'adm_outbox_tpl_label') {
             .text('🏷 Профиль', 'a:bc_tpl_bp')
             .row()
             .text('🎬 Оффер', 'a:bc_tpl_offer')
-            .text('✅ Готово', 'a:bc_btn_done')
+            .text('✅ Готово', commsCb.bcBtnDone())
             .row()
-            .text('⬅️ Отмена', 'a:bc_cancel')
+            .text('⬅️ Отмена', commsCb.bcCancel())
             .text('⬅️ Админка', 'a:admin_home')
             .row()
             .text('📋 Меню', 'a:menu')
@@ -20506,7 +20507,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       const draft = await getDraft(ctx.from.id);
       if (!draft || !broadcastDraftHasContent(draft)) {
         await ctx.reply('⚠️ Черновик не найден. Начни заново.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart())
         });
         return;
       }
@@ -20515,9 +20516,9 @@ if (exp.type === 'adm_outbox_tpl_label') {
       if (draft.buttons.length >= 3) {
         await ctx.reply('Максимум 3 кнопки. Нажми «✅ Готово» чтобы продолжить.', {
           reply_markup: new InlineKeyboard()
-            .text('✅ Готово', 'a:bc_btn_done')
+            .text('✅ Готово', commsCb.bcBtnDone())
             .row()
-            .text('⬅️ Отмена', 'a:bc_cancel')
+            .text('⬅️ Отмена', commsCb.bcCancel())
         });
         return;
       }
@@ -20556,9 +20557,9 @@ if (exp.type === 'adm_outbox_tpl_label') {
         `✅ Добавлено: ${added}. Сейчас (${draft.buttons.length}/3):\n${list}\n\nЕщё кнопку — отправь строку. Или нажми «✅ Готово».`,
         {
           reply_markup: new InlineKeyboard()
-            .text('✅ Готово', 'a:bc_btn_done')
+            .text('✅ Готово', commsCb.bcBtnDone())
             .row()
-            .text('⬅️ Отмена', 'a:bc_cancel')
+            .text('⬅️ Отмена', commsCb.bcCancel())
         }
       );
       try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
@@ -29995,7 +29996,7 @@ if (p.a === 'a:hs_hits') {
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
 
-      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+      const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminNotice());
       kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(
@@ -30023,7 +30024,7 @@ https://collabka.com/status</pre>
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
 
-      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+      const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminNotice());
       kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(
@@ -30076,7 +30077,7 @@ https://collabka.com/status</pre>
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
 
-      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_notice');
+      const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminNotice());
       kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
       await safeEditOrReply(
@@ -30974,7 +30975,7 @@ if (p.a === 'a:admin_outbox_note') {
   if (!uid) {
     await safeEditOrReply(ctx, '⚠️ Нет user_id у записи (нельзя открыть заметку).', {
       reply_markup: (() => {
-        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminOutboxView(idx, page));
         kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
         return kb;
       })()
@@ -30986,7 +30987,7 @@ if (p.a === 'a:admin_outbox_note') {
   await setAdminUserNoteReturn(ctx.from.id, {
     uid,
     backText: '⬅️ Outbox',
-    backCb: `a:admin_outbox_v|i:${idx}|p:${page}`,
+    backCb: commsCb.adminOutboxView(idx, page),
     sectionBackText: '⬅️ Коммуникации',
     sectionBackCb: 'a:admin_comms',
   });
@@ -31006,7 +31007,7 @@ if (p.a === 'a:admin_outbox_repeat') {
     await safeEditOrReply(ctx, '✉️ Повтор из Outbox доступен только в <b>личном чате</b> с ботом (DM), чтобы не светить содержимое сообщений в группах.', {
       parse_mode: 'HTML',
       reply_markup: (() => {
-        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminOutboxView(idx, page));
         kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
         return kb;
       })()
@@ -31030,7 +31031,7 @@ const templateRaw = rawMeta.text;
   if (!targetTgId || !templateRaw) {
     await safeEditOrReply(ctx, '⚠️ Нельзя повторить: нет TG ID или текста.', {
       reply_markup: (() => {
-        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminOutboxView(idx, page));
         kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
         return kb;
       })()
@@ -31070,7 +31071,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
       phUsed,
       phUnknown,
       // Return route for sendAdminMessageToUser (so “done/back” stays inside Outbox)
-      retCb: `a:admin_outbox_v|i:${idx}|p:${page}`,
+      retCb: commsCb.adminOutboxView(idx, page),
       retText: '⬅️ Outbox',
       sectionBackText: '⬅️ Коммуникации',
       sectionBackCb: 'a:admin_comms',
@@ -31084,7 +31085,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
   if (!stored) {
     await safeEditOrReply(ctx, '⚠️ Redis недоступен — нельзя безопасно показать предпросмотр и подтверждение. Повтор отменён.', {
       reply_markup: (() => {
-        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminOutboxView(idx, page));
         kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
         return kb;
       })()
@@ -31109,7 +31110,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
     .text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:all|p:0|wn:1`)
     .text('⚪ Без «Что дальше»', `a:adm_umsg_send|tk:${token}|f:all|p:0|wn:0`)
     .row()
-    .text('❌ Отмена', `a:admin_outbox_v|i:${idx}|p:${page}`)
+    .text('❌ Отмена', commsCb.adminOutboxView(idx, page))
     .row();
 
   if (uid) kb.text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`).row();
@@ -31135,7 +31136,7 @@ if (p.a === 'a:admin_outbox_to_tpl') {
     await safeEditOrReply(ctx, '📌 Сохранение в шаблоны доступно только в <b>личном чате</b> с ботом (DM).', {
       parse_mode: 'HTML',
       reply_markup: (() => {
-        const kb = new InlineKeyboard().text('⬅️ Назад', `a:admin_outbox_v|i:${idx}|p:${page}`);
+        const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminOutboxView(idx, page));
         kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
         return kb;
       })()
@@ -31165,7 +31166,7 @@ if (p.a === 'a:admin_outbox_to_tpl') {
   const hint = clipText(safeText.replace(/\n+/g, ' / '), 160);
 
   const kb = new InlineKeyboard()
-    .text('❌ Отмена', `a:admin_outbox_v|i:${idx}|p:${page}`)
+    .text('❌ Отмена', commsCb.adminOutboxView(idx, page))
     .row()
     .text('⬅️ Коммуникации', 'a:admin_comms')
     .row()
@@ -31768,8 +31769,8 @@ ${DEGRADED_COPY.line}
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
-            .text('🧩 Перейти в конструктор', 'a:bc_start')
-            .text('❌ Отмена', 'a:bc_cancel')
+            .text('🧩 Перейти в конструктор', commsCb.bcStart())
+            .text('❌ Отмена', commsCb.bcCancel())
             .row()
             .text('📋 Меню', 'a:menu')
             .text('🏠 Home', 'a:home')
@@ -31793,7 +31794,7 @@ ${DEGRADED_COPY.line}
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
-            .text('⬅️ К composer', 'a:bc_start')
+            .text('⬅️ К composer', commsCb.bcStart())
             .row()
             .text('📋 Меню', 'a:menu')
             .text('🏠 Home', 'a:home')
@@ -31808,7 +31809,7 @@ ${DEGRADED_COPY.line}
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
       await ctx.answerCallbackQuery();
       const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: 'all', buttons: [] };
-      const kb = new InlineKeyboard().text('⬅️ К composer', 'a:bc_start');
+      const kb = new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart());
       if (draft.fileId) kb.text('🧹 Убрать картинку', 'a:bc_simple_media_clear');
       kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
       await safeEditOrReply(ctx,
@@ -31875,7 +31876,7 @@ ${DEGRADED_COPY.line}
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
-            .text('⬅️ К кнопкам', 'a:bc_simple_button')
+            .text('⬅️ К кнопкам', commsCb.bcSimpleButton())
             .row()
             .text('📋 Меню', 'a:menu')
             .text('🏠 Home', 'a:home')
@@ -31921,7 +31922,7 @@ ${DEGRADED_COPY.line}
       } catch (e) {
         await safeEditOrReply(ctx, `⚠️ Preview не отправился: ${escapeHtml(String(e?.message || e).slice(0, 160))}`, {
           parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard().text('⬅️ К composer', String(draft?.mode || '') === 'simple' ? 'a:bc_start' : 'a:bc_btn_done')
+          reply_markup: new InlineKeyboard().text('⬅️ К composer', String(draft?.mode || '') === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
         });
       }
       return;
@@ -31934,7 +31935,7 @@ ${DEGRADED_COPY.line}
       const draft = await getDraft(ctx.from.id);
       if (!draft || !broadcastDraftHasContent(draft)) {
         await safeEditOrReply(ctx, '⚠️ Нет контента для отправки.', {
-          reply_markup: new InlineKeyboard().text('⬅️ К composer', 'a:bc_start').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+          reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart()).row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
         return;
       }
@@ -31961,7 +31962,7 @@ ${DEGRADED_COPY.line}
       const draft = await getDraft(ctx.from.id);
       if (!draft || !broadcastDraftHasContent(draft)) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
         return;
       }
@@ -31980,7 +31981,7 @@ ${DEGRADED_COPY.line}
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
         return;
       }
@@ -31993,9 +31994,9 @@ ${DEGRADED_COPY.line}
             .text('🏷 Профиль', 'a:bc_tpl_bp')
             .row()
             .text('🎬 Оффер', 'a:bc_tpl_offer')
-            .text('✅ Готово', 'a:bc_btn_done')
+            .text('✅ Готово', commsCb.bcBtnDone())
             .row()
-            .text('⬅️ Отмена', 'a:bc_start')
+            .text('⬅️ Отмена', commsCb.bcStart())
             .text('⬅️ Админка', 'a:admin_home')
             .row()
             .text('📋 Меню', 'a:menu')
@@ -32014,7 +32015,7 @@ ${DEGRADED_COPY.line}
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
         return;
       }
@@ -32030,10 +32031,10 @@ ${DEGRADED_COPY.line}
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
-            .text('⬅️ Назад к кнопкам', 'a:bc_buttons')
+            .text('⬅️ Назад к кнопкам', commsCb.bcButtons())
             .row()
-            .text('✅ Готово', 'a:bc_btn_done')
-            .text('⬅️ Отмена', 'a:bc_start')
+            .text('✅ Готово', commsCb.bcBtnDone())
+            .text('⬅️ Отмена', commsCb.bcStart())
         }
       );
       await setExpectText(ctx.from.id, { type: 'bc_btn_tpl_id', kind }, 10 * 60);
@@ -32075,7 +32076,7 @@ ${DEGRADED_COPY.line}
       const draft = await getDraft(ctx.from.id);
       if (!draft || !draft.type) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
         return;
       }
@@ -37190,14 +37191,14 @@ ${banner}`;
   for (let i = 0; i < presets.length; i += 2) {
     const a = presets[i];
     const b = presets[i + 1];
-    if (a) kb.text(`⚡ ${a.label}`, `a:bc_simple_btn_preset|k:${a.key}`);
-    if (b) kb.text(`⚡ ${b.label}`, `a:bc_simple_btn_preset|k:${b.key}`);
+    if (a) kb.text(`⚡ ${a.label}`, commsCb.bcSimpleBtnPreset(a.key));
+    if (b) kb.text(`⚡ ${b.label}`, commsCb.bcSimpleBtnPreset(b.key));
     kb.row();
   }
-  kb.text('✍️ Своя кнопка', 'a:bc_simple_btn_custom');
-  if (current) kb.text('🧹 Очистить кнопку', 'a:bc_simple_btn_clear');
+  kb.text('✍️ Своя кнопка', commsCb.bcSimpleBtnCustom());
+  if (current) kb.text('🧹 Очистить кнопку', commsCb.bcSimpleBtnClear());
   kb.row();
-  kb.text('⬅️ К composer', 'a:bc_start').row();
+  kb.text('⬅️ К composer', commsCb.bcStart()).row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -37242,17 +37243,17 @@ async function renderBroadcastSimpleComposer(ctx, banner = '') {
 • 👁 честный preview перед отправкой`;
 
   const kb = new InlineKeyboard()
-    .text(hasText ? '📝 Изменить текст' : '📝 Добавить текст', 'a:bc_simple_text')
-    .text(hasMedia ? '🖼 Обновить картинку' : '🖼 Добавить картинку', 'a:bc_simple_media')
+    .text(hasText ? '📝 Изменить текст' : '📝 Добавить текст', commsCb.bcSimpleText())
+    .text(hasMedia ? '🖼 Обновить картинку' : '🖼 Добавить картинку', commsCb.bcSimpleMedia())
     .row()
-    .text(btn ? '🔗 Изменить кнопку' : '🔗 Добавить кнопку', 'a:bc_simple_button')
-    .text('👥 Аудитория', 'a:bc_simple_audience')
+    .text(btn ? '🔗 Изменить кнопку' : '🔗 Добавить кнопку', commsCb.bcSimpleButton())
+    .text('👥 Аудитория', commsCb.bcSimpleAudience())
     .row()
-    .text('👁 Preview', 'a:bc_preview')
-    .text('✅ Send', 'a:bc_send_q')
+    .text('👁 Preview', commsCb.bcPreview())
+    .text('✅ Send', commsCb.bcSendQ())
     .row()
-    .text('🧹 Clear draft', 'a:bc_simple_clear')
-    .text('⚡ Перейти в быстрый пост', 'a:bc_start_adv')
+    .text('🧹 Clear draft', commsCb.bcSimpleClear())
+    .text('⚡ Перейти в быстрый пост', commsCb.bcStartAdv())
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
@@ -37263,7 +37264,7 @@ async function renderBroadcastAudiencePicker(ctx) {
   const draft = await getDraft(ctx.from.id);
   if (!draft || !broadcastDraftHasContent(draft)) {
     await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
-      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+      reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
     });
     return;
   }
@@ -37285,15 +37286,15 @@ async function renderBroadcastAudiencePicker(ctx) {
   } catch {}
 
   const kb = new InlineKeyboard()
-    .text('📨 Все', 'a:bc_audience|aud:all')
-    .text('🧑‍🎤 Креаторы', 'a:bc_audience|aud:creators')
+    .text('📨 Все', commsCb.bcAudienceSet('all'))
+    .text('🧑‍🎤 Креаторы', commsCb.bcAudienceSet('creators'))
     .row()
-    .text('🏢 Бренды', 'a:bc_audience|aud:brands')
-    .text('🧩 Кураторы', 'a:bc_audience|aud:curators')
+    .text('🏢 Бренды', commsCb.bcAudienceSet('brands'))
+    .text('🧩 Кураторы', commsCb.bcAudienceSet('curators'))
     .row()
-    .text('🧑‍💼 Менеджеры', 'a:bc_audience|aud:managers')
+    .text('🧑‍💼 Менеджеры', commsCb.bcAudienceSet('managers'))
     .row()
-    .text('⬅️ К composer', payload.mode === 'simple' ? 'a:bc_start' : 'a:bc_btn_done')
+    .text('⬅️ К composer', payload.mode === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
@@ -37304,7 +37305,7 @@ async function renderBroadcastAudiencePicker(ctx) {
 async function renderBroadcastPreview(ctx, draft, { banner = '' } = {}) {
   if (!draft || !broadcastDraftHasContent(draft)) {
     await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-      reply_markup: new InlineKeyboard().text('📣 Начать заново', 'a:bc_start').row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
+      reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
     });
     return;
   }
@@ -37340,13 +37341,13 @@ async function renderBroadcastPreview(ctx, draft, { banner = '' } = {}) {
   previewMsg += `\n\nPreview отправляется отдельным сообщением в этот чат. Send создаёт реальную рассылку в outbox/queue.`;
 
   const kb = new InlineKeyboard()
-    .text('👁 Preview', 'a:bc_preview')
-    .text('✅ Send', 'a:bc_confirm')
+    .text('👁 Preview', commsCb.bcPreview())
+    .text('✅ Send', commsCb.bcConfirm())
     .row()
-    .text('🧹 Clear draft', payload.mode === 'simple' ? 'a:bc_simple_clear' : 'a:bc_cancel')
-    .text('👥 Аудитория', 'a:bc_simple_audience')
+    .text('🧹 Clear draft', payload.mode === 'simple' ? commsCb.bcSimpleClear() : commsCb.bcCancel())
+    .text('👥 Аудитория', commsCb.bcSimpleAudience())
     .row()
-    .text('⬅️ К composer', payload.mode === 'simple' ? 'a:bc_start' : 'a:bc_btn_done')
+    .text('⬅️ К composer', payload.mode === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
@@ -37378,12 +37379,12 @@ async function renderBroadcastList(ctx, page = 0) {
   const kb = new InlineKeyboard();
   for (const r of items) {
     const icon = statusIcon[r.status] || '❓';
-    kb.text(`${icon} #${r.id} ${r.status}`, `a:bc_view|id:${r.id}`).row();
+    kb.text(`${icon} #${r.id} ${r.status}`, commsCb.bcView(r.id)).row();
   }
-  if (page > 0) kb.text('⬅️', `a:bc_list|p:${page - 1}`);
-  if (hasNext) kb.text('➡️', `a:bc_list|p:${page + 1}`);
+  if (page > 0) kb.text('⬅️', commsCb.bcList(page - 1));
+  if (hasNext) kb.text('➡️', commsCb.bcList(page + 1));
   if (page > 0 || hasNext) kb.row();
-  kb.text('📣 Новая рассылка', 'a:bc_start').row();
+  kb.text('📣 Новая рассылка', commsCb.bcStart()).row();
   kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -37393,7 +37394,7 @@ async function renderBroadcastView(ctx, broadcastId) {
   const bc = await db.getBroadcast(Number(broadcastId));
   if (!bc) {
     await safeEditOrReply(ctx, '⚠️ Рассылка не найдена.', {
-      reply_markup: new InlineKeyboard().text('⬅️ К списку', 'a:bc_list|p:0')
+      reply_markup: new InlineKeyboard().text('⬅️ К списку', commsCb.bcList(0))
     });
     return;
   }
@@ -37450,20 +37451,20 @@ async function renderBroadcastView(ctx, broadcastId) {
   const kb = new InlineKeyboard();
 
   if (bc.status === 'RUNNING' || bc.status === 'PENDING') {
-    kb.text('⏸ Пауза', `a:bc_pause|id:${bc.id}`)
-      .text('🛑 Стоп', `a:bc_stop|id:${bc.id}`)
+    kb.text('⏸ Пауза', commsCb.bcPause(bc.id))
+      .text('🛑 Стоп', commsCb.bcStop(bc.id))
       .row();
-    if (blocked > 0) kb.text('🧱 Пропуски/ошибки', `a:bc_blocked|id:${bc.id}|t:hard|p:0`).row();
-    kb.text('🔄 Обновить', `a:bc_view|id:${bc.id}`).row();
+    if (blocked > 0) kb.text('🧱 Пропуски/ошибки', commsCb.bcBlocked(bc.id, 'hard', 0)).row();
+    kb.text('🔄 Обновить', commsCb.bcView(bc.id)).row();
   } else if (bc.status === 'PAUSED') {
-    kb.text('▶️ Продолжить', `a:bc_resume|id:${bc.id}`)
-      .text('🛑 Стоп', `a:bc_stop|id:${bc.id}`)
+    kb.text('▶️ Продолжить', commsCb.bcResume(bc.id))
+      .text('🛑 Стоп', commsCb.bcStop(bc.id))
       .row();
-    if (blocked > 0) kb.text('🧱 Пропуски/ошибки', `a:bc_blocked|id:${bc.id}|t:hard|p:0`).row();
-    kb.text('🔄 Обновить', `a:bc_view|id:${bc.id}`).row();
+    if (blocked > 0) kb.text('🧱 Пропуски/ошибки', commsCb.bcBlocked(bc.id, 'hard', 0)).row();
+    kb.text('🔄 Обновить', commsCb.bcView(bc.id)).row();
   }
 
-  kb.text('⬅️ К списку', 'a:bc_list|p:0').row();
+  kb.text('⬅️ К списку', commsCb.bcList(0)).row();
   kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
@@ -37474,7 +37475,7 @@ async function renderBroadcastBlocked(ctx, broadcastId, page = 0, tab = 'hard') 
   const bc = await db.getBroadcast(Number(broadcastId));
   if (!bc) {
     await safeEditOrReply(ctx, '⚠️ Рассылка не найдена.', {
-      reply_markup: new InlineKeyboard().text('⬅️ К списку', 'a:bc_list|p:0'),
+      reply_markup: new InlineKeyboard().text('⬅️ К списку', commsCb.bcList(0)),
     });
     return;
   }
@@ -37508,15 +37509,15 @@ async function renderBroadcastBlocked(ctx, broadcastId, page = 0, tab = 'hard') 
   }
 
   const kb = new InlineKeyboard();
-  kb.text(kind === 'hard' ? '✅ hard-skip' : 'hard-skip', `a:bc_blocked|id:${bc.id}|t:hard|p:0`);
-  kb.text(kind === 'all' ? '✅ all' : 'all', `a:bc_blocked|id:${bc.id}|t:all|p:0`).row();
+  kb.text(kind === 'hard' ? '✅ hard-skip' : 'hard-skip', commsCb.bcBlocked(bc.id, 'hard', 0));
+  kb.text(kind === 'all' ? '✅ all' : 'all', commsCb.bcBlocked(bc.id, 'all', 0)).row();
 
-  if (p > 0) kb.text('⬅️', `a:bc_blocked|id:${bc.id}|t:${kind}|p:${p - 1}`);
-  if (items.length === PAGE) kb.text('➡️', `a:bc_blocked|id:${bc.id}|t:${kind}|p:${p + 1}`);
+  if (p > 0) kb.text('⬅️', commsCb.bcBlocked(bc.id, kind, p - 1));
+  if (items.length === PAGE) kb.text('➡️', commsCb.bcBlocked(bc.id, kind, p + 1));
   if (p > 0 || items.length === PAGE) kb.row();
 
-  kb.text(`⬅️ #${bc.id}`, `a:bc_view|id:${bc.id}`).row();
-  kb.text('⬅️ К списку', 'a:bc_list|p:0').row();
+  kb.text(`⬅️ #${bc.id}`, commsCb.bcView(bc.id)).row();
+  kb.text('⬅️ К списку', commsCb.bcList(0)).row();
   kb.text('⬅️ Админка', 'a:admin_home').row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
 
@@ -37745,7 +37746,7 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
     .text('👥 Пользователи', 'a:admin_users|f:all|p:0')
     .text('💰 Платежи', 'a:admin_payments')
     .row()
-    .text('📣 Рассылка', 'a:bc_list|p:0')
+    .text('📣 Рассылка', commsCb.bcList(0))
     .text('📜 Аудит', 'a:aud|h:24|p:0')
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
@@ -37790,7 +37791,7 @@ async function renderAdminComms(ctx) {
   if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• 📣 Офиц.канал — очередь публикаций (${pending})\n`;
 
   const kb = new InlineKeyboard()
-    .text('📣 Объявление', 'a:admin_notice')
+    .text('📣 Объявление', commsCb.adminNotice())
     .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
     .row()
     .text('📤 Outbox', 'a:admin_outbox|p:0');
@@ -38388,17 +38389,17 @@ async function renderAdminSysNotice(ctx) {
 Чтобы показать снова — жми «🚀 Опубликовать» (увеличит версию).`;
 
   const kb = new InlineKeyboard()
-    .text(n.active ? '⚫ Выключить' : '🟢 Включить', 'a:admin_notice_toggle')
-    .text(`🎚 Уровень: ${sev}`, 'a:admin_notice_sev')
+    .text(n.active ? '⚫ Выключить' : '🟢 Включить', commsCb.adminNoticeToggle())
+    .text(`🎚 Уровень: ${sev}`, commsCb.adminNoticeSeverity())
     .row()
-    .text(`🎯 Кому: ${tgt}`, 'a:admin_notice_target')
-    .text('⏰ Expire', 'a:admin_notice_expire')
+    .text(`🎯 Кому: ${tgt}`, commsCb.adminNoticeTarget())
+    .text('⏰ Expire', commsCb.adminNoticeExpire())
     .row()
-    .text('🔗 CTA', 'a:admin_notice_cta')
+    .text('🔗 CTA', commsCb.adminNoticeCta())
     .text('✍️ Текст', 'a:admin_notice_text')
     .row()
-    .text('🧹 Очистить текст', 'a:admin_notice_clear')
-    .text('🚀 Опубликовать (новая версия)', 'a:admin_notice_publish')
+    .text('🧹 Очистить текст', commsCb.adminNoticeClear())
+    .text('🚀 Опубликовать (новая версия)', commsCb.adminNoticePublish())
     .row()
     .text('⬅️ Коммуникации', 'a:admin_comms')
     .row()
@@ -38662,19 +38663,19 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
         : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
       const t = fmtOutboxBtnTime(it.ts) || '';
       const label = clipText(`${icon} ${t} ${to}`, 48);
-      kb.text(label, `a:admin_outbox_v|i:${absIdx}|p:${p}`).row();
+      kb.text(label, commsCb.adminOutboxView(absIdx, p)).row();
     }
 
     if (pages > 1) {
       const prev = (p - 1 + pages) % pages;
       const next = (p + 1) % pages;
-      kb.text('⬅️', `a:admin_outbox|p:${prev}`)
-        .text(`${p + 1}/${pages}`, `a:admin_outbox|p:${p}`)
-        .text('➡️', `a:admin_outbox|p:${next}`)
+      kb.text('⬅️', commsCb.adminOutbox(prev))
+        .text(`${p + 1}/${pages}`, commsCb.adminOutbox(p))
+        .text('➡️', commsCb.adminOutbox(next))
         .row();
     }
 
-    kb.text('🧹 Очистить', `a:admin_outbox_clear_q|p:${p}`).row();
+    kb.text('🧹 Очистить', commsCb.adminOutboxClearQ(p)).row();
     kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
 
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
@@ -38688,7 +38689,7 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
     if (!it) {
       await safeEditOrReply(ctx, '⚠️ Запись не найдена (возможно, очищено).', {
         reply_markup: (() => {
-        const kb = new InlineKeyboard().text('⬅️ К списку', `a:admin_outbox|p:${p}`);
+        const kb = new InlineKeyboard().text('⬅️ К списку', commsCb.adminOutbox(p));
         kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
         return kb;
       })()
@@ -38750,8 +38751,8 @@ Hash: <code>${escapeHtml(hash)}</code>` : '') +
 <pre>${escapeHtml(snippet || '—')}</pre>`;
 
     const kb = new InlineKeyboard()
-      .text('⬅️ К списку', `a:admin_outbox|p:${p}`)
-      .text('🧹 Очистить', `a:admin_outbox_clear_q|p:${p}`)
+      .text('⬅️ К списку', commsCb.adminOutbox(p))
+      .text('🧹 Очистить', commsCb.adminOutboxClearQ(p))
       .row();
 
     const uid = Number(it.target_user_id || 0);
@@ -38762,13 +38763,13 @@ Hash: <code>${escapeHtml(hash)}</code>` : '') +
 
       const canRepeat = !!(isPrivateChat && Number(it.target_tg_id || 0) && String(it.snippet || it.preview || '').trim());
       if (canRepeat) {
-        kb.text('✉️ Повторить', `a:admin_outbox_repeat|i:${index}|p:${p}`)
-          .text('📝 Заметка', `a:admin_outbox_note|i:${index}|p:${p}`)
+        kb.text('✉️ Повторить', commsCb.adminOutboxRepeat(index, p))
+          .text('📝 Заметка', commsCb.adminOutboxNote(index, p))
           .row()
-          .text('📌 В шаблон', `a:admin_outbox_to_tpl|i:${index}|p:${p}`)
+          .text('📌 В шаблон', commsCb.adminOutboxToTpl(index, p))
           .row();
       } else {
-        kb.text('📝 Заметка', `a:admin_outbox_note|i:${index}|p:${p}`).row();
+        kb.text('📝 Заметка', commsCb.adminOutboxNote(index, p)).row();
       }
     }
 

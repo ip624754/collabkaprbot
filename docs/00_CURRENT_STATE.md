@@ -2575,3 +2575,63 @@ After deploy, rerun a real admin broadcast and confirm:
 - no new `qstash_publish_failed` for invalid `flowControlKey`
 - broadcast fan-out starts queueing normally
 - broadcast delivery progresses without this QStash validation error
+
+## 0.10) Upstream import — compact callback canon/helper port for comms admin (STEP560)
+
+### Status
+- Type: narrow runtime hardening step
+- Code changes: yes
+- Runtime changes: yes
+- Migrations: none
+- Confidence: source-confirmed; live admin-comms smoke still required
+
+### What was imported
+The first upstream runtime import for Collabka is now applied to the **comms admin layer**:
+- central compact callback helper for broadcast / notice / outbox surfaces
+- compact option codes for audience selection
+- compact option codes for simple button presets
+- compact option codes for broadcast blocked-tab routing
+- backward-compatible callback decoding in the shared parser
+
+### Why this import matters
+Collabka already had strong operator UX, but comms admin callbacks were still assembled ad hoc in many places.
+
+This step introduces a single helper/canon so the comms layer stops drifting callback-by-callback and stays safer under Telegram callback size limits.
+
+### Scope
+Applied to the comms admin surface only:
+- broadcast composer
+- broadcast audience picker
+- broadcast preview
+- broadcast list / view / blocked tabs
+- system notice screen
+- outbox list / outbox item view
+
+### Backward compatibility
+Old callback payloads remain valid.
+
+`parseCb(...)` now decodes compact comms option codes into the same canonical values the runtime already expects, so both old and new messages/buttons continue to work.
+
+Examples:
+- audience codes decode back into `all / creators / brands / curators / managers`
+- preset codes decode back into `bot / app / landing / offers / catalog / feed`
+- blocked-tab codes decode back into `hard / all`
+
+### What did not change
+This step does **not** change:
+- action names in the registry
+- queue / retry / fan-out runtime
+- broadcast payload semantics
+- notice storage semantics
+- outbox storage
+- invite / rewards layer
+- broad admin UX outside comms surfaces
+
+### Live verification still required
+After deploy, operator smoke should confirm:
+- broadcast composer opens and navigates normally
+- audience buttons still select the right audience
+- simple button presets still resolve correctly
+- broadcast blocked tabs still switch correctly
+- system notice screen still works end-to-end
+- outbox list and item view still open correctly
