@@ -2635,3 +2635,28 @@ After deploy, operator smoke should confirm:
 - broadcast blocked tabs still switch correctly
 - system notice screen still works end-to-end
 - outbox list and item view still open correctly
+
+
+## STEP562 — Broadcast Draft Recap Layer
+
+Status: implemented as a narrow runtime import on top of the current Collabka comms layer.
+
+What was added:
+- draft recap block inside `Конструктор рассылки`
+- recap-before-send block inside broadcast preview/confirm screen
+- dry-run sample targets for the current audience scope
+- remembered default audience support for broadcast drafts
+- preview-only warning clarifying that sample targets are only the first slice, not the full roster
+
+What stays unchanged:
+- delivery / queue / retry / fan-out infra truth
+- QStash broadcast runtime
+- outbox storage semantics
+- simple vs quick-post composer logic
+- existing callback keys and registry contracts
+
+Operator contract now:
+- composer shows source type / audience / target count / remembered default / sample targets
+- preview repeats the recap before send
+- audience selection updates the remembered default for the next draft
+- new simple drafts and quick-post drafts start from the remembered default audience when available

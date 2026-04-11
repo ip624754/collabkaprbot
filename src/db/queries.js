@@ -6673,6 +6673,45 @@ export async function countBroadcastAudience(audience = 'all') {
  * List user TG IDs for broadcast delivery (batched, cursor-based).
  * Returns users whose tg_id > lastTgId, ordered by tg_id, limited by batchSize.
  */
+
+
+/**
+ * Return a small dry-run sample of recipients for the current broadcast scope.
+ * Used only for operator recap / preview surfaces.
+ */
+export async function listBroadcastAudienceSample(audience = 'all', limit = 3) {
+  const filter = String(audience || 'all').toLowerCase();
+  const where = ['u.tg_id is not null'];
+  if (filter === 'brands') {
+    where.push(`(
+      exists (select 1 from brand_profiles bp where bp.user_id = u.id)
+      or u.brand_plan is not null
+      or coalesce(u.brand_credits,0) > 0
+    )`);
+  } else if (filter === 'creators') {
+    where.push(`exists (select 1 from workspaces w where w.owner_user_id = u.id)`);
+  } else if (filter === 'curators') {
+    where.push(`(
+      exists (select 1 from workspace_curators wc where wc.user_id = u.id)
+      or exists (select 1 from network_moderators nm where nm.user_id = u.id)
+    )`);
+  } else if (filter === 'managers') {
+    where.push(`exists (select 1 from brand_managers bm where bm.manager_user_id = u.id)`);
+  }
+  const r = await pool.query(
+    `select u.id as user_id, u.tg_id, u.tg_username
+       from users u
+      where ${where.join(' and ')}
+      order by u.id
+      limit $1`,
+    [Math.max(1, Math.min(5, Number(limit) || 3))]
+  );
+  return (r.rows || []).map((x) => ({
+    user_id: Number(x.user_id || 0),
+    tg_id: Number(x.tg_id || 0),
+    tg_username: x.tg_username ? String(x.tg_username) : null,
+  }));
+}
 export async function listBroadcastRecipients(audience = 'all', batchSize = 30, lastUserId = 0) {
   const filter = String(audience || 'all').toLowerCase();
   const where = ['u.id > $1'];
