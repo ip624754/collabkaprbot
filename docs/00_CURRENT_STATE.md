@@ -2660,3 +2660,18 @@ Operator contract now:
 - preview repeats the recap before send
 - audience selection updates the remembered default for the next draft
 - new simple drafts and quick-post drafts start from the remembered default audience when available
+
+
+## 0.08) STEP563 — Broadcast audit consistency hotfix
+
+### What was source-confirmed and fixed
+- simple-mode `bc_confirm` no longer depends on legacy `draft.type`; send now accepts simple drafts via `broadcastDraftHasContent(...)`
+- post-create success screen now links directly to broadcast card and broadcast list
+- broadcast audience picker no longer shows raw `simple/advanced`; it shows `Конструктор рассылки / Быстрый пост`
+- broadcast detail view now keeps `🔄 Обновить` available for terminal states and keeps `🧱 Пропуски/ошибки` reachable when blocked rows exist
+
+### What remains intentionally out of scope
+- no queue/retry/fan-out rewrite
+- no post-run compact report yet
+- no quarantine UX import yet
+- no first-batch safety layer yet

@@ -31996,7 +31996,7 @@ ${DEGRADED_COPY.line}
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
       await ctx.answerCallbackQuery();
       const draft = await getDraft(ctx.from.id);
-      if (!draft || !draft.type) {
+      if (!draft || !broadcastDraftHasContent(draft)) {
         await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
           reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home')
         });
@@ -32146,11 +32146,12 @@ ${DEGRADED_COPY.line}
         try { await clearDraft(ctx.from.id); } catch {}
         await safeEditOrReply(
           ctx,
-          `✅ <b>Рассылка #${bc.id} ${res?.deduped ? 'уже создана' : 'создана'}</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n⏳ Рассылка будет запущена при следующем тике cron.\nПрогресс можно отслеживать в Админке.`,
+          `✅ <b>Рассылка #${bc.id} ${res?.deduped ? 'уже создана' : 'создана'}</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n⏳ Рассылка будет запущена при следующем тике cron.\nОткрой карточку рассылки, чтобы смотреть прогресс, завершение и результаты.`,
           {
             parse_mode: 'HTML',
             reply_markup: (() => {
               const kb = new InlineKeyboard();
+              kb.text(`📊 Открыть #${bc.id}`, commsCb.bcView(bc.id)).text('📣 К списку', commsCb.bcList(0)).row();
               kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
               return kb;
             })(),
@@ -37381,7 +37382,7 @@ async function renderBroadcastAudiencePicker(ctx) {
   let text = `📣 <b>Выбери аудиторию</b>
 
 `;
-  text += `📝 Режим: <b>${recap.payload.mode === 'simple' ? 'simple' : 'advanced'}</b>
+  text += `📝 Режим: <b>${recap.payload.mode === 'simple' ? 'Конструктор рассылки' : 'Быстрый пост'}</b>
 `;
   text += `🧩 Source type: <b>${escapeHtml(recap.sourceLabel)}</b>
 `;
@@ -37597,16 +37598,14 @@ async function renderBroadcastView(ctx, broadcastId) {
     kb.text('⏸ Пауза', commsCb.bcPause(bc.id))
       .text('🛑 Стоп', commsCb.bcStop(bc.id))
       .row();
-    if (blocked > 0) kb.text('🧱 Пропуски/ошибки', commsCb.bcBlocked(bc.id, 'hard', 0)).row();
-    kb.text('🔄 Обновить', commsCb.bcView(bc.id)).row();
   } else if (bc.status === 'PAUSED') {
     kb.text('▶️ Продолжить', commsCb.bcResume(bc.id))
       .text('🛑 Стоп', commsCb.bcStop(bc.id))
       .row();
-    if (blocked > 0) kb.text('🧱 Пропуски/ошибки', commsCb.bcBlocked(bc.id, 'hard', 0)).row();
-    kb.text('🔄 Обновить', commsCb.bcView(bc.id)).row();
   }
 
+  if (blocked > 0) kb.text('🧱 Пропуски/ошибки', commsCb.bcBlocked(bc.id, 'hard', 0)).row();
+  kb.text('🔄 Обновить', commsCb.bcView(bc.id)).row();
   kb.text('⬅️ К списку', commsCb.bcList(0)).row();
   kb.text('⬅️ Админка', 'a:admin_home');
 
