@@ -6894,6 +6894,11 @@ export async function countBroadcastDeliveryStats(broadcastId) {
         count(*) filter (where status = 'failed')::int as failed,
         count(*) filter (where status = 'blocked')::int as blocked,
         count(*) filter (where status = 'blocked' and last_error like 'hard_skip:%')::int as hard_skipped,
+        count(*) filter (where status = 'retry')::int as retry,
+        count(*) filter (where status = 'deferred')::int as deferred,
+        count(*) filter (where status = 'quarantined')::int as quarantined,
+        count(*) filter (where status = 'queued')::int as queued,
+        count(*) filter (where status = 'sending')::int as sending,
         count(*) filter (where status in ('queued','sending','retry','deferred','quarantined'))::int as pending
      from broadcast_sent_log
      where broadcast_id = $1`,
@@ -6905,8 +6910,28 @@ export async function countBroadcastDeliveryStats(broadcastId) {
     failed: Number(row.failed || 0) || 0,
     blocked: Number(row.blocked || 0) || 0,
     hard_skipped: Number(row.hard_skipped || 0) || 0,
+    retry: Number(row.retry || 0) || 0,
+    deferred: Number(row.deferred || 0) || 0,
+    quarantined: Number(row.quarantined || 0) || 0,
+    queued: Number(row.queued || 0) || 0,
+    sending: Number(row.sending || 0) || 0,
     pending: Number(row.pending || 0) || 0,
   };
+}
+
+export async function listBroadcastPostRunReasonRows(broadcastId, limit = 50) {
+  const lim = Math.max(1, Math.min(100, Number(limit) || 50));
+  const r = await pool.query(
+    `select status, coalesce(last_error, '') as last_error, count(*)::int as n
+       from broadcast_sent_log
+      where broadcast_id = $1
+        and status in ('failed','blocked','retry','deferred','quarantined')
+      group by status, coalesce(last_error, '')
+      order by count(*) desc, status asc
+      limit $2`,
+    [Number(broadcastId), lim]
+  );
+  return r.rows || [];
 }
 
 

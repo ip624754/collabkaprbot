@@ -2675,3 +2675,37 @@ Operator contract now:
 - no post-run compact report yet
 - no quarantine UX import yet
 - no first-batch safety layer yet
+
+
+## 0.09) STEP564 — Compact post-run report
+
+Status: implemented as a narrow runtime step on top of the current broadcast card / outbox truth.
+
+What was added:
+- compact `Post-run report` block on the broadcast success screen right after draft confirm
+- compact `Post-run report` block inside broadcast detail view
+- reason aggregation for top/dominant delivery reasons
+- next-action hint driven by current delivery state
+- explicit split between:
+  - `sent`
+  - `retry`
+  - `skipped`
+  - `failed`
+
+What stays unchanged:
+- queue / retry / fan-out runtime
+- QStash delivery layer
+- broadcast storage semantics
+- blocked-report screen structure
+- notice runtime
+- admin routing outside broadcast surfaces
+
+Current operator contract:
+- after create, operator sees an immediate compact report seed with next action hint
+- broadcast detail card shows a compact live/final report in one place
+- dominant reasons are shown as top aggregated categories, not raw log spam
+- next action is explicit instead of forcing operator to infer it from several screens
+
+Known pre-existing drift:
+- general callback-consistency script still reports older unresolved admin outbox callbacks unrelated to this step
+- this drift is pre-existing and was not expanded by STEP564

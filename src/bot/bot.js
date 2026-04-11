@@ -31118,749 +31118,6 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
 
   if (uid) kb.text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`).row();
 
-  kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
-
-  await safeEditOrReply(ctx, `👀 <b>Предпросмотр</b>${uname ? ` (${escapeHtml(uname)})` : ''}${phInfo}${warnHtml}\n\n${preview}`, {
-    parse_mode: 'HTML',
-    reply_markup: kb,
-    disable_web_page_preview: true,
-  });
-  return;
-}
-
-if (p.a === 'a:admin_outbox_to_tpl') {
-  await ctx.answerCallbackQuery();
-  if (!isSuperAdminTg(ctx.from.id)) return;
-
-  const chatType = String(ctx.chat?.type || '');
-  if (chatType !== 'private') {
-    const idx = Math.max(0, Number(p.i) || 0);
-    const page = Math.max(0, Number(p.p) || 0);
-    await safeEditOrReply(ctx, '📌 Сохранение в шаблоны доступно только в <b>личном чате</b> с ботом (DM).', {
-      parse_mode: 'HTML',
-      reply_markup: (() => {
-        const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminOutboxView(idx, page));
-        kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
-        return kb;
-      })()
-    });
-    return;
-  }
-
-  const idx = Math.max(0, Number(p.i) || 0);
-  const page = Math.max(0, Number(p.p) || 0);
-  const it = await getAdminOutboxItemByIndex(idx);
-  if (!it) return ctx.answerCallbackQuery({ text: 'Запись не найдена.' });
-
-  const raw0 = String(it.snippet || it.preview || '').trim();
-  const safeText = clipCodepoints(raw0, TG_SAFE_BODY_MAX).text;
-  if (!safeText) return ctx.answerCallbackQuery({ text: 'Нет текста.' });
-
-  // Ask label; store context in expectText (Redis-only).
-  try {
-    await setExpectText(ctx.from.id, {
-      type: 'adm_outbox_tpl_label',
-      idx,
-      page,
-      text: safeText,
-    });
-  } catch {}
-
-  const hint = clipText(safeText.replace(/\n+/g, ' / '), 160);
-
-  const kb = new InlineKeyboard()
-    .text('❌ Отмена', commsCb.adminOutboxView(idx, page))
-    .row()
-    .text('⬅️ Коммуникации', 'a:admin_comms')
-    .row()
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Home', 'a:home');
-
-  await safeEditOrReply(ctx, `📌 <b>Сохранить в шаблоны</b>\n\nНапиши <b>название</b> шаблона одним сообщением.\n\n<i>Текст будет взят из этой Outbox‑записи:</i>\n<code>${escapeHtml(hint)}</code>`, {
-    parse_mode: 'HTML',
-    reply_markup: kb,
-    disable_web_page_preview: true,
-  });
-  return;
-}
-
-if (p.a === 'a:admin_outbox_clear_q') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const page = Math.max(0, Number(p.p) || 0);
-      let total = 0;
-      try { total = Number(await redis.llen(adminOutboxKey())) || 0; } catch { total = 0; }
-      const kb = new InlineKeyboard()
-        .text('🧹 Очистить', `a:admin_outbox_clear|p:${page}`)
-        .text('❌ Отмена', `a:admin_outbox|p:${page}`)
-        .row()
-        .text('⬅️ Коммуникации', 'a:admin_comms')
-        .row()
-        .text('📋 Меню', 'a:menu')
-        .text('🏠 Home', 'a:home');
-      await safeEditOrReply(ctx, `🧹 <b>Очистить Outbox?</b>
-
-Будет удалено записей: <b>${escapeHtml(String(total || 0))}</b>`, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:admin_outbox_clear') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const page = Math.max(0, Number(p.p) || 0);
-      await clearAdminOutbox();
-      await renderAdminOutbox(ctx, page);
-      return;
-    }
-    // --- Admin: DM Templates (Redis-only) ---
-    if (p.a === 'a:admin_umsg_tpls') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const page = Math.max(0, Number(p.p) || 0);
-      await renderAdminDmTemplates(ctx, page);
-      return;
-    }
-
-    if (p.a === 'a:admin_umsg_tpl_view') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const tplId = String(p.tid || '').trim();
-      const page = Math.max(0, Number(p.p) || 0);
-      await renderAdminDmTemplateView(ctx, tplId, page);
-      return;
-    }
-
-    if (p.a === 'a:admin_umsg_tpl_add') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      try { await clearExpectText(ctx.from.id); } catch {}
-
-      const page = Math.max(0, Number(p.p) || 0);
-      const kb = new InlineKeyboard()
-        .text('📎 Вставить', `a:adm_ph|r:tpl_add|p:${page}`)
-        .row()
-        .text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`)
-        .row();
-      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
-
-      await safeEditOrReply(
-        ctx,
-        `➕ <b>Новый шаблон</b>\n\nОтправь одним сообщением:\n\n1-я строка — название кнопки\nостальное — текст сообщения\n\nПример:\n<pre>✅ Принято\n\nПриняли запрос. Если нужны детали — уточним и вернёмся с ответом.</pre>`,
-        { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
-      );
-
-      try { await setExpectText(ctx.from.id, { type: 'admin_umsg_tpl_add', page }); } catch {}
-      return;
-    }
-
-    if (p.a === 'a:admin_umsg_tpl_edit') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      try { await clearExpectText(ctx.from.id); } catch {}
-
-      const tplId = String(p.tid || '').trim();
-      const page = Math.max(0, Number(p.p) || 0);
-
-      const { tpls } = await getAdminDmTemplatesWithMeta();
-      const it = findAdminDmTemplate(tpls.items, tplId);
-      if (!it) return ctx.answerCallbackQuery({ text: 'Шаблон не найден.' });
-
-      const kb = new InlineKeyboard()
-        .text('📎 Вставить', `a:adm_ph|r:tpl_edit|tid:${String(it.id || '')}|p:${page}`)
-        .row()
-        .text('⬅️ Назад', `a:admin_umsg_tpl_view|tid:${String(it.id || '')}|p:${page}`)
-        .row();
-      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
-
-      await safeEditOrReply(
-        ctx,
-        `✏️ <b>Изменить шаблон</b>\n\nОтправь одним сообщением:\n\n1-я строка — название кнопки\nостальное — текст сообщения\n\nТекущая версия:\n<pre>${escapeHtml(String(it.label || ''))}\n\n${escapeHtml(String(it.text || ''))}</pre>`,
-        { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
-      );
-
-      try { await setExpectText(ctx.from.id, { type: 'admin_umsg_tpl_edit', tplId: String(it.id || ''), page }); } catch {}
-      return;
-    }
-
-    if (p.a === 'a:admin_umsg_tpl_del_q') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-
-      const tplId = String(p.tid || '').trim();
-      const page = Math.max(0, Number(p.p) || 0);
-      const kb = new InlineKeyboard()
-        .text('🗑 Удалить', `a:admin_umsg_tpl_del|tid:${tplId}|p:${page}`)
-        .text('❌ Отмена', `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`)
-        .row()
-        .text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`)
-        .row();
-      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
-
-      await safeEditOrReply(ctx, `🗑 <b>Удалить шаблон?</b>\n\nID: <code>${escapeHtml(tplId)}</code>`, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:admin_umsg_tpl_del') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-
-      const tplId = String(p.tid || '').trim();
-      const page = Math.max(0, Number(p.p) || 0);
-
-      const { tpls } = await getAdminDmTemplatesWithMeta();
-      const items = Array.isArray(tpls.items) ? tpls.items.filter((t) => String(t?.id || '') !== tplId) : [];
-      const next = { version: Number(tpls.version || 0) + 1, updatedAt: new Date().toISOString(), items };
-      await setAdminDmTemplates(next);
-      await renderAdminDmTemplates(ctx, page);
-      return;
-    }
-
-    if (p.a === 'a:admin_umsg_tpl_reset_q') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-
-      const page = Math.max(0, Number(p.p) || 0);
-      const kb = new InlineKeyboard()
-        .text('♻️ Сбросить', `a:admin_umsg_tpl_reset|p:${page}`)
-        .text('❌ Отмена', `a:admin_umsg_tpls|p:${page}`)
-        .row();
-      kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
-
-      await safeEditOrReply(ctx, '♻️ <b>Сбросить шаблоны к дефолту?</b>\n\nКастомные шаблоны в Redis будут удалены.', { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:admin_umsg_tpl_reset') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-
-      const page = Math.max(0, Number(p.p) || 0);
-      await resetAdminDmTemplates();
-      await renderAdminDmTemplates(ctx, page);
-      return;
-    }
-
-
-
-    // --- Admin: Cancel reply session in support group ---
-    if (p.a === 'a:adm_support_reply_cancel') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      if (!isSuperAdminTg(ctx.from.id)) return;
-
-      const chatId = Number(ctx.chat?.id || 0);
-      const msgId = Number(ctx.callbackQuery?.message?.message_id || 0);
-      const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
-
-      let sess = null;
-      let redisOk = true;
-      try { sess = await redis.get(sessKey); } catch { redisOk = false; sess = null; }
-
-      // Protect against cancelling a newer session using an old prompt.
-      if (sess && msgId && Number(sess.promptMsgId || 0) && Number(sess.promptMsgId || 0) !== msgId) {
-        try { await ctx.answerCallbackQuery({ text: 'Сессия уже другая.', show_alert: true }); } catch {}
-        return;
-      }
-
-      let delOk = false;
-      if (redisOk) {
-        try { await redis.del(sessKey); delOk = true; } catch { delOk = false; }
-      }
-
-      let textOut = '';
-      if (!redisOk) {
-        textOut = `⚠️ <b>Отмена не подтверждена</b>
-
-Кеш недоступен. Сессия могла остаться активной. Лучше не отвечай на этот промпт и попробуй позже.`;
-      } else if (!sess) {
-        textOut = `⏱ <b>Сессия уже завершена</b>
-
-Если нужно — нажми «✍️ Ответить» ещё раз.`;
-      } else if (delOk) {
-        textOut = `❌ <b>Отменено</b>
-
-Ответ не будет отправлен.`;
-      } else {
-        textOut = `⚠️ <b>Не удалось отменить</b>
-
-Кеш недоступен. Сессия могла остаться активной. Лучше не отвечай на этот промпт и попробуй позже.`;
-      }
-
-      try {
-        await ctx.api.editMessageText(chatId, msgId, textOut, {
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-          reply_markup: new InlineKeyboard(),
-        });
-      } catch {}
-
-      return;
-    }
-// --- Admin: Reply to support message ---
-    if (p.a === 'a:adm_support_reply') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const targetTgId = Number(p.tg || 0);
-      const targetUserId = Number(p.uid || 0);
-      if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
-
-      const chatType = String(ctx.chat?.type || '');
-      const isPrivate = chatType === 'private';
-
-      // In private chat with bot: legacy flow (expectText).
-      if (isPrivate) {
-        const kb = new InlineKeyboard().text('❌ Отмена', 'a:admin_home');
-        await safeEditOrReply(
-          ctx,
-          `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\nНапиши текст ответа одним сообщением — я отправлю его пользователю от имени поддержки.`,
-          { parse_mode: 'HTML', reply_markup: kb }
-        );
-        await setExpectText(ctx.from.id, { type: 'adm_support_reply', targetTgId, targetUserId });
-        return;
-      }
-
-      // In support group: "one button" reply flow.
-      // We post a bot prompt and ask admin to reply to that prompt message.
-      // Even with Telegram group privacy mode ON, bots receive replies to their own messages.
-      const exSec = 20 * 60;
-      const sessionKey = k(['adm_support_reply', String(ctx.from.id)]);
-      const originMsgId = Number(ctx.callbackQuery?.message?.message_id || 0);
-      const originThreadId = Number(ctx.callbackQuery?.message?.message_thread_id || 0);
-      const promptText =
-        `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})\n\n` +
-        `Отправь текст <b>Reply</b> на <b>тикет</b> (сообщение с кнопками) или на <b>эту подсказку</b> — я доставлю его пользователю от имени поддержки.\n\n` +
-        `<i>Отмена:</i> нажми «❌ Отмена» (или ответь <code>/cancel</code>).`;
-
-      const kb = new InlineKeyboard().text('❌ Отмена', 'a:adm_support_reply_cancel');
-      const sendOpts = {
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        reply_markup: kb,
-      };
-      if (originThreadId) sendOpts.message_thread_id = originThreadId;
-      const prompt = await ctx.api.sendMessage(ctx.chat.id, promptText, sendOpts);
-
-      let sessionOk = false;
-      try {
-        await redis.set(
-          sessionKey,
-          {
-            targetTgId,
-            targetUserId,
-            chatId: ctx.chat.id,
-            promptMsgId: prompt.message_id,
-            originMsgId,
-            threadId: originThreadId,
-            createdAt: new Date().toISOString(),
-          },
-          { ex: exSec }
-        );
-        sessionOk = true;
-      } catch {
-        sessionOk = false;
-      }
-
-      // Fail-closed: if Redis is degraded, do not leave a misleading "reply here" prompt.
-      if (!sessionOk) {
-        const failText =
-          `⚠️ <b>Сейчас кеш/сессии недоступны</b>
-
-` +
-          `Я не могу принять ответ в группе.
-
-${DEGRADED_COPY.line}
-
-` +
-          `Что можно сделать:
-` +
-          `• Используй «Быстрый ответ» (кнопки-шаблоны)
-` +
-          `• Попробуй позже
-
-` +
-          `<i>Эта сессия не активна.</i>`;
-        try {
-          await ctx.api.editMessageText(ctx.chat.id, prompt.message_id, failText, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: true,
-            reply_markup: new InlineKeyboard(),
-          });
-        } catch {}
-      }
-
-      return;
-    }
-
-
-    // --- Admin: Quick reply to support message (1 click templates) ---
-    if (p.a === 'a:adm_support_qr') {
-      if (!isSuperAdminTg(ctx.from.id)) {
-        try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
-        return;
-      }
-      const targetTgId = Number(p.tg || 0);
-      const targetUserId = Number(p.uid || 0);
-      const key = String(p.k || '').trim();
-
-      if (!targetTgId) {
-        try { await ctx.answerCallbackQuery({ text: 'Нет TG ID.' }); } catch {}
-        return;
-      }
-
-      const TPL = {
-        ack: 'Принято ✅\n\nПриняли запрос. Сейчас посмотрим и вернёмся с ответом.',
-        need: 'Нужны детали ❓\n\nУточни, пожалуйста: что именно не получается (шаги), и если есть — скрин/ошибка.',
-        done: 'Готово ✅\n\nСделали. Проверь, пожалуйста, сейчас. Если что — напиши ещё раз.',
-        wip: 'В работе ⏳\n\nПриняли в работу. Дадим обновление, как только будет результат.',
-      };
-
-      const raw = TPL[key] || '';
-      if (!raw) {
-        try { await ctx.answerCallbackQuery({ text: 'Шаблон не найден.' }); } catch {}
-        return;
-      }
-      const safe = clipCodepoints(raw, TG_SAFE_BODY_MAX).text;
-      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
-
-      let ok = false;
-      try {
-        const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-        await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-        ok = true;
-      } catch (e) {
-        try {
-          await ctx.answerCallbackQuery({ text: '❌ Не удалось отправить (возможно, бот заблокирован).', show_alert: true });
-        } catch {}
-      }
-
-      // Confirm in support chat (keep topic if forum-enabled)
-      if (ok) {
-        try { await ctx.answerCallbackQuery({ text: '✅ Отправлено бренду' }); } catch {}
-
-        try {
-          const threadId = Number(ctx.callbackQuery?.message?.message_thread_id || 0);
-          const kb = new InlineKeyboard()
-            .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
-            .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
-            .row()
-            .text('⬅️ Операции', 'a:admin_ops')
-            .row()
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Home', 'a:home');
-
-          const text = `✅ Быстрый ответ отправлен (tg:${targetTgId}).`;
-          const opts = { reply_markup: kb, disable_web_page_preview: true };
-          if (threadId) opts.message_thread_id = threadId;
-          await ctx.api.sendMessage(ctx.chat.id, text, opts);
-        } catch {}
-      }
-      return;
-    }
-
-    // Admin: Copy user TG ID (shows alert with ID for easy copy)
-    if (p.a === 'a:adm_ucopy') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const card = await db.getUserCardById(Number(p.id || 0));
-      if (!card) return ctx.answerCallbackQuery({ text: 'Не найден.', show_alert: true });
-      await ctx.answerCallbackQuery({ text: `TG ID: ${card.tg_id}`, show_alert: true });
-      return;
-    }
-
-    // --- Admin: Revoke subscription (confirm) ---
-    if (p.a === 'a:adm_urevoke_q') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const uid = Number(p.id || 0);
-      const t = String(p.t || '');
-      const f = String(p.f || 'all');
-      const pg = Number(p.p || 0);
-      const labels = { bp: 'Brand Plan (подписка)', bp_gcr: 'Brand Plan + подарочные кредиты', gcr: 'Подарочные кредиты', cr: 'Кредиты (→0)', pro: 'PRO (все каналы)' };
-      const label = labels[t] || t;
-      const kb = new InlineKeyboard()
-        .text(`⛔ Подтвердить: ${label}`, `a:adm_urevoke_do|id:${uid}|t:${t}|f:${f}|p:${pg}`)
-        .text('❌ Отмена', `a:adm_ucard|id:${uid}|f:${f}|p:${pg}`);
-      await safeEditOrReply(ctx, `⛔ Забрать <b>${escapeHtml(label)}</b> у пользователя #${uid}?`, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:adm_urevoke_do') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const uid = Number(p.id || 0);
-      const t = String(p.t || '');
-      const f = String(p.f || 'all');
-      const pg = Number(p.p || 0);
-      try {
-        if (t === 'bp') await db.revokeBrandPlan(uid);
-        else if (t === 'bp_gcr') {
-          await db.revokeBrandPlan(uid);
-          await db.revokeGiftedBrandCredits(uid);
-        }
-        else if (t === 'gcr') await db.revokeGiftedBrandCredits(uid);
-        else if (t === 'cr') await db.resetBrandCredits(uid);
-        else if (t === 'pro') await db.revokeAllWorkspacePro(uid);
-      } catch (e) {
-        await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e).slice(0, 60)}`, show_alert: true });
-        return;
-      }
-      await ctx.answerCallbackQuery({ text: '⛔ Забрано' });
-      await renderAdminUserCard(ctx, uid, f, pg);
-      return;
-    }
-
-    // --- Admin: Ban/Unban (confirm) ---
-    if (p.a === 'a:adm_uban_q') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const uid = Number(p.id || 0);
-      const ban = String(p.v) === '1';
-      const f = String(p.f || 'all');
-      const pg = Number(p.p || 0);
-      const label = ban ? '🚫 Заблокировать' : '✅ Разбанить';
-      const warn = ban ? '\n\nВсе офферы будут заморожены, все диалоги закрыты.' : '';
-      const kb = new InlineKeyboard()
-        .text(`${label} — подтвердить`, `a:adm_uban_do|id:${uid}|v:${ban ? 1 : 0}|f:${f}|p:${pg}`)
-        .text('❌ Отмена', `a:adm_ucard|id:${uid}|f:${f}|p:${pg}`);
-      await safeEditOrReply(ctx, `${label} пользователя #${uid}?${warn}`, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:adm_uban_do') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const uid = Number(p.id || 0);
-      const ban = String(p.v) === '1';
-      const f = String(p.f || 'all');
-      const pg = Number(p.p || 0);
-      try {
-        if (ban) {
-          await db.banUser(uid);
-          await db.freezeAllUserOffers(uid);
-          await db.closeAllUserThreads(uid);
-        } else {
-          await db.unbanUser(uid);
-        }
-      } catch (e) {
-        await ctx.answerCallbackQuery({ text: `Ошибка: ${String(e?.message || e).slice(0, 60)}`, show_alert: true });
-        return;
-      }
-      await ctx.answerCallbackQuery({ text: ban ? '🚫 Заблокирован' : '✅ Разбанен' });
-      await renderAdminUserCard(ctx, uid, f, pg);
-      return;
-    }
-
-    // --- Admin: Gift from user card (quick path) ---
-    if (p.a === 'a:adm_ugift') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const uid = Number(p.id || 0);
-      const f = String(p.f || 'all');
-      const pg = Number(p.p || 0);
-      const card = await db.getUserCardById(uid);
-      if (!card) return ctx.answerCallbackQuery({ text: 'Не найден.' });
-      const uname = card.tg_username ? `@${card.tg_username}` : `id:${card.tg_id}`;
-      const kb = new InlineKeyboard()
-        .text(`⭐️ Brand Plan Старт`, `a:adm_ugift_do|id:${uid}|t:bp_start|f:${f}|p:${pg}`)
-        .row()
-        .text(`🚀 Brand Plan Про`, `a:adm_ugift_do|id:${uid}|t:bp_pro|f:${f}|p:${pg}`)
-        .row()
-        .text(`✨ PRO Креатор`, `a:adm_ugift_do|id:${uid}|t:pro|f:${f}|p:${pg}`)
-        .row()
-        .text('❌ Отмена', `a:adm_ucard|id:${uid}|f:${f}|p:${pg}`);
-      await safeEditOrReply(ctx, `🎁 Подарить подписку пользователю <b>${escapeHtml(uname)}</b>`, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:adm_ugift_do') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      const uid = Number(p.id || 0);
-      const giftType = String(p.t || '');
-      const f = String(p.f || 'all');
-      const pg = Number(p.p || 0);
-      let msg = '';
-      try {
-        if (giftType === 'bp_start') {
-          const planDef = BRAND_PLANS.find(pl => pl.id === 'start');
-          await db.activateBrandPlan(uid, 'start', CFG.BRAND_PLAN_DURATION_DAYS);
-          if (planDef?.credits) await db.addGiftedBrandCredits(uid, planDef.credits);
-          msg = `✅ Brand Plan Старт + ${planDef?.credits || 0} кредитов`;
-        } else if (giftType === 'bp_pro') {
-          const planDef = BRAND_PLANS.find(pl => pl.id === 'pro');
-          await db.activateBrandPlan(uid, 'pro', CFG.BRAND_PLAN_DURATION_DAYS);
-          if (planDef?.credits) await db.addGiftedBrandCredits(uid, planDef.credits);
-          msg = `✅ Brand Plan Про + ${planDef?.credits || 0} кредитов`;
-        } else if (giftType === 'pro') {
-          const wsList = await db.listWorkspaces(uid);
-          if (!wsList.length) { msg = '⚠️ Нет каналов — PRO не выдан'; } else {
-            for (const ws of wsList) await db.activateWorkspacePro(ws.id, CFG.PRO_DURATION_DAYS);
-            msg = `✅ PRO на ${wsList.length} ${ruPlural(wsList.length, 'канал', 'канала', 'каналов')}`;
-          }
-        }
-      } catch (e) {
-        msg = `❌ Ошибка: ${String(e?.message || e).slice(0, 60)}`;
-      }
-      await ctx.answerCallbackQuery({ text: msg, show_alert: true });
-      await renderAdminUserCard(ctx, uid, f, pg);
-      return;
-    }
-
-    // --- Admin: User card navigation alias ---
-    if (p.a === 'a:adm_ucard') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return;
-      await renderAdminUserCard(ctx, Number(p.id || 0), String(p.f || 'all'), Number(p.p || 0));
-      return;
-    }
-
-    // Admin: Export Users CSV
-    if (p.a === 'a:adm_ucsv') {
-      await ctx.answerCallbackQuery({ text: '⏳ Генерирую CSV…' });
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const f = String(p.f || 'all').toLowerCase();
-      const tgId = Number(ctx.from?.id || 0);
-      const q = tgId ? await getAdminUsersQuery(tgId) : '';
-      try {
-        await sendAdminUsersCsv(ctx, f, q);
-      } catch (err) {
-        console.error('[ADMIN] users csv error', err);
-        await safeEditOrReply(ctx, '⚠️ Ошибка при генерации CSV.', {
-          reply_markup: new InlineKeyboard().text('⬅️ К списку', `a:admin_users|f:${f}|p:0`)
-        });
-      }
-      return;
-    }
-
-    // =====================================================
-    // 📣 Broadcast flow: start → content → buttons → audience → preview → confirm
-    // =====================================================
-
-    if (p.a === 'a:bc_start') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      const existingDraft = await getDraft(ctx.from.id);
-      if (existingDraft && String(existingDraft.mode || '') === 'simple') {
-        if (!existingDraft.audience) existingDraft.audience = 'all';
-        if (!Array.isArray(existingDraft.buttons)) existingDraft.buttons = [];
-        await setDraft(ctx.from.id, existingDraft, 30 * 60);
-        await renderBroadcastSimpleComposer(ctx);
-        return;
-      }
-      const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
-      try { await clearDraft(ctx.from.id); } catch {}
-      await setDraft(ctx.from.id, { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] }, 30 * 60);
-      await renderBroadcastSimpleComposer(ctx);
-      return;
-    }
-
-    if (p.a === 'a:bc_start_adv') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      try { await clearDraft(ctx.from.id); } catch {}
-      const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
-      await safeEditOrReply(ctx,
-        `📣 <b>Новая рассылка · Быстрый пост</b>
-
-Отправь 1 сообщение для рассылки (1 сообщение = 1 пост):
-• текст
-• фото / видео / GIF / документ (подпись — по желанию)
-
-Альбомы не поддерживаются.
-
-🧭 Remembered default audience: <b>${escapeHtml(audienceLabel(rememberedAudience || 'all'))}</b>`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard()
-            .text('🧩 Перейти в конструктор', commsCb.bcStart())
-            .text('❌ Отмена', commsCb.bcCancel())
-            .row()
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Home', 'a:home')
-        }
-      );
-      await setExpectText(ctx.from.id, { type: 'bc_content' }, 30 * 60);
-      return;
-    }
-
-    if (p.a === 'a:bc_simple_text') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx,
-        `📝 <b>Текст рассылки</b>
-
-Отправь текст одним сообщением.
-
-• Текст можно оставить пустым, если хочешь картинку без текста
-• Длинный текст при наличии картинки будет отправлен отдельным сообщением после неё`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard()
-            .text('⬅️ К composer', commsCb.bcStart())
-            .row()
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Home', 'a:home')
-        }
-      );
-      await setExpectText(ctx.from.id, { type: 'bc_simple_text' }, 30 * 60);
-      return;
-    }
-
-    if (p.a === 'a:bc_simple_media') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
-      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
-      const kb = new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart());
-      if (draft.fileId) kb.text('🧹 Убрать картинку', 'a:bc_simple_media_clear');
-      kb.row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-      await safeEditOrReply(ctx,
-        `🖼 <b>Картинка рассылки</b>
-
-Отправь <b>одну картинку</b> следующим сообщением.
-
-Конструктор рассылки сейчас не принимает видео/GIF/документы — только фото.`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
-      await setExpectText(ctx.from.id, { type: 'bc_simple_media' }, 30 * 60);
-      return;
-    }
-
-    if (p.a === 'a:bc_simple_media_clear') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery({ text: 'Картинка очищена.' });
-      const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
-      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
-      if (!draft.audience) draft.audience = rememberedAudience || 'all';
-      delete draft.mediaType;
-      delete draft.fileId;
-      await setDraft(ctx.from.id, draft, 30 * 60);
-      await renderBroadcastSimpleComposer(ctx, '✅ Картинка удалена.');
-      return;
-    }
-
-    if (p.a === 'a:bc_simple_button') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
-      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
-      if (!draft.audience) draft.audience = rememberedAudience || 'all';
-      await renderBroadcastSimpleButtonPicker(ctx, draft);
-      return;
-    }
-
-    if (p.a === 'a:bc_simple_btn_preset') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      const key = String(p.k || '');
       const preset = broadcastSimpleButtonPresets().find((x) => x.key === key);
       if (!preset) { await ctx.answerCallbackQuery({ text: 'Preset недоступен.' }); return; }
       await ctx.answerCallbackQuery({ text: 'Кнопка сохранена.' });
@@ -32146,7 +31403,7 @@ ${DEGRADED_COPY.line}
         try { await clearDraft(ctx.from.id); } catch {}
         await safeEditOrReply(
           ctx,
-          `✅ <b>Рассылка #${bc.id} ${res?.deduped ? 'уже создана' : 'создана'}</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n⏳ Рассылка будет запущена при следующем тике cron.\nОткрой карточку рассылки, чтобы смотреть прогресс, завершение и результаты.`,
+          `✅ <b>Рассылка #${bc.id} ${res?.deduped ? 'уже создана' : 'создана'}</b>\n\n📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>\n👥 Получателей: <b>${total}</b>\n📋 Статус: <b>PENDING</b>\n\n<b>Post-run report</b>\n• sent: <b>0</b>\n• retry: <b>0</b>\n• skipped: <b>0</b>\n• failed: <b>0</b>\n• dominant reasons: —\n• next action: сначала открой карточку, проверь first batch и потом обнови report.\n\n⏳ Рассылка будет запущена при следующем тике cron.`,
           {
             parse_mode: 'HTML',
             reply_markup: (() => {
@@ -37552,19 +36809,21 @@ async function renderBroadcastView(ctx, broadcastId) {
   // For the admin view, compute from broadcast_sent_log (DB-truth).
   let st = null;
   try { st = await db.countBroadcastDeliveryStats(Number(bc.id)); } catch { st = null; }
-    const sent = st ? Number(st.sent || 0) : Number(bc.sent_count || 0);
+  const sent = st ? Number(st.sent || 0) : Number(bc.sent_count || 0);
   const blocked = st ? Number(st.blocked || 0) : 0;
   const hardSkipped = st ? Number(st.hard_skipped || 0) : 0;
-  const failed = st ? (Number(st.failed || 0) + blocked) : Number(bc.failed_count || 0);
+  const retry = st ? (Number(st.retry || 0) + Number(st.deferred || 0) + Number(st.quarantined || 0) + Number(st.queued || 0) + Number(st.sending || 0)) : 0;
+  const failed = st ? Number(st.failed || 0) : Number(bc.failed_count || 0);
   const pending = st ? Number(st.pending || 0) : 0;
-  const pct = total > 0 ? Math.round((sent + failed) / total * 100) : 0;
+  const pct = total > 0 ? Math.round((sent + blocked + failed) / total * 100) : 0;
 
-  // Progress bar (10 segments)
   const filled = Math.round(pct / 10);
   const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
 
   let btns = [];
   try { btns = bc.buttons_json ? JSON.parse(bc.buttons_json) : []; } catch { btns = []; }
+  const report = await buildBroadcastPostRunReport(bc, st || {});
+
   let text = `${icon} <b>Рассылка #${bc.id}</b>
 
 `;
@@ -37580,17 +36839,27 @@ async function renderBroadcastView(ctx, broadcastId) {
 `;
   text += `<b>Создана:</b> ${msk(bc.created_at)}
 `;
-  if (bc.started_at) text += `<b>Запущена:</b> ${msk(bc.started_at)}\n`;
-  if (bc.finished_at) text += `<b>Завершена:</b> ${msk(bc.finished_at)}\n`;
-  text += `\n<b>Прогресс:</b> [${bar}] ${pct}%\n`;
-  text += `✅ Отправлено: <b>${sent}</b> / ${total}\n`;
-  text += `❌ Ошибок: <b>${failed}</b>\n`;
-  if (blocked > 0) {
-    text += `⛔ Blocked: <b>${blocked}</b>`;
-    if (hardSkipped > 0) text += ` · 🧱 hard-skip: <b>${hardSkipped}</b>`;
-    text += `\n`;
-  }
-  if (pending > 0) text += `⏳ В очереди/повторы: <b>${pending}</b>\n`;
+  if (bc.started_at) text += `<b>Запущена:</b> ${msk(bc.started_at)}
+`;
+  if (bc.finished_at) text += `<b>Завершена:</b> ${msk(bc.finished_at)}
+`;
+  text += `
+<b>Прогресс:</b> [${bar}] ${pct}%
+`;
+  text += `✅ Отправлено: <b>${sent}</b> / ${total}
+`;
+  text += `🔁 Retry / pending: <b>${retry}</b>
+`;
+  text += `⛔ Skipped: <b>${blocked}</b>`;
+  if (hardSkipped > 0) text += ` · 🧱 hard-skip: <b>${hardSkipped}</b>`;
+  text += `
+`;
+  text += `❌ Failed: <b>${failed}</b>
+`;
+  if (pending > 0 && retry !== pending) text += `⏳ Pending total: <b>${pending}</b>
+`;
+  text += `
+${report.text}`;
 
   const kb = new InlineKeyboard();
 
@@ -37604,13 +36873,14 @@ async function renderBroadcastView(ctx, broadcastId) {
       .row();
   }
 
-  if (blocked > 0) kb.text('🧱 Пропуски/ошибки', commsCb.bcBlocked(bc.id, 'hard', 0)).row();
+  if (blocked > 0 || failed > 0) kb.text('🧱 Пропуски/ошибки', commsCb.bcBlocked(bc.id, blocked > 0 ? 'hard' : 'all', 0)).row();
   kb.text('🔄 Обновить', commsCb.bcView(bc.id)).row();
   kb.text('⬅️ К списку', commsCb.bcList(0)).row();
   kb.text('⬅️ Админка', 'a:admin_home');
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
+
 
 
 async function renderBroadcastBlocked(ctx, broadcastId, page = 0, tab = 'hard') {
@@ -38116,6 +37386,87 @@ function normalizeHardSkipReasonKey(reason) {
   if (!slug) return 'unknown';
   if (slug === 'unknown') return 'unknown';
   return 'other';
+}
+
+
+function normalizeBroadcastReportReasonKey(status, reason) {
+  const st = String(status || '').toLowerCase();
+  const raw = String(reason || '').toLowerCase();
+  if (st === 'retry' || st === 'deferred' || st === 'quarantined') {
+    if (raw.includes('429') || raw.includes('retry after') || raw.includes('too many requests') || raw.includes('rate')) return 'rate_limited';
+    return 'network_retry';
+  }
+  if (raw.includes('hard_skip:')) return 'hard_skip';
+  if (raw.includes('bot_blocked') || raw.includes('bot was blocked') || raw.includes('blocked')) return 'bot_blocked';
+  if (raw.includes('chat_not_found') || raw.includes('chat not found') || raw.includes('not found')) return 'chat_not_found';
+  if (raw.includes('user_deactivated') || raw.includes('deactivated')) return 'user_deactivated';
+  if (raw.includes('forbidden')) return 'forbidden';
+  if (raw.includes('429') || raw.includes('retry after') || raw.includes('too many requests') || raw.includes('rate')) return 'rate_limited';
+  if (raw.includes('timeout') || raw.includes('network') || raw.includes('socket') || raw.includes('fetch failed') || raw.includes('econnreset')) return 'network_retry';
+  if (!raw) return st === 'failed' ? 'failed_unknown' : 'unknown';
+  return 'other';
+}
+
+function broadcastReportReasonLabel(key) {
+  const map = {
+    bot_blocked: 'bot blocked',
+    chat_not_found: 'chat not found',
+    user_deactivated: 'user deactivated',
+    hard_skip: 'hard-skip',
+    rate_limited: 'rate limited',
+    network_retry: 'network / retry',
+    forbidden: 'forbidden',
+    failed_unknown: 'unknown failed',
+    other: 'other',
+    unknown: 'unknown',
+  };
+  return map[String(key || 'other')] || 'other';
+}
+
+async function buildBroadcastPostRunReport(bc, stats) {
+  const st = stats || {};
+  const sent = Number(st.sent || 0) || 0;
+  const retry = Number(st.retry || 0) + Number(st.deferred || 0) + Number(st.quarantined || 0) + Number(st.queued || 0) + Number(st.sending || 0);
+  const skipped = Number(st.blocked || 0) || 0;
+  const failed = Number(st.failed || 0) || 0;
+  let rows = [];
+  try { rows = await db.listBroadcastPostRunReasonRows(Number(bc.id), 50); } catch { rows = []; }
+  const byReason = new Map();
+  for (const r of rows || []) {
+    const key = normalizeBroadcastReportReasonKey(r.status, r.last_error);
+    byReason.set(key, Number(byReason.get(key) || 0) + (Number(r.n || 0) || 0));
+  }
+  const dominant = Array.from(byReason.entries())
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, 3)
+    .map(([k, n]) => `${broadcastReportReasonLabel(k)} ×${n}`);
+
+  let nextAction = 'Рассылка завершена, дополнительных действий не требуется.';
+  if (retry > 0 && (bc.status === 'RUNNING' || bc.status === 'PENDING' || bc.status === 'PAUSED')) {
+    nextAction = 'Сначала дождись следующего batch и обнови карточку.';
+  } else if (retry > 0) {
+    nextAction = 'Проверь повторные попытки и обнови карточку через 1–2 минуты.';
+  } else if (skipped > 0) {
+    nextAction = 'Открой «Пропуски/ошибки» и проверь dominant reasons.';
+  } else if (failed > 0) {
+    nextAction = 'Проверь dominant reasons и реши, нужен ли повторный запуск.';
+  }
+
+  let text = `<b>Post-run report</b>
+`;
+  text += `• sent: <b>${sent}</b>
+`;
+  text += `• retry: <b>${retry}</b>
+`;
+  text += `• skipped: <b>${skipped}</b>
+`;
+  text += `• failed: <b>${failed}</b>
+`;
+  text += `• dominant reasons: ${dominant.length ? escapeHtml(dominant.join('; ')) : '—'}
+`;
+  text += `• next action: ${escapeHtml(nextAction)}`;
+
+  return { text, sent, retry, skipped, failed, dominant, nextAction };
 }
 
 function adminHardSkipHitReasonDayKey(day, reasonKey) {
