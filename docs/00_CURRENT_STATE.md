@@ -1,3 +1,5 @@
+**STEP556:** Broadcast mode label polish — no logic changes, no queue/retry/runtime changes. The default broadcast composer is still the same simple everyday path introduced in STEP554, but user-facing labels are now clearer in Telegram UI: `Simple mode` is renamed to `Быстрая рассылка`, and `Advanced mode` is renamed to `Расширенный режим`. Navigation labels now read as task-oriented operator copy instead of dev-style mode names.
+
 **STEP554:** Broadcast simple composer + honest preview — default admin broadcast path is now a clean Simple mode on top of the existing power/infra layer. Operators can compose text-only, image-only, or image + text broadcasts, optionally attach 1 URL button in Simple mode, run a real self-preview before send, and use shared smart routing (`sendMessage`, `sendPhoto` with caption, or photo + text split) that also powers runtime delivery. Advanced mode remains available as the secondary path and keeps up to 3 URL buttons. Existing queue / retry / QStash / outbox truth stays in place; no migration or broadcast-engine rewrite was introduced.
 
 **STEP551:** invite rewards live — collapsed the planned STEP550 / STEP550.1 / STEP551 path into one narrow runtime rollout on top of the existing invite layer. `src/db/queries.js` now adds a real `invite_reward_ledger`, lazy pending→confirmed processing, anti-abuse guards (`raw_open=0`, `existing/self=0`, one join reward max once, one activation reward max once), balance buckets (`Available / Pending / Redeemed`), and redeem helpers for `7d Pro / 30d Pro`. `src/bot/bot.js` upgrades the invite surface with `Collabka points`, pending/redeemed readouts, reward CTAs and confirm flow, plus a short balance line in creator/brand profile surfaces; `src/bot/actionRegistry.js` adds redeem callbacks; `migrations/046_invite_reward_ledger.sql` introduces the ledger schema. Scope stayed intentionally narrow: no cashout, no token rewards, no multi-level referral, no broad gamification. Live verification still required for migration `046_invite_reward_ledger.sql`, invite redeem flow, and role-specific Pro application target.
@@ -2371,6 +2373,38 @@ For broadcast-related work:
 - use `107_BROADCAST_CODE_MAP_RU` to find source entrypoints
 - use `108_BROADCAST_BUILD_ORDER_REUSABLE_RU` when rebuilding the same layer in another bot/project
 - treat `docs/examples/broadcast/*` as reference examples, not live runtime source of truth
+
+## 0.11) Broadcast mode label polish (STEP556)
+
+### Status
+- Type: UI label polish hotfix
+- Code changes: narrow
+- Runtime changes: none
+- Migrations: none
+
+### What changed
+The broadcast composer keeps the same logic and routing introduced in STEP554, but operator-facing mode labels are now clearer:
+
+- `Simple mode` → `Быстрая рассылка`
+- `Advanced mode` → `Расширенный режим`
+- `⬅️ Simple mode` → `⬅️ Быстрая рассылка`
+- `⚙️ Advanced mode` → `⚙️ Расширенный режим`
+
+### Why
+The old labels were technically correct but too dev-like for everyday operator work. The new labels keep the same dual-mode model while making the choice read as:
+- fast default path for ordinary sends
+- secondary flexible path for more manual composition
+
+### Scope
+This step does **not** change:
+- draft persistence
+- preview behavior
+- send routing
+- outbox truth
+- queue / retry / QStash behavior
+- callback contracts
+
+This is label polish only.
 
 ## 0.10) Broadcast simple composer + honest preview (STEP554)
 
