@@ -2374,6 +2374,44 @@ For broadcast-related work:
 - use `108_BROADCAST_BUILD_ORDER_REUSABLE_RU` when rebuilding the same layer in another bot/project
 - treat `docs/examples/broadcast/*` as reference examples, not live runtime source of truth
 
+## 0.12) Broadcast mode semantic rename polish (STEP557)
+
+### Status
+- Type: UI label polish hotfix
+- Code changes: narrow
+- Runtime changes: none
+- Migrations: none
+
+### What changed
+The broadcast dual-mode logic stays the same, but the operator-facing names now reflect the actual usage model instead of sounding reversed:
+
+- current simple composer path → **Конструктор рассылки**
+- current raw one-message path → **Быстрый пост**
+
+Updated labels:
+- `📣 Новая рассылка · Быстрая рассылка` → `📣 Новая рассылка · Конструктор рассылки`
+- `📣 Новая рассылка · Расширенный режим` → `📣 Новая рассылка · Быстрый пост`
+- `⚙️ Расширенный режим` → `⚡ Перейти в быстрый пост`
+- `⬅️ Быстрая рассылка` → `🧩 Перейти в конструктор`
+
+### Why
+The previous rename fixed dev-like English labels, but the mode semantics still read backwards in operator UX:
+- the field-by-field composer looked more like a constructor than a “fast send”
+- the raw single-message path looked more like a quick post than an “advanced mode”
+
+This hotfix fixes naming only, so the current UI now reads by actual operator workflow.
+
+### Scope
+This step does **not** change:
+- draft logic
+- preview behavior
+- send routing
+- outbox truth
+- queue / retry / QStash behavior
+- callback contracts
+
+This is naming polish only.
+
 ## 0.11) Broadcast mode label polish (STEP556)
 
 ### Status

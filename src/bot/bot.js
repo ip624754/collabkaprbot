@@ -31758,7 +31758,7 @@ ${DEGRADED_COPY.line}
       try { await clearExpectText(ctx.from.id); } catch {}
       try { await clearDraft(ctx.from.id); } catch {}
       await safeEditOrReply(ctx,
-        `📣 <b>Новая рассылка · Расширенный режим</b>
+        `📣 <b>Новая рассылка · Быстрый пост</b>
 
 Отправь 1 сообщение для рассылки (1 сообщение = 1 пост):
 • текст
@@ -31768,7 +31768,7 @@ ${DEGRADED_COPY.line}
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
-            .text('⬅️ Быстрая рассылка', 'a:bc_start')
+            .text('🧩 Перейти в конструктор', 'a:bc_start')
             .text('❌ Отмена', 'a:bc_cancel')
             .row()
             .text('📋 Меню', 'a:menu')
@@ -31816,7 +31816,7 @@ ${DEGRADED_COPY.line}
 
 Отправь <b>одну картинку</b> следующим сообщением.
 
-Быстрая рассылка сейчас не принимает видео/GIF/документы — только фото.`,
+Конструктор рассылки сейчас не принимает видео/GIF/документы — только фото.`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
       await setExpectText(ctx.from.id, { type: 'bc_simple_media' }, 30 * 60);
@@ -37168,7 +37168,7 @@ async function renderBroadcastSimpleButtonPicker(ctx, draft, banner = '') {
   const current = Array.isArray(draft?.buttons) && draft.buttons.length ? draft.buttons[0] : null;
   let text = `🔗 <b>Кнопка</b>
 
-Быстрая рассылка поддерживает <b>1 URL-кнопку</b>.`;
+Конструктор рассылки поддерживает <b>1 URL-кнопку</b>.`;
   if (banner) text += `
 
 ${banner}`;
@@ -37215,7 +37215,7 @@ async function renderBroadcastSimpleComposer(ctx, banner = '') {
   let recipients = '—';
   try { recipients = String(await db.countBroadcastAudience(draft.audience || 'all')); } catch {}
 
-  let text = `📣 <b>Новая рассылка · Быстрая рассылка</b>
+  let text = `📣 <b>Новая рассылка · Конструктор рассылки</b>
 
 `;
   if (banner) text += `${banner}
@@ -37234,7 +37234,7 @@ async function renderBroadcastSimpleComposer(ctx, banner = '') {
   text += `👥 Аудитория: <b>${escapeHtml(audienceLabel(draft.audience || 'all'))}</b> · ${escapeHtml(String(recipients))}
 `;
   text += `
-Быстрая рассылка поддерживает:
+Конструктор рассылки поддерживает:
 • только текст
 • только картинку
 • картинку + текст
@@ -37252,7 +37252,7 @@ async function renderBroadcastSimpleComposer(ctx, banner = '') {
     .text('✅ Send', 'a:bc_send_q')
     .row()
     .text('🧹 Clear draft', 'a:bc_simple_clear')
-    .text('⚙️ Расширенный режим', 'a:bc_start_adv')
+    .text('⚡ Перейти в быстрый пост', 'a:bc_start_adv')
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
