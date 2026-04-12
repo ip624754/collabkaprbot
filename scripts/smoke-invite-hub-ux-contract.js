@@ -8,9 +8,9 @@ const root = path.resolve(__dirname, '..');
 const botSource = fs.readFileSync(path.join(root, 'src', 'bot', 'bot.js'), 'utf8');
 
 assert.ok(botSource.includes("📨 <b>Инвайты</b>"), 'Invite hub must use the new Инвайты heading');
-assert.ok(botSource.includes('Activation rate:'), 'Invite hub must expose activation rate');
-assert.ok(botSource.includes('Activation rule: <b>completed profile</b>'), 'Invite hub must expose activation rule');
-assert.ok(botSource.includes('Recent invited contacts'), 'Invite hub must expose recent invited contacts');
+assert.ok(botSource.includes('Конверсия активации:'), 'Invite hub must expose RU activation rate');
+assert.ok(botSource.includes('Правило активации: <b>completed profile</b>'), 'Invite hub must expose activation rule');
+assert.ok(botSource.includes('Последние приглашённые'), 'Invite hub must expose recent invited contacts');
 assert.ok(botSource.includes("{ text: '📊 Статистика', callback_data: 'a:share_perf' }"), 'Invite hub must expose Statistics entrypoint');
 assert.ok(botSource.includes("{ text: '💎 Баллы', callback_data: 'a:share_points' }"), 'Invite hub must expose Points entrypoint');
 assert.ok(botSource.includes("{ text: '📄 История', callback_data: 'a:share_history' }"), 'Invite hub must expose History entrypoint');
