@@ -13,6 +13,9 @@ const migrationSource = fs.readFileSync(path.join(root, 'migrations', '046_invit
 assert.ok(botSource.includes('a:share_redeem'), 'Invite rewards CTA callback missing');
 assert.ok(botSource.includes('a:share_redeem_do'), 'Invite rewards confirm callback missing');
 assert.ok(botSource.includes('Invite Center'), 'Invite center layout title missing');
+assert.ok(botSource.includes('Reward center'), 'Reward center title missing');
+assert.ok(botSource.includes('Подтверждение обмена'), 'Redeem confirm UX missing');
+assert.ok(botSource.includes('Награда активирована'), 'Redeem success UX missing');
 assert.ok(botSource.includes('a:share_history'), 'Invite history callback missing');
 assert.ok(botSource.includes('a:share_rewards'), 'Invite rewards center callback missing');
 assert.ok(botSource.includes('loadInviteRewardsStateForUser'), 'Invite rewards state loader missing');

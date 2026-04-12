@@ -2679,20 +2679,30 @@ async function loadInviteRewardsStateForUser(user) {
 
 function renderInviteRewardsLines(rewards) {
   if (!rewards?.enabled) return [];
+  const available = Number(rewards.availablePoints || 0);
+  const pending = Number(rewards.pendingPoints || 0);
+  const redeemed = Number(rewards.redeemedPoints || 0);
   const lines = [];
-  lines.push(`<b>Collabka points:</b> ${Number(rewards.availablePoints || 0)}`);
-  lines.push(`<b>Pending:</b> ${Number(rewards.pendingPoints || 0)}`);
-  lines.push(`<b>Redeemed:</b> ${Number(rewards.redeemedPoints || 0)}`);
+  lines.push(`<b>Available:</b> ${available}`);
+  lines.push(`<b>Pending:</b> ${pending}`);
+  lines.push(`<b>Redeemed:</b> ${redeemed}`);
+  lines.push('');
+  lines.push('<b>Reward status</b>');
 
   if (rewards.canRedeemPro30) {
-    lines.push('<b>Rewards ready:</b> 7 days Pro and 30 days Pro доступны для обмена.');
+    lines.push('• <b>Reward ready:</b> доступны 7 days Pro и 30 days Pro.');
   } else if (rewards.canRedeemPro7) {
-    const leftTo30 = Math.max(0, 250 - Number(rewards.availablePoints || 0));
-    lines.push(`<b>Reward ready:</b> 7 days Pro доступен сейчас. До 30 days Pro осталось: <b>${leftTo30}</b> pts.`);
+    const leftTo30 = Math.max(0, 250 - available);
+    lines.push('• <b>Reward ready:</b> 7 days Pro доступен сейчас.');
+    lines.push(`• До 30 days Pro осталось: <b>${leftTo30}</b> pts.`);
   } else {
-    lines.push(`<b>Next reward:</b> ${escapeHtml(String(rewards.nextRewardLabel || '7 days Pro'))} at <b>${Number(rewards.nextRewardCost || 100)}</b> pts. Осталось: <b>${Number(rewards.pointsToNextReward || 0)}</b>.`);
+    lines.push(`• <b>Next reward:</b> ${escapeHtml(String(rewards.nextRewardLabel || '7 days Pro'))}`);
+    lines.push(`• Осталось: <b>${Number(rewards.pointsToNextReward || 0)}</b> pts.`);
   }
 
+  if (pending > 0) {
+    lines.push('• <i>Pending points не тратятся, пока не подтвердятся.</i>');
+  }
   return lines;
 }
 
@@ -2702,14 +2712,21 @@ function renderInviteRewardsMiniLine(rewards) {
 }
 
 function renderInviteRedeemConfirmText({ reward, rewards }) {
+  const cost = Number(reward?.costPoints || 0);
+  const available = Number(rewards?.availablePoints || 0);
+  const pending = Number(rewards?.pendingPoints || 0);
+  const left = Math.max(0, available - cost);
   return [
-    '🎁 <b>Redeem reward</b>',
+    '🎁 <b>Подтверждение обмена</b>',
     '',
     `Награда: <b>${escapeHtml(String(reward?.label || 'Pro reward'))}</b>`,
-    `Стоимость: <b>${Number(reward?.costPoints || 0)}</b> pts`,
-    `Твой available balance: <b>${Number(rewards?.availablePoints || 0)}</b> pts`,
+    `Спишется: <b>${cost}</b> pts`,
+    `Твой available balance: <b>${available}</b> pts`,
+    `Останется после обмена: <b>${left}</b> pts`,
     '',
-    'После подтверждения баллы будут списаны сразу, а награда применится к твоему текущему Pro-target.',
+    pending > 0 ? `Pending сейчас: <b>${pending}</b> pts (они не тратятся до подтверждения).` : 'Pending points сейчас нет.',
+    '',
+    'Награда применится к твоему текущему Pro-target только после подтверждения обмена.',
   ].join('\n');
 }
 
@@ -2717,6 +2734,34 @@ function inviteRedeemConfirmKeyboard(rewardKey) {
   return new InlineKeyboard()
     .text('✅ Обменять', `a:share_redeem_do|r:${rewardKey}`)
     .text('⬅️ Назад', 'a:share')
+    .row()
+    .text('📋 Меню', 'a:menu')
+    .text('🏠 Home', 'a:home');
+}
+
+function renderInviteRedeemSuccessText({ reward, rewards }) {
+  return [
+    '✅ <b>Награда активирована</b>',
+    '',
+    `Активировано: <b>${escapeHtml(String(reward?.label || 'Pro reward'))}</b>`,
+    `Новый available balance: <b>${Number(rewards?.availablePoints || 0)}</b> pts`,
+    `Pending: <b>${Number(rewards?.pendingPoints || 0)}</b> pts`,
+    `Redeemed: <b>${Number(rewards?.redeemedPoints || 0)}</b> pts`,
+    '',
+    rewards?.canRedeemPro30
+      ? 'У тебя уже доступны следующие награды в reward center.'
+      : rewards?.canRedeemPro7
+        ? 'У тебя всё ещё доступен 7 days Pro. Можно обменять ещё, если это нужно.'
+        : `Следующая награда: <b>${escapeHtml(String(rewards?.nextRewardLabel || '7 days Pro'))}</b>. Осталось: <b>${Number(rewards?.pointsToNextReward || 0)}</b> pts.`,
+  ].join('\n');
+}
+
+function inviteRedeemSuccessKeyboard() {
+  return new InlineKeyboard()
+    .text('🎁 Reward center', 'a:share_rewards')
+    .text('📄 История', 'a:share_history')
+    .row()
+    .text('⬅️ Invite Center', 'a:share')
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
@@ -2761,16 +2806,26 @@ function inviteHasHistoryData(inviteState = null) {
   );
 }
 
+function formatInviteHistoryStatus(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'pending') return 'pending';
+  if (s === 'confirmed') return 'confirmed';
+  if (s === 'redeemed') return 'redeemed';
+  if (s === 'rejected') return 'rejected';
+  return s || 'unknown';
+}
+
 function renderInviteHistoryEntry(row = {}) {
   const ts = row?.createdAt ? fmtTs(row.createdAt) : '—';
+  const status = formatInviteHistoryStatus(row?.status);
   if (row?.entryKind === 'redeem') {
     const rewardLabel = row?.rewardType === 'pro_30d' ? '30 days Pro' : '7 days Pro';
-    return `• ${escapeHtml(ts)} — 🎁 <b>-${Number(row?.points || 0)}</b> pts · ${escapeHtml(rewardLabel)} · ${escapeHtml(String(row?.status || 'redeemed'))}`;
+    return `• ${escapeHtml(ts)} — 🎁 <b>-${Number(row?.points || 0)}</b> pts · ${escapeHtml(rewardLabel)} · <b>${escapeHtml(status)}</b>`;
   }
   const who = row?.displayName ? ` · ${escapeHtml(String(row.displayName))}` : '';
   const label = row?.rewardType === 'invite_activation' ? 'активация' : 'приглашение';
   const emoji = row?.rewardType === 'invite_activation' ? '🔥' : '➕';
-  return `• ${escapeHtml(ts)} — ${emoji} <b>+${Number(row?.points || 0)}</b> pts · ${escapeHtml(label)} · ${escapeHtml(String(row?.status || 'pending'))}${who}`;
+  return `• ${escapeHtml(ts)} — ${emoji} <b>+${Number(row?.points || 0)}</b> pts · ${escapeHtml(label)} · <b>${escapeHtml(status)}</b>${who}`;
 }
 
 function renderInviteRewardsCenterText({ inviteState = null } = {}) {
@@ -2804,7 +2859,10 @@ function inviteRewardsCenterKeyboard(inviteState = null) {
     rewardRow.push({ text: INVITE_REDEEM_OPTIONS.pro30.buttonLabel, callback_data: 'a:share_redeem|r:pro30' });
   }
   if (rewardRow.length) rows.push(rewardRow);
-  rows.push([{ text: '⬅️ Назад', callback_data: 'a:share' }]);
+  if (inviteHasHistoryData(inviteState)) {
+    rows.push([{ text: '📄 История', callback_data: 'a:share_history' }]);
+  }
+  rows.push([{ text: '⬅️ Invite Center', callback_data: 'a:share' }]);
   rows.push([
     { text: '📋 Меню', callback_data: 'a:menu' },
     { text: '🏠 Home', callback_data: 'a:home' }
@@ -2860,10 +2918,10 @@ function renderInviteHistoryText({ inviteState = null, history = [] } = {}) {
 
 function renderInviteHistoryKeyboard(inviteState = null) {
   const rows = [];
-  if (inviteState?.rewards?.enabled && Number(inviteState?.rewards?.availablePoints || 0) >= INVITE_REDEEM_OPTIONS.pro7.costPoints) {
-    rows.push([{ text: '🎁 Обменять баллы', callback_data: 'a:share_rewards' }]);
+  if (inviteState?.rewards?.enabled) {
+    rows.push([{ text: '🎁 Reward center', callback_data: 'a:share_rewards' }]);
   }
-  rows.push([{ text: '⬅️ Назад', callback_data: 'a:share' }]);
+  rows.push([{ text: '⬅️ Invite Center', callback_data: 'a:share' }]);
   rows.push([
     { text: '📋 Меню', callback_data: 'a:menu' },
     { text: '🏠 Home', callback_data: 'a:home' }
@@ -25070,8 +25128,13 @@ if (p.a === 'a:share_redeem_do') {
   const inviteState = await loadInviteSurfaceStateForUser(u);
   let notice = '⚠️ Обмен не выполнен.';
   if (result?.ok) {
-    notice = `✅ Обмен выполнен: ${reward.label} активирован.`;
     try { await ctx.answerCallbackQuery({ text: '✅ Награда активирована', show_alert: false }); } catch {}
+    await safeEditOrReply(ctx, renderInviteRedeemSuccessText({ reward, rewards: inviteState.rewards }), {
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      reply_markup: inviteRedeemSuccessKeyboard(),
+    });
+    return;
   } else if (result?.reason === 'insufficient_points') {
     notice = 'ℹ️ Недостаточно available points для обмена.';
     try { await ctx.answerCallbackQuery({ text: 'Недостаточно баллов.', show_alert: true }); } catch {}
