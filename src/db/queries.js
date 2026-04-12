@@ -8060,6 +8060,49 @@ export async function getInviteRewardsSummary(referrerUserId) {
   }
 }
 
+export async function getInviteRewardsRecentHistory(referrerUserId, limit = 8) {
+  const uid = Number(referrerUserId || 0);
+  const lim = Math.max(1, Math.min(20, Number(limit || 8)));
+  if (!uid) return [];
+  try {
+    const result = await pool.query(
+      `select
+         l.id,
+         l.entry_kind,
+         l.reward_type,
+         l.points,
+         l.status,
+         l.created_at,
+         l.confirmed_at,
+         l.redeemed_at,
+         l.invited_user_id,
+         u.tg_id,
+         u.tg_username
+       from invite_reward_ledger l
+       left join users u on u.id = l.invited_user_id
+      where l.referrer_user_id = $1
+      order by l.created_at desc
+      limit $2`,
+      [uid, lim]
+    );
+    return (result.rows || []).map((row) => ({
+      id: Number(row.id || 0),
+      entryKind: String(row.entry_kind || ''),
+      rewardType: String(row.reward_type || ''),
+      points: Number(row.points || 0),
+      status: String(row.status || ''),
+      createdAt: row.created_at,
+      confirmedAt: row.confirmed_at,
+      redeemedAt: row.redeemed_at,
+      invitedUserId: row.invited_user_id ? Number(row.invited_user_id) : null,
+      displayName: row.invited_user_id ? buildInviteMemberLabel(row) : null,
+    }));
+  } catch (error) {
+    if (inviteRewardsMissingSchemaError(error)) return [];
+    throw error;
+  }
+}
+
 async function resolveInviteRewardRedeemTarget(client, userId) {
   const uid = Number(userId || 0);
   if (!uid) return { kind: 'brand_plan' };
