@@ -19110,6 +19110,18 @@ export function getBot() {
 
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
 
+    const supportSummarySeed = hasPhoto ? (caption || '[photo]') : (hasDoc ? (caption || '[document]') : (caption || '[video]'));
+    let supportThread = null;
+    try {
+      const threadRes = await db.openOrTouchSupportThreadForUser(u.id, ctx.from.id, {
+        source: 'telegram_bot',
+        category: 'general',
+        summary: supportSummarySeed,
+        fallbackSummary: hasPhoto ? '[photo]' : (hasDoc ? '[document]' : '[video]'),
+      });
+      supportThread = threadRes?.thread || null;
+    } catch {}
+
     // Rate-limit: allow up to 2 support messages per 5 minutes per user (text+media)
     const rlKey = k(['rl', 'support_any', String(u.id)]);
     const rl = await rateLimit(rlKey, { limit: 2, windowSec: 5 * 60 });
@@ -19161,7 +19173,7 @@ export function getBot() {
 ` +
       `TG ID: <code>${ctx.from.id}</code>
 ` +
-      `User ID: <code>${u.id}</code>
+      `User ID: <code>${u.id}</code>${supportThread?.id ? ` · Thread: <code>#${supportThread.id}</code>` : ''}
 ` +
       `Режим: <b>${escapeHtml(modeHuman)}</b>${bmEnabled ? ' · <b>Менеджер бренда</b>' : ''}${bmBrand ? `
 Brand: <b>${escapeHtml(bmBrand)}</b>` : ''}
@@ -19180,17 +19192,23 @@ ${escapeHtml(safeCap)}
       const targetChatId = t;
       if (!targetChatId) continue;
       try {
+        const threadTail = supportThread?.id ? `|th:${supportThread.id}` : '';
         const replyKb = new InlineKeyboard()
-          .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}${threadTail}`)
           .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`)
           .row()
-          .text('✅ Принято', `a:adm_support_qr|k:ack|tg:${ctx.from.id}|uid:${u.id}`)
-          .text('❓ Нужны детали', `a:adm_support_qr|k:need|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('✅ Принято', `a:adm_support_qr|k:ack|tg:${ctx.from.id}|uid:${u.id}${threadTail}`)
+          .text('❓ Нужны детали', `a:adm_support_qr|k:need|tg:${ctx.from.id}|uid:${u.id}${threadTail}`)
           .row()
-          .text('✅ Сделали', `a:adm_support_qr|k:done|tg:${ctx.from.id}|uid:${u.id}`)
-          .text('⏳ В работе', `a:adm_support_qr|k:wip|tg:${ctx.from.id}|uid:${u.id}`);
+          .text('✅ Сделали', `a:adm_support_qr|k:done|tg:${ctx.from.id}|uid:${u.id}${threadTail}`)
+          .text('⏳ В работе', `a:adm_support_qr|k:wip|tg:${ctx.from.id}|uid:${u.id}${threadTail}`);
         // Send header with reply button
-        await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
+        const headerMsg = await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
+        if (supportThread?.id && sent === 0) {
+          try {
+            await db.bindSupportThreadToSupportMessage(supportThread.id, targetChatId, headerMsg?.message_id, { supportTopicId: Number(headerMsg?.message_thread_id || 0) || null });
+          } catch {}
+        }
 
         // Copy original media message (preserves attachment)
         try {
@@ -19363,7 +19381,7 @@ ${escapeHtml(safeCap)}
         // If admin started a reply-session in this group/topic, do not "fall through" into main-menu rendering.
         if (sess && Number(sess.chatId || 0) === Number(ctx.chat?.id || 0)) {
           const curThreadId = Number(ctx.message?.message_thread_id || 0);
-          const sessThreadId = Number(sess.threadId || 0);
+          const sessThreadId = Number(sess.topicThreadId || 0);
           if (sessThreadId && curThreadId && sessThreadId !== curThreadId) {
             // Different forum topic — ignore.
           } else {
@@ -19427,9 +19445,20 @@ ${escapeHtml(safeCap)}
             }
 
             if (ok) {
+              try {
+                await db.markSupportThreadOperatorReply({
+                  threadId: Number(sess.supportThreadId || 0),
+                  userId: targetUserId,
+                  userTgId: targetTgId,
+                  operatorTgId: Number(ctx.from.id || 0),
+                  status: 'waiting_user',
+                  summary: safe,
+                });
+              } catch {}
               try { await redis.del(sessKey); } catch {}
+              const threadTail = Number(sess.supportThreadId || 0) ? `|th:${Number(sess.supportThreadId || 0)}` : '';
               const kb = new InlineKeyboard()
-                .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}`)
+                .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}${threadTail}`)
                 .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
                 .row()
                 .text('⬅️ Админка', 'a:admin_home')
@@ -19602,6 +19631,16 @@ ctx.reply = (text, extra) => {
         bmBrand = bm.brandLabel ? String(bm.brandLabel) : '';
       } catch {}
       const safe = clipCodepoints(txt, TG_SAFE_BODY_MAX).text;
+      let supportThread = null;
+      try {
+        const threadRes = await db.openOrTouchSupportThreadForUser(u.id, ctx.from.id, {
+          source: 'telegram_bot',
+          category: 'general',
+          summary: safe,
+          fallbackSummary: '[text]',
+        });
+        supportThread = threadRes?.thread || null;
+      } catch {}
       const header = `💬 <b>Support</b>
 
 ` +
@@ -19609,7 +19648,7 @@ ctx.reply = (text, extra) => {
 ` +
         `TG ID: <code>${ctx.from.id}</code>
 ` +
-        `User ID: <code>${u.id}</code>
+        `User ID: <code>${u.id}</code>${supportThread?.id ? ` · Thread: <code>#${supportThread.id}</code>` : ''}
 ` +
         `Режим: <b>${escapeHtml(modeHuman)}</b>${bmEnabled ? ' · <b>Менеджер бренда</b>' : ''}${bmBrand ? `
 Brand: <b>${escapeHtml(bmBrand)}</b>` : ''}
@@ -19625,16 +19664,22 @@ ${escapeHtml(safe)}`;
         const targetChatId = t;
         if (!targetChatId) continue;
         try {
+          const threadTail = supportThread?.id ? `|th:${supportThread.id}` : '';
           const replyKb = new InlineKeyboard()
-          .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('✍️ Ответить', `a:adm_support_reply|tg:${ctx.from.id}|uid:${u.id}${threadTail}`)
           .text('👤 Карточка', `a:adm_ucard|id:${u.id}|f:all|p:0`)
           .row()
-          .text('✅ Принято', `a:adm_support_qr|k:ack|tg:${ctx.from.id}|uid:${u.id}`)
-          .text('❓ Нужны детали', `a:adm_support_qr|k:need|tg:${ctx.from.id}|uid:${u.id}`)
+          .text('✅ Принято', `a:adm_support_qr|k:ack|tg:${ctx.from.id}|uid:${u.id}${threadTail}`)
+          .text('❓ Нужны детали', `a:adm_support_qr|k:need|tg:${ctx.from.id}|uid:${u.id}${threadTail}`)
           .row()
-          .text('✅ Сделали', `a:adm_support_qr|k:done|tg:${ctx.from.id}|uid:${u.id}`)
-          .text('⏳ В работе', `a:adm_support_qr|k:wip|tg:${ctx.from.id}|uid:${u.id}`);
-          await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
+          .text('✅ Сделали', `a:adm_support_qr|k:done|tg:${ctx.from.id}|uid:${u.id}${threadTail}`)
+          .text('⏳ В работе', `a:adm_support_qr|k:wip|tg:${ctx.from.id}|uid:${u.id}${threadTail}`);
+          const headerMsg = await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
+          if (supportThread?.id && sent === 0) {
+            try {
+              await db.bindSupportThreadToSupportMessage(supportThread.id, targetChatId, headerMsg?.message_id, { supportTopicId: Number(headerMsg?.message_thread_id || 0) || null });
+            } catch {}
+          }
           sent += 1;
         } catch {}
       }
@@ -19780,8 +19825,19 @@ ${escapeHtml(safe)}`;
       }
 
       if (ok) {
+        try {
+          await db.markSupportThreadOperatorReply({
+            threadId: Number(exp.threadId || 0),
+            userId: Number(exp.targetUserId || 0),
+            userTgId: targetTgId,
+            operatorTgId: Number(ctx.from.id || 0),
+            status: 'waiting_user',
+            summary: safe,
+          });
+        } catch {}
+        const threadTail = Number(exp.threadId || 0) ? `|th:${Number(exp.threadId || 0)}` : '';
         const kb = new InlineKeyboard()
-          .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${exp.targetUserId || 0}`)
+          .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${exp.targetUserId || 0}${threadTail}`)
           .text('👤 Карточка', `a:adm_ucard|id:${exp.targetUserId || 0}|f:all|p:0`)
           .row()
           .text('⬅️ Админка', 'a:admin_home');
@@ -30942,6 +30998,184 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
     }
 
     
+
+    // --- Admin: Cancel reply session in support group ---
+    if (p.a === 'a:adm_support_reply_cancel') {
+      try { await ctx.answerCallbackQuery(); } catch {}
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const chatId = Number(ctx.chat?.id || 0);
+      const msgId = Number(ctx.callbackQuery?.message?.message_id || 0);
+      const sessKey = k(['adm_support_reply', String(ctx.from.id)]);
+      let sess = null;
+      let redisOk = true;
+      try { sess = await redis.get(sessKey); } catch { redisOk = false; sess = null; }
+      if (sess && msgId && Number(sess.promptMsgId || 0) && Number(sess.promptMsgId || 0) !== msgId) {
+        try { await ctx.answerCallbackQuery({ text: 'Сессия уже другая.', show_alert: true }); } catch {}
+        return;
+      }
+      let delOk = false;
+      if (redisOk) {
+        try { await redis.del(sessKey); delOk = true; } catch { delOk = false; }
+      }
+      let textOut = '';
+      if (!redisOk) textOut = `⚠️ <b>Отмена не подтверждена</b>
+
+Кеш недоступен. Сессия могла остаться активной. Лучше не отвечай на этот промпт и попробуй позже.`;
+      else if (!sess) textOut = `⏱ <b>Сессия уже завершена</b>
+
+Если нужно — нажми «✍️ Ответить» ещё раз.`;
+      else if (delOk) textOut = `❌ <b>Отменено</b>
+
+Ответ не будет отправлен.`;
+      else textOut = `⚠️ <b>Не удалось отменить</b>
+
+Кеш недоступен. Сессия могла остаться активной. Лучше не отвечай на этот промпт и попробуй позже.`;
+      try {
+        await ctx.api.editMessageText(chatId, msgId, textOut, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          reply_markup: new InlineKeyboard(),
+        });
+      } catch {}
+      return;
+    }
+
+    // --- Admin: Reply to support message ---
+    if (p.a === 'a:adm_support_reply') {
+      await ctx.answerCallbackQuery();
+      if (!isSuperAdminTg(ctx.from.id)) return;
+      const targetTgId = Number(p.tg || 0);
+      const targetUserId = Number(p.uid || 0);
+      const supportThreadId = Number(p.th || 0);
+      if (!targetTgId) return ctx.answerCallbackQuery({ text: 'Нет TG ID.' });
+      const chatType = String(ctx.chat?.type || '');
+      const isPrivate = chatType === 'private';
+      if (isPrivate) {
+        const kb = new InlineKeyboard().text('❌ Отмена', 'a:admin_home');
+        await safeEditOrReply(ctx, `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})
+
+Напиши текст ответа одним сообщением — я отправлю его пользователю от имени поддержки.`, { parse_mode: 'HTML', reply_markup: kb });
+        await setExpectText(ctx.from.id, { type: 'adm_support_reply', targetTgId, targetUserId, threadId: supportThreadId });
+        return;
+      }
+      const exSec = 20 * 60;
+      const sessionKey = k(['adm_support_reply', String(ctx.from.id)]);
+      const originMsgId = Number(ctx.callbackQuery?.message?.message_id || 0);
+      const originTopicThreadId = Number(ctx.callbackQuery?.message?.message_thread_id || 0);
+      const promptText = `✍️ <b>Ответ пользователю</b> (tg:${targetTgId})
+
+Отправь текст <b>Reply</b> на <b>тикет</b> (сообщение с кнопками) или на <b>эту подсказку</b> — я доставлю его пользователю от имени поддержки.
+
+<i>Отмена:</i> нажми «❌ Отмена» (или ответь <code>/cancel</code>).`;
+      const kb = new InlineKeyboard().text('❌ Отмена', 'a:adm_support_reply_cancel');
+      const sendOpts = { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb };
+      if (originTopicThreadId) sendOpts.message_thread_id = originTopicThreadId;
+      const prompt = await ctx.api.sendMessage(ctx.chat.id, promptText, sendOpts);
+      let sessionOk = false;
+      try {
+        await redis.set(sessionKey, {
+          targetTgId,
+          targetUserId,
+          supportThreadId,
+          chatId: ctx.chat.id,
+          promptMsgId: prompt.message_id,
+          originMsgId,
+          topicThreadId: originTopicThreadId,
+          createdAt: new Date().toISOString(),
+        }, { ex: exSec });
+        sessionOk = true;
+      } catch { sessionOk = false; }
+      if (!sessionOk) {
+        const failText = `⚠️ <b>Сейчас кеш/сессии недоступны</b>
+
+Я не могу принять ответ в группе.
+
+${DEGRADED_COPY.line}
+
+Что можно сделать:
+• Используй «Быстрый ответ» (кнопки-шаблоны)
+• Попробуй позже
+
+<i>Эта сессия не активна.</i>`;
+        try {
+          await ctx.api.editMessageText(ctx.chat.id, prompt.message_id, failText, {
+            parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: new InlineKeyboard(),
+          });
+        } catch {}
+      }
+      return;
+    }
+
+    // --- Admin: Quick reply to support message (1 click templates) ---
+    if (p.a === 'a:adm_support_qr') {
+      if (!isSuperAdminTg(ctx.from.id)) {
+        try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+        return;
+      }
+      const targetTgId = Number(p.tg || 0);
+      const targetUserId = Number(p.uid || 0);
+      const supportThreadId = Number(p.th || 0);
+      const key = String(p.k || '').trim();
+      if (!targetTgId) {
+        try { await ctx.answerCallbackQuery({ text: 'Нет TG ID.' }); } catch {}
+        return;
+      }
+      const TPL = {
+        ack: 'Принято ✅\n\nПриняли запрос. Сейчас посмотрим и вернёмся с ответом.',
+        need: 'Нужны детали ❓\n\nУточни, пожалуйста: что именно не получается (шаги), и если есть — скрин/ошибка.',
+        done: 'Готово ✅\n\nСделали. Проверь, пожалуйста, сейчас. Если что — напиши ещё раз.',
+        wip: 'В работе ⏳\n\nПриняли в работу. Дадим обновление, как только будет результат.',
+      };
+      const raw = TPL[key] || '';
+      if (!raw) {
+        try { await ctx.answerCallbackQuery({ text: 'Шаблон не найден.' }); } catch {}
+        return;
+      }
+      const safe = clipCodepoints(raw, TG_SAFE_BODY_MAX).text;
+      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+      let ok = false;
+      try {
+        const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+        await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+        ok = true;
+      } catch {
+        try { await ctx.answerCallbackQuery({ text: '❌ Не удалось отправить (возможно, бот заблокирован).', show_alert: true }); } catch {}
+      }
+      if (ok) {
+        try {
+          await db.markSupportThreadOperatorReply({
+            threadId: supportThreadId,
+            userId: targetUserId,
+            userTgId: targetTgId,
+            operatorTgId: Number(ctx.from.id || 0),
+            status: key === 'done' ? 'closed' : 'waiting_user',
+            close: key === 'done',
+            summary: safe,
+          });
+        } catch {}
+        try { await ctx.answerCallbackQuery({ text: key === 'done' ? '✅ Отправлено и закрыто' : '✅ Отправлено пользователю' }); } catch {}
+        try {
+          const forumThreadId = Number(ctx.callbackQuery?.message?.message_thread_id || 0);
+          const threadTail = supportThreadId ? `|th:${supportThreadId}` : '';
+          const kb = new InlineKeyboard()
+            .text('✍️ Ещё ответ', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId || 0}${threadTail}`)
+            .text('👤 Карточка', `a:adm_ucard|id:${targetUserId || 0}|f:all|p:0`)
+            .row()
+            .text('⬅️ Операции', 'a:admin_ops')
+            .row()
+            .text('📋 Меню', 'a:menu')
+            .text('🏠 Home', 'a:home');
+          const out = key === 'done'
+            ? `✅ Быстрый ответ отправлен и тикет отмечен как <b>closed</b> (tg:${targetTgId}).`
+            : `✅ Быстрый ответ отправлен (tg:${targetTgId}).`;
+          const opts = { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true };
+          if (forumThreadId) opts.message_thread_id = forumThreadId;
+          await ctx.api.sendMessage(ctx.chat.id, out, opts);
+        } catch {}
+      }
+      return;
+    }
+
 
 
     // --- Admin: Outbox (Redis-only) (STEP193) ---

@@ -8199,6 +8199,187 @@ function buildInviteMemberLabel(row = {}) {
   return 'User';
 }
 
+function supportThreadsMissingSchemaError(error) {
+  const code = String(error?.code || '');
+  const msg = String(error?.message || '').toLowerCase();
+  if (code === '42P01' && msg.includes('support_threads')) return true;
+  if (code === '42703' && (msg.includes('support_threads') || msg.includes('support_'))) return true;
+  return false;
+}
+
+function normalizeSupportThreadStatus(raw, fallback = 'open') {
+  const v = String(raw || '').trim().toLowerCase();
+  if (v === 'open' || v === 'waiting_operator' || v === 'waiting_user' || v === 'closed') return v;
+  return fallback;
+}
+
+function buildSupportThreadSummary(raw, fallback = '') {
+  const base = String(raw || fallback || '').replace(/\s+/g, ' ').trim();
+  if (!base) return fallback ? String(fallback) : '';
+  return base.length > 240 ? base.slice(0, 237) + '…' : base;
+}
+
+export async function getLatestSupportThreadForUser(userId, userTgId) {
+  const uid = Number(userId || 0);
+  const tgId = Number(userTgId || 0);
+  if (!uid && !tgId) return null;
+  try {
+    const r = await pool.query(
+      `select *
+         from support_threads
+        where ($1::bigint > 0 and user_id = $1)
+           or ($2::bigint > 0 and user_tg_id = $2)
+        order by (closed_at is null) desc, updated_at desc, id desc
+        limit 1`,
+      [uid, tgId]
+    );
+    return r.rows[0] || null;
+  } catch (error) {
+    if (supportThreadsMissingSchemaError(error)) return null;
+    throw error;
+  }
+}
+
+export async function openOrTouchSupportThreadForUser(userId, userTgId, opts = {}) {
+  const uid = Number(userId || 0);
+  const tgId = Number(userTgId || 0);
+  if (!uid && !tgId) return { persistenceEnabled: false, reason: 'support_thread_missing_user' };
+
+  const source = String(opts?.source || 'telegram_bot').trim() || 'telegram_bot';
+  const category = String(opts?.category || '').trim() || null;
+  const summary = buildSupportThreadSummary(opts?.summary || '', opts?.fallbackSummary || '');
+  const status = normalizeSupportThreadStatus(opts?.status, 'waiting_operator');
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const existing = await client.query(
+      `select *
+         from support_threads
+        where (($1::bigint > 0 and user_id = $1) or ($2::bigint > 0 and user_tg_id = $2))
+          and closed_at is null
+        order by updated_at desc, id desc
+        limit 1
+        for update`,
+      [uid, tgId]
+    );
+    let row = existing.rows[0] || null;
+    let created = false;
+    if (row) {
+      const updated = await client.query(
+        `update support_threads
+            set status = $2,
+                category = coalesce($3, category),
+                source = coalesce(nullif($4, ''), source),
+                last_user_message_at = now(),
+                last_summary = coalesce(nullif($5, ''), last_summary),
+                updated_at = now()
+          where id = $1
+          returning *`,
+        [Number(row.id), status, category, source, summary || null]
+      );
+      row = updated.rows[0] || row;
+    } else {
+      const inserted = await client.query(
+        `insert into support_threads (
+           user_id, user_tg_id, status, category, source,
+           opened_at, last_user_message_at, last_summary, updated_at
+         )
+         values ($1, $2, $3, $4, $5, now(), now(), $6, now())
+         returning *`,
+        [uid || null, tgId || null, status, category, source, summary || null]
+      );
+      row = inserted.rows[0] || null;
+      created = true;
+    }
+    await client.query('commit');
+    return { persistenceEnabled: true, created, thread: row };
+  } catch (error) {
+    try { await client.query('rollback'); } catch {}
+    if (supportThreadsMissingSchemaError(error)) return { persistenceEnabled: false, reason: 'support_threads_schema_missing' };
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function bindSupportThreadToSupportMessage(threadId, supportChatId, supportMessageId, opts = {}) {
+  const tid = Number(threadId || 0);
+  if (!tid) return { ok: false, reason: 'thread_id_required' };
+  try {
+    const r = await pool.query(
+      `update support_threads
+          set support_chat_id = $2,
+              support_message_id = $3,
+              support_topic_id = $4,
+              updated_at = now()
+        where id = $1
+        returning id`,
+      [tid, Number(supportChatId || 0) || null, Number(supportMessageId || 0) || null, Number(opts?.supportTopicId || 0) || null]
+    );
+    return { ok: !!r.rows[0], persistenceEnabled: true };
+  } catch (error) {
+    if (supportThreadsMissingSchemaError(error)) return { ok: false, persistenceEnabled: false, reason: 'support_threads_schema_missing' };
+    throw error;
+  }
+}
+
+export async function markSupportThreadOperatorReply(opts = {}) {
+  const threadId = Number(opts?.threadId || 0);
+  const userId = Number(opts?.userId || 0);
+  const userTgId = Number(opts?.userTgId || 0);
+  const operatorTgId = Number(opts?.operatorTgId || 0);
+  const close = !!opts?.close;
+  const status = close ? 'closed' : normalizeSupportThreadStatus(opts?.status, 'waiting_user');
+  const summary = buildSupportThreadSummary(opts?.summary || '');
+  if (!threadId && !userId && !userTgId) return { ok: false, reason: 'support_thread_target_missing' };
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    let row = null;
+    if (threadId) {
+      const byId = await client.query('select * from support_threads where id = $1 limit 1 for update', [threadId]);
+      row = byId.rows[0] || null;
+    }
+    if (!row) {
+      const byUser = await client.query(
+        `select *
+           from support_threads
+          where (($1::bigint > 0 and user_id = $1) or ($2::bigint > 0 and user_tg_id = $2))
+          order by (closed_at is null) desc, updated_at desc, id desc
+          limit 1
+          for update`,
+        [userId, userTgId]
+      );
+      row = byUser.rows[0] || null;
+    }
+    if (!row) {
+      await client.query('commit');
+      return { ok: false, persistenceEnabled: true, reason: 'support_thread_not_found' };
+    }
+    const updated = await client.query(
+      `update support_threads
+          set status = $2,
+              closed_at = case when $3 then coalesce(closed_at, now()) else null end,
+              last_operator_reply_at = now(),
+              last_operator_tg_id = $4,
+              last_summary = coalesce(nullif($5, ''), last_summary),
+              updated_at = now()
+        where id = $1
+        returning *`,
+      [Number(row.id), status, close, operatorTgId || null, summary || null]
+    );
+    await client.query('commit');
+    return { ok: true, persistenceEnabled: true, thread: updated.rows[0] || row };
+  } catch (error) {
+    try { await client.query('rollback'); } catch {}
+    if (supportThreadsMissingSchemaError(error)) return { ok: false, persistenceEnabled: false, reason: 'support_threads_schema_missing' };
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export function buildInviteCodeFromTelegramUserId(telegramUserId) {
   const numeric = Number.parseInt(String(telegramUserId || ''), 10);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
