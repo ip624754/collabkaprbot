@@ -2815,6 +2815,25 @@ function formatInviteHistoryStatus(status) {
   return s || 'unknown';
 }
 
+function inviteRewardPendingReasonLabel(rewardType, { short = false } = {}) {
+  const kind = String(rewardType || '').trim().toLowerCase();
+  if (kind === 'invite_join') return short ? 'join confirm' : 'Awaiting join confirmation';
+  if (kind === 'invite_activation') return short ? 'activation confirm' : 'Awaiting activation confirmation';
+  return short ? 'pending confirm' : 'Awaiting confirmation';
+}
+
+function renderInvitePendingReasonLines(history = []) {
+  const pending = Array.isArray(history) ? history.filter((row) => String(row?.status || '').toLowerCase() === 'pending') : [];
+  if (!pending.length) return [];
+  const hasJoin = pending.some((row) => String(row?.rewardType || '').toLowerCase() === 'invite_join');
+  const hasActivation = pending.some((row) => String(row?.rewardType || '').toLowerCase() === 'invite_activation');
+  const lines = ['', '<b>Почему pending ещё не тратятся</b>'];
+  if (hasJoin) lines.push('• Awaiting join confirmation — окно подтверждения за первое приглашение ещё не истекло.');
+  if (hasActivation) lines.push('• Awaiting activation confirmation — ждём, пока активация пройдёт своё confirm-window.');
+  if (!hasJoin && !hasActivation) lines.push('• Pending points ждут подтверждения и пока не попадают в available balance.');
+  return lines;
+}
+
 function renderInviteHistoryEntry(row = {}) {
   const ts = row?.createdAt ? fmtTs(row.createdAt) : '—';
   const status = formatInviteHistoryStatus(row?.status);
@@ -2825,7 +2844,8 @@ function renderInviteHistoryEntry(row = {}) {
   const who = row?.displayName ? ` · ${escapeHtml(String(row.displayName))}` : '';
   const label = row?.rewardType === 'invite_activation' ? 'активация' : 'приглашение';
   const emoji = row?.rewardType === 'invite_activation' ? '🔥' : '➕';
-  return `• ${escapeHtml(ts)} — ${emoji} <b>+${Number(row?.points || 0)}</b> pts · ${escapeHtml(label)} · <b>${escapeHtml(status)}</b>${who}`;
+  const pendingLabel = status === 'pending' ? ` · <i>${escapeHtml(inviteRewardPendingReasonLabel(row?.rewardType))}</i>` : '';
+  return `• ${escapeHtml(ts)} — ${emoji} <b>+${Number(row?.points || 0)}</b> pts · ${escapeHtml(label)} · <b>${escapeHtml(status)}</b>${who}${pendingLabel}`;
 }
 
 function renderInviteRewardsCenterText({ inviteState = null } = {}) {
@@ -2985,14 +3005,17 @@ function renderInviteText({ inviteState = null, notice = null } = {}) {
       lines.push('');
       lines.push('<b>Следующая награда</b>');
       if (inviteState.rewards.canRedeemPro30) {
-        lines.push('• 7 days Pro и 30 days Pro доступны для обмена.');
+        lines.push('• <b>Reward ready:</b> доступны 7 days Pro и 30 days Pro.');
       } else if (inviteState.rewards.canRedeemPro7) {
         const leftTo30 = Math.max(0, 250 - Number(inviteState.rewards.availablePoints || 0));
-        lines.push('• 7 days Pro доступен сейчас');
+        lines.push('• <b>Reward ready:</b> 7 days Pro доступен сейчас');
         lines.push(`• До 30 days Pro осталось: <b>${leftTo30}</b> pts`);
       } else {
-        lines.push(`• ${escapeHtml(String(inviteState.rewards.nextRewardLabel || '7 days Pro'))}`);
+        lines.push(`• <b>Next reward:</b> ${escapeHtml(String(inviteState.rewards.nextRewardLabel || '7 days Pro'))}`);
         lines.push(`• Осталось: <b>${Number(inviteState.rewards.pointsToNextReward || 0)}</b> pts`);
+      }
+      if (Number(inviteState.rewards.pendingPoints || 0) > 0) {
+        lines.push('• <i>Pending points не тратятся, пока не подтвердятся.</i>');
       }
     }
     if (inviteState.invitedBy?.displayName) {
@@ -25071,7 +25094,8 @@ if (p.a === 'a:share_history') {
 if (p.a === 'a:share_rewards') {
   try { await ctx.answerCallbackQuery(); } catch {}
   const inviteState = await loadInviteSurfaceStateForUser(u);
-  await safeEditOrReply(ctx, renderInviteRewardsCenterText({ inviteState }), {
+  const history = await db.getInviteRewardsRecentHistory(Number(u?.id || 0), 8).catch(() => []);
+  await safeEditOrReply(ctx, renderInviteRewardsCenterText({ inviteState, history }), {
     parse_mode: 'HTML',
     disable_web_page_preview: true,
     reply_markup: inviteRewardsCenterKeyboard(inviteState),
@@ -38242,7 +38266,9 @@ function renderInviteAdminTopInviterLine(row = {}, index = 0) {
 
 function renderInviteAdminPendingLine(row = {}, index = 0) {
   const oldest = row?.oldestConfirmAfter ? fmtTs(row.oldestConfirmAfter) : '—';
-  return `${index + 1}. <b>${escapeHtml(String(row.displayName || 'User'))}</b> · pending <b>${Number(row.pendingCount || 0)}</b> · pts <b>${Number(row.pendingPoints || 0)}</b> · oldest due <b>${escapeHtml(oldest)}</b>`;
+  const reason = inviteRewardPendingReasonLabel(row?.rewardType, { short: true });
+  const overdue = Number(row?.overdueHours || 0);
+  return `${index + 1}. <b>${escapeHtml(String(row.displayName || 'User'))}</b> · ${escapeHtml(reason)} · pending <b>${Number(row.pendingCount || 0)}</b> · pts <b>${Number(row.pendingPoints || 0)}</b> · overdue <b>${overdue}h</b> · oldest due <b>${escapeHtml(oldest)}</b>`;
 }
 
 function renderInviteAdminRedeemerLine(row = {}, index = 0) {
@@ -38265,7 +38291,9 @@ function buildAdminInviteVisibilityText(view = {}) {
     `• Invited: <b>${Number(summary.invited || 0)}</b>`,
     `• Activated: <b>${Number(summary.activated || 0)}</b>`,
     `• Pending rewards: <b>${Number(summary.pendingRewards || 0)}</b>`,
-    `• Stale pending: <b>${Number(summary.stalePendingRewards || 0)}</b>`,
+    `• Pending overdue: <b>${Number(summary.stalePendingRewards || 0)}</b>`,
+    `• Join pending overdue: <b>${Number(summary.staleJoinPendingRewards || 0)}</b>`,
+    `• Activation pending overdue: <b>${Number(summary.staleActivationPendingRewards || 0)}</b>`,
     `• Redeems: <b>${Number(summary.redeemedOps || 0)}</b> · pts <b>${Number(summary.redeemedPoints || 0)}</b>`,
   ];
   if (topInviters.length) {
@@ -38275,6 +38303,9 @@ function buildAdminInviteVisibilityText(view = {}) {
   if (stalePending.length) {
     lines.push('', '<b>Где pending rewards зависают</b>');
     for (const [i, row] of stalePending.slice(0, 3).entries()) lines.push(renderInviteAdminPendingLine(row, i));
+    lines.push('', '<b>Next action</b>');
+    lines.push('• Проверь, были ли activation events и не завис ли confirm-window.');
+    lines.push('• Если pending старые и не двигаются, нужен runtime/audit follow-up.');
   }
   if (topRedeemers.length) {
     lines.push('', '<b>Кто redeem’ит чаще всего</b>');

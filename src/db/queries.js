@@ -8075,6 +8075,7 @@ export async function getInviteRewardsRecentHistory(referrerUserId, limit = 8) {
          l.created_at,
          l.confirmed_at,
          l.redeemed_at,
+         l.confirm_after,
          l.invited_user_id,
          u.tg_id,
          u.tg_username
@@ -8094,6 +8095,7 @@ export async function getInviteRewardsRecentHistory(referrerUserId, limit = 8) {
       createdAt: row.created_at,
       confirmedAt: row.confirmed_at,
       redeemedAt: row.redeemed_at,
+      confirmAfter: row.confirm_after,
       invitedUserId: row.invited_user_id ? Number(row.invited_user_id) : null,
       displayName: row.invited_user_id ? buildInviteMemberLabel(row) : null,
     }));
@@ -8845,6 +8847,8 @@ export async function getInviteAdminVisibilityOverview({ staleHours = 6, topLimi
       activated: 0,
       pendingRewards: 0,
       stalePendingRewards: 0,
+      staleJoinPendingRewards: 0,
+      staleActivationPendingRewards: 0,
       redeemedOps: 0,
       redeemedPoints: 0,
     },
@@ -8861,6 +8865,8 @@ export async function getInviteAdminVisibilityOverview({ staleHours = 6, topLimi
            count(*) filter (where inv.activated_at is not null)::int as activated,
            coalesce((select count(*)::int from invite_reward_ledger l where l.entry_kind='earn' and l.status='pending'), 0)::int as pending_rewards,
            coalesce((select count(*)::int from invite_reward_ledger l where l.entry_kind='earn' and l.status='pending' and l.confirm_after is not null and l.confirm_after <= now() - ($1::text || ' hours')::interval), 0)::int as stale_pending_rewards,
+           coalesce((select count(*)::int from invite_reward_ledger l where l.entry_kind='earn' and l.status='pending' and l.reward_type='invite_join' and l.confirm_after is not null and l.confirm_after <= now() - ($1::text || ' hours')::interval), 0)::int as stale_join_pending_rewards,
+           coalesce((select count(*)::int from invite_reward_ledger l where l.entry_kind='earn' and l.status='pending' and l.reward_type='invite_activation' and l.confirm_after is not null and l.confirm_after <= now() - ($1::text || ' hours')::interval), 0)::int as stale_activation_pending_rewards,
            coalesce((select count(*)::int from invite_reward_ledger l where l.entry_kind='redeem' and l.status='redeemed'), 0)::int as redeemed_ops,
            coalesce((select sum(points)::int from invite_reward_ledger l where l.entry_kind='redeem' and l.status='redeemed'), 0)::int as redeemed_points
          from member_invites inv`,
@@ -8898,17 +8904,19 @@ export async function getInviteAdminVisibilityOverview({ staleHours = 6, topLimi
            l.referrer_user_id,
            u.tg_id,
            u.tg_username,
+           l.reward_type,
            count(*)::int as pending_count,
            min(l.confirm_after) as oldest_confirm_after,
-           coalesce(sum(l.points), 0)::int as pending_points
+           coalesce(sum(l.points), 0)::int as pending_points,
+           floor(extract(epoch from (now() - min(l.confirm_after))) / 3600)::int as overdue_hours
          from invite_reward_ledger l
          join users u on u.id = l.referrer_user_id
          where l.entry_kind='earn'
            and l.status='pending'
            and l.confirm_after is not null
            and l.confirm_after <= now() - ($1::text || ' hours')::interval
-         group by l.referrer_user_id, u.tg_id, u.tg_username
-         order by pending_count desc, oldest_confirm_after asc nulls last
+         group by l.referrer_user_id, u.tg_id, u.tg_username, l.reward_type
+         order by overdue_hours desc, pending_count desc, oldest_confirm_after asc nulls last
          limit $2`,
         [String(stale), lim]
       ),
@@ -8939,6 +8947,8 @@ export async function getInviteAdminVisibilityOverview({ staleHours = 6, topLimi
         activated: Number(srow.activated || 0),
         pendingRewards: Number(srow.pending_rewards || 0),
         stalePendingRewards: Number(srow.stale_pending_rewards || 0),
+        staleJoinPendingRewards: Number(srow.stale_join_pending_rewards || 0),
+        staleActivationPendingRewards: Number(srow.stale_activation_pending_rewards || 0),
         redeemedOps: Number(srow.redeemed_ops || 0),
         redeemedPoints: Number(srow.redeemed_points || 0),
       },
@@ -8954,9 +8964,11 @@ export async function getInviteAdminVisibilityOverview({ staleHours = 6, topLimi
       stalePending: (staleRes.rows || []).map((row) => ({
         referrerUserId: Number(row.referrer_user_id || 0),
         displayName: buildInviteMemberLabel(row),
+        rewardType: String(row.reward_type || ''),
         pendingCount: Number(row.pending_count || 0),
         pendingPoints: Number(row.pending_points || 0),
         oldestConfirmAfter: row.oldest_confirm_after || null,
+        overdueHours: Number(row.overdue_hours || 0),
       })),
       topRedeemers: (redeemersRes.rows || []).map((row) => ({
         referrerUserId: Number(row.referrer_user_id || 0),
