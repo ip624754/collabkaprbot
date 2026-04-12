@@ -8324,6 +8324,33 @@ export async function bindSupportThreadToSupportMessage(threadId, supportChatId,
   }
 }
 
+export async function setSupportThreadStatusForAdmin(opts = {}) {
+  const threadId = Number(opts?.threadId || 0);
+  const operatorTgId = Number(opts?.operatorTgId || 0);
+  const status = normalizeSupportThreadStatus(opts?.status, 'open');
+  const summary = buildSupportThreadSummary(opts?.summary || '');
+  if (!threadId) return { ok: false, reason: 'support_thread_target_missing' };
+  try {
+    const close = status === 'closed';
+    const r = await pool.query(
+      `update support_threads
+          set status = $2,
+              closed_at = case when $3 then coalesce(closed_at, now()) else null end,
+              last_operator_tg_id = coalesce($4, last_operator_tg_id),
+              last_summary = coalesce(nullif($5, ''), last_summary),
+              updated_at = now()
+        where id = $1
+        returning *`,
+      [threadId, status, close, operatorTgId || null, summary || null]
+    );
+    return { ok: !!r.rows[0], persistenceEnabled: true, thread: r.rows[0] || null };
+  } catch (error) {
+    if (supportThreadsMissingSchemaError(error)) return { ok: false, persistenceEnabled: false, reason: 'support_threads_schema_missing' };
+    throw error;
+  }
+}
+
+
 export async function markSupportThreadOperatorReply(opts = {}) {
   const threadId = Number(opts?.threadId || 0);
   const userId = Number(opts?.userId || 0);

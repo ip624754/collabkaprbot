@@ -2783,3 +2783,22 @@ Live smoke after rollout:
 - open one thread card
 - use `✍️ Ответить` and one quick reply
 - verify status/readout updates after refresh
+
+
+## STEP569 — Support close/reopen + canned replies polish
+
+Status: runtime shipped
+Risk: low-medium
+Migrations: none
+
+What changed:
+- support thread card now has explicit close / reopen controls
+- quick replies in support thread views now use shared admin DM templates (ack / need / wip / done) instead of isolated hardcoded copy
+- quick reply labels stay aligned with the editable DM template layer
+- support thread next-action copy now reflects close/reopen semantics more honestly
+
+What did not change:
+- user-side support intake UX
+- support thread storage model introduced in STEP567
+- support operator read surface buckets introduced in STEP568
+- web helpdesk / SLA / assignment / topic routing

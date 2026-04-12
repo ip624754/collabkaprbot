@@ -1096,6 +1096,39 @@ function findAdminDmTemplate(items, tplId) {
   return (Array.isArray(items) ? items : []).find((t) => String(t?.id || '') === id) || null;
 }
 
+function supportTemplateLabelFromItems(items, tplId, fallback) {
+  const tpl = findAdminDmTemplate(Array.isArray(items) ? items : [], tplId);
+  const label = String(tpl?.label || '').trim();
+  return label || String(fallback || '—');
+}
+
+async function getSupportQuickReplyTemplates() {
+  const { tpls } = await getAdminDmTemplatesWithMeta();
+  const items = Array.isArray(tpls?.items) ? tpls.items : [];
+  const pick = (tplId, fallbackLabel, fallbackText) => {
+    const tpl = findAdminDmTemplate(items, tplId);
+    return {
+      id: tplId,
+      label: String(tpl?.label || fallbackLabel || '—').trim() || String(fallbackLabel || '—'),
+      text: clipCodepoints(String(tpl?.text || fallbackText || '').trim(), TG_SAFE_BODY_MAX).text,
+    };
+  };
+  return {
+    ack: pick('ack', '✅ Принято', `Принято ✅
+
+Приняли запрос. Сейчас посмотрим и вернёмся с ответом.`),
+    need: pick('need', '❓ Нужны детали', `Нужны детали ❓
+
+Уточни, пожалуйста: что именно не получается (шаги), и если есть — скрин/ошибка.`),
+    wip: pick('wip', '⏳ В работе', `В работе ⏳
+
+Приняли в работу. Дадим обновление, как только будет результат.`),
+    done: pick('done', '✅ Готово', `Готово ✅
+
+Сделали. Проверь, пожалуйста, сейчас. Если что — напиши ещё раз.`),
+  };
+}
+
 function parseAdminDmTemplateFromText(rawText) {
   const raw = String(rawText || '').replace(/\r/g, '').trim();
   const lines = raw.split('\n');
@@ -29921,6 +29954,34 @@ if (p.a === 'a:match_home') {
       await renderAdminSupportThread(ctx, Number(p.id || 0), { backStatus: String(p.s || 'all'), page: Math.max(0, Number(p.p || 0) || 0) });
       return;
     }
+    if (p.a === 'a:admin_support_set') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      const threadId = Number(p.id || 0);
+      const status = String(p.st || 'open');
+      const backStatus = String(p.s || 'all');
+      const backPage = Math.max(0, Number(p.p || 0) || 0);
+      const statusLabel = status === 'closed' ? 'закрыт' : status === 'waiting_operator' ? 'переоткрыт' : 'обновлён';
+      const statusSummary = status === 'closed'
+        ? 'Тикет закрыт оператором.'
+        : status === 'waiting_operator'
+          ? 'Тикет переоткрыт и ждёт оператора.'
+          : 'Статус тикета обновлён.';
+      const res = await db.setSupportThreadStatusForAdmin({
+        threadId,
+        status,
+        operatorTgId: Number(ctx.from.id || 0),
+        summary: statusSummary,
+      });
+      if (!res?.ok) {
+        await ctx.answerCallbackQuery({ text: 'Не удалось обновить тикет.' });
+        await renderAdminSupportThread(ctx, threadId, { backStatus, page: backPage });
+        return;
+      }
+      await ctx.answerCallbackQuery({ text: `✅ Тикет ${statusLabel}` });
+      await renderAdminSupportThread(ctx, threadId, { backStatus, page: backPage });
+      return;
+    }
 
     if (p.a === 'a:admin_sys') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -37551,10 +37612,10 @@ function supportThreadLastTouchLabel(row = {}) {
 
 function supportThreadNextActionLabel(row = {}) {
   const status = String(row?.status || '').toLowerCase();
-  if (status === 'waiting_operator') return 'Нужен ответ поддержки';
-  if (status === 'waiting_user') return 'Ждём ответ пользователя';
-  if (status === 'closed') return 'Тикет закрыт';
-  return 'Проверь thread и реши следующий шаг';
+  if (status === 'waiting_operator') return 'Нужен ответ поддержки или canned reply';
+  if (status === 'waiting_user') return 'Ждём пользователя; при необходимости можно закрыть тикет';
+  if (status === 'closed') return 'Тикет закрыт; при новом сообщении можно переоткрыть';
+  return 'Проверь thread, приоритизируй ответ и зафиксируй следующий шаг';
 }
 
 function supportThreadButtonLabel(row = {}) {
@@ -37664,6 +37725,7 @@ async function renderAdminSupportList(ctx, status = 'all', page = 0, { toast = '
 
 async function renderAdminSupportThread(ctx, threadId, opts = {}) {
   const row = await db.getSupportThreadByIdForAdmin(threadId);
+  const qrTpls = await getSupportQuickReplyTemplates();
   if (!row) {
     await renderStaleButton(ctx, { text: '⚠️ Тикет не найден или кнопка устарела.', backCb: 'a:admin_support' });
     return;
@@ -37699,14 +37761,20 @@ async function renderAdminSupportThread(ctx, threadId, opts = {}) {
     kb.text('✍️ Ответить', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId}${threadTail}`);
     if (targetUserId > 0) kb.text('👤 Карточка', `a:adm_ucard|id:${targetUserId}|f:all|p:0`);
     kb.row()
-      .text('✅ Принято', `a:adm_support_qr|k:ack|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
-      .text('❓ Нужны детали', `a:adm_support_qr|k:need|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
+      .text(qrTpls.ack.label, `a:adm_support_qr|k:ack|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
+      .text(qrTpls.need.label, `a:adm_support_qr|k:need|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
       .row()
-      .text('⏳ В работе', `a:adm_support_qr|k:wip|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
-      .text('✅ Сделали', `a:adm_support_qr|k:done|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
+      .text(qrTpls.wip.label, `a:adm_support_qr|k:wip|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
+      .text(qrTpls.done.label, `a:adm_support_qr|k:done|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
       .row();
   }
-  kb.text('🔄 Обновить', `a:admin_support_view|id:${Number(row.id || 0)}|s:${backStatus}|p:${page}`)
+  if (String(row.status || '').toLowerCase() === 'closed') {
+    kb.text('🔓 Переоткрыть', `a:admin_support_set|id:${Number(row.id || 0)}|st:waiting_operator|s:${backStatus}|p:${page}`);
+  } else {
+    kb.text('✅ Закрыть тикет', `a:admin_support_set|id:${Number(row.id || 0)}|st:closed|s:${backStatus}|p:${page}`);
+  }
+  kb.row()
+    .text('🔄 Обновить', `a:admin_support_view|id:${Number(row.id || 0)}|s:${backStatus}|p:${page}`)
     .text('🧾 К списку', `a:admin_support_list|s:${backStatus}|p:${page}`);
   kbAdminFooter(kb, '⬅️ Поддержка', 'a:admin_support');
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
