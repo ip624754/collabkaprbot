@@ -76,6 +76,8 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:admin_support_list": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:admin_support_view": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:admin_support_set": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
+  "a:admin_invites": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
+  "a:admin_invites_list": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE },
   "a:admin_sys": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:admin_web_login_toggle": { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS },
   // Broadcast hard-skip admin tool (Redis-only). Keep guard NONE to allow graceful UX when Redis is degraded.

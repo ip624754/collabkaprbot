@@ -30397,6 +30397,23 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    if (p.a === 'a:admin_invites') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminInviteVisibilityHome(ctx);
+      return;
+    }
+    if (p.a === 'a:admin_invites_list') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminInviteVisibilityList(ctx, String(p.k || 'top'), Math.max(0, Number(p.p || 0) || 0));
+      return;
+    }
+
     if (p.a === 'a:admin_sys') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
@@ -37933,6 +37950,7 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
     .text('📜 Аудит', 'a:aud|h:24|p:0')
     .row()
     .text('📈 Метрики', 'a:admin_metrics|d:14')
+    .text('🎁 Инвайты', 'a:admin_invites')
     .row();
 
   kb.text('🧾 Flush ops digest', 'a:admin_ops_flush').row();
@@ -38207,6 +38225,103 @@ function operatorControlChangeLine(entry = {}) {
   const prev = entry?.previousValue === true ? 'ON' : entry?.previousValue === false ? 'OFF' : '—';
   const next = entry?.nextValue === true ? 'ON' : entry?.nextValue === false ? 'OFF' : '—';
   return `${label}: ${prev} → ${next}`;
+}
+
+
+
+function inviteAdminVisibilityKindTitle(kind) {
+  const k = String(kind || 'top').trim().toLowerCase();
+  if (k === 'pending') return '⏳ Pending rewards';
+  if (k === 'redeemers') return '🎁 Топ redeemers';
+  return '🏆 Топ inviter-ов';
+}
+
+function renderInviteAdminTopInviterLine(row = {}, index = 0) {
+  return `${index + 1}. <b>${escapeHtml(String(row.displayName || 'User'))}</b> · invited <b>${Number(row.invitedCount || 0)}</b> · activated <b>${Number(row.activatedCount || 0)}</b> · available-ish <b>${Math.max(0, Number(row.earnedConfirmedPoints || 0) - Number(row.redeemedPoints || 0))}</b> pts`;
+}
+
+function renderInviteAdminPendingLine(row = {}, index = 0) {
+  const oldest = row?.oldestConfirmAfter ? fmtTs(row.oldestConfirmAfter) : '—';
+  return `${index + 1}. <b>${escapeHtml(String(row.displayName || 'User'))}</b> · pending <b>${Number(row.pendingCount || 0)}</b> · pts <b>${Number(row.pendingPoints || 0)}</b> · oldest due <b>${escapeHtml(oldest)}</b>`;
+}
+
+function renderInviteAdminRedeemerLine(row = {}, index = 0) {
+  const last = row?.lastRedeemedAt ? fmtTs(row.lastRedeemedAt) : '—';
+  return `${index + 1}. <b>${escapeHtml(String(row.displayName || 'User'))}</b> · redeemed <b>${Number(row.redeemCount || 0)}</b>× · pts <b>${Number(row.redeemedPoints || 0)}</b> · last <b>${escapeHtml(last)}</b>`;
+}
+
+function buildAdminInviteVisibilityText(view = {}) {
+  const summary = view?.summary || {};
+  const topInviters = Array.isArray(view?.topInviters) ? view.topInviters : [];
+  const stalePending = Array.isArray(view?.stalePending) ? view.stalePending : [];
+  const topRedeemers = Array.isArray(view?.topRedeemers) ? view.topRedeemers : [];
+  const lines = [
+    '🎁 <b>Админка → Invite / Rewards</b>',
+    '',
+    'Growth-layer truth без нового ledger-дизайна.',
+    '',
+    '<b>Summary</b>',
+    `• Inviters: <b>${Number(summary.inviters || 0)}</b>`,
+    `• Invited: <b>${Number(summary.invited || 0)}</b>`,
+    `• Activated: <b>${Number(summary.activated || 0)}</b>`,
+    `• Pending rewards: <b>${Number(summary.pendingRewards || 0)}</b>`,
+    `• Stale pending: <b>${Number(summary.stalePendingRewards || 0)}</b>`,
+    `• Redeems: <b>${Number(summary.redeemedOps || 0)}</b> · pts <b>${Number(summary.redeemedPoints || 0)}</b>`,
+  ];
+  if (topInviters.length) {
+    lines.push('', '<b>Кто активно приглашает</b>');
+    for (const [i, row] of topInviters.slice(0, 3).entries()) lines.push(renderInviteAdminTopInviterLine(row, i));
+  }
+  if (stalePending.length) {
+    lines.push('', '<b>Где pending rewards зависают</b>');
+    for (const [i, row] of stalePending.slice(0, 3).entries()) lines.push(renderInviteAdminPendingLine(row, i));
+  }
+  if (topRedeemers.length) {
+    lines.push('', '<b>Кто redeem’ит чаще всего</b>');
+    for (const [i, row] of topRedeemers.slice(0, 3).entries()) lines.push(renderInviteAdminRedeemerLine(row, i));
+  }
+  if (!topInviters.length && !stalePending.length && !topRedeemers.length) {
+    lines.push('', 'Пока invite/reward активность не накопилась.');
+  }
+  return lines.join('\n');
+}
+
+async function renderAdminInviteVisibilityHome(ctx, { toast = '' } = {}) {
+  const view = await db.getInviteAdminVisibilityOverview({ staleHours: 6, topLimit: 5 });
+  let text = buildAdminInviteVisibilityText(view);
+  if (toast) text = `<b>${escapeHtml(String(toast))}</b>\n\n${text}`;
+  if (view?.enabled === false) {
+    text = '🎁 <b>Invite / Rewards</b>\n\n⚠️ invite/rewards schema ещё не включена. Сначала накати invite migrations.';
+  }
+  const kb = new InlineKeyboard()
+    .text('🏆 Топ inviter-ов', 'a:admin_invites_list|k:top|p:0')
+    .text('⏳ Pending', 'a:admin_invites_list|k:pending|p:0')
+    .row()
+    .text('🎁 Redeemers', 'a:admin_invites_list|k:redeemers|p:0')
+    .text('🔄 Обновить', 'a:admin_invites');
+  kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function renderAdminInviteVisibilityList(ctx, kind = 'top', page = 0, { toast = '' } = {}) {
+  const view = await db.getInviteAdminVisibilityOverview({ staleHours: 6, topLimit: 12 });
+  const knd = String(kind || 'top').trim().toLowerCase();
+  const items = knd === 'pending' ? (view?.stalePending || []) : (knd === 'redeemers' ? (view?.topRedeemers || []) : (view?.topInviters || []));
+  const lines = [`🎁 <b>${escapeHtml(inviteAdminVisibilityKindTitle(knd))}</b>`, ''];
+  if (toast) lines.push(`<b>${escapeHtml(String(toast))}</b>`, '');
+  if (view?.enabled === false) {
+    lines.push('⚠️ invite/rewards schema ещё не включена.');
+  } else if (!items.length) {
+    lines.push('Сейчас в этом bucket пусто.');
+  } else {
+    const renderLine = knd === 'pending' ? renderInviteAdminPendingLine : (knd === 'redeemers' ? renderInviteAdminRedeemerLine : renderInviteAdminTopInviterLine);
+    for (const [i, row] of items.entries()) lines.push(renderLine(row, i));
+  }
+  const kb = new InlineKeyboard()
+    .text('🎁 Сводка', 'a:admin_invites')
+    .text('🧰 Операции', 'a:admin_ops');
+  kbAdminFooter(kb, '⬅️ Инвайты', 'a:admin_invites');
+  await safeEditOrReply(ctx, lines.join('\n'), { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderAdminSystem(ctx) {

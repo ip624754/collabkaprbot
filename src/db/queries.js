@@ -8832,6 +8832,146 @@ export async function loadInviteSnapshotByUserId({ userId, telegramUserId, botUs
   }
 }
 
+
+
+export async function getInviteAdminVisibilityOverview({ staleHours = 6, topLimit = 5 } = {}) {
+  const lim = Math.max(1, Math.min(20, Number(topLimit || 5)));
+  const stale = Math.max(1, Math.min(240, Number(staleHours || 6)));
+  const base = {
+    enabled: false,
+    summary: {
+      inviters: 0,
+      invited: 0,
+      activated: 0,
+      pendingRewards: 0,
+      stalePendingRewards: 0,
+      redeemedOps: 0,
+      redeemedPoints: 0,
+    },
+    topInviters: [],
+    stalePending: [],
+    topRedeemers: [],
+  };
+  try {
+    const [summaryRes, invitersRes, staleRes, redeemersRes] = await Promise.all([
+      pool.query(
+        `select
+           count(distinct inv.referrer_user_id)::int as inviters,
+           count(*)::int as invited,
+           count(*) filter (where inv.activated_at is not null)::int as activated,
+           coalesce((select count(*)::int from invite_reward_ledger l where l.entry_kind='earn' and l.status='pending'), 0)::int as pending_rewards,
+           coalesce((select count(*)::int from invite_reward_ledger l where l.entry_kind='earn' and l.status='pending' and l.confirm_after is not null and l.confirm_after <= now() - ($1::text || ' hours')::interval), 0)::int as stale_pending_rewards,
+           coalesce((select count(*)::int from invite_reward_ledger l where l.entry_kind='redeem' and l.status='redeemed'), 0)::int as redeemed_ops,
+           coalesce((select sum(points)::int from invite_reward_ledger l where l.entry_kind='redeem' and l.status='redeemed'), 0)::int as redeemed_points
+         from member_invites inv`,
+        [String(stale)]
+      ),
+      pool.query(
+        `with reward_rollup as (
+           select
+             l.referrer_user_id,
+             coalesce(sum(l.points) filter (where l.entry_kind='earn' and l.status='confirmed'), 0)::int as earned_confirmed,
+             coalesce(sum(l.points) filter (where l.entry_kind='earn' and l.status='pending'), 0)::int as pending_points,
+             coalesce(sum(l.points) filter (where l.entry_kind='redeem' and l.status='redeemed'), 0)::int as redeemed_points
+           from invite_reward_ledger l
+           group by l.referrer_user_id
+         )
+         select
+           inv.referrer_user_id,
+           u.tg_id,
+           u.tg_username,
+           count(*)::int as invited_count,
+           count(*) filter (where inv.activated_at is not null)::int as activated_count,
+           coalesce(rr.earned_confirmed, 0)::int as earned_confirmed,
+           coalesce(rr.pending_points, 0)::int as pending_points,
+           coalesce(rr.redeemed_points, 0)::int as redeemed_points
+         from member_invites inv
+         join users u on u.id = inv.referrer_user_id
+         left join reward_rollup rr on rr.referrer_user_id = inv.referrer_user_id
+         group by inv.referrer_user_id, u.tg_id, u.tg_username, rr.earned_confirmed, rr.pending_points, rr.redeemed_points
+         order by activated_count desc, invited_count desc, inv.referrer_user_id desc
+         limit $1`,
+        [lim]
+      ),
+      pool.query(
+        `select
+           l.referrer_user_id,
+           u.tg_id,
+           u.tg_username,
+           count(*)::int as pending_count,
+           min(l.confirm_after) as oldest_confirm_after,
+           coalesce(sum(l.points), 0)::int as pending_points
+         from invite_reward_ledger l
+         join users u on u.id = l.referrer_user_id
+         where l.entry_kind='earn'
+           and l.status='pending'
+           and l.confirm_after is not null
+           and l.confirm_after <= now() - ($1::text || ' hours')::interval
+         group by l.referrer_user_id, u.tg_id, u.tg_username
+         order by pending_count desc, oldest_confirm_after asc nulls last
+         limit $2`,
+        [String(stale), lim]
+      ),
+      pool.query(
+        `select
+           l.referrer_user_id,
+           u.tg_id,
+           u.tg_username,
+           count(*)::int as redeem_count,
+           coalesce(sum(l.points), 0)::int as redeemed_points,
+           max(l.redeemed_at) as last_redeemed_at
+         from invite_reward_ledger l
+         join users u on u.id = l.referrer_user_id
+         where l.entry_kind='redeem'
+           and l.status='redeemed'
+         group by l.referrer_user_id, u.tg_id, u.tg_username
+         order by redeemed_points desc, redeem_count desc, max(l.redeemed_at) desc nulls last
+         limit $1`,
+        [lim]
+      ),
+    ]);
+    const srow = summaryRes.rows[0] || {};
+    return {
+      enabled: true,
+      summary: {
+        inviters: Number(srow.inviters || 0),
+        invited: Number(srow.invited || 0),
+        activated: Number(srow.activated || 0),
+        pendingRewards: Number(srow.pending_rewards || 0),
+        stalePendingRewards: Number(srow.stale_pending_rewards || 0),
+        redeemedOps: Number(srow.redeemed_ops || 0),
+        redeemedPoints: Number(srow.redeemed_points || 0),
+      },
+      topInviters: (invitersRes.rows || []).map((row) => ({
+        referrerUserId: Number(row.referrer_user_id || 0),
+        displayName: buildInviteMemberLabel(row),
+        invitedCount: Number(row.invited_count || 0),
+        activatedCount: Number(row.activated_count || 0),
+        earnedConfirmedPoints: Number(row.earned_confirmed || 0),
+        pendingPoints: Number(row.pending_points || 0),
+        redeemedPoints: Number(row.redeemed_points || 0),
+      })),
+      stalePending: (staleRes.rows || []).map((row) => ({
+        referrerUserId: Number(row.referrer_user_id || 0),
+        displayName: buildInviteMemberLabel(row),
+        pendingCount: Number(row.pending_count || 0),
+        pendingPoints: Number(row.pending_points || 0),
+        oldestConfirmAfter: row.oldest_confirm_after || null,
+      })),
+      topRedeemers: (redeemersRes.rows || []).map((row) => ({
+        referrerUserId: Number(row.referrer_user_id || 0),
+        displayName: buildInviteMemberLabel(row),
+        redeemCount: Number(row.redeem_count || 0),
+        redeemedPoints: Number(row.redeemed_points || 0),
+        lastRedeemedAt: row.last_redeemed_at || null,
+      })),
+    };
+  } catch (error) {
+    if (inviteMissingSchemaError(error) || inviteRewardsMissingSchemaError(error)) return base;
+    throw error;
+  }
+}
+
 export async function attemptInviteAttribution({ telegramUserId, telegramUsername = null, startParam = null } = {}) {
   const parsed = parseInviteStartParam(startParam);
   if (!parsed) {
