@@ -2895,19 +2895,25 @@ function renderInviteRewardsCenterText({ inviteState = null } = {}) {
     `• Обменяно: <b>${redeemed}</b>`,
     '',
     '<b>Награды</b>',
-    `• 7 days Pro — <b>${INVITE_REDEEM_OPTIONS.pro7.costPoints}</b> pts`,
-    `• 30 days Pro — <b>${INVITE_REDEEM_OPTIONS.pro30.costPoints}</b> pts`,
+    `• 7 days Pro — <b>${INVITE_REDEEM_OPTIONS.pro7.costPoints}</b> баллов`,
+    `• 30 days Pro — <b>${INVITE_REDEEM_OPTIONS.pro30.costPoints}</b> баллов`,
   ];
   if (available < INVITE_REDEEM_OPTIONS.pro7.costPoints) {
     lines.push('');
-    lines.push(`До первой награды нужно ещё <b>${needForFirstReward}</b> доступных pts.`);
+    lines.push(`До первой награды нужно ещё <b>${needForFirstReward}</b> доступных баллов.`);
   } else if (available < INVITE_REDEEM_OPTIONS.pro30.costPoints) {
     lines.push('');
-    lines.push(`7 days Pro уже доступен. До 30 days Pro осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> pts.`);
+    lines.push(`7 days Pro уже доступен. До 30 days Pro осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> баллов.`);
   } else {
     lines.push('');
     lines.push('Сейчас доступны обе награды: 7 days Pro и 30 days Pro.');
   }
+  lines.push('');
+  lines.push('<b>Как работает обмен</b>');
+  lines.push('• Обмениваются только баллы из строки <b>Доступно</b>.');
+  lines.push('• Баллы <b>В ожидании</b> сначала должны подтвердиться.');
+  lines.push('• Своя ссылка и уже существующие пользователи не дают награду.');
+  lines.push('• После обмена баллы переходят в строку <b>Обменяно</b>, а Pro активируется внутри Collabka.');
   if (pending > 0) {
     lines.push('');
     lines.push('Баллы в ожидании не тратятся, пока не перейдут в доступный баланс.');
@@ -2958,6 +2964,11 @@ function renderInvitePerformanceText({ inviteState = null } = {}) {
     `• Активировано: <b>${activatedCount}</b>`,
     `• Конверсия активации: <b>${escapeHtml(activationRate)}</b>`,
     '• Правило активации: <b>completed profile</b>',
+    '',
+    '<b>Как читать статистику</b>',
+    '• <b>Приглашено</b> — валидные joins по вашей ссылке.',
+    '• <b>Активировано</b> — пользователи, которые дошли до completed profile.',
+    '• Конверсия показывает, какая доля приглашённых реально активировалась.',
   ];
 
   if (recentInvites.length) {
@@ -3020,11 +3031,19 @@ function renderInvitePointsText({ inviteState = null } = {}) {
     lines.push('• Награда доступна: <b>7 days Pro</b> и <b>30 days Pro</b> доступны сейчас.');
   } else if (rewards.canRedeemPro7) {
     lines.push('• Награда доступна: <b>7 days Pro</b> уже доступен.');
-    lines.push(`• До 30 days Pro осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> pts.`);
+    lines.push(`• До 30 days Pro осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> баллов.`);
   } else {
     lines.push(`• Следующая награда: <b>${escapeHtml(String(rewards.nextRewardLabel || '7 days Pro'))}</b>`);
-    lines.push(`• Осталось: <b>${Number(rewards.pointsToNextReward || 0)}</b> pts`);
+    lines.push(`• Осталось: <b>${Number(rewards.pointsToNextReward || 0)}</b> баллов`);
   }
+
+  lines.push('');
+  lines.push('<b>Как работают баллы</b>');
+  lines.push('• Баллы начисляются за валидную активацию, а не за простой переход по ссылке.');
+  lines.push('• Своя ссылка и уже существующие пользователи не учитываются.');
+  lines.push('• <b>В ожидании</b> — баллы ждут подтверждения и пока не тратятся.');
+  lines.push('• <b>Доступно</b> — баллы уже можно обменять на Pro внутри Collabka.');
+  lines.push('• <b>Обменяно</b> — баллы уже списаны за активированную награду.');
 
   if (pending > 0) {
     lines.push('');
