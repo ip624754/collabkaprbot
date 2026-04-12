@@ -29895,6 +29895,33 @@ if (p.a === 'a:match_home') {
       return;
     }
 
+    if (p.a === 'a:admin_support') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminSupportHome(ctx);
+      return;
+    }
+
+    if (p.a === 'a:admin_support_list') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminSupportList(ctx, String(p.s || 'all'), Math.max(0, Number(p.p || 0) || 0));
+      return;
+    }
+
+    if (p.a === 'a:admin_support_view') {
+      const isAdmin = isSuperAdminTg(ctx.from.id);
+      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      try { await clearExpectText(ctx.from.id); } catch {}
+      await renderAdminSupportThread(ctx, Number(p.id || 0), { backStatus: String(p.s || 'all'), page: Math.max(0, Number(p.p || 0) || 0) });
+      return;
+    }
+
     if (p.a === 'a:admin_sys') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
@@ -37217,6 +37244,7 @@ async function renderAdminHome(ctx) {
     .text('🧰 Операции', 'a:admin_ops')
     .text('💬 Коммуникации', 'a:admin_comms')
     .row()
+    .text('🆘 Поддержка', 'a:admin_support')
     .text('⚙️ Система', 'a:admin_sys')
     .row()
     .text('📋 Меню', 'a:menu')
@@ -37474,7 +37502,8 @@ async function renderAdminComms(ctx) {
     .text('📣 Объявление', commsCb.adminNotice())
     .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
     .row()
-    .text('📤 Outbox', 'a:admin_outbox|p:0');
+    .text('📤 Outbox', 'a:admin_outbox|p:0')
+    .text('🆘 Поддержка', 'a:admin_support');
 
   if (CFG.OFFICIAL_PUBLISH_ENABLED) {
     kb.row().text(`📣 Офиц.канал (${pending})`, 'a:off_queue|p:0');
@@ -37490,6 +37519,198 @@ async function renderAdminComms(ctx) {
   await safeEditOrReply(ctx, text, { reply_markup: kb });
 }
 
+
+function supportThreadStatusMeta(statusRaw) {
+  const status = String(statusRaw || 'open').trim().toLowerCase();
+  if (status === 'waiting_operator') return { emoji: '🟠', label: 'Ждёт оператора' };
+  if (status === 'waiting_user') return { emoji: '🔵', label: 'Ждёт пользователя' };
+  if (status === 'closed') return { emoji: '✅', label: 'Закрыт' };
+  return { emoji: '🆕', label: 'Открыт' };
+}
+
+function supportThreadActorLabel(row = {}) {
+  const username = String(row?.username || '').trim();
+  if (username) return `@${username.replace(/^@/, '')}`;
+  const uid = Number(row?.user_id || 0);
+  if (uid > 0) return `uid:${uid}`;
+  const tg = Number(row?.user_tg_id || 0);
+  if (tg > 0) return `tg:${tg}`;
+  return '—';
+}
+
+function supportThreadSummaryPreview(row = {}) {
+  const raw = String(row?.last_summary || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return '—';
+  return raw.length > 96 ? `${raw.slice(0, 93)}…` : raw;
+}
+
+function supportThreadLastTouchLabel(row = {}) {
+  const ts = row?.last_operator_reply_at || row?.last_user_message_at || row?.updated_at || row?.opened_at || null;
+  return ts ? fmtTs(ts) : '—';
+}
+
+function supportThreadNextActionLabel(row = {}) {
+  const status = String(row?.status || '').toLowerCase();
+  if (status === 'waiting_operator') return 'Нужен ответ поддержки';
+  if (status === 'waiting_user') return 'Ждём ответ пользователя';
+  if (status === 'closed') return 'Тикет закрыт';
+  return 'Проверь thread и реши следующий шаг';
+}
+
+function supportThreadButtonLabel(row = {}) {
+  const meta = supportThreadStatusMeta(row?.status);
+  const actor = supportThreadActorLabel(row).replace(/^uid:/, '#');
+  return `${meta.emoji} #${Number(row?.id || 0)} · ${actor}`.slice(0, 64);
+}
+
+function buildAdminSupportHomeText(summary = {}) {
+  const counts = summary?.counts || {};
+  const recent = Array.isArray(summary?.recent) ? summary.recent : [];
+  let text = '🆘 Админка → Поддержка\n\n';
+  text += 'Support threads поверх текущего human-friendly reply-flow.\n\n';
+  text += `• 🆕 Открытые: <b>${Number(counts.open || 0)}</b>\n`;
+  text += `• 🟠 Ждут оператора: <b>${Number(counts.waiting_operator || 0)}</b>\n`;
+  text += `• 🔵 Ждут пользователя: <b>${Number(counts.waiting_user || 0)}</b>\n`;
+  text += `• ✅ Закрытые 7д: <b>${Number(counts.closed_recent || 0)}</b>\n`;
+  if (recent.length) {
+    text += '\n<b>Последние тикеты</b>\n';
+    for (const row of recent.slice(0, 5)) {
+      const meta = supportThreadStatusMeta(row?.status);
+      text += `• ${meta.emoji} <b>#${Number(row?.id || 0)}</b> · <b>${escapeHtml(supportThreadActorLabel(row))}</b> · ${escapeHtml(supportThreadLastTouchLabel(row))}\n`;
+      text += `  ${escapeHtml(supportThreadSummaryPreview(row))}\n`;
+    }
+  } else {
+    text += '\nПоследних тикетов пока нет.\n';
+  }
+  return text;
+}
+
+async function renderAdminSupportHome(ctx, { toast = '' } = {}) {
+  const countsRes = await db.getSupportThreadBuckets(7);
+  const recentRes = await db.listSupportThreadsForAdmin({ status: 'all', page: 0, limit: 5, daysClosedRecent: 7 });
+  const summary = {
+    counts: countsRes?.counts || { open: 0, waiting_operator: 0, waiting_user: 0, closed_recent: 0 },
+    recent: recentRes?.items || [],
+  };
+  let text = buildAdminSupportHomeText(summary);
+  if (toast) text = `<b>${escapeHtml(String(toast))}</b>\n\n${text}`;
+  if (countsRes?.persistenceEnabled === false || recentRes?.persistenceEnabled === false) {
+    text = '🆘 <b>Поддержка</b>\n\n⚠️ support_threads schema ещё не включена. Сначала накати миграцию STEP567.';
+  }
+  const kb = new InlineKeyboard()
+    .text(`🟠 Ждут оператора (${Number(summary.counts.waiting_operator || 0)})`, 'a:admin_support_list|s:waiting_operator|p:0')
+    .row()
+    .text(`🔵 Ждут пользователя (${Number(summary.counts.waiting_user || 0)})`, 'a:admin_support_list|s:waiting_user|p:0')
+    .text(`🆕 Открытые (${Number(summary.counts.open || 0)})`, 'a:admin_support_list|s:open|p:0')
+    .row()
+    .text(`✅ Закрытые 7д (${Number(summary.counts.closed_recent || 0)})`, 'a:admin_support_list|s:closed_recent|p:0')
+    .text('📚 Все тикеты', 'a:admin_support_list|s:all|p:0');
+  if (Array.isArray(summary.recent) && summary.recent.length) {
+    kb.row();
+    for (const row of summary.recent.slice(0, 3)) {
+      kb.text(supportThreadButtonLabel(row), `a:admin_support_view|id:${Number(row.id || 0)}|s:all|p:0`).row();
+    }
+  }
+  kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+function supportListTitle(status) {
+  const s = String(status || 'all');
+  if (s === 'waiting_operator') return '🟠 Ждут оператора';
+  if (s === 'waiting_user') return '🔵 Ждут пользователя';
+  if (s === 'open') return '🆕 Открытые';
+  if (s === 'closed_recent') return '✅ Закрытые 7д';
+  if (s === 'closed') return '✅ Закрытые';
+  return '📚 Все тикеты';
+}
+
+async function renderAdminSupportList(ctx, status = 'all', page = 0, { toast = '' } = {}) {
+  const res = await db.listSupportThreadsForAdmin({ status, page, limit: 8, daysClosedRecent: 7 });
+  let text = `🆘 <b>${escapeHtml(supportListTitle(res?.status || status))}</b>\n\n`;
+  if (toast) text += `<b>${escapeHtml(String(toast))}</b>\n\n`;
+  if (res?.persistenceEnabled === false) {
+    text += '⚠️ support_threads schema ещё не включена.';
+  } else if (!Array.isArray(res?.items) || !res.items.length) {
+    text += 'Сейчас тикетов в этом bucket нет.';
+  } else {
+    text += `Всего: <b>${Number(res.total || 0)}</b>\n\n`;
+    for (const row of res.items) {
+      const meta = supportThreadStatusMeta(row?.status);
+      text += `${meta.emoji} <b>#${Number(row?.id || 0)}</b> · <b>${escapeHtml(supportThreadActorLabel(row))}</b>\n`;
+      text += `Статус: <b>${escapeHtml(meta.label)}</b> · Последняя активность: <b>${escapeHtml(supportThreadLastTouchLabel(row))}</b>\n`;
+      text += `${escapeHtml(supportThreadSummaryPreview(row))}\n\n`;
+    }
+  }
+  const kb = new InlineKeyboard();
+  for (const row of (res?.items || []).slice(0, 8)) {
+    kb.text(supportThreadButtonLabel(row), `a:admin_support_view|id:${Number(row.id || 0)}|s:${String(res?.status || status)}|p:${Number(res?.page || page)}`).row();
+  }
+  const total = Number(res?.total || 0);
+  const limit = Number(res?.limit || 8);
+  const maxPage = Math.max(0, Math.ceil(total / Math.max(1, limit)) - 1);
+  const curPage = Math.max(0, Number(res?.page || page) || 0);
+  if (curPage > 0 || curPage < maxPage) {
+    const prev = Math.max(0, curPage - 1);
+    const next = Math.min(maxPage, curPage + 1);
+    if (curPage > 0) kb.text('⬅️ Раньше', `a:admin_support_list|s:${String(res?.status || status)}|p:${prev}`);
+    if (curPage < maxPage) kb.text('➡️ Дальше', `a:admin_support_list|s:${String(res?.status || status)}|p:${next}`);
+    kb.row();
+  }
+  kb.text('🆘 Сводка', 'a:admin_support').text('💬 Коммуникации', 'a:admin_comms');
+  kbAdminFooter(kb, '⬅️ Поддержка', 'a:admin_support');
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
+
+async function renderAdminSupportThread(ctx, threadId, opts = {}) {
+  const row = await db.getSupportThreadByIdForAdmin(threadId);
+  if (!row) {
+    await renderStaleButton(ctx, { text: '⚠️ Тикет не найден или кнопка устарела.', backCb: 'a:admin_support' });
+    return;
+  }
+  const meta = supportThreadStatusMeta(row.status);
+  const actor = supportThreadActorLabel(row);
+  const opened = row.opened_at ? fmtTs(row.opened_at) : '—';
+  const lastUser = row.last_user_message_at ? fmtTs(row.last_user_message_at) : '—';
+  const lastOperator = row.last_operator_reply_at ? fmtTs(row.last_operator_reply_at) : '—';
+  const closed = row.closed_at ? fmtTs(row.closed_at) : '—';
+  let text = `🆘 <b>Thread #${Number(row.id || 0)}</b>\n\n`;
+  text += `Пользователь: <b>${escapeHtml(actor)}</b>`;
+  if (Number(row.user_tg_id || 0) > 0) text += ` · <code>tg:${Number(row.user_tg_id || 0)}</code>`;
+  text += `\nСтатус: ${meta.emoji} <b>${escapeHtml(meta.label)}</b>\n`;
+  text += `Открыт: <b>${escapeHtml(opened)}</b>\n`;
+  text += `Последнее от пользователя: <b>${escapeHtml(lastUser)}</b>\n`;
+  text += `Последний ответ оператора: <b>${escapeHtml(lastOperator)}</b>\n`;
+  if (String(row.status || '') === 'closed') text += `Закрыт: <b>${escapeHtml(closed)}</b>\n`;
+  text += `Next action: <b>${escapeHtml(supportThreadNextActionLabel(row))}</b>\n`;
+  if (row.support_message_id) {
+    text += `Support message: <code>${escapeHtml(String(row.support_message_id))}</code>`;
+    if (row.support_topic_id) text += ` · topic <code>${escapeHtml(String(row.support_topic_id))}</code>`;
+    text += '\n';
+  }
+  text += `\n<b>Последний summary</b>\n${escapeHtml(String(row.last_summary || '—'))}`;
+  const backStatus = String(opts?.backStatus || 'all');
+  const page = Math.max(0, Number(opts?.page || 0) || 0);
+  const threadTail = `|th:${Number(row.id || 0)}`;
+  const targetTgId = Number(row.user_tg_id || 0);
+  const targetUserId = Number(row.user_id || 0);
+  const kb = new InlineKeyboard();
+  if (targetTgId > 0) {
+    kb.text('✍️ Ответить', `a:adm_support_reply|tg:${targetTgId}|uid:${targetUserId}${threadTail}`);
+    if (targetUserId > 0) kb.text('👤 Карточка', `a:adm_ucard|id:${targetUserId}|f:all|p:0`);
+    kb.row()
+      .text('✅ Принято', `a:adm_support_qr|k:ack|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
+      .text('❓ Нужны детали', `a:adm_support_qr|k:need|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
+      .row()
+      .text('⏳ В работе', `a:adm_support_qr|k:wip|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
+      .text('✅ Сделали', `a:adm_support_qr|k:done|tg:${targetTgId}|uid:${targetUserId}${threadTail}`)
+      .row();
+  }
+  kb.text('🔄 Обновить', `a:admin_support_view|id:${Number(row.id || 0)}|s:${backStatus}|p:${page}`)
+    .text('🧾 К списку', `a:admin_support_list|s:${backStatus}|p:${page}`);
+  kbAdminFooter(kb, '⬅️ Поддержка', 'a:admin_support');
+  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
+}
 
 function operatorAuditActorLabel(entry = {}) {
   const username = String(entry?.actorUsername || '').trim();

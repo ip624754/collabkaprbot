@@ -8380,6 +8380,161 @@ export async function markSupportThreadOperatorReply(opts = {}) {
   }
 }
 
+
+
+export async function getSupportThreadBuckets(daysClosedRecent = 7) {
+  const days = Math.max(1, Number(daysClosedRecent || 7) || 7);
+  try {
+    const countsRes = await pool.query(
+      `select
+         count(*) filter (where status = 'open')::int as open_cnt,
+         count(*) filter (where status = 'waiting_operator')::int as waiting_operator_cnt,
+         count(*) filter (where status = 'waiting_user')::int as waiting_user_cnt,
+         count(*) filter (where status = 'closed' and updated_at >= (now() - ($1::int * interval '1 day')))::int as closed_recent_cnt,
+         count(*) filter (where closed_at is null)::int as active_cnt
+       from support_threads`,
+      [days]
+    );
+    const row = countsRes.rows[0] || {};
+    return {
+      persistenceEnabled: true,
+      counts: {
+        open: Number(row.open_cnt || 0),
+        waiting_operator: Number(row.waiting_operator_cnt || 0),
+        waiting_user: Number(row.waiting_user_cnt || 0),
+        closed_recent: Number(row.closed_recent_cnt || 0),
+        active: Number(row.active_cnt || 0),
+      },
+    };
+  } catch (error) {
+    if (supportThreadsMissingSchemaError(error)) return { persistenceEnabled: false, reason: 'support_threads_schema_missing', counts: null };
+    throw error;
+  }
+}
+
+function normalizeSupportThreadListStatus(raw) {
+  const v = String(raw || 'all').trim().toLowerCase();
+  if (['all', 'open', 'waiting_operator', 'waiting_user', 'closed', 'closed_recent'].includes(v)) return v;
+  return 'all';
+}
+
+export async function listSupportThreadsForAdmin(opts = {}) {
+  const status = normalizeSupportThreadListStatus(opts?.status);
+  const page = Math.max(0, Number(opts?.page || 0) || 0);
+  const limit = Math.min(20, Math.max(1, Number(opts?.limit || 8) || 8));
+  const offset = page * limit;
+  const daysClosedRecent = Math.max(1, Number(opts?.daysClosedRecent || 7) || 7);
+  const selectSql = `select
+         st.id,
+         st.user_id,
+         st.user_tg_id,
+         st.status,
+         st.category,
+         st.source,
+         st.support_chat_id,
+         st.support_message_id,
+         st.support_topic_id,
+         st.opened_at,
+         st.last_user_message_at,
+         st.last_operator_reply_at,
+         st.closed_at,
+         st.last_operator_tg_id,
+         st.last_summary,
+         st.updated_at,
+         u.username as username
+       from support_threads st
+       left join users u on u.id = st.user_id`;
+  try {
+    let totalRes;
+    let rowsRes;
+    if (status === 'all') {
+      totalRes = await pool.query(`select count(*)::int as total from support_threads`);
+      rowsRes = await pool.query(
+        `${selectSql}
+         order by (st.closed_at is null) desc, st.updated_at desc, st.id desc
+         limit $1 offset $2`,
+        [limit, offset]
+      );
+    } else if (status === 'closed_recent') {
+      totalRes = await pool.query(
+        `select count(*)::int as total
+           from support_threads st
+          where st.status = 'closed'
+            and st.updated_at >= (now() - ($1::int * interval '1 day'))`,
+        [daysClosedRecent]
+      );
+      rowsRes = await pool.query(
+        `${selectSql}
+          where st.status = 'closed'
+            and st.updated_at >= (now() - ($1::int * interval '1 day'))
+         order by st.updated_at desc, st.id desc
+         limit $2 offset $3`,
+        [daysClosedRecent, limit, offset]
+      );
+    } else {
+      totalRes = await pool.query(
+        `select count(*)::int as total
+           from support_threads st
+          where st.status = $1`,
+        [status]
+      );
+      rowsRes = await pool.query(
+        `${selectSql}
+          where st.status = $1
+         order by (st.closed_at is null) desc, st.updated_at desc, st.id desc
+         limit $2 offset $3`,
+        [status, limit, offset]
+      );
+    }
+    return {
+      persistenceEnabled: true,
+      status,
+      page,
+      limit,
+      total: Number(totalRes.rows?.[0]?.total || 0),
+      items: rowsRes.rows || [],
+    };
+  } catch (error) {
+    if (supportThreadsMissingSchemaError(error)) return { persistenceEnabled: false, reason: 'support_threads_schema_missing', status, page, limit, total: 0, items: [] };
+    throw error;
+  }
+}
+
+export async function getSupportThreadByIdForAdmin(threadId) {
+  const tid = Number(threadId || 0);
+  if (!tid) return null;
+  try {
+    const r = await pool.query(
+      `select
+         st.id,
+         st.user_id,
+         st.user_tg_id,
+         st.status,
+         st.category,
+         st.source,
+         st.support_chat_id,
+         st.support_message_id,
+         st.support_topic_id,
+         st.opened_at,
+         st.last_user_message_at,
+         st.last_operator_reply_at,
+         st.closed_at,
+         st.last_operator_tg_id,
+         st.last_summary,
+         st.updated_at,
+         u.username as username
+       from support_threads st
+       left join users u on u.id = st.user_id
+      where st.id = $1
+      limit 1`,
+      [tid]
+    );
+    return r.rows[0] || null;
+  } catch (error) {
+    if (supportThreadsMissingSchemaError(error)) return null;
+    throw error;
+  }
+}
 export function buildInviteCodeFromTelegramUserId(telegramUserId) {
   const numeric = Number.parseInt(String(telegramUserId || ''), 10);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;

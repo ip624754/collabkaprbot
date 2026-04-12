@@ -2738,3 +2738,48 @@ Operator contract now:
 - after create, the success screen already points to the first safe next actions
 - inside broadcast card, next-action hints are driven by actual post-run counters rather than static copy alone
 
+
+## 0.10) STEP568 — Support Operator Read Surface
+
+Status: implemented as a narrow runtime layer on top of STEP567 support_threads foundation.
+
+What exists now:
+- admin entrypoint `🆘 Поддержка` from Admin Home and Communications
+- compact support summary with buckets:
+  - `open`
+  - `waiting_operator`
+  - `waiting_user`
+  - `closed_recent`
+- recent support threads on the summary screen
+- paged support thread list by bucket
+- support thread card with:
+  - Thread ID
+  - user label / tg id
+  - current status
+  - opened / last user / last operator timestamps
+  - support message binding truth
+  - last summary
+  - next action hint
+- quick operator actions from thread card:
+  - reply
+  - quick replies
+  - user card (if available)
+
+Scope discipline:
+- this is a read-surface-first operator layer
+- no web helpdesk
+- no SLA engine
+- no assignment matrix
+- no bulk support actions
+- no forum/topic redesign in this step
+
+Implementation notes:
+- support read surface is DB-truth based and should remain reachable independently of Redis-heavy admin flows
+- reply-first Telegram UX remains unchanged; STEP568 only adds visibility and bucketed navigation on top of persisted support threads
+
+Live smoke after rollout:
+- open `🆘 Поддержка`
+- open `Ждут оператора`
+- open one thread card
+- use `✍️ Ответить` and one quick reply
+- verify status/readout updates after refresh
