@@ -1,8 +1,16 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP545T baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP575 baseline
 
-Цель: чтобы новый чат продолжил **текущий рабочий baseline**, а не стартовал от старой STEP535V-эпохи.
+Цель: чтобы новый чат продолжил **текущий рабочий baseline**, а не стартовал от старого контекста и не игнорировал invite/rewards wave STEP548–575.
 
 ---
+
+### STEP575 latest narrow baseline note
+- main user-side Invite Center is now summary-first instead of a long raw-link text dump
+- hub contract = `Summary / Actions / Points / Reward / Recent invited contacts`
+- raw link + invite code utility moved into `Link + copy`
+- `Invite history` / `Redeem` stay separate entrypoints
+- reward math / ledger semantics / anti-abuse remain unchanged
+
 
 ## 1) Что загрузить в новый чат
 
@@ -17,9 +25,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP545T baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP575 baseline)**
 
-Продолжаем не с нуля, а от **STEP545T baseline**.
+Продолжаем не с нуля, а от **STEP575 baseline**.
 
 Сначала прочитай по порядку:
 1. `docs/README.md`
