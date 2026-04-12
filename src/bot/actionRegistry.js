@@ -514,6 +514,8 @@ export const ACTION_REGISTRY = Object.freeze({
   "a:send_request_to_creator": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:setup": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
   "a:share": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS },
+  "a:share_perf": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
+  "a:share_points": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:share_link": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:share_card": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },
   "a:share_history": { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE },

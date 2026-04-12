@@ -12,13 +12,16 @@ const migrationSource = fs.readFileSync(path.join(root, 'migrations', '046_invit
 
 assert.ok(botSource.includes('a:share_redeem'), 'Invite rewards CTA callback missing');
 assert.ok(botSource.includes('a:share_redeem_do'), 'Invite rewards confirm callback missing');
-assert.ok(botSource.includes('Invite Center'), 'Invite center layout title missing');
-assert.ok(botSource.includes('Redeem for Pro'), 'Redeem for Pro title missing');
+assert.ok(botSource.includes('Обменять Pro'), 'Redeem center title missing');
 assert.ok(botSource.includes('Подтверждение обмена'), 'Redeem confirm UX missing');
 assert.ok(botSource.includes('Награда активирована'), 'Redeem success UX missing');
 assert.ok(botSource.includes('a:share_history'), 'Invite history callback missing');
 assert.ok(botSource.includes('a:share_rewards'), 'Invite rewards center callback missing');
+assert.ok(botSource.includes('a:share_perf'), 'Invite performance callback missing');
+assert.ok(botSource.includes('a:share_points'), 'Invite points callback missing');
 assert.ok(botSource.includes('loadInviteRewardsStateForUser'), 'Invite rewards state loader missing');
+assert.ok(registrySource.includes('"a:share_perf"'), 'Action registry missing a:share_perf');
+assert.ok(registrySource.includes('"a:share_points"'), 'Action registry missing a:share_points');
 assert.ok(registrySource.includes('"a:share_redeem"'), 'Action registry missing a:share_redeem');
 assert.ok(registrySource.includes('"a:share_redeem_do"'), 'Action registry missing a:share_redeem_do');
 assert.ok(queriesSource.includes('export async function processInviteRewardsForInvitee'), 'Invite rewards invitee processor missing');

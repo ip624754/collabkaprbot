@@ -2608,16 +2608,21 @@ function inviteSourceLabel(source) {
   return 'link';
 }
 
+function inviteContactStatusLabel(status) {
+  const s = String(status || '').trim().toLowerCase();
+  return s === 'activated' ? 'activated' : 'joined';
+}
+
 function inviteFriendLine(item, index = 0) {
   const name = String(item?.displayName || '').trim() || 'User';
-  const status = String(item?.status || '').trim().toLowerCase() === 'activated' ? 'activated' : 'joined';
+  const status = inviteContactStatusLabel(item?.status);
   const joinedAt = item?.joinedAt ? fmtTs(item.joinedAt) : '—';
   return `${index + 1}. ${name} • ${status} • ${inviteSourceLabel(item?.source)} • ${joinedAt}`;
 }
 
 function inviteRecentContactLine(item) {
   const name = String(item?.displayName || '').trim() || 'User';
-  const status = String(item?.status || '').trim().toLowerCase() === 'activated' ? 'activated' : 'joined';
+  const status = inviteContactStatusLabel(item?.status);
   const joinedAt = item?.joinedAt ? fmtTs(item.joinedAt) : '—';
   return `${name} • ${status} • ${inviteSourceLabel(item?.source)} • ${joinedAt}`;
 }
@@ -2628,6 +2633,7 @@ function getInviteActivationRate(invitedCount, activatedCount) {
   if (!invited) return '0%';
   return `${Math.round((activated / invited) * 100)}%`;
 }
+
 
 function buildInviteJoinAnchor(inviteUrl) {
   const url = String(inviteUrl || '').trim();
@@ -2747,7 +2753,7 @@ function renderInviteRedeemConfirmText({ reward, rewards }) {
 function inviteRedeemConfirmKeyboard(rewardKey) {
   return new InlineKeyboard()
     .text('✅ Обменять', `a:share_redeem_do|r:${rewardKey}`)
-    .text('⬅️ Назад', 'a:share')
+    .text('⬅️ Инвайты', 'a:share')
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
@@ -2772,10 +2778,10 @@ function renderInviteRedeemSuccessText({ reward, rewards }) {
 
 function inviteRedeemSuccessKeyboard() {
   return new InlineKeyboard()
-    .text('🎁 Redeem', 'a:share_rewards')
-    .text('📄 Invite history', 'a:share_history')
+    .text('💎 Баллы', 'a:share_points')
+    .text('📄 История', 'a:share_history')
     .row()
-    .text('⬅️ Invite Center', 'a:share')
+    .text('⬅️ Инвайты', 'a:share')
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Home', 'a:home');
@@ -2864,23 +2870,37 @@ function renderInviteHistoryEntry(row = {}) {
 
 function renderInviteRewardsCenterText({ inviteState = null } = {}) {
   const rewards = inviteState?.rewards || {};
+  const available = Number(rewards.availablePoints || 0);
+  const pending = Number(rewards.pendingPoints || 0);
+  const redeemed = Number(rewards.redeemedPoints || 0);
+  const needForFirstReward = Math.max(0, INVITE_REDEEM_OPTIONS.pro7.costPoints - available);
   const lines = [
-    '🎁 <b>Redeem for Pro</b>',
+    '🎁 <b>Обменять Pro</b>',
     '',
-    'Spend confirmed invite points on bounded Pro time inside Collabka.',
+    'Здесь можно обменять подтверждённые invite points на ограниченное Pro-время внутри Collabka.',
     '',
-    '<b>Status</b>',
-    `<b>Available:</b> ${Number(rewards.availablePoints || 0)}`,
-    `<b>Pending:</b> ${Number(rewards.pendingPoints || 0)}`,
-    `<b>Redeemed:</b> ${Number(rewards.redeemedPoints || 0)}`,
+    '<b>Баланс</b>',
+    `• Available: <b>${available}</b>`,
+    `• Pending: <b>${pending}</b>`,
+    `• Redeemed: <b>${redeemed}</b>`,
     '',
-    '<b>Available rewards</b>',
+    '<b>Награды</b>',
     `• 7 days Pro — <b>${INVITE_REDEEM_OPTIONS.pro7.costPoints}</b> pts`,
     `• 30 days Pro — <b>${INVITE_REDEEM_OPTIONS.pro30.costPoints}</b> pts`,
   ];
-  if (Number(rewards.availablePoints || 0) < INVITE_REDEEM_OPTIONS.pro7.costPoints) {
+  if (available < INVITE_REDEEM_OPTIONS.pro7.costPoints) {
     lines.push('');
-    lines.push(`You need <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro7.costPoints - Number(rewards.availablePoints || 0))}</b> more available points for the first reward.`);
+    lines.push(`До первой награды нужно ещё <b>${needForFirstReward}</b> available pts.`);
+  } else if (available < INVITE_REDEEM_OPTIONS.pro30.costPoints) {
+    lines.push('');
+    lines.push(`7 days Pro уже доступен. До 30 days Pro осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> pts.`);
+  } else {
+    lines.push('');
+    lines.push('Сейчас доступны обе награды: 7 days Pro и 30 days Pro.');
+  }
+  if (pending > 0) {
+    lines.push('');
+    lines.push('Pending points не тратятся, пока не перейдут в available.');
   }
   return lines.join('\n');
 }
@@ -2896,10 +2916,11 @@ function inviteRewardsCenterKeyboard(inviteState = null) {
     rewardRow.push({ text: INVITE_REDEEM_OPTIONS.pro30.buttonLabel, callback_data: 'a:share_redeem|r:pro30' });
   }
   if (rewardRow.length) rows.push(rewardRow);
-  if (inviteHasHistoryData(inviteState)) {
-    rows.push([{ text: '📄 Invite history', callback_data: 'a:share_history' }]);
-  }
-  rows.push([{ text: '⬅️ Invite Center', callback_data: 'a:share' }]);
+  rows.push([
+    { text: '💎 Баллы', callback_data: 'a:share_points' },
+    { text: '📄 История', callback_data: 'a:share_history' }
+  ]);
+  rows.push([{ text: '⬅️ Инвайты', callback_data: 'a:share' }]);
   rows.push([
     { text: '📋 Меню', callback_data: 'a:menu' },
     { text: '🏠 Home', callback_data: 'a:home' }
@@ -2907,10 +2928,116 @@ function inviteRewardsCenterKeyboard(inviteState = null) {
   return { inline_keyboard: rows };
 }
 
+
 async function loadInviteHistoryStateForUser(user) {
   const inviteState = await loadInviteSurfaceStateForUser(user);
   const history = await db.getInviteRewardsRecentHistory(Number(user?.id || 0), 8).catch(() => []);
   return { inviteState, history };
+}
+
+function renderInvitePerformanceText({ inviteState = null } = {}) {
+  const invitedCount = Number(inviteState?.invitedCount || 0);
+  const activatedCount = Number(inviteState?.activatedCount || 0);
+  const activationRate = getInviteActivationRate(invitedCount, activatedCount);
+  const recentInvites = Array.isArray(inviteState?.invited) ? inviteState.invited.slice(0, 3) : [];
+  const lines = [
+    '📊 <b>Статистика инвайтов</b>',
+    '',
+    '<b>Summary</b>',
+    `• Invited: <b>${invitedCount}</b>`,
+    `• Activated: <b>${activatedCount}</b>`,
+    `• Activation rate: <b>${escapeHtml(activationRate)}</b>`,
+    '• Activation rule: <b>completed profile</b>',
+  ];
+
+  if (recentInvites.length) {
+    lines.push('');
+    lines.push('<b>Recent invited contacts</b>');
+    for (const item of recentInvites) {
+      lines.push(`• ${escapeHtml(inviteRecentContactLine(item))}`);
+    }
+    if (invitedCount > recentInvites.length) {
+      lines.push('• Полный список — в экране <b>История</b>.');
+    }
+  } else {
+    lines.push('');
+    lines.push('Пока пусто. Первый валидный join появится здесь.');
+  }
+
+  if (inviteState?.invitedBy?.displayName) {
+    lines.push('');
+    lines.push(`<b>Joined from:</b> ${escapeHtml(inviteState.invitedBy.displayName)}`);
+  }
+
+  return lines.join('\n');
+}
+
+function renderInvitePerformanceKeyboard(inviteState = null) {
+  const rows = [[
+    { text: '💎 Баллы', callback_data: 'a:share_points' },
+    { text: '📄 История', callback_data: 'a:share_history' }
+  ]];
+  if (inviteState?.rewards?.enabled) {
+    rows.push([{ text: '🎁 Обменять', callback_data: 'a:share_rewards' }]);
+  }
+  rows.push([{ text: '⬅️ Инвайты', callback_data: 'a:share' }]);
+  rows.push([
+    { text: '📋 Меню', callback_data: 'a:menu' },
+    { text: '🏠 Home', callback_data: 'a:home' }
+  ]);
+  return { inline_keyboard: rows };
+}
+
+function renderInvitePointsText({ inviteState = null } = {}) {
+  const rewards = inviteState?.rewards || {};
+  const available = Number(rewards.availablePoints || 0);
+  const pending = Number(rewards.pendingPoints || 0);
+  const redeemed = Number(rewards.redeemedPoints || 0);
+  const lines = [
+    '💎 <b>Баллы</b>',
+    '',
+    '<b>Status</b>',
+    `• Available: <b>${available}</b>`,
+    `• Pending: <b>${pending}</b>`,
+    `• Redeemed: <b>${redeemed}</b>`,
+    '',
+    '<b>Reward progress</b>',
+  ];
+
+  if (!rewards?.enabled) {
+    lines.push('• Reward layer пока недоступен. Проверь invite rewards migration.');
+  } else if (rewards.canRedeemPro30) {
+    lines.push('• Reward ready: <b>7 days Pro</b> и <b>30 days Pro</b> доступны сейчас.');
+  } else if (rewards.canRedeemPro7) {
+    lines.push('• Reward ready: <b>7 days Pro</b> уже доступен.');
+    lines.push(`• До 30 days Pro осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> pts.`);
+  } else {
+    lines.push(`• Next reward: <b>${escapeHtml(String(rewards.nextRewardLabel || '7 days Pro'))}</b>`);
+    lines.push(`• Remaining: <b>${Number(rewards.pointsToNextReward || 0)}</b> pts`);
+  }
+
+  if (pending > 0) {
+    lines.push('');
+    lines.push('Pending points не тратятся, пока не перейдут в available balance.');
+  }
+
+  return lines.join('\n');
+}
+
+function renderInvitePointsKeyboard(inviteState = null) {
+  const rows = [[
+    { text: '📊 Статистика', callback_data: 'a:share_perf' },
+    { text: '📄 История', callback_data: 'a:share_history' }
+  ]];
+  if (inviteState?.rewards?.enabled) {
+    rows.push([{ text: '🎁 Обменять', callback_data: 'a:share_rewards' }]);
+  }
+  rows.push([{ text: '⬅️ Инвайты', callback_data: 'a:share' }]);
+  rows.push([
+    { text: '📋 Меню', callback_data: 'a:menu' },
+    { text: '🏠 Home', callback_data: 'a:home' }
+  ]);
+  return { inline_keyboard: rows };
 }
 
 function renderInviteHistoryText({ inviteState = null, history = [] } = {}) {
@@ -2918,7 +3045,7 @@ function renderInviteHistoryText({ inviteState = null, history = [] } = {}) {
   const activatedCount = Number(inviteState?.activatedCount || 0);
   const activationRate = getInviteActivationRate(invitedCount, activatedCount);
   const lines = [
-    '📄 <b>Invite history</b>',
+    '📄 <b>История инвайтов</b>',
     '',
     '<b>Summary</b>',
     `• Invited: <b>${invitedCount}</b>`,
@@ -2950,20 +3077,23 @@ function renderInviteHistoryText({ inviteState = null, history = [] } = {}) {
 
   if ((!inviteState?.invited || !inviteState.invited.length) && (!history || !history.length)) {
     lines.push('');
-    lines.push('Nothing here yet. Invite history will fill after the first valid join or reward movement.');
+    lines.push('Пока пусто. История заполнится после первого валидного join или reward movement.');
   }
 
   lines.push('');
-  lines.push('<i>This is a compact recent readout, not the full invite ledger.</i>');
+  lines.push('<i>Это компактный recent readout, а не полный invite ledger.</i>');
   return lines.join('\n');
 }
 
 function renderInviteHistoryKeyboard(inviteState = null) {
-  const rows = [];
+  const rows = [[
+    { text: '📊 Статистика', callback_data: 'a:share_perf' },
+    { text: '💎 Баллы', callback_data: 'a:share_points' }
+  ]];
   if (inviteState?.rewards?.enabled) {
-    rows.push([{ text: '🎁 Redeem', callback_data: 'a:share_rewards' }]);
+    rows.push([{ text: '🎁 Обменять', callback_data: 'a:share_rewards' }]);
   }
-  rows.push([{ text: '⬅️ Invite Center', callback_data: 'a:share' }]);
+  rows.push([{ text: '⬅️ Инвайты', callback_data: 'a:share' }]);
   rows.push([
     { text: '📋 Меню', callback_data: 'a:menu' },
     { text: '🏠 Home', callback_data: 'a:home' }
@@ -2974,20 +3104,20 @@ function renderInviteHistoryKeyboard(inviteState = null) {
 function inviteKeyboardMarkup(inviteState = null) {
   const rows = [];
   if (inviteState?.inviteLink) {
-    rows.push([{ text: '📨 Share invite', switch_inline_query: inviteState.shareInlineQuery || 'invite' }]);
+    rows.push([{ text: '📨 Пригласить', switch_inline_query: inviteState.shareInlineQuery || 'invite' }]);
     rows.push([
-      { text: '🔗 Link + copy', callback_data: 'a:share_link' },
-      { text: '🧾 Invite card', callback_data: 'a:share_card' }
+      { text: '🔗 Ссылка', callback_data: 'a:share_link' },
+      { text: '🧾 Инвайт-карта', callback_data: 'a:share_card' }
     ]);
-
-    const progressiveRow = [];
-    if (inviteHasHistoryData(inviteState)) progressiveRow.push({ text: '📄 Invite history', callback_data: 'a:share_history' });
-    if (inviteState?.rewards?.enabled && Number(inviteState?.rewards?.availablePoints || 0) >= INVITE_REDEEM_OPTIONS.pro7.costPoints) {
-      progressiveRow.push({ text: '🎁 Redeem', callback_data: 'a:share_rewards' });
-    }
-    if (progressiveRow.length) rows.push(progressiveRow);
-
-    rows.push([{ text: '🔄 Refresh', callback_data: 'a:share' }]);
+    rows.push([
+      { text: '📊 Статистика', callback_data: 'a:share_perf' },
+      { text: '💎 Баллы', callback_data: 'a:share_points' }
+    ]);
+    rows.push([
+      { text: '📄 История', callback_data: 'a:share_history' },
+      { text: '🎁 Обменять', callback_data: 'a:share_rewards' }
+    ]);
+    rows.push([{ text: '🔄 Обновить', callback_data: 'a:share' }]);
   }
   rows.push([
     { text: '📋 Меню', callback_data: 'a:menu' },
@@ -2996,16 +3126,17 @@ function inviteKeyboardMarkup(inviteState = null) {
   return { inline_keyboard: rows };
 }
 
+
 function renderInviteText({ inviteState = null, notice = null } = {}) {
   const invitedCount = Number(inviteState?.invitedCount || 0);
   const activatedCount = Number(inviteState?.activatedCount || 0);
   const activationRate = getInviteActivationRate(invitedCount, activatedCount);
   const recentInvites = Array.isArray(inviteState?.invited) ? inviteState.invited.slice(0, 3) : [];
   const lines = [
-    '📨 <b>Invite Center</b>',
+    '📨 <b>Инвайты</b>',
     '',
-    'Invite people who may find Collabka useful.',
-    'Use <b>Share invite</b> for the fastest Telegram-native flow.'
+    'Приглашай тех, кому может быть полезна Collabka.',
+    'Быстрый путь — кнопка <b>Пригласить</b> ниже.'
   ];
 
   if (inviteState?.inviteLink) {
@@ -3016,32 +3147,19 @@ function renderInviteText({ inviteState = null, notice = null } = {}) {
     lines.push(`• Activation rate: <b>${escapeHtml(activationRate)}</b>`);
     lines.push('• Activation rule: <b>completed profile</b>');
 
-    lines.push('');
-    lines.push('<b>Actions</b>');
-    lines.push('• Share invite — fastest Telegram-native flow');
-    lines.push('• Link + copy — open your raw personal link');
-    lines.push('• Invite card — send a forwardable invite card');
-
     if (inviteState?.rewards?.enabled) {
       lines.push('');
-      lines.push('<b>Points</b>');
+      lines.push('<b>Quick status</b>');
       lines.push(`• Available: <b>${Number(inviteState.rewards.availablePoints || 0)}</b>`);
       lines.push(`• Pending: <b>${Number(inviteState.rewards.pendingPoints || 0)}</b>`);
       lines.push(`• Redeemed: <b>${Number(inviteState.rewards.redeemedPoints || 0)}</b>`);
-      lines.push('');
-      lines.push('<b>Reward</b>');
       if (inviteState.rewards.canRedeemPro30) {
-        lines.push('• <b>Reward ready:</b> 7 days Pro and 30 days Pro are available now.');
+        lines.push('• Reward ready: <b>7 days Pro</b> и <b>30 days Pro</b> доступны сейчас.');
       } else if (inviteState.rewards.canRedeemPro7) {
-        const leftTo30 = Math.max(0, 250 - Number(inviteState.rewards.availablePoints || 0));
-        lines.push('• <b>Reward ready:</b> 7 days Pro is available now.');
-        lines.push(`• 30 days Pro: <b>${leftTo30}</b> pts to go`);
+        lines.push('• Reward ready: <b>7 days Pro</b> уже доступен.');
       } else {
-        lines.push(`• <b>Next reward:</b> ${escapeHtml(String(inviteState.rewards.nextRewardLabel || '7 days Pro'))}`);
+        lines.push(`• Next reward: <b>${escapeHtml(String(inviteState.rewards.nextRewardLabel || '7 days Pro'))}</b>`);
         lines.push(`• Remaining: <b>${Number(inviteState.rewards.pointsToNextReward || 0)}</b> pts`);
-      }
-      if (Number(inviteState.rewards.pendingPoints || 0) > 0) {
-        lines.push('• <i>Pending points are not spendable until confirmation.</i>');
       }
     }
 
@@ -3052,19 +3170,11 @@ function renderInviteText({ inviteState = null, notice = null } = {}) {
         lines.push(`• ${escapeHtml(inviteRecentContactLine(item))}`);
       }
       if (invitedCount > recentInvites.length) {
-        lines.push('• More invited contacts: open <b>Invite history</b>.');
+        lines.push('• Полный список — в экране <b>История</b>.');
       }
-    }
-
-    if (inviteState.invitedBy?.displayName) {
-      lines.push('');
-      lines.push(`<b>Joined from:</b> ${escapeHtml(inviteState.invitedBy.displayName)}`);
-    }
-    lines.push('');
-    if (inviteHasHistoryData(inviteState)) {
-      lines.push('Open <b>Invite history</b> below for recent reward activity and a fuller readout.');
     } else {
-      lines.push('No invited contacts yet. Start with <b>Share invite</b>.');
+      lines.push('');
+      lines.push('Пока нет приглашённых контактов. Начни с <b>Пригласить</b>.');
     }
   } else {
     lines.push('');
@@ -3086,9 +3196,9 @@ function renderInviteText({ inviteState = null, notice = null } = {}) {
 
 function renderInviteLinkText({ inviteState = null } = {}) {
   return [
-    '🔗 <b>Link + copy</b>',
+    '🔗 <b>Ссылка</b>',
     '',
-    'Open or copy your personal raw invite link.',
+    'Здесь твоя персональная raw invite link.',
     '',
     `<code>${escapeHtml(inviteState?.inviteLink || '—')}</code>`,
     '',
@@ -3099,7 +3209,7 @@ function renderInviteLinkText({ inviteState = null } = {}) {
 function renderInviteLinkKeyboard() {
   return {
     inline_keyboard: [
-      [{ text: '⬅️ Invite Center', callback_data: 'a:share' }],
+      [{ text: '⬅️ Инвайты', callback_data: 'a:share' }],
       [{ text: '🏠 Home', callback_data: 'a:home' }]
     ]
   };
@@ -3107,9 +3217,9 @@ function renderInviteLinkKeyboard() {
 
 function renderInviteCardText({ inviteState = null } = {}) {
   return [
-    '🧾 <b>Invite card</b>',
+    '🧾 <b>Инвайт-карта</b>',
     '',
-    'Forward this invite card into Telegram chats that may benefit from Collabka.',
+    'Отправь эту карточку в Telegram-чаты, где Collabka может быть полезна.',
     '',
     buildInviteJoinAnchor(inviteState?.inviteCardLink || inviteState?.inlineInviteLink || inviteState?.inviteLink)
   ].join('\n');
@@ -3118,9 +3228,14 @@ function renderInviteCardText({ inviteState = null } = {}) {
 function renderInviteCardKeyboard({ inviteState = null } = {}) {
   const inviteUrl = inviteState?.inviteCardLink || inviteState?.inlineInviteLink || inviteState?.inviteLink;
   return {
-    inline_keyboard: inviteUrl ? [[{ text: 'Open Collabka', url: inviteUrl }]] : []
+    inline_keyboard: [
+      ...(inviteUrl ? [[{ text: 'Открыть Collabka', url: inviteUrl }]] : []),
+      [{ text: '⬅️ Инвайты', callback_data: 'a:share' }],
+      [{ text: '🏠 Home', callback_data: 'a:home' }]
+    ]
   };
 }
+
 
 function renderInlineInviteShareText({ inviteState = null } = {}) {
   return [
@@ -3313,7 +3428,7 @@ function mainMenuKb(flags = {}) {
     if (uname) kb.url('📢 Официальный канал', `https://t.me/${uname}`).row();
   }
 
-  kb.text('🔗 Поделиться', 'a:share').text('💬 Поддержка', 'a:support').row();
+  kb.text('📨 Инвайты', 'a:share').text('💬 Поддержка', 'a:support').row();
   kb.text('🔄 Обновить', 'a:main_menu').row();
 
   const extra = [];
@@ -3366,7 +3481,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
   }
 
   kb
-    .text('🔗 Поделиться', 'a:share')
+    .text('📨 Инвайты', 'a:share')
     .text('💬 Поддержка', 'a:support')
     .row();
 
@@ -3485,7 +3600,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   }
 
   kb.row()
-    .text('🔗 Поделиться', 'a:share')
+    .text('📨 Инвайты', 'a:share')
     .text('💬 Поддержка', 'a:support')
     .row();
 
@@ -4016,7 +4131,7 @@ ${trialLine}
   if (flags?.isModerator) kb.text('🛡 Модерация', 'a:mod_home').row();
   if (flags?.isAdmin) kb.text('👑 Админка', 'a:admin_home').row();
 
-  kb.text('📋 Меню', 'a:menu').text('🔗 Поделиться', 'a:share').row();
+  kb.text('📋 Меню', 'a:menu').text('📨 Инвайты', 'a:share').row();
   if (noticeActive) kb.text('📣 Актуальное объявление', 'a:notice').row();
   kb.text('💬 Поддержка', 'a:support').row();
 
@@ -4151,7 +4266,7 @@ async function renderRoleSelection(ctx, u, opts = {}) {
     .row()
     .text('🤳 Креатор / Блогер', 'a:home_mode|m:creator')
     .row()
-    .text('🔗 Поделиться ботом', 'a:share');
+    .text('📨 Инвайты', 'a:share');
 
   if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
   else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
@@ -25087,7 +25202,7 @@ if (p.a === 'a:share') {
 
   const un = botUsernameNoAt();
   if (!un) {
-    const text = `⚠️ <b>Invite пока недоступен</b>\n\nНе задан <code>BOT_USERNAME</code> в ENV.`;
+    const text = `⚠️ <b>Инвайты пока недоступны</b>\n\nНе задан <code>BOT_USERNAME</code> в ENV.`;
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
     return;
   }
@@ -25098,6 +25213,28 @@ if (p.a === 'a:share') {
     parse_mode: 'HTML',
     disable_web_page_preview: true,
     reply_markup: inviteKeyboardMarkup(inviteState),
+  });
+  return;
+}
+
+if (p.a === 'a:share_perf') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+  const inviteState = await loadInviteSurfaceStateForUser(u);
+  await safeEditOrReply(ctx, renderInvitePerformanceText({ inviteState }), {
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    reply_markup: renderInvitePerformanceKeyboard(inviteState),
+  });
+  return;
+}
+
+if (p.a === 'a:share_points') {
+  try { await ctx.answerCallbackQuery(); } catch {}
+  const inviteState = await loadInviteSurfaceStateForUser(u);
+  await safeEditOrReply(ctx, renderInvitePointsText({ inviteState }), {
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    reply_markup: renderInvitePointsKeyboard(inviteState),
   });
   return;
 }
@@ -30847,7 +30984,7 @@ https://collabka.com/status</pre>
             .text('⭐️ Открыть Brand Plan', 'a:brand_plan|ws:0').row();
         }
         kb
-          .text('🔗 Поделиться ботом', 'a:share')
+          .text('📨 Инвайты', 'a:share')
           .text('📋 Меню', 'a:menu');
         return kb;
       };

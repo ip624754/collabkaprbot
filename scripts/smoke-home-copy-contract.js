@@ -42,7 +42,7 @@ assert.ok(renderHomeHubSrc.includes('Выбери раздел ниже.'), 'Hom
 assert.ok(renderHomeHubSrc.includes('Основные разделы уже доступны кнопками на этом экране'), 'Home hub hint banner must stay short and action-oriented');
 
 assert.ok(renderHomeHubSrc.includes(".text(`▶️ Продолжить: ${modeLabel}`, 'a:menu')"), 'Home hub must keep continue CTA');
-assert.ok(renderHomeHubSrc.includes(".text('📋 Меню', 'a:menu').text('🔗 Поделиться', 'a:share').row();"), 'Home hub must keep footer row');
+assert.ok(renderHomeHubSrc.includes(".text('📋 Меню', 'a:menu').text('📨 Инвайты', 'a:share').row();"), 'Home hub must keep footer row');
 assert.ok(renderHomeHubSrc.includes("kb.text('💬 Поддержка', 'a:support').row();"), 'Home hub must keep support CTA');
 
 console.log('✅ smoke home copy contract OK');

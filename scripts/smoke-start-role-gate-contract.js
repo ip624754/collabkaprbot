@@ -38,7 +38,7 @@ const helpersSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'helpers.js'
 const startHandlerSrc = extractBetween(
   botSource,
   "  bot.command('start', async (ctx) => {",
-  "\n\n\n  bot.command('help', async (ctx) => {"
+  "\n\n\n  bot.command('invite', async (ctx) => {"
 );
 
 const renderRoleSelectionSrc = extractBetween(
@@ -123,7 +123,7 @@ assert.ok(renderRoleSelectionSrc.includes('🏷 Бренд — лента кре
 assert.ok(renderRoleSelectionSrc.includes('<i>Режим можно поменять позже на «🏠 Home».</i>'), 'Role gate must keep later-switch hint');
 assert.ok(renderRoleSelectionSrc.includes(".text('🏢 Бренд / Заказчик', 'a:home_mode|m:brand')"), 'Role gate must keep brand pick button');
 assert.ok(renderRoleSelectionSrc.includes(".text('🤳 Креатор / Блогер', 'a:home_mode|m:creator')"), 'Role gate must keep creator pick button');
-assert.ok(renderRoleSelectionSrc.includes(".text('🔗 Поделиться ботом', 'a:share');"), 'Role gate must keep share button');
+assert.ok(renderRoleSelectionSrc.includes(".text('📨 Инвайты', 'a:share');"), 'Role gate must keep share button');
 
 // Strong-intent role switch contract.
 assert.ok(homeModeHandlerSrc.includes('let hadUiMode = true;'), 'a:home_mode must detect first explicit role pick');

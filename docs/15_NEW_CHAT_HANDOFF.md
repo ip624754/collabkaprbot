@@ -1,14 +1,14 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP575 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP576 baseline
 
-Цель: чтобы новый чат продолжил **текущий рабочий baseline**, а не стартовал от старого контекста и не игнорировал invite/rewards wave STEP548–575.
+Цель: чтобы новый чат продолжил **текущий рабочий baseline**, а не стартовал от старого контекста и не игнорировал invite/rewards wave STEP548–576.
 
 ---
 
-### STEP575 latest narrow baseline note
-- main user-side Invite Center is now summary-first instead of a long raw-link text dump
-- hub contract = `Summary / Actions / Points / Reward / Recent invited contacts`
-- raw link + invite code utility moved into `Link + copy`
-- `Invite history` / `Redeem` stay separate entrypoints
+### STEP576 latest narrow baseline note
+- invite module entrypoint is now `📨 Инвайты` instead of the generic `Поделиться` where it opens the invite layer
+- main user-side invite hub stays compact and summary-first
+- user IA is now explicitly split into bounded screens: `📊 Статистика`, `💎 Баллы`, `📄 История`, `🎁 Обменять`
+- the main hub keyboard is `Пригласить / Ссылка / Инвайт-карта / Статистика / Баллы / История / Обменять / Обновить`
 - reward math / ledger semantics / anti-abuse remain unchanged
 
 
@@ -25,9 +25,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP575 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP576 baseline)**
 
-Продолжаем не с нуля, а от **STEP575 baseline**.
+Продолжаем не с нуля, а от **STEP576 baseline**.
 
 Сначала прочитай по порядку:
 1. `docs/README.md`
