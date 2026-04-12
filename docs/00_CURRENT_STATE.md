@@ -2802,3 +2802,11 @@ What did not change:
 - support thread storage model introduced in STEP567
 - support operator read surface buckets introduced in STEP568
 - web helpdesk / SLA / assignment / topic routing
+
+## 0.08) Support follow-up context hotfix (STEP570)
+
+- After an operator support reply, the user can now respond with the **next freeform message** and it is auto-routed into the **same support thread**.
+- `💬 Поддержка` remains as an explicit fallback entry, not the only continuation path.
+- `📋 Меню` / `🏠 Home` clear the follow-up context and return the user to normal bot navigation.
+- Media follow-ups (photo / document / video with optional caption) are also routed into the same thread.
+- No migrations. No helpdesk redesign. Narrow UX/runtime hotfix only.

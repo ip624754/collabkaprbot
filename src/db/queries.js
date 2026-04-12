@@ -8409,6 +8409,58 @@ export async function markSupportThreadOperatorReply(opts = {}) {
 
 
 
+export async function markSupportThreadUserFollowup(opts = {}) {
+  const threadId = Number(opts?.threadId || 0);
+  const userId = Number(opts?.userId || 0);
+  const userTgId = Number(opts?.userTgId || 0);
+  const summary = buildSupportThreadSummary(opts?.summary || '', opts?.fallbackSummary || '');
+  if (!threadId && !userId && !userTgId) return { ok: false, reason: 'support_thread_target_missing' };
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    let row = null;
+    if (threadId) {
+      const byId = await client.query('select * from support_threads where id = $1 limit 1 for update', [threadId]);
+      row = byId.rows[0] || null;
+    }
+    if (!row) {
+      const byUser = await client.query(
+        `select *
+           from support_threads
+          where (($1::bigint > 0 and user_id = $1) or ($2::bigint > 0 and user_tg_id = $2))
+          order by (closed_at is null) desc, updated_at desc, id desc
+          limit 1
+          for update`,
+        [userId, userTgId]
+      );
+      row = byUser.rows[0] || null;
+    }
+    if (!row) {
+      await client.query('commit');
+      return { ok: false, persistenceEnabled: true, reason: 'support_thread_not_found' };
+    }
+    const updated = await client.query(
+      `update support_threads
+          set status = 'waiting_operator',
+              closed_at = null,
+              last_user_message_at = now(),
+              last_summary = coalesce(nullif($2, ''), last_summary),
+              updated_at = now()
+        where id = $1
+        returning *`,
+      [Number(row.id), summary || null]
+    );
+    await client.query('commit');
+    return { ok: true, persistenceEnabled: true, thread: updated.rows[0] || row };
+  } catch (error) {
+    try { await client.query('rollback'); } catch {}
+    if (supportThreadsMissingSchemaError(error)) return { ok: false, persistenceEnabled: false, reason: 'support_threads_schema_missing' };
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getSupportThreadBuckets(daysClosedRecent = 7) {
   const days = Math.max(1, Number(daysClosedRecent || 7) || 7);
   try {

@@ -1102,6 +1102,148 @@ function supportTemplateLabelFromItems(items, tplId, fallback) {
   return label || String(fallback || '—');
 }
 
+const SUPPORT_FOLLOWUP_TTL_SEC = 12 * 60 * 60;
+
+function supportFollowupRedisKey(tgId) {
+  return k(['support_followup', String(Number(tgId || 0) || 0)]);
+}
+
+async function getSupportFollowupContext(tgId) {
+  const id = Number(tgId || 0);
+  if (!id) return null;
+  try {
+    const raw = await redis.get(supportFollowupRedisKey(id));
+    return raw && typeof raw === 'object' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+async function setSupportFollowupContext(tgId, payload = {}) {
+  const id = Number(tgId || 0);
+  if (!id) return false;
+  try {
+    await redis.set(supportFollowupRedisKey(id), {
+      threadId: Number(payload.threadId || 0) || null,
+      userId: Number(payload.userId || 0) || null,
+      userTgId: id,
+      source: String(payload.source || 'operator_reply'),
+      armedAt: Date.now(),
+    }, { ex: SUPPORT_FOLLOWUP_TTL_SEC });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function clearSupportFollowupContext(tgId) {
+  const id = Number(tgId || 0);
+  if (!id) return;
+  try { await redis.del(supportFollowupRedisKey(id)); } catch {}
+}
+
+async function forwardSupportUserFollowup(ctx, u, payload = {}) {
+  const tgId = Number(ctx?.from?.id || 0);
+  const userId = Number(u?.id || 0);
+  const hasPhoto = !!payload.photoFileId;
+  const hasDoc = !!payload.documentFileId;
+  const hasVideo = !!payload.videoFileId;
+  const hasMedia = hasPhoto || hasDoc || hasVideo;
+  const caption = String(payload.caption || '').trim();
+  const textBody = String(payload.text || '').trim();
+  const summarySeed = textBody || caption || (hasPhoto ? '[photo]' : (hasDoc ? '[document]' : (hasVideo ? '[video]' : '')));
+
+  const supportChatIdRaw = String(CFG.SUPPORT_CHAT_ID || '').trim();
+  const admins = Array.isArray(CFG.SUPER_ADMIN_TG_IDS) ? CFG.SUPER_ADMIN_TG_IDS : [];
+  const targets = [];
+  if (supportChatIdRaw) targets.push(supportChatIdRaw);
+  else {
+    for (const a of admins) {
+      const adminId = Number(a || 0);
+      if (adminId) targets.push(adminId);
+    }
+  }
+  if (!targets.length) return { ok: false, reason: 'support_not_configured' };
+
+  const threadId = Number(payload.threadId || 0);
+  let supportThread = null;
+  try {
+    if (threadId && typeof db.markSupportThreadUserFollowup === 'function') {
+      const touch = await db.markSupportThreadUserFollowup({
+        threadId,
+        userId,
+        userTgId: tgId,
+        summary: summarySeed,
+      });
+      supportThread = touch?.thread || null;
+    }
+    if (!supportThread) {
+      const threadRes = await db.openOrTouchSupportThreadForUser(userId, tgId, {
+        source: 'telegram_bot',
+        category: 'general',
+        summary: summarySeed,
+        fallbackSummary: summarySeed || '[followup]',
+        status: 'waiting_operator',
+      });
+      supportThread = threadRes?.thread || null;
+    }
+  } catch {}
+
+  const uname = ctx.from?.username ? `@${ctx.from.username}` : '—';
+  const fullName = [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(' ').trim() || '—';
+  const safeText = clipCodepoints(textBody, TG_SAFE_BODY_MAX).text;
+  const safeCap = caption.length > 800 ? (caption.slice(0, 800) + '…') : caption;
+  const kind = hasPhoto ? 'photo' : (hasDoc ? 'document' : (hasVideo ? 'video' : 'text'));
+
+  const header = hasMedia
+    ? `💬 <b>Support follow-up</b>
+
+От: <b>${escapeHtml(fullName)}</b> (${escapeHtml(uname)})
+TG ID: <code>${tgId}</code>
+User ID: <code>${userId}</code>${supportThread?.id ? ` · Thread: <code>#${supportThread.id}</code>` : ''}
+Type: <code>${escapeHtml(kind)}</code>
+Time: <code>${new Date().toISOString()}</code>${safeCap ? `
+
+<b>Caption:</b>
+${escapeHtml(safeCap)}` : ''}`
+    : `💬 <b>Support follow-up</b>
+
+От: <b>${escapeHtml(fullName)}</b> (${escapeHtml(uname)})
+TG ID: <code>${tgId}</code>
+User ID: <code>${userId}</code>${supportThread?.id ? ` · Thread: <code>#${supportThread.id}</code>` : ''}
+Time: <code>${new Date().toISOString()}</code>
+
+<b>Сообщение:</b>
+${escapeHtml(safeText)}`;
+
+  let sent = 0;
+  for (const t of targets) {
+    const targetChatId = t;
+    if (!targetChatId) continue;
+    try {
+      const threadTail = supportThread?.id ? `|th:${supportThread.id}` : '';
+      const replyKb = new InlineKeyboard()
+        .text('✍️ Ответить', `a:adm_support_reply|tg:${tgId}|uid:${userId}${threadTail}`)
+        .text('👤 Карточка', `a:adm_ucard|id:${userId}|f:all|p:0`)
+        .row()
+        .text('✅ Принято', `a:adm_support_qr|k:ack|tg:${tgId}|uid:${userId}${threadTail}`)
+        .text('❓ Нужны детали', `a:adm_support_qr|k:need|tg:${tgId}|uid:${userId}${threadTail}`)
+        .row()
+        .text('✅ Сделали', `a:adm_support_qr|k:done|tg:${tgId}|uid:${userId}${threadTail}`)
+        .text('⏳ В работе', `a:adm_support_qr|k:wip|tg:${tgId}|uid:${userId}${threadTail}`);
+      await ctx.api.sendMessage(targetChatId, header, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: replyKb });
+      if (hasMedia) {
+        try { await ctx.api.copyMessage(targetChatId, ctx.chat.id, ctx.message.message_id); }
+        catch { try { await ctx.api.forwardMessage(targetChatId, ctx.chat.id, ctx.message.message_id); } catch {} }
+      }
+      sent += 1;
+    } catch {}
+  }
+
+  return { ok: sent > 0, sent, thread: supportThread };
+}
+
+
 async function getSupportQuickReplyTemplates() {
   const { tpls } = await getAdminDmTemplatesWithMeta();
   const items = Array.isArray(tpls?.items) ? tpls.items : [];
@@ -19009,7 +19151,8 @@ export function getBot() {
       Array.isArray(ctx.message?.entities) &&
       ctx.message.entities.some((e) => e.type === 'bot_command' && e.offset === 0);
     if (isCommand) {
-      await clearExpectText(ctx.from.id);
+      if (exp) await clearExpectText(ctx.from.id);
+      else await clearSupportFollowupContext(ctx.from.id);
       return next();
     }
 
@@ -19109,7 +19252,8 @@ export function getBot() {
     if (!ctx.from) return next();
 
     const exp = await getExpectText(ctx.from.id);
-    if (!exp || String(exp.type) !== 'support_any') return next();
+    const followupCtx = !exp ? await getSupportFollowupContext(ctx.from.id) : null;
+    if ((!exp || String(exp.type) !== 'support_any') && !followupCtx) return next();
 
     // Let text messages be handled by message:text router below
     if (ctx.message?.text) return next();
@@ -19130,18 +19274,41 @@ export function getBot() {
 
     // We accept photo/document/video as "support media"
     if (!hasPhoto && !hasDoc && !hasVideo) {
-      const backCb = expectBackCb(exp);
+      const backCb = exp ? expectBackCb(exp) : 'a:support';
       await ctx.reply('Можно отправить текст или фото/скрин (лучше с подписью). Стикеры/голос не подойдут 🙏', {
         reply_markup: navKb(backCb),
       });
-      // Keep ожидание ввода активным
-      try { await setExpectText(ctx.from.id, exp); } catch {}
+      if (exp) {
+        try { await setExpectText(ctx.from.id, exp); } catch {}
+      }
       return;
     }
 
-    await clearExpectText(ctx.from.id);
+    if (exp) await clearExpectText(ctx.from.id);
+    else await clearSupportFollowupContext(ctx.from.id);
 
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
+
+    if (followupCtx) {
+      const routed = await forwardSupportUserFollowup(ctx, u, {
+        threadId: Number(followupCtx.threadId || 0),
+        userId: Number(followupCtx.userId || 0),
+        caption: String(ctx.message?.caption || '').trim(),
+        photoFileId: hasPhoto ? String(ctx.message.photo[ctx.message.photo.length - 1]?.file_id || '') : '',
+        documentFileId: hasDoc ? String(ctx.message.document?.file_id || '') : '',
+        videoFileId: hasVideo ? String(ctx.message.video?.file_id || '') : '',
+      });
+      if (routed?.ok) {
+        await ctx.reply('✅ Уточнение отправлено в поддержку. Если потребуется ещё одно сообщение — просто ответь здесь или нажми «💬 Поддержка».', {
+          reply_markup: new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home'),
+        });
+      } else {
+        await ctx.reply('⚠️ Не удалось отправить уточнение в поддержку. Попробуй позже или нажми «💬 Поддержка».', {
+          reply_markup: new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home'),
+        });
+      }
+      return;
+    }
 
     const supportSummarySeed = hasPhoto ? (caption || '[photo]') : (hasDoc ? (caption || '[document]') : (caption || '[video]'));
     let supportThread = null;
@@ -19466,13 +19633,20 @@ ${escapeHtml(safeCap)}
             }
 
             const safe = clipCodepoints(raw, TG_SAFE_BODY_MAX).text;
-            const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+            const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Можешь просто ответить следующим сообщением — я отправлю это в тот же диалог с поддержкой.</i>`;
 
             let ok = false;
             try {
               const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
               await ctx.api.sendMessage(targetTgId, userMsg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
               ok = true;
+              try {
+                await setSupportFollowupContext(targetTgId, {
+                  threadId: Number(sess.supportThreadId || 0),
+                  userId: targetUserId || 0,
+                  source: 'operator_reply',
+                });
+              } catch {}
             } catch (e) {
               await ctx.reply(`❌ Не удалось отправить (юзер заблокировал бота?).\nОшибка: ${String(e?.message || e).slice(0, 140)}`);
             }
@@ -19516,6 +19690,22 @@ ${escapeHtml(safeCap)}
     const exp = await getExpectText(ctx.from.id);
 if (!exp) {
   if (isCommand) return next(); // allow commands like /start to reach bot.command()
+
+  const followupCtx = await getSupportFollowupContext(ctx.from.id);
+  if (followupCtx && text && String(text).trim()) {
+    const routed = await forwardSupportUserFollowup(ctx, u, {
+      threadId: Number(followupCtx.threadId || 0),
+      userId: Number(followupCtx.userId || 0),
+      text: String(text || '').trim(),
+    });
+    if (routed?.ok) {
+      await clearSupportFollowupContext(ctx.from.id);
+      await ctx.reply('✅ Уточнение отправлено в поддержку. Если потребуется ещё одно сообщение — просто ответь здесь или нажми «💬 Поддержка».', {
+        reply_markup: new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home'),
+      });
+      return;
+    }
+  }
 
   // Public CTA: user can type "креатор" / "бренд" (or creator/brand) to set UI mode explicitly.
   // Keep it strict to avoid accidental triggers in normal chats.
@@ -19843,7 +20033,7 @@ ${escapeHtml(safe)}`;
         return;
       }
       const safe = clipCodepoints(txt, TG_SAFE_BODY_MAX).text;
-      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Можешь просто ответить следующим сообщением — я отправлю это в тот же диалог с поддержкой.</i>`;
 
       let ok = false;
       try {
@@ -24938,7 +25128,7 @@ if (p.a === 'a:support_write') {
 
 Пример: «В режиме Brand нажимаю X → ошибка Y».
 
-Я отправлю это в поддержку.`;
+Я отправлю это в поддержку. После ответа поддержки можно будет просто ответить следующим сообщением.`;
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:support') });
   return;
@@ -25426,6 +25616,7 @@ if (p.a === 'a:menu') {
       // If user opens Menu while we were expecting text input — cancel it.
       // Menu is the canonical escape hatch for input-mode keyboards.
       try { await clearExpectText(ctx.from.id); } catch {}
+      await clearSupportFollowupContext(ctx.from.id);
       const flags = await getRoleFlagsCached(u, ctx.from.id);
       await renderRoleHub(ctx, u, flags);
       return;
@@ -25605,6 +25796,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       // If user navigates to Home while we were expecting text input — cancel it.
       try { await clearExpectText(ctx.from.id); } catch {}
+      await clearSupportFollowupContext(ctx.from.id);
       const flags2 = await getRoleFlagsCached(u, ctx.from.id);
       await renderHomeHub(ctx, u, flags2, { edit: true });
       return;
@@ -31220,7 +31412,7 @@ ${DEGRADED_COPY.line}
         return;
       }
       const safe = clipCodepoints(raw, TG_SAFE_BODY_MAX).text;
-      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Если нужно уточнить — нажми 💬 Поддержка в меню.</i>`;
+      const userMsg = `💬 <b>Ответ поддержки</b>\n\n${escapeHtml(safe)}\n\n<i>Можешь просто ответить следующим сообщением — я отправлю это в тот же диалог с поддержкой.</i>`;
       let ok = false;
       try {
         const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
