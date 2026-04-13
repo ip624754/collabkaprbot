@@ -479,8 +479,13 @@ async function autoDrawEnded() {
         endsAtIso
       );
 
-      if (!r || r.status !== 'drawn') {
-        // locked / wrong_status / already_drawn / no_entries
+      if (!r) return;
+      if (r.status === 'locked') {
+        // Another worker/tx is already drawing this giveaway. This is an expected fail-fast path, not a silent success.
+        return;
+      }
+      if (r.status !== 'drawn') {
+        // wrong_status / already_drawn / no_entries
         return;
       }
 

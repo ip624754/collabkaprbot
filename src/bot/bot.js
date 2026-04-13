@@ -50,7 +50,9 @@ let BOT;
 
 // STEP210: Anti-click-storm when Redis is degraded.
 // In serverless, token-lock may be unavailable when Redis is down, so we guard a few critical DB-truth/queue-first actions
-// against repeated clicks to avoid spiky Postgres/Neon load. This is best-effort (in-memory, per warm instance).
+// against repeated clicks to avoid spiky Postgres/Neon load. This is deliberately best-effort (in-memory, per warm instance).
+// Source-confirmed STEP579 boundary: the covered destructive paths (`a:brand_app_accept`, `a:wsp_contact_unlock`) already have
+// downstream DB/advisory-lock backstops for correctness. This guard is load-shedding only, not the primary concurrency invariant.
 const DEGRADED_CLICK_GUARD_TTL_MS = 8000;
 const _degradedClickGuard = new Map(); // key -> expiresAtMs
 

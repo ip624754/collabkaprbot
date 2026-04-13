@@ -1,16 +1,16 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP578 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP579 baseline
 
-Цель: чтобы новый чат продолжил **текущий рабочий baseline**, а не стартовал от старого контекста и не игнорировал invite/rewards wave STEP548–576.
+Цель: чтобы новый чат продолжил **текущий рабочий baseline**, а не стартовал от старого контекста и не игнорировал invite/rewards wave STEP548–579.
 
 ---
 
-### STEP578 latest narrow baseline note
-- invite module entrypoint stays `📨 Инвайты` and the user IA split from STEP576 remains in place
-- self-invite `/start` rejection now returns with explicit recovery buttons instead of a buttonless warning tail
-- invite user surfaces are copy-polished into one RU-first layer: `Сводка`, `Приглашено`, `Активировано`, `Конверсия активации`, `Быстрый статус`, `Последние приглашённые`, `Доступно / В ожидании / Обменяно`
-- the global `🏠 Home` label is intentionally preserved as the product-wide root escape hatch
+### STEP579 latest narrow baseline note
+- invite module entrypoint stays `📨 Инвайты`; STEP576–578 user IA / recovery / education copy remain in place unchanged
+- public secret-bearing endpoints now use timing-safe compare (`api/webhook.js`, `api/cron_router.js`) instead of plain string equality
+- `_degradedClickGuard` stays intentionally best-effort load shedding only; the covered destructive actions still rely on downstream DB/advisory locks for correctness
+- giveaway auto-draw fail-fast lock path remains status-based (`{ status: 'locked' }`) and is now handled explicitly in cron source
 - reward math / ledger semantics / anti-abuse remain unchanged
-- invite read screens now include bounded educational copy: `Как читать статистику`, `Как работают баллы`, `Как работает обмен`
+- no migrations, no invite IA rewrite, no admin redesign in STEP579
 
 
 ## 1) Что загрузить в новый чат
@@ -26,9 +26,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP578 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP579 baseline)**
 
-Продолжаем не с нуля, а от **STEP578 baseline**.
+Продолжаем не с нуля, а от **STEP579 baseline**.
 
 Сначала прочитай по порядку:
 1. `docs/README.md`

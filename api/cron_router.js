@@ -1,6 +1,7 @@
 import { broadcastTick, giveawaysTick, igVerifyTick, auditFlushTick } from '../src/bot/cron.js';
 import { queueOpsDigestSafe } from '../src/lib/opsDigest.js';
 import { CFG, assertEnv } from '../src/lib/config.js';
+import { timingSafeEq } from '../src/lib/adminWeb/common.js';
 
 function getBearerToken(req) {
   const h = req.headers?.authorization || req.headers?.Authorization || '';
@@ -55,7 +56,7 @@ export default async function handler(req, res) {
     }
 
     const token = getBearerToken(req);
-    if (!token || token !== String(CFG.CRON_SECRET)) {
+    if (!token || !timingSafeEq(token, CFG.CRON_SECRET)) {
       res.status(401).json({ ok: false, error: 'unauthorized' });
       return;
     }

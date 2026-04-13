@@ -1,5 +1,6 @@
 import { getBot } from '../src/bot/bot.js';
 import { assertEnv, CFG } from '../src/lib/config.js';
+import { timingSafeEq } from '../src/lib/adminWeb/common.js';
 
 let botInitPromise = null;
 
@@ -58,7 +59,7 @@ export default async function handler(req, res) {
     }
 
     const token = req.headers['x-telegram-bot-api-secret-token'];
-    if (!token || String(token) !== String(CFG.WEBHOOK_SECRET_TOKEN)) {
+    if (!token || !timingSafeEq(token, CFG.WEBHOOK_SECRET_TOKEN)) {
       res.status(401).json({ ok: false, error: 'unauthorized' });
       return;
     }

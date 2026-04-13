@@ -7196,6 +7196,7 @@ export async function drawAndFinalizeGiveawayWinnersAtomic(
       [gid]
     );
     if (!lockRes.rows?.[0]?.ok) {
+      // Explicit fail-fast signal for callers (cron/ops) that another tx already owns the draw path.
       await client.query('ROLLBACK');
       return { status: 'locked' };
     }
