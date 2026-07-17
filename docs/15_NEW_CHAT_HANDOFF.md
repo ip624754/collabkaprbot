@@ -1,3 +1,34 @@
+# STEP585 CURRENT TRUTH OVERRIDE
+
+Use this block over older baseline and runtime claims below.
+
+- Current baseline: STEP585 Conversation & UX Language Audit on unchanged STEP584 runtime source.
+- Source audit: complete for active Telegram message/button surfaces.
+- Copy readiness: 6.5/10; this is a language score, not runtime readiness.
+- P0 copy findings: none confirmed.
+- P1 classes: infrastructure leakage, Home/Menu drift, role drift, application/dialog/deal taxonomy, invite terminology, monetization naming, and `офер` spelling.
+- Runtime delta in STEP585: none.
+- Live Telegram/mobile copy: not verified.
+- STEP584 remote staging acceptance: still pending operator evidence.
+- Next STEP: STEP586A Copy Safety & Taxonomy Foundation.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP585_FULL_CONVERSATION_UX_LANGUAGE_AUDIT.md`
+3. `docs/product/COLLABKA_COPY_SYSTEM.md`
+4. `docs/product/TERMINOLOGY_REGISTRY.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP585.md`
+
+Rules for the next model:
+- do not perform a broad copy rewrite;
+- preserve callback values and product state machines;
+- separate user copy from operator diagnostics;
+- update source smokes with every intentional label contract change;
+- do not claim live UX verification without Telegram evidence.
+
+---
+
 # STEP582 CURRENT TRUTH OVERRIDE
 
 Use this block over older runtime claims below.

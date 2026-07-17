@@ -1,3 +1,33 @@
+## STEP585 — Conversation & UX Language Audit (2026-07-18)
+
+**Current handoff-safe baseline:** STEP585 documentation/audit layer on top of the unchanged STEP584 runtime source.
+
+Verified source truth:
+- 52 active JavaScript files under `src/**` and `api/**` were scanned;
+- 2,007 static button occurrences and 605 unique static button labels were inventoried;
+- 330 message calls with a static first text argument were identified;
+- no P0 wording defect was confirmed;
+- P1 drift is documented across infrastructure leakage, navigation, roles, lifecycle terms, invite language, monetization naming and `офер` spelling;
+- canonical copy and terminology contracts now exist;
+- runtime code, callbacks, DB, payments, rewards, permissions and state machines were not changed.
+
+Current truth boundary:
+- source audit is complete;
+- live Telegram rendering, mobile wrapping and real-user comprehension are not verified;
+- STEP584 remote staging acceptance remains pending until operator evidence exists.
+
+Next implementation STEP: **STEP586A — Copy Safety & Taxonomy Foundation**.
+
+Read:
+- `docs/audit/STEP585_FULL_CONVERSATION_UX_LANGUAGE_AUDIT.md`;
+- `docs/audit/STEP585_MESSAGE_INVENTORY.md`;
+- `docs/product/COLLABKA_COPY_SYSTEM.md`;
+- `docs/product/TERMINOLOGY_REGISTRY.md`;
+- `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP585.md`.
+
+---
+
 ## STEP582 — Preflight Truth Restoration (2026-07-17)
 
 **Current handoff-safe baseline:** STEP582 source stabilization on top of STEP581 audit/docs.

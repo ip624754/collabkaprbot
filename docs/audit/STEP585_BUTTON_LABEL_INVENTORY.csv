@@ -1,0 +1,606 @@
+label,occurrences,files,functions,callbacks_sample,flags,source_sample
+📋 Меню,238,api/qstash/monetization-retry.js | src/bot/bot.js | src/bot/cron.js | src/bot/gwNotify.js | src/bot/payments/starsHandlers.js | src/bot/routes/callbacks.js,_renderTplFlowBrandApp | _renderTplFlowLead | acceptBrandApplication | brandAppNoticeKb | brandFieldPromptKb | brandManagerRemoveConfirmKb | brandManagersListKb | brandReplyKb | broadcastTick | bxBrandOnlyNoticeKb | bxCategoryKb | bxCompKb | bxKindKb | bxNeedNetworkKb | bxPresetKb | bxSmartKb | bxTypeKb | creatorBrandAppNoticeKb | curListKb | curManageKb,a:menu | s:menu | a:menu_push|src:admmsg,,src/bot/bot.js:1698; src/bot/bot.js:2007; src/bot/bot.js:2037; src/bot/bot.js:2303; src/bot/bot.js:2770; src/bot/bot.js:2798; src/bot/bot.js:4165; src/bot/bot.js:4269
+🏠 Home,231,api/qstash/monetization-retry.js | src/bot/bot.js | src/bot/cron.js | src/bot/gwNotify.js | src/bot/payments/starsHandlers.js | src/bot/routes/callbacks.js,_renderTplFlowBrandApp | _renderTplFlowLead | acceptBrandApplication | brandAppNoticeKb | brandAppReplyRecoveryKb | brandFieldPromptKb | brandManagersListKb | brandReplyKb | brandTeamLockedKb | broadcastTick | bxBrandOnlyNoticeKb | bxCompKb | bxNeedNetworkKb | bxPresetKb | bxTypeKb | creatorBrandAppChatRecoveryKb | creatorBrandAppNoticeKb | curListKb | curManageKb | curatorHomeKb,a:home | s:home,english_or_internal_term,src/bot/bot.js:2007; src/bot/bot.js:2038; src/bot/bot.js:2303; src/bot/bot.js:2739; src/bot/bot.js:2742; src/bot/bot.js:2771; src/bot/bot.js:2799; src/bot/bot.js:3479
+⬅️ Назад,174,src/bot/bot.js | src/bot/gwAccess.js | src/bot/payments/starsHandlers.js,_renderTplFlowBrandApp | _renderTplFlowLead | acceptBrandApplication | brandFieldPromptKb | brandManagersListKb | brandTeamKb | brandTeamLockedKb | bxCompKb | bxInboxNavKb | bxNeedNetworkKb | bxOfferTagsKb | bxPresetKb | bxProofsKb | bxTypeKb | curListKb | curatorGwKb | curatorHomeKb | curatorWsKb | exportWsHistory | folderViewKb,a:bx_pub_done|ws:${…}|o:${…}|p:${…}|back:${…} | a:brand_apply_done|u:${…}|p:${…}|inb:${…} | a:brand_app_accepted_done|id:${…}|u:${…} | a:cur_manage|ws:${…} | a:brand_team|ws:0 | a:brand_profile_more${…} | a:brand_profile_edit${…} | a:brands_home|p:${…} | a:ws_open|ws:${…} | a:bx_new|ws:${…} | a:bx_comp_pick|ws:${…} | a:bx_inbox|ws:${…}|p:${…}|h:${…},generic_cta,src/bot/bot.js:2006; src/bot/bot.js:2035; src/bot/bot.js:4269; src/bot/bot.js:4497; src/bot/bot.js:4507; src/bot/bot.js:4516; src/bot/bot.js:4563; src/bot/bot.js:4582
+❌ Отмена,41,src/bot/bot.js,bxOfferTagsKb | getBot | navKbInput | renderCuratorGiveawayOwnerNotifyQ,a:menu | a:bx_open|ws:${…} | a:cur_gw_open|ws:${…}|i:${…} | a:adm_support_reply_cancel | a:adm_gift | a:adm_gift_revoke | a:adm_umsg|id:${…}|f:${…}|p:${…} | a:cur_ws|ws:${…} | a:cur_note_cancel|ws:${…}|i:${…} | a:blead_cancel|id:${…}|w:${…} | a:brand_app_view|id:${…}|s:${…}|p:${…} | a:lead_view|id:${…}|w:${…}|s:${…}|p:${…}${…},generic_cta,src/bot/bot.js:4508; src/bot/bot.js:8183; src/bot/bot.js:19035; src/bot/bot.js:19912; src/bot/bot.js:20018; src/bot/bot.js:20366; src/bot/bot.js:20373; src/bot/bot.js:20406
+⬅️ Отмена,27,src/bot/bot.js,brandManagerRemoveConfirmKb | bxCategoryKb | bxKindKb | getBot | gwNewStepPrizeKb | netConfirmKb | renderCuratorGiveawayRemindQ,a:bm_list|ws:0 | a:bx_open|ws:${…} | a:ws_open|ws:${…} | a:cur_gw_open|ws:${…}|i:${…} | a:admin_home | a:ws_prof_contacts|ws:${…} | a:ws_profile|ws:${…} | a:brand_profile${…} | a:admin_users|f:${…}|p:0 | a:aud|h:${…}|p:0 | a:mod_verif_view|uid:${…}|p:${…} | a:bx_pub|ws:${…}|o:${…}|p:${…}|h:${…},generic_cta,src/bot/bot.js:6160; src/bot/bot.js:6171; src/bot/bot.js:8088; src/bot/bot.js:8096; src/bot/bot.js:8681; src/bot/bot.js:18955; src/bot/bot.js:19939; src/bot/bot.js:21081
+⬅️ Админка,24,src/bot/bot.js | src/bot/cron.js,broadcastTick | getBot | renderAdminComms | renderAdminHardSkipHits | renderAdminHardSkipHome | renderAdminOps | renderAdminPaymentsFallback | renderAdminSystem | renderBroadcastAudiencePicker | renderBroadcastBlocked | renderBroadcastList | renderBroadcastPreview | renderBroadcastView | sendAdminAuditExport | sendAdminUsersCsv,a:admin_home,,src/bot/bot.js:19913; src/bot/bot.js:20075; src/bot/bot.js:20470; src/bot/bot.js:21124; src/bot/bot.js:32523; src/bot/bot.js:32543; src/bot/bot.js:32559; src/bot/bot.js:32577
+💬 Поддержка,24,src/bot/bot.js,curatorHomeKb | curatorModeMenuKb | getBot | mainMenuBrandKb | mainMenuCreatorCurrentKb | mainMenuCreatorKb | mainMenuKb | maybeSendSystemNotice | renderAccountDeletedGate | renderCreatorCurrentMenu | renderHomeHub | sendAdminMessageToUser,a:support | a:support_push|src:admmsg,,src/bot/bot.js:1698; src/bot/bot.js:3462; src/bot/bot.js:3516; src/bot/bot.js:3579; src/bot/bot.js:3635; src/bot/bot.js:4167; src/bot/bot.js:4321; src/bot/bot.js:4363
+✅ Готово,23,src/bot/bot.js,brandDirMultiPickKb | brandDirPickKb | bxMediaKb | bxMultiPickKb | bxOfferTagsPickerKb | bxOfferWizTagsHomeKb | bxOfferWizTagsPickerKb | bxPickKb | getBot | renderBrandBudgetBucketPicker | renderBrandCollabTypesPicker | renderBrandGoalsTagsPicker | renderBrandNichePicker | renderBrandProfileHome | renderBrandReqTagsPicker | renderProfileMatchingPick | renderWsProfileVerticals,a:brand_profile${…} | a:brand_bb_done${…} | a:brand_gt_done${…} | a:brand_rt_done${…} | a:brand_ty_done${…} | a:brands_filters|p:${…} | a:bd_mdone|p:${…} | a:bx_otdone|ws:${…} | a:bx_w5|ws:${…} | a:bx_wtagdone|ws:${…} | a:bx_filters|ws:${…}|p:${…}|h:${…}|r:${…} | a:bx_mdone|ws:${…}|k:${…}|p:${…}|h:${…}|r:${…},generic_cta,src/bot/bot.js:6768; src/bot/bot.js:6828; src/bot/bot.js:6871; src/bot/bot.js:6905; src/bot/bot.js:6939; src/bot/bot.js:6989; src/bot/bot.js:7457; src/bot/bot.js:7476
+📥 Inbox,23,api/qstash/monetization-retry.js | src/bot/bot.js | src/bot/payments/starsHandlers.js,bxBrandMenuKb | bxFeedNavKb | bxMenuKb | getBot | mainMenuBrandKb | mainMenuCreatorCurrentKb | mainMenuCreatorKb | processOrphanedAutohealBatch | registerStarsPaymentsHandlers | renderBxPublicView | renderHomeHub | wsMenuKb,a:go_dialogs | a:bx_inbox|ws:${…}|p:0|h:bo | a:bx_inbox|ws:0|p:0|h:mm | a:bx_inbox|ws:${…}|p:0|h:${…} | a:bx_inbox|ws:${…}|p:${…}|h:${…} | a:bx_inbox|ws:${…}|p:0|h:menu,english_or_internal_term,src/bot/bot.js:3496; src/bot/bot.js:3569; src/bot/bot.js:3607; src/bot/bot.js:4154; src/bot/bot.js:4158; src/bot/bot.js:5395; src/bot/bot.js:6212; src/bot/bot.js:6242
+🧹 Очистить,22,src/bot/bot.js,brandDirMultiPickKb | bxMultiPickKb | bxOfferTagsPickerKb | bxOfferWizTagsPickerKb | bxPickKb | folderViewKb | getBot | gwSponsorsReviewKb | renderAdminDmTemplateView | renderBrandBudgetBucketPicker | renderBrandNichePicker | renderWsProfileFormats | renderWsProfileVerticals,a:brand_niche_clear${…}|from:${…} | a:brand_bb_clear${…} | a:bd_mclear|k:${…}|p:${…} | a:bx_otclr|ws:${…}|k:${…} | a:bx_wtagclr|ws:${…}|k:${…} | a:bx_fset|ws:${…}|k:${…}|v:all|rp:${…}|pg:${…}|h:${…}|r:${…} | a:bx_mclear|ws:${…}|k:${…}|p:${…}|h:${…}|r:${…} | a:gw_sponsors_clear|ws:${…} | a:ws_prof_vert_clear|ws:${…} | a:ws_prof_fmt_clear|ws:${…} | a:folder_clear_q|ws:${…}|f:${…} | a:ws_prof_clear|ws:${…}|f:ig,generic_cta | destructive_or_reset,src/bot/bot.js:6827; src/bot/bot.js:6870; src/bot/bot.js:7475; src/bot/bot.js:8203; src/bot/bot.js:8361; src/bot/bot.js:8529; src/bot/bot.js:8556; src/bot/bot.js:8788
+⬅️ Система,19,src/bot/bot.js,getBot | renderAdminFounder | renderAdminFounderLinks | renderAdminFounderTexts | renderAdminHardSkipHits | renderAdminHardSkipHome | renderAdminHardSkipView | renderAdminModerators | renderAdminPaymentsFallback | renderAdminQStashStatus,a:admin_sys,,src/bot/bot.js:30746; src/bot/bot.js:30925; src/bot/bot.js:30949; src/bot/bot.js:30969; src/bot/bot.js:30995; src/bot/bot.js:31102; src/bot/bot.js:31154; src/bot/bot.js:31198
+💳 Купить ещё,17,api/qstash/monetization-retry.js | src/bot/bot.js,acceptBrandApplication | brandReplyKb | getBot | processOrphanedAutohealBatch | renderBrandLeadDialog | renderWsPublicProfile,a:brand_pass|ws:0|ret:wsp|rws:${…} | a:brand_pass|ws:0|ret:app|id:${…}|s:${…}|p:${…} | a:brand_pass|ws:0|ret:wsp|rws:,,src/bot/bot.js:9838; src/bot/bot.js:9841; src/bot/bot.js:11832; src/bot/bot.js:11844; src/bot/bot.js:11847; src/bot/bot.js:11853; src/bot/bot.js:12556; src/bot/bot.js:12560
+🗑 Убрать,17,src/bot/bot.js | src/bot/gwNotify.js,brandAppNoticeKb | bxMediaKb | creatorBrandAppNoticeKb | getBot | gwMediaKb | notifyGiveawayEnded | notifyGiveawayWinnersReady | notifyReplyKb | renderCuratorGiveawayOwnerNotifySend | sendLeadTemplateReply,a:nd | a:gw_media_clear|ws:${…} | a:bx_media_clear|ws:${…}|o:${…}|back:${…}|p:${…},,src/bot/bot.js:2301; src/bot/bot.js:8814; src/bot/bot.js:12801; src/bot/bot.js:13163; src/bot/bot.js:15213; src/bot/bot.js:16048; src/bot/bot.js:19094; src/bot/bot.js:21329
+➡️,16,src/bot/bot.js,bxFeedNavKb | bxPickKb | renderAdminAudit | renderAdminDmTemplateView | renderAdminDmTemplates | renderAdminHardSkipHits | renderAdminHardSkipHome | renderBroadcastBlocked | renderBroadcastList | renderBxMyArchive | renderCuratorAudit | renderCuratorInbox | renderLeadNotesViewer | renderOfficialQueue | renderProfileMatchingResults,a:bx_fpick|ws:${…}|k:${…}|rp:${…}|pg:${…}|h:${…}|r:${…} | a:bx_feed|ws:${…}|p:${…}|h:${…} | a:pm_run|ws:${…}|p:${…} | a:cur_inbox|s:${…}|p:${…}|af:${…} | a:lead_notes|id:${…}|w:${…}|n:${…}|s:${…}|p:${…}${…} | a:bx_my_arch|ws:${…}|p:${…} | a:off_queue|p:${…} | a:hs_home|p:${…} | a:hs_hits|p:${…}|r:${…} | a:admin_umsg_tpls|p:${…} | a:aud|h:${…}|p:${…},,src/bot/bot.js:5801; src/bot/bot.js:8524; src/bot/bot.js:8660; src/bot/bot.js:9588; src/bot/bot.js:12213; src/bot/bot.js:12214; src/bot/bot.js:12670; src/bot/bot.js:16002
+✍️ Ответить,15,src/bot/bot.js,_renderTplFlowBrandApp | _renderTplFlowLead | bxThreadKb | forwardSupportUserFollowup | getBot | renderAdminSupportThread | renderBrandAppView | renderBrandDealView | renderBrandLeadDialog | renderLeadView,a:adm_support_reply|tg:${…}|uid:${…}${…} | a:bx_thread_reply|ws:${…}|t:${…}|p:${…}|b:${…}${…}|h:${…} | a:lead_reply|id:${…}|w:${…}|s:${…}|p:${…}${…} | a:blead_reply|id:${…}|w:${…} | a:brand_deal_reply|id:${…}|b:${…}|p:${…}${…} | a:brand_app_reply|id:${…}|s:${…}|p:${…} | a:lead_reply|id:${…}|ws:${…}|s:new|p:0 | a:brand_app_reply|id:,,src/bot/bot.js:1228; src/bot/bot.js:8602; src/bot/bot.js:12406; src/bot/bot.js:12548; src/bot/bot.js:13622; src/bot/bot.js:13802; src/bot/bot.js:14286; src/bot/bot.js:14372
+⬅️,15,src/bot/bot.js,bxFeedNavKb | bxPickKb | renderAdminAudit | renderAdminDmTemplateView | renderAdminDmTemplates | renderAdminHardSkipHits | renderAdminHardSkipHome | renderBroadcastBlocked | renderBroadcastList | renderBxMyArchive | renderCuratorAudit | renderCuratorInbox | renderLeadNotesViewer | renderOfficialQueue | renderProfileMatchingResults,a:bx_fpick|ws:${…}|k:${…}|rp:${…}|pg:${…}|h:${…}|r:${…} | a:bx_feed|ws:${…}|p:${…}|h:${…} | a:pm_run|ws:${…}|p:${…} | a:cur_inbox|s:${…}|p:${…}|af:${…} | a:lead_notes|id:${…}|w:${…}|n:${…}|s:${…}|p:${…}${…} | a:bx_my_arch|ws:${…}|p:${…} | a:off_queue|p:${…} | a:hs_home|p:${…} | a:hs_hits|p:${…}|r:${…} | a:admin_umsg_tpls|p:${…} | a:aud|h:${…}|p:${…},,src/bot/bot.js:5800; src/bot/bot.js:8522; src/bot/bot.js:8659; src/bot/bot.js:9587; src/bot/bot.js:12211; src/bot/bot.js:12669; src/bot/bot.js:16001; src/bot/bot.js:17625
+👤 Карточка,15,src/bot/bot.js,forwardSupportUserFollowup | getBot | renderAdminDmTemplateView | renderAdminSupportThread | sendAdminMessageToUser,a:adm_ucard|id:${…}|f:all|p:0 | a:adm_ucard|id:${…}|f:${…}|p:${…},,src/bot/bot.js:1229; src/bot/bot.js:19802; src/bot/bot.js:20073; src/bot/bot.js:20297; src/bot/bot.js:20468; src/bot/bot.js:32045; src/bot/bot.js:32236; src/bot/bot.js:38726
+⬅️ К карточке,13,src/bot/bot.js,getBot | renderAdminUserNote | sendAdminMessageToUser,a:adm_ucard|id:${…}|f:${…}|p:${…},,src/bot/bot.js:20585; src/bot/bot.js:31333; src/bot/bot.js:31340; src/bot/bot.js:31470; src/bot/bot.js:31503; src/bot/bot.js:31598; src/bot/bot.js:31767; src/bot/bot.js:31804
+📣 Мои каналы,12,src/bot/bot.js | src/bot/payments/starsHandlers.js,ensureWorkspaceForOwner | getBot | mainMenuCreatorKb | mainMenuKb | registerStarsPaymentsHandlers | renderBrandApply | renderGwNewGate | renderGwNewWorkspacePicker | renderHomeHub | wsMenuKb,a:ws_list,,src/bot/bot.js:2005; src/bot/bot.js:2031; src/bot/bot.js:3443; src/bot/bot.js:3490; src/bot/bot.js:4157; src/bot/bot.js:5405; src/bot/bot.js:7797; src/bot/bot.js:7815
+🚀 Подключить канал,12,src/bot/bot.js,ensureWorkspaceForOwner | getBot | mainMenuCreatorKb | mainMenuKb | renderBrandApply | renderCreatorCurrentMenu | renderGwNewGate | renderGwNewWorkspacePicker | renderWsList,a:setup,,src/bot/bot.js:2004; src/bot/bot.js:2030; src/bot/bot.js:3442; src/bot/bot.js:3489; src/bot/bot.js:4361; src/bot/bot.js:7798; src/bot/bot.js:9071; src/bot/bot.js:9075
+🔄 Обновить,11,src/bot/bot.js,curatorModeMenuKb | getBot | inviteKeyboardMarkup | mainMenuKb | renderAdminInviteVisibilityHome | renderAdminSupportThread | renderBroadcastView | renderBxPublicView | renderWsPublicProfile,a:main_menu | a:cur_home | a:bx_pub|ws:${…}|o:${…}|p:${…}|h:${…} | a:admin_support_view|id:${…}|s:${…}|p:${…} | a:admin_invites | a:share,generic_cta,src/bot/bot.js:3463; src/bot/bot.js:4456; src/bot/bot.js:11831; src/bot/bot.js:16498; src/bot/bot.js:26827; src/bot/bot.js:26917; src/bot/bot.js:34220; src/bot/bot.js:38196
+🗑 Удалить,11,src/bot/bot.js,bxThreadKb | getBot | gwOpenKb | renderAdminDmTemplateView | renderBrandAppView | renderLeadView,a:bx_thread_del_q|ws:${…}|t:${…}|p:${…}|b:${…}${…}|h:${…} | a:gw_del_q|i:${…}|ws:${…} | a:lead_del_q|id:${…}|w:${…}|s:${…}|p:${…}${…} | a:brand_app_del_q|id:${…}|s:${…}|p:${…} | a:brand_app_del_do|id:${…}|s:${…}|p:${…} | a:lead_del_do|id:${…}|w:${…}|s:${…}|p:${…}${…} | a:admin_umsg_tpl_del|tid:${…}|p:${…} | a:bx_thread_del_do|ws:${…}|t:${…}${…} | a:folder_delete_do|ws:${…}|f:${…} | a:admin_umsg_tpl_del_q|tid:${…}|p:${…},generic_cta | destructive_or_reset,src/bot/bot.js:8635; src/bot/bot.js:8920; src/bot/bot.js:12443; src/bot/bot.js:13794; src/bot/bot.js:13811; src/bot/bot.js:27525; src/bot/bot.js:27979; src/bot/bot.js:32317
+➡️ Далее,10,src/bot/bot.js,bxInboxNavKb | bxOfferTagsKb | renderAdminUsers | renderBrandAppsList | renderBrandDealsList | renderBrandsDirectory | renderBxOfferDraftStep | renderCreatorApplications | renderWsLeadsList,a:brands_home|p:${…} | a:bx_otnext|ws:${…} | a:bx_w6|ws:${…} | a:bx_inbox|ws:${…}|p:${…}|h:${…} | a:ws_leads|w:${…}|s:${…}|p:${…}${…} | a:brand_apps|ws:0|s:${…}|p:${…} | a:brand_deals|ws:0|st:${…}|p:${…} | a:my_apps|p:${…} | a:admin_users|f:${…}|p:${…},generic_cta,src/bot/bot.js:7653; src/bot/bot.js:8176; src/bot/bot.js:8303; src/bot/bot.js:8571; src/bot/bot.js:12087; src/bot/bot.js:12088; src/bot/bot.js:13404; src/bot/bot.js:13515
+⬅️ Инвайты,9,src/bot/bot.js,inviteRedeemConfirmKeyboard | inviteRedeemSuccessKeyboard | inviteRewardsCenterKeyboard | inviteStartNoticeKeyboard | renderInviteCardKeyboard | renderInviteHistoryKeyboard | renderInviteLinkKeyboard | renderInvitePerformanceKeyboard | renderInvitePointsKeyboard,a:share,,src/bot/bot.js:2739; src/bot/bot.js:2768; src/bot/bot.js:2796; src/bot/bot.js:2941; src/bot/bot.js:3006; src/bot/bot.js:3066; src/bot/bot.js:3127; src/bot/bot.js:3243
+⬅️ К composer,9,src/bot/bot.js,getBot | renderBroadcastAudiencePicker | renderBroadcastPreview | renderBroadcastSimpleButtonPicker,simple,mixed_language,src/bot/bot.js:19855; src/bot/bot.js:19871; src/bot/bot.js:32371; src/bot/bot.js:32379; src/bot/bot.js:32483; src/bot/bot.js:32496; src/bot/bot.js:37867; src/bot/bot.js:37984
+⬅️ К списку,9,src/bot/bot.js,renderAdminDmTemplateView | renderAdminUserCard | renderBroadcastBlocked | renderBroadcastView | sendAdminUsersCsv,a:admin_users|f:${…}|p:${…} | a:admin_users|f:${…}|p:0,,src/bot/bot.js:38115; src/bot/bot.js:38197; src/bot/bot.js:38209; src/bot/bot.js:38251; src/bot/bot.js:39852; src/bot/bot.js:39914; src/bot/bot.js:40603; src/bot/bot.js:40726
+⭐️ PRO,9,src/bot/bot.js | src/bot/payments/starsHandlers.js,getBot | mainMenuCreatorCurrentKb | mainMenuCreatorKb | mainMenuKb | registerStarsPaymentsHandlers | wsSettingsKb,a:pro_home | a:ws_pro|ws:${…},,src/bot/bot.js:3445; src/bot/bot.js:3498; src/bot/bot.js:3571; src/bot/bot.js:5427; src/bot/bot.js:5433; src/bot/bot.js:21311; src/bot/bot.js:34779; src/bot/bot.js:36203
+🏷 Каталог брендов,8,src/bot/bot.js,bxBrandOnlyNoticeKb | bxMenuKb | getBot | kbBrandApplyMore | mainMenuCreatorCurrentKb | mainMenuCreatorKb | renderCreatorApplications | renderHomeHub,a:brands_home|p:0 | a:brands_home | a:brands_home|p:${…},,src/bot/bot.js:3493; src/bot/bot.js:3566; src/bot/bot.js:4158; src/bot/bot.js:4578; src/bot/bot.js:6216; src/bot/bot.js:14827; src/bot/bot.js:15640; src/bot/bot.js:25093
+👤 Профиль,8,src/bot/bot.js,getBot | renderWsProfileContactsClearMenu | sendWsIgTemplateMessage | sendWsShareTextMessage | wsDisconnectedKb,a:ws_profile|ws:${…},,src/bot/bot.js:5455; src/bot/bot.js:11036; src/bot/bot.js:11092; src/bot/bot.js:11340; src/bot/bot.js:21841; src/bot/bot.js:22845; src/bot/bot.js:22874; src/bot/bot.js:29104
+📣 Начать заново,8,src/bot/bot.js,getBot | renderBroadcastAudiencePicker | renderBroadcastPreview,,,src/bot/bot.js:21073; src/bot/bot.js:21196; src/bot/bot.js:32523; src/bot/bot.js:32543; src/bot/bot.js:32577; src/bot/bot.js:32638; src/bot/bot.js:37948; src/bot/bot.js:37995
+🧹 Кабинет куратора,8,src/bot/bot.js,bxBrandMenuKb | bxMenuKb | getBot | mainMenuCreatorCurrentKb | mainMenuCreatorKb | renderCreatorCurrentMenu | renderHomeHub,a:cur_home,,src/bot/bot.js:3508; src/bot/bot.js:3510; src/bot/bot.js:3577; src/bot/bot.js:4152; src/bot/bot.js:4364; src/bot/bot.js:6221; src/bot/bot.js:6252; src/bot/bot.js:21450
+🧾 Лог,7,src/bot/bot.js | src/bot/gwNotify.js,curatorGwKb | getBot | gwOpenKb | notifyGiveawayEnded | notifyGiveawayWinnersReady | renderCuratorGiveawayStats | renderGwWinnersView,a:gw_log|i:${…} | a:cur_gw_log|ws:${…}|i:${…},,src/bot/bot.js:8886; src/bot/bot.js:18582; src/bot/bot.js:18866; src/bot/bot.js:18925; src/bot/bot.js:37367; src/bot/gwNotify.js:49; src/bot/gwNotify.js:113
+↩️ Назад,6,src/bot/bot.js,getBot,a:ws_profile|ws:${…},generic_cta,src/bot/bot.js:26732; src/bot/bot.js:27257; src/bot/bot.js:28818; src/bot/bot.js:28833; src/bot/bot.js:28847; src/bot/bot.js:28862
+⬅️ Операции,6,src/bot/bot.js,getBot | renderAdminAudit | renderAdminMetrics | renderAdminUsers,a:admin_ops,,src/bot/bot.js:30549; src/bot/bot.js:31629; src/bot/bot.js:32047; src/bot/bot.js:40244; src/bot/bot.js:40404; src/bot/bot.js:40594
+🎬 UGC / Офферы,6,src/bot/bot.js,getBot | mainMenuCreatorCurrentKb | mainMenuCreatorKb | mainMenuKb | wsMenuKb,a:bx_home | a:bx_open|ws:${…},mixed_language,src/bot/bot.js:3448; src/bot/bot.js:3492; src/bot/bot.js:3565; src/bot/bot.js:5398; src/bot/bot.js:24427; src/bot/bot.js:28492
+📨 Инвайты,6,src/bot/bot.js,getBot | mainMenuBrandKb | mainMenuCreatorKb | mainMenuKb | renderHomeHub | renderRoleSelection,a:share,,src/bot/bot.js:3462; src/bot/bot.js:3515; src/bot/bot.js:3634; src/bot/bot.js:4165; src/bot/bot.js:4300; src/bot/bot.js:31020
+⚡ Шаблоны,5,src/bot/bot.js,getBot | renderBrandAppView | renderBrandDealView | renderLeadView,a:lead_tpls|id:${…}|w:${…}|s:${…}|p:${…}${…} | a:brand_deal_tpls|id:${…}|b:${…}|p:${…}${…} | a:brand_app_tpls|id:${…}|s:${…}|p:${…} | a:lead_tpls|id:${…}|ws:${…}|s:new|p:0,,src/bot/bot.js:12407; src/bot/bot.js:12427; src/bot/bot.js:13623; src/bot/bot.js:13803; src/bot/bot.js:21837
+✅ Верификация,5,src/bot/bot.js,bxMenuKb | mainMenuCreatorKb | onboardingKb | renderBrandProfileHome,a:verify_home,,src/bot/bot.js:3508; src/bot/bot.js:3511; src/bot/bot.js:4488; src/bot/bot.js:6219; src/bot/bot.js:6789
+✅ Отправить,5,src/bot/bot.js,getBot | renderBrandApplyPreview | renderCuratorGiveawayRemindQ,a:brand_apply_send|u:${…}|p:${…} | a:cur_gw_remind_send|ws:${…}|i:${…} | a:adm_umsg_send|tk:${…}|f:${…}|p:${…}|wn:1 | a:adm_umsg_send|tk:${…}|f:all|p:0|wn:1,,src/bot/bot.js:7885; src/bot/bot.js:18954; src/bot/bot.js:20578; src/bot/bot.js:31760; src/bot/bot.js:32230
+✍️ Изменить,5,src/bot/bot.js,getBot | gwSponsorsReviewKb | renderBrandApplyPreview | sendBrandApplyDraft,a:brand_apply_write|u:${…}|p:${…} | a:gw_sponsors_edit|ws:${…},,src/bot/bot.js:7887; src/bot/bot.js:7909; src/bot/bot.js:7915; src/bot/bot.js:8787; src/bot/bot.js:25825
+✍️ Написать в поддержку,5,src/bot/bot.js | src/bot/payments/starsHandlers.js,getBot | registerStarsPaymentsHandlers,a:support_write,,src/bot/bot.js:24455; src/bot/bot.js:25433; src/bot/bot.js:25437; src/bot/bot.js:25565; src/bot/payments/starsHandlers.js:35
+⭐️ Brand Plan,5,src/bot/bot.js | src/bot/payments/starsHandlers.js,getBot | registerStarsPaymentsHandlers | renderBrandPaywall,a:brand_plan|ws:${…} | a:brand_plan|ws:${…}|ret:${…} | a:brand_plan|ws:0,english_or_internal_term,src/bot/bot.js:17713; src/bot/bot.js:29356; src/bot/payments/starsHandlers.js:454; src/bot/payments/starsHandlers.js:518; src/bot/payments/starsHandlers.js:728
+🎁 Розыгрыши,5,src/bot/bot.js,getBot | mainMenuCreatorCurrentKb | mainMenuCreatorKb | mainMenuKb | wsMenuKb,a:gw_list | a:gw_list_ws|ws:${…},,src/bot/bot.js:3447; src/bot/bot.js:3499; src/bot/bot.js:3572; src/bot/bot.js:5402; src/bot/bot.js:24429
+🏠 Главное меню,5,src/bot/bot.js,getBot,a:menu,,src/bot/bot.js:21331; src/bot/bot.js:21393; src/bot/bot.js:24152; src/bot/bot.js:24246; src/bot/bot.js:35730
+🏷 Профиль бренда,5,src/bot/bot.js,brandTeamLockedKb | bxBrandMenuKb | getBot,a:brand_profile|ws:0|ret:brand_team | a:brand_profile|ws:${…}|ret:brand | a:brand_profile|ws:0|ret:verify | a:brand_profile|ws:${…}|ret:${…},,src/bot/bot.js:5996; src/bot/bot.js:6249; src/bot/bot.js:28647; src/bot/bot.js:28668; src/bot/bot.js:29355
+💎 Баллы,5,src/bot/bot.js,inviteKeyboardMarkup | inviteRedeemSuccessKeyboard | inviteRewardsCenterKeyboard | renderInviteHistoryKeyboard | renderInvitePerformanceKeyboard,a:share_points,,src/bot/bot.js:2793; src/bot/bot.js:2938; src/bot/bot.js:3000; src/bot/bot.js:3122; src/bot/bot.js:3145
+💳 Кредиты,5,src/bot/bot.js | src/bot/payments/starsHandlers.js,getBot | registerStarsPaymentsHandlers | renderAdminFounder,a:brand_pass|ws:0 | a:admin_founder_set_credits | a:brand_pass|ws:${…},,src/bot/bot.js:28512; src/bot/bot.js:40001; src/bot/payments/starsHandlers.js:455; src/bot/payments/starsHandlers.js:518; src/bot/payments/starsHandlers.js:647
+📁 Папки,5,src/bot/bot.js,getBot | mainMenuCreatorCurrentKb | mainMenuCreatorKb | mainMenuKb | wsMenuKb,a:folders_my | a:folders_home|ws:${…},,src/bot/bot.js:3452; src/bot/bot.js:3504; src/bot/bot.js:3575; src/bot/bot.js:5399; src/bot/bot.js:21708
+📄 История,5,src/bot/bot.js,inviteKeyboardMarkup | inviteRedeemSuccessKeyboard | inviteRewardsCenterKeyboard | renderInvitePerformanceKeyboard | renderInvitePointsKeyboard,a:share_history,,src/bot/bot.js:2794; src/bot/bot.js:2939; src/bot/bot.js:3001; src/bot/bot.js:3061; src/bot/bot.js:3148
+📊 Статистика,5,src/bot/bot.js,curatorGwKb | gwOpenKb | inviteKeyboardMarkup | renderInviteHistoryKeyboard | renderInvitePointsKeyboard,a:gw_stats|i:${…} | a:cur_gw_stats|ws:${…}|i:${…} | a:share_perf,,src/bot/bot.js:8885; src/bot/bot.js:18865; src/bot/bot.js:3060; src/bot/bot.js:3121; src/bot/bot.js:3144
+📎 Вставить,5,src/bot/bot.js,getBot | renderAdminDmTemplateView | renderAdminDmTemplates,a:adm_ph|r:umsg_free|id:${…}|f:${…}|p:${…} | a:adm_ph|r:umsg|id:${…}|f:${…}|p:${…} | a:adm_ph|r:tpl_list|p:${…} | a:adm_ph|r:tpl_view|tid:${…}|p:${…},,src/bot/bot.js:20583; src/bot/bot.js:31620; src/bot/bot.js:31765; src/bot/bot.js:39731; src/bot/bot.js:39763
+📝 Заметка,5,src/bot/bot.js,renderAdminDmTemplateView | renderAdminUserCard | renderLeadView,a:lead_note|id:${…}|w:${…}|s:${…}|p:${…}${…} | a:adm_unote|id:${…}|f:${…}|p:${…},,src/bot/bot.js:12413; src/bot/bot.js:12423; src/bot/bot.js:39927; src/bot/bot.js:39932; src/bot/bot.js:40697
+📝 Заявки,5,src/bot/bot.js,acceptBrandApplication | bxBrandMenuKb | mainMenuBrandKb | renderBrandAppView | renderHomeHub,a:brand_apps|ws:0|s:new|p:0 | a:brand_apps|ws:${…}|s:new|p:0 | a:brand_apps|ws:0|s:${…}|p:${…},,src/bot/bot.js:3608; src/bot/bot.js:4154; src/bot/bot.js:6243; src/bot/bot.js:13784; src/bot/bot.js:14564
+📨 Открыть заявку,5,api/qstash/monetization-retry.js | src/bot/bot.js,notifyReplyKb | processOrphanedAutohealBatch,a:brand_app_card|id:${…} | a:brand_app_view|id:${…}|s:in_progress|p:0 | a:brand_app_view|id:${…}|s:new|p:0,,src/bot/bot.js:2295; src/bot/bot.js:2297; api/qstash/monetization-retry.js:428; api/qstash/monetization-retry.js:450; api/qstash/monetization-retry.js:462
+📰 Лента креаторов,5,src/bot/bot.js,bxBrandMenuKb | getBot | mainMenuBrandKb,a:bx_feed|ws:0|p:0|h:mm | a:bx_feed|ws:${…}|p:0|h:bo,,src/bot/bot.js:3601; src/bot/bot.js:6236; src/bot/bot.js:23129; src/bot/bot.js:23150; src/bot/bot.js:23200
+🔁 Сменить бренд,5,src/bot/bot.js,mainMenuBrandKb | renderBrandAppsList | renderBrandDealView | renderBrandDealsList | renderBxInbox,a:bm_pick_brand|ret:menu | a:bm_pick_brand|ret:brand_apps|ws:0|p:0 | a:bm_pick_brand|ret:brand_deals|ws:0|p:0 | a:bm_pick_brand|ret:bx_inbox|ws:${…}|p:${…}|h:${…},,src/bot/bot.js:3627; src/bot/bot.js:13387; src/bot/bot.js:13478; src/bot/bot.js:13629; src/bot/bot.js:17809
+🧹 Сброс,5,src/bot/bot.js,renderAdminAudit | renderAdminUsers | renderBrandCollabTypesPicker | renderBrandGoalsTagsPicker | renderBrandReqTagsPicker,a:brand_gt_clear${…} | a:brand_rt_clear${…} | a:brand_ty_clear${…} | a:aud_reset|h:${…} | a:admin_users_reset|f:${…}|p:0,destructive_or_reset,src/bot/bot.js:6905; src/bot/bot.js:6939; src/bot/bot.js:6988; src/bot/bot.js:40393; src/bot/bot.js:40586
+${…} ${…},4,src/bot/bot.js,renderBrandBudgetBucketPicker | renderBrandCollabTypesPicker | renderBrandGoalsTagsPicker | renderBrandReqTagsPicker,a:brand_bb_set${…}|k:${…} | a:brand_gt_t${…}|k:${…} | a:brand_rt_t${…}|k:${…} | a:brand_ty_t${…}|k:${…},,src/bot/bot.js:6868; src/bot/bot.js:6902; src/bot/bot.js:6936; src/bot/bot.js:6984
+${…}${…},4,src/bot/bot.js,brandDirMultiPickKb | renderBmPickBrand | renderProfileMatchingPick | renderWsProfileVerticals,a:bms|u:${…}|rt:${…}|w:${…}|p:${…}|h:${…}|r:${…} | a:bd_mt|k:${…}|v:${…}|p:${…} | a:pm_tog|ws:${…}|t:${…}|k:${…} | a:ws_prof_vert_t|ws:${…}|v:${…},,src/bot/bot.js:3783; src/bot/bot.js:7471; src/bot/bot.js:9519; src/bot/bot.js:11403
+♻️ Сбросить,4,src/bot/bot.js,brandDirFiltersKb | bxFiltersKb | bxSmartKb | getBot,a:bd_freset|p:0 | a:bx_freset|ws:${…}|p:${…}|h:${…}|r:${…} | a:bx_smart_reset|ws:${…}|h:${…} | a:admin_umsg_tpl_reset|p:${…},destructive_or_reset,src/bot/bot.js:7388; src/bot/bot.js:8478; src/bot/bot.js:15733; src/bot/bot.js:32338
+✅ Закрыть,4,src/bot/bot.js,bxThreadKb | getBot | renderLeadView,a:bx_thread_close_q|ws:${…}|t:${…}|p:${…}|b:${…}${…}|h:${…} | a:lead_set|id:${…}|st:cl|w:${…}|s:${…}|p:${…}${…} | a:bx_thread_close_do|ws:${…}|t:${…}${…},,src/bot/bot.js:8627; src/bot/bot.js:12410; src/bot/bot.js:12430; src/bot/bot.js:34578
+🎁 Обменять,4,src/bot/bot.js,inviteKeyboardMarkup | renderInviteHistoryKeyboard | renderInvitePerformanceKeyboard | renderInvitePointsKeyboard,a:share_rewards,,src/bot/bot.js:3004; src/bot/bot.js:3064; src/bot/bot.js:3125; src/bot/bot.js:3149
+🎛 Фильтры креаторов,4,src/bot/bot.js,bxBrandMenuKb | bxFeedNavKb | bxSmartKb | mainMenuBrandKb,a:bx_filters|ws:0|p:0|h:mm|r:mm | a:bx_filters|ws:${…}|p:0|h:bo|r:bo | a:bx_filters|ws:${…}|p:${…}|h:${…}|r:bf | a:bx_filters|ws:${…}|p:0|h:${…}|r:bs,,src/bot/bot.js:3602; src/bot/bot.js:6237; src/bot/bot.js:8663; src/bot/bot.js:15731
+🎯 Smart Matching (подбор офферов),4,src/bot/bot.js | src/bot/payments/starsHandlers.js,getBot | registerStarsPaymentsHandlers | renderBrandPaywall | renderBrandPlan,a:match_home|ws:${…} | a:match_home|ws:${…}|ret:bp|bpr:${…},mixed_language,src/bot/bot.js:17713; src/bot/bot.js:18135; src/bot/bot.js:30261; src/bot/payments/starsHandlers.js:346
+🏷 Для брендов,4,src/bot/bot.js,getBot | mainMenuKb,a:bx_open|ws:0,,src/bot/bot.js:3452; src/bot/bot.js:3454; src/bot/bot.js:24426; src/bot/bot.js:28510
+👁 Превью,4,src/bot/bot.js,bxMediaKb | gwConfirmKb | gwMediaKb | renderBxView,a:gw_preview|ws:${…} | a:bx_media_preview|ws:${…}|o:${…}|back:${…}|p:${…},,src/bot/bot.js:8797; src/bot/bot.js:8810; src/bot/bot.js:16043; src/bot/bot.js:16200
+👑 Админка,4,src/bot/bot.js | src/bot/opsAlerts.js,flushOpsAlerts | onboardingKb | renderCreatorCurrentMenu | renderHomeHub,a:admin_home,,src/bot/bot.js:4163; src/bot/bot.js:4366; src/bot/bot.js:4490; src/bot/opsAlerts.js:237
+📁 Все папки,4,src/bot/bot.js,getBot,a:folders_home|ws:${…},,src/bot/bot.js:21524; src/bot/bot.js:21586; src/bot/bot.js:21624; src/bot/bot.js:21661
+📁 Открыть папку,4,src/bot/bot.js,getBot,a:folder_open|ws:${…}|f:${…},,src/bot/bot.js:21522; src/bot/bot.js:21584; src/bot/bot.js:21622; src/bot/bot.js:21659
+📣 Актуальное объявление,4,src/bot/bot.js,mainMenuBrandKb | mainMenuCreatorCurrentKb | mainMenuCreatorKb | renderHomeHub,a:notice,,src/bot/bot.js:3519; src/bot/bot.js:3578; src/bot/bot.js:3638; src/bot/bot.js:4166
+🔄 Сбросить ввод,4,src/bot/bot.js,brandAppReplyRecoveryKb | creatorBrandAppChatRecoveryKb | getBot | kbStatelessFallback,s:reset_input,destructive_or_reset,src/bot/bot.js:4774; src/bot/bot.js:12854; src/bot/bot.js:13055; src/bot/bot.js:24894
+🔎 Поиск,4,src/bot/bot.js,getBot | renderAdminAudit | renderAdminUsers | renderBrandDealsList,a:brand_deals_search|ws:0|st:${…}|p:${…} | a:pm_home|ws:0 | a:aud_search|h:${…} | a:admin_users_search|f:${…},,src/bot/bot.js:13489; src/bot/bot.js:25098; src/bot/bot.js:40392; src/bot/bot.js:40585
+🔥 Founder Sale,4,src/bot/bot.js,mainMenuBrandKb | mainMenuCreatorKb | renderAdminSystem | renderHomeHub,a:founder|ret:menu | a:founder|ret:home | a:admin_founder,english_or_internal_term,src/bot/bot.js:3502; src/bot/bot.js:3618; src/bot/bot.js:4143; src/bot/bot.js:38909
+🧭 Быстрый старт,4,src/bot/bot.js,getBot,a:guide,,src/bot/bot.js:24423; src/bot/bot.js:24457; src/bot/bot.js:25439; src/bot/bot.js:25571
+🪟 Открыть бренд,4,src/bot/bot.js,creatorBrandAppChatRecoveryKb | creatorBrandAppNoticeKb | kbBrandAppAcceptedMore | renderBrandAppCardForCreator,,,src/bot/bot.js:4600; src/bot/bot.js:13050; src/bot/bot.js:13160; src/bot/bot.js:14957
+${…}/${…},3,src/bot/bot.js,bxPickKb | renderAdminDmTemplateView | renderAdminDmTemplates,a:nop | a:admin_umsg_tpls|p:${…},,src/bot/bot.js:8523; src/bot/bot.js:39726; src/bot/bot.js:39833
+⋯ Ещё действия,3,src/bot/bot.js,kbBrandAppAcceptedDone | kbBrandApplyDone | kbBxPubDone,a:more|k:bx_pub_done|ws:${…}|o:${…}|p:${…}|back:${…} | a:more|k:brand_apply_done|u:${…}|p:${…}|inb:${…} | a:more|k:brand_app_accepted|id:${…}|u:${…},,src/bot/bot.js:4550; src/bot/bot.js:4571; src/bot/bot.js:4592
+⏳ В работе,3,src/bot/bot.js,forwardSupportUserFollowup | getBot,a:adm_support_qr|k:wip|tg:${…}|uid:${…}${…},,src/bot/bot.js:1235; src/bot/bot.js:19808; src/bot/bot.js:20303
+⚪ Без «Что дальше»,3,src/bot/bot.js,getBot,a:adm_umsg_send|tk:${…}|f:${…}|p:${…}|wn:0 | a:adm_umsg_send|tk:${…}|f:all|p:0|wn:0,,src/bot/bot.js:20579; src/bot/bot.js:31761; src/bot/bot.js:32231
+⛔ Подтвердить,3,src/bot/bot.js,getBot,a:adm_gift_revoke_do|t:${…}|u:${…} | a:adm_gift_revoke_batch|tk:${…} | a:adm_urevoke_do|id:${…}|t:${…}|f:${…}|p:${…},,src/bot/bot.js:20405; src/bot/bot.js:20411; src/bot/bot.js:31381
+⛔ Спам ${…},3,src/bot/bot.js,brandAppsTabsKb | curatorInboxTabsKb | leadListTabsKb,a:ws_leads|w:${…}|s:sp|p:0${…} | a:cur_inbox|s:sp|p:0|af:${…} | a:brand_apps|ws:0|s:spam|p:0,,src/bot/bot.js:11955; src/bot/bot.js:12120; src/bot/bot.js:13237
+✅ Без спонсоров (соло),3,src/bot/bot.js,getBot | gwSponsorsOptionalKb,a:gw_sponsors_skip|ws:${…},,src/bot/bot.js:8772; src/bot/bot.js:36714; src/bot/bot.js:36751
+✅ Закрыты ${…},3,src/bot/bot.js,brandAppsTabsKb | curatorInboxTabsKb | leadListTabsKb,a:ws_leads|w:${…}|s:cl|p:0${…} | a:cur_inbox|s:cl|p:0|af:${…} | a:brand_apps|ws:0|s:closed|p:0,,src/bot/bot.js:11954; src/bot/bot.js:12119; src/bot/bot.js:13236
+✅ Подтвердить,3,src/bot/bot.js,getBot,a:adm_gift_do|t:${…}|u:${…} | a:adm_gift_batch|tk:${…} | a:cur_gw_check_do|ws:${…}|i:${…},,src/bot/bot.js:20365; src/bot/bot.js:20372; src/bot/bot.js:26608
+✅ Понятно,3,src/bot/bot.js,maybeSendSystemNotice | renderHomeHub | sendAdminMessageToUser,a:usr_ack|src:admmsg | a:home_hint_ack,,src/bot/bot.js:1699; src/bot/bot.js:4169; src/bot/bot.js:40934
+✅ Принято,3,src/bot/bot.js,forwardSupportUserFollowup | getBot,a:adm_support_qr|k:ack|tg:${…}|uid:${…}${…},,src/bot/bot.js:1231; src/bot/bot.js:19804; src/bot/bot.js:20299
+✅ Сделали,3,src/bot/bot.js,forwardSupportUserFollowup | getBot,a:adm_support_qr|k:done|tg:${…}|uid:${…}${…},,src/bot/bot.js:1234; src/bot/bot.js:19807; src/bot/bot.js:20302
+✉️ Написать,3,src/bot/bot.js,renderAdminDmTemplateView | renderAdminUserCard | sendAdminMessageToUser,a:adm_umsg|id:${…}|f:all|p:0 | a:adm_umsg|id:${…}|f:${…}|p:${…},,src/bot/bot.js:39921; src/bot/bot.js:40696; src/bot/bot.js:40980
+✍️ Ввести списком,3,src/bot/bot.js,getBot | gwSponsorsOptionalKb,a:gw_sponsors_enter|ws:${…},,src/bot/bot.js:8774; src/bot/bot.js:36716; src/bot/bot.js:36753
+✍️ Ещё ответ,3,src/bot/bot.js,getBot,a:adm_support_reply|tg:${…}|uid:${…}${…},,src/bot/bot.js:20072; src/bot/bot.js:20467; src/bot/bot.js:32044
+✍️ Написать заявку,3,src/bot/bot.js,renderBrandApply | renderBrandApplyPreview | sendBrandApplyDraft,a:brand_apply_write|u:${…}|p:${…},,src/bot/bot.js:7842; src/bot/bot.js:7873; src/bot/bot.js:7902
+❓ Нужны детали,3,src/bot/bot.js,forwardSupportUserFollowup | getBot,a:adm_support_qr|k:need|tg:${…}|uid:${…}${…},,src/bot/bot.js:1232; src/bot/bot.js:19805; src/bot/bot.js:20300
+➕ Добавить по @username,3,src/bot/bot.js,brandTeamKb | renderCuratorList | renderWsEditors,a:cur_add_username|ws:${…} | a:bm_add_username|ws:${…}|ret:${…} | a:ws_editor_add_username|ws:${…},mixed_language,src/bot/bot.js:5602; src/bot/bot.js:5978; src/bot/bot.js:15463
+🆕 Новые ${…},3,src/bot/bot.js,brandAppsTabsKb | curatorInboxTabsKb | leadListTabsKb,a:ws_leads|w:${…}|s:n|p:0${…} | a:cur_inbox|s:n|p:0|af:${…} | a:brand_apps|ws:0|s:new|p:0,,src/bot/bot.js:11951; src/bot/bot.js:12116; src/bot/bot.js:13233
+🎁 Открыть конкурс,3,src/bot/bot.js | src/bot/gwNotify.js,notifyGiveawayEnded | notifyGiveawayWinnersReady | renderCuratorGiveawayOwnerNotifySend,a:gw_open|i:${…},,src/bot/bot.js:19090; src/bot/gwNotify.js:43; src/bot/gwNotify.js:109
+🎯 Цели: ${…},3,src/bot/bot.js,bxFiltersKb | bxOfferTagsKb | bxOfferWizTagsHomeKb,a:bx_otpick|ws:${…}|k:goals | a:bx_wtagpick|ws:${…}|k:goals | a:bx_mpick|ws:${…}|k:goals|p:${…}|h:${…}|r:${…},,src/bot/bot.js:8172; src/bot/bot.js:8339; src/bot/bot.js:8473
+🏷 Я бренд,3,src/bot/bot.js,bxBrandOnlyNoticeKb | getBot | onboardingKb,a:onb_brand | a:ui_mode_set|m:brand|ret:menu,,src/bot/bot.js:4484; src/bot/bot.js:15641; src/bot/bot.js:25111
+👤 Профиль канала,3,src/bot/bot.js,getBot | wsSettingsKb,a:ws_profile|ws:${…},,src/bot/bot.js:5423; src/bot/bot.js:5430; src/bot/bot.js:28623
+👥 Editors,3,src/bot/bot.js,foldersHomeKb | getBot,a:ws_editors|ws:${…},,src/bot/bot.js:15348; src/bot/bot.js:15353; src/bot/bot.js:21706
+💬 В работе ${…},3,src/bot/bot.js,brandAppsTabsKb | curatorInboxTabsKb | leadListTabsKb,a:ws_leads|w:${…}|s:ip|p:0${…} | a:cur_inbox|s:ip|p:0|af:${…} | a:brand_apps|ws:0|s:in_progress|p:0,,src/bot/bot.js:11952; src/bot/bot.js:12117; src/bot/bot.js:13234
+💬 Открыть диалог,3,api/qstash/monetization-retry.js | src/bot/bot.js,getBot | processOrphanedAutohealBatch,a:bx_thread|ws:${…}|t:${…}|p:0|b:inbox|h:${…} | a:bx_thread|ws:${…}|t:${…}|p:${…}|b:${…}${…}|h:${…} | a:bx_thread|ws:${…}|t:${…}|p:0|b:inbox|o:${…}|h:menu,,src/bot/bot.js:23315; src/bot/bot.js:23338; api/qstash/monetization-retry.js:791
+📁 ${…} (${…}),3,src/bot/bot.js,foldersHomeKb | getBot,a:folder_open|ws:${…}|f:${…} | a:bx_partner_folder_set|ws:${…}|o:${…}|f:${…} | a:gw_sponsors_use_folder|ws:${…}|f:${…},,src/bot/bot.js:15359; src/bot/bot.js:35999; src/bot/bot.js:36174
+📁 Из папки,3,src/bot/bot.js,getBot | gwSponsorsOptionalKb,a:gw_sponsors_from_folder|ws:${…},,src/bot/bot.js:8776; src/bot/bot.js:36718; src/bot/bot.js:36755
+📎 Требования: ${…},3,src/bot/bot.js,bxFiltersKb | bxOfferTagsKb | bxOfferWizTagsHomeKb,a:bx_otpick|ws:${…}|k:req | a:bx_wtagpick|ws:${…}|k:req | a:bx_mpick|ws:${…}|k:req|p:${…}|h:${…}|r:${…},,src/bot/bot.js:8173; src/bot/bot.js:8341; src/bot/bot.js:8475
+📝 Заметки,3,src/bot/bot.js,curatorGwKb | getBot,a:cur_gw_note_q|ws:${…}|i:${…} | a:lead_notes|id:${…}|w:${…}|n:${…}|s:${…}|p:${…}${…},,src/bot/bot.js:18869; src/bot/bot.js:22146; src/bot/bot.js:22171
+📣 Напомнить проверить,3,src/bot/bot.js,curatorGwKb | gwOpenKb | renderGwStats,a:gw_remind_q|i:${…} | a:cur_gw_remind_q|ws:${…}|i:${…},,src/bot/bot.js:8897; src/bot/bot.js:18627; src/bot/bot.js:18871
+📣 Офиц.канал,3,src/bot/bot.js,renderBxPublicView | renderBxView,a:off_manage|ws:${…}|o:${…}|p:${…}|back:${…},,src/bot/bot.js:16204; src/bot/bot.js:16220; src/bot/bot.js:16517
+📤 Outbox,3,src/bot/bot.js,getBot | renderAdminComms,a:admin_outbox|p:0,english_or_internal_term,src/bot/bot.js:20647; src/bot/bot.js:31625; src/bot/bot.js:38530
+📨 Мои заявки,3,src/bot/bot.js,mainMenuCreatorCurrentKb | mainMenuCreatorKb | renderHomeHub,a:my_apps|p:0,,src/bot/bot.js:3495; src/bot/bot.js:3568; src/bot/bot.js:4157
+🔁 Переключить режим,3,src/bot/bot.js,getBot | renderVerifyHome,,,src/bot/bot.js:23488; src/bot/bot.js:28563; src/bot/bot.js:37598
+🔎 #${…},3,src/bot/bot.js | src/bot/cron.js,broadcastTick | getBot | renderBxFeed,a:bx_pub|ws:${…}|o:${…}|p:${…}|h:${…} | a:bx_pub|ws:${…}|o:${…}|p:0|h:bo | a:bc_view|id:${…},,src/bot/bot.js:15918; src/bot/bot.js:23148; src/bot/cron.js:1747
+🔎 Открыть,3,src/bot/bot.js,getBot | kbBxPubDone | kbBxPubMore,a:bx_view|ws:${…}|o:${…}|back:${…}|p:${…} | a:lead_view|id:${…}|ws:${…}|s:new|p:0,,src/bot/bot.js:4548; src/bot/bot.js:4560; src/bot/bot.js:21836
+🔎 Поиск креаторов,3,src/bot/bot.js,bxBrandMenuKb | getBot | mainMenuBrandKb,a:pm_home|ws:0 | a:pm_home|ws:${…},,src/bot/bot.js:3605; src/bot/bot.js:6240; src/bot/bot.js:24209
+🔥 Featured,3,src/bot/bot.js | src/bot/payments/starsHandlers.js,getBot | registerStarsPaymentsHandlers | renderBrandPlan,a:feat_home|ws:${…}|ret:bp|bpr:${…},english_or_internal_term,src/bot/bot.js:18136; src/bot/bot.js:30349; src/bot/payments/starsHandlers.js:402
+🗄 В архив,3,src/bot/bot.js,renderBxView,a:bx_del_q|ws:${…}|o:${…}|p:${…},,src/bot/bot.js:16228; src/bot/bot.js:16232; src/bot/bot.js:16235
+🗑 ${…},3,src/bot/bot.js,brandManagersListKb | curListKb | renderAdminModerators,a:bm_rm_q|ws:0|u:${…} | a:cur_rm_q|ws:${…}|u:${…} | a:admin_mod_rm|uid:${…},,src/bot/bot.js:6150; src/bot/bot.js:6195; src/bot/bot.js:40276
+🚀 Опубликовать,3,src/bot/bot.js,getBot,,,src/bot/bot.js:20816; src/bot/bot.js:20905; src/bot/bot.js:20959
+🚀 Подключить ещё,3,src/bot/bot.js,renderWsInactiveList | renderWsList,a:setup,,src/bot/bot.js:9124; src/bot/bot.js:9141; src/bot/bot.js:9169
+🛡 Модерация,3,src/bot/bot.js,onboardingKb | renderCreatorCurrentMenu | renderHomeHub,a:mod_home,,src/bot/bot.js:4162; src/bot/bot.js:4365; src/bot/bot.js:4489
+🤝 Бартер,3,src/bot/bot.js,bxCompKb | gwNewStepPrizeKb | renderBrandDealTemplates,a:bx_comp|ws:${…}|p:barter | a:gw_prize|ws:${…}|t:barter | a:brand_deal_tpl|id:${…}|k:barter|b:${…}|p:${…}${…},,src/bot/bot.js:8155; src/bot/bot.js:8672; src/bot/bot.js:14043
+🧑‍💼 Я менеджер бренда,3,src/bot/bot.js,getBot | mainMenuBrandKb,a:bm_home,,src/bot/bot.js:3622; src/bot/bot.js:24206; src/bot/bot.js:29517
+🧭 Помощь,3,src/bot/bot.js,brandAppReplyRecoveryKb | creatorBrandAppChatRecoveryKb | kbStatelessFallback,s:help,,src/bot/bot.js:4773; src/bot/bot.js:12853; src/bot/bot.js:13054
+🧭 Что такое спонсоры?,3,src/bot/bot.js,getBot | gwSponsorsOptionalKb,a:gw_sponsors_help|ws:${…},,src/bot/bot.js:8778; src/bot/bot.js:36720; src/bot/bot.js:36757
+🧾 История,3,src/bot/bot.js,wsDisconnectedKb | wsSettingsKb,a:ws_history|ws:${…},,src/bot/bot.js:5426; src/bot/bot.js:5431; src/bot/bot.js:5456
+🪟 Витрина,3,api/qstash/monetization-retry.js,processOrphanedAutohealBatch,a:wsp_open|ws:${…} | a:wsp_open|ws:${…}|m:ro,,api/qstash/monetization-retry.js:542; api/qstash/monetization-retry.js:579; api/qstash/monetization-retry.js:607
+tg:${…},2,src/bot/bot.js,renderAdminHardSkipHits | renderAdminHardSkipHome,a:hs_view|tg:${…},,src/bot/bot.js:39366; src/bot/bot.js:39454
+Категория: ${…},2,src/bot/bot.js,brandDirFiltersKb | bxFiltersKb,a:bd_fpick|k:cat|p:${…} | a:bx_fpick|ws:${…}|k:cat|rp:${…}|pg:0|h:${…}|r:${…},,src/bot/bot.js:7377; src/bot/bot.js:8469
+Оплата: ${…},2,src/bot/bot.js,brandDirFiltersKb | bxFiltersKb,a:bd_fpick|k:comp|p:${…} | a:bx_fpick|ws:${…}|k:comp|rp:${…}|pg:0|h:${…}|r:${…},,src/bot/bot.js:7380; src/bot/bot.js:8472
+Формат: ${…},2,src/bot/bot.js,brandDirFiltersKb | bxFiltersKb,a:bd_fpick|k:type|p:${…} | a:bx_fpick|ws:${…}|k:type|rp:${…}|pg:0|h:${…}|r:${…},,src/bot/bot.js:7378; src/bot/bot.js:8470
+⏭ Пропустить,2,src/bot/bot.js,bxOfferTagsKb | gwMediaKb,a:bx_otskip|ws:${…} | a:gw_media_skip|ws:${…},,src/bot/bot.js:8175; src/bot/bot.js:8817
+⏸ Пауза,2,src/bot/bot.js,renderBroadcastView | renderBxView,a:bx_pause|ws:${…}|o:${…},,src/bot/bot.js:16227; src/bot/bot.js:38186
+⚡ ${…},2,src/bot/bot.js,renderBroadcastSimpleButtonPicker,,,src/bot/bot.js:37860; src/bot/bot.js:37861
+⛔ Ещё забрать,2,src/bot/bot.js,getBot,a:adm_gift_revoke,destructive_or_reset,src/bot/bot.js:31153; src/bot/bot.js:31197
+⛔ Забрать PRO,2,src/bot/bot.js,getBot | renderAdminUserCard,a:adm_gift_revoke_input|t:pro | a:adm_urevoke_q|id:${…}|t:pro|f:${…}|p:${…},mixed_language | destructive_or_reset,src/bot/bot.js:30944; src/bot/bot.js:40716
+✅ Send,2,src/bot/bot.js,renderBroadcastPreview | renderBroadcastSimpleComposer,,,src/bot/bot.js:37934; src/bot/bot.js:38063
+✅ Включено: осталось ${…} в этом месяце,2,src/bot/bot.js,renderFeaturedHome | renderMatchingHome,,long_button,src/bot/bot.js:18263; src/bot/bot.js:18320
+"✅ Да, удалить",2,src/bot/bot.js,getBot,a:acc_del_do | a:gw_del_do|i:${…}|ws:${…},destructive_or_reset,src/bot/bot.js:25467; src/bot/bot.js:36274
+✅ Опубликовать,2,src/bot/bot.js,notifyOfficialQueueAdmins | renderBxOfferPreviewStep,a:bx_publish|ws:${…} | a:off_pub|ws:${…}|o:${…}|p:0,,src/bot/bot.js:8436; src/bot/bot.js:16624
+✅ Принять,2,src/bot/bot.js,renderBrandAppView | renderLeadView,a:lead_tpl_send|id:${…}|k:discuss|w:${…}|s:${…}|p:${…}${…} | a:brand_app_accept|id:${…}|s:${…}|p:${…},,src/bot/bot.js:12419; src/bot/bot.js:13788
+✅ Удалить,2,src/bot/bot.js,brandManagerRemoveConfirmKb | getBot,a:bm_rm_ok|ws:0|u:${…} | a:ws_editor_rm_do|ws:${…}|u:${…},destructive_or_reset,src/bot/bot.js:6158; src/bot/bot.js:35967
+✉️ Ещё сообщение,2,src/bot/bot.js,sendAdminMessageToUser,,,src/bot/bot.js:40999; src/bot/bot.js:41001
+✨ PRO Креатор (${…}д),2,src/bot/bot.js,getBot,a:adm_gift_input|t:pro | a:adm_ugift_do|id:${…}|t:pro|f:${…}|p:${…},mixed_language,src/bot/bot.js:30921; src/bot/bot.js:31339
+✨ Расширенный,2,src/bot/bot.js,renderBrandProfileHome,a:brand_profile_more${…},,src/bot/bot.js:6765; src/bot/bot.js:6781
+❌ Выйти из канала,2,src/bot/bot.js,curatorWsKb | renderCuratorWorkspace,a:cur_leave_q|ws:${…},,src/bot/bot.js:18793; src/bot/bot.js:18810
+❌ Снять пин,2,src/bot/bot.js,getBot | renderWsProPinPick,a:ws_pro_pin_clear|ws:${…},,src/bot/bot.js:15292; src/bot/bot.js:30430
+➕ Новая папка,2,src/bot/bot.js,foldersHomeKb,a:folder_new|ws:${…},,src/bot/bot.js:15347; src/bot/bot.js:15351
+➕ Новый розыгрыш,2,src/bot/bot.js,renderGwList | wsMenuKb,a:gw_new|ws:${…},,src/bot/bot.js:5401; src/bot/bot.js:18457
+➡️ Дальше,2,src/bot/bot.js,gwSponsorsReviewKb | renderAdminSupportList,a:gw_sponsors_next|ws:${…} | a:admin_support_list|s:${…}|p:${…},,src/bot/bot.js:8790; src/bot/bot.js:38682
+⬅️ Founder Sale,2,src/bot/bot.js,renderAdminFounderLinks | renderAdminFounderTexts,a:admin_founder,english_or_internal_term,src/bot/bot.js:40063; src/bot/bot.js:40152
+⬅️ Активные,2,src/bot/bot.js,renderWsInactiveList,a:ws_list,,src/bot/bot.js:9160; src/bot/bot.js:9169
+⬅️ Аудит,2,src/bot/bot.js,getBot | sendAdminAuditExport,a:aud|h:${…}|p:0,,src/bot/bot.js:32892; src/bot/bot.js:40468
+⬅️ В меню,2,src/bot/bot.js,getBot | renderSetupInstructions,a:menu,,src/bot/bot.js:19476; src/bot/bot.js:26151
+⬅️ К меню,2,src/bot/bot.js,renderWsInactiveList | renderWsList,a:menu,,src/bot/bot.js:9142; src/bot/bot.js:9170
+⬅️ Назад к витрине,2,src/bot/bot.js,getBot,a:wsp_open|ws:${…},,src/bot/bot.js:21755; src/bot/bot.js:21857
+⬆️ Поднять,2,src/bot/bot.js,kbBxPubMore | renderBxView,a:bx_bump|ws:${…}|o:${…}|p:${…}|back:${…} | a:bx_bump|ws:${…}|o:${…},,src/bot/bot.js:4559; src/bot/bot.js:16196
+⭐️ Brand Plan Старт (${…}д),2,src/bot/bot.js,getBot,a:adm_gift_input|t:bp_start | a:adm_ugift_do|id:${…}|t:bp_start|f:${…}|p:${…},mixed_language,src/bot/bot.js:30917; src/bot/bot.js:31337
+🆘 Поддержка,2,src/bot/bot.js,renderAdminComms | renderAdminHome,a:admin_support,,src/bot/bot.js:38271; src/bot/bot.js:38531
+🎁 Ещё подарить,2,src/bot/bot.js,getBot,a:adm_gift,,src/bot/bot.js:31101; src/bot/bot.js:31251
+🎁 Конкурс,2,src/bot/bot.js,getBot,a:bc_tpl_gw,,src/bot/bot.js:21117; src/bot/bot.js:32552
+🎁 Подарить подписку,2,src/bot/bot.js,renderAdminSystem | renderAdminUserCard,a:adm_gift | a:adm_ugift|id:${…}|f:${…}|p:${…},,src/bot/bot.js:38914; src/bot/bot.js:40700
+🎛 Фильтры,2,src/bot/bot.js,getBot | renderHomeHub,a:bx_filters|ws:0|p:0|h:mm|r:mm,,src/bot/bot.js:4155; src/bot/bot.js:25090
+🎞 GIF,2,src/bot/bot.js,bxMediaKb | gwMediaKb,a:gw_media_gif|ws:${…} | a:bx_media_gif|ws:${…}|o:${…}|back:${…}|p:${…},,src/bot/bot.js:8807; src/bot/bot.js:16040
+🎟 Сертификат,2,src/bot/bot.js,bxCompKb | gwNewStepPrizeKb,a:bx_comp|ws:${…}|p:cert | a:gw_prize|ws:${…}|t:cert,,src/bot/bot.js:8157; src/bot/bot.js:8673
+🎥 Видео,2,src/bot/bot.js,bxMediaKb | gwMediaKb,a:gw_media_video|ws:${…} | a:bx_media_video|ws:${…}|o:${…}|back:${…}|p:${…},,src/bot/bot.js:8809; src/bot/bot.js:16042
+🎬 Оффер,2,src/bot/bot.js,getBot,a:bc_tpl_offer,,src/bot/bot.js:21120; src/bot/bot.js:32555
+🎯 Matching,2,src/bot/bot.js,getBot,,english_or_internal_term,src/bot/bot.js:23128; src/bot/bot.js:23151
+🎯 Подбор в ленте,2,src/bot/bot.js,bxBrandMenuKb | mainMenuBrandKb,a:bx_smart|ws:0|h:mm | a:bx_smart|ws:${…}|h:bo,,src/bot/bot.js:3604; src/bot/bot.js:6239
+🎯 Теги,2,src/bot/bot.js,renderBrandProfileMore | renderBxOfferPreviewStep,a:brand_gt_pick${…} | a:bx_wtags|ws:${…},,src/bot/bot.js:7040; src/bot/bot.js:8441
+🏁 Завершить,2,src/bot/bot.js,getBot | gwOpenKb,a:gw_end_now|i:${…},,src/bot/bot.js:8899; src/bot/bot.js:37347
+🏆 Выбрать победителей,2,src/bot/bot.js | src/bot/gwNotify.js,gwOpenKb | notifyGiveawayEnded,a:gw_draw_now|i:${…},,src/bot/bot.js:8905; src/bot/gwNotify.js:45
+🏷 Профиль,2,src/bot/bot.js,getBot,a:bc_tpl_bp,,src/bot/bot.js:21118; src/bot/bot.js:32553
+👀 Предпросмотр,2,src/bot/bot.js,getBot | renderBrandApply,a:brand_apply_preview|u:${…}|p:${…},,src/bot/bot.js:7843; src/bot/bot.js:25823
+👁 Preview,2,src/bot/bot.js,renderBroadcastPreview | renderBroadcastSimpleComposer,,,src/bot/bot.js:37933; src/bot/bot.js:38062
+👔 Менеджеры бренда,2,src/bot/bot.js,getBot | renderBrandProfileHome,a:brand_team|ws:${…}|ret:profile | a:brand_team|ws:${…}|ret:${…},,src/bot/bot.js:6788; src/bot/bot.js:29354
+👤 Открыть кабинет куратора,2,src/bot/bot.js,getBot,a:cur_home,,src/bot/bot.js:21325; src/bot/bot.js:24148
+👤 Пригласить ссылкой,2,src/bot/bot.js,brandTeamKb | renderCuratorList,a:cur_invite|ws:${…} | a:bm_invite|ws:${…}|ret:${…},,src/bot/bot.js:5603; src/bot/bot.js:5976
+👥 Аудитория,2,src/bot/bot.js,renderBroadcastPreview | renderBroadcastSimpleComposer,,,src/bot/bot.js:37931; src/bot/bot.js:38066
+💬 В работу,2,src/bot/bot.js,renderLeadView,a:lead_set|id:${…}|st:ip|w:${…}|s:${…}|p:${…}${…},,src/bot/bot.js:12409; src/bot/bot.js:12428
+💬 Диалог,2,src/bot/bot.js,getBot,a:bx_thread|ws:${…}|t:${…}|p:${…}${…}|b:${…}|h:${…},,src/bot/bot.js:23379; src/bot/bot.js:23729
+💬 Коммуникации,2,src/bot/bot.js,renderAdminHome | renderAdminSupportList,a:admin_comms,,src/bot/bot.js:38269; src/bot/bot.js:38685
+📋 Очередь,2,src/bot/bot.js | src/lib/officialPublishVerify.js,maybeNotifyAdmins | notifyOfficialQueueAdmins,a:off_queue|p:0,,src/bot/bot.js:16626; src/lib/officialPublishVerify.js:65
+📌 Сделки,2,src/bot/bot.js,bxBrandMenuKb | mainMenuBrandKb,a:brand_deals|ws:0|st:negotiation|p:0 | a:brand_deals|ws:${…}|st:negotiation|p:0,,src/bot/bot.js:3610; src/bot/bot.js:6245
+📌 Шаблоны DM,2,src/bot/bot.js,getBot | renderAdminComms,a:admin_umsg_tpls|p:0,mixed_language,src/bot/bot.js:20646; src/bot/bot.js:38528
+📝 Заметки (${…}),2,src/bot/bot.js,renderLeadView,a:lead_notes|id:${…}|w:${…}|n:0|s:${…}|p:${…}${…},,src/bot/bot.js:12415; src/bot/bot.js:12425
+📝 Оставить заявку,2,src/bot/bot.js,renderBrandDirectoryCard | renderWsPublicProfile,a:brand_apply|u:${…}|p:${…} | a:wsp_lead_new|ws:${…},,src/bot/bot.js:7740; src/bot/bot.js:11816
+📝 Тексты,2,src/bot/bot.js,renderAdminFounder | renderAdminFounderLinks,a:admin_founder_texts,,src/bot/bot.js:40005; src/bot/bot.js:40061
+📣 Fan-out: ${…},2,src/bot/bot.js,renderAdminQStashStatus | renderAdminSystem,a:admin_bc_qstash_toggle,,src/bot/bot.js:38904; src/bot/bot.js:39678
+📣 Выбрать канал,2,src/bot/bot.js,renderGwList | renderGwNewGate,a:gw_new_pick,,src/bot/bot.js:2033; src/bot/bot.js:18458
+📣 Карточка,2,src/bot/bot.js | src/lib/officialPublishVerify.js,maybeNotifyAdmins | notifyOfficialQueueAdmins,a:off_manage|ws:${…}|o:${…}|p:0,,src/bot/bot.js:16625; src/lib/officialPublishVerify.js:64
+📣 Опубликовать,2,src/bot/bot.js,getBot | gwConfirmKb,a:gw_publish|ws:${…},,src/bot/bot.js:8798; src/bot/bot.js:36899
+📣 Опубликовать итоги,2,src/bot/bot.js | src/bot/gwNotify.js,gwOpenKb | notifyGiveawayWinnersReady,a:gw_publish_results|i:${…},,src/bot/bot.js:8912; src/bot/gwNotify.js:107
+📤 Выгрузить списком,2,src/bot/bot.js,folderViewKb,a:folder_export|ws:${…}|f:${…},,src/bot/bot.js:15392; src/bot/bot.js:15405
+📦 Мои офферы,2,src/bot/bot.js,bxMenuKb | kbBxPubMore,a:bx_my|ws:${…}|p:${…} | a:bx_my|ws:${…}|p:0,,src/bot/bot.js:4561; src/bot/bot.js:6215
+📦 Неактивные (${…}),2,src/bot/bot.js,renderCreatorCurrentMenu | renderWsList,a:ws_list_inactive,,src/bot/bot.js:4362; src/bot/bot.js:9140
+📦 Неактивные каналы,2,src/bot/bot.js,ensureWorkspaceForOwner,a:ws_list_inactive,,src/bot/bot.js:9072; src/bot/bot.js:9076
+📨 Отправить,2,src/bot/bot.js,_renderTplFlowBrandApp | _renderTplFlowLead,a:brand_app_tpl_send|id:${…}|k:${…}|s:${…}|p:${…} | a:lead_tpl_send|id:${…}|k:${…}|w:${…}|s:${…}|p:${…}${…},,src/bot/bot.js:14283; src/bot/bot.js:14369
+🔄 Перепроверить,2,src/bot/bot.js | src/bot/gwAccess.js,renderGwAccess | renderGwPreflight,a:gw_preflight|i:${…}|r:1 | a:gw_access_recheck|i:${…},,src/bot/bot.js:19218; src/bot/gwAccess.js:226
+🔄 Проверить ещё раз,2,src/bot/bot.js,renderGwWhyResult | sendGwWhyResult,a:gw_why_recheck|i:${…}|tu:${…},,src/bot/bot.js:19308; src/bot/bot.js:19330
+🔄 Проверить заявку,2,src/bot/bot.js,acceptBrandApplication | renderBrandAppView,a:brand_app_view|id:${…}|s:${…}|p:${…},,src/bot/bot.js:13782; src/bot/bot.js:14562
+🔎 Найти TG ID,2,src/bot/bot.js,renderAdminHardSkipHits | renderAdminHardSkipHome,a:hs_find|p:${…} | a:hs_find|p:0,mixed_language,src/bot/bot.js:39362; src/bot/bot.js:39427
+🔎 Проверить другого,2,src/bot/bot.js,renderGwWhyResult | sendGwWhyResult,a:gw_why_enter|i:${…},,src/bot/bot.js:19310; src/bot/bot.js:19332
+🔗 Ссылка,2,src/bot/bot.js,inviteKeyboardMarkup | renderBrandProfileHome,a:brand_prof_set${…}|f:bl|from:home | a:share_link,,src/bot/bot.js:6763; src/bot/bot.js:3140
+🔗 Ссылки,2,src/bot/bot.js,renderAdminFounder | renderAdminFounderTexts,a:admin_founder_links,,src/bot/bot.js:40004; src/bot/bot.js:40150
+🖼 Фото,2,src/bot/bot.js,bxMediaKb | gwMediaKb,a:gw_media_photo|ws:${…} | a:bx_media_photo|ws:${…}|o:${…}|back:${…}|p:${…},,src/bot/bot.js:8806; src/bot/bot.js:16039
+🗑,2,src/bot/bot.js,renderBxMy | renderGwList,a:bx_archive|ws:${…}|o:${…}|p:${…} | a:gw_del_q|i:${…}|ws:${…},,src/bot/bot.js:15955; src/bot/bot.js:18475
+🗑 Сброс,2,src/bot/bot.js,renderProfileMatchingHome | renderProfileMatchingPick,a:pm_reset|ws:${…},destructive_or_reset,src/bot/bot.js:9499; src/bot/bot.js:9521
+🗑 Сбросить,2,src/bot/bot.js,getBot | renderBrandApplyPreview,a:brand_apply_clear|u:${…}|p:${…},destructive_or_reset,src/bot/bot.js:7888; src/bot/bot.js:25826
+🚀 Brand Plan Про (${…}д),2,src/bot/bot.js,getBot,a:adm_gift_input|t:bp_pro | a:adm_ugift_do|id:${…}|t:bp_pro|f:${…}|p:${…},mixed_language,src/bot/bot.js:30919; src/bot/bot.js:31338
+🚩 Жалоба,2,src/bot/bot.js,bxThreadKb | renderBxPublicView,a:bx_report_thread|ws:${…}|t:${…}|p:${…}|b:${…}${…}|h:${…} | a:bx_report_offer|ws:${…}|o:${…}|p:${…}|h:${…},,src/bot/bot.js:8630; src/bot/bot.js:16520
+🛑 Стоп,2,src/bot/bot.js,renderBroadcastView,,destructive_or_reset,src/bot/bot.js:38187; src/bot/bot.js:38191
+🧩 Проверка доступа,2,src/bot/bot.js,gwOpenKb | renderGwStats,a:gw_access|i:${…},,src/bot/bot.js:8888; src/bot/bot.js:18624
+🧰 Операции,2,src/bot/bot.js,renderAdminHome | renderAdminInviteVisibilityList,a:admin_ops,,src/bot/bot.js:38268; src/bot/bot.js:38861
+🧹 Clear draft,2,src/bot/bot.js,renderBroadcastPreview | renderBroadcastSimpleComposer,simple,,src/bot/bot.js:37936; src/bot/bot.js:38065
+🧹 Сбросить профиль,2,src/bot/bot.js,renderBrandProfileHome,a:brand_prof_reset${…},destructive_or_reset,src/bot/bot.js:6766; src/bot/bot.js:6783
+🧾 Proofs,2,src/bot/bot.js,getBot,a:bx_proofs|ws:${…}|t:${…}|p:${…}${…}|b:${…}|h:${…},,src/bot/bot.js:23377; src/bot/bot.js:23727
+🧾 Забрать подарочные кредиты,2,src/bot/bot.js,getBot | renderAdminUserCard,a:adm_gift_revoke_input|t:gcr | a:adm_urevoke_q|id:${…}|t:gcr|f:${…}|p:${…},destructive_or_reset,src/bot/bot.js:30942; src/bot/bot.js:40711
+#${…},1,src/bot/bot.js,renderBrandDealsList,a:brand_deal_view|id:${…}|st:${…}|p:${…},,src/bot/bot.js:13499
+#${…} ${…},1,src/bot/bot.js,getBot,a:ws_pro_pin_set|ws:${…}|o:${…},,src/bot/bot.js:30428
+#${…} · ${…}${…},1,src/bot/bot.js,renderGwList,a:gw_open|i:${…},,src/bot/bot.js:18474
+${…} #${…} ${…},1,src/bot/bot.js,renderBroadcastList,,,src/bot/bot.js:38100
+${…} #${…} · ${…},1,src/bot/bot.js,renderBxMy,a:bx_view|ws:${…}|o:${…}|back:my|p:${…},,src/bot/bot.js:15954
+${…}⚡ Директ,1,src/bot/bot.js,renderWsIgDmTemplate,a:ws_ig_dm|ws:${…}|tone:hard|i:${…},,src/bot/bot.js:11304
+${…}🤝 Мягкий,1,src/bot/bot.js,renderWsIgDmTemplate,a:ws_ig_dm|ws:${…}|tone:soft|i:${…},,src/bot/bot.js:11303
+1,1,src/bot/bot.js,gwNewStepWinnersKb,a:gw_winners|ws:${…}|n:1,,src/bot/bot.js:8747
+14д,1,src/bot/bot.js,renderAdminMetrics,a:admin_metrics|d:14,,src/bot/bot.js:40239
+2,1,src/bot/bot.js,gwNewStepWinnersKb,a:gw_winners|ws:${…}|n:2,,src/bot/bot.js:8748
+3,1,src/bot/bot.js,gwNewStepWinnersKb,a:gw_winners|ws:${…}|n:3,,src/bot/bot.js:8749
+30д,1,src/bot/bot.js,renderAdminMetrics,a:admin_metrics|d:30,,src/bot/bot.js:40241
+5,1,src/bot/bot.js,gwNewStepWinnersKb,a:gw_winners|ws:${…}|n:5,,src/bot/bot.js:8750
+7д,1,src/bot/bot.js,renderAdminMetrics,a:admin_metrics|d:7,,src/bot/bot.js:40238
+90д,1,src/bot/bot.js,renderAdminMetrics,a:admin_metrics|d:90,,src/bot/bot.js:40242
+ENABLED: ${…},1,src/bot/bot.js,renderAdminFounder,a:admin_founder_toggle,,src/bot/bot.js:39996
+Бюджет: ${…},1,src/bot/bot.js,brandDirFiltersKb,a:bd_fpick|k:bud|p:${…},,src/bot/bot.js:7381
+Треб.: ${…},1,src/bot/bot.js,brandDirFiltersKb,a:bd_mpick|k:req|p:${…},,src/bot/bot.js:7384
+Цели: ${…},1,src/bot/bot.js,brandDirFiltersKb,a:bd_mpick|k:goals|p:${…},,src/bot/bot.js:7383
+ℹ️ Как это работает,1,src/bot/bot.js,renderVerifyHome,a:verify_info,,src/bot/bot.js:37601
+ℹ️ Повтор,1,src/bot/bot.js,bxThreadKb,a:bx_retry_help|ws:${…}|t:${…}${…},,src/bot/bot.js:8641
+ℹ️ Почему не прошёл,1,src/bot/bot.js,renderGwStats,a:gw_why|i:${…},,src/bot/bot.js:18613
+ℹ️ Почему так?,1,src/bot/bot.js,brandTeamLockedKb,a:brand_team_help|ws:${…}|ret:${…},,src/bot/bot.js:6005
+ℹ️ Права менеджера,1,src/bot/bot.js,mainMenuBrandKb,a:bm_help,,src/bot/bot.js:3624
+↩️,1,src/bot/bot.js,renderBxMyArchive,a:bx_restore|ws:${…}|o:${…}|p:${…},,src/bot/bot.js:15993
+↩️ Вернуться к офферу,1,src/bot/payments/starsHandlers.js,registerStarsPaymentsHandlers,a:bx_pub|ws:${…}|o:${…}|p:${…}|h:bo,,src/bot/payments/starsHandlers.js:644
+↩️ Восстановить,1,src/bot/bot.js,renderBxView,a:bx_restore|ws:${…}|o:${…}|p:${…},,src/bot/bot.js:16225
+⏭ Без папки,1,src/bot/bot.js,getBot,a:bx_partner_folder_clear|ws:${…}|o:${…},,src/bot/bot.js:36001
+⏰ Expire,1,src/bot/bot.js,renderAdminSysNotice,,,src/bot/bot.js:39556
+⏱ Сроки,1,src/bot/bot.js,renderBrandDealTemplates,a:brand_deal_tpl|id:${…}|k:timing|b:${…}|p:${…}${…},,src/bot/bot.js:14045
+⏳ 1 час,1,src/bot/bot.js,gwNewStepDeadlineKb,a:gw_deadline|ws:${…}|m:60,,src/bot/bot.js:8759
+⏳ 24 часа,1,src/bot/bot.js,gwNewStepDeadlineKb,a:gw_deadline|ws:${…}|m:1440,,src/bot/bot.js:8762
+⏳ 3 дня,1,src/bot/bot.js,gwNewStepDeadlineKb,a:gw_deadline|ws:${…}|m:4320,,src/bot/bot.js:8763
+⏳ 6 часов,1,src/bot/bot.js,gwNewStepDeadlineKb,a:gw_deadline|ws:${…}|m:360,,src/bot/bot.js:8760
+⏳ Pending,1,src/bot/bot.js,renderAdminInviteVisibilityHome,a:admin_invites_list|k:pending|p:0,,src/bot/bot.js:38837
+⏳ В очереди (отменить),1,src/bot/bot.js,renderOfficialManageView,a:off_req_cancel|ws:${…}|o:${…}|p:${…}|back:${…},,src/bot/bot.js:17468
+▶️ Продолжить,1,src/bot/bot.js,renderBroadcastView,,generic_cta,src/bot/bot.js:38190
+▶️ Продолжить: ${…},1,src/bot/bot.js,renderHomeHub,a:menu,,src/bot/bot.js:4137
+♻️ Восстановить,1,src/bot/bot.js,renderAccountDeletedGate,a:acc_restore,,src/bot/bot.js:4319
+♻️ Обновить пост,1,src/bot/bot.js,renderOfficialManageView,a:off_upd|ws:${…}|o:${…}|p:${…}|back:${…},,src/bot/bot.js:17491
+♻️ Сброс,1,src/bot/bot.js,renderBrandsDirectory,a:bd_freset|p:${…},destructive_or_reset,src/bot/bot.js:7645
+♻️ Сброс к ENV,1,src/bot/bot.js,renderAdminFounder,a:admin_founder_reset,mixed_language | destructive_or_reset,src/bot/bot.js:40002
+♻️ Сброс фильтров,1,src/bot/bot.js,renderBrandDealsList,a:brand_deals_filters_clear|ws:0|st:${…}|p:${…},destructive_or_reset,src/bot/bot.js:13493
+♻️ Сбросить к дефолту,1,src/bot/bot.js,renderAdminDmTemplates,a:admin_umsg_tpl_reset_q|p:${…},destructive_or_reset,src/bot/bot.js:39719
+⚙️ Автовыдача: ${…},1,src/bot/bot.js,renderAdminSystem,a:admin_pay_auto_toggle,,src/bot/bot.js:38900
+⚙️ Изменить параметры,1,src/bot/bot.js,bxOfferTagsKb,a:bx_params|ws:${…},,src/bot/bot.js:8180
+⚙️ Изменить фильтры,1,src/bot/bot.js,renderProfileMatchingResults,a:pm_home|ws:${…},,src/bot/bot.js:9557
+⚙️ Настройки,1,src/bot/bot.js,wsMenuKb,a:ws_settings|ws:${…},,src/bot/bot.js:5404
+⚙️ По умолчанию (${…}д),1,src/bot/bot.js,renderOfficialRequestHome,a:off_req|ws:${…}|o:${…}|days:${…}|p:${…},,src/bot/bot.js:17553
+⚙️ Система,1,src/bot/bot.js,renderAdminHome,a:admin_sys,,src/bot/bot.js:38272
+⚙️ Фильтры,1,src/bot/bot.js,renderProfileMatchingResults,a:pm_home|ws:${…},,src/bot/bot.js:9592
+⚠️ Назначена другому,1,src/bot/bot.js,renderLeadView,${…}|do:re,,src/bot/bot.js:12438
+⚡ Перейти в быстрый пост,1,src/bot/bot.js,renderBroadcastSimpleComposer,,,src/bot/bot.js:37937
+⛔ #${…} ${…},1,src/bot/bot.js,renderCuratorList,a:cur_rm_q|ws:${…}|u:${…}|ret:list,,src/bot/bot.js:5610
+⛔ #${…} · ${…},1,src/bot/bot.js,renderBxMyArchive,a:bx_view|ws:${…}|o:${…}|back:arch|p:${…},,src/bot/bot.js:15992
+⛔ Забрать / отменить подписку,1,src/bot/bot.js,getBot,a:adm_gift_revoke,destructive_or_reset,src/bot/bot.js:30923
+⛔ Забрать Brand Plan,1,src/bot/bot.js,renderAdminUserCard,a:adm_urevoke_q|id:${…}|t:bp|f:${…}|p:${…},mixed_language | destructive_or_reset,src/bot/bot.js:40704
+⛔ Забрать Brand Plan (подписка),1,src/bot/bot.js,getBot,a:adm_gift_revoke_input|t:bp,mixed_language | destructive_or_reset,src/bot/bot.js:30938
+⛔ Обнулить кредиты,1,src/bot/bot.js,renderAdminUserCard,a:adm_urevoke_q|id:${…}|t:cr|f:${…}|p:${…},,src/bot/bot.js:40708
+⛔ Остановить,1,src/bot/bot.js,renderFeaturedView,a:feat_stop|ws:${…}|id:${…}|p:${…}|h:${…},,src/bot/bot.js:18375
+⛔ Отключить канал,1,src/bot/bot.js,wsSettingsKb,a:ws_disconnect_q|ws:${…},,src/bot/bot.js:5437
+⛔ Спам,1,src/bot/bot.js,renderLeadView,a:lead_set|id:${…}|st:sp|w:${…}|s:${…}|p:${…}${…},,src/bot/bot.js:12412
+⛔+🧾 Забрать Brand Plan + подарочные кредиты,1,src/bot/bot.js,getBot,a:adm_gift_revoke_input|t:bp_gcr,mixed_language | destructive_or_reset | long_button,src/bot/bot.js:30940
+⛔+🧾 Забрать Plan + подарочные,1,src/bot/bot.js,renderAdminUserCard,a:adm_urevoke_q|id:${…}|t:bp_gcr|f:${…}|p:${…},mixed_language | destructive_or_reset,src/bot/bot.js:40705
+✅ Approve,1,src/bot/bot.js,getBot,a:mod_verif_approve|uid:${…}|p:0,english_or_internal_term,src/bot/bot.js:23534
+✅ Архивировать,1,src/bot/bot.js,getBot,a:bx_del_do|ws:${…}|o:${…}|p:${…},,src/bot/bot.js:35415
+✅ Верификация аккаунта,1,src/bot/bot.js,wsSettingsKb,a:verify_home,,src/bot/bot.js:5424
+✅ Возобновить,1,src/bot/bot.js,renderBxView,a:bx_resume|ws:${…}|o:${…},,src/bot/bot.js:16231
+✅ Всё равно взять,1,src/bot/bot.js,getBot,a:lead_assign|id:${…}|w:${…}|s:${…}|p:${…}${…}|do:force,,src/bot/bot.js:27901
+✅ Выйти,1,src/bot/bot.js,getBot,a:cur_leave_do|ws:${…},,src/bot/bot.js:26473
+✅ Готовность конкурса,1,src/bot/bot.js,renderGwStats,a:gw_preflight|i:${…},,src/bot/bot.js:18611
+✅ Готово ${…},1,src/bot/bot.js,brandDealsTabsKb,a:brand_deals|ws:0|st:done|p:0,,src/bot/bot.js:13256
+"✅ Да, отправить",1,src/bot/bot.js,getBot,a:gw_remind_send|i:${…},,src/bot/bot.js:37231
+"✅ Да, сбросить",1,src/bot/bot.js,getBot,a:brand_prof_reset_ok${…},destructive_or_reset,src/bot/bot.js:30022
+✅ Дальше,1,src/bot/bot.js,gwMediaKb,a:gw_media_skip|ws:${…},,src/bot/bot.js:8815
+✅ Завершить,1,src/bot/bot.js,getBot,a:gw_end_do|i:${…},,src/bot/bot.js:37287
+✅ Закрытые 7д (${…}),1,src/bot/bot.js,renderAdminSupportHome,a:admin_support_list|s:closed_recent|p:0,,src/bot/bot.js:38631
+✅ Закрыть тикет,1,src/bot/bot.js,renderAdminSupportThread,a:admin_support_set|id:${…}|st:closed|s:${…}|p:${…},,src/bot/bot.js:38738
+✅ Обменять,1,src/bot/bot.js,inviteRedeemConfirmKeyboard,a:share_redeem_do|r:${…},,src/bot/bot.js:2767
+✅ Опубликовать сейчас,1,src/bot/bot.js,renderOfficialManageView,a:off_pub|ws:${…}|o:${…}|p:${…}|back:${…},,src/bot/bot.js:17483
+✅ Отключить,1,src/bot/bot.js,getBot,a:ws_disconnect_do|ws:${…},,src/bot/bot.js:35447
+✅ Отозвать,1,src/bot/bot.js,getBot,a:cur_rm_do|ws:${…}|u:${…}|ret:${…},,src/bot/bot.js:35707
+✅ Очистить,1,src/bot/bot.js,getBot,a:folder_clear_do|ws:${…}|f:${…},destructive_or_reset,src/bot/bot.js:35844
+✅ Очистить snapshot,1,src/bot/bot.js,getBot,a:admin_ops_pending_clear_do,mixed_language | destructive_or_reset,src/bot/bot.js:30547
+✅ Переназначить,1,src/bot/bot.js,getBot,a:lead_assign|id:${…}|w:${…}|s:${…}|p:${…}${…}|do:force,,src/bot/bot.js:27926
+✅ Подать заявку,1,src/bot/bot.js,renderVerifyHome,a:verify_kind,,src/bot/bot.js:37591
+✅ Подключить,1,src/bot/bot.js,getBot,a:ws_reconnect_do|ws:${…},,src/bot/bot.js:35493
+✅ Приняли — дальше,1,src/bot/bot.js,renderBrandDealTemplates,a:brand_deal_tpl|id:${…}|k:next|b:${…}|p:${…}${…},,src/bot/bot.js:14037
+✅ Проверено,1,src/bot/bot.js,curatorGwKb,a:cur_gw_check_q|ws:${…}|i:${…},,src/bot/bot.js:18868
+✅ Разбанить,1,src/bot/bot.js,renderAdminUserCard,a:adm_uban_q|id:${…}|v:0|f:${…}|p:${…},destructive_or_reset,src/bot/bot.js:40721
+✅ Увеличить лимит (верификация),1,src/bot/bot.js,renderBrandPaywall,a:verify_home,,src/bot/bot.js:17707
+✉️,1,src/bot/bot.js,renderAdminUsers,a:adm_umsg|id:${…}|f:${…}|p:${…},,src/bot/bot.js:40560
+✉️ Ещё,1,src/bot/bot.js,sendAdminMessageToUser,a:adm_umsg|id:${…}|f:${…}|p:${…},,src/bot/bot.js:41024
+✉️ Повторить,1,src/bot/bot.js,renderAdminDmTemplateView,,,src/bot/bot.js:39926
+✍️ Email,1,src/bot/bot.js,renderWsProfileContactsStructured,a:ws_prof_contacts_edit|ws:${…}|k:email,,src/bot/bot.js:10976
+✍️ Phone,1,src/bot/bot.js,renderWsProfileContactsStructured,a:ws_prof_contacts_edit|ws:${…}|k:phone,,src/bot/bot.js:10977
+✍️ Telegram username,1,src/bot/bot.js,renderWsProfileContactsStructured,a:ws_prof_contacts_edit|ws:${…}|k:tg,,src/bot/bot.js:10974
+✍️ Website,1,src/bot/bot.js,renderWsProfileContactsStructured,a:ws_prof_contacts_edit|ws:${…}|k:site,,src/bot/bot.js:10979
+✍️ Ввести (DD.MM HH:MM МСК),1,src/bot/bot.js,gwNewStepDeadlineKb,a:gw_deadline_custom|ws:${…},mixed_language,src/bot/bot.js:8765
+✍️ Ввести вручную,1,src/bot/bot.js,getBot,a:lead_note_text|id:${…}|w:${…}|s:${…}|p:${…}${…}${…},,src/bot/bot.js:28273
+✍️ Ввести текст,1,src/bot/bot.js,renderBxOfferPreviewStep,a:bx_wtext|ws:${…},,src/bot/bot.js:8438
+✍️ Ввести число,1,src/bot/bot.js,gwNewStepWinnersKb,a:gw_winners_custom|ws:${…},,src/bot/bot.js:8752
+✍️ Детали бюджета,1,src/bot/bot.js,renderBrandProfileMore,a:brand_prof_set${…}|f:bu|from:more,,src/bot/bot.js:7036
+✍️ Детали требований,1,src/bot/bot.js,renderBrandProfileMore,a:brand_prof_set${…}|f:rq|from:more,,src/bot/bot.js:7042
+✍️ Детали целей,1,src/bot/bot.js,renderBrandProfileMore,a:brand_prof_set${…}|f:go|from:more,,src/bot/bot.js:7039
+✍️ Добавить контакт,1,src/bot/bot.js,renderBrandApply,a:ws_prof_edit|ws:${…}|f:contact,,src/bot/bot.js:7850
+✍️ Другое,1,src/bot/bot.js,bxTypeKb,a:bx_type|ws:${…}|t:other,,src/bot/bot.js:8148
+✍️ Ещё заявку,1,src/bot/bot.js,kbBrandApplyMore,a:brand_apply|u:${…}|p:${…},,src/bot/bot.js:4579
+✍️ Изменить текст,1,src/bot/bot.js,renderBxOfferPreviewStep,a:bx_wtext|ws:${…},,src/bot/bot.js:8440
+✍️ Ниша (текст),1,src/bot/bot.js,renderBrandProfileHome,a:brand_prof_set${…}|f:ni|from:home,,src/bot/bot.js:6760
+✍️ Ответить вручную,1,src/bot/bot.js,_renderTplFlowLead,a:lead_reply|id:${…}|w:${…}|s:${…}|p:${…}${…},,src/bot/bot.js:14325
+✍️ Свободный текст,1,src/bot/bot.js,getBot,a:adm_umsg_free|id:${…}|f:${…}|p:${…},,src/bot/bot.js:31621
+✍️ Своя кнопка,1,src/bot/bot.js,renderBroadcastSimpleButtonPicker,,,src/bot/bot.js:37864
+✍️ Текст,1,src/bot/bot.js,renderAdminSysNotice,a:admin_notice_text,,src/bot/bot.js:39559
+✏️ Изменить,1,src/bot/bot.js,renderAdminDmTemplateView,a:admin_umsg_tpl_edit|tid:${…}|p:${…},,src/bot/bot.js:39760
+✏️ Изменить текст,1,src/bot/bot.js,renderAdminUserNote,a:adm_unote_edit|id:${…}|f:${…}|p:${…},,src/bot/bot.js:40802
+✏️ Название,1,src/bot/bot.js,renderBrandProfileHome,a:brand_prof_set${…}|f:bn|from:home,,src/bot/bot.js:6757
+✏️ Обновить итоги,1,src/bot/bot.js,gwOpenKb,a:gw_results_refresh|i:${…},,src/bot/bot.js:8916
+✏️ Переименовать,1,src/bot/bot.js,folderViewKb,a:folder_rename|ws:${…}|f:${…},,src/bot/bot.js:15391
+✨ Другое,1,src/bot/bot.js,gwNewStepPrizeKb,a:gw_prize|ws:${…}|t:other,,src/bot/bot.js:8678
+✨ Перенести из «Контакт»,1,src/bot/bot.js,renderWsProfileContactsStructured,a:ws_prof_contacts_migrate|ws:${…},,src/bot/bot.js:10981
+✨ Я Creator / канал,1,src/bot/bot.js,mainMenuBrandKb,a:ui_mode_set|m:creator|ret:menu,mixed_language,src/bot/bot.js:3640
+✨ Я канал / Creator,1,src/bot/bot.js,onboardingKb,a:onb_creator,mixed_language,src/bot/bot.js:4482
+❌ ${…},1,src/bot/bot.js,renderWsEditors,a:ws_editor_rm_q|ws:${…}|u:${…},,src/bot/bot.js:15469
+❌ Reject,1,src/bot/bot.js,getBot,a:mod_verif_reject|uid:${…}|p:0,english_or_internal_term,src/bot/bot.js:23535
+❌ Отказ,1,src/bot/bot.js,renderLeadView,a:lead_tpl_send|id:${…}|k:decline|w:${…}|s:${…}|p:${…}${…},,src/bot/bot.js:12422
+❌ Отмена ввода,1,src/bot/bot.js,renderBrandApply,a:brand_apply_cancel|u:${…}|p:${…},,src/bot/bot.js:7846
+❌ Сброс поиска,1,src/bot/bot.js,renderBrandDealsList,a:brand_deals_search_clear|ws:0|st:${…}|p:${…},destructive_or_reset,src/bot/bot.js:13490
+❌ Снять с себя,1,src/bot/bot.js,renderLeadView,${…}|do:un,,src/bot/bot.js:12436
+➕ Invite link,1,src/bot/bot.js,renderWsEditors,a:ws_editor_invite|ws:${…},,src/bot/bot.js:15462
+➕ Добавить каналы,1,src/bot/bot.js,folderViewKb,a:folder_add|ws:${…}|f:${…},,src/bot/bot.js:15388
+➕ Добавить куратора,1,src/bot/bot.js,curManageKb,a:cur_add_username|ws:${…},,src/bot/bot.js:5506
+➕ Добавить модератора,1,src/bot/bot.js,renderAdminModerators,a:admin_mod_add,,src/bot/bot.js:40270
+➕ Модератор,1,src/bot/bot.js,renderAdminSystem,a:admin_mod_add,,src/bot/bot.js:38911
+➕ Новая рассылка,1,src/bot/cron.js,broadcastTick,a:bc_start,,src/bot/cron.js:1749
+➕ Новый шаблон,1,src/bot/bot.js,renderAdminDmTemplates,a:admin_umsg_tpl_add|p:${…},,src/bot/bot.js:39718
+➕ Создать офер,1,src/bot/bot.js,bxMenuKb,a:bx_new|ws:${…},spelling_error,src/bot/bot.js:6213
+➕ Ссылка,1,src/bot/bot.js,bxProofsKb,a:bx_proof_link|ws:${…}|t:${…}${…},,src/bot/bot.js:18005
+➖ Удалить каналы,1,src/bot/bot.js,folderViewKb,a:folder_remove|ws:${…}|f:${…},destructive_or_reset,src/bot/bot.js:15389
+➡️ Без кнопок → аудитория,1,src/bot/bot.js,getBot,,,src/bot/bot.js:19937
+⬅️ #${…},1,src/bot/bot.js,renderBroadcastBlocked,,,src/bot/bot.js:38250
+⬅️ В админку,1,src/bot/bot.js,renderOfficialQueue,a:admin,,src/bot/bot.js:17628
+⬅️ Вернуться к витрине,1,src/bot/bot.js,renderBrandPassTopup,a:wsp_open|ws:${…}|m:ro,,src/bot/bot.js:18084
+⬅️ Вернуться к заявке,1,src/bot/bot.js,renderBrandPassTopup,a:brand_app_view|id:${…}|s:${…}|p:${…},,src/bot/bot.js:18091
+⬅️ К Brand Plan,1,src/bot/bot.js,renderBrandPassTopup,a:brand_plan|ws:${…},mixed_language,src/bot/bot.js:18079
+⬅️ К диалогу,1,src/bot/bot.js,getBot,a:bx_thread|ws:${…}|t:${…}|p:0|h:bo,,src/bot/bot.js:22958
+⬅️ К каналу,1,src/bot/bot.js,wsSettingsKb,a:ws_open|ws:${…},,src/bot/bot.js:5439
+⬅️ К кнопкам,1,src/bot/bot.js,getBot,,,src/bot/bot.js:32435
+⬅️ К настройкам,1,src/bot/bot.js,curManageKb,a:ws_settings|ws:${…},,src/bot/bot.js:5508
+⬅️ К офферу,1,src/bot/bot.js,getBot,a:bx_pub|ws:${…}|o:${…}|p:0|h:bo,,src/bot/bot.js:22960
+⬅️ Коммуникации,1,src/bot/bot.js,renderAdminSysNotice,a:admin_comms,,src/bot/bot.js:39564
+⬅️ Назад к кнопкам,1,src/bot/bot.js,getBot,,,src/bot/bot.js:32593
+⬅️ Назад к конкурсу,1,src/bot/bot.js,getBot,a:cur_gw_open|ws:${…}|i:${…},,src/bot/bot.js:21448
+⬅️ Назад к офферу,1,src/bot/bot.js,renderOfficialManageView,,,src/bot/bot.js:17502
+⬅️ Назад к черновику,1,src/bot/bot.js,getBot,a:gw_confirm_push|ws:${…},,src/bot/bot.js:36901
+⬅️ Простой composer,1,src/bot/bot.js,getBot,,mixed_language,src/bot/bot.js:32363
+⬅️ Раньше,1,src/bot/bot.js,renderAdminSupportList,a:admin_support_list|s:${…}|p:${…},,src/bot/bot.js:38681
+⭐ ${…} · ${…} Stars,1,src/bot/bot.js,renderOfficialBuyHome,a:off_buy|ws:${…}|o:${…}|dur:${…}|p:${…}|back:${…},,src/bot/bot.js:17590
+⭐ ${…} · ≈ ${…} ${…},1,src/bot/bot.js,renderBrandPaywall,a:brand_buy|ws:${…}|o:${…}|pack:${…}|p:${…},,src/bot/bot.js:17711
+⭐ Brand 12 мес · ${…}⭐️,1,src/bot/bot.js,renderFounderSale,a:founder_buy|id:founder_brand_12m|ret:${…},mixed_language,src/bot/bot.js:4264
+⭐ Brand 3 мес · ${…}⭐️,1,src/bot/bot.js,renderFounderSale,a:founder_buy|id:founder_brand_3m|ret:${…},mixed_language,src/bot/bot.js:4263
+⭐ PRO 12 мес · ${…}⭐️,1,src/bot/bot.js,renderFounderSale,a:founder_buy|id:founder_creator_12m|ret:${…},mixed_language,src/bot/bot.js:4266
+⭐ Stars,1,src/bot/bot.js,gwNewStepPrizeKb,a:gw_prize|ws:${…}|t:stars,,src/bot/bot.js:8676
+⭐️ Brand Plan (включено 10 каналов/мес),1,src/bot/bot.js,renderMatchingHome,,mixed_language | long_button,src/bot/bot.js:18265
+⭐️ Brand Plan (включено 7 дней/мес),1,src/bot/bot.js,renderFeaturedHome,,mixed_language | long_button,src/bot/bot.js:18322
+⭐️ Brand Plan${…},1,src/bot/bot.js,mainMenuBrandKb,a:brand_plan|ws:0,english_or_internal_term,src/bot/bot.js:3617
+⭐️ Brand Plan: ${…},1,src/bot/bot.js,bxBrandMenuKb,a:brand_plan|ws:${…},english_or_internal_term,src/bot/bot.js:6246
+⭐️ Купить PRO · ${…}⭐️/мес,1,src/bot/bot.js,renderWsPro,a:ws_pro_buy|ws:${…},mixed_language,src/bot/bot.js:15264
+⭐️ Открыть Brand Plan,1,src/bot/bot.js,getBot,a:brand_plan|ws:0,mixed_language,src/bot/bot.js:31017
+⭐️ Подключить Brand Plan,1,src/bot/bot.js,brandTeamLockedKb,a:brand_plan|ws:${…}|ret:${…},mixed_language,src/bot/bot.js:6000
+⭐️ Старт · ${…}⭐️/мес,1,src/bot/bot.js,renderBrandPlan,a:brand_plan_buy|ws:${…}|plan:start|ret:${…},,src/bot/bot.js:18129
+⭐️ Увеличить лимит (PRO),1,src/bot/bot.js,renderCuratorList,a:ws_pro|ws:${…},mixed_language,src/bot/bot.js:5614
+🆕 Открытые (${…}),1,src/bot/bot.js,renderAdminSupportHome,a:admin_support_list|s:open|p:0,,src/bot/bot.js:38629
+🆘 Сводка,1,src/bot/bot.js,renderAdminSupportList,a:admin_support,,src/bot/bot.js:38685
+🌍 Гео,1,src/bot/bot.js,renderBrandProfileMore,a:brand_prof_set${…}|f:ge|from:more,,src/bot/bot.js:7033
+🌐 Сеть: ❌ ВЫКЛ,1,src/bot/bot.js,bxNeedNetworkKb,a:net_q|ws:${…}|ret:bx,,src/bot/bot.js:8063
+🎁 #${…} · ${…},1,src/bot/bot.js,curatorWsKb,a:cur_gw_open|ws:${…}|i:${…},,src/bot/bot.js:18774
+🎁 Redeemers,1,src/bot/bot.js,renderAdminInviteVisibilityHome,a:admin_invites_list|k:redeemers|p:0,,src/bot/bot.js:38839
+🎁 Инвайты,1,src/bot/bot.js,renderAdminOps,a:admin_invites,,src/bot/bot.js:38485
+🎁 Розыгрыш с магазином,1,src/bot/bot.js,bxTypeKb,a:bx_type|ws:${…}|t:giveaway,,src/bot/bot.js:8146
+🎁 Сводка,1,src/bot/bot.js,renderAdminInviteVisibilityList,a:admin_invites,,src/bot/bot.js:38860
+🎚 Уровень: ${…},1,src/bot/bot.js,renderAdminSysNotice,,,src/bot/bot.js:39553
+🎛 Фильтры брендов,1,src/bot/bot.js,renderBrandsDirectory,a:brands_filters|p:${…},,src/bot/bot.js:7644
+🎟 Участвовать,1,src/bot/bot.js,participantKb,a:gw_join|i:${…}${…},,src/bot/bot.js:8941
+🎥 Обзор/распаковка,1,src/bot/bot.js,bxTypeKb,a:bx_type|ws:${…}|t:review,,src/bot/bot.js:8144
+🎫 Brand Pass,1,src/bot/cron.js,issueIntroRetryCredits,a:brand_pass|ws:0,english_or_internal_term,src/bot/cron.js:759
+🎬 UGC,1,src/bot/bot.js,bxKindKb,a:bx_kind|ws:${…}|k:ugc,,src/bot/bot.js:8094
+🎬 Офферы,1,src/bot/bot.js,getBot,a:bx_home,,src/bot/bot.js:25101
+🎬 Офферы (лента),1,src/bot/bot.js,getBot,a:bx_feed|ws:0|p:0|h:mm,,src/bot/bot.js:25097
+🎬 Форматы (${…}/${…}),1,src/bot/bot.js,renderProfileMatchingHome,a:pm_pick|ws:${…}|t:f,,src/bot/bot.js:9496
+🎯 ${…} · ${…} каналов · ${…}⭐️,1,src/bot/bot.js,renderMatchingHome,,,src/bot/bot.js:18269
+🎯 Кому: ${…},1,src/bot/bot.js,renderAdminSysNotice,,,src/bot/bot.js:39555
+🎯 Теги (опц.),1,src/bot/bot.js,renderBxOfferDraftStep,a:bx_wtags|ws:${…},,src/bot/bot.js:8301
+🎯🔥 Match/Feat: ${…},1,src/bot/bot.js,renderAdminSystem,a:admin_matchfeat_auto_toggle,,src/bot/bot.js:38901
+🏆 30 дней,1,src/bot/bot.js,renderOfficialRequestHome,a:off_req|ws:${…}|o:${…}|days:30|p:${…}|back:${…},,src/bot/bot.js:17551
+🏆 Выбрать,1,src/bot/bot.js,getBot,a:gw_draw_do|i:${…},,src/bot/bot.js:37364
+🏆 Победители,1,src/bot/bot.js,gwOpenKb,a:gw_wv|i:${…},,src/bot/bot.js:8893
+🏆 Топ inviter-ов,1,src/bot/bot.js,renderAdminInviteVisibilityHome,a:admin_invites_list|k:top|p:0,mixed_language,src/bot/bot.js:38836
+🏆 Экспорт winners,1,src/bot/bot.js,renderGwStats,a:gw_export|i:${…}|t:winners,mixed_language,src/bot/bot.js:18621
+🏢 Бренд / Заказчик,1,src/bot/bot.js,renderRoleSelection,a:home_mode|m:brand,,src/bot/bot.js:4296
+🏢 Бренды,1,src/bot/bot.js,renderBroadcastAudiencePicker,,,src/bot/bot.js:37979
+🏢 Перейти в режим Бренд,1,src/bot/bot.js,getBot,a:home_mode|m:brand,,src/bot/bot.js:31016
+🏷 Ниши,1,src/bot/bot.js,renderBrandProfileHome,a:brand_niche_pick${…}|from:home,,src/bot/bot.js:6759
+🏷 Ниши (${…}/${…}),1,src/bot/bot.js,renderProfileMatchingHome,a:pm_pick|ws:${…}|t:v,,src/bot/bot.js:9495
+🏷 Перейти в бренд,1,src/bot/bot.js,mainMenuCreatorKb,a:ui_mode_set|m:brand|ret:menu,,src/bot/bot.js:3523
+🏷 Профиль бренда${…},1,src/bot/bot.js,mainMenuBrandKb,a:brand_profile|ws:0|ret:brand,,src/bot/bot.js:3619
+🏷 Теги,1,src/bot/bot.js,renderBrandProfileMore,a:brand_rt_pick${…},,src/bot/bot.js:7043
+👀 View,1,src/bot/bot.js,getBot,a:mod_verif_view|uid:${…}|p:0,,src/bot/bot.js:23532
+👀 Пример,1,src/bot/bot.js,renderFeaturedHome,,,src/bot/bot.js:18317
+👀 Пример результата,1,src/bot/bot.js,renderMatchingHome,,,src/bot/bot.js:18260
+👤 ${…},1,src/bot/bot.js,renderProfileMatchingResults,a:pm_view|ws:${…}|id:${…}|p:${…},,src/bot/bot.js:9582
+👤 ${…}${…},1,src/bot/bot.js,renderAdminUsers,a:adm_ucard|id:${…}|f:${…}|p:${…},,src/bot/bot.js:40559
+👤 Взять себе,1,src/bot/bot.js,renderLeadView,${…}|do:me,,src/bot/bot.js:12440
+👤 Кабинет куратора,1,src/bot/bot.js,curatorModeMenuKb,a:cur_home,,src/bot/bot.js:4452
+👤 Проверить меня,1,src/bot/gwAccess.js,renderGwAccess,a:gw_access_checkme|i:${…},,src/bot/gwAccess.js:228
+👥 Все,1,src/bot/bot.js,renderCuratorAudit,,,src/bot/bot.js:5773
+👥 Кураторы,1,src/bot/bot.js,wsSettingsKb,a:cur_manage|ws:${…},,src/bot/bot.js:5419
+👥 Кураторы канала,1,src/bot/bot.js,gwOpenKb,a:ws_settings|ws:${…},,src/bot/bot.js:8908
+👥 Пользователи,1,src/bot/bot.js,renderAdminOps,a:admin_users|f:all|p:0,,src/bot/bot.js:38478
+👥 Список кураторов,1,src/bot/bot.js,curManageKb,a:cur_list|ws:${…},,src/bot/bot.js:5507
+👥 Список менеджеров,1,src/bot/bot.js,brandTeamKb,a:bm_list|ws:${…}|ret:${…},,src/bot/bot.js:5980
+💠 Категория,1,src/bot/bot.js,renderBrandProfileMore,a:brand_bb_pick${…},,src/bot/bot.js:7037
+💬 DM бренду,1,src/bot/bot.js,renderWsIgTemplatesMenu,a:ws_ig_templates_send|ws:${…}|t:dm,mixed_language,src/bot/bot.js:11124
+💬 В работе,1,api/qstash/monetization-retry.js,processOrphanedAutohealBatch,a:brand_apps|ws:0|s:in_progress|p:0,,api/qstash/monetization-retry.js:451
+💬 Написать,1,src/bot/bot.js,renderBxPublicView,a:bx_msg|ws:${…}|o:${…}|p:${…}|h:${…},,src/bot/bot.js:16501
+💬 Ответить,1,api/qstash/monetization-retry.js,processOrphanedAutohealBatch,a:brand_app_chat|id:${…},,api/qstash/monetization-retry.js:429
+💬 Перег. ${…},1,src/bot/bot.js,brandDealsTabsKb,a:brand_deals|ws:0|st:negotiation|p:0,,src/bot/bot.js:13252
+💰 Деньги ₽,1,src/bot/bot.js,gwNewStepPrizeKb,a:gw_prize|ws:${…}|t:rub,,src/bot/bot.js:8675
+💰 Платежи,1,src/bot/bot.js,renderAdminOps,a:admin_payments,,src/bot/bot.js:38479
+💰 Цены,1,src/bot/bot.js,renderAdminFounder,a:admin_founder_set_prices,,src/bot/bot.js:39999
+💳 ${…} · ${…}⭐️,1,src/bot/bot.js,renderBrandPassTopup,a:brand_buy|ws:${…}|pack:${…},,src/bot/bot.js:18077
+💳 ORPHANED,1,src/bot/opsAlerts.js,flushOpsAlerts,a:admin_payments|st:ORPHANED|p:0,,src/bot/opsAlerts.js:231
+💳 Докупить кредиты,1,src/bot/bot.js,renderBrandPlan,a:brand_pass|ws:${…},,src/bot/bot.js:18133
+💳 Кредиты: ${…}${…},1,src/bot/bot.js,bxBrandMenuKb,a:brand_pass|ws:${…},,src/bot/bot.js:6248
+💳 Купить кредиты,1,api/qstash/monetization-retry.js,processOrphanedAutohealBatch,a:brand_pass|ws:0|ret:offer|id:${…},,api/qstash/monetization-retry.js:732
+💳 Купить размещение,1,src/bot/bot.js,renderOfficialManageView,a:off_buy_home|ws:${…}|o:${…}|p:${…}|back:${…},,src/bot/bot.js:17477
+💳 Оплата ${…},1,src/bot/bot.js,brandDealsTabsKb,a:brand_deals|ws:0|st:paid|p:0,,src/bot/bot.js:13254
+💳 Прием: ${…},1,src/bot/bot.js,renderAdminSystem,a:admin_pay_accept_toggle,,src/bot/bot.js:38898
+💸 ₽,1,src/bot/bot.js,bxCompKb,a:bx_comp|ws:${…}|p:rub,,src/bot/bot.js:8159
+📁 ${…},1,src/bot/bot.js,renderFoldersMy,a:folders_home|ws:${…},,src/bot/bot.js:15312
+📁 Архив,1,src/bot/bot.js,renderBxMy,a:bx_my_arch|ws:${…}|p:0,,src/bot/bot.js:15949
+📁 Открыть папки Workspace,1,src/bot/bot.js,getBot,a:folders_home|ws:${…},mixed_language,src/bot/bot.js:24244
+📂 Текущий канал,1,src/bot/bot.js,mainMenuCreatorCurrentKb,a:ws_open|ws:${…},,src/bot/bot.js:3563
+📄 Коротко,1,src/bot/bot.js,renderWsShareMenu,a:ws_share_send|ws:${…}|v:short,,src/bot/bot.js:11060
+📄 Подробно,1,src/bot/bot.js,renderWsShareMenu,a:ws_share_send|ws:${…}|v:long,,src/bot/bot.js:11061
+📅 7 дней,1,src/bot/bot.js,renderOfficialRequestHome,a:off_req|ws:${…}|o:${…}|days:7|p:${…}|back:${…},,src/bot/bot.js:17549
+📈 Метрики,1,src/bot/bot.js,renderAdminOps,a:admin_metrics|d:14,,src/bot/bot.js:38484
+📊 Открыть #${…},1,src/bot/bot.js,getBot,,,src/bot/bot.js:32726
+📋 Модераторы,1,src/bot/bot.js,renderAdminSystem,a:admin_mod_list,,src/bot/bot.js:38912
+📋 Показать бренды,1,src/bot/bot.js,brandDirFiltersKb,a:brands_home|p:0,,src/bot/bot.js:7389
+📋 Показать креаторов,1,src/bot/bot.js,bxFiltersKb,a:bx_feed|ws:${…}|p:0|h:${…},,src/bot/bot.js:8479
+📋 Скопировать ID: ${…},1,src/bot/bot.js,renderAdminUserCard,a:adm_ucopy|id:${…},mixed_language,src/bot/bot.js:40694
+📋 Смотреть оффер,1,src/bot/bot.js,bxThreadKb,a:bx_pub|ws:${…}|o:${…}|p:${…}|h:${…},,src/bot/bot.js:8644
+📌 IG шаблоны,1,src/bot/bot.js,renderWsPublicProfile,a:ws_ig_templates|ws:${…},mixed_language,src/bot/bot.js:11866
+📌 В шаблон,1,src/bot/bot.js,renderAdminDmTemplateView,,,src/bot/bot.js:39929
+📌 Все ${…},1,src/bot/bot.js,brandDealsTabsKb,a:brand_deals|ws:0|st:all|p:0,,src/bot/bot.js:13258
+📌 Закрепить в ленте,1,src/bot/bot.js,renderBxView,a:bx_pin_set|ws:${…}|o:${…},,src/bot/bot.js:16214
+📌 Открыть шаблон,1,src/bot/bot.js,getBot,a:admin_umsg_tpl_view|tid:${…}|p:0,,src/bot/bot.js:20644
+📌 Пин в ленте,1,src/bot/bot.js,renderWsPro,a:ws_pro_pin|ws:${…},,src/bot/bot.js:15267
+📌 Снять пин,1,src/bot/bot.js,renderBxView,a:bx_pin_clear|ws:${…}|o:${…},,src/bot/bot.js:16212
+📌 Стадия сделки,1,src/bot/bot.js,renderBrandAppView,a:brand_deal_view|id:${…}|st:${…}|p:0|ab:${…}.${…},,src/bot/bot.js:13798
+📌 Шаблоны (админ),1,src/bot/bot.js,getBot,a:admin_umsg_tpls|p:0,,src/bot/bot.js:31624
+📎 Медиа,1,src/bot/bot.js,renderBxView,a:bx_media_step|ws:${…}|o:${…}|back:${…}|p:${…},,src/bot/bot.js:16199
+📎 Прайс / медиа‑кит,1,src/bot/bot.js,renderBrandDealTemplates,a:brand_deal_tpl|id:${…}|k:price|b:${…}|p:${…}${…},,src/bot/bot.js:14039
+📎 Скрин,1,src/bot/bot.js,bxProofsKb,a:bx_proof_photo|ws:${…}|t:${…}${…},,src/bot/bot.js:18006
+📚 Все тикеты,1,src/bot/bot.js,renderAdminSupportHome,a:admin_support_list|s:all|p:0,,src/bot/bot.js:38632
+📜 Аудит,1,src/bot/bot.js,renderAdminOps,a:aud|h:24|p:0,,src/bot/bot.js:38482
+📜 Журнал,1,src/bot/bot.js,renderLeadView,,,src/bot/bot.js:12416
+📝,1,src/bot/bot.js,renderAdminUsers,a:adm_unote|id:${…}|f:${…}|p:${…},,src/bot/bot.js:40561
+📝 В очередь публикаций,1,src/bot/bot.js,renderOfficialManageView,a:off_req_home|ws:${…}|o:${…}|p:${…}|back:${…},,src/bot/bot.js:17472
+📝 Добавить заметку,1,src/bot/bot.js,renderLeadNotesViewer,,,src/bot/bot.js:12674
+📞 Контакт,1,src/bot/bot.js,renderBrandProfileHome,a:brand_prof_set${…}|f:ct|from:home,,src/bot/bot.js:6762
+📣,1,src/bot/bot.js,curatorWsKb,a:cur_gw_remind_q|ws:${…}|i:${…},,src/bot/bot.js:18783
+📣 Интеграция,1,src/bot/bot.js,bxKindKb,a:bx_kind|ws:${…}|k:integration,,src/bot/bot.js:8095
+📣 К списку,1,src/bot/bot.js,getBot,,,src/bot/bot.js:32726
+📣 Новая рассылка,1,src/bot/bot.js,renderBroadcastList,,,src/bot/bot.js:38105
+📣 Объявление,1,src/bot/bot.js,renderAdminComms,,,src/bot/bot.js:38527
+📣 Опубликовать ещё раз,1,src/bot/bot.js,getBot,a:gw_publish|ws:${…},,src/bot/bot.js:37112
+📣 Офиц.канал (${…}),1,src/bot/bot.js,renderAdminComms,a:off_queue|p:0,,src/bot/bot.js:38534
+📣 Рассылка,1,src/bot/bot.js,renderAdminOps,,,src/bot/bot.js:38481
+📣 Рассылки,1,src/bot/cron.js,broadcastTick,a:bc_list|p:0,,src/bot/cron.js:1746
+📣 Реклама/упоминание,1,src/bot/bot.js,bxTypeKb,a:bx_type|ws:${…}|t:ad,,src/bot/bot.js:8142
+📣 Статус офиц.канала,1,src/bot/payments/starsHandlers.js,registerStarsPaymentsHandlers,a:off_manage|ws:${…}|o:${…}|p:0|back:my,,src/bot/payments/starsHandlers.js:268
+📤 Export CSV,1,src/bot/bot.js,renderAdminUsers,a:adm_ucsv|f:${…},english_or_internal_term,src/bot/bot.js:40588
+📤 Export TXT,1,src/bot/bot.js,renderAdminAudit,a:aud_export|h:${…},,src/bot/bot.js:40397
+📤 Ещё вариант,1,src/bot/bot.js,renderWsIgDmTemplate,a:ws_ig_dm|ws:${…}|tone:${…}|i:${…},,src/bot/bot.js:11306
+📤 Экспорт eligible,1,src/bot/bot.js,renderGwStats,a:gw_export|i:${…}|t:eligible,mixed_language,src/bot/bot.js:18619
+📤 Экспорт всех,1,src/bot/bot.js,renderGwStats,a:gw_export|i:${…}|t:all,,src/bot/bot.js:18617
+📥 Inbox бренда,1,src/bot/bot.js,kbBrandApplyMore,a:brand_apps|ws:0|s:new|p:0,mixed_language,src/bot/bot.js:4580
+📥 Скачать полный лог,1,src/bot/bot.js,renderWsHistory,a:ws_history_export|ws:${…},,src/bot/bot.js:9286
+📦 Неактивные каналы (${…}),1,src/bot/bot.js,renderWsList,a:ws_list_inactive,,src/bot/bot.js:9122
+📨 Все,1,src/bot/bot.js,renderBroadcastAudiencePicker,,,src/bot/bot.js:37976
+📨 Заявки,1,src/bot/bot.js,getBot,a:go_requests,,src/bot/bot.js:25107
+📨 Заявки брендов,1,src/bot/bot.js,wsMenuKb,a:ws_leads|ws:${…}|s:new|p:0|ret:ws_open,,src/bot/bot.js:5396
+📨 Заявки брендов${…},1,src/bot/bot.js,curatorWsKb,a:ws_leads|w:${…}|s:n|p:0${…},,src/bot/bot.js:18791
+📨 Очередь заявок${…},1,src/bot/bot.js,curatorHomeKb,a:cur_inbox|s:n|p:0,,src/bot/bot.js:18687
+📨 Переслать сообщение,1,src/bot/bot.js,renderGwWhyMenu,a:gw_why_forward|i:${…},,src/bot/bot.js:19243
+📩 Владельцу,1,src/bot/bot.js,curatorGwKb,a:cur_gw_owner_q|ws:${…}|i:${…},,src/bot/bot.js:18873
+📩 Отправить,1,src/bot/bot.js,renderCuratorGiveawayOwnerNotifyQ,a:cur_gw_owner_send|ws:${…}|i:${…},,src/bot/bot.js:19033
+📰 Лента,1,src/bot/bot.js,renderHomeHub,a:bx_feed|ws:0|p:0|h:mm,,src/bot/bot.js:4155
+📰 Открыть ленту,1,src/bot/bot.js,bxSmartKb,a:bx_feed|ws:${…}|p:0|h:${…},,src/bot/bot.js:15730
+📲 Stories,1,src/bot/bot.js,renderWsIgTemplatesMenu,a:ws_ig_templates_send|ws:${…}|t:story,,src/bot/bot.js:11121
+🔁 Повторить,1,src/bot/bot.js,getBot,a:brand_app_reply|id:${…}|s:${…}|p:${…},,src/bot/bot.js:22490
+🔁 Подать заново,1,src/bot/bot.js,renderVerifyHome,a:verify_kind,,src/bot/bot.js:37593
+🔁 Сменить канал,1,src/bot/bot.js,mainMenuCreatorCurrentKb,a:ws_list,,src/bot/bot.js:3562
+🔁 Смешано,1,src/bot/bot.js,bxCompKb,a:bx_comp|ws:${…}|p:mixed,,src/bot/bot.js:8161
+🔄 Выбрать другой,1,src/bot/bot.js,_renderTplFlowBrandApp,a:brand_app_tpls|id:${…}|s:${…}|p:${…},,src/bot/bot.js:14285
+🔄 Проверить снова,1,src/bot/bot.js,brandTeamLockedKb,a:brand_team|ws:${…}|ret:${…},,src/bot/bot.js:6004
+🔄 Статус,1,src/bot/bot.js,getBot,a:ws_ig_verify_status|ws:${…}|ret:${…},,src/bot/bot.js:28912
+🔌 Подключить снова,1,src/bot/bot.js,wsDisconnectedKb,a:ws_reconnect_q|ws:${…},,src/bot/bot.js:5453
+🔎 Ввести ID,1,src/bot/bot.js,renderGwWhyMenu,a:gw_why_enter|i:${…},mixed_language,src/bot/bot.js:19241
+🔎 Найти,1,src/bot/bot.js,renderProfileMatchingHome,a:pm_run|ws:${…}|p:0,,src/bot/bot.js:9498
+🔎 Открыть бренд,1,src/bot/bot.js,kbBrandApplyDone,a:brand_dir_open|u:${…}|p:${…},,src/bot/bot.js:4570
+🔎 Проверить по ID,1,src/bot/gwAccess.js,renderGwAccess,a:gw_access_user_prompt|i:${…},mixed_language,src/bot/gwAccess.js:229
+🔐 Web login: ${…},1,src/bot/bot.js,renderAdminSystem,a:admin_web_login_toggle,,src/bot/bot.js:38897
+🔓 Обычный,1,src/bot/bot.js,curatorHomeKb,a:cur_mode_set|v:0|ret:menu,,src/bot/bot.js:18679
+🔓 Обычный режим,1,src/bot/bot.js,curatorModeMenuKb,a:cur_mode_set|v:0|ret:menu,,src/bot/bot.js:4458
+🔓 Переоткрыть,1,src/bot/bot.js,renderAdminSupportThread,a:admin_support_set|id:${…}|st:waiting_operator|s:${…}|p:${…},,src/bot/bot.js:38736
+🔓 Режим владельца,1,src/bot/bot.js,mainMenuBrandKb,a:bm_mode_set|v:0|ret:menu,,src/bot/bot.js:3630
+🔖 Bio,1,src/bot/bot.js,renderWsIgTemplatesMenu,a:ws_ig_templates_send|ws:${…}|t:bio,,src/bot/bot.js:11125
+🔗 CTA,1,src/bot/bot.js,renderAdminSysNotice,,,src/bot/bot.js:39558
+🔗 Добавить кнопки,1,src/bot/bot.js,getBot,,,src/bot/bot.js:19935
+🔗 Поделиться,1,src/bot/bot.js,renderWsPublicProfile,a:ws_share|ws:${…},,src/bot/bot.js:11865
+🔥 #F${…},1,src/bot/bot.js,renderBxFeed,a:feat_view|ws:${…}|id:${…}|p:${…}|h:${…},,src/bot/bot.js:15915
+🔥 ${…} · ${…}⭐️,1,src/bot/bot.js,renderFeaturedHome,,,src/bot/bot.js:18326
+🔥 Посмотреть,1,src/bot/bot.js,getBot,a:feat_view|ws:${…}|id:${…}|p:0,,src/bot/bot.js:23198
+🔵 Ждут пользователя (${…}),1,src/bot/bot.js,renderAdminSupportHome,a:admin_support_list|s:waiting_user|p:0,,src/bot/bot.js:38628
+🕒 1 день,1,src/bot/bot.js,renderOfficialRequestHome,a:off_req|ws:${…}|o:${…}|days:1|p:${…}|back:${…},,src/bot/bot.js:17548
+🖼 Медиа,1,src/bot/bot.js,gwConfirmKb,a:gw_media_step|ws:${…},,src/bot/bot.js:8800
+🖼️ Пост,1,src/bot/bot.js,renderWsIgTemplatesMenu,a:ws_ig_templates_send|ws:${…}|t:post,,src/bot/bot.js:11122
+🗂 Шаблоны,1,src/bot/bot.js,_renderTplFlowLead,a:lead_tpls|id:${…}|w:${…}|s:${…}|p:${…}${…},,src/bot/bot.js:14371
+🗑 Потер. ${…},1,src/bot/bot.js,brandDealsTabsKb,a:brand_deals|ws:0|st:lost|p:0,,src/bot/bot.js:13257
+🗑 Сбросить черновик,1,src/bot/bot.js,renderBrandApply,a:brand_apply_clear|u:${…}|p:${…},destructive_or_reset,src/bot/bot.js:7845
+🗑 Снять,1,src/bot/bot.js,renderOfficialManageView,a:off_rm|ws:${…}|o:${…}|p:${…}|back:${…},,src/bot/bot.js:17495
+🗑 Удалить аккаунт,1,src/bot/bot.js,getBot,a:acc_del_q,destructive_or_reset,src/bot/bot.js:25569
+🗑 Удалить папку,1,src/bot/bot.js,folderViewKb,a:folder_delete_q|ws:${…}|f:${…},destructive_or_reset,src/bot/bot.js:15398
+🗒 Export last 200,1,src/bot/bot.js,renderAdminHardSkipHits,a:hs_hits_export|p:${…}|r:${…},,src/bot/bot.js:39447
+🗓 Дедлайн,1,src/bot/bot.js,renderAdminFounder,a:admin_founder_set_deadline,,src/bot/bot.js:39998
+🚀 Опубликовать (новая версия),1,src/bot/bot.js,renderAdminSysNotice,,,src/bot/bot.js:39562
+🚀 Про · ${…}⭐️/мес,1,src/bot/bot.js,renderBrandPlan,a:brand_plan_buy|ws:${…}|plan:pro|ret:${…},,src/bot/bot.js:18131
+🚨 Продолжить (break-glass),1,src/bot/bot.js,getBot,,mixed_language,src/bot/bot.js:24888
+🚫 Заблокировать,1,src/bot/bot.js,renderAdminUserCard,a:adm_uban_q|id:${…}|v:1|f:${…}|p:${…},,src/bot/bot.js:40723
+🛰 QStash статус,1,src/bot/bot.js,renderAdminSystem,a:admin_qstash_status,mixed_language,src/bot/bot.js:38906
+🟠 Ждут оператора (${…}),1,src/bot/bot.js,renderAdminSupportHome,a:admin_support_list|s:waiting_operator|p:0,,src/bot/bot.js:38626
+🟢 12h (backlog),1,src/bot/bot.js,renderAdminPaymentsFallback,a:admin_pay_fb_set|ttl:43200|r:backlog,,src/bot/bot.js:38976
+🟢 24h (migration),1,src/bot/bot.js,renderAdminPaymentsFallback,a:admin_pay_fb_set|ttl:86400|r:migration,,src/bot/bot.js:38978
+🟢 2h (incident),1,src/bot/bot.js,renderAdminPaymentsFallback,a:admin_pay_fb_set|ttl:7200|r:incident,,src/bot/bot.js:38975
+🤝 Сделка ${…},1,src/bot/bot.js,brandDealsTabsKb,a:brand_deals|ws:0|st:deal|p:0,,src/bot/bot.js:13253
+🤳 Креатор / Блогер,1,src/bot/bot.js,renderRoleSelection,a:home_mode|m:creator,,src/bot/bot.js:4298
+🧑‍🎤 Креаторы,1,src/bot/bot.js,renderBroadcastAudiencePicker,,,src/bot/bot.js:37977
+🧑‍💼 Менеджеры,1,src/bot/bot.js,renderBroadcastAudiencePicker,,,src/bot/bot.js:37982
+🧑‍💼 Открыть кабинет менеджера,1,src/bot/bot.js,getBot,a:bm_home,,src/bot/bot.js:21389
+🧑‍💼 Режим менеджера бренда,1,src/bot/bot.js,mainMenuCreatorKb,a:bm_home,,src/bot/bot.js:3524
+🧩 Заполнить профиль бренда,1,src/bot/bot.js,brandTeamLockedKb,a:brand_profile_edit|ws:${…}|ret:${…},,src/bot/bot.js:5994
+🧩 Кураторы,1,src/bot/bot.js,renderBroadcastAudiencePicker,,,src/bot/bot.js:37980
+🧩 Пресеты,1,src/bot/bot.js,gwNewStepPrizeKb,a:gw_preset_home|ws:${…},,src/bot/bot.js:8679
+🧩 Форматы,1,src/bot/bot.js,renderBrandProfileMore,a:brand_prof_set${…}|f:ty|from:more,,src/bot/bot.js:7034
+🧩 Шаблоны,1,src/bot/bot.js,bxCategoryKb,a:bx_preset_home|ws:${…},,src/bot/bot.js:8087
+🧪 Send signed ping,1,src/bot/bot.js,renderAdminQStashStatus,a:admin_qstash_ping,,src/bot/bot.js:39676
+🧭 Как это работает,1,src/bot/bot.js,getBot,a:gw_sponsors_help|ws:${…}|b:folder,,src/bot/bot.js:36176
+🧯 Fallback: ${…},1,src/bot/bot.js,renderAdminSystem,a:admin_pay_fb,,src/bot/bot.js:38903
+🧱 Hard-skip (dead chats),1,src/bot/bot.js,renderAdminSystem,a:hs_home|p:0,english_or_internal_term,src/bot/bot.js:38907
+🧱 Пропуски/ошибки,1,src/bot/bot.js,renderBroadcastView,,,src/bot/bot.js:38195
+🧱 Список (set),1,src/bot/bot.js,renderAdminHardSkipHits,a:hs_home|p:0,mixed_language,src/bot/bot.js:39427
+🧹 #${…} ${…},1,src/bot/bot.js,renderCuratorAudit,,,src/bot/bot.js:5787
+🧹 ${…},1,src/bot/bot.js,renderWsProfileContactsClearMenu,a:ws_prof_contacts_clear_k|ws:${…}|k:${…},,src/bot/bot.js:11033
+🧹 Clear pending snapshot,1,src/bot/bot.js,renderAdminOps,a:admin_ops_pending_clear,,src/bot/bot.js:38489
+🧹 Disable,1,src/bot/bot.js,renderAdminPaymentsFallback,a:admin_pay_fb_off,,src/bot/bot.js:38979
+🧹 Включить режим куратора,1,src/bot/bot.js,getBot,a:cur_mode_set|v:1|ret:cur,,src/bot/bot.js:21327
+"🧹 Да, сбросить",1,src/bot/bot.js,getBot,a:ws_prof_reset_ok|ws:${…},destructive_or_reset,src/bot/bot.js:29221
+🧹 Обнулить кредиты (опасно),1,src/bot/bot.js,getBot,a:adm_gift_revoke_input|t:cr,,src/bot/bot.js:30946
+🧹 Очистить всё,1,src/bot/bot.js,renderAdminUserNote,a:adm_unote_clear_q|id:${…}|f:${…}|p:${…},destructive_or_reset,src/bot/bot.js:40815
+🧹 Очистить кнопку,1,src/bot/bot.js,renderBroadcastSimpleButtonPicker,,destructive_or_reset,src/bot/bot.js:37865
+🧹 Очистить поле,1,src/bot/bot.js,renderWsProfileContactsStructured,a:ws_prof_contacts_clear|ws:${…},destructive_or_reset,src/bot/bot.js:10984
+🧹 Очистить текст,1,src/bot/bot.js,renderAdminSysNotice,,destructive_or_reset,src/bot/bot.js:39561
+🧹 Сбросить поиск,1,src/bot/bot.js,getBot,a:admin_users_reset|f:${…}|p:0,destructive_or_reset,src/bot/bot.js:31281
+🧹 Снять hard-skip,1,src/bot/bot.js,renderAdminHardSkipView,a:hs_unskip|tg:${…},mixed_language,src/bot/bot.js:39490
+🧾 #${…},1,src/bot/opsAlerts.js,flushOpsAlerts,a:admin_pay_view|id:${…}|st:ORPHANED|p:0,,src/bot/opsAlerts.js:234
+🧾 Flush ops digest,1,src/bot/bot.js,renderAdminOps,a:admin_ops_flush,,src/bot/bot.js:38488
+🧾 HITs,1,src/bot/bot.js,getBot,a:hs_hits|p:${…}|r:${…},,src/bot/bot.js:30745
+🧾 Transparency log,1,src/bot/bot.js,renderGwStats,a:gw_log|i:${…},english_or_internal_term,src/bot/bot.js:18615
+🧾 Все заявки,1,src/bot/bot.js,renderCuratorAudit,,,src/bot/bot.js:5769
+🧾 Детали,1,src/bot/bot.js,renderLeadView,a:lead_tpl_send|id:${…}|k:brief|w:${…}|s:${…}|p:${…}${…},,src/bot/bot.js:12420
+🧾 Инвайт-карта,1,src/bot/bot.js,inviteKeyboardMarkup,a:share_card,,src/bot/bot.js:3141
+🧾 К списку,1,src/bot/bot.js,renderAdminSupportThread,a:admin_support_list|s:${…}|p:${…},,src/bot/bot.js:38742
+🧾 Лог конкурса,1,src/bot/bot.js,participantKb,a:gw_log|i:${…}${…},,src/bot/bot.js:8929
+🧾 Последние пропуски,1,src/bot/bot.js,renderAdminHardSkipHome,a:hs_hits|p:${…}|r:all,,src/bot/bot.js:39363
+🧾 Уточнить детали,1,src/bot/bot.js,renderBrandDealTemplates,a:brand_deal_tpl|id:${…}|k:brief|b:${…}|p:${…}${…},,src/bot/bot.js:14041
+🩺 Проверить статус,1,src/bot/bot.js,renderOfficialManageView,a:off_verify|ws:${…}|o:${…}|p:${…}|back:${…},,src/bot/bot.js:17487

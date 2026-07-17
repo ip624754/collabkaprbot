@@ -162,3 +162,19 @@
 
 - `operations/STEP584_STAGING_RUNTIME_ACCEPTANCE_RUNBOOK.md` — safe remote preview/staging gate and evidence workflow.
 - `audit/STEP584_STAGING_RUNTIME_ACCEPTANCE_PACK_REPORT.md` — implementation report and truth boundary.
+
+## STEP585 — Conversation and UX language system
+
+Canonical product-language documents:
+
+- `product/COLLABKA_COPY_SYSTEM.md` — voice, message anatomy, button rules, errors, payments and review checklist;
+- `product/TERMINOLOGY_REGISTRY.md` — one canonical term per role, object, lifecycle stage and paid product;
+- `audit/STEP585_FULL_CONVERSATION_UX_LANGUAGE_AUDIT.md` — source-backed P0–P3 findings and readiness score;
+- `audit/STEP585_MESSAGE_INVENTORY.md` — reviewed message/button surface families and scan boundary;
+- `audit/STEP585_BUTTON_LABEL_INVENTORY.csv` — mechanical inventory of static button labels;
+- `roadmap/STEP586_COPY_REFACTOR_ROADMAP.md` — bounded implementation waves STEP586A–H;
+- `process/07_WORK_HISTORY_STEP585.md` — exact scope and Truth Boundary.
+
+Current next action: **STEP586A — Copy Safety & Taxonomy Foundation**.
+
+STEP585 did not change runtime code. Live Telegram rendering and mobile wrapping remain unverified.
