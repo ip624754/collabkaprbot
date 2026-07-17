@@ -141,6 +141,7 @@ export default async function handler(_req, res) {
       },
       official_publish_deliver_last_at: null,
       official_publish_verify_last_at: null,
+      ping: { last_at: null, last_nonce: null },
       reschedule_failed: { day, today_count: null, last_at: null, last_where: null, last_payload: null },
       official_publish_stuck: {
         day,
@@ -805,6 +806,18 @@ try {
     }
     try {
       base.qstash.official_publish_verify_last_at = (await redis.get(k(['qstash', 'official_publish_verify', 'last_at']))) || null;
+    } catch {
+      // ignore
+    }
+    try {
+      const [lastAt, lastNonce] = await readMany([
+        k(['qstash', 'ping', 'last_at']),
+        k(['qstash', 'ping', 'last_nonce']),
+      ]);
+      base.qstash.ping = {
+        last_at: lastAt || null,
+        last_nonce: lastNonce ? String(lastNonce).slice(0, 128) : null,
+      };
     } catch {
       // ignore
     }

@@ -182,3 +182,7 @@ Read first:
 - Verified locally: webhook auth and callback dispatch, Redis degradation fallback, QStash ping convergence.
 - Not verified live: Vercel, Telegram, Neon, Upstash Redis, QStash.
 - Next STEP: STEP584 Staging Runtime Acceptance Pack.
+
+## Current next action after STEP584
+
+Deploy the STEP584 baseline to preview/staging, run `npm run acceptance:staging` first in observe-only mode, then optionally with `ACCEPTANCE_QSTASH_PUBLISH=1`. Preserve generated evidence. Do not claim staging GO until that remote evidence and one manual Telegram creator/brand navigation smoke exist.

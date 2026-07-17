@@ -2900,3 +2900,7 @@ Added deterministic proof for webhook auth/dispatch, representative callback del
 Truth boundary: no live Vercel, Telegram, Neon, Upstash Redis or QStash environment was contacted.
 
 Next recommended STEP: **STEP584 — Staging Runtime Acceptance Pack**.
+
+## STEP584 — Staging Runtime Acceptance Pack
+
+Implemented a bounded remote staging acceptance command (`npm run acceptance:staging`) with exact target acknowledgement, health GO/NO-GO evaluation, webhook/QStash negative-boundary probes, optional signed QStash convergence, and JSON/Markdown evidence. `/api/health` now exposes sanitized `qstash.ping.last_at/last_nonce` for deterministic readback. Local contract verified; real staging execution remains pending.

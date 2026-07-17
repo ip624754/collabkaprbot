@@ -157,3 +157,8 @@
 - `audit/STEP583_RUNTIME_PROOF_SPINE_REPORT.md`
 - `process/07_WORK_HISTORY_STEP583.md`
 - command: `npm run smoke:runtime-proof-spine`
+
+### Staging acceptance
+
+- `operations/STEP584_STAGING_RUNTIME_ACCEPTANCE_RUNBOOK.md` — safe remote preview/staging gate and evidence workflow.
+- `audit/STEP584_STAGING_RUNTIME_ACCEPTANCE_PACK_REPORT.md` — implementation report and truth boundary.

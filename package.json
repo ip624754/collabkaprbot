@@ -144,7 +144,9 @@
     "smoke:invite-layer": "node scripts/smoke-invite-layer-contract.js",
     "smoke:invite-rewards": "node scripts/smoke-invite-rewards-contract.js",
     "smoke:preflight-dependency-resolution-contract": "node scripts/smoke-preflight-dependency-resolution-contract.js",
-    "smoke:runtime-proof-spine": "node scripts/smoke-runtime-proof-spine.js"
+    "smoke:runtime-proof-spine": "node scripts/smoke-runtime-proof-spine.js",
+    "acceptance:staging": "node scripts/staging-runtime-acceptance.js",
+    "smoke:staging-runtime-acceptance-contract": "node scripts/smoke-staging-runtime-acceptance-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",
