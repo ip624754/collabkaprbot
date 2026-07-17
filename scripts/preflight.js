@@ -39,7 +39,7 @@ function getMissingLocalDependencies() {
 
   return deps.filter((dep) => {
     try {
-      require.resolve(`${dep}/package.json`, { paths: [ROOT] });
+      require.resolve(dep, { paths: [ROOT] });
       return false;
     } catch {
       return true;

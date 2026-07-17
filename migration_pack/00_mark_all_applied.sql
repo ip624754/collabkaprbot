@@ -56,3 +56,6 @@ INSERT INTO schema_migrations(name, checksum) VALUES ('041_ig_oauth_accounts.sql
 INSERT INTO schema_migrations(name, checksum) VALUES ('042_payments_fk_hardening.sql', 'e16b3cb4ab116965069a9d7dac4eae6848b6e084d19384696bcd6ecc57c2798a') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('043_users_soft_delete.sql', '15220a406620a82f29cd10f68aec639833174cfb0083ea5268e9281d259da315') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('044_workspace_channel_disconnect.sql', 'cdf91e251528528d288caa67462a4528c9f621f63b400c69297bd364cfe8f44c') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('045_member_invites.sql', 'd61575e3e077583827cc54735ab7dcb5f5b0c65f9085a01fde3b5565e3f4bab7') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('046_invite_reward_ledger.sql', '7f5af02ad82a3969dd4a9f0b2083afea60ef34b7c0f443b14e8987d92652a7d6') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('047_support_threads.sql', 'cfaedd17b72b5f02333c0e30c294758d54fd0df8a441b28d768c9da3b9ae1ad4') ON CONFLICT (name) DO NOTHING;

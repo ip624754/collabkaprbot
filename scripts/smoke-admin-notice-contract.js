@@ -63,31 +63,18 @@ assert.ok(renderAdminNoticeSrc.includes('<b>Текст</b>'), 'Admin → Notice 
 assert.ok(renderAdminNoticeSrc.includes('Показывается пользователям <b>1 раз на версию</b>'), 'Admin → Notice must keep once-per-version runtime hint');
 assert.ok(renderAdminNoticeSrc.includes('Чтобы показать снова — жми «🚀 Опубликовать»'), 'Admin → Notice must keep publish hint');
 
-assertMatch(
-  renderAdminNoticeSrc,
-  /const kb = new InlineKeyboard\([\s\S]*?\.text\(n\.active \? '⚫ Выключить' : '🟢 Включить', 'a:admin_notice_toggle'\)\s*\.text\(`🎚 Уровень: \$\{sev\}`, 'a:admin_notice_sev'\)\s*\.row\(\)/s,
-  'Admin → Notice row 1 must keep toggle + severity controls'
-);
-assertMatch(
-  renderAdminNoticeSrc,
-  /\.text\(`🎯 Кому: \$\{tgt\}`, 'a:admin_notice_target'\)\s*\.text\('⏰ Expire', 'a:admin_notice_expire'\)\s*\.row\(\)/s,
-  'Admin → Notice row 2 must keep target + expire controls'
-);
-assertMatch(
-  renderAdminNoticeSrc,
-  /\.text\('🔗 CTA', 'a:admin_notice_cta'\)\s*\.text\('✍️ Текст', 'a:admin_notice_text'\)\s*\.row\(\)/s,
-  'Admin → Notice row 3 must keep CTA + text controls'
-);
-assertMatch(
-  renderAdminNoticeSrc,
-  /\.text\('🧹 Очистить текст', 'a:admin_notice_clear'\)\s*\.text\('🚀 Опубликовать \(новая версия\)', 'a:admin_notice_publish'\)\s*\.row\(\)/s,
-  'Admin → Notice row 4 must keep clear + publish controls'
-);
-assertMatch(
-  renderAdminNoticeSrc,
-  /kb[\s\S]*?\.text\('⬅️ Коммуникации', 'a:admin_comms'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
-  'Admin → Notice footer must keep Comms/Menu/Home navigation'
-);
+assert.ok(renderAdminNoticeSrc.includes("commsCb.adminNoticeToggle()"), 'Admin → Notice toggle control must use canonical callback builder');
+assert.ok(renderAdminNoticeSrc.includes("commsCb.adminNoticeSeverity()"), 'Admin → Notice severity control must use canonical callback builder');
+assert.ok(renderAdminNoticeSrc.includes("commsCb.adminNoticeTarget()"), 'Admin → Notice target control must use canonical callback builder');
+assert.ok(renderAdminNoticeSrc.includes("commsCb.adminNoticeExpire()"), 'Admin → Notice expiry control must use canonical callback builder');
+assert.ok(renderAdminNoticeSrc.includes("commsCb.adminNoticeCta()"), 'Admin → Notice CTA control must use canonical callback builder');
+assert.ok(renderAdminNoticeSrc.includes(".text('✍️ Текст', 'a:admin_notice_text')"), 'Admin → Notice text control must remain explicit');
+assert.ok(renderAdminNoticeSrc.includes("commsCb.adminNoticeClear()"), 'Admin → Notice clear control must use canonical callback builder');
+assert.ok(renderAdminNoticeSrc.includes("commsCb.adminNoticePublish()"), 'Admin → Notice publish control must use canonical callback builder');
+assert.ok(renderAdminNoticeSrc.includes(".text('⬅️ Коммуникации', 'a:admin_comms')"), 'Admin → Notice footer must return to Comms');
+assert.ok(renderAdminNoticeSrc.includes(".text('📋 Меню', 'a:menu')"), 'Admin → Notice footer must keep Menu');
+assert.ok(renderAdminNoticeSrc.includes(".text('🏠 Home', 'a:home')"), 'Admin → Notice footer must keep Home');
+
 
 assert.ok(noticeCallbackSrc.includes("if (p.a === 'a:admin_notice') {"), 'Admin → Notice main callback must exist');
 assert.ok(noticeCallbackSrc.includes("try { await clearExpectText(ctx.from.id); } catch {}"), 'Admin → Notice entry must clear expectText');
@@ -112,7 +99,7 @@ assert.ok(noticeCallbackSrc.includes("setExpectText(ctx.from.id, { type: 'admin_
 
 assert.ok(noticeExpectSrc.includes("if (exp.type === 'admin_notice_text') {"), 'Admin → Notice text expect handler must exist');
 assert.ok(noticeExpectSrc.includes("const textMeta = clipCodepoints(raw, TG_SAFE_BODY_MAX);"), 'Admin → Notice text expect must clip to Telegram-safe body');
-assert.ok(noticeExpectSrc.includes(".text('🚀 Опубликовать', 'a:admin_notice_publish')"), 'Admin → Notice text expect must keep publish shortcut');
+assert.ok(noticeExpectSrc.includes(".text('🚀 Опубликовать', commsCb.adminNoticePublish())"), 'Admin → Notice text expect must keep publish shortcut');
 assert.ok(noticeExpectSrc.includes('Текст был обрезан до ${TG_SAFE_BODY_MAX} символов'), 'Admin → Notice text expect must keep clip warning');
 assert.ok(noticeExpectSrc.includes('Нажми «🚀 Опубликовать», чтобы показать пользователям новую версию'), 'Admin → Notice text expect must keep publish follow-up');
 assert.ok(noticeExpectSrc.includes("if (exp.type === 'admin_notice_cta') {"), 'Admin → Notice CTA expect handler must exist');

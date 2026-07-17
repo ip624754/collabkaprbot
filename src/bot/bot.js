@@ -31301,6 +31301,136 @@ https://collabka.com/status</pre>
       return;
     }
 
+    // STEP582: User-directory callback completeness
+    if (p.a === 'a:adm_ucopy') {
+      if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      const uid = Number(p.id || 0);
+      const card = await db.getUserCardById(uid);
+      const tgId = Number(card?.tg_id || 0);
+      await ctx.answerCallbackQuery({ text: tgId ? `TG ID: ${tgId}` : 'TG ID не найден.', show_alert: true });
+      return;
+    }
+
+    if (p.a === 'a:adm_ucsv') {
+      if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery({ text: 'Готовлю CSV…' });
+      const filter = String(p.f || 'all').toLowerCase();
+      let q = '';
+      try { q = String(await getAdminUsersQuery(Number(ctx.from.id)) || ''); } catch {}
+      await sendAdminUsersCsv(ctx, filter, q);
+      return;
+    }
+
+    if (p.a === 'a:adm_ugift') {
+      if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      const uid = Number(p.id || 0);
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      const card = await db.getUserCardById(uid);
+      const username = String(card?.tg_username || '').replace(/^@/, '').trim().toLowerCase();
+      if (!card || !username) {
+        await safeEditOrReply(ctx, '⚠️ Для подарка нужен username пользователя.', { reply_markup: new InlineKeyboard().text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`) });
+        return;
+      }
+      const kb = new InlineKeyboard()
+        .text(`⭐️ Brand Plan Старт (${CFG.BRAND_PLAN_DURATION_DAYS}д)`, `a:adm_ugift_do|id:${uid}|t:bp_start|f:${f}|p:${page}`).row()
+        .text(`🚀 Brand Plan Про (${CFG.BRAND_PLAN_DURATION_DAYS}д)`, `a:adm_ugift_do|id:${uid}|t:bp_pro|f:${f}|p:${page}`).row()
+        .text(`✨ PRO Креатор (${CFG.PRO_DURATION_DAYS}д)`, `a:adm_ugift_do|id:${uid}|t:pro|f:${f}|p:${page}`).row()
+        .text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`);
+      await safeEditOrReply(ctx, `🎁 <b>Подарить подписку</b>
+
+Пользователь: <b>@${escapeHtml(username)}</b>`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_ugift_do') {
+      if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      const uid = Number(p.id || 0);
+      const giftType = String(p.t || '');
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      const card = await db.getUserCardById(uid);
+      if (!card) { await ctx.answerCallbackQuery({ text: 'Пользователь не найден.' }); return; }
+      if (giftType === 'bp_start' || giftType === 'bp_pro') {
+        const planId = giftType === 'bp_start' ? 'start' : 'pro';
+        const planDef = BRAND_PLANS.find((pl) => pl.id === planId);
+        await db.activateBrandPlan(uid, planId, CFG.BRAND_PLAN_DURATION_DAYS);
+        if (planDef?.credits) await db.addGiftedBrandCredits(uid, planDef.credits);
+      } else if (giftType === 'pro') {
+        const wsList = await db.listWorkspaces(uid);
+        for (const ws of wsList) await db.activateWorkspacePro(ws.id, CFG.PRO_DURATION_DAYS);
+      } else {
+        await ctx.answerCallbackQuery({ text: 'Неизвестный тип подарка.' });
+        return;
+      }
+      await ctx.answerCallbackQuery({ text: 'Подарок применён ✅' });
+      await renderAdminUserCard(ctx, uid, f, page);
+      return;
+    }
+
+    if (p.a === 'a:adm_urevoke_q') {
+      if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      const uid = Number(p.id || 0);
+      const type = String(p.t || '');
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      const labels = { bp: 'Brand Plan', bp_gcr: 'Brand Plan + подарочные кредиты', gcr: 'подарочные кредиты', pro: 'PRO', cr: 'все кредиты' };
+      const kb = new InlineKeyboard()
+        .text('⛔ Подтвердить', `a:adm_urevoke_do|id:${uid}|t:${type}|f:${f}|p:${page}`)
+        .text('❌ Отмена', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`);
+      await safeEditOrReply(ctx, `⛔ <b>Подтверждение</b>
+
+Забрать: <b>${escapeHtml(labels[type] || type)}</b>?`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_urevoke_do') {
+      if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      const uid = Number(p.id || 0);
+      const type = String(p.t || '');
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      if (type === 'bp') await db.revokeBrandPlan(uid);
+      else if (type === 'bp_gcr') { await db.revokeBrandPlan(uid); await db.revokeGiftedBrandCredits(uid); }
+      else if (type === 'gcr') await db.revokeGiftedBrandCredits(uid);
+      else if (type === 'pro') await db.revokeAllWorkspacePro(uid);
+      else if (type === 'cr') await db.resetBrandCredits(uid);
+      else { await ctx.answerCallbackQuery({ text: 'Неизвестный тип.' }); return; }
+      await ctx.answerCallbackQuery({ text: 'Изменение применено ✅' });
+      await renderAdminUserCard(ctx, uid, f, page);
+      return;
+    }
+
+    if (p.a === 'a:adm_uban_q') {
+      if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      await ctx.answerCallbackQuery();
+      const uid = Number(p.id || 0);
+      const ban = String(p.v || '1') === '1';
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      const kb = new InlineKeyboard()
+        .text(ban ? '🚫 Заблокировать' : '✅ Разбанить', `a:adm_uban_do|id:${uid}|v:${ban ? 1 : 0}|f:${f}|p:${page}`)
+        .text('❌ Отмена', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`);
+      await safeEditOrReply(ctx, `${ban ? '🚫' : '✅'} <b>Подтверждение</b>
+
+${ban ? 'Заблокировать' : 'Разбанить'} пользователя?`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (p.a === 'a:adm_uban_do') {
+      if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+      const uid = Number(p.id || 0);
+      const ban = String(p.v || '1') === '1';
+      const f = String(p.f || 'all').toLowerCase();
+      const page = Math.max(0, Number(p.p) || 0);
+      if (ban) await db.banUser(uid); else await db.unbanUser(uid);
+      await ctx.answerCallbackQuery({ text: ban ? 'Пользователь заблокирован.' : 'Пользователь разбанен.' });
+      await renderAdminUserCard(ctx, uid, f, page);
+      return;
+    }
+
     // Admin: User Card
     if (p.a === 'a:adm_ucard') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -32105,18 +32235,186 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
 
   if (uid) kb.text('👤 Карточка', `a:adm_ucard|id:${uid}|f:all|p:0`).row();
 
-      const preset = broadcastSimpleButtonPresets().find((x) => x.key === key);
-      if (!preset) { await ctx.answerCallbackQuery({ text: 'Preset недоступен.' }); return; }
-      await ctx.answerCallbackQuery({ text: 'Кнопка сохранена.' });
-      const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
-      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
-      draft.mode = 'simple';
-      if (!draft.audience) draft.audience = rememberedAudience || 'all';
-      draft.buttons = [{ text: preset.label, url: preset.url }];
-      await setDraft(ctx.from.id, draft, 30 * 60);
-      await renderBroadcastSimpleComposer(ctx, `✅ Кнопка preset: <b>${escapeHtml(preset.label)}</b>`);
-      return;
-    }
+
+  kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
+  await safeEditOrReply(ctx, `${preview}${warnHtml}${phInfo}`, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
+  return;
+}
+
+if (p.a === 'a:admin_outbox_to_tpl') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  const idx = Math.max(0, Number(p.i) || 0);
+  const page = Math.max(0, Number(p.p) || 0);
+  const it = await getAdminOutboxItemByIndex(idx);
+  const raw = String(it?.snippet || it?.preview || '').trim();
+  if (!raw) { await ctx.answerCallbackQuery({ text: 'В записи нет текста.' }); return; }
+  const { tpls } = await getAdminDmTemplatesWithMeta();
+  const items = Array.isArray(tpls.items) ? tpls.items.map((x) => ({ ...x })) : [];
+  const id = 't' + randomToken(6);
+  const label = clipText(`Outbox ${fmtTs(it?.ts || new Date().toISOString())}`, 48);
+  items.push({ id, label, text: clipCodepoints(raw, TG_SAFE_BODY_MAX).text });
+  await setAdminDmTemplates({ version: Number(tpls.version || 0) + 1, updatedAt: new Date().toISOString(), items });
+  await renderAdminDmTemplateView(ctx, id, 0);
+  return;
+}
+
+if (p.a === 'a:admin_outbox_clear_q') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  const page = Math.max(0, Number(p.p) || 0);
+  const kb = new InlineKeyboard().text('🧹 Очистить', commsCb.adminOutboxClear(page)).text('❌ Отмена', commsCb.adminOutbox(page));
+  await safeEditOrReply(ctx, `🧹 <b>Очистить Outbox?</b>\n\nДействие удалит Redis-журнал исходящих admin DM.`, { parse_mode: 'HTML', reply_markup: kb });
+  return;
+}
+
+if (p.a === 'a:admin_outbox_clear') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  await clearAdminOutbox();
+  await renderAdminOutbox(ctx, 0);
+  return;
+}
+
+if (p.a === 'a:admin_umsg_tpls') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  await renderAdminDmTemplates(ctx, Math.max(0, Number(p.p) || 0));
+  return;
+}
+
+if (p.a === 'a:admin_umsg_tpl_view') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  await renderAdminDmTemplateView(ctx, String(p.tid || ''), Math.max(0, Number(p.p) || 0));
+  return;
+}
+
+if (p.a === 'a:admin_umsg_tpl_add') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  const page = Math.max(0, Number(p.p) || 0);
+  await safeEditOrReply(ctx, `➕ <b>Новый DM-шаблон</b>\n\n1-я строка — название.\nДальше — текст шаблона.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`) });
+  await setExpectText(ctx.from.id, { type: 'admin_umsg_tpl_add', page }, 20 * 60);
+  return;
+}
+
+if (p.a === 'a:admin_umsg_tpl_edit') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  const page = Math.max(0, Number(p.p) || 0);
+  const tplId = String(p.tid || '');
+  await safeEditOrReply(ctx, `✏️ <b>Изменить DM-шаблон</b>\n\n1-я строка — название.\nДальше — новый текст.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`) });
+  await setExpectText(ctx.from.id, { type: 'admin_umsg_tpl_edit', tplId, page }, 20 * 60);
+  return;
+}
+
+if (p.a === 'a:admin_umsg_tpl_del_q') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  const page = Math.max(0, Number(p.p) || 0);
+  const tplId = String(p.tid || '');
+  const kb = new InlineKeyboard().text('🗑 Удалить', `a:admin_umsg_tpl_del|tid:${tplId}|p:${page}`).text('❌ Отмена', `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`);
+  await safeEditOrReply(ctx, '🗑 <b>Удалить шаблон?</b>', { parse_mode: 'HTML', reply_markup: kb });
+  return;
+}
+
+if (p.a === 'a:admin_umsg_tpl_del') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  const page = Math.max(0, Number(p.p) || 0);
+  const tplId = String(p.tid || '');
+  const { tpls } = await getAdminDmTemplatesWithMeta();
+  const items = (Array.isArray(tpls.items) ? tpls.items : []).filter((x) => String(x.id || '') !== tplId);
+  await setAdminDmTemplates({ version: Number(tpls.version || 0) + 1, updatedAt: new Date().toISOString(), items });
+  await renderAdminDmTemplates(ctx, page);
+  return;
+}
+
+if (p.a === 'a:admin_umsg_tpl_reset_q') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  const page = Math.max(0, Number(p.p) || 0);
+  const kb = new InlineKeyboard().text('♻️ Сбросить', `a:admin_umsg_tpl_reset|p:${page}`).text('❌ Отмена', `a:admin_umsg_tpls|p:${page}`);
+  await safeEditOrReply(ctx, '♻️ <b>Сбросить шаблоны к дефолтным?</b>', { parse_mode: 'HTML', reply_markup: kb });
+  return;
+}
+
+if (p.a === 'a:admin_umsg_tpl_reset') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return;
+  await resetAdminDmTemplates();
+  await renderAdminDmTemplates(ctx, 0);
+  return;
+}
+
+if (p.a === 'a:bc_start') {
+  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+  await ctx.answerCallbackQuery();
+  try { await clearExpectText(ctx.from.id); } catch {}
+  await renderBroadcastSimpleComposer(ctx);
+  return;
+}
+
+if (p.a === 'a:bc_start_adv') {
+  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+  await ctx.answerCallbackQuery();
+  try { await clearDraft(ctx.from.id); } catch {}
+  await safeEditOrReply(ctx, `🧰 <b>Расширенный composer</b>\n\nОтправь текст, фото, видео, GIF или документ.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Простой composer', commsCb.bcStart()) });
+  await setExpectText(ctx.from.id, { type: 'bc_content' }, 30 * 60);
+  return;
+}
+
+if (p.a === 'a:bc_simple_text') {
+  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+  await ctx.answerCallbackQuery();
+  await safeEditOrReply(ctx, `📝 <b>Текст рассылки</b>\n\nОтправь текст одним сообщением.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart()) });
+  await setExpectText(ctx.from.id, { type: 'bc_simple_text' }, 30 * 60);
+  return;
+}
+
+if (p.a === 'a:bc_simple_media') {
+  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+  await ctx.answerCallbackQuery();
+  await safeEditOrReply(ctx, `🖼 <b>Картинка рассылки</b>\n\nОтправь фото одним сообщением.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart()) });
+  await setExpectText(ctx.from.id, { type: 'bc_simple_media' }, 30 * 60);
+  return;
+}
+
+if (p.a === 'a:bc_simple_media_clear') {
+  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+  await ctx.answerCallbackQuery({ text: 'Картинка удалена.' });
+  const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
+  const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
+  delete draft.mediaType; delete draft.fileId; delete draft.caption; draft.mode = 'simple';
+  await setDraft(ctx.from.id, draft, 30 * 60);
+  await renderBroadcastSimpleComposer(ctx);
+  return;
+}
+
+if (p.a === 'a:bc_simple_button') {
+  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+  await ctx.answerCallbackQuery();
+  const draft = await getDraft(ctx.from.id);
+  await renderBroadcastSimpleButtonPicker(ctx, draft || {});
+  return;
+}
+
+if (p.a === 'a:bc_simple_btn_preset') {
+  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
+  const key = String(p.k || '');
+  const preset = broadcastSimpleButtonPresets().find((x) => x.key === key);
+  if (!preset) { await ctx.answerCallbackQuery({ text: 'Preset недоступен.' }); return; }
+  await ctx.answerCallbackQuery({ text: 'Кнопка сохранена.' });
+  const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
+  const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
+  draft.mode = 'simple';
+  if (!draft.audience) draft.audience = rememberedAudience || 'all';
+  draft.buttons = [{ text: preset.label, url: preset.url }];
+  await setDraft(ctx.from.id, draft, 30 * 60);
+  await renderBroadcastSimpleComposer(ctx, `✅ Кнопка preset: <b>${escapeHtml(preset.label)}</b>`);
+  return;
+}
 
     if (p.a === 'a:bc_simple_btn_custom') {
       const isAdmin = isSuperAdminTg(ctx.from.id);

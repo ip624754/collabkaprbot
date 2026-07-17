@@ -3,6 +3,7 @@
 Это актуальный комплект документации по проекту **Collabka PR**.
 
 ## 0) BOOT (всегда читаем сначала)
+- `process/07_WORK_HISTORY_STEP582.md` — актуальная дельта: восстановление callback/dependency preflight truth и границы локальной проверки
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)

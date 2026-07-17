@@ -47,8 +47,8 @@ assert.ok(renderAdminCommsSrc.includes("text += '• 📤 Outbox — журна�
 
 assertMatch(
   renderAdminCommsSrc,
-  /const kb = new InlineKeyboard\([\s\S]*?\.text\('📣 Объявление', 'a:admin_notice'\)\s*\.text\('📌 Шаблоны DM', 'a:admin_umsg_tpls\|p:0'\)\s*\.row\(\)\s*\.text\('📤 Outbox', 'a:admin_outbox\|p:0'\);/s,
-  'Admin → Comms primary keyboard rows must keep Notice + DM templates + Outbox'
+  /const kb = new InlineKeyboard\([\s\S]*?\.text\('📣 Объявление', (?:'a:admin_notice'|commsCb\.adminNotice\(\))\)\s*\.text\('📌 Шаблоны DM', 'a:admin_umsg_tpls\|p:0'\)\s*\.row\(\)\s*\.text\('📤 Outbox', 'a:admin_outbox\|p:0'\)\s*\.text\('🆘 Поддержка', 'a:admin_support'\);/s,
+  'Admin → Comms primary keyboard rows must keep Notice + DM templates + Outbox + Support'
 );
 assertMatch(
   renderAdminCommsSrc,

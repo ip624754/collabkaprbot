@@ -1,3 +1,24 @@
+## STEP582 — Preflight Truth Restoration (2026-07-17)
+
+**Current handoff-safe baseline:** STEP582 source stabilization on top of STEP581 audit/docs.
+
+Verified local truth:
+- callback consistency is restored: 553 refs, 546 exact handlers, 7 explicit aliases, 0 unresolved;
+- dependency preflight resolves installed public package entrypoints and passes;
+- dependency/runtime smoke chain passes, including Redis-down degradation;
+- parallel syntax check over `api/`, `migrations/`, `scripts/`, and `src/` passes;
+- npm audit reports 0 vulnerabilities.
+
+Truth boundary:
+- the canonical serial `npm run preflight:source` process exceeded the execution environment time limit during its large `node --check` loop; remaining syntax and optional invariant checks were executed separately and passed;
+- production runtime was not reverified.
+
+Next recommended STEP: **STEP583 — Runtime Proof Spine**.
+
+See `docs/process/07_WORK_HISTORY_STEP582.md`.
+
+---
+
 ## STEP581 — Full project audit and roadmap (2026-07-17)
 
 **Current handoff-safe baseline:** STEP581 audit documentation on top of STEP580 docs and unchanged STEP579 runtime source.

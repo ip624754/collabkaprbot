@@ -47,13 +47,13 @@ assertMatch(
 );
 assertMatch(
   renderAdminOpsSrc,
-  /\.text\('📣 Рассылка', 'a:bc_list\|p:0'\)\s*\.text\('📜 Аудит', 'a:aud\|h:24\|p:0'\)\s*\.row\(\)/s,
+  /\.text\('📣 Рассылка', (?:'a:bc_list\|p:0'|commsCb\.bcList\(0\))\)\s*\.text\('📜 Аудит', 'a:aud\|h:24\|p:0'\)\s*\.row\(\)/s,
   'Admin → Ops row 2 must keep Broadcast + Audit buttons'
 );
 assertMatch(
   renderAdminOpsSrc,
-  /\.text\('📈 Метрики', 'a:admin_metrics\|d:14'\)\s*\.row\(\)/s,
-  'Admin → Ops row 3 must keep Metrics button'
+  /\.text\('📈 Метрики', 'a:admin_metrics\|d:14'\)\s*\.text\('🎁 Инвайты', 'a:admin_invites'\)\s*\.row\(\)/s,
+  'Admin → Ops row 3 must keep Metrics + Invites buttons'
 );
 assertMatch(
   renderAdminOpsSrc,

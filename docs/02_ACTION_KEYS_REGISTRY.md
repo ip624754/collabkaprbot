@@ -5,15 +5,15 @@
 > Regenerate: `npm run actions:md`
 
 
-- Actions in code: **549**
-- Actions in registry: **549**
+- Actions in code: **559**
+- Actions in registry: **559**
 
 ## Summary by type
 
 | Type | Count |
 |---|---:|
-| admin | 97 |
-| edit | 344 |
+| admin | 103 |
+| edit | 348 |
 | ops | 93 |
 | pay | 11 |
 | view | 4 |
@@ -23,7 +23,7 @@
 | Guard | Count |
 |---|---:|
 | db_truth | 5 |
-| none | 175 |
+| none | 185 |
 | queue_first | 2 |
 | require_redis | 367 |
 
@@ -76,6 +76,8 @@
 | `a:admin_founder_texts` | admin | require_redis |
 | `a:admin_founder_toggle` | admin | require_redis |
 | `a:admin_home` | admin | none |
+| `a:admin_invites` | admin | none |
+| `a:admin_invites_list` | admin | none |
 | `a:admin_matchfeat_auto_toggle` | admin | require_redis |
 | `a:admin_metrics` | admin | require_redis |
 | `a:admin_mod_add` | admin | require_redis |
@@ -112,6 +114,10 @@
 | `a:admin_payments` | admin | require_redis |
 | `a:admin_qstash_ping` | admin | require_redis |
 | `a:admin_qstash_status` | admin | require_redis |
+| `a:admin_support` | admin | none |
+| `a:admin_support_list` | admin | none |
+| `a:admin_support_set` | admin | none |
+| `a:admin_support_view` | admin | none |
 | `a:admin_sys` | admin | require_redis |
 | `a:admin_umsg_tpl_add` | admin | require_redis |
 | `a:admin_umsg_tpl_del` | admin | require_redis |
@@ -513,9 +519,13 @@
 | `a:setup` | edit | require_redis |
 | `a:share` | edit | require_redis |
 | `a:share_card` | edit | none |
+| `a:share_history` | edit | none |
 | `a:share_link` | edit | none |
+| `a:share_perf` | edit | none |
+| `a:share_points` | edit | none |
 | `a:share_redeem` | ops | none |
 | `a:share_redeem_do` | ops | db_truth |
+| `a:share_rewards` | edit | none |
 | `a:support` | ops | none |
 | `a:support_push` | ops | none |
 | `a:support_write` | ops | require_redis |

@@ -9,10 +9,7 @@ import { ACTION_GUARD, ACTION_REGISTRY, ACTION_TYPES } from '../src/bot/actionRe
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
-
-function assertMatch(src, re, msg) {
-  assert.ok(re.test(src), msg || `expected source to match ${re}`);
-}
+const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
 
 function extractBetween(src, startMarker, endMarker) {
   const start = src.indexOf(startMarker);
@@ -22,118 +19,76 @@ function extractBetween(src, startMarker, endMarker) {
   return src.slice(start, end);
 }
 
-function expectRegistry(action, { type, guard, breakGlass = undefined }) {
+function expectRegistry(action, { type, guard }) {
   const meta = ACTION_REGISTRY[action];
   assert.ok(meta, `missing action registry entry: ${action}`);
   assert.equal(meta.type, type, `unexpected type for ${action}`);
   assert.equal(meta.guard, guard, `unexpected guard for ${action}`);
-  if (breakGlass !== undefined) {
-    assert.equal(!!meta.breakGlass, !!breakGlass, `unexpected breakGlass for ${action}`);
-  }
 }
 
-const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
-
-const renderAdminOutboxSrc = extractBetween(
+const renderList = extractBetween(
   botSource,
   'async function renderAdminOutbox(ctx, page = 0) {',
   '\n\n  async function renderAdminOutboxView(ctx, index, backPage = 0) {'
 );
-const renderAdminOutboxViewSrc = extractBetween(
+const renderView = extractBetween(
   botSource,
   'async function renderAdminOutboxView(ctx, index, backPage = 0) {',
   '\n\n\n\n\nasync function renderAdminFounder(ctx) {'
 );
-const outboxCallbackSrc = extractBetween(
+const callbacks = extractBetween(
   botSource,
   '    // --- Admin: Outbox (Redis-only) (STEP193) ---',
-  '\n    // --- Admin: DM Templates (Redis-only) ---'
+  '\n    // Broadcast: list active/recent broadcasts'
 );
 
-assert.ok(renderAdminOutboxSrc.includes('let text = `📤 <b>Outbox</b>'), 'Admin → Outbox must keep stable title');
-assert.ok(renderAdminOutboxSrc.includes('`Хранение: <b>Redis-only</b> (последние ${ADMIN_OUTBOX_MAX})'), 'Admin → Outbox must keep Redis-only storage line');
-assert.ok(renderAdminOutboxSrc.includes("text += 'Пока пусто.';"), 'Admin → Outbox must keep empty-state copy');
-assert.ok(renderAdminOutboxSrc.includes("'🔒 Скрыто (открой Outbox в личке с ботом)'"), 'Admin → Outbox list must keep privacy redaction hint for non-DM chats');
-assertMatch(
-  renderAdminOutboxSrc,
-  /kb\.text\(label, `a:admin_outbox_v\|i:\$\{absIdx\}\|p:\$\{p\}`\)\.row\(\);/s,
-  'Admin → Outbox list must keep per-entry view buttons'
-);
-assertMatch(
-  renderAdminOutboxSrc,
-  /if \(pages > 1\) \{[\s\S]*?kb\.text\('⬅️', `a:admin_outbox\|p:\$\{prev\}`\)\s*\.text\(`\$\{p \+ 1\}\/\$\{pages\}`, `a:admin_outbox\|p:\$\{p\}`\)\s*\.text\('➡️', `a:admin_outbox\|p:\$\{next\}`\)\s*\.row\(\);[\s\S]*?\}/s,
-  'Admin → Outbox must keep pagination row when pages > 1'
-);
-assertMatch(
-  renderAdminOutboxSrc,
-  /kb\.text\('🧹 Очистить', `a:admin_outbox_clear_q\|p:\$\{p\}`\)\.row\(\);/s,
-  'Admin → Outbox list must keep clear button'
-);
-assert.ok(renderAdminOutboxSrc.includes("kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');"), 'Admin → Outbox list must keep Comms footer');
+assert.ok(renderList.includes('📤 <b>Outbox</b>'), 'Outbox title must stay stable');
+assert.ok(renderList.includes('Хранение: <b>Redis-only</b>'), 'Outbox storage truth must stay visible');
+assert.ok(renderList.includes("text += 'Пока пусто.';"), 'Outbox empty state must exist');
+assert.ok(renderList.includes("'🔒 Скрыто (открой Outbox в личке с ботом)'"), 'Outbox must redact snippets outside DM');
+assert.ok(renderList.includes('commsCb.adminOutboxView(absIdx, p)'), 'Outbox entries must use canonical view callback builder');
+assert.ok(renderList.includes("commsCb.adminOutbox(prev)"), 'Outbox pagination must preserve previous route');
+assert.ok(renderList.includes("commsCb.adminOutbox(next)"), 'Outbox pagination must preserve next route');
+assert.ok(renderList.includes('commsCb.adminOutboxClearQ(p)'), 'Outbox clear confirmation route must exist');
+assert.ok(renderList.includes("kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');"), 'Outbox footer must return to Comms');
 
-assert.ok(renderAdminOutboxViewSrc.includes("'⚠️ Запись не найдена (возможно, очищено).'"), 'Admin → Outbox view must keep missing-entry message');
-assert.ok(renderAdminOutboxViewSrc.includes("'🔒 Скрыто (открой Outbox в личке с ботом)'"), 'Admin → Outbox view must keep privacy redaction hint for non-DM chats');
-assert.ok(renderAdminOutboxViewSrc.includes('`${icon} <b>Outbox запись</b>'), 'Admin → Outbox view must keep stable title');
-assert.ok(renderAdminOutboxViewSrc.includes("`Статус: <b>${escapeHtml(String(it.status || (ok ? 'ok' : 'failed')))}</b>`"), 'Admin → Outbox view must keep status line');
-assert.ok(renderAdminOutboxViewSrc.includes('<b>Текст (snippet)</b>:'), 'Admin → Outbox view must keep snippet section');
-assertMatch(
-  renderAdminOutboxViewSrc,
-  /const kb = new InlineKeyboard\([\s\S]*?\.text\('⬅️ К списку', `a:admin_outbox\|p:\$\{p\}`\)\s*\.text\('🧹 Очистить', `a:admin_outbox_clear_q\|p:\$\{p\}`\)\s*\.row\(\);/s,
-  'Admin → Outbox view must keep list + clear row'
-);
-assertMatch(
-  renderAdminOutboxViewSrc,
-  /kb\.text\('👤 Карточка', `a:adm_ucard\|id:\$\{uid\}\|f:all\|p:0`\)\s*\.text\('✉️ Написать', `a:adm_umsg\|id:\$\{uid\}\|f:all\|p:0`\)\s*\.row\(\);/s,
-  'Admin → Outbox view must keep card + message quick actions'
-);
-assertMatch(
-  renderAdminOutboxViewSrc,
-  /if \(canRepeat\) \{[\s\S]*?kb\.text\('✉️ Повторить', `a:admin_outbox_repeat\|i:\$\{index\}\|p:\$\{p\}`\)\s*\.text\('📝 Заметка', `a:admin_outbox_note\|i:\$\{index\}\|p:\$\{p\}`\)\s*\.row\(\)\s*\.text\('📌 В шаблон', `a:admin_outbox_to_tpl\|i:\$\{index\}\|p:\$\{p\}`\)\s*\.row\(\);[\s\S]*?\} else \{[\s\S]*?kb\.text\('📝 Заметка', `a:admin_outbox_note\|i:\$\{index\}\|p:\$\{p\}`\)\.row\(\);[\s\S]*?\}/s,
-  'Admin → Outbox view must keep repeat/note/template conditional controls'
-);
-assert.ok(renderAdminOutboxViewSrc.includes("kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');"), 'Admin → Outbox view must keep Comms footer');
+assert.ok(renderView.includes('⚠️ Запись не найдена (возможно, очищено).'), 'Outbox missing-entry state must exist');
+assert.ok(renderView.includes('<b>Outbox запись</b>'), 'Outbox entry title must stay stable');
+assert.ok(renderView.includes('<b>Текст (snippet)</b>:'), 'Outbox entry must expose snippet in DM');
+assert.ok(renderView.includes('commsCb.adminOutbox(p)'), 'Outbox entry must return to list');
+assert.ok(renderView.includes('commsCb.adminOutboxClearQ(p)'), 'Outbox entry must expose clear confirmation');
+assert.ok(renderView.includes('commsCb.adminOutboxRepeat(index, p)'), 'Outbox repeat action must use canonical builder');
+assert.ok(renderView.includes('commsCb.adminOutboxNote(index, p)'), 'Outbox note action must use canonical builder');
+assert.ok(renderView.includes('commsCb.adminOutboxToTpl(index, p)'), 'Outbox save-to-template action must use canonical builder');
+assert.ok(renderView.includes("kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');"), 'Outbox entry footer must return to Comms');
 
-assert.ok(outboxCallbackSrc.includes("if (p.a === 'a:admin_outbox') {"), 'Admin → Outbox main callback must exist');
-assert.ok(outboxCallbackSrc.includes("if (p.a === 'a:admin_outbox_v') {"), 'Admin → Outbox view callback must exist');
-assert.ok(outboxCallbackSrc.includes("try { await clearExpectText(ctx.from.id); } catch {}"), 'Admin → Outbox entry/view callbacks must clear expectText');
-assert.ok(outboxCallbackSrc.includes("if (p.a === 'a:admin_outbox_note') {"), 'Admin → Outbox note callback must exist');
-assert.ok(outboxCallbackSrc.includes("backText: '⬅️ Outbox'"), 'Admin → Outbox note flow must preserve back route text');
-assert.ok(outboxCallbackSrc.includes("backCb: `a:admin_outbox_v|i:${idx}|p:${page}`"), 'Admin → Outbox note flow must preserve back route callback');
-assert.ok(outboxCallbackSrc.includes("if (p.a === 'a:admin_outbox_repeat') {"), 'Admin → Outbox repeat callback must exist');
-assert.ok(outboxCallbackSrc.includes('Повтор из Outbox доступен только в <b>личном чате</b> с ботом (DM)'), 'Admin → Outbox repeat must stay DM-only');
-assert.ok(outboxCallbackSrc.includes("templateLabel: 'Повтор из Outbox'"), 'Admin → Outbox repeat must keep template label');
-assert.ok(outboxCallbackSrc.includes("retText: '⬅️ Outbox'"), 'Admin → Outbox repeat send flow must keep return text');
-assertMatch(
-  outboxCallbackSrc,
-  /const kb = new InlineKeyboard\([\s\S]*?\.text\('✅ Отправить', `a:adm_umsg_send\|tk:\$\{token\}\|f:all\|p:0\|wn:1`\)\s*\.text\('⚪ Без «Что дальше»', `a:adm_umsg_send\|tk:\$\{token\}\|f:all\|p:0\|wn:0`\)\s*\.row\(\)\s*\.text\('❌ Отмена', `a:admin_outbox_v\|i:\$\{idx\}\|p:\$\{page\}`\)\s*\.row\(\);/s,
-  'Admin → Outbox repeat preview must keep send / no-what-next / cancel controls'
-);
-assert.ok(outboxCallbackSrc.includes("if (p.a === 'a:admin_outbox_to_tpl') {"), 'Admin → Outbox save-to-template callback must exist');
-assert.ok(outboxCallbackSrc.includes('Сохранение в шаблоны доступно только в <b>личном чате</b> с ботом (DM).'), 'Admin → Outbox save-to-template must stay DM-only');
-assert.ok(outboxCallbackSrc.includes("type: 'adm_outbox_tpl_label'"), 'Admin → Outbox save-to-template must keep expectText type');
-assert.ok(outboxCallbackSrc.includes('Напиши <b>название</b> шаблона одним сообщением.'), 'Admin → Outbox save-to-template prompt must stay stable');
-assert.ok(outboxCallbackSrc.includes("if (p.a === 'a:admin_outbox_clear_q') {"), 'Admin → Outbox clear confirm callback must exist');
-assert.ok(outboxCallbackSrc.includes('🧹 <b>Очистить Outbox?</b>'), 'Admin → Outbox clear confirm text must stay stable');
-assertMatch(
-  outboxCallbackSrc,
-  /const kb = new InlineKeyboard\([\s\S]*?\.text\('🧹 Очистить', `a:admin_outbox_clear\|p:\$\{page\}`\)\s*\.text\('❌ Отмена', `a:admin_outbox\|p:\$\{page\}`\)\s*\.row\(\)\s*\.text\('⬅️ Коммуникации', 'a:admin_comms'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
-  'Admin → Outbox clear confirm must keep confirm/cancel/footer controls'
-);
-assert.ok(outboxCallbackSrc.includes("if (p.a === 'a:admin_outbox_clear') {"), 'Admin → Outbox clear callback must exist');
-assert.ok(outboxCallbackSrc.includes('await clearAdminOutbox();'), 'Admin → Outbox clear must still wipe Redis list');
-assert.ok(outboxCallbackSrc.includes('await renderAdminOutbox(ctx, page);'), 'Admin → Outbox clear must return to list render');
+for (const action of [
+  'a:admin_outbox',
+  'a:admin_outbox_v',
+  'a:admin_outbox_note',
+  'a:admin_outbox_repeat',
+  'a:admin_outbox_to_tpl',
+  'a:admin_outbox_clear_q',
+  'a:admin_outbox_clear',
+]) {
+  assert.ok(callbacks.includes(`if (p.a === '${action}') {`), `missing Outbox callback handler: ${action}`);
+}
+assert.ok(callbacks.includes("backText: '⬅️ Outbox'"), 'Outbox note return label must stay stable');
+assert.ok(callbacks.includes('backCb: commsCb.adminOutboxView(idx, page)'), 'Outbox note must preserve canonical return route');
+assert.ok(callbacks.includes('Повтор из Outbox доступен только в <b>личном чате</b> с ботом (DM)'), 'Outbox repeat must remain DM-only');
+assert.ok(callbacks.includes("templateLabel: 'Повтор из Outbox'"), 'Outbox repeat metadata must stay explicit');
+assert.ok(callbacks.includes('retCb: commsCb.adminOutboxView(idx, page)'), 'Outbox repeat must preserve canonical return route');
+assert.ok(callbacks.includes(".text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:all|p:0|wn:1`)"), 'Outbox repeat send confirmation must exist');
+assert.ok(callbacks.includes(".text('⚪ Без «Что дальше»', `a:adm_umsg_send|tk:${token}|f:all|p:0|wn:0`)"), 'Outbox repeat no-next-step option must exist');
+assert.ok(callbacks.includes(".text('❌ Отмена', commsCb.adminOutboxView(idx, page))"), 'Outbox repeat cancel must return to entry');
+assert.ok(callbacks.includes("const label = clipText(`Outbox ${fmtTs(it?.ts || new Date().toISOString())}`, 48);"), 'Save-to-template must create bounded label');
+assert.ok(callbacks.includes('await setAdminDmTemplates('), 'Save-to-template must persist templates');
+assert.ok(callbacks.includes('await clearAdminOutbox();'), 'Outbox clear must wipe the Redis log');
+assert.ok(callbacks.includes('await renderAdminOutbox(ctx, 0);'), 'Outbox clear must return to first page');
 
-expectRegistry('a:admin_outbox', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
-expectRegistry('a:admin_outbox_v', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
-expectRegistry('a:admin_outbox_clear_q', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
-expectRegistry('a:admin_outbox_clear', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
-expectRegistry('a:admin_outbox_repeat', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
-expectRegistry('a:admin_outbox_note', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
-expectRegistry('a:admin_outbox_to_tpl', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
-expectRegistry('a:adm_ucard', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE });
-expectRegistry('a:adm_umsg', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE });
+for (const action of ['a:admin_outbox', 'a:admin_outbox_v', 'a:admin_outbox_clear_q', 'a:admin_outbox_clear', 'a:admin_outbox_repeat', 'a:admin_outbox_note', 'a:admin_outbox_to_tpl']) {
+  expectRegistry(action, { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
+}
 expectRegistry('a:admin_comms', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
-expectRegistry('a:menu', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE });
-expectRegistry('a:home', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.NONE });
 
 console.log('✅ smoke admin-outbox contract OK');

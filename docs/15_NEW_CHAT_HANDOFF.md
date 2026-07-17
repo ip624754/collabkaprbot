@@ -1,3 +1,25 @@
+# STEP582 CURRENT TRUTH OVERRIDE
+
+Use this block over older runtime claims below.
+
+- Current baseline: STEP582 Preflight Truth Restoration.
+- Callback consistency: PASS, 0 unresolved.
+- Dependency/runtime preflight: PASS.
+- Syntax: PASS through parallel `node --check` across the project JS surface.
+- Security dependency audit: 0 vulnerabilities.
+- Canonical serial `preflight:source`: did not complete inside the tool time limit; no remaining assertion failure was observed and the residual checks passed separately.
+- Live production runtime: not reverified.
+- Next STEP: STEP583 Runtime Proof Spine.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/process/07_WORK_HISTORY_STEP582.md`
+3. `docs/audit/STEP581_FULL_PROJECT_AUDIT_2026_07_17.md`
+4. `docs/roadmap/COLLABKA_EXECUTION_ROADMAP_AFTER_STEP581.md`
+5. `docs/AI_MULTI_MODEL_HANDOFF_CURRENT.md`
+
+---
+
 # STEP581 CURRENT TRUTH OVERRIDE
 
 Use this block over older runtime claims below.
