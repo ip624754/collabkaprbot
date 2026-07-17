@@ -1,3 +1,22 @@
+# STEP581 CURRENT TRUTH OVERRIDE
+
+Use this block over older runtime claims below.
+
+- Current baseline: STEP581 audit pack on STEP580 docs / STEP579 runtime.
+- Source syntax: verified clean for 211 JS files.
+- Dependency audit: 0 vulnerabilities.
+- Preflight status: **NOT GREEN**. Callback consistency has 21 unresolved references. Dependency preflight has a false-negative resolver.
+- Vercel function budget: 11/12.
+- Live runtime status: **not reverified in STEP581**; older `System=OK` claims are historical snapshots, not current proof.
+- Next STEP: STEP582 Preflight Truth Restoration.
+
+Read first:
+1. `docs/audit/STEP581_FULL_PROJECT_AUDIT_2026_07_17.md`
+2. `docs/roadmap/COLLABKA_EXECUTION_ROADMAP_AFTER_STEP581.md`
+3. `docs/AI_MULTI_MODEL_HANDOFF_CURRENT.md`
+
+---
+
 # 15 — NEW CHAT HANDOFF (copy-paste) — STEP580 baseline
 
 Цель: чтобы новый чат продолжил **текущий рабочий baseline**, включая STEP579 runtime hardening и STEP580 CogniForge/Creator OS documentation layer.

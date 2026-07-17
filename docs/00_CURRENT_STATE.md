@@ -1,3 +1,23 @@
+## STEP581 — Full project audit and roadmap (2026-07-17)
+
+**Current handoff-safe baseline:** STEP581 audit documentation on top of STEP580 docs and unchanged STEP579 runtime source.
+
+Verified audit truth:
+- 211 JavaScript files pass syntax check;
+- npm dependency audit reports 0 vulnerabilities;
+- canonical source preflight is NOT green: 21 callback references are unresolved by the consistency guard;
+- dependency preflight contains a false-negative resolver for installed scoped packages;
+- Vercel function budget is 11/12;
+- live production runtime was not reverified.
+
+Next required STEP: **STEP582 — Preflight Truth Restoration**.
+
+See:
+- `docs/audit/STEP581_FULL_PROJECT_AUDIT_2026_07_17.md`
+- `docs/roadmap/COLLABKA_EXECUTION_ROADMAP_AFTER_STEP581.md`
+- `docs/AI_MULTI_MODEL_HANDOFF_CURRENT.md`
+
+---
 
 ## STEP580 — CogniForge governance + Creator OS documentation integration (2026-07-17)
 

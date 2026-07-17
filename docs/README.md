@@ -143,3 +143,10 @@
 
 
 - `docs/38_LANDING_MICRO_POLISH_STEP493.md` — landing premium micro-polish: subtle card spotlight/depth, FAQ plasticity, and tighter section-intro hierarchy without redesign.
+
+## STEP581 audit and roadmap
+
+- `audit/STEP581_FULL_PROJECT_AUDIT_2026_07_17.md`
+- `roadmap/COLLABKA_EXECUTION_ROADMAP_AFTER_STEP581.md`
+- `AI_MULTI_MODEL_HANDOFF_CURRENT.md`
+- `process/07_WORK_HISTORY_STEP581.md`
