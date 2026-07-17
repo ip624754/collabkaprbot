@@ -3,6 +3,19 @@ import { assertEnv, CFG } from '../src/lib/config.js';
 import { timingSafeEq } from '../src/lib/adminWeb/common.js';
 
 let botInitPromise = null;
+let botFactory = getBot;
+
+export function __setWebhookBotFactoryForTests(factory) {
+  if (process.env.NODE_ENV !== 'test') throw new Error('test_hook_forbidden');
+  botFactory = typeof factory === 'function' ? factory : getBot;
+  botInitPromise = null;
+}
+
+export function __resetWebhookTestHooks() {
+  if (process.env.NODE_ENV !== 'test') throw new Error('test_hook_forbidden');
+  botFactory = getBot;
+  botInitPromise = null;
+}
 
 async function ensureBotInit(bot) {
   if (!botInitPromise) {
@@ -66,7 +79,7 @@ export default async function handler(req, res) {
 
     assertEnv();
 
-    const bot = getBot();
+    const bot = botFactory();
     await ensureBotInit(bot);
 
     const update = req.body;

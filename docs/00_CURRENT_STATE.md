@@ -2888,3 +2888,15 @@ What did not change:
 - `📋 Меню` / `🏠 Home` clear the follow-up context and return the user to normal bot navigation.
 - Media follow-ups (photo / document / video with optional caption) are also routed into the same thread.
 - No migrations. No helpdesk redesign. Narrow UX/runtime hotfix only.
+
+---
+
+## STEP583 — Runtime Proof Spine (2026-07-18)
+
+Status: local bounded runtime proof PASS.
+
+Added deterministic proof for webhook auth/dispatch, representative callback delivery, Redis-down bounded fallback, and QStash ping breadcrumb convergence after transient Redis write failure.
+
+Truth boundary: no live Vercel, Telegram, Neon, Upstash Redis or QStash environment was contacted.
+
+Next recommended STEP: **STEP584 — Staging Runtime Acceptance Pack**.

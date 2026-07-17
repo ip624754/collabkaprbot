@@ -174,3 +174,11 @@ Read first:
 - web-admin mobile/runtime truth wave landed
 - open known defect class сейчас не зафиксирован
 - следующий ход выбирается только по свежему source/runtime сигналу, а не по устаревшему handoff-контексту
+
+## STEP583 delta
+
+- Current baseline: STEP583 Runtime Proof Spine.
+- Local proof command: `npm run smoke:runtime-proof-spine`.
+- Verified locally: webhook auth and callback dispatch, Redis degradation fallback, QStash ping convergence.
+- Not verified live: Vercel, Telegram, Neon, Upstash Redis, QStash.
+- Next STEP: STEP584 Staging Runtime Acceptance Pack.

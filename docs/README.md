@@ -151,3 +151,9 @@
 - `roadmap/COLLABKA_EXECUTION_ROADMAP_AFTER_STEP581.md`
 - `AI_MULTI_MODEL_HANDOFF_CURRENT.md`
 - `process/07_WORK_HISTORY_STEP581.md`
+
+### STEP583 runtime proof
+
+- `audit/STEP583_RUNTIME_PROOF_SPINE_REPORT.md`
+- `process/07_WORK_HISTORY_STEP583.md`
+- command: `npm run smoke:runtime-proof-spine`

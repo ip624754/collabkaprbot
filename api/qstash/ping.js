@@ -1,5 +1,21 @@
-import { redis, k } from '../../src/lib/redis.js';
-import { getQStashDeliveryUrl, qstashVerifySignature } from '../../src/lib/qstash.js';
+import { redis as defaultRedis, k } from '../../src/lib/redis.js';
+import { getQStashDeliveryUrl, qstashVerifySignature as defaultVerifySignature } from '../../src/lib/qstash.js';
+
+let redisClient = defaultRedis;
+let verifySignature = defaultVerifySignature;
+
+export function __setQStashPingDepsForTests({ redis, verify } = {}) {
+  if (process.env.NODE_ENV !== 'test') throw new Error('test_hook_forbidden');
+  redisClient = redis || defaultRedis;
+  verifySignature = verify || defaultVerifySignature;
+}
+
+export function __resetQStashPingDepsForTests() {
+  if (process.env.NODE_ENV !== 'test') throw new Error('test_hook_forbidden');
+  redisClient = defaultRedis;
+  verifySignature = defaultVerifySignature;
+}
+
 
 export const config = {
   api: {
@@ -52,7 +68,7 @@ export default async function handler(req, res) {
     }
 
     try {
-      await qstashVerifySignature({ signature, body: rawBody, url });
+      await verifySignature({ signature, body: rawBody, url });
     } catch (e) {
       const code = String(e?.message || 'error');
       if (code === 'qstash_lib_missing') {
@@ -84,9 +100,9 @@ export default async function handler(req, res) {
 
     // Redis-only breadcrumb for ops panel.
     try {
-      await redis.set(k(['qstash', 'ping', 'last_at']), nowIso, { ex: 14 * 24 * 60 * 60 });
-      if (nonce) await redis.set(k(['qstash', 'ping', 'last_nonce']), nonce, { ex: 14 * 24 * 60 * 60 });
-      if (byTgId) await redis.set(k(['qstash', 'ping', 'last_by_tg_id']), String(byTgId), { ex: 14 * 24 * 60 * 60 });
+      await redisClient.set(k(['qstash', 'ping', 'last_at']), nowIso, { ex: 14 * 24 * 60 * 60 });
+      if (nonce) await redisClient.set(k(['qstash', 'ping', 'last_nonce']), nonce, { ex: 14 * 24 * 60 * 60 });
+      if (byTgId) await redisClient.set(k(['qstash', 'ping', 'last_by_tg_id']), String(byTgId), { ex: 14 * 24 * 60 * 60 });
     } catch {
       // ignore
     }
