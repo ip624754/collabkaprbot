@@ -1,16 +1,15 @@
-# 15 — NEW CHAT HANDOFF (copy-paste) — STEP579 baseline
+# 15 — NEW CHAT HANDOFF (copy-paste) — STEP580 baseline
 
-Цель: чтобы новый чат продолжил **текущий рабочий baseline**, а не стартовал от старого контекста и не игнорировал invite/rewards wave STEP548–579.
+Цель: чтобы новый чат продолжил **текущий рабочий baseline**, включая STEP579 runtime hardening и STEP580 CogniForge/Creator OS documentation layer.
 
 ---
 
-### STEP579 latest narrow baseline note
-- invite module entrypoint stays `📨 Инвайты`; STEP576–578 user IA / recovery / education copy remain in place unchanged
-- public secret-bearing endpoints now use timing-safe compare (`api/webhook.js`, `api/cron_router.js`) instead of plain string equality
-- `_degradedClickGuard` stays intentionally best-effort load shedding only; the covered destructive actions still rely on downstream DB/advisory locks for correctness
-- giveaway auto-draw fail-fast lock path remains status-based (`{ status: 'locked' }`) and is now handled explicitly in cron source
-- reward math / ledger semantics / anti-abuse remain unchanged
-- no migrations, no invite IA rewrite, no admin redesign in STEP579
+### STEP580 latest narrow baseline note
+- STEP579 remains the latest runtime-code delta: timing-safe public secret checks, explicit giveaway lock handling, and unchanged invite/reward semantics
+- STEP580 is documentation/continuity only; it adds CogniForge project governance, system invariants, risk registry, and Creator OS thesis
+- canonical project contracts now include `docs/AI_NATIVE_WORKFLOW.md`, `docs/SYSTEM_INVARIANTS.md`, `docs/RISK_REGISTRY.md`, and `docs/CREATOR_OS_THESIS.md`
+- runtime code, DB, callbacks, invite/reward math, giveaway, auth, webhook, cron, payments, and admin behavior are unchanged in STEP580
+- Creator OS thesis is a north star, not permission for broad redesign; every product change still requires a scoped STEP
 
 
 ## 1) Что загрузить в новый чат
@@ -26,9 +25,9 @@
 Скопируй целиком:
 
 ---
-**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP579 baseline)**
+**HANDOFF — CONTINUE FROM CURRENT PROCESS (STEP580 baseline)**
 
-Продолжаем не с нуля, а от **STEP579 baseline**.
+Продолжаем не с нуля, а от **STEP580 baseline** (STEP580 docs/governance on top of STEP579 runtime source).
 
 Сначала прочитай по порядку:
 1. `docs/README.md`
@@ -36,8 +35,20 @@
 3. `docs/00_CURRENT_STATE.md`
 4. `docs/91_PROD_LAUNCH_30MIN.md`
 5. `docs/15_NEW_CHAT_HANDOFF.md`
+6. `docs/AI_NATIVE_WORKFLOW.md`
+7. `docs/SYSTEM_INVARIANTS.md`
+8. `docs/RISK_REGISTRY.md`
+9. `docs/CREATOR_OS_THESIS.md`
 
 ### Что уже стабилизировано в текущей волне
+
+### Что добавлено в STEP580
+- project-specific CogniForge mode routing and STEP/Truth Boundary contract
+- cross-system invariant registry
+- living risk registry
+- Creator Collaboration Operating System thesis with explicit non-goals
+- continuity baseline repair from contradictory older/current references to STEP580
+
 
 #### Bot/runtime correctness (STEP536–542)
 - callback ack / feedback contract hardened
@@ -79,7 +90,7 @@
 - не поднимать stale retry breadcrumb обратно в active warning lane
 
 ### Как должен выглядеть первый ответ ассистента
-- подтвердить, что работа продолжается от **STEP545T baseline**
+- подтвердить, что работа продолжается от **STEP580 baseline**
 - кратко перечислить, что стабилизировано в STEP536–545
 - отдельно разделить source-confirmed vs live-confirmed
 - назвать ровно **один** следующий микро-шаг с наибольшим leverage

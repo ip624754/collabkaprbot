@@ -8,6 +8,11 @@
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
 - `15_NEW_CHAT_HANDOFF.md` — copy‑paste handoff для старта нового чата (canonical baseline context)
 - `17_START_NEW_CHAT_PROMPT.md` — готовый промпт для старта нового чата (canonical behavior kernel, v3)
+- `AI_NATIVE_WORKFLOW.md` — канонический CogniForge/STEP workflow для AI-assisted разработки Collabka
+- `SYSTEM_INVARIANTS.md` — межмодульные инварианты runtime, Telegram, invites, giveaways, monetization, admin и docs
+- `RISK_REGISTRY.md` — живой реестр технических, продуктовых и AI-governance рисков
+- `CREATOR_OS_THESIS.md` — продуктовый north star: Creator Collaboration Operating System без broad rewrite
+- `CHATGPT_COLLABKA_UPGRADE_NOTES.md` — состав и truth boundary STEP580 docs upgrade
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 - `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout
@@ -92,7 +97,14 @@
 ## Как использовать в новом чате
 Сначала используй `17_START_NEW_CHAT_PROMPT.md` как ядро правил работы, затем `15_NEW_CHAT_HANDOFF.md` как живой baseline текущего цикла.
 
-## Что нового в текущем snapshot (2026-03-14)
+## Что нового в текущем snapshot (2026-07-17)
+
+### STEP580 — CogniForge governance + Creator OS docs
+- Добавлен project-specific AI-native workflow с FAST/STANDARD/HEAVY routing и Truth Boundary.
+- Зафиксированы cross-system invariants и living risk registry.
+- Добавлен Creator OS product thesis с incremental strategy и non-goals.
+- Continuity baseline синхронизирован на STEP580; runtime-код не менялся.
+
 - Платежи: fallback apply exactly‑once (DB lock) + safety visibility (HMAC minlen + баннеры в Admin→Ops).
 - Giveaways: winners draw в REPEATABLE READ + audit метаданные воспроизводимости.
 - Broadcast: DB overload load‑shedding (429+Retry‑After) + метрики в health + баннеры в админке; tick fail‑closed при Redis degraded.

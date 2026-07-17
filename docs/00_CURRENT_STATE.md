@@ -1,3 +1,26 @@
+
+## STEP580 — CogniForge governance + Creator OS documentation integration (2026-07-17)
+
+**Current handoff-safe baseline:** STEP580 docs/governance layer on top of the unchanged STEP579 runtime source.
+
+Added canonical project contracts:
+- `docs/AI_NATIVE_WORKFLOW.md` — FAST/STANDARD/HEAVY routing, STEP lifecycle, Truth Boundary, artifacts and DoD;
+- `docs/SYSTEM_INVARIANTS.md` — cross-system invariants for serverless/Neon, Telegram, invites, giveaways, monetization, cron, admin and docs;
+- `docs/RISK_REGISTRY.md` — living technical/product/AI risk register;
+- `docs/CREATOR_OS_THESIS.md` — incremental Creator Collaboration Operating System north star and non-goals;
+- `docs/CHATGPT_COLLABKA_UPGRADE_NOTES.md` — exact STEP580 scope and verification boundary.
+
+Continuity repaired:
+- `docs/README.md`, `docs/00_BOOT.md`, and `docs/15_NEW_CHAT_HANDOFF.md` now identify STEP580 consistently;
+- stale first-response/baseline instructions were removed;
+- `docs/process/07_WORK_HISTORY_STEP580.md` records the docs-only delta.
+
+Truth boundary:
+- source/archive verification completed;
+- runtime code, DB, callbacks, invite/reward math, giveaway, auth, webhook, cron, payments and admin behavior were not changed;
+- no deploy or live runtime verification was performed or required for this docs-only STEP.
+
+---
 **STEP579:** security hardening micro-pack — keeps the current product/runtime behavior intact while tightening a few narrow source-confirmed hardening seams. `api/webhook.js` now compares `x-telegram-bot-api-secret-token` with `timingSafeEq(...)` instead of plain string equality, and `api/cron_router.js` uses the same constant-time compare for `CRON_SECRET` so public secret-bearing endpoints follow one contract. `src/bot/bot.js` now documents the real truth boundary around `_degradedClickGuard`: it remains best-effort load shedding only, while the covered destructive actions (`a:brand_app_accept`, `a:wsp_contact_unlock`) continue to rely on downstream DB/advisory-lock invariants for correctness. Giveaway draw locking is source-confirmed and made more explicit, not redesigned: `src/db/queries.js` keeps returning `{ status: 'locked' }` from the `pg_try_advisory_xact_lock(...)` fail-fast path, and `src/bot/cron.js` now branches on that status explicitly so the non-drawn path is intentional and reviewable rather than looking like an accidental silent ignore. New source smoke `scripts/smoke-security-hardening-contract.js` guards the timing-safe compare contract and the documented lock-path boundary. Live verification is still required only for ordinary deploy/runtime observation; no migrations, no ledger changes, no callback/product IA changes were introduced.
 
 **STEP578:** invite education copy polish — keeps STEP571–577 invite/reward truth intact but imports the last strong user-education layer from the SWB pattern into bounded read screens. `src/bot/bot.js` now explains invite stats more honestly on `📊 Статистика` (`Как читать статистику` for `Приглашено / Активировано / Конверсия`), adds a compact `Как работают баллы` block on `💎 Баллы`, and adds `Как работает обмен` on `🎁 Обменять Pro` so users understand that rewards come from valid activation rather than raw opens, self-invites and existing users do not count, pending is not spendable, and only `Доступно` can be redeemed into bounded Pro time. Scope stays intentionally narrow: no reward math changes, no ledger rewrite, no new callbacks, no migration changes, and no admin invite redesign. New source smoke `scripts/smoke-invite-education-copy-contract.js` guards the new explanatory copy contract. Live verification is still required for mobile readability of the longer read screens in real Telegram.
