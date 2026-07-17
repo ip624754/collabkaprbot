@@ -2650,23 +2650,23 @@ function resolveInvitePhotoUrl() {
 
 function formatInviteStartNotice(result) {
   if (!result) return null;
-  if (!result.persistenceEnabled) return 'ℹ️ Приглашение открыто, но invite-tracking сейчас недоступен.';
+  if (!result.persistenceEnabled) return 'ℹ️ Приглашение открыто, но сейчас не удалось сохранить его в статистике. Попробуй позже.';
   if (result.created) {
-    const inviter = result.invitedBy?.displayName || 'вашего контакта';
-    return `✅ Приглашение засчитано: вы пришли по ссылке от ${inviter}.`;
+    const inviter = result.invitedBy?.displayName || 'контакта';
+    return `✅ Приглашение засчитано: ты пришёл по ссылке от ${inviter}.`;
   }
-  if (result.alreadyLinked) return 'ℹ️ Это приглашение уже было связано с вашим аккаунтом раньше.';
+  if (result.alreadyLinked) return 'ℹ️ Это приглашение уже было связано с твоим аккаунтом.';
   if (result.existingUser) return 'ℹ️ Зачёт инвайта работает только на первом старте нового пользователя.';
   if (result.invalid) {
-    if (result.reason === 'self_referral') return '⚠️ Нельзя использовать собственную invite-ссылку.';
+    if (result.reason === 'self_referral') return '⚠️ Нельзя использовать собственную инвайт-ссылку.';
     return '⚠️ Эта инвайт-ссылка недействительна для зачёта.';
   }
   return null;
 }
 
 const INVITE_REDEEM_OPTIONS = {
-  pro7: { key: 'pro7', costPoints: 100, days: 7, label: '7 days Pro', buttonLabel: '🎁 7d Pro · 100' },
-  pro30: { key: 'pro30', costPoints: 250, days: 30, label: '30 days Pro', buttonLabel: '💎 30d Pro · 250' },
+  pro7: { key: 'pro7', costPoints: 100, days: 7, label: '7 дней PRO', buttonLabel: '🎁 7 дней PRO · 100' },
+  pro30: { key: 'pro30', costPoints: 250, days: 30, label: '30 дней PRO', buttonLabel: '💎 30 дней PRO · 250' },
 };
 
 function inviteRedeemOption(rewardKey) {
@@ -2685,7 +2685,7 @@ async function loadInviteRewardsStateForUser(user) {
     canRedeemPro30: false,
     nextRewardKey: 'pro7',
     nextRewardCost: 100,
-    nextRewardLabel: '7 days Pro',
+    nextRewardLabel: '7 дней PRO',
     pointsToNextReward: 100,
   };
   if (!uid) return base;
@@ -2694,7 +2694,11 @@ async function loadInviteRewardsStateForUser(user) {
   try {
     const summary = await db.getInviteRewardsSummary(uid);
     return summary && typeof summary === 'object' ? { ...base, ...summary } : base;
-  } catch {
+  } catch (error) {
+    reportCopySafetyDiagnostic('invite_rewards_summary_unavailable', {
+      relation: 'invite_reward_ledger',
+      errorCode: String(error?.code || 'unknown').slice(0, 64),
+    });
     return base;
   }
 }
@@ -2712,14 +2716,14 @@ function renderInviteRewardsLines(rewards) {
   lines.push('<b>Статус наград</b>');
 
   if (rewards.canRedeemPro30) {
-    lines.push('• <b>Награда доступна:</b> доступны 7 days Pro и 30 days Pro.');
+    lines.push('• <b>Награды доступны:</b> «7 дней PRO» и «30 дней PRO» можно активировать сейчас.');
   } else if (rewards.canRedeemPro7) {
     const leftTo30 = Math.max(0, 250 - available);
-    lines.push('• <b>Награда доступна:</b> 7 days Pro доступен сейчас.');
-    lines.push(`• До 30 days Pro осталось: <b>${leftTo30}</b> pts.`);
+    lines.push('• <b>Награда доступна:</b> «7 дней PRO» можно активировать сейчас.');
+    lines.push(`• До 30 дней PRO осталось: <b>${leftTo30}</b> баллов.`);
   } else {
-    lines.push(`• <b>Следующая награда:</b> ${escapeHtml(String(rewards.nextRewardLabel || '7 days Pro'))}`);
-    lines.push(`• Осталось: <b>${Number(rewards.pointsToNextReward || 0)}</b> pts.`);
+    lines.push(`• <b>Следующая награда:</b> ${escapeHtml(String(rewards.nextRewardLabel || '7 дней PRO'))}`);
+    lines.push(`• Осталось: <b>${Number(rewards.pointsToNextReward || 0)}</b> баллов.`);
   }
 
   if (pending > 0) {
@@ -2751,14 +2755,14 @@ function renderInviteRedeemConfirmText({ reward, rewards }) {
   return [
     '🎁 <b>Подтверждение обмена</b>',
     '',
-    `Награда: <b>${escapeHtml(String(reward?.label || 'Pro reward'))}</b>`,
-    `Спишется: <b>${cost}</b> pts`,
-    `Твой доступный баланс: <b>${available}</b> pts`,
-    `Останется после обмена: <b>${left}</b> pts`,
+    `Награда: <b>${escapeHtml(String(reward?.label || 'PRO'))}</b>`,
+    `Спишется: <b>${cost}</b> баллов`,
+    `Твой доступный баланс: <b>${available}</b> баллов`,
+    `Останется после обмена: <b>${left}</b> баллов`,
     '',
-    pending > 0 ? `Сейчас в ожидании: <b>${pending}</b> pts (они не тратятся до подтверждения).` : 'Сейчас баллов в ожидании нет.',
+    pending > 0 ? `Сейчас в ожидании: <b>${pending}</b> баллов. Их нельзя потратить до подтверждения.` : 'Сейчас баллов в ожидании нет.',
     '',
-    'Награда применится к твоему текущему Pro-target сразу после подтверждения обмена.',
+    'После подтверждения награда применится к профилю, связанному с твоим аккаунтом.',
   ].join('\n');
 }
 
@@ -2775,16 +2779,16 @@ function renderInviteRedeemSuccessText({ reward, rewards }) {
   return [
     '✅ <b>Награда активирована</b>',
     '',
-    `Активировано: <b>${escapeHtml(String(reward?.label || 'Pro reward'))}</b>`,
-    `Новый доступный баланс: <b>${Number(rewards?.availablePoints || 0)}</b> pts`,
-    `В ожидании: <b>${Number(rewards?.pendingPoints || 0)}</b> pts`,
-    `Обменяно: <b>${Number(rewards?.redeemedPoints || 0)}</b> pts`,
+    `Активировано: <b>${escapeHtml(String(reward?.label || 'PRO'))}</b>`,
+    `Новый доступный баланс: <b>${Number(rewards?.availablePoints || 0)}</b> баллов`,
+    `В ожидании: <b>${Number(rewards?.pendingPoints || 0)}</b> баллов`,
+    `Обменяно: <b>${Number(rewards?.redeemedPoints || 0)}</b> баллов`,
     '',
     rewards?.canRedeemPro30
       ? 'У тебя уже доступны следующие награды в центре обмена.'
       : rewards?.canRedeemPro7
-        ? 'У тебя всё ещё доступен 7 days Pro. Можно обменять ещё, если это нужно.'
-        : `Следующая награда: <b>${escapeHtml(String(rewards?.nextRewardLabel || '7 days Pro'))}</b>. Осталось: <b>${Number(rewards?.pointsToNextReward || 0)}</b> pts.`,
+        ? 'Награда «7 дней PRO» всё ещё доступна. Её можно активировать ещё раз.'
+        : `Следующая награда: <b>${escapeHtml(String(rewards?.nextRewardLabel || '7 дней PRO'))}</b>. Осталось: <b>${Number(rewards?.pointsToNextReward || 0)}</b> баллов.`,
   ].join('\n');
 }
 
@@ -2804,7 +2808,13 @@ async function loadInviteSurfaceStateForUser(user) {
     userId: Number(user?.id || 0),
     telegramUserId: Number(user?.tg_id || user?.tgId || 0),
     botUsername: botUsernameNoAt(),
-  }).catch(() => null);
+  }).catch((error) => {
+    reportCopySafetyDiagnostic('invite_snapshot_unavailable', {
+      relation: 'member_invites',
+      errorCode: String(error?.code || 'unknown').slice(0, 64),
+    });
+    return null;
+  });
 
   const fallbackInviteCode = db.buildInviteCodeFromTelegramUserId(Number(user?.tg_id || user?.tgId || 0));
   const fallback = {
@@ -2870,14 +2880,14 @@ function renderInviteHistoryEntry(row = {}) {
   const ts = row?.createdAt ? fmtTs(row.createdAt) : '—';
   const status = formatInviteHistoryStatus(row?.status);
   if (row?.entryKind === 'redeem') {
-    const rewardLabel = row?.rewardType === 'pro_30d' ? '30 days Pro' : '7 days Pro';
-    return `• ${escapeHtml(ts)} — 🎁 <b>-${Number(row?.points || 0)}</b> pts · ${escapeHtml(rewardLabel)} · <b>${escapeHtml(status)}</b>`;
+    const rewardLabel = row?.rewardType === 'pro_30d' ? '30 дней PRO' : '7 дней PRO';
+    return `• ${escapeHtml(ts)} — 🎁 <b>-${Number(row?.points || 0)}</b> баллов · ${escapeHtml(rewardLabel)} · <b>${escapeHtml(status)}</b>`;
   }
   const who = row?.displayName ? ` · ${escapeHtml(String(row.displayName))}` : '';
   const label = row?.rewardType === 'invite_activation' ? 'активация' : 'приглашение';
   const emoji = row?.rewardType === 'invite_activation' ? '🔥' : '➕';
   const pendingLabel = String(row?.status || '').toLowerCase() === 'pending' ? ` · <i>${escapeHtml(inviteRewardPendingReasonLabel(row?.rewardType))}</i>` : '';
-  return `• ${escapeHtml(ts)} — ${emoji} <b>+${Number(row?.points || 0)}</b> pts · ${escapeHtml(label)} · <b>${escapeHtml(status)}</b>${who}${pendingLabel}`;
+  return `• ${escapeHtml(ts)} — ${emoji} <b>+${Number(row?.points || 0)}</b> баллов · ${escapeHtml(label)} · <b>${escapeHtml(status)}</b>${who}${pendingLabel}`;
 }
 
 function renderInviteRewardsCenterText({ inviteState = null } = {}) {
@@ -2897,25 +2907,25 @@ function renderInviteRewardsCenterText({ inviteState = null } = {}) {
     `• Обменяно: <b>${redeemed}</b>`,
     '',
     '<b>Награды</b>',
-    `• 7 days Pro — <b>${INVITE_REDEEM_OPTIONS.pro7.costPoints}</b> баллов`,
-    `• 30 days Pro — <b>${INVITE_REDEEM_OPTIONS.pro30.costPoints}</b> баллов`,
+    `• 7 дней PRO — <b>${INVITE_REDEEM_OPTIONS.pro7.costPoints}</b> баллов`,
+    `• 30 дней PRO — <b>${INVITE_REDEEM_OPTIONS.pro30.costPoints}</b> баллов`,
   ];
   if (available < INVITE_REDEEM_OPTIONS.pro7.costPoints) {
     lines.push('');
     lines.push(`До первой награды нужно ещё <b>${needForFirstReward}</b> доступных баллов.`);
   } else if (available < INVITE_REDEEM_OPTIONS.pro30.costPoints) {
     lines.push('');
-    lines.push(`7 days Pro уже доступен. До 30 days Pro осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> баллов.`);
+    lines.push(`Награда «7 дней PRO» уже доступна. До «30 дней PRO» осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> баллов.`);
   } else {
     lines.push('');
-    lines.push('Сейчас доступны обе награды: 7 days Pro и 30 days Pro.');
+    lines.push('Сейчас доступны обе награды: «7 дней PRO» и «30 дней PRO».');
   }
   lines.push('');
   lines.push('<b>Как работает обмен</b>');
   lines.push('• Обмениваются только баллы из строки <b>Доступно</b>.');
   lines.push('• Баллы <b>В ожидании</b> сначала должны подтвердиться.');
   lines.push('• Своя ссылка и уже существующие пользователи не дают награду.');
-  lines.push('• После обмена баллы переходят в строку <b>Обменяно</b>, а Pro активируется внутри Collabka.');
+  lines.push('• После обмена баллы переходят в строку <b>Обменяно</b>, а PRO активируется внутри Collabka.');
   if (pending > 0) {
     lines.push('');
     lines.push('Баллы в ожидании не тратятся, пока не перейдут в доступный баланс.');
@@ -2965,11 +2975,11 @@ function renderInvitePerformanceText({ inviteState = null } = {}) {
     `• Приглашено: <b>${invitedCount}</b>`,
     `• Активировано: <b>${activatedCount}</b>`,
     `• Конверсия активации: <b>${escapeHtml(activationRate)}</b>`,
-    '• Правило активации: <b>completed profile</b>',
+    '• Правило активации: <b>заполнил основной профиль</b>',
     '',
     '<b>Как читать статистику</b>',
-    '• <b>Приглашено</b> — валидные joins по вашей ссылке.',
-    '• <b>Активировано</b> — пользователи, которые дошли до completed profile.',
+    '• <b>Приглашено</b> — пользователи, которые пришли по твоей ссылке.',
+    '• <b>Активировано</b> — пользователи, которые заполнили основной профиль.',
     '• Конверсия показывает, какая доля приглашённых реально активировалась.',
   ];
 
@@ -2984,7 +2994,7 @@ function renderInvitePerformanceText({ inviteState = null } = {}) {
     }
   } else {
     lines.push('');
-    lines.push('Пока пусто. Первый валидный join появится здесь.');
+    lines.push('Пока пусто. Первый подтверждённый участник появится здесь.');
   }
 
   if (inviteState?.invitedBy?.displayName) {
@@ -3002,6 +3012,8 @@ function renderInvitePerformanceKeyboard(inviteState = null) {
   ]];
   if (inviteState?.rewards?.enabled) {
     rows.push([{ text: '🎁 Обменять', callback_data: 'a:share_rewards' }]);
+  } else {
+    rows.push([{ text: '💬 Поддержка', callback_data: 'a:support' }]);
   }
   rows.push([{ text: '⬅️ Инвайты', callback_data: 'a:share' }]);
   rows.push([
@@ -3028,14 +3040,14 @@ function renderInvitePointsText({ inviteState = null } = {}) {
   ];
 
   if (!rewards?.enabled) {
-    lines.push('• Rewards-слой пока недоступен. Проверь миграцию invite rewards.');
+    lines.push('• Баллы временно недоступны. Попробуй позже.');
   } else if (rewards.canRedeemPro30) {
-    lines.push('• Награда доступна: <b>7 days Pro</b> и <b>30 days Pro</b> доступны сейчас.');
+    lines.push('• Награда доступна: <b>7 дней PRO</b> и <b>30 дней PRO</b> доступны сейчас.');
   } else if (rewards.canRedeemPro7) {
-    lines.push('• Награда доступна: <b>7 days Pro</b> уже доступен.');
-    lines.push(`• До 30 days Pro осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> баллов.`);
+    lines.push('• Награда <b>«7 дней PRO»</b> уже доступна.');
+    lines.push(`• До 30 дней PRO осталось <b>${Math.max(0, INVITE_REDEEM_OPTIONS.pro30.costPoints - available)}</b> баллов.`);
   } else {
-    lines.push(`• Следующая награда: <b>${escapeHtml(String(rewards.nextRewardLabel || '7 days Pro'))}</b>`);
+    lines.push(`• Следующая награда: <b>${escapeHtml(String(rewards.nextRewardLabel || '7 дней PRO'))}</b>`);
     lines.push(`• Осталось: <b>${Number(rewards.pointsToNextReward || 0)}</b> баллов`);
   }
 
@@ -3044,7 +3056,7 @@ function renderInvitePointsText({ inviteState = null } = {}) {
   lines.push('• Баллы начисляются за валидную активацию, а не за простой переход по ссылке.');
   lines.push('• Своя ссылка и уже существующие пользователи не учитываются.');
   lines.push('• <b>В ожидании</b> — баллы ждут подтверждения и пока не тратятся.');
-  lines.push('• <b>Доступно</b> — баллы уже можно обменять на Pro внутри Collabka.');
+  lines.push('• <b>Доступно</b> — баллы уже можно обменять на PRO внутри Collabka.');
   lines.push('• <b>Обменяно</b> — баллы уже списаны за активированную награду.');
 
   if (pending > 0) {
@@ -3082,7 +3094,7 @@ function renderInviteHistoryText({ inviteState = null, history = [] } = {}) {
     `• Приглашено: <b>${invitedCount}</b>`,
     `• Активировано: <b>${activatedCount}</b>`,
     `• Конверсия активации: <b>${escapeHtml(activationRate)}</b>`,
-    '• Правило активации: <b>completed profile</b>',
+    '• Правило активации: <b>заполнил основной профиль</b>',
   ];
   if (inviteState?.rewards?.enabled) {
     lines.push('');
@@ -3108,11 +3120,11 @@ function renderInviteHistoryText({ inviteState = null, history = [] } = {}) {
 
   if ((!inviteState?.invited || !inviteState.invited.length) && (!history || !history.length)) {
     lines.push('');
-    lines.push('Пока пусто. История заполнится после первого валидного join или первого движения по наградам.');
+    lines.push('Пока пусто. История заполнится после первого подтверждённого приглашения или движения по баллам.');
   }
 
   lines.push('');
-  lines.push('<i>Это компактная сводка по последним событиям, а не полный invite ledger.</i>');
+  lines.push('<i>Это компактная сводка по последним событиям, а не полная история баллов.</i>');
   return lines.join('\n');
 }
 
@@ -3176,7 +3188,7 @@ function renderInviteText({ inviteState = null, notice = null } = {}) {
     lines.push(`• Приглашено: <b>${invitedCount}</b>`);
     lines.push(`• Активировано: <b>${activatedCount}</b>`);
     lines.push(`• Конверсия активации: <b>${escapeHtml(activationRate)}</b>`);
-    lines.push('• Правило активации: <b>completed profile</b>');
+    lines.push('• Правило активации: <b>заполнил основной профиль</b>');
 
     if (inviteState?.rewards?.enabled) {
       lines.push('');
@@ -3185,12 +3197,12 @@ function renderInviteText({ inviteState = null, notice = null } = {}) {
       lines.push(`• В ожидании: <b>${Number(inviteState.rewards.pendingPoints || 0)}</b>`);
       lines.push(`• Обменяно: <b>${Number(inviteState.rewards.redeemedPoints || 0)}</b>`);
       if (inviteState.rewards.canRedeemPro30) {
-        lines.push('• Награда доступна: <b>7 days Pro</b> и <b>30 days Pro</b> доступны сейчас.');
+        lines.push('• Награда доступна: <b>7 дней PRO</b> и <b>30 дней PRO</b> доступны сейчас.');
       } else if (inviteState.rewards.canRedeemPro7) {
-        lines.push('• Награда доступна: <b>7 days Pro</b> уже доступен.');
+        lines.push('• Награда <b>«7 дней PRO»</b> уже доступна.');
       } else {
-        lines.push(`• Следующая награда: <b>${escapeHtml(String(inviteState.rewards.nextRewardLabel || '7 days Pro'))}</b>`);
-        lines.push(`• Осталось: <b>${Number(inviteState.rewards.pointsToNextReward || 0)}</b> pts`);
+        lines.push(`• Следующая награда: <b>${escapeHtml(String(inviteState.rewards.nextRewardLabel || '7 дней PRO'))}</b>`);
+        lines.push(`• Осталось: <b>${Number(inviteState.rewards.pointsToNextReward || 0)}</b> баллов`);
       }
     }
 
@@ -3209,12 +3221,12 @@ function renderInviteText({ inviteState = null, notice = null } = {}) {
     }
   } else {
     lines.push('');
-    lines.push('⚠️ Инвайт-ссылка пока недоступна. Проверь BOT_USERNAME.');
+    lines.push('⚠️ Инвайт-ссылка временно недоступна. Попробуй позже или открой поддержку.');
   }
 
   if (!inviteState?.persistenceEnabled) {
     lines.push('');
-    lines.push('ℹ️ Invite-tracking сейчас недоступен: ссылка работает, но счётчики и attribution могут не записаться, пока не применена миграция invite-layer.');
+    lines.push('ℹ️ Ссылка работает, но статистика приглашений временно не обновляется. Попробуй позже.');
   }
 
   if (notice) {
@@ -3746,10 +3758,10 @@ async function renderBmPickBrand(ctx, u, params = {}) {
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
   if (bm.dbMissing) {
-    const kb = navKb('a:menu');
-    const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
+    const kb = copySafetyRecoveryKb('a:menu');
+    reportCopySafetyDiagnostic('brand_managers_relation_missing', { relation: 'brand_managers', migration: '026_brand_managers' });
 
-В Neon должна быть таблица <code>brand_managers</code>.`;
+    const text = copySafetyUnavailableHtml('Менеджеры бренда временно недоступны');
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return;
@@ -3814,10 +3826,10 @@ async function bmResolveAssert(ctx, u, wsId, ret = 'menu', page = 0, opts = {}) 
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
   if (bm.dbMissing) {
-    const kb = navKb('a:menu');
-    const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
+    const kb = copySafetyRecoveryKb('a:menu');
+    reportCopySafetyDiagnostic('brand_managers_relation_missing', { relation: 'brand_managers', migration: '026_brand_managers' });
 
-В Neon должна быть таблица <code>brand_managers</code>.`;
+    const text = copySafetyUnavailableHtml('Менеджеры бренда временно недоступны');
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
   }
@@ -3921,10 +3933,10 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
 
     if (bm.dbMissing) {
       modeHuman = 'Менеджер бренда';
-      text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
+      reportCopySafetyDiagnostic('brand_managers_relation_missing', { relation: 'brand_managers', migration: '026_brand_managers' });
 
-В Neon должна быть таблица <code>brand_managers</code>.`;
-      kb = navKb('a:menu');
+      text = copySafetyUnavailableHtml('Менеджеры бренда временно недоступны');
+      kb = copySafetyRecoveryKb('a:menu');
     } else if (bm.revoked) {
       await disableBrandManagerState(ctx.from.id);
       modeHuman = 'Менеджер бренда';
@@ -4307,7 +4319,7 @@ async function renderAccountDeletedGate(ctx, opts = {}) {
   const edit = opts.edit === true;
   const text = `🗑 <b>Аккаунт удалён</b>
 
-Мы очистили ваши контакты/профили в Collabka PR и убрали их из каталога.
+Мы очистили твои контакты и профили в Collabka PR и убрали их из каталога.
 
 Что важно:
 • переписка в Telegram у других пользователей останется
@@ -4413,10 +4425,10 @@ async function renderRoleHub(ctx, u, flags) {
       const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
       if (bm.dbMissing) {
-        const msg = `⚠️ <b>Нужна миграция 026_brand_managers</b>
+        reportCopySafetyDiagnostic('brand_managers_relation_missing', { relation: 'brand_managers', migration: '026_brand_managers' });
 
-В Neon должна быть таблица <code>brand_managers</code>.`;
-        await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: navKb('a:main_menu') });
+        const msg = copySafetyUnavailableHtml('Менеджеры бренда временно недоступны');
+        await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:main_menu') });
         return;
       }
       if (bm.revoked) {
@@ -4517,6 +4529,30 @@ function kbNavRow(kb, backCb) {
   kb.text('📋 Меню', 'a:menu');
   kb.text('🏠 Home', 'a:home');
   return kb;
+}
+
+
+function copySafetyUnavailableHtml(title = 'Раздел временно недоступен') {
+  return `⚠️ <b>${escapeHtml(String(title || 'Раздел временно недоступен'))}</b>
+
+Попробуй позже. Если проблема повторится, открой поддержку.`;
+}
+
+function copySafetyRecoveryKb(backCb = 'a:menu') {
+  const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').row();
+  if (backCb && !['a:menu', 'a:home', 'a:support'].includes(backCb)) {
+    kb.text('⬅️ Назад', backCb).row();
+  }
+  kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+  return kb;
+}
+
+function reportCopySafetyDiagnostic(code, details = {}) {
+  try {
+    console.warn('[copy_safety]', { code: String(code || 'unknown'), ...details });
+  } catch {
+    // diagnostics must never break the user flow
+  }
 }
 
 function kbAdminFooter(kb, backText = '⬅️ Админка', backCb = 'a:admin_home') {
@@ -6083,8 +6119,10 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true, backCb = 'a:menu',
   const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: false });
 
   if (bm.dbMissing) {
-    const kb = navKb('a:menu');
-    const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>\n\nВ Neon должна быть таблица <code>brand_managers</code>.`;
+    const kb = copySafetyRecoveryKb('a:menu');
+    reportCopySafetyDiagnostic('brand_managers_relation_missing', { relation: 'brand_managers', migration: '026_brand_managers' });
+
+    const text = copySafetyUnavailableHtml('Менеджеры бренда временно недоступны');
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
@@ -6101,8 +6139,9 @@ async function ensureBrandTeamUnlocked(ctx, u, { edit = true, backCb = 'a:menu',
   const st = await getBrandTeamGateState(u.id);
 
   if (st.missingRelation) {
-    const kb = navKb('a:menu');
-    const text = `⚠️ <b>Нужна миграция 024_brand_profiles</b>\n\nВ Neon должна быть таблица <code>brand_profiles</code>.`;
+    const kb = copySafetyRecoveryKb('a:menu');
+    reportCopySafetyDiagnostic('brand_profiles_relation_missing', { relation: 'brand_profiles', migration: '024_brand_profiles' });
+    const text = copySafetyUnavailableHtml('Профиль бренда временно недоступен');
     if (edit) await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
     else await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     return null;
@@ -6210,7 +6249,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
   // The creators feed is a Brand-mode concept; do not show it here to avoid confusion.
   const kb = new InlineKeyboard()
     .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
-    .text('➕ Создать офер', `a:bx_new|ws:${wsId}`)
+    .text('➕ Создать оффер', `a:bx_new|ws:${wsId}`)
     .row()
     .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`)
     .text('🏷 Каталог брендов', 'a:brands_home|p:0');
@@ -6698,7 +6737,10 @@ async function renderBrandProfileHome(ctx, ownerUserId, params = {}) {
     async () => ({ __missing_relation: true })
   );
   if (prof && prof.__missing_relation) {
-    await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
+    reportCopySafetyDiagnostic('brand_profiles_relation_missing', { relation: 'brand_profiles', migration: '024_brand_profiles' });
+
+    await safeEditOrReply(ctx, copySafetyUnavailableHtml('Профиль бренда временно недоступен'), {
+      parse_mode: 'HTML',
       reply_markup: navKb('a:menu')
     });
     return;
@@ -6967,7 +7009,7 @@ async function renderBrandCollabTypesPicker(ctx, ownerUserId, params = {}) {
     `🧩 <b>Форматы сотрудничества</b>
 
 ` +
-    `Выбери, что вы обычно делаете с креаторами (можно несколько).
+    `Выбери, что ты обычно делаешь с креаторами (можно несколько).
 
 ` +
     `Сейчас: <b>${escapeHtml(nowTxt)}</b>
@@ -7604,9 +7646,11 @@ async function renderBrandsDirectory(ctx, viewerUserId, params = {}) {
         async () => ({ __missing_relation: true })
       ), 4500, 'brands.list'), 4500);
   if (rows && rows.__missing_relation) {
-    const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
-    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
-    else await ctx.reply(msg, { reply_markup: navKb('a:menu') });
+    reportCopySafetyDiagnostic('brand_profiles_relation_missing', { relation: 'brand_profiles', migration: '024_brand_profiles' });
+
+    const msg = copySafetyUnavailableHtml('Профиль бренда временно недоступен');
+    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:menu') });
+    else await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:menu') });
     return;
   }
 
@@ -7675,9 +7719,11 @@ async function renderBrandDirectoryCard(ctx, viewerUserId, params = {}) {
     async () => ({ __missing_relation: true })
   );
   if (prof && prof.__missing_relation) {
-    const msg = '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.';
-    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { reply_markup: navKb('a:menu') });
-    else await ctx.reply(msg, { reply_markup: navKb('a:menu') });
+    reportCopySafetyDiagnostic('brand_profiles_relation_missing', { relation: 'brand_profiles', migration: '024_brand_profiles' });
+
+    const msg = copySafetyUnavailableHtml('Профиль бренда временно недоступен');
+    if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:menu') });
+    else await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:menu') });
     return;
   }
   if (!prof) {
@@ -10574,7 +10620,7 @@ function wsIgMeta(ws) {
 async function renderIgVerifyEntryFromStart(ctx, ownerUserId, opts = {}) {
   if (!CFG.IG_OAUTH_UI_ENABLED) {
     const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
-    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    await safeEditOrReply(ctx, 'Эта функция пока тебе недоступна.', { reply_markup: kb });
     return;
   }
   const handleHint = opts?.handleHint ? normalizeIgHandle(opts.handleHint) : null;
@@ -15796,7 +15842,7 @@ ${trialLine}
 
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
 
-• ➕ Создать офер — бренды увидят твой оффер в ленте (в режиме Brand)
+• ➕ Создать оффер — бренды увидят твой оффер в ленте (в режиме Brand)
 • 📥 Inbox — переписка по офферам (бренд ↔ блогер)
 • 📦 Мои офферы — пауза/удаление
 • 🏷 Каталог брендов — найти бренды для заявок`,
@@ -20193,7 +20239,7 @@ if (!exp) {
 
     // Ban gate
     if (u?.banned_at && !isSuperAdminTg(tgId)) {
-      await ctx.reply('⛔ Ваш аккаунт заблокирован. Обратитесь в поддержку.');
+      await ctx.reply('⛔ Твой аккаунт заблокирован. Открой поддержку.');
       return;
     }
 
@@ -23214,7 +23260,7 @@ if (exp.type === 'brand_deals_search') {
       const description = (lines.slice(1).join('\n') || '').trim().slice(0, 2000);
 
       if (!wsId || !draft.category || !draft.offer_type || !draft.compensation_type) {
-        await ctx.reply('Черновик оффера потерян. Начни заново: 🎬 UGC / Офферы → ➕ Создать офер');
+        await ctx.reply('Черновик оффера потерян. Начни заново: 🎬 UGC / Офферы → ➕ Создать оффер');
         return;
       }
       if (!title || title.length < 3) {
@@ -23437,7 +23483,9 @@ ${msgText}
 
       if (saved && saved.__missing_relation) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.');
+        reportCopySafetyDiagnostic('brand_profiles_relation_missing', { relation: 'brand_profiles', migration: '024_brand_profiles' });
+
+        await ctx.reply(copySafetyUnavailableHtml('Профиль бренда временно недоступен'), { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:menu') });
         return;
       }
 
@@ -24030,7 +24078,7 @@ ${list}
 
       // Ban gate
       if (u?.banned_at && !isSuperAdminTg(ctx.from.id)) {
-        await ctx.reply('⛔ Ваш аккаунт заблокирован. Обратитесь в поддержку.');
+        await ctx.reply('⛔ Твой аккаунт заблокирован. Открой поддержку.');
         return;
       }
 
@@ -24929,7 +24977,7 @@ ${DEGRADED_COPY.tips}
 
     // Ban gate: blocked users can only see admin/mod panels (so admin can unban)
     if (u?.banned_at && !isSuperAdminTg(ctx.from.id)) {
-      try { await ctx.answerCallbackQuery({ text: '⛔ Ваш аккаунт заблокирован. Обратитесь в поддержку.', show_alert: true }); } catch {}
+      try { await ctx.answerCallbackQuery({ text: '⛔ Твой аккаунт заблокирован. Открой поддержку.', show_alert: true }); } catch {}
       return;
     }
 
@@ -25235,8 +25283,11 @@ if (p.a === 'a:share') {
 
   const un = botUsernameNoAt();
   if (!un) {
-    const text = `⚠️ <b>Инвайты пока недоступны</b>\n\nНе задан <code>BOT_USERNAME</code> в ENV.`;
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+    reportCopySafetyDiagnostic('invite_bot_username_missing', { config: 'BOT_USERNAME' });
+    await safeEditOrReply(ctx, copySafetyUnavailableHtml('Инвайты временно недоступны'), {
+      parse_mode: 'HTML',
+      reply_markup: copySafetyRecoveryKb('a:menu'),
+    });
     return;
   }
 
@@ -25327,7 +25378,7 @@ if (p.a === 'a:share_redeem') {
   }
   if (!inviteState?.rewards?.enabled) {
     try { await ctx.answerCallbackQuery({ text: 'Баллы пока недоступны.', show_alert: true }); } catch {}
-    await safeEditOrReply(ctx, renderInviteText({ inviteState, notice: 'ℹ️ Reward layer пока недоступен: проверь миграцию invite rewards.' }), {
+    await safeEditOrReply(ctx, renderInviteText({ inviteState, notice: 'ℹ️ Обмен наград временно недоступен. Попробуй позже или открой поддержку.' }), {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
       reply_markup: inviteKeyboardMarkup(inviteState),
@@ -25336,7 +25387,7 @@ if (p.a === 'a:share_redeem') {
   }
   if (Number(inviteState.rewards.availablePoints || 0) < Number(reward.costPoints || 0)) {
     try { await ctx.answerCallbackQuery({ text: 'Недостаточно баллов.', show_alert: true }); } catch {}
-    await safeEditOrReply(ctx, renderInviteText({ inviteState, notice: 'ℹ️ Пока не хватает available points для этой награды.' }), {
+    await safeEditOrReply(ctx, renderInviteText({ inviteState, notice: 'ℹ️ Пока не хватает доступных баллов для этой награды.' }), {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
       reply_markup: inviteKeyboardMarkup(inviteState),
@@ -25370,16 +25421,18 @@ if (p.a === 'a:share_redeem_do') {
     });
     return;
   } else if (result?.reason === 'insufficient_points') {
-    notice = 'ℹ️ Недостаточно available points для обмена.';
+    notice = 'ℹ️ Недостаточно доступных баллов для обмена.';
     try { await ctx.answerCallbackQuery({ text: 'Недостаточно баллов.', show_alert: true }); } catch {}
   } else if (result?.reason === 'redeem_busy') {
     notice = '⏳ Обмен уже выполняется. Попробуй ещё раз через пару секунд.';
     try { await ctx.answerCallbackQuery({ text: 'Обмен уже выполняется.', show_alert: true }); } catch {}
   } else if (result?.reason === 'invite_rewards_schema_missing') {
-    notice = 'ℹ️ Reward layer пока недоступен: проверь миграцию invite rewards.';
-    try { await ctx.answerCallbackQuery({ text: 'Нет миграции invite rewards.', show_alert: true }); } catch {}
+    notice = 'ℹ️ Обмен наград временно недоступен. Попробуй позже или открой поддержку.';
+    reportCopySafetyDiagnostic('invite_rewards_schema_missing', { relation: 'invite_reward_ledger' });
+    try { await ctx.answerCallbackQuery({ text: 'Обмен наград временно недоступен.', show_alert: true }); } catch {}
   } else {
-    notice = `⚠️ Обмен не выполнен: ${String(result?.reason || 'redeem_failed').slice(0, 120)}`;
+    reportCopySafetyDiagnostic('invite_reward_redeem_failed', { reason: String(result?.reason || 'redeem_failed').slice(0, 120) });
+    notice = '⚠️ Обмен не выполнен. Попробуй позже или открой поддержку.';
     try { await ctx.answerCallbackQuery({ text: 'Обмен не выполнен.', show_alert: true }); } catch {}
   }
   await safeEditOrReply(ctx, renderInviteText({ inviteState, notice }), {
@@ -25481,15 +25534,14 @@ if (p.a === 'a:acc_del_do') {
   } catch (e) {
     const code = String(e?.code || '');
     if (code === 'MISSING_SOFT_DELETE_COLUMNS') {
-      const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+      reportCopySafetyDiagnostic('soft_delete_columns_missing', {
+        columns: ['is_deleted', 'deleted_at'],
+        runner: 'migrations/run.js',
+      });
       await safeEditOrReply(
         ctx,
-        `⚠️ <b>Нужна миграция soft-delete</b>
-
-В базе нет колонок <code>is_deleted/deleted_at</code>.
-
-Запусти миграции через <code>migrations/run.js</code>, затем повтори.`,
-        { parse_mode: 'HTML', reply_markup: kb }
+        copySafetyUnavailableHtml('Управление аккаунтом временно недоступно'),
+        { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:support') }
       );
       return;
     }
@@ -25515,15 +25567,14 @@ if (p.a === 'a:acc_restore') {
   } catch (e) {
     const code = String(e?.code || '');
     if (code === 'MISSING_SOFT_DELETE_COLUMNS') {
-      const kb = new InlineKeyboard().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu');
+      reportCopySafetyDiagnostic('soft_delete_columns_missing', {
+        columns: ['is_deleted', 'deleted_at'],
+        runner: 'migrations/run.js',
+      });
       await safeEditOrReply(
         ctx,
-        `⚠️ <b>Нужна миграция soft-delete</b>
-
-В базе нет колонок <code>is_deleted/deleted_at</code>.
-
-Запусти миграции через <code>migrations/run.js</code>, затем повтори.`,
-        { parse_mode: 'HTML', reply_markup: kb }
+        copySafetyUnavailableHtml('Управление аккаунтом временно недоступно'),
+        { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:support') }
       );
       return;
     }
@@ -25850,10 +25901,10 @@ if (p.a === 'a:brand_dir_open') {
       const bm = await resolveBmBrandContext(ctx, u, { requirePickWhenMissingActive: true });
 
       if (bm.dbMissing) {
-        const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
+        reportCopySafetyDiagnostic('brand_managers_relation_missing', { relation: 'brand_managers', migration: '026_brand_managers' });
 
-В Neon должна быть таблица <code>brand_managers</code>.`;
-        await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+        const text = copySafetyUnavailableHtml('Менеджеры бренда временно недоступны');
+        await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:menu') });
         return;
       }
 
@@ -25948,10 +25999,10 @@ if (p.a === 'a:brand_dir_open') {
         brands = await db.listBrandsForManager(u.id);
       } catch (e) {
         if (isMissingRelationError(e, 'brand_managers')) {
-          const text = `⚠️ <b>Нужна миграция 026_brand_managers</b>
+          reportCopySafetyDiagnostic('brand_managers_relation_missing', { relation: 'brand_managers', migration: '026_brand_managers' });
 
-В Neon должна быть таблица <code>brand_managers</code>.`;
-          await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:menu') });
+          const text = copySafetyUnavailableHtml('Менеджеры бренда временно недоступны');
+          await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:menu') });
           return;
         }
         brands = [];
@@ -28816,7 +28867,7 @@ if (p.a === 'a:ws_ig_verify') {
   // Launch-safe: IG OAuth can be temporarily hidden from UI while Meta side is unstable.
   if (!CFG.IG_OAUTH_UI_ENABLED) {
     const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
-    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    await safeEditOrReply(ctx, 'Эта функция пока тебе недоступна.', { reply_markup: kb });
     return;
   }
 
@@ -28831,7 +28882,7 @@ if (p.a === 'a:ws_ig_verify_comment') {
   if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
   if (!CFG.IG_OAUTH_UI_ENABLED) {
     const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
-    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    await safeEditOrReply(ctx, 'Эта функция пока тебе недоступна.', { reply_markup: kb });
     return;
   }
   const ret = String(p.ret || 'ws_profile');
@@ -28845,7 +28896,7 @@ if (p.a === 'a:ws_ig_verify_status') {
   if (!CFG.IG_OAUTH_UI_ENABLED) {
     try { await ctx.answerCallbackQuery(); } catch {}
     const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
-    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    await safeEditOrReply(ctx, 'Эта функция пока тебе недоступна.', { reply_markup: kb });
     return;
   }
   const ret = String(p.ret || 'ws_profile');
@@ -28860,39 +28911,38 @@ if (p.a === 'a:ws_ig_verify_oauth') {
 
   if (!CFG.IG_OAUTH_UI_ENABLED) {
     const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Home', 'a:home');
-    await safeEditOrReply(ctx, 'Эта функция пока вам недоступна.', { reply_markup: kb });
+    await safeEditOrReply(ctx, 'Эта функция пока тебе недоступна.', { reply_markup: kb });
     return;
   }
 
+  const igOAuthBackCb = 'a:ws_ig_verify|ws:' + wsId;
+  const igOAuthUnavailable = async (code, details = {}) => {
+    reportCopySafetyDiagnostic(code, details);
+    await safeEditOrReply(ctx, copySafetyUnavailableHtml('Подключение Instagram временно недоступно'), {
+      parse_mode: 'HTML',
+      reply_markup: copySafetyRecoveryKb(igOAuthBackCb),
+    });
+  };
+
   if (!CFG.IG_OAUTH_ENABLED) {
-    await safeEditOrReply(ctx, '⚠️ Instagram OAuth пока отключён администратором (IG_OAUTH_ENABLED=0).', { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) });
+    await igOAuthUnavailable('ig_oauth_disabled', { config: 'IG_OAUTH_ENABLED' });
     return;
   }
 
   if (!CFG.IG_TOKEN_ENC_KEY_VALID) {
-    await safeEditOrReply(
-      ctx,
-      `⚠️ Instagram OAuth сейчас недоступен: не настроен <code>IG_TOKEN_ENC_KEY</code> (нужен ключ 32 байта).\n\n` +
-        `Админ: задай hex64 (32 bytes) или base64/base64url (>=32 bytes) и задеплой.`,
-      { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) }
-    );
+    await igOAuthUnavailable('ig_oauth_encryption_key_invalid', { config: 'IG_TOKEN_ENC_KEY' });
     return;
   }
 
   if (!CFG.IG_OAUTH_CLIENT_ID || !CFG.IG_OAUTH_CLIENT_SECRET) {
-    await safeEditOrReply(
-      ctx,
-      `⚠️ Instagram OAuth сейчас недоступен: не настроены <code>IG_OAUTH_CLIENT_ID</code>/<code>IG_OAUTH_CLIENT_SECRET</code>.`,
-      { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) }
-    );
+    await igOAuthUnavailable('ig_oauth_client_config_missing', {
+      config: ['IG_OAUTH_CLIENT_ID', 'IG_OAUTH_CLIENT_SECRET'],
+    });
     return;
   }
+
   if (!CFG.PUBLIC_BASE_URL) {
-    await safeEditOrReply(
-      ctx,
-      `⚠️ Не настроено: PUBLIC_BASE_URL.\n\nАдмин должен указать домен бота, чтобы OAuth работал.`,
-      { reply_markup: navKb('a:ws_ig_verify|ws:' + wsId) }
-    );
+    await igOAuthUnavailable('ig_oauth_public_base_url_missing', { config: 'PUBLIC_BASE_URL' });
     return;
   }
 
@@ -29769,8 +29819,11 @@ ${link}`;
         async () => ({ __missing_relation: true })
       );
       if (prof && prof.__missing_relation) {
-        await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
-          reply_markup: navKb('a:menu')
+        reportCopySafetyDiagnostic('brand_profiles_relation_missing', { relation: 'brand_profiles', migration: '024_brand_profiles' });
+
+        await safeEditOrReply(ctx, copySafetyUnavailableHtml('Профиль бренда временно недоступен'), {
+          parse_mode: 'HTML',
+          reply_markup: copySafetyRecoveryKb('a:menu')
         });
         return;
       }
@@ -29786,8 +29839,11 @@ ${link}`;
         async () => ({ __missing_relation: true })
       );
       if (saved && saved.__missing_relation) {
-        await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
-          reply_markup: navKb('a:menu')
+        reportCopySafetyDiagnostic('brand_profiles_relation_missing', { relation: 'brand_profiles', migration: '024_brand_profiles' });
+
+        await safeEditOrReply(ctx, copySafetyUnavailableHtml('Профиль бренда временно недоступен'), {
+          parse_mode: 'HTML',
+          reply_markup: copySafetyRecoveryKb('a:menu')
         });
         return;
       }
@@ -29810,8 +29866,11 @@ ${link}`;
         async () => ({ __missing_relation: true })
       );
       if (saved && saved.__missing_relation) {
-        await safeEditOrReply(ctx, '⚠️ В базе нет таблицы brand_profiles. Применяй миграцию migrations/024_brand_profiles.sql в Neon и повтори.', {
-          reply_markup: navKb('a:menu')
+        reportCopySafetyDiagnostic('brand_profiles_relation_missing', { relation: 'brand_profiles', migration: '024_brand_profiles' });
+
+        await safeEditOrReply(ctx, copySafetyUnavailableHtml('Профиль бренда временно недоступен'), {
+          parse_mode: 'HTML',
+          reply_markup: copySafetyRecoveryKb('a:menu')
         });
         return;
       }
@@ -30044,7 +30103,8 @@ ${link}`;
       );
 
       if (res && res.__missing_relation) {
-        await ctx.answerCallbackQuery({ text: '⚠️ Не найдена таблица brand_profiles. Нужна миграция 024_brand_profiles.sql.', show_alert: true });
+        reportCopySafetyDiagnostic('brand_profiles_relation_missing', { relation: 'brand_profiles', migration: '024_brand_profiles' });
+        await ctx.answerCallbackQuery({ text: '⚠️ Профиль бренда временно недоступен. Попробуй позже.', show_alert: true });
         await renderBrandProfileHome(ctx, u.id, { wsId, ret, backOfferId: bo, backPage: bp, edit: true });
         return;
       }

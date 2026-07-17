@@ -1,3 +1,35 @@
+## STEP586A — Copy Safety & Taxonomy Foundation (2026-07-18)
+
+**Current handoff-safe baseline:** STEP586A source implementation on top of STEP585 audit/docs and STEP584 staging-acceptance tooling.
+
+Verified local source truth:
+- ordinary-user branches no longer expose the targeted Neon, migration, table, ENV or OAuth configuration instructions;
+- technical causes remain in structured `[copy_safety]` diagnostics;
+- bounded invite vocabulary is Russian and mechanism-honest: `баллы`, `7 дней PRO`, `30 дней PRO`, `заполнил основной профиль`, `история баллов`;
+- confirmed active `офер` spellings were corrected to `оффер`;
+- reward keys, costs, durations, balances and eligibility logic are unchanged;
+- no callback handler or action identity was renamed;
+- STEP586A source guard, targeted invite/callback contracts and dependency/runtime preflight pass locally;
+- the full JS surface passes parallel syntax verification; the canonical serial source-preflight command timed out during its long sequential syntax sweep after all preceding gates passed;
+- npm dependency audit reports 0 vulnerabilities.
+
+Current truth boundary:
+- live Telegram rendering and mobile wrapping are not verified;
+- production Vercel/Neon/Upstash behavior is not verified in this STEP;
+- remote STEP584 staging acceptance is still pending operator evidence;
+- dependency/runtime preflight must not be called PASS unless a complete local dependency install is present.
+
+Next implementation STEP: **STEP586B — Home, Menu and Role Navigation Contract**.
+
+Read:
+- `docs/audit/STEP586A_COPY_SAFETY_TAXONOMY_REPORT.md`;
+- `docs/product/COLLABKA_COPY_SYSTEM.md`;
+- `docs/product/TERMINOLOGY_REGISTRY.md`;
+- `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP586A.md`.
+
+---
+
 ## STEP585 — Conversation & UX Language Audit (2026-07-18)
 
 **Current handoff-safe baseline:** STEP585 documentation/audit layer on top of the unchanged STEP584 runtime source.

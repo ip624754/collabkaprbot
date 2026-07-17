@@ -9,7 +9,7 @@ const botSource = fs.readFileSync(path.join(root, 'src', 'bot', 'bot.js'), 'utf8
 
 assert.ok(botSource.includes("📨 <b>Инвайты</b>"), 'Invite hub must use the new Инвайты heading');
 assert.ok(botSource.includes('Конверсия активации:'), 'Invite hub must expose RU activation rate');
-assert.ok(botSource.includes('Правило активации: <b>completed profile</b>'), 'Invite hub must expose activation rule');
+assert.ok(botSource.includes('Правило активации: <b>заполнил основной профиль</b>'), 'Invite hub must expose activation rule');
 assert.ok(botSource.includes('Последние приглашённые'), 'Invite hub must expose recent invited contacts');
 assert.ok(botSource.includes("{ text: '📊 Статистика', callback_data: 'a:share_perf' }"), 'Invite hub must expose Statistics entrypoint');
 assert.ok(botSource.includes("{ text: '💎 Баллы', callback_data: 'a:share_points' }"), 'Invite hub must expose Points entrypoint');

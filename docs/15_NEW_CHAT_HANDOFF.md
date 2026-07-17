@@ -1,3 +1,38 @@
+# STEP586A CURRENT TRUTH OVERRIDE
+
+Use this block over older baseline and runtime claims below.
+
+- Current baseline: STEP586A Copy Safety & Taxonomy Foundation.
+- User-copy safety: targeted ordinary-user migration, Neon, table, ENV and OAuth configuration leaks removed.
+- Operator truth: preserved through structured `[copy_safety]` diagnostics.
+- Invite vocabulary: `баллы`, `7 дней PRO`, `30 дней PRO`, `заполнил основной профиль`, `история баллов`.
+- Reward mechanism: unchanged; keys, costs, durations, balances and eligibility remain source-identical except labels.
+- Callback contract: no action identity or handler rename; callback consistency has 0 unresolved actions.
+- Source enforcement: `npm run smoke:copy-safety-taxonomy-contract` is part of source preflight.
+- Dependency/runtime preflight: PASS after clean local dependency install.
+- Canonical serial source preflight: reached the long syntax sweep and timed out; full parallel syntax plus residual optional invariants passed separately.
+- Live Telegram/mobile copy: not verified.
+- STEP584 remote staging acceptance: still pending operator evidence.
+- Next STEP: STEP586B Home, Menu and Role Navigation Contract.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586A_COPY_SAFETY_TAXONOMY_REPORT.md`
+3. `docs/product/COLLABKA_COPY_SYSTEM.md`
+4. `docs/product/TERMINOLOGY_REGISTRY.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586A.md`
+
+Rules for the next model:
+- migrate labels by callback meaning, not global string replacement;
+- `a:home` is the global role/mode hub; `a:menu` is the current-role menu;
+- do not rename callbacks in STEP586B;
+- do not mix lifecycle or monetization copy into the navigation STEP;
+- preserve the user/operator diagnostic boundary added in STEP586A;
+- do not claim live UX verification without Telegram evidence.
+
+---
+
 # STEP585 CURRENT TRUTH OVERRIDE
 
 Use this block over older baseline and runtime claims below.

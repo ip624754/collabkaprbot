@@ -1,8 +1,8 @@
 # STEP586 — Conversation Copy Refactor Roadmap
 
-**Input:** STEP585 source audit and canonical copy system  
-**Runtime baseline:** STEP584  
-**Roadmap status:** approved sequencing proposal; implementation not yet applied  
+**Input:** STEP585 source audit and canonical copy system
+**Current implementation baseline:** STEP586A on STEP585 audit/docs
+**Roadmap status:** STEP586A implemented; STEP586B is next
 **Rule:** copy changes may not silently alter callbacks, permissions, prices, reward math, payment semantics or state transitions.
 
 ## 1. Goal
@@ -30,8 +30,11 @@ Every STEP586 wave must satisfy all applicable checks:
 
 ### STEP586A — Copy Safety & Taxonomy Foundation
 
-**Priority:** P1 / first  
-**Risk:** medium; user-facing copy in critical and shared paths  
+**Implementation:** DONE in STEP586A (2026-07-18)
+**Report:** `docs/audit/STEP586A_COPY_SAFETY_TAXONOMY_REPORT.md`
+
+**Priority:** P1 / first
+**Risk:** medium; user-facing copy in critical and shared paths
 **Mode:** STANDARD with security review
 
 Scope:
@@ -65,12 +68,14 @@ Acceptance:
 - callback consistency remains green;
 - existing payment, invite and access contracts pass.
 
+**Verified result:** local source guards and targeted invite/callback contracts pass; live Telegram rendering remains unverified.
+
 ---
 
 ### STEP586B — Home, Menu and Role Navigation Contract
 
-**Priority:** P1  
-**Risk:** high surface area; many shared footers and tests  
+**Priority:** P1
+**Risk:** high surface area; many shared footers and tests
 **Mode:** HEAVY
 
 Target contract:
@@ -99,8 +104,8 @@ Acceptance:
 
 ### STEP586C — Applications, Dialogs and Deals Lifecycle
 
-**Priority:** P1  
-**Risk:** medium/high; product taxonomy across multiple flows  
+**Priority:** P1
+**Risk:** medium/high; product taxonomy across multiple flows
 **Mode:** STANDARD
 
 Target lifecycle:
@@ -127,8 +132,8 @@ Acceptance:
 
 ### STEP586D — Invite Center Language and Mechanism Honesty
 
-**Priority:** P1  
-**Risk:** high trust surface; incentives and anti-abuse  
+**Priority:** P1
+**Risk:** high trust surface; incentives and anti-abuse
 **Mode:** HEAVY
 
 Work:
@@ -151,8 +156,8 @@ Acceptance:
 
 ### STEP586E — Monetization and Paid Product Clarity
 
-**Priority:** P1/P2  
-**Risk:** critical trust surface  
+**Priority:** P1/P2
+**Risk:** critical trust surface
 **Mode:** HEAVY
 
 Canonical distinction:
@@ -181,8 +186,8 @@ Acceptance:
 
 ### STEP586F — Access, Error and Empty-State Recovery
 
-**Priority:** P2  
-**Risk:** medium  
+**Priority:** P2
+**Risk:** medium
 **Mode:** STANDARD
 
 Work:
@@ -208,8 +213,8 @@ Acceptance:
 
 ### STEP586G — Admin and Operator Vocabulary
 
-**Priority:** P2  
-**Risk:** low/medium; operational clarity  
+**Priority:** P2
+**Risk:** low/medium; operational clarity
 **Mode:** STANDARD
 
 Work:
@@ -233,8 +238,8 @@ Acceptance:
 
 ### STEP586H — Live Telegram Acceptance and Mobile Copy Pass
 
-**Priority:** release gate after the previous waves  
-**Risk:** observational  
+**Priority:** release gate after the previous waves
+**Risk:** observational
 **Mode:** HEAVY acceptance
 
 Run on preview/staging first.

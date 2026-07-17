@@ -227,6 +227,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): home copy contract", "smoke:home-copy-contract"],
   ["Preflight (source-only): selection pilot contract", "smoke:selection-pilot-contract"],
   ["Preflight (source-only): Telegram copy hotfix wave 1 contract", "smoke:copy-wave1-contract"],
+  ["Preflight (source-only): copy safety and taxonomy foundation contract", "smoke:copy-safety-taxonomy-contract"],
   ["Preflight (source-only): public landing contract", "smoke:landing-contract"],
   ["Preflight (source-only): admin web shell contract", "smoke:admin-web-shell-contract"],
   ["Preflight (source-only): admin web mobile shell contract", "smoke:admin-web-mobile-shell-contract"],

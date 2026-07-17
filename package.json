@@ -89,6 +89,7 @@
     "smoke:selection-pilot-contract": "node scripts/smoke-selection-pilot-contract.js",
     "smoke:health-fast": "node scripts/smoke-health-fast-contract.js",
     "smoke:copy-wave1-contract": "node scripts/smoke-copy-wave1-contract.js",
+    "smoke:copy-safety-taxonomy-contract": "node scripts/smoke-copy-safety-taxonomy-contract.js",
     "smoke:landing-contract": "node scripts/smoke-landing-contract.js",
     "smoke:admin-web-shell-contract": "node scripts/smoke-admin-web-shell-contract.js",
     "smoke:admin-web-mobile-shell-contract": "node scripts/smoke-admin-web-mobile-shell-contract.js",

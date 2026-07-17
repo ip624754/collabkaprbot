@@ -1,7 +1,7 @@
 # Collabka Copy System
 
-**Status:** canonical product-writing contract  
-**Introduced:** STEP585  
+**Status:** canonical product-writing contract
+**Introduced:** STEP585
 **Applies to:** Telegram user UX, Telegram admin/operator UX, public product copy, transactional notifications, empty/error/success states.
 
 ## 1. Purpose
@@ -442,3 +442,25 @@ Are trade-offs, costs and failure states stated without drama or false certainty
 - [ ] Buttons fit Telegram mobile width.
 - [ ] Callback behavior did not change unless the STEP explicitly allows it.
 - [ ] Existing copy contracts and navigation smokes were updated deliberately.
+
+## 11. Source enforcement after STEP586A
+
+The user/operator boundary is guarded by:
+
+```bash
+npm run smoke:copy-safety-taxonomy-contract
+```
+
+For ordinary-user failures:
+
+- show the product consequence;
+- give a usable recovery route;
+- do not show migrations, tables, ENV keys or deployment instructions.
+
+For operators:
+
+- keep a structured diagnostic code;
+- keep the exact relation, migration, column or configuration key needed to repair the issue;
+- never interpolate raw internal failure reasons into user copy.
+
+This guard is intentionally bounded. Admin and QA diagnostics may use technical vocabulary when the surface is access-controlled and the detail is operationally useful.

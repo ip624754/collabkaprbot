@@ -175,6 +175,13 @@ Canonical product-language documents:
 - `roadmap/STEP586_COPY_REFACTOR_ROADMAP.md` — bounded implementation waves STEP586A–H;
 - `process/07_WORK_HISTORY_STEP585.md` — exact scope and Truth Boundary.
 
-Current next action: **STEP586A — Copy Safety & Taxonomy Foundation**.
+### STEP586A implementation
 
-STEP585 did not change runtime code. Live Telegram rendering and mobile wrapping remain unverified.
+- `audit/STEP586A_COPY_SAFETY_TAXONOMY_REPORT.md` — exact runtime copy changes, security review and Truth Boundary;
+- `process/07_WORK_HISTORY_STEP586A.md` — changed scope, preserved invariants and QA;
+- command: `npm run smoke:copy-safety-taxonomy-contract`;
+- ordinary-user infrastructure leakage is removed from the targeted branches while operator diagnostics retain technical truth.
+
+Current next action: **STEP586B — Home, Menu and Role Navigation Contract**.
+
+Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance remain unverified.

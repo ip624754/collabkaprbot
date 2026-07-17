@@ -7776,8 +7776,8 @@ function isWorkspaceProfileActivationComplete(ws) {
 }
 
 const INVITE_REWARD_CATALOG = {
-  pro7: { key: 'pro7', rewardType: 'pro_7d', costPoints: 100, days: 7, label: '7 days Pro' },
-  pro30: { key: 'pro30', rewardType: 'pro_30d', costPoints: 250, days: 30, label: '30 days Pro' },
+  pro7: { key: 'pro7', rewardType: 'pro_7d', costPoints: 100, days: 7, label: '7 дней PRO' },
+  pro30: { key: 'pro30', rewardType: 'pro_30d', costPoints: 250, days: 30, label: '30 дней PRO' },
 };
 
 function inviteRewardCatalogEntry(rewardKey) {
@@ -7795,7 +7795,7 @@ function inviteRewardsBaseSummary() {
     canRedeemPro30: false,
     nextRewardKey: 'pro7',
     nextRewardCost: 100,
-    nextRewardLabel: '7 days Pro',
+    nextRewardLabel: '7 дней PRO',
     pointsToNextReward: 100,
   };
 }
