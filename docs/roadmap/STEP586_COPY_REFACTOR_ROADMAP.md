@@ -1,8 +1,8 @@
 # STEP586 — Conversation Copy Refactor Roadmap
 
 **Input:** STEP585 source audit and canonical copy system
-**Current implementation baseline:** STEP586C on STEP586B
-**Roadmap status:** STEP586A–C implemented; STEP586D is next
+**Current implementation baseline:** STEP586D on STEP586C
+**Roadmap status:** STEP586A–D implemented; STEP586E is next
 **Rule:** copy changes may not silently alter callbacks, permissions, prices, reward math, payment semantics or state transitions.
 
 ## 1. Goal
@@ -139,6 +139,9 @@ Acceptance:
 ---
 
 ### STEP586D — Invite Center Language and Mechanism Honesty
+
+**Implementation:** DONE in STEP586D (2026-07-18)  
+**Report:** `docs/audit/STEP586D_INVITE_CENTER_LANGUAGE_MECHANISM_HONESTY_REPORT.md`
 
 **Priority:** P1
 **Risk:** high trust surface; incentives and anti-abuse
@@ -285,6 +288,6 @@ The language work should reduce risk, not hide architectural changes inside stri
 
 ## 5. Current next action
 
-Proceed with **STEP586D — Invite Center Language and Mechanism Honesty**.
+Proceed with **STEP586E — Monetization and Paid Product Clarity**.
 
-Use persisted invite/reward rules as the source of truth. Keep thresholds, ledger behavior, eligibility and anti-abuse mechanics unchanged.
+Use payment configuration, ledger and entitlement code as the source of truth. Keep provider, amounts, callbacks and apply semantics unchanged unless an independently approved critical fix is required.

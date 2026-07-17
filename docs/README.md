@@ -2,17 +2,17 @@
 
 Это актуальный комплект документации по проекту **Collabka PR**.
 
-## Текущий snapshot — STEP586C (2026-07-18)
+## Текущий snapshot — STEP586D (2026-07-18)
 
-- Канонический lifecycle: `оффер / профиль → заявка → диалог → сделка → этап / закрытие`.
-- `💬 Диалоги`, `📨 Заявки` и `🤝 Сделки` разведены по реальному состоянию объекта.
-- Сделка существует только при persisted acceptance evidence и `deal_stage`.
-- Deal-only runtime и SQL-пути защищены accepted-only guards.
-- Callback values, цены, кредиты, платежи, схема и миграции не менялись.
-- Следующий scoped STEP: `STEP586D — Invite Center Language and Mechanism Honesty`.
+- Пользовательский модуль называется `📨 Приглашения`.
+- Механика в UI и DB использует один источник: `+2 / 24h`, `+10 / 48h`, `100 / 7d`, `250 / 30d`.
+- `В ожидании`, `Доступно` и `Использовано` разведены по реальному состоянию ledger.
+- Исключения self-referral, existing user, raw-open и incomplete activation описаны явно.
+- Callback IDs, экономика, ledger, anti-abuse и redeem target order не менялись.
+- Следующий scoped STEP: `STEP586E — Monetization and Paid Product Clarity`.
 
 ## 0) BOOT (всегда читаем сначала)
-- `process/07_WORK_HISTORY_STEP586C.md` — актуальная дельта: заявки / диалоги / сделки + accepted-deal guards
+- `process/07_WORK_HISTORY_STEP586D.md` — актуальная дельта: приглашения, баллы, награды и mechanism honesty
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
@@ -23,7 +23,7 @@
 - `RISK_REGISTRY.md` — живой реестр технических, продуктовых и AI-governance рисков
 - `CREATOR_OS_THESIS.md` — продуктовый north star: Creator Collaboration Operating System без broad rewrite
 - `CHATGPT_COLLABKA_UPGRADE_NOTES.md` — состав и truth boundary STEP580 docs upgrade
-- `audit/STEP586C_APPLICATIONS_DIALOGS_DEALS_LIFECYCLE_REPORT.md` — реализация, security finding и Truth Boundary STEP586C
+- `audit/STEP586D_INVITE_CENTER_LANGUAGE_MECHANISM_HONESTY_REPORT.md` — реализация, mechanism truth и Truth Boundary STEP586D
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 - `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout
@@ -200,6 +200,13 @@ Canonical product-language documents:
 - visible lifecycle is `оффер / профиль → заявка → диалог → сделка → этап / закрытие`;
 - deal-only routes and SQL writes require authoritative acceptance evidence.
 
-Current next action: **STEP586D — Invite Center Language and Mechanism Honesty**.
+Current next action: **STEP586E — Monetization and Paid Product Clarity**.
 
 Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance remain unverified.
+### STEP586D implementation
+
+- `audit/STEP586D_INVITE_CENTER_LANGUAGE_MECHANISM_HONESTY_REPORT.md` — source-backed invite mechanism, copy changes and Truth Boundary;
+- `process/07_WORK_HISTORY_STEP586D.md` — exact implementation scope and preserved economics;
+- command: `npm run smoke:invite-language-mechanism-honesty-contract`;
+- public invite copy and DB reward processing share the same `+2 / 24h`, `+10 / 48h`, `100 / 7d`, `250 / 30d` source-of-truth values.
+

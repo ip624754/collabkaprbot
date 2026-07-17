@@ -21,7 +21,7 @@
 18) `callback_data` ≤ 64 байта: держим ключи короткими; если нужен контекст — токен → payload в Redis (TTL).
 
 19) Watchlist регрессий: см. `docs/00_CURRENT_STATE.md` → раздел «Выводы последнего регресс-аудита + watchlist».
-20) Текущий handoff-safe baseline: **STEP586C** (applications/dialogs/deals lifecycle on top of STEP586B). Следующий scoped STEP: **STEP586D — Invite Center Language and Mechanism Honesty**. Перед новой работой сверяй `docs/00_CURRENT_STATE.md`, `docs/00_BOOT.md`, `docs/15_NEW_CHAT_HANDOFF.md` и `docs/92_PROD_ENV_BASELINE.md`.
+20) Текущий handoff-safe baseline: **STEP586D** (invite language and mechanism honesty on top of STEP586C). Следующий scoped STEP: **STEP586E — Monetization and Paid Product Clarity**. Перед новой работой сверяй `docs/00_CURRENT_STATE.md`, `docs/00_BOOT.md`, `docs/15_NEW_CHAT_HANDOFF.md` и `docs/92_PROD_ENV_BASELINE.md`.
 21) Для AI-assisted работы обязательны project-specific contracts: `docs/AI_NATIVE_WORKFLOW.md`, `docs/SYSTEM_INVARIANTS.md`, `docs/RISK_REGISTRY.md`.
 22) `docs/CREATOR_OS_THESIS.md` — product north star, но не разрешение на broad rewrite: каждая продуктовая волна требует отдельный scoped STEP.
 

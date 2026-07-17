@@ -348,25 +348,42 @@ Internal code identifiers remain unchanged unless a separate engineering STEP ch
 
 ## 9. Invite and reward language
 
+The ordinary-user module is `Приглашения`, not `Инвайты`.
+
 Use:
 
-- `приглашение`;
-- `приглашённые`;
-- `активация`;
-- `баллы`;
-- `в ожидании`;
-- `доступно`;
-- `использовано`;
-- `7 дней PRO`;
-- `30 дней PRO`.
+- `приглашён` — a new user completed the first bot start through the link and attribution was stored;
+- `активирован` — the invited user completed the main brand or channel profile;
+- `в ожидании` — earned points are inside the confirmation window and cannot be used;
+- `доступно` — confirmed earned points minus points already used;
+- `использовано` — points spent on an activated reward.
 
-Explain the activation rule in user terms:
+Current source-backed reward contract:
 
 ```text
-Активация засчитывается, когда новый пользователь заполнил основной профиль.
++2 балла — первый запуск нового пользователя по ссылке; подтверждение через 24 часа.
++10 баллов — заполнен основной профиль бренда или канала; подтверждение через 48 часов.
+100 доступных баллов — 7 дней PRO.
+250 доступных баллов — 30 дней PRO.
 ```
 
-Do not expose internal reward types or ledger wording.
+Every public screen must state the relevant exclusions:
+
+- opening the link without starting the bot gives no points;
+- self-referral does not count;
+- an already existing account does not count;
+- an incomplete profile gives no activation reward;
+- one invited user can produce each earn reward once.
+
+Pending points must never be presented as spendable. Do not use `pending`, `confirmed`, `redeemed`, `join`, `pts`, `invite ledger` or reward-type identifiers in ordinary-user copy.
+
+Redeem confirmation must show the reward, exact point cost, available balance, remaining balance and target rule. Success must show the actual target returned by the transaction.
+
+The source guard is:
+
+```bash
+npm run smoke:invite-language-mechanism-honesty-contract
+```
 
 ## 10. Monetization language
 

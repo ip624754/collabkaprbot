@@ -1,25 +1,28 @@
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const files = [
-  'src/bot/bot.js',
-  'src/db/queries.js',
-  'docs/00_CURRENT_STATE.md',
-  'docs/process/07_WORK_HISTORY_STEP574.md',
-];
-const content = files.map((f) => fs.readFileSync(f, 'utf8')).join('\n');
+const botSource = fs.readFileSync('src/bot/bot.js', 'utf8');
+const queriesSource = fs.readFileSync('src/db/queries.js', 'utf8');
+
 for (const token of [
   'inviteRewardPendingReasonLabel',
-  'Awaiting join confirmation',
-  'Awaiting activation confirmation',
+  'Почему баллы в ожидании',
+  'окно подтверждения: ${INVITE_JOIN_RULE.confirmationHours} часа',
+  'окно подтверждения: ${INVITE_ACTIVATION_RULE.confirmationHours} часов',
+  'Баллы в ожидании пока нельзя использовать.',
+  'Баллы в ожидании не входят в доступный баланс до конца проверки.',
+]) {
+  assert.ok(botSource.includes(token), `pending user contract missing: ${token}`);
+}
+
+// Admin diagnostics retain dense operational overdue language until STEP586G.
+for (const token of [
   'Pending overdue',
   'Join pending overdue',
   'Activation pending overdue',
   'overdueHours',
-  'STEP574 — Pending Reward Resolution Polish',
 ]) {
-  if (!content.includes(token)) {
-    console.error('Missing token:', token);
-    process.exit(1);
-  }
+  assert.ok(`${botSource}\n${queriesSource}`.includes(token), `pending operator contract missing: ${token}`);
 }
+
 console.log('OK: invite pending resolution contract');

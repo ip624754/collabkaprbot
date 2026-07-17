@@ -22,6 +22,7 @@ This registry separates product language from internal engineering identifiers.
 | Subscription for brands | `Brand Plan` | Paid subscription/access | Brand Pass, кредиты |
 | Spendable brand units | `кредиты` | Units used for specific actions | Brand Plan, баллы |
 | Creator subscription | `PRO` | Creator paid tier | Pro-target, Pro reward |
+| Invite module | `Приглашения` | Invite link, statistics, history and rewards | Инвайты |
 | Invite reward units | `баллы` | Invite reward balance | pts, points, credits |
 | Global role hub | target: `Домой` | Switch role / global escape | Home, Главное меню |
 | Current-role navigation | `Меню` | Menu for current role/context | Домой |
@@ -101,19 +102,28 @@ Preferred Russian feature labels:
 
 ## 5. Invite vocabulary
 
-| Internal term | User-facing term |
-|---|---|
-| invite / join | приглашение / новый пользователь |
-| activated | активирован |
-| completed profile | заполнил основной профиль |
-| pending | в ожидании |
-| confirmed | подтверждено |
-| redeemed | использовано |
-| points / pts | баллы |
-| 7 days Pro | 7 дней PRO |
-| 30 days Pro | 30 дней PRO |
-| invite ledger | история баллов |
-| invite tracking | учёт приглашений |
+| Internal/state term | User-facing term | Exact meaning |
+|---|---|---|
+| invite module | `Приглашения` | Link, statistics, history, points and rewards |
+| joined / invite attribution | `приглашён` | New user completed first bot start through the link and attribution was stored |
+| activated | `активирован` | Invited user completed the main brand or channel profile |
+| pending | `в ожидании` | Earned points inside the confirmation window; not spendable |
+| confirmed / available | `доступно` | Confirmed earned points minus used points |
+| redeemed | `использовано` | Points already spent on a reward |
+| points / pts | `баллы` | Invite reward units; not money and not transferable |
+| 7 days Pro | `7 дней PRO` | Reward costing 100 available points |
+| 30 days Pro | `30 дней PRO` | Reward costing 250 available points |
+| invite ledger | `история баллов` | User-readable recent point events |
+| invite tracking | `учёт приглашений` | Attribution and activation statistics |
+
+Current event contract:
+
+- `+2` points after the first eligible bot start, pending `24` hours;
+- additional `+10` points after main profile completion, pending `48` hours;
+- self-referral, existing accounts and raw link views are not eligible;
+- incomplete profile means no activation reward.
+
+Internal identifiers remain unchanged in code and operator diagnostics.
 
 ## 6. Infrastructure terms
 

@@ -1,3 +1,31 @@
+## STEP586D — Invite Center Language and Mechanism Honesty (2026-07-18)
+
+**Current handoff-safe baseline:** STEP586D on top of STEP586C.
+
+Verified local source truth:
+- ordinary-user module uses `Приглашения`; mixed invite English and internal ledger terms are removed from the bounded user surface;
+- `приглашён` means first eligible bot start with stored attribution; `активирован` means main brand/channel profile completed;
+- reward rules are sourced from shared immutable DB exports: `+2 / 24h`, `+10 / 48h`, `100 / 7d`, `250 / 30d`;
+- DB reward processing and Telegram copy consume the same rule/catalog objects; numeric economics are unchanged;
+- pending, available and used balances are separated across hub, points, history, rewards, confirm and success screens;
+- self-referral, existing-user, raw-open and incomplete-profile exclusions are stated;
+- redeem confirmation shows cost, remaining balance and target rule; success shows the actual transaction target;
+- callback identities, ledger schema, attribution, activation, uniqueness and advisory-lock mechanics are unchanged;
+- dedicated and targeted invite source contracts pass locally.
+
+Not verified: live Telegram rendering, real 24h/48h production timing, live Neon redeem, remote staging and real-user comprehension.
+
+**Next:** STEP586E — Monetization and Paid Product Clarity.
+
+Read:
+- `docs/audit/STEP586D_INVITE_CENTER_LANGUAGE_MECHANISM_HONESTY_REPORT.md`;
+- `docs/product/COLLABKA_COPY_SYSTEM.md`;
+- `docs/product/TERMINOLOGY_REGISTRY.md`;
+- `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP586D.md`.
+
+---
+
 ## STEP586C — Applications, Dialogs and Deals Lifecycle (2026-07-18)
 
 **Current handoff-safe baseline:** STEP586C on top of STEP586B.

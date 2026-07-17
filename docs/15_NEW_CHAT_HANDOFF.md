@@ -1,3 +1,33 @@
+# STEP586D CURRENT TRUTH OVERRIDE
+
+- Current baseline: STEP586D Invite Center Language and Mechanism Honesty.
+- Public invite module: `📨 Приглашения`. Admin/operator terminology is deferred to STEP586G.
+- Mechanism truth: `+2` points after first eligible start, pending 24h; `+10` after main-profile completion, pending 48h.
+- Reward catalog: 100 points → 7 days PRO; 250 points → 30 days PRO.
+- DB processing and Telegram copy use shared immutable rule/catalog exports. Numeric mechanics did not change.
+- Pending points are not spendable; available and used balances are separate.
+- Self-referral, existing accounts, raw link views and incomplete activation exclusions are explicit.
+- Callback IDs, ledger schema, attribution, activation, uniqueness, target order and redeem lock remain unchanged.
+- Source guard: `npm run smoke:invite-language-mechanism-honesty-contract`.
+- Live Telegram, production confirmation timing, live redeem and remote staging are not verified.
+- Next STEP: STEP586E Monetization and Paid Product Clarity.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586D_INVITE_CENTER_LANGUAGE_MECHANISM_HONESTY_REPORT.md`
+3. `docs/product/COLLABKA_COPY_SYSTEM.md`
+4. `docs/product/TERMINOLOGY_REGISTRY.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586D.md`
+
+Rules for the next model:
+- compare every paid-product claim to source configuration and entitlement code;
+- do not change provider, price, callback, ledger or apply behavior inside copy cleanup;
+- keep subscription, credits and creator PRO as separate product objects;
+- do not claim live UX or payment verification without evidence.
+
+---
+
 # STEP586C CURRENT TRUTH OVERRIDE
 
 - Current baseline: STEP586C Applications, Dialogs and Deals Lifecycle.

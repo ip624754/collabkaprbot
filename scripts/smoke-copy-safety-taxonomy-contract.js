@@ -49,7 +49,8 @@ for (const needle of [
   '7 дней PRO',
   '30 дней PRO',
   'заполнил основной профиль',
-  'полная история баллов',
+  'История приглашений',
+  'Использовано',
   'доступных баллов',
 ]) assertPresent(botSource, needle);
 
@@ -59,8 +60,8 @@ for (const needle of ['7 days Pro', '30 days Pro', 'completed profile', 'invite 
 assert.equal(/(^|[^А-Яа-яЁё])офер([^А-Яа-яЁё]|$)/u.test(botSource), false, 'active typo «офер» must be absent');
 
 // DB catalog labels are user-facing outputs; reward keys and economics stay unchanged.
-assertPresent(dbSource, "pro7: { key: 'pro7', rewardType: 'pro_7d', costPoints: 100, days: 7, label: '7 дней PRO' }");
-assertPresent(dbSource, "pro30: { key: 'pro30', rewardType: 'pro_30d', costPoints: 250, days: 30, label: '30 дней PRO' }");
+assertPresent(dbSource, "pro7: Object.freeze({ key: 'pro7', rewardType: 'pro_7d', costPoints: 100, days: 7, label: '7 дней PRO' })");
+assertPresent(dbSource, "pro30: Object.freeze({ key: 'pro30', rewardType: 'pro_30d', costPoints: 250, days: 30, label: '30 дней PRO' })");
 assertAbsent(dbSource, "label: '7 days Pro'");
 assertAbsent(dbSource, "label: '30 days Pro'");
 

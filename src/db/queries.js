@@ -7777,10 +7777,15 @@ function isWorkspaceProfileActivationComplete(ws) {
   );
 }
 
-const INVITE_REWARD_CATALOG = {
-  pro7: { key: 'pro7', rewardType: 'pro_7d', costPoints: 100, days: 7, label: '7 дней PRO' },
-  pro30: { key: 'pro30', rewardType: 'pro_30d', costPoints: 250, days: 30, label: '30 дней PRO' },
-};
+export const INVITE_REWARD_PUBLIC_RULES = Object.freeze({
+  join: Object.freeze({ rewardType: 'invite_join', points: 2, confirmationHours: 24 }),
+  activation: Object.freeze({ rewardType: 'invite_activation', points: 10, confirmationHours: 48 }),
+});
+
+export const INVITE_REWARD_CATALOG = Object.freeze({
+  pro7: Object.freeze({ key: 'pro7', rewardType: 'pro_7d', costPoints: 100, days: 7, label: '7 дней PRO' }),
+  pro30: Object.freeze({ key: 'pro30', rewardType: 'pro_30d', costPoints: 250, days: 30, label: '30 дней PRO' }),
+});
 
 function inviteRewardCatalogEntry(rewardKey) {
   return INVITE_REWARD_CATALOG[String(rewardKey || '').trim().toLowerCase()] || null;
@@ -7796,9 +7801,9 @@ function inviteRewardsBaseSummary() {
     canRedeemPro7: false,
     canRedeemPro30: false,
     nextRewardKey: 'pro7',
-    nextRewardCost: 100,
-    nextRewardLabel: '7 дней PRO',
-    pointsToNextReward: 100,
+    nextRewardCost: INVITE_REWARD_CATALOG.pro7.costPoints,
+    nextRewardLabel: INVITE_REWARD_CATALOG.pro7.label,
+    pointsToNextReward: INVITE_REWARD_CATALOG.pro7.costPoints,
   };
 }
 
@@ -7842,6 +7847,7 @@ async function insertInviteEarnRewardIfMissing(client, row, rewardType, points, 
 async function backfillInviteJoinRewards(client, referrerUserId, limit = 200) {
   const uid = Number(referrerUserId || 0);
   if (!uid) return 0;
+  const rule = INVITE_REWARD_PUBLIC_RULES.join;
   const rowsResult = await client.query(
     `select inv.id, inv.referrer_user_id, inv.invited_user_id, inv.invite_code, inv.joined_at
        from member_invites inv
@@ -7849,18 +7855,18 @@ async function backfillInviteJoinRewards(client, referrerUserId, limit = 200) {
          on l.referrer_user_id = inv.referrer_user_id
         and l.invited_user_id = inv.invited_user_id
         and l.entry_kind = 'earn'
-        and l.reward_type = 'invite_join'
+        and l.reward_type = $3
       where inv.referrer_user_id = $1
         and l.id is null
       order by inv.joined_at asc
       limit $2`,
-    [uid, Number(limit || 200)]
+    [uid, Number(limit || 200), rule.rewardType]
   );
   let created = 0;
   for (const row of rowsResult.rows || []) {
     const joinedAt = row.joined_at ? new Date(row.joined_at) : new Date();
-    const confirmAfter = new Date(joinedAt.getTime() + 24 * 60 * 60 * 1000);
-    const inserted = await insertInviteEarnRewardIfMissing(client, row, 'invite_join', 2, confirmAfter);
+    const confirmAfter = new Date(joinedAt.getTime() + rule.confirmationHours * 60 * 60 * 1000);
+    const inserted = await insertInviteEarnRewardIfMissing(client, row, rule.rewardType, rule.points, confirmAfter);
     if (inserted?.id) created += 1;
   }
   return created;
@@ -7869,6 +7875,7 @@ async function backfillInviteJoinRewards(client, referrerUserId, limit = 200) {
 async function backfillInviteActivationRewards(client, referrerUserId, limit = 200) {
   const uid = Number(referrerUserId || 0);
   if (!uid) return 0;
+  const rule = INVITE_REWARD_PUBLIC_RULES.activation;
   const rowsResult = await client.query(
     `select inv.id, inv.referrer_user_id, inv.invited_user_id, inv.invite_code, inv.activated_at
        from member_invites inv
@@ -7876,19 +7883,19 @@ async function backfillInviteActivationRewards(client, referrerUserId, limit = 2
          on l.referrer_user_id = inv.referrer_user_id
         and l.invited_user_id = inv.invited_user_id
         and l.entry_kind = 'earn'
-        and l.reward_type = 'invite_activation'
+        and l.reward_type = $3
       where inv.referrer_user_id = $1
         and inv.activated_at is not null
         and l.id is null
       order by inv.activated_at asc
       limit $2`,
-    [uid, Number(limit || 200)]
+    [uid, Number(limit || 200), rule.rewardType]
   );
   let created = 0;
   for (const row of rowsResult.rows || []) {
     const activatedAt = row.activated_at ? new Date(row.activated_at) : new Date();
-    const confirmAfter = new Date(activatedAt.getTime() + 48 * 60 * 60 * 1000);
-    const inserted = await insertInviteEarnRewardIfMissing(client, row, 'invite_activation', 10, confirmAfter);
+    const confirmAfter = new Date(activatedAt.getTime() + rule.confirmationHours * 60 * 60 * 1000);
+    const inserted = await insertInviteEarnRewardIfMissing(client, row, rule.rewardType, rule.points, confirmAfter);
     if (inserted?.id) created += 1;
   }
   return created;

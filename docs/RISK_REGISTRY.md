@@ -13,7 +13,7 @@ State: `ACTIVE / WATCH / MITIGATED / ACCEPTED / PARKED`
 | R-02 | Cron overlap or duplicate external effects | CRITICAL | MITIGATED | duplicate publish/draw/send, overlapping runs | Redis token lock, PG advisory lock, idempotent reserve/state guards | any duplicate authoritative effect |
 | R-03 | Payment/credit/unlock double application | CRITICAL | MITIGATED | duplicate ledger rows, repeated entitlement | exactly-once DB guards, audit, HEAVY-only changes | any inconsistent money-like balance |
 | R-04 | Callback/action-key regression after refactor | HIGH | WATCH | dead buttons, stale callback, unacked callback | action registry, source smokes, backward compatibility | new callback family or router extraction |
-| R-05 | Invite reward truth drift between copy and ledger | HIGH | WATCH | UI promises unavailable reward, wrong activation wording | separate invite/activation/reward states, education copy, ledger unchanged | any reward-rule change |
+| R-05 | Invite reward truth drift between copy and ledger | HIGH | MITIGATED | UI promises unavailable reward, wrong amount/window, pending shown as spendable | shared immutable DB/UI rule catalog, STEP586D copy contract, ledger and anti-abuse unchanged | any reward, activation, target or confirmation-window change |
 | R-06 | Giveaway draw/claim race or non-reproducible winners | CRITICAL | MITIGATED | different winners on replay, duplicate claim, lock contention mishandled | deterministic seed/hash, transactional state, advisory lock | any draw algorithm or claim mutation change |
 | R-07 | Vercel function-cap or deploy-surface creep | HIGH | WATCH | deployment rejection, unexpected function count | collapsed routes, parked integrations outside active surface | adding API route family or reviving IG OAuth |
 | R-08 | Telegram rate limit or slow notify stalls cron batch | HIGH | MITIGATED | 429 bursts, cron timeout, partial batch | cooldown/resume, bounded notify timeout, digest | sustained 429 or batch non-convergence |
@@ -68,3 +68,13 @@ Residual risk:
 - Source verification: canonical source preflight PASS; dedicated lifecycle guard PASS.
 - Runtime verification required: live creator/brand application acceptance and deal-stage traversal in Preview/Staging.
 - Residual risk: live data may contain historical `deal_stage` rows without accepted evidence; STEP586C hides them from deal lists rather than rewriting data.
+## Current STEP586D assessment
+
+- Change type: invite/reward copy plus shared mechanism constants; no economic change.
+- Primary risks addressed: R-04, R-05, R-11, R-12.
+- Runtime blast radius: invite screens and reward-rule constant reads used by existing DB backfill code.
+- Rollback: revert the exact STEP586D delta; no migration rollback is required.
+- Source verification: dedicated invite language/mechanism contract and targeted invite contracts PASS locally.
+- Runtime verification required: first-start attribution, activation, confirmation timing and redeem on Preview/Staging test accounts.
+- Residual risk: live Telegram wrapping and production ledger timing are not proven by source checks; operator invite vocabulary remains for STEP586G.
+

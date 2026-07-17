@@ -230,6 +230,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): copy safety and taxonomy foundation contract", "smoke:copy-safety-taxonomy-contract"],
   ["Preflight (source-only): Home/Menu/role navigation contract", "smoke:home-menu-role-navigation-contract"],
   ["Preflight (source-only): applications, dialogs, deals lifecycle contract", "smoke:applications-dialogs-deals-lifecycle-contract"],
+  ["Preflight (source-only): invite language and mechanism honesty contract", "smoke:invite-language-mechanism-honesty-contract"],
   ["Preflight (source-only): public landing contract", "smoke:landing-contract"],
   ["Preflight (source-only): admin web shell contract", "smoke:admin-web-shell-contract"],
   ["Preflight (source-only): admin web mobile shell contract", "smoke:admin-web-mobile-shell-contract"],

@@ -45,7 +45,7 @@ assert.ok(renderHomeHubSrc.includes('Основные разделы уже до
 assert.ok(!renderHomeHubSrc.includes('Продолжить:'), 'Home hub must not keep a vague continue CTA');
 assert.ok(renderHomeHubSrc.includes("const bCreator = `${effective === 'creator' ? '✅ ' : ''}🤳 Креатор`;"), 'Home hub must use the canonical creator role label');
 assert.ok(renderHomeHubSrc.includes("const bBrand = `${effective === 'brand' ? '✅ ' : ''}🏷 Бренд`;"), 'Home hub must use the canonical brand role label');
-assert.ok(renderHomeHubSrc.includes(".text('📋 Меню', 'a:menu').text('📨 Инвайты', 'a:share').row();"), 'Home hub must keep footer row');
+assert.ok(renderHomeHubSrc.includes(".text('📋 Меню', 'a:menu').text('📨 Приглашения', 'a:share').row();"), 'Home hub must keep footer row');
 assert.ok(renderHomeHubSrc.includes("kb.text('💬 Поддержка', 'a:support').row();"), 'Home hub must keep support CTA');
 
 console.log('✅ smoke home copy contract OK');

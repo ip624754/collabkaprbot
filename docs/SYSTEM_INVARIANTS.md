@@ -34,12 +34,16 @@
 
 ## 4. Invite and reward invariants
 
-1. Self-invites never activate rewards.
-2. Invite identity, activation, reward availability, and redemption are distinct states and must not be collapsed in copy or logic.
-3. Reward math, ledger semantics, and anti-abuse rules change only in an explicit HEAVY STEP.
-4. UX copy may explain `pending / available / redeemed`, but must not invent eligibility or payout promises.
-5. Invite entrypoint remains `📨 Инвайты` unless a product STEP explicitly changes the IA.
-6. Recovery from invalid/self invite paths must leave the user with working navigation.
+1. Self-invites and accounts that existed before attribution never activate invite rewards.
+2. A stored invitation, activation, pending points, available points and used points are distinct states and must not be collapsed in copy or logic.
+3. The public reward source of truth is `INVITE_REWARD_PUBLIC_RULES` and `INVITE_REWARD_CATALOG`; DB processing and UI copy must consume the same values.
+4. Current earn rules are `+2 / 24h` for first eligible bot start and `+10 / 48h` for main-profile completion.
+5. Current catalog is `100 → 7 days PRO` and `250 → 30 days PRO`.
+6. Pending points are never spendable; available points equal confirmed earn minus redeemed entries.
+7. One invited user may create each earn reward only once; redeem remains transaction-locked and auditable.
+8. Reward math, ledger semantics, activation rules and anti-abuse controls change only in an explicit HEAVY STEP.
+9. Ordinary-user entrypoint is `📨 Приглашения`; internal identifiers and operator diagnostics may retain engineering names.
+10. Recovery from invalid, existing-user or self-invite paths must leave the user with working navigation.
 
 ## 5. Giveaway invariants
 

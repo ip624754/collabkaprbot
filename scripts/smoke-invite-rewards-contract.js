@@ -12,8 +12,8 @@ const migrationSource = fs.readFileSync(path.join(root, 'migrations', '046_invit
 
 assert.ok(botSource.includes('a:share_redeem'), 'Invite rewards CTA callback missing');
 assert.ok(botSource.includes('a:share_redeem_do'), 'Invite rewards confirm callback missing');
-assert.ok(botSource.includes('Обменять Pro'), 'Redeem center title missing');
-assert.ok(botSource.includes('Подтверждение обмена'), 'Redeem confirm UX missing');
+assert.ok(botSource.includes('Награды за приглашения'), 'Rewards center title missing');
+assert.ok(botSource.includes('Подтвердить награду'), 'Redeem confirm UX missing');
 assert.ok(botSource.includes('Награда активирована'), 'Redeem success UX missing');
 assert.ok(botSource.includes('a:share_history'), 'Invite history callback missing');
 assert.ok(botSource.includes('a:share_rewards'), 'Invite rewards center callback missing');
@@ -24,6 +24,8 @@ assert.ok(registrySource.includes('"a:share_perf"'), 'Action registry missing a:
 assert.ok(registrySource.includes('"a:share_points"'), 'Action registry missing a:share_points');
 assert.ok(registrySource.includes('"a:share_redeem"'), 'Action registry missing a:share_redeem');
 assert.ok(registrySource.includes('"a:share_redeem_do"'), 'Action registry missing a:share_redeem_do');
+assert.ok(queriesSource.includes('export const INVITE_REWARD_PUBLIC_RULES'), 'Invite reward public rules missing');
+assert.ok(queriesSource.includes('export const INVITE_REWARD_CATALOG'), 'Invite reward catalog missing');
 assert.ok(queriesSource.includes('export async function processInviteRewardsForInvitee'), 'Invite rewards invitee processor missing');
 assert.ok(queriesSource.includes('export async function processInviteRewardsForReferrer'), 'Invite rewards referrer processor missing');
 assert.ok(queriesSource.includes('export async function getInviteRewardsSummary'), 'Invite rewards summary helper missing');
