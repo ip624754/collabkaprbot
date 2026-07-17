@@ -37,11 +37,13 @@ assert.ok(renderHomeHubSrc.includes('🎬 Офферы — лента и пои�
 assert.ok(renderHomeHubSrc.includes('📥 Inbox — диалоги и новые заявки.'), 'Brand home must explain inbox briefly');
 assert.ok(renderHomeHubSrc.includes('🎛 Фильтры — уточнить подбор креаторов.'), 'Brand home must explain filters briefly');
 assert.ok(renderHomeHubSrc.includes('🧹 Кабинет куратора — рабочий хаб.'), 'Curator home must explain curator hub briefly');
-assert.ok(renderHomeHubSrc.includes('🔓 Обычный режим — вернуться в Creator / Brand.'), 'Curator home must explain return path briefly');
+assert.ok(renderHomeHubSrc.includes('🔓 Обычный режим — вернуться в режим креатора или бренда.'), 'Curator home must explain return path briefly');
 assert.ok(renderHomeHubSrc.includes('Выбери раздел ниже.'), 'Home hub must end with concise next-step copy');
 assert.ok(renderHomeHubSrc.includes('Основные разделы уже доступны кнопками на этом экране'), 'Home hub hint banner must stay short and action-oriented');
 
-assert.ok(renderHomeHubSrc.includes(".text(`▶️ Продолжить: ${modeLabel}`, 'a:menu')"), 'Home hub must keep continue CTA');
+assert.ok(!renderHomeHubSrc.includes('Продолжить:'), 'Home hub must not keep a vague continue CTA');
+assert.ok(renderHomeHubSrc.includes("const bCreator = `${effective === 'creator' ? '✅ ' : ''}🤳 Креатор`;"), 'Home hub must use the canonical creator role label');
+assert.ok(renderHomeHubSrc.includes("const bBrand = `${effective === 'brand' ? '✅ ' : ''}🏷 Бренд`;"), 'Home hub must use the canonical brand role label');
 assert.ok(renderHomeHubSrc.includes(".text('📋 Меню', 'a:menu').text('📨 Инвайты', 'a:share').row();"), 'Home hub must keep footer row');
 assert.ok(renderHomeHubSrc.includes("kb.text('💬 Поддержка', 'a:support').row();"), 'Home hub must keep support CTA');
 

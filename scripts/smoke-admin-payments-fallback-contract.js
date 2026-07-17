@@ -71,7 +71,7 @@ assertMatch(
 assert.ok(renderAdminPaymentsFallbackSrc.includes("if (rtOn) kb.text('🧹 Disable', 'a:admin_pay_fb_off');"), 'Admin → Payments Fallback must keep conditional disable button');
 assertMatch(
   renderAdminPaymentsFallbackSrc,
-  /kb\.row\(\)\s*\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
+  /kb\.row\(\)\s*\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Admin → Payments Fallback footer must keep System/Admin/Menu/Home navigation'
 );
 

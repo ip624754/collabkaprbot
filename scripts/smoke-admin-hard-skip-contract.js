@@ -97,7 +97,7 @@ assert.ok(renderAdminHardSkipViewSrc.includes('нет hard-skip'), 'Admin → Ha
 assert.ok(renderAdminHardSkipViewSrc.includes('<b>hard-skip</b>'), 'Admin → Hard-skip view must keep hard-skip state');
 assert.ok(renderAdminHardSkipViewSrc.includes("if (st.exists) kb.text('🧹 Снять hard-skip', `a:hs_unskip|tg:${id}`).row();"), 'Admin → Hard-skip view must keep unskip control');
 assert.ok(renderAdminHardSkipViewSrc.includes("kb.text('⬅️ Назад', 'a:hs_home|p:0').row();"), 'Admin → Hard-skip view must keep Back control');
-assert.ok(renderAdminHardSkipViewSrc.includes("kb.text('⬅️ Система', 'a:admin_sys').row().text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');"), 'Admin → Hard-skip view must keep System/Menu/Home footer');
+assert.ok(renderAdminHardSkipViewSrc.includes("kb.text('⬅️ Система', 'a:admin_sys').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');"), 'Admin → Hard-skip view must keep System/Menu/Home footer');
 
 assert.ok(hardSkipExpectSrc.includes("const m = raw.match(/(\\d{5,})/);"), 'Admin → Hard-skip find expectText must keep TG ID digits parse');
 assert.ok(hardSkipExpectSrc.includes("await ctx.reply('Нужен TG ID цифрами. Пример: 222047659');"), 'Admin → Hard-skip find expectText must keep invalid TG ID prompt');

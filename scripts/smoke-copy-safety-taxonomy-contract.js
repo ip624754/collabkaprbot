@@ -23,7 +23,7 @@ assertPresent(botSource, 'function reportCopySafetyDiagnostic(', 'copy safety di
 assertPresent(botSource, "console.warn('[copy_safety]'", 'copy safety diagnostics must keep an audit breadcrumb');
 assertPresent(botSource, "text('💬 Поддержка', 'a:support')", 'safe failures must expose Support');
 assertPresent(botSource, "text('📋 Меню', 'a:menu')", 'safe failures must expose Menu');
-assertPresent(botSource, "text('🏠 Home', 'a:home')", 'safe failures must preserve Home callback contract');
+assertPresent(botSource, "text('🏠 Домой', 'a:home')", 'safe failures must preserve Home callback contract');
 
 // Ordinary-user copy must not expose migrations, tables, ENV keys or deployment instructions.
 const legacyUserLeaks = [

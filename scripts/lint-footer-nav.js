@@ -2,12 +2,12 @@
 //
 // Goal: prevent regressions where non-menu screens accidentally ship keyboards
 // without the standard navigation footer:
-//   ⬅️ Назад / 📋 Меню / 🏠 Home
+//   ⬅️ Назад / 📋 Меню / 🏠 Домой
 //
 // Heuristic (fast, dependency-free):
 // - Scan code for InlineKeyboard construction blocks.
 // - If a keyboard contains a back-like control ('⬅️ Назад'/ '⬅️ Отмена'/ '⬅️ Админка'/ '⬅️ Операции'/ '⬅️ Коммуникации'/ '⬅️ Система'),
-//   then it must also contain both "📋 Меню" and "🏠 Home" somewhere nearby
+//   then it must also contain both "📋 Меню" and "🏠 Домой" somewhere nearby
 //   (or use nav helpers navKb()/kbNavRow()).
 //
 // Usage:
@@ -78,7 +78,7 @@ function analyzeFile(file, text) {
     const hasBackLike = /['"`]⬅️\s*(Назад|Отмена|Админка|Операции|Коммуникации|Система)/.test(block);
     const hasAdminBack = /['"`]⬅️\s*(Админка|Операции|Коммуникации|Система)/.test(block);
     const hasMenu = block.includes('📋 Меню');
-    const hasHome = block.includes('🏠 Home');
+    const hasHome = block.includes('🏠 Домой');
 
     // Default mode: enforce only on "footer-ish" keyboards.
     // A keyboard is footer-ish if it already contains either Menu or Home.
@@ -89,7 +89,7 @@ function analyzeFile(file, text) {
 
     const missing = [];
     if (!hasMenu) missing.push('📋 Меню');
-    if (!hasHome) missing.push('🏠 Home');
+    if (!hasHome) missing.push('🏠 Домой');
 
     if (missing.length) {
       const preview = block
@@ -122,7 +122,7 @@ for (const f of allFiles) {
 }
 
 if (!allViolations.length) {
-  console.log('OK: footer nav lint passed (Back-like keyboards include 📋 Меню + 🏠 Home).');
+  console.log('OK: footer nav lint passed (Back-like keyboards include 📋 Меню + 🏠 Домой).');
   process.exit(0);
 }
 
@@ -131,6 +131,6 @@ for (const v of allViolations) {
   console.error(`\n- ${v.file}: missing ${v.missing.join(' + ')}`);
   console.error(v.preview);
 }
-console.error('\nHow to fix: add navKb(backCb) / kbNavRow(kb, backCb) or append “📋 Меню” + “🏠 Home” buttons.');
+console.error('\nHow to fix: add navKb(backCb) / kbNavRow(kb, backCb) or append “📋 Меню” + “🏠 Домой” buttons.');
 console.error('If intentional, add comment: navlint: ignore');
 process.exit(2);

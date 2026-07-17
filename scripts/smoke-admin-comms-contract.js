@@ -62,7 +62,7 @@ assertMatch(
 );
 assertMatch(
   renderAdminCommsSrc,
-  /kb[\s\S]*?\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
+  /kb[\s\S]*?\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Admin → Comms footer must keep Admin/Menu/Home navigation'
 );
 

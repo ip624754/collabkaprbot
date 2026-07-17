@@ -72,7 +72,7 @@ assertMatch(
 );
 assertMatch(
   renderAdminOpsSrc,
-  /kb[\s\S]*?\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
+  /kb[\s\S]*?\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Admin → Ops footer must keep Admin/Menu/Home navigation'
 );
 
@@ -83,7 +83,7 @@ const pendingClearConfirmSrc = extractBetween(
 );
 assertMatch(
   pendingClearConfirmSrc,
-  /const kb = new InlineKeyboard\([\s\S]*?\.text\('✅ Очистить snapshot', 'a:admin_ops_pending_clear_do'\)\s*\.row\(\)\s*\.text\('⬅️ Операции', 'a:admin_ops'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
+  /const kb = new InlineKeyboard\([\s\S]*?\.text\('✅ Очистить snapshot', 'a:admin_ops_pending_clear_do'\)\s*\.row\(\)\s*\.text\('⬅️ Операции', 'a:admin_ops'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Pending snapshot confirm screen must keep confirm/back/footer actions'
 );
 

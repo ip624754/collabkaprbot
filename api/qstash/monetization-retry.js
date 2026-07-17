@@ -430,7 +430,7 @@ export default async function handler(req, res) {
               ],
               [
                 { text: '📋 Меню', callback_data: 'a:menu' },
-                { text: '🏠 Home', callback_data: 'a:home' },
+                { text: '🏠 Домой', callback_data: 'a:home' },
               ],
             ],
           };
@@ -452,7 +452,7 @@ export default async function handler(req, res) {
               ],
               [
                 { text: '📋 Меню', callback_data: 'a:menu' },
-                { text: '🏠 Home', callback_data: 'a:home' },
+                { text: '🏠 Домой', callback_data: 'a:home' },
               ],
             ],
           };
@@ -463,7 +463,7 @@ export default async function handler(req, res) {
               ],
               [
                 { text: '📋 Меню', callback_data: 'a:menu' },
-                { text: '🏠 Home', callback_data: 'a:home' },
+                { text: '🏠 Домой', callback_data: 'a:home' },
               ],
             ],
           };
@@ -543,7 +543,7 @@ export default async function handler(req, res) {
                   { text: '📋 Меню', callback_data: 'a:menu' },
                 ],
                 [
-                  { text: '🏠 Home', callback_data: 'a:home' },
+                  { text: '🏠 Домой', callback_data: 'a:home' },
                 ],
               ],
             };
@@ -609,7 +609,7 @@ export default async function handler(req, res) {
               ],
               [
                 { text: '📋 Меню', callback_data: 'a:menu' },
-                { text: '🏠 Home', callback_data: 'a:home' },
+                { text: '🏠 Домой', callback_data: 'a:home' },
               ],
             ],
           };
@@ -703,7 +703,7 @@ export default async function handler(req, res) {
               ],
               [
                 { text: '📋 Меню', callback_data: 'a:menu' },
-                { text: '🏠 Home', callback_data: 'a:home' },
+                { text: '🏠 Домой', callback_data: 'a:home' },
               ],
             ],
           };

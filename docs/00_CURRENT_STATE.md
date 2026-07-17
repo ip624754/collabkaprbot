@@ -1,3 +1,23 @@
+## STEP586B — Home, Menu and Role Navigation Contract (2026-07-18)
+
+**Current handoff-safe baseline:** STEP586B on top of STEP586A.
+
+Verified local source truth:
+- all 239 static `a:home` buttons in active `src/**` and `api/**` use `🏠 Домой`;
+- all 250 static `a:menu` buttons use `📋 Меню`;
+- global role hub is titled `Домой`; current-role hubs are titled `Меню`;
+- first-run, switch, help and verification surfaces use `Креатор` and `Бренд`;
+- `Creator / канал`, `Блогер`, `Заказчик` and vague `Продолжить:` copy are removed from the role selector/home hub;
+- callback values, destinations, role persistence and fail-open behavior are unchanged;
+- four staff/invite notification keyboards gained a global Home escape;
+- navigation contract, footer lint, callback consistency and package-lock checks pass locally.
+
+Not verified: live Telegram traversal, mobile wrapping, remote staging and production runtime.
+
+**Next:** STEP586C — Applications, Dialogs and Deals Lifecycle.
+
+---
+
 ## STEP586A — Copy Safety & Taxonomy Foundation (2026-07-18)
 
 **Current handoff-safe baseline:** STEP586A source implementation on top of STEP585 audit/docs and STEP584 staging-acceptance tooling.

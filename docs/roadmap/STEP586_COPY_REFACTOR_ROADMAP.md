@@ -1,8 +1,8 @@
 # STEP586 — Conversation Copy Refactor Roadmap
 
 **Input:** STEP585 source audit and canonical copy system
-**Current implementation baseline:** STEP586A on STEP585 audit/docs
-**Roadmap status:** STEP586A implemented; STEP586B is next
+**Current implementation baseline:** STEP586B on STEP586A
+**Roadmap status:** STEP586A–B implemented; STEP586C is next
 **Rule:** copy changes may not silently alter callbacks, permissions, prices, reward math, payment semantics or state transitions.
 
 ## 1. Goal
@@ -73,6 +73,9 @@ Acceptance:
 ---
 
 ### STEP586B — Home, Menu and Role Navigation Contract
+
+**Implementation:** DONE in STEP586B (2026-07-18)
+**Report:** `docs/audit/STEP586B_HOME_MENU_ROLE_NAVIGATION_REPORT.md`
 
 **Priority:** P1
 **Risk:** high surface area; many shared footers and tests

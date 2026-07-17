@@ -56,7 +56,7 @@ assert.match(renderCreatorCurrentMenuSrc, /Действия ниже относ�
 assert.ok(renderCreatorCurrentMenuSrc.includes("const resolved = await resolveCurrentWorkspaceForOwner(userId, tgId);"), 'creator current menu must resolve current workspace through shared helper');
 assert.ok(renderCreatorCurrentMenuSrc.includes("const kb = new InlineKeyboard().text('🚀 Подключить канал', 'a:setup').row();"), 'creator no-active gate must keep connect-channel CTA');
 assert.ok(renderCreatorCurrentMenuSrc.includes("kb.text('💬 Поддержка', 'a:support').row();"), 'creator no-active gate must keep support CTA');
-assert.ok(renderCreatorCurrentMenuSrc.includes("kb.row().text('🏠 Home', 'a:home');"), 'creator no-active gate must keep Home CTA');
+assert.ok(renderCreatorCurrentMenuSrc.includes("kb.row().text('🏠 Домой', 'a:home');"), 'creator no-active gate must keep Home CTA');
 assert.ok(!renderCreatorCurrentMenuSrc.includes('Перейти в бренд'), 'creator no-active gate must not leak brand role switch');
 assert.ok(!renderCreatorCurrentMenuSrc.includes('Режим менеджера бренда'), 'creator no-active gate must not leak manager role switch');
 assert.ok(!renderCreatorCurrentMenuSrc.includes("'✅ Верификация'"), 'creator no-active gate must not leak verification CTA');

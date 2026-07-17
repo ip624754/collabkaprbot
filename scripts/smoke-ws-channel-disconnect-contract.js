@@ -59,7 +59,7 @@ assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🏷 Перейти в брен
 assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🧑‍💼 Режим менеджера бренда"), 'creator current-channel menu must stay channel-first and keep manager mode switching out of the active current-channel screen');
 assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🏷 Я бренд"), 'creator current-channel menu must not use the old ambiguous brand-footer copy');
 assert.ok(!mainMenuCreatorCurrentKbSrc.includes("🧑‍💼 Я менеджер бренда"), 'creator current-channel menu must not use the old ambiguous manager-footer copy');
-assert.ok(botSource.includes("kb.text('🏷 Перейти в бренд', 'a:ui_mode_set|m:brand|ret:menu')"), 'creator root menu must still expose the explicit creator → brand mode switch');
+assert.ok(botSource.includes("kb.text('🏷 Режим бренда', 'a:ui_mode_set|m:brand|ret:menu')"), 'creator root menu must still expose the explicit creator → brand mode switch');
 assert.ok(botSource.includes(".text('🧑‍💼 Режим менеджера бренда', 'a:bm_home')"), 'creator root menu must still expose manager mode entry');
 assert.ok(botSource.includes("<b>Текущий канал:</b> <b>${escapeHtml(currentWsLabel(current))}</b>"), 'creator menu must show current channel explicitly');
 assert.ok(botSource.includes(".text('📣 Мои каналы', 'a:ws_list')"), 'creator current-channel menu must keep channel picker entry');
@@ -171,7 +171,7 @@ const renderWsListSrc = extractBetween(
 assert.match(renderWsListSrc, /Выбери канал для управления\./, 'ws_list must use compact picker copy');
 assert.ok(!renderWsListSrc.includes('Выбери канал — дальше можно:'), 'ws_list must drop the old explanatory bullet block');
 assert.ok(renderWsListSrc.includes("kb.text('🚀 Подключить ещё', 'a:setup').row();"), 'ws_list must keep setup entry on the picker');
-assert.ok(renderWsListSrc.includes("kb.text('⬅️ К меню', 'a:menu').text('🏠 Home', 'a:home');"), 'ws_list must return back into the creator main menu');
+assert.ok(renderWsListSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');"), 'ws_list must return back into the creator main menu');
 assert.ok(renderWsListSrc.includes("kb.text(`📦 Неактивные (${inactiveItems.length})`, 'a:ws_list_inactive').row();"), 'ws_list must keep inactive channel entry when present');
 
 const renderCreatorCurrentMenuSrc = extractBetween(

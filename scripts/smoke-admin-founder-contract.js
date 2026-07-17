@@ -79,7 +79,7 @@ assertMatch(
 );
 assertMatch(
   renderAdminFounderSrc,
-  /kb[\s\S]*?\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
+  /kb[\s\S]*?\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Admin → Founder footer must keep System/Menu/Home navigation'
 );
 
@@ -94,7 +94,7 @@ assert.ok(founderHelpersSrc.includes("const line = buildStartLink('fs_offers_a')
 assert.ok(founderHelpersSrc.includes("if (line) text += `⚡ Быстро: вставляй в конец поста: <code>🔥 Founder Sale: ${escapeHtml(line)}</code>`;"), 'Founder links screen must keep quick copy line');
 assertMatch(
   founderHelpersSrc,
-  /kb\.text\('📝 Тексты', 'a:admin_founder_texts'\)\s*\.row\(\)\s*\.text\('⬅️ Founder Sale', 'a:admin_founder'\)\s*\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
+  /kb\.text\('📝 Тексты', 'a:admin_founder_texts'\)\s*\.row\(\)\s*\.text\('⬅️ Founder Sale', 'a:admin_founder'\)\s*\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Founder links footer must keep Texts/Founder/System/Menu/Home navigation'
 );
 assert.ok(founderHelpersSrc.includes("let text = `📝 <b>Founder Sale — тексты (copy/paste)</b>\n\n`;"), 'Founder texts screen must keep stable title');
@@ -110,7 +110,7 @@ assertMatch(
 );
 assertMatch(
   founderHelpersSrc,
-  /kb\.text\('🔗 Ссылки', 'a:admin_founder_links'\)\s*\.row\(\)\s*\.text\('⬅️ Founder Sale', 'a:admin_founder'\)\s*\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
+  /kb\.text\('🔗 Ссылки', 'a:admin_founder_links'\)\s*\.row\(\)\s*\.text\('⬅️ Founder Sale', 'a:admin_founder'\)\s*\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Founder texts footer must keep Links/Founder/System/Menu/Home navigation'
 );
 

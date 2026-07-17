@@ -73,7 +73,7 @@ assert.ok(renderAdminNoticeSrc.includes("commsCb.adminNoticeClear()"), 'Admin �
 assert.ok(renderAdminNoticeSrc.includes("commsCb.adminNoticePublish()"), 'Admin → Notice publish control must use canonical callback builder');
 assert.ok(renderAdminNoticeSrc.includes(".text('⬅️ Коммуникации', 'a:admin_comms')"), 'Admin → Notice footer must return to Comms');
 assert.ok(renderAdminNoticeSrc.includes(".text('📋 Меню', 'a:menu')"), 'Admin → Notice footer must keep Menu');
-assert.ok(renderAdminNoticeSrc.includes(".text('🏠 Home', 'a:home')"), 'Admin → Notice footer must keep Home');
+assert.ok(renderAdminNoticeSrc.includes(".text('🏠 Домой', 'a:home')"), 'Admin → Notice footer must keep Home');
 
 
 assert.ok(noticeCallbackSrc.includes("if (p.a === 'a:admin_notice') {"), 'Admin → Notice main callback must exist');

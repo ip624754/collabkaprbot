@@ -26,7 +26,7 @@ assert.ok(
 assert.ok(
   botSrc.includes("<i>Это стадия сделки по этой заявке.</i>") &&
     botSrc.includes("if (backCtx.appStatus) {") &&
-    botSrc.includes("kb.text(brandAppOpenButtonLabel(app.id), appBackCb).text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');"),
+    botSrc.includes("kb.text(brandAppOpenButtonLabel(app.id), appBackCb).text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');"),
   'Expected deal view opened from an application to keep local context with a short hint and a concrete application-return footer'
 );
 assert.ok(

@@ -90,7 +90,7 @@ assert.ok(renderAdminMetricsSrc.includes("📅 Последние дни (MSK)")
 assert.ok(renderAdminMetricsSrc.includes("ℹ️ Analytics выключены (ANALYTICS_ENABLED=false) — показываю базовые счётчики."), 'Admin → Metrics must keep analytics-off fallback');
 assertMatch(
   renderAdminMetricsSrc,
-  /const kb = new InlineKeyboard\(\)\s*\.text\('7д', 'a:admin_metrics\|d:7'\)\s*\.text\('14д', 'a:admin_metrics\|d:14'\)\s*\.row\(\)\s*\.text\('30д', 'a:admin_metrics\|d:30'\)\s*\.text\('90д', 'a:admin_metrics\|d:90'\)\s*\.row\(\)\s*\.text\('⬅️ Операции', 'a:admin_ops'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
+  /const kb = new InlineKeyboard\(\)\s*\.text\('7д', 'a:admin_metrics\|d:7'\)\s*\.text\('14д', 'a:admin_metrics\|d:14'\)\s*\.row\(\)\s*\.text\('30д', 'a:admin_metrics\|d:30'\)\s*\.text\('90д', 'a:admin_metrics\|d:90'\)\s*\.row\(\)\s*\.text\('⬅️ Операции', 'a:admin_ops'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Admin → Metrics must keep day-window controls and footer'
 );
 
@@ -109,7 +109,7 @@ assertMatch(
 );
 assertMatch(
   renderAdminModeratorsSrc,
-  /kb\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\);/s,
+  /kb\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Admin → Moderators must keep back/footer buttons'
 );
 
@@ -135,7 +135,7 @@ assertMatch(
 assert.ok(sendAdminAuditExportSrc.includes("⚠️ Лимит 5000 — сузьте фильтр."), 'Admin → Audit export must keep truncation warning');
 assertMatch(
   sendAdminAuditExportSrc,
-  /reply_markup: new InlineKeyboard\(\)\s*\.text\('⬅️ Аудит', `a:aud\|h:\$\{afterHours\}\|p:0`\)\s*\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Home', 'a:home'\)/s,
+  /reply_markup: new InlineKeyboard\(\)\s*\.text\('⬅️ Аудит', `a:aud\|h:\$\{afterHours\}\|p:0`\)\s*\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\)/s,
   'Admin → Audit export must keep back/menu/footer buttons'
 );
 

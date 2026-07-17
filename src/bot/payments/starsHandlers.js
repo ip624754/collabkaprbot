@@ -34,8 +34,8 @@ export function registerStarsPaymentsHandlers(deps = {}) {
     const kb = new InlineKeyboard()
       .text('✍️ Написать в поддержку', 'a:support_write')
       .row()
-  	  	  .text('📋 Меню', 'a:menu')
-  	  	  .text('🏠 Home', 'a:home');
+      .text('📋 Меню', 'a:menu')
+      .text('🏠 Домой', 'a:home');
     await ctx.reply(
       `💬 <b>Поддержка по оплате / Stars</b>\n\nЕсли что-то пошло не так с оплатой — нажми кнопку ниже и опиши проблему.\n\n<b>Что указать:</b>\n• Что покупал (PRO / Brand Plan)\n• Примерное время оплаты\n• Скрин чека (если есть)`,
       { parse_mode: 'HTML', reply_markup: kb }
@@ -266,7 +266,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       const wsId = offer?.workspace_id ? Number(offer.workspace_id) : 0;
       const kb = new InlineKeyboard();
       if (wsId && offerId) kb.text('📣 Статус офиц.канала', `a:off_manage|ws:${wsId}|o:${offerId}|p:0|back:my`).row();
-      kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+      kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
   
       await ctx.reply('✅ Оплата получена! Оффер поставлен в очередь на публикацию в официальном канале. Модератор опубликует его вручную.', {
         reply_markup: kb
@@ -347,7 +347,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
         .text('📋 Меню', 'a:menu')
-        .text('🏠 Home', 'a:home');
+        .text('🏠 Домой', 'a:home');
   
       await ctx.reply(
         `✅ <b>Оплата получена — Smart Matching активирован</b>\n\nПришли бриф одним сообщением (ниша, гео, аудитория, формат).`,
@@ -403,7 +403,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
         .text('📋 Меню', 'a:menu')
-        .text('🏠 Home', 'a:home');
+        .text('🏠 Домой', 'a:home');
   
       await ctx.reply(
         `✅ <b>Оплата получена — Featured активирован</b>\n\nПришли контент:\n• 1 строка — заголовок\n• далее описание\n• последняя строка — контакт (@username / ссылка)`,
@@ -455,7 +455,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
                 .text('💳 Кредиты', 'a:brand_pass|ws:0')
                 .row()
                 .text('📋 Меню', 'a:menu')
-                .text('🏠 Home', 'a:home');
+                .text('🏠 Домой', 'a:home');
               let msg = '✅ Founder Sale применён!';
               if (fb.kind === 'founder_brand') {
                 msg += `
@@ -517,7 +517,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
         if (credits > 0) msg += `\n💳 +${credits} кредитов начислено.`;
         kb.text('⭐️ Brand Plan', 'a:brand_plan|ws:0').text('💳 Кредиты', 'a:brand_pass|ws:0').row();
       }
-      kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');
+      kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
       await ctx.reply(msg, { reply_markup: kb });
       return;
     } catch (e) {

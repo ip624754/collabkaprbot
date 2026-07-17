@@ -2,8 +2,16 @@
 
 Это актуальный комплект документации по проекту **Collabka PR**.
 
+## Текущий snapshot — STEP586B (2026-07-18)
+
+- `a:home` имеет единый видимый контракт `🏠 Домой` и ведёт в глобальный экран ролей.
+- `a:menu` имеет единый видимый контракт `📋 Меню` и ведёт в меню текущей роли.
+- Канонические названия ролей: `Креатор` и `Бренд`.
+- Callback values и направления переходов не менялись.
+- Следующий scoped STEP: `STEP586C — Applications, Dialogs and Deals Lifecycle`.
+
 ## 0) BOOT (всегда читаем сначала)
-- `process/07_WORK_HISTORY_STEP582.md` — актуальная дельта: восстановление callback/dependency preflight truth и границы локальной проверки
+- `process/07_WORK_HISTORY_STEP586B.md` — актуальная дельта: единый контракт Домой / Меню / ролей
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
@@ -14,6 +22,7 @@
 - `RISK_REGISTRY.md` — живой реестр технических, продуктовых и AI-governance рисков
 - `CREATOR_OS_THESIS.md` — продуктовый north star: Creator Collaboration Operating System без broad rewrite
 - `CHATGPT_COLLABKA_UPGRADE_NOTES.md` — состав и truth boundary STEP580 docs upgrade
+- `audit/STEP586B_HOME_MENU_ROLE_NAVIGATION_REPORT.md` — реализация и Truth Boundary STEP586B
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 - `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout

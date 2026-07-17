@@ -1,3 +1,24 @@
+# STEP586B CURRENT TRUTH OVERRIDE
+
+- Current baseline: STEP586B Home, Menu and Role Navigation Contract.
+- `a:home` visible label: `🏠 Домой`; destination unchanged.
+- `a:menu` visible label: `📋 Меню`; destination unchanged.
+- Canonical role labels across role gate, switches, help and verification: `Креатор`, `Бренд`; `канал` is a managed Telegram object.
+- Source guard: `npm run smoke:home-menu-role-navigation-contract`.
+- Callback consistency, footer navigation lint, dependency preflight and the 217-file JavaScript syntax sweep pass locally. The canonical serial source-preflight command timed out during its long syntax sweep after earlier gates passed.
+- Live Telegram/mobile UX is not verified.
+- Next STEP: STEP586C Applications, Dialogs and Deals Lifecycle.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586B_HOME_MENU_ROLE_NAVIGATION_REPORT.md`
+3. `docs/product/COLLABKA_COPY_SYSTEM.md`
+4. `docs/product/TERMINOLOGY_REGISTRY.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586B.md`
+
+---
+
 # STEP586A CURRENT TRUTH OVERRIDE
 
 Use this block over older baseline and runtime claims below.

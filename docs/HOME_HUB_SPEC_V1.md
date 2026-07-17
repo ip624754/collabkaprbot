@@ -10,7 +10,7 @@
 **Назначение:** единая предсказуемая точка входа в бота, которая:
 - не ломает deep-links (`/start <payload>`),
 - минимально спрашивает пользователя «кто ты»,
-- поддерживает multi-role (Creator / Brand / Brand Manager / Curator / Admin),
+- поддерживает multi-role (Креатор / Бренд / Менеджер бренда / Куратор / Админ),
 - работает **fail-open** при проблемах Redis.
 
 Связанный source of truth: `docs/00_CURRENT_STATE.md`.
@@ -20,8 +20,8 @@
 ## 1) Точки входа
 
 1) `/start`
-2) Глобальная кнопка `🏠 Home` (если есть в футере)
-3) `📋 Menu` → хаб текущего режима (а не HomeHub)
+2) Глобальная кнопка `🏠 Домой` (если есть в футере)
+3) `📋 Меню` → хаб текущего режима (а не HomeHub)
 
 **Инвариант:** `/start` без payload должен приводить к HomeHub (или к короткому role-gate, см. ниже).
 
@@ -41,8 +41,8 @@
 
 ### 2.2 Если payload нет → role-gate (только если ui_mode не задан)
 Если `ui_mode` (Redis) отсутствует → показываем короткую развилку:
-- `✨ Я Creator / канал`
-- `🏷 Я бренд`
+- `🤳 Креатор`
+- `🏷 Бренд`
 
 Нажатие на кнопку:
 - `SET ui_mode = creator|brand` (TTL ~ 365d)
@@ -60,14 +60,14 @@
 **Заголовок (пример):** `🏠 Collabka PR — выбери режим`
 
 ### 3.1 Основные кнопки
-- `👤 Creator` → creator hub (workspace hub)
-- `🏷 Brand` → brand hub (`ws:0`)
+- `🤳 Креатор` → creator hub (workspace hub)
+- `🏷 Бренд` → brand hub (`ws:0`)
 
 ### 3.2 Условные роли
 Показываем только если роль/права подтверждены:
-- `🧑‍💼 Brand Manager` → manager hub
-- `🧹 Curator` → curator hub
-- `🛠 Admin` → admin hub (только `SUPER_ADMIN_TG_IDS`)
+- `🧑‍💼 Менеджер бренда` → manager hub
+- `🧹 Куратор` → curator hub
+- `👑 Админка` → admin hub (только `SUPER_ADMIN_TG_IDS`)
 
 ### 3.3 Вторичные
 - `❓ Поддержка`
@@ -80,8 +80,8 @@
 ### 4.1 Footer standard (целевое состояние)
 На ключевых экранах (хабы/вьюшки) приводим к стандарту:
 - `⬅️ Back` (если есть осмысленный return-to)
-- `📋 Menu` (хаб текущего режима)
-- `🏠 Home` (HomeHub)
+- `📋 Меню` (хаб текущего режима)
+- `🏠 Домой` (HomeHub)
 
 ### 4.2 Back = return-to контекст
 `Back` строится из `ret` (или `r`) в callback payload.

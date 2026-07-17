@@ -26,7 +26,7 @@ const navKbSrc = extractBetween(
 );
 assert.ok(navKbSrc.includes("if (backCb && backCb !== 'a:menu' && backCb !== 'a:home') kb.text('⬅️ Назад', backCb);"), 'navKb must keep Back only for real return routes');
 assert.ok(navKbSrc.includes("kb.text('📋 Меню', 'a:menu');"), 'navKb must keep Menu escape hatch');
-assert.ok(navKbSrc.includes("kb.text('🏠 Home', 'a:home');"), 'navKb must keep Home escape hatch');
+assert.ok(navKbSrc.includes("kb.text('🏠 Домой', 'a:home');"), 'navKb must keep Home escape hatch');
 assert.ok(!navKbSrc.includes('Открыть меню'), 'navKb must keep current runtime label 📋 Меню');
 
 const navKbInputSrc = extractBetween(
@@ -34,8 +34,8 @@ const navKbInputSrc = extractBetween(
   'function navKbInput(backCb) {',
   '\n\nfunction kbNavRow(kb, backCb) {'
 );
-assert.ok(navKbInputSrc.includes("kb.text('❌ Отмена', 'a:menu');"), 'navKbInput must keep explicit cancel-to-menu escape hatch');
-assert.ok(navKbInputSrc.includes("kb.text('🏠 Home', 'a:home');"), 'navKbInput must keep Home escape hatch');
+assert.ok(navKbInputSrc.includes("kb.text('📋 Меню', 'a:menu');"), 'navKbInput must use the canonical current-role menu label');
+assert.ok(navKbInputSrc.includes("kb.text('🏠 Домой', 'a:home');"), 'navKbInput must keep Home escape hatch');
 
 const kbNavRowSrc = extractBetween(
   botSource,
@@ -44,7 +44,7 @@ const kbNavRowSrc = extractBetween(
 );
 assert.ok(kbNavRowSrc.includes("if (backCb && backCb !== 'a:menu' && backCb !== 'a:home') kb.text('⬅️ Назад', backCb);"), 'kbNavRow must keep Back only for real return routes');
 assert.ok(kbNavRowSrc.includes("kb.text('📋 Меню', 'a:menu');"), 'kbNavRow must keep Menu escape hatch');
-assert.ok(kbNavRowSrc.includes("kb.text('🏠 Home', 'a:home');"), 'kbNavRow must keep Home escape hatch');
+assert.ok(kbNavRowSrc.includes("kb.text('🏠 Домой', 'a:home');"), 'kbNavRow must keep Home escape hatch');
 
 const renderGwNewGateSrc = extractBetween(
   botSource,
@@ -56,7 +56,7 @@ assert.ok(renderGwNewGateSrc.includes(".text('📣 Мои каналы', 'a:ws_l
 assert.ok(renderGwNewGateSrc.includes(".text('📣 Выбрать канал', 'a:gw_new_pick')"), 'giveaway gate must keep explicit pick CTA');
 assert.ok(renderGwNewGateSrc.includes(".text('⬅️ Назад', backCb)"), 'giveaway gate must keep Back CTA');
 assert.ok(renderGwNewGateSrc.includes(".text('📋 Меню', 'a:menu')"), 'giveaway gate must keep Menu CTA');
-assert.ok(renderGwNewGateSrc.includes(".text('🏠 Home', 'a:home');"), 'giveaway gate must keep Home CTA');
+assert.ok(renderGwNewGateSrc.includes(".text('🏠 Домой', 'a:home');"), 'giveaway gate must keep Home CTA');
 
 const kbBrandApplyDoneSrc = extractBetween(
   botSource,
@@ -65,7 +65,7 @@ const kbBrandApplyDoneSrc = extractBetween(
 );
 assert.ok(kbBrandApplyDoneSrc.includes("kb.text('🔎 Открыть бренд', `a:brand_dir_open|u:${brandUserId}|p:${backPage}`).row();"), 'brand apply done must keep open-brand CTA');
 assert.ok(kbBrandApplyDoneSrc.includes("kb.text('⋯ Ещё действия', `a:more|k:brand_apply_done|u:${brandUserId}|p:${backPage}|inb:${canOpenInbox ? 1 : 0}`).row();"), 'brand apply done must keep more-actions CTA');
-assert.ok(kbBrandApplyDoneSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');"), 'brand apply done must keep Menu/Home escape hatches');
+assert.ok(kbBrandApplyDoneSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');"), 'brand apply done must keep Menu/Home escape hatches');
 
 const kbBrandApplyMoreSrc = extractBetween(
   botSource,
@@ -75,7 +75,7 @@ const kbBrandApplyMoreSrc = extractBetween(
 assert.ok(kbBrandApplyMoreSrc.includes("kb.text('🏷 Каталог брендов', `a:brands_home|p:${backPage}`).row();"), 'brand apply more must keep catalog CTA');
 assert.ok(kbBrandApplyMoreSrc.includes("kb.text('✍️ Ещё заявку', `a:brand_apply|u:${brandUserId}|p:${backPage}`).row();"), 'brand apply more must keep re-apply CTA');
 assert.ok(kbBrandApplyMoreSrc.includes("kb.text('⬅️ Назад', `a:brand_apply_done|u:${brandUserId}|p:${backPage}|inb:${canOpenInbox ? 1 : 0}`).row();"), 'brand apply more must keep Back CTA');
-assert.ok(kbBrandApplyMoreSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');"), 'brand apply more must keep Menu/Home escape hatches');
+assert.ok(kbBrandApplyMoreSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');"), 'brand apply more must keep Menu/Home escape hatches');
 
 const kbBrandAppAcceptedDoneSrc = extractBetween(
   botSource,
@@ -84,7 +84,7 @@ const kbBrandAppAcceptedDoneSrc = extractBetween(
 );
 assert.ok(kbBrandAppAcceptedDoneSrc.includes("kb.text(creatorBrandAppReplyButtonLabel(), `a:brand_app_chat|id:${appId}`).row();"), 'accepted-done screen must keep chat CTA');
 assert.ok(kbBrandAppAcceptedDoneSrc.includes("kb.text('⋯ Ещё действия', `a:more|k:brand_app_accepted|id:${appId}|u:${brandUserId}`).row();"), 'accepted-done screen must keep more-actions CTA');
-assert.ok(kbBrandAppAcceptedDoneSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');"), 'accepted-done screen must keep Menu/Home escape hatches');
+assert.ok(kbBrandAppAcceptedDoneSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');"), 'accepted-done screen must keep Menu/Home escape hatches');
 
 const kbBrandAppAcceptedMoreSrc = extractBetween(
   botSource,
@@ -95,7 +95,7 @@ assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text(creatorBrandAppDialogButto
 assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text('🪟 Открыть бренд', creatorBrandAppOpenBrandCallback(brandUserId, appId, 0)).row();"), 'accepted-more screen must keep open-brand CTA with local return context');
 assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text(creatorBrandAppListButtonLabel(), 'a:my_apps|p:0').row();"), 'accepted-more screen must keep applications-list CTA');
 assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text('⬅️ Назад', `a:brand_app_accepted_done|id:${appId}|u:${brandUserId}`).row();"), 'accepted-more screen must keep Back CTA');
-assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Home', 'a:home');"), 'accepted-more screen must keep Menu/Home escape hatches');
+assert.ok(kbBrandAppAcceptedMoreSrc.includes("kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');"), 'accepted-more screen must keep Menu/Home escape hatches');
 
 const renderBrandApplyPreviewSrc = extractBetween(
   botSource,

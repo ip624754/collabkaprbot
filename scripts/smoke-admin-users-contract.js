@@ -85,7 +85,7 @@ assert.ok(adminUsersCallbacksSrc.includes("await setExpectText(ctx.from.id, { ty
 assert.ok(adminUsersCallbacksSrc.includes("'🔎 Введи @username или tg_id (цифрами).'"), 'Admin → Users search prompt must stay stable');
 assertMatch(
   adminUsersCallbacksSrc,
-  /const kb = new InlineKeyboard\([\s\S]*?\.text\('⬅️ Отмена', `a:admin_users\|f:\$\{f\}\|p:0`\)[\s\S]*?\.text\('🧹 Сбросить поиск', `a:admin_users_reset\|f:\$\{f\}\|p:0`\)[\s\S]*?\.text\('⬅️ Система', 'a:admin_sys'\)[\s\S]*?\.text\('📋 Меню', 'a:menu'\)[\s\S]*?\.text\('🏠 Home', 'a:home'\);/s,
+  /const kb = new InlineKeyboard\([\s\S]*?\.text\('⬅️ Отмена', `a:admin_users\|f:\$\{f\}\|p:0`\)[\s\S]*?\.text\('🧹 Сбросить поиск', `a:admin_users_reset\|f:\$\{f\}\|p:0`\)[\s\S]*?\.text\('⬅️ Система', 'a:admin_sys'\)[\s\S]*?\.text\('📋 Меню', 'a:menu'\)[\s\S]*?\.text\('🏠 Домой', 'a:home'\);/s,
   'Admin → Users search prompt must keep cancel/reset/footer controls'
 );
 assert.ok(adminUsersCallbacksSrc.includes("if (p.a === 'a:admin_users_reset') {"), 'Admin → Users reset callback must exist');
