@@ -13,12 +13,12 @@ const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
 
 const fnStart = botSrc.indexOf('async function renderWsLeadsList(');
-const fnEnd = botSrc.indexOf('// -----------------------------\n// Curator Inbox', fnStart);
+const fnEnd = botSrc.indexOf('// -----------------------------\n// Curator application queue', fnStart);
 assert.ok(fnStart >= 0 && fnEnd > fnStart, 'Expected renderWsLeadsList function block to exist');
 const fnSrc = botSrc.slice(fnStart, fnEnd);
 
 assert.ok(
-  fnSrc.includes('📨 <b>Заявки брендов</b>') &&
+  fnSrc.includes('📨 <b>Заявки от брендов</b>') &&
     fnSrc.includes('Последние входящие заявки в этот канал.') &&
     fnSrc.includes('Открой заявку: там статус, последние сообщения, заметки и действия.') &&
     fnSrc.includes('const total = Number(counts?.[st] || 0);') &&

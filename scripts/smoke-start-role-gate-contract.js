@@ -118,8 +118,8 @@ assert.ok(idxGate >= 0 && idxGate < idxRoleFlags, 'role gate must execute before
 // Role selection screen contract.
 assert.ok(renderRoleSelectionSrc.includes('🏠 <b>Добро пожаловать</b>'), 'Role gate must keep welcome heading');
 assert.ok(renderRoleSelectionSrc.includes('Выбери, как хочешь работать:'), 'Role gate must keep short first-run split copy');
-assert.ok(renderRoleSelectionSrc.includes('🤳 Креатор — офферы, диалоги и заявки брендов для твоих каналов.'), 'Role gate must explain creator path briefly');
-assert.ok(renderRoleSelectionSrc.includes('🏷 Бренд — лента креаторов, диалоги, заявки и фильтры.'), 'Role gate must explain brand path briefly');
+assert.ok(renderRoleSelectionSrc.includes('🤳 Креатор — офферы, диалоги и заявки от брендов для твоих каналов.'), 'Role gate must explain creator path briefly');
+assert.ok(renderRoleSelectionSrc.includes('🏷 Бренд — поиск креаторов, диалоги, заявки и сделки.'), 'Role gate must explain brand path briefly');
 assert.ok(renderRoleSelectionSrc.includes('<i>Режим можно поменять позже через «🏠 Домой».</i>'), 'Role gate must keep later-switch hint');
 assert.ok(renderRoleSelectionSrc.includes(".text('🏷 Бренд', 'a:home_mode|m:brand')"), 'Role gate must keep brand pick button');
 assert.ok(renderRoleSelectionSrc.includes(".text('🤳 Креатор', 'a:home_mode|m:creator')"), 'Role gate must keep creator pick button');

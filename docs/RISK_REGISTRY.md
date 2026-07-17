@@ -25,6 +25,7 @@ State: `ACTIVE / WATCH / MITIGATED / ACCEPTED / PARKED`
 | R-14 | Third-party opportunity attribution or consent problem | HIGH | WATCH | repost appears first-party, unclear source/rights | source attribution, external-link truth, claim ownership later | ingesting real Instagram opportunities |
 | R-15 | Product drift into complex CRM/dashboard | MEDIUM | ACTIVE | duplicate surfaces, workflow friction, unused admin complexity | workflow-first Creator OS thesis, Telegram-native invariants | major dashboard or multi-workspace proposal |
 | R-16 | Trust/matching score becomes opaque or misleading | HIGH | PARKED | unexplained ranking, biased match, unsupported claims | evidence-based signals, explainable scoring requirement | before Match Engine implementation |
+| R-17 | Deal stage or paid acceptance gate bypass through forged/direct callback | CRITICAL | MITIGATED | `deal_stage` without `accepted_by_user_id`, stage write without actor access | actor-scoped load, explicit access assertion, accepted-deal runtime guards, accepted-only SQL list/write guards, STEP586C source contract | any new deal mutation path or acceptance/credit change |
 
 ## Critical-zone handling
 
@@ -57,3 +58,13 @@ Residual risk:
 - Primary risks addressed: R-11, R-12, R-15.
 - Runtime blast radius: none.
 - Runtime verification: not applicable; repository archive integrity only.
+
+## Current STEP586C assessment
+
+- Change type: lifecycle copy plus accepted-deal defense in depth.
+- Primary risks addressed: R-03, R-04, R-11, R-12, R-17.
+- Runtime blast radius: brand application/deal UI, deal-stage mutation guard and accepted-deal queries.
+- Rollback: revert the exact STEP586C file delta; no migration rollback is required.
+- Source verification: canonical source preflight PASS; dedicated lifecycle guard PASS.
+- Runtime verification required: live creator/brand application acceptance and deal-stage traversal in Preview/Staging.
+- Residual risk: live data may contain historical `deal_stage` rows without accepted evidence; STEP586C hides them from deal lists rather than rewriting data.

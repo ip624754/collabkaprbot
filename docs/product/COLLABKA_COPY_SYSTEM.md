@@ -69,7 +69,7 @@ Bad:
 Good:
 
 ```text
-Открой «Диалоги» и выбери заявку.
+Открой «Заявки» и выбери нужную заявку.
 ```
 
 ### 3.4 Facts before promises
@@ -199,7 +199,7 @@ Say what changed. Then show the next useful action.
 ```text
 Заявка отправлена бренду.
 
-Ответ появится в «Диалогах».
+Бренд увидит её в разделе «Заявки».
 ```
 
 ### 5.5 Destructive action
@@ -221,6 +221,26 @@ Not:
 ```text
 ✅ Да
 ```
+
+
+## 5.6 Collaboration lifecycle
+
+Use state, not screen history, to name the object:
+
+```text
+Оффер / профиль → Заявка → Диалог → Сделка → Этап / закрытие
+```
+
+Rules:
+
+- `заявка` is a request before acceptance;
+- `диалог` is the message thread and may exist before or after acceptance;
+- `сделка` is an accepted application only;
+- a deal title or deal-stage control requires authoritative acceptance evidence;
+- user copy says `этап сделки`, not implementation terms such as `deal_stage` or `stage`;
+- `Диалоги` must not be used as a generic destination for applications.
+
+Do not infer a deal from a button route, status label or conversation alone. The source of truth is persisted acceptance evidence.
 
 ## 6. Button rules
 

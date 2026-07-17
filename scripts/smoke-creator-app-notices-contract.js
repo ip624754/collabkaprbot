@@ -19,7 +19,7 @@ assert.ok(
     botSrc.includes('function creatorBrandAppCardReturnButtonLabel(appId = 0) {') &&
     botSrc.includes('function creatorBrandAppOpenBrandCallback(brandUserId = 0, appId = 0, backPage = 0) {') &&
     botSrc.includes('function creatorBrandAppListButtonLabel() {') &&
-    botSrc.includes("return id ? `✉️ Диалог #${id}` : '✉️ Диалог';") &&
+    botSrc.includes("return id ? `💬 Диалог #${id}` : '💬 Диалог';") &&
     botSrc.includes("return '✍️ Ответить бренду';") &&
     botSrc.includes("return id ? `⬅️ К диалогу #${id}` : '⬅️ К диалогу';") &&
     botSrc.includes("return id ? `⬅️ К заявке #${id}` : '⬅️ К заявке';") &&

@@ -95,8 +95,8 @@ assert.ok(!renderHomeHub.includes('Продолжить:'), 'Home must not keep 
 assert.ok(renderHomeHub.includes(".text(bCreator, 'a:home_mode|m:creator')"), 'creator role callback must remain unchanged');
 assert.ok(renderHomeHub.includes(".text(bBrand, 'a:home_mode|m:brand')"), 'brand role callback must remain unchanged');
 
-assert.ok(renderRoleSelection.includes('🤳 Креатор — офферы, диалоги и заявки брендов для твоих каналов.'), 'first-run creator copy must use canonical role and object terms');
-assert.ok(renderRoleSelection.includes('🏷 Бренд — лента креаторов, диалоги, заявки и фильтры.'), 'first-run brand copy must use canonical role terms');
+assert.ok(renderRoleSelection.includes('🤳 Креатор — офферы, диалоги и заявки от брендов для твоих каналов.'), 'first-run creator copy must use canonical role and object terms');
+assert.ok(renderRoleSelection.includes('🏷 Бренд — поиск креаторов, диалоги, заявки и сделки.'), 'first-run brand copy must use canonical role terms');
 assert.ok(renderRoleSelection.includes(".text('🤳 Креатор', 'a:home_mode|m:creator')"), 'first-run creator callback must remain unchanged');
 assert.ok(renderRoleSelection.includes(".text('🏷 Бренд', 'a:home_mode|m:brand')"), 'first-run brand callback must remain unchanged');
 assert.ok(!renderRoleSelection.includes('Блогер'), 'role selector must not use blogger as a creator synonym');
@@ -105,7 +105,7 @@ assert.ok(!renderRoleSelection.includes('Creator / канал'), 'role selector 
 
 assert.ok(renderMainMenu.includes('📋 <b>Меню</b>'), 'current-role hub must be titled Меню');
 assert.ok(!renderMainMenu.includes('🏠 <b>Главное меню</b>'), 'current-role hub must not look like global Home');
-assert.ok(renderMainMenu.includes('Для креатора — каналы, офферы, заявки и розыгрыши.'), 'creator menu copy must use the canonical role label');
+assert.ok(renderMainMenu.includes('Для креатора — каналы, офферы, диалоги и заявки.'), 'creator menu copy must use the canonical role label');
 
 for (const callback of [
   "'a:home'",

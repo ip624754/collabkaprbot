@@ -40,7 +40,7 @@ const mainMenuCreatorCurrentKbSrc = extractBetween(
 assert.ok(mainMenuCreatorCurrentKbSrc.includes(".text('🔁 Сменить канал', 'a:ws_list')"), 'creator current menu must expose channel switcher');
 assert.ok(mainMenuCreatorCurrentKbSrc.includes(".text('📂 Текущий канал', `a:ws_open|ws:${wsId}`)"), 'creator current menu must expose current channel opener');
 assert.ok(mainMenuCreatorCurrentKbSrc.includes(".text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)"), 'creator current menu must keep offers entry');
-assert.ok(mainMenuCreatorCurrentKbSrc.includes(".text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'creator current menu must keep inbox entry');
+assert.ok(mainMenuCreatorCurrentKbSrc.includes(".text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'creator current menu must keep dialogs entry');
 assert.ok(!mainMenuCreatorCurrentKbSrc.includes('Перейти в бренд'), 'creator current menu must not expose brand role switch');
 assert.ok(!mainMenuCreatorCurrentKbSrc.includes('Режим менеджера бренда'), 'creator current menu must not expose brand-manager role switch');
 assert.ok(!mainMenuCreatorCurrentKbSrc.includes('✅ Верификация'), 'creator current menu must not expose verification shortcut');

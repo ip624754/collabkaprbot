@@ -16,7 +16,7 @@ assert.ok(
   botSrc.includes("function brandAppListReturnButtonLabel() {") &&
     botSrc.includes("return '📨 К заявкам';") &&
     botSrc.includes("function brandDealsListReturnButtonLabel() {") &&
-    botSrc.includes("return '📌 К сделкам';") &&
+    botSrc.includes("return '🤝 К сделкам';") &&
     botSrc.includes("function creatorBrandAppListReturnButtonLabel() {") &&
     botSrc.includes("return '📨 К заявкам';"),
   'Expected shared footer/list-return label helpers for application/deal flows'

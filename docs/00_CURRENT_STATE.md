@@ -1,3 +1,31 @@
+## STEP586C — Applications, Dialogs and Deals Lifecycle (2026-07-18)
+
+**Current handoff-safe baseline:** STEP586C on top of STEP586B.
+
+Verified local source truth:
+- canonical user lifecycle is `оффер / профиль → заявка → диалог → сделка → этап / закрытие`;
+- menus and follow-up screens separate `💬 Диалоги`, `📨 Заявки` and `🤝 Сделки`;
+- creator cards derive `Заявка / Диалог / Сделка` from persisted state;
+- acceptance notifications state that a deal opens only after acceptance;
+- deal-only views, replies, templates and stage mutation reject pre-acceptance applications;
+- direct deal-stage mutation verifies actor access;
+- deal queries and the stage writer require accepted-user evidence plus a deal stage;
+- callback identities, prices, credits, payment behavior, schema and migrations are unchanged;
+- canonical source preflight, callback, dependency/runtime, lifecycle and targeted creator/brand contracts pass locally.
+
+Not verified: live Telegram traversal, mobile wrapping, remote staging, live Neon/QStash and production runtime.
+
+**Next:** STEP586D — Invite Center Language and Mechanism Honesty.
+
+Read:
+- `docs/audit/STEP586C_APPLICATIONS_DIALOGS_DEALS_LIFECYCLE_REPORT.md`;
+- `docs/product/COLLABKA_COPY_SYSTEM.md`;
+- `docs/product/TERMINOLOGY_REGISTRY.md`;
+- `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP586C.md`.
+
+---
+
 ## STEP586B — Home, Menu and Role Navigation Contract (2026-07-18)
 
 **Current handoff-safe baseline:** STEP586B on top of STEP586A.

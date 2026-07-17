@@ -1,8 +1,8 @@
 # STEP586 — Conversation Copy Refactor Roadmap
 
 **Input:** STEP585 source audit and canonical copy system
-**Current implementation baseline:** STEP586B on STEP586A
-**Roadmap status:** STEP586A–B implemented; STEP586C is next
+**Current implementation baseline:** STEP586C on STEP586B
+**Roadmap status:** STEP586A–C implemented; STEP586D is next
 **Rule:** copy changes may not silently alter callbacks, permissions, prices, reward math, payment semantics or state transitions.
 
 ## 1. Goal
@@ -107,9 +107,12 @@ Acceptance:
 
 ### STEP586C — Applications, Dialogs and Deals Lifecycle
 
+**Implementation:** DONE in STEP586C (2026-07-18)
+**Report:** `docs/audit/STEP586C_APPLICATIONS_DIALOGS_DEALS_LIFECYCLE_REPORT.md`
+
 **Priority:** P1
 **Risk:** medium/high; product taxonomy across multiple flows
-**Mode:** STANDARD
+**Mode:** HEAVY
 
 Target lifecycle:
 
@@ -130,6 +133,8 @@ Acceptance:
 - one object is not called `заявка`, `диалог` and `сделка` on the same state;
 - post-action text points to the correct destination;
 - creator and brand sides describe the same lifecycle symmetrically.
+
+**Verified result:** canonical source vocabulary and accepted-only deal guards pass locally; callback identities remain unchanged; live Telegram rendering remains unverified.
 
 ---
 
@@ -280,6 +285,6 @@ The language work should reduce risk, not hide architectural changes inside stri
 
 ## 5. Current next action
 
-Start with **STEP586A — Copy Safety & Taxonomy Foundation**.
+Proceed with **STEP586D — Invite Center Language and Mechanism Honesty**.
 
-It removes the clearest trust defects with a bounded surface and creates guards that prevent the same class from returning.
+Use persisted invite/reward rules as the source of truth. Keep thresholds, ledger behavior, eligibility and anti-abuse mechanics unchanged.

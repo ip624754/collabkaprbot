@@ -28,8 +28,8 @@ assert.ok(
   botSrc.includes("const msg = buildBrandAppReplyRecoveryText({") &&
     botSrc.includes("kind: 'degraded',") &&
     botSrc.includes("const text = buildBrandAppReplyPromptText({") &&
-    botSrc.includes("secondaryLabel: '📝 Заявки'") &&
-    botSrc.includes("secondaryLabel: '✉️ Открыть заявку'"),
+    botSrc.includes("secondaryLabel: '📨 Заявки'") &&
+    botSrc.includes("secondaryLabel: '📨 Открыть заявку'"),
   'Expected app/deal reply open flows to reuse centralized brand-side prompt and degraded fallback helpers'
 );
 

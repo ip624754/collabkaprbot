@@ -54,6 +54,15 @@ The communication thread. A dialog may exist before or after a deal, depending o
 
 An accepted collaboration with operational stages. Use this word only when acceptance is confirmed by the real mechanism.
 
+Authoritative source rule for the current implementation:
+
+```text
+meta.deal.accepted_by_user_id is present
+AND meta.deal_stage is present
+```
+
+A conversation, `in_progress` label or forged callback is not enough to call an object a deal.
+
 ## 3. Navigation contract
 
 | Destination | Canonical visible label | Current internal callback examples |

@@ -437,7 +437,7 @@ export default async function handler(req, res) {
 
           const msg =
             `✅ <b>Заявка принята</b>\n\n` +
-            `Бренд принял твою заявку. Теперь можно продолжить диалог прямо в боте.`;
+            `Бренд принял твою заявку. Сделка открыта, а переписка продолжается в боте.`;
 
           await safeTgSend(creatorTgId, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
         }
@@ -699,7 +699,7 @@ export default async function handler(req, res) {
           const kb = {
             inline_keyboard: [
               [
-                { text: '📥 Inbox', callback_data: `a:bx_inbox|ws:${wsCtx}|p:0|h:menu` },
+                { text: '💬 Диалоги', callback_data: `a:bx_inbox|ws:${wsCtx}|p:0|h:menu` },
               ],
               [
                 { text: '📋 Меню', callback_data: 'a:menu' },
@@ -732,7 +732,7 @@ export default async function handler(req, res) {
                 { text: '💳 Купить кредиты', callback_data: `a:brand_pass|ws:0|ret:offer|id:${offerId}` },
               ],
               [
-                { text: '📥 Inbox', callback_data: `a:bx_inbox|ws:${wsCtx}|p:0|h:menu` },
+                { text: '💬 Диалоги', callback_data: `a:bx_inbox|ws:${wsCtx}|p:0|h:menu` },
                 { text: '📋 Меню', callback_data: 'a:menu' },
               ],
             ],
@@ -791,7 +791,7 @@ export default async function handler(req, res) {
               { text: '💬 Открыть диалог', callback_data: `a:bx_thread|ws:${wsCtx}|t:${threadId}|p:0|b:inbox|o:${offerId}|h:menu` },
             ],
             [
-              { text: '📥 Inbox', callback_data: `a:bx_inbox|ws:${wsCtx}|p:0|h:menu` },
+              { text: '💬 Диалоги', callback_data: `a:bx_inbox|ws:${wsCtx}|p:0|h:menu` },
               { text: '📋 Меню', callback_data: 'a:menu' },
             ],
           ],

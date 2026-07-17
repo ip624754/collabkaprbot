@@ -13,10 +13,10 @@ const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
 
 assert.ok(
-  botSrc.includes('📥 <b>Inbox</b>') &&
-    botSrc.includes('Здесь появляются новые диалоги и свежие сообщения.') &&
+  botSrc.includes('💬 <b>Диалоги</b>') &&
+    botSrc.includes('Переписка по офферам и свежие сообщения.') &&
     botSrc.includes('Открой диалог: там статус, стадия, последние сообщения и действия.'),
-  'Expected Inbox list to expose a compact header, a human-readable description, and a clear open-dialog hint'
+  'Expected Dialogs list to expose a compact header, its offer-conversation scope, and a clear open-dialog hint'
 );
 
 assert.ok(
@@ -50,9 +50,9 @@ assert.ok(
 
 assert.ok(
   botSrc.includes('if (rows.length) {') &&
-    botSrc.includes('Пока здесь пусто.') &&
-    botSrc.includes('Новый диалог появится, когда кто-то напишет первым.') &&
-    botSrc.includes('Если переписка идёт внутри заявки, открой её карточку.'),
+    botSrc.includes('Пока диалогов нет.') &&
+    botSrc.includes('Диалог появится после первого сообщения по офферу.') &&
+    botSrc.includes('Заявки к брендам открываются в разделе «Заявки».'),
   'Expected Inbox empty-state to hide noisy page counters and explain what appears here in plain language'
 );
 console.log('✅ smoke brand Inbox density contract OK');

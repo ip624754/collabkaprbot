@@ -2,16 +2,17 @@
 
 Это актуальный комплект документации по проекту **Collabka PR**.
 
-## Текущий snapshot — STEP586B (2026-07-18)
+## Текущий snapshot — STEP586C (2026-07-18)
 
-- `a:home` имеет единый видимый контракт `🏠 Домой` и ведёт в глобальный экран ролей.
-- `a:menu` имеет единый видимый контракт `📋 Меню` и ведёт в меню текущей роли.
-- Канонические названия ролей: `Креатор` и `Бренд`.
-- Callback values и направления переходов не менялись.
-- Следующий scoped STEP: `STEP586C — Applications, Dialogs and Deals Lifecycle`.
+- Канонический lifecycle: `оффер / профиль → заявка → диалог → сделка → этап / закрытие`.
+- `💬 Диалоги`, `📨 Заявки` и `🤝 Сделки` разведены по реальному состоянию объекта.
+- Сделка существует только при persisted acceptance evidence и `deal_stage`.
+- Deal-only runtime и SQL-пути защищены accepted-only guards.
+- Callback values, цены, кредиты, платежи, схема и миграции не менялись.
+- Следующий scoped STEP: `STEP586D — Invite Center Language and Mechanism Honesty`.
 
 ## 0) BOOT (всегда читаем сначала)
-- `process/07_WORK_HISTORY_STEP586B.md` — актуальная дельта: единый контракт Домой / Меню / ролей
+- `process/07_WORK_HISTORY_STEP586C.md` — актуальная дельта: заявки / диалоги / сделки + accepted-deal guards
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
@@ -22,7 +23,7 @@
 - `RISK_REGISTRY.md` — живой реестр технических, продуктовых и AI-governance рисков
 - `CREATOR_OS_THESIS.md` — продуктовый north star: Creator Collaboration Operating System без broad rewrite
 - `CHATGPT_COLLABKA_UPGRADE_NOTES.md` — состав и truth boundary STEP580 docs upgrade
-- `audit/STEP586B_HOME_MENU_ROLE_NAVIGATION_REPORT.md` — реализация и Truth Boundary STEP586B
+- `audit/STEP586C_APPLICATIONS_DIALOGS_DEALS_LIFECYCLE_REPORT.md` — реализация, security finding и Truth Boundary STEP586C
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 - `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout
@@ -191,6 +192,14 @@ Canonical product-language documents:
 - command: `npm run smoke:copy-safety-taxonomy-contract`;
 - ordinary-user infrastructure leakage is removed from the targeted branches while operator diagnostics retain technical truth.
 
-Current next action: **STEP586B — Home, Menu and Role Navigation Contract**.
+### STEP586C implementation
+
+- `audit/STEP586C_APPLICATIONS_DIALOGS_DEALS_LIFECYCLE_REPORT.md` — user lifecycle, accepted-deal invariant, security finding and Truth Boundary;
+- `process/07_WORK_HISTORY_STEP586C.md` — exact implementation scope and preserved mechanics;
+- command: `npm run smoke:applications-dialogs-deals-lifecycle-contract`;
+- visible lifecycle is `оффер / профиль → заявка → диалог → сделка → этап / закрытие`;
+- deal-only routes and SQL writes require authoritative acceptance evidence.
+
+Current next action: **STEP586D — Invite Center Language and Mechanism Honesty**.
 
 Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance remain unverified.

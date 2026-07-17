@@ -64,7 +64,7 @@ assert.ok(botSource.includes(".text('🧑‍💼 Режим менеджера �
 assert.ok(botSource.includes("<b>Текущий канал:</b> <b>${escapeHtml(currentWsLabel(current))}</b>"), 'creator menu must show current channel explicitly');
 assert.ok(botSource.includes(".text('📣 Мои каналы', 'a:ws_list')"), 'creator current-channel menu must keep channel picker entry');
 assert.ok(botSource.includes(".text('⚙️ Канал', `a:ws_open|ws:${wsId}`)") || botSource.includes(".text('📂 Текущий канал', `a:ws_open|ws:${wsId}`)"), 'creator current-channel menu must expose direct current-channel management entry');
-assert.ok(botSource.includes(".text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'creator current-channel menu must route inbox to the selected current channel');
+assert.ok(botSource.includes(".text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'creator current-channel menu must route inbox to the selected current channel');
 assert.ok(botSource.includes(".text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)"), 'creator current-channel menu must route giveaways to the selected current channel');
 assert.ok(botSource.includes("const label = w.channel_username ? `⛔ @${w.channel_username}` : `⛔ ${w.title}`;"), 'inactive workspace list must visibly mark disconnected channels');
 
@@ -73,8 +73,8 @@ const wsMenuKbSrc = extractBetween(
   'function wsMenuKb(wsId, opts = {}) {',
   '\n\nfunction wsSettingsKb(wsId, s) {'
 );
-assert.ok(wsMenuKbSrc.includes(".text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'workspace work menu must preserve inbox shortcut');
-assert.ok(wsMenuKbSrc.includes(".text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)"), 'workspace work menu must preserve leads shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'workspace work menu must preserve inbox shortcut');
+assert.ok(wsMenuKbSrc.includes(".text('📨 Заявки от брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)"), 'workspace work menu must preserve leads shortcut');
 assert.ok(wsMenuKbSrc.includes(".text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)"), 'workspace work menu must preserve offers shortcut');
 assert.ok(wsMenuKbSrc.includes(".text('📁 Папки', `a:folders_home|ws:${wsId}`)"), 'workspace work menu must preserve folders shortcut');
 assert.ok(wsMenuKbSrc.includes(".text('➕ Новый розыгрыш', `a:gw_new|ws:${wsId}`)"), 'workspace work menu must preserve giveaway create shortcut');

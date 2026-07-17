@@ -31,11 +31,12 @@ assert.ok(!renderHomeHubSrc.includes('Текущий режим:'), 'Home hub mu
 assert.ok(!renderHomeHubSrc.includes('Дальше следуй по “Карте”'), 'Home hub must not reference Карта from onboarding banner');
 
 assert.ok(renderHomeHubSrc.includes('Режим: <b>${escapeHtml(modeLabel)}</b>'), 'Home hub must show concise current role copy');
-assert.ok(renderHomeHubSrc.includes('📣 Мои каналы — офферы, Inbox и заявки брендов.'), 'Creator home must explain channels branch briefly');
-assert.ok(renderHomeHubSrc.includes('🏷 Каталог брендов — найти бренд и оставить заявку.'), 'Creator home must explain brand catalog briefly');
+assert.ok(renderHomeHubSrc.includes('📣 Мои каналы — офферы и заявки от брендов.'), 'Creator home must explain channels branch briefly');
+assert.ok(renderHomeHubSrc.includes('🏷 Каталог брендов — найти бренд и отправить заявку.'), 'Creator home must explain brand catalog briefly');
 assert.ok(renderHomeHubSrc.includes('🎬 Офферы — лента и поиск креаторов.'), 'Brand home must explain offers briefly');
-assert.ok(renderHomeHubSrc.includes('📥 Inbox — диалоги и новые заявки.'), 'Brand home must explain inbox briefly');
-assert.ok(renderHomeHubSrc.includes('🎛 Фильтры — уточнить подбор креаторов.'), 'Brand home must explain filters briefly');
+assert.ok(renderHomeHubSrc.includes('💬 Диалоги — переписка по офферам.'), 'Brand home must explain inbox briefly');
+assert.ok(renderHomeHubSrc.includes('📨 Заявки — запросы к бренду до принятия.'), 'Brand home must separate pre-acceptance applications from dialogs');
+assert.ok(renderHomeHubSrc.includes('🤝 Сделки — принятые заявки и этапы работы.'), 'Brand home must explain the accepted-deal surface');
 assert.ok(renderHomeHubSrc.includes('🧹 Кабинет куратора — рабочий хаб.'), 'Curator home must explain curator hub briefly');
 assert.ok(renderHomeHubSrc.includes('🔓 Обычный режим — вернуться в режим креатора или бренда.'), 'Curator home must explain return path briefly');
 assert.ok(renderHomeHubSrc.includes('Выбери раздел ниже.'), 'Home hub must end with concise next-step copy');

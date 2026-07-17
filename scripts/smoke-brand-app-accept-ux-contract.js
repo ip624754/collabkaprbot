@@ -25,7 +25,7 @@ assert.ok(
 );
 assert.ok(
   acceptFnSrc.includes(".text('🔄 Проверить заявку', refreshCb)") &&
-    acceptFnSrc.includes(".text('📝 Заявки', listCb)"),
+    acceptFnSrc.includes(".text('📨 Заявки', listCb)"),
   'Expected accept pending UX to keep the user on the same application / list flow instead of sending them into work tabs too early'
 );
 assert.ok(

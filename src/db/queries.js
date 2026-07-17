@@ -6186,10 +6186,10 @@ export async function acceptBrandApplicationWithCharge(appId, acceptedByUserId, 
   }
 }
 
-// List brand deals (applications that have deal_stage set)
+// List accepted brand deals only (accepted_by_user_id + deal_stage are authoritative).
 export async function countBrandDealsByStage(brandUserId, acceptedByUserId = null) {
   const params = [Number(brandUserId)];
-  let where = `brand_user_id=$1 and coalesce(meta->>'deal_stage','') <> ''`;
+  let where = `brand_user_id=$1 and coalesce(meta->'deal'->>'accepted_by_user_id','') <> '' and coalesce(meta->>'deal_stage','') <> ''`;
 
   if (acceptedByUserId) {
     params.push(Number(acceptedByUserId));
@@ -6221,7 +6221,7 @@ export async function listBrandDeals(brandUserId, stage = 'negotiation', limit =
   const params = [Number(brandUserId)];
   let idx = 2;
 
-  let where = `brand_user_id=$1`;
+  let where = `brand_user_id=$1 and coalesce(meta->'deal'->>'accepted_by_user_id','') <> ''`;
 
   if (acceptedByUserId) {
     where += ` and nullif(meta->'deal'->>'accepted_by_user_id','')::int = $${idx}`;
@@ -6262,7 +6262,7 @@ export async function countBrandDealsFiltered(brandUserId, stage = 'negotiation'
   const params = [Number(brandUserId)];
   let idx = 2;
 
-  let where = `brand_user_id=$1`;
+  let where = `brand_user_id=$1 and coalesce(meta->'deal'->>'accepted_by_user_id','') <> ''`;
 
   if (acceptedByUserId) {
     where += ` and nullif(meta->'deal'->>'accepted_by_user_id','')::int = $${idx}`;
@@ -6313,7 +6313,7 @@ export async function listBrandDealsFiltered(brandUserId, stage = 'negotiation',
   const params = [Number(brandUserId)];
   let idx = 2;
 
-  let where = `brand_user_id=$1`;
+  let where = `brand_user_id=$1 and coalesce(meta->'deal'->>'accepted_by_user_id','') <> ''`;
 
   if (acceptedByUserId) {
     where += ` and nullif(meta->'deal'->>'accepted_by_user_id','')::int = $${idx}`;
@@ -6380,6 +6380,8 @@ export async function setBrandApplicationDealStage(appId, stage, setByUserId) {
        ),
        updated_at=now()
      where id=$1
+       and coalesce(meta->'deal'->>'accepted_by_user_id','') <> ''
+       and coalesce(meta->>'deal_stage','') <> ''
      returning *`,
     [Number(appId), st, setByUserId ? Number(setByUserId) : null]
   );

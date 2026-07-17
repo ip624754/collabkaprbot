@@ -13,7 +13,7 @@ const queriesPath = path.join(ROOT, 'src', 'db', 'queries.js');
 const queriesSrc = fs.readFileSync(queriesPath, 'utf8');
 
 const acceptFnStart = queriesSrc.indexOf('export async function acceptBrandApplicationWithCharge(');
-const dealsStart = queriesSrc.indexOf('// List brand deals', acceptFnStart);
+const dealsStart = queriesSrc.indexOf('export async function countBrandDealsByStage(', acceptFnStart);
 assert.ok(acceptFnStart >= 0 && dealsStart > acceptFnStart, 'Expected to locate acceptBrandApplicationWithCharge() source block');
 const acceptFnSrc = queriesSrc.slice(acceptFnStart, dealsStart);
 

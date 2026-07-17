@@ -618,7 +618,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
               telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
             });
             if (fb && fb.applied) {
-              await ctx.reply('✅ Кредиты начислены! Открой 💳 Кредиты или 📥 Inbox, чтобы начать.');
+              await ctx.reply('✅ Кредиты начислены! Открой 💳 Кредиты или 💬 Диалоги, чтобы начать.');
               return;
             }
           } catch { /* ignore */ }
@@ -645,7 +645,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
           .row();
       }
       kb.text('💳 Кредиты', `a:brand_pass|ws:${data.wsId}`)
-        .text('📥 Inbox', `a:bx_inbox|ws:${data.wsId}|p:0|h:bo`);
+        .text('💬 Диалоги', `a:bx_inbox|ws:${data.wsId}|p:0|h:bo`);
   
       await markApplied('auto_apply_brand_pass');
       await ctx.reply(
@@ -659,7 +659,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
   • 🔓 Контакты на витрине: ${CONTACT_UNLOCK_COST <= 0 ? 'бесплатно' : (CONTACT_UNLOCK_COST + ' кредит(ов)')} → ${CONTACT_UNLOCK_TTL_DAYS} дней
   • Переписка внутри диалога — бесплатно
   
-  Дальше: открой 📥 Inbox и нажми «💬 Диалог».`,
+  Дальше: открой «💬 Диалоги» и выбери нужный диалог.`,
         { reply_markup: kb }
       );
       return;
@@ -695,7 +695,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
               telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
             });
             if (fb && fb.applied) {
-              await ctx.reply('✅ Brand Plan активирован! Открой ⭐️ Brand Plan и 📥 Inbox, чтобы начать.');
+              await ctx.reply('✅ Brand Plan активирован! Открой ⭐️ Brand Plan и 💬 Диалоги, чтобы начать.');
               return;
             }
           } catch { /* ignore */ }
@@ -726,7 +726,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       const planLabel = planDef ? planDef.title : plan;
       const kb = new InlineKeyboard()
         .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`)
-        .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+        .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
         .row()
         .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
   

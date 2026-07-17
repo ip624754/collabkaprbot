@@ -13,11 +13,11 @@ const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
 
 assert.ok(
-  botSrc.includes(".text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)") &&
-    botSrc.includes("kb.text(`📨 Заявки брендов${leadBadge}`, `a:ws_leads|w:${wsId}|s:n|p:0${retPartShort('cw')}`).row();") &&
-    botSrc.includes('Сначала открой «📨 Заявки брендов»: там вход в список, карточки и диалоги по заявкам брендов.') &&
-    botSrc.includes('📨 «Заявки брендов» — вход в список заявок, карточки и диалоги по брендам.'),
-  'Expected creator-side lead entrypoints in workspace/curator screens to use one shared “📨 Заявки брендов” vocabulary with a clear open-path hint'
+  botSrc.includes(".text('📨 Заявки от брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)") &&
+    botSrc.includes("kb.text(`📨 Заявки от брендов${leadBadge}`, `a:ws_leads|w:${wsId}|s:n|p:0${retPartShort('cw')}`).row();") &&
+    botSrc.includes('Сначала открой «📨 Заявки от брендов»: там список заявок, карточки и переписка по каждой заявке.') &&
+    botSrc.includes('📨 «Заявки от брендов» — вход в список заявок, карточки и диалоги по брендам.'),
+  'Expected creator-side lead entrypoints in workspace/curator screens to use one shared “📨 Заявки от брендов” vocabulary with a clear open-path hint'
 );
 
 assert.ok(

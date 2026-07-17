@@ -28,7 +28,7 @@ assert.ok(
 
 assert.ok(
   botSrc.includes('const flash = prevStage === stage') &&
-    botSrc.includes('Стадия обновлена: ${dealStageTitle(prevStage)} → ${dealStageTitle(stage)}') &&
+    botSrc.includes('Этап обновлён: ${dealStageTitle(prevStage)} → ${dealStageTitle(stage)}') &&
     botSrc.includes("await ctx.answerCallbackQuery({ text: flash })") &&
     botSrc.includes('await renderBrandDealView(ctx, u.id, appId, { ...back, flash });'),
   'Expected stage changes to produce a clear inline confirmation and rerender flash state'

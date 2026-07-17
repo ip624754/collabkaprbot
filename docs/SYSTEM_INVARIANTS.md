@@ -56,6 +56,8 @@
 3. Payment confirmation must not depend on user-facing callback success alone.
 4. Fallback application paths use authoritative locks/guards and cannot double-credit.
 5. Copy must distinguish product entitlement, credits, unlock, payment attempt, and confirmed payment.
+6. A brand application becomes a deal only after authoritative acceptance evidence; `deal_stage` alone is insufficient.
+7. Deal-only reads and writes require actor access plus accepted-deal evidence in runtime and SQL guards.
 
 ## 7. Cron, outbox, and external effects
 

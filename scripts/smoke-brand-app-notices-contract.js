@@ -21,7 +21,7 @@ assert.ok(
     botSrc.includes("function buildBrandAppServiceNoticeText({ appId = 0, kind = 'reply', brandName = '', creatorName = '', body = '', status = 'new', dealStage = '' } = {}) {") &&
     botSrc.includes("if (noticeKind === 'new_app') return brandAppOpenButtonLabel(id);") &&
     botSrc.includes("return id ? `💬 Диалог #${id}` : '💬 Диалог';") &&
-    botSrc.includes("return '📌 Стадия сделки';") &&
+    botSrc.includes("return '🤝 Этап сделки';") &&
     botSrc.includes("const whatNext = brandAppNoticeWhatNext(id, status, dealStage, kind);") &&
     botSrc.includes("const title = kind === 'new_app'") &&
     botSrc.includes("const bodyLabel = kind === 'new_app' ? 'Текст заявки' : 'Последнее сообщение';"),

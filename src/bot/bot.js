@@ -3283,7 +3283,7 @@ function renderInviteCardKeyboard({ inviteState = null } = {}) {
 function renderInlineInviteShareText({ inviteState = null } = {}) {
   return [
     'Я нашёл удобный Telegram-бот для коллабораций брендов и креаторов.',
-    'Офферы, Inbox и работа прямо в Telegram.',
+    'Офферы, диалоги и работа прямо в Telegram.',
     '',
     buildInviteJoinAnchor(inviteState?.inlineInviteLink || inviteState?.inviteLink)
   ].join('\n');
@@ -3292,7 +3292,7 @@ function renderInlineInviteShareText({ inviteState = null } = {}) {
 function renderInlineInviteCaption({ inviteState = null } = {}) {
   return [
     'Коллаборации брендов и креаторов в Telegram.',
-    'Офферы, Inbox, рабочие сценарии и быстрый старт без лишнего шума.',
+    'Офферы, диалоги и рабочие сценарии прямо в Telegram.',
     '',
     buildInviteJoinAnchor(inviteState?.inlineInviteLink || inviteState?.inviteLink)
   ].join('\n');
@@ -3505,7 +3505,7 @@ function mainMenuCreatorKb(flags = {}, opts = {}) {
     .text('🏷 Каталог брендов', 'a:brands_home|p:0')
     .row()
     .text('📨 Мои заявки', 'a:my_apps|p:0')
-    .text('📥 Inbox', 'a:go_dialogs')
+    .text('💬 Диалоги', 'a:go_dialogs')
     .row()
     .text('⭐️ PRO', 'a:pro_home')
     .text('🎁 Розыгрыши', 'a:gw_list')
@@ -3578,7 +3578,7 @@ function mainMenuCreatorCurrentKb(flags = {}, ws, opts = {}) {
     .text('🏷 Каталог брендов', 'a:brands_home|p:0')
     .row()
     .text('📨 Мои заявки', 'a:my_apps|p:0')
-    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+    .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
     .row()
     .text('⭐️ PRO', `a:ws_pro|ws:${wsId}`)
     .text('🎁 Розыгрыши', `a:gw_list_ws|ws:${wsId}`)
@@ -3616,10 +3616,10 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
   .text('🎯 Подбор в ленте', 'a:bx_smart|ws:0|h:mm')
   .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
   .row()
-  .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
-  .text('📝 Заявки', 'a:brand_apps|ws:0|s:new|p:0')
+  .text('💬 Диалоги', 'a:bx_inbox|ws:0|p:0|h:mm')
+  .text('📨 Заявки', 'a:brand_apps|ws:0|s:new|p:0')
   .row()
-  .text('📌 Сделки', 'a:brand_deals|ws:0|st:negotiation|p:0');
+  .text('🤝 Сделки', 'a:brand_deals|ws:0|st:negotiation|p:0');
 
   if (!isManager) {
   const planTag = (teamPaid === true) ? ' ✅' : ' 🔒';
@@ -3953,7 +3953,7 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
 <b>Бренд:</b> <b>${escapeHtml(bm.brandLabel)}</b>
 `;
       text = base + `
-Для команды бренда — Inbox и поиск креаторов.
+Для команды бренда — диалоги по офферам, заявки и сделки.
 
 Выбери действие:`;
       kb = mainMenuBrandKb(flags, { isManager: true, hasMultipleBrands: (bm.brands || []).length > 1, founderActive, noticeActive });
@@ -3963,7 +3963,7 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
 <b>Ты сейчас в режиме:</b> <b>${modeHuman}</b>
 `;
       text = base + `
-Для брендов — поиск креаторов, лента креаторов и Inbox.
+Для бренда — поиск креаторов, диалоги, заявки и сделки.
 
 Выбери действие:`;
       // V4: no extra Neon queries in menu render. Manager access is checked on click.
@@ -3975,7 +3975,7 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
 <b>Ты сейчас в режиме:</b> <b>${modeHuman}</b>
 `;
     text = base + `
-Для брендов — поиск креаторов, лента креаторов и Inbox.
+Для бренда — поиск креаторов, диалоги, заявки и сделки.
 
 Выбери действие:`;
     // V4: no extra Neon queries in menu render (status will be checked on click)
@@ -3986,7 +3986,7 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
 <b>Ты сейчас в режиме:</b> <b>${modeHuman}</b>
 `;
     text = base + `
-Для креатора — каналы, офферы, заявки и розыгрыши.
+Для креатора — каналы, офферы, диалоги и заявки.
 
 Выбери действие:`;
     // V4: no extra Neon queries in menu render. Manager access is checked on click.
@@ -4064,8 +4064,9 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
       ? `Режим: <b>${escapeHtml(modeLabel)}</b>
 
 🎬 Офферы — лента и поиск креаторов.
-📥 Inbox — диалоги и новые заявки.
-🎛 Фильтры — уточнить подбор креаторов.
+💬 Диалоги — переписка по офферам.
+📨 Заявки — запросы к бренду до принятия.
+🤝 Сделки — принятые заявки и этапы работы.
 
 Выбери раздел ниже.`
       : effective === 'curator'
@@ -4077,8 +4078,9 @@ const noticeActive = chatType === 'private' && !!noticeAvail.ok;
 Выбери раздел ниже.`
         : `Режим: <b>${escapeHtml(modeLabel)}</b>
 
-📣 Мои каналы — офферы, Inbox и заявки брендов.
-🏷 Каталог брендов — найти бренд и оставить заявку.
+📣 Мои каналы — офферы и заявки от брендов.
+💬 Диалоги — переписка по офферам.
+🏷 Каталог брендов — найти бренд и отправить заявку.
 
 Выбери раздел ниже.`;
 
@@ -4161,11 +4163,12 @@ ${trialLine}
   if (effective === 'curator') {
     kb.text('🧹 Кабинет куратора', 'a:cur_home').row();
   } else if (effective === 'brand' || effective === 'brand_manager') {
-    kb.text('📥 Inbox', 'a:go_dialogs').text('📝 Заявки', 'a:brand_apps|ws:0|s:new|p:0').row();
-    kb.text('📰 Лента', 'a:bx_feed|ws:0|p:0|h:mm').text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm').row();
+    kb.text('💬 Диалоги', 'a:go_dialogs').text('📨 Заявки', 'a:brand_apps|ws:0|s:new|p:0').row();
+    kb.text('🤝 Сделки', 'a:brand_deals|ws:0|st:negotiation|p:0').text('📰 Лента', 'a:bx_feed|ws:0|p:0|h:mm').row();
+    kb.text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm').row();
   } else {
     kb.text('📣 Мои каналы', 'a:ws_list').text('📨 Мои заявки', 'a:my_apps|p:0').row();
-    kb.text('🏷 Каталог брендов', 'a:brands_home').text('📥 Inbox', 'a:go_dialogs').row();
+    kb.text('🏷 Каталог брендов', 'a:brands_home').text('💬 Диалоги', 'a:go_dialogs').row();
   }
 
   // Staff shortcuts
@@ -4295,9 +4298,9 @@ async function renderRoleSelection(ctx, u, opts = {}) {
     `Выбери, как хочешь работать:
 
 ` +
-    `🤳 Креатор — офферы, диалоги и заявки брендов для твоих каналов.
+    `🤳 Креатор — офферы, диалоги и заявки от брендов для твоих каналов.
 ` +
-    `🏷 Бренд — лента креаторов, диалоги, заявки и фильтры.
+    `🏷 Бренд — поиск креаторов, диалоги, заявки и сделки.
 
 ` +
     `<i>Режим можно поменять позже через «🏠 Домой».</i>`;
@@ -4382,7 +4385,7 @@ async function renderCreatorCurrentMenu(ctx, u, flags = {}, params = {}) {
 
 Сейчас у тебя нет активного канала.
 
-Подключи новый канал или верни один из неактивных, чтобы снова работать с Inbox, офферами, папками и розыгрышами.`;
+Подключи новый канал или верни один из неактивных, чтобы снова работать с диалогами, офферами, папками и розыгрышами.`;
     const opts = { parse_mode: 'HTML', reply_markup: kb };
     if (edit && ctx.callbackQuery?.message) await safeEditOrReply(ctx, text, opts);
     else await ctx.reply(text, opts);
@@ -4611,7 +4614,7 @@ function kbBrandApplyMore(brandUserId, backPage = 0, canOpenInbox = false) {
   const kb = new InlineKeyboard();
   kb.text('🏷 Каталог брендов', `a:brands_home|p:${backPage}`).row();
   kb.text('✍️ Ещё заявку', `a:brand_apply|u:${brandUserId}|p:${backPage}`).row();
-  if (canOpenInbox) kb.text('📥 Inbox бренда', 'a:brand_apps|ws:0|s:new|p:0').row();
+  if (canOpenInbox) kb.text('📨 Заявки к бренду', 'a:brand_apps|ws:0|s:new|p:0').row();
 
   kb.text('⬅️ Назад', `a:brand_apply_done|u:${brandUserId}|p:${backPage}|inb:${canOpenInbox ? 1 : 0}`).row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
@@ -5426,8 +5429,8 @@ function wsMenuKb(wsId, opts = {}) {
   const cur = curatorEnabled ? '✅ ВКЛ' : '❌ ВЫКЛ';
 
   const kb = new InlineKeyboard()
-    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
-    .text('📨 Заявки брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
+    .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+    .text('📨 Заявки от брендов', `a:ws_leads|ws:${wsId}|s:new|p:0|ret:ws_open`)
     .row()
     .text('🎬 UGC / Офферы', `a:bx_open|ws:${wsId}`)
     .text('📁 Папки', `a:folders_home|ws:${wsId}`)
@@ -6246,7 +6249,7 @@ function bxMenuKb(wsId, networkEnabled = true, opts = {}) {
   // Creator menu: show only actions relevant to the creator.
   // The creators feed is a Brand-mode concept; do not show it here to avoid confusion.
   const kb = new InlineKeyboard()
-    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+    .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
     .text('➕ Создать оффер', `a:bx_new|ws:${wsId}`)
     .row()
     .text('📦 Мои офферы', `a:bx_my|ws:${wsId}|p:0`)
@@ -6276,10 +6279,10 @@ function bxBrandMenuKb(wsId, credits, plan, retry = 0, opts = {}) {
 .text('🎯 Подбор в ленте', `a:bx_smart|ws:${wsId}|h:bo`)
 .text('🔎 Поиск креаторов', `a:pm_home|ws:${wsId}`)
 .row()
-.text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
-.text('📝 Заявки', `a:brand_apps|ws:${wsId}|s:new|p:0`)
+.text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
+.text('📨 Заявки', `a:brand_apps|ws:${wsId}|s:new|p:0`)
 .row()
-.text('📌 Сделки', `a:brand_deals|ws:${wsId}|st:negotiation|p:0`)
+.text('🤝 Сделки', `a:brand_deals|ws:${wsId}|st:negotiation|p:0`)
 .text(`⭐️ Brand Plan: ${planLabel}`, `a:brand_plan|ws:${wsId}`)
 .row()
 .text(`💳 Кредиты: ${creditsLabel}${retry ? ' · 🎟' + retry : ''}`, `a:brand_pass|ws:${wsId}`)
@@ -8093,7 +8096,7 @@ ${escapeHtml(msg)}`;
 
   const doneText = `✅ <b>Заявка отправлена</b>
 
-Бренд увидит её в Inbox.
+Бренд увидит её в разделе «Заявки».
 
 Хочешь продолжить?`;
   const kbDone = kbBrandApplyDone(brandUserId, backPage, canOpenInbox);
@@ -8705,7 +8708,7 @@ function bxFeedNavKb(wsId, page, hasPrev, hasNext, opts = {}) {
 
   kb.row()
     .text('🎛 Фильтры креаторов', `a:bx_filters|ws:${wsId}|p:${page}|h:${h}|r:bf`)
-    .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`);
+    .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`);
 
   kbNavRow(kb, bxHomeCb(wsNum, h));
   return kb;
@@ -9158,7 +9161,7 @@ async function renderWsList(ctx, ownerUserId) {
 
 Сейчас у тебя нет активных каналов.
 
-Подключи канал, чтобы открыть управление витриной, Inbox, офферами и розыгрышами.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('🚀 Подключить канал', 'a:setup').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home') });
+Подключи канал, чтобы открыть управление витриной, диалогами, офферами и розыгрышами.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('🚀 Подключить канал', 'a:setup').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home') });
     return;
   }
   const activeItems = items.filter((w) => !isWorkspaceDisconnected(w));
@@ -9230,8 +9233,8 @@ async function renderWorkspaceWorkScreen(ctx, ws, opts = {}) {
 Сеть: <b>${net}</b>
 Кураторы: <b>${cur}</b>
 
-<i>Здесь — ежедневная работа по этому каналу: Inbox, 📨 Заявки брендов, офферы, папки и розыгрыши.</i>
-<i>Сначала открой «📨 Заявки брендов»: там вход в список, карточки и диалоги по заявкам брендов.</i>`, {
+<i>Здесь — ежедневная работа по этому каналу: 💬 Диалоги, 📨 Заявки от брендов, офферы, папки и розыгрыши.</i>
+<i>Сначала открой «📨 Заявки от брендов»: там список заявок, карточки и переписка по каждой заявке.</i>`, {
     parse_mode: 'HTML',
     reply_markup: wsMenuKb(wsId, {
       showCurator: !!opts.showCurator,
@@ -11159,7 +11162,7 @@ async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
   const text =
     `📌 <b>Шаблоны для Instagram</b>\n\n` +
     `Скопируй текст ниже (покажу в этом сообщении) и вставь в Stories/пост/DM.\n` +
-    `Ссылка ведёт бренда прямо в Telegram-воронку (витрина → заявка → сделка).\n\n` +
+    `Ссылка ведёт бренда прямо в Telegram-воронку (витрина → заявка → диалог → сделка).\n\n` +
     (link ? `Ссылка на витрину: <a href="${escapeHtml(link)}">Открыть витрину</a>\n\n` : '\n') +
     `Выбери формат:`;
 
@@ -11950,7 +11953,7 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
   const to = String(ws.profile_title || channelTitle);
 
   let text =
-    `📩 <b>Запрос бренда</b>\n\n` +
+    `📨 <b>Заявка креатору</b>\n\n` +
     `Кому: <b>${escapeHtml(to)}</b>
 ` +
     `Канал: <b>${escapeHtml(channelTitle)}</b>
@@ -11962,7 +11965,7 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
     text +=
       `✅ <b>Шаг 2/2</b>\n` +
       (contact ? `Контакт бренда: <b>${escapeHtml(contact)}</b>\n\n` : `\n`) +
-      `Опиши запрос коротко:\n` +
+      `Опиши заявку коротко:\n` +
       `• тип: UGC или интеграция\n` +
       `• объём (1/3/5 видео, серия, пак)\n` +
       `• бюджет или бартер\n` +
@@ -11988,7 +11991,7 @@ async function renderWsLeadCompose(ctx, wsId, step = 1, draft = {}) {
   }
 }
 function leadListTabsKb(wsId, counts, active, ret) {
-  // Tabs for Creator Inbox (brand leads). Make them self-explanatory, like Brand Inbox.
+  // Tabs for creator applications from brands. Keep pre-acceptance requests separate from deals.
   const a = normLeadStatus(active);
 
   const rPart = ret ? retPartShort(ret) : '';
@@ -12096,7 +12099,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
     ? 'ℹ️ <i>Ты куратор: можешь отвечать шаблонами, ставить статусы и заметки. Владелец видит все изменения.</i>'
     : '';
 
-  let text = `📨 <b>Заявки брендов</b>`;
+  let text = `📨 <b>Заявки от брендов</b>`;
   text += `
 Последние входящие заявки в этот канал.`;
   const summaryMeta = hasMultiplePages
@@ -12152,7 +12155,7 @@ ${roleHint}`;
 
 
 // -----------------------------
-// Curator Inbox (aggregate leads across all workspaces)
+// Curator application queue (aggregate leads across all workspaces)
 // -----------------------------
 
 function curatorInboxTabsKb(counts, active, page = 0, assignFilter = 'all') {
@@ -12217,7 +12220,7 @@ async function renderCuratorInbox(ctx, userId, status = 'new', page = 0, assignF
 
   const textHeader =
     `📨 <b>Очередь заявок</b>${afLabel}\n\n` +
-    `Заявки брендов по всем каналам, где ты куратор.\n` +
+    `Заявки от брендов по всем каналам, где ты куратор.\n` +
     `Статус: <b>${escapeHtml((LEAD_STATUSES[st] || LEAD_STATUSES.new).title)}</b>\n\n` +
     whatNext;
 
@@ -12289,7 +12292,7 @@ async function getBrandAppForActorSafe(ctx, actorUserId, appId) {
 async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, status: 'new', page: 0, ret: '' }) {
   const stepId = `lead_view:${Number(leadId || 0)}`;
   const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => getLeadForActorSafe(ctx, actorUserId, leadId), 4500);
-  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
+  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 4500);
@@ -12370,7 +12373,7 @@ ${vitrinaLine}`;
 
   text += `
 
-📝 <b>Запрос бренда</b>
+📝 <b>Заявка бренда</b>
 ${msgEsc}`;
   if (replyEsc) text += `
 
@@ -12621,13 +12624,13 @@ async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: nu
   const stepId = 'lead_notes_view';
   const id = Number(leadId || 0);
   if (!id) {
-    await safeEditOrReply(ctx, '⚠️ Не найдена заявка. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+    await safeEditOrReply(ctx, '⚠️ Не найдена заявка. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
     return;
   }
 
   const lead = await p0Await(ctx, stepId, `${stepId}:getLead`, () => getLeadForActorSafe(ctx, actorUserId, id), 4500);
   if (!lead) {
-    await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+    await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
     return;
   }
 
@@ -12727,7 +12730,7 @@ async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: nu
 
 
 
-// --- Brand Applications Inbox (Creator → Brand) ---
+// --- Brand applications (Creator → Brand): applications before deals ---
 
 // Deal stages (no migrations; stored in brand_applications.meta.deal_stage)
 const DEAL_STAGES = {
@@ -12735,7 +12738,7 @@ const DEAL_STAGES = {
   deal: { id: 'deal', icon: '🤝', label: 'Договорились' },
   paid: { id: 'paid', icon: '💳', label: 'Оплата' },
   done: { id: 'done', icon: '✅', label: 'Завершено' },
-  lost: { id: 'lost', icon: '🗑', label: 'Потеряно' },
+  lost: { id: 'lost', icon: '🗑', label: 'Остановлено' },
   all: { id: 'all', icon: '📌', label: 'Все' },
 };
 
@@ -12773,10 +12776,10 @@ function brandAppWhatNow(status, opts = {}) {
   const dealStage = opts.dealStage ? normDealStage(opts.dealStage) : '';
 
   if (pending) return 'дождаться завершения принятия и нажать «Проверить заявку»';
-  if (st === 'new') return 'решить, принимать ли заявку и открывать ли диалог';
+  if (st === 'new') return 'решить, принимать ли заявку';
   if (st === 'in_progress') {
     if (dealStage) return `продолжить диалог или открыть «${dealStageTitle(dealStage)}»`;
-    return 'ответить креатору или обновить внутренний статус';
+    return 'продолжить диалог по принятой заявке';
   }
   if (st === 'closed') return 'заявка закрыта; при необходимости можно вернуть её в работу';
   if (st === 'spam') return 'заявка скрыта как спам; при ошибке её можно пересмотреть';
@@ -12798,7 +12801,7 @@ function brandAppStatusActionLabel(targetStatus, activeStatus) {
 
 function brandAppOpenButtonLabel(appId = 0) {
   const id = Math.max(0, Number(appId || 0));
-  return id ? `✉️ Заявка #${id}` : '✉️ Заявка';
+  return id ? `📨 Заявка #${id}` : '📨 Заявка';
 }
 
 function brandAppNoticeOpenButtonLabel(appId = 0, kind = 'reply') {
@@ -12809,7 +12812,7 @@ function brandAppNoticeOpenButtonLabel(appId = 0, kind = 'reply') {
 }
 
 function brandAppDealButtonLabel() {
-  return '📌 Стадия сделки';
+  return '🤝 Этап сделки';
 }
 
 function brandAppListReturnButtonLabel() {
@@ -12817,7 +12820,7 @@ function brandAppListReturnButtonLabel() {
 }
 
 function brandDealsListReturnButtonLabel() {
-  return '📌 К сделкам';
+  return '🤝 К сделкам';
 }
 
 function brandAppNoticeWhatNext(appId = 0, status = 'new', dealStage = '', kind = 'reply') {
@@ -12841,8 +12844,8 @@ function brandAppNoticeKb(appId = 0, opts = {}) {
   const kb = new InlineKeyboard();
 
   kb.text(brandAppNoticeOpenButtonLabel(appId, kind), `a:brand_app_view|id:${Number(appId || 0)}|s:${leadStatusToCb(status)}|p:${page}`);
-  if (status !== 'new' || dealStage) {
-    kb.text(brandAppDealButtonLabel(), `a:brand_deal_view|id:${Number(appId || 0)}|st:${dealStage || 'negotiation'}|p:0|ab:${leadStatusToCb(status)}.${page}`);
+  if (dealStage) {
+    kb.text(brandAppDealButtonLabel(), `a:brand_deal_view|id:${Number(appId || 0)}|st:${dealStage}|p:0|ab:${leadStatusToCb(status)}.${page}`);
   }
   if (dismiss) kb.row().text('🗑 Убрать', 'a:nd');
   kb.row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
@@ -12859,7 +12862,7 @@ function buildBrandAppServiceNoticeText({ appId = 0, kind = 'reply', brandName =
 ` : '';
   const brandLine = brandName ? `🏷 Бренд: <b>${escapeHtml(String(brandName))}</b>
 ` : '';
-  const stageLine = dealStage ? `📌 Сделка: <b>${escapeHtml(dealStageTitle(dealStage))}</b>
+  const stageLine = dealStage ? `🤝 Этап сделки: <b>${escapeHtml(dealStageTitle(dealStage))}</b>
 ` : '';
   const preview = clipText(String(body || '').replace(/\s+/g, ' ').trim(), kind === 'new_app' ? 900 : 700);
   const whatNext = brandAppNoticeWhatNext(id, status, dealStage, kind);
@@ -12909,7 +12912,7 @@ function buildBrandAppReplyPromptText({ appId = 0, creatorName = '', subjectLabe
   const id = Math.max(0, Number(appId || 0));
   const subject = String(subjectLabel || '').trim() || `заявке #${id}`;
   const context = String(contextLabel || '').trim() || brandAppOpenButtonLabel(id);
-  const secondary = String(secondaryLabel || '').trim() || '📝 Заявки';
+  const secondary = String(secondaryLabel || '').trim() || '📨 Заявки';
   const creatorLine = creatorName ? `🧑‍🎨 Креатор: <b>${escapeHtml(String(creatorName))}</b>\n` : '';
 
   return `✍️ <b>Ответить креатору по ${escapeHtml(subject)}</b>
@@ -12923,7 +12926,7 @@ function buildBrandAppReplyRecoveryText({ appId = 0, kind = 'open_error', subjec
   const id = Math.max(0, Number(appId || 0));
   const subject = String(subjectLabel || '').trim() || `заявке #${id}`;
   const context = String(contextLabel || '').trim() || brandAppOpenButtonLabel(id);
-  const secondary = String(secondaryLabel || '').trim() || '📝 Заявки';
+  const secondary = String(secondaryLabel || '').trim() || '📨 Заявки';
   const reply = String(replyLabel || '').trim() || brandAppReplyButtonLabel();
 
   if (kind === 'not_accepted') {
@@ -13036,8 +13039,8 @@ function brandLeadThreadEmptyStateText(opts = {}) {
 function creatorBrandAppWhatNow(status) {
   const st = normLeadStatus(status);
   if (st === 'new') return 'дождаться решения бренда; кнопка ответа появится после принятия заявки';
-  if (st === 'in_progress') return 'нажать «✍️ Ответить бренду» и отправить сообщение в этот диалог';
-  if (st === 'closed') return 'диалог завершён; следи за обновлениями, если бренд вернётся';
+  if (st === 'in_progress') return 'продолжить диалог по принятой заявке';
+  if (st === 'closed') return 'заявка закрыта; история переписки остаётся в карточке';
   if (st === 'spam') return 'заявка скрыта брендом; новых сообщений по ней, скорее всего, не будет';
   return 'следить за ответом бренда по этой заявке';
 }
@@ -13045,7 +13048,7 @@ function creatorBrandAppWhatNow(status) {
 
 function creatorBrandAppDialogButtonLabel(appId = 0) {
   const id = Math.max(0, Number(appId || 0));
-  return id ? `✉️ Диалог #${id}` : '✉️ Диалог';
+  return id ? `💬 Диалог #${id}` : '💬 Диалог';
 }
 
 function creatorBrandAppReplyButtonLabel() {
@@ -13214,10 +13217,10 @@ function creatorBrandAppNoticeKb(appId = 0, brandUserId = 0, opts = {}) {
 function buildCreatorBrandAppServiceNoticeText({ appId = 0, kind = 'reply', brandName = '', body = '', status = 'new', deliveryLine = '' } = {}) {
   const id = Math.max(0, Number(appId || 0));
   const title = kind === 'accepted'
-    ? `✅ <b>Бренд принял заявку #${id}</b>`
+    ? `🤝 <b>Заявка #${id} принята</b>`
     : kind === 'sent'
       ? `✅ <b>Сообщение по заявке #${id} отправлено</b>`
-      : `📩 <b>Ответ бренда по заявке #${id}</b>`;
+      : `💬 <b>Ответ бренда по заявке #${id}</b>`;
   const brandLine = brandName ? `🏷 Бренд: <b>${escapeHtml(String(brandName))}</b>
 ` : '';
   const whatNext = creatorBrandAppNoticeWhatNext(id, status);
@@ -13228,7 +13231,7 @@ function buildCreatorBrandAppServiceNoticeText({ appId = 0, kind = 'reply', bran
       ? 'Что изменилось'
       : 'Статус отправки';
   const defaultBody = kind === 'accepted'
-    ? 'Теперь можно продолжить диалог прямо в этом боте.'
+    ? 'Сделка открыта. Переписка продолжается в этом боте.'
     : kind === 'sent'
       ? 'Сообщение добавлено в диалог и отправлено бренду.'
       : 'Бренд отправил новое сообщение по заявке.';
@@ -13249,6 +13252,11 @@ function getAppDealStage(app) {
   const s = app?.meta?.deal_stage;
   const k = String(s || '').toLowerCase().trim();
   return k && DEAL_STAGES[k] ? k : '';
+}
+
+function isAcceptedBrandDeal(app) {
+  const acceptedByUserId = Number(app?.meta?.deal?.accepted_by_user_id || 0);
+  return acceptedByUserId > 0 && !!getAppDealStage(app);
 }
 
 function formatBrandAppThread(threadArr, limit = 6) {
@@ -13272,7 +13280,7 @@ function formatBrandAppThread(threadArr, limit = 6) {
 
 
 function brandAppsTabsKb(counts = {}, active = 'new') {
-  // Tabs for Brand Inbox (applications). Make them self-explanatory.
+  // Tabs for applications to the brand. Deals are shown in a separate accepted-only surface.
   const a = normLeadStatus(active);
 
   const kb = new InlineKeyboard()
@@ -13295,12 +13303,12 @@ function brandAppsTabsKb(counts = {}, active = 'new') {
 function brandDealsTabsKb(counts = {}, active = 'negotiation') {
   const a = normDealStage(active);
   const kb = new InlineKeyboard()
-    .text(`💬 Перег. ${counts.negotiation ?? 0}`, `a:brand_deals|ws:0|st:negotiation|p:0`)
-    .text(`🤝 Сделка ${counts.deal ?? 0}`, `a:brand_deals|ws:0|st:deal|p:0`)
+    .text(`💬 Переговоры ${counts.negotiation ?? 0}`, `a:brand_deals|ws:0|st:negotiation|p:0`)
+    .text(`🤝 Договорились ${counts.deal ?? 0}`, `a:brand_deals|ws:0|st:deal|p:0`)
     .text(`💳 Оплата ${counts.paid ?? 0}`, `a:brand_deals|ws:0|st:paid|p:0`)
     .row()
-    .text(`✅ Готово ${counts.done ?? 0}`, `a:brand_deals|ws:0|st:done|p:0`)
-    .text(`🗑 Потер. ${counts.lost ?? 0}`, `a:brand_deals|ws:0|st:lost|p:0`)
+    .text(`✅ Завершено ${counts.done ?? 0}`, `a:brand_deals|ws:0|st:done|p:0`)
+    .text(`🗑 Остановлено ${counts.lost ?? 0}`, `a:brand_deals|ws:0|st:lost|p:0`)
     .text(`📌 Все ${counts.all ?? 0}`, `a:brand_deals|ws:0|st:all|p:0`);
 
   // Mark active with a dot
@@ -13487,9 +13495,9 @@ async function renderBrandDealsList(ctx, actorUserId, brandUserId, stage = 'nego
   );
 
   let header =
-    `📌 <b>Сделки</b>\n` +
+    `🤝 <b>Сделки</b>\n` +
     `Бренд: <b>${escapeHtml(brandName)}</b>\n` +
-    `Стадия: <b>${escapeHtml(dealStageTitle(st))}</b>\n`;
+    `Этап: <b>${escapeHtml(dealStageTitle(st))}</b>\n`;
 
   // Filter indicator (ultra-clear)
   if (!mineOnly && !search) {
@@ -13503,7 +13511,7 @@ async function renderBrandDealsList(ctx, actorUserId, brandUserId, stage = 'nego
 
   let body = '';
   if (!items.length) {
-    body = '\nПока пусто. Сюда попадают заявки после “✅ Принять”.';
+    body = '\nПока сделок нет. Сюда попадают только принятые заявки.';
   } else {
     const lines = items.map((a, i) => {
       const who = a.creator_username
@@ -13575,6 +13583,12 @@ async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'neg
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
+  if (!isAcceptedBrandDeal(app)) {
+    try { await ctx.answerCallbackQuery({ text: 'Сделка ещё не открыта.' }); } catch {}
+    await renderBrandAppView(ctx, actorUserId, appId, { status: normLeadStatus(app.status), page: 0 });
+    return;
+  }
+
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
   if (!access.ok) return;
@@ -13582,7 +13596,7 @@ async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'neg
   const prof = await safeBrandProfiles(() => db.getBrandProfile(brandUserId), async () => null);
   const brandName = String(prof?.brand_name || '').trim() || 'Бренд';
 
-  const stage = getAppDealStage(app) || 'negotiation';
+  const stage = getAppDealStage(app);
   const st = normLeadStatus(app.status);
   const backCtx = brandDealBackCtx(back);
   const appBackCb = backCtx.appStatus ? brandDealAppBackCb(app.id, backCtx) : `a:brand_app_view|id:${app.id}|s:${normLeadStatus(app.status)}|p:0`;
@@ -13606,7 +13620,7 @@ async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'neg
   const flash = String(back?.flash || '').trim();
 
   let text =
-    `📌 <b>Сделка #${app.id}</b>
+    `🤝 <b>Сделка #${app.id}</b>
 ` +
     `<b>${escapeHtml(dealStageTitle(stage))}</b>
 ` +
@@ -13615,7 +13629,7 @@ async function renderBrandDealView(ctx, actorUserId, appId, back = { stage: 'neg
     `🕒 <code>${escapeHtml(when)}</code>
 
 ` +
-    `<i>Это стадия сделки по этой заявке.</i>`;
+    `<i>Это принятая заявка. Здесь хранятся диалог и этап сделки.</i>`;
 
   if (flash) {
     text += `
@@ -13740,7 +13754,7 @@ async function renderBrandAppView(ctx, actorUserId, appId, back = { status: 'new
   const replyEsc = replyRaw ? (escapeHtml(replyText) + (replyRaw.length > 700 ? '\n<i>(сокращено)</i>' : '')) : '';
 
   let text =
-    `✉️ <b>Заявка #${app.id}</b>
+    `📨 <b>Заявка #${app.id}</b>
 ` +
     `<b>${escapeHtml(stTitle)}</b>
 ` +
@@ -13762,7 +13776,7 @@ ${escapeHtml(brandAppWhatNow(st, { pending: acceptPending, dealStage }))}`;
   if (dealStage) {
     text += `
 
-📌 <b>Сделка</b>
+🤝 <b>Этап сделки</b>
 ${escapeHtml(dealStageTitle(dealStage))}`;
   }
 
@@ -13827,7 +13841,7 @@ ${escapeHtml(brandAppThreadEmptyStateText(st, { pending: acceptPending, dealStag
       kb
         .text('🔄 Проверить заявку', `a:brand_app_view|id:${app.id}|s:${back.status}|p:${back.page}`)
         .row()
-        .text('📝 Заявки', `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`)
+        .text('📨 Заявки', `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`)
         .row()
         .text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
     } else {
@@ -13841,7 +13855,7 @@ ${escapeHtml(brandAppThreadEmptyStateText(st, { pending: acceptPending, dealStag
     }
   } else {
     if (dealStage) {
-      kb.text('📌 Стадия сделки', `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0|ab:${leadStatusToCb(back.status)}.${back.page}`).row();
+      kb.text(brandAppDealButtonLabel(), `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0|ab:${leadStatusToCb(back.status)}.${back.page}`).row();
     }
 
     kb
@@ -13905,7 +13919,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
       backPage: back.page,
       subjectLabel: `заявке #${app.id}`,
       contextLabel: brandAppOpenButtonLabel(app.id),
-      secondaryLabel: '📝 Заявки',
+      secondaryLabel: '📨 Заявки',
       secondaryCb: listCb,
       replyLabel: brandAppReplyButtonLabel(),
       replyCb
@@ -13914,7 +13928,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
     const kb = brandAppReplyRecoveryKb({
       primaryLabel: brandAppOpenButtonLabel(app.id),
       primaryCb: backCb,
-      secondaryLabel: '📝 Заявки',
+      secondaryLabel: '📨 Заявки',
       secondaryCb: listCb,
       safeMode: true,
       showHelp: true,
@@ -13925,7 +13939,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
       kind: 'degraded',
       subjectLabel: `заявке #${app.id}`,
       contextLabel: brandAppOpenButtonLabel(app.id),
-      secondaryLabel: '📝 Заявки',
+      secondaryLabel: '📨 Заявки',
       replyLabel: brandAppReplyButtonLabel()
     });
     try {
@@ -13939,7 +13953,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
   const kb = brandAppReplyRecoveryKb({
     primaryLabel: brandAppOpenButtonLabel(app.id),
     primaryCb: backCb,
-    secondaryLabel: '📝 Заявки',
+    secondaryLabel: '📨 Заявки',
     secondaryCb: listCb
   });
   const text = buildBrandAppReplyPromptText({
@@ -13947,7 +13961,7 @@ async function startBrandAppReply(ctx, actorUserId, appId, back) {
     creatorName: who,
     subjectLabel: `заявке #${app.id}`,
     contextLabel: brandAppOpenButtonLabel(app.id),
-    secondaryLabel: '📝 Заявки'
+    secondaryLabel: '📨 Заявки'
   });
 
   try {
@@ -13961,6 +13975,12 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
 
+  if (!isAcceptedBrandDeal(app)) {
+    try { await ctx.answerCallbackQuery({ text: 'Сделка ещё не открыта.' }); } catch {}
+    await renderBrandAppView(ctx, actorUserId, appId, { status: normLeadStatus(app.status), page: 0 });
+    return;
+  }
+
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
   if (!access.ok) return;
@@ -13973,7 +13993,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
     const kb = brandAppReplyRecoveryKb({
       primaryLabel: brandAppDealButtonLabel(),
       primaryCb: backCb,
-      secondaryLabel: '✉️ Открыть заявку',
+      secondaryLabel: '📨 Открыть заявку',
       secondaryCb: appBackCb
     });
     return ctx.reply(buildBrandAppReplyRecoveryText({
@@ -13981,7 +14001,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
       kind: 'no_creator_tg',
       subjectLabel: `сделке #${app.id}`,
       contextLabel: brandAppDealButtonLabel(),
-      secondaryLabel: '✉️ Открыть заявку',
+      secondaryLabel: '📨 Открыть заявку',
       replyLabel: brandAppReplyButtonLabel()
     }), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
@@ -14000,7 +14020,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
       backPage: Math.max(0, Number(back.page || 0)),
       subjectLabel: `сделке #${app.id}`,
       contextLabel: brandAppDealButtonLabel(),
-      secondaryLabel: '✉️ Открыть заявку',
+      secondaryLabel: '📨 Открыть заявку',
       secondaryCb: appBackCb,
       replyLabel: brandAppReplyButtonLabel(),
       replyCb
@@ -14009,7 +14029,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
     const kb = brandAppReplyRecoveryKb({
       primaryLabel: brandAppDealButtonLabel(),
       primaryCb: backCb,
-      secondaryLabel: '✉️ Открыть заявку',
+      secondaryLabel: '📨 Открыть заявку',
       secondaryCb: appBackCb,
       safeMode: true,
       showHelp: true,
@@ -14020,7 +14040,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
       kind: 'degraded',
       subjectLabel: `сделке #${app.id}`,
       contextLabel: brandAppDealButtonLabel(),
-      secondaryLabel: '✉️ Открыть заявку',
+      secondaryLabel: '📨 Открыть заявку',
       replyLabel: brandAppReplyButtonLabel()
     });
     try {
@@ -14034,7 +14054,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
   const kb = brandAppReplyRecoveryKb({
     primaryLabel: brandAppDealButtonLabel(),
     primaryCb: backCb,
-    secondaryLabel: '✉️ Открыть заявку',
+    secondaryLabel: '📨 Открыть заявку',
     secondaryCb: appBackCb
   });
 
@@ -14043,7 +14063,7 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
     creatorName: String(who),
     subjectLabel: `сделке #${app.id}`,
     contextLabel: brandAppDealButtonLabel(),
-    secondaryLabel: '✉️ Открыть заявку'
+    secondaryLabel: '📨 Открыть заявку'
   });
 
   try {
@@ -14056,6 +14076,12 @@ async function startBrandDealReply(ctx, actorUserId, appId, back = { stage: 'neg
 async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage: 'negotiation', page: 0 }) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
+
+  if (!isAcceptedBrandDeal(app)) {
+    try { await ctx.answerCallbackQuery({ text: 'Сделка ещё не открыта.' }); } catch {}
+    await renderBrandAppView(ctx, actorUserId, appId, { status: normLeadStatus(app.status), page: 0 });
+    return;
+  }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -14103,6 +14129,12 @@ async function renderBrandDealTemplates(ctx, actorUserId, appId, back = { stage:
 async function sendBrandDealTemplateReply(ctx, actorUserId, appId, key, back = { stage: 'negotiation', page: 0 }) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
   if (!app) { try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {} return; }
+
+  if (!isAcceptedBrandDeal(app)) {
+    try { await ctx.answerCallbackQuery({ text: 'Сделка ещё не открыта.' }); } catch {}
+    await renderBrandAppView(ctx, actorUserId, appId, { status: normLeadStatus(app.status), page: 0 });
+    return;
+  }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -14342,7 +14374,7 @@ async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
 
 async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
   const lead = await getLeadForActorSafe(ctx, actorUserId, leadId);
-  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
+  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
@@ -14607,7 +14639,7 @@ async function acceptBrandApplication(ctx, actorUserId, appId, back) {
     const kb = new InlineKeyboard()
       .text('🔄 Проверить заявку', refreshCb)
       .row()
-      .text('📝 Заявки', listCb)
+      .text('📨 Заявки', listCb)
       .row()
       .text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
 
@@ -14916,6 +14948,7 @@ async function renderBrandAppCardForCreator(ctx, actorUserId, appId, opts = {}) 
 
   const st = normLeadStatus(app.status);
   const stTitle = (LEAD_STATUSES[st] || LEAD_STATUSES.new).title;
+  const dealStage = getAppDealStage(app);
   const when = app.updated_at ? fmtTs(app.updated_at) : (app.created_at ? fmtTs(app.created_at) : '—');
 
   const msgRaw = String(app.message || '').trim();
@@ -14938,8 +14971,14 @@ async function renderBrandAppCardForCreator(ctx, actorUserId, appId, opts = {}) 
     : '';
   const threadBlock = formatBrandAppThread(thread, 3);
 
+  const cardTitle = st === 'new'
+    ? `📨 <b>Заявка #${app.id}</b>`
+    : dealStage
+      ? `🤝 <b>Сделка #${app.id}</b>`
+      : `💬 <b>Диалог по заявке #${app.id}</b>`;
+
   let text =
-    `✉️ <b>Диалог по заявке #${app.id}</b>
+    `${cardTitle}
 ` +
     `<b>${escapeHtml(stTitle)}</b>
 ` +
@@ -14953,6 +14992,10 @@ async function renderBrandAppCardForCreator(ctx, actorUserId, appId, opts = {}) 
   }
 
   text += `\n\n💡 <b>Сейчас</b>\n${escapeHtml(creatorBrandAppWhatNow(st))}`;
+
+  if (dealStage) {
+    text += `\n\n🤝 <b>Этап сделки</b>\n${escapeHtml(dealStageTitle(dealStage))}`;
+  }
 
   if (st !== 'new') {
     text += `
@@ -14968,7 +15011,7 @@ ${msgEsc}`;
   if (replyEsc) {
     text += `
 
-📩 <b>Последний ответ бренда</b>
+💬 <b>Последний ответ бренда</b>
 ${replyEsc}`;
   }
 
@@ -15101,7 +15144,7 @@ async function renderLeadTemplatePreview(ctx, actorUserId, leadId, key, back) {
 
 async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
   const lead = await getLeadForActorSafe(ctx, actorUserId, leadId);
-  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
+  if (!lead) { await safeEditOrReply(ctx, '⚠️ Заявка не найдена или удалена. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { parse_mode: 'HTML', reply_markup: navKb('a:menu') }); return; }
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
@@ -15843,7 +15886,7 @@ ${trialLine}
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
 
 • ➕ Создать оффер — бренды увидят твой оффер в ленте (в режиме Brand)
-• 📥 Inbox — переписка по офферам (бренд ↔ блогер)
+• 💬 Диалоги — переписка по офферам (бренд ↔ креатор)
 • 📦 Мои офферы — пауза/удаление
 • 🏷 Каталог брендов — найти бренды для заявок`,
     { parse_mode: 'HTML', reply_markup: bxMenuKb(wsNum, ws.network_enabled, { showCurator: isCurator }) }
@@ -16540,7 +16583,7 @@ if (introLockKey) {
 
 const kb = new InlineKeyboard();
 if (introPending) {
-  kb.text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`)
+  kb.text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:${h}`)
     .text('🔄 Обновить', `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}`)
     .row();
 } else {
@@ -17778,7 +17821,7 @@ function bxThreadTriageTitle(triage) {
 function bxThreadWhatNow(thread, viewerUserId, replySt) {
   const statusRaw = String(thread?.status || 'OPEN').toUpperCase();
   if (statusRaw === 'CLOSED') return 'диалог закрыт — можно открыть оффер или просмотреть историю';
-  if (statusRaw === 'DELETED') return 'диалог удалён из твоего Inbox';
+  if (statusRaw === 'DELETED') return 'диалог удалён из раздела «Диалоги»';
 
   const triage = String(thread?.triage_status || 'open').toLowerCase();
   if (triage === 'spam') return 'диалог помечен как спам — можно вернуть его обратно, если это ошибка';
@@ -17834,9 +17877,9 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
     ? await safeUserVerifications(() => db.listBarterThreadsForUserWithVerified(userId, limit, offset), () => db.listBarterThreadsForUser(userId, limit, offset))
     : await db.listBarterThreadsForUser(userId, limit, offset);
 
-  let text = `📥 <b>Inbox</b>
+  let text = `💬 <b>Диалоги</b>
 `;
-  text += `<i>Здесь появляются новые диалоги и свежие сообщения.</i>
+  text += `<i>Переписка по офферам и свежие сообщения.</i>
 `;
 
   const secondary = [];
@@ -17858,10 +17901,10 @@ async function renderBxInbox(ctx, userId, wsId, page = 0, opts = {}) {
   if (!rows.length) {
     text += `
 
-Пока здесь пусто.
+Пока диалогов нет.
 
-Новый диалог появится, когда кто-то напишет первым.
-Если переписка идёт внутри заявки, открой её карточку.`;
+Диалог появится после первого сообщения по офферу.
+Заявки к брендам открываются в разделе «Заявки».`;
   } else {
     text += `
 
@@ -18755,7 +18798,7 @@ async function renderCuratorHome(ctx, userId) {
   const disabledCnt = Math.max(0, items.length - enabledCnt);
   const text = `👤 <b>Кабинет куратора</b>
 
-Ты помогаешь вести конкурсы и разбирать заявки брендов в каналах, где тебя назначили куратором.
+Ты помогаешь вести конкурсы и разбирать заявки от брендов в каналах, где тебя назначили куратором.
 
 <b>Что делать:</b>
 1) Выбери канал ниже.
@@ -18785,7 +18828,7 @@ async function replyCuratorHome(ctx, userId) {
   const disabledCnt = Math.max(0, items.length - enabledCnt);
   const text = `👤 <b>Кабинет куратора</b>
 
-Ты помогаешь вести конкурсы и разбирать заявки брендов в каналах, где тебя назначили куратором.
+Ты помогаешь вести конкурсы и разбирать заявки от брендов в каналах, где тебя назначили куратором.
 
 <b>Что делать:</b>
 1) Выбери канал ниже.
@@ -18834,7 +18877,7 @@ function curatorWsKb(wsId, giveaways, checkedSet = new Set(), leadCounts = null)
 
   const newLeads = leadCounts ? Number(leadCounts.new || 0) : 0;
   const leadBadge = newLeads ? ` (${newLeads})` : '';
-  kb.text(`📨 Заявки брендов${leadBadge}`, `a:ws_leads|w:${wsId}|s:n|p:0${retPartShort('cw')}`).row();
+  kb.text(`📨 Заявки от брендов${leadBadge}`, `a:ws_leads|w:${wsId}|s:n|p:0${retPartShort('cw')}`).row();
 
   kb.text('❌ Выйти из канала', `a:cur_leave_q|ws:${wsId}`).row();
 
@@ -18876,7 +18919,7 @@ async function renderCuratorWorkspace(ctx, userId, wsId) {
   const leadsLine = leadCounts
     ? `
 
-📨 Заявки брендов: <b>${Number(leadCounts.new || 0)}</b> новых · <b>${Number(leadCounts.in_progress || 0)}</b> в работе`
+📨 Заявки от брендов: <b>${Number(leadCounts.new || 0)}</b> новых · <b>${Number(leadCounts.in_progress || 0)}</b> в работе`
     : '';
 
   
@@ -18889,7 +18932,7 @@ ${giveaways.length ? 'Конкурсы:' : 'Пока нет конкурсов.'
 • Если нужно — «📩 Владельцу» (короткий апдейт) или 📣 «Напомнить проверить».
 
 Подсказка: ✅/☑️ — отметить «проверено», 📣 — напомнить участникам нажать «Проверить».
-📨 «Заявки брендов» — вход в список заявок, карточки и диалоги по брендам.
+📨 «Заявки от брендов» — вход в список заявок, карточки и диалоги по брендам.
 
 Если тебя назначили по ошибке или помощь больше не нужна — нажми “❌ Выйти из канала”.`;
     // Preload "checked" meta for quick status icons (best-effort; Redis).
@@ -21443,7 +21486,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
           Number(manager.tg_id),
           `✅ Тебя добавили в <b>команду бренда</b>.
 
-Нажми <b>«🧑‍💼 Открыть кабинет менеджера»</b> — там будут Inbox и поиск креаторов.`,
+Нажми <b>«🧑‍💼 Открыть кабинет менеджера»</b> — там будут диалоги, заявки, сделки и поиск креаторов.`,
           { parse_mode: 'HTML', reply_markup: kb }
         );
       } catch {}
@@ -22265,7 +22308,7 @@ if (exp.type === 'brand_apply') {
         return ctx.reply(buildBrandAppReplyRecoveryText({ kind: 'missing_id' }), {
           parse_mode: 'HTML',
           reply_markup: brandAppReplyRecoveryKb({
-            secondaryLabel: '📝 Заявки',
+            secondaryLabel: '📨 Заявки',
             secondaryCb: 'a:brand_apps|ws:0|s:in_progress|p:0'
           })
         });
@@ -23385,7 +23428,7 @@ ${msgText}
       const kb = new InlineKeyboard()
         .text('💬 Открыть диалог', `a:bx_thread|ws:${wsId}|t:${threadId}|p:${page}|b:${back}${offerId ? `|o:${offerId}` : ''}|h:${h}`)
         .row()
-        .text('📥 Inbox', `a:bx_inbox|ws:${wsId}|p:${page}|h:${h}`);
+        .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:${page}|h:${h}`);
       await ctx.reply(again ? again.text : '✅ Отправлено.', { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
@@ -24257,7 +24300,7 @@ ${list}
       const kb = new InlineKeyboard()
         .text('🧑‍💼 Я менеджер бренда', 'a:bm_home')
         .row()
-        .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
+        .text('💬 Диалоги', 'a:bx_inbox|ws:0|p:0|h:mm')
         .text('🔎 Поиск креаторов', 'a:pm_home|ws:0')
         .row()
         .text('📋 Меню', 'a:menu')
@@ -24269,7 +24312,9 @@ ${list}
 <b>Ты сейчас в режиме:</b> <b>Менеджер бренда</b>
 
 Доступ:
-• 📩 Inbox
+• 💬 Диалоги по офферам
+• 📨 Заявки
+• 🤝 Сделки
 • 🔎 Поиск креаторов
 
 Ограничения:
@@ -24450,11 +24495,11 @@ if (payload?.type === 'bxo') {
 • 🚀 Подключи канал (бот админ) и перешли любой пост
 • 🪟 Заполни витрину: IG, портфолио, ниши/форматы, гео, контакт
 • 🔗 Поставь ссылку витрины в Instagram (bio / stories)
-• 📨 Заявки брендов → Inbox, статусы, история
+• 📨 Заявки от брендов → статус, диалог и история
 
 Для брендов
 • 🔎 Поиск креаторов → фильтры → кампании (сохранённые поиски)
-• 📩 Запрос можно отправить прямо из списка или из витрины
+• 📨 Заявку можно отправить прямо из списка или из витрины
 • Всё дальше в TG: новые диалоги, дедлайны, материалы
 
 UGC vs Интеграция
@@ -25101,35 +25146,42 @@ if (p.a === 'a:guide') {
 
   if (isBrandish) {
     text +=
-      `• 🎬 Офферы → 🎬 Офферы (лента) / 🔎 Поиск
+      `• 🎬 Офферы → лента и поиск креаторов
 ` +
-      `• 📥 Inbox — диалоги и заявки
+      `• 💬 Диалоги → переписка по офферам
 ` +
-      `• 🎛 Фильтры — кнопка «🎛 Фильтры» ниже
+      `• 📨 Заявки → запросы к бренду до принятия
+` +
+      `• 🤝 Сделки → принятые заявки и этапы работы
 
 `;
   } else {
     text +=
       `• 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы
 ` +
-      `• 📥 Inbox → 📣 Мои каналы → выбери канал → 📥 Inbox
+      `• 💬 Диалоги → 📣 Мои каналы → выбери канал → 💬 Диалоги
 ` +
-      `• 📨 Заявки → 📣 Мои каналы → выбери канал → 📨 Заявки брендов
+      `• 📨 Заявки от брендов → 📣 Мои каналы → выбери канал → 📨 Заявки от брендов
 ` +
-      `• 🏷 Каталог → кнопка «🏷 Каталог брендов» ниже
+      `• 📨 Мои заявки → 🏷 Каталог брендов
 
 `;
   }
 
   if (isBrandish) {
     text +=
-      `🏷 <b>Режим Бренд</b>\n` +
-      `• Офферы: смотри ленту креаторов / поиск\n` +
-      `• Диалоги и заявки: всё в Inbox\n\n`;
+      `🏷 <b>Режим бренда</b>
+` +
+      `Заявка становится сделкой только после принятия.
+
+`;
   } else {
     text +=
-      `🤳 <b>Режим креатора</b>\n` +
-      `• Подключи канал → заполни витрину → публикуй офферы\n\n`;
+      `🤳 <b>Режим креатора</b>
+` +
+      `Подай заявку бренду или ответь на заявку от бренда.
+
+`;
   }
 
   text += `Навигация: ⬅️ Назад / 📋 Меню / 🏠 Домой`;
@@ -25139,7 +25191,10 @@ if (p.a === 'a:guide') {
   // Map shortcuts (same as HOME HUB, mode-aware)
   if (isBrandish) {
     kb
-      .text('📥 Inbox', 'a:go_dialogs')
+      .text('💬 Диалоги', 'a:go_dialogs')
+      .text('📨 Заявки', 'a:brand_apps|ws:0|s:new|p:0')
+      .row()
+      .text('🤝 Сделки', 'a:brand_deals|ws:0|st:negotiation|p:0')
       .text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm')
       .row();
   } else {
@@ -25157,7 +25212,7 @@ if (p.a === 'a:guide') {
   }
 
   if (!isBrandish) {
-    kb.text('📥 Inbox', 'a:go_dialogs').text('📨 Заявки', 'a:go_requests').row();
+    kb.text('💬 Диалоги', 'a:go_dialogs').text('📨 Заявки от брендов', 'a:go_requests').row();
   }
 
   if (!isBrandish) {
@@ -25263,7 +25318,7 @@ if (p.a === 'a:go_requests') {
   const bmMode = await getBrandManagerMode(ctx.from.id);
   const isBrandish = normalizeUiMode(mode) === UI_MODES.BRAND || bmMode;
 
-  // For Brand: requests/responses live in Inbox.
+  // Offer conversations live in Dialogs; applications and accepted deals use separate surfaces.
   if (isBrandish) {
     const wsId = 0;
     const page = 0;
@@ -25926,7 +25981,7 @@ if (p.a === 'a:brand_dir_open') {
         return;
       }
 
-      // One brand (or already chosen) — go straight to Inbox
+      // One brand (or already chosen) — open offer conversations.
       await renderBxInbox(ctx, bm.brandUserId, 0, 0, { bm });
       return;
     }
@@ -25938,8 +25993,9 @@ if (p.a === 'a:brand_dir_open') {
 Это роль для команды бренда.
 
 ✅ Можно:
-• 📩 Inbox (переписка по заявкам/сделкам)
-• 🔎 Поиск креаторов (подбор)
+• 💬 Диалоги по офферам
+• 📨 Заявки и 🤝 Сделки
+• 🔎 Поиск креаторов
 
 ⛔️ Нельзя:
 • менять профиль бренда
@@ -26879,7 +26935,7 @@ cid: ${cid}`, { reply_markup: kb });
         if (pending) {
           const openCb = fromLead ? `a:wsp_open|ws:${wsId}|m:ro${ctxExtra}` : `a:wsp_open|ws:${wsId}`;
           const kb = new InlineKeyboard()
-            .text('📥 Inbox', 'a:bx_inbox|ws:0|p:0|h:mm')
+            .text('💬 Диалоги', 'a:bx_inbox|ws:0|p:0|h:mm')
             .text('🔄 Обновить', openCb)
             .row()
             .text('💳 Купить ещё', `a:brand_pass|ws:0|ret:wsp|rws:${wsId}`)
@@ -26969,7 +27025,7 @@ ${tail}`;
         try { await ctx.answerCallbackQuery({ text: alreadyQueued ? '⏳ Уже в обработке…' : '⏳ В обработке…', show_alert: false }); } catch {}
 
         const kb = new InlineKeyboard()
-          .text('📥 Inbox', inboxCb)
+          .text('💬 Диалоги', inboxCb)
           .text('🔄 Обновить', openCb)
           .row()
           .text('💳 Купить ещё', buyCb)
@@ -27113,7 +27169,7 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
 
           const kb = new InlineKeyboard()
 .text(fromLead ? brandLeadProfileButtonLabel() : '🪟 Витрина', openCb)
-            .text('📥 Inbox', inboxCb)
+            .text('💬 Диалоги', inboxCb)
             .row()
             .text(fromLead ? brandLeadDialogButtonLabel(leadId) : '⬅️ Назад', backCb)
             .text('📋 Меню', 'a:menu')
@@ -27506,9 +27562,22 @@ if (p.a === 'a:brand_deal_view') {
 	  const back = { stage: String(p.b || 'negotiation'), page: Math.max(0, Number(p.p || 0)), ab: String(p.ab || '') };
 	  if (!appId) return;
 
+	  const app = await getBrandAppForActorSafe(ctx, u.id, appId);
+	  if (!app) {
+	    try { await ctx.answerCallbackQuery({ text: 'Сделка не найдена.' }); } catch {}
+	    return;
+	  }
+	  const access = await assertBrandAppsAccess(ctx, u.id, Number(app.brand_user_id));
+	  if (!access.ok) return;
+	  if (!isAcceptedBrandDeal(app)) {
+	    try { await ctx.answerCallbackQuery({ text: 'Сделка ещё не открыта.' }); } catch {}
+	    await renderBrandAppView(ctx, u.id, appId, { status: normLeadStatus(app.status), page: 0 });
+	    return;
+	  }
+
 	  const flash = prevStage === stage
-	    ? `Стадия уже: ${dealStageTitle(stage)}`
-	    : `Стадия обновлена: ${dealStageTitle(prevStage)} → ${dealStageTitle(stage)}`;
+	    ? `Этап уже: ${dealStageTitle(stage)}`
+	    : `Этап обновлён: ${dealStageTitle(prevStage)} → ${dealStageTitle(stage)}`;
 	  try { await ctx.answerCallbackQuery({ text: flash }); } catch {}
 	  await safeBrandApplications(() => db.setBrandApplicationDealStage(appId, stage, u.id), async () => null);
 	  await renderBrandDealView(ctx, u.id, appId, { ...back, flash });
@@ -27527,7 +27596,7 @@ if (p.a === 'a:brand_deal_reply') {
     const kb = brandAppReplyRecoveryKb({
       primaryLabel: brandAppDealButtonLabel(),
       primaryCb: backCb,
-      secondaryLabel: '✉️ Открыть заявку',
+      secondaryLabel: '📨 Открыть заявку',
       secondaryCb: brandDealAppBackCb(appId, back)
     });
     const msg = buildBrandAppReplyRecoveryText({
@@ -27535,7 +27604,7 @@ if (p.a === 'a:brand_deal_reply') {
       kind: 'open_error',
       subjectLabel: `сделке #${appId}`,
       contextLabel: brandAppDealButtonLabel(),
-      secondaryLabel: '✉️ Открыть заявку',
+      secondaryLabel: '📨 Открыть заявку',
       replyLabel: brandAppReplyButtonLabel()
     });
     try { await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); } catch { await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
@@ -27672,7 +27741,7 @@ if (p.a === 'a:brand_app_reply') {
     const kb = brandAppReplyRecoveryKb({
       primaryLabel: brandAppOpenButtonLabel(appId),
       primaryCb: `a:brand_app_view|id:${appId}|s:${back.status}|p:${back.page}`,
-      secondaryLabel: '📝 Заявки',
+      secondaryLabel: '📨 Заявки',
       secondaryCb: `a:brand_apps|ws:0|s:${back.status}|p:${back.page}`
     });
     const msg = buildBrandAppReplyRecoveryText({
@@ -27680,7 +27749,7 @@ if (p.a === 'a:brand_app_reply') {
       kind: 'open_error',
       subjectLabel: `заявке #${appId}`,
       contextLabel: brandAppOpenButtonLabel(appId),
-      secondaryLabel: '📝 Заявки',
+      secondaryLabel: '📨 Заявки',
       replyLabel: brandAppReplyButtonLabel()
     });
     try { await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); } catch { await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }); }
@@ -27828,7 +27897,7 @@ if (p.a === 'a:ws_leads') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const wsId = Number(p.w || p.ws || 0);
@@ -27861,7 +27930,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const wsId = Number(p.w || p.ws || 0);
@@ -27875,7 +27944,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const key = String(p.k || 'discuss');
@@ -27901,7 +27970,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const key = String(p.k || 'discuss');
@@ -28072,12 +28141,12 @@ if (p.a === 'a:lead_del_do') {
 if (p.a === 'a:lead_set') {
       const leadId = Number(p.id || 0);
       if (!leadId) {
-        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const lead = await getLeadForActorSafe(ctx, u.id, leadId);
       if (!lead) {
-        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
       const wsId = Number(lead.workspace_id);
@@ -28281,7 +28350,7 @@ if (p.a === 'a:lead_set') {
 
       const lead = await getLeadForActorSafe(ctx, u.id, leadId);
       if (!lead) {
-        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
 
@@ -28354,7 +28423,7 @@ if (p.a === 'a:lead_set') {
 
       const lead = await getLeadForActorSafe(ctx, u.id, leadId);
       if (!lead) {
-        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
 
@@ -28418,7 +28487,7 @@ if (p.a === 'a:lead_set') {
 
       const lead = await getLeadForActorSafe(ctx, u.id, leadId);
       if (!lead) {
-        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
+        await safeEditOrReply(ctx, '⚠️ Заявка не найдена. Открой 📨 Заявки от брендов и выбери заявку ещё раз.', { reply_markup: navKb('a:menu') });
         return;
       }
 
@@ -28534,11 +28603,11 @@ if (p.a === 'a:lead_set') {
       await setUiMode(ctx.from.id, UI_MODES.CREATOR);
       const text =
         '🤳 <b>Креатор</b>\n\n' +
-        'Это UGC/Collab CRM: IG → лиды, TG → сделки.\n\n' +
+        'Это UGC/Collab CRM: Instagram → заявки, Telegram → диалоги и сделки.\n\n' +
         '1) 🚀 Подключи канал (workspace)\n' +
         '2) 🪟 Заполни витрину (IG, портфолио, форматы)\n' +
         '3) 🔗 Поставь ссылку витрины в Instagram\n' +
-        '4) 📨 Принимай запросы брендов и веди статусы\n\n' +
+        '4) 📨 Принимай заявки от брендов и веди диалог\n\n' +
         'Давай начнём:';
       const kb = new InlineKeyboard()
         .text('🚀 Подключить канал', 'a:setup')
@@ -28556,11 +28625,11 @@ if (p.a === 'a:lead_set') {
       await ctx.answerCallbackQuery();
       await setUiMode(ctx.from.id, UI_MODES.BRAND);
       const text =
-        '🏷 <b>Brand / Бренд</b>\n\n' +
-        'Нашли креатора в Instagram → открываете витрину → закрываете сделку в Telegram.\n\n' +
+        '🏷 <b>Бренд</b>\n\n' +
+        'Нашли креатора в Instagram → открываете витрину → обсуждаете условия и ведёте сделку в Telegram.\n\n' +
         '• 📰 Смотри ленту креаторов\n' +
-        '• 📨 Пиши в Inbox через <b>Brand Plan</b> (анти-спам)\n' +
-        '• 🧾 Держи историю и статусы\n\n' +
+        '• 💬 Открывай диалог по офферу через <b>Brand Plan</b>\n' +
+        '• 🤝 Веди принятые заявки в разделе «Сделки»\n\n' +
         'Открыть режим бренда:';
       const kb = new InlineKeyboard()
         .text('🏷 Для брендов', 'a:bx_open|ws:0')
@@ -34282,7 +34351,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
         try { await ctx.answerCallbackQuery({ text: alreadyQueued ? '⏳ Уже в обработке…' : '⏳ В обработке…', show_alert: false }); } catch {}
 
         const kb = new InlineKeyboard()
-          .text('📥 Inbox', inboxCb)
+          .text('💬 Диалоги', inboxCb)
           .text('🔄 Обновить', offerCb)
           .row()
           .text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
@@ -34296,7 +34365,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
           `⏳ <b>В обработке…</b>
 <i>💬 Открываем диалог</i>
 
-${hint} Открой «📥 Inbox» или нажми «🔄 Обновить» через 10–30 секунд.`,
+${hint} Открой «💬 Диалоги» или нажми «🔄 Обновить» через 10–30 секунд.`,
           { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
         );
       };
@@ -34681,7 +34750,7 @@ if (p.a === 'a:bx_retry_help') {
       const kb = new InlineKeyboard()
         .text('🗑 Удалить', `a:bx_thread_del_do|ws:${wsId}|t:${threadId}${cbTail}`)
         .text('❌ Отмена', `a:bx_thread|ws:${wsId}|t:${threadId}${cbTail}`);
-      await safeEditOrReply(ctx, '🗑 Удалить диалог из своего Inbox?\n\nСобеседник по-прежнему будет видеть переписку.', { reply_markup: kb });
+      await safeEditOrReply(ctx, '🗑 Удалить диалог из раздела «Диалоги»?\n\nСобеседник по-прежнему будет видеть переписку.', { reply_markup: kb });
       return;
     }
 
@@ -36716,7 +36785,7 @@ ${winnersHeader}`;
       }
       await clearDraft(ctx.from.id);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '🎁 <b>Новый конкурс</b>\n\nКонкурс — инструмент PR и роста аудитории.\nИспользуй его, чтобы собрать участников, вовлечённость и заявки брендов.\n\n<b>Шаг 1/6:</b> выбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
+      await safeEditOrReply(ctx, '🎁 <b>Новый конкурс</b>\n\nКонкурс — инструмент PR и роста аудитории.\nИспользуй его, чтобы собрать участников, вовлечённость и заявки от брендов.\n\n<b>Шаг 1/6:</b> выбери тип приза:', { parse_mode: 'HTML', reply_markup: gwNewStepPrizeKb(wsId) });
       return;
     }
 

@@ -1,3 +1,33 @@
+# STEP586C CURRENT TRUTH OVERRIDE
+
+- Current baseline: STEP586C Applications, Dialogs and Deals Lifecycle.
+- Canonical lifecycle: `оффер / профиль → заявка → диалог → сделка → этап / закрытие`.
+- Visible destinations: `💬 Диалоги`, `📨 Заявки`, `🤝 Сделки`; callback IDs and destinations are unchanged.
+- A deal exists only with persisted accepted-user evidence plus a deal stage.
+- Deal-only routes and the SQL stage writer reject pre-acceptance applications.
+- `a:brand_deal_set` now verifies actor access before mutation.
+- Source guard: `npm run smoke:applications-dialogs-deals-lifecycle-contract`.
+- Canonical source preflight plus lifecycle, callback, dependency/runtime, targeted flow and syntax checks pass.
+- Live Telegram, mobile wrapping, Vercel/Neon/QStash and remote staging are not verified.
+- Next STEP: STEP586D Invite Center Language and Mechanism Honesty.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586C_APPLICATIONS_DIALOGS_DEALS_LIFECYCLE_REPORT.md`
+3. `docs/product/COLLABKA_COPY_SYSTEM.md`
+4. `docs/product/TERMINOLOGY_REGISTRY.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586C.md`
+
+Rules for the next model:
+- preserve invite reward math, eligibility and anti-abuse rules;
+- do not rename callbacks;
+- compare invite copy to persisted source truth;
+- treat incentive wording as a security and trust surface;
+- do not claim live UX verification without Telegram evidence.
+
+---
+
 # STEP586B CURRENT TRUTH OVERRIDE
 
 - Current baseline: STEP586B Home, Menu and Role Navigation Contract.

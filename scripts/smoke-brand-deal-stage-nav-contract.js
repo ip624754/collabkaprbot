@@ -19,12 +19,13 @@ assert.ok(
   'Expected deal stage metadata writer to cast set_by_user_id explicitly inside jsonb_build_object()'
 );
 assert.ok(
-  botSrc.includes("kb.text('📌 Стадия сделки', `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0|ab:${leadStatusToCb(back.status)}.${back.page}`).row();") &&
+  botSrc.includes("kb.text(brandAppDealButtonLabel(), `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0|ab:${leadStatusToCb(back.status)}.${back.page}`).row();") &&
+    botSrc.includes("return '🤝 Этап сделки';") &&
     !botSrc.includes("kb.text('📌 В сделках', `a:brand_deal_view|id:${app.id}|st:${dealStage}|p:0`).row();"),
-  'Expected local application card CTA to say “📌 Стадия сделки” instead of the misleading “В сделках”'
+  'Expected local application card CTA to use the canonical accepted-deal stage label'
 );
 assert.ok(
-  botSrc.includes("<i>Это стадия сделки по этой заявке.</i>") &&
+  botSrc.includes("<i>Это принятая заявка. Здесь хранятся диалог и этап сделки.</i>") &&
     botSrc.includes("if (backCtx.appStatus) {") &&
     botSrc.includes("kb.text(brandAppOpenButtonLabel(app.id), appBackCb).text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');"),
   'Expected deal view opened from an application to keep local context with a short hint and a concrete application-return footer'

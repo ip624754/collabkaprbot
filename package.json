@@ -91,6 +91,7 @@
     "smoke:copy-wave1-contract": "node scripts/smoke-copy-wave1-contract.js",
     "smoke:copy-safety-taxonomy-contract": "node scripts/smoke-copy-safety-taxonomy-contract.js",
     "smoke:home-menu-role-navigation-contract": "node scripts/smoke-home-menu-role-navigation-contract.js",
+    "smoke:applications-dialogs-deals-lifecycle-contract": "node scripts/smoke-applications-dialogs-deals-lifecycle-contract.js",
     "smoke:landing-contract": "node scripts/smoke-landing-contract.js",
     "smoke:admin-web-shell-contract": "node scripts/smoke-admin-web-shell-contract.js",
     "smoke:admin-web-mobile-shell-contract": "node scripts/smoke-admin-web-mobile-shell-contract.js",
