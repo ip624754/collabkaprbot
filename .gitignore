@@ -5,3 +5,8 @@ dist/
 # Local staging acceptance evidence
 artifacts/runtime_acceptance/*.json
 artifacts/runtime_acceptance/*.md
+
+# Local Telegram acceptance evidence
+artifacts/telegram_acceptance/*.json
+artifacts/telegram_acceptance/*.md
+artifacts/telegram_acceptance/evidence/**

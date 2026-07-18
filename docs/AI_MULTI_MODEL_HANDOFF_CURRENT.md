@@ -1,5 +1,70 @@
 # AI Multi-Model Handoff — Current Collabka Truth
 
+**Current baseline:** STEP586H — Live Telegram Acceptance and Mobile Copy Pass
+**Parent:** STEP586G — Admin and Operator Vocabulary
+**Live status:** remote Telegram evidence not yet executed
+
+## Verified now
+
+- deterministic evidence tooling covers seven required Telegram paths;
+- exact deployment + bot acknowledgement is required before evidence initialization;
+- no path can PASS without actual labels, screenshot/transcript evidence and three mobile checks;
+- unapproved Stars purchase, invite spend or real broadcast evidence is rejected;
+- obvious secrets are rejected from evidence files;
+- static bounded button labels above 34 visible characters are blocked by source lint;
+- source-confirmed long labels were shortened without callback or behavior changes;
+- STEP586H local contract and source mobile audit pass.
+
+## Not verified
+
+- Vercel Preview deployment;
+- live creator, brand, invite, paid, recovery and operator paths;
+- actual phone wrapping and message density;
+- Stars invoice rendering;
+- real screenshots/transcripts;
+- remote STEP584 evidence;
+- production.
+
+## Immediate next action
+
+Deploy STEP586H to preview/staging and run `docs/operations/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_RUNBOOK.md`.
+
+Do not open another copy wave until the finalized evidence pack is PASS or contains a source-reproduced defect that needs a narrow fix.
+
+## Do not do yet
+
+- claim live-green from source checks;
+- use production purchases or broadcasts for convenience;
+- change callbacks, permissions, prices or state machines;
+- broad bot/admin redesign;
+- broad `bot.js` extraction.
+
+## Working lenses
+
+- Jobs: one clear result per screen.
+- Vitalik: no live claim without evidence.
+- Woz: smallest reliable acceptance surface.
+- Durov: phone-first Telegram flow.
+- Toly: runnable operator workflow.
+- Armani: coherent evidence and presentation.
+- samczsun: no secret leakage or accidental spend.
+- Hasu: BLOCKED is better than false confidence.
+
+## Canonical files
+
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_MOBILE_COPY_REPORT.md`
+3. `docs/operations/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_RUNBOOK.md`
+4. `docs/product/COLLABKA_COPY_SYSTEM.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586H.md`
+
+---
+
+## Historical handoff snapshots
+
+# Historical snapshot — STEP586G
+
 **Current baseline:** STEP586G — Admin and Operator Vocabulary
 **Parent:** STEP586F — Access, Error and Empty-State Recovery
 **Live status:** not reverified in STEP586G
@@ -55,10 +120,6 @@ Run a bounded live acceptance pass. Capture evidence for Telegram admin, web-adm
 4. `docs/product/TERMINOLOGY_REGISTRY.md`
 5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
 6. `docs/process/07_WORK_HISTORY_STEP586G.md`
-
----
-
-## Historical handoff snapshots
 
 # Historical snapshot — STEP586F
 

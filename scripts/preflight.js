@@ -234,6 +234,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): monetization and paid-product clarity contract", "smoke:monetization-paid-product-clarity-contract"],
   ["Preflight (source-only): access, error and empty-state recovery contract", "smoke:access-error-empty-state-recovery-contract"],
   ["Preflight (source-only): admin and operator vocabulary contract", "smoke:admin-operator-vocabulary-contract"],
+  ["Preflight (source-only): Telegram mobile copy hard-limit lint", "lint:telegram-mobile-copy"],
+  ["Preflight (source-only): live Telegram acceptance evidence contract", "smoke:telegram-mobile-acceptance-contract"],
   ["Preflight (source-only): public landing contract", "smoke:landing-contract"],
   ["Preflight (source-only): admin web shell contract", "smoke:admin-web-shell-contract"],
   ["Preflight (source-only): admin web mobile shell contract", "smoke:admin-web-mobile-shell-contract"],

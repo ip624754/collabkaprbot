@@ -96,6 +96,8 @@
     "smoke:monetization-paid-product-clarity-contract": "node scripts/smoke-monetization-paid-product-clarity-contract.js",
     "smoke:access-error-empty-state-recovery-contract": "node scripts/smoke-access-error-empty-state-recovery-contract.js",
     "smoke:admin-operator-vocabulary-contract": "node scripts/smoke-admin-operator-vocabulary-contract.js",
+    "lint:telegram-mobile-copy": "node scripts/telegram-mobile-copy-audit.js",
+    "smoke:telegram-mobile-acceptance-contract": "node scripts/smoke-telegram-mobile-acceptance-contract.js",
     "smoke:landing-contract": "node scripts/smoke-landing-contract.js",
     "smoke:admin-web-shell-contract": "node scripts/smoke-admin-web-shell-contract.js",
     "smoke:admin-web-mobile-shell-contract": "node scripts/smoke-admin-web-mobile-shell-contract.js",
@@ -153,6 +155,7 @@
     "smoke:preflight-dependency-resolution-contract": "node scripts/smoke-preflight-dependency-resolution-contract.js",
     "smoke:runtime-proof-spine": "node scripts/smoke-runtime-proof-spine.js",
     "acceptance:staging": "node scripts/staging-runtime-acceptance.js",
+    "acceptance:telegram-mobile": "node scripts/telegram-mobile-acceptance.js",
     "smoke:staging-runtime-acceptance-contract": "node scripts/smoke-staging-runtime-acceptance-contract.js"
   },
   "dependencies": {

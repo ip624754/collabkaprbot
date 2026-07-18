@@ -98,3 +98,11 @@ Residual risk:
 - Source verification: dedicated recovery contract, STEP586A–E regressions, callback/dependency/runtime contracts and 223-file syntax surface PASS locally.
 - Runtime verification required: Preview/Staging stale-button and unauthorized-object traversal for creator, brand, curator and giveaway paths.
 - Residual risk: 123 exact `Нет доступа.` strings remain for later source classification; live Telegram wrapping and production stale-data combinations are unverified.
+
+## STEP586H acceptance-specific risk
+
+| ID | Risk | Severity | State | Mitigation | Escalation |
+|---|---|---:|---|---|---|
+| R-UX-LIVE-EVIDENCE | Source-green copy is presented as live-green without phone/deployment evidence | P1 | OPEN until remote pack PASS | Exact target acknowledgement; seven mandatory paths; screenshot/transcript requirement; PASS/FAIL/BLOCKED evaluator | Block release claim and rerun STEP586H on preview/staging |
+| R-UX-ACCEPTANCE-SPEND | Operator accidentally buys Stars, spends invite points or launches a broadcast during UX acceptance | P1 | MITIGATED IN TOOLING | Read-only default; explicit approval flags; evaluator rejects unapproved spend/broadcast evidence | Stop acceptance, preserve evidence, review payment/broadcast state |
+| R-UX-EVIDENCE-SECRET | Token, DB URL or personal data leaks into acceptance artifacts | P1 | PARTIALLY MITIGATED | Secret-pattern rejection, redaction rule, local gitignore | Rotate exposed secret immediately; remove artifact from history |

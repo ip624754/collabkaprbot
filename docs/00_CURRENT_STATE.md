@@ -1,3 +1,30 @@
+## STEP586H — Live Telegram Acceptance and Mobile Copy Pass (2026-07-18)
+
+**Current handoff-safe baseline:** STEP586H on top of STEP586G.
+
+Verified local source truth:
+- target-acknowledged Telegram acceptance tooling exists for seven mandatory paths;
+- an untouched checklist is BLOCKED and PASS without screenshot/transcript evidence is rejected;
+- paid-product and invite-spend paths fail when a spend is recorded without explicit test approval;
+- obvious bot/QStash/database/bearer secrets are rejected from evidence;
+- static Telegram button audit enforces a 34-character hard limit for bounded labels;
+- source-confirmed long labels were shortened without changing callback data or destination;
+- callback, permission, payment, invite, deal, giveaway, schema and infra mechanics are unchanged;
+- dedicated STEP586H contract and mobile hard-limit scan pass locally.
+
+Not verified: preview/staging deployment, live Telegram creator/brand/operator traversal, real phone wrapping, screenshots/transcripts, Stars rendering, invite spend rendering, remote STEP584 evidence or production behavior.
+
+**Current release decision:** source/tooling ready; live Telegram acceptance remains BLOCKED pending target and evidence.
+
+Read:
+- `docs/audit/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_MOBILE_COPY_REPORT.md`;
+- `docs/operations/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_RUNBOOK.md`;
+- `docs/product/COLLABKA_COPY_SYSTEM.md`;
+- `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP586H.md`.
+
+---
+
 ## STEP586G — Admin and Operator Vocabulary (2026-07-18)
 
 **Current handoff-safe baseline:** STEP586G on top of STEP586F.

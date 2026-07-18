@@ -603,3 +603,47 @@ For operators:
 - never interpolate raw internal failure reasons into user copy.
 
 This guard is intentionally bounded. Admin and QA diagnostics may use technical vocabulary when the surface is access-controlled and the detail is operationally useful.
+
+## 16. Live Telegram and mobile evidence contract (STEP586H)
+
+Source copy is not live copy until Telegram renders it on a phone.
+
+### 16.1 Static button guard
+
+Run:
+
+```bash
+npm run lint:telegram-mobile-copy
+```
+
+- preferred maximum: 28 visible characters;
+- hard maximum: 34 visible characters for bounded static labels;
+- dynamic labels remain a manual-review item.
+
+The scanner catches obvious width risk. It does not model Telegram font metrics, device width or localized dynamic values.
+
+### 16.2 Required live evidence
+
+A path can be marked PASS only when it contains:
+
+- actual visible labels;
+- a redacted screenshot or transcript reference;
+- button wrapping PASS;
+- message density PASS;
+- navigation clarity PASS.
+
+### 16.3 Safety
+
+Do not use copy acceptance to justify:
+
+- a real Stars purchase;
+- invite-point spend;
+- a live broadcast;
+- probing private IDs;
+- publishing secrets or personal data in evidence.
+
+### 16.4 Decision rule
+
+`BLOCKED` is a valid and honest result when the target or test data is unavailable.
+
+No source test, mock or confidence statement may be converted into a live PASS.

@@ -1,3 +1,34 @@
+# STEP586H CURRENT TRUTH OVERRIDE
+
+- Current baseline: STEP586H Live Telegram Acceptance and Mobile Copy Pass.
+- Acceptance tooling and source mobile copy fixes are implemented on top of STEP586G.
+- Required live paths: new user/roles, creator lifecycle, brand lifecycle, invite center, paid guard, stale/error recovery, admin/operator.
+- A PASS requires actual labels, screenshot/transcript evidence and three mobile checks for every path.
+- An untouched pack is BLOCKED. PASS without evidence is FAIL.
+- Unapproved Stars purchase or invite-points spend is FAIL.
+- Static bounded button labels must stay at or below 34 visible characters.
+- Source-confirmed long labels were shortened; callback values and destinations are unchanged.
+- Live Telegram, phone wrapping, Preview deployment and remote STEP584 evidence remain unverified.
+- Current action: deploy to preview/staging and execute the STEP586H runbook. Do not claim live-green before finalized PASS evidence.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_MOBILE_COPY_REPORT.md`
+3. `docs/operations/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_RUNBOOK.md`
+4. `docs/product/COLLABKA_COPY_SYSTEM.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586H.md`
+
+Rules for the next model:
+- do not infer live rendering from source tests;
+- use exact deployment + bot acknowledgement;
+- capture redacted evidence for every required path;
+- do not buy Stars, spend invite points or send broadcasts without explicit approval;
+- fix only defects reproduced by evidence;
+- do not change callbacks, permissions or mechanisms inside the acceptance pass.
+
+---
+
 # STEP586G CURRENT TRUTH OVERRIDE
 
 - Current baseline: STEP586G Admin and Operator Vocabulary.

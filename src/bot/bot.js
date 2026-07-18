@@ -18380,9 +18380,9 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
   kb.text('👀 Пример результата', cbJoin('a:match_example', { ws: wsId, ret, bpr })).row();
 
   if (hasPlan && left > 0) {
-    kb.text(`✅ Включено: осталось ${left} в этом месяце`, cbJoin('a:match_inc', { ws: wsId, ret, bpr })).row();
+    kb.text(`✅ Включено · осталось ${left}`, cbJoin('a:match_inc', { ws: wsId, ret, bpr })).row();
   } else if (!hasPlan) {
-    kb.text(`⭐️ Brand Plan · включён 1 запуск`, cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
+    kb.text(`⭐️ 1 запуск в Brand Plan`, cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
   }
 
   for (const t of MATCH_TIERS) {
@@ -18437,9 +18437,9 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
   kb.text('👀 Пример', cbJoin('a:feat_example', { ws: wsId, ret, bpr })).row();
 
   if (hasPlan && left > 0) {
-    kb.text(`✅ Включено: осталось ${left} в этом месяце`, cbJoin('a:feat_inc', { ws: wsId, ret, bpr })).row();
+    kb.text(`✅ Включено · осталось ${left}`, cbJoin('a:feat_inc', { ws: wsId, ret, bpr })).row();
   } else if (!hasPlan) {
-    kb.text(`⭐️ Brand Plan · включён 1 запуск`, cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
+    kb.text(`⭐️ 1 запуск в Brand Plan`, cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
   }
 
   for (const d of FEATURED_DURATIONS) {
@@ -21533,7 +21533,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       // best-effort notify manager
       try {
         const kb = new InlineKeyboard()
-          .text('🧑‍💼 Открыть кабинет менеджера', 'a:bm_home')
+          .text('🧑‍💼 Кабинет менеджера', 'a:bm_home')
           .row()
           .text('🗑 Убрать', 'a:nd')
           .row()
@@ -21543,7 +21543,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
           Number(manager.tg_id),
           `✅ Тебя добавили в <b>команду бренда</b>.
 
-Нажми <b>«🧑‍💼 Открыть кабинет менеджера»</b> — там будут диалоги, заявки, сделки и поиск креаторов.`,
+Нажми <b>«🧑‍💼 Кабинет менеджера»</b> — там будут диалоги, заявки, сделки и поиск креаторов.`,
           { parse_mode: 'HTML', reply_markup: kb }
         );
       } catch {}
@@ -31133,7 +31133,7 @@ https://collabka.com/status</pre>
         .row()
         .text(`✨ PRO Креатор (${CFG.PRO_DURATION_DAYS}д)`, 'a:adm_gift_input|t:pro')
         .row()
-        .text('⛔ Забрать / отменить подписку', 'a:adm_gift_revoke')
+        .text('⛔ Отменить подписку', 'a:adm_gift_revoke')
         .row()
         .text('⬅️ Система', 'a:admin_sys')
         .row()
@@ -31148,9 +31148,9 @@ https://collabka.com/status</pre>
       await ctx.answerCallbackQuery();
       if (!isSuperAdminTg(ctx.from.id)) return;
       const kb = new InlineKeyboard()
-        .text('⛔ Забрать Brand Plan (подписка)', 'a:adm_gift_revoke_input|t:bp')
+        .text('⛔ Отменить Brand Plan', 'a:adm_gift_revoke_input|t:bp')
         .row()
-        .text('⛔+🧾 Забрать Brand Plan + подарочные кредиты', 'a:adm_gift_revoke_input|t:bp_gcr')
+        .text('⛔ Plan и подарочные кредиты', 'a:adm_gift_revoke_input|t:bp_gcr')
         .row()
         .text('🧾 Забрать подарочные кредиты', 'a:adm_gift_revoke_input|t:gcr')
         .row()
@@ -39737,7 +39737,7 @@ async function renderAdminSysNotice(ctx) {
     .text('✍️ Текст', 'a:admin_notice_text')
     .row()
     .text('🧹 Очистить текст', commsCb.adminNoticeClear())
-    .text('🚀 Опубликовать (новая версия)', commsCb.adminNoticePublish())
+    .text('🚀 Опубликовать заново', commsCb.adminNoticePublish())
     .row()
     .text('⬅️ Коммуникации', 'a:admin_comms')
     .row()
@@ -40845,7 +40845,7 @@ async function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0
   // Revoke actions
   if (card.brand_plan) {
     kb.text('⛔ Забрать Brand Plan', `a:adm_urevoke_q|id:${card.id}|t:bp|f:${backFilter}|p:${backPage}`);
-    kb.text('⛔+🧾 Забрать Plan + подарочные', `a:adm_urevoke_q|id:${card.id}|t:bp_gcr|f:${backFilter}|p:${backPage}`);
+    kb.text('⛔ Plan и подарочные кредиты', `a:adm_urevoke_q|id:${card.id}|t:bp_gcr|f:${backFilter}|p:${backPage}`);
   }
   if (Number(card.brand_credits || 0) > 0) {
     kb.text('⛔ Обнулить кредиты', `a:adm_urevoke_q|id:${card.id}|t:cr|f:${backFilter}|p:${backPage}`);

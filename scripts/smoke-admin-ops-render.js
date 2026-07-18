@@ -48,10 +48,10 @@ function run() {
   });
 
   assertIncludes(okText, 'READY', 'banner must be rendered');
-  assertIncludes(okText, '✅ <b>Redis OK</b> (17ms)', 'redis OK status must be rendered');
-  assertIncludes(okText, '⚠️ <b>Broadcast: tick deferred (Redis)</b>', 'ops metric block must be rendered');
-  assertIncludes(okText, '📦 <b>Broadcast pending snapshot</b>', 'pending snapshot block must be rendered');
-  assertIncludes(okText, '• broadcast: <b>#42</b>; pending: <b>3</b>;', 'pending snapshot values must be rendered');
+  assertIncludes(okText, '✅ <b>Redis работает</b> · 17 мс', 'redis OK status must be rendered');
+  assertIncludes(okText, '⚠️ <b>Рассылка отложена: Redis недоступен</b>', 'ops metric block must be rendered');
+  assertIncludes(okText, '📦 <b>Снимок очереди рассылки</b>', 'pending snapshot block must be rendered');
+  assertIncludes(okText, '• Рассылка: <b>#42</b> · ожидает: <b>3</b> · время:', 'pending snapshot values must be rendered');
 
   const degradedText = buildAdminOpsText({
     redisState: { configured: true, ok: false, error: 'simulated redis timeout' },
@@ -72,17 +72,17 @@ function run() {
     pendingSnapshot: { visible: true, ok: false },
   });
 
-  assertIncludes(degradedText, '⚠️ <b>Redis degraded</b>', 'redis degraded banner must be rendered');
+  assertIncludes(degradedText, '⚠️ <b>Redis недоступен</b>', 'redis degraded banner must be rendered');
   assertIncludes(degradedText, 'simulated redis timeout', 'redis error tail must be rendered');
-  assertIncludes(degradedText, '🚨 <b>Payments: HMAC key отсутствует</b>', 'payments HMAC warning must be rendered');
-  assertIncludes(degradedText, '🚨 <b>Payments: fallback apply ENABLED</b>', 'payments fallback banner must be rendered');
-  assertIncludes(degradedText, '• ⚠️ недоступно (Redis degraded)', 'degraded pending snapshot must stay graceful');
+  assertIncludes(degradedText, '🚨 <b>Платежи: HMAC-ключ не задан</b>', 'payments HMAC warning must be rendered');
+  assertIncludes(degradedText, '🚨 <b>Резервное применение платежей включено</b>', 'payments fallback banner must be rendered');
+  assertIncludes(degradedText, '• Недоступно: Redis не отвечает.', 'degraded pending snapshot must stay graceful');
 
   const probeFailText = buildAdminOpsText({
     redisState: { configured: true, ok: false, probeFailed: true },
     paymentsState: { hmacKey: 'x'.repeat(40), fallbackState: { effective: false } },
   });
-  assertIncludes(probeFailText, 'не удалось выполнить probe', 'probe failure fallback text must be rendered');
+  assertIncludes(probeFailText, 'Проверка соединения не завершилась', 'probe failure fallback text must be rendered');
 
   const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
   const renderAdminOpsSrc = extractRenderAdminOpsSource(botSource);

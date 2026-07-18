@@ -2,18 +2,18 @@
 
 Это актуальный комплект документации по проекту **Collabka PR**.
 
-## Текущий snapshot — STEP586F (2026-07-18)
+## Текущий snapshot — STEP586H (2026-07-18)
 
-- Добавлен единый recovery-контракт для каналов, заявок, диалогов, офферов, розыгрышей, папок и role-gates.
-- Обычный пользователь не видит внутренние Redis/ID/source причины; техническая правда остаётся в `[copy_safety]` логах.
-- Empty states теперь объясняют причину и дают одно следующее действие.
-- Recovery не ослабляет доступ и не подтверждает существование приватного объекта.
-- Curator workspace read-order усилен: specific membership проверяется до unrestricted detail lookup.
-- Callbacks, schema, платежи, invite economy и deal/giveaway mechanics не менялись.
-- Следующий scoped STEP: `STEP586H — Live Telegram Acceptance and Mobile Copy Pass`.
+- Добавлен evidence-driven live Telegram acceptance workflow с точным target acknowledgement.
+- PASS невозможен без screenshot/transcript evidence для всех creator, brand, invite, paid, recovery и operator путей.
+- Добавлен static mobile button audit: hard limit 34 видимых символа для bounded labels.
+- Исправлены source-confirmed длинные кнопки без изменения callbacks и destinations.
+- Защищены test purchase, invite spend и evidence files от случайного использования секретов.
+- Runtime business logic, цены, права, schema, Redis/QStash/Neon mechanics не менялись.
+- Remote Telegram acceptance ещё не выполнен: текущий статус — source/tooling ready, live evidence pending.
 
 ## 0) BOOT (всегда читаем сначала)
-- `process/07_WORK_HISTORY_STEP586F.md` — актуальная дельта: recovery taxonomy, empty states и authorization-safe fallback
+- `process/07_WORK_HISTORY_STEP586H.md` — актуальная дельта: live evidence tooling и mobile copy pass
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
@@ -24,7 +24,8 @@
 - `RISK_REGISTRY.md` — живой реестр технических, продуктовых и AI-governance рисков
 - `CREATOR_OS_THESIS.md` — продуктовый north star: Creator Collaboration Operating System без broad rewrite
 - `CHATGPT_COLLABKA_UPGRADE_NOTES.md` — состав и truth boundary STEP580 docs upgrade
-- `audit/STEP586F_ACCESS_ERROR_EMPTY_STATE_RECOVERY_REPORT.md` — recovery taxonomy, curator access finding и Truth Boundary STEP586F
+- `audit/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_MOBILE_COPY_REPORT.md` — STEP586H mobile/source findings и live Truth Boundary
+- `operations/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_RUNBOOK.md` — точный preview/staging acceptance workflow
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 - `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout

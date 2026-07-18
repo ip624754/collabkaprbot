@@ -1,8 +1,8 @@
 # STEP586 — Conversation Copy Refactor Roadmap
 
 **Input:** STEP585 source audit and canonical copy system
-**Current implementation baseline:** STEP586G on STEP586F
-**Roadmap status:** STEP586A–G implemented; STEP586H is next
+**Current implementation baseline:** STEP586H on STEP586G
+**Roadmap status:** STEP586A–H source implementation complete; STEP586H remote evidence is still required
 **Rule:** copy changes may not silently alter callbacks, permissions, prices, reward math, payment semantics or state transitions.
 
 ## 1. Goal
@@ -264,6 +264,10 @@ Acceptance:
 
 ### STEP586H — Live Telegram Acceptance and Mobile Copy Pass
 
+**Implementation:** SOURCE/TOOLING DONE in STEP586H (2026-07-18); REMOTE LIVE EVIDENCE PENDING
+**Report:** `docs/audit/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_MOBILE_COPY_REPORT.md`
+**Runbook:** `docs/operations/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_RUNBOOK.md`
+
 **Priority:** release gate after the previous waves
 **Risk:** observational
 **Mode:** HEAVY acceptance
@@ -303,6 +307,11 @@ The language work should reduce risk, not hide architectural changes inside stri
 
 ## 5. Current next action
 
-Proceed with **STEP586H — Live Telegram Acceptance and Mobile Copy Pass**.
+Deploy STEP586H to preview/staging, run STEP584 machine acceptance, then execute:
 
-Run the bounded preview/staging acceptance paths, capture evidence, check mobile wrapping and fix only source-confirmed copy defects without adding product functionality.
+```bash
+npm run acceptance:telegram-mobile -- init
+npm run acceptance:telegram-mobile -- finalize <evidence.json>
+```
+
+Do not open a new copy wave until all seven required paths have captured evidence and the finalized result is PASS. Fix only defects reproduced by the evidence.
