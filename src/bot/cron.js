@@ -24,6 +24,7 @@ import {
   isQStashLibAvailable,
 } from '../lib/qstash.js';
 import { applyPaymentFallbackNoSession } from './payments_fallback.js';
+import { buildRecoveredPaymentMessage } from './monetizationCopy.js';
 import { tgTimeoutSignal, TG_HTTP_MEDIA_TIMEOUT_MS } from '../lib/tgApi.js';
 import { flushOpsAlerts, queueOpsAlert } from './opsAlerts.js';
 import { buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
@@ -756,15 +757,15 @@ async function issueIntroRetryCredits() {
         const u = await db.getUserTgIdByUserId(buyerUserId);
         const tgId = u?.tg_id;
         if (tgId) {
-          const kb = new InlineKeyboard().text('🎫 Brand Pass', 'a:brand_pass|ws:0');
+          const kb = new InlineKeyboard().text('💳 Кредиты', 'a:brand_pass|ws:0');
           await withTimeout(
             bot.api.sendMessage(
               Number(tgId),
-              `🎟 <b>Retry credit начислен</b>
+              `🎟 <b>Повторный кредит начислен</b>
 
 По одному из новых диалогов не было ответа ${Number(
                 CFG.INTRO_RETRY_AFTER_HOURS || 24
-              )}ч — мы вернули тебе 1 Retry credit.
+              )}ч — мы вернули 1 повторный кредит.
 Действует ${Number(
                 CFG.INTRO_RETRY_EXPIRES_DAYS || 7
               )} дней и списывается автоматически при следующем новом диалоге.`,
@@ -864,11 +865,10 @@ async function autoHealOrphanedPayments() {
             notifySkipped += 1;
             if (notifySkippedIds.length < 5) notifySkippedIds.push(Number(r.id));
           } else {
-            let msg = '✅ Оплата применена автоматически (восстановлено после задержки).';
-            if (fb.kind === 'brand_pass') msg += `\n\n💳 Кредиты начислены: +${Number(fb.credits || 0)}.`;
-            if (fb.kind === 'brand_plan') msg += `\n\n⭐️ Brand Plan активирован (${String(fb.plan || '')}).`;
-            if (fb.kind === 'pro') msg += `\n\n⭐️ PRO активирован.`;
-            if (fb.kind === 'founder_brand') msg += `\n\n⭐️ Founder Sale применён.`;
+            const msg = buildRecoveredPaymentMessage({
+              result: fb,
+              amount: Number(r.total_amount || 0),
+            });
             await api.sendMessage(tgId, msg);
           }
         } catch {

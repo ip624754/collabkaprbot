@@ -1,7 +1,7 @@
 # SYSTEM INVARIANTS — Collabka PR
 
-**Status:** canonical project invariant registry  
-**Introduced:** STEP580  
+**Status:** canonical project invariant registry
+**Introduced:** STEP580
 **Rule:** a STEP may extend this file, but must not silently violate it
 
 ## 1. Platform and infrastructure
@@ -56,12 +56,14 @@
 ## 6. Payments, credits, unlocks, and monetization
 
 1. Money-like state transitions are exactly-once or idempotent.
-2. Telegram Stars, credits, Brand Pass, contact unlocks, and paid dialog actions remain auditable.
+2. Telegram Stars, credits, Brand Plan, channel PRO, contact unlocks, and paid actions remain auditable.
 3. Payment confirmation must not depend on user-facing callback success alone.
 4. Fallback application paths use authoritative locks/guards and cannot double-credit.
 5. Copy must distinguish product entitlement, credits, unlock, payment attempt, and confirmed payment.
 6. A brand application becomes a deal only after authoritative acceptance evidence; `deal_stage` alone is insufficient.
 7. Deal-only reads and writes require actor access plus accepted-deal evidence in runtime and SQL guards.
+8. Invoice titles and descriptions stay within Telegram field limits; copy expansion cannot make `sendInvoice` invalid.
+9. User copy derives prices, quantities and durations from the same active server-side configuration/catalog used to validate and apply the purchase.
 
 ## 7. Cron, outbox, and external effects
 

@@ -1,3 +1,5 @@
+import { MONETIZATION_LABELS, buildRecoveredPaymentMessage, starsAmountLabel } from '../monetizationCopy.js';
+
 // Payments (Telegram Stars) — extracted handler bundle from src/bot/bot.js
 // Goal: reduce monolith surface without changing runtime behavior.
 // This module is intentionally dependency-injected to avoid circular imports.
@@ -24,6 +26,9 @@ export function registerStarsPaymentsHandlers(deps = {}) {
     fmtCredits,
     setBrandCreditsCache,
     applyPaymentFallbackNoSession,
+    MATCH_TIERS,
+    FEATURED_DURATIONS,
+    BRAND_PLANS,
   } = deps;
 
   if (!bot) throw new Error('registerStarsPaymentsHandlers: bot is required');
@@ -37,7 +42,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       .text('📋 Меню', 'a:menu')
       .text('🏠 Домой', 'a:home');
     await ctx.reply(
-      `💬 <b>Поддержка по оплате / Stars</b>\n\nЕсли что-то пошло не так с оплатой — нажми кнопку ниже и опиши проблему.\n\n<b>Что указать:</b>\n• Что покупал (PRO / Brand Plan)\n• Примерное время оплаты\n• Скрин чека (если есть)`,
+      `💬 <b>Поддержка по оплате / Stars</b>\n\nЕсли что-то пошло не так с оплатой — нажми кнопку ниже и опиши проблему.\n\n<b>Что указать:</b>\n• Что покупал: PRO канала, Brand Plan, кредиты, Умный подбор, Продвижение или размещение\n• Примерное время оплаты\n• Скрин чека (если есть)`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   });
@@ -268,11 +273,11 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       if (wsId && offerId) kb.text('📣 Статус офиц.канала', `a:off_manage|ws:${wsId}|o:${offerId}|p:0|back:my`).row();
       kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
   
-      await ctx.reply('✅ Оплата получена! Оффер поставлен в очередь на публикацию в официальном канале. Модератор опубликует его вручную.', {
+      await ctx.reply('✅ Оплата получена. Оффер передан модератору. Публикация начнётся только после одобрения.', {
         reply_markup: kb
       });
     } catch {
-      await ctx.reply('✅ Оплата получена! Оффер поставлен в очередь на публикацию в официальном канале. Модератор опубликует его вручную.');
+      await ctx.reply('✅ Оплата получена. Оффер передан модератору. Публикация начнётся только после одобрения.');
     }
   
     return;
@@ -307,7 +312,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
     return;
   }
   
-  // Smart Matching auto-apply (paid) — gated by env + runtime flag
+  // Умный подбор auto-apply (paid) — gated by env + runtime flag
   if (isMatchPay) {
     try {
       const parts = String(invoicePayload).split('_');
@@ -343,14 +348,14 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       await markApplied(`auto_apply_match:req:${req.id}`);
   
       const kb = new InlineKeyboard()
-        .text('🎯 Smart Matching (подбор офферов)', cbJoin('a:match_home', { ws: wsId, ret, bpr }))
+        .text('🎯 Умный подбор', cbJoin('a:match_home', { ws: wsId, ret, bpr }))
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
         .text('📋 Меню', 'a:menu')
         .text('🏠 Домой', 'a:home');
   
       await ctx.reply(
-        `✅ <b>Оплата получена — Smart Matching активирован</b>\n\nПришли бриф одним сообщением (ниша, гео, аудитория, формат).`,
+        `✅ <b>Умный подбор оплачен</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>.\nРезультат: один подбор до <b>${tier.count}</b> каналов.\n\nПришли бриф одним сообщением: ниша, гео, аудитория и формат.`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
       return;
@@ -358,12 +363,12 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       const em = String(e?.message || e).slice(0, 300);
       await markStatus('ERROR', `auto_apply_error: ${em.slice(0, 120)}`);
       await notifyPayOps('auto_apply_error', [`Error: <code>${escapeHtml(em)}</code>`]);
-      await ctx.reply('✅ Оплата получена. Не смог автоматически запустить Smart Matching. Нажми «💬 Поддержка» — я уже получил алерт.');
+      await ctx.reply('✅ Оплата получена. Не смог автоматически запустить Умный подбор. Нажми «💬 Поддержка» — я уже получил алерт.');
       return;
     }
   }
   
-  // Featured auto-apply (paid) — gated by env flag
+  // Продвижение auto-apply (paid) — gated by env flag
   if (isFeatPay) {
     try {
       const parts = String(invoicePayload).split('_');
@@ -399,14 +404,14 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       await markApplied(`auto_apply_feat:id:${f.id}`);
   
       const kb = new InlineKeyboard()
-        .text('🔥 Featured', cbJoin('a:feat_home', { ws: wsId, ret, bpr }))
+        .text('🔥 Продвижение', cbJoin('a:feat_home', { ws: wsId, ret, bpr }))
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
         .text('📋 Меню', 'a:menu')
         .text('🏠 Домой', 'a:home');
   
       await ctx.reply(
-        `✅ <b>Оплата получена — Featured активирован</b>\n\nПришли контент:\n• 1 строка — заголовок\n• далее описание\n• последняя строка — контакт (@username / ссылка)`,
+        `✅ <b>Продвижение оплачено</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>.\nСрок размещения: <b>${dur.days}</b> дн.\n\nПришли контент:\n• первая строка — заголовок\n• затем описание\n• последняя строка — контакт`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
       return;
@@ -414,7 +419,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       const em = String(e?.message || e).slice(0, 300);
       await markStatus('ERROR', `auto_apply_error: ${em.slice(0, 120)}`);
       await notifyPayOps('auto_apply_error', [`Error: <code>${escapeHtml(em)}</code>`]);
-      await ctx.reply('✅ Оплата получена. Не смог автоматически запустить Featured. Нажми «💬 Поддержка» — я уже получил алерт.');
+      await ctx.reply('✅ Оплата получена. Не смог автоматически запустить Продвижение. Нажми «💬 Поддержка» — я уже получил алерт.');
       return;
     }
   }
@@ -456,11 +461,11 @@ export function registerStarsPaymentsHandlers(deps = {}) {
                 .row()
                 .text('📋 Меню', 'a:menu')
                 .text('🏠 Домой', 'a:home');
-              let msg = '✅ Founder Sale применён!';
+              let msg = `✅ ${MONETIZATION_LABELS.FOUNDER_SALE} применён.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.`
               if (fb.kind === 'founder_brand') {
                 msg += `
   
-  ⭐️ Brand Plan Pro активирован на ${fb.days || 0} дней.`;
+  ⭐️ Brand Plan «Про» активирован на ${fb.days || 0} дней.`;
                 if (fb.credits > 0) msg += `
   💳 +${fb.credits} кредитов начислено.`;
               }
@@ -507,13 +512,13 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       await markApplied(`auto_apply_founder:${productId}`);
   
       const kb = new InlineKeyboard();
-      let msg = '✅ Founder Sale применён!';
+      let msg = `✅ ${MONETIZATION_LABELS.FOUNDER_SALE} применён.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.`
       if (productId === 'founder_creator_12m') {
-        msg += `\n\n⭐️ PRO активирован на ${durationDays || 365} дней.`;
+        msg += `\n\n${MONETIZATION_LABELS.CREATOR_PRO} активирован на ${durationDays || 365} дней.`;
         if (wsId) kb.text('⭐️ PRO', `a:ws_pro|ws:${wsId}`).text('📣 Мои каналы', 'a:ws_list').row();
       } else {
         const d = durationDays || (productId === 'founder_brand_3m' ? 90 : 365);
-        msg += `\n\n⭐️ Brand Plan Pro активирован на ${d} дней.`;
+        msg += `\n\n⭐️ Brand Plan «Про» активирован на ${d} дней.`;
         if (credits > 0) msg += `\n💳 +${credits} кредитов начислено.`;
         kb.text('⭐️ Brand Plan', 'a:brand_plan|ws:0').text('💳 Кредиты', 'a:brand_pass|ws:0').row();
       }
@@ -562,7 +567,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
               telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
             });
             if (fb && fb.applied) {
-              await ctx.reply('⭐️ PRO активирован! Открой настройки канала → ⭐️ PRO, чтобы управлять пином и лимитами.');
+              await ctx.reply(`✅ ${MONETIZATION_LABELS.CREATOR_PRO} активирован.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.\nСрок: ${Number(fb?.days || CFG.PRO_DURATION_DAYS)} дней.\n\nОткрой настройки канала → ⭐️ PRO.`);
               return;
             }
           } catch { /* ignore fallback failures */ }
@@ -585,7 +590,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
       });
       await redis.del(k(['pay_pro', token]));
       await markApplied('auto_apply_pro');
-      await ctx.reply('⭐️ PRO активирован! Открой настройки канала → ⭐️ PRO, чтобы управлять пином и лимитами.');
+      await ctx.reply(`✅ ${MONETIZATION_LABELS.CREATOR_PRO} активирован.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.\nСрок: ${CFG.PRO_DURATION_DAYS} дней.\n\nОткрой настройки канала → ⭐️ PRO.`);
       return;
     } catch (e) {
       const em = String(e?.message || e).slice(0, 300);
@@ -618,7 +623,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
               telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
             });
             if (fb && fb.applied) {
-              await ctx.reply('✅ Кредиты начислены! Открой 💳 Кредиты или 💬 Диалоги, чтобы начать.');
+              await ctx.reply(buildRecoveredPaymentMessage({ result: fb, amount: sp.total_amount }));
               return;
             }
           } catch { /* ignore */ }
@@ -649,18 +654,14 @@ export function registerStarsPaymentsHandlers(deps = {}) {
   
       await markApplied('auto_apply_brand_pass');
       await ctx.reply(
-        `✅ Кредиты начислены!
-  
-  Начислено: +${creditsToAdd}
-  🎫 кредиты: ${fmtCredits(newBalance)}
-  
-  Как тратить кредиты:
-  • 💬 Новый диалог: ${introCost} кредит(ов)
-  • 🔓 Контакты на витрине: ${CONTACT_UNLOCK_COST <= 0 ? 'бесплатно' : (CONTACT_UNLOCK_COST + ' кредит(ов)')} → ${CONTACT_UNLOCK_TTL_DAYS} дней
-  • Переписка внутри диалога — бесплатно
-  
-  Дальше: открой «💬 Диалоги» и выбери нужный диалог.`,
-        { reply_markup: kb }
+        `✅ <b>Кредиты начислены</b>
+
+Списано: <b>${starsAmountLabel(sp.total_amount)}</b>
+Начислено: <b>${creditsToAdd}</b>
+Баланс: <b>${fmtCredits(newBalance)}</b>
+
+Кредиты расходуются на новые диалоги, принятие заявок и открытие контактов. Сообщения внутри открытого диалога бесплатны.\n\nДальше: открой «💬 Диалоги» и выбери нужный диалог.`,
+        { parse_mode: 'HTML', reply_markup: kb }
       );
       return;
     } catch (e) {
@@ -695,7 +696,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
               telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
             });
             if (fb && fb.applied) {
-              await ctx.reply('✅ Brand Plan активирован! Открой ⭐️ Brand Plan и 💬 Диалоги, чтобы начать.');
+              await ctx.reply(buildRecoveredPaymentMessage({ result: fb, amount: sp.total_amount }));
               return;
             }
           } catch { /* ignore */ }
@@ -731,7 +732,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
         .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
   
       await markApplied('auto_apply_brand_plan');
-      await ctx.reply(`✅ Brand Plan «${planLabel}» активирован!${bonusCredits ? `\n💳 +${bonusCredits} кредитов начислено.` : ''}\nCRM-стадии и менеджеры доступны.`, { reply_markup: kb });
+      await ctx.reply(`✅ <b>Brand Plan «${planLabel}» активирован</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>\nСрок: <b>${CFG.BRAND_PLAN_DURATION_DAYS}</b> дней.${bonusCredits ? `\nНачислено: <b>${bonusCredits}</b> кредитов.` : ''}\n\nCRM-этапы, менеджеры, Умный подбор и Продвижение доступны по условиям плана.`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     } catch (e) {
       const em = String(e?.message || e).slice(0, 300);

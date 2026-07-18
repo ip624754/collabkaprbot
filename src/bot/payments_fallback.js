@@ -399,7 +399,7 @@ export async function applyPaymentFallbackNoSession({
           [Number(wsId), Number(days)]
         );
 
-        return { ok: true, kind: 'pro', wsId: Number(wsId) };
+        return { ok: true, kind: 'pro', wsId: Number(wsId), days: Number(days) };
       }
     });
 
@@ -511,7 +511,7 @@ export async function applyPaymentFallbackNoSession({
           if (rCr.rowCount <= 0) return { ok: false, reason: 'no_user_row' };
         }
 
-        return { ok: true, kind: 'brand_plan', plan: String(planId), credits: Number(credits) };
+        return { ok: true, kind: 'brand_plan', plan: String(planId), days: Number(days), credits: Number(credits) };
       }
     });
   }

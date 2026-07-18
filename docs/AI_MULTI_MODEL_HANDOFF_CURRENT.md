@@ -1,43 +1,48 @@
 # AI Multi-Model Handoff — Current Collabka Truth
 
-**Current baseline:** STEP586D — Invite Center Language and Mechanism Honesty  
-**Parent:** STEP586C — Applications, Dialogs and Deals Lifecycle  
-**Live status:** not reverified in STEP586D
+**Current baseline:** STEP586E — Monetization and Paid Product Clarity
+**Parent:** STEP586D — Invite Center Language and Mechanism Honesty
+**Live status:** not reverified in STEP586E
 
 ## Verified now
 
-- ordinary-user module is `Приглашения`; user invite screens no longer expose `pts`, `join`, ledger or mixed English reward terms;
-- persisted event meanings are explicit: first eligible bot start creates invitation attribution; main profile completion creates activation;
-- shared source-of-truth exports define `+2 / 24h`, `+10 / 48h`, `100 / 7d` and `250 / 30d`;
-- DB backfill logic and Telegram copy consume the same constants; no economic value changed;
-- pending points are not spendable; available and used balances are distinct;
-- exclusion, uniqueness and redeem-lock controls remain in storage code;
-- redeem confirmation shows cost and remaining balance; success shows the actual target;
-- dedicated and targeted invite source contracts pass locally.
+- paid product objects are distinct: Brand Plan, credits, channel PRO, matching, promotion and moderated official placement;
+- exact visible quantity, duration and result labels derive from runtime configuration or server-side catalogs;
+- credits are expendable brand units; they are not money, Stars or subscription time;
+- Brand Plan is the brand subscription; the current source-backed tier difference is price and included credits;
+- PRO applies to one selected creator channel and is independent of Brand Plan;
+- payment receipts state the Stars amount and applied result;
+- delayed application routes to `/paysupport`; source contains no automatic refund path;
+- direct fallback, cron and QStash recovery use shared truthful receipt copy;
+- missing payment catalog dependencies in the extracted Stars handler are now injected explicitly;
+- provider, prices, callbacks, payloads, payment ledger and exactly-once controls are unchanged;
+- dedicated and targeted payment/source contracts pass locally.
 
-## Trust finding resolved
+## Trust and runtime finding resolved
 
-Old copy said points were awarded only for activation. Runtime also awards two points for the first eligible start. STEP586D removes the contradiction and prevents future amount/window drift through a shared rule catalog plus source smoke.
+Old copy understated where credits are spent and could drift from configured pack quantities or durations. Separately, extracted Stars handlers referenced three catalogs that were not injected, creating a paid-path `ReferenceError` risk. STEP586E aligns copy with source truth and restores the dependency boundary without changing economics.
 
 ## Not verified
 
-- live Telegram invite traversal and wrapping;
-- production 24h/48h confirmation timing;
-- live Neon reward convergence and redemption;
+- live Telegram Stars payment or refund;
+- Vercel Preview/production;
+- live Neon/Redis/QStash convergence;
+- mobile wrapping;
+- `/paysupport` operator handling;
 - remote STEP584 staging evidence;
 - real-user comprehension.
 
 ## Immediate next STEP
 
-`STEP586E_MONETIZATION_AND_PAID_PRODUCT_CLARITY`
+`STEP586F_ACCESS_ERROR_EMPTY_STATE_RECOVERY`
 
-Keep provider, prices, callbacks, entitlement logic, ledgers and exactly-once boundaries unchanged. Align visible product names and claims with source truth.
+Classify errors by known source state. Do not make a blind global `Нет доступа.` replacement and do not reveal private-object existence.
 
 ## Do not do yet
 
 - admin/operator vocabulary migration (STEP586G);
-- callback renaming;
-- reward or payment mechanic changes hidden inside copy;
+- payment provider, price or entitlement changes inside copy work;
+- permission/state-machine changes hidden inside error cleanup;
 - broad `bot.js` rewrite;
 - claim live-green from source checks.
 
@@ -55,8 +60,8 @@ Keep provider, prices, callbacks, entitlement logic, ledgers and exactly-once bo
 ## Canonical files
 
 1. `docs/00_CURRENT_STATE.md`
-2. `docs/audit/STEP586D_INVITE_CENTER_LANGUAGE_MECHANISM_HONESTY_REPORT.md`
+2. `docs/audit/STEP586E_MONETIZATION_PAID_PRODUCT_CLARITY_REPORT.md`
 3. `docs/product/COLLABKA_COPY_SYSTEM.md`
 4. `docs/product/TERMINOLOGY_REGISTRY.md`
 5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
-6. `docs/process/07_WORK_HISTORY_STEP586D.md`
+6. `docs/process/07_WORK_HISTORY_STEP586E.md`

@@ -93,6 +93,7 @@
     "smoke:home-menu-role-navigation-contract": "node scripts/smoke-home-menu-role-navigation-contract.js",
     "smoke:applications-dialogs-deals-lifecycle-contract": "node scripts/smoke-applications-dialogs-deals-lifecycle-contract.js",
     "smoke:invite-language-mechanism-honesty-contract": "node scripts/smoke-invite-language-mechanism-honesty-contract.js",
+    "smoke:monetization-paid-product-clarity-contract": "node scripts/smoke-monetization-paid-product-clarity-contract.js",
     "smoke:landing-contract": "node scripts/smoke-landing-contract.js",
     "smoke:admin-web-shell-contract": "node scripts/smoke-admin-web-shell-contract.js",
     "smoke:admin-web-mobile-shell-contract": "node scripts/smoke-admin-web-mobile-shell-contract.js",

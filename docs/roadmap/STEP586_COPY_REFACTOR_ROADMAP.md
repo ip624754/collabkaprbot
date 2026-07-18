@@ -1,8 +1,8 @@
 # STEP586 — Conversation Copy Refactor Roadmap
 
 **Input:** STEP585 source audit and canonical copy system
-**Current implementation baseline:** STEP586D on STEP586C
-**Roadmap status:** STEP586A–D implemented; STEP586E is next
+**Current implementation baseline:** STEP586E on STEP586D
+**Roadmap status:** STEP586A–E implemented; STEP586F is next
 **Rule:** copy changes may not silently alter callbacks, permissions, prices, reward math, payment semantics or state transitions.
 
 ## 1. Goal
@@ -140,7 +140,7 @@ Acceptance:
 
 ### STEP586D — Invite Center Language and Mechanism Honesty
 
-**Implementation:** DONE in STEP586D (2026-07-18)  
+**Implementation:** DONE in STEP586D (2026-07-18)
 **Report:** `docs/audit/STEP586D_INVITE_CENTER_LANGUAGE_MECHANISM_HONESTY_REPORT.md`
 
 **Priority:** P1
@@ -167,6 +167,9 @@ Acceptance:
 
 ### STEP586E — Monetization and Paid Product Clarity
 
+**Implementation:** DONE in STEP586E (2026-07-18)
+**Report:** `docs/audit/STEP586E_MONETIZATION_PAID_PRODUCT_CLARITY_REPORT.md`
+
 **Priority:** P1/P2
 **Risk:** critical trust surface
 **Mode:** HEAVY
@@ -192,6 +195,8 @@ Acceptance:
 - subscription and spendable units are never described as the same object;
 - payment success/failure copy points to the correct next action;
 - no amount or entitlement statement differs from runtime configuration.
+
+**Verified result:** local payment/source contracts pass; visible quantities and durations derive from runtime catalogs; provider, prices and payment semantics are unchanged; live Stars behavior remains unverified.
 
 ---
 
@@ -288,6 +293,6 @@ The language work should reduce risk, not hide architectural changes inside stri
 
 ## 5. Current next action
 
-Proceed with **STEP586E — Monetization and Paid Product Clarity**.
+Proceed with **STEP586F — Access, Error and Empty-State Recovery**.
 
-Use payment configuration, ledger and entitlement code as the source of truth. Keep provider, amounts, callbacks and apply semantics unchanged unless an independently approved critical fix is required.
+Classify each failure from authoritative state. Do not use a global string replacement, do not weaken permission checks and do not reveal whether a private object exists.

@@ -5,6 +5,7 @@ import { tgSendMessage } from '../../src/lib/tgApi.js';
 import * as db from '../../src/db/queries.js';
 import { _validateStarsPaymentStrict } from '../../src/bot/bot.js';
 import { applyPaymentFallbackNoSession } from '../../src/bot/payments_fallback.js';
+import { buildRecoveredPaymentMessage } from '../../src/bot/monetizationCopy.js';
 import { isPaymentsFallbackApplyEnabled } from '../../src/lib/paymentsOps.js';
 import { queueOpsDigestSafe } from '../../src/lib/opsDigest.js';
 import { getQStashDeliveryUrl, qstashPublishJSON, qstashVerifySignature } from '../../src/lib/qstash.js';
@@ -229,11 +230,10 @@ async function processOrphanedAutohealBatch({ chainId = '', chainDepth = 0, chai
             notifySkipped += 1;
             if (notifySkippedIds.length < 5) notifySkippedIds.push(Number(r.id));
           } else {
-            let msg = '✅ Оплата применена автоматически (восстановлено после задержки).';
-            if (fb.kind === 'brand_pass') msg += `\n\n💳 Кредиты начислены: +${Number(fb.credits || 0)}.`;
-            if (fb.kind === 'brand_plan') msg += `\n\n⭐️ Brand Plan активирован (${String(fb.plan || '')}).`;
-            if (fb.kind === 'pro') msg += `\n\n⭐️ PRO активирован.`;
-            if (fb.kind === 'founder_brand') msg += `\n\n⭐️ Founder Sale применён.`;
+            const msg = buildRecoveredPaymentMessage({
+              result: fb,
+              amount: Number(r.total_amount || 0),
+            });
             await safeTgSend(tgId, msg);
           }
         } catch {

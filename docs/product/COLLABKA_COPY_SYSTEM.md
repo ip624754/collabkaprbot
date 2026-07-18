@@ -316,7 +316,7 @@ Core rules:
 - `сделка` — accepted collaboration tracked through stages;
 - `кредиты` — units spent by a brand for bounded paid actions;
 - `Brand Plan` — subscription product;
-- `PRO` — creator subscription/product tier.
+- `PRO канала` — creator subscription for one selected channel.
 
 Do not combine a role and an object into one label such as `Creator / канал`.
 
@@ -387,23 +387,59 @@ npm run smoke:invite-language-mechanism-honesty-contract
 
 ## 10. Monetization language
 
-A payment screen must state:
+Paid copy is a mechanism contract. Before a purchase, state:
 
-- what the user receives;
-- exact price;
-- duration or quantity;
-- what will be charged;
-- whether the action is immediate;
-- what to do if the receipt is delayed.
-
-Do not mix `Brand Pass`, `кредиты` and `Brand Plan` as interchangeable terms.
+1. what object is being bought;
+2. exact amount and currency;
+3. exact result or quantity;
+4. scope or target;
+5. duration when time-bounded;
+6. the next action after payment;
+7. delayed-application and refund boundary.
 
 Canonical distinction:
 
-- `Brand Plan` — subscription/access;
-- `кредиты` — spendable units;
-- `покупка кредитов` — top-up;
-- `PRO` — creator access tier.
+- `Brand Plan` — time-bounded subscription and access for a brand;
+- `кредиты` — expendable internal brand units;
+- `покупка кредитов` — a top-up, not a subscription;
+- `PRO канала` — time-bounded creator entitlement for one selected channel;
+- `Умный подбор` — one-time matching service;
+- `Продвижение` — one-time visibility service;
+- `Founder Sale` — campaign name that applies an existing entitlement;
+- `размещение в официальном канале` — separate moderated placement.
+
+Never say or imply:
+
+- credits are Stars or money;
+- buying credits activates or extends Brand Plan;
+- creator PRO includes Brand Plan or brand credits;
+- payment guarantees publication before moderation;
+- Stars are used only for new dialogs;
+- a refund is automatic when no automatic refund path exists.
+
+Credit copy must reflect all source-backed spend surfaces. Current contract:
+
+- opening a new dialog;
+- accepting an application and opening a deal;
+- unlocking contacts when the configured cost is above zero;
+- messages inside an already-open dialog are free.
+
+A delayed-success receipt must state the actual applied result. Generic `Оплата получена` is not enough when the system knows the product, duration or quantity.
+
+Current recovery boundary:
+
+```text
+Платёж не применился: /paysupport.
+Автоматического возврата нет.
+```
+
+Do not hardcode a price, duration or quantity when runtime configuration/catalog already owns the value. Keep invoice titles within 32 characters and descriptions within 255 characters; use the shared builders rather than ad hoc clipping.
+
+Source enforcement after STEP586E:
+
+```bash
+npm run smoke:monetization-paid-product-clarity-contract
+```
 
 ## 11. Operator language
 

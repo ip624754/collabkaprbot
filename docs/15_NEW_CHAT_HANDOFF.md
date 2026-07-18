@@ -1,3 +1,37 @@
+# STEP586E CURRENT TRUTH OVERRIDE
+
+- Current baseline: STEP586E Monetization and Paid Product Clarity.
+- Canonical products: `Brand Plan`, `Кредиты`, `PRO канала`, `Умный подбор`, `Продвижение`, `Founder Sale`, moderated official placement.
+- Credits are expendable brand units, not money, Stars or subscription time.
+- Source-backed credit spend: new dialogs, accepted applications/deals and contact unlocks; messages inside an open dialog are free.
+- Brand Plan is a time-bounded brand subscription. Current Start/Pro tool entitlement is the same; verified difference is price and included credits.
+- PRO applies to one selected channel and does not include Brand Plan or brand credits.
+- Visible prices, quantities and durations derive from runtime config/catalogs.
+- Paid receipts state Stars amount and applied result. Delayed application routes to `/paysupport`.
+- No automatic refund path was found; do not promise one.
+- `MATCH_TIERS`, `FEATURED_DURATIONS` and `BRAND_PLANS` are now explicit Stars-handler dependencies.
+- Provider, prices, callbacks, payload prefixes, ledger, HMAC and exactly-once mechanics remain unchanged.
+- Source guard: `npm run smoke:monetization-paid-product-clarity-contract`.
+- Live Stars, Vercel, Neon/Redis/QStash, support/refunds and mobile UX are not verified.
+- Next STEP: STEP586F Access, Error and Empty-State Recovery.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586E_MONETIZATION_PAID_PRODUCT_CLARITY_REPORT.md`
+3. `docs/product/COLLABKA_COPY_SYSTEM.md`
+4. `docs/product/TERMINOLOGY_REGISTRY.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586E.md`
+
+Rules for the next model:
+- classify access/error states from authoritative source evidence;
+- do not globally replace `Нет доступа.`;
+- do not weaken permissions or expose hidden object existence;
+- keep payment and entitlement mechanics unchanged;
+- do not claim live UX verification without evidence.
+
+---
+
 # STEP586D CURRENT TRUTH OVERRIDE
 
 - Current baseline: STEP586D Invite Center Language and Mechanism Honesty.

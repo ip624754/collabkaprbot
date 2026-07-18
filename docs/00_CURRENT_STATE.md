@@ -1,3 +1,32 @@
+## STEP586E — Monetization and Paid Product Clarity (2026-07-18)
+
+**Current handoff-safe baseline:** STEP586E on top of STEP586D.
+
+Verified local source truth:
+- canonical paid products are separated: `Brand Plan`, `Кредиты`, `PRO канала`, `Умный подбор`, `Продвижение`, `Founder Sale`, official-channel placement;
+- visible credit pack quantities, PRO duration and paid-service result labels derive from runtime configuration/catalogs;
+- credits are expendable brand units, not Stars, money or a subscription; source-backed spend surfaces are new dialogs, accepted applications/deals and contact unlocks;
+- Brand Plan is a time-bounded brand subscription; current Start/Pro tool entitlement is the same and the verified difference is price plus included credits;
+- creator PRO applies to one selected channel and does not include Brand Plan or brand credits;
+- payment screens and receipts state Stars amount, result, duration/quantity, next action and delayed-application recovery;
+- no automatic refund path was found; user copy routes delayed application to `/paysupport` and does not promise automatic refund;
+- extracted Stars handlers now receive `MATCH_TIERS`, `FEATURED_DURATIONS` and `BRAND_PLANS` explicitly, removing a source-confirmed ReferenceError risk on paid apply paths;
+- provider, prices, callbacks, payload prefixes, ledger, HMAC, amount validation and exactly-once semantics are unchanged;
+- dedicated and targeted payment/source contracts pass locally.
+
+Not verified: live Telegram Stars charge, Vercel deployment, live Neon/Redis/QStash convergence, mobile wrapping, operator support handling, refunds or real-user comprehension.
+
+**Next:** STEP586F — Access, Error and Empty-State Recovery.
+
+Read:
+- `docs/audit/STEP586E_MONETIZATION_PAID_PRODUCT_CLARITY_REPORT.md`;
+- `docs/product/COLLABKA_COPY_SYSTEM.md`;
+- `docs/product/TERMINOLOGY_REGISTRY.md`;
+- `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP586E.md`.
+
+---
+
 ## STEP586D — Invite Center Language and Mechanism Honesty (2026-07-18)
 
 **Current handoff-safe baseline:** STEP586D on top of STEP586C.

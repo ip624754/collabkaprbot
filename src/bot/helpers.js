@@ -378,7 +378,7 @@ export function formatBxChargeLine(thread) {
 
   let label = '';
   if (src === 'RETRY') label = 'Повтор';
-  else if (src === 'CREDITS') label = 'Brand Pass';
+  else if (src === 'CREDITS') label = 'Кредиты';
   else if (src) label = src;
 
   if (label) return `💳 Списано: ${cost} · ${label}`;

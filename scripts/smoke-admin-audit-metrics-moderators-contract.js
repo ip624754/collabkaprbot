@@ -73,7 +73,7 @@ const auditSearchExpectTextSrc = extractBetween(
 const moderatorAddExpectTextSrc = extractBetween(
   botSource,
   "    if (exp.type === 'admin_add_mod_username') {",
-  "\n\n    // Smart Matching brief (after payment)"
+  "\n\n    // Умный подбор: бриф после оплаты"
 );
 
 assert.ok(renderAdminMetricsSrc.includes("const d = Math.max(1, Math.min(90, Number(days) || 14));"), 'Admin → Metrics must clamp window to 1..90 days');

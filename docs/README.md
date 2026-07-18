@@ -2,17 +2,19 @@
 
 Это актуальный комплект документации по проекту **Collabka PR**.
 
-## Текущий snapshot — STEP586D (2026-07-18)
+## Текущий snapshot — STEP586E (2026-07-18)
 
-- Пользовательский модуль называется `📨 Приглашения`.
-- Механика в UI и DB использует один источник: `+2 / 24h`, `+10 / 48h`, `100 / 7d`, `250 / 30d`.
-- `В ожидании`, `Доступно` и `Использовано` разведены по реальному состоянию ledger.
-- Исключения self-referral, existing user, raw-open и incomplete activation описаны явно.
-- Callback IDs, экономика, ledger, anti-abuse и redeem target order не менялись.
-- Следующий scoped STEP: `STEP586E — Monetization and Paid Product Clarity`.
+- `Brand Plan`, кредиты, `PRO канала`, Умный подбор и Продвижение разведены как разные продуктовые объекты.
+- Цена, количество и срок в пользовательском UX берутся из runtime config/catalogs.
+- Кредиты описаны как расходуемые единицы бренда, а не Stars, деньги или подписка.
+- Платёжные receipts показывают сумму в Stars и фактически применённый результат.
+- Задержанная покупка ведёт в `/paysupport`; автоматический возврат не обещается.
+- Missing catalog dependency в extracted Stars handler исправлен явной dependency injection.
+- Провайдер, цены, callbacks, ledger и exactly-once механика не менялись.
+- Следующий scoped STEP: `STEP586F — Access, Error and Empty-State Recovery`.
 
 ## 0) BOOT (всегда читаем сначала)
-- `process/07_WORK_HISTORY_STEP586D.md` — актуальная дельта: приглашения, баллы, награды и mechanism honesty
+- `process/07_WORK_HISTORY_STEP586E.md` — актуальная дельта: монетизация, paid-product clarity и payment recovery truth
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
@@ -23,7 +25,7 @@
 - `RISK_REGISTRY.md` — живой реестр технических, продуктовых и AI-governance рисков
 - `CREATOR_OS_THESIS.md` — продуктовый north star: Creator Collaboration Operating System без broad rewrite
 - `CHATGPT_COLLABKA_UPGRADE_NOTES.md` — состав и truth boundary STEP580 docs upgrade
-- `audit/STEP586D_INVITE_CENTER_LANGUAGE_MECHANISM_HONESTY_REPORT.md` — реализация, mechanism truth и Truth Boundary STEP586D
+- `audit/STEP586E_MONETIZATION_PAID_PRODUCT_CLARITY_REPORT.md` — paid-product taxonomy, payment-path finding и Truth Boundary STEP586E
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 - `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout
@@ -200,7 +202,7 @@ Canonical product-language documents:
 - visible lifecycle is `оффер / профиль → заявка → диалог → сделка → этап / закрытие`;
 - deal-only routes and SQL writes require authoritative acceptance evidence.
 
-Current next action: **STEP586E — Monetization and Paid Product Clarity**.
+Current next action: **STEP586F — Access, Error and Empty-State Recovery**.
 
 Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance remain unverified.
 ### STEP586D implementation
@@ -210,3 +212,10 @@ Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance r
 - command: `npm run smoke:invite-language-mechanism-honesty-contract`;
 - public invite copy and DB reward processing share the same `+2 / 24h`, `+10 / 48h`, `100 / 7d`, `250 / 30d` source-of-truth values.
 
+### STEP586E implementation
+
+- `audit/STEP586E_MONETIZATION_PAID_PRODUCT_CLARITY_REPORT.md` — source-backed paid-product taxonomy, payment dependency finding and Truth Boundary;
+- `process/07_WORK_HISTORY_STEP586E.md` — exact implementation scope and preserved payment mechanics;
+- command: `npm run smoke:monetization-paid-product-clarity-contract`;
+- visible paid-product quantities/durations derive from runtime configuration and catalogs;
+- delayed payment recovery uses `/paysupport`; no automatic refund is claimed.

@@ -1,6 +1,6 @@
 # Collabka Terminology Registry
 
-**Status:** canonical vocabulary contract  
+**Status:** canonical vocabulary contract
 **Introduced:** STEP585
 
 This registry separates product language from internal engineering identifiers.
@@ -21,7 +21,7 @@ This registry separates product language from internal engineering identifiers.
 | Creator public profile | `витрина канала` or `профиль канала` | Public creator/channel presentation | workspace |
 | Subscription for brands | `Brand Plan` | Paid subscription/access | Brand Pass, кредиты |
 | Spendable brand units | `кредиты` | Units used for specific actions | Brand Plan, баллы |
-| Creator subscription | `PRO` | Creator paid tier | Pro-target, Pro reward |
+| Creator subscription | `PRO канала` | Paid tier for one selected creator channel | Brand Plan, кредиты, Pro-target |
 | Invite module | `Приглашения` | Invite link, statistics, history and rewards | Инвайты |
 | Invite reward units | `баллы` | Invite reward balance | pts, points, credits |
 | Global role hub | target: `Домой` | Switch role / global escape | Home, Главное меню |
@@ -81,9 +81,22 @@ Internal callbacks are not renamed by copy-only STEPs.
 Allowed as proper product names:
 
 - `Collabka`;
-- `PRO`;
 - `Brand Plan`;
 - `Founder Sale` during the campaign.
+
+### Monetization contract
+
+| Product object | Canonical user label | Exact meaning | Must not be confused with |
+|---|---|---|---|
+| Brand subscription | `Brand Plan` | Time-bounded access for a brand; may include credits and configured tool limits | кредиты, PRO канала |
+| Spendable brand units | `Кредиты` | Internal expendable units used for configured brand actions | Stars, money, Brand Plan, invite баллы |
+| Creator entitlement | `PRO канала` | Time-bounded paid tier for one selected creator channel | Brand Plan, credits |
+| One-time matching | `Умный подбор` | Paid or plan-included matching run with configured result count | Brand Plan itself |
+| One-time visibility | `Продвижение` | Paid or plan-included placement/visibility period | official-channel moderation |
+| Campaign | `Founder Sale` | Campaign that applies an existing Brand Plan or channel-PRO entitlement | separate subscription type |
+| Moderated placement | `Размещение в официальном канале` | Separate paid submission that still requires moderation/publication decision | Продвижение |
+
+Internal plan IDs such as `start`, `pro`, `basic`, `max`, invoice payload prefixes and callback keys remain internal.
 
 Preferred Russian feature labels:
 

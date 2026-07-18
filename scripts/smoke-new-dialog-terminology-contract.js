@@ -14,31 +14,30 @@ const starsSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'payments', 'star
 const cronSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'cron.js'), 'utf8');
 
 assert.ok(
-  botSrc.includes('<b>Кредиты</b> = Stars для новых диалогов.') &&
-    botSrc.includes('• 💬 Новый диалог: <b>${cost}</b>') &&
-    botSrc.includes('📆 Лимит новых диалогов в день: <b>${dailyLimit}</b>') &&
-    botSrc.includes('Stars тратятся только на новые диалоги.') &&
-    botSrc.includes("ruPlural(intros,'новый диалог','новых диалога','новых диалогов')"),
-  'Expected active brand-pass / paywall copy to consistently use «Новый диалог» terminology'
+  botSrc.includes('• Новый диалог по офферу: <b>${cost}</b>') &&
+    botSrc.includes('📆 Новых диалогов сегодня: <b>${usedToday}</b> из <b>${dailyLimit}</b>.') &&
+    botSrc.includes('Сообщения внутри уже открытого диалога: <b>бесплатно</b>'),
+  'Expected credit copy to keep the canonical «Новый диалог» terminology'
 );
 
 assert.ok(
   !botSrc.includes('Интро = новый диалог') &&
     !botSrc.includes('Stars для интро.') &&
-    !botSrc.includes('интро-диалог'),
-  'Expected old mixed «Интро = новый диалог» copy to be removed from active bot source'
+    !botSrc.includes('интро-диалог') &&
+    !botSrc.includes('Stars тратятся только на новые диалоги.'),
+  'Expected old mixed or false new-dialog monetization copy to be removed'
 );
 
 assert.ok(
-  starsSrc.includes('• 💬 Новый диалог: ${introCost} кредит(ов)') &&
+  starsSrc.includes('Кредиты расходуются на новые диалоги, принятие заявок и открытие контактов.') &&
     !starsSrc.includes('Интро = новый диалог'),
-  'Expected Stars auto-apply receipt copy to use «Новый диалог» terminology'
+  'Expected Stars receipt copy to use the complete credit-spend contract'
 );
 
 assert.ok(
   cronSrc.includes('По одному из новых диалогов не было ответа') &&
     cronSrc.includes('при следующем новом диалоге.'),
-  'Expected retry-credit notifications to use the same «Новый диалог» terminology'
+  'Expected retry-credit notifications to keep the same «Новый диалог» terminology'
 );
 
 console.log('✅ smoke new-dialog terminology contract OK');

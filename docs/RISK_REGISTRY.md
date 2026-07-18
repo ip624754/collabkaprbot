@@ -1,10 +1,10 @@
 # RISK REGISTRY — Collabka PR
 
-**Status:** living register  
-**Introduced:** STEP580  
+**Status:** living register
+**Introduced:** STEP580
 **Review cadence:** before high-risk STEPs and during release readiness reviews
 
-Severity: `LOW / MEDIUM / HIGH / CRITICAL`  
+Severity: `LOW / MEDIUM / HIGH / CRITICAL`
 State: `ACTIVE / WATCH / MITIGATED / ACCEPTED / PARKED`
 
 | ID | Risk | Severity | State | Detection signal | Current mitigation | Escalation trigger |
@@ -26,6 +26,7 @@ State: `ACTIVE / WATCH / MITIGATED / ACCEPTED / PARKED`
 | R-15 | Product drift into complex CRM/dashboard | MEDIUM | ACTIVE | duplicate surfaces, workflow friction, unused admin complexity | workflow-first Creator OS thesis, Telegram-native invariants | major dashboard or multi-workspace proposal |
 | R-16 | Trust/matching score becomes opaque or misleading | HIGH | PARKED | unexplained ranking, biased match, unsupported claims | evidence-based signals, explainable scoring requirement | before Match Engine implementation |
 | R-17 | Deal stage or paid acceptance gate bypass through forged/direct callback | CRITICAL | MITIGATED | `deal_stage` without `accepted_by_user_id`, stage write without actor access | actor-scoped load, explicit access assertion, accepted-deal runtime guards, accepted-only SQL list/write guards, STEP586C source contract | any new deal mutation path or acceptance/credit change |
+| R-18 | Paid-product copy/config drift or invoice fields rejected after copy expansion | HIGH | WATCH | UI price/result differs from server catalog, `sendInvoice` 400, stale parsed config key | runtime-derived labels, bounded 32/255 invoice fields, STEP586E source contract | any price/catalog/entitlement change or invoice rejection |
 
 ## Critical-zone handling
 
@@ -78,3 +79,12 @@ Residual risk:
 - Runtime verification required: first-start attribution, activation, confirmation timing and redeem on Preview/Staging test accounts.
 - Residual risk: live Telegram wrapping and production ledger timing are not proven by source checks; operator invite vocabulary remains for STEP586G.
 
+## Current STEP586E assessment
+
+- Change type: paid-product copy, shared receipt/invoice builders and explicit payment-handler catalog dependency injection; no economic change.
+- Primary risks addressed: R-03, R-04, R-11, R-12, R-18.
+- Runtime blast radius: Stars invoice construction, payment success/recovery notifications and paid-product screens.
+- Rollback: revert the exact STEP586E delta; no migration rollback is required.
+- Source verification: paid-product contract, payment validation, callback/dependency/runtime and 221-file syntax checks PASS locally.
+- Runtime verification required: one Preview/Staging invoice per product family without completing unintended purchases, plus approved test purchases for apply/retry evidence.
+- Residual risk: live Telegram Stars and operator support/refund handling are unverified; two parsed Brand Plan config keys remain non-authoritative and need a separate ENV-governance decision.

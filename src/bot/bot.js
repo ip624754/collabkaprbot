@@ -45,6 +45,7 @@ import { qstashPublishJSON, getQStashDeliveryUrl, getQStashLibHealth } from '../
 import { appendOperatorControlAudit, getOperatorControlSnapshot, setOperatorControlToggle } from '../lib/operatorControls.js';
 import { BROADCAST_CAPTION_SAFE_LIMIT, buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
 import { commsCb } from './commsCallbacks.js';
+import { MONETIZATION_LABELS, buildStarsInvoiceDescription, buildStarsInvoiceTitle, starsAmountLabel } from './monetizationCopy.js';
 
 let BOT;
 
@@ -253,9 +254,9 @@ function brandPassUnlocksLineHtml(credits) {
   const have = Number(credits || 0);
   const need = Number(CONTACT_UNLOCK_COST || 0);
   if (!Number.isFinite(have) || have < 0) return '';
-  if (!Number.isFinite(need) || need <= 0) return `🔓 Разлок контактов: <b>∞</b>`;
+  if (!Number.isFinite(need) || need <= 0) return `🔓 Контакты по балансу: <b>без списания</b>`;
   const n = Math.max(0, Math.floor(have / Math.max(1, need)));
-  return `🔓 Разлок контактов: <b>${escapeHtml(String(n))}</b>`;
+  return `🔓 Контакты по балансу: <b>${escapeHtml(String(n))}</b>`;
 }
 
 function brandPassTrialLineHtml(credits) {
@@ -264,7 +265,7 @@ function brandPassTrialLineHtml(credits) {
   if (!trial) return '';
   // Show only around initial trial window to keep UX clean once brand has real top-ups.
   if (have > trial) return '';
-  return `🎁 Осталось (тест): <b>${escapeHtml(String(have))}/${escapeHtml(String(trial))}</b>`;
+  return `🎁 Стартовый бонус: <b>${escapeHtml(String(have))}/${escapeHtml(String(trial))}</b>`;
 }
 
 // redactContactsInText is implemented in ./redactContacts.js (dependency-free, unit-tested)
@@ -305,13 +306,13 @@ function contactsLockedHintHtml(hasCredits, bal = null) {
 Открой через «${contactUnlockBtnLabel()}» (${contactUnlockExplainLine()}).${balLine}`;
   }
   return `🔒 <b>Контакты скрыты</b>
-Нужен <b>Brand Plan</b> (кредиты Stars). Купи и открой через «${contactUnlockBtnLabel()}» (${contactUnlockExplainLine()}).${balLine}`;
+Нужны кредиты бренда. Докупи их и открой контакты через «${contactUnlockBtnLabel()}» (${contactUnlockExplainLine()}).${balLine}`;
 }
 
 const BRAND_PACKS = [
-  { id: 'S', credits: CFG.BRAND_TOPUP_S_CREDITS, stars: CFG.BRAND_TOPUP_S_PRICE, title: '+10 кредитов' },
-  { id: 'M', credits: CFG.BRAND_TOPUP_M_CREDITS, stars: CFG.BRAND_TOPUP_M_PRICE, title: '+30 кредитов' },
-  { id: 'L', credits: CFG.BRAND_TOPUP_L_CREDITS, stars: CFG.BRAND_TOPUP_L_PRICE, title: '+100 кредитов' }
+  { id: 'S', credits: CFG.BRAND_TOPUP_S_CREDITS, stars: CFG.BRAND_TOPUP_S_PRICE },
+  { id: 'M', credits: CFG.BRAND_TOPUP_M_CREDITS, stars: CFG.BRAND_TOPUP_M_PRICE },
+  { id: 'L', credits: CFG.BRAND_TOPUP_L_CREDITS, stars: CFG.BRAND_TOPUP_L_PRICE }
 ];
 
 function getBrandPack(packId) {
@@ -327,9 +328,9 @@ const BRAND_PLANS = [
 // Founder Sale (limited time promo; UI-only, no migrations)
 // NOTE: effective settings may be overridden from Admin (Redis runtime), so prices/credits are computed at runtime.
 const FOUNDER_PRODUCT_DEFS = [
-  { id: 'founder_brand_3m', scope: 'brand', title: 'Brand Plan Pro', subtitle: '3 месяца', durationDays: 90 },
-  { id: 'founder_brand_12m', scope: 'brand', title: 'Brand Plan Pro', subtitle: '12 месяцев', durationDays: 365 },
-  { id: 'founder_creator_12m', scope: 'creator', title: 'PRO', subtitle: '12 месяцев', durationDays: 365 },
+  { id: 'founder_brand_3m', scope: 'brand', title: 'Brand Plan «Про»', subtitle: '3 месяца', durationDays: 90 },
+  { id: 'founder_brand_12m', scope: 'brand', title: 'Brand Plan «Про»', subtitle: '12 месяцев', durationDays: 365 },
+  { id: 'founder_creator_12m', scope: 'creator', title: 'PRO канала', subtitle: '12 месяцев', durationDays: 365 },
 ];
 
 function _boolish(v, d = null) {
@@ -443,9 +444,9 @@ function founderBackCb(ret) {
 }
 
 const MATCH_TIERS = [
-  { id: 'S', title: 'Match S', stars: CFG.MATCH_S_PRICE, count: CFG.MATCH_S_COUNT },
-  { id: 'M', title: 'Match M', stars: CFG.MATCH_M_PRICE, count: CFG.MATCH_M_COUNT },
-  { id: 'L', title: 'Match L', stars: CFG.MATCH_L_PRICE, count: CFG.MATCH_L_COUNT }
+  { id: 'S', title: 'Пакет S', stars: CFG.MATCH_S_PRICE, count: CFG.MATCH_S_COUNT },
+  { id: 'M', title: 'Пакет M', stars: CFG.MATCH_M_PRICE, count: CFG.MATCH_M_COUNT },
+  { id: 'L', title: 'Пакет L', stars: CFG.MATCH_L_PRICE, count: CFG.MATCH_L_COUNT }
 ];
 
 // Brand Plan included quotas (calendar month)
@@ -1709,11 +1710,8 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
   const chatId = ctx?.chat?.id;
   const userId = ctx?.from?.id;
 
-  // Put the "cancel/help" hint into the invoice description to avoid sending a second message.
-  // Keep it on a new paragraph to make Telegram UI readable.
-  const fullDescription = `${description}
-
-Если передумал — жми «📋 Меню».`;
+  // Keep product truth and recovery inside Telegram's 255-codepoint invoice limit.
+  const fullDescription = buildStarsInvoiceDescription(description);
 
   // Prices must contain exactly one item for Stars.
   // Telegram invoice UI shows it as: ⭐ <amount> <label>
@@ -1741,7 +1739,7 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
     // Stars: currency XTR, provider_token must be empty string
     await ctx.api.raw.sendInvoice({
       chat_id: chatId,
-      title,
+      title: buildStarsInvoiceTitle(title),
       description: fullDescription,
       payload,
       provider_token: '',
@@ -4242,7 +4240,7 @@ async function renderFounderSale(ctx, u, params = {}) {
   const normalBrand12 = Number(pBrand12?.normalStars || 0);
   const normalCreator12 = Number(pCreator12?.normalStars || 0);
 
-  let text = `🔥 <b>Founder Launch — ограниченное предложение</b>
+  let text = `🔥 <b>Founder Sale</b>
 
 `;
 
@@ -4264,20 +4262,19 @@ async function renderFounderSale(ctx, u, params = {}) {
 `;
     }
   } else {
-    text += `До <b>${escapeHtml(deadlineLabel)}</b> можно купить подписку по спеццене.
-После завершения акции цены вырастут.
+    text += `До <b>${escapeHtml(deadlineLabel)}</b> действуют указанные цены. Это временная кампания, а не отдельный тип подписки.
 
 `;
   }
 
   text += `<b>Для брендов:</b>
 ` +
-    `⭐ 3 месяца Brand Plan Pro — ${brand3}⭐️ (обычно ${normalBrand3}⭐️)` +
+    `⭐ 3 месяца Brand Plan «Про» — ${brand3}⭐️ (обычно ${normalBrand3}⭐️)` +
     (brand3Credits ? `
    💳 +${brand3Credits} кредитов` : '') +
     `
 ` +
-    `⭐ 12 месяцев Brand Plan Pro — ${brand12}⭐️ (обычно ${normalBrand12}⭐️)` +
+    `⭐ 12 месяцев Brand Plan «Про» — ${brand12}⭐️ (обычно ${normalBrand12}⭐️)` +
     (brand12Credits ? `
    💳 +${brand12Credits} кредитов` : '') +
     `
@@ -4285,7 +4282,7 @@ async function renderFounderSale(ctx, u, params = {}) {
 ` +
     `<b>Для креаторов:</b>
 ` +
-    `⭐ 12 месяцев PRO — ${creator12}⭐️ (обычно ${normalCreator12}⭐️)
+    `⭐ 12 месяцев PRO канала — ${creator12}⭐️ (обычно ${normalCreator12}⭐️)
 `;
 
   if (active) {
@@ -15350,32 +15347,32 @@ async function renderWsPro(ctx, ownerUserId, wsId) {
   if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
   if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
   await db.ensureWorkspaceSettings(wsId);
-  const s = await db.getWorkspace(ownerUserId, wsId);
+  const settings = await db.getWorkspace(ownerUserId, wsId);
   const isPro = await db.isWorkspacePro(wsId);
-  const until = s.pro_until ? fmtTs(s.pro_until) : '—';
+  const until = settings.pro_until ? fmtTs(settings.pro_until) : '—';
+  const channel = ws.channel_username ? '@' + ws.channel_username : ws.title;
 
-  const free = `Free: конкурсы + базовая биржа`;
-  const pro = `PRO: bump чаще / больше офферов / pin в ленте / расширенная аналитика`;
+  const text = `⭐️ <b>${MONETIZATION_LABELS.CREATOR_PRO}</b>
 
-  const text = `⭐️ <b>PRO</b>
+Канал: <b>${escapeHtml(channel)}</b>
+Статус: <b>${isPro ? 'Активен' : 'Не активен'}</b>
+Действует до: <b>${escapeHtml(until)}</b>
 
-Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
-План: <b>${escapeHtml(String(s.plan || 'free').toUpperCase())}</b>
-PRO до: <b>${escapeHtml(until)}</b>
+<b>Что меняется для этого канала</b>
+• Активные офферы: <b>${CFG.BARTER_MAX_ACTIVE_OFFERS_FREE}</b> → <b>${CFG.BARTER_MAX_ACTIVE_OFFERS_PRO}</b>
+• Повторное поднятие оффера: раз в <b>${CFG.BARTER_BUMP_COOLDOWN_HOURS_FREE} ч</b> → раз в <b>${CFG.BARTER_BUMP_COOLDOWN_HOURS_PRO} ч</b>
+• Пин одного оффера в ленте
+• Расширенная аналитика
 
-${escapeHtml(free)}
-${escapeHtml(pro)}
+Стоимость: <b>${starsAmountLabel(CFG.PRO_STARS_PRICE)}</b>
+Срок после оплаты: <b>${CFG.PRO_DURATION_DAYS}</b> ${ruPlural(CFG.PRO_DURATION_DAYS, 'день', 'дня', 'дней')}
 
-Лимиты:
-• Офферы: <b>${CFG.BARTER_MAX_ACTIVE_OFFERS_FREE}</b> (Free) / <b>${CFG.BARTER_MAX_ACTIVE_OFFERS_PRO}</b> (PRO)
-• Bump: <b>${CFG.BARTER_BUMP_COOLDOWN_HOURS_FREE}ч</b> (Free) / <b>${CFG.BARTER_BUMP_COOLDOWN_HOURS_PRO}ч</b> (PRO)
-
-Оплата: Telegram Stars или ссылкой.`;
+<i>PRO действует только для выбранного канала. Он не включает Brand Plan и не начисляет кредиты бренда.</i>`;
 
   const kb = new InlineKeyboard();
   if (!isPro) {
-    kb.text(`⭐️ Купить PRO · ${CFG.PRO_STARS_PRICE}⭐️/мес`, `a:ws_pro_buy|ws:${wsId}`).row();
-    if (CFG.PRO_PAYMENT_URL) kb.url('🔗 Оплатить ссылкой', CFG.PRO_PAYMENT_URL).row();
+    kb.text(`⭐️ Купить на ${CFG.PRO_DURATION_DAYS} дн. · ${CFG.PRO_STARS_PRICE}⭐️`, `a:ws_pro_buy|ws:${wsId}`).row();
+    if (CFG.PRO_PAYMENT_URL) kb.url('🔗 Другой способ оплаты', CFG.PRO_PAYMENT_URL).row();
   } else {
     kb.text('📌 Пин в ленте', `a:ws_pro_pin|ws:${wsId}`).row();
   }
@@ -15977,7 +15974,7 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
 <tg-spoiler>${bxFilterSummaryLinesHtml(filter)}</tg-spoiler>`;
 
   const featLines = featured.map((f) => {
-    const title = (f.title || 'Featured').toString();
+    const title = (f.title || 'Продвижение').toString();
     const body = (f.body || '').toString();
     const contact = (f.contact || '').toString();
     const blurb = body ? body.replace(/\s+/g, ' ').slice(0, 90) : '';
@@ -16016,7 +16013,7 @@ ${escapeHtml(bxTypeLabel(o.offer_type))} · ${escapeHtml(bxCompLabel(o.compensat
 
   const text = `${header}
 
-${featLines.length ? `🔥 <b>Featured</b>
+${featLines.length ? `🔥 <b>Продвижение</b>
 
 ${featLines.join('\n\n')}
 
@@ -17696,11 +17693,13 @@ async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0, back 
 
 Оффер #${offerId}
 
+Оплата создаёт заявку на размещение. Публикация начнётся только после одобрения модератором.
+
 Выбери срок слота:`;
 
   const kb = new InlineKeyboard();
   for (const d of OFFICIAL_DURATIONS) {
-    kb.text(`⭐ ${d.label} · ${d.price} Stars`, `a:off_buy|ws:${wsId}|o:${offerId}|dur:${d.id}|p:${page}|back:${back}`).row();
+    kb.text(`⭐️ ${d.label} · ${d.price}⭐️`, `a:off_buy|ws:${wsId}|o:${offerId}|dur:${d.id}|p:${page}|back:${back}`).row();
   }
   kbNavRow(kb, `a:off_manage|ws:${wsId}|o:${offerId}|p:${page}|back:${back}`);
 
@@ -17746,67 +17745,50 @@ async function renderBrandPaywall(ctx, userId, wsId, offerId, page = 0) {
   const cost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
   const trialCredits = Math.max(0, Number(CFG.INTRO_TRIAL_CREDITS || 0));
 
-  // Verification-aware daily limit
   let isVerified = false;
   if (CFG.VERIFICATION_ENABLED) {
     const v = await safeUserVerifications(() => db.getUserVerification(userId), async () => null);
     isVerified = String(v?.status || '').toUpperCase() === 'APPROVED' && String(v?.kind || '').toLowerCase() === 'brand';
   }
   const dailyLimit = Math.max(0, Number(isVerified ? CFG.INTRO_DAILY_LIMIT : CFG.INTRO_DAILY_LIMIT_UNVERIFIED));
-
   const meta = (await db.getBrandIntroMeta(userId)) || { brand_credits: 0, brand_trial_granted: false };
   const credits = Number(meta.brand_credits || 0);
   let usedToday = 0;
-  try {
-    usedToday = await db.getIntroDailyUsage(userId);
-  } catch {
-    usedToday = 0;
-  }
-
+  try { usedToday = await db.getIntroDailyUsage(userId); } catch { usedToday = 0; }
   const retry = CFG.INTRO_RETRY_ENABLED ? await db.countAvailableBrandRetryCredits(userId) : 0;
 
   const afterH = Number(CFG.INTRO_RETRY_AFTER_HOURS || 24);
   const expD = Number(CFG.INTRO_RETRY_EXPIRES_DAYS || 7);
   const retryHintLine = CFG.INTRO_RETRY_ENABLED
-    ? `
-ℹ️ Повторный кредит: если креатор не отвечает за <b>${afterH}ч</b> → 1 повтор на <b>${expD}</b> ${ruPlural(expD,'день','дня','дней')}.`
+    ? `\nℹ️ Если креатор не ответил за <b>${afterH} ч</b>, один повторный кредит действует <b>${expD}</b> ${ruPlural(expD,'день','дня','дней')}.`
     : '';
-
   const trialLine = !meta.brand_trial_granted && trialCredits > 0
-    ? `
-🎁 Тест-бонус на старт: <b>${trialCredits}</b> кредит(ов) на первые новые диалоги (выдаётся 1 раз).
-`
+    ? `\n🎁 Стартовый бонус: <b>${trialCredits}</b> ${ruPlural(trialCredits,'кредит','кредита','кредитов')} один раз.\n`
     : '';
-
   const limitLine = dailyLimit > 0
-    ? `
-📆 Лимит новых диалогов в день: <b>${dailyLimit}</b> (сегодня использовано: <b>${usedToday}</b>).
-`
+    ? `\n📆 Новых диалогов сегодня: <b>${usedToday}</b> из <b>${dailyLimit}</b>.\n`
     : '';
-
   const verifiedLimit = Math.max(0, Number(CFG.INTRO_DAILY_LIMIT || 0));
   const unverifiedLimit = Math.max(0, Number(CFG.INTRO_DAILY_LIMIT_UNVERIFIED || 0));
   const verifyHintLine = (CFG.VERIFICATION_ENABLED && !isVerified && verifiedLimit > unverifiedLimit)
-    ? `
-
-✅ Пройди <b>верификацию</b>, чтобы увеличить лимит до <b>${verifiedLimit}</b> новых диалогов в день.
-<i>Открытие новых диалогов всё равно оплачивается кредитами — верификация не отменяет списания.</i>
-`
+    ? `\n✅ Верификация увеличит дневной лимит до <b>${verifiedLimit}</b>. Списание кредитов при этом не отменяется.\n`
     : '';
+
+  const contactLine = CONTACT_UNLOCK_COST <= 0
+    ? '• Контакты в витрине: <b>бесплатно</b>'
+    : `• Контакты в одной витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')} на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}`;
 
   const text = `🔒 <b>Нужны кредиты</b>
 
-<b>Кредиты</b> = Stars для новых диалогов.
+Кредиты — внутренние расходуемые единицы бренда. Их покупают за Telegram Stars. Это не подписка и не денежный баланс.
 
-<b>Как работает:</b>
-• 💬 Новый диалог: <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}
-• Переписка внутри открытого диалога — бесплатна
-• Лимит считается только на <b>новые</b> диалоги (ответы без ограничений)
+<b>На что списываются кредиты</b>
+• Новый диалог по офферу: <b>${cost}</b> ${ruPlural(cost,'кредит','кредита','кредитов')}
+• Принять заявку креатора и открыть сделку: <b>${BRAND_APP_ACCEPT_COST}</b> ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')}
+${contactLine}
+• Сообщения внутри уже открытого диалога: <b>бесплатно</b>
 
-<i>ℹ️ Stars тратятся только на новые диалоги. Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
-
-${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')} (на одну витрину).
-👥 Раздел «Менеджеры бренда» открывается после покупки Brand Plan.
+<i>Brand Plan — отдельная подписка. Покупка кредитов не активирует Brand Plan.</i>
 ${trialLine}${limitLine}${verifyHintLine}
 ${brandPassBalanceLineHtml(credits)}
 ${brandPassUnlocksLineHtml(credits)}
@@ -17817,18 +17799,16 @@ ${brandPassTrialLineHtml(credits)}
 
   const kb = new InlineKeyboard();
   if (CFG.VERIFICATION_ENABLED && !isVerified && verifiedLimit > unverifiedLimit) {
-    kb.text('✅ Увеличить лимит (верификация)', 'a:verify_home').row();
+    kb.text('✅ Увеличить лимит', 'a:verify_home').row();
   }
   for (const p of BRAND_PACKS) {
-    const intros = Math.max(1, Math.floor(Number(p.credits || 0) / Math.max(1, cost)));
-    kb.text(`⭐ ${p.title} · ≈ ${intros} ${ruPlural(intros,'новый диалог','новых диалога','новых диалогов')}`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
+    kb.text(`⭐️ ${p.credits} ${ruPlural(p.credits,'кредит','кредита','кредитов')} · ${p.stars}⭐️`, `a:brand_buy|ws:${wsId}|o:${offerId}|pack:${p.id}|p:${page}`).row();
   }
-  kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Smart Matching (подбор офферов)', `a:match_home|ws:${wsId}`).row();
+  kb.text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('🎯 Умный подбор', `a:match_home|ws:${wsId}`).row();
   kbNavRow(kb, `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:bo`);
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
-
 
 function bxThreadStageTitle(stage) {
   const st = CRM_STAGES.find((s) => s.id === String(stage || '').trim());
@@ -18187,35 +18167,36 @@ async function renderBrandPassTopup(ctx, userId, wsId, opts = {}) {
   const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
   const kb = new InlineKeyboard();
   for (const p of BRAND_PACKS) {
-    kb.text(`💳 ${p.title} · ${p.stars}⭐️`, `a:brand_buy|ws:${wsId}|pack:${p.id}`).row();
+    kb.text(`⭐️ ${p.credits} ${ruPlural(p.credits,'кредит','кредита','кредитов')} · ${p.stars}⭐️`, `a:brand_buy|ws:${wsId}|pack:${p.id}`).row();
   }
-  kb.text('⬅️ К Brand Plan', `a:brand_plan|ws:${wsId}`);
-  kb.row();
+  kb.text('⬅️ К Brand Plan', `a:brand_plan|ws:${wsId}`).row();
   const bpRet = String(opts?.ret || '').trim().toLowerCase();
   const bpRws = Number(opts?.rws || 0);
-  if (bpRet === 'wsp' && bpRws > 0) {
-    kb.text('⬅️ Вернуться к витрине', `a:wsp_open|ws:${bpRws}|m:ro`);
-  }
-
+  if (bpRet === 'wsp' && bpRws > 0) kb.text('⬅️ Вернуться к витрине', `a:wsp_open|ws:${bpRws}|m:ro`).row();
   const bpAppId = Number(opts?.id || 0);
   const bpBackStatus = String(opts?.s || 'new');
   const bpBackPage = Number(opts?.p || 0);
-  if (bpRet === 'app' && bpAppId > 0) {
-    kb.text('⬅️ Вернуться к заявке', `a:brand_app_view|id:${bpAppId}|s:${bpBackStatus}|p:${bpBackPage}`);
-  }
+  if (bpRet === 'app' && bpAppId > 0) kb.text('⬅️ Вернуться к заявке', `a:brand_app_view|id:${bpAppId}|s:${bpBackStatus}|p:${bpBackPage}`).row();
 
-  await safeEditOrReply(ctx, 
-    `💳 <b>Докупить кредиты</b>
+  const contactLine = CONTACT_UNLOCK_COST <= 0
+    ? '• Контакты в витрине: бесплатно'
+    : `• Контакты в одной витрине: ${CONTACT_UNLOCK_COST} ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')} на ${CONTACT_UNLOCK_TTL_DAYS} ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}`;
+
+  await safeEditOrReply(ctx,
+    `💳 <b>Кредиты бренда</b>
 
 ${brandPassBalanceLineHtml(credits)}
 ${brandPassUnlocksLineHtml(credits)}
 ${brandPassTrialLineHtml(credits)}
 🎟 Повторные кредиты: <b>${retry}</b>
 
-<b>Как работает:</b>
-• 💬 Новый диалог: <b>${introCost}</b> ${ruPlural(introCost,'кредит','кредита','кредитов')}
-• Переписка внутри открытого диалога — бесплатна
-• ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST,'кредит','кредита','кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS,'день','дня','дней')}
+Кредиты — расходуемые единицы. Они не продлевают Brand Plan.
+
+<b>Списание</b>
+• Новый диалог: ${introCost} ${ruPlural(introCost,'кредит','кредита','кредитов')}
+• Принять заявку и открыть сделку: ${BRAND_APP_ACCEPT_COST} ${ruPlural(BRAND_APP_ACCEPT_COST,'кредит','кредита','кредитов')}
+${contactLine}
+• Сообщения в открытом диалоге: бесплатно
 
 Выбери пакет:`,
     { parse_mode: 'HTML', reply_markup: kb }
@@ -18237,52 +18218,49 @@ async function renderBrandPlan(ctx, userId, wsId, ret = 'brand') {
 
   const startPl = BRAND_PLANS.find(p => p.id === 'start');
   const proPl = BRAND_PLANS.find(p => p.id === 'pro');
+  const includedMatch = MATCH_TIERS.find(t => t.id === BRAND_PLAN_INCLUDED_MATCH_TIER_ID) || MATCH_TIERS[0];
 
   const kb = new InlineKeyboard()
-    .text(`⭐️ Старт · ${startPl.stars}⭐️/мес`, `a:brand_plan_buy|ws:${wsId}|plan:start|ret:${ret}`)
+    .text(`⭐️ Старт · ${CFG.BRAND_PLAN_DURATION_DAYS} дн. · ${startPl.stars}⭐️`, `a:brand_plan_buy|ws:${wsId}|plan:start|ret:${ret}`)
     .row()
-    .text(`🚀 Про · ${proPl.stars}⭐️/мес`, `a:brand_plan_buy|ws:${wsId}|plan:pro|ret:${ret}`)
+    .text(`🚀 Про · ${CFG.BRAND_PLAN_DURATION_DAYS} дн. · ${proPl.stars}⭐️`, `a:brand_plan_buy|ws:${wsId}|plan:pro|ret:${ret}`)
     .row()
     .text('💳 Докупить кредиты', `a:brand_pass|ws:${wsId}`)
     .row()
-    .text('🎯 Smart Matching (подбор офферов)', `a:match_home|ws:${wsId}|ret:bp|bpr:${ret}`)
-    .text('🔥 Featured', `a:feat_home|ws:${wsId}|ret:bp|bpr:${ret}`)
+    .text('🎯 Умный подбор', `a:match_home|ws:${wsId}|ret:bp|bpr:${ret}`)
+    .text('🔥 Продвижение', `a:feat_home|ws:${wsId}|ret:bp|bpr:${ret}`)
     .row()
     .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
 
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(ctx,
     `⭐️ <b>Brand Plan</b>
+
+Brand Plan — подписка для бренда. Она открывает рабочие инструменты на <b>${CFG.BRAND_PLAN_DURATION_DAYS}</b> ${ruPlural(CFG.BRAND_PLAN_DURATION_DAYS,'день','дня','дней')}.
 
 Статус: <b>${escapeHtml(status)}</b>
 ${brandPassBalanceLineHtml(credits)}
-${brandPassUnlocksLineHtml(credits)}
-${brandPassTrialLineHtml(credits)}
-<i>ℹ️ Stars тратятся только на новые диалоги. Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
 
-<b>Старт</b> · ${startPl.stars}⭐️/мес
-• ${startPl.credits} кредитов на новые диалоги
-• CRM-стадии в диалогах
-• До 3 менеджеров
+<b>Оба тарифа включают</b>
+• CRM-этапы в диалогах
+• До 3 менеджеров бренда
+• 🎯 Умный подбор: до <b>${includedMatch.count}</b> каналов, <b>${BRAND_PLAN_INCLUDED_MATCH_PER_MONTH}</b> запуск за календарный месяц
+• 🔥 Продвижение: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')}, <b>${BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH}</b> запуск за календарный месяц
 
-<b>Про</b> · ${proPl.stars}⭐️/мес
-• ${proPl.credits} кредитов на новые диалоги
-• CRM-стадии + менеджеры
+<b>Старт</b> · <b>${starsAmountLabel(startPl.stars)}</b>
+• Срок: ${CFG.BRAND_PLAN_DURATION_DAYS} ${ruPlural(CFG.BRAND_PLAN_DURATION_DAYS,'день','дня','дней')}
+• При активации: +${startPl.credits} ${ruPlural(startPl.credits,'кредит','кредита','кредитов')}
 
-<b>Включено в подписку</b>
-<i>Открывай 🎯 Smart Matching (подбор офферов) / 🔥 Featured ниже — там покажет остаток включённых запусков.</i>
+<b>Про</b> · <b>${starsAmountLabel(proPl.stars)}</b>
+• Срок: ${CFG.BRAND_PLAN_DURATION_DAYS} ${ruPlural(CFG.BRAND_PLAN_DURATION_DAYS,'день','дня','дней')}
+• При активации: +${proPl.credits} ${ruPlural(proPl.credits,'кредит','кредита','кредитов')}
 
-• 🎯 Smart Matching (подбор офферов): <b>${BRAND_PLAN_INCLUDED_MATCH_TIER_ID}</b> (≈ ${MATCH_TIERS.find(t=>t.id===BRAND_PLAN_INCLUDED_MATCH_TIER_ID)?.count || 10} каналов) · <b>${BRAND_PLAN_INCLUDED_MATCH_PER_MONTH}</b> раз/мес
-• 🔥 Featured: <b>${BRAND_PLAN_INCLUDED_FEATURED_DAYS}</b> ${ruPlural(BRAND_PLAN_INCLUDED_FEATURED_DAYS,'день','дня','дней')} · <b>${BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH}</b> раз/мес
+<i>Отличие тарифов сейчас — цена и число кредитов при активации. Кредиты расходуются отдельно и не продлевают подписку.</i>
 
-<b>Сверх лимита</b>
-• 🎯 Smart Matching (подбор офферов) / 🔥 Featured можно докупить за Stars
-${paidAuto ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>После оплаты я попрошу бриф/контент и запущу услугу.</i>'}
-
-Кредиты можно докупить отдельно.`,
+Сверх включённого лимита Умный подбор и Продвижение покупаются отдельно за Stars.
+${paidAuto ? '<i>После отдельной оплаты бот запросит бриф или контент.</i>' : '<i>После отдельной оплаты оператор запросит бриф или контент.</i>'}`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
 }
-
 
 function cbJoin(base, params = {}) {
   let s = base;
@@ -18309,7 +18287,7 @@ async function renderMatchingExample(ctx, wsId, ret, bpr) {
 
   await safeEditOrReply(
     ctx,
-    `👀 <b>Пример результата — Smart Matching (подбор офферов)</b>
+    `👀 <b>Пример результата — Умный подбор</b>
 
 ` +
       `Ты присылаешь бриф (ниша, гео, аудитория, формат) — бот подбирает релевантные офферы/каналы из сети и даёт список с кнопками.
@@ -18341,7 +18319,7 @@ async function renderFeaturedExample(ctx, wsId, ret, bpr) {
 
   await safeEditOrReply(
     ctx,
-    `👀 <b>Пример — Featured</b>
+    `👀 <b>Пример — Продвижение</b>
 
 ` +
       `Ты присылаешь контент, и твой блок появляется <b>сверху в ленте</b> у пользователей на время размещения.
@@ -18375,7 +18353,7 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
   if (hasPlan && left > 0) {
     kb.text(`✅ Включено: осталось ${left} в этом месяце`, cbJoin('a:match_inc', { ws: wsId, ret, bpr })).row();
   } else if (!hasPlan) {
-    kb.text('⭐️ Brand Plan (включено 10 каналов/мес)', cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
+    kb.text(`⭐️ Brand Plan · включён 1 запуск`, cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
   }
 
   for (const t of MATCH_TIERS) {
@@ -18389,10 +18367,10 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
 
   const cta = (hasPlan && left > 0)
     ? 'Нажми «✅ Включено…» — затем пришли бриф одним сообщением (ниша, гео, аудитория, формат).'
-    : 'Чтобы запустить: купи Smart Matching за Stars (или включи Brand Plan) и пришли бриф одним сообщением.';
+    : 'Чтобы запустить: купи Умный подбор за Stars или активируй Brand Plan. Затем пришли бриф одним сообщением.';
 
   await safeEditOrReply(ctx,
-    `🎯 <b>Smart Matching (подбор офферов)</b>
+    `🎯 <b>Умный подбор</b>
 
 ` +
       `<b>Что это:</b> подбор подходящих офферов/каналов по твоему брифу.
@@ -18403,12 +18381,12 @@ async function renderMatchingHome(ctx, userId, wsId, ret = '', bpr = '') {
       `${includedLine}
 
 ` +
-      `<i>ℹ️ Stars тратятся только на новые диалоги. Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+      `<i>Это отдельная услуга. Она не списывает кредиты бренда. Один запуск может входить в активный Brand Plan; сверх лимита услуга оплачивается Stars.</i>
 
-<i>Не путать с «🎯 Подбор в ленте» — это отдельный фильтр.</i>
+<i>Не путай с «🎯 Подбор в ленте»: это обычный фильтр ленты.</i>
 
 ` +
-      `Сверх лимита можно докупить за Stars.
+      `Сверх лимита услуга покупается отдельно за Stars.
 ${paidAuto ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>После оплаты я попрошу бриф/контент и запущу услугу.</i>'}
 
 ` +
@@ -18432,7 +18410,7 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
   if (hasPlan && left > 0) {
     kb.text(`✅ Включено: осталось ${left} в этом месяце`, cbJoin('a:feat_inc', { ws: wsId, ret, bpr })).row();
   } else if (!hasPlan) {
-    kb.text('⭐️ Brand Plan (включено 7 дней/мес)', cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
+    kb.text(`⭐️ Brand Plan · включён 1 запуск`, cbJoin('a:brand_plan', { ws: wsId, ret: String(bpr || 'brand') })).row();
   }
 
   for (const d of FEATURED_DURATIONS) {
@@ -18446,10 +18424,10 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
 
   const cta = (hasPlan && left > 0)
     ? 'Нажми «✅ Включено…» — затем пришли контент (заголовок/описание/контакт).'
-    : 'Чтобы запустить: купи Featured за Stars (или включи Brand Plan) и пришли контент (заголовок/описание/контакт).';
+    : 'Чтобы запустить: купи Продвижение за Stars или активируй Brand Plan. Затем пришли контент: заголовок, описание и контакт.';
 
   await safeEditOrReply(ctx,
-    `🔥 <b>Featured</b>
+    `🔥 <b>Продвижение</b>
 
 ` +
       `<b>Что это:</b> твой промо-блок появляется <b>сверху в ленте</b> у пользователей на время размещения.
@@ -18460,12 +18438,12 @@ async function renderFeaturedHome(ctx, userId, wsId, ret = '', bpr = '') {
       `${includedLine}
 
 ` +
-      `<i>ℹ️ Stars тратятся только на новые диалоги. Переписка в открытом диалоге бесплатна. Brand Plan даёт отдельные квоты на Smart Matching/Featured.</i>
+      `<i>Это отдельная услуга. Она не списывает кредиты бренда. Один запуск может входить в активный Brand Plan; сверх лимита услуга оплачивается Stars.</i>
 
-<i>Не путать с «🎯 Подбор в ленте» — это отдельный фильтр.</i>
+<i>Не путай с «🎯 Подбор в ленте»: это обычный фильтр ленты.</i>
 
 ` +
-      `Сверх лимита можно докупить за Stars.
+      `Сверх лимита услуга покупается отдельно за Stars.
 ${paidAuto ? '<i>После оплаты бот автоматически попросит бриф/контент и запустит.</i>' : '<i>После оплаты я попрошу бриф/контент и запущу услугу.</i>'}
 
 ` +
@@ -18476,10 +18454,10 @@ ${paidAuto ? '<i>После оплаты бот автоматически по�
 
 async function renderFeaturedView(ctx, userId, wsId, id, page = 0, h = BX_HOME.MENU) {
   const f = await db.getFeaturedPlacement(id);
-  if (!f || String(f.status) !== 'ACTIVE') return ctx.answerCallbackQuery({ text: 'Featured не найден.' });
+  if (!f || String(f.status) !== 'ACTIVE') return ctx.answerCallbackQuery({ text: 'Продвижение не найдено.' });
 
   const ends = f.ends_at ? fmtTs(f.ends_at) : '—';
-  const title = f.title || 'Featured';
+  const title = f.title || 'Продвижение';
   const body = f.body || '';
   const contact = f.contact || '';
 
@@ -23214,7 +23192,7 @@ if (exp.type === 'brand_deals_search') {
       return;
     }
 
-    // Smart Matching brief (after payment)
+    // Умный подбор: бриф после оплаты
     if (exp.type === 'match_brief') {
       const brief = String(ctx.message.text || '').trim().slice(0, 1000);
       if (!brief || brief.length < 10) {
@@ -23229,7 +23207,7 @@ if (exp.type === 'brand_deals_search') {
 
       const req = await db.getMatchingRequest(reqId, u.id);
       if (!req) {
-        await ctx.reply('Запрос matching не найден (возможно, устарел). Открой 🎯 Smart Matching (подбор офферов) и попробуй ещё раз.');
+        await ctx.reply('Запрос Умного подбора не найден или устарел. Открой «🎯 Умный подбор» и запусти его снова.');
         return;
       }
 
@@ -23240,7 +23218,7 @@ if (exp.type === 'brand_deals_search') {
 
       if (!rows.length) {
         const kb = new InlineKeyboard()
-          .text('🎯 Matching', cbJoin('a:match_home', { ws: wsId, ret: String(exp.ret || ''), bpr: String(exp.bpr || '') }))
+          .text('🎯 Умный подбор', cbJoin('a:match_home', { ws: wsId, ret: String(exp.ret || ''), bpr: String(exp.bpr || '') }))
           .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
           .row()
           .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
@@ -23263,18 +23241,18 @@ if (exp.type === 'brand_deals_search') {
         kb.text(`🔎 #${o.id}`, `a:bx_pub|ws:${wsId}|o:${o.id}|p:0|h:bo`).row();
       }
       kb.text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
-        .text('🎯 Matching', cbJoin('a:match_home', { ws: wsId, ret: String(exp.ret || ''), bpr: String(exp.bpr || '') }))
+        .text('🎯 Умный подбор', cbJoin('a:match_home', { ws: wsId, ret: String(exp.ret || ''), bpr: String(exp.bpr || '') }))
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
 
       await ctx.reply(
-        `🎯 <b>Smart Matching (подбор офферов)</b>\n\nБриф: <tg-spoiler>${escapeHtml(brief)}</tg-spoiler>\n\nНайдено: <b>${rows.length}</b>\nПоказаны: <b>${showN}</b>\n\n${lines.join('\n\n')}`,
+        `🎯 <b>Умный подбор</b>\n\nБриф: <tg-spoiler>${escapeHtml(brief)}</tg-spoiler>\n\nНайдено: <b>${rows.length}</b>\nПоказаны: <b>${showN}</b>\n\n${lines.join('\n\n')}`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
       return;
     }
 
-    // Featured content (after payment)
+    // Продвижение: контент после оплаты
     if (exp.type === 'feat_content') {
       const raw = String(ctx.message.text || '').trim();
       const lines = raw.split(/\n+/).map(s => s.trim()).filter(Boolean);
@@ -23304,7 +23282,7 @@ if (exp.type === 'brand_deals_search') {
       const featuredId = Number(exp.featuredId);
       const f = await db.activateFeaturedPlacementWithContent(featuredId, u.id, title, body, contact);
       if (!f) {
-        await ctx.reply('Не смог активировать Featured (возможно, доступ истёк). Открой 🔥 Featured и попробуй снова.');
+        await ctx.reply('Не удалось активировать Продвижение: запрос мог устареть. Открой «🔥 Продвижение» и повтори.');
         return;
       }
 
@@ -23315,7 +23293,7 @@ if (exp.type === 'brand_deals_search') {
         .text('📰 Лента креаторов', `a:bx_feed|ws:${wsId}|p:0|h:bo`)
         .text('⬅️ Назад', mfBackCb(wsId, String(exp.ret || ''), String(exp.bpr || '')));
 
-      await ctx.reply(`✅ Featured активирован до <b>${escapeHtml(String(ends))}</b>.`, { parse_mode: 'HTML', reply_markup: kb });
+      await ctx.reply(`✅ Продвижение активно до <b>${escapeHtml(String(ends))}</b>.`, { parse_mode: 'HTML', reply_markup: kb });
       return;
     }
     // Barter offer wizard: text input (save to draft) — actual publish happens from step 6.
@@ -24789,6 +24767,9 @@ UGC vs Интеграция
     fmtCredits,
     setBrandCreditsCache,
     applyPaymentFallbackNoSession,
+    MATCH_TIERS,
+    FEATURED_DURATIONS,
+    BRAND_PLANS,
   });
 
 // --- Callback router ---
@@ -26360,10 +26341,10 @@ ${escapeHtml(safeText)}
 
       const descrLines = [];
       if (prod.scope === 'brand') {
-        descrLines.push(`Brand Plan Pro на ${dur} дней.`);
-        if (credits > 0) descrLines.push(`💳 +${credits} кредитов на новые диалоги.`);
+        descrLines.push(`Brand Plan «Про» на ${dur} дней.`);
+        if (credits > 0) descrLines.push(`💳 При активации: +${credits} кредитов бренда.`);
       } else {
-        descrLines.push(`PRO на ${dur} дней (для выбранного канала).`);
+        descrLines.push(`PRO выбранного канала на ${dur} дней.`);
       }
       if (normal > 0) descrLines.push(`Обычно: ${normal}⭐️.`);
 
@@ -27001,13 +26982,14 @@ cid: ${cid}`, { reply_markup: kb });
       const text =
         `🔒 <b>Контакты на витрине скрыты</b>
 
-<b>Кредиты</b> = Stars для новых диалогов.
+Кредиты — расходуемые единицы бренда. Их покупают за Stars, но это не подписка.
 
-Кредиты тратятся на:
-• 💬 Новый диалог: <b>${introCost}</b> ${ruPlural(introCost, 'кредит', 'кредита', 'кредитов')}
-• ${CONTACT_UNLOCK_COST <= 0 ? '🔓 Контакты на витрине: <b>бесплатно</b>' : `🔓 Контакты на витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST, 'кредит', 'кредита', 'кредитов')}`} → доступ на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS, 'день', 'дня', 'дней')}
+Кредиты списываются за:
+• Новый диалог: <b>${introCost}</b> ${ruPlural(introCost, 'кредит', 'кредита', 'кредитов')}
+• Принять заявку и открыть сделку: <b>${BRAND_APP_ACCEPT_COST}</b> ${ruPlural(BRAND_APP_ACCEPT_COST, 'кредит', 'кредита', 'кредитов')}
+• ${CONTACT_UNLOCK_COST <= 0 ? 'Контакты в витрине: <b>бесплатно</b>' : `Контакты в одной витрине: <b>${CONTACT_UNLOCK_COST}</b> ${ruPlural(CONTACT_UNLOCK_COST, 'кредит', 'кредита', 'кредитов')}`} на <b>${CONTACT_UNLOCK_TTL_DAYS}</b> ${ruPlural(CONTACT_UNLOCK_TTL_DAYS, 'день', 'дня', 'дней')}
 
-Переписка внутри открытого диалога — бесплатна.
+Сообщения внутри открытого диалога бесплатны.
 
 ${brandPassCreditsBlockLines(bal, { showHintWhenUnknown: true }).join('\n')}
 
@@ -29424,8 +29406,8 @@ if (p.a === 'a:ws_prof_mode') {
       await redis.set(k(['pay_pro', token]), { wsId, ownerUserId: u.id, tgId: ctx.from.id }, { ex: CFG.PAYMENT_SESSION_TTL_SEC });
       const payload = `${payloadPrefix}${token}`;
       await sendStarsInvoice(ctx, {
-        title: 'MicroGiveaways PRO',
-        description: 'PRO на 30 дней: чаще bump, больше офферов, пин в ленте, расширенная аналитика.',
+        title: `${MONETIZATION_LABELS.CREATOR_PRO} · ${CFG.PRO_DURATION_DAYS} дней`,
+        description: `Для выбранного канала: ${CFG.PRO_DURATION_DAYS} дней, до ${CFG.BARTER_MAX_ACTIVE_OFFERS_PRO} активных офферов, повторное поднятие раз в ${CFG.BARTER_BUMP_COOLDOWN_HOURS_PRO} ч, пин и расширенная аналитика.`,
         payload,
         amount: CFG.PRO_STARS_PRICE,
         backCb: `a:ws_pro|ws:${wsId}`,
@@ -29461,8 +29443,8 @@ if (p.a === 'a:ws_prof_mode') {
       const payload = `${payloadPrefix}${token}`;
       const back = offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}` : `a:brand_pass|ws:${wsId}`;
       await sendStarsInvoice(ctx, {
-        title: `Кредиты · ${pack.credits} шт`,
-        description: 'Кредиты нужны только для открытия НОВОГО диалога. Переписка внутри диалога — бесплатна.',
+        title: `${MONETIZATION_LABELS.BRAND_CREDITS} · ${pack.credits} шт.`,
+        description: `Начисление ${pack.credits} кредитов бренда. Кредиты расходуются на новые диалоги, принятие заявок и открытие контактов. Это не Brand Plan.`,
         payload,
         amount: pack.stars,
         backCb: back,
@@ -30285,8 +30267,8 @@ ${link}`;
       const payload = `${payloadPrefix}${token}`;
       const label = planDef.title;
       await sendStarsInvoice(ctx, {
-        title: `Brand Plan · ${label} · ${CFG.BRAND_PLAN_DURATION_DAYS} дней`,
-        description: `Подписка ${label}: ${planDef.credits} кредитов на новые диалоги + CRM + менеджеры + Smart Matching (10 каналов/мес) + Featured (7 дней/мес).`,
+        title: `${MONETIZATION_LABELS.BRAND_PLAN} · ${label} · ${CFG.BRAND_PLAN_DURATION_DAYS} дней`,
+        description: `Подписка для бренда на ${CFG.BRAND_PLAN_DURATION_DAYS} дней: CRM-этапы, до 3 менеджеров, 1 Умный подбор и 1 Продвижение за календарный месяц. При активации начисляется ${planDef.credits} кредитов.`,
         payload,
         amount: stars,
         backCb: `a:brand_plan|ws:${wsId}|ret:${ret}`,
@@ -30417,13 +30399,13 @@ if (p.a === 'a:match_home') {
       await setExpectText(ctx.from.id, { type: 'match_brief', requestId: req.id, wsId, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') });
 
       const kb = new InlineKeyboard()
-        .text('🎯 Smart Matching (подбор офферов)', cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
+        .text('🎯 Умный подбор', cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, String(p.ret || ''), String(p.bpr || '')));
 
       await safeEditOrReply(
         ctx,
-        `✅ <b>Smart Matching включён</b>
+        `✅ <b>Умный подбор включён</b>
 
 Осталось в этом месяце: <b>${Math.max(0, left - 1)}</b>
 
@@ -30454,8 +30436,8 @@ if (p.a === 'a:match_home') {
       );
       const payload = `match_${u.id}_${tier.id}_${token}`;
       await sendStarsInvoice(ctx, {
-        title: `Smart Matching · ${tier.title}`,
-        description: 'Подбор подходящих микро-каналов под твой бриф. После оплаты отправь бриф одним сообщением.',
+        title: `${MONETIZATION_LABELS.MATCHING} · ${tier.title}`,
+        description: `Один подбор до ${tier.count} каналов по твоему брифу. Это отдельная услуга: кредиты бренда не списываются. После оплаты пришли бриф одним сообщением.`,
         payload,
         amount: tier.stars,
         backCb: cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }),
@@ -30505,13 +30487,13 @@ if (p.a === 'a:match_home') {
       await setExpectText(ctx.from.id, { type: 'feat_content', featuredId: f.id, wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') });
 
       const kb = new InlineKeyboard()
-        .text('🔥 Featured', cbJoin('a:feat_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
+        .text('🔥 Продвижение', cbJoin('a:feat_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }))
         .row()
         .text('⬅️ Назад', mfBackCb(wsId, String(p.ret || ''), String(p.bpr || '')));
 
       await safeEditOrReply(
         ctx,
-        `✅ <b>Featured включён</b>
+        `✅ <b>Продвижение включено</b>
 
 Осталось в этом месяце: <b>${Math.max(0, left - 1)}</b>
 
@@ -30545,8 +30527,8 @@ if (p.a === 'a:match_home') {
       );
       const payload = `feat_${u.id}_${d.days}_${token}`;
       await sendStarsInvoice(ctx, {
-        title: `Featured · ${d.title}`,
-        description: 'Твой блок появится сверху в ленте у всех (бренд + блогеры). После оплаты отправь контент.',
+        title: `${MONETIZATION_LABELS.FEATURED} · ${d.title}`,
+        description: `Промо-блок сверху в ленте на ${d.days} ${ruPlural(d.days,'день','дня','дней')}. Это отдельная услуга: кредиты бренда не списываются. После оплаты пришли контент.`,
         payload,
         amount: d.stars,
         backCb: cbJoin('a:feat_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }),
@@ -34053,7 +34035,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
       );
 
       const title = 'Размещение в официальном канале';
-      const description = `${d.label} • оффер #${offerId}`;
+      const description = `Заявка на размещение оффера #${offerId}: ${d.label}. Публикация после модерации.`;
       const okInv = await sendStarsInvoice(ctx, {
         title,
         description,
@@ -34063,10 +34045,10 @@ if (p.a === 'a:bc_simple_btn_preset') {
       });
       if (!okInv) return;
 
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `💳 Счёт выставлен на **${d.price}⭐️**.
 
-Оплати Stars — и оффер попадёт в очередь на публикацию в офиц.канале.\n\nПосле оплаты модератор нажмёт Apply и поставит пост в канал.`,
+Оплата передаст оффер модератору. Публикация начнётся только после одобрения.`,
         {
           parse_mode: 'Markdown',
           reply_markup: new InlineKeyboard()
@@ -40239,14 +40221,14 @@ async function renderAdminFounderTexts(ctx) {
   const linkCreator = buildStartLink('fs_gw_creator');
 
   const brandPost = [
-    '🎁 РОЗЫГРЫШ ДЛЯ БРЕНДОВ: Brand Plan PRO (30 дней)',
+    `🎁 РОЗЫГРЫШ ДЛЯ БРЕНДОВ: Brand Plan «Про» (${CFG.BRAND_PLAN_DURATION_DAYS} дней)`,
     '',
-    'Разыгрываем 2 подписки Brand Plan PRO на 30 дней!',
+    `Разыгрываем 2 подписки Brand Plan «Про» на ${CFG.BRAND_PLAN_DURATION_DAYS} дней!`,
     '',
     'Что получишь:',
-    '• 50 кредитов на новые диалоги с блогерами',
-    '• Smart Match (10 каналов/мес)',
-    '• Featured размещение (7 дней)',
+    `• ${CFG.BRAND_PLAN_PRO_CREDITS} кредитов на диалоги, принятие заявок и контакты`,
+    `• Умный подбор: до ${(MATCH_TIERS.find(t => String(t.id) === String(BRAND_PLAN_INCLUDED_MATCH_TIER_ID)) || MATCH_TIERS[0]).count} каналов, ${BRAND_PLAN_INCLUDED_MATCH_PER_MONTH} запуск/мес`,
+    `• Продвижение: ${BRAND_PLAN_INCLUDED_FEATURED_DAYS} дней, ${BRAND_PLAN_INCLUDED_FEATURED_PER_MONTH} запуск/мес`,
     '',
     'Как участвовать:',
     `1) Подпишись на ${ch}`,
@@ -40259,14 +40241,15 @@ async function renderAdminFounderTexts(ctx) {
   ].join('\n');
 
   const creatorPost = [
-    '🎁 РОЗЫГРЫШ ДЛЯ КРЕАТОРОВ: PRO (30 дней)',
+    `🎁 РОЗЫГРЫШ ДЛЯ КРЕАТОРОВ: PRO канала (${CFG.PRO_DURATION_DAYS} дней)`,
     '',
-    'Разыгрываем 3 PRO подписки на 30 дней!',
+    `Разыгрываем 3 подписки PRO канала на ${CFG.PRO_DURATION_DAYS} дней!`,
     '',
     'Что получишь:',
-    '• Закреплённые офферы',
-    '• Расширенные возможности',
-    '• Приоритет в ленте брендов',
+    `• До ${CFG.BARTER_MAX_ACTIVE_OFFERS_PRO} активных офферов`,
+    `• Повторное поднятие раз в ${CFG.BARTER_BUMP_COOLDOWN_HOURS_PRO} ч`,
+    '• Пин одного оффера в ленте',
+    '• Расширенная аналитика',
     '',
     'Как участвовать:',
     `1) Подпишись на ${ch}`,
