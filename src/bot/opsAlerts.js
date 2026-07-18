@@ -74,6 +74,7 @@ export async function queueOpsAlert(api, {
   kind = '',
   payload = '',
   extra = [],
+  dedupId = null,
 } = {}) {
   try {
     // "Silent" mode: keep the operator chat quiet; only failures/errors should pass.
@@ -93,8 +94,8 @@ export async function queueOpsAlert(api, {
     const g = String(group || 'ops');
     const bufK = bufferKey(g);
 
-    // Dedup same payment+reason for a short window.
-    const dId = paymentId ? `p:${paymentId}|r:${reason}` : `r:${reason}|k:${kind}|u:${userId || ''}`;
+    // Dedup for a short window. Callers may provide a narrower identity (for example per cron job + error class).
+    const dId = dedupId || (paymentId ? `p:${paymentId}|r:${reason}` : `r:${reason}|k:${kind}|u:${userId || ''}`);
     const dK = dedupKey(g, dId);
     try {
       const ok = await redis.set(dK, '1', { nx: true, ex: Math.max(60, Math.min(30 * 60, Number(CFG.OPS_ALERT_SUMMARY_SEC || 600))) });

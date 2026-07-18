@@ -1,5 +1,6 @@
 import { CFG } from '../src/lib/config.js'; 
 import { getQStashConfigSnapshot, isQStashLibAvailable } from '../src/lib/qstash.js';
+import { getDbPoolConfigSnapshot } from '../src/db/poolConfig.js';
 
 function resolveHealthTier(req) {
   try {
@@ -25,7 +26,7 @@ function attachHealthTier(out, tier) {
   if (tier === 'fast') {
     next.operator_fast_path = {
       full_tier_available: true,
-      included_sections: ['redis', 'support', 'ops', 'payments', 'system_status', 'no_go_reasons'],
+      included_sections: ['database', 'system_warnings', 'redis', 'support', 'ops', 'payments', 'system_status', 'no_go_reasons'],
       omitted_sections: ['cron', 'broadcast', 'qstash', 'mon', 'ref', 'audit'],
       note: 'Fast operator summary. Open /api/health without tier=fast for full drill-down.',
     };
@@ -38,6 +39,8 @@ function buildFastHealthOut(base) {
     ok: base.ok,
     ts: base.ts,
     env: base.env,
+    database: base.database,
+    system_warnings: base.system_warnings,
     redis: base.redis,
     support: base.support,
     ops: base.ops,
@@ -54,11 +57,14 @@ export default async function handler(_req, res) {
 
   const now = new Date();
   const day = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
+  const database = getDbPoolConfigSnapshot(process.env);
 
   const base = {
     ok: true,
     ts: now.toISOString(),
     env: CFG.APP_ENV,
+    database,
+    system_warnings: [...database.warnings],
     redis: {
       configured: !!(CFG.UPSTASH_REDIS_REST_URL && CFG.UPSTASH_REDIS_REST_TOKEN),
       read_ok: null,

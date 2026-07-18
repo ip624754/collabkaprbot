@@ -32,10 +32,12 @@
 
 ### Neon / Postgres
 - `DATABASE_URL=<set>`
-- `PG_POOL_MAX=10`
-- `PG_IDLE_TIMEOUT_MS=10000`
-- `PG_CONN_TIMEOUT_MS=10000`
+- `PG_POOL_MAX=1`
+- `PG_IDLE_TIMEOUT_MS=5000`
+- `PG_CONN_TIMEOUT_MS=1000`  # operator-confirmed current value; aggressive, observe via STEP586H1
 - `PG_STATEMENT_TIMEOUT_MS=15000`
+
+> STEP586H1: `DATABASE_URL` must be the Neon pooled URL. `/api/health` must report `pooled_url=true`, `pool_max=1`, `connect_retry.max_retries=1`. With `PG_CONN_TIMEOUT_MS=1000`, `database_connect_timeout_aggressive` is an expected warning until the 24-hour observation closes. If final timeouts persist, raise only the timeout to 3000–5000; do not raise pool max or add more retries.
 
 ### Upstash Redis
 - `UPSTASH_REDIS_REST_URL=<set>`

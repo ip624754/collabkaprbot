@@ -2,6 +2,7 @@ import { broadcastTick, giveawaysTick, igVerifyTick, auditFlushTick } from '../s
 import { queueOpsDigestSafe } from '../src/lib/opsDigest.js';
 import { CFG, assertEnv } from '../src/lib/config.js';
 import { timingSafeEq } from '../src/lib/adminWeb/common.js';
+import { getCronJobFailureHandled, isCronJobFailureHandled } from '../src/lib/cronFailure.js';
 
 function getBearerToken(req) {
   const h = req.headers?.authorization || req.headers?.Authorization || '';
@@ -85,20 +86,27 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error('[CRON-ROUTER] error', e);
 
-    // Best-effort ops digest (Redis-only, anti-spam). Never blocks the response.
-    try {
-      const job = getJob(req) || '';
-      await queueOpsDigestSafe({
-        group: 'ops',
-        reason: 'cron_router_failed',
-        title: 'cron_router crashed',
-        kind: 'cron',
-        payload: job ? `job=${job}` : '',
-        extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
-        dedupId: job ? `cron_router:${job}` : 'cron_router',
-      });
-    } catch {
-      // ignore
+    // A cron job reports its own authoritative failure with job/error classification.
+    // The router alerts only for failures outside that owned job boundary.
+    if (!isCronJobFailureHandled(e)) {
+      try {
+        const job = getJob(req) || '';
+        await queueOpsDigestSafe({
+          group: 'ops',
+          reason: 'cron_router_failed',
+          title: 'cron_router crashed',
+          kind: 'cron',
+          payload: job ? `job=${job}` : '',
+          extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
+          dedupId: job ? `cron_router:${job}` : 'cron_router',
+        });
+      } catch {
+        // ignore
+      }
+    } else {
+      try {
+        console.warn('[CRON-ROUTER] duplicate alert suppressed', getCronJobFailureHandled(e));
+      } catch {}
     }
 
     res.status(500).json({ ok: false, error: 'internal_error' });

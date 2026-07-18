@@ -28,6 +28,7 @@ import { buildRecoveredPaymentMessage } from './monetizationCopy.js';
 import { tgTimeoutSignal, TG_HTTP_MEDIA_TIMEOUT_MS } from '../lib/tgApi.js';
 import { flushOpsAlerts, queueOpsAlert } from './opsAlerts.js';
 import { buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
+import { reportCronJobFailure } from '../lib/cronFailure.js';
 import {
   notifyGiveawayEnded,
   notifyGiveawayWinnersReady,
@@ -379,6 +380,26 @@ async function writeCronLastRun(name, payload) {
   } catch {
     // ignore metrics failures
   }
+}
+
+async function recordCronTickFailure(redisName, routeJob, error) {
+  await reportCronJobFailure({
+    job: routeJob,
+    error,
+    beforeQueue: async (alert) => {
+      await writeCronLastRun(redisName, {
+        ts: new Date().toISOString(),
+        status: 'error',
+        error_class: alert.metadata.error_class,
+        phase: alert.metadata.phase,
+        retry_attempted: alert.metadata.retry_attempted,
+        retry_count: alert.metadata.retry_count,
+      });
+    },
+    queueAlert: async ({ metadata, ...opsArgs }) => {
+      return await queueOpsAlert(getBot().api, opsArgs);
+    },
+  });
 }
 
 async function withLock(lockKey, ttlSec, fn) {
@@ -1088,16 +1109,8 @@ export async function giveawaysTick() {
     return out;
     });
   } catch (e) {
-    // Best-effort ops alert on cron crash.
-    try {
-      await queueOpsAlert(getBot().api, {
-        group: 'ops',
-        reason: 'cron_failed',
-        title: 'giveaways_tick crashed',
-        kind: 'cron',
-        extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
-      });
-    } catch {}
+    // One authoritative job-level alert. The router sees the marker and does not emit a duplicate.
+    try { await recordCronTickFailure('giveaways_tick', 'giveaways-tick', e); } catch {}
     throw e;
   }
 }
@@ -2056,16 +2069,8 @@ const fanoutEnabled = !!fanoutStatus.enabled;
     return out;
     });
   } catch (e) {
-    // Best-effort ops alert on cron crash.
-    try {
-      await queueOpsAlert(getBot().api, {
-        group: 'ops',
-        reason: 'cron_failed',
-        title: 'broadcast_tick crashed',
-        kind: 'cron',
-        extra: [String(e?.name || 'Error') + ': ' + String(e?.message || e).slice(0, 180)],
-      });
-    } catch {}
+    // One authoritative job-level alert. The router sees the marker and does not emit a duplicate.
+    try { await recordCronTickFailure('broadcast_tick', 'broadcast-tick', e); } catch {}
     throw e;
   }
 }

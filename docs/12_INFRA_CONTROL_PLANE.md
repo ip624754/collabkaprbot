@@ -187,3 +187,20 @@ AUDIT_DB_THROTTLE_PREFIXES=lead.,folders.,ws.profile_,deal.,inbox.,brand.
 ```
 
 Стратегия: сначала включаем троттлинг (MEDIUM) → смотрим `/api/health` → точечно правим `PREFIXES` и лимиты.
+
+## STEP586H1 — Neon cron connection resilience
+
+После production-инцидента `2026-07-18` зафиксирован отдельный контракт для serverless cron → Neon:
+
+- физическое подключение и инициализация сессии допускают **не более одного** bounded retry;
+- retry выполняется только **до пользовательского SQL**;
+- SQL-запрос, cron-job и внешние side effects автоматически не повторяются;
+- соединение, оборванное во время session init или query, уничтожается и не возвращается в pool;
+- конкретный cron-job владеет единственным OPS alert, а router не дублирует тот же exception;
+- dedup cron-alert учитывает `job + error_class`, поэтому параллельные `broadcast-tick` и `giveaways-tick` не скрывают друг друга;
+- `/api/health` показывает только безопасный DB posture без hostname, credentials и connection string;
+- внешний scheduler следует разнести: giveaways на минуту `00`, broadcast на минуту `03`, чтобы не будить Neon двумя job одновременно.
+
+`PG_POOL_MAX=1` остаётся обязательным. Текущее операторское значение `PG_CONN_TIMEOUT_MS=1000` не изменяется кодом и должно пройти 24-часовое наблюдение. Если после bounded retry сохраняются финальные connection timeout, следующий допустимый операторский шаг — поднять только timeout до `3000–5000`, затем начать окно наблюдения заново.
+
+Runbook: `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`.

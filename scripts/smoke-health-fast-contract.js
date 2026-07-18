@@ -54,6 +54,13 @@ assert.ok(Array.isArray(res.body.operator_fast_path.omitted_sections), 'Expected
 assert.ok(res.body.operator_fast_path.omitted_sections.includes('broadcast'), 'Expected broadcast to be omitted in fast tier');
 assert.ok(res.body.operator_fast_path.omitted_sections.includes('qstash'), 'Expected qstash to be omitted in fast tier');
 
+assert.ok(res.body.database && typeof res.body.database === 'object', 'Expected database config block');
+assert.equal(Object.prototype.hasOwnProperty.call(res.body.database, 'pooled_url'), true, 'Expected database.pooled_url');
+assert.equal(Object.prototype.hasOwnProperty.call(res.body.database, 'pool_max'), true, 'Expected database.pool_max');
+assert.equal(Object.prototype.hasOwnProperty.call(res.body.database, 'connect_timeout_ms'), true, 'Expected database.connect_timeout_ms');
+assert.ok(Array.isArray(res.body.system_warnings), 'Expected system_warnings[]');
+assert.equal(Object.prototype.hasOwnProperty.call(res.body.database, 'hostname'), false, 'Health must not expose DB host');
+
 assert.ok(res.body.redis && typeof res.body.redis === 'object', 'Expected redis block');
 assert.ok(res.body.ops && typeof res.body.ops === 'object', 'Expected ops block');
 assert.ok(res.body.payments && typeof res.body.payments === 'object', 'Expected payments block');

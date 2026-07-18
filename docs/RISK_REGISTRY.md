@@ -9,7 +9,7 @@ State: `ACTIVE / WATCH / MITIGATED / ACCEPTED / PARKED`
 
 | ID | Risk | Severity | State | Detection signal | Current mitigation | Escalation trigger |
 |---|---|---:|---|---|---|---|
-| R-01 | Neon/serverless connection timeout on first query or cold wake | HIGH | WATCH | `Connection terminated due to connection timeout`, first-query failures | bounded requests, health visibility, retry only where safe | repeated production failures or user-facing loss |
+| R-01 | Neon/serverless connection timeout on first query or cold wake | HIGH | WATCH | `Connection terminated due to connection timeout`, first-query failures | pooled URL, pool max 1, one acquisition/session-init retry, dead-client destruction, health warning, 24h observation | repeated final failures after retry or missed cron work |
 | R-02 | Cron overlap or duplicate external effects | CRITICAL | MITIGATED | duplicate publish/draw/send, overlapping runs | Redis token lock, PG advisory lock, idempotent reserve/state guards | any duplicate authoritative effect |
 | R-03 | Payment/credit/unlock double application | CRITICAL | MITIGATED | duplicate ledger rows, repeated entitlement | exactly-once DB guards, audit, HEAVY-only changes | any inconsistent money-like balance |
 | R-04 | Callback/action-key regression after refactor | HIGH | WATCH | dead buttons, stale callback, unacked callback | action registry, source smokes, backward compatibility | new callback family or router extraction |
@@ -28,6 +28,7 @@ State: `ACTIVE / WATCH / MITIGATED / ACCEPTED / PARKED`
 | R-17 | Deal stage or paid acceptance gate bypass through forged/direct callback | CRITICAL | MITIGATED | `deal_stage` without `accepted_by_user_id`, stage write without actor access | actor-scoped load, explicit access assertion, accepted-deal runtime guards, accepted-only SQL list/write guards, STEP586C source contract | any new deal mutation path or acceptance/credit change |
 | R-18 | Paid-product copy/config drift or invoice fields rejected after copy expansion | HIGH | WATCH | UI price/result differs from server catalog, `sendInvoice` 400, stale parsed config key | runtime-derived labels, bounded 32/255 invoice fields, STEP586E source contract | any price/catalog/entitlement change or invoice rejection |
 | R-19 | Private-object enumeration or authorization drift through recovery/error path | HIGH | MITIGATED | crafted callback confirms object detail, recovery route bypasses scoped lookup | neutral recovery copy, specific-membership proof before unrestricted read, STEP586F source contract | any new object-detail route, broad access-copy refactor or permission change |
+| R-20 | One cron exception creates duplicate or collapsed OPS alerts | HIGH | WATCH | matching `cron_failed` + `cron_router_failed`, two job stack traces but one digest item | job-owned failure marker, router suppression, per-job/error-class dedup, failed last-run breadcrumb | any duplicate pair or cross-job suppression after STEP586H1 |
 
 ## Critical-zone handling
 
@@ -106,3 +107,13 @@ Residual risk:
 | R-UX-LIVE-EVIDENCE | Source-green copy is presented as live-green without phone/deployment evidence | P1 | OPEN until remote pack PASS | Exact target acknowledgement; seven mandatory paths; screenshot/transcript requirement; PASS/FAIL/BLOCKED evaluator | Block release claim and rerun STEP586H on preview/staging |
 | R-UX-ACCEPTANCE-SPEND | Operator accidentally buys Stars, spends invite points or launches a broadcast during UX acceptance | P1 | MITIGATED IN TOOLING | Read-only default; explicit approval flags; evaluator rejects unapproved spend/broadcast evidence | Stop acceptance, preserve evidence, review payment/broadcast state |
 | R-UX-EVIDENCE-SECRET | Token, DB URL or personal data leaks into acceptance artifacts | P1 | PARTIALLY MITIGATED | Secret-pattern rejection, redaction rule, local gitignore | Rotate exposed secret immediately; remove artifact from history |
+
+## Current STEP586H1 assessment
+
+- Change type: production reliability hardening at DB acquisition and cron alert boundaries; no schema or business-logic change.
+- Primary risks addressed: R-01, R-02, R-10, R-11, R-12, R-20.
+- Runtime blast radius: all pool acquisitions, cron failure reporting and health JSON shape.
+- Rollback: revert the exact STEP586H1 delta; no migration or data rollback is required.
+- Source verification: dedicated resilience contract, health/dependency/runtime contracts, callbacks, package-lock and audit PASS locally.
+- Runtime verification required: 24-hour production cron observation with health/OPS/last-run evidence.
+- Residual risk: `PG_CONN_TIMEOUT_MS=1000` remains aggressive; external schedules still require manual staggering; optional broadcast-429 atomicity smoke is pre-existing FAIL and out of STEP586H1 scope.

@@ -1,3 +1,37 @@
+# STEP586H1 CURRENT TRUTH OVERRIDE
+
+- Current baseline: STEP586H1 Neon Cron Connection Resilience & Alert Truth.
+- Parent: STEP586H Live Telegram Acceptance and Mobile Copy Pass.
+- Production logs confirmed transient Neon connection acquisition failures in `broadcast-tick` and `giveaways-tick`.
+- Operator-confirmed: pooled Neon URL, verify-full TLS/channel binding, `PG_POOL_MAX=1`, `PG_CONN_TIMEOUT_MS=1000`.
+- One retry is allowed only before user SQL: connection acquisition/session initialization.
+- Query errors are classified and rethrown; whole cron jobs and SQL are never replayed automatically.
+- Broken clients are destroyed instead of returned to the pool.
+- Job-level `cron_failed` owns the alert; router duplicate `cron_router_failed` is suppressed for the marked exception.
+- Dedup is per job + error class, so broadcast and giveaway failures remain separately visible.
+- Health exposes secret-free DB pool/retry truth and warnings.
+- Current 1000 ms timeout produces `database_connect_timeout_aggressive`; it remains operator-accepted pending observation.
+- Local QA is green. Production effect is unverified.
+- Next action: deploy STEP586H1, stagger schedules externally, run the 24-hour observation. STEP587 is blocked until PASS.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586H1_NEON_CRON_CONNECTION_RESILIENCE_ALERT_TRUTH_REPORT.md`
+3. `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`
+4. `docs/process/07_WORK_HISTORY_STEP586H1.md`
+5. `docs/SYSTEM_INVARIANTS.md`
+6. `docs/RISK_REGISTRY.md`
+
+Rules for the next model:
+- do not add more than one connection retry;
+- do not retry user SQL or whole cron jobs;
+- do not raise `PG_POOL_MAX`;
+- do not claim production resolution before 24-hour evidence;
+- preserve one authoritative alert per job exception;
+- keep DB URL/host/credentials out of health and artifacts.
+
+---
+
 # STEP586H CURRENT TRUTH OVERRIDE
 
 - Current baseline: STEP586H Live Telegram Acceptance and Mobile Copy Pass.

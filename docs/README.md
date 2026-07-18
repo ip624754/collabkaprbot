@@ -2,18 +2,18 @@
 
 Это актуальный комплект документации по проекту **Collabka PR**.
 
-## Текущий snapshot — STEP586H (2026-07-18)
+## Текущий snapshot — STEP586H1 (2026-07-18)
 
-- Добавлен evidence-driven live Telegram acceptance workflow с точным target acknowledgement.
-- PASS невозможен без screenshot/transcript evidence для всех creator, brand, invite, paid, recovery и operator путей.
-- Добавлен static mobile button audit: hard limit 34 видимых символа для bounded labels.
-- Исправлены source-confirmed длинные кнопки без изменения callbacks и destinations.
-- Защищены test purchase, invite spend и evidence files от случайного использования секретов.
-- Runtime business logic, цены, права, schema, Redis/QStash/Neon mechanics не менялись.
-- Remote Telegram acceptance ещё не выполнен: текущий статус — source/tooling ready, live evidence pending.
+- Добавлен один bounded retry только для Neon connection acquisition/session init.
+- SQL и целые cron-задачи автоматически не повторяются.
+- Повреждённые соединения уничтожаются, а ошибки получают явный класс/phase/retry truth.
+- `cron_failed` стал единственным job-owned alert; дублирующий `cron_router_failed` подавляется только для отмеченного исключения.
+- Dedup разделён по job + error class, поэтому broadcast/giveaway failures не скрывают друг друга.
+- `/api/health` показывает безопасный database config/retry snapshot без host/credentials.
+- Production effect ещё не доказан: нужен 24-часовой observation PASS.
 
 ## 0) BOOT (всегда читаем сначала)
-- `process/07_WORK_HISTORY_STEP586H.md` — актуальная дельта: live evidence tooling и mobile copy pass
+- `process/07_WORK_HISTORY_STEP586H1.md` — актуальная дельта: Neon cron resilience и alert truth
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
@@ -26,6 +26,8 @@
 - `CHATGPT_COLLABKA_UPGRADE_NOTES.md` — состав и truth boundary STEP580 docs upgrade
 - `audit/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_MOBILE_COPY_REPORT.md` — STEP586H mobile/source findings и live Truth Boundary
 - `operations/STEP586H_LIVE_TELEGRAM_ACCEPTANCE_RUNBOOK.md` — точный preview/staging acceptance workflow
+- `audit/STEP586H1_NEON_CRON_CONNECTION_RESILIENCE_ALERT_TRUTH_REPORT.md` — incident evidence, implementation и Truth Boundary
+- `operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md` — production observation gate перед STEP587
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 - `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout
@@ -232,6 +234,6 @@ Canonical product-language documents:
 - command: `npm run smoke:admin-operator-vocabulary-contract`;
 - primary labels use human Russian terms while Redis, QStash, hard-skip, raw statuses and machine values remain in diagnostic blocks.
 
-Current next action: **STEP586H — Live Telegram Acceptance and Mobile Copy Pass**.
+Current next action: **deploy STEP586H1 and complete the 24-hour Neon cron observation; STEP587 remains blocked until PASS**.
 
 Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance remain unverified.

@@ -1,6 +1,14 @@
 import pg from 'pg'; 
 import { CFG } from '../lib/config.js';
 import { queueOpsDigestSafe } from '../lib/opsDigest.js';
+import { acquireClientWithBoundedRetry } from './connectionResilience.js';
+import { DB_POOL_CONFIG } from './poolConfig.js';
+import {
+  annotateDbError,
+  getDbErrorContext,
+  isTransientDbConnectError,
+  shouldDestroyClientAfterDbError,
+} from './errorClassification.js';
 
 const { Pool } = pg;
 
@@ -26,10 +34,10 @@ const { Pool } = pg;
 // потому что pg-pool сразу после connect отдаёт клиента pending query.
 // Вместо этого SET statement_timeout выполняется лениво через обёртки pool.connect / pool.query.
 
-const PG_POOL_MAX = Number(process.env.PG_POOL_MAX || 1);
-const PG_CONN_TIMEOUT_MS = Number(process.env.PG_CONN_TIMEOUT_MS || 10000);
-const PG_IDLE_TIMEOUT_MS = Number(process.env.PG_IDLE_TIMEOUT_MS || 5000);
-const PG_STATEMENT_TIMEOUT_MS = Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000);
+const PG_POOL_MAX = DB_POOL_CONFIG.pool_max;
+const PG_CONN_TIMEOUT_MS = DB_POOL_CONFIG.connect_timeout_ms;
+const PG_IDLE_TIMEOUT_MS = DB_POOL_CONFIG.idle_timeout_ms;
+const PG_STATEMENT_TIMEOUT_MS = DB_POOL_CONFIG.statement_timeout_ms;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -133,6 +141,11 @@ async function ensureStatementTimeout(client) {
       client._stmtTimeoutSet = true;
       client._stmtTimeoutMs = _stmtMs;
     } catch (e2) {
+      const initErr = annotateDbError(e2, { phase: 'session_init' });
+      // A broken connection must never be returned to callers as a usable client.
+      // The bounded retry wrapper will destroy it and acquire one fresh client.
+      if (isTransientDbConnectError(initErr, { phase: 'session_init' })) throw initErr;
+
       try { console.warn('[pg] statement_timeout init failed', { message: String(e2?.message || e2) }); } catch {}
       try {
         await queueOpsDigestSafe({
@@ -159,7 +172,8 @@ function wrapClientQuery(client) {
   client.query = (...args) => {
     const p = _cq(...args);
     if (p && typeof p.then === 'function') {
-      return p.catch((e) => {
+      return p.catch((rawErr) => {
+        const e = annotateDbError(rawErr, { phase: 'query' });
         if (isStatementTimeoutErr(e)) {
           logStatementTimeout(e, { scope: 'client.query' });
           notifyOpsStmtTimeout(e, { scope: 'client.query' });
@@ -176,23 +190,46 @@ function wrapClientQuery(client) {
 
 const _originalConnect = pool.connect.bind(pool);
 pool.connect = async function () {
-  const client = await _originalConnect();
-  wrapClientQuery(client);
-  await ensureStatementTimeout(client);
-  return client;
+  return await acquireClientWithBoundedRetry({
+    connect: async () => await _originalConnect(),
+    prepare: async (client) => {
+      wrapClientQuery(client);
+      await ensureStatementTimeout(client);
+    },
+    destroy: async (client) => {
+      try { client.release(true); } catch {}
+    },
+    onRetry: ({ attempt, delayMs, error }) => {
+      const meta = getDbErrorContext(error, { phase: error?.dbPhase || 'connect' });
+      try {
+        console.warn('[pg.connect.retry]', {
+          attempt,
+          max_retries: DB_POOL_CONFIG.connect_retry.max_retries,
+          delay_ms: delayMs,
+          error_class: meta.error_class,
+          phase: meta.phase,
+          code: meta.code,
+        });
+      } catch {}
+    },
+  });
 };
 
 // ── Override pool.query: route through pool.connect for lazy SET ──────
 // pool.query() internally acquires a client, runs query, releases.
 // By routing through our pool.connect(), we ensure SET runs first.
 
-const _origPoolQuery = pool.query.bind(pool);
 pool.query = async function (text, params) {
   const client = await pool.connect();
+  let destroyClient = false;
   try {
     return await client.query(text, params);
+  } catch (rawErr) {
+    const err = annotateDbError(rawErr, { phase: 'query' });
+    destroyClient = shouldDestroyClientAfterDbError(err);
+    throw err;
   } finally {
-    client.release();
+    try { client.release(destroyClient); } catch {}
   }
 };
 

@@ -11,6 +11,9 @@
 3. Heavy filtering, aggregation, ownership checks, and state transitions belong in SQL or bounded read models, not large in-memory scans.
 4. Migrations run only through the project migration runner with exactly-once/checksum behavior.
 5. New schema usage must respect rolling deployment: code-before-migration compatibility or explicit guarded rollout is required.
+6. Transient database retry may wrap only physical connection acquisition and session initialization, with at most one retry. User SQL and whole cron jobs must never be replayed automatically.
+7. A client with connection-termination evidence must be destroyed, not returned to the pool.
+8. Health may expose DB configuration posture, but never host, username, password, full URL or secret query parameters.
 
 ## 2. Security and authorization
 
@@ -77,6 +80,8 @@
 3. External side effects follow reserve/lock → send → record/confirm, with idempotency where duplicates matter.
 4. Telegram 429 handling uses cooldown/resume; no tight retry loops inside one serverless request.
 5. Operator alerts flow through the canonical alert queue/digest mechanism.
+6. One cron exception has one authoritative job-level alert. The router may alert only when the failure was not already owned by the job.
+7. Cron alert deduplication must distinguish job identity and error class so concurrent jobs cannot suppress each other.
 
 ## 8. Admin and observability
 

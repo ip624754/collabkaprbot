@@ -1,4 +1,55 @@
-# AI Multi-Model Handoff — Current Collabka Truth
+# AI Multi-Model Handoff — STEP586H1 Current Truth
+
+**Current baseline:** STEP586H1 — Neon Cron Connection Resilience & Alert Truth
+**Parent:** STEP586H
+**Live status:** local QA PASS; 24-hour production observation pending
+
+## Verified now
+
+- bounded one-retry connection acquisition/session-init wrapper;
+- no automatic SQL or whole-job replay;
+- dead-client destruction;
+- DB error classification and retry metadata;
+- one job-owned cron alert with router duplicate suppression;
+- per-job/error-class dedup identity;
+- failed cron last-run breadcrumbs;
+- secret-free health database config/warnings;
+- source/runtime contracts pass locally.
+
+## Not verified
+
+- production Neon convergence after deploy;
+- external cron schedule staggering;
+- 24-hour last-run continuity;
+- real support digest result;
+- live giveaway/broadcast catch-up.
+
+## Immediate next action
+
+Deploy STEP586H1 and execute `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`. Do not open STEP587 until the evidence decision is PASS.
+
+## Do not do
+
+- add multiple retries;
+- retry SQL or a full cron body;
+- increase pool max;
+- hide final failures;
+- expose connection strings in evidence.
+
+## Canonical files
+
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586H1_NEON_CRON_CONNECTION_RESILIENCE_ALERT_TRUTH_REPORT.md`
+3. `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`
+4. `docs/process/07_WORK_HISTORY_STEP586H1.md`
+5. `docs/SYSTEM_INVARIANTS.md`
+6. `docs/RISK_REGISTRY.md`
+
+---
+
+## Historical handoff snapshots
+
+# Historical snapshot — STEP586H
 
 **Current baseline:** STEP586H — Live Telegram Acceptance and Mobile Copy Pass
 **Parent:** STEP586G — Admin and Operator Vocabulary
@@ -60,8 +111,6 @@ Do not open another copy wave until the finalized evidence pack is PASS or conta
 6. `docs/process/07_WORK_HISTORY_STEP586H.md`
 
 ---
-
-## Historical handoff snapshots
 
 # Historical snapshot — STEP586G
 

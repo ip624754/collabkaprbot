@@ -156,7 +156,8 @@
     "smoke:runtime-proof-spine": "node scripts/smoke-runtime-proof-spine.js",
     "acceptance:staging": "node scripts/staging-runtime-acceptance.js",
     "acceptance:telegram-mobile": "node scripts/telegram-mobile-acceptance.js",
-    "smoke:staging-runtime-acceptance-contract": "node scripts/smoke-staging-runtime-acceptance-contract.js"
+    "smoke:staging-runtime-acceptance-contract": "node scripts/smoke-staging-runtime-acceptance-contract.js",
+    "smoke:neon-cron-resilience-contract": "node scripts/smoke-neon-cron-resilience-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

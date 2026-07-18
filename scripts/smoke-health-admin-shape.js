@@ -58,6 +58,13 @@ assert.equal(redisReadReason.severity, 'P0', 'Expected redis_read_not_ok severit
 assert.equal(typeof redisReadReason.hint, 'string', 'Expected redis_read_not_ok hint string');
 assert.ok(redisReadReason.hint.length > 0, 'Expected redis_read_not_ok hint to be non-empty');
 
+assert.ok(res.body.database && typeof res.body.database === 'object', 'Expected database config block');
+assert.equal(Object.prototype.hasOwnProperty.call(res.body.database, 'pooled_url'), true, 'Expected database.pooled_url');
+assert.equal(Object.prototype.hasOwnProperty.call(res.body.database, 'connect_retry'), true, 'Expected database.connect_retry');
+assert.ok(Array.isArray(res.body.database.warnings), 'Expected database.warnings[]');
+assert.ok(Array.isArray(res.body.system_warnings), 'Expected system_warnings[]');
+assert.equal(Object.prototype.hasOwnProperty.call(res.body.database, 'hostname'), false, 'Health must not expose DB host');
+
 assert.ok(res.body.ops && typeof res.body.ops === 'object', 'Expected ops object');
 assert.ok(Object.prototype.hasOwnProperty.call(res.body.ops, 'digest_preview'), 'Expected ops.digest_preview key');
 assert.ok(Object.prototype.hasOwnProperty.call(res.body.ops, 'pending'), 'Expected ops.pending key');

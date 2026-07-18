@@ -1,7 +1,11 @@
 # Collabka Execution Roadmap after STEP581
 
-**Status:** ACTIVE  
+**Status:** ACTIVE
 **Baseline:** STEP581 audit pack on top of STEP580 docs / STEP579 runtime
+
+## 2026-07-18 operational override
+
+STEP586H1 is inserted before any next numbered roadmap work because production cron logs confirmed transient Neon acquisition failures and duplicate alerting. Exit gate: 24 continuous hours of cron evidence PASS. Only then proceed to STEP587.
 
 ## Governing rule
 

@@ -1,3 +1,34 @@
+## STEP586H1 — Neon Cron Connection Resilience & Alert Truth (2026-07-18)
+
+**Current handoff-safe baseline:** STEP586H1 on top of STEP586H.
+
+Production evidence supplied by the operator confirmed recurring `pool.connect()` failures for `broadcast-tick` and `giveaways-tick` with `Connection terminated due to connection timeout` / `Connection terminated unexpectedly`. The SQL calls had not started. Operator-confirmed ENV: Neon pooled URL, `sslmode=verify-full`, `channel_binding=verify-full`, `PG_POOL_MAX=1`, `PG_CONN_TIMEOUT_MS=1000`.
+
+Implemented and locally verified:
+- one bounded retry wraps only physical connection acquisition and session initialization;
+- user SQL is never replayed automatically;
+- a client broken during session initialization is destroyed with `release(true)`;
+- query-time connection termination destroys the client before release;
+- DB failures are classified as `pg_connect_timeout`, `pg_connection_terminated`, `pg_statement_timeout` or `pg_query_failed`;
+- cron job catches own the authoritative `cron_failed` event and mark the exception;
+- `cron_router_failed` is suppressed only for that already-owned exception;
+- alert dedup identity includes job + error class, so concurrent jobs do not suppress each other;
+- failed cron `last_run` snapshots include error class, phase and retry count;
+- `/api/health` exposes a secret-free database config/retry block and warning list;
+- current `PG_CONN_TIMEOUT_MS=1000` intentionally emits `database_connect_timeout_aggressive`;
+- dedicated STEP586H1 contract, health contracts, dependency preflight, runtime proof spine, callback consistency, package-lock and npm audit pass locally.
+
+Not verified: production behavior after deployment, real Neon wake-up timing, 24-hour cron continuity, live support digest formatting, external schedule staggering or absence of delayed giveaway/broadcast work.
+
+**Release gate:** 24-hour production observation is required before STEP587.
+
+Read:
+- `docs/audit/STEP586H1_NEON_CRON_CONNECTION_RESILIENCE_ALERT_TRUTH_REPORT.md`;
+- `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`;
+- `docs/process/07_WORK_HISTORY_STEP586H1.md`.
+
+---
+
 ## STEP586H — Live Telegram Acceptance and Mobile Copy Pass (2026-07-18)
 
 **Current handoff-safe baseline:** STEP586H on top of STEP586G.
