@@ -29,10 +29,10 @@ const list = between('async function renderAdminDmTemplates(ctx, page = 0) {', '
 const view = between('async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {', '\n\n  async function renderAdminOutbox(ctx, page = 0) {');
 const callbacks = between("if (p.a === 'a:admin_umsg_tpls') {", "\nif (p.a === 'a:bc_start') {");
 
-assert.ok(list.includes('📌 <b>Шаблоны сообщений (DM)</b>'), 'DM template list title must exist');
-assert.ok(list.includes("${isCustom ? 'custom (Redis)' : 'default'}"), 'DM template source truth must exist');
+assert.ok(list.includes('📌 <b>Шаблоны личных сообщений</b>'), 'DM template list title must exist');
+assert.ok(list.includes("${isCustom ? 'Redis custom' : 'default bundle'}"), 'DM template source truth must exist');
 assert.ok(list.includes('${Number(tpls.version || 0)}'), 'DM template version must exist');
-assert.ok(list.includes('Пока нет шаблонов.'), 'DM template empty state must exist');
+assert.ok(list.includes('Шаблонов пока нет.'), 'DM template empty state must exist');
 assert.ok(list.includes('a:admin_umsg_tpl_view|tid:${String(it.id || \'\')}|p:${p}'), 'DM template list must link to exact template');
 assert.ok(list.includes('a:admin_umsg_tpl_add|p:${p}'), 'DM template add action must exist');
 assert.ok(list.includes('a:admin_umsg_tpl_reset_q|p:${p}'), 'DM template reset confirmation must exist');

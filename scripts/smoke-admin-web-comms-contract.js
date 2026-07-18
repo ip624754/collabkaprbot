@@ -12,11 +12,11 @@ for (const token of [
   'create_notice_draft',
   'update_notice_draft',
   'test_send_notice',
-  'Drafts',
-  'Recent notices',
-  'Outbox snapshot',
-  'Founder test send',
-  'Последние comms-действия',
+  'Черновики',
+  'Недавние объявления',
+  'Снимок исходящих',
+  'Отправить тест себе',
+  'Последние действия',
 ]) {
   assert.ok(js.includes(token), `comms UI must include ${token}`);
 }

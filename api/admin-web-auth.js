@@ -29,8 +29,8 @@ export default async function handler(req, res) {
     const returnHref = `${String(CFG.PUBLIC_BASE_URL || '').replace(/\/$/, '')}/admin/login?challenge=${encodeURIComponent(challengeId)}`;
     const returnLink = CFG.PUBLIC_BASE_URL ? `<a class="btn" href="${returnHref}">Вернуться в веб-админку</a>` : '';
     if (!result.ok) return html(res, 400, page('Не удалось обработать вход', `Причина: ${String(result.error || 'unknown')}`, returnLink));
-    if (decision === 'deny') return html(res, 200, page('Вход отклонён', 'Этот login challenge помечен как denied.', returnLink));
-    return html(res, 200, page('Вход подтверждён', 'Challenge помечен как approved. Веб-админка может автоматически подтянуть этот статус.', returnLink, returnHref));
+    if (decision === 'deny') return html(res, 200, page('Вход отклонён', 'Запрос входа отклонён. Диагностика: <code>denied</code>.', returnLink));
+    return html(res, 200, page('Вход подтверждён', 'Запрос входа подтверждён. Диагностика: <code>approved</code>. Веб-админка автоматически проверит статус.', returnLink, returnHref));
   }
 
   if (action === 'start') {

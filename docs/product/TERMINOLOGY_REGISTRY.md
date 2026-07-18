@@ -153,7 +153,25 @@ Current event contract:
 
 Internal identifiers remain unchanged in code and operator diagnostics.
 
-## 7. Infrastructure terms
+## 7. Operator vocabulary
+
+| Internal/machine term | Primary operator label | Diagnostic rule |
+|---|---|---|
+| Outbox | `Исходящие` | Redis source and raw delivery status may remain below |
+| DM | `Личное сообщение` | Template ID and placeholder keys may remain below |
+| Approve / Reject | `Одобрить / Отклонить` | Keep `approve / deny` and `approved / denied` as machine values |
+| Transparency log | `Журнал розыгрыша` | Keep event codes and IDs |
+| Audit Log | `Журнал аудита` | Keep action and object identifiers |
+| hard-skip list | `Недоступные чаты` | Keep `hard-skip`, TTL and reason codes |
+| hard-skip hits | `Пропуски доставки` | Keep raw filter value and delivery IDs |
+| broadcast draft | `Черновик рассылки` | Keep raw status in diagnostics |
+| first batch | `Первая партия` | Keep batch counters |
+| post-run report | `Итог доставки` | Keep sent/queued/blocked/failed counters |
+| Comms workspace | `Коммуникации` | Keep `broadcasts / broadcast_sent_log` in diagnostics |
+
+Primary buttons name the operator result. Technical terms are not removed when they are needed to diagnose or repair production.
+
+## 8. Infrastructure terms
 
 The following terms are operator-only and must not appear in ordinary user flows:
 
@@ -177,7 +195,7 @@ User-facing replacement:
 
 Admin/operator diagnostics may preserve technical detail after a human-readable heading.
 
-## 8. Grammar and capitalization
+## 9. Grammar and capitalization
 
 - `креатор`, `бренд`, `оффер`, `заявка`, `диалог`, `сделка` — lowercase inside a sentence.
 - `PRO` — uppercase.

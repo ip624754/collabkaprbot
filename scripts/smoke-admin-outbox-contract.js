@@ -42,10 +42,10 @@ const callbacks = extractBetween(
   '\n    // Broadcast: list active/recent broadcasts'
 );
 
-assert.ok(renderList.includes('📤 <b>Outbox</b>'), 'Outbox title must stay stable');
-assert.ok(renderList.includes('Хранение: <b>Redis-only</b>'), 'Outbox storage truth must stay visible');
-assert.ok(renderList.includes("text += 'Пока пусто.';"), 'Outbox empty state must exist');
-assert.ok(renderList.includes("'🔒 Скрыто (открой Outbox в личке с ботом)'"), 'Outbox must redact snippets outside DM');
+assert.ok(renderList.includes('📤 <b>Исходящие</b>'), 'Outbox title must stay stable');
+assert.ok(renderList.includes('Диагностика: <code>Redis</code>'), 'Outbox storage truth must stay visible');
+assert.ok(renderList.includes("text += 'Исходящих сообщений пока нет.';"), 'Outbox empty state must exist');
+assert.ok(renderList.includes("'🔒 Текст скрыт. Открой «Исходящие» в личном чате с ботом.'"), 'Outbox must redact snippets outside DM');
 assert.ok(renderList.includes('commsCb.adminOutboxView(absIdx, p)'), 'Outbox entries must use canonical view callback builder');
 assert.ok(renderList.includes("commsCb.adminOutbox(prev)"), 'Outbox pagination must preserve previous route');
 assert.ok(renderList.includes("commsCb.adminOutbox(next)"), 'Outbox pagination must preserve next route');
@@ -53,8 +53,8 @@ assert.ok(renderList.includes('commsCb.adminOutboxClearQ(p)'), 'Outbox clear con
 assert.ok(renderList.includes("kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');"), 'Outbox footer must return to Comms');
 
 assert.ok(renderView.includes('⚠️ Запись не найдена (возможно, очищено).'), 'Outbox missing-entry state must exist');
-assert.ok(renderView.includes('<b>Outbox запись</b>'), 'Outbox entry title must stay stable');
-assert.ok(renderView.includes('<b>Текст (snippet)</b>:'), 'Outbox entry must expose snippet in DM');
+assert.ok(renderView.includes('<b>Исходящее сообщение</b>'), 'Outbox entry title must stay stable');
+assert.ok(renderView.includes('<b>Фрагмент сообщения</b>:'), 'Outbox entry must expose snippet in DM');
 assert.ok(renderView.includes('commsCb.adminOutbox(p)'), 'Outbox entry must return to list');
 assert.ok(renderView.includes('commsCb.adminOutboxClearQ(p)'), 'Outbox entry must expose clear confirmation');
 assert.ok(renderView.includes('commsCb.adminOutboxRepeat(index, p)'), 'Outbox repeat action must use canonical builder');
@@ -73,15 +73,15 @@ for (const action of [
 ]) {
   assert.ok(callbacks.includes(`if (p.a === '${action}') {`), `missing Outbox callback handler: ${action}`);
 }
-assert.ok(callbacks.includes("backText: '⬅️ Outbox'"), 'Outbox note return label must stay stable');
+assert.ok(callbacks.includes("backText: '⬅️ Исходящие'"), 'Outbox note return label must stay stable');
 assert.ok(callbacks.includes('backCb: commsCb.adminOutboxView(idx, page)'), 'Outbox note must preserve canonical return route');
-assert.ok(callbacks.includes('Повтор из Outbox доступен только в <b>личном чате</b> с ботом (DM)'), 'Outbox repeat must remain DM-only');
-assert.ok(callbacks.includes("templateLabel: 'Повтор из Outbox'"), 'Outbox repeat metadata must stay explicit');
+assert.ok(callbacks.includes('Повтор из исходящих доступен только в <b>личном чате</b> с ботом'), 'Outbox repeat must remain DM-only');
+assert.ok(callbacks.includes("templateLabel: 'Повтор из исходящих'"), 'Outbox repeat metadata must stay explicit');
 assert.ok(callbacks.includes('retCb: commsCb.adminOutboxView(idx, page)'), 'Outbox repeat must preserve canonical return route');
 assert.ok(callbacks.includes(".text('✅ Отправить', `a:adm_umsg_send|tk:${token}|f:all|p:0|wn:1`)"), 'Outbox repeat send confirmation must exist');
 assert.ok(callbacks.includes(".text('⚪ Без «Что дальше»', `a:adm_umsg_send|tk:${token}|f:all|p:0|wn:0`)"), 'Outbox repeat no-next-step option must exist');
 assert.ok(callbacks.includes(".text('❌ Отмена', commsCb.adminOutboxView(idx, page))"), 'Outbox repeat cancel must return to entry');
-assert.ok(callbacks.includes("const label = clipText(`Outbox ${fmtTs(it?.ts || new Date().toISOString())}`, 48);"), 'Save-to-template must create bounded label');
+assert.ok(callbacks.includes("const label = clipText(`Исходящие ${fmtTs(it?.ts || new Date().toISOString())}`, 48);"), 'Save-to-template must create bounded label');
 assert.ok(callbacks.includes('await setAdminDmTemplates('), 'Save-to-template must persist templates');
 assert.ok(callbacks.includes('await clearAdminOutbox();'), 'Outbox clear must wipe the Redis log');
 assert.ok(callbacks.includes('await renderAdminOutbox(ctx, 0);'), 'Outbox clear must return to first page');

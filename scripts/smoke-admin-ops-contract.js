@@ -57,12 +57,12 @@ assertMatch(
 );
 assertMatch(
   renderAdminOpsSrc,
-  /kb\.text\('🧾 Flush ops digest', 'a:admin_ops_flush'\)\.row\(\);/s,
+  /kb\.text\('🧾 Отправить сводку событий', 'a:admin_ops_flush'\)\.row\(\);/s,
   'Admin → Ops must keep Flush ops digest action'
 );
 assertMatch(
   renderAdminOpsSrc,
-  /kb\.text\('🧹 Clear pending snapshot', 'a:admin_ops_pending_clear'\)\.row\(\);/s,
+  /kb\.text\('🧹 Очистить снимок очереди', 'a:admin_ops_pending_clear'\)\.row\(\);/s,
   'Admin → Ops must keep Clear pending snapshot action'
 );
 assertMatch(

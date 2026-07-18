@@ -103,7 +103,7 @@ assert.ok(renderAdminUserNoteSrc.includes('for (let i = 0; i < ADMIN_USER_NOTE_T
 assert.ok(renderAdminUserNoteSrc.includes("const label = on ? `✅ ${t.title}` : `🏷 ${t.title}`;"), 'Admin → User Note must keep tag toggle labels');
 assert.ok(renderAdminUserNoteSrc.includes("kb.text('🧹 Очистить всё', `a:adm_unote_clear_q|id:${uid}|f:${f}|p:${page}`).row();"), 'Admin → User Note must keep clear-all button when note data exists');
 assert.ok(renderAdminUserNoteSrc.includes("kb.text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`);"), 'Admin → User Note must keep back-to-card action');
-assert.ok(renderAdminUserNoteSrc.includes("if (hasRet) kb.text(String(ret.backText || '⬅️ Outbox'), String(ret.backCb));"), 'Admin → User Note must keep optional return-route button');
+assert.ok(renderAdminUserNoteSrc.includes("if (hasRet) kb.text(String(ret.backText || '⬅️ Исходящие'), String(ret.backCb));"), 'Admin → User Note must keep optional return-route button');
 assert.ok(renderAdminUserNoteSrc.includes('kbAdminFooter(kb, sectionBackText, sectionBackCb);'), 'Admin → User Note must keep section footer');
 
 assert.ok(adminUserCardCallbacksSrc.includes("if (p.a === 'a:adm_ucard') {"), 'Admin → User Card callback must exist');

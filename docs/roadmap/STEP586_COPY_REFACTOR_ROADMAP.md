@@ -1,8 +1,8 @@
 # STEP586 — Conversation Copy Refactor Roadmap
 
 **Input:** STEP585 source audit and canonical copy system
-**Current implementation baseline:** STEP586F on STEP586E
-**Roadmap status:** STEP586A–F implemented; STEP586G is next
+**Current implementation baseline:** STEP586G on STEP586F
+**Roadmap status:** STEP586A–G implemented; STEP586H is next
 **Rule:** copy changes may not silently alter callbacks, permissions, prices, reward math, payment semantics or state transitions.
 
 ## 1. Goal
@@ -234,6 +234,9 @@ Acceptance:
 
 ### STEP586G — Admin and Operator Vocabulary
 
+**Implementation:** DONE in STEP586G (2026-07-18)
+**Report:** `docs/audit/STEP586G_ADMIN_OPERATOR_VOCABULARY_REPORT.md`
+
 **Priority:** P2
 **Risk:** low/medium; operational clarity
 **Mode:** STANDARD
@@ -254,6 +257,8 @@ Acceptance:
 - the primary action is readable without internal shorthand;
 - diagnostic precision is not lost;
 - no operator control changes behavior.
+
+**Verified result:** dedicated and affected operator contracts pass locally; human labels are aligned across Telegram and web admin; raw diagnostics and machine values remain unchanged; live rendering remains unverified.
 
 ---
 
@@ -298,6 +303,6 @@ The language work should reduce risk, not hide architectural changes inside stri
 
 ## 5. Current next action
 
-Proceed with **STEP586G — Admin and Operator Vocabulary**.
+Proceed with **STEP586H — Live Telegram Acceptance and Mobile Copy Pass**.
 
-Make primary operator labels readable, retain exact diagnostics where they help repair the system, and do not change control behavior or privileges.
+Run the bounded preview/staging acceptance paths, capture evidence, check mobile wrapping and fix only source-confirmed copy defects without adding product functionality.

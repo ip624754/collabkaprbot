@@ -43,8 +43,8 @@ for (const token of [
 const bot = read('src/bot/bot.js');
 for (const token of [
   'a:admin_web_login_toggle',
-  '⚙️ Админка → Control Surface',
-  'Web-admin login:',
+  '⚙️ Админка → Управление системой',
+  'Вход в веб-админку:',
   'setOperatorControlToggle(',
   'appendOperatorControlAudit(',
   'getOperatorControlSnapshot(',

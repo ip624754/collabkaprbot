@@ -95,6 +95,7 @@
     "smoke:invite-language-mechanism-honesty-contract": "node scripts/smoke-invite-language-mechanism-honesty-contract.js",
     "smoke:monetization-paid-product-clarity-contract": "node scripts/smoke-monetization-paid-product-clarity-contract.js",
     "smoke:access-error-empty-state-recovery-contract": "node scripts/smoke-access-error-empty-state-recovery-contract.js",
+    "smoke:admin-operator-vocabulary-contract": "node scripts/smoke-admin-operator-vocabulary-contract.js",
     "smoke:landing-contract": "node scripts/smoke-landing-contract.js",
     "smoke:admin-web-shell-contract": "node scripts/smoke-admin-web-shell-contract.js",
     "smoke:admin-web-mobile-shell-contract": "node scripts/smoke-admin-web-mobile-shell-contract.js",

@@ -877,35 +877,35 @@ function buildDraftTitle(row = {}) {
   const explicit = String(row.draft_caption || '').trim();
   if (explicit) return explicit.slice(0, 80);
   const text = String(row.draft_text || '').trim();
-  if (!text) return 'Untitled draft';
-  return text.split(/\n+/)[0].trim().slice(0, 80) || 'Untitled draft';
+  if (!text) return 'Без названия';
+  return text.split(/\n+/)[0].trim().slice(0, 80) || 'Без названия';
 }
 
 function buildCommsWarnings(summary = {}, extra = {}) {
   const warnings = [];
   if (!summary.available) {
-    warnings.push({ level: 'warning', message: 'Comms workspace недоступен.', source: 'comms' });
+    warnings.push({ level: 'warning', message: 'Раздел коммуникаций недоступен.', source: 'comms' });
     return warnings;
   }
-  if (Number(summary.cooldownActive || 0) > 0) warnings.push({ level: 'warning', message: `Есть active cooldown notices: ${Number(summary.cooldownActive || 0)}`, source: 'broadcasts' });
-  if (Number(summary.blocked || 0) > 0) warnings.push({ level: 'warning', message: `Есть blocked deliveries: ${Number(summary.blocked || 0)}`, source: 'outbox' });
-  if (Number(summary.failed || 0) > 0) warnings.push({ level: 'warning', message: `Есть failed deliveries: ${Number(summary.failed || 0)}`, source: 'outbox' });
-  if (Number(summary.deferred || 0) > 0 || Number(summary.quarantined || 0) > 0) warnings.push({ level: 'warning', message: `Есть deferred/quarantined retries: ${Number(summary.deferred || 0) + Number(summary.quarantined || 0)}`, source: 'outbox' });
-  if (Number(extra.draftsWithoutTest || 0) > 0) warnings.push({ level: 'info', message: `Есть draft без founder test-send: ${Number(extra.draftsWithoutTest || 0)}`, source: 'drafts' });
-  if (!warnings.length) warnings.push({ level: 'info', message: 'Явных comms-предупреждений нет.', source: 'comms' });
+  if (Number(summary.cooldownActive || 0) > 0) warnings.push({ level: 'warning', message: `Есть рассылки с активной паузой: ${Number(summary.cooldownActive || 0)}`, source: 'broadcasts' });
+  if (Number(summary.blocked || 0) > 0) warnings.push({ level: 'warning', message: `Есть заблокированные доставки: ${Number(summary.blocked || 0)}`, source: 'outbox' });
+  if (Number(summary.failed || 0) > 0) warnings.push({ level: 'warning', message: `Есть доставки с ошибкой: ${Number(summary.failed || 0)}`, source: 'outbox' });
+  if (Number(summary.deferred || 0) > 0 || Number(summary.quarantined || 0) > 0) warnings.push({ level: 'warning', message: `Есть отложенные или изолированные повторы: ${Number(summary.deferred || 0) + Number(summary.quarantined || 0)}`, source: 'outbox' });
+  if (Number(extra.draftsWithoutTest || 0) > 0) warnings.push({ level: 'info', message: `Есть черновики без тестовой отправки: ${Number(extra.draftsWithoutTest || 0)}`, source: 'drafts' });
+  if (!warnings.length) warnings.push({ level: 'info', message: 'Явных предупреждений по коммуникациям нет.', source: 'comms' });
   return warnings;
 }
 
 function buildCommsHints(summary = {}, extra = {}) {
   if (!summary.available) {
-    return [{ kind: 'warning', message: 'Broadcasts / outbox таблицы недоступны. Проверь schema и runtime baseline.' }];
+    return [{ kind: 'warning', message: 'Таблицы рассылок недоступны. Проверь схему и текущий runtime baseline. Диагностика: broadcasts / broadcast_sent_log.' }];
   }
   const hints = [];
-  if (Number(summary.active || 0) > 0) hints.push({ kind: 'warning', message: 'Есть активные notices. Live send по-прежнему остаётся вне web и должен идти через bot/admin fallback.' });
-  if (Number(summary.drafts || 0) > 0) hints.push({ kind: 'info', message: 'Drafts можно править в web и проверять через founder test-send без live mass send.' });
-  if (Number(summary.blocked || 0) > 0 || Number(summary.failed || 0) > 0) hints.push({ kind: 'warning', message: 'Есть blocked / failed deliveries. Проверь outbox snapshot и operator fallback в Telegram-admin.' });
-  if (Number(extra.recentTestSends || 0) > 0) hints.push({ kind: 'info', message: `Недавние founder test-sends: ${Number(extra.recentTestSends || 0)}.` });
-  if (!hints.length) hints.push({ kind: 'info', message: 'Drafts, notices и outbox выглядят спокойно. Web workspace остаётся safe и read-first.' });
+  if (Number(summary.active || 0) > 0) hints.push({ kind: 'warning', message: 'Есть активные рассылки. Массовый запуск из веб-админки выключен; используй Telegram-админку. Диагностика: live send → bot/admin fallback.' });
+  if (Number(summary.drafts || 0) > 0) hints.push({ kind: 'info', message: 'Черновики можно редактировать в веб-админке и проверять тестовой отправкой себе. Массовый запуск здесь выключен.' });
+  if (Number(summary.blocked || 0) > 0 || Number(summary.failed || 0) > 0) hints.push({ kind: 'warning', message: 'Есть пропуски или ошибки доставки. Проверь снимок исходящих и Telegram-админку.' });
+  if (Number(extra.recentTestSends || 0) > 0) hints.push({ kind: 'info', message: `Недавние тестовые отправки себе: ${Number(extra.recentTestSends || 0)}.` });
+  if (!hints.length) hints.push({ kind: 'info', message: 'Черновики, объявления и исходящие работают без явных проблем. Веб-админка остаётся режимом проверки перед действием.' });
   return hints.slice(0, 4);
 }
 
@@ -925,11 +925,11 @@ export async function getCommsSummary() {
       doneRecent: 0,
       blocked: 0,
     },
-    warnings: [{ level: 'info', message: 'Notice rows пока отсутствуют.', source: 'comms' }],
+    warnings: [{ level: 'info', message: 'Записей рассылок пока нет.', source: 'comms' }],
     drafts: [],
     recentNotices: [],
     outbox: { queued: 0, processing: 0, warning: 0, failed: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0 },
-    hints: [{ kind: 'info', message: 'Live send из web отключён. Используйте draft preview и founder test-send.' }],
+    hints: [{ kind: 'info', message: 'Массовый запуск из веб-админки отключён. Используй предпросмотр и тестовую отправку себе.' }],
     recentAdminAudit: [],
     recentBroadcasts: [],
     groups: { queued: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0 },
@@ -1038,7 +1038,7 @@ export async function getCommsSummary() {
         bodyText: String(row.draft_text || '').trim(),
         preview: String(row.draft_text || row.draft_caption || '').trim().slice(0, 140),
         totalCount: Number(row.total_count || 0),
-        createdByLabel: row.tg_username ? `@${String(row.tg_username).trim()}` : 'operator',
+        createdByLabel: row.tg_username ? `@${String(row.tg_username).trim()}` : 'Оператор',
         createdAt: row.created_at || null,
         updatedAt: row.updated_at || null,
         outbox: {
@@ -1063,8 +1063,8 @@ export async function getCommsSummary() {
   out.overall = {
     state: commsOverallState(summary),
     label: summary.available
-      ? (commsOverallState(summary) === 'ok' ? 'Drafts, notices и outbox выглядят стабильно' : 'Есть comms-сигналы, требующие проверки')
-      : 'Comms диагностика недоступна',
+      ? (commsOverallState(summary) === 'ok' ? 'Черновики, объявления и исходящие выглядят стабильно' : 'Есть сигналы по коммуникациям, требующие проверки')
+      : 'Диагностика коммуникаций недоступна',
   };
   out.summary = {
     drafts: drafts.length,

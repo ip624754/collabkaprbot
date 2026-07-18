@@ -4,9 +4,9 @@ const bot = fs.readFileSync(new URL('../src/bot/bot.js', import.meta.url), 'utf8
 const checks = [
   [bot.includes('buildBroadcastFirstBatchSafetyText'), 'bot.js missing buildBroadcastFirstBatchSafetyText'],
   [bot.includes('buildBroadcastNextActionHints'), 'bot.js missing buildBroadcastNextActionHints'],
-  [bot.includes('First-batch safety'), 'bot.js missing First-batch safety block'],
-  [bot.includes('Next action hints'), 'bot.js missing Next action hints block'],
-  [bot.includes('дождись первого batch'), 'bot.js missing first-batch guidance copy'],
+  [bot.includes('Проверка первой партии'), 'bot.js missing First-batch safety block'],
+  [bot.includes('Следующее действие'), 'bot.js missing Next action hints block'],
+  [bot.includes('дождись первой партии'), 'bot.js missing first-batch guidance copy'],
 ];
 const failed = checks.filter(([ok]) => !ok).map(([, msg]) => msg);
 if (failed.length) {

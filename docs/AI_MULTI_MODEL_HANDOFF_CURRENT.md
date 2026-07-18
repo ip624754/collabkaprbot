@@ -1,5 +1,67 @@
 # AI Multi-Model Handoff — Current Collabka Truth
 
+**Current baseline:** STEP586G — Admin and Operator Vocabulary
+**Parent:** STEP586F — Access, Error and Empty-State Recovery
+**Live status:** not reverified in STEP586G
+
+## Verified now
+
+- Telegram admin and web-admin use aligned human-readable vocabulary for communications, outgoing messages, templates, moderation, audit, giveaways and delivery skips;
+- status, diagnosis and operator action are separated;
+- exact Redis, QStash, raw status, reason-code, callback and table diagnostics remain available;
+- signed login decisions and machine values remain `approve / deny`;
+- callback IDs, action-registry guards, audience values, permissions, queue behavior, payments, schema and migrations are unchanged;
+- STEP586G, affected operator contracts and STEP586A–F regressions pass locally.
+
+## Not verified
+
+- live Telegram admin traversal or mobile wrapping;
+- live web-admin rendering;
+- Vercel Preview/production;
+- live Redis, QStash or Neon diagnostics;
+- real moderator/operator comprehension;
+- remote STEP584 staging evidence.
+
+## Immediate next STEP
+
+`STEP586H_LIVE_TELEGRAM_ACCEPTANCE_AND_MOBILE_COPY_PASS`
+
+Run a bounded live acceptance pass. Capture evidence for Telegram admin, web-admin communications, mobile labels, moderation, outgoing messages and one diagnostic failure state. Do not add product functionality.
+
+## Do not do yet
+
+- broad admin redesign;
+- callback or permission changes;
+- removal of raw diagnostics needed for production repair;
+- payment, invite, deal or giveaway mechanism changes;
+- claim live-green from source checks.
+
+## Working lenses
+
+- Jobs: one clear outcome, no UX debris.
+- Vitalik: mechanism truth and auditable evidence.
+- Woz: smallest reliable engineering surface.
+- Durov: Telegram-native speed and leverage.
+- Toly: ship under real constraints.
+- Armani: coherent, polished artifacts.
+- samczsun: abuse paths and adversarial review.
+- Hasu: sober risk, incentives and cost of error.
+
+## Canonical files
+
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586G_ADMIN_OPERATOR_VOCABULARY_REPORT.md`
+3. `docs/product/COLLABKA_COPY_SYSTEM.md`
+4. `docs/product/TERMINOLOGY_REGISTRY.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586G.md`
+
+---
+
+## Historical handoff snapshots
+
+# Historical snapshot — STEP586F
+
 **Current baseline:** STEP586F — Access, Error and Empty-State Recovery
 **Parent:** STEP586E — Monetization and Paid Product Clarity
 **Live status:** not reverified in STEP586F

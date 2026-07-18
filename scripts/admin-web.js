@@ -766,7 +766,7 @@ const SECTION_MANIFEST = {
     label: 'Обзор',
     subtitle: 'Командный cockpit: главный статус, следующий owner-шаг и короткие workspace-снимки без live-шума.',
     route: '/admin',
-    group: 'operator',
+    group: 'Оператор',
     navCaption: 'командный вход',
     visible: () => true,
   },
@@ -775,7 +775,7 @@ const SECTION_MANIFEST = {
     label: 'Пользователи',
     subtitle: 'Плотный ops/audit список: фильтры, экспорт, safe bulk utilities и быстрый drilldown в карточку.',
     route: '/admin/users',
-    group: 'operator',
+    group: 'Оператор',
     navCaption: 'люди и срезы',
     visible: () => true,
   },
@@ -784,7 +784,7 @@ const SECTION_MANIFEST = {
     label: 'Система',
     subtitle: 'Общий статус системы, incident strip и опорный runtime-срез без write-path действий.',
     route: '/admin/runtime',
-    group: 'operator',
+    group: 'Оператор',
     navCaption: 'система и очереди',
     visible: () => true,
   },
@@ -793,7 +793,7 @@ const SECTION_MANIFEST = {
     label: 'Платежи',
     subtitle: 'Read-only срез платёжной активности, fallback-сигналов и проблемных кейсов.',
     route: '/admin/payments',
-    group: 'operator',
+    group: 'Оператор',
     navCaption: 'монетизация и разбор',
     visible: () => true,
   },
@@ -802,7 +802,7 @@ const SECTION_MANIFEST = {
     label: 'Коммуникации',
     subtitle: 'Контур драфтов, предпросмотра и фаундерской тест-отправки без live mass send.',
     route: '/admin/comms',
-    group: 'operator',
+    group: 'Оператор',
     navCaption: 'драфты и предпросмотр',
     visible: () => true,
   },
@@ -811,7 +811,7 @@ const SECTION_MANIFEST = {
     label: 'Помощь',
     subtitle: 'Короткая operator-справка по web-admin без длинной документации и догадок.',
     route: '/admin/help',
-    group: 'operator',
+    group: 'Оператор',
     navCaption: 'операторский мануал',
     visible: () => true,
   },
@@ -869,7 +869,7 @@ function sectionGroups(session = {}) {
     if (meta.key !== sectionKeyForRoutePage(meta.key)) continue;
     const visible = typeof meta.visible === 'function' ? meta.visible(session) : true;
     if (!visible) continue;
-    const group = String(meta.group || 'operator');
+    const group = String(meta.group || 'Оператор');
     if (!groups[group]) groups[group] = [];
     groups[group].push(meta);
   }
@@ -981,7 +981,7 @@ async function checkLoginChallengeStatus({ silent = false } = {}) {
     return { ok: false, status };
   }
   if (!silent) {
-    writeLoginState({ challengeId, error: 'Approve ещё не подтверждён. Окно само проверяет статус каждые несколько секунд.' });
+    writeLoginState({ challengeId, error: 'Вход ещё не одобрен. Окно само проверяет статус каждые несколько секунд.' });
     render();
   }
   return { ok: true, status };
@@ -1006,7 +1006,7 @@ function navLink(href, label, active, caption = '') {
 
 function renderSidebarNav(session = {}, route = routeInfo()) {
   const groups = sectionGroups(session);
-  const order = ['operator', 'founder'];
+  const order = ['Оператор', 'founder'];
   return order.map((groupKey) => {
     const items = Array.isArray(groups[groupKey]) ? groups[groupKey] : [];
     if (!items.length) return '';
@@ -2845,7 +2845,7 @@ function userDetailView(model) {
             ${recentAudit.length ? recentAudit.map((item) => `
               <div class="aw-list-item">
                 <strong>${escapeHtml(founderTextLabel(item.action || '—'))}</strong>
-                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
+                <small>${formatDate(item.ts)} · оператор TG ${Number(item.actorTgId || 0) || '—'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -3133,7 +3133,7 @@ function paymentDetailView(model) {
             ${recentAdminAudit.length ? recentAdminAudit.map((item) => `
               <div class="aw-list-item">
                 <strong>${escapeHtml(founderTextLabel(item.action || '—'))}</strong>
-                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
+                <small>${formatDate(item.ts)} · оператор TG ${Number(item.actorTgId || 0) || '—'}${item.reason ? ` · ${escapeHtml(item.reason)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
           </div>
@@ -3145,7 +3145,7 @@ function paymentDetailView(model) {
 
 function commsAudienceLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ all: 'all', brands: 'brands', creators: 'creators', curators: 'curators', managers: 'managers' })[key] || (key || 'all');
+  return ({ all: 'Все', brands: 'Бренды', creators: 'Креаторы', curators: 'Кураторы', managers: 'Менеджеры' })[key] || (key || 'Все');
 }
 
 function commsStatusClass(value) {
@@ -3158,7 +3158,7 @@ function commsStatusClass(value) {
 
 function commsStatusLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ pending: 'draft', running: 'running', paused: 'paused', done: 'done', error: 'error', stopped: 'stopped', blocked: 'blocked', sent: 'sent', failed: 'failed', queued: 'queued', unknown: 'unknown' })[key] || (key || 'unknown');
+  return ({ pending: 'Черновик', running: 'Выполняется', paused: 'На паузе', done: 'Завершено', error: 'Ошибка', stopped: 'Остановлено', blocked: 'Заблокировано', sent: 'Отправлено', failed: 'Ошибка', queued: 'В очереди', processing: 'Обрабатывается', warning: 'Нужна проверка', unknown: 'Неизвестно' })[key] || (key || 'Неизвестно');
 }
 
 function normalizeCommsEditorState(model) {
@@ -3202,14 +3202,14 @@ function resetCommsEditor() {
 }
 
 function syncCommsPreview() {
-  const title = document.getElementById('draftTitleInput')?.value?.trim() || 'Новый draft';
+  const title = document.getElementById('draftTitleInput')?.value?.trim() || 'Новый черновик';
   const audience = document.getElementById('draftAudienceInput')?.value || 'all';
-  const bodyText = document.getElementById('draftBodyInput')?.value?.trim() || 'Текст notice пока пустой.';
+  const bodyText = document.getElementById('draftBodyInput')?.value?.trim() || 'Текст объявления пока пуст.';
   const titleNode = document.getElementById('draftPreviewTitle');
   const metaNode = document.getElementById('draftPreviewMeta');
   const bodyNode = document.getElementById('draftPreviewBody');
   if (titleNode) titleNode.textContent = title;
-  if (metaNode) metaNode.textContent = `Audience · ${commsAudienceLabel(audience)}`;
+  if (metaNode) metaNode.textContent = `Аудитория · ${commsAudienceLabel(audience)}`;
   if (bodyNode) bodyNode.textContent = bodyText;
 }
 
@@ -3230,25 +3230,25 @@ function commsView(model) {
     <section class="aw-surface aw-section aw-stack">
       <div class="aw-runtime-head">
         <div>
-          <h2>Comms workspace</h2>
+          <h2>Коммуникации</h2>
           <p class="aw-muted">Обновлено: ${formatDate(model.updatedAt)}</p>
         </div>
         <div class="aw-runtime-overall ${runtimeStateClass(overall.state)}">${escapeHtml(runtimeTextLabel(runtimeStateLabel(overall.state)))} · ${escapeHtml(runtimeTextLabel(overall.label || ''))}</div>
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
-        <div class="aw-card aw-runtime-card"><span>Drafts</span><strong>${Number(summary.drafts || 0)}</strong><small>Можно редактировать и preview</small></div>
-        <div class="aw-card aw-runtime-card"><span>Recent notices</span><strong>${Number(summary.recentNotices || 0)}</strong><small>Недавние notices</small></div>
-        <div class="aw-card aw-runtime-card"><span>Outbox pending</span><strong class="aw-status ${Number(summary.outboxPending || 0) > 0 ? 'warn' : 'good'}">${Number(summary.outboxPending || 0)}</strong><small>queued / processing</small></div>
-        <div class="aw-card aw-runtime-card"><span>Outbox warnings</span><strong class="aw-status ${Number(summary.outboxWarnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.outboxWarnings || 0)}</strong><small>warning / failed</small></div>
-        <div class="aw-card aw-runtime-card"><span>Founder test sends</span><strong>${Number(summary.recentTestSends || 0)}</strong><small>Последние audit-сигналы</small></div>
-        <div class="aw-card aw-runtime-card"><span>Comms warnings</span><strong class="aw-status ${Number(summary.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.warnings || 0)}</strong><small>Read-first snapshot</small></div>
+        <div class="aw-card aw-runtime-card"><span>Черновики</span><strong>${Number(summary.drafts || 0)}</strong><small>Редактирование и предпросмотр</small></div>
+        <div class="aw-card aw-runtime-card"><span>Недавние объявления</span><strong>${Number(summary.recentNotices || 0)}</strong><small>Последние публикации</small></div>
+        <div class="aw-card aw-runtime-card"><span>Исходящие: в очереди</span><strong class="aw-status ${Number(summary.outboxPending || 0) > 0 ? 'warn' : 'good'}">${Number(summary.outboxPending || 0)}</strong><small>Ожидают или обрабатываются</small></div>
+        <div class="aw-card aw-runtime-card"><span>Исходящие: требуют проверки</span><strong class="aw-status ${Number(summary.outboxWarnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.outboxWarnings || 0)}</strong><small>Предупреждения и ошибки</small></div>
+        <div class="aw-card aw-runtime-card"><span>Тестовые отправки</span><strong>${Number(summary.recentTestSends || 0)}</strong><small>Последние события аудита</small></div>
+        <div class="aw-card aw-runtime-card"><span>Предупреждения</span><strong class="aw-status ${Number(summary.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.warnings || 0)}</strong><small>Сначала проверь этот блок</small></div>
       </div>
     </section>
 
     <section class="aw-surface aw-section aw-stack">
       <h2>Предупреждения</h2>
       <div class="aw-list">
-        ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных comms-предупреждений нет.', source: 'comms' }]).map((item) => `
+        ${(warnings.length ? warnings : [{ level: 'info', message: 'Явных предупреждений по коммуникациям нет.', source: 'communications' }]).map((item) => `
           <div class="aw-list-item aw-warning-item">
             <strong class="${warningTone(item.level)}">${escapeHtml(founderTextLabel(item.message || '—'))}</strong>
             <small>${escapeHtml(item.source || 'comms')}</small>
@@ -3262,11 +3262,11 @@ function commsView(model) {
         <section class="aw-surface aw-stack">
           <div class="aw-runtime-head">
             <div>
-              <h2>Drafts</h2>
-              <p class="aw-muted">Safe draft workspace: create / update / preview. Live send из web выключен.</p>
+              <h2>Черновики</h2>
+              <p class="aw-muted">Черновики можно создавать, редактировать и проверять. Массовый запуск из веб-админки выключен.</p>
             </div>
             <div class="aw-actions">
-              <button class="aw-button ghost" id="newDraftBtn">Новый draft</button>
+              <button class="aw-button ghost" id="newDraftBtn">Новый черновик</button>
             </div>
           </div>
           <div class="aw-list">
@@ -3274,8 +3274,8 @@ function commsView(model) {
               <div class="aw-list-item">
                 <div class="aw-row-between">
                   <div>
-                    <strong>${escapeHtml(item.title || 'Untitled draft')}</strong>
-                    <small>${escapeHtml(commsAudienceLabel(item.audience))} · ${formatDate(item.updatedAt)} · ${escapeHtml(item.createdByLabel || 'operator')}</small>
+                    <strong>${escapeHtml(item.title || 'Без названия')}</strong>
+                    <small>${escapeHtml(commsAudienceLabel(item.audience))} · ${formatDate(item.updatedAt)} · ${escapeHtml(item.createdByLabel || 'Оператор')}</small>
                   </div>
                   <div class="aw-actions">
                     <span class="aw-status ${commsStatusClass(item.status)}">${escapeHtml(commsStatusLabel(item.status))}</span>
@@ -3284,68 +3284,68 @@ function commsView(model) {
                 </div>
                 <small>${escapeHtml(item.preview || 'Черновик без текста')}</small>
               </div>
-            `).join('') : '<div class="aw-empty">Drafts пока отсутствуют.</div>'}
+            `).join('') : '<div class="aw-empty">Черновиков пока нет.</div>'}
           </div>
         </section>
 
         <section class="aw-surface aw-stack">
           <div class="aw-runtime-head">
             <div>
-              <h2>${editor.draftId ? 'Редактирование draft' : 'Новый draft'}</h2>
-              <p class="aw-muted">Сохраняется только по явному действию. Blank body не допускается.</p>
+              <h2>${editor.draftId ? 'Редактирование черновика' : 'Новый черновик'}</h2>
+              <p class="aw-muted">Изменения сохраняются только по кнопке. Пустой текст не допускается.</p>
             </div>
-            ${editor.draftId ? `<span class="aw-chip">draft #${escapeHtml(editor.draftId)}</span>` : '<span class="aw-chip">new</span>'}
+            ${editor.draftId ? `<span class="aw-chip">черновик #${escapeHtml(editor.draftId)}</span>` : '<span class="aw-chip">новый</span>'}
           </div>
           <input id="draftIdInput" type="hidden" value="${escapeHtml(editor.draftId || '')}" />
           <div class="aw-stack aw-gap-xs">
-            <label class="aw-muted" for="draftTitleInput">Внутренний label</label>
-            <input id="draftTitleInput" class="aw-input" maxlength="120" placeholder="Например: April creator notice" value="${escapeHtml(editor.title || '')}" />
+            <label class="aw-muted" for="draftTitleInput">Внутреннее название</label>
+            <input id="draftTitleInput" class="aw-input" maxlength="120" placeholder="Например: Апрельское объявление для креаторов" value="${escapeHtml(editor.title || '')}" />
           </div>
           <div class="aw-stack aw-gap-xs">
-            <label class="aw-muted" for="draftAudienceInput">Audience</label>
+            <label class="aw-muted" for="draftAudienceInput">Аудитория</label>
             <select id="draftAudienceInput" class="aw-select">
-              ${['all','brands','creators','curators','managers'].map((item) => `<option value="${item}" ${editor.audience === item ? 'selected' : ''}>${item}</option>`).join('')}
+              ${['all','brands','creators','curators','managers'].map((item) => `<option value="${item}" ${editor.audience === item ? 'selected' : ''}>${commsAudienceLabel(item)}</option>`).join('')}
             </select>
           </div>
           <div class="aw-stack aw-gap-xs">
-            <label class="aw-muted" for="draftBodyInput">Body</label>
-            <textarea id="draftBodyInput" class="aw-textarea" maxlength="4000" placeholder="Текст notice для preview и founder test-send">${escapeHtml(editor.bodyText || '')}</textarea>
+            <label class="aw-muted" for="draftBodyInput">Текст</label>
+            <textarea id="draftBodyInput" class="aw-textarea" maxlength="4000" placeholder="Текст объявления для предпросмотра и тестовой отправки">${escapeHtml(editor.bodyText || '')}</textarea>
           </div>
           <div class="aw-actions">
-            <button class="aw-button" id="saveDraftBtn">${editor.draftId ? 'Сохранить draft' : 'Создать draft'}</button>
-            ${isFounder ? `<button class="aw-button secondary" id="testSendDraftBtn" ${editor.draftId ? '' : 'disabled'}>Founder test send</button>` : ''}
+            <button class="aw-button" id="saveDraftBtn">${editor.draftId ? 'Сохранить черновик' : 'Создать черновик'}</button>
+            ${isFounder ? `<button class="aw-button secondary" id="testSendDraftBtn" ${editor.draftId ? '' : 'disabled'}>Отправить тест себе</button>` : ''}
           </div>
           <div class="aw-card aw-preview-card">
-            <span>Preview</span>
-            <strong id="draftPreviewTitle">${escapeHtml(editor.title || 'Новый draft')}</strong>
-            <small id="draftPreviewMeta">Audience · ${escapeHtml(commsAudienceLabel(editor.audience || 'all'))}</small>
-            <div class="aw-preview-body" id="draftPreviewBody">${escapeHtml(editor.bodyText || 'Текст notice пока пустой.')}</div>
+            <span>Предпросмотр</span>
+            <strong id="draftPreviewTitle">${escapeHtml(editor.title || 'Новый черновик')}</strong>
+            <small id="draftPreviewMeta">Аудитория · ${escapeHtml(commsAudienceLabel(editor.audience || 'all'))}</small>
+            <div class="aw-preview-body" id="draftPreviewBody">${escapeHtml(editor.bodyText || 'Текст объявления пока пуст.')}</div>
           </div>
         </section>
 
         <section class="aw-surface aw-stack">
-          <h2>Recent notices</h2>
+          <h2>Недавние объявления</h2>
           <div class="aw-table-wrap">
             <table class="aw-table">
               <thead>
                 <tr>
-                  <th>Notice</th>
-                  <th>Audience</th>
+                  <th>Объявление</th>
+                  <th>Аудитория</th>
                   <th>Статус</th>
-                  <th>Outbox</th>
+                  <th>Исходящие</th>
                   <th>Обновлён</th>
                 </tr>
               </thead>
               <tbody>
                 ${recentNotices.length ? recentNotices.map((item) => `
                   <tr>
-                    <td><strong>${escapeHtml(item.title || `#${Number(item.id || 0)}`)}</strong><small>${escapeHtml(item.preview || 'Без текста')} · ${escapeHtml(item.createdByLabel || 'operator')}</small></td>
+                    <td><strong>${escapeHtml(item.title || `#${Number(item.id || 0)}`)}</strong><small>${escapeHtml(item.preview || 'Без текста')} · ${escapeHtml(item.createdByLabel || 'Оператор')}</small></td>
                     <td>${escapeHtml(commsAudienceLabel(item.audience))}</td>
                     <td><span class="aw-status ${commsStatusClass(item.status)}">${escapeHtml(commsStatusLabel(item.status))}</span></td>
-                    <td><small>sent ${Number(item.outbox?.sent || 0)} · queued ${Number(item.outbox?.queued || 0)} · failed ${Number(item.outbox?.failed || 0)}</small></td>
+                    <td><small>отправлено ${Number(item.outbox?.sent || 0)} · в очереди ${Number(item.outbox?.queued || 0)} · ошибки ${Number(item.outbox?.failed || 0)}</small></td>
                     <td>${formatDate(item.updatedAt)}</td>
                   </tr>
-                `).join('') : '<tr><td colspan="5" class="aw-empty">Recent notices пока отсутствуют.</td></tr>'}
+                `).join('') : '<tr><td colspan="5" class="aw-empty">Недавних объявлений пока нет.</td></tr>'}
               </tbody>
             </table>
           </div>
@@ -3354,13 +3354,13 @@ function commsView(model) {
 
       <aside class="aw-stack">
         <section class="aw-surface aw-stack">
-          <h2>Outbox snapshot</h2>
+          <h2>Снимок исходящих</h2>
           <div class="aw-list">
-            <div class="aw-list-item"><strong>queued</strong><small>${Number(outbox.queued || 0)}</small></div>
-            <div class="aw-list-item"><strong>processing</strong><small>${Number(outbox.processing || 0)}</small></div>
-            <div class="aw-list-item"><strong>warning</strong><small>${Number(outbox.warning || 0)}</small></div>
-            <div class="aw-list-item"><strong>failed</strong><small>${Number(outbox.failed || 0)}</small></div>
-            <div class="aw-list-item"><strong>sent</strong><small>${Number(outbox.sent || 0)}</small></div>
+            <div class="aw-list-item"><strong>В очереди</strong><small>${Number(outbox.queued || 0)}</small></div>
+            <div class="aw-list-item"><strong>Обрабатывается</strong><small>${Number(outbox.processing || 0)}</small></div>
+            <div class="aw-list-item"><strong>Нужна проверка</strong><small>${Number(outbox.warning || 0)}</small></div>
+            <div class="aw-list-item"><strong>Ошибки</strong><small>${Number(outbox.failed || 0)}</small></div>
+            <div class="aw-list-item"><strong>Отправлено</strong><small>${Number(outbox.sent || 0)}</small></div>
           </div>
         </section>
 
@@ -3377,12 +3377,12 @@ function commsView(model) {
         </section>
 
         <section class="aw-surface aw-stack">
-          <h2>Последние comms-действия</h2>
+          <h2>Последние действия</h2>
           <div class="aw-list">
             ${recentAdminAudit.length ? recentAdminAudit.map((item) => `
               <div class="aw-list-item">
                 <strong>${escapeHtml(founderTextLabel(item.action || '—'))}</strong>
-                <small>${formatDate(item.ts)} · actor TG ${Number(item.actorTgId || 0) || '—'}${item.targetId ? ` · notice ${escapeHtml(item.targetId)}` : ''}</small>
+                <small>${formatDate(item.ts)} · оператор TG ${Number(item.actorTgId || 0) || '—'}${item.targetId ? ` · объявление ${escapeHtml(item.targetId)}` : ''}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока нет действий.</div>'}
           </div>

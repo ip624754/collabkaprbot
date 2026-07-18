@@ -10,7 +10,7 @@
 - Recovery не ослабляет доступ и не подтверждает существование приватного объекта.
 - Curator workspace read-order усилен: specific membership проверяется до unrestricted detail lookup.
 - Callbacks, schema, платежи, invite economy и deal/giveaway mechanics не менялись.
-- Следующий scoped STEP: `STEP586G — Admin and Operator Vocabulary`.
+- Следующий scoped STEP: `STEP586H — Live Telegram Acceptance and Mobile Copy Pass`.
 
 ## 0) BOOT (всегда читаем сначала)
 - `process/07_WORK_HISTORY_STEP586F.md` — актуальная дельта: recovery taxonomy, empty states и authorization-safe fallback
@@ -222,7 +222,15 @@ Canonical product-language documents:
 - command: `npm run smoke:access-error-empty-state-recovery-contract`;
 - ordinary-user recovery is neutral, non-enumerating and returns to an existing list/menu surface;
 - selected empty states include a reason and one next action;
-- admin/operator vocabulary remains scoped to STEP586G.
-Current next action: **STEP586G — Admin and Operator Vocabulary**.
+- admin/operator vocabulary is implemented in STEP586G; exact diagnostics remain available.
+
+### STEP586G implementation
+
+- `audit/STEP586G_ADMIN_OPERATOR_VOCABULARY_REPORT.md` — Telegram/web operator vocabulary, diagnostics boundary and Truth Boundary;
+- `process/07_WORK_HISTORY_STEP586G.md` — exact source/test scope and preserved controls;
+- command: `npm run smoke:admin-operator-vocabulary-contract`;
+- primary labels use human Russian terms while Redis, QStash, hard-skip, raw statuses and machine values remain in diagnostic blocks.
+
+Current next action: **STEP586H — Live Telegram Acceptance and Mobile Copy Pass**.
 
 Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance remain unverified.

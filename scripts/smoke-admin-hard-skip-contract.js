@@ -70,8 +70,8 @@ assert.ok(hardSkipExportHelperSrc.includes('const scanN = Math.max(200, Math.min
 assert.ok(hardSkipExportHelperSrc.includes('const out = filtered.slice(0, Math.max(1, Number(limit || 200) || 200));'), 'Admin → Hard-skip export helper must keep export limit guard');
 assert.ok(hardSkipExportHelperSrc.includes("return { ok: true, reason: rf || 'all', scanN, total: filtered.length, items: out };"), 'Admin → Hard-skip export helper must keep ok result shape');
 
-assert.ok(renderAdminHardSkipHomeSrc.includes("let text = '🧱 <b>Hard-skip (dead chats)</b>\\n\\n';"), 'Admin → Hard-skip home must keep stable title');
-assert.ok(renderAdminHardSkipHomeSrc.includes("text += `TTL configured: <b>${ttlDays}</b> дн.\\n\\n`;"), 'Admin → Hard-skip home must keep TTL configured line');
+assert.ok(renderAdminHardSkipHomeSrc.includes("let text = '🧱 <b>Недоступные чаты</b>\\n\\n';"), 'Admin → Hard-skip home must keep human-readable title');
+assert.ok(renderAdminHardSkipHomeSrc.includes("text += `Срок хранения: <b>${ttlDays}</b> дн.\\n\\n`;"), 'Admin → Hard-skip home must keep retention line');
 assert.ok(renderAdminHardSkipHomeSrc.includes("text += '⚠️ Redis недоступен — список временно недоступен.\\n';"), 'Admin → Hard-skip home must keep redis unavailable helper');
 assert.ok(renderAdminHardSkipHomeSrc.includes("text += 'Пока пусто.\\n';"), 'Admin → Hard-skip home must keep empty-state');
 assertMatch(renderAdminHardSkipHomeSrc, /kb\.text\('🔎 Найти TG ID', `a:hs_find\|p:\$\{p\}`\)\.row\(\);/s, 'Admin → Hard-skip home must keep find button');
@@ -80,22 +80,25 @@ assertMatch(renderAdminHardSkipHomeSrc, /kb\.text\(`tg:\$\{it\.tgId\}`, `a:hs_vi
 assertMatch(renderAdminHardSkipHomeSrc, /if \(p > 0\) kb\.text\('⬅️', `a:hs_home\|p:\$\{p - 1\}`\);\s*kb\.text\('➡️', `a:hs_home\|p:\$\{p \+ 1\}`\);/s, 'Admin → Hard-skip home must keep pagination controls');
 assert.ok(renderAdminHardSkipHomeSrc.includes("kb.row().text('⬅️ Система', 'a:admin_sys').row().text('⬅️ Админка', 'a:admin_home');"), 'Admin → Hard-skip home must keep System/Admin footer');
 
-assert.ok(renderAdminHardSkipHitsSrc.includes("let text = `🧾 <b>Hard-skip HITs (пропуски)</b>\n\n`;"), 'Admin → Hard-skip hits must keep stable title');
-assert.ok(renderAdminHardSkipHitsSrc.includes('Показывает последние случаи, когда рассылка <b>пропустила</b> отправку из‑за hard-skip (dead chats).'), 'Admin → Hard-skip hits must keep helper copy');
-assert.ok(renderAdminHardSkipHitsSrc.includes("text += `Фильтр: <b>${filterLabel}</b> · окно: последние <code>${hits.scanN || ADMIN_HS_HITS_SAMPLE_LIMIT}</code> HITs\n\n`;"), 'Admin → Hard-skip hits must keep filter/window line');
+assert.ok(renderAdminHardSkipHitsSrc.includes('🧾 <b>Пропуски доставки</b>'), 'Admin → Hard-skip hits must keep human-readable title');
+assert.ok(renderAdminHardSkipHitsSrc.includes('Последние случаи, когда доставка была пропущена для недоступного чата.'), 'Admin → Hard-skip hits must keep human-readable helper copy');
+assert.ok(renderAdminHardSkipHitsSrc.includes('Диагностика: <code>hard-skip hits</code>.'), 'Admin → Hard-skip hits must retain exact diagnostic term');
+assert.ok(renderAdminHardSkipHitsSrc.includes('окно: последние <code>${hits.scanN || ADMIN_HS_HITS_SAMPLE_LIMIT}</code> событий'), 'Admin → Hard-skip hits must keep bounded event window');
 assert.ok(renderAdminHardSkipHitsSrc.includes("text += `Сегодня: ${top}\n\n`;"), 'Admin → Hard-skip hits must keep top reasons summary');
 assert.ok(renderAdminHardSkipHitsSrc.includes("text += 'Пока пусто (по текущему фильтру/окну).\\n';"), 'Admin → Hard-skip hits must keep empty-state');
-assertMatch(renderAdminHardSkipHitsSrc, /kb\.text\('🧱 Список \(set\)', `a:hs_home\|p:0`\)\.text\('🔎 Найти TG ID', `a:hs_find\|p:0`\)\.row\(\);/s, 'Admin → Hard-skip hits must keep home/find row');
+assertMatch(renderAdminHardSkipHitsSrc, /kb\.text\('🧱 Недоступные чаты', `a:hs_home\|p:0`\)\.text\('🔎 Найти TG ID', `a:hs_find\|p:0`\)\.row\(\);/s, 'Admin → Hard-skip hits must keep home/find row');
 assertMatch(renderAdminHardSkipHitsSrc, /kb\.text\(fAll, `a:hs_hits\|p:0\|r:all`\);/s, 'Admin → Hard-skip hits must keep ALL filter');
-assertMatch(renderAdminHardSkipHitsSrc, /kb\.text\('🗒 Export last 200', `a:hs_hits_export\|p:\$\{p\}\|r:\$\{rf\}`\)\.row\(\);/s, 'Admin → Hard-skip hits must keep export button');
+assertMatch(renderAdminHardSkipHitsSrc, /kb\.text\('🗒 Скачать последние 200', `a:hs_hits_export\|p:\$\{p\}\|r:\$\{rf\}`\)\.row\(\);/s, 'Admin → Hard-skip hits must keep human-readable export button');
 assertMatch(renderAdminHardSkipHitsSrc, /kb\.text\(`tg:\$\{it\.tgId\}`, `a:hs_view\|tg:\$\{it\.tgId\}`\)\.row\(\);/s, 'Admin → Hard-skip hits must keep quick view buttons');
 assertMatch(renderAdminHardSkipHitsSrc, /if \(p > 0\) kb\.text\('⬅️', `a:hs_hits\|p:\$\{p - 1\}\|r:\$\{rf\}`\);\s*kb\.text\('➡️', `a:hs_hits\|p:\$\{p \+ 1\}\|r:\$\{rf\}`\);/s, 'Admin → Hard-skip hits must keep pagination controls');
 assert.ok(renderAdminHardSkipHitsSrc.includes("kb.row().text('⬅️ Система', 'a:admin_sys').row().text('⬅️ Админка', 'a:admin_home');"), 'Admin → Hard-skip hits must keep System/Admin footer');
 
-assert.ok(renderAdminHardSkipViewSrc.includes("let text = `🧱 <b>Hard-skip status</b>\\n\\nTG ID: <code>${id || 0}</code>\\n`;"), 'Admin → Hard-skip view must keep stable title');
-assert.ok(renderAdminHardSkipViewSrc.includes('нет hard-skip'), 'Admin → Hard-skip view must keep no-hard-skip state');
-assert.ok(renderAdminHardSkipViewSrc.includes('<b>hard-skip</b>'), 'Admin → Hard-skip view must keep hard-skip state');
-assert.ok(renderAdminHardSkipViewSrc.includes("if (st.exists) kb.text('🧹 Снять hard-skip', `a:hs_unskip|tg:${id}`).row();"), 'Admin → Hard-skip view must keep unskip control');
+assert.ok(renderAdminHardSkipViewSrc.includes("let text = `🧱 <b>Статус доставки</b>\\n\\nTelegram ID: <code>${id || 0}</code>\\n`;"), 'Admin → Hard-skip view must keep human-readable title');
+assert.ok(renderAdminHardSkipViewSrc.includes('доставка разрешена'), 'Admin → Hard-skip view must keep allowed-delivery state');
+assert.ok(renderAdminHardSkipViewSrc.includes('hard-skip absent'), 'Admin → Hard-skip view must retain absent diagnostic state');
+assert.ok(renderAdminHardSkipViewSrc.includes('доставка пропускается'), 'Admin → Hard-skip view must keep skipped-delivery state');
+assert.ok(renderAdminHardSkipViewSrc.includes('hard-skip active'), 'Admin → Hard-skip view must retain active diagnostic state');
+assert.ok(renderAdminHardSkipViewSrc.includes("if (st.exists) kb.text('🧹 Разрешить доставку', `a:hs_unskip|tg:${id}`).row();"), 'Admin → Hard-skip view must keep human-readable unskip control');
 assert.ok(renderAdminHardSkipViewSrc.includes("kb.text('⬅️ Назад', 'a:hs_home|p:0').row();"), 'Admin → Hard-skip view must keep Back control');
 assert.ok(renderAdminHardSkipViewSrc.includes("kb.text('⬅️ Система', 'a:admin_sys').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');"), 'Admin → Hard-skip view must keep System/Menu/Home footer');
 
@@ -109,7 +112,7 @@ assert.ok(hardSkipCallbacksSrc.includes("if (p.a === 'a:hs_find') {"), 'Admin �
 assert.ok(hardSkipCallbacksSrc.includes("if (p.a === 'a:hs_view') {"), 'Admin → Hard-skip view callback must exist');
 assert.ok(hardSkipCallbacksSrc.includes("if (p.a === 'a:hs_unskip') {"), 'Admin → Hard-skip unskip callback must exist');
 assert.ok(hardSkipCallbacksSrc.includes("if (p.a === 'a:hs_hits_export') {"), 'Admin → Hard-skip export callback must exist');
-assert.ok(hardSkipCallbacksSrc.includes("await safeEditOrReply(ctx, '🔎 Введи TG ID (число), чтобы проверить hard-skip статус.\\n\\nПример: <code>222047659</code>'"), 'Admin → Hard-skip find callback must keep find prompt');
+assert.ok(hardSkipCallbacksSrc.includes("await safeEditOrReply(ctx, '🔎 Введи Telegram ID, чтобы проверить статус доставки.\\n\\nПример: <code>222047659</code>'"), 'Admin → Hard-skip find callback must keep human-readable find prompt');
 assert.ok(hardSkipCallbacksSrc.includes("await setExpectText(ctx.from.id, { type: 'hs_find', backCb: `a:hs_home|p:${page}` }, 10 * 60);"), 'Admin → Hard-skip find callback must keep expectText wiring');
 assert.ok(hardSkipCallbacksSrc.includes("await adminHardSkipUnskip(tgId);"), 'Admin → Hard-skip unskip callback must keep Redis DEL path');
 assert.ok(hardSkipCallbacksSrc.includes("await renderAdminHardSkipView(ctx, tgId, { toast: '✅ Снято' });"), 'Admin → Hard-skip unskip callback must rerender status view with toast');
@@ -117,9 +120,9 @@ assert.ok(hardSkipCallbacksSrc.includes("const ex = await adminHardSkipHitsExpor
 assert.ok(hardSkipCallbacksSrc.includes("await ctx.answerCallbackQuery({ text: 'Готовлю экспорт…' });"), 'Admin → Hard-skip export callback must keep initial toast');
 assert.ok(hardSkipCallbacksSrc.includes("'⚠️ Redis недоступен — экспорт временно недоступен.'"), 'Admin → Hard-skip export callback must keep Redis unavailable rerender toast');
 assert.ok(hardSkipCallbacksSrc.includes("new InputFile(Buffer.from(txt, 'utf-8'), filename)"), 'Admin → Hard-skip export callback must export TXT document');
-assert.ok(hardSkipCallbacksSrc.includes("caption: `📤 Export: ${ex.items.length} HITs · фильтр: ${tag}`"), 'Admin → Hard-skip export callback must keep export caption');
-assert.ok(hardSkipCallbacksSrc.includes(".text('🧾 HITs', `a:hs_hits|p:${page}|r:${rf}`)"), 'Admin → Hard-skip export document must keep back-to-HITs button');
-assert.ok(hardSkipCallbacksSrc.includes("await renderAdminHardSkipHits(ctx, page, rf, { toast: `📤 Export ready: ${ex.items.length}` });"), 'Admin → Hard-skip export callback must rerender hits screen with toast');
+assert.ok(hardSkipCallbacksSrc.includes("caption: `📤 Экспорт: ${ex.items.length} событий · фильтр: ${tag}`"), 'Admin → Hard-skip export callback must keep human-readable export caption');
+assert.ok(hardSkipCallbacksSrc.includes(".text('🧾 Пропуски', `a:hs_hits|p:${page}|r:${rf}`)"), 'Admin → Hard-skip export document must keep back-to-events button');
+assert.ok(hardSkipCallbacksSrc.includes("await renderAdminHardSkipHits(ctx, page, rf, { toast: `📤 Экспорт готов: ${ex.items.length}` });"), 'Admin → Hard-skip export callback must rerender hits screen with human-readable toast');
 
 expectRegistry('a:hs_home', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE });
 expectRegistry('a:hs_hits', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE });

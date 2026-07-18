@@ -65,7 +65,7 @@ assert.ok(renderAdminQStashStatusSrc.includes("if (cooldownLast429At) text += `�
 assert.ok(renderAdminQStashStatusSrc.includes("if (cooldownReason) text += `• reason: <code>${escapeHtml(String(cooldownReason))}</code>\n`;"), 'Admin → QStash status must keep cooldown reason line');
 assertMatch(
   renderAdminQStashStatusSrc,
-  /const kb = new InlineKeyboard\([\s\S]*?\.text\('🧪 Send signed ping', 'a:admin_qstash_ping'\)\s*\.row\(\)\s*\.text\(`📣 Fan-out: \$\{fanout \? 'ON' : 'OFF'\}`, 'a:admin_bc_qstash_toggle'\)\s*\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
+  /const kb = new InlineKeyboard\([\s\S]*?\.text\('🧪 Отправить подписанный ping', 'a:admin_qstash_ping'\)\s*\.row\(\)\s*\.text\(`📣 QStash-рассылка: \$\{fanout \? 'ON' : 'OFF'\}`, 'a:admin_bc_qstash_toggle'\)\s*\.text\('⬅️ Система', 'a:admin_sys'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\);/s,
   'Admin → QStash status keyboard/footer must keep ping, fan-out toggle, System/Menu/Home'
 );
 

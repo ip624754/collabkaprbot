@@ -30,16 +30,16 @@ export async function notifyLoginChallenge({ challengeId, code, expiresAt, ua, i
   if (!CFG.BOT_TOKEN || !ids.length) return { ok: false, reason: 'approvers_not_configured' };
 
   const lines = [
-    '<b>Web Admin login request</b>',
+    '<b>Запрос входа в веб-админку</b>',
     '',
-    `Challenge: <code>${escapeHtml(String(challengeId).slice(0, 8))}</code>`,
-    `Expires: <code>${escapeHtml(expiresAt)}</code>`,
+    `Запрос: <code>${escapeHtml(String(challengeId).slice(0, 8))}</code>`,
+    `Истекает: <code>${escapeHtml(expiresAt)}</code>`,
   ];
   if (ip) lines.push(`IP: <code>${escapeHtml(ip)}</code>`);
   if (ua) lines.push(`UA: <code>${escapeHtml(ua)}</code>`);
-  lines.push('', `Fallback code: <code>${escapeHtml(code)}</code>`);
+  lines.push('', `Резервный код: <code>${escapeHtml(code)}</code>`);
   if (typeof buildDecisionUrl !== 'function') {
-    lines.push('', '<i>Approve links unavailable: PUBLIC_BASE_URL not configured. Use fallback code in web login.</i>');
+    lines.push('', '<i>Ссылки подтверждения недоступны: PUBLIC_BASE_URL не настроен. Используй резервный код на экране входа.</i>');
   }
 
   const results = [];
@@ -50,8 +50,8 @@ export async function notifyLoginChallenge({ challengeId, code, expiresAt, ua, i
     if (approveUrl && denyUrl) {
       payload.reply_markup = {
         inline_keyboard: [[
-          { text: '✅ Approve', url: approveUrl },
-          { text: '❌ Deny', url: denyUrl },
+          { text: '✅ Одобрить', url: approveUrl },
+          { text: '❌ Отклонить', url: denyUrl },
         ]],
       };
     }

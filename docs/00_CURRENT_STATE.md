@@ -1,3 +1,28 @@
+## STEP586G — Admin and Operator Vocabulary (2026-07-18)
+
+**Current handoff-safe baseline:** STEP586G on top of STEP586F.
+
+Verified local source truth:
+- Telegram admin and web-admin use aligned human-readable labels for communications, drafts, outgoing messages, personal-message templates, moderation, giveaways, audit and delivery skips;
+- operator screens present current status and next action before exact diagnostics;
+- Redis, QStash, raw broadcast states, hard-skip reason codes, callback IDs and `broadcasts / broadcast_sent_log` remain available in diagnostic blocks;
+- admin-web login shows `Одобрить / Отклонить`, while signed `approve / deny` values and `approved / denied` statuses remain unchanged;
+- callback IDs, action-registry guards, audience machine values, permissions, queue mechanics, payment behavior, schema and migrations are unchanged;
+- dedicated STEP586G, affected admin/web/broadcast contracts and STEP586A–F regressions pass locally.
+
+Not verified: Vercel deployment, live Telegram or web-admin rendering, mobile wrapping, production Redis/QStash/Neon diagnostics, real operator comprehension or remote STEP584 evidence.
+
+**Next:** STEP586H — Live Telegram Acceptance and Mobile Copy Pass.
+
+Read:
+- `docs/audit/STEP586G_ADMIN_OPERATOR_VOCABULARY_REPORT.md`;
+- `docs/product/COLLABKA_COPY_SYSTEM.md`;
+- `docs/product/TERMINOLOGY_REGISTRY.md`;
+- `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP586G.md`.
+
+---
+
 ## STEP586F — Access, Error and Empty-State Recovery (2026-07-18)
 
 **Current handoff-safe baseline:** STEP586F on top of STEP586E.

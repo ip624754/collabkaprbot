@@ -9029,7 +9029,7 @@ function gwOpenKb(g, flags = {}) {
 function participantKb(gwId, entry, opts = {}) {
   const pub = opts.pub ? '|pub:1' : '';
   const kb = new InlineKeyboard()
-    .text('🧾 Лог конкурса', `a:gw_log|i:${gwId}${pub}`).row();
+    .text('🧾 Журнал розыгрыша', `a:gw_log|i:${gwId}${pub}`).row();
 
   // If contest ended — do not allow joining/checking anymore (avoid confusion)
   if (opts.ended) {
@@ -18718,27 +18718,27 @@ async function renderGwStats(ctx, ownerUserId, gwId) {
   const text =
 `📊 <b>Статистика конкурса #${gwId}</b>
 
-👥 Entries total: <b>${total}</b>
-✅ Eligible: <b>${elig}</b>  (<b>${eligPct}%</b>)
-⚠️ Not eligible: <b>${notElig}</b>
+👥 Всего участников: <b>${total}</b>
+✅ Допущены: <b>${elig}</b>  (<b>${eligPct}%</b>)
+⚠️ Не допущены: <b>${notElig}</b>
 
-🕒 Last join: <b>${fmtTs(st.last_joined_at)}</b>
-🔎 Last check: <b>${fmtTs(st.last_checked_at)}</b>
+🕒 Последнее участие: <b>${fmtTs(st.last_joined_at)}</b>
+🔎 Последняя проверка: <b>${fmtTs(st.last_checked_at)}</b>
 
-🔍 Transparency log: 🧾`;
+🔍 Журнал розыгрыша: 🧾`;
 
   const kb = new InlineKeyboard()
     .text('✅ Готовность конкурса', `a:gw_preflight|i:${gwId}`)
     .row()
     .text('ℹ️ Почему не прошёл', `a:gw_why|i:${gwId}`)
     .row()
-    .text('🧾 Transparency log', `a:gw_log|i:${gwId}`)
+    .text('🧾 Журнал розыгрыша', `a:gw_log|i:${gwId}`)
     .row()
     .text('📤 Экспорт всех', `a:gw_export|i:${gwId}|t:all`)
     .row()
-    .text('📤 Экспорт eligible', `a:gw_export|i:${gwId}|t:eligible`)
+    .text('📤 Экспорт допущенных', `a:gw_export|i:${gwId}|t:eligible`)
     .row()
-    .text('🏆 Экспорт winners', `a:gw_export|i:${gwId}|t:winners`)
+    .text('🏆 Экспорт победителей', `a:gw_export|i:${gwId}|t:winners`)
     .row();
 
   if (isSuperAdminTg(ctx.from?.id)) kb.text('🧩 Проверка доступа', `a:gw_access|i:${gwId}`).row();
@@ -18755,7 +18755,7 @@ async function renderGwLog(ctx, ownerUserIdOrNull, gwId) {
   // both owner & participants can open log: show last audit rows
   const rows = await db.listGiveawayAudit(gwId, 30);
   const lines = rows.map(r => `• <b>${escapeHtml(r.action)}</b> — ${fmtTs(r.created_at)}`);
-  const text = `🧾 <b>Лог конкурса #${gwId}</b>
+  const text = `🧾 <b>Журнал розыгрыша #${gwId}</b>
 
 ${lines.length ? lines.join('\n') : emptyStateText({ title: 'Событий пока нет', reason: 'Лог заполнится после первого действия с розыгрышем.', action: 'Вернись к карточке розыгрыша.' })}`;
   const back = ownerUserIdOrNull ? `a:gw_open|i:${gwId}` : `a:gw_open_public|i:${gwId}`;
@@ -19078,7 +19078,7 @@ async function renderCuratorGiveawayLog(ctx, userId, wsId, gwId) {
   if (!g) return renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
   const rows = await db.listGiveawayAudit(Number(gwId), 30);
   const lines = rows.map(r => `• <b>${escapeHtml(r.action)}</b> — ${fmtTs(r.created_at)}`);
-  const text = `🧾 <b>Лог конкурса #${gwId}</b>
+  const text = `🧾 <b>Журнал розыгрыша #${gwId}</b>
 
 ${lines.length ? lines.join('\n') : emptyStateText({ title: 'Событий пока нет', reason: 'Лог заполнится после первого действия с конкурсом.', action: 'Вернись к карточке конкурса.' })}`;
   const kb = navKb(`a:cur_gw_open|ws:${wsId}|i:${gwId}`);
@@ -19413,7 +19413,7 @@ async function clearEligibilityCacheForGw(gwId, userTgId) {
 
 function buildWhyText({ gwId, targetUserId, check }) {
   const who = `<a href="tg://user?id=${Number(targetUserId)}">id:${Number(targetUserId)}</a>`;
-  const ok = check.isEligible ? '✅ <b>Eligible</b>' : (check.unknown ? '❔ <b>Не могу проверить полностью</b>' : '⚠️ <b>Not eligible</b>');
+  const ok = check.isEligible ? '✅ <b>Допущены</b>' : (check.unknown ? '❔ <b>Не могу проверить полностью</b>' : '⚠️ <b>Не допущены</b>');
 
   const lines = (check.results || []).map(r => {
     const ref = formatChatRef(r.chat);
@@ -19998,7 +19998,7 @@ ${escapeHtml(safeCap)}
     const photo = Array.isArray(msg.photo) && msg.photo.length ? msg.photo[msg.photo.length - 1] : null;
     if (!photo?.file_id) {
       await ctx.reply('❌ Нужна именно картинка. Отправь фото одним сообщением.', {
-        reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart()).row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
+        reply_markup: new InlineKeyboard().text('⬅️ К редактору', commsCb.bcStart()).row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
       });
       try { await setExpectText(ctx.from.id, exp, 30 * 60); } catch {}
       return;
@@ -20014,7 +20014,7 @@ ${escapeHtml(safeCap)}
     await clearExpectText(ctx.from.id);
     await setDraft(ctx.from.id, draft, 30 * 60);
     await ctx.reply('✅ Картинка сохранена.', {
-      reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart())
+      reply_markup: new InlineKeyboard().text('⬅️ К редактору', commsCb.bcStart())
     });
     return;
   });
@@ -20749,7 +20749,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
 
   const chatType = String(ctx.chat?.type || '');
   if (chatType !== 'private') {
-    await ctx.reply('Эта операция доступна только в личном чате (DM) с ботом.');
+    await ctx.reply('Эта операция доступна только в личном чате с ботом.');
     return;
   }
 
@@ -20764,7 +20764,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
   const safeTextMeta = clipCodepoints(String(exp.text || '').trim(), TG_SAFE_BODY_MAX);
   const safeText = safeTextMeta.text;
   if (!safeLabel || !safeText) {
-    await ctx.reply('⚠️ Сессия истекла (нет текста). Открой Outbox и попробуй ещё раз.');
+    await ctx.reply('⚠️ Сессия истекла (нет текста). Открой «Исходящие» и попробуй ещё раз.');
     return;
   }
 
@@ -20789,8 +20789,8 @@ if (exp.type === 'adm_outbox_tpl_label') {
   const kb = new InlineKeyboard()
     .text('📌 Открыть шаблон', `a:admin_umsg_tpl_view|tid:${id}|p:0`)
     .row()
-    .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
-    .text('📤 Outbox', commsCb.adminOutboxView(idx, page))
+    .text('📌 Шаблоны сообщений', 'a:admin_umsg_tpls|p:0')
+    .text('📤 Исходящие', commsCb.adminOutboxView(idx, page))
     .row();
 
   kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
@@ -23680,10 +23680,10 @@ ${msgText}
 
 ${escapeHtml(trimmed)}`;
       const kb = new InlineKeyboard()
-        .text('👀 View', `a:mod_verif_view|uid:${u.id}|p:0`)
+        .text('👀 Открыть', `a:mod_verif_view|uid:${u.id}|p:0`)
         .row()
-        .text('✅ Approve', `a:mod_verif_approve|uid:${u.id}|p:0`)
-        .text('❌ Reject', `a:mod_verif_reject|uid:${u.id}|p:0`)
+        .text('✅ Одобрить', `a:mod_verif_approve|uid:${u.id}|p:0`)
+        .text('❌ Отклонить', `a:mod_verif_reject|uid:${u.id}|p:0`)
         .row()
         .text('🗑 Убрать', 'a:nd')
         .row()
@@ -30743,7 +30743,7 @@ if (p.a === 'a:match_home') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
       await ctx.answerCallbackQuery();
-      let text = '🧹 <b>Clear pending snapshot</b>\n\n';
+      let text = '🧹 <b>Очистить снимок очереди?</b>\n\n';
       text += 'Очистит только Redis snapshot <code>broadcast.pending_deliveries</code>.\n';
       text += '<b>Не</b> останавливает реальную доставку и <b>не</b> меняет DB/QStash state.\n\n';
       const st = await adminGetBroadcastPendingSnapshot();
@@ -30774,7 +30774,7 @@ if (p.a === 'a:match_home') {
       const out = await adminClearBroadcastPendingSnapshot();
       const banner = out.ok
         ? '✅ Broadcast pending snapshot cleared (Redis only)'
-        : `⚠️ Clear pending snapshot failed: ${String(out.error || 'redis_error').slice(0, 90)}`;
+        : `⚠️ Не удалось очистить снимок очереди: ${String(out.error || 'redis_error').slice(0, 90)}`;
       await renderAdminOps(ctx, { banner });
       return;
     }
@@ -30895,7 +30895,7 @@ if (p.a === 'a:hs_hits') {
       if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
       await ctx.answerCallbackQuery();
       const page = Math.max(0, Number(p.p || 0) || 0);
-      await safeEditOrReply(ctx, '🔎 Введи TG ID (число), чтобы проверить hard-skip статус.\n\nПример: <code>222047659</code>', {
+      await safeEditOrReply(ctx, '🔎 Введи Telegram ID, чтобы проверить статус доставки.\n\nПример: <code>222047659</code>', {
         parse_mode: 'HTML',
         reply_markup: navKb('a:hs_home|p:' + page)
       });
@@ -30953,9 +30953,9 @@ if (p.a === 'a:hs_hits') {
       await ctx.replyWithDocument(
         new InputFile(Buffer.from(txt, 'utf-8'), filename),
         {
-          caption: `📤 Export: ${ex.items.length} HITs · фильтр: ${tag}`,
+          caption: `📤 Экспорт: ${ex.items.length} событий · фильтр: ${tag}`,
           reply_markup: new InlineKeyboard()
-            .text('🧾 HITs', `a:hs_hits|p:${page}|r:${rf}`)
+            .text('🧾 Пропуски', `a:hs_hits|p:${page}|r:${rf}`)
             .text('⬅️ Система', 'a:admin_sys')
             .row()
             .text('📋 Меню', 'a:menu')
@@ -30963,7 +30963,7 @@ if (p.a === 'a:hs_hits') {
         }
       );
 
-      await renderAdminHardSkipHits(ctx, page, rf, { toast: `📤 Export ready: ${ex.items.length}` });
+      await renderAdminHardSkipHits(ctx, page, rf, { toast: `📤 Экспорт готов: ${ex.items.length}` });
       return;
     }
 
@@ -31835,7 +31835,7 @@ ${ban ? 'Заблокировать' : 'Разбанить'} пользоват�
         .row();
 
       kb.text('📌 Шаблоны (админ)', 'a:admin_umsg_tpls|p:0')
-        .text('📤 Outbox', 'a:admin_outbox|p:0')
+        .text('📤 Исходящие', 'a:admin_outbox|p:0')
         .row();
 
       kb.text('⬅️ Назад', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`)
@@ -32319,7 +32319,7 @@ if (p.a === 'a:admin_outbox_note') {
   // Preserve return route back to Outbox for this admin (short TTL).
   await setAdminUserNoteReturn(ctx.from.id, {
     uid,
-    backText: '⬅️ Outbox',
+    backText: '⬅️ Исходящие',
     backCb: commsCb.adminOutboxView(idx, page),
     sectionBackText: '⬅️ Коммуникации',
     sectionBackCb: 'a:admin_comms',
@@ -32337,7 +32337,7 @@ if (p.a === 'a:admin_outbox_repeat') {
   if (chatType !== 'private') {
     const idx = Math.max(0, Number(p.i) || 0);
     const page = Math.max(0, Number(p.p) || 0);
-    await safeEditOrReply(ctx, '✉️ Повтор из Outbox доступен только в <b>личном чате</b> с ботом (DM), чтобы не светить содержимое сообщений в группах.', {
+    await safeEditOrReply(ctx, '✉️ Повтор из исходящих доступен только в <b>личном чате</b> с ботом, чтобы не светить содержимое сообщений в группах.', {
       parse_mode: 'HTML',
       reply_markup: (() => {
         const kb = new InlineKeyboard().text('⬅️ Назад', commsCb.adminOutboxView(idx, page));
@@ -32400,12 +32400,12 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
       targetUsername,
       templateRaw,
       templateId: 'outbox_repeat',
-      templateLabel: 'Повтор из Outbox',
+      templateLabel: 'Повтор из исходящих',
       phUsed,
       phUnknown,
       // Return route for sendAdminMessageToUser (so “done/back” stays inside Outbox)
       retCb: commsCb.adminOutboxView(idx, page),
-      retText: '⬅️ Outbox',
+      retText: '⬅️ Исходящие',
       sectionBackText: '⬅️ Коммуникации',
       sectionBackCb: 'a:admin_comms',
       createdAt: new Date().toISOString(),
@@ -32465,7 +32465,7 @@ if (p.a === 'a:admin_outbox_to_tpl') {
   const { tpls } = await getAdminDmTemplatesWithMeta();
   const items = Array.isArray(tpls.items) ? tpls.items.map((x) => ({ ...x })) : [];
   const id = 't' + randomToken(6);
-  const label = clipText(`Outbox ${fmtTs(it?.ts || new Date().toISOString())}`, 48);
+  const label = clipText(`Исходящие ${fmtTs(it?.ts || new Date().toISOString())}`, 48);
   items.push({ id, label, text: clipCodepoints(raw, TG_SAFE_BODY_MAX).text });
   await setAdminDmTemplates({ version: Number(tpls.version || 0) + 1, updatedAt: new Date().toISOString(), items });
   await renderAdminDmTemplateView(ctx, id, 0);
@@ -32477,7 +32477,7 @@ if (p.a === 'a:admin_outbox_clear_q') {
   if (!isSuperAdminTg(ctx.from.id)) return;
   const page = Math.max(0, Number(p.p) || 0);
   const kb = new InlineKeyboard().text('🧹 Очистить', commsCb.adminOutboxClear(page)).text('❌ Отмена', commsCb.adminOutbox(page));
-  await safeEditOrReply(ctx, `🧹 <b>Очистить Outbox?</b>\n\nДействие удалит Redis-журнал исходящих admin DM.`, { parse_mode: 'HTML', reply_markup: kb });
+  await safeEditOrReply(ctx, `🧹 <b>Очистить журнал исходящих?</b>\n\nБудет удалён только журнал в Redis. Уже отправленные сообщения в Telegram останутся у получателей.`, { parse_mode: 'HTML', reply_markup: kb });
   return;
 }
 
@@ -32507,7 +32507,7 @@ if (p.a === 'a:admin_umsg_tpl_add') {
   await ctx.answerCallbackQuery();
   if (!isSuperAdminTg(ctx.from.id)) return;
   const page = Math.max(0, Number(p.p) || 0);
-  await safeEditOrReply(ctx, `➕ <b>Новый DM-шаблон</b>\n\n1-я строка — название.\nДальше — текст шаблона.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`) });
+  await safeEditOrReply(ctx, `➕ <b>Новый шаблон личного сообщения</b>\n\n1-я строка — название.\nДальше — текст шаблона.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_umsg_tpls|p:${page}`) });
   await setExpectText(ctx.from.id, { type: 'admin_umsg_tpl_add', page }, 20 * 60);
   return;
 }
@@ -32517,7 +32517,7 @@ if (p.a === 'a:admin_umsg_tpl_edit') {
   if (!isSuperAdminTg(ctx.from.id)) return;
   const page = Math.max(0, Number(p.p) || 0);
   const tplId = String(p.tid || '');
-  await safeEditOrReply(ctx, `✏️ <b>Изменить DM-шаблон</b>\n\n1-я строка — название.\nДальше — новый текст.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`) });
+  await safeEditOrReply(ctx, `✏️ <b>Изменить шаблон личного сообщения</b>\n\n1-я строка — название.\nДальше — новый текст.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`) });
   await setExpectText(ctx.from.id, { type: 'admin_umsg_tpl_edit', tplId, page }, 20 * 60);
   return;
 }
@@ -32549,7 +32549,7 @@ if (p.a === 'a:admin_umsg_tpl_reset_q') {
   if (!isSuperAdminTg(ctx.from.id)) return;
   const page = Math.max(0, Number(p.p) || 0);
   const kb = new InlineKeyboard().text('♻️ Сбросить', `a:admin_umsg_tpl_reset|p:${page}`).text('❌ Отмена', `a:admin_umsg_tpls|p:${page}`);
-  await safeEditOrReply(ctx, '♻️ <b>Сбросить шаблоны к дефолтным?</b>', { parse_mode: 'HTML', reply_markup: kb });
+  await safeEditOrReply(ctx, '♻️ <b>Восстановить стандартные шаблоны?</b>', { parse_mode: 'HTML', reply_markup: kb });
   return;
 }
 
@@ -32573,7 +32573,7 @@ if (p.a === 'a:bc_start_adv') {
   if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
   await ctx.answerCallbackQuery();
   try { await clearDraft(ctx.from.id); } catch {}
-  await safeEditOrReply(ctx, `🧰 <b>Расширенный composer</b>\n\nОтправь текст, фото, видео, GIF или документ.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Простой composer', commsCb.bcStart()) });
+  await safeEditOrReply(ctx, `🧰 <b>Расширенный редактор</b>\n\nОтправь текст, фото, видео, GIF или документ.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Простой редактор', commsCb.bcStart()) });
   await setExpectText(ctx.from.id, { type: 'bc_content' }, 30 * 60);
   return;
 }
@@ -32581,7 +32581,7 @@ if (p.a === 'a:bc_start_adv') {
 if (p.a === 'a:bc_simple_text') {
   if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
   await ctx.answerCallbackQuery();
-  await safeEditOrReply(ctx, `📝 <b>Текст рассылки</b>\n\nОтправь текст одним сообщением.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart()) });
+  await safeEditOrReply(ctx, `📝 <b>Текст рассылки</b>\n\nОтправь текст одним сообщением.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ К редактору', commsCb.bcStart()) });
   await setExpectText(ctx.from.id, { type: 'bc_simple_text' }, 30 * 60);
   return;
 }
@@ -32589,7 +32589,7 @@ if (p.a === 'a:bc_simple_text') {
 if (p.a === 'a:bc_simple_media') {
   if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
   await ctx.answerCallbackQuery();
-  await safeEditOrReply(ctx, `🖼 <b>Картинка рассылки</b>\n\nОтправь фото одним сообщением.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart()) });
+  await safeEditOrReply(ctx, `🖼 <b>Картинка рассылки</b>\n\nОтправь фото одним сообщением.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ К редактору', commsCb.bcStart()) });
   await setExpectText(ctx.from.id, { type: 'bc_simple_media' }, 30 * 60);
   return;
 }
@@ -32617,7 +32617,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
   if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
   const key = String(p.k || '');
   const preset = broadcastSimpleButtonPresets().find((x) => x.key === key);
-  if (!preset) { await ctx.answerCallbackQuery({ text: 'Preset недоступен.' }); return; }
+  if (!preset) { await ctx.answerCallbackQuery({ text: 'Готовый вариант недоступен.' }); return; }
   await ctx.answerCallbackQuery({ text: 'Кнопка сохранена.' });
   const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
   const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
@@ -32688,12 +32688,12 @@ if (p.a === 'a:bc_simple_btn_preset') {
       await ctx.answerCallbackQuery({ text: 'Отправляю preview…' });
       try {
         await sendBroadcastPreviewToOperator(ctx, draft);
-        if (String(draft.mode || '') === 'simple') await renderBroadcastSimpleComposer(ctx, '👁 Preview отправлен в этот чат отдельным сообщением.');
-        else await renderBroadcastPreview(ctx, draft, { banner: '👁 Preview отправлен в этот чат отдельным сообщением.' });
+        if (String(draft.mode || '') === 'simple') await renderBroadcastSimpleComposer(ctx, '👁 Предпросмотр отправлен в этот чат отдельным сообщением.');
+        else await renderBroadcastPreview(ctx, draft, { banner: '👁 Предпросмотр отправлен в этот чат отдельным сообщением.' });
       } catch (e) {
-        await safeEditOrReply(ctx, `⚠️ Preview не отправился: ${escapeHtml(String(e?.message || e).slice(0, 160))}`, {
+        await safeEditOrReply(ctx, `⚠️ Не удалось отправить предпросмотр: ${escapeHtml(String(e?.message || e).slice(0, 160))}`, {
           parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard().text('⬅️ К composer', String(draft?.mode || '') === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
+          reply_markup: new InlineKeyboard().text('⬅️ К редактору', String(draft?.mode || '') === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
         });
       }
       return;
@@ -32706,7 +32706,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
       const draft = await getDraft(ctx.from.id);
       if (!draft || !broadcastDraftHasContent(draft)) {
         await safeEditOrReply(ctx, '⚠️ Нет контента для отправки.', {
-          reply_markup: new InlineKeyboard().text('⬅️ К composer', commsCb.bcStart()).row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
+          reply_markup: new InlineKeyboard().text('⬅️ К редактору', commsCb.bcStart()).row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
         });
         return;
       }
@@ -32901,8 +32901,8 @@ if (p.a === 'a:bc_simple_btn_preset') {
         try { await clearDraft(ctx.from.id); } catch {}
         const safetyLines = buildBroadcastFirstBatchSafetyText();
         const successHints = [
-          'Сначала открой карточку и дождись первого batch.',
-          'Потом обнови report и проверь sent / retry / skipped / failed.',
+          'Сначала открой карточку и дождись первой партии.',
+          'Потом обнови карточку и проверь отправлено / повтор / пропущено / ошибки.',
           'Только после этого решай, нужен ли следующий шаг.',
         ];
         await safeEditOrReply(
@@ -32913,20 +32913,20 @@ if (p.a === 'a:bc_simple_btn_preset') {
 👥 Получателей: <b>${total}</b>
 📋 Статус: <b>PENDING</b>
 
-<b>First-batch safety</b>
+<b>Проверка первой партии</b>
 • ${escapeHtml(safetyLines[0])}
 • ${escapeHtml(safetyLines[1])}
 • ${escapeHtml(safetyLines[2])}
 
-<b>Post-run report</b>
-• sent: <b>0</b>
-• retry: <b>0</b>
-• skipped: <b>0</b>
-• failed: <b>0</b>
-• dominant reasons: —
-• next action: сначала открой карточку, проверь first batch и потом обнови report.
+<b>Итог доставки</b>
+• отправлено: <b>0</b>
+• повтор / ожидание: <b>0</b>
+• пропущено: <b>0</b>
+• ошибки: <b>0</b>
+• основные причины: —
+• следующее действие: открой карточку, проверь первую партию и обнови данные.
 
-<b>Next action hints</b>
+<b>Что делать дальше</b>
 • ${escapeHtml(successHints[0])}
 • ${escapeHtml(successHints[1])}
 • ${escapeHtml(successHints[2])}
@@ -33063,7 +33063,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
       await ctx.answerCallbackQuery();
       const h = Number(p.h || 24);
       await safeEditOrReply(ctx,
-        `🔎 <b>Поиск по Audit Log</b>\n\nВведи одно из:\n• <code>action:</code> — поиск по типу действия (напр. <code>lead.status_changed</code>)\n• <code>ws:ID</code> — по workspace\n• <code>user:ID</code> — по actor user id\n\nПример: <code>lead.status</code>`,
+        `🔎 <b>Поиск по журналу аудита</b>\n\nВведи одно из:\n• <code>action:</code> — поиск по типу действия (напр. <code>lead.status_changed</code>)\n• <code>ws:ID</code> — по workspace\n• <code>user:ID</code> — по actor user id\n\nПример: <code>lead.status</code>`,
         {
           parse_mode: 'HTML',
           reply_markup: new InlineKeyboard()
@@ -33102,7 +33102,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
       } catch (err) {
         console.error('[ADMIN] audit export error', err);
         await safeEditOrReply(ctx, '⚠️ Ошибка при генерации экспорта.', {
-          reply_markup: new InlineKeyboard().text('⬅️ Аудит', `a:aud|h:${h}|p:0`)
+          reply_markup: new InlineKeyboard().text('⬅️ Журнал аудита', `a:aud|h:${h}|p:0`)
         });
       }
       return;
@@ -33559,7 +33559,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
       return;
     }
     if (p.a === 'a:mod_verif_approve') {
-      await ctx.answerCallbackQuery({ text: '✅ Approved' });
+      await ctx.answerCallbackQuery({ text: '✅ Одобрено' });
       const isMod = await isModerator(u, ctx.from.id);
       if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
@@ -37449,7 +37449,7 @@ ${actionHint}`;
         .text('❌ Отмена', `a:gw_open|i:${gwId}`);
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '📣 Отправить напоминание в канал конкурса?\n\nЭто поднимет Eligible %.', { reply_markup: kb });
+      await safeEditOrReply(ctx, '📣 Отправить напоминание в канал конкурса?\n\nЭто повысит долю допущенных участников.', { reply_markup: kb });
       return;
     }
 
@@ -37857,6 +37857,29 @@ function audienceLabel(aud) {
   return map[String(aud || 'all').toLowerCase()] || 'Все';
 }
 
+function broadcastStatusLabel(status) {
+  const map = {
+    DRAFT: 'Черновик',
+    PENDING: 'Ожидает запуска',
+    RUNNING: 'Выполняется',
+    PAUSED: 'На паузе',
+    DONE: 'Завершена',
+    STOPPED: 'Остановлена',
+    ERROR: 'Ошибка',
+  };
+  const key = String(status || '').trim().toUpperCase();
+  return map[key] || 'Неизвестно';
+}
+
+function broadcastDraftTypeLabel(type) {
+  const map = { text: 'Текст', photo: 'Фото', video: 'Видео', animation: 'GIF', document: 'Документ' };
+  return map[String(type || 'text').trim().toLowerCase()] || 'Сообщение';
+}
+
+function yesNoLabel(value) {
+  return value ? 'да' : 'нет';
+}
+
 const BROADCAST_DEFAULT_AUDIENCE_TTL_SEC = 30 * 24 * 60 * 60;
 
 async function getBroadcastRememberedAudience(tgId) {
@@ -37916,10 +37939,10 @@ async function buildBroadcastDraftRecap(tgId, draft) {
   const remembered = await getBroadcastRememberedAudience(tgId);
   const defaultLine = remembered
     ? (remembered === audience
-      ? `🧭 Default context: совпадает с последним default <b>${escapeHtml(audienceLabel(remembered))}</b>`
-      : `🧭 Default context: last-used default <b>${escapeHtml(audienceLabel(remembered))}</b>, текущий draft его переопределяет`)
-    : '🧭 Default context: last-used default ещё не сохранён';
-  const sampleHeader = `Preview only: ниже показаны первые ${Math.min(samples.length, targetCount || samples.length)} из ${targetCount} targets текущего scope.`;
+      ? `🧭 Аудитория по умолчанию: <b>${escapeHtml(audienceLabel(remembered))}</b>`
+      : `🧭 Аудитория по умолчанию: <b>${escapeHtml(audienceLabel(remembered))}</b>; текущий черновик использует другую`)
+    : '🧭 Аудитория по умолчанию ещё не сохранена';
+  const sampleHeader = `Тестовая выборка: первые ${Math.min(samples.length, targetCount || samples.length)} из ${targetCount} получателей выбранной аудитории.`;
   return {
     payload,
     plan,
@@ -37952,12 +37975,12 @@ function broadcastPresetUrl(key) {
 
 function broadcastSimpleButtonPresets() {
   return [
-    { key: 'bot', label: 'Open bot', url: broadcastPresetUrl('bot') },
-    { key: 'app', label: 'Open app', url: broadcastPresetUrl('app') },
-    { key: 'landing', label: 'Open landing', url: broadcastPresetUrl('landing') },
-    { key: 'offers', label: 'Open offers', url: broadcastPresetUrl('offers') },
-    { key: 'catalog', label: 'Open catalog', url: broadcastPresetUrl('catalog') },
-    { key: 'feed', label: 'Open feed', url: broadcastPresetUrl('feed') },
+    { key: 'bot', label: 'Открыть бота', url: broadcastPresetUrl('bot') },
+    { key: 'app', label: 'Открыть приложение', url: broadcastPresetUrl('app') },
+    { key: 'landing', label: 'Открыть сайт', url: broadcastPresetUrl('landing') },
+    { key: 'offers', label: 'Открыть офферы', url: broadcastPresetUrl('offers') },
+    { key: 'catalog', label: 'Открыть каталог', url: broadcastPresetUrl('catalog') },
+    { key: 'feed', label: 'Открыть ленту', url: broadcastPresetUrl('feed') },
   ].filter((x) => x.url);
 }
 
@@ -38051,23 +38074,23 @@ async function sendBroadcastPreviewToOperator(ctx, draft) {
 
 async function renderBroadcastSimpleButtonPicker(ctx, draft, banner = '') {
   const current = Array.isArray(draft?.buttons) && draft.buttons.length ? draft.buttons[0] : null;
-  let text = `🔗 <b>Кнопка</b>
+  let text = `🔗 <b>Кнопка рассылки</b>
 
-Конструктор рассылки поддерживает <b>1 URL-кнопку</b>.`;
+Можно добавить одну URL-кнопку.`;
   if (banner) text += `
 
 ${banner}`;
   if (current) text += `
 
-Текущая:
+Текущая кнопка:
 • <b>${escapeHtml(current.text)}</b>
 <code>${escapeHtml(current.url)}</code>`;
   else text += `
 
-Сейчас кнопка не задана.`;
+Кнопка не задана.`;
   text += `
 
-Можно выбрать preset ниже или ввести свою строку:
+Выбери готовый вариант или отправь строку:
 <code>Текст кнопки | https://...</code>`;
 
   const kb = new InlineKeyboard();
@@ -38080,9 +38103,9 @@ ${banner}`;
     kb.row();
   }
   kb.text('✍️ Своя кнопка', commsCb.bcSimpleBtnCustom());
-  if (current) kb.text('🧹 Очистить кнопку', commsCb.bcSimpleBtnClear());
+  if (current) kb.text('🧹 Удалить кнопку', commsCb.bcSimpleBtnClear());
   kb.row();
-  kb.text('⬅️ К composer', commsCb.bcStart()).row();
+  kb.text('⬅️ К редактору', commsCb.bcStart()).row();
   kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
@@ -38104,42 +38127,20 @@ async function renderBroadcastSimpleComposer(ctx, banner = '') {
     return un ? `@${un}` : `tg:${Number(x?.tg_id || 0)}`;
   }).join(', ') : '—';
 
-  let text = `📣 <b>Новая рассылка · Конструктор рассылки</b>
-
-`;
-  if (banner) text += `${banner}
-
-`;
-  text += `📝 Текст: <b>${hasText ? 'yes' : 'no'}</b>`;
+  let text = `📣 <b>Редактор рассылки</b>\n\n`;
+  if (banner) text += `${banner}\n\n`;
+  text += `📝 Текст: <b>${yesNoLabel(hasText)}</b>`;
   if (hasText) text += ` · ${escapeHtml(clipText(String(draft.text || '').replace(/\s+/g, ' '), 90))}`;
-  text += `
-`;
-  text += `🖼 Картинка: <b>${hasMedia ? 'yes' : 'no'}</b>
-`;
-  text += `🔗 Кнопка: <b>${btn ? 'yes' : 'no'}</b>`;
+  text += `\n🖼 Картинка: <b>${yesNoLabel(hasMedia)}</b>\n`;
+  text += `🔗 Кнопка: <b>${yesNoLabel(!!btn)}</b>`;
   if (btn) text += ` · ${escapeHtml(btn.text)}`;
-  text += `
-`;
-  text += `👥 Аудитория: <b>${escapeHtml(audienceLabel(draft.audience || 'all'))}</b> · ${escapeHtml(String(recap.targetCount))}
-`;
-  text += `
-<b>Draft recap</b>
-`;
-  text += `🧩 Source type: <b>${escapeHtml(recap.sourceLabel)}</b>
-`;
-  text += `${recap.defaultLine}
-`;
-  text += `🔎 Sample targets: <code>${escapeHtml(sampleCompact)}</code>
-`;
-  text += `⚠️ Preview покажет реальную форму сообщения, sample targets — только первую часть scope.
-`;
-  text += `
-Конструктор рассылки поддерживает:
-• только текст
-• только картинку
-• картинку + текст
-• 1 URL-кнопку
-• 👁 честный preview перед отправкой`;
+  text += `\n👥 Аудитория: <b>${escapeHtml(audienceLabel(draft.audience || 'all'))}</b> · получателей: <b>${escapeHtml(String(recap.targetCount))}</b>\n`;
+  text += `\n<b>Черновик</b>\n`;
+  text += `🧩 Тип сообщения: <b>${escapeHtml(recap.sourceLabel)}</b>\n`;
+  text += `${recap.defaultLine}\n`;
+  text += `🔎 Примеры получателей: <code>${escapeHtml(sampleCompact)}</code>\n`;
+  text += `⚠️ Предпросмотр покажет форму сообщения. Примеры выше — только часть аудитории.\n`;
+  text += `\nПоддерживается:\n• текст\n• картинка\n• картинка с текстом\n• одна URL-кнопка\n• предпросмотр перед запуском`;
 
   const kb = new InlineKeyboard()
     .text(hasText ? '📝 Изменить текст' : '📝 Добавить текст', commsCb.bcSimpleText())
@@ -38148,11 +38149,11 @@ async function renderBroadcastSimpleComposer(ctx, banner = '') {
     .text(btn ? '🔗 Изменить кнопку' : '🔗 Добавить кнопку', commsCb.bcSimpleButton())
     .text('👥 Аудитория', commsCb.bcSimpleAudience())
     .row()
-    .text('👁 Preview', commsCb.bcPreview())
-    .text('✅ Send', commsCb.bcSendQ())
+    .text('👁 Предпросмотр', commsCb.bcPreview())
+    .text('✅ Проверить запуск', commsCb.bcSendQ())
     .row()
-    .text('🧹 Clear draft', commsCb.bcSimpleClear())
-    .text('⚡ Перейти в быстрый пост', commsCb.bcStartAdv())
+    .text('🧹 Очистить черновик', commsCb.bcSimpleClear())
+    .text('⚡ Расширенный режим', commsCb.bcStartAdv())
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Домой', 'a:home');
@@ -38162,32 +38163,24 @@ async function renderBroadcastSimpleComposer(ctx, banner = '') {
 async function renderBroadcastAudiencePicker(ctx) {
   const draft = await getDraft(ctx.from.id);
   if (!draft || !broadcastDraftHasContent(draft)) {
-    await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
+    await safeEditOrReply(ctx, '⚠️ Черновик не найден. Начни рассылку заново.', {
       reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
     });
     return;
   }
 
   const recap = await buildBroadcastDraftRecap(ctx.from.id, draft);
-  let text = `📣 <b>Выбери аудиторию</b>
-
-`;
-  text += `📝 Режим: <b>${recap.payload.mode === 'simple' ? 'Конструктор рассылки' : 'Быстрый пост'}</b>
-`;
-  text += `🧩 Source type: <b>${escapeHtml(recap.sourceLabel)}</b>
-`;
-  text += `🔗 Кнопок: <b>${recap.buttonCount}</b>
-`;
-  text += `👥 Target count: <b>${recap.targetCount}</b>
-`;
+  let text = `📣 <b>Аудитория рассылки</b>\n\n`;
+  text += `📝 Режим: <b>${recap.payload.mode === 'simple' ? 'Редактор рассылки' : 'Расширенный режим'}</b>\n`;
+  text += `🧩 Тип сообщения: <b>${escapeHtml(recap.sourceLabel)}</b>\n`;
+  text += `🔗 Кнопок: <b>${recap.buttonCount}</b>\n`;
+  text += `👥 Получателей: <b>${recap.targetCount}</b>\n`;
   text += `${recap.defaultLine}`;
 
   try {
     const counts = {};
     for (const a of ['all', 'creators', 'brands', 'curators', 'managers']) counts[a] = await db.countBroadcastAudience(a);
-    text += `
-
-👥 Все: ${counts.all} · Креаторы: ${counts.creators} · Бренды: ${counts.brands} · Кураторы: ${counts.curators} · Менеджеры: ${counts.managers}`;
+    text += `\n\nВсе: ${counts.all} · Креаторы: ${counts.creators} · Бренды: ${counts.brands} · Кураторы: ${counts.curators} · Менеджеры: ${counts.managers}`;
   } catch {}
 
   const kb = new InlineKeyboard()
@@ -38199,7 +38192,7 @@ async function renderBroadcastAudiencePicker(ctx) {
     .row()
     .text('🧑‍💼 Менеджеры', commsCb.bcAudienceSet('managers'))
     .row()
-    .text('⬅️ К composer', recap.payload.mode === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
+    .text('⬅️ К редактору', recap.payload.mode === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Домой', 'a:home');
@@ -38209,7 +38202,7 @@ async function renderBroadcastAudiencePicker(ctx) {
 
 async function renderBroadcastPreview(ctx, draft, { banner = '' } = {}) {
   if (!draft || !broadcastDraftHasContent(draft)) {
-    await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
+    await safeEditOrReply(ctx, '⚠️ Черновик не найден.', {
       reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
     });
     return;
@@ -38218,72 +38211,41 @@ async function renderBroadcastPreview(ctx, draft, { banner = '' } = {}) {
   const recap = await buildBroadcastDraftRecap(ctx.from.id, draft);
   const mediaYes = recap.payload.draftType !== 'text' && !!recap.payload.draftFileId;
   const buttonYes = Array.isArray(recap.payload.buttons) && recap.payload.buttons.length > 0;
-  let previewMsg = `👁 <b>Broadcast preview</b>
-
-`;
-  if (banner) previewMsg += `${banner}
-
-`;
-  previewMsg += `<b>Recap before send</b>
-`;
-  previewMsg += `🧩 Source type: <b>${escapeHtml(recap.sourceLabel)}</b>
-`;
-  previewMsg += `👥 Scope: <b>${escapeHtml(audienceLabel(recap.audience))}</b>
-`;
-  previewMsg += `🎯 Target count: <b>${recap.targetCount}</b>
-`;
-  previewMsg += `${recap.defaultLine}
-`;
-  previewMsg += `🔗 Buttons: <b>${recap.buttonCount}</b>
-`;
-  previewMsg += `⚠️ Preview only: below samples show only the first slice, not the full roster.
-
-`;
-  previewMsg += `<b>Routing</b>
-`;
-  previewMsg += `🖼 Media: <b>${mediaYes ? 'yes' : 'no'}</b>
-`;
-  previewMsg += `🔗 Button: <b>${buttonYes ? 'yes' : 'no'}</b>
-`;
-  previewMsg += `🧠 Delivery plan: <b>${escapeHtml(recap.plan.splitLongText ? 'photo + text split' : (mediaYes ? 'single media message' : 'text message'))}</b>`;
-  previewMsg += `\n\n<b>First-batch safety</b>\n`;
+  let previewMsg = `👁 <b>Проверка перед запуском</b>\n\n`;
+  if (banner) previewMsg += `${banner}\n\n`;
+  previewMsg += `<b>Что будет отправлено</b>\n`;
+  previewMsg += `🧩 Тип сообщения: <b>${escapeHtml(recap.sourceLabel)}</b>\n`;
+  previewMsg += `👥 Аудитория: <b>${escapeHtml(audienceLabel(recap.audience))}</b>\n`;
+  previewMsg += `🎯 Получателей: <b>${recap.targetCount}</b>\n`;
+  previewMsg += `${recap.defaultLine}\n`;
+  previewMsg += `🔗 Кнопок: <b>${recap.buttonCount}</b>\n`;
+  previewMsg += `⚠️ Примеры ниже показывают только часть аудитории.\n\n`;
+  previewMsg += `<b>Маршрут доставки</b>\n`;
+  previewMsg += `🖼 Медиа: <b>${yesNoLabel(mediaYes)}</b>\n`;
+  previewMsg += `🔗 Кнопка: <b>${yesNoLabel(buttonYes)}</b>\n`;
+  previewMsg += `🧠 План: <b>${escapeHtml(recap.plan.splitLongText ? 'медиа и отдельный текст' : (mediaYes ? 'одно сообщение с медиа' : 'текстовое сообщение'))}</b>`;
+  previewMsg += `\n\n<b>Проверка первой партии</b>\n`;
   for (const line of buildBroadcastFirstBatchSafetyText()) previewMsg += `• ${escapeHtml(line)}\n`;
 
   const bodyPreview = String(recap.payload.draftText || recap.payload.draftCaption || '').replace(/\s+/g, ' ').trim();
-  if (bodyPreview) previewMsg += `
-
-<b>Preview body</b>
-${escapeHtml(clipText(bodyPreview, 220))}`;
+  if (bodyPreview) previewMsg += `\n\n<b>Фрагмент текста</b>\n${escapeHtml(clipText(bodyPreview, 220))}`;
   if (buttonYes) {
     const lines = recap.payload.buttons.map((b) => `${b.text} → ${b.url}`).join('\n');
-    previewMsg += `
-
-<b>Buttons</b>
-<code>${escapeHtml(lines)}</code>`;
+    previewMsg += `\n\n<b>Кнопки</b>\n<code>${escapeHtml(lines)}</code>`;
   }
-  previewMsg += `
-
-<b>Dry-run sample targets</b>
-${escapeHtml(recap.sampleHeader)}`;
-  if (recap.samples.length) {
-    previewMsg += `
-${recap.samples.map((item) => formatBroadcastTargetSampleLine(item)).join('\n')}`;
-  } else {
-    previewMsg += `
-—`;
-  }
-  previewMsg += `
-
-Preview отправляется отдельным сообщением в этот чат. Send создаёт реальную рассылку в outbox/queue.`;
+  previewMsg += `\n\n<b>Тестовая выборка получателей</b>\n${escapeHtml(recap.sampleHeader)}`;
+  if (recap.samples.length) previewMsg += `\n${recap.samples.map((item) => formatBroadcastTargetSampleLine(item)).join('\n')}`;
+  else previewMsg += `\n—`;
+  previewMsg += `\n\nПредпросмотр придёт отдельным сообщением в этот чат. Запуск создаст реальную рассылку и поставит доставки в очередь.`;
 
   const kb = new InlineKeyboard()
-    .text('👁 Preview', commsCb.bcPreview())
-    .text('✅ Send', commsCb.bcConfirm())
+    .text('👁 Отправить предпросмотр', commsCb.bcPreview())
+    .text('✅ Запустить рассылку', commsCb.bcConfirm())
     .row()
-    .text('🧹 Clear draft', recap.payload.mode === 'simple' ? commsCb.bcSimpleClear() : commsCb.bcCancel())
+    .text('🧹 Очистить черновик', recap.payload.mode === 'simple' ? commsCb.bcSimpleClear() : commsCb.bcCancel())
     .text('👥 Аудитория', commsCb.bcSimpleAudience())
     .row()
-    .text('⬅️ К composer', recap.payload.mode === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
+    .text('⬅️ К редактору', recap.payload.mode === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
     .row()
     .text('📋 Меню', 'a:menu')
     .text('🏠 Домой', 'a:home');
@@ -38315,7 +38277,7 @@ async function renderBroadcastList(ctx, page = 0) {
   const kb = new InlineKeyboard();
   for (const r of items) {
     const icon = statusIcon[r.status] || '❓';
-    kb.text(`${icon} #${r.id} ${r.status}`, commsCb.bcView(r.id)).row();
+    kb.text(`${icon} #${r.id} ${broadcastStatusLabel(r.status)}`, commsCb.bcView(r.id)).row();
   }
   if (page > 0) kb.text('⬅️', commsCb.bcList(page - 1));
   if (hasNext) kb.text('➡️', commsCb.bcList(page + 1));
@@ -38363,15 +38325,17 @@ async function renderBroadcastView(ctx, broadcastId) {
   let text = `${icon} <b>Рассылка #${bc.id}</b>
 
 `;
-  text += `<b>Статус:</b> ${bc.status}
+  text += `<b>Статус:</b> ${escapeHtml(broadcastStatusLabel(bc.status))}
+`;
+  text += `<b>Код статуса:</b> <code>${escapeHtml(String(bc.status || 'UNKNOWN'))}</code>
 `;
   text += `<b>Аудитория:</b> ${audienceLabel(bc.audience)}
 `;
-  text += `<b>Тип:</b> ${bc.draft_type || '—'}
+  text += `<b>Тип:</b> ${escapeHtml(broadcastDraftTypeLabel(bc.draft_type))}
 `;
-  text += `<b>Media:</b> ${bc.draft_type && bc.draft_type !== 'text' ? 'yes' : 'no'}
+  text += `<b>Медиа:</b> ${yesNoLabel(bc.draft_type && bc.draft_type !== 'text')}
 `;
-  text += `<b>Button:</b> ${Array.isArray(btns) && btns.length ? 'yes' : 'no'}
+  text += `<b>Кнопка:</b> ${yesNoLabel(Array.isArray(btns) && btns.length)}
 `;
   text += `<b>Создана:</b> ${msk(bc.created_at)}
 `;
@@ -38384,18 +38348,18 @@ async function renderBroadcastView(ctx, broadcastId) {
 `;
   text += `✅ Отправлено: <b>${sent}</b> / ${total}
 `;
-  text += `🔁 Retry / pending: <b>${retry}</b>
+  text += `🔁 Повтор / ожидание: <b>${retry}</b>
 `;
-  text += `⛔ Skipped: <b>${blocked}</b>`;
-  if (hardSkipped > 0) text += ` · 🧱 hard-skip: <b>${hardSkipped}</b>`;
+  text += `⛔ Пропущено: <b>${blocked}</b>`;
+  if (hardSkipped > 0) text += ` · постоянный пропуск: <b>${hardSkipped}</b>`;
   text += `
 `;
-  text += `❌ Failed: <b>${failed}</b>
+  text += `❌ Ошибки: <b>${failed}</b>
 `;
-  if (pending > 0 && retry !== pending) text += `⏳ Pending total: <b>${pending}</b>
+  if (pending > 0 && retry !== pending) text += `⏳ Всего ожидает: <b>${pending}</b>
 `;
   text += `\n${report.text}`;
-  text += `\n\n<b>Next action hints</b>\n`;
+  text += `\n\n<b>Следующее действие</b>\n`;
   for (const hint of nextActionHints) text += `• ${escapeHtml(hint)}\n`;
 
   const kb = new InlineKeyboard();
@@ -38410,7 +38374,7 @@ async function renderBroadcastView(ctx, broadcastId) {
       .row();
   }
 
-  if (blocked > 0 || failed > 0) kb.text('🧱 Пропуски/ошибки', commsCb.bcBlocked(bc.id, blocked > 0 ? 'hard' : 'all', 0)).row();
+  if (blocked > 0 || failed > 0) kb.text('🧱 Пропуски доставки', commsCb.bcBlocked(bc.id, blocked > 0 ? 'hard' : 'all', 0)).row();
   kb.text('🔄 Обновить', commsCb.bcView(bc.id)).row();
   kb.text('⬅️ К списку', commsCb.bcList(0)).row();
   kb.text('⬅️ Админка', 'a:admin_home');
@@ -38442,8 +38406,9 @@ async function renderBroadcastBlocked(ctx, broadcastId, page = 0, tab = 'hard') 
   }
 
   const msk = (d) => d ? new Date(d).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
-  let text = `🧱 <b>Пропуски/blocked</b> · #${bc.id}\n`;
-  text += `<b>Таб:</b> ${kind === 'hard' ? 'hard-skip' : 'all blocked'}\n\n`;
+  let text = `🧱 <b>Пропуски доставки</b> · #${bc.id}\n`;
+  text += `<b>Режим:</b> ${kind === 'hard' ? 'постоянные' : 'все'}\n`;
+  text += `<b>Диагностика:</b> <code>${kind === 'hard' ? 'hard-skip' : 'all blocked'}</code>\n\n`;
 
   if (!items.length) {
     text += 'Нет записей на этой странице.';
@@ -38458,8 +38423,8 @@ async function renderBroadcastBlocked(ctx, broadcastId, page = 0, tab = 'hard') 
   }
 
   const kb = new InlineKeyboard();
-  kb.text(kind === 'hard' ? '✅ hard-skip' : 'hard-skip', commsCb.bcBlocked(bc.id, 'hard', 0));
-  kb.text(kind === 'all' ? '✅ all' : 'all', commsCb.bcBlocked(bc.id, 'all', 0)).row();
+  kb.text(kind === 'hard' ? '✅ Постоянные' : 'Постоянные', commsCb.bcBlocked(bc.id, 'hard', 0));
+  kb.text(kind === 'all' ? '✅ Все' : 'Все', commsCb.bcBlocked(bc.id, 'all', 0)).row();
 
   if (p > 0) kb.text('⬅️', commsCb.bcBlocked(bc.id, kind, p - 1));
   if (items.length === PAGE) kb.text('➡️', commsCb.bcBlocked(bc.id, kind, p + 1));
@@ -38479,7 +38444,7 @@ async function renderAdminHome(ctx) {
   let text = '👑 Админ-панель\n\n';
   text += 'Выбери раздел:\n';
   text += '• 🧰 Операции — пользователи, платежи, рассылка, аудит, метрики\n';
-  text += '• 💬 Коммуникации — объявление, шаблоны DM, outbox, офиц.канал\n';
+  text += '• 💬 Коммуникации — объявления, личные сообщения, исходящие, официальный канал\n';
   text += '• ⚙️ Система — тумблеры, QStash, модераторы, подарки, Founder\n';
 
   const kb = new InlineKeyboard()
@@ -38703,8 +38668,8 @@ async function renderAdminOps(ctx, { banner = '' } = {}) {
     .text('🎁 Инвайты', 'a:admin_invites')
     .row();
 
-  kb.text('🧾 Flush ops digest', 'a:admin_ops_flush').row();
-  kb.text('🧹 Clear pending snapshot', 'a:admin_ops_pending_clear').row();
+  kb.text('🧾 Отправить сводку событий', 'a:admin_ops_flush').row();
+  kb.text('🧹 Очистить снимок очереди', 'a:admin_ops_pending_clear').row();
 
   // Quick health link (if PUBLIC_BASE_URL is configured)
   if (CFG.PUBLIC_BASE_URL) {
@@ -38728,40 +38693,28 @@ async function renderAdminComms(ctx) {
   // Access is checked in the callback handler via isSuperAdminTg().
   let pending = 0;
   if (CFG.OFFICIAL_PUBLISH_ENABLED) {
-    try {
-      pending = await safeOfficialPosts(() => db.countOfficialPending(), async () => 0);
-    } catch {
-      pending = 0;
-    }
+    try { pending = await safeOfficialPosts(() => db.countOfficialPending(), async () => 0); }
+    catch { pending = 0; }
   }
 
   let text = '💬 Админка → Коммуникации\n\n';
-  text += '• 📣 Системное объявление — баннер без рассылки (показ 1 раз)\n';
-  text += '• 📌 Шаблоны DM — быстрые ответы из админки\n';
-  text += '• 📤 Outbox — журнал отправок\n';
-  if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• 📣 Офиц.канал — очередь публикаций (${pending})\n`;
+  text += '• 📣 Системное объявление — баннер без массовой отправки\n';
+  text += '• 📌 Шаблоны личных сообщений — быстрые ответы оператора\n';
+  text += '• 📤 Исходящие — журнал сообщений из админки\n';
+  if (CFG.OFFICIAL_PUBLISH_ENABLED) text += `• 📣 Официальный канал — очередь публикаций (${pending})\n`;
 
   const kb = new InlineKeyboard()
     .text('📣 Объявление', commsCb.adminNotice())
-    .text('📌 Шаблоны DM', 'a:admin_umsg_tpls|p:0')
+    .text('📌 Шаблоны сообщений', 'a:admin_umsg_tpls|p:0')
     .row()
-    .text('📤 Outbox', 'a:admin_outbox|p:0')
+    .text('📤 Исходящие', 'a:admin_outbox|p:0')
     .text('🆘 Поддержка', 'a:admin_support');
 
-  if (CFG.OFFICIAL_PUBLISH_ENABLED) {
-    kb.row().text(`📣 Офиц.канал (${pending})`, 'a:off_queue|p:0');
-  }
+  if (CFG.OFFICIAL_PUBLISH_ENABLED) kb.row().text(`📣 Официальный канал (${pending})`, 'a:off_queue|p:0');
 
-  kb
-    .row()
-    .text('⬅️ Админка', 'a:admin_home')
-    .row()
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Домой', 'a:home');
-
+  kb.row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
   await safeEditOrReply(ctx, text, { reply_markup: kb });
 }
-
 
 function supportThreadStatusMeta(statusRaw) {
   const status = String(statusRaw || 'open').trim().toLowerCase();
@@ -39098,12 +39051,12 @@ async function renderAdminSystem(ctx) {
   const founderUntil = founderState.deadlineLabel || '—';
   const lastAudit = Array.isArray(control?.audit) && control.audit.length ? control.audit[0] : null;
 
-  let text = '⚙️ Админка → Control Surface\n\n';
-  text += `Web-admin login: ${webLogin ? 'ON' : 'OFF'}\n`;
+  let text = '⚙️ Админка → Управление системой\n\n';
+  text += `Вход в веб-админку: ${webLogin ? 'ON' : 'OFF'}\n`;
   text += `Платежи: прием ${payAccept ? 'ON' : 'OFF'} • автовыдача ${payAutoApply ? 'ON' : 'OFF'}\n`;
-  text += `Match/Feat auto-apply: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
-  text += `Payments fallback apply: ${fallback.value ? 'ON' : 'OFF'} (env ${fallback.envEnabled ? 'ON' : 'OFF'} • runtime ${fallback.runtimeLabel || 'OFF'})\n`;
-  text += `Broadcast fan-out (QStash): ${bcFanout ? 'ON' : 'OFF'}\n`;
+  text += `Автовыдача подбора и продвижения: ${mfAutoApply ? 'ON' : 'OFF'}\n`;
+  text += `Резервное применение платежей: ${fallback.value ? 'ON' : 'OFF'} (env ${fallback.envEnabled ? 'ON' : 'OFF'} • runtime ${fallback.runtimeLabel || 'OFF'})\n`;
+  text += `Рассылка через QStash: ${bcFanout ? 'ON' : 'OFF'}\n`;
   text += `Founder Sale: ${founderOn ? 'ON' : 'OFF'} • ${founderActive ? 'ACTIVE' : 'INACTIVE'} • до ${founderUntil}${founderState.hasOverride ? ' (ADMIN)' : ''}\n`;
   if (lastAudit) {
     text += `\nПоследнее изменение: ${operatorControlChangeLine(lastAudit)}\n`;
@@ -39112,17 +39065,17 @@ async function renderAdminSystem(ctx) {
 
   const kb = new InlineKeyboard()
 
-    .text(`🔐 Web login: ${webLogin ? 'ON' : 'OFF'}`, 'a:admin_web_login_toggle')
+    .text(`🔐 Веб-вход: ${webLogin ? 'ON' : 'OFF'}`, 'a:admin_web_login_toggle')
     .text(`💳 Прием: ${payAccept ? 'ON' : 'OFF'}`, 'a:admin_pay_accept_toggle')
     .row()
     .text(`⚙️ Автовыдача: ${payAutoApply ? 'ON' : 'OFF'}`, 'a:admin_pay_auto_toggle')
-    .text(`🎯🔥 Match/Feat: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
+    .text(`🎯 Автовыдача: ${mfAutoApply ? 'ON' : 'OFF'}`, 'a:admin_matchfeat_auto_toggle')
     .row()
-    .text(`🧯 Fallback: ${fallback.value ? 'ON' : 'OFF'}`, 'a:admin_pay_fb')
-    .text(`📣 Fan-out: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
+    .text(`🧯 Резерв платежей: ${fallback.value ? 'ON' : 'OFF'}`, 'a:admin_pay_fb')
+    .text(`📣 QStash-рассылка: ${bcFanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
     .row()
     .text('🛰 QStash статус', 'a:admin_qstash_status')
-    .text('🧱 Hard-skip (dead chats)', 'a:hs_home|p:0')
+    .text('🧱 Недоступные чаты', 'a:hs_home|p:0')
     .row()
     .text('🔥 Founder Sale', 'a:admin_founder')
     .row()
@@ -39252,18 +39205,18 @@ function normalizeBroadcastReportReasonKey(status, reason) {
 
 function broadcastReportReasonLabel(key) {
   const map = {
-    bot_blocked: 'bot blocked',
-    chat_not_found: 'chat not found',
-    user_deactivated: 'user deactivated',
-    hard_skip: 'hard-skip',
-    rate_limited: 'rate limited',
-    network_retry: 'network / retry',
-    forbidden: 'forbidden',
-    failed_unknown: 'unknown failed',
-    other: 'other',
-    unknown: 'unknown',
+    bot_blocked: 'бот заблокирован',
+    chat_not_found: 'чат не найден',
+    user_deactivated: 'пользователь деактивирован',
+    hard_skip: 'постоянный пропуск',
+    rate_limited: 'лимит Telegram',
+    network_retry: 'сетевая ошибка или повтор',
+    forbidden: 'отправка запрещена',
+    failed_unknown: 'неизвестная ошибка',
+    other: 'другая причина',
+    unknown: 'неизвестная причина',
   };
-  return map[String(key || 'other')] || 'other';
+  return map[String(key || 'other')] || 'другая причина';
 }
 
 async function buildBroadcastPostRunReport(bc, stats) {
@@ -39286,28 +39239,28 @@ async function buildBroadcastPostRunReport(bc, stats) {
 
   let nextAction = 'Рассылка завершена, дополнительных действий не требуется.';
   if (retry > 0 && (bc.status === 'RUNNING' || bc.status === 'PENDING' || bc.status === 'PAUSED')) {
-    nextAction = 'Сначала дождись следующего batch и обнови карточку.';
+    nextAction = 'Сначала дождись следующей партии и обнови карточку.';
   } else if (retry > 0) {
     nextAction = 'Проверь повторные попытки и обнови карточку через 1–2 минуты.';
   } else if (skipped > 0) {
-    nextAction = 'Открой «Пропуски/ошибки» и проверь dominant reasons.';
+    nextAction = 'Открой «Пропуски/ошибки» и проверь основные причины.';
   } else if (failed > 0) {
-    nextAction = 'Проверь dominant reasons и реши, нужен ли повторный запуск.';
+    nextAction = 'Проверь основные причины и реши, нужен ли повторный запуск.';
   }
 
-  let text = `<b>Post-run report</b>
+  let text = `<b>Итог доставки</b>
 `;
-  text += `• sent: <b>${sent}</b>
+  text += `• отправлено: <b>${sent}</b>
 `;
-  text += `• retry: <b>${retry}</b>
+  text += `• повтор / ожидание: <b>${retry}</b>
 `;
-  text += `• skipped: <b>${skipped}</b>
+  text += `• пропущено: <b>${skipped}</b>
 `;
-  text += `• failed: <b>${failed}</b>
+  text += `• ошибки: <b>${failed}</b>
 `;
-  text += `• dominant reasons: ${dominant.length ? escapeHtml(dominant.join('; ')) : '—'}
+  text += `• основные причины: ${dominant.length ? escapeHtml(dominant.join('; ')) : '—'}
 `;
-  text += `• next action: ${escapeHtml(nextAction)}`;
+  text += `• следующее действие: ${escapeHtml(nextAction)}`;
 
   return { text, sent, retry, skipped, failed, dominant, nextAction };
 }
@@ -39321,21 +39274,21 @@ function buildBroadcastNextActionHints(bc, report) {
   const failed = Number(report?.failed || 0) || 0;
 
   if ((status === 'PENDING' || status === 'RUNNING') && sent === 0 && retry === 0 && skipped === 0 && failed === 0) {
-    hints.push('Сначала дождись первого batch и только потом обнови report.');
+    hints.push('Сначала дождись первой партии и только потом обнови карточку.');
   }
   if (sent > 0 && (status === 'PENDING' || status === 'RUNNING') && retry === 0 && skipped === 0 && failed === 0) {
-    hints.push('Первая волна идёт чисто: дождись следующего batch и не запускай повтор вслепую.');
+    hints.push('Первая волна идёт чисто: дождись следующей партии и не запускай повтор вслепую.');
   }
   if (retry > 0) {
-    hints.push('Проверь повторные попытки и не принимай решение до refresh карточки.');
+    hints.push('Проверь повторные попытки и не принимай решение до обновления карточки.');
   }
   if (skipped > 0 || failed > 0) {
     hints.push('Если есть ошибки, открой «Пропуски/ошибки» и начни с dominant reasons.');
   }
   if (!hints.length && status === 'DONE') {
-    hints.push('Рассылка завершена: проверь финальный report и только потом решай про следующий запуск.');
+    hints.push('Рассылка завершена: проверь итог доставки и только потом решай про следующий запуск.');
   }
-  if (!hints.length) hints.push(String(report?.nextAction || 'Обнови карточку и проверь report.'));
+  if (!hints.length) hints.push(String(report?.nextAction || 'Обнови карточку и проверь итог доставки.'));
 
   const seen = new Set();
   return hints.filter((x) => {
@@ -39348,9 +39301,9 @@ function buildBroadcastNextActionHints(bc, report) {
 
 function buildBroadcastFirstBatchSafetyText() {
   return [
-    'Сначала дождись первого batch, а не полной доставки.',
-    'Перед следующим действием проверь sent / retry / skipped / failed.',
-    'Не делай повторный запуск вслепую, пока не увидишь report.',
+    'Сначала дождись первой партии, а не полной доставки.',
+    'Перед следующим действием проверь отправлено / повтор / пропущено / ошибки.',
+    'Не делай повторный запуск вслепую, пока не увидишь итог доставки.',
   ];
 }
 
@@ -39561,9 +39514,9 @@ async function adminHardSkipHitsExport(reasonFilter = 'all', limit = ADMIN_HS_HI
 async function renderAdminHardSkipHome(ctx, page = 0) {
   const p = Math.max(0, Number(page || 0) || 0);
   const recent = await adminHardSkipRecent(p);
-  let text = '🧱 <b>Hard-skip (dead chats)</b>\n\n';
-  text += 'Это список TG ID, для которых рассылка пропускает отправку (permanent errors: blocked / chat not found / deactivated).\n';
-  text += `TTL configured: <b>${ttlDays}</b> дн.\n\n`;
+  let text = '🧱 <b>Недоступные чаты</b>\n\n';
+  text += 'Здесь собраны Telegram-чаты, куда рассылка больше не пытается отправлять сообщения после постоянной ошибки.\nДиагностика: <code>hard-skip</code> · причины <code>blocked / chat_not_found / user_deactivated</code>.\n';
+  text += `Срок хранения: <b>${ttlDays}</b> дн.\n\n`;
   if (!recent.ok) {
     text += '⚠️ Redis недоступен — список временно недоступен.\n';
   } else if (!recent.items.length) {
@@ -39602,17 +39555,17 @@ async function renderAdminHardSkipHits(ctx, page = 0, reasonFilter = 'all', opts
   const hits = await adminHardSkipHits(p, rf);
   const stats = await adminHardSkipHitReasonStatsToday();
 
-  let text = `🧾 <b>Hard-skip HITs (пропуски)</b>
+  let text = `🧾 <b>Пропуски доставки</b>
 
 `;
-  text += `Показывает последние случаи, когда рассылка <b>пропустила</b> отправку из‑за hard-skip (dead chats).
+  text += `Последние случаи, когда доставка была пропущена для недоступного чата.\nДиагностика: <code>hard-skip hits</code>.
 
 `;
   if (toast) text += `<b>${escapeHtml(toast)}</b>
 
 `;
-const filterLabel = rf === 'all' ? 'ALL' : escapeHtml(rf);
-  text += `Фильтр: <b>${filterLabel}</b> · окно: последние <code>${hits.scanN || ADMIN_HS_HITS_SAMPLE_LIMIT}</code> HITs
+const filterLabel = rf === 'all' ? 'Все' : `<code>${escapeHtml(rf)}</code>`;
+  text += `Фильтр: <b>${filterLabel}</b> · окно: последние <code>${hits.scanN || ADMIN_HS_HITS_SAMPLE_LIMIT}</code> событий
 
 `;
 
@@ -39642,7 +39595,7 @@ const filterLabel = rf === 'all' ? 'ALL' : escapeHtml(rf);
   }
 
   const kb = new InlineKeyboard();
-  kb.text('🧱 Список (set)', `a:hs_home|p:0`).text('🔎 Найти TG ID', `a:hs_find|p:0`).row();
+  kb.text('🧱 Недоступные чаты', `a:hs_home|p:0`).text('🔎 Найти TG ID', `a:hs_find|p:0`).row();
 
   // Filters with today counters (best-effort).
   const reasonCounts = new Map();
@@ -39650,19 +39603,26 @@ const filterLabel = rf === 'all' ? 'ALL' : escapeHtml(rf);
     for (const [r, c] of stats.by_reason) reasonCounts.set(String(r), Number(c) || 0);
   }
 
-  const fAll = rf === 'all' ? '✅ ALL' : 'ALL';
+  const fAll = rf === 'all' ? '✅ Все' : 'Все';
   kb.text(fAll, `a:hs_hits|p:0|r:all`);
   const filters = ['bot_blocked', 'chat_not_found', 'user_deactivated', 'unknown', 'other'];
+  const filterLabels = {
+    bot_blocked: 'Бот заблокирован',
+    chat_not_found: 'Чат не найден',
+    user_deactivated: 'Аккаунт удалён',
+    unknown: 'Неизвестно',
+    other: 'Другое',
+  };
   for (const f of filters) {
-    const labelBase = f.replace(/_/g, ' ');
+    const labelBase = filterLabels[f] || 'Другое';
     const c = reasonCounts.get(f) || 0;
-    const label = (rf === f ? '✅ ' : '') + (c > 0 ? `${labelBase}(${c})` : labelBase);
-    kb.text(label.slice(0, 20), `a:hs_hits|p:0|r:${f}`);
+    const label = (rf === f ? '✅ ' : '') + (c > 0 ? `${labelBase} (${c})` : labelBase);
+    kb.text(label.slice(0, 28), `a:hs_hits|p:0|r:${f}`);
     if (['chat_not_found', 'unknown', 'other'].includes(f)) kb.row();
   }
   kb.row();
 
-  kb.text('🗒 Export last 200', `a:hs_hits_export|p:${p}|r:${rf}`).row();
+  kb.text('🗒 Скачать последние 200', `a:hs_hits_export|p:${p}|r:${rf}`).row();
 
   if (hits.ok && hits.items.length) {
     const seen = new Set();
@@ -39684,7 +39644,7 @@ const filterLabel = rf === 'all' ? 'ALL' : escapeHtml(rf);
 
 async function renderAdminHardSkipView(ctx, tgId, opts = {}) {
   const id = Number(tgId || 0);
-  let text = `🧱 <b>Hard-skip status</b>\n\nTG ID: <code>${id || 0}</code>\n`;
+  let text = `🧱 <b>Статус доставки</b>\n\nTelegram ID: <code>${id || 0}</code>\n`;
   if (opts && opts.toast) {
     text += `\n<b>${escapeHtml(String(opts.toast))}</b>\n`;
   }
@@ -39693,19 +39653,19 @@ async function renderAdminHardSkipView(ctx, tgId, opts = {}) {
   if (st.error === 'redis_unavailable') {
     text += '\n⚠️ Redis недоступен.\n';
   } else if (!st.exists) {
-    text += '\nСтатус: ✅ <b>нет hard-skip</b>\n';
+    text += '\nСтатус: ✅ <b>доставка разрешена</b>\nДиагностика: <code>hard-skip absent</code>\n';
   } else {
-    text += `\nСтатус: 🧱 <b>hard-skip</b>\n`;
+    text += `\nСтатус: 🧱 <b>доставка пропускается</b>\nДиагностика: <code>hard-skip active</code>\n`;
     text += `Причина: <b>${escapeHtml(st.reason || 'unknown')}</b>\n`;
     if (st.at) text += `Время: <code>${escapeHtml(String(st.at).slice(0, 19))}</code>\n`;
     if (Number.isFinite(st.ttlSec) && st.ttlSec !== null) {
       const days = Math.max(0, Math.round((st.ttlSec || 0) / 86400));
-      text += `TTL: ~${days}d\n`;
+      text += `Осталось: ~${days} дн.\n`;
     }
   }
 
   const kb = new InlineKeyboard();
-  if (st.exists) kb.text('🧹 Снять hard-skip', `a:hs_unskip|tg:${id}`).row();
+  if (st.exists) kb.text('🧹 Разрешить доставку', `a:hs_unskip|tg:${id}`).row();
   kb.text('⬅️ Назад', 'a:hs_home|p:0').row();
   kb.text('⬅️ Система', 'a:admin_sys').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
 
@@ -39891,9 +39851,9 @@ Broadcast cooldown: <b>${cdActive ? 'ACTIVE' : 'OFF'}</b>`;
 `;
 
   const kb = new InlineKeyboard()
-    .text('🧪 Send signed ping', 'a:admin_qstash_ping')
+    .text('🧪 Отправить подписанный ping', 'a:admin_qstash_ping')
     .row()
-    .text(`📣 Fan-out: ${fanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
+    .text(`📣 QStash-рассылка: ${fanout ? 'ON' : 'OFF'}`, 'a:admin_bc_qstash_toggle')
     .text('⬅️ Система', 'a:admin_sys')
     .row()
             .text('📋 Меню', 'a:menu')
@@ -39912,14 +39872,14 @@ async function renderAdminDmTemplates(ctx, page = 0) {
   const slice = items.slice(p * perPage, p * perPage + perPage);
 
   let text =
-    `📌 <b>Шаблоны сообщений (DM)</b>\n\n` +
-    `Источник: <b>${isCustom ? 'custom (Redis)' : 'default'}</b>\n` +
+    `📌 <b>Шаблоны личных сообщений</b>\n\n` +
+    `Набор: <b>${isCustom ? 'собственный' : 'стандартный'}</b>\n` +
+    `Диагностика: <code>${isCustom ? 'Redis custom' : 'default bundle'}</code>\n` +
     `Версия: <b>v${Number(tpls.version || 0)}</b>\n` +
     `Обновлено: <code>${escapeHtml(tpls.updatedAt || '—')}</code>\n\n`;
 
-  if (!slice.length) {
-    text += 'Пока нет шаблонов. Добавь первый через “➕ Новый шаблон”.';
-  } else {
+  if (!slice.length) text += 'Шаблонов пока нет. Добавь первый через «➕ Новый шаблон».';
+  else {
     text += 'Список (страница ' + (p + 1) + '/' + pages + '):\n\n';
     for (const it of slice) {
       const lbl = escapeHtml(String(it.label || '—'));
@@ -39929,27 +39889,15 @@ async function renderAdminDmTemplates(ctx, page = 0) {
   }
 
   const kb = new InlineKeyboard();
-  for (const it of slice) {
-    kb.text(String(it.label || '—'), `a:admin_umsg_tpl_view|tid:${String(it.id || '')}|p:${p}`).row();
-  }
-
-  kb.text('➕ Новый шаблон', `a:admin_umsg_tpl_add|p:${p}`)
-    .text('♻️ Сбросить к дефолту', `a:admin_umsg_tpl_reset_q|p:${p}`)
-    .row();
-
+  for (const it of slice) kb.text(String(it.label || '—'), `a:admin_umsg_tpl_view|tid:${String(it.id || '')}|p:${p}`).row();
+  kb.text('➕ Новый шаблон', `a:admin_umsg_tpl_add|p:${p}`).text('♻️ Восстановить стандартные', `a:admin_umsg_tpl_reset_q|p:${p}`).row();
   if (pages > 1) {
     const prev = (p - 1 + pages) % pages;
     const next = (p + 1) % pages;
-    kb.text('⬅️', `a:admin_umsg_tpls|p:${prev}`)
-      .text(`${p + 1}/${pages}`, `a:admin_umsg_tpls|p:${p}`)
-      .text('➡️', `a:admin_umsg_tpls|p:${next}`)
-      .row();
+    kb.text('⬅️', `a:admin_umsg_tpls|p:${prev}`).text(`${p + 1}/${pages}`, `a:admin_umsg_tpls|p:${p}`).text('➡️', `a:admin_umsg_tpls|p:${next}`).row();
   }
-
   kb.text('📎 Вставить', `a:adm_ph|r:tpl_list|p:${p}`).row();
-
   kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
-
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
 }
 
@@ -39990,72 +39938,48 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
 
   async function renderAdminOutbox(ctx, page = 0) {
     const isPrivateChat = (ctx?.chat?.type === 'private');
-    const { items, total, pages, perPage, page: p, startIndex } = await getAdminOutboxPage(page, 8);
+    const { items, total, pages, page: p, startIndex } = await getAdminOutboxPage(page, 8);
 
-    let text = `📤 <b>Outbox</b>
+    let text = `📤 <b>Исходящие</b>\n\n` +
+      `Журнал последних сообщений, отправленных из админки.\n` +
+      `Всего записей: <b>${escapeHtml(String(total || 0))}</b>\n` +
+      `Диагностика: <code>Redis</code>, последние ${ADMIN_OUTBOX_MAX} записей\n\n`;
 
-` +
-      `Всего записей: <b>${escapeHtml(String(total || 0))}</b>
-` +
-      `Хранение: <b>Redis-only</b> (последние ${ADMIN_OUTBOX_MAX})
-
-`;
-
-    if (!items.length) {
-      text += 'Пока пусто.';
-    } else {
-      text += `Страница ${p + 1}/${pages}:
-
-`;
+    if (!items.length) text += 'Исходящих сообщений пока нет.';
+    else {
+      text += `Страница ${p + 1}/${pages}:\n\n`;
       for (let i = 0; i < items.length; i++) {
         const it = items[i] || {};
-        const absIdx = startIndex + i; // 0-based Redis list index
+        const absIdx = startIndex + i;
         const ok = String(it.status || '').toLowerCase() === 'ok' || String(it.status || '').toLowerCase() === 'sent';
         const icon = ok ? '✅' : '❌';
-        const to = it.target_username
-          ? ('@' + String(it.target_username).replace(/^@/, ''))
-          : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
+        const to = it.target_username ? ('@' + String(it.target_username).replace(/^@/, '')) : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
         const when = fmtTs(it.ts);
-        const sn = isPrivateChat
-          ? clipText(String(it.preview || it.snippet || '').replace(/\n+/g, ' / '), 110)
-          : '🔒 Скрыто (открой Outbox в личке с ботом)';
+        const sn = isPrivateChat ? clipText(String(it.preview || it.snippet || '').replace(/\n+/g, ' / '), 110) : '🔒 Текст скрыт. Открой «Исходящие» в личном чате с ботом.';
         const num = absIdx + 1;
-        text += `${icon} <b>#${num}</b> · ${escapeHtml(when)} → <b>${escapeHtml(to)}</b>
-<i>${escapeHtml(sn || '—')}</i>
-`;
-        if (!ok && it.error) text += `<code>${escapeHtml(clipText(String(it.error), 140))}</code>
-`;
+        text += `${icon} <b>#${num}</b> · ${escapeHtml(when)} → <b>${escapeHtml(to)}</b>\n<i>${escapeHtml(sn || '—')}</i>\n`;
+        if (!ok && it.error) text += `<code>${escapeHtml(clipText(String(it.error), 140))}</code>\n`;
         text += '\n';
       }
     }
 
     const kb = new InlineKeyboard();
-
     for (let i = 0; i < items.length; i++) {
       const it = items[i] || {};
       const absIdx = startIndex + i;
       const ok = String(it.status || '').toLowerCase() === 'ok' || String(it.status || '').toLowerCase() === 'sent';
       const icon = ok ? '✅' : '❌';
-      const to = it.target_username
-        ? ('@' + String(it.target_username).replace(/^@/, ''))
-        : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
+      const to = it.target_username ? ('@' + String(it.target_username).replace(/^@/, '')) : (it.target_tg_id ? `tg:${it.target_tg_id}` : '—');
       const t = fmtOutboxBtnTime(it.ts) || '';
-      const label = clipText(`${icon} ${t} ${to}`, 48);
-      kb.text(label, commsCb.adminOutboxView(absIdx, p)).row();
+      kb.text(clipText(`${icon} ${t} ${to}`, 48), commsCb.adminOutboxView(absIdx, p)).row();
     }
-
     if (pages > 1) {
       const prev = (p - 1 + pages) % pages;
       const next = (p + 1) % pages;
-      kb.text('⬅️', commsCb.adminOutbox(prev))
-        .text(`${p + 1}/${pages}`, commsCb.adminOutbox(p))
-        .text('➡️', commsCb.adminOutbox(next))
-        .row();
+      kb.text('⬅️', commsCb.adminOutbox(prev)).text(`${p + 1}/${pages}`, commsCb.adminOutbox(p)).text('➡️', commsCb.adminOutbox(next)).row();
     }
-
-    kb.text('🧹 Очистить', commsCb.adminOutboxClearQ(p)).row();
+    kb.text('🧹 Очистить журнал', commsCb.adminOutboxClearQ(p)).row();
     kbAdminFooter(kb, '⬅️ Коммуникации', 'a:admin_comms');
-
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
 
@@ -40094,38 +40018,38 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
     let phLine = '';
     if (used.length) {
       phLine += `
-📎 used: ${used.map((x) => `<code>{{${escapeHtml(String(x))}}}</code>`).join(' ')}`;
+📎 Подставлены: ${used.map((x) => `<code>{{${escapeHtml(String(x))}}}</code>`).join(' ')}`;
     }
     if (unknown.length) {
       phLine += `
-⚠️ unknown: ${unknown.map((x) => `<code>{{${escapeHtml(String(x))}}}</code>`).join(' ')}`;
+⚠️ Неизвестны: ${unknown.map((x) => `<code>{{${escapeHtml(String(x))}}}</code>`).join(' ')}`;
     }
 
     const err = it.error ? `
 Ошибка: <code>${escapeHtml(String(it.error))}</code>` : '';
     const snippet = isPrivateChat
       ? String(it.snippet || it.preview || '').trim()
-      : '🔒 Скрыто (открой Outbox в личке с ботом)';
+      : '🔒 Текст скрыт. Открой «Исходящие» в личном чате с ботом.';
 
     const text =
-      `${icon} <b>Outbox запись</b>
+      `${icon} <b>Исходящее сообщение</b>
 
 ` +
       `Время: <b>${escapeHtml(when)}</b>
 ` +
-      `To: <b>${escapeHtml(toU)}</b> (tg:<code>${escapeHtml(toId)}</code>)
+      `Кому: <b>${escapeHtml(toU)}</b> (tg:<code>${escapeHtml(toId)}</code>)
 ` +
-      `By: <b>${escapeHtml(byU)}</b> (tg:<code>${escapeHtml(byId)}</code>)
+      `Отправил: <b>${escapeHtml(byU)}</b> (tg:<code>${escapeHtml(byId)}</code>)
 ` +
       `Статус: <b>${escapeHtml(String(it.status || (ok ? 'ok' : 'failed')))}</b>` +
       (hash ? `
-Hash: <code>${escapeHtml(hash)}</code>` : '') +
+Хэш: <code>${escapeHtml(hash)}</code>` : '') +
       tplLine +
       phLine +
       err +
       `
 
-<b>Текст (snippet)</b>:
+<b>Фрагмент сообщения</b>:
 <pre>${escapeHtml(snippet || '—')}</pre>`;
 
     const kb = new InlineKeyboard()
@@ -40581,11 +40505,11 @@ async function renderAdminAudit(ctx, { afterHours = 24, page = 0 } = {}) {
 
   // Search info
   let searchLine = '';
-  if (action) searchLine = `\n🔎 Action: <code>${escapeHtml(action)}</code>`;
-  else if (wsId) searchLine = `\n🔎 Workspace: <code>${wsId}</code>`;
-  else if (userId) searchLine = `\n🔎 User: <code>${userId}</code>`;
+  if (action) searchLine = `\n🔎 Действие: <code>${escapeHtml(action)}</code>`;
+  else if (wsId) searchLine = `\n🔎 Пространство: <code>${wsId}</code>`;
+  else if (userId) searchLine = `\n🔎 Пользователь: <code>${userId}</code>`;
 
-  let text = `📜 <b>Audit Log</b> · ${timeLabel} · стр ${p + 1}${searchLine}\n\n`;
+  let text = `📜 <b>Журнал аудита</b> · ${timeLabel} · стр ${p + 1}${searchLine}\n\n`;
 
   if (!rows.length) {
     text += 'Событий нет.';
@@ -40613,7 +40537,7 @@ async function renderAdminAudit(ctx, { afterHours = 24, page = 0 } = {}) {
   kb.row();
 
   // Export
-  kb.text('📤 Export TXT', `a:aud_export|h:${h}`).row();
+  kb.text('📤 Скачать TXT', `a:aud_export|h:${h}`).row();
 
   // Pagination
   if (p > 0) kb.text('⬅️', `a:aud|h:${h}|p:${p - 1}`);
@@ -40676,7 +40600,7 @@ async function sendAdminAuditExport(ctx, afterHours = 24) {
   const ts = new Date().toISOString().slice(0, 10);
   const filename = `audit_${filterDesc.join('_') || 'all'}_${ts}.txt`;
 
-  let caption = `📤 Audit export: ${rows.length} событий`;
+  let caption = `📤 Экспорт журнала: ${rows.length} событий`;
   if (truncated) caption += '\n⚠️ Лимит 5000 — сузьте фильтр.';
 
   await ctx.replyWithDocument(
@@ -40684,7 +40608,7 @@ async function sendAdminAuditExport(ctx, afterHours = 24) {
     {
       caption,
       reply_markup: new InlineKeyboard()
-        .text('⬅️ Аудит', `a:aud|h:${afterHours}|p:0`)
+        .text('⬅️ Журнал аудита', `a:aud|h:${afterHours}|p:0`)
         .text('⬅️ Админка', 'a:admin_home')
         .row()
         .text('📋 Меню', 'a:menu')
@@ -40804,7 +40728,7 @@ async function renderAdminUsers(ctx, filterRaw = 'all', page = 0) {
   kb.text('🔎 Поиск', `a:admin_users_search|f:${filter}`);
   if (q) kb.text('🧹 Сброс', `a:admin_users_reset|f:${filter}|p:0`);
   kb.row();
-  kb.text('📤 Export CSV', `a:adm_ucsv|f:${filter}`).row();
+  kb.text('📤 Скачать CSV', `a:adm_ucsv|f:${filter}`).row();
 
   if (p > 0) kb.text('⬅️ Назад', `a:admin_users|f:${filter}|p:${p - 1}`);
   if (hasNext) kb.text('➡️ Далее', `a:admin_users|f:${filter}|p:${p + 1}`);
@@ -40961,7 +40885,7 @@ const sectionBackCb = hasRet ? String(ret.sectionBackCb || 'a:admin_comms') : 'a
 
 const backKb = new InlineKeyboard();
 backKb.text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`);
-if (hasRet) backKb.text(String(ret.backText || '⬅️ Outbox'), String(ret.backCb));
+if (hasRet) backKb.text(String(ret.backText || '⬅️ Исходящие'), String(ret.backCb));
 backKb.row();
 kbAdminFooter(backKb, sectionBackText, sectionBackCb);
 
@@ -41035,7 +40959,7 @@ kbAdminFooter(backKb, sectionBackText, sectionBackCb);
   }
 
 kb.text('⬅️ К карточке', `a:adm_ucard|id:${uid}|f:${f}|p:${page}`);
-if (hasRet) kb.text(String(ret.backText || '⬅️ Outbox'), String(ret.backCb));
+if (hasRet) kb.text(String(ret.backText || '⬅️ Исходящие'), String(ret.backCb));
 kb.row();
 kbAdminFooter(kb, sectionBackText, sectionBackCb);
 
@@ -41295,7 +41219,7 @@ async function sendAdminUsersCsv(ctx, filter = 'all', q = '') {
   const ts = new Date().toISOString().slice(0, 10);
   const filename = `users_${tag}${q ? '_search' : ''}_${ts}.csv`;
 
-  let caption = `📤 Export: ${rows.length} записей · фильтр: ${tag}`;
+  let caption = `📤 Экспорт: ${rows.length} записей · фильтр: ${tag}`;
   if (q) caption += ` · поиск: "${q}"`;
   if (truncated) caption += `\n⚠️ Лимит 10 000 — сузьте фильтр для полной выгрузки.`;
 
@@ -41732,6 +41656,13 @@ async function renderModReportView(ctx, reportId) {
 }
 
 
+function verificationKindLabel(kindRaw) {
+  const kind = String(kindRaw || 'creator').trim().toLowerCase();
+  if (kind === 'brand') return 'Бренд';
+  if (kind === 'creator') return 'Креатор';
+  return 'Пользователь';
+}
+
 async function renderModVerifs(ctx, page = 0) {
   const limit = 10;
   const offset = page * limit;
@@ -41742,7 +41673,7 @@ async function renderModVerifs(ctx, page = 0) {
   for (const r of rows) {
     const who = r.tg_username ? '@' + r.tg_username : ('tg:' + r.tg_id);
     const kind = String(r.kind || 'creator');
-    kb.text(`👀 ${who} · ${kind}`, `a:mod_verif_view|uid:${r.user_id}|p:${page}`).row();
+    kb.text(`👀 ${who} · ${verificationKindLabel(kind)}`, `a:mod_verif_view|uid:${r.user_id}|p:${page}`).row();
   }
 
   const hasPrev = page > 0;
@@ -41760,7 +41691,7 @@ async function renderModVerifs(ctx, page = 0) {
       const who = r.tg_username ? '@' + r.tg_username : ('tg:' + r.tg_id);
       const when = r.submitted_at ? fmtTs(r.submitted_at) : '—';
       const kind = String(r.kind || 'creator');
-      return `• <b>${escapeHtml(who)}</b> · ${escapeHtml(kind)} · <tg-spoiler>${escapeHtml(when)}</tg-spoiler>`;
+      return `• <b>${escapeHtml(who)}</b> · ${escapeHtml(verificationKindLabel(kind))} · <tg-spoiler>${escapeHtml(when)}</tg-spoiler>`;
     }).join('\n')
     : 'Пока нет заявок.');
 
@@ -41779,8 +41710,8 @@ async function renderModVerifView(ctx, userId, page = 0) {
 ` +
     `Пользователь: <b>${escapeHtml(who)}</b>
 ` +
-    `Тип: <b>${escapeHtml(kind)}</b>
-` +
+    `Тип: <b>${escapeHtml(verificationKindLabel(kind))}</b>\n` +
+    `Диагностика: <code>${escapeHtml(kind)}</code>\n` +
     `Когда: <tg-spoiler>${escapeHtml(when)}</tg-spoiler>
 
 ` +
@@ -41788,8 +41719,8 @@ async function renderModVerifView(ctx, userId, page = 0) {
 ${escapeHtml(v.submitted_text || '—')}`;
 
   const kb = new InlineKeyboard()
-    .text('✅ Approve', `a:mod_verif_approve|uid:${userId}|p:${page}`)
-    .text('❌ Reject', `a:mod_verif_reject|uid:${userId}|p:${page}`)
+    .text('✅ Одобрить', `a:mod_verif_approve|uid:${userId}|p:${page}`)
+    .text('❌ Отклонить', `a:mod_verif_reject|uid:${userId}|p:${page}`)
     .row()
     .text('⬅️ К очереди', `a:mod_verifs|p:${page}`)
     .text('⬅️ Модерация', 'a:mod_home');

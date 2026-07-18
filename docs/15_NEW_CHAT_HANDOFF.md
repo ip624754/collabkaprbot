@@ -1,3 +1,31 @@
+# STEP586G CURRENT TRUTH OVERRIDE
+
+- Current baseline: STEP586G Admin and Operator Vocabulary.
+- Primary Telegram and web-admin labels are human-readable and aligned.
+- Canonical operator terms include `Исходящие`, `Шаблоны личных сообщений`, `Одобрить / Отклонить`, `Журнал розыгрыша`, `Журнал аудита`, `Недоступные чаты` and `Пропуски доставки`.
+- Exact Redis, QStash, hard-skip, broadcast-state, callback and DB-table diagnostics remain available below the human status/action layer.
+- Login machine decisions remain `approve / deny`; signed decision behavior is unchanged.
+- Callback IDs, action-registry guards, audience values, permissions, queue mechanics, payments, schema and migrations are unchanged.
+- Source guard: `npm run smoke:admin-operator-vocabulary-contract`.
+- Live Telegram, web-admin, Vercel, Redis/QStash/Neon, mobile wrapping and operator comprehension are not verified.
+- Next STEP: STEP586H Live Telegram Acceptance and Mobile Copy Pass.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586G_ADMIN_OPERATOR_VOCABULARY_REPORT.md`
+3. `docs/product/COLLABKA_COPY_SYSTEM.md`
+4. `docs/product/TERMINOLOGY_REGISTRY.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586G.md`
+
+Rules for the next model:
+- verify real rendering and comprehension before changing more copy;
+- preserve raw diagnostics and machine values;
+- do not redesign operator controls or change privileges;
+- do not claim live-green without remote evidence.
+
+---
+
 # STEP586F CURRENT TRUTH OVERRIDE
 
 - Current baseline: STEP586F Access, Error and Empty-State Recovery.

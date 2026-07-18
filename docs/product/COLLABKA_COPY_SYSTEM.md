@@ -492,28 +492,45 @@ npm run smoke:access-error-empty-state-recovery-contract
 
 ## 12. Operator language
 
-Admin-only screens may use QStash, Redis, Neon, Outbox and DM when they are operationally necessary.
+Operator copy follows a two-layer contract:
 
-Even there:
+1. human-readable status and action;
+2. exact diagnosis in a separate line or block.
 
-- explain the operator action;
-- separate current state from diagnosis;
-- do not use unexplained shorthand in primary buttons;
-- use Russian labels where the English word adds no precision.
+Canonical primary labels:
 
-Example:
+- `Исходящие`;
+- `Шаблоны личных сообщений`;
+- `Одобрить / Отклонить`;
+- `Журнал розыгрыша`;
+- `Журнал аудита`;
+- `Недоступные чаты`;
+- `Пропуски доставки`;
+- `Редактор рассылки`;
+- `Проверка первой партии`;
+- `Итог доставки`.
+
+Precise terms such as Redis, QStash, Neon, callback IDs, table names, raw statuses and reason codes remain allowed inside access-controlled diagnostic bodies when they help repair production.
+
+Preferred structure:
 
 ```text
-📤 Исходящие сообщения
+[Human status]
+
+[What the operator should do next]
+
+Диагностика: [exact system / code / state]
 ```
 
-instead of:
+Do not translate or rename machine values such as callback IDs, `approve / deny`, audience keys or database statuses. Translate only the visible label around them.
 
-```text
-📤 Outbox
+Telegram admin and web-admin must use the same visible word for the same object.
+
+Source enforcement after STEP586G:
+
+```bash
+npm run smoke:admin-operator-vocabulary-contract
 ```
-
-The diagnostic body may still say `QStash delivery failed`.
 
 ## 13. Review lenses
 

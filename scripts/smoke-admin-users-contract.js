@@ -72,7 +72,7 @@ assertMatch(
 );
 assert.ok(renderAdminUsersSrc.includes("kb.text('🔎 Поиск', `a:admin_users_search|f:${filter}`);"), 'Admin → Users list must keep search button');
 assert.ok(renderAdminUsersSrc.includes("if (q) kb.text('🧹 Сброс', `a:admin_users_reset|f:${filter}|p:0`);"), 'Admin → Users list must keep reset-search button only when q exists');
-assert.ok(renderAdminUsersSrc.includes("kb.text('📤 Export CSV', `a:adm_ucsv|f:${filter}`).row();"), 'Admin → Users list must keep CSV export button');
+assert.ok(renderAdminUsersSrc.includes("kb.text('📤 Скачать CSV', `a:adm_ucsv|f:${filter}`).row();"), 'Admin → Users list must keep CSV export button');
 assert.ok(renderAdminUsersSrc.includes("if (p > 0) kb.text('⬅️ Назад', `a:admin_users|f:${filter}|p:${p - 1}`);"), 'Admin → Users list must keep previous-page button');
 assert.ok(renderAdminUsersSrc.includes("if (hasNext) kb.text('➡️ Далее', `a:admin_users|f:${filter}|p:${p + 1}`);"), 'Admin → Users list must keep next-page button');
 assert.ok(renderAdminUsersSrc.includes("kb.text('⬅️ Операции', 'a:admin_ops');"), 'Admin → Users list must keep back-to-Ops button');
@@ -96,7 +96,7 @@ assert.ok(adminUsersCallbacksSrc.includes('await renderAdminUserCard(ctx, uid, f
 assert.ok(sendAdminUsersCsvSrc.includes('const { rows, truncated } = await db.exportUsersDirectory(filter, q);'), 'Admin → Users CSV must use exportUsersDirectory helper');
 assert.ok(sendAdminUsersCsvSrc.includes("const header = 'user_id,tg_id,username,roles,created_at_msk,updated_at_msk,brand_plan,brand_plan_until_msk,brand_credits,brand_credits_spent';"), 'Admin → Users CSV must keep stable CSV header');
 assert.ok(sendAdminUsersCsvSrc.includes("const filename = `users_${tag}${q ? '_search' : ''}_${ts}.csv`;"), 'Admin → Users CSV must keep stable filename scheme');
-assert.ok(sendAdminUsersCsvSrc.includes("let caption = `📤 Export: ${rows.length} записей · фильтр: ${tag}`;"), 'Admin → Users CSV must keep export caption');
+assert.ok(sendAdminUsersCsvSrc.includes("let caption = `📤 Экспорт: ${rows.length} записей · фильтр: ${tag}`;"), 'Admin → Users CSV must keep export caption');
 assert.ok(sendAdminUsersCsvSrc.includes("if (truncated) caption += `\\n⚠️ Лимит 10 000 — сузьте фильтр для полной выгрузки.`;"), 'Admin → Users CSV must keep truncation warning');
 assertMatch(
   sendAdminUsersCsvSrc,

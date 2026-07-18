@@ -20,10 +20,10 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
 for (const token of [
-  "⚙️ Админка → Control Surface",
-  'Web-admin login:',
-  'Payments fallback apply:',
-  'Broadcast fan-out (QStash):',
+  "⚙️ Админка → Управление системой",
+  'Вход в веб-админку:',
+  'Резервное применение платежей:',
+  'Рассылка через QStash:',
   "'a:admin_web_login_toggle'",
   "'a:admin_pay_accept_toggle'",
   "'a:admin_pay_auto_toggle'",

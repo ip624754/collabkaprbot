@@ -41,23 +41,22 @@ const renderAdminCommsSrc = extractBetween(
 );
 
 assert.ok(renderAdminCommsSrc.includes("let text = '💬 Админка → Коммуникации\\n\\n';"), 'Admin → Comms title must stay stable');
-assert.ok(renderAdminCommsSrc.includes("text += '• 📣 Системное объявление — баннер без рассылки (показ 1 раз)\\n';"), 'Admin → Comms must describe System Notice');
-assert.ok(renderAdminCommsSrc.includes("text += '• 📌 Шаблоны DM — быстрые ответы из админки\\n';"), 'Admin → Comms must describe DM templates');
-assert.ok(renderAdminCommsSrc.includes("text += '• 📤 Outbox — журнал отправок\\n';"), 'Admin → Comms must describe Outbox');
+assert.ok(renderAdminCommsSrc.includes("text += '• 📣 Системное объявление — баннер без массовой отправки\\n';"), 'Admin → Comms must describe System Notice');
+assert.ok(renderAdminCommsSrc.includes("text += '• 📌 Шаблоны личных сообщений — быстрые ответы оператора\\n';"), 'Admin → Comms must describe personal-message templates');
+assert.ok(renderAdminCommsSrc.includes("text += '• 📤 Исходящие — журнал сообщений из админки\\n';"), 'Admin → Comms must describe outgoing log');
 
 assertMatch(
   renderAdminCommsSrc,
-  /const kb = new InlineKeyboard\([\s\S]*?\.text\('📣 Объявление', (?:'a:admin_notice'|commsCb\.adminNotice\(\))\)\s*\.text\('📌 Шаблоны DM', 'a:admin_umsg_tpls\|p:0'\)\s*\.row\(\)\s*\.text\('📤 Outbox', 'a:admin_outbox\|p:0'\)\s*\.text\('🆘 Поддержка', 'a:admin_support'\);/s,
+  /const kb = new InlineKeyboard\([\s\S]*?\.text\('📣 Объявление', (?:'a:admin_notice'|commsCb\.adminNotice\(\))\)\s*\.text\('📌 Шаблоны сообщений', 'a:admin_umsg_tpls\|p:0'\)\s*\.row\(\)\s*\.text\('📤 Исходящие', 'a:admin_outbox\|p:0'\)\s*\.text\('🆘 Поддержка', 'a:admin_support'\);/s,
   'Admin → Comms primary keyboard rows must keep Notice + DM templates + Outbox + Support'
 );
 assertMatch(
   renderAdminCommsSrc,
-  /if \(CFG\.OFFICIAL_PUBLISH_ENABLED\) text \+= `• 📣 Офиц\.канал — очередь публикаций \(\$\{pending\}\)\\n`;/s,
+  /if \(CFG\.OFFICIAL_PUBLISH_ENABLED\) text \+= `• 📣 Официальный канал — очередь публикаций \(\$\{pending\}\)\\n`;/s,
   'Admin → Comms text must gate Official channel queue by OFFICIAL_PUBLISH_ENABLED'
 );
-assertMatch(
-  renderAdminCommsSrc,
-  /if \(CFG\.OFFICIAL_PUBLISH_ENABLED\) \{[\s\S]*?kb\.row\(\)\.text\(`📣 Офиц\.канал \(\$\{pending\}\)`, 'a:off_queue\|p:0'\);[\s\S]*?\}/s,
+assert.ok(
+  renderAdminCommsSrc.includes("if (CFG.OFFICIAL_PUBLISH_ENABLED) kb.row().text(`📣 Официальный канал (${pending})`, 'a:off_queue|p:0');"),
   'Admin → Comms keyboard must gate Official channel queue button by OFFICIAL_PUBLISH_ENABLED'
 );
 assertMatch(

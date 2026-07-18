@@ -115,14 +115,14 @@ assertMatch(
 
 assert.ok(renderAdminAuditSrc.includes('const opts = { action, wsId, userId, afterHours: h, limit: limit + 1, offset };'), 'Admin → Audit must keep query object with action/ws/user/time window');
 assert.ok(renderAdminAuditSrc.includes("const timeLabels = { 24: '24ч', 168: '7д', 720: '30д', 0: 'Всё' };"), 'Admin → Audit must keep stable time-label map');
-assert.ok(renderAdminAuditSrc.includes("searchLine = `\\n🔎 Action: <code>${escapeHtml(action)}</code>`;"), 'Admin → Audit must keep action search line');
-assert.ok(renderAdminAuditSrc.includes("searchLine = `\\n🔎 Workspace: <code>${wsId}</code>`;"), 'Admin → Audit must keep workspace search line');
-assert.ok(renderAdminAuditSrc.includes("searchLine = `\\n🔎 User: <code>${userId}</code>`;"), 'Admin → Audit must keep user search line');
-assert.ok(renderAdminAuditSrc.includes("let text = `📜 <b>Audit Log</b> · ${timeLabel} · стр ${p + 1}${searchLine}\\n\\n`;"), 'Admin → Audit must keep stable title');
+assert.ok(renderAdminAuditSrc.includes("searchLine = `\\n🔎 Действие: <code>${escapeHtml(action)}</code>`;"), 'Admin → Audit must keep action search line');
+assert.ok(renderAdminAuditSrc.includes("searchLine = `\\n🔎 Пространство: <code>${wsId}</code>`;"), 'Admin → Audit must keep workspace search line');
+assert.ok(renderAdminAuditSrc.includes("searchLine = `\\n🔎 Пользователь: <code>${userId}</code>`;"), 'Admin → Audit must keep user search line');
+assert.ok(renderAdminAuditSrc.includes("let text = `📜 <b>Журнал аудита</b> · ${timeLabel} · стр ${p + 1}${searchLine}\\n\\n`;"), 'Admin → Audit must keep stable title');
 assert.ok(renderAdminAuditSrc.includes("text += 'Событий нет.';"), 'Admin → Audit must keep empty-state text');
 assert.ok(renderAdminAuditSrc.includes("kb.text('🔎 Поиск', `a:aud_search|h:${h}`);"), 'Admin → Audit must keep search button');
 assert.ok(renderAdminAuditSrc.includes("if (sq) kb.text('🧹 Сброс', `a:aud_reset|h:${h}`);"), 'Admin → Audit must keep reset button');
-assert.ok(renderAdminAuditSrc.includes("kb.text('📤 Export TXT', `a:aud_export|h:${h}`).row();"), 'Admin → Audit must keep export button');
+assert.ok(renderAdminAuditSrc.includes("kb.text('📤 Скачать TXT', `a:aud_export|h:${h}`).row();"), 'Admin → Audit must keep export button');
 assert.ok(renderAdminAuditSrc.includes("if (p > 0) kb.text('⬅️', `a:aud|h:${h}|p:${p - 1}`);"), 'Admin → Audit must keep previous-page button');
 assert.ok(renderAdminAuditSrc.includes("if (hasNext) kb.text('➡️', `a:aud|h:${h}|p:${p + 1}`);"), 'Admin → Audit must keep next-page button');
 assert.ok(renderAdminAuditSrc.includes("kb.text('⬅️ Операции', 'a:admin_ops');"), 'Admin → Audit must keep back-to-Ops button');
@@ -135,7 +135,7 @@ assertMatch(
 assert.ok(sendAdminAuditExportSrc.includes("⚠️ Лимит 5000 — сузьте фильтр."), 'Admin → Audit export must keep truncation warning');
 assertMatch(
   sendAdminAuditExportSrc,
-  /reply_markup: new InlineKeyboard\(\)\s*\.text\('⬅️ Аудит', `a:aud\|h:\$\{afterHours\}\|p:0`\)\s*\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\)/s,
+  /reply_markup: new InlineKeyboard\(\)\s*\.text\('⬅️ Журнал аудита', `a:aud\|h:\$\{afterHours\}\|p:0`\)\s*\.text\('⬅️ Админка', 'a:admin_home'\)\s*\.row\(\)\s*\.text\('📋 Меню', 'a:menu'\)\s*\.text\('🏠 Домой', 'a:home'\)/s,
   'Admin → Audit export must keep back/menu/footer buttons'
 );
 
