@@ -27,6 +27,7 @@ State: `ACTIVE / WATCH / MITIGATED / ACCEPTED / PARKED`
 | R-16 | Trust/matching score becomes opaque or misleading | HIGH | PARKED | unexplained ranking, biased match, unsupported claims | evidence-based signals, explainable scoring requirement | before Match Engine implementation |
 | R-17 | Deal stage or paid acceptance gate bypass through forged/direct callback | CRITICAL | MITIGATED | `deal_stage` without `accepted_by_user_id`, stage write without actor access | actor-scoped load, explicit access assertion, accepted-deal runtime guards, accepted-only SQL list/write guards, STEP586C source contract | any new deal mutation path or acceptance/credit change |
 | R-18 | Paid-product copy/config drift or invoice fields rejected after copy expansion | HIGH | WATCH | UI price/result differs from server catalog, `sendInvoice` 400, stale parsed config key | runtime-derived labels, bounded 32/255 invoice fields, STEP586E source contract | any price/catalog/entitlement change or invoice rejection |
+| R-19 | Private-object enumeration or authorization drift through recovery/error path | HIGH | MITIGATED | crafted callback confirms object detail, recovery route bypasses scoped lookup | neutral recovery copy, specific-membership proof before unrestricted read, STEP586F source contract | any new object-detail route, broad access-copy refactor or permission change |
 
 ## Critical-zone handling
 
@@ -88,3 +89,12 @@ Residual risk:
 - Source verification: paid-product contract, payment validation, callback/dependency/runtime and 221-file syntax checks PASS locally.
 - Runtime verification required: one Preview/Staging invoice per product family without completing unintended purchases, plus approved test purchases for apply/retry evidence.
 - Residual risk: live Telegram Stars and operator support/refund handling are unverified; two parsed Brand Plan config keys remain non-authoritative and need a separate ENV-governance decision.
+## Current STEP586F assessment
+
+- Change type: recovery taxonomy, bounded ordinary-user copy/empty-state changes and curator read-order hardening; no schema or economic change.
+- Primary risks addressed: R-04, R-09, R-11, R-12, R-19.
+- Runtime blast radius: Telegram stale/access failure rendering, selected empty states and curator workspace detail loading.
+- Rollback: revert the exact STEP586F delta; no migration rollback or data rewrite is required.
+- Source verification: dedicated recovery contract, STEP586A–E regressions, callback/dependency/runtime contracts and 223-file syntax surface PASS locally.
+- Runtime verification required: Preview/Staging stale-button and unauthorized-object traversal for creator, brand, curator and giveaway paths.
+- Residual risk: 123 exact `Нет доступа.` strings remain for later source classification; live Telegram wrapping and production stale-data combinations are unverified.

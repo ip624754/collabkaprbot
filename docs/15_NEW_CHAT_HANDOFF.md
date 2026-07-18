@@ -1,3 +1,34 @@
+# STEP586F CURRENT TRUTH OVERRIDE
+
+- Current baseline: STEP586F Access, Error and Empty-State Recovery.
+- Recovery classes: channel, application, dialog, offer, giveaway, folder, role and generic.
+- Ordinary-user recovery is neutral when deletion and permission change cannot be distinguished safely.
+- Recovery buttons return to existing list/menu surfaces; they never authorize access to the object.
+- Empty-state contract: title + source-backed reason + next action.
+- Selected infrastructure details are removed from user copy and retained in structured `[copy_safety]` diagnostics.
+- Non-admin curator workspace detail lookup now follows specific membership proof.
+- Explicit admin/operator `Нет доступа.` gates remain; no blind global replacement was performed.
+- Callbacks, schema, payments, invite economics, deal mechanics and giveaway mechanics remain unchanged.
+- Source guard: `npm run smoke:access-error-empty-state-recovery-contract`.
+- Live Telegram, Vercel, Neon/Redis/QStash, mobile wrapping and remote staging are not verified.
+- Next STEP: STEP586G Admin and Operator Vocabulary.
+
+Read first:
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/audit/STEP586F_ACCESS_ERROR_EMPTY_STATE_RECOVERY_REPORT.md`
+3. `docs/product/COLLABKA_COPY_SYSTEM.md`
+4. `docs/product/TERMINOLOGY_REGISTRY.md`
+5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP586F.md`
+
+Rules for the next model:
+- preserve precise diagnostics while making primary operator actions readable;
+- do not redesign admin controls or change privileges;
+- do not expose private-object existence in ordinary-user recovery;
+- do not claim live UX verification without evidence.
+
+---
+
 # STEP586E CURRENT TRUTH OVERRIDE
 
 - Current baseline: STEP586E Monetization and Paid Product Clarity.

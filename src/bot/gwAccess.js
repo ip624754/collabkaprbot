@@ -1,6 +1,7 @@
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
 import { sponsorToChatId } from './sponsorParse.js';
+import { recoveryPlain, recoveryToast } from './recoveryCopy.js';
 
 function acc2Key(chat) {
   return ['mg', CFG.APP_ENV, 'acc2', chat].join(':');
@@ -111,8 +112,8 @@ function accessHelpText(botUsername) {
 export async function renderGwAccess({ ctx, gwId, ownerUserId, redis, db, safeEditOrReply, forceRecheck = false, checkUserId = null }) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    if (ctx?.callbackQuery?.id) await ctx.answerCallbackQuery({ text: 'Нет доступа.' }).catch(() => {});
-    else await ctx.reply('Нет доступа.');
+    if (ctx?.callbackQuery?.id) await ctx.answerCallbackQuery({ text: recoveryToast('giveaway'), show_alert: true }).catch(() => {});
+    else await ctx.reply(recoveryPlain('giveaway'));
     return null;
   }
 

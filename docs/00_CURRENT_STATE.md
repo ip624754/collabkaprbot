@@ -1,3 +1,30 @@
+## STEP586F — Access, Error and Empty-State Recovery (2026-07-18)
+
+**Current handoff-safe baseline:** STEP586F on top of STEP586E.
+
+Verified local source truth:
+- immutable recovery classes now cover channel, application, dialog, offer, giveaway, folder, role and generic failures;
+- ordinary-user recovery is neutral when source truth cannot safely distinguish deletion from changed permission;
+- selected empty states now state why the list is empty and what to do next;
+- recovery buttons return only to existing authorized list/menu surfaces and do not bypass object-level checks;
+- selected Redis/internal-ID/source leakage is removed from ordinary-user copy; exact causes remain in structured `[copy_safety]` logs;
+- non-admin curator workspace rendering proves membership in the specific workspace before unrestricted workspace detail lookup;
+- callback IDs, schema, payments, invite economics, deal mechanics and giveaway mechanics are unchanged;
+- dedicated and regression contracts pass locally; the full 223-file JavaScript syntax surface passes separately.
+
+Not verified: Vercel deployment, live Telegram rendering, mobile wrapping, production stale-data paths, live Neon/Redis/QStash, remote STEP584 evidence or real-user comprehension.
+
+**Next:** STEP586G — Admin and Operator Vocabulary.
+
+Read:
+- `docs/audit/STEP586F_ACCESS_ERROR_EMPTY_STATE_RECOVERY_REPORT.md`;
+- `docs/product/COLLABKA_COPY_SYSTEM.md`;
+- `docs/product/TERMINOLOGY_REGISTRY.md`;
+- `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP586F.md`.
+
+---
+
 ## STEP586E — Monetization and Paid Product Clarity (2026-07-18)
 
 **Current handoff-safe baseline:** STEP586E on top of STEP586D.

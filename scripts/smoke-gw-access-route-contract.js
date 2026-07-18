@@ -38,7 +38,8 @@ assert.ok(!botSource.includes("if (p.a === 'a:gw_access_user_prompt') {"), 'lega
 assert.ok(actionRegistrySource.includes('"a:gw_access_user_prompt": { type: ACTION_TYPES.OPS, guard: ACTION_GUARD.REQUIRE_REDIS }'), 'gw_access user prompt must require Redis because the flow is input-stateful');
 assert.ok(!gwAccessSource.includes('async function safeAnswerCb('), 'gw_access module must not keep a local bare callback ack helper');
 assert.ok(!gwAccessSource.includes('async function safeEditOrReply('), 'gw_access module must use project-level safeEditOrReply instead of a divergent local helper');
-assert.ok(gwAccessSource.includes("if (ctx?.callbackQuery?.id) await ctx.answerCallbackQuery({ text: 'Нет доступа.' }).catch(() => {});"), 'gw_access no-access path must send one final no-access feedback');
+assert.ok(gwAccessSource.includes("if (ctx?.callbackQuery?.id) await ctx.answerCallbackQuery({ text: recoveryToast('giveaway'), show_alert: true }).catch(() => {});"), 'gw_access no-access path must send one classified final feedback');
+assert.ok(gwAccessSource.includes("else await ctx.reply(recoveryPlain('giveaway'));"), 'gw_access message path must preserve a visible classified recovery response');
 assert.ok(!gwAccessSource.includes('await safeAnswerCb(ctx);'), 'gw_access render paths must not pre-ack before final feedback');
 assert.ok(botSource.includes('safeEditOrReply,'), 'bot must pass project-level safeEditOrReply into the extracted gw_access family');
 

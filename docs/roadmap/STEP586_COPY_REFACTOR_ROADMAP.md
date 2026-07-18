@@ -1,8 +1,8 @@
 # STEP586 — Conversation Copy Refactor Roadmap
 
 **Input:** STEP585 source audit and canonical copy system
-**Current implementation baseline:** STEP586E on STEP586D
-**Roadmap status:** STEP586A–E implemented; STEP586F is next
+**Current implementation baseline:** STEP586F on STEP586E
+**Roadmap status:** STEP586A–F implemented; STEP586G is next
 **Rule:** copy changes may not silently alter callbacks, permissions, prices, reward math, payment semantics or state transitions.
 
 ## 1. Goal
@@ -202,6 +202,9 @@ Acceptance:
 
 ### STEP586F — Access, Error and Empty-State Recovery
 
+**Implementation:** DONE in STEP586F (2026-07-18)
+**Report:** `docs/audit/STEP586F_ACCESS_ERROR_EMPTY_STATE_RECOVERY_REPORT.md`
+
 **Priority:** P2
 **Risk:** medium
 **Mode:** STANDARD
@@ -224,6 +227,8 @@ Acceptance:
 - every changed error remains truthful under all reachable states;
 - recovery buttons lead only to already-authorized surfaces;
 - destructive errors do not reveal private object existence.
+
+**Verified result:** recovery taxonomy and source guard pass locally; selected empty states have reason/action; curator membership proof precedes unrestricted workspace lookup; no global access-string replacement was used; live Telegram recovery remains unverified.
 
 ---
 
@@ -293,6 +298,6 @@ The language work should reduce risk, not hide architectural changes inside stri
 
 ## 5. Current next action
 
-Proceed with **STEP586F — Access, Error and Empty-State Recovery**.
+Proceed with **STEP586G — Admin and Operator Vocabulary**.
 
-Classify each failure from authoritative state. Do not use a global string replacement, do not weaken permission checks and do not reveal whether a private object exists.
+Make primary operator labels readable, retain exact diagnostics where they help repair the system, and do not change control behavior or privileges.

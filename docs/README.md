@@ -2,19 +2,18 @@
 
 Это актуальный комплект документации по проекту **Collabka PR**.
 
-## Текущий snapshot — STEP586E (2026-07-18)
+## Текущий snapshot — STEP586F (2026-07-18)
 
-- `Brand Plan`, кредиты, `PRO канала`, Умный подбор и Продвижение разведены как разные продуктовые объекты.
-- Цена, количество и срок в пользовательском UX берутся из runtime config/catalogs.
-- Кредиты описаны как расходуемые единицы бренда, а не Stars, деньги или подписка.
-- Платёжные receipts показывают сумму в Stars и фактически применённый результат.
-- Задержанная покупка ведёт в `/paysupport`; автоматический возврат не обещается.
-- Missing catalog dependency в extracted Stars handler исправлен явной dependency injection.
-- Провайдер, цены, callbacks, ledger и exactly-once механика не менялись.
-- Следующий scoped STEP: `STEP586F — Access, Error and Empty-State Recovery`.
+- Добавлен единый recovery-контракт для каналов, заявок, диалогов, офферов, розыгрышей, папок и role-gates.
+- Обычный пользователь не видит внутренние Redis/ID/source причины; техническая правда остаётся в `[copy_safety]` логах.
+- Empty states теперь объясняют причину и дают одно следующее действие.
+- Recovery не ослабляет доступ и не подтверждает существование приватного объекта.
+- Curator workspace read-order усилен: specific membership проверяется до unrestricted detail lookup.
+- Callbacks, schema, платежи, invite economy и deal/giveaway mechanics не менялись.
+- Следующий scoped STEP: `STEP586G — Admin and Operator Vocabulary`.
 
 ## 0) BOOT (всегда читаем сначала)
-- `process/07_WORK_HISTORY_STEP586E.md` — актуальная дельта: монетизация, paid-product clarity и payment recovery truth
+- `process/07_WORK_HISTORY_STEP586F.md` — актуальная дельта: recovery taxonomy, empty states и authorization-safe fallback
 - `00_BOOT.md` — 10–15 строк, что нельзя забывать
 - `01_SECURITY_INVARIANTS.md` — инварианты безопасности/монетизации (что нельзя ломать)
 - `02_ACTION_KEYS_REGISTRY.md` — реестр action keys (AUTO-GENERATED, для аудитов; обновить: `npm run actions:md`)
@@ -25,7 +24,7 @@
 - `RISK_REGISTRY.md` — живой реестр технических, продуктовых и AI-governance рисков
 - `CREATOR_OS_THESIS.md` — продуктовый north star: Creator Collaboration Operating System без broad rewrite
 - `CHATGPT_COLLABKA_UPGRADE_NOTES.md` — состав и truth boundary STEP580 docs upgrade
-- `audit/STEP586E_MONETIZATION_PAID_PRODUCT_CLARITY_REPORT.md` — paid-product taxonomy, payment-path finding и Truth Boundary STEP586E
+- `audit/STEP586F_ACCESS_ERROR_EMPTY_STATE_RECOVERY_REPORT.md` — recovery taxonomy, curator access finding и Truth Boundary STEP586F
 - `25_TELEGRAM_UI_PATTERN_REUSE.md` — reusable объяснение Collabka-style Telegram UI pattern: single-surface router, Back/Menu/Home, edit-first, `ret`, push-vs-edit
 - `26_SELECTION_UI_CONTRACT_RU.md` — канонический selection UI contract для русских picker/filter surfaces: мультивыбор, один выбор, toggle, нижний action block
 - `27_SELECTION_SURFACE_INVENTORY_STEP479.md` — source-level inventory активных selection surfaces + выбор 2 low-risk pilot экранов для первого rollout
@@ -202,9 +201,6 @@ Canonical product-language documents:
 - visible lifecycle is `оффер / профиль → заявка → диалог → сделка → этап / закрытие`;
 - deal-only routes and SQL writes require authoritative acceptance evidence.
 
-Current next action: **STEP586F — Access, Error and Empty-State Recovery**.
-
-Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance remain unverified.
 ### STEP586D implementation
 
 - `audit/STEP586D_INVITE_CENTER_LANGUAGE_MECHANISM_HONESTY_REPORT.md` — source-backed invite mechanism, copy changes and Truth Boundary;
@@ -219,3 +215,14 @@ Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance r
 - command: `npm run smoke:monetization-paid-product-clarity-contract`;
 - visible paid-product quantities/durations derive from runtime configuration and catalogs;
 - delayed payment recovery uses `/paysupport`; no automatic refund is claimed.
+### STEP586F implementation
+
+- `audit/STEP586F_ACCESS_ERROR_EMPTY_STATE_RECOVERY_REPORT.md` — recovery taxonomy, curator authorization finding, QA and Truth Boundary;
+- `process/07_WORK_HISTORY_STEP586F.md` — exact runtime/source scope and preserved invariants;
+- command: `npm run smoke:access-error-empty-state-recovery-contract`;
+- ordinary-user recovery is neutral, non-enumerating and returns to an existing list/menu surface;
+- selected empty states include a reason and one next action;
+- admin/operator vocabulary remains scoped to STEP586G.
+Current next action: **STEP586G — Admin and Operator Vocabulary**.
+
+Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance remain unverified.

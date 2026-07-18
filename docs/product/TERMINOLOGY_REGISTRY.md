@@ -76,7 +76,22 @@ A conversation, `in_progress` label or forged callback is not enough to call an 
 
 Internal callbacks are not renamed by copy-only STEPs.
 
-## 4. Product names
+## 4. Recovery vocabulary
+
+| Internal condition | Canonical user wording | Rule |
+|---|---|---|
+| stale/deleted/inaccessible channel | `Канал недоступен` | Do not disclose which condition is true unless source evidence is safe to reveal |
+| stale/deleted/inaccessible application | `Заявка недоступна` | Return to the application list |
+| stale/inaccessible conversation | `Диалог недоступен` | Return to `Диалоги` |
+| stale/removed/inaccessible offer | `Оффер недоступен` | Return to the offer list/feed |
+| stale/inaccessible giveaway | `Розыгрыш недоступен` | Return to the giveaway list |
+| stale/deleted/inaccessible folder | `Папка недоступна` | Return to the folder list |
+| role/permission mismatch | `Раздел недоступен` | Return to the current-role menu |
+| unclassified safe fallback | `Раздел недоступен` | Do not invent a technical reason |
+
+`Не найдено` is allowed only when object existence is not private and source evidence proves absence. `Нет доступа` is allowed for explicit operator/admin gates, but ordinary-user recovery should include a safe next action when possible.
+
+## 5. Product names
 
 Allowed as proper product names:
 
@@ -113,7 +128,7 @@ Preferred Russian feature labels:
 | Creator | Креатор |
 | Home | Домой |
 
-## 5. Invite vocabulary
+## 6. Invite vocabulary
 
 | Internal/state term | User-facing term | Exact meaning |
 |---|---|---|
@@ -138,7 +153,7 @@ Current event contract:
 
 Internal identifiers remain unchanged in code and operator diagnostics.
 
-## 6. Infrastructure terms
+## 7. Infrastructure terms
 
 The following terms are operator-only and must not appear in ordinary user flows:
 
@@ -162,7 +177,7 @@ User-facing replacement:
 
 Admin/operator diagnostics may preserve technical detail after a human-readable heading.
 
-## 7. Grammar and capitalization
+## 8. Grammar and capitalization
 
 - `креатор`, `бренд`, `оффер`, `заявка`, `диалог`, `сделка` — lowercase inside a sentence.
 - `PRO` — uppercase.

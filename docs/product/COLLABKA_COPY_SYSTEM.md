@@ -441,7 +441,56 @@ Source enforcement after STEP586E:
 npm run smoke:monetization-paid-product-clarity-contract
 ```
 
-## 11. Operator language
+## 11. Access, error and recovery language
+
+Access copy is part of the authorization boundary.
+
+When the source cannot safely distinguish deletion from changed permission, use neutral non-enumerating language. Do not confirm that a private object exists or belongs to another user.
+
+Canonical recovery classes:
+
+- channel;
+- application;
+- dialog;
+- offer;
+- giveaway;
+- folder;
+- role;
+- generic.
+
+Preferred structure:
+
+```text
+[Object] недоступен.
+
+Кнопка могла устареть, а статус или доступ — измениться.
+
+Вернись к актуальному списку и открой объект заново.
+```
+
+Recovery actions may return to a list, current-role menu or global home. They may not grant access, retry a destructive mutation or skip an object-level guard.
+
+Do not globally replace `Нет доступа.`. First classify the route from authoritative state. Explicit admin/operator denial may remain short when no additional detail is safe or useful.
+
+Empty-state contract:
+
+```text
+[What is empty]
+
+[Why, only when source-backed]
+
+[One useful next action]
+```
+
+Technical failures remain in structured operator diagnostics. Ordinary-user copy must not expose Redis, Neon, QStash, table names, internal IDs, callback keys or raw exception reasons.
+
+Source enforcement after STEP586F:
+
+```bash
+npm run smoke:access-error-empty-state-recovery-contract
+```
+
+## 12. Operator language
 
 Admin-only screens may use QStash, Redis, Neon, Outbox and DM when they are operationally necessary.
 
@@ -466,7 +515,7 @@ instead of:
 
 The diagnostic body may still say `QStash delivery failed`.
 
-## 12. Review lenses
+## 13. Review lenses
 
 Every copy change should pass these questions.
 
@@ -502,7 +551,7 @@ Can ambiguity cause a wrong payment, wrong deletion, permission mistake or abuse
 
 Are trade-offs, costs and failure states stated without drama or false certainty?
 
-## 13. Pre-merge checklist
+## 14. Pre-merge checklist
 
 - [ ] One term for one object.
 - [ ] No internal infrastructure in user copy.
@@ -516,7 +565,7 @@ Are trade-offs, costs and failure states stated without drama or false certainty
 - [ ] Callback behavior did not change unless the STEP explicitly allows it.
 - [ ] Existing copy contracts and navigation smokes were updated deliberately.
 
-## 11. Source enforcement after STEP586A
+## 15. Source enforcement after STEP586A
 
 The user/operator boundary is guarded by:
 

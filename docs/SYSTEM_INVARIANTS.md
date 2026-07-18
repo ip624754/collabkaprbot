@@ -19,6 +19,9 @@
 3. Ownership and destructive-action eligibility must be enforced at the authoritative mutation boundary, preferably in SQL.
 4. Secrets must never appear in docs, logs, artifacts, health payloads, or client-side source.
 5. Admin, auth, webhook, and payment changes require HEAVY governance.
+5. Recovery and error copy must not confirm private-object existence when deletion and permission change cannot be distinguished safely.
+6. Recovery navigation may return to authorized list/menu surfaces but never grant access or bypass an object-level guard.
+7. Non-admin unrestricted object lookup must follow specific membership/ownership proof when the lookup can expose private details.
 
 `docs/01_SECURITY_INVARIANTS.md` remains the detailed security/monetization contract. This file is the cross-system index, not a replacement.
 
@@ -31,6 +34,8 @@
 5. Back/Menu/Home behavior and `ret` navigation must not create dead ends.
 6. Every handled callback should acknowledge quickly and provide visible feedback when the action is not immediate.
 7. Degraded click guards are load-shedding aids, not correctness locks.
+8. Empty states changed by product copy work state a source-backed reason and one useful next action.
+9. Ordinary-user errors do not expose infrastructure names, raw internal identifiers or exception reasons; exact diagnosis belongs in operator logs/surfaces.
 
 ## 4. Invite and reward invariants
 

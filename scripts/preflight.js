@@ -232,6 +232,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): applications, dialogs, deals lifecycle contract", "smoke:applications-dialogs-deals-lifecycle-contract"],
   ["Preflight (source-only): invite language and mechanism honesty contract", "smoke:invite-language-mechanism-honesty-contract"],
   ["Preflight (source-only): monetization and paid-product clarity contract", "smoke:monetization-paid-product-clarity-contract"],
+  ["Preflight (source-only): access, error and empty-state recovery contract", "smoke:access-error-empty-state-recovery-contract"],
   ["Preflight (source-only): public landing contract", "smoke:landing-contract"],
   ["Preflight (source-only): admin web shell contract", "smoke:admin-web-shell-contract"],
   ["Preflight (source-only): admin web mobile shell contract", "smoke:admin-web-mobile-shell-contract"],

@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, InputFile } from 'grammy';  
+import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import crypto from 'crypto';
 import { CFG, assertEnv } from '../lib/config.js';
 import logger from '../lib/logger.js';
@@ -46,6 +46,7 @@ import { appendOperatorControlAudit, getOperatorControlSnapshot, setOperatorCont
 import { BROADCAST_CAPTION_SAFE_LIMIT, buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
 import { commsCb } from './commsCallbacks.js';
 import { MONETIZATION_LABELS, buildStarsInvoiceDescription, buildStarsInvoiceTitle, starsAmountLabel } from './monetizationCopy.js';
+import { emptyStateText, recoveryHtml, recoveryPlain, recoveryToast } from './recoveryCopy.js';
 
 let BOT;
 
@@ -1880,7 +1881,7 @@ async function _expectedStarsForInvoicePayload(payload) {
     return { ok: true, expected, kind, meta: { wsId, userId } };
   }
 
-  
+
 // brand_<userId>_<S|M|L>_<token> (legacy supported: numeric credits token)
 if (kind === 'brand_pass') {
   if (parts.length < 4) return { ok: false, reason: 'bad_payload_format', expected: 0, kind };
@@ -2017,7 +2018,7 @@ async function renderGwNewWorkspacePicker(ctx, ownerUserId, backCb = 'a:gw_list'
   }
   kbNavRow(kb, backCb);
 
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(ctx,
     `Выбери канал, где создать новый розыгрыш:`,
     { reply_markup: kb }
   );
@@ -3685,7 +3686,7 @@ function mainMenuBrandKb(flags = {}, opts = {}) {
     if (b) kb.text(b[0], b[1]);
   }
 
-  
+
   kb.row().text('🏠 Домой', 'a:home');
 
   return kb;
@@ -4567,6 +4568,40 @@ function copySafetyRecoveryKb(backCb = 'a:menu') {
   }
   kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
   return kb;
+}
+
+
+function recoveryBackCb(kind = 'generic', backCb = '') {
+  const explicit = String(backCb || '').trim();
+  if (explicit) return explicit;
+  if (kind === 'channel') return 'a:ws_list';
+  if (kind === 'application') return 'a:my_apps|p:0';
+  if (kind === 'giveaway') return 'a:gw_list';
+  return 'a:menu';
+}
+
+async function answerRecovery(ctx, kind = 'generic', opts = {}) {
+  if (!ctx?.callbackQuery) return false;
+  try {
+    await ctx.answerCallbackQuery({
+      text: recoveryToast(kind),
+      show_alert: opts.showAlert === true
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function renderRecovery(ctx, kind = 'generic', opts = {}) {
+  const backCb = recoveryBackCb(kind, opts.backCb);
+  if (ctx?.callbackQuery) {
+    try { await ctx.answerCallbackQuery({ text: recoveryToast(kind) }); } catch {}
+  }
+  await safeEditOrReply(ctx, recoveryHtml(kind), {
+    parse_mode: 'HTML',
+    reply_markup: opts.replyMarkup || navKb(backCb)
+  });
 }
 
 function reportCopySafetyDiagnostic(code, details = {}) {
@@ -5523,18 +5558,16 @@ function wsDisconnectedKb(wsId, opts = {}) {
 async function renderWsDisconnected(ctx, ownerUserId, wsId, opts = {}) {
   const ws = await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
-    await renderStaleButton(ctx, {
-      text: '⚠️ Канал не найден или кнопка устарела. Открой 📋 Меню → «📣 Мои каналы» и выбери канал заново.',
-      backCb: 'a:ws_list'
-    });
+    await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' });
     return;
   }
   const title = ws.channel_username ? `@${ws.channel_username}` : ws.title;
   const backCb = String(opts.backCb || 'a:ws_list');
   const disconnectedAt = ws.channel_disconnected_at ? fmtTs(ws.channel_disconnected_at) : null;
-  const sourceHint = opts.source ? `Источник: <i>${escapeHtml(String(opts.source))}</i>
-
-` : '';
+  if (opts.source) {
+    reportCopySafetyDiagnostic('workspace_disconnected_surface', { workspaceId: Number(wsId), source: String(opts.source) });
+  }
+  const sourceHint = '';
   const whenLine = disconnectedAt ? `
 Отключён: <b>${escapeHtml(disconnectedAt)}</b>` : '';
   await safeEditOrReply(ctx, `⛔ <b>Канал отключён</b>
@@ -5584,7 +5617,7 @@ async function renderCuratorList(ctx, ownerUserId, wsId, opts = {}) {
   const notice = opts.notice ? String(opts.notice) : '';
   const ws = await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    try { await answerRecovery(ctx, 'channel'); } catch {}
     return;
   }
 
@@ -5738,7 +5771,7 @@ async function renderCuratorAudit(ctx, viewerUserId, wsId, opts = {}) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(viewerUserId, wsId);
   if (!ws) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    try { await answerRecovery(ctx, 'channel'); } catch {}
     return;
   }
 
@@ -5802,7 +5835,7 @@ async function renderCuratorAudit(ctx, viewerUserId, wsId, opts = {}) {
 Заявка: <b>${escapeHtml(String(leadLine))}</b>
 Роли: <b>${escapeHtml(String(roleLine))}</b>
 
-${list.length ? list.join('\n') : 'Пока пусто.'}`;
+${list.length ? list.join('\n') : emptyStateText({ title: 'Действий по выбранным условиям нет', reason: 'Журнал заполнится после первого действия куратора.', action: 'Сбрось фильтр или вернись к заявкам.' })}`;
 
   const mkCb = (patch = {}) => {
     const u = (patch.u !== undefined) ? patch.u : actorUserId;
@@ -5876,7 +5909,7 @@ async function renderCuratorManage(ctx, ownerUserId, wsId, opts = {}) {
   const notice = opts.notice ? String(opts.notice) : '';
   const ws = await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    try { await answerRecovery(ctx, 'channel'); } catch {}
     return;
   }
   if (isWorkspaceDisconnected(ws)) {
@@ -6234,7 +6267,7 @@ function netConfirmKb(wsId, enabled, ret) {
 
 async function renderNetConfirm(ctx, ownerUserId, wsId, ret = 'ws') {
   const ws = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) return answerRecovery(ctx, 'channel');
 
   const enabled = !!ws.network_enabled;
   const state = enabled ? '🌐 Сеть: ✅ ВКЛ' : '🌐 Сеть: ❌ ВЫКЛ';
@@ -9226,7 +9259,7 @@ async function renderWsInactiveList(ctx, ownerUserId) {
   }
   const inactiveItems = items.filter((w) => isWorkspaceDisconnected(w));
   if (!inactiveItems.length) {
-    await safeEditOrReply(ctx, '📦 Неактивных каналов пока нет.', {
+    await safeEditOrReply(ctx, emptyStateText({ title: '📦 Неактивных каналов нет', reason: 'Все подключённые каналы сейчас активны.', action: 'Вернись к списку каналов или подключи новый.' }), {
       reply_markup: new InlineKeyboard().text('⬅️ Активные', 'a:ws_list').text('📋 Меню', 'a:menu').row().text('🏠 Домой', 'a:home')
     });
     return;
@@ -9286,10 +9319,7 @@ async function renderWorkspaceSettingsScreen(ctx, ws, opts = {}) {
 async function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {
   const ws = await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
-    await renderStaleButton(ctx, {
-      text: '⚠️ Канал не найден или кнопка устарела. Открой 📋 Меню → «📣 Мои каналы» и выбери канал заново.',
-      backCb: 'a:ws_list'
-    });
+    await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' });
     return;
   }
   await setActiveWorkspace(ctx.from.id, wsId);
@@ -9307,8 +9337,8 @@ async function renderWsOpen(ctx, ownerUserId, wsId, opts = null) {
 async function renderWsSettings(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
   if (!isAdmin && isWorkspaceDisconnected(ws)) {
     await renderWsDisconnected(ctx, ownerUserId, wsId, { backCb: 'a:ws_list', source: 'workspace_settings' });
     return;
@@ -9320,8 +9350,8 @@ async function renderWsSettings(ctx, ownerUserId, wsId) {
 async function renderWsHistory(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
   const ACTION_LABELS = {
     'ws.profile_updated': 'Профиль обновлён',
     'ws.profile_reset': 'Профиль сброшен',
@@ -9350,7 +9380,7 @@ async function renderWsHistory(ctx, ownerUserId, wsId) {
   const text = `🧾 <b>История действий</b>\n\n` +
     `Канал: <b>${escapeHtml(title)}</b>\n` +
     `<i>${escapeHtml(hint)}</i>\n\n` +
-    `${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
+    `${lines.length ? lines.join('\n') : emptyStateText({ title: 'История пока пуста', reason: 'Изменения появятся здесь после первого действия с каналом.', action: 'Вернись к настройкам канала или повтори действие позже.' })}`;
 
   const kb = new InlineKeyboard()
     .text('📥 Скачать полный лог', `a:ws_history_export|ws:${wsId}`)
@@ -9366,8 +9396,8 @@ async function renderWsHistory(ctx, ownerUserId, wsId) {
 async function exportWsHistory(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const items = await db.listWorkspaceAudit(wsId, 500);
 
@@ -9627,7 +9657,7 @@ ${escapeHtml(pmHumanBullets(st.f, PROFILE_FORMATS))}
       .text('⚙️ Изменить фильтры', `a:pm_home|ws:${wsId}`)
       .row()
       .text('⬅️ Назад', backCb);
-    return safeEditOrReply(ctx, 
+    return safeEditOrReply(ctx,
       head + '😶 Ничего не нашёл по фильтрам.\n\nПопробуй упростить фильтр (меньше ниш/форматов).',
       { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true }
     );
@@ -10687,7 +10717,7 @@ async function renderWsIgVerifyStart(ctx, ownerUserId, wsId, opts = {}) {
   const ret = String(opts.ret || 'ws_profile');
   const ws = isSuperAdminTg(ctx.from?.id) ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
-    await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { reply_markup: navKb('a:ws_list') });
+    await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' });
     return;
   }
 
@@ -10742,7 +10772,7 @@ async function renderWsIgVerifyComment(ctx, ownerUserId, wsId, opts = {}) {
   const ret = String(opts.ret || 'ws_profile');
   const ws = isSuperAdminTg(ctx.from?.id) ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
-    await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { reply_markup: navKb('a:ws_list') });
+    await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' });
     return;
   }
 
@@ -10768,7 +10798,7 @@ async function renderWsIgVerifyStatus(ctx, ownerUserId, wsId, opts = {}) {
   const ret = String(opts.ret || 'ws_profile');
   const ws = isSuperAdminTg(ctx.from?.id) ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
   if (!ws) {
-    await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { reply_markup: navKb('a:ws_list') });
+    await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' });
     return;
   }
 
@@ -10847,12 +10877,12 @@ async function renderWsProfile(ctx, ownerUserId, wsId, opts = {}) {
   } catch (_) {
     ws0 = null;
   }
-  if (!ws0) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws0) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   try { await db.ensureWorkspaceSettings(wsId); } catch {}
 
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   let isPro = false;
   try { isPro = await db.isWorkspacePro(wsId); } catch {}
@@ -11003,7 +11033,7 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
   const isAdmin = isSuperAdminTg(ctx.from?.id);
 
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const o = wsProfileContactsObj(ws);
   const tg = o.tg ? String(o.tg).replace(/^@/, '') : '';
@@ -11074,7 +11104,7 @@ async function renderWsProfileContactsStructured(ctx, ownerUserId, wsId, opts = 
 async function renderWsProfileContactsClearMenu(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const o = wsProfileContactsObj(ws);
   const items = [
@@ -11115,8 +11145,8 @@ async function renderWsProfileContactsClearMenu(ctx, ownerUserId, wsId) {
 async function renderWsShareMenu(ctx, ownerUserId, wsId, ret = null) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const link = wsBrandLink(wsId);
 
@@ -11144,8 +11174,8 @@ async function renderWsShareMenu(ctx, ownerUserId, wsId, ret = null) {
 async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short') {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const text = buildWsShareText(ws, wsId, variant);
   // Текст для шаринга: URL в самом конце (чтобы в превью чата не светилась ссылка).
@@ -11175,8 +11205,8 @@ async function sendWsShareTextMessage(ctx, ownerUserId, wsId, variant = 'short')
 async function renderWsIgTemplatesMenu(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const link = wsBrandLink(wsId);
 
@@ -11360,8 +11390,8 @@ function buildWsIgDmMessage(ws, wsId, tone = 'soft', variantIndex = 0) {
 async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', variantIndex = 0) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const t = String(tone || 'soft').toLowerCase();
   const toneNorm = (t === 'hard' ? 'hard' : 'soft');
@@ -11389,8 +11419,8 @@ async function renderWsIgDmTemplate(ctx, ownerUserId, wsId, tone = 'soft', varia
 async function sendWsIgTemplateMessage(ctx, ownerUserId, wsId, type = 'story') {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const t = String(type || 'story');
   const allowed = ['story', 'post', 'dm', 'bio'];
@@ -11421,8 +11451,8 @@ async function sendWsIgTemplateMessage(ctx, ownerUserId, wsId, type = 'story') {
 async function renderWsProfileMode(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
   const cur = String(ws.profile_mode || 'both');
 
   const kb = new InlineKeyboard()
@@ -11462,8 +11492,8 @@ async function renderWsProfileMode(ctx, ownerUserId, wsId) {
 async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const selected = Array.isArray(ws.profile_verticals) ? ws.profile_verticals.map(String) : [];
   const kb = new InlineKeyboard();
@@ -11497,8 +11527,8 @@ async function renderWsProfileVerticals(ctx, ownerUserId, wsId) {
 async function renderWsProfileFormats(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const selected = Array.isArray(ws.profile_formats) ? ws.profile_formats.map(String) : [];
   const kb = new InlineKeyboard();
@@ -12101,7 +12131,7 @@ async function renderWsLeadsList(ctx, ownerUserId, wsId, status = 'new', page = 
     try { isCurator = await db.isCuratorForWorkspace(Number(wsId), Number(actorUserId)); } catch {}
   }
   if (!isAdmin && !isOwner && !isCurator) {
-    await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
+    await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' });
     return;
   }
 
@@ -12317,7 +12347,7 @@ async function renderLeadView(ctx, actorUserId, leadId, back = { wsId: null, sta
 
   const wsId = Number(lead.workspace_id);
   const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 4500);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -12658,7 +12688,7 @@ async function renderLeadNotesViewer(ctx, actorUserId, leadId, back = { wsId: nu
   const wsId = Number(lead.workspace_id);
   const ws = await p0Await(ctx, stepId, `${stepId}:getWs`, () => db.getWorkspaceAny(wsId), 4500);
   if (!ws) {
-    await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал заново.', { reply_markup: navKb('a:ws_list') });
+    await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' });
     return;
   }
 
@@ -13726,7 +13756,7 @@ ${escapeHtml(brandAppThreadEmptyStateText(st, { role: 'deal', dealStage: stage }
 
 async function renderBrandAppView(ctx, actorUserId, appId, back = { status: 'new', page: 0 }) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  if (!app) { await answerRecovery(ctx, 'application'); return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -13905,7 +13935,7 @@ ${escapeHtml(brandAppThreadEmptyStateText(st, { pending: acceptPending, dealStag
 
 async function startBrandAppReply(ctx, actorUserId, appId, back) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  if (!app) { await answerRecovery(ctx, 'application'); return; }
 
   // Guard: reply is only allowed after accept (accept charges credits).
   if (normLeadStatus(app.status) === 'new') {
@@ -14300,7 +14330,7 @@ async function renderTemplatePreviewFlow(ctx, actorUserId, kind, id, key, backCb
 
 async function _renderTplFlowBrandApp(ctx, actorUserId, appId, key, back) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  if (!app) { await answerRecovery(ctx, 'application'); return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -14399,7 +14429,7 @@ async function _renderTplFlowLead(ctx, actorUserId, leadId, key, back) {
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -14493,7 +14523,7 @@ async function renderBrandAppTemplatePreview(ctx, actorUserId, appId, key, back)
 
 async function sendBrandAppTemplateReply(ctx, actorUserId, appId, key, back) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  if (!app) { await answerRecovery(ctx, 'application'); return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -14709,7 +14739,7 @@ ${extra}${hint} Кредит спишется, а заявка появится 
     return;
   }
 
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  if (!app) { await answerRecovery(ctx, 'application'); return; }
 
   const brandUserId = Number(app.brand_user_id);
   const access = await assertBrandAppsAccess(ctx, actorUserId, brandUserId);
@@ -14956,10 +14986,10 @@ ${escapeHtml(body)}`;
 
 async function renderBrandAppCardForCreator(ctx, actorUserId, appId, opts = {}) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  if (!app) { await answerRecovery(ctx, 'application'); return; }
 
   if (Number(app.creator_user_id) !== Number(actorUserId)) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    try { await answerRecovery(ctx, 'application'); } catch {}
     return;
   }
 
@@ -15076,10 +15106,10 @@ ${escapeHtml(creatorBrandAppThreadEmptyStateText(st))}`;
 
 async function startBrandAppChatForCreator(ctx, actorUserId, appId) {
   const app = await getBrandAppForActorSafe(ctx, actorUserId, appId);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена.' }); } catch {} return; }
+  if (!app) { await answerRecovery(ctx, 'application'); return; }
 
   if (Number(app.creator_user_id) !== Number(actorUserId)) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    try { await answerRecovery(ctx, 'application'); } catch {}
     return;
   }
 
@@ -15169,7 +15199,7 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 
   const wsId = Number(lead.workspace_id);
   const ws = await db.getWorkspaceAny(wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден или нет доступа. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
 
   const isOwner = Number(ws.owner_user_id) === Number(actorUserId);
   const isAdmin = isSuperAdminTg(ctx.from?.id);
@@ -15344,8 +15374,8 @@ async function sendLeadTemplateReply(ctx, actorUserId, leadId, key, back) {
 async function renderWsPro(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
   await db.ensureWorkspaceSettings(wsId);
   const settings = await db.getWorkspace(ownerUserId, wsId);
   const isPro = await db.isWorkspacePro(wsId);
@@ -15384,8 +15414,8 @@ async function renderWsPro(ctx, ownerUserId, wsId) {
 async function renderWsProPinPick(ctx, ownerUserId, wsId) {
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) { await safeEditOrReply(ctx, '⚠️ Канал не найден. Открой 📋 Меню → выбери канал и повтори.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
-  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await safeEditOrReply(ctx, '⚠️ Нет доступа. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+  if (!ws) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
+  if (!isAdmin && Number(ws.owner_user_id) !== Number(ownerUserId)) { await renderRecovery(ctx, 'channel', { backCb: 'a:ws_list' }); return; }
   const isPro = await db.isWorkspacePro(wsId);
   if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно в PRO.' });
 
@@ -15478,7 +15508,7 @@ function foldersHomeKb(access, folders) {
 
 async function renderFoldersHome(ctx, userId, wsId) {
   const access = await getFolderAccess(userId, wsId);
-  if (!access) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!access) return answerRecovery(ctx, 'folder');
 
   const folders = await db.listChannelFolders(Number(wsId));
   const isPro = await db.isWorkspacePro(Number(wsId));
@@ -15523,7 +15553,7 @@ function folderViewKb(access, wsId, folderId) {
 
 async function renderFolderView(ctx, userId, wsId, folderId) {
   const access = await getFolderAccess(userId, wsId);
-  if (!access) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!access) return answerRecovery(ctx, 'folder');
 
   const folder = await db.getChannelFolder(Number(folderId));
   if (!folder || Number(folder.workspace_id) !== Number(wsId)) {
@@ -15542,7 +15572,7 @@ async function renderFolderView(ctx, userId, wsId, folderId) {
   const text = `📁 <b>${escapeHtml(String(folder.title || 'Папка'))}</b>\n` +
     `Канал: <b>${escapeHtml(String(title))}</b>\n` +
     `Каналы: <b>${items.length}</b> / <b>${max}</b>\n\n` +
-    (shown.length ? shown.join('\n') : 'Пока пусто.') +
+    (shown.length ? shown.join('\n') : emptyStateText({ title: 'Папка пока пуста', reason: 'В неё ещё не добавлены каналы.', action: 'Нажми «➕ Добавить каналы», чтобы собрать список.' })) +
     more;
 
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: folderViewKb(access, Number(wsId), Number(folderId)) });
@@ -15550,7 +15580,7 @@ async function renderFolderView(ctx, userId, wsId, folderId) {
 
 async function renderWsEditors(ctx, ownerUserId, wsId) {
   const ws = await db.getWorkspace(ownerUserId, Number(wsId));
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) return answerRecovery(ctx, 'channel');
 
   const editorsEnabled = String(CFG.WORKSPACE_EDITORS_ENABLED || '').trim() === '1';
   if (!editorsEnabled) {
@@ -15865,7 +15895,7 @@ async function renderBxOpen(ctx, ownerUserId, wsId) {
     const unlocksLine = bpLines[1] || '';
     const trialLine = bpLines[2] || '';
 
-    await safeEditOrReply(ctx, 
+    await safeEditOrReply(ctx,
       `🏷 <b>Для брендов</b>
 
 Здесь бренд может работать с UGC/офферами без подключения канала.
@@ -15883,14 +15913,14 @@ ${trialLine}
   }
 
   const ws = await db.getWorkspace(ownerUserId, wsNum);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) return answerRecovery(ctx, 'channel');
   if (isWorkspaceDisconnected(ws)) {
     await renderWsDisconnected(ctx, ownerUserId, wsNum, { backCb: 'a:ws_list', source: 'bx_open' });
     return;
   }
 
   if (!ws.network_enabled) {
-    await safeEditOrReply(ctx, 
+    await safeEditOrReply(ctx,
       `🎬 <b>UGC / Офферы</b>
 
 Это лента UGC/Collab офферов: контент, интеграции, бартер/бюджет.
@@ -15901,7 +15931,7 @@ ${trialLine}
     return;
   }
 
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(ctx,
     `🎬 <b>UGC / Офферы</b>
 
 Канал: <b>${escapeHtml(ws.channel_username ? '@' + ws.channel_username : ws.title)}</b>
@@ -15919,7 +15949,7 @@ async function renderBxFeed(ctx, ownerUserId, wsId, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
-    if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (!ws) return answerRecovery(ctx, 'channel');
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
@@ -16006,10 +16036,10 @@ ${escapeHtml(bxTypeLabel(o.offer_type))} · ${escapeHtml(bxCompLabel(o.compensat
   });
 
   const zeroState = hasActiveBxFilter(filter)
-    ? `По этим фильтрам креаторы пока не найдены.
+    ? `По этим фильтрам креаторы не найдены.
 
 Ослабь 1–2 фильтра или нажми «♻️ Сбросить».`
-    : 'Пока офферов нет.';
+    : emptyStateText({ title: 'Офферов пока нет', reason: 'Креаторы ещё не опубликовали активные офферы.', action: 'Обнови ленту позже или настрой фильтры креаторов.' });
 
   const text = `${header}
 
@@ -16048,7 +16078,7 @@ ${featLines.join('\n\n')}
 
 async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
   const ws = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) return answerRecovery(ctx, 'channel');
   if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsId);
 
   const limit = 8;
@@ -16067,7 +16097,7 @@ async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
   }
   kbNavRow(kb, `a:bx_open|ws:${wsId}`);
 
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(ctx,
     `📦 <b>Мои офферы</b>
 
 Нажми оффер, чтобы открыть. Кнопка 🗑 — архивирует и сразу убирает из списка.`,
@@ -16077,7 +16107,7 @@ async function renderBxMy(ctx, ownerUserId, wsId, page = 0) {
 
 async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
   const ws = await db.getWorkspace(ownerUserId, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) return answerRecovery(ctx, 'channel');
   if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsId);
 
   const limit = 8;
@@ -16088,7 +16118,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
 
   if (!rows.length) {
     kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
-    await safeEditOrReply(ctx, 
+    await safeEditOrReply(ctx,
       `📁 <b>Архив офферов</b>
 
 Пока пусто. Нажми 🗑 в «Мои офферы», чтобы архивировать оффер (он останется в истории).`,
@@ -16115,7 +16145,7 @@ async function renderBxMyArchive(ctx, ownerUserId, wsId, page = 0) {
 
   kbNavRow(kb, `a:bx_my|ws:${wsId}|p:0`);
 
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(ctx,
     `📁 <b>Архив офферов</b>
 
 Открой оффер, чтобы посмотреть. ↩️ — вернуть в активные.`,
@@ -16169,7 +16199,7 @@ async function renderBxMediaStep(ctx, ownerUserId, wsId, offerId, back = 'my', o
   const { edit = true } = opts;
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
   if (!o) {
-    if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (ctx.callbackQuery) await renderRecovery(ctx, 'offer', { backCb: `a:bx_my|ws:${wsId}|p:${Number(opts.page || 0)}` });
     return;
   }
 
@@ -16192,8 +16222,7 @@ async function renderBxMediaStep(ctx, ownerUserId, wsId, offerId, back = 'my', o
 async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my', page = 0) {
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
   if (!o) {
-    const kb = navKb('a:menu');
-    await safeEditOrReply(ctx, '⚠️ <b>Оффер не найден</b>\n\nНажми «📋 Меню» и открой «🤝 Мои офферы» заново.', { parse_mode: 'HTML', reply_markup: kb });
+    await renderRecovery(ctx, 'offer', { backCb: `a:bx_my|ws:${wsId}|p:${Math.max(0, Number(page || 0))}` });
     return;
   }
 
@@ -16227,7 +16256,7 @@ async function sendBxPreview(ctx, ownerUserId, wsId, offerId, back = 'my', page 
 
 async function renderBxView(ctx, ownerUserId, wsId, offerId, back = 'feed', page = 0) {
   const o = await db.getBarterOfferForOwner(ownerUserId, offerId);
-  if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!o) return answerRecovery(ctx, 'offer');
 
   const st = String(o.status || 'ACTIVE').toUpperCase();
   const contact = String(o.contact || '').trim();
@@ -16365,7 +16394,7 @@ async function renderBxFilters(ctx, ownerUserId, wsId, page = 0, opts = {}) {
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
-    if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (!ws) return answerRecovery(ctx, 'channel');
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
@@ -16403,7 +16432,7 @@ async function renderBxFilterPick(ctx, ownerUserId, wsId, key, retPage = 0, pick
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
-    if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (!ws) return answerRecovery(ctx, 'channel');
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
@@ -16451,7 +16480,7 @@ async function renderBxFilterMultiPick(ctx, ownerUserId, wsId, key, page = 0, op
   const wsNum = Number(wsId || 0);
   if (wsNum !== 0) {
     const ws = await db.getWorkspace(ownerUserId, wsNum);
-    if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    if (!ws) return answerRecovery(ctx, 'channel');
     if (!ws.network_enabled) return renderBxOpen(ctx, ownerUserId, wsNum);
   }
 
@@ -17516,7 +17545,7 @@ async function renderOfficialManageView(ctx, userId, wsId, offerId, page = 0, ba
   const isOwner = Number(offer.owner_user_id) === Number(userId);
   const isMod = await isModerator({ id: userId }, ctx.from?.id);
   if (!isOwner && !isMod) {
-    if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Нет доступа.', show_alert: true });
+    if (ctx.callbackQuery) await answerRecovery(ctx, 'offer', { showAlert: true });
     return;
   }
 
@@ -17638,7 +17667,7 @@ async function renderOfficialRequestHome(ctx, userId, wsId, offerId, page = 0, b
 
   // Allow owner (or moderator) to create a PENDING draft.
   if (!isOwner && !isMod) {
-    if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Нет доступа.', show_alert: true });
+    if (ctx.callbackQuery) await answerRecovery(ctx, 'offer', { showAlert: true });
     return;
   }
 
@@ -17709,7 +17738,7 @@ async function renderOfficialBuyHome(ctx, userId, wsId, offerId, page = 0, back 
 async function renderOfficialQueue(ctx, userId, page = 0) {
   const isMod = await isModerator({ id: userId }, ctx.from?.id);
   if (!isMod) {
-    if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: 'Нет доступа.', show_alert: true });
+    if (ctx.callbackQuery) await answerRecovery(ctx, 'role', { showAlert: true });
     return;
   }
 
@@ -18057,7 +18086,7 @@ ${threadBlock}`;
 
 async function renderBxThread(ctx, userId, wsId, threadId, opts = {}) {
   const built = await buildBxThreadView(userId, threadId, { flash: opts.flash });
-  if (!built) return ctx.answerCallbackQuery({ text: 'Диалог не найден.' });
+  if (!built) return answerRecovery(ctx, 'dialog');
   const { thread, text, proofsCount } = built;
 
   let canStage = false;
@@ -18103,7 +18132,7 @@ function bxProofsKb(wsId, threadId, opts = {}) {
 
 async function renderBxProofs(ctx, userId, wsId, threadId, opts = {}) {
   const built = await buildBxThreadView(userId, threadId, { flash: opts.flash });
-  if (!built) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!built) return answerRecovery(ctx, 'dialog');
   const offerId = built.thread.offer_id ? Number(built.thread.offer_id) : null;
 
   let proofs = [];
@@ -18125,13 +18154,13 @@ async function renderBxProofs(ctx, userId, wsId, threadId, opts = {}) {
   });
 
   const text =
-`🧾 <b>Proofs</b>
+`🧾 <b>Подтверждения публикации</b>
 
 Сюда можно добавить подтверждение, что пост опубликован:
 • ссылка на пост (t.me/...)
 • скрин (фото)
 
-${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
+${lines.length ? lines.join('\n') : emptyStateText({ title: 'Подтверждений пока нет', reason: 'В этот диалог ещё не добавлены ссылка или скрин публикации.', action: 'Нажми «➕ Ссылка» или «📎 Скрин», когда появится подтверждение.' })}`;
 
   await safeEditOrReply(ctx, text, {
     parse_mode: 'HTML',
@@ -18467,7 +18496,7 @@ async function renderFeaturedView(ctx, userId, wsId, id, page = 0, h = BX_HOME.M
   }
   kbNavRow(kb, `a:bx_feed|ws:${wsId}|p:${page}|h:${h}`);
 
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(ctx,
     `🔥 <b>${escapeHtml(String(title))}</b>
 
 ${escapeHtml(String(body))}
@@ -18568,7 +18597,7 @@ async function renderGwList(ctx, ownerUserId, wsId = null) {
   }
 
   kb.text('⬅️ Назад', wsId ? `a:ws_open|ws:${wsId}` : 'a:menu');
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(ctx,
     `🎁 <b>${wsId ? 'Розыгрыши канала' : 'Розыгрыши'}</b>
 
 Выбери розыгрыш (или создай новый):`,
@@ -18578,7 +18607,7 @@ async function renderGwList(ctx, ownerUserId, wsId = null) {
 
 async function renderGwOpen(ctx, ownerUserId, gwId) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) return answerRecovery(ctx, 'giveaway');
 
   // Lazy auto-end: if дедлайн прошёл, чтобы статус не "врал" даже без cron
   const nowMs = Date.now();
@@ -18644,7 +18673,7 @@ ${notesBlock}
 
 async function renderGwWinnersView(ctx, ownerUserId, gwId) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) return answerRecovery(ctx, 'giveaway');
 
   const rawSt = String(g.status || '').toUpperCase();
   const winnersDrawn = rawSt === 'WINNERS_DRAWN' || rawSt === 'RESULTS_PUBLISHED' || !!g.winners_drawn_at;
@@ -18681,7 +18710,7 @@ ${winnersBlock}
 
 async function renderGwStats(ctx, ownerUserId, gwId) {
   const st = await db.getGiveawayStats(gwId, ownerUserId);
-  if (!st) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!st) return answerRecovery(ctx, 'giveaway');
   const total = Number(st.entries_total || 0);
   const elig = Number(st.eligible_count || 0);
   const notElig = Number(st.not_eligible_count || 0);
@@ -18728,7 +18757,7 @@ async function renderGwLog(ctx, ownerUserIdOrNull, gwId) {
   const lines = rows.map(r => `• <b>${escapeHtml(r.action)}</b> — ${fmtTs(r.created_at)}`);
   const text = `🧾 <b>Лог конкурса #${gwId}</b>
 
-${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
+${lines.length ? lines.join('\n') : emptyStateText({ title: 'Событий пока нет', reason: 'Лог заполнится после первого действия с розыгрышем.', action: 'Вернись к карточке розыгрыша.' })}`;
   const back = ownerUserIdOrNull ? `a:gw_open|i:${gwId}` : `a:gw_open_public|i:${gwId}`;
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb(back) });
 }
@@ -18787,7 +18816,7 @@ function curatorHomeKb(items, modeEnabled = false, queueCounts = null) {
 
   // Help + footer
   kb.text('💬 Поддержка', 'a:support').row();
-  kb.text('🏠 Домой', 'a:home').text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
+  kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
   return kb;
 }
 
@@ -18889,11 +18918,35 @@ function curatorWsKb(wsId, giveaways, checkedSet = new Set(), leadCounts = null)
 }
 
 
-async function renderCuratorWorkspace(ctx, userId, wsId) {
+async function renderCuratorWorkspace(ctx, userId, wsId, opts = {}) {
   const wsIdNum = Number(wsId);
-  const ws = await db.getWorkspaceAny(wsIdNum);
+  const isAdmin = Boolean(opts.isAdmin);
+  if (!wsIdNum) {
+    await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
+    return;
+  }
 
-  const wsTitle = ws ? wsLabelNice(ws) : `Канал #${wsIdNum}`;
+  // Do not use an unrestricted workspace lookup until actor access is proven.
+  // This keeps stale or forged callbacks from confirming a private channel exists.
+  let ws = null;
+  if (isAdmin) {
+    ws = await db.getWorkspaceAny(wsIdNum);
+  } else {
+    const assigned = await db.listCuratorWorkspaces(userId);
+    const membership = assigned.find((item) => Number(item?.id || 0) === wsIdNum) || null;
+    if (!membership) {
+      await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
+      return;
+    }
+    ws = await db.getWorkspaceAny(wsIdNum);
+  }
+
+  if (!ws) {
+    await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
+    return;
+  }
+
+  const wsTitle = wsLabelNice(ws);
 
   // If owner disabled curator mode — show info + allow leaving
   if (ws && !ws.curator_enabled) {
@@ -18917,14 +18970,14 @@ async function renderCuratorWorkspace(ctx, userId, wsId) {
     let leadCounts = null;
   try { leadCounts = await db.countBrandLeadsByStatus(wsIdNum); } catch {}
 
-  
+
   const leadsLine = leadCounts
     ? `
 
 📨 Заявки от брендов: <b>${Number(leadCounts.new || 0)}</b> новых · <b>${Number(leadCounts.in_progress || 0)}</b> в работе`
     : '';
 
-  
+
   const text = `👤 <b>Куратор</b> • ${escapeHtml(wsTitle)}${leadsLine}
 
 ${giveaways.length ? 'Конкурсы:' : 'Пока нет конкурсов.'}
@@ -18969,7 +19022,7 @@ function curatorGwKb(wsId, gwId) {
 async function renderCuratorGiveawayOpen(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
   if (!g || Number(g.workspace_id) !== Number(wsId)) {
-    return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+    return renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
   }
 
   const checked = await getCurGwChecked(g.id);
@@ -19002,7 +19055,7 @@ ${notesBlock}
 
 async function renderCuratorGiveawayStats(ctx, userId, wsId, gwId) {
   const st = await db.getGiveawayStatsForCurator(Number(gwId), userId);
-  if (!st) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!st) return renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
 
   const text = `📊 <b>Статистика конкурса #${gwId}</b>
 
@@ -19022,19 +19075,19 @@ async function renderCuratorGiveawayStats(ctx, userId, wsId, gwId) {
 
 async function renderCuratorGiveawayLog(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) return renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
   const rows = await db.listGiveawayAudit(Number(gwId), 30);
   const lines = rows.map(r => `• <b>${escapeHtml(r.action)}</b> — ${fmtTs(r.created_at)}`);
   const text = `🧾 <b>Лог конкурса #${gwId}</b>
 
-${lines.length ? lines.join('\n') : 'Пока пусто.'}`;
+${lines.length ? lines.join('\n') : emptyStateText({ title: 'Событий пока нет', reason: 'Лог заполнится после первого действия с конкурсом.', action: 'Вернись к карточке конкурса.' })}`;
   const kb = navKb(`a:cur_gw_open|ws:${wsId}|i:${gwId}`);
   await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 async function renderCuratorGiveawayRemindQ(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) return renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
 
   const text = `📣 <b>Напомнить проверить</b>
 
@@ -19049,7 +19102,7 @@ async function renderCuratorGiveawayRemindQ(ctx, userId, wsId, gwId) {
 
 async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) return renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
 
   const chatId = g.published_chat_id ?? g.published_chat ?? g.channel_id ?? null;
   if (!chatId) {
@@ -19058,7 +19111,8 @@ async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
   }
 
   if (!(await redisHealthOkQuick())) {
-    await ctx.answerCallbackQuery({ text: '⚠️ Временно недоступно (Redis). Чтобы избежать спама, отправка напоминаний отключена. Попробуй позже.' });
+    reportCopySafetyDiagnostic('curator_reminder_rate_limit_store_unavailable', { workspaceId: Number(wsId), giveawayId: Number(gwId) });
+    await ctx.answerCallbackQuery({ text: '⚠️ Напоминание временно недоступно. Попробуй позже.' });
     await renderCuratorGiveawayOpen(ctx, userId, wsId, gwId);
     return;
   }
@@ -19089,13 +19143,13 @@ async function renderCuratorGiveawayRemindSend(ctx, userId, wsId, gwId) {
     await ctx.answerCallbackQuery({ text: 'Не удалось отправить в канал.' });
   }
 
-  
+
 await renderCuratorGiveawayOpen(ctx, userId, wsId, gwId);
 }
 
 async function renderCuratorGiveawayOwnerNotifyQ(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) return renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
 
   const checked = await getCurGwChecked(g.id);
   const notes = await getCurGwNotes(g.id, 3);
@@ -19130,10 +19184,11 @@ ${curatorNotesBlock(notes)}
 
 async function renderCuratorGiveawayOwnerNotifySend(ctx, userId, wsId, gwId) {
   const g = await db.getGiveawayForCurator(Number(gwId), userId);
-  if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!g) return renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
 
   if (!(await redisHealthOkQuick())) {
-    await ctx.answerCallbackQuery({ text: '⚠️ Временно недоступно (Redis). Чтобы не заспамить владельца, отправка отключена. Попробуй позже.' });
+    reportCopySafetyDiagnostic('curator_owner_notice_rate_limit_store_unavailable', { workspaceId: Number(wsId), giveawayId: Number(gwId) });
+    await ctx.answerCallbackQuery({ text: '⚠️ Сообщение владельцу временно недоступно. Попробуй позже.' });
     await renderCuratorGiveawayOpen(ctx, userId, wsId, gwId);
     return;
   }
@@ -19243,7 +19298,7 @@ function accessLine(chat, a) {
 export async function renderGwPreflight(ctx, ownerUserId, gwId, { forceRecheck = false } = {}) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeEditOrReply(ctx, 'Нет доступа.');
+    await renderRecovery(ctx, 'giveaway');
     return;
   }
 
@@ -19324,7 +19379,7 @@ ${lines.join('\n')}
 export async function renderGwWhyMenu(ctx, ownerUserId, gwId) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeEditOrReply(ctx, 'Нет доступа.');
+    await renderRecovery(ctx, 'giveaway');
     return;
   }
 
@@ -19335,7 +19390,7 @@ export async function renderGwWhyMenu(ctx, ownerUserId, gwId) {
     .row()
     .text('⬅️ Назад', `a:gw_stats|i:${gwId}`);
 
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(ctx,
     `ℹ️ <b>Почему участник не прошёл</b>\n\nВыбери режим:\n• <b>Ввести ID</b> — быстро и надёжно.\n• <b>Переслать сообщение</b> — сработает только если у участника выключена “Forward privacy”.`,
     { parse_mode: 'HTML', reply_markup: kb }
   );
@@ -19364,7 +19419,7 @@ function buildWhyText({ gwId, targetUserId, check }) {
     const ref = formatChatRef(r.chat);
     if (r.status === 'ok') return `✅ ${ref} — подписка OK`;
     if (r.status === 'no') return `❌ ${ref} — <b>нет подписки</b>`;
-    return `❔ ${ref} — <b>не могу проверить</b> (нет доступа/приватный канал)`;
+    return `❔ ${ref} — <b>не могу проверить</b> (проверка недоступна или канал закрыт)`;
   });
 
   let help = 'Если участник подписался только что — пусть нажмёт “Проверить” заново.';
@@ -19386,7 +19441,7 @@ ${lines.length ? lines.join('\n') : 'Нет каналов для проверк
 export async function renderGwWhyResult(ctx, ownerUserId, gwId, targetUserId, { forceRecheck = false } = {}) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await safeEditOrReply(ctx, 'Нет доступа.');
+    await renderRecovery(ctx, 'giveaway');
     return;
   }
 
@@ -19408,7 +19463,7 @@ export async function renderGwWhyResult(ctx, ownerUserId, gwId, targetUserId, { 
 export async function sendGwWhyResult(ctx, ownerUserId, gwId, targetUserId, { forceRecheck = false } = {}) {
   const g = await db.getGiveawayForOwner(gwId, ownerUserId);
   if (!g) {
-    await ctx.reply('Нет доступа.');
+    await ctx.reply(recoveryHtml('giveaway'), { parse_mode: 'HTML' });
     return;
   }
 
@@ -19740,7 +19795,7 @@ export function getBot() {
 
 
 
-  
+
   // Support: accept text OR media (photo/screenshot) as one message.
   // Text is handled in message:text router; media is handled here.
   bot.on('message', async (ctx, next) => {
@@ -20687,7 +20742,7 @@ if (containsUrl(expandedPlain)) warnLines.push('🔗 В тексте есть с
     }
 
 
-    
+
 // --- Admin: Outbox -> Save as DM template (label input) (STEP204) ---
 if (exp.type === 'adm_outbox_tpl_label') {
   if (!isSuperAdminTg(tgId)) { await ctx.reply('Нет доступа.'); return; }
@@ -21514,7 +21569,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
 
       const g = await db.getGiveawayForCurator(gwId, u.id);
       if (!g || Number(g.workspace_id) !== wsId) {
-        await ctx.reply('Нет доступа.');
+        await ctx.reply(recoveryPlain('giveaway'));
         return;
       }
 
@@ -21603,7 +21658,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
 
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) {
-        await ctx.reply('Нет доступа.');
+        await ctx.reply(recoveryPlain('folder'));
         return;
       }
 
@@ -21637,7 +21692,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
 
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) {
-        await ctx.reply('Нет доступа.');
+        await ctx.reply(recoveryPlain('folder'));
         return;
       }
 
@@ -21691,7 +21746,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
 
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) {
-        await ctx.reply('Нет доступа.');
+        await ctx.reply(recoveryPlain('folder'));
         return;
       }
 
@@ -21726,7 +21781,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
 
       const access = await getFolderAccess(u.id, wsId);
       if (!access || !access.canEdit) {
-        await ctx.reply('Нет доступа.');
+        await ctx.reply(recoveryPlain('folder'));
         return;
       }
 
@@ -21772,7 +21827,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       const wsId = Number(exp.wsId);
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) {
-        await ctx.reply('Нет доступа.');
+        await ctx.reply(recoveryPlain('channel'));
         return;
       }
 
@@ -21806,7 +21861,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
 
 
 
-    
+
     // Brand lead from public profile (vitrina) — 2-step (contact -> request)
     if (exp.type === 'wsp_lead_step1') {
       const wsId = Number(exp.wsId || 0);
@@ -21990,7 +22045,7 @@ ${escapeHtml(details)}`;
       const isOwner = Number(ws.owner_user_id) === Number(u.id);
       const isAdmin = isSuperAdminTg(tgId);
       if (!isOwner && !isAdmin) {
-        await ctx.reply('Нет доступа.');
+        await ctx.reply(recoveryPlain('application'));
         return;
       }
 
@@ -22101,7 +22156,7 @@ ${escapeHtml(details)}`;
       return;
     }
 
-    
+
 
 
 
@@ -22128,7 +22183,7 @@ ${escapeHtml(details)}`;
       const brandOk = Number(lead.brand_user_id || 0) === Number(u.id) || Number(lead.brand_tg_id || 0) === Number(ctx.from.id);
       if (!brandOk) {
         await clearExpectText(ctx.from.id);
-        return ctx.reply('⚠️ Нет доступа к этой заявке.');
+        return ctx.reply(recoveryPlain('application'));
       }
 
       await appendBrandLeadThread(leadId, 'brand', msg);
@@ -22828,7 +22883,7 @@ if (exp.type === 'brand_deals_search') {
       const wsId = Number(exp.wsId);
       const field = String(exp.field || '');
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) { await ctx.reply('Нет доступа к этому каналу.'); return; }
+      if (!ws) { await ctx.reply(recoveryPlain('channel')); return; }
 
       const igMeta0 = wsIgMeta(ws) || {};
       const igLockedByOAuth = igMeta0?.verified === true && String(igMeta0?.verified_method || '') === 'oauth';
@@ -22951,7 +23006,7 @@ if (exp.type === 'brand_deals_search') {
 
       const isAdmin = isSuperAdminTg(ctx.from?.id);
       const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(u.id, wsId);
-      if (!ws) { await ctx.reply('Нет доступа к этому каналу.'); return; }
+      if (!ws) { await ctx.reply(recoveryPlain('channel')); return; }
 
       const raw = String(ctx.message.text || '').trim();
       await safeDeleteIncomingUserMessage(ctx);
@@ -23460,7 +23515,7 @@ ${msgText}
         await db.addBarterThreadProofLink(threadId, asUserId, raw);
       } catch (e) {
         if (String(e?.message || '') === 'NO_THREAD_ACCESS') {
-          await ctx.reply('Нет доступа к этому диалогу.');
+          await ctx.reply(recoveryPlain('dialog'));
           return;
         }
         throw e;
@@ -23474,7 +23529,7 @@ ${msgText}
       return;
     }
 
-    
+
     // Brand profile edit (Brand Mode)
     if (exp.type === 'brand_prof_field') {
       const field = String(exp.field || '');
@@ -23813,7 +23868,7 @@ ${list}
         await db.addBarterThreadProofScreenshot(threadId, asUserId, fileId);
       } catch (e) {
         if (String(e?.message || '') === 'NO_THREAD_ACCESS') {
-          await ctx.reply('Нет доступа к этому диалогу.');
+          await ctx.reply(recoveryPlain('dialog'));
           return;
         }
         throw e;
@@ -23869,7 +23924,7 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        await ctx.reply(recoveryPlain('offer'), { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:${page || 0}`) });
         return;
       }
 
@@ -23919,7 +23974,7 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        await ctx.reply(recoveryPlain('offer'), { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:${page || 0}`) });
         return;
       }
 
@@ -23972,7 +24027,7 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        await ctx.reply(recoveryPlain('offer'), { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:${page || 0}`) });
         return;
       }
 
@@ -24047,7 +24102,7 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        await ctx.reply(recoveryPlain('offer'), { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:${page || 0}`) });
         return;
       }
 
@@ -24072,7 +24127,7 @@ ${list}
       const o = await db.getBarterOfferForOwner(ctx.from.id, offerId);
       if (!o) {
         await clearExpectText(ctx.from.id);
-        await ctx.reply('Оффер не найден или нет доступа.');
+        await ctx.reply(recoveryPlain('offer'), { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:${page || 0}`) });
         return;
       }
 
@@ -24195,7 +24250,7 @@ ${list}
     }
     if (payload?.type === 'gwo') {
       const g = await db.getGiveawayForOwner(payload.id, u.id);
-      if (!g) return ctx.reply('Нет доступа к этому конкурсу.');
+      if (!g) return ctx.reply(recoveryPlain('giveaway'));
       const sponsors = await db.listGiveawaySponsors(payload.id);
       const sponsorLines = sponsors.map(s => `• ${escapeHtml(s.sponsor_text)}`).join('\n') || '—';
       const text = `🎁 <b>Конкурс #${g.id}</b>\n\nСтатус: <b>${escapeHtml(gwStatusLabel(gwEffectiveStatusValue(g)))}</b>
@@ -24354,7 +24409,7 @@ ${list}
       return;
     }
 
-    
+
     if (payload?.type === 'wsp') {
       const wsId = Number(payload.wsId || 0);
       if (!wsId) return ctx.reply('Профиль не найден.');
@@ -25127,7 +25182,7 @@ if (p.a === 'a:ui_mode_set') {
   const flags = await getRoleFlags(u, ctx.from.id);
   const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
   if (curMode) {
-    await safeEditOrReply(ctx, 
+    await safeEditOrReply(ctx,
       `🧹 <b>Режим куратора</b> включен.\n\nДля простоты я скрываю лишнее меню.\n\nТы сейчас в режиме: <b>Curator</b>`,
       { parse_mode: 'HTML', reply_markup: curatorModeMenuKb(flags) }
     );
@@ -26514,7 +26569,7 @@ ${escapeHtml(safeText)}
       await clearExpectText(ctx.from.id);
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       await renderCuratorHome(ctx, u.id);
@@ -26526,7 +26581,7 @@ ${escapeHtml(safeText)}
       await clearExpectText(ctx.from.id);
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       const st = leadStatusFromCb(String(p.s || 'n'));
@@ -26537,13 +26592,21 @@ ${escapeHtml(safeText)}
     }
 
     if (p.a === 'a:cur_ws_off') {
-      // Backward-compat: old buttons for disabled workspaces
+      // Backward-compat: old buttons for disabled workspaces.
       await ctx.answerCallbackQuery();
+      const flags = await getRoleFlags(u, ctx.from.id);
+      if (!flags.isCurator && !flags.isAdmin) {
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
+        return;
+      }
       const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return;
-      await renderCuratorWorkspace(ctx, u.id, wsId);
+      if (!wsId) {
+        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
+        return;
+      }
+      await renderCuratorWorkspace(ctx, u.id, wsId, { isAdmin: flags.isAdmin });
       return;
     }
 
@@ -26553,14 +26616,17 @@ ${escapeHtml(safeText)}
       await clearExpectText(ctx.from.id);
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return;
-      await renderCuratorWorkspace(ctx, u.id, wsId);
+      if (!wsId) {
+        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
+        return;
+      }
+      await renderCuratorWorkspace(ctx, u.id, wsId, { isAdmin: flags.isAdmin });
       return;
     }
 
@@ -26568,24 +26634,31 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return;
+      if (!wsId) {
+        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
+        return;
+      }
 
       // ensure user is actually curator for this workspace
       const items = await db.listCuratorWorkspaces(u.id);
       const ok = items.some(w => Number(w.id) === wsId);
       if (!ok && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
         return;
       }
 
       const ws = await db.getWorkspaceAny(wsId);
-      const wsTitle = ws ? wsLabelNice(ws) : `Канал #${wsId}`;
+      if (!ws) {
+        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
+        return;
+      }
+      const wsTitle = wsLabelNice(ws);
       const kb = new InlineKeyboard()
         .text('✅ Выйти', `a:cur_leave_do|ws:${wsId}`)
         .text('❌ Отмена', `a:cur_ws|ws:${wsId}`);
@@ -26601,21 +26674,23 @@ ${escapeHtml(safeText)}
     }
 
     if (p.a === 'a:cur_leave_do') {
-      await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return;
+      if (!wsId) {
+        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
+        return;
+      }
 
       const items = await db.listCuratorWorkspaces(u.id);
       const ok = items.some(w => Number(w.id) === wsId);
       if (!ok && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
         return;
       }
 
@@ -26633,7 +26708,7 @@ ${escapeHtml(safeText)}
       await clearExpectText(ctx.from.id);
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       await renderCuratorGiveawayOpen(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
@@ -26644,7 +26719,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       await renderCuratorGiveawayStats(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
@@ -26655,7 +26730,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       await renderCuratorGiveawayLog(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
@@ -26666,7 +26741,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       await renderCuratorGiveawayRemindQ(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
@@ -26677,7 +26752,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       await renderCuratorGiveawayRemindSend(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
@@ -26688,7 +26763,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       await renderCuratorGiveawayOwnerNotifyQ(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
@@ -26699,7 +26774,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       await renderCuratorGiveawayOwnerNotifySend(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
@@ -26712,7 +26787,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       const wsId = Number(p.w || p.ws || 0);
@@ -26742,7 +26817,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       const wsId = Number(p.w || p.ws || 0);
@@ -26753,7 +26828,7 @@ ${escapeHtml(safeText)}
 
       const g = await db.getGiveawayForCurator(gwId, u.id);
       if (!g || Number(g.workspace_id) !== wsId) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
         return;
       }
 
@@ -26775,7 +26850,7 @@ ${escapeHtml(safeText)}
       await ctx.answerCallbackQuery();
       const flags = await getRoleFlags(u, ctx.from.id);
       if (!flags.isCurator && !flags.isAdmin) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
         return;
       }
       const wsId = Number(p.w || p.ws || 0);
@@ -26786,12 +26861,13 @@ ${escapeHtml(safeText)}
 
       const g = await db.getGiveawayForCurator(gwId, u.id);
       if (!g || Number(g.workspace_id) !== wsId) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
         return;
       }
 
       if (!(await redisHealthOkQuick())) {
-        await safeEditOrReply(ctx, '⚠️ Временно недоступно: Redis (заметки). Попробуй позже.', {
+        reportCopySafetyDiagnostic('curator_notes_store_unavailable', { workspaceId: wsId, giveawayId: gwId });
+        await safeEditOrReply(ctx, '⚠️ Заметки временно недоступны. Попробуй позже.', {
           parse_mode: 'HTML',
           reply_markup: navKb(`a:cur_gw_open|ws:${wsId}|i:${gwId}`)
         });
@@ -26837,7 +26913,7 @@ if (p.a === 'a:wsp_preview') {
       const wsId = Number(p.w || p.ws || 0);
 
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) return ctx.answerCallbackQuery({ text: 'Workspace не найден.' });
+      if (!wsId) return answerRecovery(ctx, 'channel', { showAlert: true });
 
       try { await ctx.answerCallbackQuery({ text: 'Открываю витрину…' }); } catch {}
 
@@ -26847,9 +26923,7 @@ if (p.a === 'a:wsp_preview') {
         const cid = ctx?.state?.cid || `${ctx?.update?.update_id ?? 0}-${ctx?.from?.id ?? 0}`;
         try { console.warn('[wsp_preview] error', { cid, wsId, err: String(e?.message || e) }); } catch {}
         const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`);
-        await safeEditOrReply(ctx, `⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз.
-
-cid: ${cid}`, { reply_markup: kb });
+        await safeEditOrReply(ctx, '⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз.', { reply_markup: kb });
       }
       return;
     }
@@ -27003,7 +27077,7 @@ ${tail}`;
       const wsId = Number(p.w || p.ws || 0);
       if (!wsId) {
         await setMonUnlockDiag({ source: 'click',  status: 'skipped', errorCode: 'bad_ws_id', wsId: null });
-        try { await ctx.answerCallbackQuery({ text: 'Workspace не найден.', show_alert: true }); } catch {}
+        try { await answerRecovery(ctx, 'channel', { showAlert: true }); } catch {}
         return;
       }
 
@@ -27324,7 +27398,7 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
       return;
     }
 
-    
+
 // Alias for legacy payloads: "send request to creator" from old vitrina buttons
 if (p.a === 'a:send_request_to_creator') {
   const wsId = Number(p.ws || p.w || p.wsId || 0);
@@ -27342,13 +27416,13 @@ if (p.a === 'a:wsp_lead_new') {
 	        await renderStaleButton(ctx, { text: '⚠️ Витрина не найдена или кнопка устарела. Открой витрину заново и попробуй снова.', backCb: 'a:menu' });
 	        return;
 	      }
-	
+
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
 
       // Prevent self-apply and curator-mode confusion (old buttons may still exist)
       const ws = await db.getWorkspaceAny(wsId);
       if (!ws) {
-        await ctx.answerCallbackQuery({ text: 'Профиль не найден.', show_alert: true });
+        await answerRecovery(ctx, 'channel', { showAlert: true });
         return;
       }
 
@@ -27373,9 +27447,7 @@ if (p.a === 'a:wsp_lead_new') {
         const cid = ctx?.state?.cid || `${ctx?.update?.update_id ?? 0}-${ctx?.from?.id ?? 0}`;
         try { console.warn('[wsp_preview] error', { cid, wsId, err: String(e?.message || e) }); } catch {}
         const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`);
-        await safeEditOrReply(ctx, `⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз.
-
-cid: ${cid}`, { reply_markup: kb });
+        await safeEditOrReply(ctx, '⚠️ Не удалось открыть предпросмотр. Попробуй ещё раз.', { reply_markup: kb });
       }
         return;
       }
@@ -27462,7 +27534,7 @@ cid: ${cid}`, { reply_markup: kb });
       return;
     }
     // Leads inbox (owner + SUPER_ADMIN)
-    
+
 	if (p.a === 'a:brand_apps') {
 	  await ctx.answerCallbackQuery();
 	  const status = String(p.s || 'new');
@@ -27664,7 +27736,7 @@ if (p.a === 'a:brand_app_del_do') {
   const appId = Number(p.id || 0);
   if (!appId) return;
   const app = await getBrandAppForActorSafe(ctx, u.id, appId);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+  if (!app) { try { await answerRecovery(ctx, 'application'); } catch {} return; }
   await db.softDeleteBrandApplication(appId, u.id);
   await ctx.answerCallbackQuery({ text: '🗑 Заявка удалена' });
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
@@ -27680,7 +27752,7 @@ if (p.a === 'a:brand_app_set') {
   const back = { status: String(p.s || 'new'), page: Math.max(0, Number(p.p || 0)) };
 
   const app = await getBrandAppForActorSafe(ctx, u.id, appId);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+  if (!app) { try { await answerRecovery(ctx, 'application'); } catch {} return; }
   const isAdmin = isSuperAdminTg(ctx.from?.id);
   if (!isAdmin && Number(app.creator_user_id) === Number(u.id)) {
     try { await ctx.answerCallbackQuery({ text: 'Статус меняет только бренд.' }); } catch {}
@@ -27873,7 +27945,7 @@ if (p.a === 'a:brand_app_card') {
 
   // Route by role: creator sees their card, brand/manager sees brand view
   const app = await getBrandAppForActorSafe(ctx, u.id, appId);
-  if (!app) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена или нет доступа.' }); } catch {} return; }
+  if (!app) { try { await answerRecovery(ctx, 'application'); } catch {} return; }
 
   if (Number(app.creator_user_id) === Number(u.id)) {
     await renderBrandAppCardForCreator(ctx, u.id, appId);
@@ -27891,7 +27963,7 @@ if (p.a === 'a:ws_leads') {
 	        await renderStaleButton(ctx, { text: '⚠️ Канал не выбран или кнопка устарела. Открой 📋 Меню → «📣 Мои каналы» и выбери канал.', backCb: 'a:ws_list' });
 	        return;
 	      }
-	
+
 	      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const st = leadStatusFromCb(String(p.s || 'new'));
       const retKey = String(p.ret || retFromCb(p.r) || '').trim();
@@ -27931,7 +28003,7 @@ cid: ${cid || '—'}`, { reply_markup: navKb(backCb) });
       return;
     }
 
-    
+
     if (p.a === 'a:lead_tpls') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const leadId = Number(p.id || 0);
@@ -28005,7 +28077,7 @@ if (p.a === 'a:lead_assign') {
   if (!leadId) return;
   const action = String(p.do || '');
   const lead = await getLeadForActorSafe(ctx, u.id, leadId);
-  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Заявка не найдена или нет доступа.' }); } catch {} return; }
+  if (!lead) { try { await answerRecovery(ctx, 'application'); } catch {} return; }
   const wsId = Number(lead.workspace_id);
 
   // Only curator/owner/admin can assign.
@@ -28016,7 +28088,7 @@ if (p.a === 'a:lead_assign') {
     try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
   }
   if (!isOwner && !isAdmin && !isCurator) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    try { await answerRecovery(ctx, 'application'); } catch {}
     return;
   }
 
@@ -28118,7 +28190,7 @@ if (p.a === 'a:lead_del_do') {
   const leadId = Number(p.id || 0);
   if (!leadId) return;
   const lead = await getLeadForActorSafe(ctx, u.id, leadId);
-  if (!lead) { try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {} return; }
+  if (!lead) { try { await answerRecovery(ctx, 'application'); } catch {} return; }
   const wsIdReal = Number(lead.workspace_id);
 
   // Soft delete is global (deleted_by_user_ids affects team listing) — restrict to curator/owner/admin.
@@ -28129,7 +28201,7 @@ if (p.a === 'a:lead_del_do') {
     try { isCurator = await db.isCuratorForWorkspace(wsIdReal, u.id); } catch {}
   }
   if (!isOwner && !isAdmin && !isCurator) {
-    try { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); } catch {}
+    try { await answerRecovery(ctx, 'application'); } catch {}
     return;
   }
 
@@ -28168,7 +28240,7 @@ if (p.a === 'a:lead_set') {
         try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
       }
       if (!isOwner && !isAdmin && !isCurator) {
-        await safeEditOrReply(ctx, '⚠️ Нет доступа к изменению статуса этой заявки.', { reply_markup: navKb('a:menu') });
+        await renderRecovery(ctx, 'application', { backCb: 'a:menu' });
         return;
       }
 
@@ -28374,7 +28446,7 @@ if (p.a === 'a:lead_set') {
         try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
       }
       if (!isOwner && !isAdmin && !isCurator) {
-        await safeEditOrReply(ctx, '⚠️ Нет доступа к заметкам этой заявки.', { reply_markup: navKb('a:menu') });
+        await renderRecovery(ctx, 'application', { backCb: 'a:menu' });
         return;
       }
 
@@ -28447,7 +28519,7 @@ if (p.a === 'a:lead_set') {
         try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
       }
       if (!isOwner && !isAdmin && !isCurator) {
-        await safeEditOrReply(ctx, '⚠️ Нет доступа к заметкам этой заявки.', { reply_markup: navKb('a:menu') });
+        await renderRecovery(ctx, 'application', { backCb: 'a:menu' });
         return;
       }
 
@@ -28511,7 +28583,7 @@ if (p.a === 'a:lead_set') {
         try { isCurator = await db.isCuratorForWorkspace(wsId, u.id); } catch {}
       }
       if (!isOwner && !isAdmin && !isCurator) {
-        await safeEditOrReply(ctx, '⚠️ Нет доступа к заметкам этой заявки.', { reply_markup: navKb('a:menu') });
+        await renderRecovery(ctx, 'application', { backCb: 'a:menu' });
         return;
       }
 
@@ -28584,7 +28656,7 @@ if (p.a === 'a:lead_set') {
 
       const isOwner = Number(ws.owner_user_id) === Number(u.id);
       const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isOwner && !isAdmin) { await safeEditOrReply(ctx, '⚠️ Нет доступа к этой заявке. Открой 📋 Меню → выбери канал заново.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') }); return; }
+      if (!isOwner && !isAdmin) { await renderRecovery(ctx, 'application', { backCb: 'a:ws_list' }); return; }
 
       const backStatus = leadStatusFromCb(String(p.s || 'new'));
       const retKey = String(p.ret || retFromCb(p.r) || '').trim();
@@ -28594,7 +28666,7 @@ if (p.a === 'a:lead_set') {
       const kb = new InlineKeyboard()
         .text('⬅️ Назад', `a:lead_view|id:${leadId}|w:${Number(ws.id)}|s:${leadStatusToCb(backStatus)}|p:${Number(p.p || 0)}${rPart}`);
 
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `✍️ <b>Ответ на заявку #${leadId}</b>
 
 Напиши ответ одним сообщением.`,
@@ -28785,7 +28857,7 @@ if (p.a === 'a:lead_set') {
         }
 
         if (CFG.BRAND_VERIFY_REQUIRES_EXTENDED && !isBrandExtendedComplete(prof)) {
-          await safeEditOrReply(ctx, 
+          await safeEditOrReply(ctx,
             `🏷 <b>Верификация Brand</b>
 
 Чтобы подать заявку как бренд, заполни расширенный профиль:
@@ -28808,7 +28880,7 @@ if (p.a === 'a:lead_set') {
 
 
       await setExpectText(ctx.from.id, { type: 'verify_submit', kind });
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `✅ <b>Заявка на верификацию</b>
 
 Отправь одним сообщением:
@@ -28843,7 +28915,7 @@ if (p.a === 'a:lead_set') {
       await renderWsInactiveList(ctx, u.id);
       return;
     }
-    
+
     if (p.a === 'a:pro_home') {
       await ctx.answerCallbackQuery();
       const ws = await ensureWorkspaceForOwner(ctx, u.id);
@@ -28884,7 +28956,7 @@ if (p.a === 'a:ws_open') {
       return;
     }
 
-    
+
     if (p.a === 'a:ws_share') {
       try { await ctx.answerCallbackQuery(); } catch {}
       const wsId = Number(p.w || p.ws || 0);
@@ -29028,7 +29100,7 @@ if (p.a === 'a:ws_ig_verify_oauth') {
   }
 
   const ws = await db.getWorkspace(u.id, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) return answerRecovery(ctx, 'channel');
 
   // One-time token for web OAuth start (TTL 10 min).
   const t = randomToken();
@@ -29071,7 +29143,7 @@ if (p.a === 'a:ws_prof_mode') {
       const allowed = ['channel', 'ugc', 'both'];
       if (!allowed.includes(mode)) return ctx.answerCallbackQuery({ text: 'Неверный режим.' });
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await db.setWorkspaceSetting(wsId, { profile_mode: mode });
       await db.auditWorkspace(wsId, u.id, 'ws.profile_mode_updated', { mode });
       await renderWsProfileMode(ctx, u.id, wsId);
@@ -29088,7 +29160,7 @@ if (p.a === 'a:ws_prof_mode') {
       const wsId = Number(p.ws);
       const key = String(p.v || '');
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const cur = Array.isArray(ws.profile_verticals) ? ws.profile_verticals.map(String) : [];
       const has = cur.includes(key);
@@ -29109,7 +29181,7 @@ if (p.a === 'a:ws_prof_mode') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await db.setWorkspaceSetting(wsId, { profile_verticals: [] });
       await db.auditWorkspace(wsId, u.id, 'ws.profile_verticals_cleared', {});
       await renderWsProfileVerticals(ctx, u.id, wsId);
@@ -29126,7 +29198,7 @@ if (p.a === 'a:ws_prof_mode') {
       const wsId = Number(p.ws);
       const key = String(p.f || '');
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const cur = Array.isArray(ws.profile_formats) ? ws.profile_formats.map(String) : [];
       const has = cur.includes(key);
@@ -29147,7 +29219,7 @@ if (p.a === 'a:ws_prof_mode') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await db.setWorkspaceSetting(wsId, { profile_formats: [] });
       await db.auditWorkspace(wsId, u.id, 'ws.profile_formats_cleared', {});
       await renderWsProfileFormats(ctx, u.id, wsId);
@@ -29170,7 +29242,7 @@ if (p.a === 'a:ws_prof_mode') {
 
       const isAdmin = isSuperAdminTg(ctx.from?.id);
       const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const legacy = ws.profile_contact ? String(ws.profile_contact).trim() : '';
       if (!legacy) {
@@ -29261,7 +29333,7 @@ if (p.a === 'a:ws_prof_mode') {
 
       const isAdmin = isSuperAdminTg(ctx.from?.id);
       const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const o = wsProfileContactsObj(ws);
       delete o[key];
@@ -29286,7 +29358,7 @@ if (p.a === 'a:ws_prof_mode') {
       if (!allowed.has(field)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
 
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       if (field === 'contact') await db.setWorkspaceSetting(wsId, { profile_contact: null });
       if (field === 'ig') await db.setWorkspaceSetting(wsId, { profile_ig: null });
@@ -29332,7 +29404,7 @@ if (p.a === 'a:ws_prof_mode') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const text =
         `🧹 <b>Сбросить витрину?</b>
@@ -29362,7 +29434,7 @@ if (p.a === 'a:ws_prof_mode') {
     if (p.a === 'a:ws_prof_reset_ok') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       await db.setWorkspaceSetting(wsId, {
         profile_title: null,
@@ -29399,7 +29471,7 @@ if (p.a === 'a:ws_prof_mode') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const tokenRaw = randomToken(10);
       const payloadPrefix = `pro_${wsId}_${u.id}_`;
       const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
@@ -29687,7 +29759,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await safeEditOrReply(ctx,
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -29711,7 +29783,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await safeEditOrReply(ctx,
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -30204,7 +30276,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await safeEditOrReply(ctx,
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -30229,7 +30301,7 @@ ${link}`;
 
       const bm = wsId === 0 ? await resolveBmBrandContext(ctx, u) : { enabled: false };
       if (wsId === 0 && bm.enabled && bm.brandUserId !== u.id) {
-        await safeEditOrReply(ctx, 
+        await safeEditOrReply(ctx,
           '⛔️ Недостаточно прав. Этот раздел доступен только владельцу бренда.',
           { parse_mode: 'HTML', reply_markup: navKb('a:menu') }
         );
@@ -30276,7 +30348,7 @@ ${link}`;
       return;
     }
 
-    
+
     // Profile Matching (pm_*)
     if (p.a === 'a:pm_home') {
       await ctx.answerCallbackQuery();
@@ -30551,7 +30623,7 @@ if (p.a === 'a:match_home') {
       const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
       const id = Number(p.id);
       const ok = await db.stopFeaturedPlacement(id, u.id);
-      if (!ok) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ok) return answerRecovery(ctx, 'offer');
       await ctx.answerCallbackQuery({ text: 'Остановлено.' });
       await renderBxFeed(ctx, u.id, wsId, Number(p.p || 0), { h });
       return;
@@ -30560,7 +30632,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const isPro = await db.isWorkspacePro(wsId);
       if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно только в PRO.' });
       const offers = await db.listMyBarterOffers(wsId);
@@ -30578,7 +30650,7 @@ if (p.a === 'a:match_home') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const isPro = await db.isWorkspacePro(wsId);
       if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно только в PRO.' });
       await db.setWorkspacePinnedOffer(wsId, offerId);
@@ -30590,7 +30662,7 @@ if (p.a === 'a:match_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await db.setWorkspacePinnedOffer(wsId, null);
       await db.auditWorkspace(wsId, u.id, 'ws.pro_pinned_offer', { offerId: null });
       await renderWsPro(ctx, u.id, wsId);
@@ -32021,7 +32093,7 @@ const warnHtml = warnLines.length ? `\n\n<i>${escapeHtml(warnLines.join('\n'))}<
       return;
     }
 
-    
+
 
     // --- Admin: Cancel reply session in support group ---
     if (p.a === 'a:adm_support_reply_cancel') {
@@ -32222,7 +32294,7 @@ ${DEGRADED_COPY.line}
       return;
     }
 
-    
+
 // STEP204: Outbox quick actions (repeat / note / save as template)
 if (p.a === 'a:admin_outbox_note') {
   await ctx.answerCallbackQuery();
@@ -33570,7 +33642,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
         compensationType: next.compensationType,
       });
 
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         bxSmartPrefillText(next, info, totalAll, totalFiltered),
         { parse_mode: 'HTML', reply_markup: bxSmartKb(wsId, { h }) }
       );
@@ -33902,7 +33974,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
       const isOwner = Number(offer.owner_user_id) === Number(u.id);
       const isMod = await isModerator(u, ctx.from.id);
       if (!isOwner && !isMod) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.', show_alert: true });
+        await answerRecovery(ctx, 'offer', { showAlert: true });
         return;
       }
 
@@ -33965,7 +34037,7 @@ if (p.a === 'a:bc_simple_btn_preset') {
       const isOwner = Number(offer.owner_user_id) === Number(u.id);
       const isMod = await isModerator(u, ctx.from.id);
       if (!isOwner && !isMod) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.', show_alert: true });
+        await answerRecovery(ctx, 'offer', { showAlert: true });
         return;
       }
 
@@ -34782,7 +34854,7 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const isPro = await db.isWorkspacePro(wsId);
       if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно в PRO.' });
       await db.setWorkspacePinnedOffer(wsId, offerId);
@@ -34796,7 +34868,7 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const isPro = await db.isWorkspacePro(wsId);
       if (!isPro) return ctx.answerCallbackQuery({ text: 'Доступно в PRO.' });
       await db.setWorkspacePinnedOffer(wsId, null);
@@ -34821,7 +34893,9 @@ if (p.a === 'a:bx_retry_help') {
       // owner gate: bump allowed только владельцу канала (ws)
       const ws = await db.getWorkspace(u.id, wsId);
       if (!ws) {
-        await safeEditOrReply(ctx, '⚠️ Нет доступа. Поднимать оффер может только владелец канала.', { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
+        await safeEditOrReply(ctx, `⚠️ <b>Поднять оффер может только владелец канала</b>
+
+Вернись к своим офферам или выбери канал, которым управляешь.`, { parse_mode: 'HTML', reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
         return;
       }
 
@@ -34832,7 +34906,7 @@ if (p.a === 'a:bx_retry_help') {
       }
       const oWs = Number(o?.workspace_id || o?.workspaceId || 0);
       if (!o || oWs !== wsId) {
-        await safeEditOrReply(ctx, '⚠️ Оффер не найден или нет доступа.', { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
+        await renderRecovery(ctx, 'offer', { backCb: `a:bx_my|ws:${wsId}|p:0` });
         return;
       }
 
@@ -34897,7 +34971,7 @@ if (p.a === 'a:bx_retry_help') {
       const wsId = Number(p.ws);
       db.trackEvent('bx_offer_new_open', { userId: u.id, wsId, meta: {} });
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       if (isWorkspaceDisconnected(ws)) {
         await ctx.answerCallbackQuery();
         await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'bx_new' });
@@ -34932,24 +35006,24 @@ if (p.a === 'a:bx_retry_help') {
       return;
     }
 
-    
+
     if (p.a === 'a:bx_preset_home') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         '🧩 <b>Шаблоны оффера</b>\n\nВыбери вариант — мы подготовим категорию/формат/оплату и перейдём к тегам (опционально), затем к тексту оффера.',
         { parse_mode: 'HTML', reply_markup: bxPresetKb(wsId) }
       );
       return;
     }
 
-    
+
     if (p.a === 'a:bx_preset_apply') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const presetId = String(p.id || '');
       const preset = BX_PRESETS.find((x) => x.id === presetId);
@@ -34975,7 +35049,7 @@ if (p.a === 'a:bx_retry_help') {
     if (p.a === 'a:bx_params') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
       await safeEditOrReply(ctx, 'Шаг 1/4: выбери категорию:', {
@@ -35028,7 +35102,7 @@ if (p.a === 'a:bx_cat') {
       return;
     }
 
-    
+
     if (p.a === 'a:bx_comp') {
       const wsId = Number(p.ws);
       await ctx.answerCallbackQuery();
@@ -35048,7 +35122,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_w5') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
       await renderBxOfferDraftStep(ctx, wsId);
@@ -35059,7 +35133,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_w6') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
 
@@ -35078,7 +35152,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_wtext') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
       await renderBxOfferTextInputStep(ctx, wsId, { backCb: `a:bx_w5|ws:${wsId}` });
@@ -35089,7 +35163,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_wtags') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
       await renderBxOfferWizTagsHome(ctx, wsId);
@@ -35099,7 +35173,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_wtagpick') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const key = String(p.k || '');
       if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
       await ctx.answerCallbackQuery();
@@ -35111,7 +35185,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_wtagt') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const key = String(p.k || '');
       const val = String(p.v || '');
       if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
@@ -35139,7 +35213,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_wtagclr') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const key = String(p.k || '');
       if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
       await ctx.answerCallbackQuery();
@@ -35159,7 +35233,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_wtagdone') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
       await renderBxOfferWizTagsHome(ctx, wsId);
@@ -35169,7 +35243,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_comp_pick') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
@@ -35183,7 +35257,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_ottags') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
       await renderBxOfferTagsStep(ctx, wsId);
@@ -35193,7 +35267,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_otpick') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const key = String(p.k || '');
       if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
@@ -35207,7 +35281,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_ott') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const key = String(p.k || '');
       const val = String(p.v || '');
@@ -35238,7 +35312,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_otclr') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const key = String(p.k || '');
       if (key !== 'goals' && key !== 'req') return ctx.answerCallbackQuery({ text: 'Неверный ключ.' });
@@ -35260,7 +35334,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_otdone') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
@@ -35271,7 +35345,7 @@ if (p.a === 'a:bx_cat') {
     if (p.a === 'a:bx_otnext') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       await ctx.answerCallbackQuery();
       await clearExpectText(ctx.from.id);
@@ -35283,7 +35357,7 @@ if (p.a === 'a:bx_cat') {
 if (p.a === 'a:bx_publish_hint') {
   const wsId = Number(p.ws);
   const ws = await db.getWorkspace(u.id, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) return answerRecovery(ctx, 'channel');
 
   try { await ctx.answerCallbackQuery({ text: 'Сначала введи текст оффера (✍️), затем нажми ✅ Опубликовать.', show_alert: true }); } catch {}
 
@@ -35295,7 +35369,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:bx_otskip') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       await ctx.answerCallbackQuery();
 
@@ -35313,7 +35387,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:bx_publish') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       if (isWorkspaceDisconnected(ws)) {
         await ctx.answerCallbackQuery();
         await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'bx_publish' });
@@ -35433,7 +35507,7 @@ if (p.a === 'a:bx_publish_hint') {
       await clearExpectText(ctx.from.id);
 
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) return answerRecovery(ctx, 'offer');
 
       await db.updateBarterOffer(offerId, { media_type: null, media_file_id: null });
       await ctx.answerCallbackQuery({ text: 'Убрано' });
@@ -35495,7 +35569,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) return answerRecovery(ctx, 'offer');
       await db.updateBarterOfferStatus(offerId, 'PAUSED');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_paused', {});
       await ctx.answerCallbackQuery();
@@ -35507,7 +35581,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) return answerRecovery(ctx, 'offer');
       await db.updateBarterOfferStatus(offerId, 'ACTIVE');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_resumed', {});
       await ctx.answerCallbackQuery();
@@ -35521,7 +35595,7 @@ if (p.a === 'a:bx_publish_hint') {
       const offerId = Number(p.o);
       const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) return answerRecovery(ctx, 'offer');
       await db.updateBarterOfferStatus(offerId, 'CLOSED');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_archived', {});
       await ctx.answerCallbackQuery({ text: 'Архивировано.' });
@@ -35551,7 +35625,7 @@ if (p.a === 'a:bx_publish_hint') {
       const offerId = Number(p.o);
       const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) return answerRecovery(ctx, 'offer');
       const kb = new InlineKeyboard()
         .text('✅ Архивировать', `a:bx_del_do|ws:${wsId}|o:${offerId}|p:${page}`)
         .text('❌ Отмена', `a:bx_view|ws:${wsId}|o:${offerId}|back:my|p:${page}`);
@@ -35567,7 +35641,7 @@ if (p.a === 'a:bx_publish_hint') {
       const offerId = Number(p.o);
       const page = Math.max(0, Number(p.p || 0));
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) return answerRecovery(ctx, 'offer');
       await db.updateBarterOfferStatus(offerId, 'CLOSED');
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_archived', {});
       await ctx.answerCallbackQuery({ text: 'Архивировано.' });
@@ -35578,7 +35652,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:ws_disconnect_q') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       if (isWorkspaceDisconnected(ws)) {
         await ctx.answerCallbackQuery();
         await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'disconnect_confirm' });
@@ -35608,7 +35682,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:ws_disconnect_do') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await db.setWorkspaceChannelConnection(wsId, false);
       await db.auditWorkspace(wsId, u.id, 'ws.channel_disconnected', { network_enabled: false, curator_enabled: false });
       await invalidateWorkspacesCache(u.id);
@@ -35624,7 +35698,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:ws_reconnect_q') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       if (!isWorkspaceDisconnected(ws)) {
         await ctx.answerCallbackQuery();
         await renderWsOpen(ctx, u.id, wsId);
@@ -35653,7 +35727,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:ws_reconnect_do') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await db.setWorkspaceChannelConnection(wsId, true);
       await db.auditWorkspace(wsId, u.id, 'ws.channel_reconnected', {});
       await invalidateWorkspacesCache(u.id);
@@ -35667,7 +35741,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const ret = String(p.ret || 'ws');
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       if (isWorkspaceDisconnected(ws)) {
         await ctx.answerCallbackQuery();
         await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'network_gate' });
@@ -35682,7 +35756,7 @@ if (p.a === 'a:bx_publish_hint') {
       const enabled = String(p.v) === '1';
       const ret = String(p.ret || 'ws') === 'bx' ? 'bx' : 'ws';
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       if (isWorkspaceDisconnected(ws)) {
         await ctx.answerCallbackQuery();
         await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'network_set' });
@@ -35710,7 +35784,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:ws_toggle_cur') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       if (isWorkspaceDisconnected(ws)) {
         await ctx.answerCallbackQuery();
         await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'curator_toggle' });
@@ -35731,7 +35805,7 @@ if (p.a === 'a:bx_publish_hint') {
 	if (p.a === 'a:cur_manage') {
 	  const wsId = Number(p.ws);
 	  const ws = await db.getWorkspace(u.id, wsId);
-	  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+	  if (!ws) return answerRecovery(ctx, 'channel');
 	  await ctx.answerCallbackQuery();
 	  if (isWorkspaceDisconnected(ws)) {
 	    await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'curator_manage' });
@@ -35744,11 +35818,12 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:cur_invite') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       if (!(await redisHealthOkQuick())) {
         await ctx.answerCallbackQuery();
-        await safeEditOrReply(ctx, '⚠️ Временно недоступно: Redis (приглашения). Попробуй позже.', {
+        reportCopySafetyDiagnostic('curator_invite_store_unavailable', { workspaceId: wsId });
+        await safeEditOrReply(ctx, '⚠️ Приглашение временно недоступно. Попробуй позже.', {
           reply_markup: new InlineKeyboard()
             .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
             .text('📋 Меню', 'a:menu')
@@ -35782,11 +35857,12 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:cur_add_username') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       if (!(await redisHealthOkQuick())) {
         await ctx.answerCallbackQuery();
-        await safeEditOrReply(ctx, '⚠️ Временно недоступно: Redis (ввод @username). Попробуй позже.', {
+        reportCopySafetyDiagnostic('curator_username_input_store_unavailable', { workspaceId: wsId });
+        await safeEditOrReply(ctx, '⚠️ Добавление куратора временно недоступно. Попробуй позже.', {
           reply_markup: new InlineKeyboard()
             .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
             .text('📋 Меню', 'a:menu')
@@ -35808,7 +35884,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:cur_list') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await renderCuratorList(ctx, u.id, wsId);
       return;
@@ -35839,7 +35915,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:cur_rm_q') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const curatorUserId = Number(p.u);
       const ret = String(p.ret || 'list');
       const info = await db.getUserTgIdByUserId(curatorUserId);
@@ -35855,7 +35931,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:cur_rm_do') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const curatorUserId = Number(p.u);
       const ret = String(p.ret || 'list');
       await db.removeCurator(wsId, curatorUserId);
@@ -35920,7 +35996,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:folder_new') {
       const wsId = Number(p.ws);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) return answerRecovery(ctx, 'folder');
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➕ <b>Новая папка</b>\n\nВведи название папки:', {
         parse_mode: 'HTML',
@@ -35934,7 +36010,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) return answerRecovery(ctx, 'folder');
       const isPro = await db.isWorkspacePro(wsId);
       const max = isPro ? CFG.WORKSPACE_FOLDER_MAX_ITEMS_PRO : CFG.WORKSPACE_FOLDER_MAX_ITEMS_FREE;
       const folder = await db.getChannelFolder(folderId);
@@ -35954,7 +36030,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) return answerRecovery(ctx, 'folder');
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➖ Укажи @каналы (или ссылки t.me) списком — удалю их из папки:', {
         reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
@@ -35967,7 +36043,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) return answerRecovery(ctx, 'folder');
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '✏️ Введи новое название папки:', {
         reply_markup: navKb(`a:folder_open|ws:${wsId}|f:${folderId}`)
@@ -35980,7 +36056,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) return answerRecovery(ctx, 'folder');
       const kb = new InlineKeyboard()
         .text('✅ Очистить', `a:folder_clear_do|ws:${wsId}|f:${folderId}`)
         .text('❌ Отмена', `a:folder_open|ws:${wsId}|f:${folderId}`);
@@ -35993,7 +36069,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access || !access.canEdit) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access || !access.canEdit) return answerRecovery(ctx, 'folder');
       await db.clearChannelFolder(folderId);
       await db.auditWorkspace(wsId, u.id, 'folders.cleared', { folderId });
       await ctx.answerCallbackQuery({ text: 'Очищено.' });
@@ -36030,7 +36106,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const access = await getFolderAccess(u.id, wsId);
-      if (!access) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!access) return answerRecovery(ctx, 'folder');
       const folder = await db.getChannelFolder(folderId);
       if (!folder || Number(folder.workspace_id) !== Number(wsId)) return ctx.answerCallbackQuery({ text: 'Папка не найдена.' });
       const items = await db.listChannelFolderItems(folderId);
@@ -36067,7 +36143,7 @@ if (p.a === 'a:bx_publish_hint') {
       if (!editorsEnabled) return ctx.answerCallbackQuery({ text: 'Отключено.' });
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const token = randomToken(8);
       const key = k(['ws_editor_invite', wsId, token]);
       await redis.set(key, { ownerUserId: u.id }, { ex: Number(CFG.WORKSPACE_EDITOR_INVITE_TTL_MIN || 10) * 60 });
@@ -36087,7 +36163,7 @@ if (p.a === 'a:bx_publish_hint') {
       if (!editorsEnabled) return ctx.answerCallbackQuery({ text: 'Отключено.' });
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, '➕ Введи @username редактора (он должен уже запускать бота /start).', {
         reply_markup: navKb(`a:ws_editors|ws:${wsId}`)
@@ -36102,7 +36178,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const targetUserId = Number(p.u);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const kb = new InlineKeyboard()
         .text('✅ Удалить', `a:ws_editor_rm_do|ws:${wsId}|u:${targetUserId}`)
@@ -36118,7 +36194,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const targetUserId = Number(p.u);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await db.removeWorkspaceEditor(wsId, targetUserId);
       try { await invalidateRoleFlagsCache(targetUserId); } catch {}
       await db.auditWorkspace(wsId, u.id, 'ws.editor_removed', { userId: targetUserId });
@@ -36132,7 +36208,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) return answerRecovery(ctx, 'offer');
 
       const folders = await db.listChannelFolders(wsId);
       const kb = new InlineKeyboard();
@@ -36152,7 +36228,7 @@ if (p.a === 'a:bx_publish_hint') {
       const offerId = Number(p.o);
       const folderId = Number(p.f);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) return answerRecovery(ctx, 'offer');
 
       const folder = await db.getChannelFolder(folderId);
       if (!folder || Number(folder.workspace_id) !== Number(wsId)) return ctx.answerCallbackQuery({ text: 'Папка не найдена.' });
@@ -36168,7 +36244,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const offerId = Number(p.o);
       const o = await db.getBarterOfferForOwner(u.id, offerId);
-      if (!o) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!o) return answerRecovery(ctx, 'offer');
 
       await db.updateBarterOffer(offerId, { partner_folder_id: null });
       await db.auditBarterOffer(offerId, wsId, u.id, 'bx.partner_folder_cleared', {});
@@ -36177,12 +36253,12 @@ if (p.a === 'a:bx_publish_hint') {
       return;
     }
 
-    
+
     // Giveaways: sponsors skip (solo mode)
     if (p.a === 'a:gw_sponsors_skip') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const draft = (await getDraft(ctx.from.id)) || {};
       draft.wsId = wsId;
@@ -36199,7 +36275,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:gw_sponsors_enter') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       await clearExpectText(ctx.from.id);
       await setExpectText(ctx.from.id, { type: 'gw_sponsors_text', wsId });
@@ -36208,7 +36284,7 @@ if (p.a === 'a:bx_publish_hint') {
       const isPro = await db.isWorkspacePro(wsId);
       const max = isPro ? CFG.GIVEAWAY_SPONSORS_MAX_PRO : CFG.GIVEAWAY_SPONSORS_MAX_FREE;
 
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `✍️ Пришли список спонсоров (до ${max}) — @каналы или ссылки t.me (через пробел/перенос строки).
 
 ` +
@@ -36223,7 +36299,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:gw_sponsors_edit') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       await clearExpectText(ctx.from.id);
       await setExpectText(ctx.from.id, { type: 'gw_sponsors_text', wsId });
@@ -36232,7 +36308,7 @@ if (p.a === 'a:bx_publish_hint') {
       const max = isPro ? CFG.GIVEAWAY_SPONSORS_MAX_PRO : CFG.GIVEAWAY_SPONSORS_MAX_FREE;
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `✍️ Пришли список спонсоров (до ${max}) — @каналы или ссылки t.me (через пробел/перенос строки).\n\nЕсли это соло — нажми «✅ Без спонсоров (соло)».`,
         { reply_markup: gwSponsorsOptionalKb(wsId) }
       );
@@ -36242,7 +36318,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:gw_sponsors_clear') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const draft = (await getDraft(ctx.from.id)) || {};
       draft.wsId = wsId;
@@ -36258,7 +36334,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:gw_sponsors_next') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const draft = (await getDraft(ctx.from.id)) || {};
       draft.wsId = wsId;
@@ -36280,7 +36356,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:gw_sponsors_help') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const b = String(p.b || '').toLowerCase();
       let backCb = `a:gw_step_sponsors|ws:${wsId}`;
@@ -36288,7 +36364,7 @@ if (p.a === 'a:bx_publish_hint') {
       if (b === 'step') backCb = `a:gw_step_sponsors|ws:${wsId}`;
 
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `🧭 Каналы-спонсоры (подписки)
 
 Это список каналов, на которые участник должен подписаться.
@@ -36307,7 +36383,7 @@ if (p.a === 'a:bx_publish_hint') {
     if (p.a === 'a:gw_sponsors_from_folder') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const folders = await db.listChannelFolders(wsId);
       const kb = new InlineKeyboard();
@@ -36329,7 +36405,7 @@ if (p.a === 'a:bx_publish_hint') {
       const wsId = Number(p.ws);
       const folderId = Number(p.f);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
 
       const folder = await db.getChannelFolder(folderId);
       if (!folder || Number(folder.workspace_id) !== Number(wsId)) return ctx.answerCallbackQuery({ text: 'Папка не найдена.' });
@@ -36354,7 +36430,7 @@ if (p.a === 'a:bx_publish_hint') {
 
       const list = sponsors.map(x => `• ${escapeHtml(String(x))}`).join('\n');
       await ctx.answerCallbackQuery({ text: 'Готово.' });
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `✅ Спонсоры: <b>${sponsors.length}</b>
 ${list}
 
@@ -36407,7 +36483,7 @@ ${list}
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
       if (!g) {
-        await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+        await answerRecovery(ctx, 'giveaway');
         return;
       }
       await ctx.answerCallbackQuery();
@@ -36418,7 +36494,7 @@ ${list}
         .row()
         .text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
 
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `🗑 <b>Удалить конкурс #${gwId}?</b>
 
 Это действие необратимо (удалятся спонсоры/участники/победители).
@@ -36448,7 +36524,7 @@ ${list}
     if (p.a === 'a:gw_publish_results') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) return answerRecovery(ctx, 'giveaway');
 
       if (g.results_message_id && Number(g.results_message_id) !== -1) {
         await ctx.answerCallbackQuery({ text: 'Итоги уже опубликованы.' });
@@ -36598,7 +36674,7 @@ ${winnersHeader}`;
     if (p.a === 'a:gw_results_refresh') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) return answerRecovery(ctx, 'giveaway');
 
       const msgId = Number(g.results_message_id || 0);
       if (!msgId || msgId <= 0) {
@@ -36742,7 +36818,7 @@ ${winnersHeader}`;
     if (p.a === 'a:gw_why_enter') {
       const gwId = Number(p.i);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         'ℹ️ <b>Почему не прошёл</b>\n\nПришли <b>user_id</b> участника (цифрами).\n\nПодсказка: участник может узнать свой id командой /whoami.',
         { parse_mode: 'HTML', reply_markup: navKb(`a:gw_stats|i:${gwId}`) }
       );
@@ -36752,7 +36828,7 @@ ${winnersHeader}`;
     if (p.a === 'a:gw_why_forward') {
       const gwId = Number(p.i);
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         'ℹ️ <b>Почему не прошёл</b>\n\nПерешли сюда сообщение участника (forward).\n\nВажно: если у участника включена “Forward privacy”, бот не увидит user_id — тогда используй “Ввести ID”.',
         { parse_mode: 'HTML', reply_markup: navKb(`a:gw_why|i:${gwId}`) }
       );
@@ -36781,7 +36857,7 @@ ${winnersHeader}`;
         // active_ws can become stale (channel removed / permissions changed). Clear it so the UI falls back to picker.
         try { await redis.del(k(['active_ws', ctx.from.id])); } catch {}
         await ctx.answerCallbackQuery({ text: 'Сначала выбери канал.' });
-        await renderGwNewGate(ctx, { backCb: 'a:gw_list', reason: 'Канал не найден или нет доступа. Выбери канал заново.' });
+        await renderGwNewGate(ctx, { backCb: 'a:gw_list', reason: 'Канал недоступен или кнопка устарела. Выбери канал заново.' });
         return;
       }
       if (isWorkspaceDisconnected(ws)) {
@@ -36795,13 +36871,13 @@ ${winnersHeader}`;
       return;
     }
 
-    
+
     if (p.a === 'a:gw_preset_home') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         '🧩 <b>Пресеты конкурса</b>\n\nВыбери вариант — мы подготовим тип приза и текст. Потом выберешь количество мест, спонсоров и дедлайн.',
         { parse_mode: 'HTML', reply_markup: gwPresetKb(wsId) }
       );
@@ -36811,14 +36887,14 @@ ${winnersHeader}`;
     if (p.a === 'a:gw_preset_apply') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const presetId = String(p.id || '');
       const preset = GW_PRESETS.find((x) => x.id === presetId);
       if (!preset) return ctx.answerCallbackQuery({ text: 'Пресет не найден.' });
       await ctx.answerCallbackQuery();
       await clearDraft(ctx.from.id);
       await setDraft(ctx.from.id, { wsId, prize_type: preset.prize_type, prize_value_text: preset.prize_value_text });
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `✅ Пресет применён.\n\n<b>Приз:</b> <code>${escapeHtml(preset.prize_value_text)}</code>\n\nТеперь выбери количество призовых мест:`,
         { parse_mode: 'HTML', reply_markup: gwNewStepWinnersKb(wsId) }
       );
@@ -36828,7 +36904,7 @@ ${winnersHeader}`;
 if (p.a === 'a:gw_prize') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const type = p.t;
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, gwPrizePrompt(type), {
@@ -36843,7 +36919,7 @@ if (p.a === 'a:gw_prize') {
     if (p.a === 'a:gw_winners') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       const n = Number(p.n);
       const draft = (await getDraft(ctx.from.id)) || { wsId };
       draft.winners_count = n;
@@ -36861,7 +36937,7 @@ if (p.a === 'a:gw_prize') {
         .text('🧭 Что такое спонсоры?', `a:gw_sponsors_help|ws:${wsId}`)
         .row()
         .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `Спонсоры (необязательно, до ${max}).\n\n` +
         `Если это соло — нажми «✅ Без спонсоров (соло)».\n` +
         `Если есть партнёры — нажми «✍️ Ввести списком» и пришли список @каналов или t.me ссылками (можно просто прислать).`,
@@ -36874,7 +36950,7 @@ if (p.a === 'a:gw_prize') {
     if (p.a === 'a:gw_winners_custom') {
       const wsId = Number(p.ws);
       const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!ws) return answerRecovery(ctx, 'channel');
       await ctx.answerCallbackQuery();
       await safeEditOrReply(ctx, 'Введи число призовых мест (1..50):', {
         reply_markup: navKb(`a:gw_new|ws:${wsId}`)
@@ -36898,7 +36974,7 @@ if (p.a === 'a:gw_prize') {
         .text('🧭 Что такое спонсоры?', `a:gw_sponsors_help|ws:${wsId}`)
         .row()
         .text('⬅️ Назад', `a:gw_new|ws:${wsId}`);
-      await safeEditOrReply(ctx, 
+      await safeEditOrReply(ctx,
         `Спонсоры (необязательно, до ${max}).\n\n` +
         `Если соло — нажми «✅ Без спонсоров (соло)».\n` +
         `Если есть партнёры — нажми «✍️ Ввести списком» и пришли список @каналов или t.me ссылками (можно просто прислать).`,
@@ -37071,7 +37147,7 @@ ${sponsorsLine}
 if (p.a === 'a:gw_publish') {
   const wsId = Number(p.ws);
   const ws = await db.getWorkspace(u.id, wsId);
-  if (!ws) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+  if (!ws) return answerRecovery(ctx, 'channel');
   if (isWorkspaceDisconnected(ws)) {
     await ctx.answerCallbackQuery();
     await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'gw_publish' });
@@ -37365,7 +37441,7 @@ ${actionHint}`;
     if (p.a === 'a:gw_remind_q') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) return answerRecovery(ctx, 'giveaway');
       if (['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(gwEffectiveStatusValue(g))) return ctx.answerCallbackQuery({ text: 'Уже завершен.' });
 
       const kb = new InlineKeyboard()
@@ -37380,7 +37456,7 @@ ${actionHint}`;
     if (p.a === 'a:gw_remind_send') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) return answerRecovery(ctx, 'giveaway');
       if (!g.published_chat_id) return ctx.answerCallbackQuery({ text: 'Конкурс не опубликован?' });
       if (['ENDED','WINNERS_DRAWN','RESULTS_PUBLISHED','CANCELLED'].includes(gwEffectiveStatusValue(g))) return ctx.answerCallbackQuery({ text: 'Уже завершен.' });
 
@@ -37423,7 +37499,7 @@ ${actionHint}`;
     if (p.a === 'a:gw_end_now') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) return answerRecovery(ctx, 'giveaway');
       const kb = new InlineKeyboard()
         .text('✅ Завершить', `a:gw_end_do|i:${gwId}`)
         .text('❌ Отмена', `a:gw_open|i:${gwId}`);
@@ -37435,7 +37511,7 @@ ${actionHint}`;
     if (p.a === 'a:gw_end_do') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) return answerRecovery(ctx, 'giveaway');
       const prevStatus = String(g.status || '').toUpperCase();
       const ended = await db.atomicEndGiveaway(gwId);
       if (ended) {
@@ -37470,7 +37546,7 @@ ${actionHint}`;
     if (p.a === 'a:gw_draw_now') {
       const gwId = Number(p.i);
       const g = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g) return answerRecovery(ctx, 'giveaway');
 
       const effSt = gwEffectiveStatusValue(g);
       const rawSt = String(g.status || '').toUpperCase();
@@ -37528,7 +37604,7 @@ ${actionHint}`;
     if (p.a === 'a:gw_draw_do') {
       const gwId = Number(p.i);
       const g0 = await db.getGiveawayForOwner(gwId, u.id);
-      if (!g0) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+      if (!g0) return answerRecovery(ctx, 'giveaway');
 
       // Idempotency lock per giveaway
       const lockKey = k(['lock', 'gw_draw', gwId]);
@@ -37542,7 +37618,7 @@ ${actionHint}`;
         // Re-fetch (fresh)
         const g = await db.getGiveawayForOwner(gwId, u.id);
         if (!g) {
-          await ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+          await answerRecovery(ctx, 'giveaway');
           return;
         }
 
@@ -41269,7 +41345,7 @@ async function renderAdminPayments(ctx, statusRaw = 'ORPHANED', page = 0) {
   if (rows.length === limit) kb.text('➡️ Далее', `a:admin_payments|st:${status}|p:${Number(page) + 1}`);
     kb.row().text('⬅️ Операции', 'a:admin_ops');
 
-  await safeEditOrReply(ctx, 
+  await safeEditOrReply(ctx,
     `💳 <b>Payments</b> • <b>${escapeHtml(status)}</b>
 
 ${escapeHtml(lines)}`,

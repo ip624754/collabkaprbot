@@ -71,7 +71,7 @@ const gwNewHandlerSrc = extractBetween(
 );
 assert.ok(gwNewHandlerSrc.includes("if (!wsId || wsId <= 0) {"), 'giveaway create handler must guard missing workspace');
 assert.ok(gwNewHandlerSrc.includes("await renderGwNewGate(ctx, { backCb: 'a:gw_list', reason: 'Не выбран канал.' });"), 'giveaway create handler must reroute missing workspace into explicit gate');
-assert.ok(gwNewHandlerSrc.includes("await renderGwNewGate(ctx, { backCb: 'a:gw_list', reason: 'Канал не найден или нет доступа. Выбери канал заново.' });"), 'giveaway create handler must reroute stale workspace into explicit gate');
+assert.ok(gwNewHandlerSrc.includes("await renderGwNewGate(ctx, { backCb: 'a:gw_list', reason: 'Канал недоступен или кнопка устарела. Выбери канал заново.' });"), 'giveaway create handler must reroute stale workspace into explicit gate');
 assert.ok(!gwNewHandlerSrc.includes('return;\n      // silent'), 'giveaway create handler must not silently stop on missing/stale workspace');
 
 console.log('smoke-no-channel-gate-contract: OK');

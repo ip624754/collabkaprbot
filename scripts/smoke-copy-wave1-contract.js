@@ -77,7 +77,7 @@ assert.ok(!bxFiltersSrc.includes('Фильтруем креаторов по т�
 assert.ok(!bxFiltersSrc.includes('увидеть выдачу'), 'bx filters must not keep old bureaucratic helper');
 
 assert.ok(bxFeedSrc.includes('Режим: 🏷 Бренд\nЛента: 🎬 Креаторы'), 'bx feed header must be split into separate lines');
-assert.ok(bxFeedSrc.includes('По этим фильтрам креаторы пока не найдены.'), 'bx feed zero-state must be short and direct');
+assert.ok(bxFeedSrc.includes('По этим фильтрам креаторы не найдены.'), 'bx feed zero-state must be short and direct');
 assert.ok(bxFeedSrc.includes('Ослабь 1–2 фильтра или нажми «♻️ Сбросить».'), 'bx feed zero-state must suggest reset/relax next step');
 assert.ok(!bxFeedSrc.includes('Пока нет офферов по этим фильтрам.'), 'bx feed must not keep flat zero-state copy');
 

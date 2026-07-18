@@ -1,48 +1,46 @@
 # AI Multi-Model Handoff — Current Collabka Truth
 
-**Current baseline:** STEP586E — Monetization and Paid Product Clarity
-**Parent:** STEP586D — Invite Center Language and Mechanism Honesty
-**Live status:** not reverified in STEP586E
+**Current baseline:** STEP586F — Access, Error and Empty-State Recovery
+**Parent:** STEP586E — Monetization and Paid Product Clarity
+**Live status:** not reverified in STEP586F
 
 ## Verified now
 
-- paid product objects are distinct: Brand Plan, credits, channel PRO, matching, promotion and moderated official placement;
-- exact visible quantity, duration and result labels derive from runtime configuration or server-side catalogs;
-- credits are expendable brand units; they are not money, Stars or subscription time;
-- Brand Plan is the brand subscription; the current source-backed tier difference is price and included credits;
-- PRO applies to one selected creator channel and is independent of Brand Plan;
-- payment receipts state the Stars amount and applied result;
-- delayed application routes to `/paysupport`; source contains no automatic refund path;
-- direct fallback, cron and QStash recovery use shared truthful receipt copy;
-- missing payment catalog dependencies in the extracted Stars handler are now injected explicitly;
-- provider, prices, callbacks, payloads, payment ledger and exactly-once controls are unchanged;
-- dedicated and targeted payment/source contracts pass locally.
+- a shared immutable recovery taxonomy covers channel, application, dialog, offer, giveaway, folder, role and generic failures;
+- ordinary-user recovery does not disclose whether a private object exists, was deleted or belongs to another actor;
+- recovery buttons return to existing list/menu surfaces and do not bypass authoritative access checks;
+- selected empty states include a title, a source-backed reason and one next action;
+- selected infrastructure details are removed from user copy and retained in structured `[copy_safety]` diagnostics;
+- non-admin curator workspace rendering proves membership in the requested workspace before unrestricted detail lookup;
+- the legacy curator workspace route has an explicit curator/admin gate;
+- callback identities, schema, payment mechanics, invite economics, deal mechanics and giveaway mechanics are unchanged;
+- STEP586F and regression contracts pass locally; the full 223-file JavaScript syntax surface passes separately.
 
-## Trust and runtime finding resolved
+## Security finding resolved
 
-Old copy understated where credits are spent and could drift from configured pack quantities or durations. Separately, extracted Stars handlers referenced three catalogs that were not injected, creating a paid-path `ReferenceError` risk. STEP586E aligns copy with source truth and restores the dependency boundary without changing economics.
+The curator workspace renderer previously loaded unrestricted workspace details before proving membership in that specific workspace. A crafted callback could therefore confirm private workspace detail before the intended boundary. STEP586F moves specific membership proof ahead of unrestricted lookup for non-admin actors and returns neutral recovery on failure. Live exploitation was not tested.
 
 ## Not verified
 
-- live Telegram Stars payment or refund;
+- live Telegram traversal or mobile wrapping;
 - Vercel Preview/production;
-- live Neon/Redis/QStash convergence;
-- mobile wrapping;
-- `/paysupport` operator handling;
+- live Neon/Redis/QStash behavior;
+- production stale-data combinations;
 - remote STEP584 staging evidence;
 - real-user comprehension.
 
 ## Immediate next STEP
 
-`STEP586F_ACCESS_ERROR_EMPTY_STATE_RECOVERY`
+`STEP586G_ADMIN_OPERATOR_VOCABULARY`
 
-Classify errors by known source state. Do not make a blind global `Нет доступа.` replacement and do not reveal private-object existence.
+Make primary operator actions readable while preserving exact diagnostic vocabulary. Do not redesign controls or change privileges.
 
 ## Do not do yet
 
-- admin/operator vocabulary migration (STEP586G);
-- payment provider, price or entitlement changes inside copy work;
-- permission/state-machine changes hidden inside error cleanup;
+- broad admin redesign;
+- global replacement of remaining `Нет доступа.` strings;
+- permission changes hidden inside copy cleanup;
+- payment, invite, deal or giveaway mechanism changes;
 - broad `bot.js` rewrite;
 - claim live-green from source checks.
 
@@ -60,8 +58,8 @@ Classify errors by known source state. Do not make a blind global `Нет дос
 ## Canonical files
 
 1. `docs/00_CURRENT_STATE.md`
-2. `docs/audit/STEP586E_MONETIZATION_PAID_PRODUCT_CLARITY_REPORT.md`
+2. `docs/audit/STEP586F_ACCESS_ERROR_EMPTY_STATE_RECOVERY_REPORT.md`
 3. `docs/product/COLLABKA_COPY_SYSTEM.md`
 4. `docs/product/TERMINOLOGY_REGISTRY.md`
 5. `docs/roadmap/STEP586_COPY_REFACTOR_ROADMAP.md`
-6. `docs/process/07_WORK_HISTORY_STEP586E.md`
+6. `docs/process/07_WORK_HISTORY_STEP586F.md`
