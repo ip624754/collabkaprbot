@@ -107,3 +107,16 @@
 4. Source-confirmed, runtime-confirmed, operator-confirmed, and unverified claims are separated.
 5. A new AI chat starts from the current archive and continuity docs, not memory alone.
 6. Broad redesign is prohibited without source/runtime evidence of systemic failure.
+
+## 11. Backoffice invariants (STEP588)
+
+1. The existing web-admin is the canonical backoffice foundation; a parallel admin is prohibited.
+2. Telegram remains the primary user product and the authoritative path for risky operator mutations until an explicit safety STEP moves a bounded action to web.
+3. New backoffice domains use the existing collapsed read/write endpoints while Vercel function budget is constrained.
+4. No ORM or framework rewrite may be introduced without source evidence that the current architecture is an operational blocker.
+5. New list read models are bounded, parameterized and free of N+1 query patterns.
+6. Sensitive web writes require canonical service reuse, object authorization, idempotency, exact confirmation, durable PostgreSQL audit and replay protection.
+7. Redis recent audit is not a durable ledger and may not be the sole evidence for money/access/state-changing actions.
+8. Overview warnings and operator tasks are distinct: only actionable, owned cases enter the attention queue.
+9. Client/read-model modularization is incremental by touched domain, never a broad one-shot rewrite.
+10. Live backoffice readiness requires operator evidence; source-green is not live-green.

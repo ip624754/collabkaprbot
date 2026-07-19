@@ -1,3 +1,33 @@
+## STEP588 — Backoffice Productization Audit & Architecture (2026-07-19)
+
+**Current handoff-safe repository baseline:** STEP588 on top of STEP586H1.
+
+Source audit confirms that the existing web-admin is already a substantial backoffice foundation, not a placeholder. It includes Telegram-approved auth, founder/operator separation, Overview, Users, Runtime, Payments, Communications, Help and Founder surfaces through three collapsed serverless endpoints.
+
+Verified in STEP588:
+- current route/read/write/auth inventory;
+- static SPA + collapsed API is retained;
+- ORM and React/Next rewrite are rejected;
+- the strongest current surfaces are Users, Runtime and auth safety;
+- the largest product gap is a read-only Collaboration Control Center;
+- unified attention queue, invite/giveaway/moderation operations and durable audit are the next backoffice gaps;
+- durable PostgreSQL audit plus Origin/CSRF/replay protection are mandatory before sensitive web writes;
+- six stale admin-web source contracts were repaired without changing runtime UI;
+- a backoffice architecture source guard is wired into preflight;
+- targeted admin/admin-web/backoffice contracts pass locally: 54/54.
+
+Not verified: live production web-admin rendering, operator task completion time, mobile browser traversal, production query latency, or STEP586H1 24-hour observation.
+
+**Release order:** STEP586H1 production observation → STEP587 Go/No-Go → STEP589 backoffice implementation waves.
+
+Read:
+- `docs/audit/STEP588_BACKOFFICE_PRODUCTIZATION_AUDIT.md`;
+- `docs/backoffice/README.md`;
+- `docs/roadmap/STEP589_BACKOFFICE_IMPLEMENTATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588.md`.
+
+---
+
 ## STEP586H1 — Neon Cron Connection Resilience & Alert Truth (2026-07-18)
 
 **Current handoff-safe baseline:** STEP586H1 on top of STEP586H.

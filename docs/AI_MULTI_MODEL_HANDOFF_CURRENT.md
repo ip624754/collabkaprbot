@@ -1,49 +1,54 @@
-# AI Multi-Model Handoff — STEP586H1 Current Truth
+# AI Multi-Model Handoff — STEP588 Current Truth
 
-**Current baseline:** STEP586H1 — Neon Cron Connection Resilience & Alert Truth
-**Parent:** STEP586H
-**Live status:** local QA PASS; 24-hour production observation pending
+**Current repository baseline:** STEP588 — Backoffice Productization Audit & Architecture
+**Parent:** STEP586H1
+**Production release status:** STEP586H1 24-hour observation still pending
 
 ## Verified now
 
-- bounded one-retry connection acquisition/session-init wrapper;
-- no automatic SQL or whole-job replay;
-- dead-client destruction;
-- DB error classification and retry metadata;
-- one job-owned cron alert with router duplicate suppression;
-- per-job/error-class dedup identity;
-- failed cron last-run breadcrumbs;
-- secret-free health database config/warnings;
-- source/runtime contracts pass locally.
+- current web-admin is a strong existing backoffice foundation;
+- 10 routes, 11 read sections and a tightly bounded write surface are inventoried;
+- auth uses secret + Telegram approval/code + Redis session + strict cookie;
+- Users, Runtime and Overview are already mature;
+- sensitive runtime/payment/access actions remain Telegram-only;
+- no ORM exists and no ORM/framework rewrite is approved;
+- six stale admin source contracts were restored to current UI truth;
+- the accepted no-ORM/collapsed-API architecture is guarded in source preflight;
+- targeted admin/admin-web/backoffice tests pass locally: 54/54.
 
-## Not verified
+## Main gaps
 
-- production Neon convergence after deploy;
-- external cron schedule staggering;
-- 24-hour last-run continuity;
-- real support digest result;
-- live giveaway/broadcast catch-up.
+1. unified attention queue;
+2. collaboration control center;
+3. invite/giveaway/moderation operations;
+4. durable audit before sensitive web writes;
+5. incremental client/read-model modularization.
 
-## Immediate next action
+## Immediate order
 
-Deploy STEP586H1 and execute `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`. Do not open STEP587 until the evidence decision is PASS.
+1. Complete STEP586H1 24-hour production observation.
+2. Execute STEP587 release Go/No-Go.
+3. Start STEP589A only after release gate.
 
 ## Do not do
 
-- add multiple retries;
-- retry SQL or a full cron body;
-- increase pool max;
-- hide final failures;
-- expose connection strings in evidence.
+- build a parallel admin;
+- add ORM;
+- migrate to React/Next;
+- add one serverless endpoint per entity;
+- copy Telegram user flows into web;
+- add payment/access/deal/giveaway web mutations before durable audit and request-provenance guards.
 
 ## Canonical files
 
 1. `docs/00_CURRENT_STATE.md`
-2. `docs/audit/STEP586H1_NEON_CRON_CONNECTION_RESILIENCE_ALERT_TRUTH_REPORT.md`
-3. `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`
-4. `docs/process/07_WORK_HISTORY_STEP586H1.md`
-5. `docs/SYSTEM_INVARIANTS.md`
-6. `docs/RISK_REGISTRY.md`
+2. `docs/audit/STEP588_BACKOFFICE_PRODUCTIZATION_AUDIT.md`
+3. `docs/backoffice/README.md`
+4. `docs/backoffice/BACKOFFICE_SURFACE_MANIFEST.json`
+5. `docs/roadmap/STEP589_BACKOFFICE_IMPLEMENTATION_ROADMAP.md`
+6. `docs/process/07_WORK_HISTORY_STEP588.md`
+7. `docs/audit/STEP586H1_NEON_CRON_CONNECTION_RESILIENCE_ALERT_TRUTH_REPORT.md`
+8. `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`
 
 ---
 

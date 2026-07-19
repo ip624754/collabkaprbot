@@ -237,3 +237,16 @@ Canonical product-language documents:
 Current next action: **deploy STEP586H1 and complete the 24-hour Neon cron observation; STEP587 remains blocked until PASS**.
 
 Live Telegram rendering, mobile wrapping and remote STEP584 staging acceptance remain unverified.
+
+## STEP588 — Backoffice productization
+
+- `audit/STEP588_BACKOFFICE_PRODUCTIZATION_AUDIT.md` — source audit, maturity score and findings.
+- `backoffice/README.md` — canonical backoffice document index.
+- `backoffice/BACKOFFICE_CURRENT_SURFACE_INVENTORY.md` — current routes, APIs, auth and jobs.
+- `backoffice/BACKOFFICE_TARGET_INFORMATION_ARCHITECTURE.md` — target navigation and domain structure.
+- `backoffice/BACKOFFICE_AUTHORIZATION_MUTATION_MATRIX.md` — current and future write gates.
+- `backoffice/BACKOFFICE_READ_MODEL_AND_API_ARCHITECTURE.md` — collapsed API/read-model decision.
+- `backoffice/BACKOFFICE_WIREFRAMES.md` — structural wireframes.
+- `backoffice/ADR_001_KEEP_STATIC_ADMIN_COLLAPSED_API_NO_ORM.md` — accepted architecture decision.
+- `backoffice/BACKOFFICE_SURFACE_MANIFEST.json` — machine-readable surface inventory for other AIs.
+- `roadmap/STEP589_BACKOFFICE_IMPLEMENTATION_ROADMAP.md` — phased implementation after release gates.

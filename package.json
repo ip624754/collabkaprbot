@@ -150,6 +150,7 @@
     "smoke:gw-access-route-contract": "node scripts/smoke-gw-access-route-contract.js",
     "smoke:admin-web-users-mobile-contract": "node scripts/smoke-admin-web-users-mobile-contract.js",
     "smoke:admin-web-mobile-consistency-contract": "node scripts/smoke-admin-web-mobile-consistency-contract.js",
+    "smoke:backoffice-productization-contract": "node scripts/smoke-backoffice-productization-contract.js",
     "smoke:invite-layer": "node scripts/smoke-invite-layer-contract.js",
     "smoke:invite-rewards": "node scripts/smoke-invite-rewards-contract.js",
     "smoke:preflight-dependency-resolution-contract": "node scripts/smoke-preflight-dependency-resolution-contract.js",

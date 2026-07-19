@@ -8,10 +8,10 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const js = read('scripts/admin-web.js');
 for (const token of [
   'Очереди и retry',
-  'Active backlog',
-  'Retry problems',
-  'Cooling windows',
-  'Unknown lanes',
+  'Активная очередь',
+  'Проблемы retry',
+  'Окна охлаждения',
+  'Справочно',
   'aw-runtime-queues-grid',
   'aw-runtime-retry-feed',
 ]) {

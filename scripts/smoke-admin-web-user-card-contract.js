@@ -8,12 +8,12 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const js = read('scripts/admin-web.js');
 for (const token of [
   'Профиль',
-  'Аккаунт и доступ',
+  'Доступ и сигналы',
   'Активность',
   'Заметка оператора',
   'Последние admin-действия',
-  'buildUsersHref',
-  'buildUserDetailHref',
+  'buildUsersListHref',
+  'userDetailBackHref',
   '/api/admin-web-read?section=user',
   'set_note',
   '/api/admin-web-write?action=clear_note',
@@ -26,12 +26,11 @@ for (const token of [
   'account:',
   'access:',
   'activity:',
-  'stateHint',
-  'summary:',
+  'recentSummary:',
+  'lightCounters:',
   'recentAdminAudit',
   'buildActivitySummary',
-  'buildAccessSummary',
-  'normalizeRecentAdminAudit',
+  'buildAccessSignals',
 ]) {
   assert.ok(readModels.includes(token), `user detail read model must include ${token}`);
 }

@@ -1,3 +1,39 @@
+# STEP588 NEW CHAT HANDOFF
+
+**Current repository baseline:** STEP588 — Backoffice Productization Audit & Architecture
+**Parent:** STEP586H1
+
+## Start here
+
+1. Read `docs/00_CURRENT_STATE.md`.
+2. Read `docs/audit/STEP588_BACKOFFICE_PRODUCTIZATION_AUDIT.md`.
+3. Read `docs/backoffice/README.md`.
+4. Read `docs/roadmap/STEP589_BACKOFFICE_IMPLEMENTATION_ROADMAP.md`.
+5. Read `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`.
+
+## Current truth
+
+- Existing web-admin is already the canonical backoffice foundation.
+- Do not build a second admin or duplicate Telegram user flows.
+- Keep static SPA, collapsed API and canonical query/services.
+- No ORM or framework rewrite is approved.
+- STEP589 feature work is blocked until STEP586H1 observation and STEP587 release decision.
+- First product gap after release is the read-only attention/collaboration operations layer.
+- Six stale admin-web contracts were restored to current runtime truth.
+- `smoke:backoffice-productization-contract` guards static SPA + three collapsed endpoints + no ORM.
+- Targeted admin/admin-web/backoffice suite: 54/54 PASS locally.
+
+## Next accepted sequence
+
+```text
+STEP586H1 24h observation
+→ STEP587 release Go/No-Go
+→ STEP589A attention queue
+→ STEP589B collaboration control center
+```
+
+---
+
 # STEP586H1 CURRENT TRUTH OVERRIDE
 
 - Current baseline: STEP586H1 Neon Cron Connection Resilience & Alert Truth.

@@ -1,0 +1,125 @@
+{
+  "step": "STEP588",
+  "baseline": "STEP586H1",
+  "generated_at": "2026-07-19",
+  "architecture": {
+    "client": "static_es_module_spa",
+    "serverless_admin_entrypoints": 3,
+    "database_access": "node-postgres_direct_queries_and_canonical_query_modules",
+    "orm": false,
+    "framework_rewrite": "rejected",
+    "api_strategy": "collapsed_section_action_endpoints",
+    "vercel_function_budget": {
+      "used": 11,
+      "limit": 12
+    }
+  },
+  "metrics": {
+    "admin_client_lines": 4575,
+    "admin_css_lines": 2268,
+    "read_models_lines": 1166,
+    "runtime_model_lines": 1150,
+    "client_functions": 180,
+    "css_class_selectors": 283,
+    "admin_web_smoke_contracts": 48,
+    "historical_admin_docs": 56
+  },
+  "routes": [
+    {
+      "path": "/admin/login",
+      "page": "login",
+      "mode": "auth"
+    },
+    {
+      "path": "/admin",
+      "page": "overview",
+      "mode": "read"
+    },
+    {
+      "path": "/admin/users",
+      "page": "users",
+      "mode": "read_export_bulk"
+    },
+    {
+      "path": "/admin/users/:id",
+      "page": "user_detail",
+      "mode": "read_note_write"
+    },
+    {
+      "path": "/admin/runtime",
+      "page": "runtime",
+      "mode": "read"
+    },
+    {
+      "path": "/admin/payments",
+      "page": "payments",
+      "mode": "read"
+    },
+    {
+      "path": "/admin/payments/:id",
+      "page": "payment_detail",
+      "mode": "read"
+    },
+    {
+      "path": "/admin/comms",
+      "page": "communications",
+      "mode": "draft_write_founder_test"
+    },
+    {
+      "path": "/admin/help",
+      "page": "help",
+      "mode": "client_read"
+    },
+    {
+      "path": "/admin/founder",
+      "page": "founder",
+      "mode": "founder_read_session_revoke"
+    }
+  ],
+  "read_sections": [
+    "overview",
+    "users",
+    "users_export",
+    "users_bulk",
+    "user",
+    "payments",
+    "payment",
+    "comms",
+    "founder",
+    "runtime",
+    "control_surface"
+  ],
+  "write_actions": [
+    "set_note",
+    "clear_note",
+    "create_notice_draft",
+    "update_notice_draft",
+    "test_send_notice",
+    "revoke_all"
+  ],
+  "gaps": [
+    "unified_attention_queue",
+    "collaboration_control_center",
+    "invite_operations",
+    "giveaway_and_moderation_operations",
+    "durable_admin_write_audit",
+    "explicit_origin_csrf_replay_guard_before_write_expansion",
+    "incremental_client_and_read_model_modularization"
+  ],
+  "decisions": [
+    "keep_static_admin",
+    "keep_collapsed_api",
+    "no_orm",
+    "no_framework_rewrite",
+    "telegram_remains_authoritative_for_risky_mutations",
+    "durable_audit_required_before_sensitive_web_writes"
+  ],
+  "next_steps": [
+    "STEP589A",
+    "STEP589B",
+    "STEP589C",
+    "STEP589D",
+    "STEP589E",
+    "STEP589F"
+  ]
+}

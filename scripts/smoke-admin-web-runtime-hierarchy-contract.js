@@ -9,7 +9,7 @@ const js = read('scripts/admin-web.js');
 for (const token of [
   'Общий статус',
   'Главный runtime-сигнал',
-  'Control plane snapshot',
+  'Снимок управления',
   'Как читать этот экран',
   'paused ',
   'summaryCards.ok',

@@ -117,3 +117,22 @@ Residual risk:
 - Source verification: dedicated resilience contract, health/dependency/runtime contracts, callbacks, package-lock and audit PASS locally.
 - Runtime verification required: 24-hour production cron observation with health/OPS/last-run evidence.
 - Residual risk: `PG_CONN_TIMEOUT_MS=1000` remains aggressive; external schedules still require manual staggering; optional broadcast-429 atomicity smoke is pre-existing FAIL and out of STEP586H1 scope.
+
+## STEP588 backoffice-specific risks
+
+| ID | Risk | Severity | State | Detection signal | Current mitigation | Escalation trigger |
+|---|---|---:|---|---|---|---|
+| R-21 | Sensitive web mutation without durable audit | CRITICAL | ACTIVE | money/access/state change exists only in 14-day Redis audit | current web writes limited to notes/drafts/test-send; sensitive actions Telegram-only | any new payment, entitlement, access, deal or giveaway web write |
+| R-22 | Backoffice client/read-model monolith increases regression blast radius | HIGH | WATCH | unrelated sections change in one large file, repeated merge/test drift | source contracts, incremental strangler extraction decision | new domain adds >500 lines to existing monolith or repeated cross-section regressions |
+| R-23 | Backoffice becomes a second product/backend | HIGH | MITIGATED | duplicated Telegram workflow or business mutation logic | ADR-001, collapsed API, canonical service reuse | proposal for parallel web user flow or separate money/state core |
+| R-24 | Web write request provenance is insufficient after surface expansion | HIGH | WATCH | state-changing POST relies only on session cookie | SameSite Strict now; Origin/CSRF/replay gate required before expansion | first new sensitive web mutation |
+| R-25 | Operational gaps remain invisible because no unified attention queue exists | MEDIUM | ACTIVE | operator must inspect multiple sections to find actionable case | STEP589A roadmap; Overview currently provides one next step | missed incident/case or repeated manual cross-section triage |
+
+## Current STEP588 assessment
+
+- Change type: documentation/architecture plus stale-test truth restoration.
+- Primary risks addressed: R-07, R-09, R-11, R-12, R-15, R-21–R-25.
+- Runtime business blast radius: none.
+- Source verification: targeted admin/admin-web contracts PASS.
+- Runtime verification required: live web-admin acceptance after STEP589 implementation, not for docs-only architecture.
+- Residual release risk: STEP586H1 24-hour production observation remains pending.
