@@ -8,14 +8,14 @@ The following risks override earlier release optimism until remediation evidence
 | R-27 | Payment ledger absence fails open into product/credit fulfillment | CRITICAL | ACTIVE | Source fail-closed implemented; production migration/canary evidence required |
 | R-28 | Matching/featured session removed before durable paid apply | HIGH | ACTIVE | Durable context + post-commit cleanup implemented; live evidence required |
 | R-29 | Giveaway auto-draw runtime binding defect and split manual path | CRITICAL | ACTIVE | Source uses one atomic service; production manual/replay/cron evidence required |
-| R-30 | Broadcast Telegram send may succeed while DB remains reclaimable | CRITICAL | ACTIVE | unknown terminal state; no auto-resend |
+| R-30 | Broadcast Telegram send may succeed while DB remains reclaimable | CRITICAL | SOURCE MITIGATED / PROD OPEN | attempt-token claim, terminal unknown, no auto-resend, founder reconciliation |
 | R-31 | Admin challenge/approval URL can act as transferable privileged capability | CRITICAL | ACTIVE | browser binding + Telegram callback + one-time consume |
 | R-32 | Admin fallback code lacks crypto generation/throttling/lockout | HIGH | ACTIVE | disabled-by-default production fallback |
 | R-33 | Public health and webhook logs expose excess operational/personal data | HIGH | ACTIVE | protected diagnostics + redaction |
 | R-34 | Source-heavy test portfolio misses transaction/crash/race defects | HIGH | ACTIVE | STEP588X7 executable critical-path suite |
 | R-35 | Generic dynamic SQL/body/update helpers retain latent safety footguns | MEDIUM | WATCH | allowlists, size caps, row-count truth |
 
-**Release gate:** R-26 through R-28 are source-remediated but remain active until STEP588X1 migration/canary evidence. R-29 is source-remediated but remains active until STEP588X2 manual/replay/cron evidence. R-30 through R-34 still require implementation. STEP587 GO and STEP589 remain paused.
+**Release gate:** R-26 through R-28 are source-remediated but remain active until STEP588X1 migration/canary evidence. R-29 is source-remediated but remains active until STEP588X2 manual/replay/cron evidence. R-30 is source-remediated but remains active until STEP588X3 migration, replay and unknown-state evidence. R-31 through R-34 still require implementation. STEP587 GO and STEP589 remain paused.
 
 ---
 
@@ -167,3 +167,13 @@ Residual risk:
 - Source verification: 55 giveaway behavioral assertions, 124 registered source checks, 238 JavaScript syntax checks, generated-file parity and supplementary source invariants PASS locally.
 - Runtime verification required: controlled manual top-up, replay/idempotency and cron canaries with SQL winner/audit evidence.
 - Residual risk: real Neon connection termination and multi-session contention are not reproduced locally; notifications remain external side effects after the committed draw.
+
+## Current STEP588X3 assessment
+
+- Change type: critical broadcast delivery state-machine hardening plus additive migration 049.
+- Primary risks addressed: R-02, R-10, R-11, R-12, R-30, R-34.
+- Runtime blast radius: QStash delivery worker, legacy direct cron, broadcast sent-log state, Communications observability and founder reconciliation.
+- Rollback: prefer fix-forward; rollback to STEP588X2 is unsafe while `delivery_unknown` rows exist because the old runtime lacks the terminal-state contract.
+- Source verification: 35 unknown-state assertions, 126 registered source checks, 250 JavaScript syntax checks, dependency/runtime preflight and registry parity PASS locally.
+- Runtime verification required: migration 049, controlled normal-send/replay, staging ambiguity injection, live unknown-state visibility and no-resend reconciliation evidence.
+- Residual risk: at-most-once safety intentionally permits under-delivery when Telegram outcome cannot be determined; production QStash/Telegram behavior is not reproduced locally.

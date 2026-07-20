@@ -269,3 +269,31 @@ BEGIN
     $sql$;
   END IF;
 END $$;
+
+-- 15) Broadcast delivery unknown-state safety (STEP588X3)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+ALTER TABLE IF EXISTS broadcast_sent_log
+  ADD COLUMN IF NOT EXISTS delivery_attempt_id uuid,
+  ADD COLUMN IF NOT EXISTS delivery_unknown_at timestamptz,
+  ADD COLUMN IF NOT EXISTS telegram_message_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS resolved_at timestamptz,
+  ADD COLUMN IF NOT EXISTS resolved_by_tg_id bigint,
+  ADD COLUMN IF NOT EXISTS resolution_note text;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='broadcast_sent_log') THEN
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_broadcast_sent_log_delivery_unknown
+        ON broadcast_sent_log (broadcast_id, delivery_unknown_at DESC)
+        WHERE status = 'delivery_unknown';
+    $$;
+
+    EXECUTE $$
+      CREATE INDEX IF NOT EXISTS idx_broadcast_sent_log_attempt
+        ON broadcast_sent_log (broadcast_id, user_id, delivery_attempt_id)
+        WHERE delivery_attempt_id IS NOT NULL;
+    $$;
+  END IF;
+END $$;

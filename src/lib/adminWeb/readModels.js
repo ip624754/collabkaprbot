@@ -864,7 +864,7 @@ function normalizeBroadcastStatus(value) {
 
 function commsOverallState(summary = {}) {
   if (!summary.available) return 'unknown';
-  if (Number(summary.blocked || 0) > 0 || Number(summary.failed || 0) > 0 || Number(summary.deferred || 0) > 0 || Number(summary.quarantined || 0) > 0 || Number(summary.cooldownActive || 0) > 0 || Number(summary.active || 0) > 0) return 'degraded';
+  if (Number(summary.blocked || 0) > 0 || Number(summary.failed || 0) > 0 || Number(summary.deliveryUnknown || 0) > 0 || Number(summary.deferred || 0) > 0 || Number(summary.quarantined || 0) > 0 || Number(summary.cooldownActive || 0) > 0 || Number(summary.active || 0) > 0) return 'degraded';
   return 'ok';
 }
 
@@ -890,6 +890,7 @@ function buildCommsWarnings(summary = {}, extra = {}) {
   if (Number(summary.cooldownActive || 0) > 0) warnings.push({ level: 'warning', message: `Есть рассылки с активной паузой: ${Number(summary.cooldownActive || 0)}`, source: 'broadcasts' });
   if (Number(summary.blocked || 0) > 0) warnings.push({ level: 'warning', message: `Есть заблокированные доставки: ${Number(summary.blocked || 0)}`, source: 'outbox' });
   if (Number(summary.failed || 0) > 0) warnings.push({ level: 'warning', message: `Есть доставки с ошибкой: ${Number(summary.failed || 0)}`, source: 'outbox' });
+  if (Number(summary.deliveryUnknown || 0) > 0) warnings.push({ level: 'warning', message: `Есть доставки с неопределённым исходом: ${Number(summary.deliveryUnknown || 0)}. Автоповтор отключён.`, source: 'outbox' });
   if (Number(summary.deferred || 0) > 0 || Number(summary.quarantined || 0) > 0) warnings.push({ level: 'warning', message: `Есть отложенные или изолированные повторы: ${Number(summary.deferred || 0) + Number(summary.quarantined || 0)}`, source: 'outbox' });
   if (Number(extra.draftsWithoutTest || 0) > 0) warnings.push({ level: 'info', message: `Есть черновики без тестовой отправки: ${Number(extra.draftsWithoutTest || 0)}`, source: 'drafts' });
   if (!warnings.length) warnings.push({ level: 'info', message: 'Явных предупреждений по коммуникациям нет.', source: 'comms' });
@@ -903,6 +904,7 @@ function buildCommsHints(summary = {}, extra = {}) {
   const hints = [];
   if (Number(summary.active || 0) > 0) hints.push({ kind: 'warning', message: 'Есть активные рассылки. Массовый запуск из веб-админки выключен; используй Telegram-админку. Диагностика: live send → bot/admin fallback.' });
   if (Number(summary.drafts || 0) > 0) hints.push({ kind: 'info', message: 'Черновики можно редактировать в веб-админке и проверять тестовой отправкой себе. Массовый запуск здесь выключен.' });
+  if (Number(summary.deliveryUnknown || 0) > 0) hints.push({ kind: 'warning', message: 'Неопределённые доставки нельзя отправлять повторно автоматически. Сверь Telegram и отметь исход вручную.' });
   if (Number(summary.blocked || 0) > 0 || Number(summary.failed || 0) > 0) hints.push({ kind: 'warning', message: 'Есть пропуски или ошибки доставки. Проверь снимок исходящих и Telegram-админку.' });
   if (Number(extra.recentTestSends || 0) > 0) hints.push({ kind: 'info', message: `Недавние тестовые отправки себе: ${Number(extra.recentTestSends || 0)}.` });
   if (!hints.length) hints.push({ kind: 'info', message: 'Черновики, объявления и исходящие работают без явных проблем. Веб-админка остаётся режимом проверки перед действием.' });
@@ -928,11 +930,12 @@ export async function getCommsSummary() {
     warnings: [{ level: 'info', message: 'Записей рассылок пока нет.', source: 'comms' }],
     drafts: [],
     recentNotices: [],
-    outbox: { queued: 0, processing: 0, warning: 0, failed: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0 },
+    outbox: { queued: 0, processing: 0, warning: 0, failed: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0, deliveryUnknown: 0 },
     hints: [{ kind: 'info', message: 'Массовый запуск из веб-админки отключён. Используй предпросмотр и тестовую отправку себе.' }],
     recentAdminAudit: [],
     recentBroadcasts: [],
-    groups: { queued: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0 },
+    unknownDeliveries: [],
+    groups: { queued: 0, sent: 0, blocked: 0, deferred: 0, quarantined: 0, deliveryUnknown: 0 },
   };
 
   let summary = {
@@ -950,6 +953,7 @@ export async function getCommsSummary() {
     deferred: 0,
     quarantined: 0,
     failed: 0,
+    deliveryUnknown: 0,
     latestEventAt: null,
   };
 
@@ -974,12 +978,13 @@ export async function getCommsSummary() {
           count(*) filter (where status = 'deferred')::int as deferred,
           count(*) filter (where status = 'quarantined')::int as quarantined,
           count(*) filter (where status = 'failed')::int as failed,
-          max(sent_at) as latest_sent_at
+          count(*) filter (where status = 'delivery_unknown')::int as delivery_unknown,
+          max(greatest(sent_at, delivery_unknown_at)) as latest_sent_at
         from broadcast_sent_log
       )
       select
         bc.total, bc.drafts, bc.active, bc.done_recent, bc.errors, bc.stopped, bc.cooldown_active, bc.latest_broadcast_at,
-        sl.queued, sl.sent, sl.blocked, sl.deferred, sl.quarantined, sl.failed, sl.latest_sent_at
+        sl.queued, sl.sent, sl.blocked, sl.deferred, sl.quarantined, sl.failed, sl.delivery_unknown, sl.latest_sent_at
       from bc cross join sl
     `);
     const row = r.rows?.[0] || {};
@@ -998,6 +1003,7 @@ export async function getCommsSummary() {
       deferred: Number(row.deferred || 0),
       quarantined: Number(row.quarantined || 0),
       failed: Number(row.failed || 0),
+      deliveryUnknown: Number(row.delivery_unknown || 0),
       latestEventAt: row.latest_sent_at || row.latest_broadcast_at || null,
     };
   } catch {
@@ -1014,7 +1020,8 @@ export async function getCommsSummary() {
           coalesce(st.sent, 0)::int as sent_count,
           coalesce(st.queued, 0)::int as queued_count,
           coalesce(st.blocked, 0)::int as blocked_count,
-          coalesce(st.failed, 0)::int as failed_count
+          coalesce(st.failed, 0)::int as failed_count,
+          coalesce(st.delivery_unknown, 0)::int as delivery_unknown_count
         from broadcasts b
         left join users u on u.id = b.created_by_user_id
         left join lateral (
@@ -1022,7 +1029,8 @@ export async function getCommsSummary() {
             count(*) filter (where status = 'sent') as sent,
             count(*) filter (where status = 'queued') as queued,
             count(*) filter (where status = 'blocked') as blocked,
-            count(*) filter (where status = 'failed') as failed
+            count(*) filter (where status = 'failed') as failed,
+            count(*) filter (where status = 'delivery_unknown') as delivery_unknown
           from broadcast_sent_log sl
           where sl.broadcast_id = b.id
         ) st on true
@@ -1046,10 +1054,41 @@ export async function getCommsSummary() {
           queued: Number(row.queued_count || 0),
           blocked: Number(row.blocked_count || 0),
           failed: Number(row.failed_count || 0),
+          deliveryUnknown: Number(row.delivery_unknown_count || 0),
         },
       })) : [];
     } catch {
       recentRows = [];
+    }
+  }
+
+  let unknownDeliveries = [];
+  if (summary.available && Number(summary.deliveryUnknown || 0) > 0) {
+    try {
+      const r = await pool.query(`
+        select
+          sl.broadcast_id, sl.user_id, u.tg_id, u.tg_username,
+          sl.attempts, sl.last_attempt_at, sl.delivery_unknown_at,
+          sl.last_error, sl.telegram_message_ids
+        from broadcast_sent_log sl
+        join users u on u.id = sl.user_id
+        where sl.status = 'delivery_unknown'
+        order by sl.delivery_unknown_at desc nulls last, sl.broadcast_id desc, sl.user_id desc
+        limit 50
+      `);
+      unknownDeliveries = (r.rows || []).map((row) => ({
+        broadcastId: Number(row.broadcast_id || 0),
+        userId: Number(row.user_id || 0),
+        tgId: Number(row.tg_id || 0),
+        username: row.tg_username ? String(row.tg_username) : '',
+        attempts: Number(row.attempts || 0),
+        lastAttemptAt: row.last_attempt_at || null,
+        unknownAt: row.delivery_unknown_at || null,
+        reason: String(row.last_error || ''),
+        telegramMessageIds: Array.isArray(row.telegram_message_ids) ? row.telegram_message_ids : [],
+      }));
+    } catch {
+      unknownDeliveries = [];
     }
   }
 
@@ -1070,27 +1109,30 @@ export async function getCommsSummary() {
     drafts: drafts.length,
     recentNotices: recentNotices.length,
     outboxPending: Number(summary.queued || 0) + Number(summary.deferred || 0) + Number(summary.quarantined || 0),
-    outboxWarnings: Number(summary.blocked || 0) + Number(summary.failed || 0),
+    outboxWarnings: Number(summary.blocked || 0) + Number(summary.failed || 0) + Number(summary.deliveryUnknown || 0),
     recentTestSends,
     warnings: warnings.filter((item) => String(item.level || '') !== 'info').length,
     total: summary.total,
     active: summary.active,
     doneRecent: summary.doneRecent,
     blocked: Number(summary.blocked || 0) + Number(summary.failed || 0),
+    deliveryUnknown: Number(summary.deliveryUnknown || 0),
   };
   out.warnings = warnings;
   out.drafts = drafts;
   out.recentNotices = recentNotices;
   out.recentBroadcasts = recentRows;
+  out.unknownDeliveries = unknownDeliveries;
   out.outbox = {
     queued: Number(summary.queued || 0),
     processing: Number(summary.deferred || 0),
-    warning: Number(summary.blocked || 0) + Number(summary.quarantined || 0),
+    warning: Number(summary.blocked || 0) + Number(summary.quarantined || 0) + Number(summary.deliveryUnknown || 0),
     failed: Number(summary.failed || 0),
     sent: Number(summary.sent || 0),
     blocked: Number(summary.blocked || 0),
     deferred: Number(summary.deferred || 0),
     quarantined: Number(summary.quarantined || 0),
+    deliveryUnknown: Number(summary.deliveryUnknown || 0),
   };
   out.groups = {
     queued: out.outbox.queued,
@@ -1098,6 +1140,7 @@ export async function getCommsSummary() {
     blocked: out.outbox.blocked + out.outbox.failed,
     deferred: out.outbox.deferred,
     quarantined: out.outbox.quarantined,
+    deliveryUnknown: out.outbox.deliveryUnknown,
   };
   out.hints = buildCommsHints(summary, { recentTestSends });
   out.recentAdminAudit = recentAdminAudit.slice(0, 8);

@@ -108,8 +108,10 @@ One service owns draw, winners, status and audit in one transaction for every ca
 
 ## STEP588X3 — Broadcast Delivery Unknown-State Safety
 
-**Mode:** HEAVY
+**Mode:** HEAVY / CRITICAL
 **Expected risk score:** 14/20
+**Actual risk score:** 16/20
+**Status:** IMPLEMENTED LOCALLY / MIGRATION AND PRODUCTION CANARY PENDING
 
 ### Scope
 
@@ -131,6 +133,20 @@ One service owns draw, winners, status and audit in one transaction for every ca
 ### Exit gate
 
 The system prefers a visible unknown delivery over an automatic duplicate.
+
+### STEP588X3 implementation evidence
+
+- per-attempt claim and compare-and-set receipts in `src/db/queries.js`;
+- shared classification in `src/bot/broadcastDeliverySafety.js`;
+- shared receipt safety in `src/bot/broadcastDeliveryReceipt.js`;
+- QStash and legacy cron convergence;
+- stale `sending` quarantine with no automatic reclaim;
+- founder-only no-resend reconciliation and Communications visibility;
+- atomic Redis Lua for 429 distinct-user window;
+- additive migration `049_broadcast_delivery_unknown_state.sql`;
+- executable regression: `scripts/test-broadcast-delivery-unknown-critical.js`;
+- source contract: `scripts/smoke-broadcast-delivery-unknown-state-contract.js`;
+- source exit gate is met locally; production migration/replay/unknown-state evidence remains open.
 
 ## STEP588X4 — Admin Web Auth Challenge Binding & Throttling
 

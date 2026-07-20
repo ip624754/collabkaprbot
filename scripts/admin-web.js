@@ -3152,13 +3152,13 @@ function commsStatusClass(value) {
   const key = String(value || '').trim().toLowerCase();
   if (key === 'done' || key === 'sent') return 'good';
   if (key === 'running' || key === 'paused' || key === 'pending' || key === 'queued') return 'warn';
-  if (key === 'error' || key === 'stopped' || key === 'blocked' || key === 'failed') return 'bad';
+  if (key === 'error' || key === 'stopped' || key === 'blocked' || key === 'failed' || key === 'delivery_unknown') return 'bad';
   return '';
 }
 
 function commsStatusLabel(value) {
   const key = String(value || '').trim().toLowerCase();
-  return ({ pending: 'Черновик', running: 'Выполняется', paused: 'На паузе', done: 'Завершено', error: 'Ошибка', stopped: 'Остановлено', blocked: 'Заблокировано', sent: 'Отправлено', failed: 'Ошибка', queued: 'В очереди', processing: 'Обрабатывается', warning: 'Нужна проверка', unknown: 'Неизвестно' })[key] || (key || 'Неизвестно');
+  return ({ pending: 'Черновик', running: 'Выполняется', paused: 'На паузе', done: 'Завершено', error: 'Ошибка', stopped: 'Остановлено', blocked: 'Заблокировано', sent: 'Отправлено', failed: 'Ошибка', queued: 'В очереди', processing: 'Обрабатывается', warning: 'Нужна проверка', delivery_unknown: 'Исход неизвестен', unknown: 'Неизвестно' })[key] || (key || 'Неизвестно');
 }
 
 function normalizeCommsEditorState(model) {
@@ -3222,6 +3222,7 @@ function commsView(model) {
   const hints = Array.isArray(model.hints) ? model.hints : [];
   const overall = model.overall || { state: 'unknown', label: 'Данные пока недоступны' };
   const recentAdminAudit = Array.isArray(model.recentAdminAudit) ? model.recentAdminAudit : [];
+  const unknownDeliveries = Array.isArray(model.unknownDeliveries) ? model.unknownDeliveries : [];
   const editor = normalizeCommsEditorState(model);
   window.__commsPageData = model;
   window.__commsState = editor;
@@ -3240,6 +3241,7 @@ function commsView(model) {
         <div class="aw-card aw-runtime-card"><span>Недавние объявления</span><strong>${Number(summary.recentNotices || 0)}</strong><small>Последние публикации</small></div>
         <div class="aw-card aw-runtime-card"><span>Исходящие: в очереди</span><strong class="aw-status ${Number(summary.outboxPending || 0) > 0 ? 'warn' : 'good'}">${Number(summary.outboxPending || 0)}</strong><small>Ожидают или обрабатываются</small></div>
         <div class="aw-card aw-runtime-card"><span>Исходящие: требуют проверки</span><strong class="aw-status ${Number(summary.outboxWarnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.outboxWarnings || 0)}</strong><small>Предупреждения и ошибки</small></div>
+        <div class="aw-card aw-runtime-card"><span>Исход неизвестен</span><strong class="aw-status ${Number(summary.deliveryUnknown || 0) > 0 ? 'bad' : 'good'}">${Number(summary.deliveryUnknown || 0)}</strong><small>Автоповтор отключён</small></div>
         <div class="aw-card aw-runtime-card"><span>Тестовые отправки</span><strong>${Number(summary.recentTestSends || 0)}</strong><small>Последние события аудита</small></div>
         <div class="aw-card aw-runtime-card"><span>Предупреждения</span><strong class="aw-status ${Number(summary.warnings || 0) > 0 ? 'bad' : 'good'}">${Number(summary.warnings || 0)}</strong><small>Сначала проверь этот блок</small></div>
       </div>
@@ -3342,7 +3344,7 @@ function commsView(model) {
                     <td><strong>${escapeHtml(item.title || `#${Number(item.id || 0)}`)}</strong><small>${escapeHtml(item.preview || 'Без текста')} · ${escapeHtml(item.createdByLabel || 'Оператор')}</small></td>
                     <td>${escapeHtml(commsAudienceLabel(item.audience))}</td>
                     <td><span class="aw-status ${commsStatusClass(item.status)}">${escapeHtml(commsStatusLabel(item.status))}</span></td>
-                    <td><small>отправлено ${Number(item.outbox?.sent || 0)} · в очереди ${Number(item.outbox?.queued || 0)} · ошибки ${Number(item.outbox?.failed || 0)}</small></td>
+                    <td><small>отправлено ${Number(item.outbox?.sent || 0)} · в очереди ${Number(item.outbox?.queued || 0)} · ошибки ${Number(item.outbox?.failed || 0)} · сверка ${Number(item.outbox?.deliveryUnknown || 0)}</small></td>
                     <td>${formatDate(item.updatedAt)}</td>
                   </tr>
                 `).join('') : '<tr><td colspan="5" class="aw-empty">Недавних объявлений пока нет.</td></tr>'}
@@ -3360,6 +3362,7 @@ function commsView(model) {
             <div class="aw-list-item"><strong>Обрабатывается</strong><small>${Number(outbox.processing || 0)}</small></div>
             <div class="aw-list-item"><strong>Нужна проверка</strong><small>${Number(outbox.warning || 0)}</small></div>
             <div class="aw-list-item"><strong>Ошибки</strong><small>${Number(outbox.failed || 0)}</small></div>
+            <div class="aw-list-item"><strong>Исход неизвестен</strong><small>${Number(outbox.deliveryUnknown || 0)} · без автоповтора</small></div>
             <div class="aw-list-item"><strong>Отправлено</strong><small>${Number(outbox.sent || 0)}</small></div>
           </div>
         </section>
@@ -3373,6 +3376,32 @@ function commsView(model) {
                 <small>${escapeHtml(founderTextLabel(item.message || ''))}</small>
               </div>
             `).join('') : '<div class="aw-empty">Пока пусто.</div>'}
+          </div>
+        </section>
+
+        <section class="aw-surface aw-stack">
+          <h2>Неопределённые доставки</h2>
+          <p class="aw-muted">Telegram мог принять сообщение, но durable receipt не подтверждён. Повторная отправка здесь отсутствует.</p>
+          <div class="aw-list">
+            ${unknownDeliveries.length ? unknownDeliveries.map((item) => `
+              <div class="aw-list-item">
+                <div class="aw-row-between">
+                  <div>
+                    <strong>Рассылка #${Number(item.broadcastId || 0)} · user ${Number(item.userId || 0)}</strong>
+                    <small>${item.username ? `@${escapeHtml(item.username)}` : `TG ${Number(item.tgId || 0) || '—'}`} · ${formatDate(item.unknownAt || item.lastAttemptAt)}</small>
+                  </div>
+                  <span class="aw-status bad">Исход неизвестен</span>
+                </div>
+                <small>${escapeHtml(item.reason || 'Нет подтверждённого delivery receipt')}</small>
+                ${Array.isArray(item.telegramMessageIds) && item.telegramMessageIds.length ? `<small>Telegram message IDs: ${escapeHtml(item.telegramMessageIds.join(', '))}</small>` : ''}
+                ${isFounder ? `
+                  <div class="aw-actions">
+                    <button class="aw-button secondary" data-resolve-unknown="sent" data-broadcast-id="${Number(item.broadcastId || 0)}" data-user-id="${Number(item.userId || 0)}">Подтвердить отправку</button>
+                    <button class="aw-button ghost" data-resolve-unknown="failed" data-broadcast-id="${Number(item.broadcastId || 0)}" data-user-id="${Number(item.userId || 0)}">Подтвердить ошибку</button>
+                  </div>
+                ` : '<small>Ручная сверка доступна только фаундеру.</small>'}
+              </div>
+            `).join('') : '<div class="aw-empty">Неопределённых доставок нет.</div>'}
           </div>
         </section>
 
@@ -4522,6 +4551,30 @@ function bindShell() {
     }
     alert('Тест-отправка фаундера отправлена в Telegram.');
     await render();
+  });
+
+  app.querySelectorAll('[data-resolve-unknown]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const resolution = btn.getAttribute('data-resolve-unknown') || '';
+      const broadcastId = Number(btn.getAttribute('data-broadcast-id') || 0);
+      const userId = Number(btn.getAttribute('data-user-id') || 0);
+      const label = resolution === 'sent' ? 'сообщение подтверждено как отправленное' : 'доставка подтверждена как ошибка';
+      if (!confirm(`Ручная сверка: ${label}. Повторной отправки не будет. Продолжить?`)) return;
+      const note = prompt('Короткое основание сверки (обязательно):', '') || '';
+      if (!note.trim()) {
+        alert('Для ручной сверки нужно указать основание.');
+        return;
+      }
+      const res = await api('/api/admin-web-write?action=resolve_broadcast_delivery_unknown', {
+        method: 'POST',
+        body: JSON.stringify({ broadcastId, userId, resolution, note }),
+      });
+      if (!res.ok) {
+        alert(`Не удалось сохранить сверку: ${res.data?.error || 'unknown'}`);
+        return;
+      }
+      await render();
+    });
   });
 }
 

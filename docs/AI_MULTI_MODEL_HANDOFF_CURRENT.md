@@ -1,3 +1,56 @@
+# AI Multi-Model Handoff — STEP588X3 Current Truth
+
+**Baseline:** STEP588X3 source implementation on STEP588X2
+**Status:** SOURCE READY / MIGRATION + PRODUCTION CANARY PENDING / GLOBAL RELEASE HOLD
+
+## Verified locally
+
+- per-attempt delivery claim and compare-and-set receipts;
+- terminal `delivery_unknown` state;
+- no stale-`sending` automatic reclaim;
+- common QStash/legacy-cron safety helpers;
+- bounded DB-only receipt retry after Telegram success;
+- durable read after lost DB acknowledgement;
+- timeout/network/5xx ambiguity handling;
+- atomic Redis Lua for distinct-recipient 429 counting;
+- founder-only no-resend reconciliation with mandatory note;
+- 35 broadcast assertions, 66 payment assertions and 55 giveaway assertions PASS;
+- 126 registered source checks and 250 JavaScript syntax checks PASS;
+- dependency/runtime preflight PASS;
+- migration/action/callback/package-lock gates PASS.
+
+## Not verified
+
+- migration 049 in production;
+- live QStash replay and timeout behavior;
+- real Telegram send-success / DB-receipt failure;
+- live legacy cron and founder reconciliation;
+- production duplicate absence;
+- fresh npm vulnerability result because the audit endpoint returned 502;
+- X1/X2 production acceptance unless separately evidenced;
+- STEP586H1 24-hour observation.
+
+## Immediate action
+
+Apply migration 049, deploy STEP588X3 and execute `docs/operations/STEP588X3_BROADCAST_ROLLOUT_RUNBOOK.md`. Preserve normal-send, replay, unknown-state and reconciliation evidence. Then execute STEP588X4.
+
+## Hard rules
+
+- unknown is terminal for automation;
+- no Telegram call from persistence/reconciliation;
+- explicit negative acknowledgement and ambiguous outcome remain distinct;
+- attempt token is mandatory for in-flight terminal writes;
+- no release-clean claim before production evidence.
+
+Canonical references:
+
+- `docs/audit/STEP588X3_BROADCAST_UNKNOWN_STATE_SAFETY_REPORT.md`;
+- `docs/operations/STEP588X3_BROADCAST_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X3.md`.
+
+---
+
 # AI Multi-Model Handoff — STEP588X2 Current Truth
 
 **Baseline:** STEP588X2 source implementation on STEP588X1

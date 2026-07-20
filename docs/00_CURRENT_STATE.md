@@ -1,3 +1,31 @@
+## STEP588X3 — Broadcast Delivery Unknown-State Safety (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X3 source implementation on top of STEP588X2.
+
+Repository truth:
+
+- every automatic broadcast send requires a durable per-attempt claim identified by `delivery_attempt_id`;
+- stale `sending` rows are quarantined to terminal `delivery_unknown` and are never automatically reclaimed;
+- Telegram success plus DB receipt failure retries only the DB receipt and then persists `delivery_unknown` where possible;
+- transport timeout, network failure and Telegram 5xx are treated as ambiguous outcomes, not proof of non-delivery;
+- explicit 429 remains retryable because Telegram rejected the request; distinct-recipient 429 accounting is one Redis Lua operation;
+- QStash and legacy direct cron use the same delivery classification and receipt helpers;
+- founder-only reconciliation can mark an unknown row `sent` or `failed`, requires a reason and never sends Telegram;
+- admin Communications exposes unknown counts, evidence and the no-auto-resend policy;
+- migration 049 is additive and must be applied before runtime deployment;
+- 35 executable unknown-state assertions, all 126 registered source checks and all 250 JavaScript syntax checks pass locally.
+
+**Release decision:** STEP588X3 is source-ready, migration/deployment/canary pending. STEP587 and STEP589 remain HOLD. Continue with STEP588X4 only after preserving X3 rollout evidence or explicitly retaining the source-only boundary.
+
+Read first:
+
+- `docs/audit/STEP588X3_BROADCAST_UNKNOWN_STATE_SAFETY_REPORT.md`;
+- `docs/operations/STEP588X3_BROADCAST_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X3.md`.
+
+---
+
 ## STEP588X2 — Giveaway Draw Correctness & Single Atomic Path (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X2 source implementation on top of STEP588X1.

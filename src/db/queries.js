@@ -6782,23 +6782,31 @@ export async function listBroadcastRecipients(audience = 'all', batchSize = 30, 
 }
 
 export async function logBroadcastSent(broadcastId, userId, status = 'sent') {
-  await pool.query(
-    `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until)
-     values ($1, $2, $3, null)
+  const normalizedStatus = String(status || 'sent').toLowerCase() === 'sent' ? 'sent' : 'failed';
+  const r = await pool.query(
+    `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until, non_retryable)
+     values ($1, $2, $3, null, true)
      on conflict (broadcast_id, user_id)
      do update set
        status = excluded.status,
        retry_after_until = null,
-       non_retryable = false,
+       non_retryable = true,
        last_error = null,
-       sent_at = now()`,
-    [Number(broadcastId), Number(userId), String(status)]
+       sent_at = now(),
+       resolved_at = null,
+       resolved_by_tg_id = null,
+       resolution_note = null
+     where broadcast_sent_log.status not in ('sent','delivery_unknown')
+     returning *`,
+    [Number(broadcastId), Number(userId), normalizedStatus]
   );
+  return r.rows[0] || null;
 }
 
 // QStash fan-out: mark recipient queued (idempotent, does NOT increment attempts).
+// Terminal and in-flight states are never moved backwards to queued.
 export async function logBroadcastQueued(broadcastId, userId) {
-  await pool.query(
+  const r = await pool.query(
     `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until, non_retryable)
      values ($1, $2, 'queued', null, false)
      on conflict (broadcast_id, user_id)
@@ -6807,16 +6815,18 @@ export async function logBroadcastQueued(broadcastId, userId) {
        retry_after_until = null,
        non_retryable = false,
        last_error = null,
-       sent_at = now()`,
+       sent_at = now()
+     where broadcast_sent_log.status in ('queued','retry','deferred','quarantined')
+     returning *`,
     [Number(broadcastId), Number(userId)]
   );
+  return r.rows[0] || null;
 }
 
-
-// QStash fan-out: mark recipient blocked (idempotent, terminal).
-// Used for hard-skip and permanent Telegram errors.
+// QStash fan-out: mark recipient blocked before an external send attempt.
+// Existing sent/unknown/in-flight receipts are not overwritten.
 export async function logBroadcastBlocked(broadcastId, userId, errorText = '') {
-  await pool.query(
+  const r = await pool.query(
     `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until, non_retryable, last_error)
      values ($1, $2, 'blocked', null, true, $3)
      on conflict (broadcast_id, user_id)
@@ -6825,34 +6835,76 @@ export async function logBroadcastBlocked(broadcastId, userId, errorText = '') {
        retry_after_until = null,
        non_retryable = true,
        last_error = excluded.last_error,
-       sent_at = now()`,
+       sent_at = now()
+     where broadcast_sent_log.status in ('queued','retry','deferred','quarantined','blocked','failed')
+     returning *`,
     [Number(broadcastId), Number(userId), String(errorText || '').slice(0, 500)]
   );
+  return r.rows[0] || null;
 }
 
-// QStash fan-out: atomically claim delivery for sending.
-// Allows reclaim of stale 'sending' rows (serverless hard-kill) after N seconds.
+// Convert stale in-flight rows into a terminal operator-review state.
+// They are deliberately NOT reclaimed for automatic sending: a process may have
+// reached Telegram and died before persisting the receipt.
+export async function quarantineStaleBroadcastDeliveries(broadcastId, staleSendingSec = 60) {
+  const stale = Math.max(10, Math.min(3600, Number(staleSendingSec || 0) || 0));
+  const r = await pool.query(
+    `update broadcast_sent_log
+        set status = 'delivery_unknown',
+            retry_after_until = null,
+            non_retryable = true,
+            delivery_unknown_at = coalesce(delivery_unknown_at, now()),
+            last_error = coalesce(nullif(last_error, ''), 'stale_sending_outcome_unknown')
+      where broadcast_id = $1
+        and status = 'sending'
+        and last_attempt_at is not null
+        and last_attempt_at < now() - ($2 || ' seconds')::interval
+      returning broadcast_id, user_id, delivery_attempt_id`,
+    [Number(broadcastId), String(stale)]
+  );
+  return r.rows || [];
+}
+
+// Atomically claim a delivery. Stale `sending` is first quarantined as unknown;
+// it is never automatically reclaimed.
 export async function claimBroadcastDelivery(broadcastId, userId, staleSendingSec = 60) {
-  const stale = Math.max(10, Math.min(600, Number(staleSendingSec || 0) || 0));
+  const stale = Math.max(10, Math.min(3600, Number(staleSendingSec || 0) || 0));
   const r = await pool.query(
     `with ins as (
        insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until, non_retryable)
        values ($1, $2, 'queued', null, false)
        on conflict do nothing
      ),
+     quarantine_stale as (
+       update broadcast_sent_log
+          set status = 'delivery_unknown',
+              retry_after_until = null,
+              non_retryable = true,
+              delivery_unknown_at = coalesce(delivery_unknown_at, now()),
+              last_error = coalesce(nullif(last_error, ''), 'stale_sending_outcome_unknown')
+        where broadcast_id = $1
+          and user_id = $2
+          and status = 'sending'
+          and last_attempt_at is not null
+          and last_attempt_at < now() - ($3 || ' seconds')::interval
+        returning 1
+     ),
      claim as (
        update broadcast_sent_log
           set status = 'sending',
               attempts = attempts + 1,
               last_attempt_at = now(),
+              delivery_attempt_id = gen_random_uuid(),
+              delivery_unknown_at = null,
+              telegram_message_ids = '[]'::jsonb,
+              resolved_at = null,
+              resolved_by_tg_id = null,
+              resolution_note = null,
               last_error = null
         where broadcast_id = $1
           and user_id = $2
           and non_retryable = false
-          and (
-            status in ('queued','retry','deferred','quarantined')
-            or (status = 'sending' and last_attempt_at is not null and last_attempt_at < now() - ($3 || ' seconds')::interval)
-          )
+          and status in ('queued','retry','deferred','quarantined')
           and (retry_after_until is null or retry_after_until <= now())
         returning *
      )
@@ -6862,57 +6914,189 @@ export async function claimBroadcastDelivery(broadcastId, userId, staleSendingSe
   return r.rows[0] || null;
 }
 
-export async function markBroadcastDeliverySent(broadcastId, userId) {
-  await pool.query(
+function normalizeDeliveryAttemptId(value) {
+  const id = String(value || '').trim();
+  return id || null;
+}
+
+export async function getBroadcastDeliveryReceipt(broadcastId, userId, deliveryAttemptId) {
+  const attemptId = normalizeDeliveryAttemptId(deliveryAttemptId);
+  if (!attemptId) return null;
+  const r = await pool.query(
+    `select *
+       from broadcast_sent_log
+      where broadcast_id = $1
+        and user_id = $2
+        and delivery_attempt_id = $3::uuid
+      limit 1`,
+    [Number(broadcastId), Number(userId), attemptId]
+  );
+  return r.rows[0] || null;
+}
+
+export async function markBroadcastDeliverySent(broadcastId, userId, deliveryAttemptId, telegramMessageIds = []) {
+  const attemptId = normalizeDeliveryAttemptId(deliveryAttemptId);
+  if (!attemptId) return null;
+  const ids = Array.isArray(telegramMessageIds)
+    ? telegramMessageIds.map((x) => Number(x)).filter((x) => Number.isSafeInteger(x) && x > 0).slice(0, 20)
+    : [];
+  const r = await pool.query(
     `update broadcast_sent_log
         set status = 'sent',
             retry_after_until = null,
-            non_retryable = false,
+            non_retryable = true,
             last_error = null,
-            sent_at = now()
-      where broadcast_id = $1 and user_id = $2`,
-    [Number(broadcastId), Number(userId)]
+            sent_at = now(),
+            telegram_message_ids = $4::jsonb,
+            delivery_unknown_at = null,
+            resolved_at = null,
+            resolved_by_tg_id = null,
+            resolution_note = null
+      where broadcast_id = $1
+        and user_id = $2
+        and delivery_attempt_id = $3::uuid
+        and status in ('sending','delivery_unknown')
+      returning *`,
+    [Number(broadcastId), Number(userId), attemptId, JSON.stringify(ids)]
   );
+  return r.rows[0] || null;
 }
 
-export async function markBroadcastDeliveryBlocked(broadcastId, userId, errorText = '') {
-  await pool.query(
+export async function markBroadcastDeliveryUnknown(
+  broadcastId,
+  userId,
+  deliveryAttemptId,
+  errorText = '',
+  telegramMessageIds = []
+) {
+  const attemptId = normalizeDeliveryAttemptId(deliveryAttemptId);
+  if (!attemptId) return null;
+  const ids = Array.isArray(telegramMessageIds)
+    ? telegramMessageIds.map((x) => Number(x)).filter((x) => Number.isSafeInteger(x) && x > 0).slice(0, 20)
+    : [];
+  const r = await pool.query(
+    `update broadcast_sent_log
+        set status = 'delivery_unknown',
+            retry_after_until = null,
+            non_retryable = true,
+            last_error = $4,
+            delivery_unknown_at = coalesce(delivery_unknown_at, now()),
+            telegram_message_ids = case
+              when jsonb_array_length($5::jsonb) > 0 then $5::jsonb
+              else telegram_message_ids
+            end,
+            sent_at = now()
+      where broadcast_id = $1
+        and user_id = $2
+        and delivery_attempt_id = $3::uuid
+        and status in ('sending','delivery_unknown')
+      returning *`,
+    [
+      Number(broadcastId),
+      Number(userId),
+      attemptId,
+      String(errorText || 'delivery_outcome_unknown').slice(0, 500),
+      JSON.stringify(ids),
+    ]
+  );
+  return r.rows[0] || null;
+}
+
+export async function markBroadcastDeliveryBlocked(broadcastId, userId, errorText = '', deliveryAttemptId = null) {
+  const attemptId = normalizeDeliveryAttemptId(deliveryAttemptId);
+  const r = await pool.query(
     `update broadcast_sent_log
         set status = 'blocked',
             retry_after_until = null,
             non_retryable = true,
             last_error = $3,
             sent_at = now()
-      where broadcast_id = $1 and user_id = $2`,
-    [Number(broadcastId), Number(userId), String(errorText || '').slice(0, 500)]
+      where broadcast_id = $1
+        and user_id = $2
+        and (
+          ($4::uuid is not null and delivery_attempt_id = $4::uuid and status = 'sending')
+          or ($4::uuid is null and status in ('queued','retry','deferred','quarantined','blocked','failed'))
+        )
+      returning *`,
+    [Number(broadcastId), Number(userId), String(errorText || '').slice(0, 500), attemptId]
   );
+  return r.rows[0] || null;
 }
 
-export async function markBroadcastDeliveryFailedNonRetryable(broadcastId, userId, errorText = '') {
-  await pool.query(
+export async function markBroadcastDeliveryFailedNonRetryable(broadcastId, userId, errorText = '', deliveryAttemptId = null) {
+  const attemptId = normalizeDeliveryAttemptId(deliveryAttemptId);
+  const r = await pool.query(
     `update broadcast_sent_log
         set status = 'failed',
             retry_after_until = null,
             non_retryable = true,
             last_error = $3,
             sent_at = now()
-      where broadcast_id = $1 and user_id = $2`,
-    [Number(broadcastId), Number(userId), String(errorText || '').slice(0, 500)]
+      where broadcast_id = $1
+        and user_id = $2
+        and (
+          ($4::uuid is not null and delivery_attempt_id = $4::uuid and status = 'sending')
+          or ($4::uuid is null and status in ('queued','retry','deferred','quarantined','failed'))
+        )
+      returning *`,
+    [Number(broadcastId), Number(userId), String(errorText || '').slice(0, 500), attemptId]
   );
+  return r.rows[0] || null;
 }
 
-export async function markBroadcastDeliveryRetry(broadcastId, userId, retryAfterSec, errorText = '') {
+export async function markBroadcastDeliveryRetry(
+  broadcastId,
+  userId,
+  retryAfterSec,
+  errorText = '',
+  deliveryAttemptId = null
+) {
   const sec = Math.max(1, Math.min(24 * 3600, Number(retryAfterSec || 0) || 0));
-  await pool.query(
+  const attemptId = normalizeDeliveryAttemptId(deliveryAttemptId);
+  const r = await pool.query(
     `update broadcast_sent_log
         set status = 'retry',
             retry_after_until = now() + ($3 || ' seconds')::interval,
             non_retryable = false,
             last_error = $4,
             sent_at = now()
-      where broadcast_id = $1 and user_id = $2`,
-    [Number(broadcastId), Number(userId), String(sec), String(errorText || '').slice(0, 500)]
+      where broadcast_id = $1
+        and user_id = $2
+        and (
+          ($5::uuid is not null and delivery_attempt_id = $5::uuid and status = 'sending')
+          or ($5::uuid is null and status in ('queued','retry','deferred','quarantined'))
+        )
+      returning *`,
+    [Number(broadcastId), Number(userId), String(sec), String(errorText || '').slice(0, 500), attemptId]
   );
+  return r.rows[0] || null;
+}
+
+export async function markBroadcastDeliveryDeferred(
+  broadcastId,
+  userId,
+  retryAfterSec,
+  deliveryAttemptId,
+  errorText = 'telegram_429'
+) {
+  const sec = Math.max(1, Math.min(3600, Number(retryAfterSec || 0) || 0));
+  const attemptId = normalizeDeliveryAttemptId(deliveryAttemptId);
+  if (!attemptId) return null;
+  const r = await pool.query(
+    `update broadcast_sent_log
+        set status = 'deferred',
+            retry_after_until = now() + ($3 || ' seconds')::interval,
+            non_retryable = false,
+            last_error = $5,
+            sent_at = now()
+      where broadcast_id = $1
+        and user_id = $2
+        and delivery_attempt_id = $4::uuid
+        and status = 'sending'
+      returning *`,
+    [Number(broadcastId), Number(userId), String(sec), attemptId, String(errorText || '').slice(0, 500)]
+  );
+  return r.rows[0] || null;
 }
 
 export async function countBroadcastPendingDeliveries(broadcastId) {
@@ -6932,6 +7116,7 @@ export async function countBroadcastDeliveryStats(broadcastId) {
         count(*) filter (where status = 'sent')::int as sent,
         count(*) filter (where status = 'failed')::int as failed,
         count(*) filter (where status = 'blocked')::int as blocked,
+        count(*) filter (where status = 'delivery_unknown')::int as delivery_unknown,
         count(*) filter (where status = 'blocked' and last_error like 'hard_skip:%')::int as hard_skipped,
         count(*) filter (where status = 'retry')::int as retry,
         count(*) filter (where status = 'deferred')::int as deferred,
@@ -6948,6 +7133,7 @@ export async function countBroadcastDeliveryStats(broadcastId) {
     sent: Number(row.sent || 0) || 0,
     failed: Number(row.failed || 0) || 0,
     blocked: Number(row.blocked || 0) || 0,
+    delivery_unknown: Number(row.delivery_unknown || 0) || 0,
     hard_skipped: Number(row.hard_skipped || 0) || 0,
     retry: Number(row.retry || 0) || 0,
     deferred: Number(row.deferred || 0) || 0,
@@ -6964,7 +7150,7 @@ export async function listBroadcastPostRunReasonRows(broadcastId, limit = 50) {
     `select status, coalesce(last_error, '') as last_error, count(*)::int as n
        from broadcast_sent_log
       where broadcast_id = $1
-        and status in ('failed','blocked','retry','deferred','quarantined')
+        and status in ('failed','blocked','retry','deferred','quarantined','delivery_unknown')
       group by status, coalesce(last_error, '')
       order by count(*) desc, status asc
       limit $2`,
@@ -6972,7 +7158,6 @@ export async function listBroadcastPostRunReasonRows(broadcastId, limit = 50) {
   );
   return r.rows || [];
 }
-
 
 export async function listBroadcastBlockedDeliveries(broadcastId, limit = 20, offset = 0, kind = 'all') {
   const lim = Math.max(1, Math.min(50, Number(limit) || 20));
@@ -6992,10 +7177,69 @@ export async function listBroadcastBlockedDeliveries(broadcastId, limit = 20, of
   return r.rows || [];
 }
 
-// Broadcast per-recipient 429 deferral (so one heavy recipient doesn't stall the whole job).
+export async function listBroadcastUnknownDeliveries(limit = 50, broadcastId = null) {
+  const lim = Math.max(1, Math.min(200, Number(limit) || 50));
+  const bid = Number(broadcastId || 0) || 0;
+  const r = await pool.query(
+    `select
+        sl.broadcast_id,
+        sl.user_id,
+        u.tg_id,
+        u.tg_username,
+        sl.attempts,
+        sl.last_attempt_at,
+        sl.delivery_unknown_at,
+        sl.last_error,
+        sl.telegram_message_ids,
+        sl.delivery_attempt_id
+       from broadcast_sent_log sl
+       join users u on u.id = sl.user_id
+      where sl.status = 'delivery_unknown'
+        and ($1::bigint = 0 or sl.broadcast_id = $1)
+      order by sl.delivery_unknown_at desc nulls last, sl.broadcast_id desc, sl.user_id desc
+      limit $2`,
+    [bid, lim]
+  );
+  return r.rows || [];
+}
+
+export async function resolveBroadcastUnknownDelivery({
+  broadcastId,
+  userId,
+  resolution,
+  actorTgId,
+  note = '',
+}) {
+  const bid = Number(broadcastId || 0) || 0;
+  const uid = Number(userId || 0) || 0;
+  const actor = Number(actorTgId || 0) || 0;
+  const outcome = String(resolution || '').trim().toLowerCase();
+  if (!bid || !uid || !actor) return null;
+  if (!['sent','failed'].includes(outcome)) return null;
+  const r = await pool.query(
+    `update broadcast_sent_log
+        set status = $3,
+            non_retryable = true,
+            retry_after_until = null,
+            resolved_at = now(),
+            resolved_by_tg_id = $4,
+            resolution_note = $5,
+            sent_at = case when $3 = 'sent' then now() else sent_at end,
+            last_error = case when $3 = 'failed' then coalesce(nullif($5, ''), last_error) else last_error end
+      where broadcast_id = $1
+        and user_id = $2
+        and status = 'delivery_unknown'
+      returning *`,
+    [bid, uid, outcome, actor, String(note || '').slice(0, 500)]
+  );
+  return r.rows[0] || null;
+}
+
+// Broadcast per-recipient 429 deferral before the send state machine is claimed.
+// Runtime send paths should use markBroadcastDeliveryDeferred with an attempt id.
 export async function logBroadcastDeferred(broadcastId, userId, retryAfterSec) {
   const sec = Math.max(1, Math.min(3600, Number(retryAfterSec || 0) || 0));
-  await pool.query(
+  const r = await pool.query(
     `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until)
      values ($1, $2, 'deferred', now() + ($3 || ' seconds')::interval)
      on conflict (broadcast_id, user_id)
@@ -7004,16 +7248,18 @@ export async function logBroadcastDeferred(broadcastId, userId, retryAfterSec) {
        retry_after_until = now() + ($3 || ' seconds')::interval,
        non_retryable = false,
        last_error = null,
-       sent_at = now()`,
+       sent_at = now()
+     where broadcast_sent_log.status in ('queued','retry','deferred','quarantined')
+     returning *`,
     [Number(broadcastId), Number(userId), String(sec)]
   );
+  return r.rows[0] || null;
 }
 
 // Broadcast quarantine for recipients that keep hitting 429 repeatedly.
-// Reuses broadcast_sent_log (no schema change): status='quarantined', retry_after_until extended.
 export async function logBroadcastQuarantine(broadcastId, userId, quarantineSec) {
   const sec = Math.max(60, Math.min(86400, Number(quarantineSec || 0) || 0));
-  await pool.query(
+  const r = await pool.query(
     `insert into broadcast_sent_log (broadcast_id, user_id, status, retry_after_until)
      values ($1, $2, 'quarantined', now() + ($3 || ' seconds')::interval)
      on conflict (broadcast_id, user_id)
@@ -7026,9 +7272,11 @@ export async function logBroadcastQuarantine(broadcastId, userId, quarantineSec)
        non_retryable = false,
        last_error = null,
        sent_at = now()
-     where broadcast_sent_log.status in ('deferred','quarantined')`,
+     where broadcast_sent_log.status in ('deferred','quarantined')
+     returning *`,
     [Number(broadcastId), Number(userId), String(sec)]
   );
+  return r.rows[0] || null;
 }
 
 export async function getNextBroadcastDeferredRetryMs(broadcastId) {

@@ -60,3 +60,4 @@ INSERT INTO schema_migrations(name, checksum) VALUES ('045_member_invites.sql', 
 INSERT INTO schema_migrations(name, checksum) VALUES ('046_invite_reward_ledger.sql', '7f5af02ad82a3969dd4a9f0b2083afea60ef34b7c0f443b14e8987d92652a7d6') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('047_support_threads.sql', 'cfaedd17b72b5f02333c0e30c294758d54fd0df8a441b28d768c9da3b9ae1ad4') ON CONFLICT (name) DO NOTHING;
 INSERT INTO schema_migrations(name, checksum) VALUES ('048_payment_fulfillment_atomicity.sql', 'eaa17a16e2eb48174c79f59f1f8daaec14f7d07d0387ffe275f7f458f7fcb9c1') ON CONFLICT (name) DO NOTHING;
+INSERT INTO schema_migrations(name, checksum) VALUES ('049_broadcast_delivery_unknown_state.sql', '3814c21921560b8da86866981b863b96e94f444932de5558640ff6a124cf103f') ON CONFLICT (name) DO NOTHING;

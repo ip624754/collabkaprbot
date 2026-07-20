@@ -42,6 +42,8 @@
     "test:payment-fulfillment-critical": "node scripts/test-payment-fulfillment-critical.js",
     "test:giveaway-draw-critical": "node scripts/test-giveaway-draw-critical.js",
     "smoke:giveaway-single-atomic-path-contract": "node scripts/smoke-giveaway-single-atomic-path-contract.js",
+    "test:broadcast-delivery-unknown-critical": "node scripts/test-broadcast-delivery-unknown-critical.js",
+    "smoke:broadcast-delivery-unknown-state-contract": "node scripts/smoke-broadcast-delivery-unknown-state-contract.js",
     "smoke:admin-qstash-status-contract": "node scripts/smoke-admin-qstash-status-contract.js",
     "smoke:admin-hard-skip-contract": "node scripts/smoke-admin-hard-skip-contract.js",
     "smoke:admin-users-contract": "node scripts/smoke-admin-users-contract.js",

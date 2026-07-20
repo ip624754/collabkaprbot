@@ -28,6 +28,17 @@ import { buildRecoveredPaymentMessage } from './monetizationCopy.js';
 import { tgTimeoutSignal, TG_HTTP_MEDIA_TIMEOUT_MS } from '../lib/tgApi.js';
 import { flushOpsAlerts, queueOpsAlert } from './opsAlerts.js';
 import { buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
+import {
+  attachBroadcastPartialDeliveryEvidence,
+  buildBroadcastUnknownReason,
+  classifyBroadcastSendError,
+  extractTelegramMessageIds,
+} from './broadcastDeliverySafety.js';
+import {
+  persistBroadcastRejectedOrUnknown,
+  persistBroadcastSentOrUnknown,
+  persistBroadcastUnknown,
+} from './broadcastDeliveryReceipt.js';
 import { reportCronJobFailure } from '../lib/cronFailure.js';
 import {
   notifyGiveawayEnded,
@@ -1328,37 +1339,53 @@ export function extractRetryAfterSec(err) {
 
 export async function sendBroadcastMessage(api, tgId, bc) {
   const plan = buildBroadcastDeliveryPlan(bc, { maxButtons: 3, captionSafeLimit: 900 });
+  const messages = [];
 
-  for (const msg of plan.messages) {
-    const opts = {};
-    if (msg.reply_markup) opts.reply_markup = msg.reply_markup;
+  try {
+    for (const msg of plan.messages) {
+      const opts = {};
+      if (msg.reply_markup) opts.reply_markup = msg.reply_markup;
 
-    if (msg.kind === 'text') {
-      opts.parse_mode = 'HTML';
-      await api.sendMessage(Number(tgId), msg.text || '', opts, tgTimeoutSignal());
-      continue;
+      let sent = null;
+      if (msg.kind === 'text') {
+        opts.parse_mode = 'HTML';
+        sent = await api.sendMessage(Number(tgId), msg.text || '', opts, tgTimeoutSignal());
+      } else {
+        if (msg.caption) {
+          opts.caption = msg.caption;
+          opts.parse_mode = 'HTML';
+        }
+
+        if (msg.kind === 'photo') {
+          sent = await api.sendPhoto(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
+        } else if (msg.kind === 'video') {
+          sent = await api.sendVideo(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
+        } else if (msg.kind === 'animation') {
+          sent = await api.sendAnimation(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
+        } else if (msg.kind === 'document') {
+          sent = await api.sendDocument(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
+        } else {
+          opts.parse_mode = 'HTML';
+          sent = await api.sendMessage(
+            Number(tgId),
+            bc.draft_text || bc.draft_caption || '(empty)',
+            opts,
+            tgTimeoutSignal()
+          );
+        }
+      }
+
+      if (sent) messages.push(sent);
     }
-
-    if (msg.caption) {
-      opts.caption = msg.caption;
-      opts.parse_mode = 'HTML';
-    }
-
-    if (msg.kind === 'photo') {
-      await api.sendPhoto(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
-    } else if (msg.kind === 'video') {
-      await api.sendVideo(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
-    } else if (msg.kind === 'animation') {
-      await api.sendAnimation(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
-    } else if (msg.kind === 'document') {
-      await api.sendDocument(Number(tgId), msg.file_id, opts, tgTimeoutSignal(TG_HTTP_MEDIA_TIMEOUT_MS));
-    } else {
-      opts.parse_mode = 'HTML';
-      await api.sendMessage(Number(tgId), bc.draft_text || bc.draft_caption || '(empty)', opts, tgTimeoutSignal());
-    }
+  } catch (err) {
+    throw attachBroadcastPartialDeliveryEvidence(err, { messages });
   }
-}
 
+  return {
+    messages,
+    message_ids: extractTelegramMessageIds({ messages }),
+  };
+}
 
 
 export async function igVerifyTick() {
@@ -1654,6 +1681,7 @@ const fanoutEnabled = !!fanoutStatus.enabled;
       // we must NOT finish the broadcast until all queued deliveries are terminal.
       if (fanoutEnabled) {
         try {
+          await db.quarantineStaleBroadcastDeliveries(bc.id, 60);
           const pending = await db.countBroadcastPendingDeliveries(bc.id);
           await writeBroadcastPendingSnapshot(bc.id, pending);
           if (pending > 0) {
@@ -1724,14 +1752,15 @@ const fanoutEnabled = !!fanoutStatus.enabled;
       // In fan-out mode, compute final counters from broadcast_sent_log to keep admin UI accurate.
       let finalSent = Number(bc.sent_count || 0);
       let finalFailed = Number(bc.failed_count || 0);
-      if (fanoutEnabled) {
-        try {
-          const st = await db.countBroadcastDeliveryStats(bc.id);
-          finalSent = Number(st.sent || 0);
-          finalFailed = Number(st.failed || 0) + Number(st.blocked || 0);
-        } catch {
-          // keep best-effort
-        }
+      let finalUnknown = 0;
+      try {
+        await db.quarantineStaleBroadcastDeliveries(bc.id, 60);
+        const st = await db.countBroadcastDeliveryStats(bc.id);
+        finalSent = Number(st.sent || 0);
+        finalUnknown = Number(st.delivery_unknown || 0);
+        finalFailed = Number(st.failed || 0) + Number(st.blocked || 0) + finalUnknown;
+      } catch {
+        // keep best-effort snapshot; do not invent unknown count
       }
 
       const done = await db.atomicTransitionBroadcast(bc.id, 'RUNNING', 'DONE', {
@@ -1761,11 +1790,18 @@ const fanoutEnabled = !!fanoutStatus.enabled;
             .text('📋 Меню', 'a:menu')
             .text('🏠 Домой', 'a:home');
 
-          const sentShown = fanoutEnabled ? finalSent : bc.sent_count;
-          const failedShown = fanoutEnabled ? finalFailed : bc.failed_count;
+          const sentShown = finalSent;
+          const failedShown = finalFailed;
+          const unknownLine = finalUnknown > 0
+            ? `
+⚠️ Требуют сверки: ${finalUnknown} (повторная отправка отключена)`
+            : '';
           await bot.api.sendMessage(
             Number(creator.tg_id),
-            `✅ <b>Рассылка #${bc.id} завершена</b>\n\n📊 Отправлено: ${sentShown} / ${bc.total_count}\n❌ Ошибок: ${failedShown}`,
+            `✅ <b>Рассылка #${bc.id} завершена</b>
+
+📊 Отправлено: ${sentShown} / ${bc.total_count}
+❌ Ошибок: ${failedShown}${unknownLine}`,
             { parse_mode: 'HTML', reply_markup: kb }
           );
         }
@@ -1912,16 +1948,14 @@ const fanoutEnabled = !!fanoutStatus.enabled;
     let sent = 0;
     let failed = 0;
     let deferred = 0;
+    let unknown = 0;
     let lastId = lastUserId;
     let cooldownSetSec = 0;
 
     let hardSkipped = 0;
     const hardSkipMap2 = await getBroadcastHardSkipMap(recipients.map((r) => Number(r.tg_id)));
 
-
     for (const recipient of recipients) {
-      // Global budget: stop early to avoid Vercel hard-kill mid-loop and to
-      // always have time to persist cursor/counters.
       if (Date.now() >= deadlineAt - reserveMs) {
         timeBudgetHit = true;
         break;
@@ -1945,94 +1979,159 @@ const fanoutEnabled = !!fanoutStatus.enabled;
         continue;
       }
 
-      // Advance cursor only after we have *logged* an outcome for this uid.
-      // Important for 429: if rate-limited, we must NOT advance or the uid can be skipped forever.
-      let advanced = false;
+      const claim = await db.claimBroadcastDelivery(bc.id, uid, 60);
+      if (!claim) {
+        // Existing terminal or in-flight row: never send it again automatically.
+        lastId = Math.max(lastId, uid);
+        continue;
+      }
+      const deliveryAttemptId = String(claim.delivery_attempt_id || '').trim();
+      if (!deliveryAttemptId) throw new Error('broadcast_delivery_migration_required');
 
+      let advanced = false;
       try {
-        await sendBroadcastMessage(bot.api, tgId, bc);
-        await db.logBroadcastSent(bc.id, uid, 'sent');
+        const sendResult = await sendBroadcastMessage(bot.api, tgId, bc);
+        const messageIds = extractTelegramMessageIds(sendResult);
+        const receipt = await persistBroadcastSentOrUnknown({
+          db,
+          broadcastId: bc.id,
+          userId: uid,
+          attemptId: deliveryAttemptId,
+          messageIds,
+          sleepFn: sleep,
+        });
+
+        if (receipt.state === 'sent') {
+          sent++;
+        } else {
+          unknown++;
+          try {
+            await queueOpsAlert(bot.api, {
+              group: 'ops',
+              reason: 'broadcast_delivery_unknown',
+              title: 'Broadcast delivery needs reconciliation',
+              userId: uid,
+              kind: 'broadcast',
+              payload: `broadcast=${bc.id}`,
+              extra: ['outcome=send_succeeded_receipt_missing'],
+              dedupId: `broadcast_delivery_unknown:${bc.id}:${uid}`,
+            });
+          } catch {}
+        }
         await resetBroadcastQuarantineCount(bc.id, uid);
-        sent++;
         advanced = true;
       } catch (err) {
-        const code = err?.error_code || err?.statusCode || 0;
-        const desc = String(err?.description || err?.message || '');
+        const outcome = classifyBroadcastSendError(err);
+        const code = Number(outcome.code || 0) || 0;
+        const desc = String(outcome.description || '');
 
-        // 403 = blocked by user, 400 = chat not found → permanent failure
-        if (
-          code === 403 ||
-          code === 400 ||
-          desc.includes('bot was blocked') ||
-          desc.includes('chat not found') ||
-          desc.includes('user is deactivated')
-        ) {
+        if (outcome.kind === 'blocked') {
           const hsReason = normalizeBroadcastDeadChatReason(code, desc);
           if (hsReason) await setBroadcastHardSkip(tgId, hsReason);
-          await db.logBroadcastBlocked(bc.id, uid, desc || `telegram_${code}`);
+          const receipt = await persistBroadcastRejectedOrUnknown({
+            db,
+            broadcastId: bc.id,
+            userId: uid,
+            attemptId: deliveryAttemptId,
+            kind: 'blocked',
+            errorText: desc || outcome.reason,
+            error: err,
+          });
+          if (receipt.state === 'blocked') failed++;
+          else unknown++;
           await resetBroadcastQuarantineCount(bc.id, uid);
-          failed++;
           advanced = true;
-        }
-        // 429 = rate limit → stop batch early, retry next tick
-        else if (code === 429) {
+        } else if (outcome.kind === 'failed') {
+          const receipt = await persistBroadcastRejectedOrUnknown({
+            db,
+            broadcastId: bc.id,
+            userId: uid,
+            attemptId: deliveryAttemptId,
+            kind: 'failed',
+            errorText: desc || outcome.reason,
+            error: err,
+          });
+          if (receipt.state === 'failed') failed++;
+          else unknown++;
+          advanced = true;
+        } else if (outcome.kind === 'retryable') {
           const retryAfter = extractRetryAfterSec(err);
           cooldownSetSec = retryAfter;
-          // Persist per-recipient retry_after (DB-truth) so this user won't stall the whole job.
-          // We still respect Telegram retry_after globally via Redis cooldown (early-exit on next tick).
           let qCount = 0;
+          let deferredRow = null;
           try {
-            await db.logBroadcastDeferred(bc.id, uid, retryAfter);
-            deferred++;
+            deferredRow = await db.markBroadcastDeliveryDeferred(
+              bc.id,
+              uid,
+              retryAfter,
+              deliveryAttemptId,
+              'telegram_429'
+            );
+            if (deferredRow) {
+              deferred++;
+              advanced = true;
+              qCount = await bumpBroadcastQuarantineCount(bc.id, uid);
+            }
+          } catch {}
+
+          if (!deferredRow) {
+            await persistBroadcastUnknown({
+              db,
+              broadcastId: bc.id,
+              userId: uid,
+              attemptId: deliveryAttemptId,
+              reason: buildBroadcastUnknownReason('telegram_429_db_receipt_failed', err),
+            });
+            unknown++;
             advanced = true;
-            qCount = await bumpBroadcastQuarantineCount(bc.id, uid);
-          } catch {
-            // If DB is unavailable, fall back to global cooldown only (cursor won't advance).
           }
 
           const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
           await incrDayCounter(bcDeferSetDayKey(day));
-
-          // If the same recipient keeps triggering 429 repeatedly, quarantine it for a longer window.
-          // This avoids wasting cron ticks on problematic chats while keeping broadcast progress.
-          if (qCount >= BROADCAST_QUARANTINE_THRESHOLD) {
+          if (deferredRow && qCount >= BROADCAST_QUARANTINE_THRESHOLD) {
             try {
               await resetBroadcastQuarantineCount(bc.id, uid);
               await db.logBroadcastQuarantine(bc.id, uid, BROADCAST_QUARANTINE_SEC);
               await incrDayCounter(bcQuarantineSetDayKey(day));
-              console.error(
-                `[BROADCAST] quarantine uid=${uid} for ${BROADCAST_QUARANTINE_SEC}s after ${qCount} deferrals`
-              );
-            } catch {
-              // ignore quarantine failures
-            }
+            } catch {}
           }
-
           await setBroadcastCooldown(bc.id, retryAfter, 'telegram_429');
-          console.error(`[BROADCAST] 429 rate limit, retry_after=${retryAfter} (uid=${uid})`);
-          // Stop batch early — serverless safe. Next tick continues after cursor.
           break;
-        }
-        // Other errors → log as failed, continue
-        else {
-          console.error(`[BROADCAST] send error uid=${uid}`, desc);
-          await db.logBroadcastSent(bc.id, uid, 'failed');
-          await resetBroadcastQuarantineCount(bc.id, uid);
-          failed++;
+        } else {
+          const reason = buildBroadcastUnknownReason(outcome.reason, err);
+          await persistBroadcastUnknown({
+            db,
+            broadcastId: bc.id,
+            userId: uid,
+            attemptId: deliveryAttemptId,
+            reason,
+            messageIds: outcome.messageIds || [],
+          });
+          unknown++;
           advanced = true;
+          try {
+            await queueOpsAlert(bot.api, {
+              group: 'ops',
+              reason: 'broadcast_delivery_unknown',
+              title: 'Broadcast delivery needs reconciliation',
+              userId: uid,
+              kind: 'broadcast',
+              payload: `broadcast=${bc.id}`,
+              extra: [`outcome=${String(outcome.reason || 'unknown')}`],
+              dedupId: `broadcast_delivery_unknown:${bc.id}:${uid}`,
+            });
+          } catch {}
         }
       }
 
       if (advanced) lastId = Math.max(lastId, uid);
-
-      // Throttle between messages
       if (BROADCAST_SEND_DELAY_MS > 0) await sleep(BROADCAST_SEND_DELAY_MS);
     }
 
     // Update counters only when there is progress.
     // Important: on 429 we intentionally do NOT advance the cursor and can have sent=0/failed=0.
     // Cooldown is Redis-only, so avoid burning Neon CU with a no-op UPDATE.
-    const hasProgress = sent > 0 || failed > 0 || lastId !== lastUserId;
+    const hasProgress = sent > 0 || failed > 0 || unknown > 0 || lastId !== lastUserId;
     if (hasProgress) {
       await db.updateBroadcast(bc.id, {
         sent_count: Number(bc.sent_count || 0) + sent,
@@ -2047,6 +2146,7 @@ const fanoutEnabled = !!fanoutStatus.enabled;
       broadcast_id: bc.id,
       batch_sent: sent,
       batch_failed: failed,
+      ...(unknown ? { batch_delivery_unknown: unknown } : {}),
       ...(deferred ? { batch_deferred: deferred } : {}),
       ...(hardSkipped ? { batch_hard_skipped: hardSkipped } : {}),
       total_sent: Number(bc.sent_count || 0) + sent,

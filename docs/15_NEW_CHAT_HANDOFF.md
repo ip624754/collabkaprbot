@@ -1,3 +1,58 @@
+# STEP588X3 NEW CHAT HANDOFF
+
+**Current repository baseline:** STEP588X3 — Broadcast Delivery Unknown-State Safety
+**Parent:** STEP588X2 — Giveaway Draw Correctness
+**Repository status:** source implementation complete / migration and production canary pending
+
+## Start here
+
+1. Read `docs/00_CURRENT_STATE.md`.
+2. Read `docs/audit/STEP588X3_BROADCAST_UNKNOWN_STATE_SAFETY_REPORT.md`.
+3. Read `docs/operations/STEP588X3_BROADCAST_ROLLOUT_RUNBOOK.md`.
+4. Read `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`.
+5. Read `docs/RISK_REGISTRY.md`.
+
+## Current truth
+
+- QStash and legacy cron require an attempt-token claim before Telegram send.
+- Stale `sending` becomes terminal `delivery_unknown`; it is never automatically reclaimed.
+- Telegram success retries only the DB receipt, never Telegram.
+- Timeout/network/5xx outcomes are unknown, not retryable proof.
+- Explicit 429 remains retryable and its distinct-user Redis operation is atomic.
+- Founder reconciliation is no-resend, compare-and-set and requires an evidence note.
+- Admin Communications exposes unknown rows and message IDs.
+- Migration 049 must precede runtime deployment.
+- Local source, syntax, dependency/runtime and critical regression checks pass.
+- Production migration, QStash/Telegram behavior and duplicate absence are not verified.
+- STEP588X1 and X2 production acceptance remain pending unless separately evidenced.
+- STEP587 and STEP589 remain HOLD.
+
+## Next accepted sequence
+
+```text
+STEP588X1 production evidence
+→ STEP588X2 production evidence
+→ STEP588X3 migration + canary evidence
+→ STEP588X4 Admin Auth Challenge Binding
+→ STEP588X5 Health/Logging Privacy
+→ STEP588X6 Bounded Safety Hardening
+→ STEP588X7 Critical Behavior Test Spine
+→ STEP586H1 24h observation PASS
+→ STEP587 Go/No-Go
+→ resume STEP589
+```
+
+## Hard rules
+
+- never add `delivery_unknown` or stale `sending` to an automatic claim/retry set;
+- never call Telegram from receipt persistence or manual reconciliation;
+- treat transport timeout and Telegram 5xx as ambiguous;
+- preserve attempt-token compare-and-set writes;
+- apply migration 049 before deploying runtime;
+- do not claim production duplicate safety without canary/replay evidence.
+
+---
+
 # STEP588X2 NEW CHAT HANDOFF
 
 **Current repository baseline:** STEP588X2 — Giveaway Draw Correctness & Single Atomic Path

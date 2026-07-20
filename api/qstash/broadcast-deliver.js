@@ -19,6 +19,16 @@ import {
   getBroadcastFlowControl,
   qstashVerifySignature,
 } from '../../src/lib/qstash.js';
+import {
+  buildBroadcastUnknownReason,
+  classifyBroadcastSendError,
+  extractTelegramMessageIds,
+} from '../../src/bot/broadcastDeliverySafety.js';
+import {
+  persistBroadcastRejectedOrUnknown,
+  persistBroadcastSentOrUnknown,
+  persistBroadcastUnknown,
+} from '../../src/bot/broadcastDeliveryReceipt.js';
 
 export const config = {
   api: {
@@ -98,9 +108,12 @@ async function bumpBroadcast429DistinctUsers(broadcastId, userId) {
   try {
     const key = broadcast429DistinctUsersKey(broadcastId);
     const ttlSec = getGlobal429WindowSec();
-    await redis.sadd(key, String(userId));
-    await redis.expire(key, ttlSec);
-    const n = await redis.scard(key);
+    const lua = [
+      "redis.call('SADD', KEYS[1], ARGV[1])",
+      "redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))",
+      "return redis.call('SCARD', KEYS[1])",
+    ].join('; ');
+    const n = await redis.eval(lua, [key], [String(userId), String(ttlSec)]);
     return Number(n) || 0;
   } catch {
     return 0;
@@ -143,16 +156,26 @@ async function readRawBody(req, limitBytes = 1024 * 1024) {
   });
 }
 
-function isNonRetryableTelegramError(code, desc) {
-  if (code === 403 || code === 400) return true;
-  const d = String(desc || '').toLowerCase();
-  return (
-    d.includes('bot was blocked') ||
-    d.includes('chat not found') ||
-    d.includes('user is deactivated')
-  );
+async function emitBroadcastDeliveryUnknown({ broadcastId, userId, attemptId, reason, dbPersisted }) {
+  try {
+    await queueOpsDigestSafe({
+      group: 'ops',
+      reason: 'broadcast_delivery_unknown',
+      title: 'Broadcast delivery needs reconciliation',
+      kind: 'qstash',
+      payload: `broadcast=${Number(broadcastId || 0) || 0}`,
+      extra: [
+        `user=${Number(userId || 0) || 0}`,
+        attemptId ? `attempt=${String(attemptId)}` : '',
+        dbPersisted ? 'state=delivery_unknown' : 'state=sending_unconfirmed',
+        String(reason || 'delivery_outcome_unknown').slice(0, 180),
+      ].filter(Boolean),
+      dedupId: `broadcast_delivery_unknown:${Number(broadcastId || 0) || 0}:${Number(userId || 0) || 0}`,
+    });
+  } catch {
+    // Redis-only observability must not change delivery state.
+  }
 }
-
 
 function getDbBackoffSec() {
   const v = Number(process.env.BROADCAST_DB_BACKOFF_SEC || 60) || 60;
@@ -633,7 +656,12 @@ if (hardSkip) {
       return;
     }
 
-    // Claim delivery (DB guard). If already processed / not due, return 200.
+    // Construct the Telegram client before claiming: a local configuration
+    // failure is definitely pre-send and must not strand an in-flight row.
+    const bot = getBot();
+
+    // Claim delivery (DB guard). Stale `sending` is quarantined as unknown,
+    // never reclaimed for another automatic Telegram send.
     let claim;
     try {
       claim = await db.claimBroadcastDelivery(broadcastId, userId, 60);
@@ -645,119 +673,170 @@ if (hardSkip) {
       throw e;
     }
     if (!claim) {
-      res.status(200).json({ ok: true, skipped: 'not_claimable' });
+      res.status(200).json({ ok: true, skipped: 'not_claimable', automatic_resend: false });
       return;
     }
 
-    const bot = getBot();
+    const deliveryAttemptId = String(claim.delivery_attempt_id || '').trim();
+    if (!deliveryAttemptId) {
+      res.status(503).json({ ok: false, error: 'broadcast_delivery_migration_required' });
+      return;
+    }
 
     try {
-      await sendBroadcastMessage(bot.api, tgId, bcPayload);
+      const sendResult = await sendBroadcastMessage(bot.api, tgId, bcPayload);
+      const messageIds = extractTelegramMessageIds(sendResult);
       await resetBroadcastQuarantineCount(broadcastId, userId);
 
-      // Mark sent. Best-effort retries.
-      let marked = false;
-      for (let i = 0; i < 3; i++) {
-        try {
-          await db.markBroadcastDeliverySent(broadcastId, userId);
-          marked = true;
-          break;
-        } catch {
-          await new Promise((r) => setTimeout(r, 50 + i * 100));
-        }
-      }
+      // Telegram has acknowledged success. Persist only the DB receipt here;
+      // this helper never calls Telegram and falls back to delivery_unknown.
+      const receipt = await persistBroadcastSentOrUnknown({
+        db,
+        broadcastId,
+        userId,
+        attemptId: deliveryAttemptId,
+        messageIds,
+      });
 
-      if (!marked) {
-        console.error('[QSTASH][BC] sent but DB mark failed', { broadcastId, userId });
-      }
-
-      res.status(200).json({ ok: true, sent: true, db_marked: marked, ms: Date.now() - startedAt });
-      return;
-    } catch (err) {
-      const code = err?.error_code || err?.statusCode || 0;
-      const desc = String(err?.description || err?.message || '');
-
-      // Non-retryable errors
-      if (isNonRetryableTelegramError(code, desc)) {
-        const hsReason = normalizeBroadcastDeadChatReason(code, desc);
-        if (hsReason) await setBroadcastHardSkip(tgId, hsReason);
-        try {
-          await db.markBroadcastDeliveryBlocked(broadcastId, userId, desc || `telegram_${code}`);
-          await resetBroadcastQuarantineCount(broadcastId, userId);
-        } catch (e) {
-          if (isDbOverloadError(e)) {
-            await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
-            return;
-          }
-          // DB down: fail-closed
-          res.status(500).json({ ok: false, error: 'db_unavailable' });
-          return;
-        }
-        res.status(200).json({ ok: true, failed: true, non_retryable: true });
+      if (receipt.state !== 'sent') {
+        const reason = buildBroadcastUnknownReason('telegram_send_succeeded_db_receipt_failed');
+        await emitBroadcastDeliveryUnknown({
+          broadcastId,
+          userId,
+          attemptId: deliveryAttemptId,
+          reason,
+          dbPersisted: receipt.persisted,
+        });
+        res.status(200).json({
+          ok: true,
+          sent: true,
+          delivery_state: receipt.state,
+          automatic_resend: false,
+          ms: Date.now() - startedAt,
+        });
         return;
       }
 
-      // 429 → per-recipient backoff/skip (so one chat can't keep the broadcast pending forever).
-      // We set a GLOBAL cooldown only during bursty 429 across multiple recipients.
-      if (Number(code) === 429) {
+      res.status(200).json({
+        ok: true,
+        sent: true,
+        delivery_state: 'sent',
+        automatic_resend: false,
+        ms: Date.now() - startedAt,
+      });
+      return;
+    } catch (err) {
+      const outcome = classifyBroadcastSendError(err);
+      const code = Number(outcome.code || 0) || 0;
+      const desc = String(outcome.description || '');
+
+      if (outcome.kind === 'blocked') {
+        const hsReason = normalizeBroadcastDeadChatReason(code, desc);
+        if (hsReason) await setBroadcastHardSkip(tgId, hsReason);
+        const receipt = await persistBroadcastRejectedOrUnknown({
+          db,
+          broadcastId,
+          userId,
+          attemptId: deliveryAttemptId,
+          kind: 'blocked',
+          errorText: desc || outcome.reason,
+          error: err,
+        });
+        await resetBroadcastQuarantineCount(broadcastId, userId);
+        if (receipt.state !== 'blocked') {
+          const reason = buildBroadcastUnknownReason('telegram_rejected_db_receipt_failed', err);
+          await emitBroadcastDeliveryUnknown({
+            broadcastId,
+            userId,
+            attemptId: deliveryAttemptId,
+            reason,
+            dbPersisted: receipt.persisted,
+          });
+          res.status(200).json({ ok: true, delivery_state: receipt.state, automatic_resend: false });
+          return;
+        }
+        res.status(200).json({ ok: true, failed: true, non_retryable: true, delivery_state: 'blocked' });
+        return;
+      }
+
+      if (outcome.kind === 'failed') {
+        const receipt = await persistBroadcastRejectedOrUnknown({
+          db,
+          broadcastId,
+          userId,
+          attemptId: deliveryAttemptId,
+          kind: 'failed',
+          errorText: desc || outcome.reason,
+          error: err,
+        });
+        if (receipt.state !== 'failed') {
+          const reason = buildBroadcastUnknownReason('telegram_failed_db_receipt_failed', err);
+          await emitBroadcastDeliveryUnknown({
+            broadcastId,
+            userId,
+            attemptId: deliveryAttemptId,
+            reason,
+            dbPersisted: receipt.persisted,
+          });
+          res.status(200).json({ ok: true, delivery_state: receipt.state, automatic_resend: false });
+          return;
+        }
+        res.status(200).json({ ok: true, failed: true, non_retryable: true, delivery_state: 'failed' });
+        return;
+      }
+
+      if (outcome.kind === 'retryable') {
         const retryAfter = extractRetryAfterSec(err);
         const threshold = getQuarantineThreshold();
         const quarantineSec = getQuarantineSec();
         const globalThr = getGlobal429Threshold();
-
-        // Best-effort Redis signals (never fail because Redis is down).
         const qCount = await bumpBroadcastQuarantineCount(broadcastId, userId);
         const distinct429Users = await bumpBroadcast429DistinctUsers(broadcastId, userId);
         const isGlobal429 = distinct429Users >= globalThr;
 
-        // If this looks like a per-recipient issue (NOT a global burst), stop retrying after N hits.
         if (!isGlobal429 && qCount >= threshold) {
+          let row = null;
           try {
-            await db.markBroadcastDeliveryBlocked(
+            row = await db.markBroadcastDeliveryBlocked(
               broadcastId,
               userId,
-              `telegram_429_quarantined_${quarantineSec}s`
+              `telegram_429_quarantined_${quarantineSec}s`,
+              deliveryAttemptId
             );
-          } catch (e) {
-          if (isDbOverloadError(e)) {
-            await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
+          } catch {}
+          if (!row) {
+            const reason = buildBroadcastUnknownReason('telegram_429_quarantine_db_receipt_failed', err);
+            const receipt = await persistBroadcastUnknown({ db, broadcastId, userId, attemptId: deliveryAttemptId, reason });
+            await emitBroadcastDeliveryUnknown({ broadcastId, userId, attemptId: deliveryAttemptId, reason, dbPersisted: receipt.persisted });
+            res.status(200).json({ ok: true, delivery_state: receipt.state, automatic_resend: false });
             return;
           }
-          // DB down: fail-closed
-          res.status(500).json({ ok: false, error: 'db_unavailable' });
-          return;
-        }
-
           await resetBroadcastQuarantineCount(broadcastId, userId);
-          res.status(200).json({
-            ok: true,
-            blocked: true,
-            reason: 'telegram_429_quarantined',
-            qcnt: qCount || 0,
-            d429: distinct429Users || 0,
-          });
+          res.status(200).json({ ok: true, blocked: true, reason: 'telegram_429_quarantined', qcnt: qCount || 0, d429: distinct429Users || 0 });
           return;
         }
 
-        // DB log: must succeed (so cron can compute pending/done correctly).
+        let deferredRow = null;
         try {
-          await db.logBroadcastDeferred(broadcastId, userId, retryAfter);
-          // In global mode, reset per-recipient counter to avoid accidental quarantine on bursty limits.
-          if (isGlobal429) await resetBroadcastQuarantineCount(broadcastId, userId);
-        } catch (e) {
-        if (isDbOverloadError(e)) {
-          await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
+          deferredRow = await db.markBroadcastDeliveryDeferred(
+            broadcastId,
+            userId,
+            retryAfter,
+            deliveryAttemptId,
+            'telegram_429'
+          );
+        } catch {}
+        if (!deferredRow) {
+          const reason = buildBroadcastUnknownReason('telegram_429_db_receipt_failed', err);
+          const receipt = await persistBroadcastUnknown({ db, broadcastId, userId, attemptId: deliveryAttemptId, reason });
+          await emitBroadcastDeliveryUnknown({ broadcastId, userId, attemptId: deliveryAttemptId, reason, dbPersisted: receipt.persisted });
+          res.status(200).json({ ok: true, delivery_state: receipt.state, automatic_resend: false });
           return;
         }
-        res.status(500).json({ ok: false, error: 'db_unavailable' });
-        return;
-      }
 
-        // Global cooldown is best-effort (Redis-only). If Redis is down, we still delay this job.
         if (isGlobal429) {
-          try {
-            await setBroadcastCooldown(broadcastId, retryAfter, 'telegram_429');
-          } catch {}
+          await resetBroadcastQuarantineCount(broadcastId, userId);
+          try { await setBroadcastCooldown(broadcastId, retryAfter, 'telegram_429'); } catch {}
         }
 
         const delaySec = Math.max(1, Number(retryAfter || 0) || 1);
@@ -774,7 +853,6 @@ if (hardSkip) {
           });
         } catch (e) {
           console.error('[QSTASH][BC] republish after 429 failed', String(e?.message || e));
-          // Allow QStash retry, but DB already deferred and (in global mode) cooldown is set best-effort.
           res.status(500).json({ ok: false, error: 'republish_failed' });
           return;
         }
@@ -790,19 +868,30 @@ if (hardSkip) {
         return;
       }
 
-      // Other errors → retryable. Mark retry window and return 500 so QStash retries.
-      try {
-        await db.markBroadcastDeliveryRetry(broadcastId, userId, 60, desc || `telegram_${code}`);
-      } catch (e) {
-        if (isDbOverloadError(e)) {
-          await respondDbOverload({ res, broadcastId, userId, tgId, attempt, where: 'db_write', err: e });
-          return;
-        }
-        res.status(500).json({ ok: false, error: 'db_unavailable' });
-        return;
-      }
-
-      res.status(500).json({ ok: false, error: 'retryable_error' });
+      // No trustworthy negative acknowledgement from Telegram. Treat the outcome
+      // as terminal unknown and require explicit operator reconciliation.
+      const reason = buildBroadcastUnknownReason(outcome.reason, err);
+      const receipt = await persistBroadcastUnknown({
+        db,
+        broadcastId,
+        userId,
+        attemptId: deliveryAttemptId,
+        reason,
+        messageIds: outcome.messageIds || [],
+      });
+      await emitBroadcastDeliveryUnknown({
+        broadcastId,
+        userId,
+        attemptId: deliveryAttemptId,
+        reason,
+        dbPersisted: receipt.persisted,
+      });
+      res.status(200).json({
+        ok: true,
+        delivery_state: receipt.state,
+        automatic_resend: false,
+      });
+      return;
     }
   } catch (e) {
     console.error('[QSTASH][BC] handler error', e);

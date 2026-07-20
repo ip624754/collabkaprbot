@@ -1,5 +1,10 @@
 import { pool } from '../../db/pool.js';
-import { createBroadcast, getBroadcast, updateBroadcast } from '../../db/queries.js';
+import {
+  createBroadcast,
+  getBroadcast,
+  resolveBroadcastUnknownDelivery,
+  updateBroadcast,
+} from '../../db/queries.js';
 import { appendAdminWebAudit } from './auth.js';
 import { escapeHtml } from './common.js';
 import { sendTelegramMessage } from './telegram.js';
@@ -143,4 +148,59 @@ export async function testSendNoticeDraftToActor({ actorTgId, draftId }) {
   });
 
   return { ok: true };
+}
+
+
+export async function resolveUnknownBroadcastDeliveryForActor({
+  actorTgId,
+  broadcastId,
+  userId,
+  resolution,
+  note,
+}) {
+  const bid = Number(broadcastId || 0) || 0;
+  const uid = Number(userId || 0) || 0;
+  const outcome = String(resolution || '').trim().toLowerCase();
+  const cleanNote = String(note || '').trim().slice(0, 500);
+  if (!bid) return { ok: false, error: 'broadcast_id_required' };
+  if (!uid) return { ok: false, error: 'user_id_required' };
+  if (!['sent', 'failed'].includes(outcome)) return { ok: false, error: 'resolution_invalid' };
+  if (!cleanNote) return { ok: false, error: 'reconciliation_note_required' };
+
+  const row = await resolveBroadcastUnknownDelivery({
+    broadcastId: bid,
+    userId: uid,
+    resolution: outcome,
+    actorTgId,
+    note: cleanNote,
+  });
+  if (!row) return { ok: false, error: 'delivery_not_unknown' };
+
+  await appendAdminWebAudit({
+    section: 'comms',
+    action: 'resolve_broadcast_delivery_unknown',
+    actorTgId,
+    targetType: 'broadcast_delivery',
+    targetId: `${bid}:${uid}`,
+    reason: 'manual_reconciliation_no_resend',
+    oldJson: { status: 'delivery_unknown' },
+    newJson: {
+      status: outcome,
+      broadcastId: bid,
+      userId: uid,
+      note: cleanNote,
+      automaticResend: false,
+    },
+  });
+
+  return {
+    ok: true,
+    delivery: {
+      broadcastId: bid,
+      userId: uid,
+      status: outcome,
+      resolvedAt: row.resolved_at || null,
+      automaticResend: false,
+    },
+  };
 }

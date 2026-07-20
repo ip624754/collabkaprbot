@@ -1,6 +1,11 @@
 import { appendAdminWebAudit, isFounderSession, requireSession } from '../src/lib/adminWeb/auth.js';
 import { getSearchParam, json, readJsonBody } from '../src/lib/adminWeb/common.js';
-import { createNoticeDraftForActor, testSendNoticeDraftToActor, updateNoticeDraftForActor } from '../src/lib/adminWeb/comms.js';
+import {
+  createNoticeDraftForActor,
+  resolveUnknownBroadcastDeliveryForActor,
+  testSendNoticeDraftToActor,
+  updateNoticeDraftForActor,
+} from '../src/lib/adminWeb/comms.js';
 import { clearAdminUserNote, getAdminUserNote, setAdminUserNote } from '../src/lib/adminWeb/notes.js';
 
 export default async function handler(req, res) {
@@ -70,6 +75,18 @@ export default async function handler(req, res) {
   if (action === 'test_send_notice') {
     if (!isFounderSession(session)) return json(res, 403, { ok: false, error: 'founder_only' });
     const result = await testSendNoticeDraftToActor({ actorTgId: session.actorTgId, draftId: body.draftId });
+    return json(res, result.ok ? 200 : 400, result);
+  }
+
+  if (action === 'resolve_broadcast_delivery_unknown') {
+    if (!isFounderSession(session)) return json(res, 403, { ok: false, error: 'founder_only' });
+    const result = await resolveUnknownBroadcastDeliveryForActor({
+      actorTgId: session.actorTgId,
+      broadcastId: body.broadcastId,
+      userId: body.userId,
+      resolution: body.resolution,
+      note: body.note,
+    });
     return json(res, result.ok ? 200 : 400, result);
   }
 

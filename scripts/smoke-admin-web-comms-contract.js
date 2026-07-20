@@ -17,6 +17,8 @@ for (const token of [
   'Снимок исходящих',
   'Отправить тест себе',
   'Последние действия',
+  'Неопределённые доставки',
+  'data-resolve-unknown',
 ]) {
   assert.ok(js.includes(token), `comms UI must include ${token}`);
 }
@@ -28,6 +30,8 @@ for (const token of [
   'recentAdminAudit',
   'draftsWithoutTest',
   'recentTestSends',
+  'unknownDeliveries',
+  'deliveryUnknown',
 ]) {
   assert.ok(models.includes(token), `comms read model must include ${token}`);
 }
@@ -39,6 +43,8 @@ for (const token of [
   'testSendNoticeDraftToActor',
   'create_notice_draft',
   'test_send_notice',
+  'resolveUnknownBroadcastDeliveryForActor',
+  'reconciliation_note_required',
 ]) {
   assert.ok(comms.includes(token), `comms write helper must include ${token}`);
 }
@@ -51,6 +57,7 @@ for (const token of [
   "action === 'create_notice_draft'",
   "action === 'update_notice_draft'",
   "action === 'test_send_notice'",
+  "action === 'resolve_broadcast_delivery_unknown'",
   "founder_only",
 ]) {
   assert.ok(apiWrite.includes(token), `admin-web-write must include ${token}`);
