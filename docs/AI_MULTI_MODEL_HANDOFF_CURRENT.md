@@ -1,3 +1,40 @@
+# AI Multi-Model Handoff — STEP588X7 Current Truth
+
+**Baseline:** STEP588X7 test/governance implementation on STEP588X6
+**Status:** SOURCE READY / PORTABLE SPINE PASS / STRICT EXTERNAL INTEGRATION PENDING / GLOBAL RELEASE HOLD
+
+## Verified locally
+
+- canonical critical-spine runner and machine-readable report semantics;
+- portable 6/6 X1–X6 executable suites PASS;
+- 8/8 P1 roots mapped to passing portable executable regressions;
+- source contract 28 assertions PASS;
+- auto mode reports absent external capabilities as `NOT_RUN`;
+- strict mode reports absent/unsafe capabilities as `BLOCKED` with exit code 2;
+- clean npm install, dependency/runtime preflight and package-lock consistency PASS;
+- 133 registered source checks PASS using bounded continuation.
+
+## Not verified
+
+- real disposable PostgreSQL integration execution;
+- real isolated Upstash/Redis integration execution;
+- production Neon/Upstash behavior;
+- production acceptance for STEP588X1–X6;
+- STEP586H1 24-hour observation.
+
+## Hard rules
+
+- never call an absent integration capability PASS;
+- never run the suite against production resources;
+- preserve `PASS / FAIL / NOT_RUN / BLOCKED` semantics;
+- do not weaken failure injection to restore green status;
+- portable tests do not replace strict infrastructure evidence;
+- strict integration PASS does not replace production canaries.
+
+Next operator sequence: strict isolated X7 integration → X1–X6 production evidence → STEP586H1 24h observation → STEP587 Go/No-Go.
+
+---
+
 # AI Multi-Model Handoff — STEP588X6 Current Truth
 
 **Baseline:** STEP588X6 source implementation on STEP588X5

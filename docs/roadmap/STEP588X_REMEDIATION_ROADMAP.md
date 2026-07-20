@@ -288,6 +288,18 @@ Retain source-string tests for drift, but do not treat them as runtime proof.
 - source preflight remains fast enough for normal STEP work;
 - critical behavior suite can run separately in CI/staging.
 
+
+### STEP588X7 implementation evidence
+
+- canonical runner: `scripts/critical-spine/run.js`;
+- portable P1 manifest: `scripts/critical-spine/manifest.js`;
+- real PostgreSQL suite: `scripts/critical-spine/postgres.js`;
+- real Redis/production-function suite: `scripts/critical-spine/redis.js`;
+- explicit `PASS / FAIL / NOT_RUN / BLOCKED` semantics;
+- strict isolation confirmation and shared-infrastructure acknowledgement;
+- portable local result: 6/6 suites PASS, 8/8 P1 roots covered;
+- external PostgreSQL/Redis run remains pending because disposable credentials were unavailable.
+
 ## Final release sequence
 
 ```text

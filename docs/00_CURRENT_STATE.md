@@ -1,3 +1,31 @@
+## STEP588X7 — Executable Critical-Path Test Spine (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X7 test/governance implementation on top of STEP588X6.
+
+Repository truth:
+
+- one canonical runner exposes portable, auto, strict integration and CI-report profiles;
+- missing external capability is `NOT_RUN` in auto mode and `BLOCKED` in strict mode, never PASS;
+- all eight P1 audit roots map to executable portable regressions;
+- isolated PostgreSQL integration executes canonical payment and giveaway services plus broadcast receipt persistence with concurrency and failure injection;
+- isolated Redis integration executes production critical-update receipt, admin throttle, Telegram approval and one-time session consume functions;
+- integration requires `CRITICAL_TEST_CONFIRM_ISOLATED=1`; shared application URLs require a second explicit acknowledgement;
+- no runtime product logic, migration, API endpoint or user-facing flow changed;
+- local portable spine passes 6/6 suites and the source contract passes 28 assertions;
+- external PostgreSQL/Redis integration is implemented but was not run because disposable credentials were unavailable;
+- 133/133 registered source checks pass using bounded continuation after the monolithic process exceeded the execution window.
+
+**Release decision:** STEP588X7 is source-ready and portable-green. Strict isolated PostgreSQL/Redis evidence, STEP588X1–X6 production canaries and STEP586H1 observation remain mandatory. STEP587 and STEP589 remain HOLD.
+
+Read first:
+
+- `docs/audit/STEP588X7_EXECUTABLE_CRITICAL_PATH_TEST_SPINE_REPORT.md`;
+- `docs/operations/STEP588X7_CRITICAL_PATH_SPINE_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X7.md`.
+
+---
+
 ## STEP588X6 — Bounded Safety Hardening (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X6 source implementation on top of STEP588X5.

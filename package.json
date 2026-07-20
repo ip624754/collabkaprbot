@@ -169,7 +169,12 @@
     "smoke:staging-runtime-acceptance-contract": "node scripts/smoke-staging-runtime-acceptance-contract.js",
     "smoke:neon-cron-resilience-contract": "node scripts/smoke-neon-cron-resilience-contract.js",
     "test:bounded-safety-hardening": "node scripts/test-bounded-safety-hardening.js",
-    "smoke:bounded-safety-hardening-contract": "node scripts/smoke-bounded-safety-hardening-contract.js"
+    "smoke:bounded-safety-hardening-contract": "node scripts/smoke-bounded-safety-hardening-contract.js",
+    "test:critical-spine": "node scripts/critical-spine/run.js --profile=portable",
+    "test:critical-spine:auto": "node scripts/critical-spine/run.js --profile=auto",
+    "test:critical-spine:integration": "node scripts/critical-spine/run.js --profile=integration --require-postgres --require-redis",
+    "test:critical-spine:ci": "node scripts/critical-spine/run.js --profile=integration --require-postgres --require-redis --report=artifacts/critical-path-spine-report.json",
+    "smoke:critical-spine-contract": "node scripts/smoke-critical-path-spine-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

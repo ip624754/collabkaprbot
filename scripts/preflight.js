@@ -309,6 +309,7 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin payments fallback contract", "smoke:admin-payments-fallback-contract"],
   ["Preflight (source-only): bounded safety hardening executable tests", "test:bounded-safety-hardening"],
   ["Preflight (source-only): bounded safety hardening contract", "smoke:bounded-safety-hardening-contract"],
+  ["Preflight (source-only): executable critical-path spine contract", "smoke:critical-spine-contract"],
   ["Preflight (source-only): payment fulfillment critical-path executable tests", "test:payment-fulfillment-critical"],
   ["Preflight (source-only): giveaway draw critical-path executable tests", "test:giveaway-draw-critical"],
   ["Preflight (source-only): giveaway single atomic path contract", "smoke:giveaway-single-atomic-path-contract"],
