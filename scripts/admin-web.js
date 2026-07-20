@@ -890,9 +890,18 @@ function authErrorLabel(code) {
     telegram_notify_failed: 'Не удалось отправить запрос подтверждения в Telegram.',
     challenge_and_code_required: 'Нужны challenge и одноразовый код.',
     invalid_code: 'Неверный одноразовый код.',
+    code_locked: 'Резервный код заблокирован после лимита ошибок. Подтверди вход кнопкой в Telegram или запроси новый вход.',
+    fallback_code_disabled: 'Резервный код отключён. Используй Telegram-кнопку подтверждения.',
+    fallback_actor_not_allowed: 'Резервный код настроен некорректно: actor не входит в approver list.',
     challenge_not_found: 'Challenge не найден. Запроси новый вход.',
     challenge_expired: 'Challenge истёк. Запроси новый вход.',
-    challenge_not_pending: 'Этот challenge уже обработан. Проверь approve или запроси новый вход.',
+    challenge_not_pending: 'Этот challenge уже обработан. Проверь подтверждение или запроси новый вход.',
+    challenge_not_approved: 'Вход ещё не подтверждён в Telegram.',
+    challenge_consumed: 'Этот challenge уже обменян на сессию. Запроси новый вход, если cookie потеряна.',
+    browser_verifier_missing: 'Этот браузер не создавал challenge. Запроси новый вход в этом окне.',
+    browser_binding_mismatch: 'Challenge привязан к другому браузеру. Пересланная ссылка не даёт доступ.',
+    auth_store_unavailable: 'Хранилище авторизации временно недоступно. Вход закрыт fail-closed.',
+    rate_limited: 'Слишком много попыток. Подожди и повтори позже.',
     challenge_id_required: 'Не найден challenge для проверки.',
     denied: 'Вход отклонён в Telegram.',
     status_failed: 'Не удалось проверить статус approve.',
@@ -948,41 +957,66 @@ function stopLoginStatusPolling() {
   }
 }
 
+async function exchangeLoginChallenge(challengeId) {
+  const res = await api('/api/admin-web-auth?action=exchange', {
+    method: 'POST',
+    body: JSON.stringify({ challengeId }),
+  });
+  if (!res.ok) return { ok: false, error: res.data?.error || 'session_issue_failed' };
+  stopLoginStatusPolling();
+  clearLoginState();
+  history.replaceState({}, '', '/admin');
+  await render();
+  return { ok: true };
+}
+
 async function checkLoginChallengeStatus({ silent = false } = {}) {
-  const challengeId = String(getLoginState()?.challengeId || '').trim();
+  const state = getLoginState() || {};
+  const challengeId = String(state.challengeId || '').trim();
   if (!challengeId) return { ok: false, error: 'challenge_id_required' };
   const res = await api(`/api/admin-web-auth?action=status&challengeId=${encodeURIComponent(challengeId)}`);
   if (!res.ok) {
-    const error = authErrorLabel(res.data?.error || 'status_failed');
+    const errorCode = res.data?.error || 'status_failed';
+    const error = authErrorLabel(errorCode);
     if (!silent) {
-      writeLoginState({ challengeId, error });
+      writeLoginState({ ...state, challengeId, error });
       render();
     }
-    return { ok: false, error };
+    return { ok: false, error, errorCode };
   }
   const status = String(res.data?.status || 'pending');
-  if (status === 'approved') {
-    stopLoginStatusPolling();
-    clearLoginState();
-    history.replaceState({}, '', '/admin');
-    await render();
+  const nextState = {
+    ...state,
+    challengeId,
+    fallbackCodeEnabled: res.data?.fallbackCodeEnabled === true,
+  };
+  if (status === 'approved' || status === 'consumed') {
+    const exchanged = await exchangeLoginChallenge(challengeId);
+    if (!exchanged.ok) {
+      const error = authErrorLabel(exchanged.error || 'session_issue_failed');
+      writeLoginState({ ...nextState, error });
+      if (!silent) render();
+      return { ok: false, status, error };
+    }
     return { ok: true, status };
   }
   if (status === 'denied') {
     stopLoginStatusPolling();
-    writeLoginState({ challengeId, error: authErrorLabel('denied') });
+    writeLoginState({ ...nextState, error: authErrorLabel('denied') });
     if (!silent) render();
     return { ok: false, status };
   }
   if (status === 'expired') {
     stopLoginStatusPolling();
-    writeLoginState({ challengeId, error: authErrorLabel('challenge_expired') });
+    writeLoginState({ ...nextState, error: authErrorLabel('challenge_expired') });
     if (!silent) render();
     return { ok: false, status };
   }
   if (!silent) {
-    writeLoginState({ challengeId, error: 'Вход ещё не одобрен. Окно само проверяет статус каждые несколько секунд.' });
+    writeLoginState({ ...nextState, error: 'Вход ещё не подтверждён. Окно проверяет статус каждые несколько секунд.' });
     render();
+  } else {
+    writeLoginState(nextState);
   }
   return { ok: true, status };
 }
@@ -1076,7 +1110,8 @@ function sectionShell(pageKey, body, session, overrides = {}) {
 
 function loginView(state = {}) {
   const hasChallenge = !!state.challengeId;
-  const stepTitle = hasChallenge ? 'Шаг 2 — Telegram approve / code' : 'Шаг 1 — admin secret';
+  const fallbackCodeEnabled = state.fallbackCodeEnabled === true;
+  const stepTitle = hasChallenge ? (fallbackCodeEnabled ? 'Шаг 2 — Telegram approve / break-glass code' : 'Шаг 2 — Telegram approve') : 'Шаг 1 — admin secret';
   return `
     <div class="aw-login">
       <div class="aw-login-card">
@@ -1088,23 +1123,26 @@ function loginView(state = {}) {
           </div>
         </div>
         <h1>Вход в web-админку</h1>
-        <p>Hobby-safe operator console: secret → Telegram approve / code → session.</p>
+        <p>Operator console: secret → browser-bound challenge → Telegram callback → one-time session.</p>
         <div class="aw-login-grid">
           <div class="aw-step-chip">${escapeHtml(stepTitle)}</div>
           ${state.info ? `<div class="aw-info">${escapeHtml(state.info)}</div>` : ''}
           ${state.error ? `<div class="aw-error">${escapeHtml(state.error)}</div>` : ''}
           ${hasChallenge ? `
-            <div class="aw-info">Secret уже принят. Снова вводить его не нужно: подтверди вход в Telegram или вставь одноразовый код.</div>
+            <div class="aw-info">Secret уже принят. Подтверди вход callback-кнопкой в Telegram. Challenge работает только в этом браузере.</div>
             <div class="aw-login-phase aw-login-phase-verify">
               <div class="aw-login-meta">
                 <span class="aw-login-meta-label">Challenge</span>
                 <code id="challengeCodeBox">${escapeHtml(state.challengeId || '')}</code>
               </div>
-              <p class="aw-login-help">Оставь это окно открытым. После approve сессия подтянется автоматически. Если переходишь из Telegram, вход должен закрыться без повторного ввода secret.</p>
-              <input id="otpInput" class="aw-input" placeholder="Telegram code" autocomplete="one-time-code" />
+              <p class="aw-login-help">Оставь это окно открытым. Telegram подтверждает реальный approver account, а сессия выдаётся только этому браузеру.</p>
+              ${fallbackCodeEnabled ? `
+                <input id="otpInput" class="aw-input" placeholder="Break-glass code" autocomplete="one-time-code" />
+                <div class="aw-info">Break-glass code включён оператором, ограничен попытками и привязан к этому браузеру.</div>
+              ` : ''}
               <div class="aw-actions">
-                <button class="aw-button secondary" id="verifyCodeBtn">Ввести код</button>
-                <button class="aw-button ghost" id="checkStatusBtn">Проверить approve</button>
+                ${fallbackCodeEnabled ? '<button class="aw-button secondary" id="verifyCodeBtn">Проверить код</button>' : ''}
+                <button class="aw-button ghost" id="checkStatusBtn">Проверить подтверждение</button>
               </div>
               <div class="aw-actions aw-actions-topline">
                 <button class="aw-button ghost" id="newChallengeBtn">Запросить новый вход</button>
@@ -1119,7 +1157,7 @@ function loginView(state = {}) {
               </div>
             </div>
           `}
-          <p class="aw-login-help">Без approve/code доступ к admin pages не открывается.</p>
+          <p class="aw-login-help">Challenge ID или пересланная Telegram-кнопка без cookie исходного браузера не выдают сессию.</p>
         </div>
       </div>
     </div>
@@ -1132,7 +1170,7 @@ function helpView(session) {
       <section class="aw-surface aw-stack aw-help-card">
         <h2>Быстрый старт</h2>
         <div class="aw-help-list">
-          <div class="aw-list-item"><strong>1. Вход</strong><small>Открой ссылку админки, введи secret один раз, затем подтверди вход в Telegram или вставь одноразовый code.</small></div>
+          <div class="aw-list-item"><strong>1. Вход</strong><small>Введи secret, оставь исходное окно открытым и подтверди challenge callback-кнопкой в Telegram. Break-glass code по умолчанию выключен.</small></div>
           <div class="aw-list-item"><strong>2. Обновление</strong><small>Панель не делает auto-polling. Используй кнопку <b>Обновить</b>, когда хочешь подтянуть свежий snapshot.</small></div>
           <div class="aw-list-item"><strong>3. Рабочий ритм</strong><small>Для разбора людей чаще всего стартуем с <b>Пользователи</b>. Для общей системной картины — <b>Runtime</b>. Для платёжных кейсов — <b>Платежи</b>.</small></div>
         </div>
@@ -3455,8 +3493,9 @@ function founderView(model) {
       </div>
       <div class="aw-grid-cards aw-runtime-cards">
         <div class="aw-card aw-runtime-card"><span>Авторизация и сессия</span><strong class="aw-status good">OK</strong><small>логин ${Number(sessionPolicy.loginTtlSec || 0)}с · сессия ${Number(sessionPolicy.sessionTtlSec || 0)}с</small></div>
-        <div class="aw-card aw-runtime-card"><span>Таймаут бездействия</span><strong>${Math.round(Number(sessionPolicy.idleTimeoutSec || 0) / 60) || 0}м</strong><small>только ручное обновление</small></div>
-        <div class="aw-card aw-runtime-card"><span>Telegram-аппруверы</span><strong>${Number(sessionPolicy.approversCount || 0)}</strong><small>граница для фаундерского web-входа</small></div>
+        <div class="aw-card aw-runtime-card"><span>Таймаут бездействия</span><strong>${Math.round(Number(sessionPolicy.idleTimeoutSec || 0) / 60) || 0}м</strong><small>применяется при каждой проверке сессии</small></div>
+        <div class="aw-card aw-runtime-card"><span>Telegram-аппруверы</span><strong>${Number(sessionPolicy.approversCount || 0)}</strong><small>callback identity boundary</small></div>
+        <div class="aw-card aw-runtime-card"><span>Break-glass code</span><strong class="aw-status ${sessionPolicy.fallbackCodeEnabled ? 'warn' : 'good'}">${sessionPolicy.fallbackCodeEnabled ? 'ВКЛ' : 'ВЫКЛ'}</strong><small>${sessionPolicy.fallbackCodeEnabled ? `лимит ${Number(sessionPolicy.codeMaxAttempts || 0)} попыток` : 'production default: off'}</small></div>
         <div class="aw-card aw-runtime-card"><span>Founder Sale</span><strong class="aw-status ${founderSale.enabled ? 'warn' : 'good'}">${founderSale.enabled ? 'ВКЛ' : 'ВЫКЛ'}</strong><small>${escapeHtml(founderSale.deadline || 'Без дедлайна')}</small></div>
       </div>
     </section>
@@ -4587,7 +4626,7 @@ function bindLogin() {
       writeLoginState({ error: authErrorLabel(res.data?.error || 'login_failed') });
       return render();
     }
-    writeLoginState({ challengeId: res.data.challengeId });
+    writeLoginState({ challengeId: res.data.challengeId, fallbackCodeEnabled: res.data.fallbackCodeEnabled === true });
     await render();
   });
 
@@ -4604,15 +4643,15 @@ function bindLogin() {
   });
 
   document.getElementById('verifyCodeBtn')?.addEventListener('click', async () => {
-    const challengeId = String(getLoginState()?.challengeId || '').trim();
+    const state = getLoginState() || {};
+    const challengeId = String(state.challengeId || '').trim();
     const code = document.getElementById('otpInput')?.value || '';
     const res = await api('/api/admin-web-auth?action=verify_code', { method: 'POST', body: JSON.stringify({ challengeId, code }) });
     if (!res.ok) {
-      const statusCheck = await checkLoginChallengeStatus({ silent: true });
-      if (statusCheck.ok && statusCheck.status === 'approved') return;
-      writeLoginState({ challengeId, error: authErrorLabel(res.data?.error || 'invalid_code') });
+      writeLoginState({ ...state, challengeId, error: authErrorLabel(res.data?.error || 'invalid_code') });
       return render();
     }
+    stopLoginStatusPolling();
     clearLoginState();
     history.replaceState({}, '', '/admin');
     render();

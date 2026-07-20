@@ -9,13 +9,13 @@ The following risks override earlier release optimism until remediation evidence
 | R-28 | Matching/featured session removed before durable paid apply | HIGH | ACTIVE | Durable context + post-commit cleanup implemented; live evidence required |
 | R-29 | Giveaway auto-draw runtime binding defect and split manual path | CRITICAL | ACTIVE | Source uses one atomic service; production manual/replay/cron evidence required |
 | R-30 | Broadcast Telegram send may succeed while DB remains reclaimable | CRITICAL | SOURCE MITIGATED / PROD OPEN | attempt-token claim, terminal unknown, no auto-resend, founder reconciliation |
-| R-31 | Admin challenge/approval URL can act as transferable privileged capability | CRITICAL | ACTIVE | browser binding + Telegram callback + one-time consume |
-| R-32 | Admin fallback code lacks crypto generation/throttling/lockout | HIGH | ACTIVE | disabled-by-default production fallback |
+| R-31 | Admin challenge/approval URL can act as transferable privileged capability | CRITICAL | SOURCE MITIGATED / PROD OPEN | browser binding + actual Telegram callback actor + atomic one-time consume + session versioning |
+| R-32 | Admin fallback code lacks crypto generation/throttling/lockout | HIGH | SOURCE MITIGATED / PROD OPEN | disabled by default; crypto RNG; explicit actor; atomic attempts/lockout; dedicated throttles |
 | R-33 | Public health and webhook logs expose excess operational/personal data | HIGH | ACTIVE | protected diagnostics + redaction |
 | R-34 | Source-heavy test portfolio misses transaction/crash/race defects | HIGH | ACTIVE | STEP588X7 executable critical-path suite |
 | R-35 | Generic dynamic SQL/body/update helpers retain latent safety footguns | MEDIUM | WATCH | allowlists, size caps, row-count truth |
 
-**Release gate:** R-26 through R-28 are source-remediated but remain active until STEP588X1 migration/canary evidence. R-29 is source-remediated but remains active until STEP588X2 manual/replay/cron evidence. R-30 is source-remediated but remains active until STEP588X3 migration, replay and unknown-state evidence. R-31 through R-34 still require implementation. STEP587 GO and STEP589 remain paused.
+**Release gate:** R-26 through R-28 are source-remediated but remain active until STEP588X1 migration/canary evidence. R-29 is source-remediated but remains active until STEP588X2 manual/replay/cron evidence. R-30 is source-remediated but remains active until STEP588X3 migration, replay and unknown-state evidence. R-31 and R-32 are source-remediated but remain open until STEP588X4 deployment and two-browser/replay/idle evidence. R-33 and R-34 still require implementation. STEP587 GO and STEP589 remain paused.
 
 ---
 
@@ -177,3 +177,13 @@ Residual risk:
 - Source verification: 35 unknown-state assertions, 126 registered source checks, 250 JavaScript syntax checks, dependency/runtime preflight and registry parity PASS locally.
 - Runtime verification required: migration 049, controlled normal-send/replay, staging ambiguity injection, live unknown-state visibility and no-resend reconciliation evidence.
 - Residual risk: at-most-once safety intentionally permits under-delivery when Telegram outcome cannot be determined; production QStash/Telegram behavior is not reproduced locally.
+
+## Current STEP588X4 assessment
+
+- Change type: critical admin-web identity proof, challenge/session state-machine and abuse-control hardening; no PostgreSQL migration.
+- Primary risks addressed: R-04, R-09, R-11, R-12, R-31, R-32, R-34.
+- Runtime blast radius: admin login start/status/exchange, Telegram approval callback, Redis challenge/session records, session validation and admin login UX.
+- Rollback: security fix-forward or temporary `ADMIN_WEB_ENABLED=0`; rollback to STEP588X3 restores transferable approval links and unversioned sessions.
+- Source verification: executable auth policy tests, auth binding contract, action/callback registry and full source regressions are required by preflight.
+- Runtime verification required: origin/second-browser canary, actual Telegram approver identity, duplicate callback/exchange, old-session invalidation, idle expiry and bounded throttle evidence.
+- Residual risk: actual Upstash Lua concurrency, Vercel cookie/domain behavior and live Telegram callbacks are not reproduced locally; Redis-only audit durability remains tracked separately.

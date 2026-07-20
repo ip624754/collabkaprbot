@@ -74,7 +74,7 @@ export function randomId(size = 24) {
 }
 
 export function randomCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
 }
 
 export function timingSafeEq(a, b) {

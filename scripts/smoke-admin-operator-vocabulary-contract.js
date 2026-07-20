@@ -103,10 +103,10 @@ for (const token of [
 ]) {
   assert.ok(models.includes(token), `Missing precise web diagnostic term: ${token}`);
 }
-assert.ok(auth.includes('<code>approved</code>'), 'Approved decision code must remain visible as diagnostics');
-assert.ok(auth.includes('<code>denied</code>'), 'Denied decision code must remain visible as diagnostics');
-assert.ok(telegram.includes("buildDecisionUrl('approve', id)"), 'Approve decision value must remain unchanged');
-assert.ok(telegram.includes("buildDecisionUrl('deny', id)"), 'Deny decision value must remain unchanged');
+assert.ok(auth.includes("action === 'decision'"), 'Legacy decision endpoint must remain explicitly disabled');
+assert.ok(telegram.includes("buildDecisionCallback(challengeId, 'approve')"), 'Approve callback decision must remain explicit');
+assert.ok(telegram.includes("buildDecisionCallback(challengeId, 'deny')"), 'Deny callback decision must remain explicit');
+assert.ok(telegram.includes('callback_data: approveCallback'), 'Approve must use Telegram callback identity');
 
 // Primary surfaces keep human language while raw state/code stays secondary.
 assert.ok(outbox.includes('Диагностика: <code>Redis</code>'));
@@ -141,7 +141,7 @@ expectRegistry('a:hs_home', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE
 for (const value of ['all', 'brands', 'creators', 'curators', 'managers']) {
   assert.ok(web.includes(`value="${value}"`) || web.includes(`['all','brands','creators','curators','managers']`), `Audience machine value changed: ${value}`);
 }
-assert.ok(auth.includes("decision === 'deny'"), 'Deny branch must remain unchanged');
-assert.ok(auth.includes("action === 'decision'"), 'Decision endpoint must remain unchanged');
+assert.ok(telegram.includes("buildDecisionCallback(challengeId, 'deny')"), 'Deny callback value must remain explicit');
+assert.ok(auth.includes("action === 'decision'"), 'Legacy decision endpoint must remain explicitly disabled');
 
 console.log('✅ smoke admin and operator vocabulary contract OK');

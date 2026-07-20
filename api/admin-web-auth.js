@@ -1,46 +1,87 @@
-import { approveChallenge, appendAdminWebAudit, clearAuthCookie, createLoginChallenge, getChallenge, getSession, isAdminWebReady, isFounderActorTgId, issueSession, logout, requireFounderSession, requireSession, revokeAllSessions, verifyChallengeCode } from '../src/lib/adminWeb/auth.js';
-import { getSearchParam, html, json, readJsonBody, timingSafeEq } from '../src/lib/adminWeb/common.js';
+import {
+  appendAdminWebAudit,
+  clearAuthCookie,
+  consumeAdminAuthRateLimit,
+  createLoginChallenge,
+  getChallengeStatusForBrowser,
+  getSession,
+  isAdminWebReady,
+  isFounderActorTgId,
+  issueSession,
+  logout,
+  requireFounderSession,
+  revokeAllSessions,
+  touchSession,
+  verifyChallengeCode,
+} from '../src/lib/adminWeb/auth.js';
+import { getClientIp, getSearchParam, html, json, readJsonBody, timingSafeEq } from '../src/lib/adminWeb/common.js';
 import { CFG } from '../src/lib/config.js';
 
-function page(title, body, ctaHtml = '', autoRedirectHref = '') {
-  const redirectMeta = autoRedirectHref ? `<meta http-equiv="refresh" content="1.2;url=${autoRedirectHref}">` : '';
-  const redirectNote = autoRedirectHref ? '<p>Сейчас окно само вернётся в веб-админку и завершит вход.</p>' : '<p>Можно вернуться в веб-админку и обновить статус входа.</p>';
-  const redirectScript = autoRedirectHref
-    ? `<script>setTimeout(function(){ location.replace(${JSON.stringify(autoRedirectHref)}); }, 1200);</script>`
-    : '';
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title>${redirectMeta}<style>body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#071021;color:#eef3ff;display:grid;place-items:center;min-height:100vh;padding:24px}.card{max-width:560px;background:rgba(12,21,44,.88);border:1px solid rgba(133,177,255,.25);border-radius:20px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.35)}h1{margin:0 0 10px;font-size:28px}p{margin:8px 0;color:#bfc9e6;line-height:1.5}.actions{margin-top:18px;display:flex;gap:12px;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 16px;border-radius:12px;background:rgba(42,84,170,.35);border:1px solid rgba(133,177,255,.28);color:#eef3ff;text-decoration:none;font-weight:600}</style></head><body><div class="card"><h1>${title}</h1><p>${body}</p>${redirectNote}${ctaHtml ? `<div class="actions">${ctaHtml}</div>` : ''}</div>${redirectScript}</body></html>`;
+function page(title, body) {
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:#071021;color:#eef3ff;display:grid;place-items:center;min-height:100vh;padding:24px}.card{max-width:560px;background:rgba(12,21,44,.88);border:1px solid rgba(133,177,255,.25);border-radius:20px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.35)}h1{margin:0 0 10px;font-size:28px}p{margin:8px 0;color:#bfc9e6;line-height:1.5}</style></head><body><div class="card"><h1>${title}</h1><p>${body}</p></div></body></html>`;
 }
 
 function getAction(req) {
   return String(getSearchParam(req, 'action', '') || '').trim().toLowerCase();
 }
 
+function rateLimitSubject(req, suffix = '') {
+  return `${getClientIp(req) || 'unknown'}:${String(suffix || '')}`;
+}
+
+function rateLimitResponse(res, result) {
+  if (!result?.ok) {
+    json(res, 503, { ok: false, error: result?.error || 'auth_rate_limit_unavailable' });
+    return true;
+  }
+  if (result.allowed) return false;
+  const retryAfterSec = Math.max(1, Number(result.retryAfterSec || 60));
+  res.setHeader('Retry-After', String(retryAfterSec));
+  json(res, 429, { ok: false, error: 'rate_limited', retryAfterSec });
+  return true;
+}
+
+function authErrorStatus(error) {
+  const code = String(error || '');
+  if (code === 'auth_store_unavailable' || code === 'session_store_failed') return 503;
+  if (code === 'challenge_not_found') return 404;
+  if (code === 'challenge_expired') return 410;
+  if (code === 'browser_verifier_missing' || code === 'browser_binding_mismatch') return 403;
+  if (code === 'challenge_not_approved' || code === 'challenge_not_pending' || code === 'challenge_consumed') return 409;
+  if (code === 'fallback_code_disabled' || code === 'fallback_actor_not_allowed') return 403;
+  if (code === 'code_locked') return 423;
+  if (code === 'invalid_code') return 401;
+  if (code === 'approved_actor_missing') return 409;
+  return 400;
+}
+
 export default async function handler(req, res) {
   const action = getAction(req);
 
+  // Legacy signed decision URLs are deliberately non-mutating now.
   if (action === 'decision') {
-    if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method_not_allowed' });
-    const challengeId = String(getSearchParam(req, 'challengeId', '') || '').trim();
-    const decision = String(getSearchParam(req, 'decision', '') || '').trim();
-    const actor = Number(getSearchParam(req, 'actor', '0') || 0) || 0;
-    const exp = Number(getSearchParam(req, 'exp', '0') || 0) || 0;
-    const sig = String(getSearchParam(req, 'sig', '') || '').trim();
-    const result = await approveChallenge({ challengeId, decision, actorTgId: actor, exp, sig });
-    const returnHref = `${String(CFG.PUBLIC_BASE_URL || '').replace(/\/$/, '')}/admin/login?challenge=${encodeURIComponent(challengeId)}`;
-    const returnLink = CFG.PUBLIC_BASE_URL ? `<a class="btn" href="${returnHref}">Вернуться в веб-админку</a>` : '';
-    if (!result.ok) return html(res, 400, page('Не удалось обработать вход', `Причина: ${String(result.error || 'unknown')}`, returnLink));
-    if (decision === 'deny') return html(res, 200, page('Вход отклонён', 'Запрос входа отклонён. Диагностика: <code>denied</code>.', returnLink));
-    return html(res, 200, page('Вход подтверждён', 'Запрос входа подтверждён. Диагностика: <code>approved</code>. Веб-админка автоматически проверит статус.', returnLink, returnHref));
+    return html(res, 410, page(
+      'Ссылка подтверждения отключена',
+      'Вход больше не подтверждается через web-ссылку. Используй Telegram callback-кнопку в сообщении от бота.',
+    ));
   }
 
   if (action === 'start') {
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
-    const body = await readJsonBody(req);
-    const secret = String(body.secret || '');
     if (!CFG.ADMIN_WEB_ENABLED) return json(res, 503, { ok: false, error: 'admin_web_disabled' });
     if (!String(CFG.ADMIN_WEB_SECRET || '')) return json(res, 503, { ok: false, error: 'admin_web_secret_missing' });
+    const throttle = await consumeAdminAuthRateLimit({
+      scope: 'start',
+      subject: rateLimitSubject(req),
+      limit: CFG.ADMIN_WEB_START_RATE_LIMIT,
+      windowSec: CFG.ADMIN_WEB_START_RATE_WINDOW_SEC,
+    });
+    if (rateLimitResponse(res, throttle)) return;
+
+    const body = await readJsonBody(req);
+    const secret = String(body.secret || '');
     if (!timingSafeEq(secret, CFG.ADMIN_WEB_SECRET)) return json(res, 401, { ok: false, error: 'invalid_secret' });
-    const result = await createLoginChallenge(req);
+    const result = await createLoginChallenge(req, res);
     return json(res, result.status || (result.ok ? 200 : 400), result);
   }
 
@@ -48,19 +89,25 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method_not_allowed' });
     const challengeId = String(getSearchParam(req, 'challengeId', '') || '').trim();
     if (!challengeId) return json(res, 400, { ok: false, error: 'challenge_id_required' });
-    const challenge = await getChallenge(challengeId);
-    if (!challenge) return json(res, 404, { ok: false, error: 'challenge_not_found' });
-    const status = String(challenge.status || 'pending');
-    if (status === 'approved') {
-      const issued = await issueSession(res, challengeId);
-      if (!issued.ok) return json(res, 500, { ok: false, error: issued.error || 'session_issue_failed' });
-    }
+    const result = await getChallengeStatusForBrowser(req, challengeId);
+    if (!result.ok) return json(res, result.status || authErrorStatus(result.error), result);
     return json(res, 200, {
       ok: true,
-      challengeId,
-      status,
-      expiresAt: new Date(Number(challenge.expiresAt || 0)).toISOString(),
+      challengeId: result.challengeId,
+      status: result.status,
+      expiresAt: new Date(Number(result.expiresAt || 0)).toISOString(),
+      fallbackCodeEnabled: result.fallbackCodeEnabled === true,
     });
+  }
+
+  if (action === 'exchange') {
+    if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
+    const body = await readJsonBody(req);
+    const challengeId = String(body.challengeId || '').trim();
+    if (!challengeId) return json(res, 400, { ok: false, error: 'challenge_id_required' });
+    const issued = await issueSession(req, res, challengeId);
+    if (!issued.ok) return json(res, authErrorStatus(issued.error), { ok: false, error: issued.error || 'session_issue_failed' });
+    return json(res, 200, { ok: true, reused: issued.reused === true });
   }
 
   if (action === 'verify_code') {
@@ -69,27 +116,47 @@ export default async function handler(req, res) {
     const challengeId = String(body.challengeId || '').trim();
     const code = String(body.code || '').trim();
     if (!challengeId || !code) return json(res, 400, { ok: false, error: 'challenge_and_code_required' });
-    const verified = await verifyChallengeCode(challengeId, code);
+
+    const throttle = await consumeAdminAuthRateLimit({
+      scope: 'code',
+      subject: rateLimitSubject(req, challengeId),
+      limit: CFG.ADMIN_WEB_CODE_RATE_LIMIT,
+      windowSec: CFG.ADMIN_WEB_CODE_RATE_WINDOW_SEC,
+    });
+    if (rateLimitResponse(res, throttle)) return;
+
+    const verified = await verifyChallengeCode(req, challengeId, code);
     if (!verified.ok) {
-      const challenge = await getChallenge(challengeId);
-      if (challenge && String(challenge.status || '') === 'approved') {
-        const issued = await issueSession(res, challengeId);
-        if (!issued.ok) return json(res, 500, { ok: false, error: issued.error || 'session_issue_failed' });
-        return json(res, 200, { ok: true, reusedApprovedChallenge: true });
-      }
-      return json(res, 401, { ok: false, error: verified.error || 'invalid_code' });
+      return json(res, authErrorStatus(verified.error), {
+        ok: false,
+        error: verified.error || 'invalid_code',
+        attemptsRemaining: Number(verified.attemptsRemaining || 0),
+      });
     }
-    const issued = await issueSession(res, challengeId);
-    if (!issued.ok) return json(res, 500, { ok: false, error: issued.error || 'session_issue_failed' });
-    return json(res, 200, { ok: true });
+    const issued = await issueSession(req, res, challengeId);
+    if (!issued.ok) return json(res, authErrorStatus(issued.error), { ok: false, error: issued.error || 'session_issue_failed' });
+    return json(res, 200, { ok: true, reused: issued.reused === true });
   }
 
   if (action === 'me') {
     if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method_not_allowed' });
     if (!isAdminWebReady()) return json(res, 503, { ok: false, error: 'admin_web_not_configured' });
     const session = await getSession(req);
-    if (!session) return json(res, 401, { ok: false, error: 'unauthorized' });
-    return json(res, 200, { ok: true, session: { actorTgId: Number(session.actorTgId || 0) || 0, isFounder: isFounderActorTgId(session.actorTgId), expiresAt: session.expiresAt || 0, issuedAt: session.issuedAt || 0 } });
+    if (!session) {
+      clearAuthCookie(res);
+      return json(res, 401, { ok: false, error: 'unauthorized' });
+    }
+    await touchSession(session);
+    return json(res, 200, {
+      ok: true,
+      session: {
+        actorTgId: Number(session.actorTgId || 0) || 0,
+        isFounder: isFounderActorTgId(session.actorTgId),
+        expiresAt: session.expiresAt || 0,
+        issuedAt: session.issuedAt || 0,
+        idleTimeoutSec: Number(CFG.ADMIN_WEB_IDLE_TIMEOUT_SEC || 0) || 0,
+      },
+    });
   }
 
   if (action === 'logout') {
@@ -105,7 +172,14 @@ export default async function handler(req, res) {
     const result = await revokeAllSessions();
     clearAuthCookie(res);
     if (result.ok) {
-      await appendAdminWebAudit({ section: 'founder', action: 'revoke_all_sessions', actorTgId: session.actorTgId, targetType: 'session', targetId: 'all', reason: 'founder_split' });
+      await appendAdminWebAudit({
+        section: 'founder',
+        action: 'revoke_all_sessions',
+        actorTgId: session.actorTgId,
+        targetType: 'session',
+        targetId: 'all',
+        reason: 'founder_split',
+      });
     }
     return json(res, result.ok ? 200 : 500, result);
   }

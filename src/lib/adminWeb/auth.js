@@ -1,10 +1,31 @@
 import { CFG } from '../config.js';
 import { redis, k } from '../redis.js';
-import { clearCookie, getAdminWebBaseUrl, getClientIp, hmacSha256, json, nowIso, parseCookies, randomCode, randomId, setCookie, sha256, shortUa, timingSafeEq } from './common.js';
+import {
+  clearCookie,
+  getClientIp,
+  hmacSha256,
+  json,
+  nowIso,
+  parseCookies,
+  randomCode,
+  randomId,
+  setCookie,
+  sha256,
+  shortUa,
+  timingSafeEq,
+} from './common.js';
 import { notifyLoginChallenge, getAdminApproverIds } from './telegram.js';
-import { isAdminWebLoginEnabled } from '../operatorControls.js';
+import { getAdminWebLoginGateState } from '../operatorControls.js';
+import {
+  ADMIN_AUTH_CHALLENGE_STATUSES,
+  isAdminSessionIdleExpired,
+  isFallbackActorAllowed,
+  normalizeAdminAuthDecision,
+} from './authPolicy.js';
 
 const COOKIE_NAME = 'collabka_admin_session';
+const LOGIN_VERIFIER_COOKIE_NAME = 'collabka_admin_login_verifier';
+const ADMIN_WEB_AUTH_VERSION = 2;
 
 function challengeKey(id) {
   return k(['admin_web', 'challenge', String(id || '')]);
@@ -12,11 +33,17 @@ function challengeKey(id) {
 function sessionKey(id) {
   return k(['admin_web', 'session', String(id || '')]);
 }
+function sessionKeyPrefix() {
+  return k(['admin_web', 'session', '']);
+}
 function auditKey() {
   return k(['admin_web', 'audit_recent']);
 }
 function revokeBeforeKey() {
   return k(['admin_web', 'revoke_before']);
+}
+function throttleKey(scope, subject) {
+  return k(['admin_web', 'auth_rl', String(scope || 'unknown'), sha256(String(subject || 'unknown')).slice(0, 32)]);
 }
 
 function getLoginTtlSec() {
@@ -24,6 +51,12 @@ function getLoginTtlSec() {
 }
 function getSessionTtlSec() {
   return Math.max(600, Number(CFG.ADMIN_WEB_SESSION_TTL_SEC || 28800));
+}
+function getIdleTimeoutSec() {
+  return Math.max(60, Math.min(getSessionTtlSec(), Number(CFG.ADMIN_WEB_IDLE_TIMEOUT_SEC || 1800)));
+}
+function getCodeMaxAttempts() {
+  return Math.max(3, Math.min(10, Number(CFG.ADMIN_WEB_CODE_MAX_ATTEMPTS || 5)));
 }
 
 export function isFounderActorTgId(actorTgId) {
@@ -43,18 +76,90 @@ function getSigningSecret() {
   return String(CFG.ADMIN_WEB_SESSION_SECRET || CFG.WEBHOOK_SECRET_TOKEN || '');
 }
 
-export async function createLoginChallenge(req) {
+function getFallbackActorTgId() {
+  const actor = Number(CFG.ADMIN_WEB_FALLBACK_ACTOR_TG_ID || 0) || 0;
+  return isFallbackActorAllowed(actor, getAdminApproverIds()) ? actor : 0;
+}
+
+function isFallbackCodeEnabled() {
+  return CFG.ADMIN_WEB_FALLBACK_CODE_ENABLED === true && getFallbackActorTgId() > 0;
+}
+
+function browserVerifierHash(challengeId, verifier) {
+  return hmacSha256(getSigningSecret(), `browser:${String(challengeId || '')}:${String(verifier || '')}`);
+}
+
+function fallbackCodeHash(challengeId, code) {
+  return hmacSha256(getSigningSecret(), `fallback-code:${String(challengeId || '')}:${String(code || '')}`);
+}
+
+function readBrowserVerifier(req) {
+  const cookies = parseCookies(req);
+  return String(cookies[LOGIN_VERIFIER_COOKIE_NAME] || '').trim();
+}
+
+function setBrowserVerifierCookie(res, verifier) {
+  setCookie(res, LOGIN_VERIFIER_COOKIE_NAME, verifier, {
+    maxAge: getLoginTtlSec(),
+    sameSite: 'Strict',
+  });
+}
+
+function parseEvalJson(raw) {
+  if (raw && typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(String(raw || '{}'));
+  } catch {
+    return { ok: false, error: 'auth_state_decode_failed' };
+  }
+}
+
+async function evalJson(script, keys, args) {
+  try {
+    const raw = await redis.eval(script, keys, args.map((value) => String(value)));
+    return parseEvalJson(raw);
+  } catch (error) {
+    return { ok: false, error: 'auth_store_unavailable', detail: String(error?.message || error) };
+  }
+}
+
+export async function consumeAdminAuthRateLimit({ scope, subject, limit, windowSec }) {
+  const lim = Math.max(1, Number(limit || 1));
+  const win = Math.max(30, Number(windowSec || 60));
+  const script = `
+    local current = redis.call('INCR', KEYS[1])
+    if current == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) end
+    local ttl = redis.call('TTL', KEYS[1])
+    return cjson.encode({ ok = true, allowed = current <= tonumber(ARGV[2]), current = current, limit = tonumber(ARGV[2]), retryAfterSec = ttl })
+  `;
+  return evalJson(script, [throttleKey(scope, subject)], [win, lim]);
+}
+
+export function buildDecisionCallback(challengeId, decision) {
+  const normalized = normalizeAdminAuthDecision(decision);
+  if (!normalized) return '';
+  return `a:aw_auth_dec|c:${String(challengeId || '')}|d:${normalized === 'approve' ? 'a' : 'd'}`;
+}
+
+export async function createLoginChallenge(req, res) {
   if (!isAdminWebReady()) {
     return { ok: false, status: 503, error: 'admin_web_not_configured' };
   }
-  if (!(await isAdminWebLoginEnabled())) {
+  const loginGate = await getAdminWebLoginGateState();
+  if (!loginGate.ok) {
+    return { ok: false, status: 503, error: 'auth_store_unavailable' };
+  }
+  if (!loginGate.enabled) {
     return { ok: false, status: 503, error: 'admin_web_login_paused' };
   }
   const approverIds = getAdminApproverIds();
   if (!approverIds.length) return { ok: false, status: 503, error: 'approvers_not_configured' };
 
   const challengeId = randomId(12);
-  const code = randomCode();
+  const verifier = randomId(32);
+  const fallbackEnabled = isFallbackCodeEnabled();
+  const fallbackActorTgId = fallbackEnabled ? getFallbackActorTgId() : 0;
+  const code = fallbackEnabled ? randomCode() : '';
   const requestedAt = Date.now();
   const expiresAtMs = requestedAt + getLoginTtlSec() * 1000;
   const ip = getClientIp(req);
@@ -62,36 +167,47 @@ export async function createLoginChallenge(req) {
 
   const record = {
     id: challengeId,
-    status: 'pending',
-    codeHash: sha256(code),
-    requestedAt: requestedAt,
+    status: ADMIN_AUTH_CHALLENGE_STATUSES.PENDING,
+    browserVerifierHash: browserVerifierHash(challengeId, verifier),
+    codeHash: fallbackEnabled ? fallbackCodeHash(challengeId, code) : '',
+    codeAttempts: 0,
+    codeMaxAttempts: getCodeMaxAttempts(),
+    codeLockedAt: 0,
+    fallbackCodeEnabled: fallbackEnabled,
+    fallbackActorTgId,
+    requestedAt,
     expiresAt: expiresAtMs,
     requestIpHash: ip ? sha256(ip) : '',
     requestIpPreview: ip || '',
     userAgent: ua,
-    approveMode: getAdminWebBaseUrl() ? 'telegram_approve' : 'telegram_code',
+    approveMode: 'telegram_callback',
     approvedByTgId: 0,
     approvedAt: 0,
     deniedAt: 0,
+    consumedAt: 0,
   };
 
   try {
     await redis.set(challengeKey(challengeId), record, { ex: getLoginTtlSec() });
-  } catch (e) {
-    return { ok: false, status: 500, error: `challenge_store_failed:${String(e?.message || e)}` };
+    setBrowserVerifierCookie(res, verifier);
+  } catch (error) {
+    return { ok: false, status: 503, error: 'challenge_store_failed' };
   }
 
-  const baseUrl = getAdminWebBaseUrl();
   const tg = await notifyLoginChallenge({
     challengeId,
     code,
+    fallbackEnabled,
+    fallbackActorTgId,
     expiresAt: new Date(expiresAtMs).toISOString(),
     ua,
     ip,
-    buildDecisionUrl: baseUrl ? ((decision, actorId) => buildDecisionUrl(challengeId, decision, actorId)) : null,
+    buildDecisionCallback,
   });
 
   if (!tg.ok) {
+    try { await redis.del(challengeKey(challengeId)); } catch {}
+    clearCookie(res, LOGIN_VERIFIER_COOKIE_NAME);
     return { ok: false, status: 502, error: 'telegram_notify_failed' };
   }
 
@@ -100,107 +216,207 @@ export async function createLoginChallenge(req) {
     challengeId,
     expiresAt: new Date(expiresAtMs).toISOString(),
     mode: record.approveMode,
+    fallbackCodeEnabled: fallbackEnabled,
   };
 }
 
-export function buildDecisionUrl(challengeId, decision, actorTgId) {
-  const base = getAdminWebBaseUrl();
-  const exp = Date.now() + getLoginTtlSec() * 1000;
+export async function getChallengeStatusForBrowser(req, challengeId) {
+  const verifier = readBrowserVerifier(req);
+  if (!verifier) return { ok: false, status: 401, error: 'browser_verifier_missing' };
+  let challenge;
+  try {
+    challenge = await redis.get(challengeKey(challengeId));
+  } catch {
+    return { ok: false, status: 503, error: 'auth_store_unavailable' };
+  }
+  if (!challenge) return { ok: false, status: 404, error: 'challenge_not_found' };
+  const expected = browserVerifierHash(challengeId, verifier);
+  if (!timingSafeEq(expected, challenge.browserVerifierHash)) {
+    return { ok: false, status: 403, error: 'browser_binding_mismatch' };
+  }
+  const expired = Number(challenge.expiresAt || 0) <= Date.now();
+  return {
+    ok: true,
+    challengeId: String(challenge.id || challengeId),
+    status: expired ? ADMIN_AUTH_CHALLENGE_STATUSES.EXPIRED : String(challenge.status || ADMIN_AUTH_CHALLENGE_STATUSES.PENDING),
+    expiresAt: Number(challenge.expiresAt || 0),
+    fallbackCodeEnabled: challenge.fallbackCodeEnabled === true,
+  };
+}
+
+export async function approveChallengeFromTelegram({ challengeId, decision, actorTgId }) {
+  const normalized = normalizeAdminAuthDecision(decision);
+  if (!normalized) return { ok: false, error: 'invalid_decision' };
   const actor = Number(actorTgId || 0) || 0;
-  const payload = `${challengeId}:${decision}:${actor}:${exp}`;
-  const sig = hmacSha256(getSigningSecret(), payload);
-  return `${base}/api/admin-web-auth?action=decision&challengeId=${encodeURIComponent(challengeId)}&decision=${encodeURIComponent(decision)}&actor=${actor}&exp=${exp}&sig=${sig}`;
+  const allowed = getAdminApproverIds().includes(actor);
+  const now = Date.now();
+  const script = `
+    local raw = redis.call('GET', KEYS[1])
+    if not raw then return cjson.encode({ ok = false, error = 'challenge_not_found' }) end
+    local decoded, record = pcall(cjson.decode, raw)
+    if not decoded then return cjson.encode({ ok = false, error = 'auth_state_decode_failed' }) end
+    if ARGV[4] ~= '1' then return cjson.encode({ ok = false, error = 'approver_not_allowed' }) end
+    if tostring(record.status or '') ~= 'pending' then return cjson.encode({ ok = false, error = 'challenge_not_pending', status = tostring(record.status or '') }) end
+    local now = tonumber(ARGV[1])
+    if tonumber(record.expiresAt or 0) <= now then
+      record.status = 'expired'
+      local ttl = math.max(30, math.ceil((tonumber(record.expiresAt or 0) - now) / 1000))
+      redis.call('SET', KEYS[1], cjson.encode(record), 'EX', ttl)
+      return cjson.encode({ ok = false, error = 'challenge_expired' })
+    end
+    local decision = ARGV[2]
+    local actor = tonumber(ARGV[3])
+    if decision == 'approve' then
+      record.status = 'approved'
+      record.approvedByTgId = actor
+      record.approvedBy = 'telegram_callback'
+      record.approvedAt = now
+      record.codeHash = ''
+    elseif decision == 'deny' then
+      record.status = 'denied'
+      record.deniedByTgId = actor
+      record.deniedAt = now
+      record.codeHash = ''
+    else
+      return cjson.encode({ ok = false, error = 'invalid_decision' })
+    end
+    local ttl = math.max(30, math.ceil((tonumber(record.expiresAt or 0) - now) / 1000))
+    redis.call('SET', KEYS[1], cjson.encode(record), 'EX', ttl)
+    return cjson.encode({ ok = true, status = record.status, actorTgId = actor })
+  `;
+  const result = await evalJson(script, [challengeKey(challengeId)], [now, normalized, actor, allowed ? 1 : 0]);
+  if (result.ok) {
+    await appendAdminWebAudit({
+      section: 'auth',
+      action: `challenge_${result.status}`,
+      actorTgId: actor,
+      targetType: 'admin_web_challenge',
+      targetId: String(challengeId || ''),
+      reason: 'telegram_callback',
+    });
+  }
+  return result;
 }
 
-export async function getChallenge(challengeId) {
-  try {
-    return await redis.get(challengeKey(challengeId));
-  } catch {
-    return null;
+export async function verifyChallengeCode(req, challengeId, code) {
+  if (!CFG.ADMIN_WEB_FALLBACK_CODE_ENABLED) return { ok: false, error: 'fallback_code_disabled' };
+  const fallbackActor = getFallbackActorTgId();
+  if (!fallbackActor) return { ok: false, error: 'fallback_actor_not_allowed' };
+  const verifier = readBrowserVerifier(req);
+  if (!verifier) return { ok: false, error: 'browser_verifier_missing' };
+  const now = Date.now();
+  const candidateHash = fallbackCodeHash(challengeId, String(code || ''));
+  const verifierHash = browserVerifierHash(challengeId, verifier);
+  const script = `
+    local raw = redis.call('GET', KEYS[1])
+    if not raw then return cjson.encode({ ok = false, error = 'challenge_not_found' }) end
+    local decoded, record = pcall(cjson.decode, raw)
+    if not decoded then return cjson.encode({ ok = false, error = 'auth_state_decode_failed' }) end
+    local now = tonumber(ARGV[1])
+    if tostring(record.status or '') ~= 'pending' then return cjson.encode({ ok = false, error = 'challenge_not_pending', status = tostring(record.status or '') }) end
+    if tonumber(record.expiresAt or 0) <= now then return cjson.encode({ ok = false, error = 'challenge_expired' }) end
+    if record.fallbackCodeEnabled ~= true then return cjson.encode({ ok = false, error = 'fallback_code_disabled' }) end
+    if tonumber(record.fallbackActorTgId or 0) ~= tonumber(ARGV[5]) then return cjson.encode({ ok = false, error = 'fallback_actor_not_allowed' }) end
+    if tostring(record.browserVerifierHash or '') ~= ARGV[3] then return cjson.encode({ ok = false, error = 'browser_binding_mismatch' }) end
+    if tonumber(record.codeLockedAt or 0) > 0 then return cjson.encode({ ok = false, error = 'code_locked' }) end
+    local maxAttempts = tonumber(record.codeMaxAttempts or ARGV[4])
+    if tostring(record.codeHash or '') ~= ARGV[2] then
+      local attempts = tonumber(record.codeAttempts or 0) + 1
+      record.codeAttempts = attempts
+      local errorCode = 'invalid_code'
+      if attempts >= maxAttempts then
+        record.codeLockedAt = now
+        errorCode = 'code_locked'
+      end
+      local ttl = math.max(30, math.ceil((tonumber(record.expiresAt or 0) - now) / 1000))
+      redis.call('SET', KEYS[1], cjson.encode(record), 'EX', ttl)
+      return cjson.encode({ ok = false, error = errorCode, attemptsRemaining = math.max(0, maxAttempts - attempts) })
+    end
+    record.status = 'approved'
+    record.approvedByTgId = tonumber(ARGV[5])
+    record.approvedBy = 'fallback_code'
+    record.approvedAt = now
+    record.codeHash = ''
+    local ttl = math.max(30, math.ceil((tonumber(record.expiresAt or 0) - now) / 1000))
+    redis.call('SET', KEYS[1], cjson.encode(record), 'EX', ttl)
+    return cjson.encode({ ok = true, status = 'approved', actorTgId = tonumber(ARGV[5]) })
+  `;
+  const result = await evalJson(
+    script,
+    [challengeKey(challengeId)],
+    [now, candidateHash, verifierHash, getCodeMaxAttempts(), fallbackActor],
+  );
+  if (result.ok) {
+    await appendAdminWebAudit({
+      section: 'auth',
+      action: 'challenge_approved',
+      actorTgId: fallbackActor,
+      targetType: 'admin_web_challenge',
+      targetId: String(challengeId || ''),
+      reason: 'fallback_code',
+    });
   }
+  return result;
 }
 
-export async function updateChallenge(challengeId, patch = {}) {
-  const cur = await getChallenge(challengeId);
-  if (!cur) return null;
-  const next = { ...cur, ...patch };
-  const ttl = Math.max(30, Math.ceil((Number(next.expiresAt || 0) - Date.now()) / 1000));
-  try {
-    await redis.set(challengeKey(challengeId), next, { ex: ttl });
-    return next;
-  } catch {
-    return null;
-  }
-}
-
-export async function approveChallenge({ challengeId, decision, actorTgId, exp, sig }) {
-  const payload = `${challengeId}:${decision}:${Number(actorTgId || 0) || 0}:${Number(exp || 0)}`;
-  const expected = hmacSha256(getSigningSecret(), payload);
-  if (!timingSafeEq(expected, sig)) return { ok: false, error: 'invalid_signature' };
-  if (Number(exp || 0) < Date.now()) return { ok: false, error: 'link_expired' };
-  const cur = await getChallenge(challengeId);
-  if (!cur) return { ok: false, error: 'challenge_not_found' };
-  if (String(cur.status) !== 'pending') return { ok: false, error: 'challenge_not_pending' };
-  if (Number(cur.expiresAt || 0) < Date.now()) {
-    await updateChallenge(challengeId, { status: 'expired' });
-    return { ok: false, error: 'challenge_expired' };
-  }
-  const patch = decision === 'approve'
-    ? { status: 'approved', approvedByTgId: Number(actorTgId || 0) || 0, approvedAt: Date.now() }
-    : { status: 'denied', deniedAt: Date.now() };
-  await updateChallenge(challengeId, patch);
-  return { ok: true, status: patch.status };
-}
-
-export async function verifyChallengeCode(challengeId, code) {
-  const cur = await getChallenge(challengeId);
-  if (!cur) return { ok: false, error: 'challenge_not_found' };
-  if (String(cur.status) !== 'pending') return { ok: false, error: 'challenge_not_pending' };
-  if (Number(cur.expiresAt || 0) < Date.now()) {
-    await updateChallenge(challengeId, { status: 'expired' });
-    return { ok: false, error: 'challenge_expired' };
-  }
-  if (sha256(String(code || '')) !== String(cur.codeHash || '')) {
-    return { ok: false, error: 'invalid_code' };
-  }
-  const approverIds = getAdminApproverIds();
-  const approvedByTgId = approverIds.length === 1 ? Number(approverIds[0] || 0) || 0 : 0;
-  const next = await updateChallenge(challengeId, { status: 'approved', approvedByTgId, approvedAt: Date.now(), approvedBy: 'telegram_code_fallback' });
-  return { ok: !!next, error: next ? null : 'challenge_update_failed' };
-}
-
-export async function issueSession(res, challengeId) {
-  const ch = await getChallenge(challengeId);
-  if (!ch || String(ch.status) !== 'approved') return { ok: false, error: 'challenge_not_approved' };
-  if (ch.sessionId) {
-    try {
-      const existing = await redis.get(sessionKey(ch.sessionId));
-      if (existing && Number(existing.expiresAt || 0) > Date.now()) {
-        setCookie(res, COOKIE_NAME, ch.sessionId, { maxAge: getSessionTtlSec() });
-        return { ok: true, sessionId: ch.sessionId, reused: true };
-      }
-    } catch {
-      // ignore and mint a fresh session below
-    }
-  }
+export async function issueSession(req, res, challengeId) {
+  const verifier = readBrowserVerifier(req);
+  if (!verifier) return { ok: false, error: 'browser_verifier_missing' };
   const sessionId = randomId(18);
-  const issuedAt = Date.now();
-  const record = {
-    id: sessionId,
-    actorTgId: Number(ch.approvedByTgId || 0) || 0,
-    issuedAt,
-    expiresAt: issuedAt + getSessionTtlSec() * 1000,
-    challengeId,
-    lastSeenAt: issuedAt,
-  };
-  try {
-    await redis.set(sessionKey(sessionId), record, { ex: getSessionTtlSec() });
-    await updateChallenge(challengeId, { sessionId, sessionIssuedAt: issuedAt });
-    setCookie(res, COOKIE_NAME, sessionId, { maxAge: getSessionTtlSec() });
-    return { ok: true, sessionId };
-  } catch {
-    return { ok: false, error: 'session_store_failed' };
-  }
+  const now = Date.now();
+  const verifierHash = browserVerifierHash(challengeId, verifier);
+  const sessionTtl = getSessionTtlSec();
+  const script = `
+    local raw = redis.call('GET', KEYS[1])
+    if not raw then return cjson.encode({ ok = false, error = 'challenge_not_found' }) end
+    local decoded, record = pcall(cjson.decode, raw)
+    if not decoded then return cjson.encode({ ok = false, error = 'auth_state_decode_failed' }) end
+    local now = tonumber(ARGV[1])
+    if tostring(record.browserVerifierHash or '') ~= ARGV[2] then return cjson.encode({ ok = false, error = 'browser_binding_mismatch' }) end
+    if tonumber(record.expiresAt or 0) <= now then return cjson.encode({ ok = false, error = 'challenge_expired' }) end
+    if tostring(record.status or '') == 'consumed' then
+      local existingId = tostring(record.sessionId or '')
+      if existingId == '' then return cjson.encode({ ok = false, error = 'challenge_consumed' }) end
+      local existingRaw = redis.call('GET', ARGV[6] .. existingId)
+      if not existingRaw then return cjson.encode({ ok = false, error = 'challenge_consumed' }) end
+      local existingDecoded, existingSession = pcall(cjson.decode, existingRaw)
+      if not existingDecoded or tonumber(existingSession.authVersion or 0) ~= tonumber(ARGV[7]) then
+        return cjson.encode({ ok = false, error = 'challenge_consumed' })
+      end
+      return cjson.encode({ ok = true, status = 'consumed', sessionId = existingId, reused = true, actorTgId = tonumber(record.approvedByTgId or 0) })
+    end
+    if tostring(record.status or '') ~= 'approved' then return cjson.encode({ ok = false, error = 'challenge_not_approved', status = tostring(record.status or '') }) end
+    local actor = tonumber(record.approvedByTgId or 0)
+    if not actor or actor <= 0 then return cjson.encode({ ok = false, error = 'approved_actor_missing' }) end
+    local sessionId = ARGV[3]
+    local sessionTtl = tonumber(ARGV[4])
+    local expiresAt = now + sessionTtl * 1000
+    local session = {
+      id = sessionId,
+      actorTgId = actor,
+      issuedAt = now,
+      expiresAt = expiresAt,
+      challengeId = tostring(record.id or ''),
+      lastSeenAt = now,
+      authVersion = tonumber(ARGV[7])
+    }
+    redis.call('SET', KEYS[2], cjson.encode(session), 'EX', sessionTtl)
+    record.status = 'consumed'
+    record.consumedAt = now
+    record.sessionId = sessionId
+    record.sessionIssuedAt = now
+    local challengeTtl = math.max(30, math.ceil((tonumber(record.expiresAt or 0) - now) / 1000))
+    redis.call('SET', KEYS[1], cjson.encode(record), 'EX', challengeTtl)
+    return cjson.encode({ ok = true, status = 'consumed', sessionId = sessionId, actorTgId = actor, reused = false })
+  `;
+  const result = await evalJson(
+    script,
+    [challengeKey(challengeId), sessionKey(sessionId)],
+    [now, verifierHash, sessionId, sessionTtl, challengeId, sessionKeyPrefix(), ADMIN_WEB_AUTH_VERSION],
+  );
+  if (!result.ok) return result;
+  setCookie(res, COOKIE_NAME, result.sessionId, { maxAge: sessionTtl, sameSite: 'Strict' });
+  return result;
 }
 
 export async function getSession(req) {
@@ -210,7 +426,19 @@ export async function getSession(req) {
   try {
     const session = await redis.get(sessionKey(sessionId));
     if (!session) return null;
-    if (Number(session.expiresAt || 0) < Date.now()) return null;
+    const now = Date.now();
+    if (Number(session.authVersion || 0) !== ADMIN_WEB_AUTH_VERSION) {
+      try { await redis.del(sessionKey(sessionId)); } catch {}
+      return null;
+    }
+    if (Number(session.expiresAt || 0) <= now) {
+      try { await redis.del(sessionKey(sessionId)); } catch {}
+      return null;
+    }
+    if (isAdminSessionIdleExpired(session, getIdleTimeoutSec(), now)) {
+      try { await redis.del(sessionKey(sessionId)); } catch {}
+      return null;
+    }
     const revokeBefore = Number((await redis.get(revokeBeforeKey())) || 0);
     if (revokeBefore && Number(session.issuedAt || 0) < revokeBefore) return null;
     return { ...session, id: sessionId };
@@ -220,12 +448,13 @@ export async function getSession(req) {
 }
 
 export async function touchSession(session) {
-  if (!session?.id) return;
+  if (!session?.id) return false;
   const next = { ...session, lastSeenAt: Date.now() };
   try {
     await redis.set(sessionKey(session.id), next, { ex: Math.max(60, Math.ceil((Number(next.expiresAt || 0) - Date.now()) / 1000)) });
+    return true;
   } catch {
-    // ignore
+    return false;
   }
 }
 
@@ -236,6 +465,7 @@ export async function requireSession(req, res) {
   }
   const session = await getSession(req);
   if (!session) {
+    clearCookie(res, COOKIE_NAME);
     json(res, 401, { ok: false, error: 'unauthorized' });
     return null;
   }
@@ -294,7 +524,7 @@ export async function appendAdminWebAudit(entry = {}) {
   try {
     await redis.eval(lua, [key], [JSON.stringify(payload)]);
   } catch {
-    // ignore
+    // Audit durability is tracked separately in STEP588X findings.
   }
 }
 

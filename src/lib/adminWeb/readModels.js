@@ -1159,7 +1159,7 @@ export async function getFounderSummary(actorTgId = 0) {
   const founderWarnings = [];
   if (!founder) founderWarnings.push({ level: 'warning', message: 'Фаундерский слой доступен только для SUPER_ADMIN.', source: 'founder' });
   if (!CFG.FOUNDER_SALE_ENABLED) founderWarnings.push({ level: 'info', message: 'Founder Sale сейчас выключен.', source: 'founder_sale' });
-  if (!CFG.PUBLIC_BASE_URL) founderWarnings.push({ level: 'warning', message: 'PUBLIC_BASE_URL missing — approve / signed links будут ограничены.', source: 'config' });
+  if (!CFG.PUBLIC_BASE_URL) founderWarnings.push({ level: 'warning', message: 'PUBLIC_BASE_URL missing — web-admin route будет недоступен, Telegram callback approval при этом остаётся отдельной identity boundary.', source: 'config' });
   if (!runtime?.services?.qstash || String(runtime.services.qstash.state || '') === 'missing') founderWarnings.push({ level: 'warning', message: 'QStash не настроен — publish/retry founder-слой ограничен.', source: 'qstash' });
   if (!founderWarnings.length) founderWarnings.push({ level: 'info', message: 'Явных фаундер-предупреждений нет.', source: 'founder' });
 
@@ -1181,6 +1181,10 @@ export async function getFounderSummary(actorTgId = 0) {
       sessionTtlSec: Number(CFG.ADMIN_WEB_SESSION_TTL_SEC || 0),
       idleTimeoutSec: Number(CFG.ADMIN_WEB_IDLE_TIMEOUT_SEC || 0),
       approversCount: Array.isArray(CFG.ADMIN_WEB_APPROVER_TG_IDS) ? CFG.ADMIN_WEB_APPROVER_TG_IDS.length : 0,
+      fallbackCodeEnabled: CFG.ADMIN_WEB_FALLBACK_CODE_ENABLED === true,
+      codeMaxAttempts: Number(CFG.ADMIN_WEB_CODE_MAX_ATTEMPTS || 0),
+      startRateLimit: Number(CFG.ADMIN_WEB_START_RATE_LIMIT || 0),
+      startRateWindowSec: Number(CFG.ADMIN_WEB_START_RATE_WINDOW_SEC || 0),
     },
     founderSale: {
       enabled: !!CFG.FOUNDER_SALE_ENABLED,

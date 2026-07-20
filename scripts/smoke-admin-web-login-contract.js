@@ -7,6 +7,9 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const js = read('scripts/admin-web.js');
 const authApi = read('api/admin-web-auth.js');
+const auth = read('src/lib/adminWeb/auth.js');
+const telegram = read('src/lib/adminWeb/telegram.js');
+const bot = read('src/bot/bot.js');
 
 for (const token of [
   'LOGIN_STATE_KEY',
@@ -15,8 +18,10 @@ for (const token of [
   'startLoginStatusPolling({ immediate: true })',
   'checkLoginChallengeStatus({ silent: true })',
   "params.set('challenge', next.challengeId)",
-  'Secret уже принят. Снова вводить его не нужно',
-  'Шаг 2 — Telegram approve / code',
+  'Challenge работает только в этом браузере',
+  'Шаг 2 — Telegram approve',
+  'exchangeLoginChallenge(',
+  "action=exchange",
   'ensureSession()',
   'resetChallengeBtn',
   'newChallengeBtn',
@@ -25,13 +30,31 @@ for (const token of [
 }
 
 for (const token of [
-  'reusedApprovedChallenge',
-  'Вернуться в веб-админку',
-  'Веб-админка автоматически проверит статус',
-  'http-equiv="refresh"',
-  'Сейчас окно само вернётся в веб-админку и завершит вход',
+  "action === 'decision'",
+  'Ссылка подтверждения отключена',
+  "action === 'exchange'",
+  'consumeAdminAuthRateLimit',
+  'getChallengeStatusForBrowser',
+  'issueSession(req, res, challengeId)',
 ]) {
   assert.ok(authApi.includes(token), `api/admin-web-auth.js must include ${token}`);
 }
+
+for (const token of [
+  'LOGIN_VERIFIER_COOKIE_NAME',
+  'browserVerifierHash',
+  "status = 'consumed'",
+  "approvedBy = 'telegram_callback'",
+  'codeAttempts',
+  'codeLockedAt',
+  'ADMIN_WEB_IDLE_TIMEOUT_SEC',
+]) {
+  assert.ok(auth.includes(token), `auth.js must include ${token}`);
+}
+
+assert.ok(telegram.includes('callback_data: approveCallback'), 'Telegram approval must use callback_data');
+assert.ok(telegram.includes('callback_data: denyCallback'), 'Telegram denial must use callback_data');
+assert.equal(telegram.includes('url: approveUrl'), false, 'Telegram approval must not use transferable web URL');
+assert.ok(bot.includes("p.a === 'a:aw_auth_dec'"), 'Telegram callback router must handle admin auth decision');
 
 console.log('✅ smoke admin-web login contract OK');

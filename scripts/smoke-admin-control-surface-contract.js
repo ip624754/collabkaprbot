@@ -27,7 +27,8 @@ assert.ok(runtime.includes('out.controlSurface = await getOperatorControlSnapsho
 
 const auth = read('src/lib/adminWeb/auth.js');
 assert.ok(auth.includes("admin_web_login_paused"), 'admin web auth must expose admin_web_login_paused');
-assert.ok(auth.includes('isAdminWebLoginEnabled'), 'admin web auth must guard start by operator control');
+assert.ok(auth.includes('getAdminWebLoginGateState'), 'admin web auth must guard start by fail-closed operator control state');
+assert.ok(controls.includes('getAdminWebLoginGateState'), 'operator control must expose strict login gate state');
 
 const webJs = read('scripts/admin-web.js');
 for (const token of [

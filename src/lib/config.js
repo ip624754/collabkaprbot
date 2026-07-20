@@ -298,6 +298,28 @@ export const CFG = {
     const n = parseIntSafe(process.env.ADMIN_WEB_IDLE_TIMEOUT_SEC, 30 * 60);
     return Math.max(300, Math.min(n, 8 * 60 * 60));
   })(),
+  ADMIN_WEB_FALLBACK_CODE_ENABLED: parseBoolSafe(process.env.ADMIN_WEB_FALLBACK_CODE_ENABLED, false),
+  ADMIN_WEB_FALLBACK_ACTOR_TG_ID: parseIntSafe(process.env.ADMIN_WEB_FALLBACK_ACTOR_TG_ID, 0),
+  ADMIN_WEB_CODE_MAX_ATTEMPTS: (() => {
+    const n = parseIntSafe(process.env.ADMIN_WEB_CODE_MAX_ATTEMPTS, 5);
+    return Math.max(3, Math.min(n, 10));
+  })(),
+  ADMIN_WEB_START_RATE_LIMIT: (() => {
+    const n = parseIntSafe(process.env.ADMIN_WEB_START_RATE_LIMIT, 8);
+    return Math.max(3, Math.min(n, 30));
+  })(),
+  ADMIN_WEB_START_RATE_WINDOW_SEC: (() => {
+    const n = parseIntSafe(process.env.ADMIN_WEB_START_RATE_WINDOW_SEC, 300);
+    return Math.max(60, Math.min(n, 3600));
+  })(),
+  ADMIN_WEB_CODE_RATE_LIMIT: (() => {
+    const n = parseIntSafe(process.env.ADMIN_WEB_CODE_RATE_LIMIT, 10);
+    return Math.max(3, Math.min(n, 30));
+  })(),
+  ADMIN_WEB_CODE_RATE_WINDOW_SEC: (() => {
+    const n = parseIntSafe(process.env.ADMIN_WEB_CODE_RATE_WINDOW_SEC, 300);
+    return Math.max(60, Math.min(n, 3600));
+  })(),
 
   // QStash (optional): delivery/retry/publish queues in serverless-safe way
   QSTASH_URL: process.env.QSTASH_URL || '',
@@ -505,6 +527,16 @@ export function assertEnv() {
     if (!CFG.ADMIN_WEB_SECRET) missing.push('ADMIN_WEB_SECRET');
     if (!CFG.ADMIN_WEB_SESSION_SECRET) missing.push('ADMIN_WEB_SESSION_SECRET');
     if (!CFG.ADMIN_WEB_APPROVER_TG_IDS?.length) missing.push('ADMIN_WEB_APPROVER_TG_IDS or SUPER_ADMIN_TG_IDS');
+    if (CFG.ADMIN_WEB_FALLBACK_CODE_ENABLED) {
+      const fallbackActor = Number(CFG.ADMIN_WEB_FALLBACK_ACTOR_TG_ID || 0) || 0;
+      const effectiveApprovers = CFG.ADMIN_WEB_APPROVER_TG_IDS?.length
+        ? CFG.ADMIN_WEB_APPROVER_TG_IDS
+        : CFG.SUPER_ADMIN_TG_IDS;
+      if (!fallbackActor) missing.push('ADMIN_WEB_FALLBACK_ACTOR_TG_ID');
+      else if (!(effectiveApprovers || []).includes(fallbackActor)) {
+        missing.push('ADMIN_WEB_FALLBACK_ACTOR_TG_ID must be in effective admin web approvers');
+      }
+    }
   }
 
   if (missing.length) {

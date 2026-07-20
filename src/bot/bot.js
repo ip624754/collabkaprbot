@@ -36,6 +36,7 @@ import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
 import { qstashPublishJSON, getQStashDeliveryUrl, getQStashLibHealth } from '../lib/qstash.js';
 import { appendOperatorControlAudit, getOperatorControlSnapshot, setOperatorControlToggle } from '../lib/operatorControls.js';
+import { approveChallengeFromTelegram } from '../lib/adminWeb/auth.js';
 import { BROADCAST_CAPTION_SAFE_LIMIT, buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
 import { commsCb } from './commsCallbacks.js';
 import { MONETIZATION_LABELS, buildStarsInvoiceDescription, buildStarsInvoiceTitle, starsAmountLabel } from './monetizationCopy.js';
@@ -19612,7 +19613,10 @@ async function renderSetupInstructions(ctx) {
 2) Перешли сюда любой пост из канала (forward).
 
 Бот создаст workspace и ты сможешь запускать конкурсы.`;
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('📋 Меню', 'a:menu') });
+  await safeEditOrReply(ctx, text, {
+    parse_mode: 'HTML',
+    reply_markup: new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home'),
+  });
 }
 
 export function getBot() {
@@ -19732,6 +19736,37 @@ export function getBot() {
       return;
     }
 
+
+
+    if (p.a === 'a:aw_auth_dec') {
+      const challengeId = String(p.c || '').trim();
+      const decision = String(p.d || '').trim() === 'a' ? 'approve' : (String(p.d || '').trim() === 'd' ? 'deny' : '');
+      if (!/^[a-f0-9]{24}$/i.test(challengeId) || !decision) {
+        await ctx.answerCallbackQuery({ text: 'Некорректный запрос входа.' });
+        return;
+      }
+      const result = await approveChallengeFromTelegram({
+        challengeId,
+        decision,
+        actorTgId: Number(ctx.from?.id || 0) || 0,
+      });
+      if (!result.ok) {
+        const labels = {
+          approver_not_allowed: 'Эта кнопка доступна только назначенному approver.',
+          challenge_not_found: 'Запрос входа уже истёк.',
+          challenge_not_pending: 'Запрос уже обработан.',
+          challenge_expired: 'Запрос входа истёк.',
+          auth_store_unavailable: 'Хранилище авторизации временно недоступно.',
+        };
+        await ctx.answerCallbackQuery({ text: labels[String(result.error || '')] || 'Не удалось обработать запрос.' });
+        return;
+      }
+      try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+      await ctx.answerCallbackQuery({
+        text: decision === 'approve' ? 'Вход одобрен для исходного браузера.' : 'Вход отклонён.',
+      });
+      return;
+    }
 
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
 

@@ -1,3 +1,30 @@
+## STEP588X4 — Admin Web Auth Challenge Binding & Throttling (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X4 source implementation on top of STEP588X3.
+
+Repository truth:
+
+- admin login challenges are bound to an HttpOnly, Secure, SameSite=Strict browser verifier cookie; a challenge ID alone is insufficient;
+- Telegram approval uses callback data and the actual `ctx.from.id`; the legacy signed decision URL is permanently non-mutating (`410 Gone`);
+- Redis Lua owns atomic `pending → approved/denied → consumed` transitions and one-time session creation; concurrent exchange reuses the same versioned session instead of minting another;
+- sessions carry `authVersion = 2`, so pre-STEP588X4 sessions fail closed after rollout;
+- idle timeout is enforced during session reads and stale sessions are deleted;
+- fallback code is disabled by default, generated with `crypto.randomInt`, browser-bound, attempt-limited, lockable and independently rate-limited; when enabled it is disclosed only to the explicitly configured fallback approver;
+- start and fallback verification use dedicated Redis Lua throttles and auth fails closed when the throttle store is unavailable;
+- no database migration is required; Redis challenge/session records are ephemeral and versioned;
+- local QA passes 48 auth assertions, 128/128 registered source checks, 253/253 JavaScript syntax checks, dependency/runtime preflight and npm audit with 0 vulnerabilities; this must not be represented as production Telegram/Upstash proof.
+
+**Release decision:** STEP588X4 is source-ready, deployment and live auth canary pending. STEP587 and STEP589 remain HOLD. Continue with STEP588X5 only after preserving X4 rollout evidence or explicitly retaining the source-only boundary.
+
+Read first:
+
+- `docs/audit/STEP588X4_ADMIN_WEB_AUTH_CHALLENGE_BINDING_REPORT.md`;
+- `docs/operations/STEP588X4_ADMIN_WEB_AUTH_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X4.md`.
+
+---
+
 ## STEP588X3 — Broadcast Delivery Unknown-State Safety (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X3 source implementation on top of STEP588X2.

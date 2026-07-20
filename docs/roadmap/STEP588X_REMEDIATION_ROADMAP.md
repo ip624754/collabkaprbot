@@ -180,6 +180,20 @@ The system prefers a visible unknown delivery over an automatic duplicate.
 
 Possession of a URL or challenge ID alone cannot mint an admin session.
 
+### STEP588X4 implementation evidence
+
+- browser verifier stored only as challenge-bound HMAC and required by status, fallback verification and session exchange;
+- Telegram approval/denial uses `a:aw_auth_dec` callback data and the actual allowlisted `ctx.from.id`;
+- legacy signed decision GET is non-mutating and returns `410 Gone`;
+- Redis Lua performs atomic pending decision, fallback attempt/lockout and approved-to-consumed session creation;
+- repeated exchange reuses the same pinned versioned session and cannot mint another;
+- `authVersion=2` rejects all pre-X4 sessions automatically;
+- configured idle timeout is enforced on session read;
+- fallback code defaults off, uses cryptographic RNG, requires one explicit approver actor and is disclosed only to that actor;
+- dedicated start/code Redis throttles fail closed when storage is unavailable;
+- no PostgreSQL migration is required;
+- source implementation is complete; live Telegram/Upstash/browser evidence remains open.
+
 ## STEP588X5 — Health, Logging Privacy & Readiness Truth
 
 **Mode:** HEAVY

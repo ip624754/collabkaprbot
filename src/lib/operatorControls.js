@@ -219,8 +219,18 @@ function buildFallbackControlItem(state = {}) {
   };
 }
 
+export async function getAdminWebLoginGateState() {
+  try {
+    const raw = await redis.get(OPERATOR_CONTROL_KEYS.admin_web_login_enabled);
+    return { ok: true, enabled: toBool(raw, true) };
+  } catch {
+    return { ok: false, enabled: false, error: 'auth_store_unavailable' };
+  }
+}
+
 export async function isAdminWebLoginEnabled() {
-  return getBool(OPERATOR_CONTROL_KEYS.admin_web_login_enabled, true);
+  const state = await getAdminWebLoginGateState();
+  return state.ok === true && state.enabled === true;
 }
 
 export async function setOperatorControlToggle(controlId, enabled, meta = {}) {

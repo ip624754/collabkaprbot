@@ -25,36 +25,53 @@ export async function sendTelegramMessage(chatId, payload) {
   return { ok: !!j?.ok, data: j };
 }
 
-export async function notifyLoginChallenge({ challengeId, code, expiresAt, ua, ip, buildDecisionUrl }) {
+export async function notifyLoginChallenge({
+  challengeId,
+  code,
+  fallbackEnabled = false,
+  fallbackActorTgId = 0,
+  expiresAt,
+  ua,
+  ip,
+  buildDecisionCallback,
+}) {
   const ids = getAdminApproverIds();
   if (!CFG.BOT_TOKEN || !ids.length) return { ok: false, reason: 'approvers_not_configured' };
 
-  const lines = [
+  const baseLines = [
     '<b>Запрос входа в веб-админку</b>',
     '',
     `Запрос: <code>${escapeHtml(String(challengeId).slice(0, 8))}</code>`,
     `Истекает: <code>${escapeHtml(expiresAt)}</code>`,
   ];
-  if (ip) lines.push(`IP: <code>${escapeHtml(ip)}</code>`);
-  if (ua) lines.push(`UA: <code>${escapeHtml(ua)}</code>`);
-  lines.push('', `Резервный код: <code>${escapeHtml(code)}</code>`);
-  if (typeof buildDecisionUrl !== 'function') {
-    lines.push('', '<i>Ссылки подтверждения недоступны: PUBLIC_BASE_URL не настроен. Используй резервный код на экране входа.</i>');
-  }
+  if (ip) baseLines.push(`IP: <code>${escapeHtml(ip)}</code>`);
+  if (ua) baseLines.push(`UA: <code>${escapeHtml(ua)}</code>`);
+  baseLines.push('', '<b>Подтверди или отклони вход кнопкой ниже.</b>');
+
+  const approveCallback = typeof buildDecisionCallback === 'function'
+    ? buildDecisionCallback(challengeId, 'approve')
+    : '';
+  const denyCallback = typeof buildDecisionCallback === 'function'
+    ? buildDecisionCallback(challengeId, 'deny')
+    : '';
+  if (!approveCallback || !denyCallback) return { ok: false, reason: 'decision_callback_unavailable' };
 
   const results = [];
   for (const id of ids) {
-    const approveUrl = typeof buildDecisionUrl === 'function' ? buildDecisionUrl('approve', id) : '';
-    const denyUrl = typeof buildDecisionUrl === 'function' ? buildDecisionUrl('deny', id) : '';
-    const payload = { text: lines.join('\n') };
-    if (approveUrl && denyUrl) {
-      payload.reply_markup = {
-        inline_keyboard: [[
-          { text: '✅ Одобрить', url: approveUrl },
-          { text: '❌ Отклонить', url: denyUrl },
-        ]],
-      };
+    const lines = [...baseLines];
+    if (fallbackEnabled && code && Number(id) === Number(fallbackActorTgId || 0)) {
+      lines.push('', `Аварийный одноразовый код: <code>${escapeHtml(code)}</code>`);
+      lines.push('<i>Код работает только в исходном браузере и блокируется после лимита ошибок.</i>');
     }
+    const payload = {
+      text: lines.join('\n'),
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '✅ Одобрить', callback_data: approveCallback },
+          { text: '❌ Отклонить', callback_data: denyCallback },
+        ]],
+      },
+    };
     try {
       // eslint-disable-next-line no-await-in-loop
       results.push(await sendTelegramMessage(id, payload));

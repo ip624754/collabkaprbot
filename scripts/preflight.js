@@ -259,6 +259,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin web founder contract", "smoke:admin-web-founder-contract"],
   ["Preflight (source-only): admin web density / interaction contract", "smoke:admin-web-density-interaction-contract"],
   ["Preflight (source-only): admin web login contract", "smoke:admin-web-login-contract"],
+  ["Preflight (source-only): admin web auth critical executable tests", "test:admin-web-auth-critical"],
+  ["Preflight (source-only): admin web auth browser-binding contract", "smoke:admin-web-auth-binding-contract"],
   ["Preflight (source-only): admin web users export contract", "smoke:admin-web-users-export-contract"],
   ["Preflight (source-only): admin web users bulk utility contract", "smoke:admin-web-users-bulk-contract"],
   ["Preflight (source-only): admin web users action-state truth contract", "smoke:admin-web-users-action-state-contract"],
