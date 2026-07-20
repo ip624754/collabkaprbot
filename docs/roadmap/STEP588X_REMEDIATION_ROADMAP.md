@@ -4,6 +4,14 @@
 **Policy:** fix release-blocking correctness before new backoffice features
 **Current release state:** HOLD
 
+## STEP588X7H1 — Mandatory Admin Auth Routing Hotfix
+
+**Status:** IMPLEMENTED LOCALLY / PRODUCTION DEPLOY PENDING
+
+Production acceptance after STEP588X7 exposed a routing regression: the registered `a:aw_auth_dec` action was not handled by the real callback router. STEP588X7H1 restores the callback path without changing the STEP588X4 security mechanism. This hotfix must be deployed before admin-web acceptance continues.
+
+---
+
 ## Gate 0 — Preserve evidence
 
 Before runtime remediation:

@@ -9,6 +9,7 @@ import {
   isFallbackActorAllowed,
   normalizeAdminAuthDecision,
 } from '../src/lib/adminWeb/authPolicy.js';
+import { handleAdminWebAuthDecisionCallback } from '../src/bot/adminWebAuthCallback.js';
 
 let assertions = 0;
 function ok(value, message) {
@@ -159,5 +160,77 @@ const activeSession = { issuedAt: NOW, lastSeenAt: NOW, expiresAt: NOW + 60_000 
 equal(isAdminSessionIdleExpired(activeSession, 300, NOW + 299_000), false, 'session remains active before idle limit');
 ok(isAdminSessionIdleExpired(activeSession, 300, NOW + 301_000), 'session expires after idle limit');
 ok(isAdminSessionIdleExpired({}, 300, NOW), 'session without lastSeen fails closed');
+
+
+function makeCallbackCtx(actorTgId = 111) {
+  const events = [];
+  return {
+    from: { id: actorTgId },
+    events,
+    async answerCallbackQuery(payload) {
+      events.push({ type: 'answer', payload });
+    },
+    async editMessageReplyMarkup(payload) {
+      events.push({ type: 'edit_markup', payload });
+    },
+  };
+}
+
+const unrelatedCtx = makeCallbackCtx();
+const unrelatedHandled = await handleAdminWebAuthDecisionCallback(
+  unrelatedCtx,
+  { a: 'a:home' },
+  { approve: async () => ({ ok: true }) }
+);
+equal(unrelatedHandled, false, 'non-auth callback stays available to the normal callback router');
+equal(unrelatedCtx.events.length, 0, 'non-auth callback has no auth side effects');
+
+let approveCalls = 0;
+const invalidCtx = makeCallbackCtx();
+const invalidHandled = await handleAdminWebAuthDecisionCallback(
+  invalidCtx,
+  { a: 'a:aw_auth_dec', c: 'bad', d: 'a' },
+  { approve: async () => { approveCalls += 1; return { ok: true }; } }
+);
+ok(invalidHandled, 'malformed auth callback is consumed by the auth route');
+equal(approveCalls, 0, 'malformed auth callback never reaches the Redis auth transition');
+equal(invalidCtx.events[0]?.payload?.text, 'Некорректный запрос входа.', 'malformed auth callback gets bounded feedback');
+
+const approveCtx = makeCallbackCtx(222);
+let approvedInput = null;
+const approveHandled = await handleAdminWebAuthDecisionCallback(
+  approveCtx,
+  { a: 'a:aw_auth_dec', c: base.id, d: 'a' },
+  { approve: async (input) => { approvedInput = input; return { ok: true, status: 'approved' }; } }
+);
+ok(approveHandled, 'valid approval callback is routed');
+equal(approvedInput?.challengeId, base.id, 'challenge id is passed to the canonical auth service');
+equal(approvedInput?.decision, 'approve', 'compact approve decision is normalized');
+equal(approvedInput?.actorTgId, 222, 'actual Telegram callback actor is authoritative at routing boundary');
+equal(approveCtx.events.filter((event) => event.type === 'edit_markup').length, 1, 'successful callback removes reusable buttons');
+equal(approveCtx.events.filter((event) => event.type === 'answer').length, 1, 'successful callback is acknowledged once');
+equal(approveCtx.events.find((event) => event.type === 'answer')?.payload?.text, 'Вход одобрен для исходного браузера.', 'approval feedback preserves browser-binding truth');
+
+const denyCtx = makeCallbackCtx(111);
+let deniedInput = null;
+await handleAdminWebAuthDecisionCallback(
+  denyCtx,
+  { a: 'a:aw_auth_dec', c: base.id, d: 'd' },
+  { approve: async (input) => { deniedInput = input; return { ok: true, status: 'denied' }; } }
+);
+equal(deniedInput?.decision, 'deny', 'compact deny decision is normalized');
+equal(denyCtx.events.find((event) => event.type === 'answer')?.payload?.text, 'Вход отклонён.', 'deny feedback is explicit');
+
+const rejectedCtx = makeCallbackCtx(333);
+await handleAdminWebAuthDecisionCallback(
+  rejectedCtx,
+  { a: 'a:aw_auth_dec', c: base.id, d: 'a' },
+  { approve: async () => ({ ok: false, error: 'approver_not_allowed' }) }
+);
+equal(
+  rejectedCtx.events.find((event) => event.type === 'answer')?.payload?.text,
+  'Эта кнопка доступна только назначенному approver.',
+  'unauthorized approver gets the canonical rejection without falling into unknown_callback'
+);
 
 console.log(`✅ admin web auth critical policy tests PASS (${assertions} assertions)`);

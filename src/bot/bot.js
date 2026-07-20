@@ -31,13 +31,13 @@ import { renderGwAccess } from './gwAccess.js';
 import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
+import { handleAdminWebAuthDecisionCallback } from './adminWebAuthCallback.js';
 import { handleGwAccessRoute } from './routes/gwAccess.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
 import { qstashPublishJSON, getQStashDeliveryUrl, getQStashLibHealth } from '../lib/qstash.js';
 import { appendOperatorControlAudit, getOperatorControlSnapshot, setOperatorControlToggle } from '../lib/operatorControls.js';
-import { approveChallengeFromTelegram } from '../lib/adminWeb/auth.js';
 import { BROADCAST_CAPTION_SAFE_LIMIT, buildBroadcastDeliveryPlan } from '../lib/broadcast.js';
 import { commsCb } from './commsCallbacks.js';
 import { MONETIZATION_LABELS, buildStarsInvoiceDescription, buildStarsInvoiceTitle, starsAmountLabel } from './monetizationCopy.js';
@@ -19738,36 +19738,6 @@ export function getBot() {
 
 
 
-    if (p.a === 'a:aw_auth_dec') {
-      const challengeId = String(p.c || '').trim();
-      const decision = String(p.d || '').trim() === 'a' ? 'approve' : (String(p.d || '').trim() === 'd' ? 'deny' : '');
-      if (!/^[a-f0-9]{24}$/i.test(challengeId) || !decision) {
-        await ctx.answerCallbackQuery({ text: 'Некорректный запрос входа.' });
-        return;
-      }
-      const result = await approveChallengeFromTelegram({
-        challengeId,
-        decision,
-        actorTgId: Number(ctx.from?.id || 0) || 0,
-      });
-      if (!result.ok) {
-        const labels = {
-          approver_not_allowed: 'Эта кнопка доступна только назначенному approver.',
-          challenge_not_found: 'Запрос входа уже истёк.',
-          challenge_not_pending: 'Запрос уже обработан.',
-          challenge_expired: 'Запрос входа истёк.',
-          auth_store_unavailable: 'Хранилище авторизации временно недоступно.',
-        };
-        await ctx.answerCallbackQuery({ text: labels[String(result.error || '')] || 'Не удалось обработать запрос.' });
-        return;
-      }
-      try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
-      await ctx.answerCallbackQuery({
-        text: decision === 'approve' ? 'Вход одобрен для исходного браузера.' : 'Вход отклонён.',
-      });
-      return;
-    }
-
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
 
     const title = f.title || 'Channel';
@@ -25111,6 +25081,11 @@ ${DEGRADED_COPY.tips}
         return;
       }
     }
+
+    // STEP588X4H1: route the Telegram approval callback before application-user hydration.
+    // The auth state machine is bound to the real Telegram actor and Redis challenge,
+    // not to an application user row. Returning true prevents legacy unknown recovery.
+    if (await handleAdminWebAuthDecisionCallback(ctx, p)) return;
 
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
 

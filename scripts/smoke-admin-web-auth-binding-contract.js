@@ -10,6 +10,7 @@ const policy = read('src/lib/adminWeb/authPolicy.js');
 const api = read('api/admin-web-auth.js');
 const telegram = read('src/lib/adminWeb/telegram.js');
 const bot = read('src/bot/bot.js');
+const callbackRoute = read('src/bot/adminWebAuthCallback.js');
 const common = read('src/lib/adminWeb/common.js');
 const config = read('src/lib/config.js');
 const registry = read('src/bot/actionRegistry.js');
@@ -56,8 +57,14 @@ assert.ok(telegram.includes('callback_data: approveCallback'), 'approval must us
 assert.ok(telegram.includes('callback_data: denyCallback'), 'denial must use Telegram callback_data');
 assert.equal(telegram.includes('url: approveUrl'), false, 'approval must not use web URL');
 assert.ok(telegram.includes('Number(id) === Number(fallbackActorTgId || 0)'), 'fallback code must be disclosed only to the explicit fallback actor');
-assert.ok(bot.includes("p.a === 'a:aw_auth_dec'"), 'bot must handle auth callback');
-assert.ok(bot.includes('actorTgId: Number(ctx.from?.id || 0)'), 'actual Telegram callback actor must be authoritative');
+assert.ok(bot.includes("import { handleAdminWebAuthDecisionCallback } from './adminWebAuthCallback.js'"), 'bot must import the executable auth callback route');
+assert.ok(bot.includes('if (await handleAdminWebAuthDecisionCallback(ctx, p)) return;'), 'callback router must invoke auth route before legacy dispatch');
+assert.ok(callbackRoute.includes("String(p?.a || '') === 'a:aw_auth_dec'"), 'auth callback module must own the action match');
+assert.ok(callbackRoute.includes('actorTgId = Number(ctx?.from?.id || 0)'), 'actual Telegram callback actor must be authoritative');
+const callbackRouterStart = bot.indexOf('// --- Callback router ---');
+const authRouteCall = bot.indexOf('if (await handleAdminWebAuthDecisionCallback(ctx, p)) return;', callbackRouterStart);
+const callbackUserHydration = bot.indexOf('const u = await db.upsertUser(ctx.from.id', callbackRouterStart);
+assert.ok(callbackRouterStart >= 0 && authRouteCall > callbackRouterStart && callbackUserHydration > authRouteCall, 'auth callback must route before callback application-user hydration');
 assert.ok(registry.includes('"a:aw_auth_dec"'), 'auth callback must be in action registry');
 
 assert.ok(common.includes('crypto.randomInt(0, 1_000_000)'), 'fallback code must use cryptographic RNG');

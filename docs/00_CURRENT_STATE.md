@@ -1,3 +1,29 @@
+## STEP588X7H1 — Admin Auth Callback Routing Hotfix (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X7H1 runtime hotfix on top of STEP588X7.
+
+Repository truth:
+
+- production evidence showed `a:aw_auth_dec` reaching `unknown_callback`;
+- the STEP588X4 auth branch was misplaced inside the setup-forward message handler instead of the callback router;
+- `src/bot/adminWebAuthCallback.js` now owns the executable route and delegates to the canonical Redis auth transition;
+- callback routing occurs after the Redis guard and before application-user hydration;
+- browser binding, real Telegram actor identity, one-time challenge consume and replay protection are unchanged;
+- the latent undefined-`p` setup-forward defect is removed;
+- no migration or ENV change is required;
+- local auth tests, portable critical spine and callback/action registry gates pass;
+- production Vercel deploy and live approve/exchange remain pending.
+
+**Release decision:** deploy this hotfix before continuing admin-web acceptance. STEP587 and STEP589 remain HOLD.
+
+Read first:
+
+- `docs/audit/STEP588X7H1_ADMIN_AUTH_CALLBACK_ROUTING_HOTFIX_REPORT.md`;
+- `docs/operations/STEP588X7H1_ADMIN_AUTH_CALLBACK_ROUTING_ROLLOUT_RUNBOOK.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X7H1.md`.
+
+---
+
 ## STEP588X7 — Executable Critical-Path Test Spine (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X7 test/governance implementation on top of STEP588X6.

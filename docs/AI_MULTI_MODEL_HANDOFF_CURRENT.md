@@ -1,3 +1,36 @@
+# AI Multi-Model Handoff — STEP588X7H1 Current Truth
+
+**Baseline:** STEP588X7H1 hotfix on STEP588X7
+**Status:** SOURCE READY / PRODUCTION ADMIN-AUTH CANARY PENDING / GLOBAL RELEASE HOLD
+
+## Verified locally
+
+- production log signature is explained by a concrete routing defect;
+- admin auth callback has an executable route in the real callback path;
+- actual Telegram actor and canonical Redis state machine remain authoritative;
+- malformed, unauthorized, expired and successful callback outcomes are executable-tested;
+- portable X1–X6 critical spine remains PASS;
+- callback/action registries have no drift.
+
+## Not verified
+
+- Vercel deployment;
+- live Telegram callback success;
+- browser status polling and session exchange;
+- production Upstash transition.
+
+## Hard rules
+
+- do not restore signed decision URLs;
+- do not bypass browser verifier binding;
+- do not route auth approval through application-user identity;
+- generic `unknown_callback` must never be the expected auth decision outcome;
+- rollback to STEP588X7 is security/functionality regressive for admin access.
+
+Next operator action: deploy STEP588X7H1 and perform the bounded live approve/deny/browser exchange canary.
+
+---
+
 # AI Multi-Model Handoff — STEP588X7 Current Truth
 
 **Baseline:** STEP588X7 test/governance implementation on STEP588X6

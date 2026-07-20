@@ -10,6 +10,7 @@ const authApi = read('api/admin-web-auth.js');
 const auth = read('src/lib/adminWeb/auth.js');
 const telegram = read('src/lib/adminWeb/telegram.js');
 const bot = read('src/bot/bot.js');
+const callbackRoute = read('src/bot/adminWebAuthCallback.js');
 
 for (const token of [
   'LOGIN_STATE_KEY',
@@ -55,6 +56,8 @@ for (const token of [
 assert.ok(telegram.includes('callback_data: approveCallback'), 'Telegram approval must use callback_data');
 assert.ok(telegram.includes('callback_data: denyCallback'), 'Telegram denial must use callback_data');
 assert.equal(telegram.includes('url: approveUrl'), false, 'Telegram approval must not use transferable web URL');
-assert.ok(bot.includes("p.a === 'a:aw_auth_dec'"), 'Telegram callback router must handle admin auth decision');
+assert.ok(bot.includes("import { handleAdminWebAuthDecisionCallback } from './adminWebAuthCallback.js'"), 'Telegram callback router must import the admin auth route');
+assert.ok(bot.includes('if (await handleAdminWebAuthDecisionCallback(ctx, p)) return;'), 'Telegram callback router must execute the admin auth route');
+assert.ok(callbackRoute.includes("String(p?.a || '') === 'a:aw_auth_dec'"), 'admin auth callback module must own the action match');
 
 console.log('✅ smoke admin-web login contract OK');

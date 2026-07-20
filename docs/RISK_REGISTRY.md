@@ -209,3 +209,14 @@ Residual risk:
 - Source verification: 36 X6 assertions, 132 registered source checks, X1–X5 critical regressions, dependency/runtime preflight and package-lock/registry/migration-pack gates PASS locally; one completed npm audit reported 0 vulnerabilities and the final repeat hit registry HTTP 502.
 - Runtime verification required: production ENV preflight, one duplicate-suppression canary, one preview receipt-store failure, one HTTP 413 canary and one stale/missing-row mutation canary.
 - Residual risk: replay receipts reduce provider-level retries but do not replace domain idempotency; a crash after an external/domain side effect can intentionally leave `outcome_unknown` requiring operator review.
+
+
+## Current STEP588X7H1 assessment
+
+- Change type: narrow production auth-callback routing correction; no schema or ENV change.
+- Primary risk addressed: registered critical callback existed but was unreachable in the real callback router, causing admin-login denial and generic stale-button recovery.
+- Runtime blast radius: `a:aw_auth_dec` only, plus removal of a latent undefined-variable branch from setup-forward handling.
+- Security posture: browser binding, Telegram actor proof, Redis atomic transition and critical update replay receipt remain unchanged.
+- Rollback: rollback to STEP588X7 restores the known defect; prefer fix-forward or temporarily disable admin web.
+- Source verification: 63 auth assertions, auth source contracts, portable critical spine, callback/action registries and dependency preflight PASS.
+- Runtime verification required: one approve, one deny, no `unknown_callback`, successful originating-browser exchange.
