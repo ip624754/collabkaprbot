@@ -69,7 +69,7 @@ export function registerStarsPaymentsHandlers(deps = {}) {
         await ctx.answerPreCheckoutQuery(false, { error_message: 'Ошибка счета. Нажми /paysupport — поможем.' });
         try {
           // Best-effort: keep logs for debugging without spamming.
-          console.warn('[PAY] pre_checkout rejected', { reason: v.reason, payload: String(payload).slice(0, 64), paid: totalAmount, expected: v.expected || 0, currency });
+          console.warn('[PAY] pre_checkout rejected', { reason: v.reason, product_kind: _safeKindFromPayload(payload), paid: totalAmount, expected: v.expected || 0, currency });
         } catch {}
         return;
       }

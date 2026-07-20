@@ -38,6 +38,9 @@
 ### 3.1 `/api/health`
 
 #### Что смотреть в health (сигналы деградации)
+Сначала public `/api/health`: HTTP 200 + `ok=true` + `system_status=GO`. Если HTTP 503 — прочитай `reason_codes`, затем войди в web-admin и открой protected `/api/health?full=1`.
+
+В protected diagnostics:
 - Redis: `redis.read_ok` / `redis.write_ok` + `last_error`
 - Payments: `payments.payload_hmac_minlen_ok`, `payments.fallback_apply_effective`
 - Broadcast: `broadcast.db_overload`, `broadcast.tick_deferred_redis`, `broadcast.pending_deliveries`
@@ -47,8 +50,8 @@
 Cookbook: `docs/94_PROD_READINESS_PACK.md`.
 
 Открываешь раз в день (или после деплоя):
-- `system_status` + `no_go_reasons[]` (если NO_GO — делай то, что написано в `hint`)
-- `ok:true`, `redis.read_ok/write_ok:true`
+- public readiness: HTTP 200, `ok:true`, `system_status=GO`, `reason_codes=[]`;
+- protected diagnostics: `no_go_reasons[]`, `redis.read_ok/write_ok:true`
 - `cron.*.last_run` (giveaways/broadcast)
 - `ops.digest_preview` (быстро понять, “что болит” без захода в логи)
 - если была рассылка — `broadcast.pending_deliveries` + counters (deferred/db_overload)
@@ -141,7 +144,8 @@ Staging проверка деградаций:
 
 После деплоя:
 - `smoke-tests_short.md`
-- `/api/health` — убедиться, что `ok:true`
+- public `/api/health` — убедиться, что HTTP 200, `ok:true`, `system_status=GO`
+- после admin login `/api/health?full=1` — проверить подробные DB/Redis/Payments/OPS блоки
 
 Ссылки:
 - `docs/16_RELEASE_CHECKLIST.md`

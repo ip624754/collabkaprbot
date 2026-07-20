@@ -2,6 +2,7 @@ import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import crypto from 'crypto';
 import { CFG, assertEnv } from '../lib/config.js';
 import logger from '../lib/logger.js';
+import { opaqueLogRef, safeLogError, sanitizeLogMeta } from '../lib/logPrivacy.js';
 import * as R from '../lib/redis.js';
 
 // Build-compat: avoid hard ESM named-import crashes if a partial cherry-pick updates
@@ -1746,12 +1747,11 @@ async function sendStarsInvoice(ctx, { title, description, payload, amount, back
     return true;
   } catch (e) {
     const desc = String(e?.description || e?.error?.description || e?.message || e);
-    console.error('[PAY] sendInvoice(stars) failed', {
-      chat_id: chatId ?? null,
-      from_id: userId ?? null,
-      payload: String(payload || '').slice(0, 64),
-      error: desc,
-    });
+    logger.error({
+      chat_ref: opaqueLogRef(chatId, 'telegram_chat'),
+      actor_ref: opaqueLogRef(userId, 'telegram_actor'),
+      err: safeLogError(e),
+    }, 'payment.invoice.send_failed');
 
     const isAdmin = isSuperAdminTg(userId);
     const text = isAdmin
@@ -2368,7 +2368,7 @@ async function notifyWorkspaceTeam(api, wsId, opts = {}) {
       sent++;
     } catch (e) {
       failed++;
-      try { console.warn('[notifyWorkspaceTeam] failed', { wsId, tgId, role, err: e?.description || e?.message || String(e) }); } catch {}
+      try { logger.warn({ workspace_ref: opaqueLogRef(wsId, 'workspace'), actor_ref: opaqueLogRef(tgId, 'telegram_actor'), role, err: safeLogError(e) }, 'workspace.notify.failed'); } catch {}
     }
   }
   return { sent, failed };
@@ -3416,8 +3416,8 @@ const P0_AWAIT_TIMEOUT_MS = Number(process.env.P0_AWAIT_TIMEOUT_MS || 8000);
 function p0StepLog(ctx, stepId, phase, meta = {}) {
   try {
     const cid = ctx?.state?.cid || null;
-    const payload = { phase, stepId: String(stepId || ''), cid, ...meta };
-    console.warn('[P0]', payload);
+    const payload = sanitizeLogMeta({ phase, stepId: String(stepId || ''), cid, ...meta });
+    logger.warn(payload, 'p0.step');
   } catch {}
 }
 
@@ -7851,7 +7851,7 @@ async function setBrandApplyDraft(tgId, brandUserId, draft, ttlSec = 20 * 60) {
   try {
     await redis.set(brandApplyDraftKey(tgId, brandUserId), draft, { ex: ttlSec });
   } catch (e) {
-    try { console.warn('[REDIS] setBrandApplyDraft failed', { tgId, brandUserId, err: errInfo(e) }); } catch {}
+    try { logger.warn({ actor_ref: opaqueLogRef(tgId, 'telegram_actor'), brand_ref: opaqueLogRef(brandUserId, 'user'), err: safeLogError(e) }, 'brand_apply_draft.set_failed'); } catch {}
   }
 }
 
@@ -7859,7 +7859,7 @@ async function getBrandApplyDraft(tgId, brandUserId) {
   try {
     return await redis.get(brandApplyDraftKey(tgId, brandUserId));
   } catch (e) {
-    try { console.warn('[REDIS] getBrandApplyDraft failed', { tgId, brandUserId, err: errInfo(e) }); } catch {}
+    try { logger.warn({ actor_ref: opaqueLogRef(tgId, 'telegram_actor'), brand_ref: opaqueLogRef(brandUserId, 'user'), err: safeLogError(e) }, 'brand_apply_draft.get_failed'); } catch {}
     return null;
   }
 }
@@ -7868,7 +7868,7 @@ async function clearBrandApplyDraft(tgId, brandUserId) {
   try {
     await redis.del(brandApplyDraftKey(tgId, brandUserId));
   } catch (e) {
-    try { console.warn('[REDIS] clearBrandApplyDraft failed', { tgId, brandUserId, err: errInfo(e) }); } catch {}
+    try { logger.warn({ actor_ref: opaqueLogRef(tgId, 'telegram_actor'), brand_ref: opaqueLogRef(brandUserId, 'user'), err: safeLogError(e) }, 'brand_apply_draft.clear_failed'); } catch {}
   }
 }
 
@@ -8120,7 +8120,7 @@ ${escapeHtml(msg)}`;
     try {
       await api.sendMessage(chatId, notifText, { parse_mode: 'HTML', reply_markup: kbNotif, disable_web_page_preview: true });
     } catch (e) {
-      try { console.warn('[brand_apply_notify] failed', { audience: 'brand', chatId, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+      try { logger.warn({ audience: 'brand', chat_ref: opaqueLogRef(chatId, 'telegram_chat'), cid: ctx.state?.cid || null, err: safeLogError(e) }, 'brand_apply.notify_failed'); } catch {}
     }
   }
 
@@ -8128,7 +8128,7 @@ ${escapeHtml(msg)}`;
     try {
       await api.sendMessage(chatId, opsCopyText, { parse_mode: 'HTML', reply_markup: kbNotif, disable_web_page_preview: true });
     } catch (e) {
-      try { console.warn('[brand_apply_notify] failed', { audience: 'ops_copy', chatId, cid: ctx.state?.cid || null, err: errInfo(e) }); } catch {}
+      try { logger.warn({ audience: 'ops_copy', chat_ref: opaqueLogRef(chatId, 'telegram_chat'), cid: ctx.state?.cid || null, err: safeLogError(e) }, 'brand_apply.notify_failed'); } catch {}
     }
   }
 
@@ -22878,18 +22878,19 @@ if (exp.type === 'brand_deals_search') {
           deliveredTo.push(rec);
         } catch (e) {
           failedTo.push({ ...rec, err: e?.description || e?.message || String(e) });
-          try { console.warn('[brand_app_chat_send] notify failed', { tgId: rec.tgId, role: rec.role, err: e?.description || e?.message || String(e) }); } catch {}
+          try { logger.warn({ actor_ref: opaqueLogRef(rec.tgId, 'telegram_actor'), role: rec.role, err: safeLogError(e) }, 'brand_app_chat.notify_failed'); } catch {}
         }
       }
 
       try {
-        console.info('[brand_app_chat_send] notify summary', {
-          brandUserId,
-          appId,
+        logger.info({
+          brand_ref: opaqueLogRef(brandUserId, 'user'),
+          app_ref: opaqueLogRef(appId, 'application'),
           recipients: targetsMap.size,
           delivered,
-          deliveredTo: deliveredTo.map(x => ({ tgId: x.tgId, role: x.role, username: x.tg_username || null }))
-        });
+          delivered_roles: deliveredTo.map((item) => String(item.role || 'unknown')),
+          failed: failedTo.length,
+        }, 'brand_app_chat.notify_summary');
       } catch {}
 
       await clearExpectText(ctx.from.id);
@@ -34969,7 +34970,7 @@ if (p.a === 'a:bx_retry_help') {
       try {
         await db.bumpBarterOffer(offerId);
       } catch (e) {
-        try { console.warn('[bx_bump] bump failed', { err: errInfo(e), wsId, offerId, uid: u.id }); } catch {}
+        try { logger.warn({ err: safeLogError(e), workspace_ref: opaqueLogRef(wsId, 'workspace'), offer_ref: opaqueLogRef(offerId, 'offer'), user_ref: opaqueLogRef(u.id, 'user') }, 'barter.bump_failed'); } catch {}
         await safeEditOrReply(ctx, '⚠️ Не удалось поднять оффер. Попробуй ещё раз через «📦 Мои офферы».', { reply_markup: navKb(`a:bx_my|ws:${wsId}|p:0`) });
         return;
       }
@@ -34977,7 +34978,7 @@ if (p.a === 'a:bx_retry_help') {
       try {
         await db.auditBarterOffer(offerId, wsId, u.id, 'bx.offer_bumped', { cooldownHours, isPro });
       } catch (e) {
-        try { console.warn('[bx_bump] audit failed', { err: errInfo(e), wsId, offerId, uid: u.id }); } catch {}
+        try { logger.warn({ err: safeLogError(e), workspace_ref: opaqueLogRef(wsId, 'workspace'), offer_ref: opaqueLogRef(offerId, 'offer'), user_ref: opaqueLogRef(u.id, 'user') }, 'barter.bump_audit_failed'); } catch {}
       }
 
       // Show результат так, чтобы было ВИДНО (перекидываем в список, где оффер уедет наверх)
@@ -37354,7 +37355,7 @@ ${actionHint}`;
       });
     } catch (e) {
       // The post is already sent; keep breadcrumb and let the user retry to finalize.
-      try { console.warn('[gw_publish] post sent but DB commit failed', { err: errInfo(e), wsId, gwId, uid: u.id }); } catch {}
+      try { logger.warn({ err: safeLogError(e), workspace_ref: opaqueLogRef(wsId, 'workspace'), giveaway_ref: opaqueLogRef(gwId, 'giveaway'), user_ref: opaqueLogRef(u.id, 'user') }, 'giveaway.publish_commit_failed'); } catch {}
       await ctx.answerCallbackQuery({ text: 'Пост отправлен, но не сохранён. Нажми ещё раз.' });
       await safeEditOrReply(ctx,
         '⚠️ Пост в канал отправлен, но бот не смог сохранить результат в базе (временная ошибка).\n\nНажми «📣 Опубликовать» ещё раз — бот дожмёт без повторной отправки.',

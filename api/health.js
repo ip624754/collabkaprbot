@@ -1,66 +1,52 @@
 import { CFG } from '../src/lib/config.js'; 
 import { getQStashConfigSnapshot, isQStashLibAvailable } from '../src/lib/qstash.js';
 import { getDbPoolConfigSnapshot } from '../src/db/poolConfig.js';
-
-function resolveHealthTier(req) {
-  try {
-    if (typeof req?.url === 'string' && req.url) {
-      const u = new URL(req.url, 'http://localhost');
-      const raw = String(
-        u.searchParams.get('tier')
-          || u.searchParams.get('view')
-          || (u.searchParams.has('fast') ? 'fast' : '')
-      ).trim().toLowerCase();
-      if (raw === 'fast' || raw === 'ops' || raw === 'operator') return 'fast';
-      if (raw === 'full') return 'full';
-    }
-  } catch {
-    // ignore
-  }
-
-  return 'full';
-}
+import { pingDb } from '../src/db/pool.js';
+import { requireSession } from '../src/lib/adminWeb/auth.js';
+import {
+  buildLivenessPayload,
+  buildPublicReadinessPayload,
+  healthStatusCode,
+  resolveHealthView,
+  sanitizeHealthDiagnostics,
+} from '../src/lib/healthPolicy.js';
 
 function attachHealthTier(out, tier) {
-  const next = { ...out, health_tier: tier === 'fast' ? 'fast' : 'full' };
-  if (tier === 'fast') {
-    next.operator_fast_path = {
-      full_tier_available: true,
-      included_sections: ['database', 'system_warnings', 'redis', 'support', 'ops', 'payments', 'system_status', 'no_go_reasons'],
-      omitted_sections: ['cron', 'broadcast', 'qstash', 'mon', 'ref', 'audit'],
-      note: 'Fast operator summary. Open /api/health without tier=fast for full drill-down.',
-    };
-  }
-  return next;
+  return { ...out, health_tier: tier === 'full' ? 'full' : 'readiness' };
 }
 
-function buildFastHealthOut(base) {
-  return attachHealthTier({
-    ok: base.ok,
-    ts: base.ts,
-    env: base.env,
-    database: base.database,
-    system_warnings: base.system_warnings,
-    redis: base.redis,
-    support: base.support,
-    ops: base.ops,
-    payments: base.payments,
-  }, 'fast');
-}
-
-// Simple health endpoint (no secrets).
-// Must never throw (fail-open), even if Redis is unavailable.
+// Public default: dependency-aware readiness with minimal disclosure.
+// `?mode=liveness` is process-only and always 200 when the handler can answer.
+// `?full=1` / `?view=diagnostics` requires an authenticated admin session.
 export default async function handler(_req, res) {
-  const healthTier = resolveHealthTier(_req);
+  const healthView = resolveHealthView(_req);
+  // Readiness computes the full internal status and only projects a minimal public payload.
+  // The compatibility tier header remains `fast` for existing operator checks.
+  const healthTier = 'full';
+  const responseHealthTier = healthView === 'diagnostics' ? 'full' : 'fast';
   res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Health-Tier', healthTier);
+  res.setHeader('X-Health-View', healthView);
+  res.setHeader('X-Health-Tier', responseHealthTier);
 
   const now = new Date();
+  if (healthView === 'liveness') {
+    res.status(200).json(buildLivenessPayload(now));
+    return;
+  }
+
+  if (healthView === 'diagnostics') {
+    const session = await requireSession(_req, res);
+    if (!session) return;
+  }
+
   const day = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD (UTC)
   const database = getDbPoolConfigSnapshot(process.env);
+  const dbStartedAt = Date.now();
+  database.read_ok = database.configured && database.url_valid ? await pingDb() : false;
+  database.latency_ms = Math.max(0, Date.now() - dbStartedAt);
 
   const base = {
-    ok: true,
+    ok: null,
     ts: now.toISOString(),
     env: CFG.APP_ENV,
     database,
@@ -230,19 +216,29 @@ export default async function handler(_req, res) {
     };
   }
 
-  // Redis is optional for /api/health (so it stays useful in minimal envs).
+  function respondWithHealth(out) {
+    const status = computeSystemStatus(out);
+    out.system_status = status.system_status;
+    out.no_go_reasons = status.no_go_reasons;
+    out.ok = status.system_status === 'GO';
+
+    const httpStatus = healthStatusCode(status.system_status);
+    if (healthView === 'diagnostics') {
+      return res.status(httpStatus).json(sanitizeHealthDiagnostics(out));
+    }
+    return res.status(httpStatus).json(buildPublicReadinessPayload(out));
+  }
+
+  // Redis is a readiness dependency. Missing/unavailable Redis is NO_GO,
+  // while liveness remains independently available through mode=liveness.
   if (!CFG.UPSTASH_REDIS_REST_URL || !CFG.UPSTASH_REDIS_REST_TOKEN) {
     base.redis.configured = false;
     base.redis.read_ok = false;
     base.redis.write_ok = false;
     base.redis.latency_ms = null;
     base.redis.last_error = 'not_configured';
-    const fullOut = attachHealthTier({ ...base, cron: makeCronBase(false), broadcast: makeBroadcastBase(), ref: makeRefBase(), audit: auditBase }, healthTier);
-    const out = healthTier === 'fast' ? buildFastHealthOut(base) : fullOut;
-    const st = computeSystemStatus(out);
-    out.system_status = st.system_status;
-    out.no_go_reasons = st.no_go_reasons;
-    res.status(200).json(out);
+    const out = attachHealthTier({ ...base, cron: makeCronBase(false), broadcast: makeBroadcastBase(), ref: makeRefBase(), audit: auditBase }, healthTier);
+    respondWithHealth(out);
     return;
   }
 
@@ -269,6 +265,17 @@ export default async function handler(_req, res) {
         if (hint) o.hint = String(hint).slice(0, 220);
         reasons.push(o);
       };
+
+      const dbConfigured = out?.database?.configured;
+      const dbUrlValid = out?.database?.url_valid;
+      const dbReadOk = out?.database?.read_ok;
+      if (dbConfigured === false) {
+        add('database_not_configured', 'P0', false, null, 'DATABASE_URL не задан. Runtime не готов обслуживать продуктовые запросы.');
+      } else if (dbUrlValid === false) {
+        add('database_url_invalid', 'P0', false, null, 'DATABASE_URL не проходит URL validation.');
+      } else if (dbReadOk === false) {
+        add('database_read_not_ok', 'P0', false, null, 'PostgreSQL readiness probe не прошёл. Проверь Neon/PG и сетевую доступность.');
+      }
 
       const redisReadOk = out?.redis?.read_ok;
       const redisWriteOk = out?.redis?.write_ok;
@@ -546,14 +553,6 @@ try {
       // ignore
     }
 
-    if (healthTier === 'fast') {
-      const out = buildFastHealthOut(base);
-      const st = computeSystemStatus(out);
-      out.system_status = st.system_status;
-      out.no_go_reasons = st.no_go_reasons;
-      res.status(200).json(out);
-      return;
-    }
 
     // Monetization breadcrumbs (Redis-only)
     async function readMany(keys) {
@@ -1003,10 +1002,7 @@ try {
       audit,
 
     }, healthTier);
-    const st = computeSystemStatus(out);
-    out.system_status = st.system_status;
-    out.no_go_reasons = st.no_go_reasons;
-    res.status(200).json(out);
+    respondWithHealth(out);
   } catch {
     base.redis.configured = true;
     base.redis.read_ok = false;
@@ -1014,7 +1010,7 @@ try {
     base.redis.latency_ms = null;
     base.redis.last_error = 'redis_unavailable';
 
-    const fullOut = attachHealthTier({
+    const out = attachHealthTier({
 
       ...base,
       cron: { ...makeCronBase(true), error: 'redis_unavailable' },
@@ -1023,10 +1019,6 @@ try {
       audit: auditBase,
 
     }, healthTier);
-    const out = healthTier === 'fast' ? buildFastHealthOut(base) : fullOut;
-    const st = computeSystemStatus(out);
-    out.system_status = st.system_status;
-    out.no_go_reasons = st.no_go_reasons;
-    res.status(200).json(out);
+    respondWithHealth(out);
   }
 }

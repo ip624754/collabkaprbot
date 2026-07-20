@@ -1,4 +1,5 @@
 import { InlineKeyboard } from 'grammy';
+import { opaqueLogRef, safeLogError } from '../../lib/logPrivacy.js';
 
 function escHtml(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -36,11 +37,9 @@ async function callMaybe(fn, ctx, p, u) {
 
 async function replyUnknown(ctx, deps, action) {
   const cid = getCid(ctx);
-  const data = ctx?.callbackQuery?.data;
-
   try {
     deps?.logger?.warn?.(
-      { cid, action: String(action || ''), data: String(data || ''), from_id: ctx?.from?.id ?? null },
+      { cid, action: String(action || ''), actor_ref: opaqueLogRef(ctx?.from?.id, 'telegram_actor') },
       'unknown_callback'
     );
   } catch {}
@@ -73,9 +72,8 @@ async function replyError(ctx, deps, action, err) {
       {
         cid,
         action: String(action || ''),
-        data: String(ctx?.callbackQuery?.data || ''),
-        from_id: ctx?.from?.id ?? null,
-        err: { name: String(err?.name || 'Error'), message: String(err?.message || err) }
+        actor_ref: opaqueLogRef(ctx?.from?.id, 'telegram_actor'),
+        err: safeLogError(err)
       },
       'callback.error'
     );

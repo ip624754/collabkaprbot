@@ -216,6 +216,17 @@ Possession of a URL or challenge ID alone cannot mint an admin session.
 - log redaction snapshots;
 - no operator/user identifiers in public response.
 
+### STEP588X5 implementation evidence
+
+- public default is minimal readiness, while explicit liveness is process-only;
+- `NO_GO` maps to `503` and `ok=false`;
+- full diagnostics require the existing admin-web session and are additionally sanitized;
+- DB readiness now uses a real bounded query and Redis retains read/write proof;
+- webhook and update middleware logs use action-only summaries plus pseudonymous actor/chat refs;
+- shared privacy helpers redact secrets, usernames, emails, IDs and URL query material;
+- no new Vercel endpoint and no PostgreSQL migration;
+- source implementation is complete; production health/log evidence remains open.
+
 ## STEP588X6 — Bounded Safety Hardening
 
 **Mode:** HEAVY

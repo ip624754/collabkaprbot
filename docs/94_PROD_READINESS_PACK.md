@@ -15,39 +15,37 @@
 
 ## 1) GO / NO‑GO (за 60 секунд)
 
-### GO (можно звать пользователей), если:
-1) `/api/health`:
-   - `ok=true`
-   - `system_status="GO"` и `no_go_reasons.length == 0`  ← **главный агрегат**
-   - `redis.read_ok=true` и `redis.write_ok=true`
-   - `payments.payload_hmac_key_configured=true` и `payments.payload_hmac_minlen_ok=true`
-   - `payments.fallback_apply_effective=false` (baseline)
-   - `broadcast.db_overload.today_count` не растёт (единичные всплески ок)
-   - `qstash.reschedule_failed.today_count == 0`
-   - `qstash.official_publish_stuck.today_count == 0`
-   - `broadcast.pending_deliveries` либо отсутствует, либо `pending_count` небольшой и **снижается**
-2) В админке → **🧰 Операции**:
-   - нет красных баннеров (если есть — действовать по подсказке)
-   - если показан баннер “Payments fallback apply ENABLED” — это должно быть осознанно и временно
-   - при сомнениях нажать **`🧾 Flush ops digest`** (получить актуальную сводку)
-3) Мини‑смоук (5–10 минут): “креатор + бренд” (см. `91_PROD_LAUNCH_30MIN.md`).
+### GO
 
-### NO‑GO (не зовём пользователей), если:
-- `/api/health.system_status="NO_GO"` → смотри `no_go_reasons[].hint` (что делать)
-- `redis.write_ok=false` и планируется массовая операция (broadcast/cron fan‑out)
-- `payments.payload_hmac_key_configured=false` или `payments.payload_hmac_minlen_ok=false`
-- `payments.fallback_apply_effective=true` **без осознанного инцидента** (случайно включили)
-- быстро растут counters: `broadcast.db_overload.today_count`, `qstash.reschedule_failed.today_count`, `qstash.official_publish_stuck.today_count`
-- `broadcast.pending_deliveries.pending_count` долго не снижается (и/или snapshot старый) → сначала разобраться, потом трафик
+1. Public readiness `GET /api/health` returns HTTP `200` with:
+   - `ok=true`;
+   - `system_status="GO"`;
+   - `reason_codes=[]`;
+   - `checks.database="ok"`;
+   - `checks.redis="ok"`;
+   - `checks.payment_payload_verification="ok"`.
+2. After web-admin login, protected `GET /api/health?full=1` shows:
+   - `redis.read_ok=true` and `redis.write_ok=true`;
+   - `payments.payload_hmac_minlen_ok=true`;
+   - `payments.fallback_apply_effective=false`;
+   - no growing broadcast/QStash/OPS incident signal.
+3. Admin → Operations has no unexplained red banner.
+
+### NO-GO
+
+- public readiness returns HTTP `503`, `ok=false` or `system_status="NO_GO"`;
+- `reason_codes` contains a DB, Redis or payment verification blocker;
+- protected diagnostics show active fallback apply without an explicit incident;
+- broadcast/QStash pressure is growing or unknown delivery reconciliation is unresolved.
+
+Do not use `/api/health?mode=liveness` as a release signal. Liveness proves only that the handler can answer.
 
 ## 2) Что мониторить каждый день (коротко)
 
-### 2.1 `/api/health` (главный индикатор)
-Начинай с агрегатов:
-- `system_status` + `no_go_reasons[]` — готовность и **подсказки действий**
-- `ops.digest_preview` — короткая “человеческая” сводка (последние причины/события)
+### 2.1 Public readiness + protected diagnostics
+Начинай с public `/api/health`: HTTP status, `ok`, `system_status`, `checks`, `reason_codes`.
 
-Дальше — по блокам:
+Для drill-down сначала войди в web-admin и открой `/api/health?full=1`. Там смотри:
 - `redis.*` — read/write/latency/last_error
 - `payments.*` — HMAC ok + fallback effective + payload issues
 - `broadcast.pending_deliveries` — snapshot pending доставок (раннее обнаружение “залипов”)

@@ -84,6 +84,7 @@ const EXPECT_TEXT_MAX_LIFETIME_SEC = (() => {
 
 export const CFG = {
   APP_ENV: process.env.APP_ENV || 'dev',
+  LOG_PII_HASH_KEY: process.env.LOG_PII_HASH_KEY || '',
 
   // Variant (for copy+paste deployments on one core)
   BOT_VARIANT: process.env.BOT_VARIANT || 'collab_girls',

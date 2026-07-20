@@ -1,3 +1,30 @@
+## STEP588X5 — Health, Logging Privacy & Readiness Truth (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X5 source implementation on top of STEP588X4.
+
+Current truth:
+
+- anonymous `/api/health` is minimal readiness and returns `503` on `NO_GO`;
+- liveness is explicitly `/api/health?mode=liveness` and does not probe dependencies;
+- full diagnostics require an authenticated admin-web session;
+- DB and Redis readiness are evidence-based probes;
+- public responses contain reason codes, not internal hints, payloads, actor data or OPS/QStash internals;
+- webhook/update logs use pseudonymous actor/chat references and action-only summaries;
+- raw Telegram text, username, IDs and full callback/payment payloads are not emitted by the hardened log paths;
+- no schema migration is required;
+- source/dependency QA must not be represented as production Vercel/Upstash/Neon proof.
+
+**Release decision:** source-ready; deployment, public/private health checks and Vercel log inspection pending. STEP587 and STEP589 remain HOLD.
+
+Read first:
+
+- `docs/audit/STEP588X5_HEALTH_LOGGING_PRIVACY_READINESS_REPORT.md`;
+- `docs/operations/STEP588X5_HEALTH_PRIVACY_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/RISK_REGISTRY.md`.
+
+---
+
 ## STEP588X4 — Admin Web Auth Challenge Binding & Throttling (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X4 source implementation on top of STEP588X3.

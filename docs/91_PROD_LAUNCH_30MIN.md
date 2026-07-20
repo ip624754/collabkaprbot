@@ -81,14 +81,19 @@ APP_ENV=production npm run preflight
 
 ## 4) Health check (2 минуты)
 
-Открой:
+Открой public readiness:
 
 - `GET /api/health`
 
 Ожидаем:
-- `ok=true`
-- видны статусы **DB/Redis** (`redis.read_ok/write_ok`)
-- payments safety: `payments.payload_hmac_minlen_ok` и `payments.fallback_apply_effective`
+- HTTP `200`, `ok=true`, `system_status=GO`, `reason_codes=[]`;
+- coarse checks `database=ok`, `redis=ok`, `payment_payload_verification=ok`.
+
+Затем войди в web-admin и открой protected diagnostics:
+
+- `GET /api/health?full=1`
+- проверь `redis.read_ok/write_ok`;
+- payments safety: `payments.payload_hmac_minlen_ok` и `payments.fallback_apply_effective`;
 - нет ошибок по “critical path”
 - в Admin → Ops `Broadcast pending snapshot` выглядит ожидаемо (и при очистке помни: это только Redis snapshot)
 - если есть `broadcast.db_overload.local_fuse_active=true`, не дергай manual replay/deliver: это защитный short-circuit после overload

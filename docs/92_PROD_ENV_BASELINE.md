@@ -22,6 +22,7 @@
 ### Core
 - `NODE_ENV=production`
 - `LOG_LEVEL=info`
+- `LOG_PII_HASH_KEY=<optional 32+ random bytes>` — dedicated pseudonymization key; if omitted, hardened logging derives from existing admin/webhook secrets
 - `BOT_TOKEN=<set>`
 - `PUBLIC_BASE_URL=<set>`
 - `WEBHOOK_SECRET_TOKEN=<set>`
@@ -37,7 +38,7 @@
 - `PG_CONN_TIMEOUT_MS=1000`  # operator-confirmed current value; aggressive, observe via STEP586H1
 - `PG_STATEMENT_TIMEOUT_MS=15000`
 
-> STEP586H1: `DATABASE_URL` must be the Neon pooled URL. `/api/health` must report `pooled_url=true`, `pool_max=1`, `connect_retry.max_retries=1`. With `PG_CONN_TIMEOUT_MS=1000`, `database_connect_timeout_aggressive` is an expected warning until the 24-hour observation closes. If final timeouts persist, raise only the timeout to 3000–5000; do not raise pool max or add more retries.
+> STEP586H1: `DATABASE_URL` must be the Neon pooled URL. protected `/api/health?full=1` must report `pooled_url=true`, `pool_max=1`, `connect_retry.max_retries=1`. With `PG_CONN_TIMEOUT_MS=1000`, `database_connect_timeout_aggressive` is an expected warning until the 24-hour observation closes. If final timeouts persist, raise only the timeout to 3000–5000; do not raise pool max or add more retries.
 
 ### Upstash Redis
 - `UPSTASH_REDIS_REST_URL=<set>`
@@ -113,10 +114,10 @@
 ## 4) Проверка после изменения ENV
 
 1) Сделай redeploy Production.
-2) Открой `/api/health` и проверь:
+2) Открой public readiness `/api/health` и проверь HTTP 200 + `ok=true` + `system_status=GO`. Для подробностей сначала войди в web-admin, затем открой `/api/health?full=1`:
    - `payments.payload_hmac_key_configured: true`
    - `payments.fallback_apply_effective: false` (в норме)
 3) Для проверки админки:
    - включи fallback на 2h
-   - `/api/health` должен показать `fallback_apply_runtime_enabled: true` и `fallback_apply_effective: true`
+   - protected `/api/health?full=1` должен показать `fallback_apply_runtime_enabled: true` и `fallback_apply_effective: true`
    - выключи fallback → оба снова false

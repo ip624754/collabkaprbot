@@ -1,3 +1,44 @@
+# AI Multi-Model Handoff — STEP588X5 Current Truth
+
+**Baseline:** STEP588X5 source implementation on STEP588X4
+**Status:** SOURCE READY / PRODUCTION HEALTH-LOG CANARY PENDING / GLOBAL RELEASE HOLD
+
+## Verified locally
+
+- public readiness allowlist and `NO_GO → HTTP 503` policy;
+- separate process liveness contract;
+- admin-session gate for full diagnostics;
+- PostgreSQL and Redis readiness probes;
+- protected diagnostics redaction of payloads, actors, nonces, event tails and incidental object IDs;
+- privacy-safe webhook and update middleware summaries;
+- pseudonymous actor/chat references and structured error sanitization;
+- Pino defensive field redaction;
+- 52 executable health/privacy assertions, 130/130 registered source checks, 257/257 JavaScript syntax checks, dependency/runtime preflight and npm audit with 0 vulnerabilities PASS;
+- no new Vercel function and no DB migration.
+
+## Not verified
+
+- production deployment;
+- actual GO/NO_GO status in Neon/Upstash;
+- production admin session access to `?full=1`;
+- real Vercel logs after representative message/callback/payment failures;
+- external uptime monitor compatibility with the new 503 readiness truth;
+- production acceptance for STEP588X1–X4 unless separately evidenced;
+- STEP586H1 24-hour observation.
+
+## Hard rules
+
+- do not revert public readiness to verbose operator JSON;
+- do not return HTTP 200 with `ok=true` when `system_status=NO_GO`;
+- keep liveness and readiness semantically separate;
+- full health must remain behind admin auth;
+- never add raw Telegram IDs, usernames, message/callback text or payment payloads to logs;
+- use `opaqueLogRef`, `safeLogError` and `sanitizeLogMeta` for new critical logs.
+
+Next remediation STEP: `STEP588X6 — Bounded Safety Hardening`.
+
+---
+
 ## STEP588X4 — Admin Web Auth Challenge Binding & Throttling (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X4 source implementation on top of STEP588X3.

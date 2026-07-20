@@ -30,6 +30,8 @@
     "smoke:admin-comms-contract": "node scripts/smoke-admin-comms-contract.js",
     "smoke:admin-system-contract": "node scripts/smoke-admin-system-contract.js",
     "smoke:health-admin": "node scripts/smoke-health-admin-shape.js",
+    "test:health-privacy-readiness-critical": "node scripts/test-health-privacy-readiness-critical.js",
+    "smoke:health-privacy-readiness-contract": "node scripts/smoke-health-privacy-readiness-contract.js",
     "smoke:short": "node scripts/smoke-short.js",
     "test:redact": "node scripts/test-redactContactsInText.js",
     "zip": "bash scripts/zip.sh",

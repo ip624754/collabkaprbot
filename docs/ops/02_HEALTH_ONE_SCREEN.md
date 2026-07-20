@@ -1,140 +1,91 @@
-# 02 — `/api/health` one-screen operator guide (STEP429)
+# `/api/health` — operator one-screen guide (STEP588X5)
 
-Короткая шпаргалка: что смотреть в `/api/health` **сверху вниз**, без импровизации.
+Health now has three explicit surfaces. Do not treat them as interchangeable.
 
-Быстрый режим: `/api/health?tier=fast` — только короткий operator summary для первого GO/NO_GO pass.
-Полный drill-down: `/api/health` без параметров — полный JSON со всеми контурами.
+## 1. Public readiness — default
 
-## 1) Сначала смотри только это
-1. `ok`
-2. `system_status`
-3. `no_go_reasons[]`
-4. `ops.digest_preview`
+```text
+GET /api/health
+```
 
-Правило: если `system_status = NO_GO`, сначала прочитай `no_go_reasons[].hint`, а не жми кнопки “на удачу”.
+Response is intentionally coarse:
 
----
+```json
+{
+  "ok": true,
+  "status": "ready",
+  "check": "readiness",
+  "system_status": "GO",
+  "checks": {
+    "database": "ok",
+    "redis": "ok",
+    "payment_payload_verification": "ok"
+  },
+  "reason_codes": []
+}
+```
 
-## 2) Что означает каждый верхний блок
+Contract:
 
-### `ok`
-- `true` — endpoint жив, JSON собрался.
-- `false` / exception — сначала infra/debug, а не ручные replays.
+- `GO` → HTTP `200`, `ok=true`;
+- `NO_GO` → HTTP `503`, `ok=false`;
+- no internal hints, actor IDs, Redis payloads, QStash details, broadcast IDs or OPS event tails.
 
-### `system_status`
-- `GO` — baseline выглядит безопасно.
-- `NO_GO` — есть явный стоп-фактор для релиза / трафика.
+Use this endpoint for deployment readiness and external monitoring.
 
-### `no_go_reasons[]`
-Это список **конкретных причин**, почему сейчас нельзя считать прод зелёным.
-Ищи поля:
-- `code`
-- `value`
-- `threshold`
-- `hint`
+## 2. Liveness — process only
 
-`hint` — это первый безопасный ход.
+```text
+GET /api/health?mode=liveness
+```
 
-### `ops.digest_preview`
-Это короткая operator-сводка: последние причины, топ-спайки, свежие тревоги.
-Если нужен свежий срез после инцидента — в админке жми `🧾 Flush ops digest`.
+Liveness answers only whether the serverless handler can execute. It does not prove DB/Redis/product readiness.
 
----
+- healthy process → HTTP `200`, `status=alive`;
+- never use liveness alone as a release GO signal.
 
-## 3) Дальше смотри по контурам
+## 3. Protected diagnostics
 
-### Redis
-Смотри:
-- `redis.read_ok`
-- `redis.write_ok`
-- `redis.latency_ms`
-- `redis.last_error`
+```text
+GET /api/health?full=1
+```
 
-Если Redis degraded:
-- не запускай массовые операции;
-- mutating callbacks должны оставаться fail-closed;
-- сначала восстанови Redis, потом трогай рассылки/ручные apply.
+Requirements:
 
-### Payments
-Смотри:
-- `payments.payload_hmac_key_configured`
-- `payments.payload_hmac_minlen_ok`
-- `payments.fallback_apply_env_enabled`
-- `payments.fallback_apply_runtime_enabled`
-- `payments.fallback_apply_effective`
-- `payments.payload_issues_today.*`
+- first authenticate in web-admin;
+- the same browser session cookie must be present;
+- unauthenticated requests are rejected.
 
-Первый safe action:
-- если fallback effective включён без инцидента — выключить runtime fallback в админке;
-- если HMAC key не configured / слишком короткий — это **NO-GO**, лечится ENV + redeploy.
+Protected diagnostics contain detailed configuration and operational evidence, but still remove raw QStash payloads/nonces, fallback actor IDs/reasons and recent free-text event tails.
 
-### Broadcast
-Смотри:
-- `broadcast.pending_deliveries`
-- `broadcast.db_overload.*`
-- `broadcast.tick_deferred_redis.*`
-- `broadcast.cooldown_until` / `retry_after_sec`
+## 4. Safe operator sequence
 
-Первый safe action:
-- при overload / cooldown не стартуй новые рассылки;
-- дай системе самой short-circuit / reschedule path отработать.
+1. Open public readiness.
+2. If HTTP `503`, read `reason_codes`.
+3. Sign into web-admin and open protected diagnostics.
+4. Resolve the first P0/P1 dependency failure; do not start mass actions while readiness is red.
+5. Recheck readiness until it returns HTTP `200` and `GO`.
 
-### QStash / Official Publish
-Смотри:
-- `qstash.reschedule_failed.*`
-- `qstash.official_publish_stuck.*`
-- `broadcast.pending_deliveries` вместе с qstash counters
+## 5. Main reason codes
 
-Первый safe action:
-- для stuck publish сначала `🩺 Проверить статус`, а не republish;
-- для reschedule failed — проверить QStash keys / delivery path, а не дёргать ручные повторы пачками.
+- `database_not_configured`
+- `database_url_invalid`
+- `database_read_not_ok`
+- `redis_read_not_ok`
+- `redis_write_not_ok`
+- `payments_payload_hmac_key_missing`
+- `payments_payload_hmac_minlen_not_ok`
+- `payments_fallback_apply_effective`
+- `health_compute_failed`
 
-### Ops / Audit visibility
-Смотри:
-- `ops.digest_preview`
-- `audit.buffer.*` (если есть)
-- operator banners в Admin → Ops
+## 6. Logging privacy
 
-Первый safe action:
-- если есть красный баннер в админке, действуй по нему раньше, чем по логам.
+Production logs should retain:
 
----
+- update ID;
+- correlation ID;
+- update kind and command/callback action;
+- pseudonymous actor/chat references;
+- sanitized error class/code/message.
 
-## 4) Быстрые safe actions по симптомам
-
-### `system_status = NO_GO`
-1. Прочитать `no_go_reasons[].hint`.
-2. Не звать пользователей и не запускать новые mass actions.
-3. Устранить ровно верхнюю причину, потом обновить `/api/health`.
-
-### `payments.fallback_apply_effective = true`
-1. Убедиться, что это осознанный инцидентный режим.
-2. Если нет — выключить runtime fallback.
-3. Проверить, что effective снова `false`.
-
-### `broadcast.pending_deliveries.pending_count` завис
-1. Посмотреть `db_overload`, `tick_deferred_redis`, `ops.digest_preview`.
-2. Проверить Hard-skip HITs report.
-3. Не стартовать новые большие broadcast.
-
-### `qstash.official_publish_stuck.today_count > 0`
-1. Открыть карточку публикации.
-2. Нажать `🩺 Проверить статус`.
-3. Не делать republish до verify/self-heal.
-
----
-
-## 5) Чего не делать
-- Не лечить `NO_GO` ручными реплеями “на всякий случай”.
-- Не включать fallback apply как универсальную кнопку починки.
-- Не давить новые рассылки во время cooldown / DB overload.
-- Не обходить `🩺 Проверить статус` ручной перепубликацией.
-
----
-
-## 6) Связанные документы
-- `docs/90_OWNER_RUNBOOK.md`
-- `docs/91_PROD_LAUNCH_30MIN.md`
-- `docs/94_PROD_READINESS_PACK.md`
-- `docs/ops/01_OPERATOR_INCIDENT_PLAYBOOK.md`
-- `docs/process/10_RELEASE_PREFLIGHT.md`
+They must not retain raw Telegram IDs, usernames, message text, full callback data, payment payloads, auth headers or cookies.

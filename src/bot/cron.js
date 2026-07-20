@@ -15,6 +15,8 @@ import * as db from '../db/queries.js';
 import { getBot, _validateStarsPaymentStrict } from './bot.js';
 import { InlineKeyboard } from 'grammy';
 import { CFG } from '../lib/config.js';
+import logger from '../lib/logger.js';
+import { opaqueLogRef, safeLogError } from '../lib/logPrivacy.js';
 import { isPaymentsFallbackApplyEnabled } from '../lib/paymentsOps.js';
 import {
   qstashPublishJSON,
@@ -1867,7 +1869,7 @@ const fanoutEnabled = !!fanoutStatus.enabled;
             continue;
           } catch (e) {
             const em = String(e?.message || e).slice(0, 200);
-            console.error('[BROADCAST] hard-skip log failed', { broadcast_id: bc.id, uid, error: em });
+            logger.error({ broadcast_ref: opaqueLogRef(bc.id, 'broadcast'), user_ref: opaqueLogRef(uid, 'user'), err: safeLogError(e) }, 'broadcast.hard_skip_log_failed');
             enqueueError = em || 'hard_skip_log_failed';
             break;
           }
@@ -1902,7 +1904,7 @@ const fanoutEnabled = !!fanoutStatus.enabled;
           lastId = Math.max(lastId, uid);
         } catch (e) {
           const em = String(e?.message || e).slice(0, 200);
-          console.error('[BROADCAST][QSTASH] enqueue failed', { broadcast_id: bc.id, uid, error: em });
+          logger.error({ broadcast_ref: opaqueLogRef(bc.id, 'broadcast'), user_ref: opaqueLogRef(uid, 'user'), err: safeLogError(e) }, 'broadcast.qstash_enqueue_failed');
           enqueueError = em || 'enqueue_failed';
           // Stop early: do not advance cursor past a failed enqueue.
           break;

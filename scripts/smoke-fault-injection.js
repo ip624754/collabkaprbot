@@ -3,12 +3,12 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Smoke (staging/dev only): verify that SIMULATE_REDIS_DOWN forces Redis calls to fail,
-// while /api/health remains fail-open (never throws) and reports NO_GO reasons.
+// while /api/health still answers and truthfully reports public readiness as NO_GO/503.
 //
 // Usage (staging):
 //   APP_ENV=staging SIMULATE_REDIS_DOWN=1 node scripts/smoke-fault-injection.js
 //
-// Safety: this script refuses to run in prod/prodution APP_ENV.
+// Safety: this script refuses to run in prod/production APP_ENV.
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +24,7 @@ const { CFG } = await import(pathToFileURL(path.join(ROOT, 'src', 'lib', 'config
 
 const env = String(CFG.APP_ENV || '').trim().toLowerCase();
 if (env === 'prod' || env === 'production') {
-  throw new Error('Refusing to run smoke-fault-injection in prod/prodution APP_ENV');
+  throw new Error('Refusing to run smoke-fault-injection in prod/production APP_ENV');
 }
 
 const { redis, k } = await import(pathToFileURL(path.join(ROOT, 'src', 'lib', 'redis.js')).href);
@@ -37,30 +37,32 @@ await assert.rejects(
   'Expected Redis call to fail with code=SIMULATED_REDIS_DOWN'
 );
 
-// Verify /api/health remains fail-open and surfaces NO_GO.
+// Verify public readiness remains available but is fail-closed and minimally disclosed.
 const healthMod = await import(pathToFileURL(path.join(ROOT, 'api', 'health.js')).href);
 const handler = healthMod.default;
 
 function makeResStub() {
-  const out = {
+  return {
     headers: {},
     statusCode: 200,
     body: null,
     setHeader(k, v) { this.headers[String(k).toLowerCase()] = v; },
     status(code) { this.statusCode = code; return this; },
     json(obj) { this.body = obj; return this; },
-    send(obj) { this.body = obj; return this; }
+    send(obj) { this.body = obj; return this; },
   };
-  return out;
 }
 
 const res = makeResStub();
-await handler({}, res);
+await handler({ url: '/api/health' }, res);
 
-assert.ok(res.body && res.body.ok === true, 'Expected /api/health ok=true');
-assert.equal(res.body.system_status, 'NO_GO', 'Expected system_status=NO_GO under simulated Redis down');
-assert.ok(Array.isArray(res.body.no_go_reasons) && res.body.no_go_reasons.length > 0, 'Expected non-empty no_go_reasons');
-assert.equal(res.body.redis.read_ok, false, 'Expected redis.read_ok=false');
-assert.equal(res.body.redis.write_ok, false, 'Expected redis.write_ok=false');
+assert.equal(res.statusCode, 503, 'Expected /api/health HTTP 503 under simulated Redis down');
+assert.equal(res.body?.ok, false, 'Expected /api/health ok=false');
+assert.equal(res.body?.status, 'not_ready', 'Expected readiness status=not_ready');
+assert.equal(res.body?.system_status, 'NO_GO', 'Expected system_status=NO_GO under simulated Redis down');
+assert.ok(Array.isArray(res.body?.reason_codes) && res.body.reason_codes.length > 0, 'Expected non-empty reason_codes');
+assert.equal(res.body?.checks?.redis, 'unavailable', 'Expected checks.redis=unavailable');
+assert.equal(Object.prototype.hasOwnProperty.call(res.body || {}, 'redis'), false, 'Public readiness must not expose raw Redis diagnostics');
+assert.equal(Object.prototype.hasOwnProperty.call(res.body || {}, 'no_go_reasons'), false, 'Public readiness must not expose internal reason details');
 
-console.log('OK: fault injection is active, Redis calls fail, and /api/health stays fail-open with NO_GO reasons.');
+console.log('OK: fault injection is active, Redis calls fail, and public readiness returns minimal NO_GO/503 truth.');

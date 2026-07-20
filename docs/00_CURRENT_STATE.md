@@ -1,3 +1,32 @@
+## STEP588X5 — Health, Logging Privacy & Readiness Truth (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X5 source implementation on top of STEP588X4.
+
+Repository truth:
+
+- public `/api/health` is now a coarse readiness surface only; it returns an allowlisted payload with `ok`, `status`, `system_status`, dependency states and reason codes;
+- `NO_GO` readiness returns HTTP `503` and `ok=false`; `GO` returns HTTP `200` and `ok=true`;
+- `/api/health?mode=liveness` is process-only, minimal and returns `200` when the handler can answer;
+- `/api/health?full=1` / `?view=diagnostics` requires an existing authenticated admin-web session;
+- readiness now performs a real PostgreSQL `select 1` probe in addition to Redis read/write probes;
+- protected diagnostics remove QStash payload/nonce values, raw fallback actors/reasons, operational event tails and object IDs that are not required for triage;
+- webhook and bot middleware logs no longer emit raw Telegram IDs, usernames, message fragments or full callback payloads;
+- centralized privacy helpers pseudonymize identifiers and redact tokens, emails, usernames, long numeric IDs and URL query values;
+- Pino has defensive field redaction for direct/nested actor, chat, username, text, callback and payload fields;
+- no new Vercel endpoint and no database migration were introduced;
+- local QA: 52 health/privacy assertions, 130/130 registered source checks, 257/257 JavaScript syntax checks, dependency/runtime preflight and npm audit with 0 vulnerabilities PASS; production health status, admin-cookie access and Vercel log output remain operator-acceptance items.
+
+**Release decision:** STEP588X5 is source-ready, deployment and production health/log canary pending. STEP587 and STEP589 remain HOLD. Continue with STEP588X6 while preserving the source-only boundary, or perform the X1–X5 production evidence sequence first.
+
+Read first:
+
+- `docs/audit/STEP588X5_HEALTH_LOGGING_PRIVACY_READINESS_REPORT.md`;
+- `docs/operations/STEP588X5_HEALTH_PRIVACY_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X5.md`.
+
+---
+
 ## STEP588X4 — Admin Web Auth Challenge Binding & Throttling (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X4 source implementation on top of STEP588X3.
