@@ -1,3 +1,48 @@
+# AI Multi-Model Handoff — STEP588X Independent Audit Truth
+
+**Baseline:** STEP588X documentation on runtime STEP588
+**Status:** P1 REMEDIATION REQUIRED / STEP587 HOLD / STEP589 HOLD
+
+## Verified
+
+- 621-file repository inspected;
+- 233/233 JavaScript syntax PASS;
+- 121/121 independent source checks PASS;
+- 559 action keys / 553 callback refs / 0 unresolved;
+- generated action registry and migration pack have no drift;
+- no runtime source change in audit STEP.
+
+## P1 queue
+
+1. Payment apply is not atomic with APPLIED state; missing ledger fails open.
+2. Matching/featured recovery context can be deleted before durable apply.
+3. Atomic giveaway auto-draw uses undeclared variables; manual draw is a separate non-atomic mechanism.
+4. Broadcast can resend after Telegram send succeeds but DB sent mark fails.
+5. Admin approval challenge/URL is transferable and not bound to the initiating browser.
+6. Fallback admin code lacks cryptographic generation, throttling and lockout.
+
+## Do not do
+
+- do not start STEP589A;
+- do not issue STEP587 GO;
+- do not broad-rewrite `bot.js`, `queries.js` or admin SPA;
+- do not add ORM or new API route family;
+- do not infer runtime safety from source-string checks;
+- do not claim live fund loss or exploit without production evidence.
+
+## Next accepted STEP
+
+`STEP588X1 — Payment Fulfillment Atomicity & Missing-Ledger Fail-Closed`
+
+Canonical references:
+
+- `docs/audit/STEP588X_INDEPENDENT_FULL_PROJECT_AUDIT_2026_07_20.md`;
+- `docs/audit/STEP588X_FINDINGS_REGISTER.csv`;
+- `docs/audit/STEP588X_VERIFICATION_MATRIX.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`.
+
+---
+
 # AI Multi-Model Handoff — STEP588 Current Truth
 
 **Current repository baseline:** STEP588 — Backoffice Productization Audit & Architecture

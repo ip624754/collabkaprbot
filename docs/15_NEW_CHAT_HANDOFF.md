@@ -1,3 +1,56 @@
+# STEP588X NEW CHAT HANDOFF
+
+**Current repository baseline:** STEP588X — Independent Full Project Audit
+**Runtime parent:** STEP588 — Backoffice Productization Audit & Architecture
+**Change type:** audit/documentation only
+
+## Start here
+
+1. Read `docs/00_CURRENT_STATE.md`.
+2. Read `docs/audit/STEP588X_INDEPENDENT_FULL_PROJECT_AUDIT_2026_07_20.md`.
+3. Read `docs/audit/STEP588X_FINDINGS_REGISTER.csv`.
+4. Read `docs/audit/STEP588X_VERIFICATION_MATRIX.md`.
+5. Read `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`.
+6. Read `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`.
+
+## Current truth
+
+- Product foundation is strong; repository is not release-clean.
+- No P0 exploit was confirmed.
+- P1 remediation is mandatory in payments, giveaways, broadcast delivery and admin auth.
+- Do not open STEP589A or STEP587 yet.
+- Runtime code in STEP588X is byte-identical to STEP588.
+- Existing source gates are useful but do not prove crash/race/transaction behavior.
+- Do not claim live exploitation, live fix or production safety without evidence.
+
+## Required sequence
+
+```text
+STEP588X1 Payment Fulfillment Atomicity
+→ STEP588X2 Giveaway Single Atomic Path
+→ STEP588X3 Broadcast Unknown-State Safety
+→ STEP588X4 Admin Auth Challenge Binding
+→ STEP588X5 Health/Logging Privacy
+→ STEP588X6 Bounded Safety Hardening
+→ STEP588X7 Critical Behavior Test Spine
+→ STEP586H1 24h observation PASS
+→ STEP587 Go/No-Go
+→ resume STEP589
+```
+
+## Hard rules for the next model
+
+- narrow STEP only; no broad rewrite;
+- no price, entitlement or role changes hidden inside remediation;
+- financial side effects fail closed when the ledger is unavailable;
+- no automatic resend when Telegram send success is uncertain;
+- one canonical giveaway draw path;
+- challenge URL/ID possession alone must never mint admin access;
+- each P1 fix requires executable fault/race regression tests;
+- preserve Truth Boundary in every handoff.
+
+---
+
 # STEP588 NEW CHAT HANDOFF
 
 **Current repository baseline:** STEP588 — Backoffice Productization Audit & Architecture

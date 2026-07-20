@@ -1,0 +1,27 @@
+id,severity,title,evidence,files,surface,impact,remediation_step
+F-001,P1,Automatic giveaway draw uses undeclared transaction metadata,SOURCE-CONFIRMED,src/db/queries.js,drawAndFinalizeGiveawayWinnersAtomic,Auto-draw transaction rolls back before completion,STEP588X2
+F-002,P1,Direct Stars fulfillment not atomic with payment APPLIED,RISK-CONFIRMED,src/bot/payments/starsHandlers.js; src/db/queries.js,successful_payment apply path,Crash can repeat credits/entitlement/request,STEP588X1
+F-003,P1,Missing payment ledger fails open into fulfillment,SOURCE-CONFIRMED,src/db/queries.js; src/bot/payments/starsHandlers.js,insertPayment / claim bypass,Exactly-once protection absent while side effect proceeds,STEP588X1
+F-004,P1,Matching/featured session deleted before durable apply,SOURCE-CONFIRMED,src/bot/payments/starsHandlers.js,matching and featured branches,Paid request can become unrecoverable,STEP588X1
+F-005,P1,Broadcast sent-but-unmarked delivery can be resent,RISK-CONFIRMED,api/qstash/broadcast-deliver.js; src/db/queries.js,send / mark / stale reclaim,Duplicate Telegram broadcast,STEP588X3
+F-006,P1,Manual giveaway draw is non-atomic and mechanism-inconsistent,SOURCE-CONFIRMED,src/bot/bot.js; src/db/queries.js,manual draw / setWinners,Partial state and wrong eligible top-up,STEP588X2
+F-007,P1,Admin login challenge is transferable session-mint capability,SOURCE-CONFIRMED,src/lib/adminWeb/auth.js; src/lib/adminWeb/telegram.js; api/admin-web-auth.js,decision URL / status exchange,Forwarded URL or challenge can mint privileged session,STEP588X4
+F-008,P1,Admin fallback code weak and unthrottled,SOURCE-CONFIRMED,admin web auth modules,code generation / verification,Brute-force and founder-attribution risk,STEP588X4
+F-009,P2,Admin approval decision mutates state via GET,SOURCE-CONFIRMED,api/admin-web-auth.js,action=decision,Link scanner or prefetch can change state,STEP588X4
+F-010,P2,Admin challenge updates are non-atomic,SOURCE-CONFIRMED,src/lib/adminWeb/auth.js,updateChallenge,Parallel decision race,STEP588X4
+F-011,P2,Configured admin idle timeout is not enforced,SOURCE-CONFIRMED,src/lib/adminWeb/auth.js; src/lib/config.js,getSession / touchSession,Idle privileged session remains valid,STEP588X4
+F-012,P2,Admin audit is volatile and fail-open,SOURCE-CONFIRMED,admin web audit modules,Redis audit,Insufficient evidence for sensitive writes,STEP588X4 / STEP589 gate
+F-013,P2,Public health exposes excessive internal/actor data,SOURCE-CONFIRMED,api/health.js,public full response,Operational reconnaissance and identity leakage,STEP588X5
+F-014,P2,Health HTTP/ok semantics can hide NO_GO,SOURCE-CONFIRMED,api/health.js,response status,External monitor false green,STEP588X5
+F-015,P2,Webhook logs include PII and message content,SOURCE-CONFIRMED,api/webhook.js,summarizeUpdate,Production log privacy exposure,STEP588X5
+F-016,P2,No general critical Telegram update dedup receipt,RISK-CONFIRMED,api/webhook.js; bot handlers,update processing,Retry can replay non-idempotent mutation,STEP588X6
+F-017,P2,Dynamic SQL field names lack explicit allowlists,RISK-CONFIRMED,src/db/queries.js,generic update helpers,Future caller injection footgun,STEP588X6
+F-018,P2,Giveaway sponsor replacement non-transactional,SOURCE-CONFIRMED,src/db/queries.js,replaceGiveawaySponsors,Empty/partial sponsor set on failure,STEP588X2
+F-019,P2,Broadcast 429 set TTL/count operation non-atomic,SOURCE-CONFIRMED,broadcast Redis helpers,SADD/EXPIRE/SCARD,Persistent set after process interruption,STEP588X3 / STEP588X6
+F-020,P2,Admin JSON body reader has no size limit,SOURCE-CONFIRMED,admin web HTTP helpers,readJsonBody,Memory pressure / oversized request,STEP588X6
+F-021,P2,Owner-looking Telegram ID hardcoded in runtime copy,SOURCE-CONFIRMED,src/bot/routes/gwAccess.js and prompts,UX example,Operator identity exposure/confusing example,STEP588X6
+F-022,P2,Update helpers do not consistently verify affected rows,RISK-CONFIRMED,src/db/queries.js,generic updates,False success under missing/stale state,STEP588X6
+F-023,P2,Critical QA dominated by source-string assertions,SOURCE-CONFIRMED,scripts smoke/test portfolio,154-test inventory,Runtime crash/race defects escape green gates,STEP588X7
+F-024,P3,Large source concentration increases blast radius,SOURCE-CONFIRMED,bot.js; queries.js; admin-web.js,file inventory,Higher merge/regression cost,Incremental extraction only
+F-025,P3,Fallback HMAC comparison not timing-safe,SOURCE-CONFIRMED,payment fallback code,comparison,Minor side-channel posture,STEP588X6
+F-026,P3,Production security config not uniformly fail-fast,SOURCE-CONFIRMED,.env/config assertions,rate limit/secrets/HMAC,Unsafe deployment posture possible,STEP588X6

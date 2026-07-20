@@ -1,3 +1,24 @@
+# STEP588X Independent Audit — Active Risk Override
+
+The following risks override earlier release optimism until remediation evidence exists.
+
+| ID | Risk | Severity | State | Required control |
+|---|---|---:|---|---|
+| R-26 | Payment fulfillment commits outside payment APPLIED transaction | CRITICAL | ACTIVE | STEP588X1 canonical atomic fulfillment |
+| R-27 | Payment ledger absence fails open into product/credit fulfillment | CRITICAL | ACTIVE | fail closed + OPS/recovery evidence |
+| R-28 | Matching/featured session removed before durable paid apply | HIGH | ACTIVE | ledger-owned product parameters + post-commit cleanup |
+| R-29 | Giveaway auto-draw runtime binding defect and split manual path | CRITICAL | ACTIVE | STEP588X2 one atomic service |
+| R-30 | Broadcast Telegram send may succeed while DB remains reclaimable | CRITICAL | ACTIVE | unknown terminal state; no auto-resend |
+| R-31 | Admin challenge/approval URL can act as transferable privileged capability | CRITICAL | ACTIVE | browser binding + Telegram callback + one-time consume |
+| R-32 | Admin fallback code lacks crypto generation/throttling/lockout | HIGH | ACTIVE | disabled-by-default production fallback |
+| R-33 | Public health and webhook logs expose excess operational/personal data | HIGH | ACTIVE | protected diagnostics + redaction |
+| R-34 | Source-heavy test portfolio misses transaction/crash/race defects | HIGH | ACTIVE | STEP588X7 executable critical-path suite |
+| R-35 | Generic dynamic SQL/body/update helpers retain latent safety footguns | MEDIUM | WATCH | allowlists, size caps, row-count truth |
+
+**Release gate:** R-26 through R-34 must be remediated or explicitly accepted with evidence before STEP587 GO. STEP589 feature implementation remains paused.
+
+---
+
 # RISK REGISTRY — Collabka PR
 
 **Status:** living register

@@ -21,7 +21,7 @@
 18) `callback_data` ≤ 64 байта: держим ключи короткими; если нужен контекст — токен → payload в Redis (TTL).
 
 19) Watchlist регрессий: см. `docs/00_CURRENT_STATE.md` → раздел «Выводы последнего регресс-аудита + watchlist».
-20) Текущий handoff-safe baseline: **STEP586H1** (Neon cron connection resilience + alert truth on top of STEP586H). Один retry разрешён только до user SQL; whole-job/SQL replay запрещён. Production resolution не подтверждён до 24-часового наблюдения по `docs/operations/STEP586H1_NEON_CRON_24H_OBSERVATION_RUNBOOK.md`.
+20) Текущий handoff-safe baseline: **STEP588X** (independent full-project audit on runtime STEP588). Runtime не менялся. STEP587 и STEP589 HOLD до STEP588X1–X7 remediation и STEP586H1 24-hour observation PASS. Начать с `docs/audit/STEP588X_INDEPENDENT_FULL_PROJECT_AUDIT_2026_07_20.md`.
 21) Для AI-assisted работы обязательны project-specific contracts: `docs/AI_NATIVE_WORKFLOW.md`, `docs/SYSTEM_INVARIANTS.md`, `docs/RISK_REGISTRY.md`.
 22) `docs/CREATOR_OS_THESIS.md` — product north star, но не разрешение на broad rewrite: каждая продуктовая волна требует отдельный scoped STEP.
 

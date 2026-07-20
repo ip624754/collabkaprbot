@@ -1,3 +1,31 @@
+## STEP588X — Independent Full Project Audit (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X audit documentation on top of STEP588. Runtime source remains STEP588.
+
+Independent HEAVY audit result:
+
+- no confirmed P0 exploit or proven live fund-loss event;
+- eight P1 findings/classes require remediation before release-clean status;
+- highest-risk domains: payment fulfillment atomicity/fail-closed, giveaway settlement, broadcast sent-unknown state, admin login challenge binding;
+- 233/233 JavaScript syntax checks passed;
+- 121/121 independent source checks passed;
+- generated action registry and migration pack show no drift;
+- current custom QA is strong at source drift and weak at crash/race/transaction behavior;
+- no runtime code, schema, migration or production environment was changed in STEP588X;
+- dependency vulnerability status was not independently revalidated because clean install did not complete in the audit environment.
+
+**Release decision:** STEP587 and STEP589 feature work are HOLD. Execute STEP588X1–X7, complete STEP586H1 24-hour observation, then run STEP587 Go/No-Go.
+
+Read first:
+
+- `docs/audit/STEP588X_INDEPENDENT_FULL_PROJECT_AUDIT_2026_07_20.md`;
+- `docs/audit/STEP588X_FINDINGS_REGISTER.csv`;
+- `docs/audit/STEP588X_VERIFICATION_MATRIX.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X.md`.
+
+---
+
 ## STEP588 — Backoffice Productization Audit & Architecture (2026-07-19)
 
 **Current handoff-safe repository baseline:** STEP588 on top of STEP586H1.

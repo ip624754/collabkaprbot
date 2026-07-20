@@ -1,3 +1,17 @@
+# STEP588X — Independent full-project audit
+
+Current audit baseline and remediation truth:
+
+- `audit/STEP588X_INDEPENDENT_FULL_PROJECT_AUDIT_2026_07_20.md`
+- `audit/STEP588X_FINDINGS_REGISTER.csv`
+- `audit/STEP588X_VERIFICATION_MATRIX.md`
+- `roadmap/STEP588X_REMEDIATION_ROADMAP.md`
+- `process/07_WORK_HISTORY_STEP588X.md`
+
+Release state: P1 remediation required. STEP587 and STEP589 feature work are HOLD.
+
+---
+
 # DOCS — START HERE
 
 Это актуальный комплект документации по проекту **Collabka PR**.
