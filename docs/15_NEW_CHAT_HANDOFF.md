@@ -1,3 +1,30 @@
+## STEP588X6 — Bounded Safety Hardening (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X6 source implementation on top of STEP588X5.
+
+Current truth:
+
+- selected critical Telegram updates claim a Redis receipt keyed by provider `update_id` before mutation; duplicate, concurrent and ambiguous receipts suppress automatic replay;
+- receipt-store failure and missing critical `update_id` fail closed, while non-critical navigation remains outside the gate;
+- dynamic SQL patch helpers use explicit field allowlists and generic mutations require exactly one affected row;
+- admin auth/write JSON bodies are bounded and oversized requests return HTTP 413;
+- production webhook/cron initialization requires enabled rate limiting, strong distinct operational secrets, signed payment payloads and safe admin limits; readiness reports unsafe posture;
+- runtime-facing owner-looking Telegram IDs were replaced with a neutral synthetic example;
+- payment fallback HMAC verification remains timing-safe;
+- no PostgreSQL migration, Redis migration or new API endpoint is required;
+- local QA passes 36 X6 assertions, 132/132 source checks, X1–X5 critical regressions, dependency/runtime preflight PASS; one completed npm audit reported 0 vulnerabilities and the final repeat hit registry HTTP 502; this is not production replay/ENV evidence.
+
+**Release decision:** source-ready; production ENV preflight, duplicate-suppression canary, body-limit canary and live receipt behavior remain pending. STEP587 and STEP589 remain HOLD.
+
+Read first:
+
+- `docs/audit/STEP588X6_BOUNDED_SAFETY_HARDENING_REPORT.md`;
+- `docs/operations/STEP588X6_BOUNDED_SAFETY_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/RISK_REGISTRY.md`.
+
+---
+
 ## STEP588X5 — Health, Logging Privacy & Readiness Truth (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X5 source implementation on top of STEP588X4.

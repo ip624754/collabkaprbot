@@ -14,7 +14,7 @@ import {
   touchSession,
   verifyChallengeCode,
 } from '../src/lib/adminWeb/auth.js';
-import { getClientIp, getSearchParam, html, json, readJsonBody, timingSafeEq } from '../src/lib/adminWeb/common.js';
+import { getClientIp, getSearchParam, html, isRequestBodyTooLargeError, json, readJsonBody, timingSafeEq } from '../src/lib/adminWeb/common.js';
 import { CFG } from '../src/lib/config.js';
 
 function page(title, body) {
@@ -39,6 +39,19 @@ function rateLimitResponse(res, result) {
   res.setHeader('Retry-After', String(retryAfterSec));
   json(res, 429, { ok: false, error: 'rate_limited', retryAfterSec });
   return true;
+}
+
+
+async function readBodyOrReply(req, res) {
+  try {
+    return await readJsonBody(req);
+  } catch (error) {
+    if (isRequestBodyTooLargeError(error)) {
+      json(res, 413, { ok: false, error: 'request_body_too_large' });
+      return null;
+    }
+    throw error;
+  }
 }
 
 function authErrorStatus(error) {
@@ -78,7 +91,8 @@ export default async function handler(req, res) {
     });
     if (rateLimitResponse(res, throttle)) return;
 
-    const body = await readJsonBody(req);
+    const body = await readBodyOrReply(req, res);
+    if (!body) return;
     const secret = String(body.secret || '');
     if (!timingSafeEq(secret, CFG.ADMIN_WEB_SECRET)) return json(res, 401, { ok: false, error: 'invalid_secret' });
     const result = await createLoginChallenge(req, res);
@@ -102,7 +116,8 @@ export default async function handler(req, res) {
 
   if (action === 'exchange') {
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
-    const body = await readJsonBody(req);
+    const body = await readBodyOrReply(req, res);
+    if (!body) return;
     const challengeId = String(body.challengeId || '').trim();
     if (!challengeId) return json(res, 400, { ok: false, error: 'challenge_id_required' });
     const issued = await issueSession(req, res, challengeId);
@@ -112,7 +127,8 @@ export default async function handler(req, res) {
 
   if (action === 'verify_code') {
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
-    const body = await readJsonBody(req);
+    const body = await readBodyOrReply(req, res);
+    if (!body) return;
     const challengeId = String(body.challengeId || '').trim();
     const code = String(body.code || '').trim();
     if (!challengeId || !code) return json(res, 400, { ok: false, error: 'challenge_and_code_required' });

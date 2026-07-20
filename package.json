@@ -1,6 +1,6 @@
 {
   "name": "collabgirls-bot",
-  "version": "1.3.19",
+  "version": "1.3.20",
   "private": true,
   "type": "module",
   "engines": {
@@ -167,7 +167,9 @@
     "acceptance:staging": "node scripts/staging-runtime-acceptance.js",
     "acceptance:telegram-mobile": "node scripts/telegram-mobile-acceptance.js",
     "smoke:staging-runtime-acceptance-contract": "node scripts/smoke-staging-runtime-acceptance-contract.js",
-    "smoke:neon-cron-resilience-contract": "node scripts/smoke-neon-cron-resilience-contract.js"
+    "smoke:neon-cron-resilience-contract": "node scripts/smoke-neon-cron-resilience-contract.js",
+    "test:bounded-safety-hardening": "node scripts/test-bounded-safety-hardening.js",
+    "smoke:bounded-safety-hardening-contract": "node scripts/smoke-bounded-safety-hardening-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

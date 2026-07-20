@@ -1,3 +1,31 @@
+## STEP588X6 — Bounded Safety Hardening (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X6 source implementation on top of STEP588X5.
+
+Repository truth:
+
+- selected high-risk Telegram mutations now require a Redis replay receipt keyed by Telegram `update_id` before handler execution;
+- concurrent/replayed `processing`, completed `done` and ambiguous `outcome_unknown` receipts suppress automatic handler replay;
+- critical receipt storage failure or missing provider `update_id` fails closed before mutation;
+- dynamic SQL patch helpers use explicit field allowlists and generic updates require exactly one affected row;
+- admin auth/write JSON bodies are capped at a bounded configurable size and return HTTP 413 when oversized;
+- production webhook/cron initialization fails closed on disabled rate limiting, weak/reused operational secrets, unsigned payment fallback or weak automatic-fulfillment HMAC posture; readiness reports `production_security_posture_not_ok`;
+- owner-looking runtime user-ID examples were replaced with the neutral synthetic value `123456789`;
+- payment fallback HMAC verification remains timing-safe and is covered by the X6 executable gate;
+- no PostgreSQL migration, Redis migration, new API endpoint or broad product refactor was introduced;
+- local QA: 36 X6 assertions, 132/132 registered source checks, X1–X5 critical regressions, dependency/runtime preflight PASS; one completed npm audit reported 0 vulnerabilities, while the final repeat hit registry HTTP 502; production ENV and live replay behavior remain operator-acceptance items.
+
+**Release decision:** STEP588X6 is source-ready, production ENV/replay/body-limit canary pending. STEP587 and STEP589 remain HOLD. Continue with STEP588X7 while preserving the source-only boundary, or complete the X1–X6 production evidence sequence first.
+
+Read first:
+
+- `docs/audit/STEP588X6_BOUNDED_SAFETY_HARDENING_REPORT.md`;
+- `docs/operations/STEP588X6_BOUNDED_SAFETY_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X6.md`.
+
+---
+
 ## STEP588X5 — Health, Logging Privacy & Readiness Truth (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X5 source implementation on top of STEP588X4.

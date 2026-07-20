@@ -1,4 +1,4 @@
-import { CFG } from '../src/lib/config.js'; 
+import { CFG, collectProductionSecurityPostureErrors, isProductionAppEnv } from '../src/lib/config.js';
 import { getQStashConfigSnapshot, isQStashLibAvailable } from '../src/lib/qstash.js';
 import { getDbPoolConfigSnapshot } from '../src/db/poolConfig.js';
 import { pingDb } from '../src/db/pool.js';
@@ -45,10 +45,17 @@ export default async function handler(_req, res) {
   database.read_ok = database.configured && database.url_valid ? await pingDb() : false;
   database.latency_ms = Math.max(0, Date.now() - dbStartedAt);
 
+  const productionSecurityPostureErrors = collectProductionSecurityPostureErrors(CFG);
   const base = {
     ok: null,
     ts: now.toISOString(),
     env: CFG.APP_ENV,
+    security_posture: {
+      production: isProductionAppEnv(CFG.APP_ENV),
+      ok: productionSecurityPostureErrors.length === 0,
+      error_count: productionSecurityPostureErrors.length,
+      errors: productionSecurityPostureErrors.slice(0, 20),
+    },
     database,
     system_warnings: [...database.warnings],
     redis: {
@@ -265,6 +272,16 @@ export default async function handler(_req, res) {
         if (hint) o.hint = String(hint).slice(0, 220);
         reasons.push(o);
       };
+
+      if (out?.security_posture?.production === true && out?.security_posture?.ok !== true) {
+        add(
+          'production_security_posture_not_ok',
+          'P0',
+          Number(out?.security_posture?.error_count || 0),
+          0,
+          'Production security posture validation failed. Correct ENV; do not bypass the guard.'
+        );
+      }
 
       const dbConfigured = out?.database?.configured;
       const dbUrlValid = out?.database?.url_valid;

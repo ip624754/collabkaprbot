@@ -1,5 +1,6 @@
 import { pool } from './pool.js';
 import { CFG } from '../lib/config.js';
+import { buildAllowedPatch, requireExactlyOneAffectedRow } from './safePatch.js';
 import * as R from '../lib/redis.js';
 import {
   drawAndFinalizeGiveawayWinnersAtomicCore,
@@ -1465,15 +1466,37 @@ export async function countActiveBarterOffers(workspaceId) {
   );
   return Number(r.rows[0]?.cnt || 0);
 }
+const WORKSPACE_SETTING_PATCH_FIELDS = new Set([
+  'profile_title',
+  'profile_niche',
+  'profile_contact',
+  'profile_geo',
+  'profile_ig',
+  'profile_about',
+  'profile_portfolio_urls',
+  'profile_contacts',
+  'profile_contacts_v',
+  'profile_mode',
+  'profile_verticals',
+  'profile_formats',
+  'network_enabled',
+  'curator_enabled',
+]);
+
 export async function setWorkspaceSetting(workspaceId, patch) {
-  const keys = Object.keys(patch);
-  if (!keys.length) return;
-  const sets = keys.map((k, i) => `${k}=$${i + 2}`);
-  const vals = keys.map(k => patch[k]);
-  await pool.query(
-    `update workspace_settings set ${sets.join(', ')}, updated_at=now() where workspace_id=$1`,
-    [workspaceId, ...vals]
+  const built = buildAllowedPatch(patch, WORKSPACE_SETTING_PATCH_FIELDS, {
+    label: 'workspace_setting_patch',
+  });
+  if (!built.keys.length) return false;
+  const result = await pool.query(
+    `update workspace_settings
+        set ${built.sets.join(', ')}, updated_at=now()
+      where workspace_id=$1
+      returning workspace_id`,
+    [Number(workspaceId), ...built.values]
   );
+  requireExactlyOneAffectedRow(result, 'workspace_setting_update');
+  return true;
 }
 
 
@@ -2359,15 +2382,29 @@ export async function createGiveaway({ workspaceId, prizeValueText, winnersCount
   return r.rows[0];
 }
 
+const GIVEAWAY_PATCH_FIELDS = new Set([
+  'prize_value_text',
+  'winners_count',
+  'ends_at',
+  'status',
+  'published_chat_id',
+  'published_message_id',
+]);
+
 export async function updateGiveaway(giveawayId, patch) {
-  const keys = Object.keys(patch);
-  if (!keys.length) return;
-  const sets = keys.map((k, i) => `${k}=$${i + 2}`);
-  const vals = keys.map(k => patch[k]);
-  await pool.query(
-    `update giveaways set ${sets.join(', ')}, updated_at=now() where id=$1`,
-    [giveawayId, ...vals]
+  const built = buildAllowedPatch(patch, GIVEAWAY_PATCH_FIELDS, {
+    label: 'giveaway_patch',
+  });
+  if (!built.keys.length) return false;
+  const result = await pool.query(
+    `update giveaways
+        set ${built.sets.join(', ')}, updated_at=now()
+      where id=$1
+      returning id`,
+    [Number(giveawayId), ...built.values]
   );
+  requireExactlyOneAffectedRow(result, 'giveaway_update');
+  return true;
 }
 
 export async function getGiveawayForOwner(giveawayId, ownerUserId) {
@@ -6646,18 +6683,35 @@ export async function getBroadcast(id) {
   return r.rows[0] || null;
 }
 
+const BROADCAST_PATCH_FIELDS = new Set([
+  'status',
+  'finished_at',
+  'last_sent_user_id',
+  'sent_count',
+  'failed_count',
+  'audience',
+  'draft_type',
+  'draft_text',
+  'draft_file_id',
+  'draft_caption',
+  'buttons_json',
+  'total_count',
+]);
+
 export async function updateBroadcast(id, fields = {}) {
-  const sets = [];
-  const params = [Number(id)];
-  let idx = 2;
-  for (const [key, val] of Object.entries(fields)) {
-    sets.push(`${key} = $${idx}`);
-    params.push(val);
-    idx++;
-  }
-  if (!sets.length) return;
-  sets.push(`updated_at = now()`);
-  await pool.query(`update broadcasts set ${sets.join(', ')} where id = $1`, params);
+  const built = buildAllowedPatch(fields, BROADCAST_PATCH_FIELDS, {
+    label: 'broadcast_patch',
+  });
+  if (!built.keys.length) return false;
+  const result = await pool.query(
+    `update broadcasts
+        set ${built.sets.join(', ')}, updated_at=now()
+      where id=$1
+      returning id`,
+    [Number(id), ...built.values]
+  );
+  requireExactlyOneAffectedRow(result, 'broadcast_update');
+  return true;
 }
 
 /**
@@ -7603,18 +7657,23 @@ export async function atomicPublishGiveawayResults(giveawayId, messageId) {
  * Atomically transition a broadcast status (e.g. PENDING→RUNNING, RUNNING→DONE).
  * Returns true if the row was updated; false means status already changed.
  */
+const BROADCAST_TRANSITION_PATCH_FIELDS = new Set([
+  'started_at',
+  'finished_at',
+  'sent_count',
+  'failed_count',
+]);
+
 export async function atomicTransitionBroadcast(id, fromStatus, toStatus, extraFields = {}) {
-  const sets = ['status = $2', 'updated_at = now()'];
-  const params = [Number(id), toStatus];
-  let idx = 3;
-  for (const [key, val] of Object.entries(extraFields)) {
-    sets.push(`${key} = $${idx}`);
-    params.push(val);
-    idx++;
-  }
-  params.push(fromStatus);
+  const built = buildAllowedPatch(extraFields, BROADCAST_TRANSITION_PATCH_FIELDS, {
+    label: 'broadcast_transition_patch',
+    parameterOffset: 3,
+  });
+  const sets = ['status = $2', 'updated_at = now()', ...built.sets];
+  const params = [Number(id), toStatus, ...built.values, fromStatus];
+  const fromStatusParam = params.length;
   const r = await pool.query(
-    `UPDATE broadcasts SET ${sets.join(', ')} WHERE id = $1 AND status = $${idx} RETURNING id`,
+    `UPDATE broadcasts SET ${sets.join(', ')} WHERE id = $1 AND status = $${fromStatusParam} RETURNING id`,
     params
   );
   return r.rowCount > 0;

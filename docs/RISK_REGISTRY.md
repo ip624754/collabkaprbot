@@ -13,9 +13,11 @@ The following risks override earlier release optimism until remediation evidence
 | R-32 | Admin fallback code lacks crypto generation/throttling/lockout | HIGH | SOURCE MITIGATED / PROD OPEN | disabled by default; crypto RNG; explicit actor; atomic attempts/lockout; dedicated throttles |
 | R-33 | Public health and webhook logs expose excess operational/personal data | HIGH | SOURCE MITIGATED / PROD OPEN | coarse public readiness, admin-protected diagnostics, pseudonymous structured logs; production log/health canary required |
 | R-34 | Source-heavy test portfolio misses transaction/crash/race defects | HIGH | ACTIVE | STEP588X7 executable critical-path suite |
-| R-35 | Generic dynamic SQL/body/update helpers retain latent safety footguns | MEDIUM | WATCH | allowlists, size caps, row-count truth |
+| R-35 | Generic dynamic SQL/body/update helpers retain latent safety footguns | MEDIUM | SOURCE MITIGATED / PROD OPEN | allowlists, size caps, row-count truth; production canary required |
+| R-36 | Critical Telegram retry can replay a non-idempotent mutation | HIGH | SOURCE MITIGATED / PROD OPEN | bounded update_id receipts, terminal ambiguous state, fail-closed storage |
+| R-37 | Weak/reused production secrets or disabled rate limits permit unsafe runtime | HIGH | SOURCE MITIGATED / PROD OPEN | webhook/cron init gate plus readiness NO_GO; operator ENV evidence required |
 
-**Release gate:** R-26 through R-28 are source-remediated but remain active until STEP588X1 migration/canary evidence. R-29 is source-remediated but remains active until STEP588X2 manual/replay/cron evidence. R-30 is source-remediated but remains active until STEP588X3 migration, replay and unknown-state evidence. R-31 and R-32 are source-remediated but remain open until STEP588X4 deployment and two-browser/replay/idle evidence. R-33 is source-remediated but remains open until STEP588X5 deployment, public/private health and Vercel-log evidence. R-34 still requires implementation. STEP587 GO and STEP589 remain paused.
+**Release gate:** R-26 through R-28 are source-remediated but remain active until STEP588X1 migration/canary evidence. R-29 is source-remediated but remains active until STEP588X2 manual/replay/cron evidence. R-30 is source-remediated but remains active until STEP588X3 migration, replay and unknown-state evidence. R-31 and R-32 are source-remediated but remain open until STEP588X4 deployment and two-browser/replay/idle evidence. R-33 is source-remediated but remains open until STEP588X5 deployment, public/private health and Vercel-log evidence. R-35 through R-37 are source-remediated but remain open until STEP588X6 ENV, replay, body-limit and stale-row canaries. R-34 still requires STEP588X7 implementation. STEP587 GO and STEP589 remain paused.
 
 ---
 
@@ -187,3 +189,23 @@ Residual risk:
 - Source verification: executable auth policy tests, auth binding contract, action/callback registry and full source regressions are required by preflight.
 - Runtime verification required: origin/second-browser canary, actual Telegram approver identity, duplicate callback/exchange, old-session invalidation, idle expiry and bounded throttle evidence.
 - Residual risk: actual Upstash Lua concurrency, Vercel cookie/domain behavior and live Telegram callbacks are not reproduced locally; Redis-only audit durability remains tracked separately.
+
+## Current STEP588X5 assessment
+
+- Change type: health/readiness truth and logging privacy hardening; no schema migration or new endpoint.
+- Primary risks addressed: R-07, R-10, R-11, R-12 and R-33.
+- Runtime blast radius: public/private health response policy, database/Redis readiness probes and selected structured log paths.
+- Rollback: prefer fix-forward; rollback restores verbose public diagnostics and false-green readiness semantics.
+- Source verification: 52 health/privacy assertions, 130 registered source checks, 257 JavaScript syntax checks, dependency/runtime preflight and npm audit PASS locally.
+- Runtime verification required: public/private health canary, controlled NO_GO response and representative Vercel log inspection.
+- Residual risk: full diagnostics depend on Redis-backed admin auth; platform-added metadata and external monitor compatibility require live observation.
+
+## Current STEP588X6 assessment
+
+- Change type: bounded replay, request-size, SQL-patch, mutation-truth and production-config hardening; no schema migration or product-flow redesign.
+- Primary risks addressed: R-02, R-03, R-04, R-09, R-11, R-12, R-35, R-36 and R-37.
+- Runtime blast radius: selected critical webhook updates, three generic DB patch helpers, admin auth/write request parsing and production runtime-initialization/readiness validation.
+- Rollback: code rollback to STEP588X5 is possible but security-regressive; preserve Redis/log evidence and do not automatically replay `outcome_unknown` updates.
+- Source verification: 36 X6 assertions, 132 registered source checks, X1–X5 critical regressions, dependency/runtime preflight and package-lock/registry/migration-pack gates PASS locally; one completed npm audit reported 0 vulnerabilities and the final repeat hit registry HTTP 502.
+- Runtime verification required: production ENV preflight, one duplicate-suppression canary, one preview receipt-store failure, one HTTP 413 canary and one stale/missing-row mutation canary.
+- Residual risk: replay receipts reduce provider-level retries but do not replace domain idempotency; a crash after an external/domain side effect can intentionally leave `outcome_unknown` requiring operator review.

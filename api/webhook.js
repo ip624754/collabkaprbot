@@ -3,6 +3,7 @@ import { assertEnv, CFG } from '../src/lib/config.js';
 import { timingSafeEq } from '../src/lib/adminWeb/common.js';
 import logger from '../src/lib/logger.js';
 import { safeLogError, telegramUpdateLogSummary } from '../src/lib/logPrivacy.js';
+import { claimCriticalTelegramUpdate, finalizeCriticalTelegramUpdate } from '../src/lib/criticalUpdateReplay.js';
 
 let botInitPromise = null;
 let botFactory = getBot;
@@ -59,10 +60,69 @@ export default async function handler(req, res) {
       return;
     }
 
+    const replayClaim = await claimCriticalTelegramUpdate(update);
+    if (!replayClaim.claimed) {
+      if (replayClaim.duplicate) {
+        logger.warn({
+          update_id: replayClaim.updateId,
+          kind: replayClaim.kind,
+          action: replayClaim.action || undefined,
+          receipt_status: replayClaim.existingStatus,
+          ms: Date.now() - startedAt,
+        }, 'webhook.critical_duplicate_suppressed');
+        res.status(200).json({ ok: true, duplicate: true });
+        return;
+      }
+      logger.error({
+        update_id: replayClaim.updateId || null,
+        kind: replayClaim.kind || 'critical',
+        action: replayClaim.action || undefined,
+        error: replayClaim.error || 'critical_update_receipt_unavailable',
+        ms: Date.now() - startedAt,
+      }, 'webhook.critical_receipt_fail_closed');
+      res.status(503).json({ ok: false, error: replayClaim.error || 'critical_update_receipt_unavailable' });
+      return;
+    }
+
     const summary = telegramUpdateLogSummary(update);
     logger.info(summary, 'webhook.in');
 
-    await bot.handleUpdate(update);
+    try {
+      await bot.handleUpdate(update);
+    } catch (error) {
+      if (replayClaim.critical) {
+        const finalized = await finalizeCriticalTelegramUpdate(replayClaim, 'outcome_unknown', {
+          errorCode: String(error?.code || error?.name || 'handler_error'),
+        });
+        if (!finalized.ok) {
+          logger.error({
+            update_id: replayClaim.updateId,
+            error: finalized.error,
+          }, 'webhook.critical_unknown_receipt_failed');
+        } else {
+          logger.error({
+            update_id: replayClaim.updateId,
+            kind: replayClaim.kind,
+            action: replayClaim.action || undefined,
+            handler_error: String(error?.code || error?.name || 'handler_error').slice(0, 80),
+          }, 'webhook.critical_outcome_unknown');
+        }
+      }
+      throw error;
+    }
+
+    if (replayClaim.critical) {
+      const finalized = await finalizeCriticalTelegramUpdate(replayClaim, 'done');
+      if (!finalized.ok) {
+        logger.error({
+          update_id: replayClaim.updateId,
+          error: finalized.error,
+          ms: Date.now() - startedAt,
+        }, 'webhook.critical_done_receipt_failed');
+        res.status(500).json({ ok: false, error: 'critical_update_receipt_finalize_failed' });
+        return;
+      }
+    }
 
     logger.info({ update_id: summary.update_id, ms: Date.now() - startedAt }, 'webhook.ok');
     res.status(200).json({ ok: true });

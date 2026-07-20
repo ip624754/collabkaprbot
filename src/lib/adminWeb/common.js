@@ -15,10 +15,53 @@ export function html(res, status, markup) {
   res.send(markup);
 }
 
-export async function readJsonBody(req) {
-  if (req.body && typeof req.body === 'object') return req.body;
+export class RequestBodyTooLargeError extends Error {
+  constructor(limitBytes) {
+    super('request_body_too_large');
+    this.name = 'RequestBodyTooLargeError';
+    this.code = 'REQUEST_BODY_TOO_LARGE';
+    this.statusCode = 413;
+    this.limitBytes = Number(limitBytes || 0) || 0;
+  }
+}
+
+function assertBodySizeWithinLimit(sizeBytes, limitBytes) {
+  if (Number(sizeBytes || 0) > Number(limitBytes || 0)) {
+    throw new RequestBodyTooLargeError(limitBytes);
+  }
+}
+
+export async function readJsonBody(req, { maxBytes = CFG.ADMIN_WEB_JSON_BODY_MAX_BYTES } = {}) {
+  const limitBytes = Math.max(1, Number(maxBytes || 0) || 64 * 1024);
+  const contentLength = Number(req?.headers?.['content-length'] || 0) || 0;
+  if (contentLength > 0) assertBodySizeWithinLimit(contentLength, limitBytes);
+
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    const serialized = JSON.stringify(req.body);
+    assertBodySizeWithinLimit(Buffer.byteLength(serialized, 'utf8'), limitBytes);
+    return req.body;
+  }
+
+  if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) {
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body, 'utf8');
+    assertBodySizeWithinLimit(rawBody.length, limitBytes);
+    const raw = rawBody.toString('utf8').trim();
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error('invalid_json');
+    }
+  }
+
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let totalBytes = 0;
+  for await (const rawChunk of req) {
+    const chunk = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk);
+    totalBytes += chunk.length;
+    assertBodySizeWithinLimit(totalBytes, limitBytes);
+    chunks.push(chunk);
+  }
   const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return {};
   try {
@@ -26,6 +69,10 @@ export async function readJsonBody(req) {
   } catch {
     return {};
   }
+}
+
+export function isRequestBodyTooLargeError(error) {
+  return error?.code === 'REQUEST_BODY_TOO_LARGE' || Number(error?.statusCode || 0) === 413;
 }
 
 export function parseCookies(req) {

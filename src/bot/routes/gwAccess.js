@@ -55,7 +55,7 @@ export async function handleGwAccessRoute(ctx, p, u, deps = {}) {
 
     await safeEditOrReply(
       ctx,
-      `🧩 <b>Проверка участника</b>\n\nПришли <b>user_id</b> цифрами.\n\nПример: <code>611377976</code>`,
+      `🧩 <b>Проверка участника</b>\n\nПришли <b>user_id</b> цифрами.\n\nПример: <code>123456789</code>`,
       { parse_mode: 'HTML', reply_markup: navKb(`a:gw_access|i:${gwId}`) }
     );
     await setExpectText(ctx.from.id, { type: 'gw_access_userid', gwId });

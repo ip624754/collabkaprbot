@@ -21640,7 +21640,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       const gwId = Number(exp.gwId);
       const m = String(ctx.message.text || '').match(/(\d{5,})/);
       if (!m) {
-        await ctx.reply('Пришли user_id цифрами (пример: 611377976).');
+        await ctx.reply('Пришли user_id цифрами (пример: 123456789).');
         await setExpectText(ctx.from.id, exp);
         return;
       }
@@ -21653,7 +21653,7 @@ if (exp.type === 'adm_outbox_tpl_label') {
       const gwId = Number(exp.gwId);
       const m = String(ctx.message.text || '').match(/(\d{5,})/);
       if (!m) {
-        await ctx.reply('Пришли user_id цифрами (пример: 611377976).');
+        await ctx.reply('Пришли user_id цифрами (пример: 123456789).');
         await setExpectText(ctx.from.id, exp);
         return;
       }

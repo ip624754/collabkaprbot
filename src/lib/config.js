@@ -106,6 +106,12 @@ export const CFG = {
   // expectText (text input mode): total lifetime cap (seconds)
   EXPECT_TEXT_MAX_LIFETIME_SEC,
 
+  // Critical Telegram update replay receipts (Redis, fail-closed for selected mutations).
+  CRITICAL_UPDATE_RECEIPT_TTL_SEC: (() => {
+    const n = parseIntSafe(process.env.CRITICAL_UPDATE_RECEIPT_TTL_SEC, 7 * 24 * 60 * 60);
+    return Math.max(24 * 60 * 60, Math.min(n, 30 * 24 * 60 * 60));
+  })(),
+
   // Security
   WEBHOOK_SECRET_TOKEN: process.env.WEBHOOK_SECRET_TOKEN || '',
   CRON_SECRET: process.env.CRON_SECRET || '',
@@ -298,6 +304,10 @@ export const CFG = {
   ADMIN_WEB_IDLE_TIMEOUT_SEC: (() => {
     const n = parseIntSafe(process.env.ADMIN_WEB_IDLE_TIMEOUT_SEC, 30 * 60);
     return Math.max(300, Math.min(n, 8 * 60 * 60));
+  })(),
+  ADMIN_WEB_JSON_BODY_MAX_BYTES: (() => {
+    const n = parseIntSafe(process.env.ADMIN_WEB_JSON_BODY_MAX_BYTES, 64 * 1024);
+    return Math.max(4 * 1024, Math.min(n, 256 * 1024));
   })(),
   ADMIN_WEB_FALLBACK_CODE_ENABLED: parseBoolSafe(process.env.ADMIN_WEB_FALLBACK_CODE_ENABLED, false),
   ADMIN_WEB_FALLBACK_ACTOR_TG_ID: parseIntSafe(process.env.ADMIN_WEB_FALLBACK_ACTOR_TG_ID, 0),
@@ -495,6 +505,101 @@ export const CFG = {
 
 };
 
+export function isProductionAppEnv(value = CFG.APP_ENV) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'prod' || normalized === 'production';
+}
+
+function isStrongOperationalSecret(value, minBytes = 32) {
+  const raw = String(value || '').trim();
+  if (Buffer.byteLength(raw, 'utf8') < Number(minBytes || 32)) return false;
+  const compact = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!compact) return false;
+  if (/^(changeme|changeit|secret|password|set|replace|example|test|default)+$/.test(compact)) return false;
+  return new Set(raw).size >= 8;
+}
+
+export function collectProductionSecurityPostureErrors(cfg = CFG) {
+  if (!isProductionAppEnv(cfg.APP_ENV)) return [];
+  const errors = [];
+
+  for (const [name, value] of [
+    ['WEBHOOK_SECRET_TOKEN', cfg.WEBHOOK_SECRET_TOKEN],
+    ['CRON_SECRET', cfg.CRON_SECRET],
+  ]) {
+    if (!isStrongOperationalSecret(value)) errors.push(`${name} must be 32+ bytes and non-placeholder`);
+  }
+
+  if (cfg.RATE_LIMIT_ENABLED !== true) {
+    errors.push('RATE_LIMIT_ENABLED must be enabled in production');
+  }
+  for (const [name, value] of [
+    ['BX_MSG_RATE_LIMIT', cfg.BX_MSG_RATE_LIMIT],
+    ['BX_MSG_RATE_WINDOW_SEC', cfg.BX_MSG_RATE_WINDOW_SEC],
+    ['INTRO_RATE_LIMIT', cfg.INTRO_RATE_LIMIT],
+    ['INTRO_RATE_WINDOW_SEC', cfg.INTRO_RATE_WINDOW_SEC],
+    ['BRAND_LEAD_RATE_LIMIT', cfg.BRAND_LEAD_RATE_LIMIT],
+    ['BRAND_LEAD_RATE_WINDOW_SEC', cfg.BRAND_LEAD_RATE_WINDOW_SEC],
+    ['CREATOR_BRAND_APPLY_RATE_LIMIT', cfg.CREATOR_BRAND_APPLY_RATE_LIMIT],
+    ['CREATOR_BRAND_APPLY_RATE_WINDOW_SEC', cfg.CREATOR_BRAND_APPLY_RATE_WINDOW_SEC],
+    ['CREATOR_BRAND_APPLY_DAILY_LIMIT', cfg.CREATOR_BRAND_APPLY_DAILY_LIMIT],
+    ['CREATOR_BRAND_APPLY_DAILY_WINDOW_SEC', cfg.CREATOR_BRAND_APPLY_DAILY_WINDOW_SEC],
+  ]) {
+    if (!Number.isFinite(Number(value)) || Number(value) <= 0) errors.push(`${name} must be > 0 in production`);
+  }
+
+  const automaticFulfillmentEnabled = Boolean(
+    cfg.PAYMENTS_AUTO_APPLY_DEFAULT
+    || cfg.PAYMENTS_FALLBACK_APPLY_ENABLED
+    || cfg.MATCH_FEAT_AUTO_APPLY_ENABLED
+  );
+  if (automaticFulfillmentEnabled && !isStrongOperationalSecret(cfg.PAYMENTS_PAYLOAD_HMAC_KEY)) {
+    errors.push('PAYMENTS_PAYLOAD_HMAC_KEY must be 32+ bytes when automatic fulfillment is enabled');
+  }
+  if (cfg.PAYMENTS_FALLBACK_ALLOW_UNSIGNED === true) {
+    errors.push('PAYMENTS_FALLBACK_ALLOW_UNSIGNED must be disabled in production');
+  }
+
+  const privilegedSecrets = [
+    ['WEBHOOK_SECRET_TOKEN', cfg.WEBHOOK_SECRET_TOKEN],
+    ['CRON_SECRET', cfg.CRON_SECRET],
+    ...(automaticFulfillmentEnabled ? [['PAYMENTS_PAYLOAD_HMAC_KEY', cfg.PAYMENTS_PAYLOAD_HMAC_KEY]] : []),
+    ...(cfg.ADMIN_WEB_ENABLED
+      ? [
+          ['ADMIN_WEB_SECRET', cfg.ADMIN_WEB_SECRET],
+          ['ADMIN_WEB_SESSION_SECRET', cfg.ADMIN_WEB_SESSION_SECRET],
+        ]
+      : []),
+  ].filter(([, value]) => String(value || ''));
+  const secretOwners = new Map();
+  for (const [name, value] of privilegedSecrets) {
+    const raw = String(value);
+    const prior = secretOwners.get(raw);
+    if (prior) errors.push(`${name} must be distinct from ${prior}`);
+    else secretOwners.set(raw, name);
+  }
+
+  if (cfg.ADMIN_WEB_ENABLED) {
+    if (!isStrongOperationalSecret(cfg.ADMIN_WEB_SECRET)) {
+      errors.push('ADMIN_WEB_SECRET must be 32+ bytes and non-placeholder');
+    }
+    if (!isStrongOperationalSecret(cfg.ADMIN_WEB_SESSION_SECRET)) {
+      errors.push('ADMIN_WEB_SESSION_SECRET must be 32+ bytes and non-placeholder');
+    }
+    for (const [name, value] of [
+      ['ADMIN_WEB_START_RATE_LIMIT', cfg.ADMIN_WEB_START_RATE_LIMIT],
+      ['ADMIN_WEB_START_RATE_WINDOW_SEC', cfg.ADMIN_WEB_START_RATE_WINDOW_SEC],
+      ['ADMIN_WEB_CODE_RATE_LIMIT', cfg.ADMIN_WEB_CODE_RATE_LIMIT],
+      ['ADMIN_WEB_CODE_RATE_WINDOW_SEC', cfg.ADMIN_WEB_CODE_RATE_WINDOW_SEC],
+      ['ADMIN_WEB_JSON_BODY_MAX_BYTES', cfg.ADMIN_WEB_JSON_BODY_MAX_BYTES],
+    ]) {
+      if (!Number.isFinite(Number(value)) || Number(value) <= 0) errors.push(`${name} must be > 0 in production`);
+    }
+  }
+
+  return errors;
+}
+
 export function assertEnv() {
   const missing = [];
   if (!CFG.BOT_TOKEN) missing.push('BOT_TOKEN');
@@ -508,7 +613,7 @@ export function assertEnv() {
   }
 
   // Fail-fast safety in prod
-  if (CFG.APP_ENV === 'prod') {
+  if (isProductionAppEnv()) {
     if (!CFG.WEBHOOK_SECRET_TOKEN) missing.push('WEBHOOK_SECRET_TOKEN');
     if (!CFG.CRON_SECRET) missing.push('CRON_SECRET');
     if (!CFG.SUPER_ADMIN_TG_IDS?.length) missing.push('SUPER_ADMIN_TG_IDS');
@@ -542,5 +647,10 @@ export function assertEnv() {
 
   if (missing.length) {
     throw new Error(`Missing env: ${missing.join(', ')}`);
+  }
+
+  const postureErrors = collectProductionSecurityPostureErrors(CFG);
+  if (postureErrors.length) {
+    throw new Error(`Unsafe production env: ${postureErrors.join('; ')}`);
   }
 }

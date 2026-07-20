@@ -231,6 +231,8 @@ Possession of a URL or challenge ID alone cannot mint an admin session.
 
 **Mode:** HEAVY
 **Expected risk score:** 12/20
+**Actual risk score:** 14/20
+**Status:** IMPLEMENTED LOCALLY / PRODUCTION ENV PREFLIGHT AND REPLAY CANARY PENDING
 
 ### Scope
 
@@ -245,6 +247,20 @@ Possession of a URL or challenge ID alone cannot mint an admin session.
 ### Exit gate
 
 Latent footguns are converted to explicit contracts without broad rewrites.
+
+### STEP588X6 implementation evidence
+
+- selected high-risk Telegram mutations claim a Redis `update_id` receipt before handler execution;
+- `processing`, `done` and `outcome_unknown` receipts suppress automatic replay;
+- Redis unavailability or a missing critical `update_id` fails closed before mutation;
+- `src/db/safePatch.js` enforces explicit field allowlists and exact affected-row truth;
+- admin auth/write JSON bodies are capped and return HTTP 413 when oversized;
+- production webhook/cron initialization fails closed on disabled rate limiting, weak/reused secrets, unsigned fallback and weak automatic-fulfillment HMAC posture; readiness becomes NO_GO;
+- runtime copy uses a neutral synthetic user ID;
+- executable regression: `scripts/test-bounded-safety-hardening.js`;
+- source contract: `scripts/smoke-bounded-safety-hardening-contract.js`;
+- no migration and no new Vercel function are required;
+- source exit gate is met locally; production ENV/replay/body-limit evidence remains open.
 
 ## STEP588X7 — Executable Critical-Path Test Spine
 

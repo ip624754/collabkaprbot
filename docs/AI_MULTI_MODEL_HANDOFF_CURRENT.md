@@ -1,3 +1,42 @@
+# AI Multi-Model Handoff — STEP588X6 Current Truth
+
+**Baseline:** STEP588X6 source implementation on STEP588X5
+**Status:** SOURCE READY / PRODUCTION ENV AND REPLAY CANARY PENDING / GLOBAL RELEASE HOLD
+
+## Verified locally
+
+- bounded critical-update classification and Redis receipt lifecycle;
+- duplicate/concurrent/ambiguous critical update suppression and fail-closed receipt-store behavior;
+- explicit dynamic SQL field allowlists and exact affected-row checks;
+- bounded admin JSON request bodies with HTTP 413 handling;
+- production security posture checks for rate limits, strong distinct secrets, signed payment payloads and admin limits;
+- neutral runtime identifier examples and timing-safe payment HMAC verification;
+- 36 X6 assertions, 132/132 registered source checks, X1–X5 critical regressions, dependency/runtime preflight PASS; one completed npm audit reported 0 vulnerabilities and the final repeat hit registry HTTP 502;
+- no database migration and no new Vercel function.
+
+## Not verified
+
+- production Upstash receipt behavior under actual Telegram webhook retries;
+- live crash after a partial critical mutation;
+- production ENV values and fail-fast deployment boot;
+- Vercel/proxy behavior for oversized JSON bodies;
+- production row-count mismatch behavior;
+- production acceptance for STEP588X1–X5;
+- STEP586H1 24-hour observation.
+
+## Hard rules
+
+- do not broaden replay dedup into a blind global update drop;
+- do not automatically rerun `outcome_unknown`;
+- new critical callbacks require explicit classification plus domain idempotency review;
+- dynamic SQL fields require explicit allowlist changes;
+- do not bypass production posture failures;
+- do not claim production acceptance from local Redis/test doubles.
+
+Next remediation STEP: `STEP588X7 — Executable Critical-Path Test Spine`.
+
+---
+
 # AI Multi-Model Handoff — STEP588X5 Current Truth
 
 **Baseline:** STEP588X5 source implementation on STEP588X4

@@ -1,5 +1,5 @@
 import { appendAdminWebAudit, isFounderSession, requireSession } from '../src/lib/adminWeb/auth.js';
-import { getSearchParam, json, readJsonBody } from '../src/lib/adminWeb/common.js';
+import { getSearchParam, isRequestBodyTooLargeError, json, readJsonBody } from '../src/lib/adminWeb/common.js';
 import {
   createNoticeDraftForActor,
   resolveUnknownBroadcastDeliveryForActor,
@@ -8,11 +8,24 @@ import {
 } from '../src/lib/adminWeb/comms.js';
 import { clearAdminUserNote, getAdminUserNote, setAdminUserNote } from '../src/lib/adminWeb/notes.js';
 
+async function readBodyOrReply(req, res) {
+  try {
+    return await readJsonBody(req);
+  } catch (error) {
+    if (isRequestBodyTooLargeError(error)) {
+      json(res, 413, { ok: false, error: 'request_body_too_large' });
+      return null;
+    }
+    throw error;
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
   const session = await requireSession(req, res);
   if (!session) return;
-  const body = await readJsonBody(req);
+  const body = await readBodyOrReply(req, res);
+  if (!body) return;
   const action = String(getSearchParam(req, 'action', body.action || '') || body.action || '').trim().toLowerCase();
 
   if (action === 'set_note' || action === 'clear_note') {
