@@ -30500,13 +30500,15 @@ if (p.a === 'a:match_home') {
       const tier = MATCH_TIERS.find(t => t.id === tierId);
       if (!tier) return ctx.answerCallbackQuery({ text: 'Тариф не найден.' });
 
-      const token = randomToken(10);
+      const tokenRaw = randomToken(10);
+      const payloadPrefix = `match_${u.id}_${tier.id}_`;
+      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
       await redis.set(
         k(['pay_match', token]),
         { tgId: ctx.from.id, userId: u.id, wsId, tierId: tier.id, stars: tier.stars, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
         { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
-      const payload = `match_${u.id}_${tier.id}_${token}`;
+      const payload = `${payloadPrefix}${token}`;
       await sendStarsInvoice(ctx, {
         title: `${MONETIZATION_LABELS.MATCHING} · ${tier.title}`,
         description: `Один подбор до ${tier.count} каналов по твоему брифу. Это отдельная услуга: кредиты бренда не списываются. После оплаты пришли бриф одним сообщением.`,
@@ -30591,13 +30593,15 @@ if (p.a === 'a:match_home') {
       const d = FEATURED_DURATIONS.find(x => x.id === durId);
       if (!d) return ctx.answerCallbackQuery({ text: 'Тариф не найден.' });
 
-      const token = randomToken(10);
+      const tokenRaw = randomToken(10);
+      const payloadPrefix = `feat_${u.id}_${d.days}_`;
+      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
       await redis.set(
         k(['pay_feat', token]),
         { tgId: ctx.from.id, userId: u.id, wsId, days: d.days, durId: d.id, stars: d.stars, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
         { ex: CFG.PAYMENT_SESSION_TTL_SEC }
       );
-      const payload = `feat_${u.id}_${d.days}_${token}`;
+      const payload = `${payloadPrefix}${token}`;
       await sendStarsInvoice(ctx, {
         title: `${MONETIZATION_LABELS.FEATURED} · ${d.title}`,
         description: `Промо-блок сверху в ленте на ${d.days} ${ruPlural(d.days,'день','дня','дней')}. Это отдельная услуга: кредиты бренда не списываются. После оплаты пришли контент.`,
@@ -41287,8 +41291,8 @@ async function renderAdminPaymentView(ctx, paymentId, backStatus = 'ORPHANED', p
   const payload = String(p.invoice_payload || '');
   const when = new Date(p.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
   const who = p.username ? '@' + p.username : 'id ' + p.tg_id;
-  const canApply = (p.status === 'ORPHANED' || p.status === 'ERROR' || p.status === 'RECEIVED') &&
-    (payload.startsWith('pro_') || payload.startsWith('brand_') || payload.startsWith('bplan_') || payload.startsWith('offpub_'));
+  const canApply = (p.status === 'ORPHANED' || p.status === 'ERROR' || p.status === 'RECEIVED' || p.status === 'APPLYING') &&
+    ['pro_', 'brand_', 'bplan_', 'match_', 'feat_', 'founder_', 'offpub_'].some((prefix) => payload.startsWith(prefix));
 
   const kb = new InlineKeyboard();
   if (canApply) kb.text('✅ Apply (manual)', `a:admin_pay_apply|id:${p.id}|st:${backStatus}|p:${page}`).row();
@@ -41323,148 +41327,124 @@ async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = 'ORP
     return;
   }
 
-  if (row.status === 'APPLIED') {
+  if (String(row.status || '').toUpperCase() === 'APPLIED') {
     await ctx.answerCallbackQuery({ text: 'Уже применён ✅', show_alert: true });
     await renderAdminPaymentView(ctx, row.id, backStatus, page);
     return;
   }
 
   const payload = String(row.invoice_payload || '');
-
-  // Hardening: do not apply payments if amount/currency/payload do not match the current product catalog.
+  let validation = null;
   try {
-    const v = await _validateStarsPaymentStrict({
+    validation = await _validateStarsPaymentStrict({
       payload,
       currency: String(row.currency || 'XTR'),
       totalAmount: Number(row.total_amount || 0),
       payerUserId: Number(row.user_id || 0) || null,
     });
-    if (!v.ok) {
-      const note = `manual_apply_blocked:${String(v.reason || 'unknown')} exp:${Number(v.expected || 0)} got:${Number(v.paid || row.total_amount || 0)} cur:${String(row.currency || 'XTR')}`;
-      try { await db.setPaymentStatus(row.id, 'ERROR', note.slice(0, 240)); } catch {}
+    if (!validation?.ok) {
+      const note = `manual_apply_blocked:${String(validation?.reason || 'unknown')} exp:${Number(validation?.expected || 0)} got:${Number(validation?.paid || row.total_amount || 0)} cur:${String(row.currency || 'XTR')}`;
+      try { await db.setPaymentStatusIfNotApplied(row.id, 'ERROR', note.slice(0, 240)); } catch {}
       await ctx.answerCallbackQuery({ text: '⛔️ Apply заблокирован: счёт невалидный/не совпадает сумма.', show_alert: true });
       await renderAdminPaymentView(ctx, row.id, backStatus, page);
       return;
     }
   } catch {
-    // If we cannot validate, block apply (fail-safe).
-    try { await db.setPaymentStatus(row.id, 'ERROR', 'manual_apply_blocked: validation_exception'); } catch {}
+    try { await db.setPaymentStatusIfNotApplied(row.id, 'ERROR', 'manual_apply_blocked: validation_exception'); } catch {}
     await ctx.answerCallbackQuery({ text: '⛔️ Apply заблокирован: ошибка валидации.', show_alert: true });
     await renderAdminPaymentView(ctx, row.id, backStatus, page);
     return;
   }
 
-  // Claim fulfillment in DB to prevent double-apply (retries / parallel admins / cron).
-  const claimed = await db.claimPaymentApplying(row.id, adminUserRow.id);
-  if (!claimed) {
-    await ctx.answerCallbackQuery({ text: '⏳ Платёж уже обрабатывается или применён.', show_alert: true });
-    await renderAdminPaymentView(ctx, row.id, backStatus, page);
-    return;
-  }
-
-  try {
-    if (payload.startsWith('pro_')) {
-      const parts = payload.split('_');
-      const wsId = Number(parts[1]);
-      if (!wsId) throw new Error('Bad wsId');
-      await db.activateWorkspacePro(wsId, CFG.PRO_DURATION_DAYS);
-      await db.auditWorkspace(wsId, adminUserRow.id, 'pro.activated.manual', {
-        payment_id: row.id,
-        telegram_payment_charge_id: row.telegram_payment_charge_id
-      });
-      await db.markPaymentApplied(row.id, adminUserRow.id, 'manual_apply_pro');
-      await ctx.answerCallbackQuery({ text: 'PRO применён ✅', show_alert: true });
-      await renderAdminPaymentView(ctx, row.id, backStatus, page);
-      return;
-    }
-
-    if (payload.startsWith('brand_')) {
-      const parts = payload.split('_');
-      const userId = Number(parts[1]);
-      const packToken = String(parts[2] || '').trim();
-
-      // New format: brand_<userId>_<S|M|L>_<token>
-      // Legacy safety: if somehow a numeric token is present, try resolve by credits.
-      let pack = getBrandPack(packToken);
-      if (!pack && /^\d+$/.test(packToken)) {
-        const n = Number(packToken);
-        pack = BRAND_PACKS.find(p => Number(p.credits) === n) || null;
-      }
-
-      if (!userId || !pack) throw new Error('Bad userId/pack');
-      const newBalance = await db.addBrandCredits(userId, Number(pack.credits));
-      try { await setBrandCreditsCache(userId, newBalance); } catch {}
-      await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_brand_pass:+${pack.credits}`);
-      await ctx.answerCallbackQuery({ text: 'Кредиты начислены ✅', show_alert: true });
-      await renderAdminPaymentView(ctx, row.id, backStatus, page);
-      return;
-    }
-
-    if (payload.startsWith('bplan_')) {
-      const parts = payload.split('_');
-      const userId = Number(parts[1]);
-      const planRaw = String(parts[2] || 'start').toLowerCase();
-      const plan = (planRaw === 'basic') ? 'start' : (planRaw === 'max') ? 'pro' : planRaw;
-
-      if (!userId) throw new Error('Bad userId');
-      if (plan !== 'start' && plan !== 'pro') throw new Error('Bad plan');
-
-      await db.activateBrandPlan(userId, plan, CFG.BRAND_PLAN_DURATION_DAYS);
-      // Credit bonus
-      const planDef = BRAND_PLANS.find(pl => pl.id === plan) || null;
-      if (planDef?.credits) {
-        const newBalance = await db.addBrandCredits(userId, planDef.credits);
-        try { await setBrandCreditsCache(userId, newBalance); } catch {}
-      }
-      await db.markPaymentApplied(row.id, adminUserRow.id, `manual_apply_brand_plan:${plan}${planDef?.credits ? `:+${planDef.credits}cr` : ''}`);
-      await ctx.answerCallbackQuery({ text: 'Brand Plan применён ✅', show_alert: true });
-      await renderAdminPaymentView(ctx, row.id, backStatus, page);
-      return;
-    }
-
-    if (payload.startsWith('offpub_')) {
+  // Official-channel publishing remains a moderated external side-effect flow.
+  if (payload.startsWith('offpub_')) {
+    try {
       const parts = payload.split('_');
       const offerId = Number(parts[2]);
       const days = Number(parts[3] || CFG.OFFICIAL_MANUAL_DEFAULT_DAYS);
       if (!CFG.OFFICIAL_PUBLISH_ENABLED) throw new Error('Official publishing disabled');
       if (!offerId) throw new Error('Bad offerId');
-            const pubRes = await queueOfficialPublishToOfficialChannel(ctx.api, offerId, {
+      const pubRes = await queueOfficialPublishToOfficialChannel(ctx.api, offerId, {
         placementType: 'PAID',
         paymentId: row.id,
         days,
         publishedByUserId: adminUserRow.id,
-        keepExpiry: false
+        keepExpiry: false,
       });
       if (pubRes && pubRes.locked) {
         await ctx.answerCallbackQuery({ text: '⏳ Уже публикуется. Попробуй чуть позже.', show_alert: true });
-        await renderAdminPaymentView(ctx, row.id, backStatus, page);
-        return;
-      }
-      if (pubRes && pubRes.queued) {
-        await ctx.answerCallbackQuery({ text: 'Поставлено в очередь ✅', show_alert: true });
       } else {
-        await ctx.answerCallbackQuery({ text: 'Опубликовано ✅', show_alert: true });
+        await ctx.answerCallbackQuery({ text: pubRes?.queued ? 'Поставлено в очередь ✅' : 'Опубликовано ✅', show_alert: true });
+      }
+      await renderAdminPaymentView(ctx, row.id, backStatus, page);
+      return;
+    } catch (e) {
+      const msg = String(e?.message || e);
+      try { await db.setPaymentStatusIfNotApplied(row.id, 'ERROR', `manual_apply_error: ${msg.slice(0, 160)}`); } catch {}
+      await ctx.answerCallbackQuery({ text: `Ошибка apply: ${msg.slice(0, 64)}`, show_alert: true });
+      await renderAdminPaymentView(ctx, row.id, backStatus, page);
+      return;
+    }
+  }
+
+  try {
+    const result = await applyPaymentFallbackNoSession({
+      paymentId: Number(row.id),
+      paymentUserId: Number(row.user_id),
+      invoicePayload: payload,
+      appliedByUserId: Number(adminUserRow.id),
+      totalAmount: Number(row.total_amount || 0),
+      currency: String(row.currency || 'XTR'),
+      telegramPaymentChargeId: String(row.telegram_payment_charge_id || ''),
+      validation,
+    });
+
+    if (!result?.applied) {
+      if (result?.alreadyApplied || result?.reason === 'already_applied') {
+        await ctx.answerCallbackQuery({ text: 'Уже применён ✅', show_alert: true });
+      } else if (result?.reason === 'locked' || result?.reason === 'applying_in_progress') {
+        await ctx.answerCallbackQuery({ text: '⏳ Платёж уже обрабатывается.', show_alert: true });
+      } else {
+        const reason = String(result?.reason || 'atomic_apply_failed');
+        try { await db.setPaymentStatusIfNotApplied(row.id, 'ERROR', `manual_atomic_apply_failed:${reason}`.slice(0, 240)); } catch {}
+        await ctx.answerCallbackQuery({ text: `Apply не выполнен: ${reason.slice(0, 72)}`, show_alert: true });
       }
       await renderAdminPaymentView(ctx, row.id, backStatus, page);
       return;
     }
 
-    // match/feat or unknown
-    await ctx.answerCallbackQuery({ text: 'Эта услуга не поддерживает apply.', show_alert: true });
+    // Cache and audit are post-commit mirrors; DB transaction is the product truth.
+    if (Number.isFinite(Number(result.brandCreditsBalance))) {
+      try { await setBrandCreditsCache(Number(row.user_id), Number(result.brandCreditsBalance)); } catch {}
+    }
+    if (result.kind === 'pro' || result.kind === 'founder_creator') {
+      try {
+        await db.auditWorkspace(Number(result.wsId), adminUserRow.id, 'pro.activated.manual.atomic', {
+          payment_id: row.id,
+          fulfillment_version: 'STEP588X1_v1',
+          telegram_payment_charge_id: row.telegram_payment_charge_id,
+        });
+      } catch {}
+    }
+
+    const labels = {
+      pro: 'PRO применён ✅',
+      brand_pass: 'Кредиты начислены ✅',
+      brand_plan: 'Brand Plan применён ✅',
+      matching: 'Умный подбор создан ✅',
+      featured: 'Продвижение создано ✅',
+      founder_creator: 'Founder PRO применён ✅',
+      founder_brand: 'Founder Brand применён ✅',
+    };
+    await ctx.answerCallbackQuery({ text: labels[result.kind] || 'Платёж применён ✅', show_alert: true });
     await renderAdminPaymentView(ctx, row.id, backStatus, page);
-    return;
   } catch (e) {
     const msg = String(e?.message || e);
-    try {
-      await db.setPaymentStatus(row.id, 'ERROR', `manual_apply_error: ${msg.slice(0, 160)}`);
-    } catch {
-      // ignore
-    }
+    try { await db.setPaymentStatusIfNotApplied(row.id, 'ERROR', `manual_atomic_apply_error:${msg.slice(0, 160)}`); } catch {}
     await ctx.answerCallbackQuery({ text: `Ошибка apply: ${msg.slice(0, 64)}`, show_alert: true });
     await renderAdminPaymentView(ctx, row.id, backStatus, page);
   }
 }
-
 
 async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED', page = 0) {
   const fbOn = await isPaymentsFallbackApplyEnabled();
@@ -41524,14 +41504,7 @@ async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED',
       if (!v || !v.ok || (needsPayer && !(v?.meta && v.meta.userId))) {
         const rr = (!v || !v.ok) ? String(v?.reason || 'validation_failed') : 'missing_payer_in_payload';
         validationFailed += 1;
-        try { await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
-        skipped += 1;
-        continue;
-      }
-
-      // Claim fulfillment in DB to prevent double-apply (cron/admin parallelism).
-      const claimed = await db.claimPaymentApplying(Number(r.id), adminUserRow?.id || Number(r.user_id));
-      if (!claimed) {
+        try { await db.setPaymentStatusIfNotApplied(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
         skipped += 1;
         continue;
       }
@@ -41544,6 +41517,7 @@ async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED',
         totalAmount: Number(r.total_amount || 0),
         currency: String(r.currency || 'XTR'),
         telegramPaymentChargeId: String(r.telegram_payment_charge_id || ''),
+        validation: v,
       });
 
       if (fb && fb.applied) {
@@ -41567,7 +41541,7 @@ async function adminAutoHealPayments(ctx, adminUserRow, backStatus = 'ORPHANED',
         const rr = String(fb?.reason || '');
         if (rr === 'unsupported_payload' || rr === 'missing_userid_or_wsid' || rr === 'bad_input' || rr === 'user_mismatch' || rr === 'amount_mismatch') {
           manualRequired += 1;
-          try { await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
+          try { await db.setPaymentStatusIfNotApplied(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
         }
       }
     } catch {

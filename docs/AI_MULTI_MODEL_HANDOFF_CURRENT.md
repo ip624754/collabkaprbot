@@ -1,45 +1,46 @@
-# AI Multi-Model Handoff — STEP588X Independent Audit Truth
+# AI Multi-Model Handoff — STEP588X1 Current Truth
 
-**Baseline:** STEP588X documentation on runtime STEP588
-**Status:** P1 REMEDIATION REQUIRED / STEP587 HOLD / STEP589 HOLD
+**Baseline:** STEP588X1 source implementation on STEP588X
+**Status:** SOURCE READY / PRODUCTION ROLLOUT PENDING / GLOBAL RELEASE HOLD
 
-## Verified
+## Verified locally
 
-- 621-file repository inspected;
-- 233/233 JavaScript syntax PASS;
-- 121/121 independent source checks PASS;
-- 559 action keys / 553 callback refs / 0 unresolved;
-- generated action registry and migration pack have no drift;
-- no runtime source change in audit STEP.
+- one canonical atomic Stars fulfillment service;
+- direct, admin, cron and QStash convergence;
+- missing ledger/schema fail closed;
+- durable recovery context and one fulfillment receipt per payment;
+- post-commit Redis cleanup;
+- commit-acknowledgement reconciliation;
+- non-regressing payment status helper;
+- 66 executable critical-path assertions PASS;
+- source and dependency gates PASS; migration pack has no drift.
 
-## P1 queue
+## Not verified
 
-1. Payment apply is not atomic with APPLIED state; missing ledger fails open.
-2. Matching/featured recovery context can be deleted before durable apply.
-3. Atomic giveaway auto-draw uses undeclared variables; manual draw is a separate non-atomic mechanism.
-4. Broadcast can resend after Telegram send succeeds but DB sent mark fails.
-5. Admin approval challenge/URL is transferable and not bound to the initiating browser.
-6. Fallback admin code lacks cryptographic generation, throttling and lockout.
+- production migration 048;
+- live Stars canary and replay;
+- real PostgreSQL/serverless failure injection;
+- production Redis/QStash/Telegram behavior.
 
-## Do not do
+## Immediate action
 
-- do not start STEP589A;
-- do not issue STEP587 GO;
-- do not broad-rewrite `bot.js`, `queries.js` or admin SPA;
-- do not add ORM or new API route family;
-- do not infer runtime safety from source-string checks;
-- do not claim live fund loss or exploit without production evidence.
+Apply `docs/operations/STEP588X1_PAYMENT_ROLLOUT_RUNBOOK.md`. After evidence, execute STEP588X2. Do not issue STEP587 GO or resume STEP589.
 
-## Next accepted STEP
+## Hard rules
 
-`STEP588X1 — Payment Fulfillment Atomicity & Missing-Ledger Fail-Closed`
+- migration before runtime;
+- one money core only;
+- no product effect without APPLIED + receipt in one transaction;
+- no APPLIED status regression;
+- no pre-commit Redis cleanup;
+- no production claim without canary/replay evidence.
 
 Canonical references:
 
-- `docs/audit/STEP588X_INDEPENDENT_FULL_PROJECT_AUDIT_2026_07_20.md`;
-- `docs/audit/STEP588X_FINDINGS_REGISTER.csv`;
-- `docs/audit/STEP588X_VERIFICATION_MATRIX.md`;
-- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`.
+- `docs/audit/STEP588X1_PAYMENT_FULFILLMENT_ATOMICITY_REPORT.md`;
+- `docs/operations/STEP588X1_PAYMENT_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X1.md`.
 
 ---
 

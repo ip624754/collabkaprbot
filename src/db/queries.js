@@ -4311,7 +4311,7 @@ export async function insertPayment(input = {}) {
   const status = String(input.status || 'RECEIVED');
 
   if (!userId || !telegramPaymentChargeId || !invoicePayload) {
-    return { inserted: true, ledger: 'skipped_missing_fields' };
+    return { inserted: false, reason: 'missing_fields', ledger: 'unavailable' };
   }
 
   try {
@@ -4330,7 +4330,7 @@ export async function insertPayment(input = {}) {
       return { inserted: false, reason: 'duplicate' };
     }
     if (isMissingRelationError(e, 'payments')) {
-      return { inserted: true, ledger: 'missing_table' };
+      return { inserted: false, reason: 'missing_table', ledger: 'missing_table' };
     }
     throw e;
   }
@@ -4387,6 +4387,21 @@ export async function setPaymentStatus(paymentId, status, note = null) {
             note=$3,
             updated_at=now()
       where id=$1
+      returning *`,
+    [Number(paymentId), st, note]
+  );
+  return r.rows[0] || null;
+}
+
+export async function setPaymentStatusIfNotApplied(paymentId, status, note = null) {
+  const st = String(status || 'ORPHANED').toUpperCase();
+  const r = await pool.query(
+    `update payments
+        set status=$2,
+            note=$3,
+            updated_at=now()
+      where id=$1
+        and status <> 'APPLIED'
       returning *`,
     [Number(paymentId), st, note]
   );

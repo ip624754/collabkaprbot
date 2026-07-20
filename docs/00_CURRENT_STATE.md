@@ -1,3 +1,29 @@
+## STEP588X1 — Payment Fulfillment Atomicity & Missing-Ledger Fail-Closed (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X1 source implementation on top of STEP588X.
+
+Repository truth:
+
+- one canonical PostgreSQL fulfillment service now owns direct Stars, admin, cron and QStash apply paths;
+- product mutation, durable receipt and `payment = APPLIED` are one transaction;
+- missing canonical ledger/schema fails closed;
+- matching/featured/founder recovery context is persisted durably and Redis cleanup is post-commit;
+- commit acknowledgement loss is reconciled from durable receipt evidence; unresolved commit state is reported as unknown;
+- migration 048 is additive and must be applied before runtime deployment;
+- executable payment tests pass locally with 66 assertions;
+- full local QA is source/dependency green, but production migration and Stars behavior are not verified.
+
+**Release decision:** STEP588X1 is source-ready, rollout pending. STEP587 and STEP589 remain HOLD. After controlled production evidence, continue with STEP588X2.
+
+Read first:
+
+- `docs/audit/STEP588X1_PAYMENT_FULFILLMENT_ATOMICITY_REPORT.md`;
+- `docs/operations/STEP588X1_PAYMENT_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X1.md`.
+
+---
+
 ## STEP588X — Independent Full Project Audit (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X audit documentation on top of STEP588. Runtime source remains STEP588.

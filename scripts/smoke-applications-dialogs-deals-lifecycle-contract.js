@@ -80,7 +80,7 @@ assert.ok(botSrc.includes('Сделка открыта. Переписка пр�
 assert.ok(retrySrc.includes('Сделка открыта, а переписка продолжается в боте.'), 'QStash acceptance notification must use the same lifecycle truth');
 
 // Payment surfaces point to offer conversations without changing callbacks or economics.
-assert.ok(starsSrc.includes(".text('💬 Диалоги', `a:bx_inbox|ws:${data.wsId}|p:0|h:bo`)"), 'credits success route must retain the existing dialog callback');
+assert.ok(starsSrc.includes(".text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)"), 'credits success route must retain the existing dialog callback through canonical fulfillment context');
 assert.ok(starsSrc.includes('Дальше: открой «💬 Диалоги» и выбери нужный диалог.'), 'payment copy must name the next action precisely');
 
 console.log('✅ Applications → Dialogs → Deals lifecycle contract OK');

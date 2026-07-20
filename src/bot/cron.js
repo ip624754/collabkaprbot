@@ -861,7 +861,7 @@ async function autoHealOrphanedPayments() {
         if (validationFailedIds.length < 5) validationFailedIds.push(Number(r.id));
         if (validationFailedReasons.length < 3) validationFailedReasons.push(rr);
         try {
-          await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`);
+          await db.setPaymentStatusIfNotApplied(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`);
         } catch {}
         skipped += 1;
         continue;
@@ -875,6 +875,7 @@ async function autoHealOrphanedPayments() {
         totalAmount: Number(r.total_amount || 0),
         currency: String(r.currency || 'XTR'),
         telegramPaymentChargeId: String(r.telegram_payment_charge_id || ''),
+        validation: v,
       });
 
       if (fb && fb.applied) {
@@ -905,7 +906,7 @@ async function autoHealOrphanedPayments() {
           if (manualRequiredIds.length < 5) manualRequiredIds.push(Number(r.id));
           if (manualRequiredReasons.length < 3) manualRequiredReasons.push(rr);
           try {
-            await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`);
+            await db.setPaymentStatusIfNotApplied(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`);
           } catch {}
         }
       }

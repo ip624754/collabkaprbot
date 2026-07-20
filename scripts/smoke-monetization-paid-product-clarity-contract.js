@@ -24,7 +24,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const botSrc = read('src/bot/bot.js');
 const starsSrc = read('src/bot/payments/starsHandlers.js');
 const helpersSrc = read('src/bot/helpers.js');
-const fallbackSrc = read('src/bot/payments_fallback.js');
+const fallbackSrc = read('src/bot/payments_fallback.js') + '\n' + read('src/bot/paymentFulfillmentCore.js');
 const cronSrc = read('src/bot/cron.js');
 const qstashSrc = read('api/qstash/monetization-retry.js');
 const configSrc = read('src/lib/config.js');
@@ -114,8 +114,8 @@ assert.ok(!starsSrc.includes('Brand Plan Pro'));
 assert.ok(helpersSrc.includes("else if (src === 'CREDITS') label = 'Кредиты';"));
 assert.ok(!helpersSrc.includes("label = 'Brand Pass'"));
 
-assert.ok(fallbackSrc.includes("kind: 'pro', wsId: Number(wsId), days: Number(days)"));
-assert.ok(fallbackSrc.includes("kind: 'brand_plan', plan: String(planId), days: Number(days), credits: Number(credits)"));
+assert.ok(fallbackSrc.includes("kind: 'pro', wsId, days"));
+assert.ok(fallbackSrc.includes("kind: 'brand_plan', plan: planId, days, credits, brandCreditsBalance: balance"));
 assert.ok(cronSrc.includes('buildRecoveredPaymentMessage({'));
 assert.ok(qstashSrc.includes('buildRecoveredPaymentMessage({'));
 
@@ -123,8 +123,9 @@ for (const invariant of [
   "const payloadPrefix = `pro_${wsId}_${u.id}_`;",
   "const payloadPrefix = `brand_${u.id}_${pack.id}_`;",
   "const payloadPrefix = `bplan_${u.id}_${plan}_`;",
-  "const payload = `match_${u.id}_${tier.id}_${token}`;",
-  "const payload = `feat_${u.id}_${d.days}_${token}`;",
+  "const payloadPrefix = `match_${u.id}_${tier.id}_`;",
+  "const payloadPrefix = `feat_${u.id}_${d.days}_`;",
+  "const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);",
   "a:ws_pro_buy|ws:${wsId}",
   "a:brand_buy|ws:${wsId}",
   "a:brand_plan_buy|ws:${wsId}",
@@ -133,10 +134,11 @@ for (const invariant of [
 ]) assert.ok(botSrc.includes(invariant), `Payment callback/payload invariant missing: ${invariant}`);
 
 for (const mechanism of [
-  'verifyPayloadHmac(payload)',
-  'applyPaymentFallbackAtomicTx({',
+  'verifyPayloadHmac(payloadRaw, cfg)',
+  'applyPaymentAtomicTx({',
   "status='APPLIED'",
-  "return { applied: false, reason: 'amount_mismatch' }",
+  "reason: 'ledger_amount_mismatch'",
+  'insert into payment_fulfillments',
 ]) assert.ok(fallbackSrc.includes(mechanism), `Exactly-once/payment safety mechanism missing: ${mechanism}`);
 
 console.log('✅ smoke monetization paid-product clarity contract OK');

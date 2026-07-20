@@ -16,8 +16,9 @@ Before runtime remediation:
 ## STEP588X1 — Payment Fulfillment Atomicity & Missing-Ledger Fail-Closed
 
 **Mode:** CRITICAL
-**Expected risk score:** 17/20
+**Risk score:** 18/20
 **Priority:** first
+**Status:** IMPLEMENTED LOCALLY / PRODUCTION ROLLOUT PENDING
 
 ### Scope
 
@@ -51,6 +52,15 @@ Before runtime remediation:
 ### Exit gate
 
 No financial/product side effect can commit without the same transaction committing payment APPLIED and result evidence.
+
+### STEP588X1 implementation evidence
+
+- canonical service: `src/bot/paymentFulfillmentCore.js`;
+- production adapter: `src/bot/payments_fallback.js`;
+- additive schema: `migrations/048_payment_fulfillment_atomicity.sql`;
+- executable regression: `scripts/test-payment-fulfillment-critical.js`;
+- direct/admin/cron/QStash paths converge on the service;
+- source exit gate is met locally; production exit gate remains open until migration, canary and replay evidence.
 
 ## STEP588X2 — Giveaway Draw Correctness & Single Atomic Path
 

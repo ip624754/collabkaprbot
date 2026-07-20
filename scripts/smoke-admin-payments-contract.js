@@ -55,7 +55,7 @@ const renderAdminPaymentViewSrc = extractBetween(
 const adminApplyPaymentSrc = extractBetween(
   botSource,
   'async function adminApplyPayment(ctx, adminUserRow, paymentId, backStatus = \'ORPHANED\', page = 0) {',
-  '\n\n\nasync function adminAutoHealPayments(ctx, adminUserRow, backStatus = \'ORPHANED\', page = 0) {'
+  '\n\nasync function adminAutoHealPayments(ctx, adminUserRow, backStatus = \'ORPHANED\', page = 0) {'
 );
 
 const adminAutoHealPaymentsSrc = extractBetween(
@@ -83,8 +83,8 @@ assert.ok(renderAdminPaymentsSrc.includes("kb.row().text('⬅️ Операци�
 assert.ok(renderAdminPaymentsSrc.includes('`💳 <b>Payments</b> • <b>${escapeHtml(status)}</b>'), 'Admin → Payments list must keep stable title');
 
 assert.ok(renderAdminPaymentViewSrc.includes("await safeEditOrReply(ctx, '⚠️ Платеж не найден.'"), 'Admin → Payment view must keep missing-payment fallback');
-assert.ok(renderAdminPaymentViewSrc.includes("const canApply = (p.status === 'ORPHANED' || p.status === 'ERROR' || p.status === 'RECEIVED') &&"), 'Admin → Payment view must keep manual-apply status gate');
-assert.ok(renderAdminPaymentViewSrc.includes("payload.startsWith('pro_') || payload.startsWith('brand_') || payload.startsWith('bplan_') || payload.startsWith('offpub_')"), 'Admin → Payment view must keep payload-prefix allowlist for manual apply');
+assert.ok(renderAdminPaymentViewSrc.includes("const canApply = (p.status === 'ORPHANED' || p.status === 'ERROR' || p.status === 'RECEIVED' || p.status === 'APPLYING') &&"), 'Admin → Payment view must keep manual-apply status gate including stale APPLYING recovery');
+assert.ok(renderAdminPaymentViewSrc.includes("['pro_', 'brand_', 'bplan_', 'match_', 'feat_', 'founder_', 'offpub_'].some((prefix) => payload.startsWith(prefix))"), 'Admin → Payment view must keep explicit canonical payload-prefix allowlist for manual apply');
 assert.ok(renderAdminPaymentViewSrc.includes("if (canApply) kb.text('✅ Apply (manual)', `a:admin_pay_apply|id:${p.id}|st:${backStatus}|p:${page}`).row();"), 'Admin → Payment view must keep manual apply button');
 assert.ok(renderAdminPaymentViewSrc.includes("kb.text('⬅️ К списку', `a:admin_payments|st:${backStatus}|p:${page}`).row();"), 'Admin → Payment view must keep back-to-list button');
 assert.ok(renderAdminPaymentViewSrc.includes("kb.text('⬅️ Операции', 'a:admin_ops');"), 'Admin → Payment view must keep back-to-Ops button');
@@ -100,14 +100,18 @@ assert.ok(renderAdminPaymentViewSrc.includes('Note:'), 'Admin → Payment view m
 
 assert.ok(adminApplyPaymentSrc.includes("await ctx.answerCallbackQuery({ text: 'Платеж не найден.', show_alert: true });"), 'Admin → Payments apply must keep missing-payment alert');
 assert.ok(adminApplyPaymentSrc.includes("await ctx.answerCallbackQuery({ text: 'Уже применён ✅', show_alert: true });"), 'Admin → Payments apply must keep already-applied alert');
-assert.ok(adminApplyPaymentSrc.includes('const v = await _validateStarsPaymentStrict({'), 'Admin → Payments apply must keep strict validation');
+assert.ok(adminApplyPaymentSrc.includes('validation = await _validateStarsPaymentStrict({'), 'Admin → Payments apply must keep strict validation');
 assert.ok(adminApplyPaymentSrc.includes("manual_apply_blocked:"), 'Admin → Payments apply must keep blocked-note prefix');
 assert.ok(adminApplyPaymentSrc.includes("'⛔️ Apply заблокирован: счёт невалидный/не совпадает сумма.'"), 'Admin → Payments apply must keep invalid-invoice alert');
 assert.ok(adminApplyPaymentSrc.includes("'⛔️ Apply заблокирован: ошибка валидации.'"), 'Admin → Payments apply must keep validation-exception alert');
-assert.ok(adminApplyPaymentSrc.includes('const claimed = await db.claimPaymentApplying(row.id, adminUserRow.id);'), 'Admin → Payments apply must still claim DB fulfillment before apply');
-assert.ok(adminApplyPaymentSrc.includes("'⏳ Платёж уже обрабатывается или применён.'"), 'Admin → Payments apply must keep already-processing alert');
-assert.ok(adminApplyPaymentSrc.includes("'Эта услуга не поддерживает apply.'"), 'Admin → Payments apply must keep unsupported-payload alert');
-assert.ok(adminApplyPaymentSrc.includes('manual_apply_error:'), 'Admin → Payments apply must keep error note prefix');
+assert.ok(adminApplyPaymentSrc.includes('const result = await applyPaymentFallbackNoSession({'), 'Admin → Payments apply must use the canonical atomic fulfillment service');
+assert.ok(adminApplyPaymentSrc.includes('validation,'), 'Admin → Payments apply must pass strict validation proof to the canonical service');
+assert.ok(!adminApplyPaymentSrc.includes('db.claimPaymentApplying('), 'Admin → Payments apply must not pre-claim outside the canonical transaction');
+assert.ok(!adminApplyPaymentSrc.includes('db.addBrandCredits('), 'Admin → Payments apply must not mutate paid credits outside the canonical transaction');
+assert.ok(!adminApplyPaymentSrc.includes('db.activateBrandPlan('), 'Admin → Payments apply must not mutate Brand Plan outside the canonical transaction');
+assert.ok(!adminApplyPaymentSrc.includes('db.activateWorkspacePro('), 'Admin → Payments apply must not mutate PRO outside the canonical transaction');
+assert.ok(adminApplyPaymentSrc.includes("result?.reason === 'locked'"), 'Admin → Payments apply must keep concurrent-processing response');
+assert.ok(adminApplyPaymentSrc.includes('manual_atomic_apply_failed:'), 'Admin → Payments apply must keep canonical failure note prefix');
 assert.ok(adminApplyPaymentSrc.includes('Ошибка apply:'), 'Admin → Payments apply must keep error alert text');
 
 assert.ok(adminAutoHealPaymentsSrc.includes('const fbOn = await isPaymentsFallbackApplyEnabled();'), 'Admin → Payments auto-heal must keep fallback toggle check');
@@ -116,8 +120,9 @@ assert.ok(adminAutoHealPaymentsSrc.includes("const batch = Math.max(0, Number(CF
 assert.ok(adminAutoHealPaymentsSrc.includes("'Auto-heal batch=0.'"), 'Admin → Payments auto-heal must keep batch=0 alert');
 assert.ok(adminAutoHealPaymentsSrc.includes("const rows = await db.listPaymentsByStatus('ORPHANED', 50, 0);"), 'Admin → Payments auto-heal must only list ORPHANED payments');
 assert.ok(adminAutoHealPaymentsSrc.includes("const miss = (rows || []).filter(r => String(r.note || '').includes('missing_session'));"), 'Admin → Payments auto-heal must keep missing_session filter');
-assert.ok(adminAutoHealPaymentsSrc.includes('const claimed = await db.claimPaymentApplying(Number(r.id), adminUserRow?.id || Number(r.user_id));'), 'Admin → Payments auto-heal must claim DB fulfillment before fallback apply');
-assert.ok(adminAutoHealPaymentsSrc.includes('const fb = await applyPaymentFallbackNoSession({'), 'Admin → Payments auto-heal must use fallback apply helper');
+assert.ok(!adminAutoHealPaymentsSrc.includes('db.claimPaymentApplying('), 'Admin → Payments auto-heal must not pre-claim outside the canonical transaction');
+assert.ok(adminAutoHealPaymentsSrc.includes('const fb = await applyPaymentFallbackNoSession({'), 'Admin → Payments auto-heal must use canonical apply helper');
+assert.ok(adminAutoHealPaymentsSrc.includes('validation: v,'), 'Admin → Payments auto-heal must pass strict validation proof');
 assert.ok(adminAutoHealPaymentsSrc.includes("msg = '✅ Оплата найдена и применена автоматически.';"), 'Admin → Payments auto-heal must keep user-notification text');
 assert.ok(adminAutoHealPaymentsSrc.includes('autoheal_manual_required:'), 'Admin → Payments auto-heal must keep manual-required note prefix');
 assert.ok(adminAutoHealPaymentsSrc.includes('Auto-heal: applied ${applied}, failed ${failed}, skipped ${skipped}, validation ${validationFailed}, manual ${manualRequired}'), 'Admin → Payments auto-heal must keep summary alert text');

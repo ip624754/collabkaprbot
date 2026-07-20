@@ -86,665 +86,322 @@ export function registerStarsPaymentsHandlers(deps = {}) {
   });
   
   bot.on('message:successful_payment', async (ctx) => {
-  const sp = ctx.message.successful_payment;
-  const invoicePayload = sp?.invoice_payload || '';
-  if (!invoicePayload) return;
-  
-  // ensure user exists
-  const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
-  
-  const kind = _safeKindFromPayload(invoicePayload);
-  
-  db.trackEvent('payment_success', { userId: u.id, meta: { kind, payload: invoicePayload, amount: sp.total_amount, currency: sp.currency || 'XTR' } });
-  
-  const tgChargeId = String(sp.telegram_payment_charge_id || '');
-  
-  // 1) Old ledger: protects from Telegram retries/duplicates
-  // NOTE: do NOT early-return on duplicates — we still want to ensure the canonical payments
-  // ledger has the record and fulfillment can be retried safely.
-  await db.recordStarsPayment({
-    userId: u.id,
-    kind,
-    invoicePayload,
-    currency: sp.currency,
-    totalAmount: sp.total_amount,
-    telegramPaymentChargeId: sp.telegram_payment_charge_id,
-    providerPaymentChargeId: sp.provider_payment_charge_id,
-    raw: sp
-  });
-  
-  // 2) New payments ledger (admin apply + statuses)
-  const pay = await db.insertPayment({
-    userId: u.id,
-    kind,
-    invoicePayload,
-    currency: sp.currency,
-    totalAmount: sp.total_amount,
-    telegramPaymentChargeId: sp.telegram_payment_charge_id,
-    providerPaymentChargeId: sp.provider_payment_charge_id,
-    raw: sp,
-    status: 'RECEIVED'
-  });
-  let paymentId = pay?.id || null;
-  if (pay && pay.inserted === false) {
-    try {
-      const existing = await db.getPaymentByTelegramChargeId(tgChargeId);
-      paymentId = existing?.id || paymentId;
-      if (existing && String(existing.status || '').toUpperCase() === 'APPLIED') {
-        await ctx.reply('✅ Платеж уже обработан.');
-        return;
-      }
-    } catch {
-      await ctx.reply('✅ Платеж уже обработан.');
-      return;
-    }
-  }
-  
-  const markStatus = async (status, note) => {
-    if (!paymentId) return null;
-    try {
-      return await db.setPaymentStatus(paymentId, status, note);
-    } catch {
-      return null;
-    }
-  };
-  const markApplied = async (note) => {
-    if (!paymentId) return null;
-    try {
-      return await db.markPaymentApplied(paymentId, u.id, note);
-    } catch {
-      return null;
-    }
-  };
-  
-  const notifyPayOps = async (reason, extraLines = []) => {
-    try {
-      const userTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
-      const amount = sp.total_amount;
-      const currency = sp.currency || 'XTR';
-  
-      const extra = [];
-      extra.push(`Kind: ${kind}`);
-      extra.push(`Payload: ${invoicePayload}`);
-      extra.push(`From: ${userTag} (userId=${u.id})`);
-      extra.push(`Amount: ${amount} ${currency}`);
-      extra.push(`TG charge: ${tgChargeId || '-'}`);
-      extra.push(`PaymentId: ${paymentId || '-'}`);
-      for (const x of (Array.isArray(extraLines) ? extraLines : [])) {
-        const s = String(x || '').trim();
-        if (s) extra.push(s);
-      }
-  
-      // Anti-spam digest: first alert in a window is sent immediately, the rest is summarized.
-      return await queueOpsAlert(ctx.api, {
-        group: 'ops',
-        reason: String(reason || 'pay_error'),
-        title: 'Payments',
-        paymentId: paymentId || null,
-        userId: u.id,
-        tgId: ctx.from?.id || null,
-        kind: 'payments',
-        payload: invoicePayload,
-        extra,
-      });
-    } catch {
-      return { sent: 0, error: 'notify_failed' };
-    }
-  };
-  
-  const isMatchPay = invoicePayload.startsWith('match_');
-  const isFeatPay = invoicePayload.startsWith('feat_');
-  const isOffpubPay = invoicePayload.startsWith('offpub_');
-  
-  // Runtime override: payments fallback apply (env OR Redis TTL flag).
-  const payFbApplyEnabled = await isPaymentsFallbackApplyEnabled();
-  
-  // Hardening: validate Stars amount/currency/payload before any fulfillment.
-  // Pre-checkout already rejects invalid invoices, but this covers retries/edge cases.
-  {
-    const v = await _validateStarsPaymentStrict({
-      payload: invoicePayload,
-      currency: sp.currency || 'XTR',
-      totalAmount: sp.total_amount,
-      payerUserId: u.id,
+    const sp = ctx.message?.successful_payment;
+    const invoicePayload = String(sp?.invoice_payload || '');
+    if (!invoicePayload) return;
+
+    const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
+    const kind = _safeKindFromPayload(invoicePayload);
+    const tgChargeId = String(sp.telegram_payment_charge_id || '');
+    let paymentId = null;
+
+    db.trackEvent('payment_success', {
+      userId: u.id,
+      meta: { kind, payload: invoicePayload, amount: sp.total_amount, currency: sp.currency || 'XTR' },
     });
-  
-    if (!v.ok) {
-      const note = `validation_failed:${String(v.reason || 'unknown')} exp:${Number(v.expected || 0)} got:${Number(v.paid || sp.total_amount || 0)} cur:${String(sp.currency || 'XTR')}`;
-      await markStatus('ORPHANED', note.slice(0, 240));
-      db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'validation_failed', v } });
-      await notifyPayOps('validation_failed', [
-        `Reason: ${String(v.reason || 'unknown')}`,
-        `Expected: ${Number(v.expected || 0)} ${String(sp.currency || 'XTR')}`,
-        `Paid: ${Number(v.paid || sp.total_amount || 0)} ${String(sp.currency || 'XTR')}`,
-      ]);
-      await ctx.reply('✅ Оплата получена. Но я не смог безопасно подтвердить счёт. Нажми /paysupport — поможем быстро.');
-      return;
-    }
-  }
-  
-  // Official channel posts are always ORPHANED post-payment (moderation).
-  if (isOffpubPay) {
-    await markStatus('ORPHANED', 'postpay_orphaned');
-    db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'postpay_orphaned' } });
-  
-    let offerId = 0;
-    let days = 0;
-    let offer = null;
-    try {
-      const parts = String(invoicePayload).split('_');
-      offerId = Number(parts[2]);
-      days = Number(parts[3] || CFG.OFFICIAL_MANUAL_DEFAULT_DAYS);
-      const channelChatId = Number(CFG.OFFICIAL_CHANNEL_ID || 0);
-  
-      if (offerId && channelChatId) {
-        await db.upsertOfficialPostDraft({
-          offerId,
-          channelChatId,
-          placementType: 'PAID',
-          paymentId,
-          slotDays: days
-        });
-      }
-      offer = offerId ? await db.getBarterOfferPublic(offerId) : null;
-    } catch (_) { /* ignore */ }
-  
-    // Notify super admins with direct actions (queue + publish + card).
-    try {
-      const wsId = offer?.workspace_id ? Number(offer.workspace_id) : 0;
-      const fromTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
-      await notifyOfficialQueueAdmins(ctx.api, {
-        kind: 'paid',
-        offerId,
-        wsId,
-        offerTitle: offer?.title || '',
-        wsTitle: offer?.ws_title || '',
-        channelUsername: offer?.channel_username || '',
-        days,
-        paymentId,
-        fromTag
-      });
-    } catch (_) { /* ignore */ }
-  
-    // User confirmation + quick access to status screen.
-    try {
-      const wsId = offer?.workspace_id ? Number(offer.workspace_id) : 0;
-      const kb = new InlineKeyboard();
-      if (wsId && offerId) kb.text('📣 Статус офиц.канала', `a:off_manage|ws:${wsId}|o:${offerId}|p:0|back:my`).row();
-      kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
-  
-      await ctx.reply('✅ Оплата получена. Оффер передан модератору. Публикация начнётся только после одобрения.', {
-        reply_markup: kb
-      });
-    } catch {
-      await ctx.reply('✅ Оплата получена. Оффер передан модератору. Публикация начнётся только после одобрения.');
-    }
-  
-    return;
-  }
-  
-  // Idempotency hardening (serverless + Telegram retries):
-  // claim payment fulfillment in DB to prevent double-apply races.
-  if (paymentId) {
-    const claimed = await db.claimPaymentApplying(paymentId, u.id);
-    if (!claimed) {
-      // Either already APPLIED, or being processed by another runner.
+
+    const notifyPayOps = async (reason, extraLines = []) => {
       try {
-        const existing = tgChargeId ? await db.getPaymentByTelegramChargeId(tgChargeId) : null;
+        const userTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
+        const extra = [
+          `Kind: ${kind}`,
+          `Payload: ${invoicePayload}`,
+          `From: ${userTag} (userId=${u.id})`,
+          `Amount: ${sp.total_amount} ${sp.currency || 'XTR'}`,
+          `TG charge: ${tgChargeId || '-'}`,
+          `PaymentId: ${paymentId || '-'}`,
+          ...(Array.isArray(extraLines) ? extraLines.map((x) => String(x || '').trim()).filter(Boolean) : []),
+        ];
+        return await queueOpsAlert(ctx.api, {
+          group: 'ops', reason: String(reason || 'pay_error'), title: 'Payments',
+          paymentId: paymentId || null, userId: u.id, tgId: ctx.from?.id || null,
+          kind: 'payments', payload: invoicePayload, extra,
+        });
+      } catch {
+        return { sent: 0, error: 'notify_failed' };
+      }
+    };
+
+    // Legacy Stars receipt is supplementary. The canonical payments ledger below is mandatory.
+    try {
+      await db.recordStarsPayment({
+        userId: u.id, kind, invoicePayload, currency: sp.currency,
+        totalAmount: sp.total_amount,
+        telegramPaymentChargeId: sp.telegram_payment_charge_id,
+        providerPaymentChargeId: sp.provider_payment_charge_id,
+        raw: sp,
+      });
+    } catch (e) {
+      await notifyPayOps('legacy_stars_ledger_error', [`Error: ${String(e?.message || e).slice(0, 160)}`]);
+    }
+
+    let pay = null;
+    try {
+      pay = await db.insertPayment({
+        userId: u.id, kind, invoicePayload, currency: sp.currency,
+        totalAmount: sp.total_amount,
+        telegramPaymentChargeId: sp.telegram_payment_charge_id,
+        providerPaymentChargeId: sp.provider_payment_charge_id,
+        raw: sp, status: 'RECEIVED',
+      });
+
+      paymentId = pay?.id || null;
+      if (!paymentId && pay?.inserted === false && tgChargeId) {
+        const existing = await db.getPaymentByTelegramChargeId(tgChargeId);
+        paymentId = existing?.id || null;
         if (existing && String(existing.status || '').toUpperCase() === 'APPLIED') {
           await ctx.reply('✅ Платеж уже обработан.');
           return;
         }
-      } catch {
-        // ignore
       }
-      await ctx.reply('⏳ Платёж уже обрабатывается. Если через пару минут не применится — нажми /paysupport.');
-      return;
-    }
-  }
-  
-  const { autoApply } = await getPaymentsRuntimeFlags();
-  if (!autoApply) {
-    await markStatus('ORPHANED', 'auto_apply_paused');
-    db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'auto_apply_paused' } });
-    await notifyPayOps('auto_apply_paused');
-    await ctx.reply('✅ Платёж получен. Автовыдача сейчас на паузе. Если нужно — нажми «💬 Поддержка».');
-    return;
-  }
-  
-  // Умный подбор auto-apply (paid) — gated by env + runtime flag
-  if (isMatchPay) {
-    try {
-      const parts = String(invoicePayload).split('_');
-      const payUserId = Number(parts[1] || 0);
-      const tierId = String(parts[2] || 'S').toUpperCase();
-      const token = parts.slice(3).join('_');
-  
-      if (!payUserId || Number(payUserId) !== Number(u.id)) {
-        await markStatus('ORPHANED', 'user_mismatch');
-        await notifyPayOps('user_mismatch');
-        await ctx.reply('✅ Платёж получен. Не удалось связать оплату с аккаунтом — нажми «💬 Поддержка» или напиши /paysupport.');
-        return;
-      }
-  
-      const tier = MATCH_TIERS.find(t => String(t.id) === String(tierId)) || MATCH_TIERS[0];
-  
-      let wsId = 0;
-      let ret = '';
-      let bpr = '';
-      try {
-        const data = token ? await redis.get(k(['pay_match', token])) : null;
-        if (data) {
-          wsId = Number(data.wsId || 0);
-          if (Object.prototype.hasOwnProperty.call(data, 'ret')) ret = String(data.ret || '');
-          if (Object.prototype.hasOwnProperty.call(data, 'bpr')) bpr = String(data.bpr || '');
-          await redis.del(k(['pay_match', token]));
-        }
-      } catch {}
-  
-      const paid = Number(sp.total_amount || tier.stars || 0);
-      const req = await db.createMatchingRequest(u.id, tier.id, paid);
-      await setExpectText(ctx.from.id, { type: 'match_brief', requestId: req.id, wsId, count: tier.count, ret, bpr });
-      await markApplied(`auto_apply_match:req:${req.id}`);
-  
-      const kb = new InlineKeyboard()
-        .text('🎯 Умный подбор', cbJoin('a:match_home', { ws: wsId, ret, bpr }))
-        .row()
-        .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
-        .text('📋 Меню', 'a:menu')
-        .text('🏠 Домой', 'a:home');
-  
-      await ctx.reply(
-        `✅ <b>Умный подбор оплачен</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>.\nРезультат: один подбор до <b>${tier.count}</b> каналов.\n\nПришли бриф одним сообщением: ниша, гео, аудитория и формат.`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
-      return;
     } catch (e) {
-      const em = String(e?.message || e).slice(0, 300);
-      await markStatus('ERROR', `auto_apply_error: ${em.slice(0, 120)}`);
-      await notifyPayOps('auto_apply_error', [`Error: <code>${escapeHtml(em)}</code>`]);
-      await ctx.reply('✅ Оплата получена. Не смог автоматически запустить Умный подбор. Нажми «💬 Поддержка» — я уже получил алерт.');
+      await notifyPayOps('payment_ledger_unavailable', [`Error: ${String(e?.message || e).slice(0, 160)}`]);
+      await ctx.reply('✅ Оплата получена, но выдача временно остановлена: платёжный журнал недоступен. Нажми /paysupport — данные оплаты сохранены в Telegram.');
       return;
     }
-  }
-  
-  // Продвижение auto-apply (paid) — gated by env flag
-  if (isFeatPay) {
+
+    if (!paymentId) {
+      await notifyPayOps('payment_ledger_unavailable', [`Ledger: ${String(pay?.ledger || pay?.reason || 'no_payment_id')}`]);
+      await ctx.reply('✅ Оплата получена, но выдача временно остановлена: платёжный журнал недоступен. Нажми /paysupport — данные оплаты сохранены в Telegram.');
+      return;
+    }
+
+    const markStatus = async (status, note) => {
+      try { return await db.setPaymentStatusIfNotApplied(paymentId, status, note); } catch { return null; }
+    };
+
+    let validation;
     try {
-      const parts = String(invoicePayload).split('_');
-      const payUserId = Number(parts[1] || 0);
-      const days = Number(parts[2] || 1);
-      const token = parts.slice(3).join('_');
-  
-      if (!payUserId || Number(payUserId) !== Number(u.id)) {
-        await markStatus('ORPHANED', 'user_mismatch');
-        await notifyPayOps('user_mismatch');
-        await ctx.reply('✅ Платёж получен. Не удалось связать оплату с аккаунтом — нажми «💬 Поддержка» или напиши /paysupport.');
-        return;
-      }
-  
-      const dur = FEATURED_DURATIONS.find(d => Number(d.days) === Number(days)) || FEATURED_DURATIONS.find(d => Number(d.days) === 7) || FEATURED_DURATIONS[0];
-  
-      let wsId = 0;
-      let ret = '';
-      let bpr = '';
+      validation = await _validateStarsPaymentStrict({
+        payload: invoicePayload,
+        currency: sp.currency || 'XTR',
+        totalAmount: sp.total_amount,
+        payerUserId: u.id,
+      });
+    } catch {
+      validation = { ok: false, reason: 'validation_exception' };
+    }
+
+    if (!validation?.ok) {
+      const note = `validation_failed:${String(validation?.reason || 'unknown')} exp:${Number(validation?.expected || 0)} got:${Number(sp.total_amount || 0)} cur:${String(sp.currency || 'XTR')}`;
+      await markStatus('ORPHANED', note.slice(0, 240));
+      db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'validation_failed', validation } });
+      await notifyPayOps('validation_failed', [`Reason: ${String(validation?.reason || 'unknown')}`]);
+      await ctx.reply('✅ Оплата получена. Но я не смог безопасно подтвердить счёт. Нажми /paysupport — поможем быстро.');
+      return;
+    }
+
+    // Official-channel placement remains a moderated/manual flow; no product is auto-fulfilled here.
+    if (invoicePayload.startsWith('offpub_')) {
+      await markStatus('ORPHANED', 'postpay_orphaned');
+      db.trackEvent('payment_orphaned', { userId: u.id, meta: { kind, payload: invoicePayload, reason: 'postpay_orphaned' } });
+
+      let offerId = 0;
+      let days = 0;
+      let offer = null;
       try {
-        const data = token ? await redis.get(k(['pay_feat', token])) : null;
-        if (data) {
-          wsId = Number(data.wsId || 0);
-          if (Object.prototype.hasOwnProperty.call(data, 'ret')) ret = String(data.ret || '');
-          if (Object.prototype.hasOwnProperty.call(data, 'bpr')) bpr = String(data.bpr || '');
-          await redis.del(k(['pay_feat', token]));
+        const parts = invoicePayload.split('_');
+        offerId = Number(parts[2]);
+        days = Number(parts[3] || CFG.OFFICIAL_MANUAL_DEFAULT_DAYS);
+        const channelChatId = Number(CFG.OFFICIAL_CHANNEL_ID || 0);
+        if (offerId && channelChatId) {
+          await db.upsertOfficialPostDraft({ offerId, channelChatId, placementType: 'PAID', paymentId, slotDays: days });
         }
+        offer = offerId ? await db.getBarterOfferPublic(offerId) : null;
       } catch {}
-  
-      const paid = Number(sp.total_amount || dur.stars || 0);
-      const f = await db.createFeaturedPlacement(u.id, dur.days, paid);
-      await setExpectText(ctx.from.id, { type: 'feat_content', featuredId: f.id, wsId, ret, bpr });
-      await markApplied(`auto_apply_feat:id:${f.id}`);
-  
-      const kb = new InlineKeyboard()
-        .text('🔥 Продвижение', cbJoin('a:feat_home', { ws: wsId, ret, bpr }))
-        .row()
-        .text('⬅️ Назад', mfBackCb(wsId, ret, bpr))
-        .text('📋 Меню', 'a:menu')
-        .text('🏠 Домой', 'a:home');
-  
-      await ctx.reply(
-        `✅ <b>Продвижение оплачено</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>.\nСрок размещения: <b>${dur.days}</b> дн.\n\nПришли контент:\n• первая строка — заголовок\n• затем описание\n• последняя строка — контакт`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
-      return;
-    } catch (e) {
-      const em = String(e?.message || e).slice(0, 300);
-      await markStatus('ERROR', `auto_apply_error: ${em.slice(0, 120)}`);
-      await notifyPayOps('auto_apply_error', [`Error: <code>${escapeHtml(em)}</code>`]);
-      await ctx.reply('✅ Оплата получена. Не смог автоматически запустить Продвижение. Нажми «💬 Поддержка» — я уже получил алерт.');
-      return;
-    }
-  }
-  
-  
-  // Founder Sale activation
-  if (invoicePayload.startsWith('founder_')) {
-    try {
-      const parts = String(invoicePayload || '').split('_');
-      const productId = parts.slice(0, 3).join('_');
-      const payUserId = Number(parts[3] || 0);
-      const token = parts.slice(4).join('_');
-  
-      const data = token ? await redis.get(k(['pay_founder', token])) : null;
-      const ok =
-        data &&
-        Number(data.userId) === payUserId &&
-        Number(data.tgId) === Number(ctx.from.id) &&
-        String(data.productId || '') === productId;
-  
-      if (!ok) {
-        // Fallback: apply by payload even if Redis pay_* session expired.
-        // Safe for founder_brand_* (no ws context needed). founder_creator_* still requires wsId from session.
-        if (payFbApplyEnabled && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
-          try {
-            const fb = await applyPaymentFallbackNoSession({
-              paymentId,
-              paymentUserId: u.id,
-              invoicePayload: invoicePayload,
-              appliedByUserId: u.id,
-              totalAmount: sp.total_amount,
-              currency: sp.currency || 'XTR',
-              telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
-            });
-            if (fb && fb.applied) {
-              const kb = new InlineKeyboard()
-                .text('⭐️ Brand Plan', 'a:brand_plan|ws:0')
-                .text('💳 Кредиты', 'a:brand_pass|ws:0')
-                .row()
-                .text('📋 Меню', 'a:menu')
-                .text('🏠 Домой', 'a:home');
-              let msg = `✅ ${MONETIZATION_LABELS.FOUNDER_SALE} применён.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.`
-              if (fb.kind === 'founder_brand') {
-                msg += `
-  
-  ⭐️ Brand Plan «Про» активирован на ${fb.days || 0} дней.`;
-                if (fb.credits > 0) msg += `
-  💳 +${fb.credits} кредитов начислено.`;
-              }
-              await ctx.reply(msg, { reply_markup: kb });
-              return;
-            }
-          } catch { /* ignore */ }
-        }
-  
-        await markStatus('ORPHANED', 'missing_session');
-        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && payFbApplyEnabled;
-        const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
-        await ctx.reply(
-          `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и нажми «💬 Поддержка».`
-        );
-        return;
-      }
-  
-      const durationDays = Number(data.durationDays || 0) || 0;
-      const credits = Number(data.credits || 0) || 0;
-      const wsId = Number(data.wsId || 0) || 0;
-  
-      if (productId === 'founder_creator_12m') {
-        if (!wsId) throw new Error('Missing wsId');
-        await db.activateWorkspacePro(wsId, durationDays || 365);
-        try {
-          await db.auditWorkspace(wsId, payUserId, 'pro.activated.founder', {
-            duration_days: durationDays || 365,
-            currency: sp.currency,
-            total_amount: sp.total_amount,
-            telegram_payment_charge_id: sp.telegram_payment_charge_id
-          });
-        } catch {}
-      } else {
-        const d = durationDays || (productId === 'founder_brand_3m' ? 90 : 365);
-        await db.activateBrandPlan(payUserId, 'pro', d);
-        if (credits > 0) {
-          const newBalance = await db.addBrandCredits(payUserId, credits);
-          try { await setBrandCreditsCache(payUserId, newBalance); } catch {}
-        }
-      }
-  
-      try { await redis.del(k(['pay_founder', token])); } catch {}
-      await markApplied(`auto_apply_founder:${productId}`);
-  
+
+      try {
+        const wsId = offer?.workspace_id ? Number(offer.workspace_id) : 0;
+        const fromTag = ctx.from?.username ? `@${ctx.from.username}` : `tg:${ctx.from?.id}`;
+        await notifyOfficialQueueAdmins(ctx.api, {
+          kind: 'paid', offerId, wsId, offerTitle: offer?.title || '', wsTitle: offer?.ws_title || '',
+          channelUsername: offer?.channel_username || '', days, paymentId, fromTag,
+        });
+      } catch {}
+
+      const wsId = offer?.workspace_id ? Number(offer.workspace_id) : 0;
       const kb = new InlineKeyboard();
-      let msg = `✅ ${MONETIZATION_LABELS.FOUNDER_SALE} применён.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.`
-      if (productId === 'founder_creator_12m') {
-        msg += `\n\n${MONETIZATION_LABELS.CREATOR_PRO} активирован на ${durationDays || 365} дней.`;
-        if (wsId) kb.text('⭐️ PRO', `a:ws_pro|ws:${wsId}`).text('📣 Мои каналы', 'a:ws_list').row();
-      } else {
-        const d = durationDays || (productId === 'founder_brand_3m' ? 90 : 365);
-        msg += `\n\n⭐️ Brand Plan «Про» активирован на ${d} дней.`;
-        if (credits > 0) msg += `\n💳 +${credits} кредитов начислено.`;
-        kb.text('⭐️ Brand Plan', 'a:brand_plan|ws:0').text('💳 Кредиты', 'a:brand_pass|ws:0').row();
-      }
+      if (wsId && offerId) kb.text('📣 Статус офиц.канала', `a:off_manage|ws:${wsId}|o:${offerId}|p:0|back:my`).row();
       kb.text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
+      await ctx.reply('✅ Оплата получена. Оффер передан модератору. Публикация начнётся только после одобрения.', { reply_markup: kb });
+      return;
+    }
+
+    const { autoApply } = await getPaymentsRuntimeFlags();
+    if (!autoApply) {
+      await markStatus('ORPHANED', 'auto_apply_paused');
+      await notifyPayOps('auto_apply_paused');
+      await ctx.reply('✅ Платёж получен. Автовыдача сейчас на паузе. Если нужно — нажми «💬 Поддержка».');
+      return;
+    }
+
+    const parts = invoicePayload.split('_');
+    let sessionKey = null;
+    let sessionData = null;
+    let sessionBound = false;
+    let fulfillmentContext = {};
+
+    try {
+      let family = '';
+      let token = '';
+      if (kind === 'matching') { family = 'pay_match'; token = parts.slice(3).join('_'); }
+      else if (kind === 'featured') { family = 'pay_feat'; token = parts.slice(3).join('_'); }
+      else if (kind === 'founder') { family = 'pay_founder'; token = parts.slice(4).join('_'); }
+      else if (kind === 'pro') {
+        family = 'pay_pro';
+        token = (parts.length >= 4 && /^\d+$/.test(String(parts[2] || ''))) ? parts.slice(3).join('_') : parts.slice(2).join('_');
+      }
+      else if (kind === 'brand_pass') { family = 'pay_brand'; token = parts.slice(3).join('_'); }
+      else if (kind === 'brand_plan') { family = 'pay_bplan'; token = parts.slice(3).join('_'); }
+
+      if (family && token) {
+        sessionKey = k([family, token]);
+        sessionData = await redis.get(sessionKey);
+      }
+
+      if (sessionData && typeof sessionData === 'object') {
+        const tgOk = !sessionData.tgId || Number(sessionData.tgId) === Number(ctx.from.id);
+        const embeddedUserId = Number(sessionData.userId || sessionData.ownerUserId || 0);
+        const userOk = !embeddedUserId || embeddedUserId === Number(u.id);
+        const productOk = kind !== 'founder' || !sessionData.productId || String(sessionData.productId) === String(validation.meta?.productId || '');
+        sessionBound = tgOk && userOk && productOk;
+      }
+
+      if (sessionBound) {
+        fulfillmentContext = {
+          sessionType: kind,
+          wsId: Number(sessionData.wsId || validation.meta?.wsId || 0),
+          ownerUserId: Number(sessionData.ownerUserId || sessionData.userId || u.id),
+          userId: Number(sessionData.userId || u.id),
+          offerId: Number(sessionData.offerId || 0),
+          page: Number(sessionData.page || 0),
+          durationDays: Number(sessionData.durationDays || 0),
+          credits: Number(sessionData.credits || 0),
+          days: Number(sessionData.days || validation.meta?.days || 0),
+          count: Number(sessionData.count || 0),
+          ret: String(sessionData.ret || ''),
+          bpr: String(sessionData.bpr || ''),
+          productId: String(sessionData.productId || validation.meta?.productId || ''),
+          packId: String(sessionData.packId || validation.meta?.packId || ''),
+          plan: String(sessionData.plan || validation.meta?.plan || ''),
+          tierId: String(sessionData.tierId || validation.meta?.tierId || ''),
+        };
+      }
+    } catch {
+      sessionKey = null;
+      sessionData = null;
+      sessionBound = false;
+      fulfillmentContext = {};
+    }
+
+    const result = await applyPaymentFallbackNoSession({
+      paymentId,
+      paymentUserId: u.id,
+      invoicePayload,
+      appliedByUserId: u.id,
+      totalAmount: sp.total_amount,
+      currency: sp.currency || 'XTR',
+      telegramPaymentChargeId: tgChargeId,
+      fulfillmentContext,
+      validation,
+      allowLegacyUnsignedValidated: sessionBound,
+    });
+
+    if (!result?.applied) {
+      if (result?.alreadyApplied || result?.reason === 'already_applied') {
+        if (sessionKey) { try { await redis.del(sessionKey); } catch {} }
+        await ctx.reply('✅ Платеж уже обработан.');
+        return;
+      }
+      if (result?.reason === 'locked' || result?.reason === 'applying_in_progress') {
+        await ctx.reply('⏳ Платёж уже обрабатывается. Если через пару минут не применится — нажми /paysupport.');
+        return;
+      }
+
+      const permanent = new Set([
+        'bad_input', 'validation_required', 'user_mismatch', 'payment_user_mismatch', 'charge_id_mismatch',
+        'payload_mismatch', 'unsupported_payload', 'unsupported_founder_product', 'missing_context',
+        'missing_wsid', 'no_ws_access', 'bad_pack', 'bad_plan', 'bad_tier', 'bad_duration',
+        'unsigned_payload', 'bad_sig', 'manual_only',
+      ]);
+      const reason = String(result?.reason || 'atomic_apply_failed');
+      await markStatus(permanent.has(reason) ? 'ORPHANED' : 'ERROR', `atomic_apply_failed:${reason}`.slice(0, 240));
+      await notifyPayOps('atomic_apply_failed', [`Reason: ${reason}`, result?.errorCode ? `DB code: ${result.errorCode}` : '']);
+      await ctx.reply('✅ Оплата получена, но продукт не выдан автоматически. Повторная выдача заблокирована до безопасного восстановления. Нажми /paysupport — оператор уже получил алерт.');
+      return;
+    }
+
+    // Commit already succeeded. Only now may transient session/cache/UI state be changed.
+    if (sessionKey) { try { await redis.del(sessionKey); } catch {} }
+    if (Number.isFinite(Number(result.brandCreditsBalance))) {
+      try { await setBrandCreditsCache(u.id, Number(result.brandCreditsBalance)); } catch {}
+    }
+
+    const wsId = Number(fulfillmentContext.wsId || result.wsId || 0);
+    const ret = String(fulfillmentContext.ret || '');
+    const bpr = String(fulfillmentContext.bpr || '');
+
+    if (result.kind === 'matching') {
+      try {
+        await setExpectText(ctx.from.id, {
+          type: 'match_brief', requestId: result.requestId, wsId,
+          count: Number(result.count || 0), ret, bpr,
+        });
+      } catch { await notifyPayOps('postcommit_expect_state_failed', [`Product: matching`, `RequestId: ${result.requestId}`]); }
+      const kb = new InlineKeyboard()
+        .text('🎯 Умный подбор', cbJoin('a:match_home', { ws: wsId, ret, bpr })).row()
+        .text('⬅️ Назад', mfBackCb(wsId, ret, bpr)).text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
+      await ctx.reply(`✅ <b>Умный подбор оплачен</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>.\nРезультат: один подбор до <b>${Number(result.count || 0)}</b> каналов.\n\nПришли бриф одним сообщением: ниша, гео, аудитория и формат.`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (result.kind === 'featured') {
+      try {
+        await setExpectText(ctx.from.id, { type: 'feat_content', featuredId: result.featuredId, wsId, ret, bpr });
+      } catch { await notifyPayOps('postcommit_expect_state_failed', [`Product: featured`, `FeaturedId: ${result.featuredId}`]); }
+      const kb = new InlineKeyboard()
+        .text('🔥 Продвижение', cbJoin('a:feat_home', { ws: wsId, ret, bpr })).row()
+        .text('⬅️ Назад', mfBackCb(wsId, ret, bpr)).text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
+      await ctx.reply(`✅ <b>Продвижение оплачено</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>.\nСрок размещения: <b>${Number(result.days || 0)}</b> дн.\n\nПришли контент:\n• первая строка — заголовок\n• затем описание\n• последняя строка — контакт`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (result.kind === 'pro' || result.kind === 'founder_creator') {
+      try {
+        await db.auditWorkspace(Number(result.wsId), u.id, result.kind === 'pro' ? 'pro.activated.atomic' : 'pro.activated.founder.atomic', {
+          payment_id: paymentId, fulfillment_version: 'STEP588X1_v1', telegram_payment_charge_id: tgChargeId,
+        });
+      } catch {}
+      const label = result.kind === 'pro' ? MONETIZATION_LABELS.CREATOR_PRO : MONETIZATION_LABELS.FOUNDER_SALE;
+      await ctx.reply(`✅ ${label} применён.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.\nСрок: ${Number(result.days || 0)} дней.`);
+      return;
+    }
+
+    if (result.kind === 'brand_pass') {
+      const kb = new InlineKeyboard();
+      if (fulfillmentContext.offerId) kb.text('↩️ Вернуться к офферу', `a:bx_pub|ws:${wsId}|o:${fulfillmentContext.offerId}|p:${Number(fulfillmentContext.page || 0)}|h:bo`).row();
+      kb.text('💳 Кредиты', `a:brand_pass|ws:${wsId}`).text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`);
+      await ctx.reply(`✅ <b>Кредиты начислены</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>\nНачислено: <b>${Number(result.credits || 0)}</b>\nБаланс: <b>${fmtCredits(result.brandCreditsBalance)}</b>\n\nКредиты расходуются на новые диалоги, принятие заявок и открытие контактов. Сообщения внутри открытого диалога бесплатны.\n\nДальше: открой «💬 Диалоги» и выбери нужный диалог.`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (result.kind === 'brand_plan') {
+      const planDef = BRAND_PLANS.find((pl) => pl.id === result.plan);
+      const kb = new InlineKeyboard()
+        .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`).text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`).row()
+        .text('⬅️ Назад', wsId ? `a:bx_open|ws:${wsId}` : 'a:menu');
+      await ctx.reply(`✅ <b>Brand Plan «${planDef?.title || result.plan}» активирован</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>\nСрок: <b>${Number(result.days || 0)}</b> дней.${Number(result.credits || 0) ? `\nНачислено: <b>${Number(result.credits)}</b> кредитов.` : ''}\n\nCRM-этапы, менеджеры, Умный подбор и Продвижение доступны по условиям плана.`, { parse_mode: 'HTML', reply_markup: kb });
+      return;
+    }
+
+    if (result.kind === 'founder_brand') {
+      const kb = new InlineKeyboard().text('⭐️ Brand Plan', 'a:brand_plan|ws:0').text('💳 Кредиты', 'a:brand_pass|ws:0').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
+      let msg = `✅ ${MONETIZATION_LABELS.FOUNDER_SALE} применён.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.\n\n⭐️ Brand Plan «Про» активирован на ${Number(result.days || 0)} дней.`;
+      if (Number(result.credits || 0) > 0) msg += `\n💳 +${Number(result.credits)} кредитов начислено.`;
       await ctx.reply(msg, { reply_markup: kb });
       return;
-    } catch (e) {
-      const em = String(e?.message || e).slice(0, 300);
-      await markStatus('ERROR', `auto_apply_error: ${em.slice(0, 120)}`);
-      await notifyPayOps('auto_apply_error', [`Error: <code>${escapeHtml(em)}</code>`]);
-      await ctx.reply('✅ Оплата получена. Не смог применить автоматически. Нажми «💬 Поддержка» — я уже получил алерт.');
-      return;
     }
-  }  // PRO activation
-  if (invoicePayload.startsWith('pro_')) {
-    try {
-      const parts = invoicePayload.split('_');
-      const wsId = Number(parts[1]);
-  
-      // New format: pro_<wsId>_<userId>_<token>
-      // Old format (backwards compatible): pro_<wsId>_<token>
-      let payUserId = 0;
-      let token = '';
-      if (parts.length >= 4 && /^\d+$/.test(String(parts[2] || ''))) {
-        payUserId = Number(parts[2]);
-        token = parts.slice(3).join('_');
-      } else {
-        token = parts.slice(2).join('_');
-      }
-  
-      const data = await redis.get(k(['pay_pro', token]));
-      const tgOk = !data?.tgId || Number(data.tgId) === Number(ctx.from.id);
-      const userOk = !payUserId || Number(data?.ownerUserId) === payUserId;
-  
-      if (!data || Number(data.wsId) != wsId || !tgOk || !userOk) {
-        // Fallback: apply by payload even if Redis pay_* session expired.
-        if (payFbApplyEnabled && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
-          try {
-            const fb = await applyPaymentFallbackNoSession({
-              paymentId,
-              paymentUserId: u.id,
-              invoicePayload: invoicePayload,
-              appliedByUserId: u.id,
-              totalAmount: sp.total_amount,
-              currency: sp.currency || 'XTR',
-              telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
-            });
-            if (fb && fb.applied) {
-              await ctx.reply(`✅ ${MONETIZATION_LABELS.CREATOR_PRO} активирован.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.\nСрок: ${Number(fb?.days || CFG.PRO_DURATION_DAYS)} дней.\n\nОткрой настройки канала → ⭐️ PRO.`);
-              return;
-            }
-          } catch { /* ignore fallback failures */ }
-        }
-  
-        await markStatus('ORPHANED', 'missing_session');
-        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && payFbApplyEnabled;
-        const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
-        await ctx.reply(
-          `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и открой ⭐️ PRO — помогу разобраться.`
-        );
-        return;
-      }
-  
-      await db.activateWorkspacePro(wsId, CFG.PRO_DURATION_DAYS);
-      await db.auditWorkspace(wsId, data.ownerUserId, 'pro.activated', {
-        currency: sp.currency,
-        total_amount: sp.total_amount,
-        telegram_payment_charge_id: sp.telegram_payment_charge_id
-      });
-      await redis.del(k(['pay_pro', token]));
-      await markApplied('auto_apply_pro');
-      await ctx.reply(`✅ ${MONETIZATION_LABELS.CREATOR_PRO} активирован.\n\nСписано: ${starsAmountLabel(sp.total_amount)}.\nСрок: ${CFG.PRO_DURATION_DAYS} дней.\n\nОткрой настройки канала → ⭐️ PRO.`);
-      return;
-    } catch (e) {
-      const em = String(e?.message || e).slice(0, 300);
-      await markStatus('ERROR', `auto_apply_error: ${em.slice(0, 120)}`);
-      await notifyPayOps('auto_apply_error', [`Error: <code>${escapeHtml(em)}</code>`]);
-      await ctx.reply('✅ Оплата получена. Не смог применить автоматически. Нажми «💬 Поддержка» — я уже получил алерт.');
-      return;
-    }
-  }
-  
-  // Brand Pass credits
-  if (invoicePayload.startsWith('brand_')) {
-    try {
-      const parts = invoicePayload.split('_');
-      const payUserId = Number(parts[1]);
-      const token = parts.slice(3).join('_');
-  
-      const data = await redis.get(k(['pay_brand', token]));
-      if (!data || Number(data.userId) !== payUserId || Number(data.tgId) !== Number(ctx.from.id)) {
-        // Fallback: apply by payload even if Redis pay_* session expired.
-        if (payFbApplyEnabled && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
-          try {
-            const fb = await applyPaymentFallbackNoSession({
-              paymentId,
-              paymentUserId: u.id,
-              invoicePayload: invoicePayload,
-              appliedByUserId: u.id,
-              totalAmount: sp.total_amount,
-              currency: sp.currency || 'XTR',
-              telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
-            });
-            if (fb && fb.applied) {
-              await ctx.reply(buildRecoveredPaymentMessage({ result: fb, amount: sp.total_amount }));
-              return;
-            }
-          } catch { /* ignore */ }
-        }
-  
-        await markStatus('ORPHANED', 'missing_session');
-        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && payFbApplyEnabled;
-        const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
-        await ctx.reply(
-          `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и нажми «💬 Поддержка».`
-        );
-        return;
-      }
-  
-      const creditsToAdd = Number(data.credits || 0);
-      const newBalance = await db.addBrandCredits(payUserId, creditsToAdd);
-      try { await setBrandCreditsCache(payUserId, newBalance); } catch {}
-      const introCost = Math.max(1, Number(CFG.INTRO_COST_PER_INTRO || 1));
-      await redis.del(k(['pay_brand', token]));
-  
-      const kb = new InlineKeyboard();
-      if (data.offerId) {
-        kb.text('↩️ Вернуться к офферу', `a:bx_pub|ws:${data.wsId}|o:${data.offerId}|p:${Number(data.page || 0)}|h:bo`)
-          .row();
-      }
-      kb.text('💳 Кредиты', `a:brand_pass|ws:${data.wsId}`)
-        .text('💬 Диалоги', `a:bx_inbox|ws:${data.wsId}|p:0|h:bo`);
-  
-      await markApplied('auto_apply_brand_pass');
-      await ctx.reply(
-        `✅ <b>Кредиты начислены</b>
 
-Списано: <b>${starsAmountLabel(sp.total_amount)}</b>
-Начислено: <b>${creditsToAdd}</b>
-Баланс: <b>${fmtCredits(newBalance)}</b>
-
-Кредиты расходуются на новые диалоги, принятие заявок и открытие контактов. Сообщения внутри открытого диалога бесплатны.\n\nДальше: открой «💬 Диалоги» и выбери нужный диалог.`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
-      return;
-    } catch (e) {
-      const em = String(e?.message || e).slice(0, 300);
-      await markStatus('ERROR', `auto_apply_error: ${em.slice(0, 120)}`);
-      await notifyPayOps('auto_apply_error', [`Error: <code>${escapeHtml(em)}</code>`]);
-      await ctx.reply('✅ Оплата получена. Не смог применить автоматически. Нажми «💬 Поддержка» — я уже получил алерт.');
-      return;
-    }
-  }
-  
-  // Brand Plan tools subscription
-  if (invoicePayload.startsWith('bplan_')) {
-    try {
-      const parts = invoicePayload.split('_');
-      const payUserId = Number(parts[1]);
-      const plan = String(parts[2] || 'start').toLowerCase();
-      const token = parts.slice(3).join('_');
-  
-      const data = await redis.get(k(['pay_bplan', token]));
-      if (!data || Number(data.userId) !== payUserId || Number(data.tgId) !== Number(ctx.from.id)) {
-        // Fallback: apply by payload even if Redis pay_* session expired.
-        if (payFbApplyEnabled && payUserId && Number(payUserId) === Number(u.id) && paymentId) {
-          try {
-            const fb = await applyPaymentFallbackNoSession({
-              paymentId,
-              paymentUserId: u.id,
-              invoicePayload: invoicePayload,
-              appliedByUserId: u.id,
-              totalAmount: sp.total_amount,
-              currency: sp.currency || 'XTR',
-              telegramPaymentChargeId: String(sp.telegram_payment_charge_id || ''),
-            });
-            if (fb && fb.applied) {
-              await ctx.reply(buildRecoveredPaymentMessage({ result: fb, amount: sp.total_amount }));
-              return;
-            }
-          } catch { /* ignore */ }
-        }
-  
-        await markStatus('ORPHANED', 'missing_session');
-        const autoHeal = CFG.PAYMENTS_ORPHANED_AUTOHEAL_ENABLED && payFbApplyEnabled;
-        const m = Math.max(1, Math.round(Number(CFG.PAYMENTS_ORPHANED_AUTOHEAL_MIN_AGE_SEC || 300) / 60));
-        await ctx.reply(
-          `✅ Платёж получен. Но сессия оплаты не найдена (возможно, истекла).${autoHeal ? `\n\n🔁 Я попробую применить оплату автоматически в течение ~${m} мин.` : ''}\n\nЕсли не применилось — напиши /start и нажми «💬 Поддержка».`
-        );
-        return;
-      }
-  
-      await db.activateBrandPlan(payUserId, plan, CFG.BRAND_PLAN_DURATION_DAYS);
-  
-      // Credit bonus included in plan
-      const bonusCredits = Number(data.credits || 0);
-      if (bonusCredits > 0) {
-        const newBalance = await db.addBrandCredits(payUserId, bonusCredits);
-        try { await setBrandCreditsCache(payUserId, newBalance); } catch {}
-      }
-      await redis.del(k(['pay_bplan', token]));
-  
-      const wsId = Number(data.wsId || 0);
-      const ret = String(data.ret || 'brand');
-      const planDef = BRAND_PLANS.find(pl => pl.id === plan);
-      const planLabel = planDef ? planDef.title : plan;
-      const kb = new InlineKeyboard()
-        .text('⭐️ Brand Plan', `a:brand_plan|ws:${wsId}`)
-        .text('💬 Диалоги', `a:bx_inbox|ws:${wsId}|p:0|h:bo`)
-        .row()
-        .text('⬅️ Назад', (String(ret) === 'brand_team_bx') ? `a:brand_team|ws:${wsId}|ret:bx` : (String(ret) === 'brand_team') ? `a:brand_team|ws:${wsId}` : (wsId ? `a:bx_open|ws:${wsId}` : 'a:menu'));
-  
-      await markApplied('auto_apply_brand_plan');
-      await ctx.reply(`✅ <b>Brand Plan «${planLabel}» активирован</b>\n\nСписано: <b>${starsAmountLabel(sp.total_amount)}</b>\nСрок: <b>${CFG.BRAND_PLAN_DURATION_DAYS}</b> дней.${bonusCredits ? `\nНачислено: <b>${bonusCredits}</b> кредитов.` : ''}\n\nCRM-этапы, менеджеры, Умный подбор и Продвижение доступны по условиям плана.`, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    } catch (e) {
-      const em = String(e?.message || e).slice(0, 300);
-      await markStatus('ERROR', `auto_apply_error: ${em.slice(0, 120)}`);
-      await notifyPayOps('auto_apply_error', [`Error: <code>${escapeHtml(em)}</code>`]);
-      await ctx.reply('✅ Оплата получена. Не смог применить автоматически. Нажми «💬 Поддержка» — я уже получил алерт.');
-      return;
-    }
-  }
-  
-  await markStatus('ORPHANED', 'unknown_payload');
-  await notifyPayOps('unknown_payload');
-  await ctx.reply('✅ Оплата получена. Я не смог автоматически распознать покупку — нажми «💬 Поддержка», я помогу.');
+    await ctx.reply(buildRecoveredPaymentMessage({ result, amount: sp.total_amount }));
   });
 }

@@ -207,7 +207,7 @@ async function processOrphanedAutohealBatch({ chainId = '', chainDepth = 0, chai
         validationFailed += 1;
         if (validationFailedIds.length < 5) validationFailedIds.push(Number(r.id));
         if (validationFailedReasons.length < 3) validationFailedReasons.push(rr);
-        try { await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
+        try { await db.setPaymentStatusIfNotApplied(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
         skipped += 1;
         continue;
       }
@@ -220,6 +220,7 @@ async function processOrphanedAutohealBatch({ chainId = '', chainDepth = 0, chai
         totalAmount: Number(r.total_amount || 0),
         currency: String(r.currency || 'XTR'),
         telegramPaymentChargeId: String(r.telegram_payment_charge_id || ''),
+        validation: v,
       });
 
       if (fb && fb.applied) {
@@ -247,7 +248,7 @@ async function processOrphanedAutohealBatch({ chainId = '', chainDepth = 0, chai
           manualRequired += 1;
           if (manualRequiredIds.length < 5) manualRequiredIds.push(Number(r.id));
           if (manualRequiredReasons.length < 3) manualRequiredReasons.push(rr);
-          try { await db.setPaymentStatus(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
+          try { await db.setPaymentStatusIfNotApplied(Number(r.id), 'ORPHANED', `autoheal_manual_required:${rr}`); } catch {}
         }
       }
     } catch (e) {
