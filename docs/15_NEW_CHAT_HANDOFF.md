@@ -1,34 +1,36 @@
-# STEP588X1 NEW CHAT HANDOFF
+# STEP588X2 NEW CHAT HANDOFF
 
-**Current repository baseline:** STEP588X1 — Payment Fulfillment Atomicity & Missing-Ledger Fail-Closed
-**Parent:** STEP588X — Independent Full Project Audit
-**Repository status:** source implementation complete / production rollout pending
+**Current repository baseline:** STEP588X2 — Giveaway Draw Correctness & Single Atomic Path
+**Parent:** STEP588X1 — Payment Fulfillment Atomicity
+**Repository status:** source implementation complete / production canary pending
 
 ## Start here
 
 1. Read `docs/00_CURRENT_STATE.md`.
-2. Read `docs/audit/STEP588X1_PAYMENT_FULFILLMENT_ATOMICITY_REPORT.md`.
-3. Read `docs/operations/STEP588X1_PAYMENT_ROLLOUT_RUNBOOK.md`.
+2. Read `docs/audit/STEP588X2_GIVEAWAY_DRAW_CORRECTNESS_REPORT.md`.
+3. Read `docs/operations/STEP588X2_GIVEAWAY_ROLLOUT_RUNBOOK.md`.
 4. Read `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`.
 5. Read `docs/RISK_REGISTRY.md`.
 
 ## Current truth
 
-- All automatic Stars product effects use one canonical transaction service.
-- Payment row, amount, currency, kind, invoice payload and Telegram charge ID are bound before mutation.
-- Product effect, fulfillment receipt and APPLIED state commit atomically.
-- Missing ledger/schema/DB access blocks fulfillment.
-- Redis session cleanup is post-commit.
-- Commit ambiguity is reconciled from durable evidence or returned as `commit_unknown`.
-- Migration 048 must be applied before runtime deployment.
-- Local executable payment tests pass; production Neon/Stars/Redis/QStash behavior is not verified.
+- Manual Telegram draw and cron auto-draw use one canonical PostgreSQL transaction service.
+- The locked giveaway row owns winner count and seed timestamps; caller snapshots are not authoritative.
+- Eligible-first selection and deterministic ineligible top-up are identical for every caller.
+- Winners, status and audit are one commit; failure rolls all of them back.
+- Timed lazy-end and draw can commit in the same transaction.
+- Manual actor and source are recorded in the audit receipt.
+- Sponsor replacement is transactional.
+- No migration is required for STEP588X2.
+- Local executable giveaway tests pass; production Neon/cron/Telegram behavior is not verified.
+- STEP588X1 production migration/canary evidence is still pending unless separately supplied.
 - STEP587 and STEP589 remain HOLD.
 
 ## Next accepted sequence
 
 ```text
-STEP588X1 migration-first rollout + canary evidence
-→ STEP588X2 Giveaway Single Atomic Path
+STEP588X1 production evidence
+→ STEP588X2 production canary evidence
 → STEP588X3 Broadcast Unknown-State Safety
 → STEP588X4 Admin Auth Challenge Binding
 → STEP588X5 Health/Logging Privacy
@@ -41,12 +43,12 @@ STEP588X1 migration-first rollout + canary evidence
 
 ## Hard rules
 
-- do not deploy runtime before migration 048;
-- do not drop fulfillment schema while STEP588X1 runtime is active;
-- do not reintroduce direct product mutations outside the canonical service;
-- do not delete Redis payment context before commit;
-- do not overwrite APPLIED with an error/recovery status;
-- do not claim production resolution before canary and replay evidence.
+- do not reintroduce a JavaScript/manual winner-selection path;
+- do not write winners, final status or draw audit in separate transactions;
+- do not top up from a pool that can repeat already-selected eligible users;
+- do not treat Redis lock as the correctness boundary;
+- do not rerun or rewrite an important committed giveaway to simplify acceptance;
+- do not claim production resolution before manual, replay and cron evidence.
 
 ---
 

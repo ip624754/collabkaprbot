@@ -1,3 +1,30 @@
+## STEP588X2 — Giveaway Draw Correctness & Single Atomic Path (2026-07-20)
+
+**Current handoff-safe repository baseline:** STEP588X2 source implementation on top of STEP588X1.
+
+Repository truth:
+
+- one canonical PostgreSQL transaction service now owns manual and cron giveaway draw;
+- locked DB row is authoritative for workspace, winner count and durable seed timestamp;
+- eligible participants are selected first and insufficient eligible pools are deterministically topped up from ineligible entries;
+- winner rows, `WINNERS_DRAWN`, timed lazy-end receipts and final draw audit commit together;
+- manual actor and caller source are recorded in the same transaction;
+- repeat draw is idempotent and advisory/row locks protect cross-worker concurrency;
+- sponsor replacement is transactional and ordered;
+- no schema migration is required;
+- 55 executable giveaway assertions pass locally; all 124 registered source checks pass across bounded batches.
+
+**Release decision:** STEP588X2 is source-ready, production canary pending. STEP587 and STEP589 remain HOLD. Continue with STEP588X3 only after preserving X2 rollout evidence or explicitly accepting the source-only boundary.
+
+Read first:
+
+- `docs/audit/STEP588X2_GIVEAWAY_DRAW_CORRECTNESS_REPORT.md`;
+- `docs/operations/STEP588X2_GIVEAWAY_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
+- `docs/process/07_WORK_HISTORY_STEP588X2.md`.
+
+---
+
 ## STEP588X1 — Payment Fulfillment Atomicity & Missing-Ledger Fail-Closed (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X1 source implementation on top of STEP588X.

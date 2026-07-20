@@ -1,12 +1,10 @@
-import { pool } from './pool.js'; 
+import { pool } from './pool.js';
 import { CFG } from '../lib/config.js';
 import * as R from '../lib/redis.js';
 import {
-  GW_DRAW_ALGO_VERSION_SQL,
-  GW_DRAW_SEED_VERSION_SQL,
-  GW_POOL_HASH_METHOD_SQL,
-  GW_WINNERS_HASH_METHOD_SQL,
-} from '../lib/gwRepro.js';
+  drawAndFinalizeGiveawayWinnersAtomicCore,
+  replaceGiveawaySponsorsAtomicCore,
+} from './giveawayAtomicCore.js';
 
 // Build-compat: avoid hard ESM named-import crashes if a partial cherry-pick updates
 // call-sites but not `src/lib/redis.js`. Fallbacks are atomic-only / no-op.
@@ -2455,16 +2453,13 @@ export async function listGiveaways(ownerUserId, limit = 20) {
 }
 
 // Sponsors
-export async function replaceGiveawaySponsors(giveawayId, sponsorTexts) {
-  await pool.query(`delete from giveaway_sponsors where giveaway_id=$1`, [giveawayId]);
-  let pos = 1;
-  for (const s of sponsorTexts) {
-    await pool.query(
-      `insert into giveaway_sponsors (giveaway_id, position, sponsor_text)
-       values ($1,$2,$3)`,
-      [giveawayId, pos++, s]
-    );
-  }
+export async function replaceGiveawaySponsors(giveawayId, sponsorTexts, opts = {}) {
+  return replaceGiveawaySponsorsAtomicCore({
+    pool,
+    giveawayId,
+    sponsorTexts,
+    statementTimeoutMs: getHeavyTxStatementTimeoutMs(opts),
+  });
 }
 
 export async function listGiveawaySponsors(giveawayId) {
@@ -2625,15 +2620,42 @@ export async function exportGiveawayWinnersForPublish(giveawayId, ownerUserId) {
 }
 
 // Winners
-export async function setWinners(giveawayId, winners) {
-  // winners: [{user_id, place}]
-  await pool.query(`delete from giveaway_winners where giveaway_id=$1`, [giveawayId]);
-  for (const w of winners) {
-    await pool.query(
-      `insert into giveaway_winners (giveaway_id, user_id, place)
-       values ($1,$2,$3)`,
-      [giveawayId, (w.user_id ?? w.userId), w.place]
-    );
+// Deprecated maintenance helper. Runtime draw paths MUST use
+// drawAndFinalizeGiveawayWinnersAtomic(), which owns winner selection, status and audit.
+export async function setWinners(giveawayId, winners, opts = {}) {
+  const gid = Number(giveawayId);
+  const normalized = Array.isArray(winners)
+    ? winners
+        .map((w) => ({
+          userId: Number(w?.user_id ?? w?.userId),
+          place: Number(w?.place),
+        }))
+        .filter((w) => Number.isFinite(w.userId) && Number.isFinite(w.place) && w.place > 0)
+        .sort((a, b) => a.place - b.place)
+    : [];
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const stm = getHeavyTxStatementTimeoutMs(opts);
+    if (stm) await txSetLocalStatementTimeout(client, stm);
+    await client.query('SELECT id FROM giveaways WHERE id=$1 FOR UPDATE', [gid]);
+    await client.query('DELETE FROM giveaway_winners WHERE giveaway_id=$1', [gid]);
+    if (normalized.length) {
+      await client.query(
+        `INSERT INTO giveaway_winners (giveaway_id, user_id, place)
+         SELECT $1, row_data.user_id, row_data.place
+         FROM jsonb_to_recordset($2::jsonb) AS row_data(user_id bigint, place int)
+         ORDER BY row_data.place`,
+        [gid, JSON.stringify(normalized.map((w) => ({ user_id: w.userId, place: w.place })))]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
@@ -7188,324 +7210,31 @@ export async function drawWinnersDeterministic(
  */
 export async function drawAndFinalizeGiveawayWinnersAtomic(
   giveawayId,
-  workspaceId,
-  winnersCount,
-  endsAtIso,
-  opts = {}
+  workspaceOrOptions = {},
+  legacyWinnersCount = null,
+  legacyEndsAtIso = null,
+  legacyOptions = {}
 ) {
-  const gid = Number(giveawayId);
-  const wsid = Number(workspaceId);
-  const requested = Math.max(1, Number(winnersCount || 1));
-  const seed = `${gid}:${String(endsAtIso || '')}`;
+  // Backward-compatible argument normalization for rolling deploys. New callers must
+  // pass the object form; locked DB row remains the canonical source for count/seed.
+  const objectForm = workspaceOrOptions && typeof workspaceOrOptions === 'object' && !Array.isArray(workspaceOrOptions);
+  const opts = objectForm
+    ? workspaceOrOptions
+    : {
+        ...legacyOptions,
+        expectedWorkspaceId: Number(workspaceOrOptions) || null,
+        legacyWinnersCount,
+        legacyEndsAtIso,
+      };
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Defense-in-depth: enforce a transaction-scoped statement_timeout for heavy operations.
-    // Global pool timeout exists, but local SET LOCAL is safer against partial deployments.
-    const stm = getHeavyTxStatementTimeoutMs(opts);
-    if (stm) await txSetLocalStatementTimeout(client, stm);
-
-    // Transaction-scoped advisory lock: released automatically on COMMIT/ROLLBACK
-    const lockRes = await client.query(
-      'SELECT pg_try_advisory_xact_lock($1) AS ok',
-      [gid]
-    );
-    if (!lockRes.rows?.[0]?.ok) {
-      // Explicit fail-fast signal for callers (cron/ops) that another tx already owns the draw path.
-      await client.query('ROLLBACK');
-      return { status: 'locked' };
-    }
-
-    // Row lock for idempotency (prevents a second tx from drawing the same giveaway)
-    const gwRes = await client.query(
-      `
-      SELECT id, status, winners_drawn_at
-      FROM giveaways
-      WHERE id = $1
-      FOR UPDATE
-      `,
-      [gid]
-    );
-
-    if (!gwRes.rowCount) {
-      await client.query('ROLLBACK');
-      return { status: 'missing' };
-    }
-
-    const gw = gwRes.rows[0];
-    if (gw.winners_drawn_at) {
-      await client.query('ROLLBACK');
-      return { status: 'already_drawn' };
-    }
-    if (String(gw.status || '').toUpperCase() !== 'ENDED') {
-      await client.query('ROLLBACK');
-      return { status: 'wrong_status', status_value: gw.status };
-    }
-
-    // Snapshot timestamp (UTC) for reproducible audits.
-    try {
-      const tsr = await client.query(
-        `SELECT to_char((transaction_timestamp() at time zone 'utc'), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ts`
-      );
-      snapshotTs = tsr.rows?.[0]?.ts || null;
-    } catch {
-      snapshotTs = null;
-    }
-
-    // Helper to pick winners deterministically with sha256 (fallback: md5)
-    async function pick({ onlyEligible, excludeIds, limit }) {
-      const eligibilityClause = onlyEligible ? 'AND is_eligible = TRUE' : '';
-      const exclude = Array.isArray(excludeIds) ? excludeIds : [];
-      const lim = Math.max(1, Number(limit || 1));
-
-      // Primary (sha256 via pgcrypto)
-      try {
-        const r = await client.query(
-          `
-          SELECT user_id
-          FROM giveaway_entries
-          WHERE giveaway_id = $1
-            ${eligibilityClause}
-            AND NOT (user_id = ANY($4::bigint[]))
-          ORDER BY encode(digest($2 || ':' || user_id::text, 'sha256'), 'hex')
-          LIMIT $3
-          `,
-          [gid, seed, lim, exclude]
-        );
-        return { rows: r.rows, method: 'sha256' };
-      } catch (e) {
-        const code = e?.code || null;
-        const msg = String(e?.message || '');
-        const looksLikeMissingDigest = code === '42883' || msg.includes('function digest');
-        if (!looksLikeMissingDigest) throw e;
-
-        const r = await client.query(
-          `
-          SELECT user_id
-          FROM giveaway_entries
-          WHERE giveaway_id = $1
-            ${eligibilityClause}
-            AND NOT (user_id = ANY($4::bigint[]))
-          ORDER BY md5($2 || ':' || user_id::text)
-          LIMIT $3
-          `,
-          [gid, seed, lim, exclude]
-        );
-        return { rows: r.rows, method: 'md5_fallback' };
-      }
-    }
-
-    // Reproducibility helpers (best-effort; must NOT block a successful draw).
-    // Pool hash is deterministic and extension-free (md5 built-in).
-    async function computePoolHash(onlyEligible) {
-      const eligibilityClause = onlyEligible ? 'AND is_eligible = TRUE' : '';
-      const r = await client.query(
-        `
-        SELECT
-          md5(string_agg(md5(user_id::text), '' ORDER BY user_id)) AS h,
-          count(*)::int AS cnt,
-          max(joined_at) AS max_joined_at
-        FROM giveaway_entries
-        WHERE giveaway_id = $1
-          ${eligibilityClause}
-        `,
-        [gid]
-      );
-      const row = r.rows?.[0] || {};
-      let mj = row.max_joined_at || null;
-      try {
-        if (mj) mj = new Date(mj).toISOString();
-      } catch {
-        // keep raw value
-      }
-      return { h: row.h || null, cnt: Number(row.cnt || 0), max_joined_at: mj };
-    }
-
-    async function computeWinnersHash() {
-      const r = await client.query(
-        `
-        SELECT md5(string_agg((place::text || ':' || user_id::text), ',' ORDER BY place)) AS h
-        FROM giveaway_winners
-        WHERE giveaway_id = $1
-        `,
-        [gid]
-      );
-      return r.rows?.[0]?.h || null;
-    }
-
-    // 1) Prefer eligible
-    let usedPool = 'eligible';
-    const winnersUserIds = [];
-
-    const pickedEligible = await pick({ onlyEligible: true, excludeIds: [], limit: requested });
-    let method = pickedEligible.method;
-
-    for (const r of pickedEligible.rows || []) {
-      const uid = Number(r.user_id);
-      if (Number.isFinite(uid)) winnersUserIds.push(uid);
-    }
-
-    // 2) Top-up from all entries if eligible < requested (no duplicates), deterministic
-    if (winnersUserIds.length < requested) {
-      const remaining = requested - winnersUserIds.length;
-
-      const pickedTopup = await pick({
-        onlyEligible: false,
-        excludeIds: winnersUserIds,
-        limit: remaining,
-      });
-
-      // If eligible was empty, this is effectively "all_entries"
-      if (!winnersUserIds.length) usedPool = 'all_entries';
-      else if ((pickedTopup.rows || []).length) usedPool = 'eligible_topup';
-      else usedPool = 'eligible'; // partial, but still "eligible first"
-
-      // If methods differ (shouldn't), prefer sha256 when available
-      if (method !== 'sha256') method = pickedTopup.method;
-      else method = 'sha256';
-
-      for (const r of pickedTopup.rows || []) {
-        const uid = Number(r.user_id);
-        if (!Number.isFinite(uid)) continue;
-        // excludeIds already prevents duplicates, but keep a hard guard anyway
-        if (winnersUserIds.includes(uid)) continue;
-        winnersUserIds.push(uid);
-        if (winnersUserIds.length >= requested) break;
-      }
-    }
-
-    if (!winnersUserIds.length) {
-      // Audit skip (no entries)
-      await client.query(
-        `
-        INSERT INTO giveaway_audit (giveaway_id, workspace_id, actor_user_id, action, payload)
-        VALUES ($1, $2, NULL, $3, $4::jsonb)
-        `,
-        [
-          gid,
-          wsid,
-          'gw.winners_drawn_skipped',
-          JSON.stringify({
-            reason: 'no_entries',
-            tx_isolation: txIsolation,
-            snapshot_ts: snapshotTs,
-            seed,
-            seed_version: GW_DRAW_SEED_VERSION_SQL,
-            algo_version: GW_DRAW_ALGO_VERSION_SQL,
-            ends_at_iso_used: String(endsAtIso || ''),
-            method,
-          }),
-        ]
-      );
-      await client.query('COMMIT');
-      return { status: 'no_entries', seed, method };
-    }
-
-    // Persist winners (replace if any)
-    await client.query('DELETE FROM giveaway_winners WHERE giveaway_id = $1', [gid]);
-    for (let i = 0; i < winnersUserIds.length; i++) {
-      await client.query(
-        `
-        INSERT INTO giveaway_winners (giveaway_id, user_id, place)
-        VALUES ($1, $2, $3)
-        `,
-        [gid, winnersUserIds[i], i + 1]
-      );
-    }
-
-    // Mark giveaway as drawn (extra atomic guard)
-    const markRes = await client.query(
-      `
-      UPDATE giveaways
-      SET status = 'WINNERS_DRAWN',
-          winners_drawn_at = NOW(),
-          updated_at = NOW()
-      WHERE id = $1 AND winners_drawn_at IS NULL
-      RETURNING id
-      `,
-      [gid]
-    );
-
-    if (!markRes.rowCount) {
-      await client.query('ROLLBACK');
-      return { status: 'already_drawn' };
-    }
-
-    // Reproducibility metadata (best-effort).
-    let eligiblePool = { h: null, cnt: 0, max_joined_at: null };
-    let entriesPool = { h: null, cnt: 0, max_joined_at: null };
-    try {
-      eligiblePool = await computePoolHash(true);
-      entriesPool = await computePoolHash(false);
-    } catch {
-      // ignore
-    }
-    let wh = null;
-    try { wh = await computeWinnersHash(); } catch {}
-
-    const poolHashValue = (usedPool === 'eligible') ? eligiblePool.h : entriesPool.h;
-    const poolCountValue = (usedPool === 'eligible') ? eligiblePool.cnt : entriesPool.cnt;
-
-    const poolCutoffJoinedAt = (usedPool === 'eligible') ? eligiblePool.max_joined_at : entriesPool.max_joined_at;
-
-    // Audit draw
-    await client.query(
-      `
-      INSERT INTO giveaway_audit (giveaway_id, workspace_id, actor_user_id, action, payload)
-      VALUES ($1, $2, NULL, $3, $4::jsonb)
-      `,
-      [
-        gid,
-        wsid,
-        'gw.winners_drawn',
-        JSON.stringify({
-          tx_isolation: txIsolation,
-          snapshot_ts: snapshotTs,
-          seed,
-          seed_version: GW_DRAW_SEED_VERSION_SQL,
-          algo_version: GW_DRAW_ALGO_VERSION_SQL,
-          ends_at_iso_used: String(endsAtIso || ''),
-          method,
-          winners: winnersUserIds.length,
-          used_pool: usedPool,
-          requested_winners: requested,
-          // Pool reproducibility
-          pool_hash: poolHashValue,
-          pool_hash_method: GW_POOL_HASH_METHOD_SQL,
-          pool_count: poolCountValue,
-          pool_cutoff_joined_at: poolCutoffJoinedAt,
-          eligible_max_joined_at: eligiblePool.max_joined_at,
-          entries_max_joined_at: entriesPool.max_joined_at,
-          eligible_pool_hash: eligiblePool.h,
-          eligible_count: eligiblePool.cnt,
-          entries_pool_hash: entriesPool.h,
-          entries_pool_count: entriesPool.cnt,
-          // Winners reproducibility
-          winners_hash: wh,
-          winners_hash_method: GW_WINNERS_HASH_METHOD_SQL,
-        }),
-      ]
-    );
-
-    await client.query('COMMIT');
-    return {
-      status: 'drawn',
-      seed,
-      method,
-      used_pool: usedPool,
-      winnersUserIds,
-      requested_winners: requested,
-    };
-  } catch (e) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {}
-    throw e;
-  } finally {
-    client.release();
-  }
+  return drawAndFinalizeGiveawayWinnersAtomicCore({
+    pool,
+    giveawayId,
+    expectedWorkspaceId: opts.expectedWorkspaceId ?? opts.workspaceId ?? null,
+    actorUserId: opts.actorUserId ?? null,
+    source: opts.source ?? 'unknown',
+    statementTimeoutMs: getHeavyTxStatementTimeoutMs(opts),
+  });
 }
 
 /**

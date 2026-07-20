@@ -1,4 +1,4 @@
-import * as R from '../lib/redis.js'; 
+import * as R from '../lib/redis.js';
 
 // Build-compat: avoid hard ESM named-import crashes if a partial cherry-pick updates
 // call-sites but not `src/lib/redis.js`. Fallbacks are atomic-only / no-op.
@@ -490,16 +490,11 @@ async function autoDrawEnded() {
 
     // Extra safety (even though we have a global tick lock).
     await withGiveawayLock(g.id, async () => {
-      const endsAtIso = new Date(g.ends_at).toISOString();
-      const requested = Number(g.winners_count || 1);
-
       // Atomic: lock + pick + persist + status update + audit, all in one tx.
-      const r = await db.drawAndFinalizeGiveawayWinnersAtomic(
-        g.id,
-        g.workspace_id,
-        requested,
-        endsAtIso
-      );
+      const r = await db.drawAndFinalizeGiveawayWinnersAtomic(g.id, {
+        expectedWorkspaceId: g.workspace_id,
+        source: 'cron',
+      });
 
       if (!r) return;
       if (r.status === 'locked') {
@@ -2117,4 +2112,3 @@ export async function auditFlushTick() {
 
   return out;
 }
- 

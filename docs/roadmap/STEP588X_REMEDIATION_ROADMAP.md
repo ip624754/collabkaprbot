@@ -66,6 +66,8 @@ No financial/product side effect can commit without the same transaction committ
 
 **Mode:** CRITICAL
 **Expected risk score:** 16/20
+**Actual risk score:** 17/20
+**Status:** IMPLEMENTED LOCALLY / PRODUCTION CANARY PENDING
 
 ### Scope
 
@@ -92,6 +94,17 @@ No financial/product side effect can commit without the same transaction committ
 ### Exit gate
 
 One service owns draw, winners, status and audit in one transaction for every caller.
+
+### STEP588X2 implementation evidence
+
+- canonical service: `src/db/giveawayAtomicCore.js`;
+- manual and cron callers converge on `drawAndFinalizeGiveawayWinnersAtomic()`;
+- actor/source, timed lazy-end, winner set, final status and audit share one transaction;
+- deterministic eligible-first top-up is common to every caller;
+- sponsor replacement is transactional;
+- executable regression: `scripts/test-giveaway-draw-critical.js` with 55 assertions;
+- source contract: `scripts/smoke-giveaway-single-atomic-path-contract.js`;
+- source exit gate is met locally; production manual/replay/cron evidence remains open.
 
 ## STEP588X3 — Broadcast Delivery Unknown-State Safety
 

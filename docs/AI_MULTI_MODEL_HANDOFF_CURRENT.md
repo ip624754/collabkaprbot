@@ -1,46 +1,52 @@
-# AI Multi-Model Handoff — STEP588X1 Current Truth
+# AI Multi-Model Handoff — STEP588X2 Current Truth
 
-**Baseline:** STEP588X1 source implementation on STEP588X
-**Status:** SOURCE READY / PRODUCTION ROLLOUT PENDING / GLOBAL RELEASE HOLD
+**Baseline:** STEP588X2 source implementation on STEP588X1
+**Status:** SOURCE READY / PRODUCTION CANARY PENDING / GLOBAL RELEASE HOLD
 
 ## Verified locally
 
-- one canonical atomic Stars fulfillment service;
-- direct, admin, cron and QStash convergence;
-- missing ledger/schema fail closed;
-- durable recovery context and one fulfillment receipt per payment;
-- post-commit Redis cleanup;
-- commit-acknowledgement reconciliation;
-- non-regressing payment status helper;
-- 66 executable critical-path assertions PASS;
-- source and dependency gates PASS; migration pack has no drift.
+- one canonical atomic giveaway draw service;
+- manual and cron convergence;
+- eligible-first deterministic top-up;
+- winner/status/audit rollback as one transaction;
+- actor/source audit attribution;
+- repeat-draw idempotency and cross-worker PostgreSQL locks;
+- transactional sponsor replacement;
+- 55 executable giveaway assertions PASS;
+- 124 registered source checks PASS across bounded batches;
+- action registry and migration pack have no drift;
+- no STEP588X2 migration is required.
 
 ## Not verified
 
-- production migration 048;
-- live Stars canary and replay;
-- real PostgreSQL/serverless failure injection;
-- production Redis/QStash/Telegram behavior.
+- production manual draw;
+- production cron draw;
+- real PostgreSQL multi-session contention and connection termination;
+- live winner notifications;
+- production sponsor replacement;
+- dependency/runtime preflight in the current audit environment;
+- STEP588X1 migration/Stars canary unless separately evidenced;
+- STEP586H1 24-hour observation.
 
 ## Immediate action
 
-Apply `docs/operations/STEP588X1_PAYMENT_ROLLOUT_RUNBOOK.md`. After evidence, execute STEP588X2. Do not issue STEP587 GO or resume STEP589.
+Use `docs/operations/STEP588X2_GIVEAWAY_ROLLOUT_RUNBOOK.md`. Preserve manual top-up, replay and cron evidence. Then execute STEP588X3. Do not issue STEP587 GO or resume STEP589.
 
 ## Hard rules
 
-- migration before runtime;
-- one money core only;
-- no product effect without APPLIED + receipt in one transaction;
-- no APPLIED status regression;
-- no pre-commit Redis cleanup;
-- no production claim without canary/replay evidence.
+- one draw core only;
+- database row owns draw inputs;
+- eligible-first and top-up remain explicit;
+- no partial winner/status/audit state;
+- Redis is not the correctness lock;
+- no production claim without SQL and Telegram/cron evidence.
 
 Canonical references:
 
-- `docs/audit/STEP588X1_PAYMENT_FULFILLMENT_ATOMICITY_REPORT.md`;
-- `docs/operations/STEP588X1_PAYMENT_ROLLOUT_RUNBOOK.md`;
+- `docs/audit/STEP588X2_GIVEAWAY_DRAW_CORRECTNESS_REPORT.md`;
+- `docs/operations/STEP588X2_GIVEAWAY_ROLLOUT_RUNBOOK.md`;
 - `docs/roadmap/STEP588X_REMEDIATION_ROADMAP.md`;
-- `docs/process/07_WORK_HISTORY_STEP588X1.md`.
+- `docs/process/07_WORK_HISTORY_STEP588X2.md`.
 
 ---
 

@@ -7,7 +7,7 @@ The following risks override earlier release optimism until remediation evidence
 | R-26 | Payment fulfillment commits outside payment APPLIED transaction | CRITICAL | ACTIVE | Source uses one atomic service; migration 048 + production canary required |
 | R-27 | Payment ledger absence fails open into product/credit fulfillment | CRITICAL | ACTIVE | Source fail-closed implemented; production migration/canary evidence required |
 | R-28 | Matching/featured session removed before durable paid apply | HIGH | ACTIVE | Durable context + post-commit cleanup implemented; live evidence required |
-| R-29 | Giveaway auto-draw runtime binding defect and split manual path | CRITICAL | ACTIVE | STEP588X2 one atomic service |
+| R-29 | Giveaway auto-draw runtime binding defect and split manual path | CRITICAL | ACTIVE | Source uses one atomic service; production manual/replay/cron evidence required |
 | R-30 | Broadcast Telegram send may succeed while DB remains reclaimable | CRITICAL | ACTIVE | unknown terminal state; no auto-resend |
 | R-31 | Admin challenge/approval URL can act as transferable privileged capability | CRITICAL | ACTIVE | browser binding + Telegram callback + one-time consume |
 | R-32 | Admin fallback code lacks crypto generation/throttling/lockout | HIGH | ACTIVE | disabled-by-default production fallback |
@@ -15,7 +15,7 @@ The following risks override earlier release optimism until remediation evidence
 | R-34 | Source-heavy test portfolio misses transaction/crash/race defects | HIGH | ACTIVE | STEP588X7 executable critical-path suite |
 | R-35 | Generic dynamic SQL/body/update helpers retain latent safety footguns | MEDIUM | WATCH | allowlists, size caps, row-count truth |
 
-**Release gate:** R-26 through R-28 are source-remediated but remain active until STEP588X1 migration/canary evidence. R-29 through R-34 still require implementation. STEP587 GO and STEP589 remain paused.
+**Release gate:** R-26 through R-28 are source-remediated but remain active until STEP588X1 migration/canary evidence. R-29 is source-remediated but remains active until STEP588X2 manual/replay/cron evidence. R-30 through R-34 still require implementation. STEP587 GO and STEP589 remain paused.
 
 ---
 
@@ -157,3 +157,13 @@ Residual risk:
 - Source verification: targeted admin/admin-web contracts PASS.
 - Runtime verification required: live web-admin acceptance after STEP589 implementation, not for docs-only architecture.
 - Residual release risk: STEP586H1 24-hour production observation remains pending.
+
+## Current STEP588X2 assessment
+
+- Change type: critical giveaway settlement unification and transactional sponsor replacement; no schema migration.
+- Primary risks addressed: R-02, R-06, R-11, R-12, R-29, R-34.
+- Runtime blast radius: manual draw, cron auto-draw, winner persistence, giveaway audit and sponsor replacement.
+- Rollback: code rollback to STEP588X1; committed winner rows must not be silently rewritten or re-drawn.
+- Source verification: 55 giveaway behavioral assertions, 124 registered source checks, 238 JavaScript syntax checks, generated-file parity and supplementary source invariants PASS locally.
+- Runtime verification required: controlled manual top-up, replay/idempotency and cron canaries with SQL winner/audit evidence.
+- Residual risk: real Neon connection termination and multi-session contention are not reproduced locally; notifications remain external side effects after the committed draw.

@@ -302,6 +302,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin payments contract", "smoke:admin-payments-contract"],
   ["Preflight (source-only): admin payments fallback contract", "smoke:admin-payments-fallback-contract"],
   ["Preflight (source-only): payment fulfillment critical-path executable tests", "test:payment-fulfillment-critical"],
+  ["Preflight (source-only): giveaway draw critical-path executable tests", "test:giveaway-draw-critical"],
+  ["Preflight (source-only): giveaway single atomic path contract", "smoke:giveaway-single-atomic-path-contract"],
   ["Preflight (source-only): admin QStash status contract", "smoke:admin-qstash-status-contract"],
   ["Preflight (source-only): admin hard-skip contract", "smoke:admin-hard-skip-contract"],
   ["Preflight (source-only): admin users contract", "smoke:admin-users-contract"],

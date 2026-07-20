@@ -27,13 +27,6 @@ import { queueOpsAlert, flushOpsAlerts } from './opsAlerts.js';
 import { getPaymentsFallbackApplyState, isPaymentsFallbackApplyEnabled, setPaymentsFallbackRuntime } from '../lib/paymentsOps.js';
 import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clearDraft } from './draft.js';
 import { renderGwAccess } from './gwAccess.js';
-import { makeSeed, makeXorShift32, sampleWithoutReplacement, sha256Hex } from './prng.js';
-import {
-  GW_DRAW_ALGO_VERSION_JS,
-  GW_DRAW_SEED_VERSION_JS,
-  GW_POOL_HASH_METHOD_JS,
-  GW_WINNERS_HASH_METHOD_JS,
-} from '../lib/gwRepro.js';
 import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback } from './routes/callbacks.js';
@@ -37610,7 +37603,8 @@ ${actionHint}`;
       const g0 = await db.getGiveawayForOwner(gwId, u.id);
       if (!g0) return answerRecovery(ctx, 'giveaway');
 
-      // Idempotency lock per giveaway
+      // Redis lock is UX/load shedding only. PostgreSQL advisory + row locks remain
+      // the canonical correctness boundary across serverless workers.
       const lockKey = k(['lock', 'gw_draw', gwId]);
       const lock = await acquireLock(lockKey, 30);
       if (!lock) {
@@ -37619,7 +37613,6 @@ ${actionHint}`;
       }
 
       try {
-        // Re-fetch (fresh)
         const g = await db.getGiveawayForOwner(gwId, u.id);
         if (!g) {
           await answerRecovery(ctx, 'giveaway');
@@ -37635,79 +37628,64 @@ ${actionHint}`;
           return;
         }
 
-        // Ensure ENDED (Jobs-style: avoid surprises)
         if (effSt !== 'ENDED') {
           await ctx.answerCallbackQuery({ text: 'Сначала заверши конкурс.' });
           await renderGwOpen(ctx, u.id, gwId);
           return;
         }
-        if (String(g.status || '').toUpperCase() !== 'ENDED') {
-          try {
-            const ended = await db.atomicEndGiveaway(gwId);
-            if (ended) {
-              await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.ended_lazy', { by_time: true, manual_draw: true });
-            }
-          } catch {}
-        }
 
-        // Prefer eligible participants. If not enough, fall back to all entries (transparent).
-        const eligibleIds = await db.listEligibleUserIdsForGiveaway(gwId);
-        let poolIds = eligibleIds;
-        let fallback = false;
-        if (!poolIds || poolIds.length === 0) {
-          poolIds = await db.listAllUserIdsForGiveaway(gwId);
-          fallback = true;
-        }
-
-        if (!poolIds || poolIds.length === 0) {
-          await ctx.answerCallbackQuery({ text: 'Нет участников.' });
-          await safeEditOrReply(ctx, '⛔️ У конкурса пока нет участников. Победителей выбрать нельзя.', { reply_markup: navKb(`a:gw_open|i:${gwId}`) });
-          return;
-        }
-
-        const seedMode = g.ends_at ? 'ends_at' : 'now';
-        const endsAtIso = g.ends_at ? new Date(g.ends_at).toISOString() : new Date().toISOString();
-        const seedObj = makeSeed({ giveawayId: gwId, endsAtIso, eligibleUserIds: eligibleIds || [] });
-        const { seedHash, eligibleHash } = seedObj;
-        const rnd = makeXorShift32(seedObj.seed);
-
-        const requested = Number(g.winners_count || 1) || 1;
-        const count = Math.min(requested, poolIds.length);
-        const winnersUserIds = sampleWithoutReplacement(poolIds, count, rnd);
-
-        await db.setWinners(gwId, winnersUserIds.map((uid, idx) => ({ userId: uid, place: idx + 1 })));
-        await db.updateGiveaway(gwId, { status: 'WINNERS_DRAWN', winners_drawn_at: new Date().toISOString() });
-        // Reproducibility pack: log seed/algo versions + pool/winners hashes.
-        const poolHash = sha256Hex([...poolIds].sort((a, b) => Number(a) - Number(b)).join(','));
-        const winnersHash = sha256Hex(winnersUserIds.map((uid, idx) => `${idx + 1}:${uid}`).join(','));
-
-        await db.auditGiveaway(gwId, g.workspace_id, u.id, 'gw.winners_drawn', {
-          manual: true,
-          algo_version: GW_DRAW_ALGO_VERSION_JS,
-          seed_version: GW_DRAW_SEED_VERSION_JS,
-          ends_at_iso_used: endsAtIso,
-          seedHash,
-          eligibleHash,
-          seed_mode: seedMode,
-          pool_hash: poolHash,
-          pool_hash_method: GW_POOL_HASH_METHOD_JS,
-          winners_hash: winnersHash,
-          winners_hash_method: GW_WINNERS_HASH_METHOD_JS,
-          winners: winnersUserIds.length,
-          used_pool: fallback ? 'all_entries' : 'eligible',
-          eligible_count: eligibleIds?.length || 0,
-          entries_pool_count: poolIds.length,
-          requested_winners: requested,
+        const result = await db.drawAndFinalizeGiveawayWinnersAtomic(gwId, {
+          expectedWorkspaceId: g.workspace_id,
+          actorUserId: u.id,
+          source: 'manual',
         });
 
-        const toast = fallback ? 'Победители выбраны (есть добор) ✅' : 'Победители выбраны ✅';
+        if (!result) throw new Error('giveaway draw returned no result');
+
+        if (result.status === 'locked') {
+          await ctx.answerCallbackQuery({ text: 'Секунду… уже выбираю.' });
+          return;
+        }
+        if (result.status === 'already_drawn') {
+          await ctx.answerCallbackQuery({ text: 'Уже выбраны.' });
+          await renderGwOpen(ctx, u.id, gwId);
+          return;
+        }
+        if (result.status === 'no_entries') {
+          await ctx.answerCallbackQuery({ text: 'Нет участников.' });
+          await safeEditOrReply(
+            ctx,
+            '⛔️ У конкурса пока нет участников. Победителей выбрать нельзя.',
+            { reply_markup: navKb(`a:gw_open|i:${gwId}`) }
+          );
+          return;
+        }
+        if (result.status === 'wrong_status') {
+          await ctx.answerCallbackQuery({ text: 'Сначала заверши конкурс.' });
+          await renderGwOpen(ctx, u.id, gwId);
+          return;
+        }
+        if (result.status === 'workspace_mismatch' || result.status === 'missing') {
+          await answerRecovery(ctx, 'giveaway');
+          return;
+        }
+        if (result.status !== 'drawn') {
+          throw new Error(`unexpected giveaway draw status: ${String(result.status)}`);
+        }
+
+        const hasTopup = Number(result.topup_winners || 0) > 0;
+        const underfilled = Number(result.winnersUserIds?.length || 0) < Number(result.requested_winners || 0);
+        const toast = underfilled
+          ? 'Выбраны все доступные участники ✅'
+          : hasTopup
+            ? 'Победители выбраны (есть добор) ✅'
+            : 'Победители выбраны ✅';
         await ctx.answerCallbackQuery({ text: toast });
 
-        // DM winners
         try { await notifyGiveawayWinnersDM({ api: ctx.api, db, gwId }); } catch {}
-
         await renderGwOpen(ctx, u.id, gwId);
-      } catch (e) {
+      } catch (error) {
+        try { logger?.error?.({ error, gwId, actorUserId: u.id }, 'manual giveaway draw failed'); } catch {}
         await ctx.answerCallbackQuery({ text: 'Ошибка выбора.' });
       } finally {
         try { await releaseLock(lockKey, lock?.token); } catch {}
