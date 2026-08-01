@@ -1,3 +1,18 @@
+## STEP590C3 — Critical Giveaway Callback Domain Extraction (2026-08-01)
+
+**Current handoff-safe source baseline:** STEP590C3 on exact STEP590C2.
+
+- status: SOURCE READY / PRODUCTION GIVEAWAY CALLBACK CANARY PENDING;
+- production STEP590C2 evidence: `a:brand_buy` and `a:brand_plan_buy` reached `update.ok`; Admin Payments read returned 200; no router/payment-domain error marker in supplied 99-row log;
+- new bounded domain: `src/bot/domains/giveaways/`;
+- extracted callback ownership: 29 total, 531 legacy;
+- newly extracted actions: join, eligibility check, manual end, winners view and manual draw confirmation/execution;
+- canonical draw core unchanged: `src/db/giveawayAtomicCore.js`;
+- SQL/ENV changes: none;
+- source QA: 119 giveaway-domain assertions, 2364 router assertions, 55 giveaway-critical assertions, 286 syntax checks;
+- portable spine: 6/6 PASS under temporary dependency shims; clean `npm ci` remains operator-side;
+- next bounded architecture step: STEP590C4 Critical Broadcast Callback Domain Extraction.
+
 ## STEP590C2 — Critical Payment Callback Domain Extraction (2026-08-01)
 
 **Current handoff-safe repository baseline:** STEP590C2 source architecture package on exact STEP590C1.

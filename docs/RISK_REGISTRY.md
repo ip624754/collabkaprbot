@@ -278,3 +278,14 @@ Residual risk:
 - Environment limitation: fresh `npm ci` was blocked by package-mirror HTTP 404 for `xtend@4.0.2`; bounded-safety and the complete portable spine are not newly claimed on the final tree.
 - Runtime verification required: cancelled invoice rendering for available product families, admin payment ledger navigation and absence of callback ownership/domain dependency errors.
 - Residual risk: the domain still receives a broad injected dependency object from the composition root; STEP590I must eventually enforce narrower capability interfaces.
+
+## Current STEP590C3 assessment
+
+- Change type: critical giveaway callback transport extraction; no schema or algorithm change.
+- Primary risks addressed: route shadowing, duplicate ownership, misplaced handler reachability and monolith blast radius.
+- Runtime blast radius: giveaway access, participant join/check, manual end, winners view and manual draw callbacks.
+- Canonical correctness boundary: PostgreSQL atomic draw transaction and advisory/row locks remain unchanged.
+- Rollback: code rollback only; committed winners and audit rows must never be rewritten or redrawn.
+- Source verification: dedicated domain/router/critical tests and source preflight PASS; portable spine PASS with temporary dependency shims.
+- Runtime verification required: bounded participant/owner canary; real draw only on a disposable or explicitly approved giveaway.
+- Residual risk: remaining giveaway sponsor/publish/results/reminder callbacks still reside in legacy ownership and will be extracted separately.

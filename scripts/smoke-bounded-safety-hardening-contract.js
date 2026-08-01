@@ -11,7 +11,7 @@ const replay = fs.readFileSync('src/lib/criticalUpdateReplay.js', 'utf8');
 const config = fs.readFileSync('src/lib/config.js', 'utf8');
 const health = fs.readFileSync('api/health.js', 'utf8');
 const bot = fs.readFileSync('src/bot/bot.js', 'utf8');
-const gwAccess = fs.readFileSync('src/bot/routes/gwAccess.js', 'utf8');
+const gwAccess = fs.readFileSync('src/bot/domains/giveaways/callbacks.js', 'utf8');
 
 assert.ok(safePatch.includes('field_not_allowed'), 'dynamic SQL allowlist rejects unknown fields');
 assert.ok(safePatch.includes('MUTATION_ROW_COUNT_MISMATCH'), 'row-count mismatch is explicit');

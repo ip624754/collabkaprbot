@@ -122,8 +122,8 @@ for (const action of PAYMENT_ADMIN_ACTIONS) {
 }
 check(!isPaymentCallbackAction('a:menu'), 'foreign action not captured');
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 22, 'STEP590C2 extracted owner count exact');
-equal(summary.legacy, 538, 'STEP590C2 legacy owner count exact');
+equal(summary.extracted, 29, 'STEP590C3 cumulative extracted owner count exact');
+equal(summary.legacy, 531, 'STEP590C3 cumulative legacy owner count exact');
 equal(summary.byRoute[CALLBACK_ROUTE.PAYMENT_PURCHASE], 6, 'purchase route count exact');
 equal(summary.byRoute[CALLBACK_ROUTE.PAYMENT_ADMIN], 10, 'admin payment route count exact');
 

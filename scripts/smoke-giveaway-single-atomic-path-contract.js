@@ -3,12 +3,16 @@ import fs from 'node:fs';
 
 const bot = fs.readFileSync(new URL('../src/bot/bot.js', import.meta.url), 'utf8');
 const cron = fs.readFileSync(new URL('../src/bot/cron.js', import.meta.url), 'utf8');
+const giveawayDomain = fs.readFileSync(new URL('../src/bot/domains/giveaways/callbacks.js', import.meta.url), 'utf8');
 const queries = fs.readFileSync(new URL('../src/db/queries.js', import.meta.url), 'utf8');
 const core = fs.readFileSync(new URL('../src/db/giveawayAtomicCore.js', import.meta.url), 'utf8');
 
-assert.match(bot, /drawAndFinalizeGiveawayWinnersAtomic\(gwId,\s*\{[\s\S]*?source:\s*'manual'/);
+assert.match(giveawayDomain, /drawAndFinalizeGiveawayWinnersAtomic\(gwId,\s*\{[\s\S]*?source:\s*'manual'/);
+assert.doesNotMatch(bot, /drawAndFinalizeGiveawayWinnersAtomic\(gwId/);
 assert.doesNotMatch(bot, /db\.setWinners\s*\(/);
+assert.doesNotMatch(giveawayDomain, /db\.setWinners\s*\(/);
 assert.doesNotMatch(bot, /makeXorShift32|sampleWithoutReplacement|GW_DRAW_ALGO_VERSION_JS/);
+assert.doesNotMatch(giveawayDomain, /makeXorShift32|sampleWithoutReplacement|GW_DRAW_ALGO_VERSION_JS/);
 
 assert.match(cron, /drawAndFinalizeGiveawayWinnersAtomic\(g\.id,\s*\{[\s\S]*?source:\s*'cron'/);
 assert.match(queries, /return drawAndFinalizeGiveawayWinnersAtomicCore\s*\(/);

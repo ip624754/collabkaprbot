@@ -1,0 +1,30 @@
+{
+  "a:gw_join": {
+    "bytes": 1699,
+    "lines": 42
+  },
+  "a:gw_check": {
+    "bytes": 2509,
+    "lines": 52
+  },
+  "a:gw_end_now": {
+    "bytes": 466,
+    "lines": 12
+  },
+  "a:gw_end_do": {
+    "bytes": 1078,
+    "lines": 27
+  },
+  "a:gw_wv": {
+    "bytes": 171,
+    "lines": 8
+  },
+  "a:gw_draw_now": {
+    "bytes": 1874,
+    "lines": 58
+  },
+  "a:gw_draw_do": {
+    "bytes": 3617,
+    "lines": 96
+  }
+}

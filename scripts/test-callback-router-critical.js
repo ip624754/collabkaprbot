@@ -35,14 +35,16 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 22, 'STEP590C2 must extract twenty-two exact actions');
-equal(summary.legacy, registryKeys.length - 22, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 29, 'STEP590C3 must extract twenty-nine exact actions');
+equal(summary.legacy, registryKeys.length - 29, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
+equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_PARTICIPANT], 2, 'giveaway participant owns two actions');
+equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_LIFECYCLE], 5, 'giveaway lifecycle owns five actions');
 equal(summary.byRoute[CALLBACK_ROUTE.PAYMENT_PURCHASE], 6, 'payment purchase owns six actions');
 equal(summary.byRoute[CALLBACK_ROUTE.PAYMENT_ADMIN], 10, 'payment admin owns ten actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 22, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 29, 'legacy count must be exact');
 
 for (const action of registryKeys) {
   const owner = getCallbackOwnership(action);
@@ -62,6 +64,14 @@ equal(getCallbackOwnership('a:admin_web_login_toggle').phase, CALLBACK_PHASE.POS
 for (const action of ['a:gw_access', 'a:gw_access_recheck', 'a:gw_access_checkme', 'a:gw_access_user_prompt']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.GIVEAWAY_ACCESS, `${action} owner`);
   equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} phase`);
+}
+for (const action of ['a:gw_join', 'a:gw_check']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.GIVEAWAY_PARTICIPANT, `${action} participant owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} participant phase`);
+}
+for (const action of ['a:gw_end_now', 'a:gw_end_do', 'a:gw_wv', 'a:gw_draw_now', 'a:gw_draw_do']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.GIVEAWAY_LIFECYCLE, `${action} lifecycle owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} lifecycle phase`);
 }
 for (const action of ['a:founder_buy', 'a:ws_pro_buy', 'a:brand_buy', 'a:brand_plan_buy', 'a:match_buy', 'a:feat_buy']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, `${action} payment purchase owner`);
@@ -191,6 +201,44 @@ const gwPostResult = await dispatchOwnedCallback({
 });
 equal(gwPostResult.status, CALLBACK_DISPATCH_STATUS.HANDLED, 'giveaway access executable owner handles callback');
 equal(gwCalls, 1, 'giveaway owner called exactly once');
+
+let gwParticipantCalls = 0;
+const gwParticipantResult = await dispatchOwnedCallback({
+  phase: CALLBACK_PHASE.POST_USER,
+  ctx: {},
+  p: { a: 'a:gw_check', i: '8' },
+  u: { id: 10 },
+  handlers: {
+    [CALLBACK_ROUTE.GIVEAWAY_PARTICIPANT]: async (_ctx, p, u) => {
+      gwParticipantCalls += 1;
+      equal(p.i, '8', 'giveaway participant payload reaches owner');
+      equal(u.id, 10, 'hydrated user reaches giveaway participant owner');
+      return true;
+    },
+  },
+  final: true,
+});
+equal(gwParticipantResult.status, CALLBACK_DISPATCH_STATUS.HANDLED, 'giveaway participant owner handles callback');
+equal(gwParticipantCalls, 1, 'giveaway participant owner called exactly once');
+
+let gwLifecycleCalls = 0;
+const gwLifecycleResult = await dispatchOwnedCallback({
+  phase: CALLBACK_PHASE.POST_USER,
+  ctx: {},
+  p: { a: 'a:gw_draw_do', i: '9' },
+  u: { id: 11 },
+  handlers: {
+    [CALLBACK_ROUTE.GIVEAWAY_LIFECYCLE]: async (_ctx, p, u) => {
+      gwLifecycleCalls += 1;
+      equal(p.i, '9', 'giveaway lifecycle payload reaches owner');
+      equal(u.id, 11, 'hydrated user reaches giveaway lifecycle owner');
+      return true;
+    },
+  },
+  final: true,
+});
+equal(gwLifecycleResult.status, CALLBACK_DISPATCH_STATUS.HANDLED, 'giveaway lifecycle owner handles callback');
+equal(gwLifecycleCalls, 1, 'giveaway lifecycle owner called exactly once');
 
 let paymentPurchaseCalls = 0;
 const paymentPurchaseResult = await dispatchOwnedCallback({

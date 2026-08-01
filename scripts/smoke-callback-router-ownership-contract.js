@@ -7,11 +7,14 @@ const router = fs.readFileSync(new URL('../src/bot/router/callbackRouter.js', im
 const ownership = fs.readFileSync(new URL('../src/bot/router/callbackOwnership.js', import.meta.url), 'utf8');
 const adminAuthActions = fs.readFileSync(new URL('../src/bot/domains/adminAuth/actions.js', import.meta.url), 'utf8');
 const adminAuthRoute = fs.readFileSync(new URL('../src/bot/domains/adminAuth/route.js', import.meta.url), 'utf8');
+const giveawayRoute = fs.readFileSync(new URL('../src/bot/domains/giveaways/route.js', import.meta.url), 'utf8');
 
 const requiredBotFragments = [
   'dispatchPreUserCallback(ctx, p',
   'admin_web_auth: (ctx2, p2) => handleAdminAuthChallengeCallback(ctx2, p2)',
-  'giveaway_access: (ctx2, p2, u2) => handleGwAccessRoute(ctx2, p2, u2',
+  'giveaway_access: (ctx2, p2, u2) => handleGiveawayAccessCallback(',
+  'giveaway_participant: (ctx2, p2, u2) => handleGiveawayParticipantCallback(',
+  'giveaway_lifecycle: (ctx2, p2, u2) => handleGiveawayLifecycleCallback(',
   'await dispatchCallback(ctx, p, u',
 ];
 for (const fragment of requiredBotFragments) {
@@ -29,8 +32,10 @@ assert.ok(ownership.includes('ADMIN_AUTH_CALLBACK_ROUTE_DEFINITIONS'), 'admin au
 assert.ok(adminAuthActions.includes("DECIDE: 'a:aw_auth_dec'"), 'admin auth domain must own exact action key');
 assert.ok(adminAuthRoute.includes('CALLBACK_PHASE.PRE_USER'), 'admin auth challenge route must preserve pre-user phase');
 assert.ok(adminAuthRoute.includes('CALLBACK_PHASE.POST_USER'), 'admin auth control route must preserve post-user phase');
-assert.ok(ownership.includes("'a:gw_access_user_prompt'"), 'giveaway access family must have exact owner');
+assert.ok(ownership.includes('GIVEAWAY_CALLBACK_ROUTE_DEFINITIONS'), 'giveaway ownership must come from bounded domain descriptors');
+assert.ok(giveawayRoute.includes('GIVEAWAY_PARTICIPANT_ROUTE_DEFINITION'), 'giveaway participant route must be explicit');
+assert.ok(giveawayRoute.includes('GIVEAWAY_LIFECYCLE_ROUTE_DEFINITION'), 'giveaway lifecycle route must be explicit');
 assert.ok(ownership.includes('callback_route.duplicate_action_owner'), 'duplicate action ownership must hard fail');
 assert.ok(ownership.includes('callback_route.unknown_action'), 'unknown extracted action must hard fail');
 
-console.log('PASS STEP590B callback router ownership source contract');
+console.log('PASS STEP590C3 callback router ownership source contract');
