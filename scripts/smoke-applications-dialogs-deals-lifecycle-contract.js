@@ -10,10 +10,11 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
 const botSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const applicationCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'applications', 'callbacks.js'), 'utf8');
 const dbSrc = fs.readFileSync(path.join(ROOT, 'src', 'db', 'queries.js'), 'utf8');
 const starsSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'payments', 'starsHandlers.js'), 'utf8');
 const retrySrc = fs.readFileSync(path.join(ROOT, 'api', 'qstash', 'monetization-retry.js'), 'utf8');
-const runtimeSrc = [botSrc, starsSrc, retrySrc].join('\n');
+const runtimeSrc = [botSrc, applicationCallbacksSrc, starsSrc, retrySrc].join('\n');
 
 function between(source, startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -32,7 +33,7 @@ const dealView = between(botSrc, 'async function renderBrandDealView(', '\nasync
 const dealReply = between(botSrc, 'async function startBrandDealReply(', '\nasync function renderBrandDealTemplates(');
 const dealTemplates = between(botSrc, 'async function renderBrandDealTemplates(', '\nasync function sendBrandDealTemplateReply(');
 const dealTemplateSend = between(botSrc, 'async function sendBrandDealTemplateReply(', '\nasync function _renderTplFlowLead(');
-const dealSetHandler = between(botSrc, "\tif (p.a === 'a:brand_deal_set') {", "if (p.a === 'a:brand_deal_reply') {");
+const dealSetHandler = between(applicationCallbacksSrc, "\tif (p.a === 'a:brand_deal_set') {", "if (p.a === 'a:brand_deal_reply') {");
 
 // Canonical visible taxonomy. Callback identities stay unchanged.
 assert.ok(creatorMenu.includes(".text('💬 Диалоги', 'a:go_dialogs')"), 'creator menu must expose 💬 Диалоги on the existing callback');

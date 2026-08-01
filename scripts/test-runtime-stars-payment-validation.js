@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerHooks } from 'node:module';
 
 const STUB_MODULES = new Map([
@@ -138,7 +138,9 @@ Object.assign(process.env, {
   FOUNDER_CREATOR_12M_PRICE: process.env.FOUNDER_CREATOR_12M_PRICE || '3333',
 });
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const root = path.resolve(__dirname, '..');
 const { _validateStarsPaymentStrict } = await import(pathToFileURL(path.join(root, 'src', 'bot', 'bot.js')).href);
 
 async function expectOk(args, expected) {

@@ -17,5 +17,11 @@ export const CALLBACK_ROUTE = Object.freeze({
   BROADCAST_OPERATIONS: 'broadcast_operations',
   NAVIGATION_SHARED: 'navigation_shared',
   TELEGRAM_UX_SHARED: 'telegram_ux_shared',
+  APPLICATION_CREATOR: 'application_creator',
+  APPLICATION_BRAND: 'application_brand',
+  APPLICATION_DEALS: 'application_deals',
+  LEAD_ACQUISITION: 'lead_acquisition',
+  LEAD_WORKFLOW: 'lead_workflow',
+  LEAD_AUDIT: 'lead_audit',
   LEGACY: 'legacy',
 });

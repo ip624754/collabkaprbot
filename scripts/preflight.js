@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");
-const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCmd = "npm";
 const require = createRequire(import.meta.url);
 const mode = String(process.argv[2] || "full").trim().toLowerCase();
 
@@ -71,13 +71,49 @@ function assertDependenciesInstalled() {
   process.exit(2);
 }
 
+function buildNpmRunSpec(scriptName, platform = process.platform) {
+  const normalized = String(scriptName || "").trim();
+  if (!/^[a-zA-Z0-9:_-]+$/.test(normalized)) {
+    throw new Error(`[preflight] Unsafe npm script name: ${normalized || "<empty>"}`);
+  }
+
+  if (platform === "win32") {
+    return {
+      command: process.env.ComSpec || "cmd.exe",
+      args: ["/d", "/s", "/c", `npm.cmd run ${normalized}`],
+    };
+  }
+
+  return {
+    command: npmCmd,
+    args: ["run", normalized],
+  };
+}
+
 function runNpm(scriptName) {
-  const res = spawnSync(npmCmd, ["run", scriptName], {
+  const spec = buildNpmRunSpec(scriptName);
+  const res = spawnSync(spec.command, spec.args, {
     cwd: ROOT,
     stdio: "inherit",
     env: process.env,
   });
-  if (res.status !== 0) process.exit(res.status ?? 1);
+
+  if (res.error) {
+    console.error(
+      `\n[preflight] Failed to launch npm script "${scriptName}" via ${spec.command}:`,
+      res.error
+    );
+    process.exit(1);
+  }
+
+  if (res.status == null) {
+    console.error(
+      `\n[preflight] npm script "${scriptName}" ended without an exit status via ${spec.command}.`
+    );
+    process.exit(1);
+  }
+
+  if (res.status !== 0) process.exit(res.status);
 }
 
 function runNodeCheck(relPath) {
@@ -201,6 +237,7 @@ function buildNodeCheckList() {
 
 const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): ENV baseline contract", "smoke:env-baseline-contract"],
+  ["Preflight (source-only): Windows npm runner contract", "smoke:preflight-windows-runner-contract"],
   ["Preflight (source-only): package-lock release consistency", "check:package-lock"],
   ["Preflight (source-only): Vercel Hobby function budget", "check:function-budget"],
   ["Preflight (source-only): creator current-channel contract", "smoke:creator-current-channel-contract"],
@@ -308,12 +345,16 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): broadcast bounded-domain source contract", "smoke:broadcast-domain-extraction-contract"],
   ["Preflight (source-only): navigation/shared Telegram UX executable tests", "test:navigation-shared-ux-extraction"],
   ["Preflight (source-only): navigation/shared Telegram UX source contract", "smoke:navigation-shared-ux-contract"],
+  ["Preflight (source-only): applications/leads bounded-domain executable tests", "test:applications-leads-domain-extraction"],
+  ["Preflight (source-only): applications/leads bounded-domain source contract", "smoke:applications-leads-domain-extraction-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],
   ["Preflight (source-only): redis atomicity grep gate", "lint:redis-atomic"],
   ["Preflight (source-only): redis TTL hygiene gate", "lint:redis-ttl"],
   ["Preflight (source-only): redis.js exports gate", "lint:redis-exports"],
+  ["Preflight (source-only): repository file-URL path safety contract", "smoke:file-url-path-safety-contract"],
+  ["Preflight (source-only): portable paths Windows root contract", "smoke:portable-paths-windows-root-contract"],
   ["Preflight (source-only): portable paths gate (ZIP/Windows-safe)", "lint:portable-paths"],
   ["Preflight (source-only): admin ops keyboard/actions contract", "smoke:admin-ops-contract"],
   ["Preflight (source-only): admin comms contract", "smoke:admin-comms-contract"],

@@ -5,6 +5,8 @@ import { GIVEAWAY_CALLBACK_ROUTE_DEFINITIONS } from '../domains/giveaways/route.
 import { BROADCAST_CALLBACK_ROUTE_DEFINITIONS } from '../domains/broadcasts/route.js';
 import { NAVIGATION_CALLBACK_ROUTE_DEFINITIONS } from '../shared/navigation/route.js';
 import { TELEGRAM_UX_CALLBACK_ROUTE_DEFINITIONS } from '../shared/telegramUx/route.js';
+import { APPLICATION_CALLBACK_ROUTE_DEFINITIONS } from '../domains/applications/route.js';
+import { LEAD_CALLBACK_ROUTE_DEFINITIONS } from '../domains/leads/route.js';
 import { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
@@ -16,6 +18,8 @@ export const CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
   ...BROADCAST_CALLBACK_ROUTE_DEFINITIONS,
   ...NAVIGATION_CALLBACK_ROUTE_DEFINITIONS,
   ...TELEGRAM_UX_CALLBACK_ROUTE_DEFINITIONS,
+  ...APPLICATION_CALLBACK_ROUTE_DEFINITIONS,
+  ...LEAD_CALLBACK_ROUTE_DEFINITIONS,
 ]);
 
 function assertRouteDefinition(definition) {

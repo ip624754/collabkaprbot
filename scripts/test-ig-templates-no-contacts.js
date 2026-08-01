@@ -1,8 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT = path.resolve(__dirname, '..');
 const BOT_JS = path.join(ROOT, 'src', 'bot', 'bot.js');
 
 function die(msg) {

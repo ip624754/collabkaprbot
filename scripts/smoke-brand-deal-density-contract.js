@@ -11,6 +11,8 @@ const ROOT = path.resolve(__dirname, '..');
 
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
+const appCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'applications', 'callbacks.js'), 'utf8');
+const combinedSrc = `${botSrc}\n${appCallbacksSrc}`;
 
 assert.ok(
   botSrc.includes('function dealStageWhatNow(s) {') &&
@@ -27,10 +29,10 @@ assert.ok(
 );
 
 assert.ok(
-  botSrc.includes('const flash = prevStage === stage') &&
-    botSrc.includes('Этап обновлён: ${dealStageTitle(prevStage)} → ${dealStageTitle(stage)}') &&
-    botSrc.includes("await ctx.answerCallbackQuery({ text: flash })") &&
-    botSrc.includes('await renderBrandDealView(ctx, u.id, appId, { ...back, flash });'),
+  combinedSrc.includes('const flash = prevStage === stage') &&
+    combinedSrc.includes('Этап обновлён: ${dealStageTitle(prevStage)} → ${dealStageTitle(stage)}') &&
+    combinedSrc.includes("await ctx.answerCallbackQuery({ text: flash })") &&
+    combinedSrc.includes('await renderBrandDealView(ctx, u.id, appId, { ...back, flash });'),
   'Expected stage changes to produce a clear inline confirmation and rerender flash state'
 );
 

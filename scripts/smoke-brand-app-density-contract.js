@@ -11,6 +11,8 @@ const ROOT = path.resolve(__dirname, '..');
 
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
+const appCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'applications', 'callbacks.js'), 'utf8');
+const combinedSrc = `${botSrc}\n${appCallbacksSrc}`;
 
 assert.ok(
   botSrc.includes('function brandAppWhatNow(status, opts = {}) {') &&
@@ -27,10 +29,10 @@ assert.ok(
 );
 
 assert.ok(
-  botSrc.includes('const flash = prevSt === st') &&
-    botSrc.includes('Статус обновлён: ${(LEAD_STATUSES[prevSt]?.title || LEAD_STATUSES[prevSt]?.label || prevSt)} → ${(LEAD_STATUSES[st]?.title || LEAD_STATUSES[st]?.label || st)}') &&
-    botSrc.includes('const nextBack = { status: st, page: back.page, flash };') &&
-    botSrc.includes('await renderBrandAppView(ctx, u.id, appId, nextBack);'),
+  combinedSrc.includes('const flash = prevSt === st') &&
+    combinedSrc.includes('Статус обновлён: ${(LEAD_STATUSES[prevSt]?.title || LEAD_STATUSES[prevSt]?.label || prevSt)} → ${(LEAD_STATUSES[st]?.title || LEAD_STATUSES[st]?.label || st)}') &&
+    combinedSrc.includes('const nextBack = { status: st, page: back.page, flash };') &&
+    combinedSrc.includes('await renderBrandAppView(ctx, u.id, appId, nextBack);'),
   'Expected status changes to produce a clear inline confirmation and rerender flash state on the application card'
 );
 

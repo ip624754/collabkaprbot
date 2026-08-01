@@ -26,6 +26,7 @@ function expectRegistry(action, { type, guard }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const applicationCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'applications', 'callbacks.js'), 'utf8');
 
 expectRegistry('a:brand_apply', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS });
 expectRegistry('a:brand_apply_write', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS });
@@ -54,9 +55,9 @@ assert.ok(renderBrandApplyPreviewSrc.includes(".text('✍️ Изменить', 
 assert.ok(renderBrandApplyPreviewSrc.includes(".text('🗑 Сбросить', `a:brand_apply_clear|u:${brandUserId}|p:${backPage}`);"), 'brand apply preview must expose draft reset CTA');
 
 const brandApplyCallbacksSrc = extractBetween(
-  botSource,
+  applicationCallbacksSource,
   "    if (p.a === 'a:brand_apply') {",
-  '\n\n\n\n\n    // MENU'
+  '\n  })();\n  return true;\n}\n\nexport async function handleApplicationBrandCallback'
 );
 assert.ok(brandApplyCallbacksSrc.includes('startWrite: !hasDraft'), 'brand apply entry must auto-enable input mode when no draft exists');
 assert.ok(brandApplyCallbacksSrc.includes("if (p.a === 'a:brand_apply_write') {"), 'brand apply callbacks must keep explicit write action');

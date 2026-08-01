@@ -254,6 +254,8 @@ Residual risk:
 | R-40 | Compatibility façades become permanent second ownership layers | HIGH | WATCH | new behavior added to `bot.js`/`queries.js` after domain extraction | façade freeze rule and retirement criteria in STEP590J | extracted domain adds new legacy branch/export implementation |
 | R-41 | Module split creates circular or inverted dependencies | HIGH | WATCH | static cycle or repository/service/view direction violation | dependency rules and STEP590I automated import gates | first cycle or forbidden import |
 | R-42 | Architecture program delays production remediation/acceptance evidence | MEDIUM | ACTIVE | structural work proceeds while H1/X1–X7 production state remains unknown | retain explicit release HOLD and separate production acceptance lane | architecture claim used to imply production readiness |
+| R-43 | Application/lead extraction drifts actor, role or workspace authorization | HIGH | ACTIVE | record from another actor/workspace becomes readable or mutable; callback payload identity is trusted | keep Telegram/hydrated actor canonical, inject existing access guards, executable authorization/source parity tests | first cross-workspace access, actor mismatch or unaudited status transition |
+| R-44 | Canonical lead creation is split between public workspace and lead owners | HIGH | WATCH | `a:send_request_to_creator` and `a:wsp_lead_new` diverge or recurse across owners | own both actions in `lead_acquisition` and test normalization/reachability as one path | duplicate lead, cross-owner fallback or stale old-button regression |
 
 ## Current STEP590A assessment
 
@@ -312,3 +314,15 @@ Residual risk:
 - Source verification: 161 domain assertions, 2,440 router assertions, 35 broadcast-critical assertions, source preflight and portable spine PASS; dependency-backed runs are shim-assisted where declared.
 - Runtime verification required: bounded composer/preview/audience/cancel/list/view/blocked canary with no live send or fanout mutation by default.
 - Residual risk: target enumeration, worker execution, delivery reconciliation and some communications/admin flows remain outside this bounded callback domain and will be decomposed in later STEPs.
+
+## Current STEP590E1 assessment
+
+- Change type: applications, accepted-deals and leads callback transport/orchestration extraction; no schema, ENV or lifecycle-state redesign.
+- Primary risks addressed: R-38, R-39, R-40 and R-41.
+- Runtime blast radius: 53 callback actions across creator application flows, brand review/reply/acceptance, accepted deals, lead acquisition/workflow and lead audit.
+- Canonical correctness boundary: existing workspace/role guards, application/lead write helpers, rate limits, audit evidence and DB repositories remain unchanged.
+- Rollback: code rollback to exact STEP590D; preserve durable application, deal, lead, note and audit records created after deployment.
+- Source verification: 302 domain assertions, 2,574 router assertions, action/callback registries, prior domain regressions and 316 JavaScript syntax checks PASS; source preflight and portable spine PASS under declared temporary dependency shims.
+- Environment limitation: clean `npm ci` was blocked by internal mirror HTTP 404 for `xtend@4.0.2`; operator-side dependency/audit evidence remains required.
+- Runtime verification required: bounded creator/brand/deal/lead navigation and disposable mutation canary, including workspace isolation and no duplicate notifications.
+- Residual risk: broad capability injection remains a compatibility seam until repository decomposition and architecture import gates; `a:wsp_lead_new` ownership should remain explicitly tested because it moved from a public-workspace adjacency into canonical lead acquisition.

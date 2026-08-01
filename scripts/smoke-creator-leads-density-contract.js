@@ -11,6 +11,8 @@ const ROOT = path.resolve(__dirname, '..');
 
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
+const leadCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'leads', 'callbacks.js'), 'utf8');
+const combinedSrc = `${botSrc}\n${leadCallbacksSrc}`;
 
 const fnStart = botSrc.indexOf('async function renderWsLeadsList(');
 const fnEnd = botSrc.indexOf('// -----------------------------\n// Curator application queue', fnStart);
@@ -59,9 +61,9 @@ assert.ok(
 );
 
 assert.ok(
-  botSrc.includes('const flash = `Шаблон отправлен: ${leadTplLabel(tplKey)}`;') &&
-    botSrc.includes('Статус обновлён: ${(LEAD_STATUSES[stBefore]?.title || stBefore)} → ${(LEAD_STATUSES[stAfter]?.title || stAfter)}') &&
-    botSrc.includes('await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus || st, page: backPage, ret: retKey, flash });'),
+  combinedSrc.includes('const flash = `Шаблон отправлен: ${leadTplLabel(tplKey)}`;') &&
+    combinedSrc.includes('Статус обновлён: ${(LEAD_STATUSES[stBefore]?.title || stBefore)} → ${(LEAD_STATUSES[stAfter]?.title || stAfter)}') &&
+    combinedSrc.includes('await renderLeadView(ctx, u.id, leadId, { wsId: wsId || null, status: backStatus || st, page: backPage, ret: retKey, flash });'),
   'Expected creator-side brand-lead status/template actions to rerender the same card with a visible inline flash'
 );
 

@@ -35,8 +35,8 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 67, 'STEP590D must extract sixty-seven exact actions');
-equal(summary.legacy, registryKeys.length - 67, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 120, 'STEP590E1 must extract one hundred twenty exact actions');
+equal(summary.legacy, registryKeys.length - 120, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
@@ -50,7 +50,13 @@ equal(summary.byRoute[CALLBACK_ROUTE.BROADCAST_DISPATCH], 2, 'broadcast dispatch
 equal(summary.byRoute[CALLBACK_ROUTE.BROADCAST_OPERATIONS], 7, 'broadcast operations owns seven actions');
 equal(summary.byRoute[CALLBACK_ROUTE.NAVIGATION_SHARED], 9, 'shared navigation owns nine actions');
 equal(summary.byRoute[CALLBACK_ROUTE.TELEGRAM_UX_SHARED], 1, 'shared Telegram UX owns one action');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 67, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.APPLICATION_CREATOR], 13, 'application creator owns thirteen actions');
+equal(summary.byRoute[CALLBACK_ROUTE.APPLICATION_BRAND], 10, 'application brand owns ten actions');
+equal(summary.byRoute[CALLBACK_ROUTE.APPLICATION_DEALS], 10, 'application deals owns ten actions');
+equal(summary.byRoute[CALLBACK_ROUTE.LEAD_ACQUISITION], 5, 'lead acquisition owns five actions');
+equal(summary.byRoute[CALLBACK_ROUTE.LEAD_WORKFLOW], 14, 'lead workflow owns fourteen actions');
+equal(summary.byRoute[CALLBACK_ROUTE.LEAD_AUDIT], 1, 'lead audit owns one action');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 120, 'legacy count must be exact');
 
 for (const action of registryKeys) {
   const owner = getCallbackOwnership(action);
@@ -109,6 +115,28 @@ for (const action of ['a:ui_mode_set', 'a:guide', 'a:menu_push', 'a:menu', 'a:ro
 }
 equal(getCallbackOwnership('a:usr_ack').routeId, CALLBACK_ROUTE.TELEGRAM_UX_SHARED, 'user ack shared UX owner');
 equal(getCallbackOwnership('a:usr_ack').phase, CALLBACK_PHASE.POST_USER, 'user ack shared UX phase');
+for (const action of ['a:brand_apply', 'a:brand_apply_clear', 'a:brand_apply_done', 'a:brand_apply_preview', 'a:brand_apply_send', 'a:brand_apply_write', 'a:brand_apply_cancel', 'a:brand_app_accepted_done', 'a:brand_app_card', 'a:brand_app_chat', 'a:my_apps', 'a:go_dialogs', 'a:go_requests']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.APPLICATION_CREATOR, `${action} application creator owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} application creator phase`);
+}
+for (const action of ['a:brand_apps', 'a:brand_app_accept', 'a:brand_app_del_do', 'a:brand_app_del_q', 'a:brand_app_reply', 'a:brand_app_set', 'a:brand_app_tpl', 'a:brand_app_tpl_send', 'a:brand_app_tpls', 'a:brand_app_view']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.APPLICATION_BRAND, `${action} application brand owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} application brand phase`);
+}
+for (const action of ['a:brand_deal_reply', 'a:brand_deal_set', 'a:brand_deal_tpl', 'a:brand_deal_tpls', 'a:brand_deal_view', 'a:brand_deals', 'a:brand_deals_filters_clear', 'a:brand_deals_mine_toggle', 'a:brand_deals_search', 'a:brand_deals_search_clear']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.APPLICATION_DEALS, `${action} application deals owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} application deals phase`);
+}
+for (const action of ['a:send_request_to_creator', 'a:wsp_lead_new', 'a:blead_view', 'a:blead_reply', 'a:blead_cancel']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.LEAD_ACQUISITION, `${action} lead acquisition owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} lead acquisition phase`);
+}
+for (const action of ['a:lead_assign', 'a:lead_del_do', 'a:lead_del_q', 'a:lead_note', 'a:lead_note_cancel', 'a:lead_note_text', 'a:lead_note_tpl', 'a:lead_notes', 'a:lead_reply', 'a:lead_set', 'a:lead_tpl', 'a:lead_tpl_send', 'a:lead_tpls', 'a:lead_view']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.LEAD_WORKFLOW, `${action} lead workflow owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} lead workflow phase`);
+}
+equal(getCallbackOwnership('a:ca').routeId, CALLBACK_ROUTE.LEAD_AUDIT, 'lead audit owner');
+equal(getCallbackOwnership('a:ca').phase, CALLBACK_PHASE.POST_USER, 'lead audit phase');
 equal(getCallbackOwnership('a:support').routeId, CALLBACK_ROUTE.LEGACY, 'non-extracted action stays legacy');
 equal(getCallbackOwnership('a:not_registered'), null, 'unknown action has no owner');
 

@@ -11,6 +11,8 @@ const ROOT = path.resolve(__dirname, '..');
 
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
+const applicationCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'applications', 'callbacks.js'), 'utf8');
+const runtimeSrc = [botSrc, applicationCallbacksSrc].join('\n');
 
 assert.ok(
   botSrc.includes("function brandAppReplyButtonLabel() {") &&
@@ -25,24 +27,24 @@ assert.ok(
 );
 
 assert.ok(
-  botSrc.includes("const msg = buildBrandAppReplyRecoveryText({") &&
-    botSrc.includes("kind: 'degraded',") &&
-    botSrc.includes("const text = buildBrandAppReplyPromptText({") &&
-    botSrc.includes("secondaryLabel: '📨 Заявки'") &&
-    botSrc.includes("secondaryLabel: '📨 Открыть заявку'"),
+  runtimeSrc.includes("const msg = buildBrandAppReplyRecoveryText({") &&
+    runtimeSrc.includes("kind: 'degraded',") &&
+    runtimeSrc.includes("const text = buildBrandAppReplyPromptText({") &&
+    runtimeSrc.includes("secondaryLabel: '📨 Заявки'") &&
+    runtimeSrc.includes("secondaryLabel: '📨 Открыть заявку'"),
   'Expected app/deal reply open flows to reuse centralized brand-side prompt and degraded fallback helpers'
 );
 
 assert.ok(
-  botSrc.includes("buildBrandAppReplyRecoveryText({ kind: 'missing_id' })") &&
-    botSrc.includes("kind: 'too_short',") &&
-    botSrc.includes("kind: 'too_long',") &&
-    botSrc.includes("kind: 'not_found',") &&
-    botSrc.includes("kind: 'no_access',") &&
-    botSrc.includes("kind: 'not_accepted',") &&
-    botSrc.includes("kind: 'no_creator_tg',") &&
-    botSrc.includes("kind: 'rate_limit',") &&
-    botSrc.includes("kind: 'open_error',"),
+  runtimeSrc.includes("buildBrandAppReplyRecoveryText({ kind: 'missing_id' })") &&
+    runtimeSrc.includes("kind: 'too_short',") &&
+    runtimeSrc.includes("kind: 'too_long',") &&
+    runtimeSrc.includes("kind: 'not_found',") &&
+    runtimeSrc.includes("kind: 'no_access',") &&
+    runtimeSrc.includes("kind: 'not_accepted',") &&
+    runtimeSrc.includes("kind: 'no_creator_tg',") &&
+    runtimeSrc.includes("kind: 'rate_limit',") &&
+    runtimeSrc.includes("kind: 'open_error',"),
   'Expected brand-side reply open/send recovery paths to use centralized recovery copy for validation, guards, and open errors'
 );
 

@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT = path.resolve(__dirname, "..");
 
 // Limits chosen to be safe across filesystems + zip tools.
 // - Most filesystems allow 255 bytes for a single filename, but zip/unzip + UTF-8 can break earlier.

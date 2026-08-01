@@ -1,3 +1,19 @@
+## STEP590E1 — Applications & Leads Domain Extraction (2026-08-01)
+
+**Current handoff-safe source baseline:** STEP590E1 on exact STEP590D.
+
+- status: SOURCE READY / PRODUCTION APPLICATIONS-LEADS CANARY PENDING;
+- new bounded domains: `src/bot/domains/applications/` and `src/bot/domains/leads/`;
+- newly extracted callback actions: 53 across creator applications, brand review, deals, lead acquisition, lead workflow and lead audit;
+- cumulative ownership: 120 extracted, 440 legacy, 0 unresolved;
+- `a:send_request_to_creator` and canonical `a:wsp_lead_new` now share one explicit lead-acquisition owner;
+- `a:ca` is lead-audit owned while `a:cur_audit` remains for later curation extraction;
+- application/lead DB, Redis, role/workspace guards, lifecycle states, callback keys and visible copy are unchanged;
+- SQL/ENV changes: none;
+- source QA: 302 domain assertions, 2,574 router assertions, action/callback registries and 316 JavaScript syntax checks PASS;
+- source preflight and portable spine: PASS under temporary dependency shims; clean `npm ci` remains operator-side because the implementation mirror returned 404 for `xtend@4.0.2`;
+- next bounded architecture step after production canary: STEP590E2 Barter.
+
 ## STEP590D — Navigation & Shared Telegram UX (2026-08-01)
 
 **Current handoff-safe source baseline:** STEP590D on exact STEP590C4.

@@ -11,6 +11,8 @@ const ROOT = path.resolve(__dirname, '..');
 
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
+const appCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'applications', 'callbacks.js'), 'utf8');
+const combinedSrc = `${botSrc}\n${appCallbacksSrc}`;
 
 assert.ok(
   botSrc.includes('function creatorBrandAppChatRecoveryKb(appId = 0, brandUserId = 0, opts = {}) {') &&
@@ -32,15 +34,15 @@ assert.ok(
 );
 
 assert.ok(
-  botSrc.includes("const kb = creatorBrandAppChatRecoveryKb(appId, 0);") &&
-    botSrc.includes("const msg = buildCreatorBrandAppChatRecoveryText({ appId, kind: 'open_error' });") &&
-    botSrc.includes("buildCreatorBrandAppChatRecoveryText({ kind: 'missing_id' })") &&
-    botSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'too_short' })") &&
-    botSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'too_long' })") &&
-    botSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'rate_limit' })") &&
-    botSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'not_found' })") &&
-    botSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'no_access' })") &&
-    botSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'not_accepted' })"),
+  combinedSrc.includes("const kb = creatorBrandAppChatRecoveryKb(appId, 0);") &&
+    combinedSrc.includes("const msg = buildCreatorBrandAppChatRecoveryText({ appId, kind: 'open_error' });") &&
+    combinedSrc.includes("buildCreatorBrandAppChatRecoveryText({ kind: 'missing_id' })") &&
+    combinedSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'too_short' })") &&
+    combinedSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'too_long' })") &&
+    combinedSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'rate_limit' })") &&
+    combinedSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'not_found' })") &&
+    combinedSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'no_access' })") &&
+    combinedSrc.includes("buildCreatorBrandAppChatRecoveryText({ appId, kind: 'not_accepted' })"),
   'Expected creator-side chat open/send recovery paths to use centralized recovery copy for open, validation, and guard failures'
 );
 
