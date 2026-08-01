@@ -16,7 +16,7 @@
 | Step | Scope | Runtime change | Expected risk | Exit gate |
 |---|---|---|---:|---|
 | STEP590A | Architecture baseline, ownership inventories, dependency rules | None | 9/20 | Reproducible map and approved sequence |
-| STEP590B | Executable callback router and ownership registry | Yes, behavior-preserving | 15/20 | Every action has one owner/alias; real dispatch tests PASS |
+| STEP590B | Executable callback router and ownership registry | Implemented; production canary pending | 15/20 | 560/560 unique owners; executable reachability PASS |
 | STEP590C1 | Admin-auth route registration extraction | Yes, behavior-preserving | 14/20 | H1 route remains reachable; auth suite PASS |
 | STEP590C2 | Payment callback extraction | Yes, critical | 18/20 | Payment semantics and X1 suite unchanged |
 | STEP590C3 | Giveaway callback extraction | Yes, critical | 17/20 | Manual/cron atomic draw contract unchanged |
@@ -67,3 +67,12 @@ Each extraction must remain deployable and reversible at its own commit/artifact
 ## Program completion
 
 STEP590 does not claim completion from smaller files alone. Completion requires explicit ownership, executable routing, preserved critical invariants, bounded dependency direction and removal of the legacy central dispatch/DB ownership only after all consumers are migrated.
+
+
+## Current program position — STEP590B
+
+- STEP590A architecture baseline: complete;
+- STEP590B source implementation: complete;
+- STEP590B deployment/live callback canary: pending;
+- next bounded extraction after canary: STEP590C1 admin/auth callback domain;
+- legacy owner count: 555 and must decrease monotonically through accepted extractions.

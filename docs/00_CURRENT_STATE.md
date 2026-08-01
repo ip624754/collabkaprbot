@@ -1,3 +1,30 @@
+## STEP590B — Executable Callback Router & Unique Ownership Gate (2026-08-01)
+
+**Current handoff-safe repository baseline:** STEP590B runtime architecture package on top of STEP590A.
+
+Repository truth:
+
+- all 560 registered callback actions now have one exact owner;
+- 5 actions are extracted into executable owners: admin-web auth (1) and giveaway access diagnostics (4);
+- 555 untouched actions remain explicitly owned by the legacy compatibility dispatcher;
+- pre-user and post-user callback phases are executable and fail closed on missing handler, wrong phase or silent extracted-route decline;
+- `a:aw_auth_dec` now reaches the admin-auth domain through the canonical pre-user router rather than a direct bypass;
+- duplicate action ownership, duplicate route IDs and unknown extracted actions are hard failures;
+- callback keys, action guards, product logic, schema, ENV and user-facing copy are unchanged;
+- local dependency-free router QA passes 2,292 assertions; action/callback registries, X1 payment, X2 giveaway, X3 broadcast and 271-file syntax gates pass;
+- clean `npm ci`, full dependency/runtime preflight, full STEP590B portable spine and production callback canary remain pending because the available package mirror returned HTTP 404 for `xtend@4.0.2`.
+
+**Architecture decision:** STEP590B establishes the strangler router. Do not remove the legacy owner until each bounded domain is extracted and accepted.
+
+Read first:
+
+- `docs/architecture/STEP590B_EXECUTABLE_CALLBACK_ROUTER.md`;
+- `docs/audit/STEP590B_EXECUTABLE_CALLBACK_ROUTER_REPORT.md`;
+- `docs/operations/STEP590B_CALLBACK_ROUTER_ROLLOUT_RUNBOOK.md`;
+- `docs/process/07_WORK_HISTORY_STEP590B.md`.
+
+---
+
 ## STEP590A — Architecture Baseline & Modular Monolith Plan (2026-08-01)
 
 **Current handoff-safe repository baseline:** STEP590A docs-only architecture package on top of STEP588X7H1.

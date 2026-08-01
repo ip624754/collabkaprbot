@@ -184,6 +184,7 @@ function buildNodeCheckList() {
   scanDir("api", { maxDepth: 2 });
   scanDir("migrations", { maxDepth: 1 });
   scanDir(path.join("src", "bot", "routes"), { maxDepth: 2 });
+  scanDir(path.join("src", "bot", "router"), { maxDepth: 2 });
   scanDir(path.join("src", "bot", "payments"), { maxDepth: 2 });
   scanDir(path.join("src", "lib"), { maxDepth: 1 });
   scanDir("scripts", {
@@ -294,6 +295,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): creator catalog open-path contract", "smoke:creator-brands-home-open-contract"],
   ["Preflight (source-only): actions registry", "actions:check"],
   ["Preflight (source-only): callback consistency guard", "callbacks:check"],
+  ["Preflight (source-only): callback router ownership and reachability", "callbacks:ownership"],
+  ["Preflight (source-only): callback router ownership source contract", "smoke:callback-router-ownership-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

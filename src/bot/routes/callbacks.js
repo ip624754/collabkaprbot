@@ -1,5 +1,12 @@
 import { InlineKeyboard } from 'grammy';
 import { opaqueLogRef, safeLogError } from '../../lib/logPrivacy.js';
+import {
+  CALLBACK_DISPATCH_STATUS,
+  dispatchOwnedCallback,
+} from '../router/callbackRouter.js';
+import { CALLBACK_PHASE } from '../router/callbackOwnership.js';
+
+const SAFE_ACK_INSTALLED = Symbol.for('collabka.callback.safe_ack_installed');
 
 function escHtml(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -7,32 +14,6 @@ function escHtml(s) {
 
 function getCid(ctx) {
   return ctx?.state?.cid || `${ctx?.update?.update_id ?? 0}-${ctx?.from?.id ?? 0}`;
-}
-
-function resolveRoute(action) {
-  const a = String(action || '');
-  if (!a) return null;
-
-  // NOTE: this is a thin registry used for safe dispatch + future strangler extraction.
-  // Today most routes still delegate to the legacy (monolith) handler.
-  if (a === 'a:menu' || a === 'a:main_menu' || a.startsWith('a:ui_')) return 'ui';
-  if (a.startsWith('a:bx_') || a.startsWith('a:bm_')) return 'bx';
-  if (a.startsWith('a:dir_') || a.startsWith('a:brand_dir_')) return 'dir';
-  if (a === 'a:gw_access' || a.startsWith('a:gw_access_')) return 'gw_access';
-  if (a.startsWith('a:gw_')) return 'gw';
-  if (a.startsWith('a:ws_') || a.startsWith('a:wsp_')) return 'ws';
-  if (a.startsWith('a:adm_')) return 'adm';
-  if (a.startsWith('a:rep_') || a.startsWith('a:report_')) return 'rep';
-
-  // Unknown a:* action
-  return null;
-}
-
-async function callMaybe(fn, ctx, p, u) {
-  if (!fn) return undefined;
-  // Support both closures (() => ...) and explicit signatures ((ctx,p,u)=>...)
-  if (fn.length >= 1) return fn(ctx, p, u);
-  return fn();
 }
 
 async function replyUnknown(ctx, deps, action) {
@@ -50,18 +31,14 @@ async function replyUnknown(ctx, deps, action) {
 
   const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
   const msg =
-    `⚠️ <b>Кнопка устарела</b> (после обновления).
-
-` +
+    `⚠️ <b>Кнопка устарела</b> (после обновления).\n\n` +
     `Открой меню и продолжай оттуда.`;
 
-  // safeEditOrReply is a project-level contract: never silently fail.
   if (typeof deps?.safeEditOrReply === 'function') {
     await deps.safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb });
     return;
   }
 
-  // Fallback if safeEditOrReply is not available for any reason
   await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb }).catch(() => {});
 }
 
@@ -73,7 +50,7 @@ async function replyError(ctx, deps, action, err) {
         cid,
         action: String(action || ''),
         actor_ref: opaqueLogRef(ctx?.from?.id, 'telegram_actor'),
-        err: safeLogError(err)
+        err: safeLogError(err),
       },
       'callback.error'
     );
@@ -84,17 +61,13 @@ async function replyError(ctx, deps, action, err) {
   } catch {}
 
   const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
-  const dbg = `
-
-<code>cid: ${escHtml(cid)}
-act: ${escHtml(String(action || ''))}</code>`;
+  const dbg = `\n\n<code>cid: ${escHtml(cid)}\nact: ${escHtml(String(action || ''))}</code>`;
   const isAdmin = (typeof deps?.isAdmin === 'function') ? !!deps.isAdmin(ctx) : !!deps?.isAdmin;
-  const errLine = isAdmin ? `
-<code>err: ${escHtml(String(err?.name || 'Error'))}: ${escHtml(String(err?.message || err))}</code>` : '';
+  const errLine = isAdmin
+    ? `\n<code>err: ${escHtml(String(err?.name || 'Error'))}: ${escHtml(String(err?.message || err))}</code>`
+    : '';
   const msg =
-    `⚠️ <b>Произошла ошибка</b>
-
-` +
+    `⚠️ <b>Произошла ошибка</b>\n\n` +
     `Я уже записал детали. Открой меню и повтори шаг.` +
     dbg +
     errLine;
@@ -106,29 +79,80 @@ act: ${escHtml(String(action || ''))}</code>`;
   await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: kb }).catch(() => {});
 }
 
-export async function dispatchCallback(ctx, p, u, deps = {}) {
-  const action = String(p?.a || '');
-
-  const route = resolveRoute(action);
-  const handlers = deps.handlers || {};
-  const handler = (route && handlers[route]) ? handlers[route] : deps.legacy;
-
-  // Anti-silent: never crash on answerCallbackQuery
+function installSafeCallbackAck(ctx) {
   try {
-    const orig = ctx.answerCallbackQuery?.bind(ctx);
-    if (orig) ctx.answerCallbackQuery = async (...args) => { try { return await orig(...args); } catch { return undefined; } };
-  } catch {}
-
-  try {
-    const res = await callMaybe(handler, ctx, p, u);
-    // Convention: legacy returns EXACT false when no branch matched.
-    if (res === false) {
-      await replyUnknown(ctx, deps, action);
-      return false;
+    if (!ctx || ctx[SAFE_ACK_INSTALLED]) return;
+    const original = ctx.answerCallbackQuery?.bind(ctx);
+    if (original) {
+      ctx.answerCallbackQuery = async (...args) => {
+        try {
+          return await original(...args);
+        } catch {
+          return undefined;
+        }
+      };
     }
+    Object.defineProperty(ctx, SAFE_ACK_INSTALLED, {
+      value: true,
+      enumerable: false,
+      configurable: false,
+    });
+  } catch {}
+}
+
+/**
+ * Runs only routes explicitly owned by the pre-user phase.
+ *
+ * Returns true when the callback was consumed (including a rendered error),
+ * false when ownership belongs to a later phase.
+ */
+export async function dispatchPreUserCallback(ctx, p, deps = {}) {
+  installSafeCallbackAck(ctx);
+
+  const result = await dispatchOwnedCallback({
+    phase: CALLBACK_PHASE.PRE_USER,
+    ctx,
+    p,
+    handlers: deps.handlers || {},
+    final: false,
+  });
+
+  if (result.status === CALLBACK_DISPATCH_STATUS.DEFERRED) return false;
+  if (result.status === CALLBACK_DISPATCH_STATUS.HANDLED) return true;
+
+  if (result.status === CALLBACK_DISPATCH_STATUS.UNKNOWN) {
+    await replyUnknown(ctx, deps, result.action);
     return true;
-  } catch (err) {
-    await replyError(ctx, deps, action, err);
+  }
+
+  await replyError(ctx, deps, result.action, result.error);
+  return true;
+}
+
+/**
+ * Final post-user dispatch. All registered actions have exactly one owner:
+ * an extracted route or the compatibility legacy dispatcher.
+ */
+export async function dispatchCallback(ctx, p, u, deps = {}) {
+  installSafeCallbackAck(ctx);
+
+  const result = await dispatchOwnedCallback({
+    phase: CALLBACK_PHASE.POST_USER,
+    ctx,
+    p,
+    u,
+    handlers: deps.handlers || {},
+    legacy: deps.legacy,
+    final: true,
+  });
+
+  if (result.status === CALLBACK_DISPATCH_STATUS.HANDLED) return true;
+
+  if (result.status === CALLBACK_DISPATCH_STATUS.UNKNOWN) {
+    await replyUnknown(ctx, deps, result.action);
     return false;
   }
+
+  await replyError(ctx, deps, result.action, result.error);
+  return false;
 }

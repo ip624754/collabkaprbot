@@ -1,3 +1,14 @@
+# STEP590B — Active Architecture Risk Update
+
+| ID | Risk | Severity | State | Required control |
+|---|---|---:|---|---|
+| R-38 | Callback exists in source/registry but is unreachable, shadowed or owned by multiple handlers | HIGH | SOURCE MITIGATED / PROD OPEN | exact ownership registry, executable phased dispatch, duplicate-owner hard fail, live callback canary |
+| R-39 | Legacy compatibility dispatcher masks extraction drift or becomes permanent architecture | MEDIUM | ACTIVE | bounded STEP590C–J extraction, explicit legacy count, architecture gates and eventual façade retirement |
+
+**Release gate:** R-38 remains open until STEP590B deployment canary proves admin-auth, giveaway-access, representative legacy routes and stale recovery. R-39 is intentionally active throughout the strangler migration and closes only when legacy ownership is retired by accepted domain extractions.
+
+---
+
 # STEP588X Independent Audit — Active Risk Override
 
 The following risks override earlier release optimism until remediation evidence exists.

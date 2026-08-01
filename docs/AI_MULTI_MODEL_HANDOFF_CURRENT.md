@@ -1,3 +1,36 @@
+# AI Multi-Model Handoff — STEP590B Current Truth
+
+**Baseline:** STEP590B runtime architecture package on STEP590A
+**Status:** SOURCE READY / PRODUCTION CALLBACK CANARY PENDING / GLOBAL RELEASE HOLD
+
+## Verified
+
+- one exact ownership row for each of 560 registered callback actions;
+- 5 extracted executable actions and 555 explicit legacy owners;
+- pre-user admin-auth reachability and post-user giveaway-access reachability;
+- duplicate action/route ownership hard failures;
+- fail-closed wrong-phase, missing-handler and extracted-handler contract behavior;
+- action registry, callback consistency, targeted X1–X3 critical regressions and full JavaScript syntax.
+
+## Not verified
+
+- clean local dependency installation in the execution environment;
+- full STEP590B portable critical spine;
+- Vercel deployment and live callback canary;
+- production behavior of all legacy-owned callbacks.
+
+## Hard rules
+
+- preserve one action → one owner;
+- no direct callback bypass around the canonical router;
+- extracted route must not silently return false;
+- retain the compatibility legacy owner until bounded domain acceptance;
+- preserve callback keys, guards, identity boundaries and user copy.
+
+Next step after canary: `STEP590C1 — Critical Admin/Auth Callback Domain Extraction`.
+
+---
+
 # AI Multi-Model Handoff — STEP590A Current Truth
 
 **Baseline:** STEP590A docs-only architecture package on STEP588X7H1

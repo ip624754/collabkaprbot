@@ -30,7 +30,7 @@ import { setExpectText, getExpectText, clearExpectText, setDraft, getDraft, clea
 import { renderGwAccess } from './gwAccess.js';
 import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
-import { dispatchCallback } from './routes/callbacks.js';
+import { dispatchCallback, dispatchPreUserCallback } from './routes/callbacks.js';
 import { handleAdminWebAuthDecisionCallback } from './adminWebAuthCallback.js';
 import { handleGwAccessRoute } from './routes/gwAccess.js';
 import { redactContactsInText } from './redactContacts.js';
@@ -25082,10 +25082,19 @@ ${DEGRADED_COPY.tips}
       }
     }
 
-    // STEP588X4H1: route the Telegram approval callback before application-user hydration.
-    // The auth state machine is bound to the real Telegram actor and Redis challenge,
-    // not to an application user row. Returning true prevents legacy unknown recovery.
-    if (await handleAdminWebAuthDecisionCallback(ctx, p)) return;
+    // STEP590B: executable pre-user callback ownership. Admin auth is routed
+    // through the canonical callback router before application-user hydration.
+    // The actual Telegram actor remains ctx.from.id and the domain handler keeps
+    // ownership of the Redis challenge state machine.
+    const preUserHandled = await dispatchPreUserCallback(ctx, p, {
+      logger,
+      safeEditOrReply,
+      isAdmin: (c) => isSuperAdminTg(c?.from?.id),
+      handlers: {
+        admin_web_auth: (ctx2, p2) => handleAdminWebAuthDecisionCallback(ctx2, p2),
+      },
+    });
+    if (preUserHandled) return;
 
     const u = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
 
@@ -37714,7 +37723,7 @@ ${actionHint}`;
       safeEditOrReply,
       isAdmin: (c) => isSuperAdminTg(c?.from?.id),
       handlers: {
-        gw_access: (ctx2, p2, u2) => handleGwAccessRoute(ctx2, p2, u2, {
+        giveaway_access: (ctx2, p2, u2) => handleGwAccessRoute(ctx2, p2, u2, {
           renderGwAccess,
           redis,
           db,

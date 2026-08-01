@@ -1,3 +1,42 @@
+# STEP590B NEW CHAT HANDOFF
+
+**Current repository baseline:** STEP590B — Executable Callback Router & Unique Ownership Gate
+**Parent:** STEP590A — Architecture Baseline
+**Repository status:** source implementation complete / deployment canary pending
+
+## Current truth
+
+- exact ownership exists for all 560 registered callback actions;
+- admin auth is owned by the pre-user `admin_web_auth` route;
+- giveaway access diagnostics are owned by the post-user `giveaway_access` route;
+- all other actions remain explicit post-user `legacy` owners;
+- duplicate ownership and missing extracted handlers fail closed;
+- no callback key, schema, ENV or product behavior was intentionally changed;
+- dependency-free router tests pass; clean dependency install/full runtime QA remain pending due package-mirror failure;
+- STEP589 remains HOLD during critical architecture extraction.
+
+## Next accepted step
+
+`STEP590C1 — Critical Admin/Auth Callback Domain Extraction` after STEP590B deployment canary, or a bounded follow-up if the canary reveals router defects.
+
+## Hard rules
+
+- one action has one owner;
+- extracted handlers must return exact `true` for owned actions;
+- no extracted route may fall through to legacy;
+- preserve global guards and phase ordering;
+- do not delete the legacy owner before domain-by-domain acceptance;
+- do not rename callback keys during extraction.
+
+Read:
+
+- `docs/architecture/STEP590B_EXECUTABLE_CALLBACK_ROUTER.md`;
+- `docs/audit/STEP590B_EXECUTABLE_CALLBACK_ROUTER_REPORT.md`;
+- `docs/operations/STEP590B_CALLBACK_ROUTER_ROLLOUT_RUNBOOK.md`;
+- `docs/roadmap/STEP590_MODULAR_MONOLITH_ROADMAP.md`.
+
+---
+
 ## STEP590A — Architecture Baseline & Modular Monolith Plan (2026-08-01)
 
 **Current handoff-safe repository baseline:** STEP590A docs-only architecture package on top of STEP588X7H1.
