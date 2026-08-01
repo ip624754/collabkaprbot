@@ -24,8 +24,8 @@
 | STEP590D | Navigation and shared Telegram UX | Implemented; production canary pending | 16/20 | Copy/key/action parity and degraded-mode navigation PASS |
 | STEP590E1 | Applications and leads | Production accepted | 17/20 | Deployment and representative application/deal/lead canary PASS |
 | STEP590E2 | Barter | Operator accepted for roadmap progression; mutation canary waived | 18/20 | Deployment identity + read-only runtime markers PASS |
-| STEP590E3A | Workspace control, roles and folders | Source implemented; operator dependency gate pending | 16/20 | Owner/editor/curator/folder contracts PASS |
-| STEP590E3B | Workspace profile, Instagram and sharing | Planned | 14/20 | Profile/share/IG route parity PASS |
+| STEP590E3A | Workspace control, roles and folders | Operator accepted for roadmap progression | 16/20 | Owner/editor/curator/folder contracts PASS |
+| STEP590E3B | Workspace profile, Instagram and sharing | Source implemented; operator dependency gate pending | 14/20 | Profile/share/IG route parity PASS |
 | STEP590E3C | Directory search and public Workspace | Planned | 15/20 | Search/public/contact ownership parity PASS |
 | STEP590E4 | Brands and curation | Yes | 13/20 | Profile/directory/curator contracts PASS |
 | STEP590E5 | Admin and moderation | Yes | 15/20 | Privilege and audit contracts PASS |
@@ -71,7 +71,7 @@ Each extraction must remain deployable and reversible at its own commit/artifact
 STEP590 does not claim completion from smaller files alone. Completion requires explicit ownership, executable routing, preserved critical invariants, bounded dependency direction and removal of the legacy central dispatch/DB ownership only after all consumers are migrated.
 
 
-## Current program position — STEP590E3A
+## Current program position — STEP590E3B
 
 - STEP590A architecture baseline: complete;
 - STEP590B executable router: deployed and operator canary accepted;
@@ -82,7 +82,8 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 - STEP590D navigation/shared Telegram UX extraction: source complete; dedicated production navigation evidence remains separate;
 - STEP590E1 applications/leads extraction: production deployed and operator canary accepted;
 - STEP590E2 Barter extraction: operator accepted for roadmap progression; disposable mutation canary waived as residual risk;
-- STEP590E3A Workspace control/folders extraction: source implementation complete; operator dependency gate pending;
-- extracted owner count: 248;
-- legacy owner count: 312 and must continue to decrease monotonically;
-- next bounded architecture step after the local/deploy boundary: STEP590E3B Workspace Profile, Instagram & Sharing.
+- STEP590E3A Workspace control/folders extraction: operator accepted for roadmap progression;
+- STEP590E3B Workspace profile/Instagram/sharing extraction: source implementation complete; operator dependency gate pending;
+- extracted owner count: 275;
+- legacy owner count: 285 and must continue to decrease monotonically;
+- next bounded architecture step after the local/deploy boundary: STEP590E3C Directory Search & Public Workspace.

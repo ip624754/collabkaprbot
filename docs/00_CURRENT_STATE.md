@@ -1,3 +1,22 @@
+## STEP590E3B — Workspace Profile, Instagram & Sharing Domain Extraction (2026-08-01)
+
+**Current source artifact baseline:** STEP590E3B layered on the STEP590E3A source artifact.
+
+- STEP590E3A: operator directed roadmap progression after bounded Workspace smoke; exact resulting Git/deployment identity was not supplied in this implementation environment;
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY GATE PENDING;
+- bounded Workspace domain extended with `profileCallbacks.js` and `socialCallbacks.js`;
+- newly extracted callback actions: 27 total, split into `workspace_profile` (18) and `workspace_social` (9);
+- cumulative ownership: 275 extracted, 285 legacy, 7 aliases, 0 unresolved;
+- `a:ws_pro_buy` remains payment-owned and `a:wsp_lead_new` remains lead-owned;
+- public Workspace/contact-unlock and directory-search actions remain outside this STEP for STEP590E3C;
+- existing DB, Redis, OAuth configuration, audit, input-mode and Telegram implementations remain canonical;
+- SQL/ENV/API-route/callback-key/product-copy changes: none;
+- package: `1.3.22`;
+- verified QA: 166 Workspace profile/social assertions, 2,762 router assertions, 560/560 action registry, prior domain suites PASS and 338/338 JavaScript syntax checks PASS;
+- source preflight passes through all architecture, domain and source-contract gates, then stops only at dependency-bound `test:bounded-safety-hardening` because `dotenv` is unavailable without `node_modules`;
+- portable critical spine: 5/6 PASS, with the same environment-only `dotenv` failure;
+- next bounded architecture step after operator local/deploy gate: STEP590E3C Directory Search & Public Workspace.
+
 ## STEP590E3A — Workspace Control, Roles & Folders Domain Extraction (2026-08-01)
 
 **Current source artifact baseline:** STEP590E3A on operator-confirmed `main` commit `117c3e8462d85e811a76beaf899f512ff7e3c84a`.

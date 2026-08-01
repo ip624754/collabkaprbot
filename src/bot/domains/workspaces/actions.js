@@ -38,6 +38,34 @@ export const WORKSPACE_ACTION = Object.freeze({
   WS_EDITOR_RM_DO: 'a:ws_editor_rm_do',
   WS_EDITOR_RM_Q: 'a:ws_editor_rm_q',
   WS_EDITORS: 'a:ws_editors',
+
+  WS_PROFILE: 'a:ws_profile',
+  WS_PROF_MODE: 'a:ws_prof_mode',
+  WS_PROF_MODE_SET: 'a:ws_prof_mode_set',
+  WS_PROF_VERTICALS: 'a:ws_prof_verticals',
+  WS_PROF_VERT_T: 'a:ws_prof_vert_t',
+  WS_PROF_VERT_CLEAR: 'a:ws_prof_vert_clear',
+  WS_PROF_FORMATS: 'a:ws_prof_formats',
+  WS_PROF_FMT_T: 'a:ws_prof_fmt_t',
+  WS_PROF_FMT_CLEAR: 'a:ws_prof_fmt_clear',
+  WS_PROF_CONTACTS: 'a:ws_prof_contacts',
+  WS_PROF_CONTACTS_MIGRATE: 'a:ws_prof_contacts_migrate',
+  WS_PROF_CONTACTS_EDIT: 'a:ws_prof_contacts_edit',
+  WS_PROF_CONTACTS_CLEAR: 'a:ws_prof_contacts_clear',
+  WS_PROF_CONTACTS_CLEAR_K: 'a:ws_prof_contacts_clear_k',
+  WS_PROF_CLEAR: 'a:ws_prof_clear',
+  WS_PROF_EDIT: 'a:ws_prof_edit',
+  WS_PROF_RESET: 'a:ws_prof_reset',
+  WS_PROF_RESET_OK: 'a:ws_prof_reset_ok',
+  WS_SHARE: 'a:ws_share',
+  WS_SHARE_SEND: 'a:ws_share_send',
+  WS_IG_TEMPLATES: 'a:ws_ig_templates',
+  WS_IG_TEMPLATES_SEND: 'a:ws_ig_templates_send',
+  WS_IG_DM: 'a:ws_ig_dm',
+  WS_IG_VERIFY: 'a:ws_ig_verify',
+  WS_IG_VERIFY_COMMENT: 'a:ws_ig_verify_comment',
+  WS_IG_VERIFY_STATUS: 'a:ws_ig_verify_status',
+  WS_IG_VERIFY_OAUTH: 'a:ws_ig_verify_oauth',
 });
 
 export const WORKSPACE_CONTROL_ACTIONS = Object.freeze([
@@ -85,7 +113,44 @@ export const WORKSPACE_FOLDER_ACTIONS = Object.freeze([
   WORKSPACE_ACTION.WS_EDITORS,
 ]);
 
+
+
+export const WORKSPACE_PROFILE_ACTIONS = Object.freeze([
+  WORKSPACE_ACTION.WS_PROFILE,
+  WORKSPACE_ACTION.WS_PROF_MODE,
+  WORKSPACE_ACTION.WS_PROF_MODE_SET,
+  WORKSPACE_ACTION.WS_PROF_VERTICALS,
+  WORKSPACE_ACTION.WS_PROF_VERT_T,
+  WORKSPACE_ACTION.WS_PROF_VERT_CLEAR,
+  WORKSPACE_ACTION.WS_PROF_FORMATS,
+  WORKSPACE_ACTION.WS_PROF_FMT_T,
+  WORKSPACE_ACTION.WS_PROF_FMT_CLEAR,
+  WORKSPACE_ACTION.WS_PROF_CONTACTS,
+  WORKSPACE_ACTION.WS_PROF_CONTACTS_MIGRATE,
+  WORKSPACE_ACTION.WS_PROF_CONTACTS_EDIT,
+  WORKSPACE_ACTION.WS_PROF_CONTACTS_CLEAR,
+  WORKSPACE_ACTION.WS_PROF_CONTACTS_CLEAR_K,
+  WORKSPACE_ACTION.WS_PROF_CLEAR,
+  WORKSPACE_ACTION.WS_PROF_EDIT,
+  WORKSPACE_ACTION.WS_PROF_RESET,
+  WORKSPACE_ACTION.WS_PROF_RESET_OK,
+]);
+
+export const WORKSPACE_SOCIAL_ACTIONS = Object.freeze([
+  WORKSPACE_ACTION.WS_SHARE,
+  WORKSPACE_ACTION.WS_SHARE_SEND,
+  WORKSPACE_ACTION.WS_IG_TEMPLATES,
+  WORKSPACE_ACTION.WS_IG_TEMPLATES_SEND,
+  WORKSPACE_ACTION.WS_IG_DM,
+  WORKSPACE_ACTION.WS_IG_VERIFY,
+  WORKSPACE_ACTION.WS_IG_VERIFY_COMMENT,
+  WORKSPACE_ACTION.WS_IG_VERIFY_STATUS,
+  WORKSPACE_ACTION.WS_IG_VERIFY_OAUTH,
+]);
+
 export const WORKSPACE_CALLBACK_ACTIONS = Object.freeze([
   ...WORKSPACE_CONTROL_ACTIONS,
   ...WORKSPACE_FOLDER_ACTIONS,
+  ...WORKSPACE_PROFILE_ACTIONS,
+  ...WORKSPACE_SOCIAL_ACTIONS,
 ]);

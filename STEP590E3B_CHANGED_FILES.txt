@@ -1,0 +1,47 @@
+STEP590E3B_CHANGED_FILES
+
+Modified: 21
+Added: 13
+Deleted: 0
+Total: 34
+
+MODIFIED
+docs/00_CURRENT_STATE.md
+docs/15_NEW_CHAT_HANDOFF.md
+docs/AI_MULTI_MODEL_HANDOFF_CURRENT.md
+docs/RISK_REGISTRY.md
+docs/roadmap/STEP590_MODULAR_MONOLITH_ROADMAP.md
+package-lock.json
+package.json
+scripts/preflight.js
+scripts/smoke-copy-safety-taxonomy-contract.js
+scripts/test-applications-leads-domain-extraction.js
+scripts/test-barter-domain-extraction.js
+scripts/test-callback-router-critical.js
+scripts/test-giveaway-domain-extraction.js
+scripts/test-payment-domain-extraction.js
+scripts/test-workspaces-control-folders-domain-extraction.js
+src/bot/bot.js
+src/bot/domains/workspaces/actions.js
+src/bot/domains/workspaces/index.js
+src/bot/domains/workspaces/policy.js
+src/bot/domains/workspaces/route.js
+src/bot/router/callbackContracts.js
+
+ADDED
+INSTALL_STEP590E3B_WORKSPACE_PROFILE_INSTAGRAM_SHARING_DOMAIN_EXTRACTION.md
+STEP590E3B_CHANGED_FILES.txt
+STEP590E3B_HANDOFF_NOTES.md
+STEP590E3B_QA_checklist.md
+docs/architecture/STEP590E3B_ACTION_OWNERSHIP_DELTA.csv
+docs/architecture/STEP590E3B_WORKSPACE_PROFILE_INSTAGRAM_SHARING_DOMAIN.md
+docs/audit/STEP590E3B_WORKSPACE_PROFILE_SOCIAL_EXTRACTION_REPORT.md
+docs/operations/STEP590E3B_WORKSPACE_PROFILE_SOCIAL_ROLLOUT_RUNBOOK.md
+docs/process/07_WORK_HISTORY_STEP590E3B.md
+scripts/smoke-workspaces-profile-social-domain-extraction-contract.js
+scripts/test-workspaces-profile-social-domain-extraction.js
+src/bot/domains/workspaces/profileCallbacks.js
+src/bot/domains/workspaces/socialCallbacks.js
+
+DELETED
+none

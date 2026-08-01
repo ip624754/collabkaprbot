@@ -29,5 +29,7 @@ export const CALLBACK_ROUTE = Object.freeze({
   BARTER_OFFERS: 'barter_offers',
   WORKSPACE_CONTROL: 'workspace_control',
   WORKSPACE_FOLDERS: 'workspace_folders',
+  WORKSPACE_PROFILE: 'workspace_profile',
+  WORKSPACE_SOCIAL: 'workspace_social',
   LEGACY: 'legacy',
 });

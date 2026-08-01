@@ -71,6 +71,8 @@ import {
 import {
   handleWorkspaceControlCallback,
   handleWorkspaceFolderCallback,
+  handleWorkspaceProfileCallback,
+  handleWorkspaceSocialCallback,
 } from './domains/workspaces/index.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
@@ -2413,11 +2415,6 @@ async function notifyWorkspaceTeam(api, wsId, opts = {}) {
   }
   return { sent, failed };
 }
-
-
-
-
-
 
 
 async function safeBrandProfiles(primaryFn, fallbackFn) {
@@ -4990,12 +4987,6 @@ ${DEGRADED_COPY.tips}`,
 }
 
 
-
-
-
-
-
-
 async function safeDeleteIncomingUserMessage(ctx) {
   // Best-effort: remove the incoming user message after we consumed it
   // to keep the chat clean in text-input flows.
@@ -5056,9 +5047,6 @@ async function safeDeleteIncomingUserMessage(ctx) {
     return false;
   }
 }
-
-
-
 
 
 async function uiGuard(ctx, tag, fn) {
@@ -5410,14 +5398,6 @@ function curatorNotesBlock(notes) {
     .join('\n\n');
   return `📝 <b>Заметки</b> (последние ${shown.length}):\n${lines}`;
 }
-
-
-
-
-
-
-
-
 
 
 async function getCurGwChecked(gwId) {
@@ -22069,11 +22049,6 @@ ${escapeHtml(details)}`;
       }
 
 
-
-
-
-
-
       const ws = await db.getWorkspaceAny(Number(lead.workspace_id));
       if (!ws) {
         await ctx.reply('Канал не найден.');
@@ -22193,9 +22168,6 @@ ${escapeHtml(details)}`;
       }
       return;
     }
-
-
-
 
 
     if (exp.type === 'blead_reply') {
@@ -25936,9 +25908,6 @@ if (p.a === 'a:brand_dir_open') {
     }
 
 
-
-
-
 // User-friendly ack under service/system messages
 
 // Users: open current System Notice again (without affecting seen)
@@ -25993,9 +25962,6 @@ ${escapeHtml(safeText)}
     }
 
     // HOME HUB (Commit87)
-
-
-
 
 
     // Toggle Curator UI mode (stored in Redis).
@@ -26061,10 +26027,6 @@ ${escapeHtml(safeText)}
       await renderCuratorInbox(ctx, u.id, st, page, af);
       return;
     }
-
-
-
-
 
 
     if (p.a === 'a:cur_leave_q') {
@@ -27074,522 +27036,13 @@ ${extra}${hint} Нажми «🔄 Обновить» через 10–30 секу
     }
 
 
-
-
-
-
-    if (p.a === 'a:ws_profile') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      const wsId = Number(p.w || p.ws || 0);
-      if (!wsId) {
-        await safeEditOrReply(ctx, '⚠️ Канал не выбран. Открой 📋 Меню → выбери канал и повтори шаг.', { parse_mode: 'HTML', reply_markup: navKb('a:ws_list') });
-        return;
-      }
-      await renderWsProfile(ctx, u.id, wsId);
-      return;
-    }
-
-
-    if (p.a === 'a:ws_share') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      const wsId = Number(p.w || p.ws || 0);
-      if (!wsId) { await safeEditOrReply(ctx, '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал заново.', { reply_markup: navKb('a:ws_list') }); return; }
-      await renderWsShareMenu(ctx, u.id, wsId, String(p.ret || '') || null);
-      return;
-    }
-
-
-
-    if (p.a === 'a:ws_share_send') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) {
-        await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' });
-        return;
-      }
-      const v = String(p.v || 'short') === 'long' ? 'long' : 'short';
-      await sendWsShareTextMessage(ctx, u.id, wsId, v);
-      return;
-    }
-
-
-if (p.a === 'a:ws_ig_templates') {
-  await ctx.answerCallbackQuery();
-  const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-  await renderWsIgTemplatesMenu(ctx, u.id, wsId);
-  return;
-}
-
-if (p.a === 'a:ws_ig_templates_send') {
-  await ctx.answerCallbackQuery();
-  const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-  const t = String(p.t || 'story');
-  await sendWsIgTemplateMessage(ctx, u.id, wsId, t);
-  return;
-}
-
-
-if (p.a === 'a:ws_ig_dm') {
-  await ctx.answerCallbackQuery();
-  const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-  const tone = String(p.tone || 'soft');
-  const i = Number(p.i || 0);
-  await renderWsIgDmTemplate(ctx, u.id, wsId, tone, i);
-  return;
-}
-
-
 // IG verification (Level B skeleton)
-if (p.a === 'a:ws_ig_verify') {
-  await ctx.answerCallbackQuery();
-  const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
 
-  // Launch-safe: IG OAuth can be temporarily hidden from UI while Meta side is unstable.
-  if (!CFG.IG_OAUTH_UI_ENABLED) {
-    const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Домой', 'a:home');
-    await safeEditOrReply(ctx, 'Эта функция пока тебе недоступна.', { reply_markup: kb });
-    return;
-  }
-
-  const ret = String(p.ret || 'ws_profile');
-  await renderWsIgVerifyStart(ctx, u.id, wsId, { ret });
-  return;
-}
-
-if (p.a === 'a:ws_ig_verify_comment') {
-  await ctx.answerCallbackQuery();
-  const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-  if (!CFG.IG_OAUTH_UI_ENABLED) {
-    const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Домой', 'a:home');
-    await safeEditOrReply(ctx, 'Эта функция пока тебе недоступна.', { reply_markup: kb });
-    return;
-  }
-  const ret = String(p.ret || 'ws_profile');
-  await renderWsIgVerifyComment(ctx, u.id, wsId, { ret });
-  return;
-}
-
-if (p.a === 'a:ws_ig_verify_status') {
-  const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) { try { await ctx.answerCallbackQuery(); } catch {} await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-  if (!CFG.IG_OAUTH_UI_ENABLED) {
-    try { await ctx.answerCallbackQuery(); } catch {}
-    const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Домой', 'a:home');
-    await safeEditOrReply(ctx, 'Эта функция пока тебе недоступна.', { reply_markup: kb });
-    return;
-  }
-  const ret = String(p.ret || 'ws_profile');
-  await renderWsIgVerifyStatus(ctx, u.id, wsId, { ret });
-  return;
-}
-
-if (p.a === 'a:ws_ig_verify_oauth') {
-  await ctx.answerCallbackQuery();
-  const wsId = Number(p.w || p.ws || 0);
-  if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-
-  if (!CFG.IG_OAUTH_UI_ENABLED) {
-    const kb = new InlineKeyboard().text('↩️ Назад', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').row().text('🏠 Домой', 'a:home');
-    await safeEditOrReply(ctx, 'Эта функция пока тебе недоступна.', { reply_markup: kb });
-    return;
-  }
-
-  const igOAuthBackCb = 'a:ws_ig_verify|ws:' + wsId;
-  const igOAuthUnavailable = async (code, details = {}) => {
-    reportCopySafetyDiagnostic(code, details);
-    await safeEditOrReply(ctx, copySafetyUnavailableHtml('Подключение Instagram временно недоступно'), {
-      parse_mode: 'HTML',
-      reply_markup: copySafetyRecoveryKb(igOAuthBackCb),
-    });
-  };
-
-  if (!CFG.IG_OAUTH_ENABLED) {
-    await igOAuthUnavailable('ig_oauth_disabled', { config: 'IG_OAUTH_ENABLED' });
-    return;
-  }
-
-  if (!CFG.IG_TOKEN_ENC_KEY_VALID) {
-    await igOAuthUnavailable('ig_oauth_encryption_key_invalid', { config: 'IG_TOKEN_ENC_KEY' });
-    return;
-  }
-
-  if (!CFG.IG_OAUTH_CLIENT_ID || !CFG.IG_OAUTH_CLIENT_SECRET) {
-    await igOAuthUnavailable('ig_oauth_client_config_missing', {
-      config: ['IG_OAUTH_CLIENT_ID', 'IG_OAUTH_CLIENT_SECRET'],
-    });
-    return;
-  }
-
-  if (!CFG.PUBLIC_BASE_URL) {
-    await igOAuthUnavailable('ig_oauth_public_base_url_missing', { config: 'PUBLIC_BASE_URL' });
-    return;
-  }
-
-  const ws = await db.getWorkspace(u.id, wsId);
-  if (!ws) return answerRecovery(ctx, 'channel');
-
-  // One-time token for web OAuth start (TTL 10 min).
-  const t = randomToken();
-  const payload = { wsId: Number(wsId), ownerUserId: Number(u.id), tgId: Number(ctx.from.id), created_at: new Date().toISOString() };
-  try { await redis.set(k(['ig_oauth_t', t]), payload, { ex: 10 * 60 }); } catch {}
-
-  const url = String(CFG.PUBLIC_BASE_URL).replace(/\/$/, '') + `/api/ig/oauth/start?t=${encodeURIComponent(t)}`;
-
-  const kb = new InlineKeyboard()
-    .url('🌐 Открыть подключение', url)
-    .row()
-    .text('🔄 Статус', `a:ws_ig_verify_status|ws:${wsId}|ret:${String(p.ret || 'ws_profile')}`)
-    .row()
-    .text('⬅️ Назад', `a:ws_ig_verify|ws:${wsId}|ret:${String(p.ret || 'ws_profile')}`)
-    .text('📋 Меню', 'a:menu')
-    .row()
-    .text('🏠 Домой', 'a:home');
-
-  const msg =
-    `🔗 <b>Подключение Instagram через OAuth</b>\n\n` +
-    `1) Нажми кнопку ниже и авторизуйся в Meta/Instagram\n` +
-    `2) Разреши доступ приложению\n` +
-    `3) После успеха вернись в бот — бейдж <b>verified</b> появится автоматически\n\n` +
-    `ℹ️ Требуется IG <b>Business/Creator</b>, привязанный к Facebook Page.`;
-
-  await safeEditOrReply(ctx, msg, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-  return;
-}
-
-
-if (p.a === 'a:ws_prof_mode') {
-      await ctx.answerCallbackQuery();
-      await renderWsProfileMode(ctx, u.id, Number(p.ws));
-      return;
-    }
-    if (p.a === 'a:ws_prof_mode_set') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws);
-      const mode = String(p.m || 'both');
-      const allowed = ['channel', 'ugc', 'both'];
-      if (!allowed.includes(mode)) return ctx.answerCallbackQuery({ text: 'Неверный режим.' });
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-      await db.setWorkspaceSetting(wsId, { profile_mode: mode });
-      await db.auditWorkspace(wsId, u.id, 'ws.profile_mode_updated', { mode });
-      await renderWsProfileMode(ctx, u.id, wsId);
-      return;
-    }
-
-    if (p.a === 'a:ws_prof_verticals') {
-      await ctx.answerCallbackQuery();
-      await renderWsProfileVerticals(ctx, u.id, Number(p.ws));
-      return;
-    }
-    if (p.a === 'a:ws_prof_vert_t') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const key = String(p.v || '');
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-
-      const cur = Array.isArray(ws.profile_verticals) ? ws.profile_verticals.map(String) : [];
-      const has = cur.includes(key);
-      let next = cur.filter(x => x !== key);
-      if (!has) {
-        if (cur.length >= 3) {
-          await ctx.answerCallbackQuery({ text: 'Максимум 3 ниши.', show_alert: true });
-          return renderWsProfileVerticals(ctx, u.id, wsId);
-        }
-        next = [...cur, key];
-      }
-      await db.setWorkspaceSetting(wsId, { profile_verticals: next });
-      await db.auditWorkspace(wsId, u.id, 'ws.profile_verticals_updated', { count: next.length });
-      await renderWsProfileVerticals(ctx, u.id, wsId);
-      return;
-    }
-    if (p.a === 'a:ws_prof_vert_clear') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-      await db.setWorkspaceSetting(wsId, { profile_verticals: [] });
-      await db.auditWorkspace(wsId, u.id, 'ws.profile_verticals_cleared', {});
-      await renderWsProfileVerticals(ctx, u.id, wsId);
-      return;
-    }
-
-    if (p.a === 'a:ws_prof_formats') {
-      await ctx.answerCallbackQuery();
-      await renderWsProfileFormats(ctx, u.id, Number(p.ws));
-      return;
-    }
-    if (p.a === 'a:ws_prof_fmt_t') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const key = String(p.f || '');
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-
-      const cur = Array.isArray(ws.profile_formats) ? ws.profile_formats.map(String) : [];
-      const has = cur.includes(key);
-      let next = cur.filter(x => x !== key);
-      if (!has) {
-        if (cur.length >= 5) {
-          await ctx.answerCallbackQuery({ text: 'Максимум 5 форматов.', show_alert: true });
-          return renderWsProfileFormats(ctx, u.id, wsId);
-        }
-        next = [...cur, key];
-      }
-      await db.setWorkspaceSetting(wsId, { profile_formats: next });
-      await db.auditWorkspace(wsId, u.id, 'ws.profile_formats_updated', { count: next.length });
-      await renderWsProfileFormats(ctx, u.id, wsId);
-      return;
-    }
-    if (p.a === 'a:ws_prof_fmt_clear') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-      await db.setWorkspaceSetting(wsId, { profile_formats: [] });
-      await db.auditWorkspace(wsId, u.id, 'ws.profile_formats_cleared', {});
-      await renderWsProfileFormats(ctx, u.id, wsId);
-      return;
-    }
-
-
-    if (p.a === 'a:ws_prof_contacts') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-      await renderWsProfileContactsStructured(ctx, u.id, wsId);
-      return;
-    }
-
-    if (p.a === 'a:ws_prof_contacts_migrate') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-
-      const isAdmin = isSuperAdminTg(ctx.from?.id);
-      const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-
-      const legacy = ws.profile_contact ? String(ws.profile_contact).trim() : '';
-      if (!legacy) {
-        await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: 'ℹ️ Legacy контакт пуст — переносить нечего.' });
-        return;
-      }
-
-      const r = detectLegacyContactForMigration(legacy);
-      const label = { tg: 'Telegram', email: 'Email', phone: 'Phone', site: 'Website' };
-
-      if (!r.ok) {
-        const reason = (() => {
-          if (r.reason === 'too_long') return 'слишком длинный текст';
-          if (r.reason === 'no_match') return 'не нашёл tg/email/phone/url';
-          if (r.reason === 'ambiguous_multi_types') return 'нашёл сразу несколько типов контактов';
-          if (r.reason === 'ambiguous_multi_values') return 'нашёл несколько вариантов одного типа';
-          return 'не могу распознать безопасно';
-        })();
-
-        const hint = `⚠️ <b>Не получилось перенести</b>\nПричина: <b>${escapeHtml(reason)}</b>\n\nСовет: оставь в «Контакт» <b>только одно</b> значение (например только @user или только почту), либо заполни поля вручную.`;
-
-        await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: hint });
-        return;
-      }
-
-      const o = wsProfileContactsObj(ws);
-      const cur = o[r.key] ? String(o[r.key]) : '';
-      if (cur && cur !== String(r.value)) {
-        const msg = `⚠️ Поле <b>${escapeHtml(label[r.key] || r.key)}</b> уже заполнено.\n\nТекущее: <code>${escapeHtml(deLinkifyText(cur))}</code>\nНайдено в legacy: <code>${escapeHtml(deLinkifyText(String(r.value)))}</code>\n\nЕсли хочешь заменить — сначала очисти поле, потом введи нужное значение.`;
-        await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: msg });
-        return;
-      }
-
-      o[r.key] = String(r.value);
-      await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: 1 });
-      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_contacts_migrated', { from: 'legacy', key: r.key }); } catch {}
-
-      const okMsg = `✅ Перенёс в <b>${escapeHtml(label[r.key] || r.key)}</b>: <code>${escapeHtml(deLinkifyText(String(r.value)))}</code>\n\nПоле «Контакт» оставил как есть (по желанию можно очистить).`;
-      await renderWsProfileContactsStructured(ctx, u.id, wsId, { flashHtml: okMsg });
-      return;
-    }
-
-    if (p.a === 'a:ws_prof_contacts_edit') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const key = String(p.k || '');
-      const allowed = ['tg', 'email', 'phone', 'site'];
-      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-      if (!allowed.includes(key)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
-
-      const prompts = {
-        tg: '✍️ Telegram username (рекомендуется): пришли @user или ссылку t.me/user.\n\nДостаточно 1 контакта — обычно Telegram.',
-        email: '✍️ Email (опционально): пришли почту вида name@domain.com.',
-        phone: '✍️ Phone (опционально, не обязателен): пришли номер (можно с пробелами/скобками). Сохраню в формате +цифры.',
-        site: '✍️ Website (опционально): пришли ссылку или домен (example.com).\n\nВажно: t.me лучше указать в Telegram username.',
-      };
-
-      const kb = new InlineKeyboard()
-        .text('🧹 Очистить', `a:ws_prof_contacts_clear_k|ws:${wsId}|k:${key}`)
-        .row()
-        .text('⬅️ Отмена', `a:ws_prof_contacts|ws:${wsId}`)
-        .text('👤 Профиль', `a:ws_profile|ws:${wsId}`)
-        .row()
-        .text('📋 Меню', 'a:menu')
-        .text('🏠 Домой', 'a:home');
-
-      await safeEditOrReply(ctx, prompts[key] || prompts.tg, { reply_markup: kb });
-
-      await setExpectText(ctx.from.id, { type: 'ws_prof_contacts_edit', wsId, key, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
-      return;
-    }
-
-    if (p.a === 'a:ws_prof_contacts_clear') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-      await renderWsProfileContactsClearMenu(ctx, u.id, wsId);
-      return;
-    }
-
-    if (p.a === 'a:ws_prof_contacts_clear_k') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const key = String(p.k || '');
-      const allowed = ['tg', 'email', 'phone', 'site', 'other'];
-      if (!wsId) { await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' }); return; }
-      if (!allowed.includes(key)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
-
-      const isAdmin = isSuperAdminTg(ctx.from?.id);
-      const ws = isAdmin ? await db.getWorkspaceAny(wsId) : await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-
-      const o = wsProfileContactsObj(ws);
-      delete o[key];
-
-      await db.setWorkspaceSetting(wsId, { profile_contacts: o, profile_contacts_v: 1 });
-      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_contacts_cleared', { key }); } catch {}
-      await renderWsProfileContactsStructured(ctx, u.id, wsId);
-      return;
-    }
 
     // Creator profile: clear a single legacy field (UI button). We keep "-" as an implicit shortcut, but do not mention it in UI.
-    if (p.a === 'a:ws_prof_clear') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const field = String(p.f || '');
-      if (!wsId) {
-        await renderStaleButton(ctx, { text: '⚠️ Кнопка устарела. Открой 📋 Меню → выбери канал и повтори.', backCb: 'a:ws_list' });
-        return;
-      }
-
-      const allowed = new Set(['contact', 'ig', 'portfolio', 'about']);
-      if (!allowed.has(field)) return ctx.answerCallbackQuery({ text: 'Неверное поле.' });
-
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-
-      if (field === 'contact') await db.setWorkspaceSetting(wsId, { profile_contact: null });
-      if (field === 'ig') await db.setWorkspaceSetting(wsId, { profile_ig: null });
-      if (field === 'portfolio') await db.setWorkspaceSetting(wsId, { profile_portfolio_urls: [] });
-      if (field === 'about') await db.setWorkspaceSetting(wsId, { profile_about: null });
-      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_updated', { field, cleared: true, via: 'button' }); } catch {}
-
-      // If user was in expectText mode for this edit — drop it to avoid confusion.
-      try { await clearExpectText(ctx.from.id); } catch {}
-      try { await ctx.answerCallbackQuery({ text: '✅ Очищено' }); } catch {}
-      await renderWsProfile(ctx, u.id, wsId);
-      return;
-    }
-
-    if (p.a === 'a:ws_prof_edit') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const field = String(p.f || 'title');
-      const prompts = {
-        title: '✍️ Введи название витрины (как тебя видит бренд).',
-        niche: '✍️ Введи нишу (устар.) — лучше выбрать “🏷 Ниши”.',
-        ig: '✍️ Пришли Instagram: @handle или ссылку на профиль (instagram.com/handle).',
-        about: '✍️ Короткое описание (1–2 предложения).\n\nПример: “Тестирую косметику и делаю распаковки. Люблю честные обзоры.”',
-        portfolio: '✍️ Пришли 1–3 ссылки на портфолио (каждая с новой строки или в одном сообщении).',
-        contact: '✍️ Контакт: @username / ссылка / почта.\n\n💡 Достаточно 1 контакта — обычно Telegram.\nЕсли хочешь — заполни «📇 Контакты (структурно)»: там контакты валидируются и показываются бренду только после разлока.',
-        geo: '✍️ Введи город/гео.'
-      };
-
-      const kb = new InlineKeyboard();
-      if (['contact', 'ig', 'portfolio', 'about'].includes(field)) {
-        kb.text('🧹 Очистить', `a:ws_prof_clear|ws:${wsId}|f:${field}`).row();
-      }
-      kb.text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`).text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
-
-      await safeEditOrReply(ctx, prompts[field] || prompts.title, { reply_markup: kb });
-      await setExpectText(ctx.from.id, { type: 'ws_profile_edit', wsId, field, chatId: ctx.chat?.id, messageId: ctx.callbackQuery?.message?.message_id });
-      return;
-    }
 
 
     // Creator profile: reset vitrina (wipe public fields only, keep dialogs/payments intact)
-    if (p.a === 'a:ws_prof_reset') {
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-
-      const text =
-        `🧹 <b>Сбросить витрину?</b>
-
-Это очистит публичные поля витрины:
-• Название
-• Ниши и форматы
-• Гео и описание
-• Instagram и ссылки портфолио
-• Контакты (legacy + структурно)
-
-<b>Не трогаем</b>: диалоги/заявки, оплаты, PRO и подключение канала.
-
-После сброса профиль станет “как новый” — можно заполнить заново.`;
-
-      const kb = new InlineKeyboard()
-        .text('🧹 Да, сбросить', `a:ws_prof_reset_ok|ws:${wsId}`)
-        .row()
-        .text('⬅️ Отмена', `a:ws_profile|ws:${wsId}`)
-        .text('📋 Меню', 'a:menu')
-        .text('🏠 Домой', 'a:home');
-
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-      return;
-    }
-
-    if (p.a === 'a:ws_prof_reset_ok') {
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-
-      await db.setWorkspaceSetting(wsId, {
-        profile_title: null,
-        profile_niche: null,
-        profile_ig: null,
-        profile_verticals: [],
-        profile_formats: [],
-        profile_geo: null,
-        profile_contact: null,
-        profile_contacts: {},
-        profile_contacts_v: 1,
-        profile_portfolio_urls: [],
-        profile_about: null,
-        profile_mode: 'both',
-      });
-
-      try { await db.auditWorkspace(wsId, u.id, 'ws.profile_reset', { scope: 'public_fields' }); } catch { }
-
-      try { await ctx.answerCallbackQuery({ text: '✅ Витрина сброшена', show_alert: true }); } catch { }
-      await renderWsProfile(ctx, u.id, wsId);
-      return;
-    }
 
 
     // Brand Pass (Stars) - buy credits to open new threads as a brand
@@ -30988,17 +30441,6 @@ if (p.a === 'a:admin_umsg_tpl_reset') {
     // One-tap archive from list (soft delete). Hides immediately from "Мои офферы".
 
 
-
-
-
-
-
-
-
-
-
-
-
     // Backward compat: old toggle callback (messages already sent)
 
 
@@ -31172,37 +30614,7 @@ if (p.a === 'a:admin_umsg_tpl_reset') {
     // FOLDERS (workspace shared @channel lists)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     // Workspace editors (folder-only)
-
-
-
-
-
-
-
-
 
 
     // Barter: attach partner folder to offer
@@ -31300,10 +30712,6 @@ if (p.a === 'a:admin_umsg_tpl_reset') {
       await safeEditOrReply(ctx, 'Ок. Выбери дедлайн:', { reply_markup: gwNewStepDeadlineKb(wsId) });
       return;
     }
-
-
-
-
 
 
     // Giveaways: sponsors help (Jobs-style micro guide)
@@ -32733,6 +32141,8 @@ ${actionHint}`;
       answerRecovery,
       clearExpectText,
       db,
+      deLinkifyText,
+      detectLegacyContactForMigration,
       escapeHtml,
       exportWsHistory,
       getActiveWorkspace,
@@ -32740,12 +32150,15 @@ ${actionHint}`;
       getRoleFlags,
       invalidateRoleFlagsCache,
       invalidateWorkspacesCache,
+      isSuperAdminTg,
       isWorkspaceDisconnected,
       k,
       leadStatusFromCb,
       navKb,
       randomToken,
       redis,
+      copySafetyRecoveryKb,
+      copySafetyUnavailableHtml,
       renderBxOpen,
       renderCuratorManage,
       renderCuratorWorkspace,
@@ -32759,17 +32172,33 @@ ${actionHint}`;
       renderWsDisconnected,
       renderWsEditors,
       renderWsHistory,
+      renderWsIgDmTemplate,
+      renderWsIgTemplatesMenu,
+      renderWsIgVerifyComment,
+      renderWsIgVerifyStart,
+      renderWsIgVerifyStatus,
       renderWsInactiveList,
       renderWsLeadsList,
       renderWsList,
       renderWsOpen,
       renderWsPro,
+      renderWsProfile,
+      renderWsProfileContactsClearMenu,
+      renderWsProfileContactsStructured,
+      renderWsProfileFormats,
+      renderWsProfileMode,
+      renderWsProfileVerticals,
       renderWsSettings,
+      renderWsShareMenu,
+      reportCopySafetyDiagnostic,
       resolveBxHomeFromUi,
       retFromCb,
       safeEditOrReply,
+      sendWsIgTemplateMessage,
+      sendWsShareTextMessage,
       setActiveWorkspace,
       setExpectText,
+      wsProfileContactsObj,
     };
 
     await dispatchCallback(ctx, p, u, {
@@ -32917,6 +32346,18 @@ ${actionHint}`;
           workspaceDomainDeps
         ),
         workspace_folders: (ctx2, p2, u2) => handleWorkspaceFolderCallback(
+          ctx2,
+          p2,
+          u2,
+          workspaceDomainDeps
+        ),
+        workspace_profile: (ctx2, p2, u2) => handleWorkspaceProfileCallback(
+          ctx2,
+          p2,
+          u2,
+          workspaceDomainDeps
+        ),
+        workspace_social: (ctx2, p2, u2) => handleWorkspaceSocialCallback(
           ctx2,
           p2,
           u2,
@@ -35272,9 +34713,6 @@ async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {
 
     await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   }
-
-
-
 
 
 async function renderAdminFounder(ctx) {

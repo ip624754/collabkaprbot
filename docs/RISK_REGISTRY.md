@@ -1,3 +1,15 @@
+# STEP590E3B — Active Architecture Risk Update
+
+| ID | Risk | Severity | State | Required control |
+|---|---|---:|---|---|
+| R-49 | Profile/contact extraction weakens owner scoping or exposes structured contacts through a broad Workspace read | HIGH | SOURCE MITIGATED / PROD OPEN | preserve scoped Workspace loads, existing super-admin branch, public-contact redaction/unlock boundaries and bounded production smoke |
+| R-50 | Instagram OAuth extraction becomes fail-open, leaks credentials/tokens or creates replayable start state | CRITICAL | SOURCE MITIGATED / PROD OPEN | preserve feature flags and config gates, owner Workspace validation, one-time Redis token/TTL, no secrets in callback payload/logs, bounded OAuth-start smoke |
+| R-51 | Profile reset/share/template callback replay duplicates mutation or sends unintended external content | HIGH | SOURCE MITIGATED / PROD OPEN | canonical DB/render/send helpers, exact route ownership, cancel-first smoke, no destructive/reset production canary by default |
+
+**Release gate:** R-49 through R-51 remain production-open until the exact STEP590E3B artifact is dependency-gated, deployed and exercised through bounded profile, contacts, sharing and Instagram entry paths. Live Meta OAuth completion and destructive profile reset are not mandatory unless explicitly approved.
+
+---
+
 # STEP590E3A — Active Architecture Risk Update
 
 | ID | Risk | Severity | State | Required control |

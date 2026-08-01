@@ -121,8 +121,8 @@ const user = { id: 55 };
 
 equal(WORKSPACE_CONTROL_ACTIONS.length, 22, 'workspace control action count');
 equal(WORKSPACE_FOLDER_ACTIONS.length, 17, 'workspace folder action count');
-equal(WORKSPACE_CALLBACK_ACTIONS.length, 39, 'workspace total action count');
-equal(new Set(WORKSPACE_CALLBACK_ACTIONS).size, 39, 'workspace actions are unique');
+equal(WORKSPACE_CALLBACK_ACTIONS.length, 66, 'workspace cumulative action count');
+equal(new Set(WORKSPACE_CALLBACK_ACTIONS).size, 66, 'workspace actions are unique');
 
 for (const action of WORKSPACE_CONTROL_ACTIONS) {
   check(isWorkspaceControlAction(action), `${action} control predicate`);
@@ -199,8 +199,8 @@ await assert.rejects(
 assertions += 1;
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 248, 'STEP590E3A cumulative extracted ownership');
-equal(summary.legacy, 312, 'STEP590E3A cumulative legacy ownership');
+equal(summary.extracted, 275, 'STEP590E3B cumulative extracted ownership');
+equal(summary.legacy, 285, 'STEP590E3B cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.WORKSPACE_CONTROL], 22, 'workspace control route count');
 equal(summary.byRoute[CALLBACK_ROUTE.WORKSPACE_FOLDERS], 17, 'workspace folder route count');
 equal(getCallbackOwnership('a:ws_pro_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'workspace checkout remains payment-owned');

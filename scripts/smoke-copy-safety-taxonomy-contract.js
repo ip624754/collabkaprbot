@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const botSource = fs.readFileSync(path.join(root, 'src', 'bot', 'bot.js'), 'utf8');
+const workspaceSocialSource = fs.readFileSync(path.join(root, 'src', 'bot', 'domains', 'workspaces', 'socialCallbacks.js'), 'utf8');
+const runtimeSource = `${botSource}\n${workspaceSocialSource}`;
 const dbSource = fs.readFileSync(path.join(root, 'src', 'db', 'queries.js'), 'utf8');
 
 function assertAbsent(source, needle, message) {
@@ -42,7 +44,7 @@ const legacyUserLeaks = [
   'Reward layer пока недоступен:',
   'Недостаточно available points',
 ];
-for (const needle of legacyUserLeaks) assertAbsent(botSource, needle);
+for (const needle of legacyUserLeaks) assertAbsent(runtimeSource, needle);
 
 // The bounded taxonomy migration is explicit and stable.
 for (const needle of [
@@ -57,7 +59,7 @@ for (const needle of [
 for (const needle of ['7 days Pro', '30 days Pro', 'completed profile', 'invite ledger', 'Pro-target']) {
   assertAbsent(botSource, needle, `ordinary-user invite legacy term must be absent: ${needle}`);
 }
-assert.equal(/(^|[^А-Яа-яЁё])офер([^А-Яа-яЁё]|$)/u.test(botSource), false, 'active typo «офер» must be absent');
+assert.equal(/(^|[^А-Яа-яЁё])офер([^А-Яа-яЁё]|$)/u.test(runtimeSource), false, 'active typo «офер» must be absent');
 
 // DB catalog labels are user-facing outputs; reward keys and economics stay unchanged.
 assertPresent(dbSource, "pro7: Object.freeze({ key: 'pro7', rewardType: 'pro_7d', costPoints: 100, days: 7, label: '7 дней PRO' })");
@@ -87,7 +89,7 @@ const diagnostics = [
   "'invite_snapshot_unavailable'",
   "relation: 'member_invites'",
 ];
-for (const needle of diagnostics) assertPresent(botSource, needle);
+for (const needle of diagnostics) assertPresent(runtimeSource, needle);
 
 // This STEP changes labels and failure presentation, not action identities.
 for (const callback of ["'a:share_redeem_do'", "'a:support'", "'a:menu'", "'a:home'"]) {
