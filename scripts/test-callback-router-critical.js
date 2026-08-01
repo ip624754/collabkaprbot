@@ -35,8 +35,8 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 336, 'STEP590E4B must extract three hundred thirty-six exact actions');
-equal(summary.legacy, registryKeys.length - 336, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 359, 'STEP590E4C must extract three hundred fifty-nine exact actions');
+equal(summary.legacy, registryKeys.length - 359, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
@@ -70,7 +70,9 @@ equal(summary.byRoute[CALLBACK_ROUTE.BRAND_DIRECTORY], 10, 'brand directory owns
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_PROFILE], 28, 'brand profile owns twenty-eight actions');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_MANAGER_MODE], 6, 'brand manager mode owns six actions');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_TEAM_MEMBERSHIP], 7, 'brand team membership owns seven actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 336, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_OPERATIONS], 16, 'curator operations own sixteen actions');
+equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_MANAGEMENT], 7, 'curator management owns seven actions');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 359, 'legacy count must be exact');
 
 for (const action of ['a:cur_ws', 'a:cur_ws_off', 'a:net_q', 'a:net_set', 'a:setup', 'a:ws_disconnect_do', 'a:ws_disconnect_q', 'a:ws_history', 'a:ws_history_export', 'a:ws_leads', 'a:ws_list', 'a:ws_list_inactive', 'a:ws_open', 'a:ws_pro', 'a:ws_pro_pin', 'a:ws_pro_pin_clear', 'a:ws_pro_pin_set', 'a:ws_reconnect_do', 'a:ws_reconnect_q', 'a:ws_settings', 'a:ws_toggle_cur', 'a:ws_toggle_net']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.WORKSPACE_CONTROL, `${action} workspace control owner`);
@@ -116,7 +118,16 @@ for (const action of ['a:brand_team_help', 'a:brand_team', 'a:bm_invite', 'a:bm_
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BRAND_TEAM_MEMBERSHIP, `${action} brand team-membership owner`);
   equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} brand team-membership phase`);
 }
-equal(getCallbackOwnership('a:cur_home').routeId, CALLBACK_ROUTE.LEGACY, 'curator remains legacy for STEP590E4C');
+for (const action of ['a:cur_mode_set', 'a:cur_home', 'a:cur_inbox', 'a:cur_leave_q', 'a:cur_leave_do', 'a:cur_gw_open', 'a:cur_gw_stats', 'a:cur_gw_log', 'a:cur_gw_remind_q', 'a:cur_gw_remind_send', 'a:cur_gw_owner_q', 'a:cur_gw_owner_send', 'a:cur_gw_check_q', 'a:cur_gw_check_do', 'a:cur_gw_note_q', 'a:cur_note_cancel']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.CURATOR_OPERATIONS, `${action} curator operations owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} curator operations phase`);
+}
+for (const action of ['a:cur_manage', 'a:cur_invite', 'a:cur_add_username', 'a:cur_list', 'a:cur_audit', 'a:cur_rm_q', 'a:cur_rm_do']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.CURATOR_MANAGEMENT, `${action} curator management owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} curator management phase`);
+}
+equal(getCallbackOwnership('a:cur_ws').routeId, CALLBACK_ROUTE.WORKSPACE_CONTROL, 'curator workspace remains workspace-owned');
+equal(getCallbackOwnership('a:curator_home').routeId, CALLBACK_ROUTE.LEGACY, 'registry-only curator alias remains legacy');
 
 for (const action of registryKeys) {
   const owner = getCallbackOwnership(action);

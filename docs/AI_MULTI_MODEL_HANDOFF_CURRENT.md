@@ -1,10 +1,12 @@
-## STEP590E4B CURRENT HANDOFF — Brand Team & Manager Membership
 
-- Baseline: operator-pushed STEP590E4A commit `60f19ba`.
-- Result: package `1.3.25`; Brands domain extended with manager/team callbacks; 13 actions extracted.
-- Ownership: 336 extracted / 224 legacy / 7 aliases / 0 unresolved.
-- QA: E4B 83 assertions PASS; router 2,893 PASS; preflight source and portable spine 6/6 PASS under temporary execution-only shims.
-- Contracts unchanged: no SQL, ENV, API route, callback key, pricing, payment or visible-copy change.
-- Bounded parity fix: last-manager removal now safely resolves `wsId`/`ret` from callback payload.
-- Operator gate: `npm.cmd ci`, `npm.cmd audit`, E4B tests, critical spine, preflight, commit/push and Vercel Ready.
-- Next: STEP590E4C Curator Operations.
+## STEP590E4C CURRENT HANDOFF — Curator Operations
+
+- Baseline: operator-pushed STEP590E4B commit `e738784`.
+- Result: package `1.3.26`; new `src/bot/domains/curators/`; 23 live callbacks extracted.
+- Ownership: 359 extracted / 201 legacy / 7 aliases / 0 unresolved.
+- Routes: `curator_operations` owns 16 actions; `curator_management` owns 7 actions.
+- QA: E4C 136 assertions PASS; router 2,942 PASS; all prior domain suites PASS; preflight source and portable spine 6/6 PASS under temporary execution-only shims.
+- Contracts unchanged: no SQL, ENV, API route, callback key, action guard or visible-copy change.
+- Explicit exclusions: `a:cur_ws`/`a:cur_ws_off` remain Workspace-owned; registry-only curator aliases remain legacy.
+- Operator gate: `npm.cmd ci`, `npm.cmd audit`, E4C tests, critical spine, preflight, commit/push, Vercel Ready and bounded curator smoke.
+- Next: STEP590E5 Admin & Moderation.

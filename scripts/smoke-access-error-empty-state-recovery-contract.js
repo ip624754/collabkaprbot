@@ -19,7 +19,9 @@ const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 const botSrc = read('src/bot/bot.js');
 const barterCallbacksSrc = read('src/bot/domains/barter/callbacks.js');
 const workspaceCallbacksSrc = read('src/bot/domains/workspaces/callbacks.js');
-const runtimeSrc = `${botSrc}\n${barterCallbacksSrc}\n${workspaceCallbacksSrc}`;
+const curatorOperationsSrc = read('src/bot/domains/curators/operationsCallbacks.js');
+const curatorManagementSrc = read('src/bot/domains/curators/managementCallbacks.js');
+const runtimeSrc = `${botSrc}\n${barterCallbacksSrc}\n${workspaceCallbacksSrc}\n${curatorOperationsSrc}\n${curatorManagementSrc}`;
 const gwAccessSrc = read('src/bot/gwAccess.js');
 const recoverySrc = read('src/bot/recoveryCopy.js');
 
@@ -91,7 +93,7 @@ for (const diagnostic of [
   "'curator_reminder_rate_limit_store_unavailable'",
   "'curator_owner_notice_rate_limit_store_unavailable'",
 ]) {
-  assert.ok(botSrc.includes(diagnostic), `Missing operator diagnostic breadcrumb: ${diagnostic}`);
+  assert.ok(runtimeSrc.includes(diagnostic), `Missing operator diagnostic breadcrumb: ${diagnostic}`);
 }
 
 // This is not a blind global replacement: operator-only authorization gates remain explicit.

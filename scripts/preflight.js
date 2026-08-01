@@ -359,6 +359,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): brands directory/profile bounded-domain source contract", "smoke:brands-directory-profile-domain-extraction-contract"],
   ["Preflight (source-only): brand team/manager bounded-domain executable tests", "test:brand-team-manager-domain-extraction"],
   ["Preflight (source-only): brand team/manager bounded-domain source contract", "smoke:brand-team-manager-domain-extraction-contract"],
+  ["Preflight (source-only): curator operations bounded-domain executable tests", "test:curator-operations-domain-extraction"],
+  ["Preflight (source-only): curator operations bounded-domain source contract", "smoke:curator-operations-domain-extraction-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

@@ -26,6 +26,7 @@ function expectRegistry(action, { type, guard }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const curatorManagementSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'curators', 'managementCallbacks.js'), 'utf8');
 
 expectRegistry('a:ws_share', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS });
 expectRegistry('a:ws_share_send', { type: ACTION_TYPES.EDIT, guard: ACTION_GUARD.REQUIRE_REDIS });
@@ -52,9 +53,9 @@ assert.ok(!sendWsShareTextMessageSrc.includes('share/url?text='), 'workspace sha
 assert.ok(!sendWsShareTextMessageSrc.includes('share/url?url=&text='), 'workspace share send must not use empty url= share URL');
 
 const curatorInviteHandlerSrc = extractBetween(
-  botSource,
-  "    if (p.a === 'a:cur_invite') {",
-  "\n\n    if (p.a === 'a:cur_add_username') {"
+  curatorManagementSource,
+  "if (p.a === 'a:cur_invite') {",
+  "\n\nif (p.a === 'a:cur_add_username') {"
 );
 assert.ok(curatorInviteHandlerSrc.includes("const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('\\u2060')}&text=${encodeURIComponent(shareText)}`;"), 'curator invite share must use invisible url= workaround');
 assert.ok(curatorInviteHandlerSrc.includes(".url('📤 Поделиться', shareUrl)"), 'curator invite flow must keep share button');
@@ -62,7 +63,7 @@ assert.ok(curatorInviteHandlerSrc.includes('Some Telegram clients ignore share l
 assert.ok(!curatorInviteHandlerSrc.includes('share/url?text='), 'curator invite flow must not regress to text-only share URL');
 assert.ok(!curatorInviteHandlerSrc.includes('share/url?url=&text='), 'curator invite flow must not regress to empty url= share URL');
 
-assert.ok(!/https:\/\/t\.me\/share\/url\?text=/.test(botSource), 'bot source must not contain text-only Telegram share URLs');
-assert.ok(!/https:\/\/t\.me\/share\/url\?url=&text=/.test(botSource), 'bot source must not contain empty-url Telegram share URLs');
+assert.ok(!/https:\/\/t\.me\/share\/url\?text=/.test(botSource + curatorManagementSource), 'bot/domain source must not contain text-only Telegram share URLs');
+assert.ok(!/https:\/\/t\.me\/share\/url\?url=&text=/.test(botSource + curatorManagementSource), 'bot/domain source must not contain empty-url Telegram share URLs');
 
 console.log('smoke-share-url-compat-contract: OK');

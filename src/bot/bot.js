@@ -84,6 +84,10 @@ import {
   handleBrandProfileCallback,
   handleBrandTeamMembershipCallback,
 } from './domains/brands/index.js';
+import {
+  handleCuratorManagementCallback,
+  handleCuratorOperationsCallback,
+} from './domains/curators/index.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
@@ -25680,348 +25684,26 @@ ${escapeHtml(safeText)}
 
 
     // Toggle Curator UI mode (stored in Redis).
-    if (p.a === 'a:cur_mode_set') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      const enabled = String(p.v || '0') === '1';
-      await setCuratorMode(ctx.from.id, enabled);
-
-      // Curator mode is a creator-side overlay. When enabling it, force creator UI and disable brand-manager state to avoid mixed menus.
-      if (enabled) {
-        try { await setUiMode(ctx.from.id, UI_MODES.CREATOR); } catch {}
-        try { await disableBrandManagerState(ctx.from.id); } catch {}
-      }
-
-      const ret = String(p.ret || 'menu');
-      const flags = await getRoleFlags(u, ctx.from.id);
-
-      // When turning Curator Mode OFF from curator UI — go to Creator main menu (не в старый ws-hub).
-      if (!enabled && ret === 'menu') {
-        await renderMainMenu(ctx, flags, { edit: true, user: u });
-        return;
-      }
-
-      // If user wants to stay in curator cabinet — render it. Otherwise go to role hub.
-      if (ret === 'cur') {
-        if (!flags.isCurator && !flags.isAdmin) {
-          await renderRoleHub(ctx, u, flags);
-          return;
-        }
-        await renderCuratorHome(ctx, u.id);
-        return;
-      }
-
-      await renderRoleHub(ctx, u, flags);
-      return;
-    }
 
 
     // CURATOR (safe cabinet)
-    if (p.a === 'a:cur_home') {
-      await ctx.answerCallbackQuery();
-      await clearExpectText(ctx.from.id);
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      await renderCuratorHome(ctx, u.id);
-      return;
-    }
-
-    if (p.a === 'a:cur_inbox') {
-      await ctx.answerCallbackQuery();
-      await clearExpectText(ctx.from.id);
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      const st = leadStatusFromCb(String(p.s || 'n'));
-      const page = Number(p.p || 0);
-      const af = ['all', 'my', 'free'].includes(String(p.af)) ? String(p.af) : 'all';
-      await renderCuratorInbox(ctx, u.id, st, page, af);
-      return;
-    }
 
 
-    if (p.a === 'a:cur_leave_q') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      const wsId = Number(p.w || p.ws || 0);
 
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) {
-        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
-        return;
-      }
 
-      // ensure user is actually curator for this workspace
-      const items = await db.listCuratorWorkspaces(u.id);
-      const ok = items.some(w => Number(w.id) === wsId);
-      if (!ok && !flags.isAdmin) {
-        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
-        return;
-      }
 
-      const ws = await db.getWorkspaceAny(wsId);
-      if (!ws) {
-        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
-        return;
-      }
-      const wsTitle = wsLabelNice(ws);
-      const kb = new InlineKeyboard()
-        .text('✅ Выйти', `a:cur_leave_do|ws:${wsId}`)
-        .text('❌ Отмена', `a:cur_ws|ws:${wsId}`);
-      await safeEditOrReply(ctx, `❌ <b>Выйти из канала</b>
 
-Ты больше не будешь куратором: <b>${escapeHtml(wsTitle)}</b>
 
-Продолжить?`, {
-        parse_mode: 'HTML',
-        reply_markup: kb
-      });
-      return;
-    }
 
-    if (p.a === 'a:cur_leave_do') {
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      const wsId = Number(p.w || p.ws || 0);
 
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      if (!wsId) {
-        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
-        return;
-      }
 
-      const items = await db.listCuratorWorkspaces(u.id);
-      const ok = items.some(w => Number(w.id) === wsId);
-      if (!ok && !flags.isAdmin) {
-        await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });
-        return;
-      }
 
-      await db.removeCurator(wsId, u.id);
-      try { await invalidateRoleFlagsCache(u.id); } catch {}
-      await db.auditWorkspace(wsId, u.id, 'ws.curator_left', { curatorUserId: u.id });
-      await ctx.answerCallbackQuery({ text: 'Готово' });
-
-      await renderCuratorHome(ctx, u.id);
-      return;
-    }
-
-    if (p.a === 'a:cur_gw_open') {
-      await ctx.answerCallbackQuery();
-      await clearExpectText(ctx.from.id);
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      await renderCuratorGiveawayOpen(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
-      return;
-    }
-
-    if (p.a === 'a:cur_gw_stats') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      await renderCuratorGiveawayStats(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
-      return;
-    }
-
-    if (p.a === 'a:cur_gw_log') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      await renderCuratorGiveawayLog(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
-      return;
-    }
-
-    if (p.a === 'a:cur_gw_remind_q') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      await renderCuratorGiveawayRemindQ(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
-      return;
-    }
-
-    if (p.a === 'a:cur_gw_remind_send') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      await renderCuratorGiveawayRemindSend(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
-      return;
-    }
-
-    if (p.a === 'a:cur_gw_owner_q') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      await renderCuratorGiveawayOwnerNotifyQ(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
-      return;
-    }
-
-    if (p.a === 'a:cur_gw_owner_send') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      await renderCuratorGiveawayOwnerNotifySend(ctx, u.id, Number(p.ws || 0), Number(p.i || 0));
-      return;
-    }
 
 
     // CURATOR: safe "checked" mark + note (teamwork helpers)
-    if (p.a === 'a:cur_gw_check_q') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      const wsId = Number(p.w || p.ws || 0);
 
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const gwId = Number(p.i || 0);
-      if (!wsId || !gwId) return;
 
-      const kb = new InlineKeyboard()
-        .text('✅ Подтвердить', `a:cur_gw_check_do|ws:${wsId}|i:${gwId}`)
-        .text('❌ Отмена', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
 
-      await safeEditOrReply(ctx, `✅ <b>Отметить как проверено?</b>
-
-Это внутренняя отметка для владельца и других кураторов.
-Ничего не меняет в конкурсе — только фиксирует “я проверил”.
-
-<b>Что дальше:</b>
-• Можно добавить 📝 заметку (next step).
-• Или нажать «📩 Владельцу» и отправить апдейт.
-
-Продолжить?`, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:cur_gw_check_do') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const gwId = Number(p.i || 0);
-      if (!wsId || !gwId) return;
-
-      const g = await db.getGiveawayForCurator(gwId, u.id);
-      if (!g || Number(g.workspace_id) !== wsId) {
-        await renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
-        return;
-      }
-
-      const meta = {
-        by_tg_id: Number(ctx.from.id),
-        by_username: ctx.from.username ?? null,
-        by_name: [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ').trim(),
-        at: Date.now()
-      };
-      await setCurGwChecked(gwId, meta);
-      try { await db.auditGiveaway(gwId, Number(g.workspace_id), u.id, 'curator.checked', { by_tg_id: meta.by_tg_id, by_username: meta.by_username }); } catch {}
-      await ctx.answerCallbackQuery({ text: '✅ Отмечено' });
-
-      await renderCuratorGiveawayOpen(ctx, u.id, wsId, gwId);
-      return;
-    }
-
-    if (p.a === 'a:cur_gw_note_q') {
-      await ctx.answerCallbackQuery();
-      const flags = await getRoleFlags(u, ctx.from.id);
-      if (!flags.isCurator && !flags.isAdmin) {
-        await renderRecovery(ctx, 'role', { backCb: 'a:menu' });
-        return;
-      }
-      const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const gwId = Number(p.i || 0);
-      if (!wsId || !gwId) return;
-
-      const g = await db.getGiveawayForCurator(gwId, u.id);
-      if (!g || Number(g.workspace_id) !== wsId) {
-        await renderRecovery(ctx, 'giveaway', { backCb: 'a:cur_home' });
-        return;
-      }
-
-      if (!(await redisHealthOkQuick())) {
-        reportCopySafetyDiagnostic('curator_notes_store_unavailable', { workspaceId: wsId, giveawayId: gwId });
-        await safeEditOrReply(ctx, '⚠️ Заметки временно недоступны. Попробуй позже.', {
-          parse_mode: 'HTML',
-          reply_markup: navKb(`a:cur_gw_open|ws:${wsId}|i:${gwId}`)
-        });
-        return;
-      }
-
-      await setExpectText(ctx.from.id, { type: 'curator_note', wsId, gwId });
-
-      const kb = new InlineKeyboard()
-        .text('❌ Отмена', `a:cur_note_cancel|ws:${wsId}|i:${gwId}`)
-        .row()
-        .text('⬅️ Назад', `a:cur_gw_open|ws:${wsId}|i:${gwId}`);
-
-      await safeEditOrReply(ctx, `📝 <b>Заметки к конкурсу #${gwId}</b>
-
-Это внутренние пометки для владельца и кураторов — участникам не показывается.
-Примеры: «согласовали приз», «ждём фото», «уточнить условия», «риск/сомнительно».
-
-Пришли заметку одним сообщением (до 400 символов).
-Она будет видна владельцу и другим кураторам.
-
-<b>Что дальше:</b>
-• После отправки ты вернёшься в конкурс.
-• Если нужно — нажми «📩 Владельцу», чтобы отправить владельцу короткий апдейт.
-
-Чтобы отменить — нажми “❌ Отмена”.`, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:cur_note_cancel') {
-      await ctx.answerCallbackQuery();
-      await clearExpectText(ctx.from.id);
-      const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const gwId = Number(p.i || 0);
-      if (!wsId || !gwId) return;
-      await renderCuratorGiveawayOpen(ctx, u.id, wsId, gwId);
-      return;
-    }
 
     // Public profile (vitrina)
     // Public vitrina: contact unlock (Brand Pass credits) to prevent bypassing the bot.
@@ -28891,167 +28573,12 @@ if (p.a === 'a:admin_umsg_tpl_reset') {
 
 
 	// Curators
-	if (p.a === 'a:cur_manage') {
-	  const wsId = Number(p.ws);
-	  const ws = await db.getWorkspace(u.id, wsId);
-	  if (!ws) return answerRecovery(ctx, 'channel');
-	  await ctx.answerCallbackQuery();
-	  if (isWorkspaceDisconnected(ws)) {
-	    await renderWsDisconnected(ctx, u.id, wsId, { backCb: 'a:ws_list', source: 'curator_manage' });
-	    return;
-	  }
-	  await renderCuratorManage(ctx, u.id, wsId);
-	  return;
-	}
 
-    if (p.a === 'a:cur_invite') {
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
 
-      if (!(await redisHealthOkQuick())) {
-        await ctx.answerCallbackQuery();
-        reportCopySafetyDiagnostic('curator_invite_store_unavailable', { workspaceId: wsId });
-        await safeEditOrReply(ctx, '⚠️ Приглашение временно недоступно. Попробуй позже.', {
-          reply_markup: new InlineKeyboard()
-            .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Домой', 'a:home')
-        });
-        return;
-      }
 
-      const token = randomToken(8);
-      const key = k(['cur_invite', wsId, token]);
-      await redis.set(key, { ownerUserId: u.id }, { ex: 10 * 60 });
 
-      const link = `https://t.me/${CFG.BOT_USERNAME}?start=cur_${wsId}_${token}`;
-      const text = `👤 <b>Приглашение куратора</b>\n\nСсылка (одноразовая • 10 минут):\n${escapeHtml(link)}\n\nНажми “Поделиться” и отправь приглашение нужному человеку.`;
 
-      const shareText = `Приглашение куратора (одноразовая, 10 минут).\nОткрой ссылку: ${link}`;
-      // Some Telegram clients ignore share links when `url=` is empty. Use an invisible URL value for broad compatibility.
-      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('\u2060')}&text=${encodeURIComponent(shareText)}`;
-      await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, text, {
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        reply_markup: new InlineKeyboard()
-          .url('📤 Поделиться', shareUrl)
-          .row()
-          .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
-      });
-      return;
-    }
 
-    if (p.a === 'a:cur_add_username') {
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-
-      if (!(await redisHealthOkQuick())) {
-        await ctx.answerCallbackQuery();
-        reportCopySafetyDiagnostic('curator_username_input_store_unavailable', { workspaceId: wsId });
-        await safeEditOrReply(ctx, '⚠️ Добавление куратора временно недоступно. Попробуй позже.', {
-          reply_markup: new InlineKeyboard()
-            .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Домой', 'a:home')
-        });
-        return;
-      }
-
-      await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, '➕ Введи @username куратора (он должен уже запускать бота /start).', {
-        reply_markup: new InlineKeyboard()
-          .text('⬅️ Назад', `a:cur_manage|ws:${wsId}`)
-          .text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
-      });
-      await setExpectText(ctx.from.id, { type: 'curator_username', wsId });
-      return;
-    }
-
-    if (p.a === 'a:cur_list') {
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-      await ctx.answerCallbackQuery();
-      await renderCuratorList(ctx, u.id, wsId);
-      return;
-    }
-
-    if (p.a === 'a:cur_audit') {
-      const wsId = Number(p.ws);
-      const actorUserId = Math.max(0, Number(p.u || 0));
-      const leadId = Math.max(0, Number(p.l || 0));
-      const page = Math.max(0, Number(p.p || 0));
-      const allRoles = Number((p.al ?? p.all) || 0) === 1;
-      const backType = String(p.b || 'cm');
-      const backStatus = leadStatusFromCb(String(p.s || 'new'));
-      const backPage = Math.max(0, Number((p.g ?? p.pg) || 0));
-      const retKey = String(p.ret || retFromCb(p.r) || '').trim();
-
-      await ctx.answerCallbackQuery();
-      await renderCuratorAudit(ctx, u.id, wsId, {
-        actorUserId,
-        leadId,
-        page,
-        allRoles,
-        back: { type: backType, status: backStatus, page: backPage, ret: retKey }
-      });
-      return;
-    }
-
-    if (p.a === 'a:cur_rm_q') {
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-      const curatorUserId = Number(p.u);
-      const ret = String(p.ret || 'list');
-      const info = await db.getUserTgIdByUserId(curatorUserId);
-      const label = info?.tg_username ? '@' + info.tg_username : 'id:' + (info?.tg_id || curatorUserId);
-      const kb = new InlineKeyboard()
-        .text('✅ Отозвать', `a:cur_rm_do|ws:${wsId}|u:${curatorUserId}|ret:${ret}`)
-        .text('❌ Отмена', ret === 'manage' ? `a:cur_manage|ws:${wsId}` : `a:cur_list|ws:${wsId}`);
-      await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx, `Отозвать доступ куратора <b>${escapeHtml(label)}</b>?`, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:cur_rm_do') {
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-      const curatorUserId = Number(p.u);
-      const ret = String(p.ret || 'list');
-      await db.removeCurator(wsId, curatorUserId);
-      try { await invalidateRoleFlagsCache(curatorUserId); } catch {}
-      await db.auditWorkspace(wsId, u.id, 'ws.curator_removed', { curatorUserId });
-
-      // best-effort notify curator in DM
-      try {
-        const info = await db.getUserTgIdByUserId(curatorUserId);
-        if (info?.tg_id) {
-          const wsTitle = wsLabelNice(ws);
-          const kb = new InlineKeyboard()
-            .text('📋 Меню', 'a:menu')
-            .row()
-            .text('💬 Поддержка', 'a:support');
-          await ctx.api.sendMessage(
-            Number(info.tg_id),
-            `❌ Твоя роль <b>куратора</b> для: <b>${escapeHtml(wsTitle)}</b> была удалена владельцем.`,
-            { parse_mode: 'HTML', reply_markup: kb }
-          );
-        }
-      } catch {}
-
-      await ctx.answerCallbackQuery({ text: 'Готово' });
-      if (ret === 'manage') {
-        await renderCuratorManage(ctx, u.id, wsId, { notice: 'Доступ куратора отозван' });
-      } else {
-        await renderCuratorList(ctx, u.id, wsId, { notice: 'Куратор отозван' });
-      }
-      return;
-    }
 
 
 
@@ -30772,6 +30299,52 @@ ${actionHint}`;
       setUiMode,
     };
 
+    const curatorDomainDeps = {
+      BX_HOME,
+      CFG,
+      InlineKeyboard,
+      UI_MODES,
+      answerRecovery,
+      clearExpectText,
+      db,
+      disableBrandManagerState,
+      escapeHtml,
+      getRoleFlags,
+      invalidateRoleFlagsCache,
+      isWorkspaceDisconnected,
+      k,
+      leadStatusFromCb,
+      navKb,
+      randomToken,
+      redis,
+      redisHealthOkQuick,
+      renderCuratorAudit,
+      renderCuratorGiveawayLog,
+      renderCuratorGiveawayOpen,
+      renderCuratorGiveawayOwnerNotifyQ,
+      renderCuratorGiveawayOwnerNotifySend,
+      renderCuratorGiveawayRemindQ,
+      renderCuratorGiveawayRemindSend,
+      renderCuratorGiveawayStats,
+      renderCuratorHome,
+      renderCuratorInbox,
+      renderCuratorList,
+      renderCuratorManage,
+      renderMainMenu,
+      renderRecovery,
+      renderRoleHub,
+      renderWsDisconnected,
+      reportCopySafetyDiagnostic,
+      resolveBxHomeFromUi,
+      retFromCb,
+      safeEditOrReply,
+      setCuratorMode,
+      setCurGwChecked,
+      setExpectText,
+      setUiMode,
+      wsLabelNice,
+    };
+
     await dispatchCallback(ctx, p, u, {
       legacy,
       logger,
@@ -30969,6 +30542,18 @@ ${actionHint}`;
           p2,
           u2,
           brandDomainDeps
+        ),
+        curator_operations: (ctx2, p2, u2) => handleCuratorOperationsCallback(
+          ctx2,
+          p2,
+          u2,
+          curatorDomainDeps
+        ),
+        curator_management: (ctx2, p2, u2) => handleCuratorManagementCallback(
+          ctx2,
+          p2,
+          u2,
+          curatorDomainDeps
         ),
       },
     });

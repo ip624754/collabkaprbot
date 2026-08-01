@@ -221,8 +221,8 @@ assertions += 1;
 }
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 336, 'STEP590E4B cumulative extracted ownership total');
-equal(summary.legacy, summary.total - 336, 'STEP590E4B cumulative legacy ownership total');
+equal(summary.extracted, 359, 'STEP590E4C cumulative extracted ownership total');
+equal(summary.legacy, summary.total - 359, 'STEP590E4C cumulative legacy ownership total');
 equal(summary.byRoute[CALLBACK_ROUTE.BARTER_DISCOVERY], 16, 'discovery route count');
 equal(summary.byRoute[CALLBACK_ROUTE.BARTER_OFFICIAL], 9, 'official route count');
 equal(summary.byRoute[CALLBACK_ROUTE.BARTER_CONVERSATIONS], 16, 'conversation route count');

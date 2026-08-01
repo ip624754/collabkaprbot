@@ -415,3 +415,16 @@ Residual risk:
 - Source verification: 83 domain assertions, 2,893 router assertions, 560/560 registry and prior domain regressions PASS; source preflight and portable spine 6/6 PASS under declared temporary shims.
 - Runtime verification required: manager cabinet entry/brand switching, owner team screen, disposable invitation, add/remove and removed-manager notification.
 - Residual risk: invitation and role-state changes depend on Redis/DB parity; use bounded disposable accounts for production canary.
+
+
+## Current STEP590E4C assessment
+
+- Change type: curator cabinet/giveaway operations and owner-side curator management callback orchestration extraction.
+- Runtime blast radius: 23 callbacks split into `curator_operations` (16) and `curator_management` (7).
+- Correctness boundary: existing role flags, Workspace membership proof, curator DB helpers, giveaway audit helpers, Redis checked/note/rate-limit/invite state and Telegram notifications remain canonical.
+- Explicit exclusions: Workspace-owned `a:cur_ws`/`a:cur_ws_off`, Brand domains, payments, applications/deals, admin moderation and registry-only curator aliases are not modified.
+- Watchlist preserved: Telegram share links retain the invisible non-empty `url=` workaround; curator notes/invites retain explicit degraded-store recovery; public and participant surfaces receive no curator-only data.
+- Source verification: 136 domain assertions, 2,942 router assertions, 560/560 registry and all prior extracted-domain regressions PASS; source preflight and portable spine 6/6 PASS under declared temporary shims.
+- Environment limitation: clean `npm ci`/`npm audit` remain operator-side; shim-assisted evidence does not claim live Upstash behavior.
+- Runtime verification required: curator cabinet/inbox, one Workspace, one giveaway read path, checked/note cancellation, disposable invite and owner-side remove confirmation.
+- Residual risk: role mutations depend on DB/Redis parity and best-effort Telegram notification; production canary must use bounded disposable actors.

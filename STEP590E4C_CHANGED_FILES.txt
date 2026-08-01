@@ -1,0 +1,45 @@
+STEP590E4C — CHANGED FILES
+
+Total paths: 41
+
+ADDED	INSTALL_STEP590E4C_CURATOR_OPERATIONS_DOMAIN_EXTRACTION.md
+ADDED	STEP590E4C_CHANGED_FILES.txt
+ADDED	STEP590E4C_HANDOFF_NOTES.md
+ADDED	STEP590E4C_QA_checklist.md
+MODIFIED	docs/00_CURRENT_STATE.md
+MODIFIED	docs/15_NEW_CHAT_HANDOFF.md
+MODIFIED	docs/AI_MULTI_MODEL_HANDOFF_CURRENT.md
+MODIFIED	docs/RISK_REGISTRY.md
+ADDED	docs/architecture/STEP590E4C_ACTION_OWNERSHIP_DELTA.csv
+ADDED	docs/architecture/STEP590E4C_CURATOR_OPERATIONS_DOMAIN.md
+ADDED	docs/audit/STEP590E4C_CURATOR_OPERATIONS_EXTRACTION_REPORT.md
+ADDED	docs/operations/STEP590E4C_CURATOR_OPERATIONS_ROLLOUT_RUNBOOK.md
+ADDED	docs/process/07_WORK_HISTORY_STEP590E4C.md
+MODIFIED	docs/roadmap/STEP590_MODULAR_MONOLITH_ROADMAP.md
+MODIFIED	package-lock.json
+MODIFIED	package.json
+MODIFIED	scripts/preflight.js
+MODIFIED	scripts/smoke-access-error-empty-state-recovery-contract.js
+MODIFIED	scripts/smoke-applications-leads-domain-extraction-contract.js
+ADDED	scripts/smoke-curator-operations-domain-extraction-contract.js
+MODIFIED	scripts/smoke-share-url-compat-contract.js
+MODIFIED	scripts/test-applications-leads-domain-extraction.js
+MODIFIED	scripts/test-barter-domain-extraction.js
+MODIFIED	scripts/test-brand-team-manager-domain-extraction.js
+MODIFIED	scripts/test-brands-directory-profile-domain-extraction.js
+MODIFIED	scripts/test-callback-router-critical.js
+ADDED	scripts/test-curator-operations-domain-extraction.js
+MODIFIED	scripts/test-directory-public-workspace-domain-extraction.js
+MODIFIED	scripts/test-giveaway-domain-extraction.js
+MODIFIED	scripts/test-payment-domain-extraction.js
+MODIFIED	scripts/test-workspaces-control-folders-domain-extraction.js
+MODIFIED	scripts/test-workspaces-profile-social-domain-extraction.js
+MODIFIED	src/bot/bot.js
+ADDED	src/bot/domains/curators/actions.js
+ADDED	src/bot/domains/curators/index.js
+ADDED	src/bot/domains/curators/managementCallbacks.js
+ADDED	src/bot/domains/curators/operationsCallbacks.js
+ADDED	src/bot/domains/curators/policy.js
+ADDED	src/bot/domains/curators/route.js
+MODIFIED	src/bot/router/callbackContracts.js
+MODIFIED	src/bot/router/callbackOwnership.js

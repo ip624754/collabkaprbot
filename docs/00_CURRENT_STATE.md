@@ -1,3 +1,22 @@
+
+## STEP590E4C — Curator Operations Domain Extraction (2026-08-01)
+
+**Current source artifact baseline:** operator-pushed STEP590E4B commit `e738784`.
+
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY AND DEPLOY GATE PENDING;
+- new bounded domain: `src/bot/domains/curators/`;
+- newly extracted callback actions: 23 total, split into `curator_operations` (16) and `curator_management` (7);
+- cumulative ownership: 359 extracted, 201 legacy, 7 aliases, 0 unresolved;
+- curator cabinet, inbox, leave, giveaway review/check/note/reminder/owner-notice and owner-side curator invite/list/audit/removal flows preserve existing DB/Redis/Telegram behavior;
+- `a:cur_ws` and `a:cur_ws_off` remain Workspace-owned; registry-only `a:curator_home`, `a:curators`, and `a:curators_home` remain legacy until STEP590J dead-code retirement;
+- share-URL invisible `url=` workaround, role checks, membership proof, Redis degraded-mode recovery, audit and one-time invite TTL remain canonical;
+- SQL/ENV/API-route/callback-key/action-guard/product-copy changes: none;
+- package: `1.3.26`;
+- verified QA: 136 E4C assertions, 2,942 router assertions, 560/560 registry and all prior extracted-domain suites PASS;
+- full `preflight:source` and portable critical spine 6/6 PASS under temporary execution-only `dotenv` and `@upstash/redis` shims; no shim or `node_modules` remains in the final tree;
+- clean `npm ci`/`npm audit`, Git commit/push, Vercel deployment and bounded Telegram curator canary remain operator-side;
+- next bounded architecture step after acceptance: STEP590E5 Admin & Moderation.
+
 ## STEP590E4B — Brand Team & Manager Membership Domain Extraction (2026-08-01)
 
 **Current source artifact baseline:** operator-pushed STEP590E4A commit `60f19ba`.

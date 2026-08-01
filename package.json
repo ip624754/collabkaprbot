@@ -1,6 +1,6 @@
 {
   "name": "collabgirls-bot",
-  "version": "1.3.25",
+  "version": "1.3.26",
   "private": true,
   "type": "module",
   "engines": {
@@ -203,7 +203,9 @@
     "test:brands-directory-profile-domain-extraction": "node scripts/test-brands-directory-profile-domain-extraction.js",
     "smoke:brands-directory-profile-domain-extraction-contract": "node scripts/smoke-brands-directory-profile-domain-extraction-contract.js",
     "test:brand-team-manager-domain-extraction": "node scripts/test-brand-team-manager-domain-extraction.js",
-    "smoke:brand-team-manager-domain-extraction-contract": "node scripts/smoke-brand-team-manager-domain-extraction-contract.js"
+    "smoke:brand-team-manager-domain-extraction-contract": "node scripts/smoke-brand-team-manager-domain-extraction-contract.js",
+    "test:curator-operations-domain-extraction": "node scripts/test-curator-operations-domain-extraction.js",
+    "smoke:curator-operations-domain-extraction-contract": "node scripts/smoke-curator-operations-domain-extraction-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

@@ -11,6 +11,7 @@ import { BARTER_CALLBACK_ROUTE_DEFINITIONS } from '../domains/barter/route.js';
 import { WORKSPACE_CALLBACK_ROUTE_DEFINITIONS } from '../domains/workspaces/route.js';
 import { DIRECTORY_CALLBACK_ROUTE_DEFINITIONS } from '../domains/directory/route.js';
 import { BRAND_CALLBACK_ROUTE_DEFINITIONS } from '../domains/brands/route.js';
+import { CURATOR_CALLBACK_ROUTE_DEFINITIONS } from '../domains/curators/route.js';
 import { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
@@ -28,6 +29,7 @@ export const CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
   ...WORKSPACE_CALLBACK_ROUTE_DEFINITIONS,
   ...DIRECTORY_CALLBACK_ROUTE_DEFINITIONS,
   ...BRAND_CALLBACK_ROUTE_DEFINITIONS,
+  ...CURATOR_CALLBACK_ROUTE_DEFINITIONS,
 ]);
 
 function assertRouteDefinition(definition) {

@@ -18,6 +18,7 @@ const ownership = read('src/bot/router/callbackOwnership.js');
 const contracts = read('src/bot/router/callbackContracts.js');
 const appCallbacks = read('src/bot/domains/applications/callbacks.js');
 const leadCallbacks = read('src/bot/domains/leads/callbacks.js');
+const curatorCallbacks = read('src/bot/domains/curators/managementCallbacks.js');
 
 assert.match(bot, /handleApplicationCreatorCallback/);
 assert.match(bot, /handleApplicationBrandCallback/);
@@ -54,7 +55,8 @@ for (const action of [...APPLICATION_CALLBACK_ACTIONS, ...LEAD_CALLBACK_ACTIONS]
   );
 }
 assert.doesNotMatch(bot, /p\.a === 'a:cur_audit' \|\| p\.a === 'a:ca'/);
-assert.match(bot, /if \(p\.a === 'a:cur_audit'\)/);
+assert.doesNotMatch(bot, /if \(p\.a === 'a:cur_audit'\)/);
+assert.match(curatorCallbacks, /if \(p\.a === 'a:cur_audit'\)/);
 
 for (const source of [appCallbacks, leadCallbacks]) {
   assert.doesNotMatch(source, /from ['\"]\.\.\/\.\.\/\.\.\/db\/queries\.js['\"]/);
