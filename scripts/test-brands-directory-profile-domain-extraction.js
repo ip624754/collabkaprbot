@@ -205,15 +205,16 @@ await assert.rejects(
 assertions += 1;
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 323, 'STEP590E4A cumulative extracted ownership');
-equal(summary.legacy, 237, 'STEP590E4A cumulative legacy ownership');
+equal(summary.extracted, 336, 'STEP590E4B cumulative extracted ownership');
+equal(summary.legacy, 224, 'STEP590E4B cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_DIRECTORY], 10, 'brand directory route count');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_PROFILE], 28, 'brand profile route count');
 equal(getCallbackOwnership('a:brand_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'brand checkout remains payment-owned');
 equal(getCallbackOwnership('a:brand_plan_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'brand plan checkout remains payment-owned');
 equal(getCallbackOwnership('a:brand_apps').routeId, CALLBACK_ROUTE.APPLICATION_BRAND, 'brand applications remain application-owned');
 equal(getCallbackOwnership('a:brand_deals').routeId, CALLBACK_ROUTE.APPLICATION_DEALS, 'brand deals remain application-owned');
-equal(getCallbackOwnership('a:bm_home').routeId, CALLBACK_ROUTE.LEGACY, 'brand manager remains legacy for STEP590E4B');
+equal(getCallbackOwnership('a:bm_home').routeId, CALLBACK_ROUTE.BRAND_MANAGER_MODE, 'brand manager moved to STEP590E4B owner');
+equal(getCallbackOwnership('a:brand_team').routeId, CALLBACK_ROUTE.BRAND_TEAM_MEMBERSHIP, 'brand team moved to STEP590E4B owner');
 equal(getCallbackOwnership('a:cur_home').routeId, CALLBACK_ROUTE.LEGACY, 'curator remains legacy for STEP590E4C');
 
 console.log(`PASS STEP590E4A brands directory/profile extraction tests (${assertions} assertions)`);

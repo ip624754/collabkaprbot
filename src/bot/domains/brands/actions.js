@@ -37,6 +37,19 @@ export const BRAND_ACTION = Object.freeze({
   BRAND_PROF_RESET_OK: 'a:brand_prof_reset_ok',
   BRAND_PASS: 'a:brand_pass',
   BRAND_PLAN: 'a:brand_plan',
+  BM_HOME: 'a:bm_home',
+  BM_HELP: 'a:bm_help',
+  BM_MODE_SET: 'a:bm_mode_set',
+  BM_PICK_BRAND: 'a:bm_pick_brand',
+  BMS: 'a:bms',
+  BM_SET_BRAND: 'a:bm_set_brand',
+  BRAND_TEAM_HELP: 'a:brand_team_help',
+  BRAND_TEAM: 'a:brand_team',
+  BM_INVITE: 'a:bm_invite',
+  BM_ADD_USERNAME: 'a:bm_add_username',
+  BM_LIST: 'a:bm_list',
+  BM_RM_Q: 'a:bm_rm_q',
+  BM_RM_OK: 'a:bm_rm_ok',
 });
 
 export const BRAND_DIRECTORY_ACTIONS = Object.freeze([
@@ -83,7 +96,29 @@ export const BRAND_PROFILE_ACTIONS = Object.freeze([
   BRAND_ACTION.BRAND_PLAN,
 ]);
 
+
+export const BRAND_MANAGER_MODE_ACTIONS = Object.freeze([
+  BRAND_ACTION.BM_HOME,
+  BRAND_ACTION.BM_HELP,
+  BRAND_ACTION.BM_MODE_SET,
+  BRAND_ACTION.BM_PICK_BRAND,
+  BRAND_ACTION.BMS,
+  BRAND_ACTION.BM_SET_BRAND,
+]);
+
+export const BRAND_TEAM_MEMBERSHIP_ACTIONS = Object.freeze([
+  BRAND_ACTION.BRAND_TEAM_HELP,
+  BRAND_ACTION.BRAND_TEAM,
+  BRAND_ACTION.BM_INVITE,
+  BRAND_ACTION.BM_ADD_USERNAME,
+  BRAND_ACTION.BM_LIST,
+  BRAND_ACTION.BM_RM_Q,
+  BRAND_ACTION.BM_RM_OK,
+]);
+
 export const BRAND_CALLBACK_ACTIONS = Object.freeze([
   ...BRAND_DIRECTORY_ACTIONS,
   ...BRAND_PROFILE_ACTIONS,
+  ...BRAND_MANAGER_MODE_ACTIONS,
+  ...BRAND_TEAM_MEMBERSHIP_ACTIONS,
 ]);

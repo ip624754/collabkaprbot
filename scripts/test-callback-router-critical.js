@@ -35,8 +35,8 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 323, 'STEP590E4A must extract three hundred twenty-three exact actions');
-equal(summary.legacy, registryKeys.length - 323, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 336, 'STEP590E4B must extract three hundred thirty-six exact actions');
+equal(summary.legacy, registryKeys.length - 336, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
@@ -68,7 +68,9 @@ equal(summary.byRoute[CALLBACK_ROUTE.DIRECTORY_SEARCH], 6, 'directory search own
 equal(summary.byRoute[CALLBACK_ROUTE.DIRECTORY_PUBLIC_WORKSPACE], 4, 'public workspace owns four actions');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_DIRECTORY], 10, 'brand directory owns ten actions');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_PROFILE], 28, 'brand profile owns twenty-eight actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 323, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.BRAND_MANAGER_MODE], 6, 'brand manager mode owns six actions');
+equal(summary.byRoute[CALLBACK_ROUTE.BRAND_TEAM_MEMBERSHIP], 7, 'brand team membership owns seven actions');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 336, 'legacy count must be exact');
 
 for (const action of ['a:cur_ws', 'a:cur_ws_off', 'a:net_q', 'a:net_set', 'a:setup', 'a:ws_disconnect_do', 'a:ws_disconnect_q', 'a:ws_history', 'a:ws_history_export', 'a:ws_leads', 'a:ws_list', 'a:ws_list_inactive', 'a:ws_open', 'a:ws_pro', 'a:ws_pro_pin', 'a:ws_pro_pin_clear', 'a:ws_pro_pin_set', 'a:ws_reconnect_do', 'a:ws_reconnect_q', 'a:ws_settings', 'a:ws_toggle_cur', 'a:ws_toggle_net']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.WORKSPACE_CONTROL, `${action} workspace control owner`);
@@ -104,9 +106,16 @@ for (const action of ['a:brand_profile', 'a:brand_profile_edit', 'a:brand_profil
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BRAND_PROFILE, `${action} brand profile owner`);
   equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} brand profile phase`);
 }
-equal(getCallbackOwnership('a:brand_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'brand checkout remains payment-owned after STEP590E4A');
-equal(getCallbackOwnership('a:brand_plan_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'brand plan checkout remains payment-owned after STEP590E4A');
-equal(getCallbackOwnership('a:bm_home').routeId, CALLBACK_ROUTE.LEGACY, 'brand manager remains legacy for STEP590E4B');
+equal(getCallbackOwnership('a:brand_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'brand checkout remains payment-owned after STEP590E4B');
+equal(getCallbackOwnership('a:brand_plan_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'brand plan checkout remains payment-owned after STEP590E4B');
+for (const action of ['a:bm_home', 'a:bm_help', 'a:bm_mode_set', 'a:bm_pick_brand', 'a:bms', 'a:bm_set_brand']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BRAND_MANAGER_MODE, `${action} brand manager-mode owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} brand manager-mode phase`);
+}
+for (const action of ['a:brand_team_help', 'a:brand_team', 'a:bm_invite', 'a:bm_add_username', 'a:bm_list', 'a:bm_rm_q', 'a:bm_rm_ok']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BRAND_TEAM_MEMBERSHIP, `${action} brand team-membership owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} brand team-membership phase`);
+}
 equal(getCallbackOwnership('a:cur_home').routeId, CALLBACK_ROUTE.LEGACY, 'curator remains legacy for STEP590E4C');
 
 for (const action of registryKeys) {

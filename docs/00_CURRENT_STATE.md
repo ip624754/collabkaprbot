@@ -1,3 +1,21 @@
+## STEP590E4B — Brand Team & Manager Membership Domain Extraction (2026-08-01)
+
+**Current source artifact baseline:** operator-pushed STEP590E4A commit `60f19ba`.
+
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY AND DEPLOY GATE PENDING;
+- Brands domain extended with `managerCallbacks.js` and `teamCallbacks.js`;
+- newly extracted callback actions: 13 total, split into `brand_manager_mode` (6) and `brand_team_membership` (7);
+- cumulative ownership: 336 extracted, 224 legacy, 7 aliases, 0 unresolved;
+- manager mode, active-brand selection, invitation, username add, list and removal flows preserve existing DB/Redis/Telegram behavior;
+- bounded parity hardening: last-manager removal now derives `wsId` and `ret` from callback payload instead of referencing undefined identifiers;
+- payment, applications/deals, directory/profile and curator owners remain unchanged;
+- SQL/ENV/API-route/callback-key/action-guard/pricing/product-copy changes: none;
+- package: `1.3.25`;
+- verified QA: 83 E4B assertions, 2,893 router assertions, 560/560 registry, all prior extracted-domain suites PASS;
+- full `preflight:source` and portable critical spine 6/6 PASS under temporary execution-only `dotenv` and `@upstash/redis` shims; no shim or `node_modules` remains in the final tree;
+- clean `npm ci`/`npm audit`, Git identity, Vercel deployment and Telegram canary remain operator-side;
+- next bounded architecture step after acceptance: STEP590E4C Curator Operations.
+
 ## STEP590E4A — Brand Directory & Profile Domain Extraction (2026-08-01)
 
 **Current source artifact baseline:** operator-pushed STEP590E3C commit `858a0b1`.

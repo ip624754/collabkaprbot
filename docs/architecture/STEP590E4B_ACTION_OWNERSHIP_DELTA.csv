@@ -1,0 +1,14 @@
+action,previous_owner,new_owner
+a:bm_home,legacy,brand_manager_mode
+a:bm_help,legacy,brand_manager_mode
+a:bm_mode_set,legacy,brand_manager_mode
+a:bm_pick_brand,legacy,brand_manager_mode
+a:bms,legacy,brand_manager_mode
+a:bm_set_brand,legacy,brand_manager_mode
+a:brand_team_help,legacy,brand_team_membership
+a:brand_team,legacy,brand_team_membership
+a:bm_invite,legacy,brand_team_membership
+a:bm_add_username,legacy,brand_team_membership
+a:bm_list,legacy,brand_team_membership
+a:bm_rm_q,legacy,brand_team_membership
+a:bm_rm_ok,legacy,brand_team_membership

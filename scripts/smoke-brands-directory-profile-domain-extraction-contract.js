@@ -51,7 +51,7 @@ assert.doesNotMatch(actions, /a:brand_buy/);
 assert.doesNotMatch(actions, /a:brand_plan_buy/);
 assert.doesNotMatch(actions, /a:brand_apps/);
 assert.doesNotMatch(actions, /a:brand_deals/);
-assert.doesNotMatch(actions, /a:bm_home/);
+assert.match(actions, /a:bm_home/);
 assert.doesNotMatch(actions, /a:cur_home/);
 
 console.log('PASS STEP590E4A brands directory/profile bounded-domain source contract');

@@ -403,3 +403,15 @@ Residual risk:
 - Environment limitation: clean `npm ci`/`npm audit` remain operator-side; shim-assisted evidence does not claim real Upstash behavior.
 - Runtime verification required: bounded directory/filter/application-return/profile navigation plus disposable profile mutation only with explicit operator intent.
 - Residual risk: broad injected capability seams remain until STEP590F/STEP590I; registry-only Brand/curator keys remain for STEP590J dead-code retirement.
+
+
+## Current STEP590E4B assessment
+
+- Change type: Brand manager-mode and Brand team membership callback orchestration extraction.
+- Runtime blast radius: 13 callbacks split into two executable owners.
+- Correctness boundary: existing `brand_managers` DB helpers, Redis manager state/invite TTL and Telegram notifications remain canonical.
+- Bounded parity correction: `a:bm_rm_ok` now defines `wsId` and `ret` before the empty-team recovery branch, preventing a pre-existing ReferenceError.
+- Explicit exclusions: Brand directory/profile, payments, applications/deals and curator flows are not modified.
+- Source verification: 83 domain assertions, 2,893 router assertions, 560/560 registry and prior domain regressions PASS; source preflight and portable spine 6/6 PASS under declared temporary shims.
+- Runtime verification required: manager cabinet entry/brand switching, owner team screen, disposable invitation, add/remove and removed-manager notification.
+- Residual risk: invitation and role-state changes depend on Redis/DB parity; use bounded disposable accounts for production canary.
