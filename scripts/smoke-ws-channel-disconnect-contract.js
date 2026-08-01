@@ -26,6 +26,7 @@ function extractBetween(src, startMarker, endMarker) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const barterCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'barter', 'callbacks.js'), 'utf8');
 const dbSource = fs.readFileSync(path.join(ROOT, 'src', 'db', 'queries.js'), 'utf8');
 const migrationSource = fs.readFileSync(path.join(ROOT, 'migrations', '044_workspace_channel_disconnect.sql'), 'utf8');
 
@@ -217,7 +218,7 @@ const gwPublishSrc = extractBetween(
 assert.match(gwPublishSrc, /if \(isWorkspaceDisconnected\(ws\)\) \{[\s\S]*?await renderWsDisconnected\(/, 'gw_publish must block disconnected workspaces');
 
 const bxPublishSrc = extractBetween(
-  botSource,
+  barterCallbacksSource,
   "    if (p.a === 'a:bx_publish') {",
   "    if (p.a === 'a:bx_view') {"
 );

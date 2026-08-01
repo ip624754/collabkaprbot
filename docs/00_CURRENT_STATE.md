@@ -1,8 +1,26 @@
+## STEP590E2 — Barter Domain Extraction (2026-08-01)
+
+**Current handoff-safe source baseline:** STEP590E2 on accepted STEP590E1H5 / production commit `af56af594c1de6d6c8a950f4168be7a2c397320f`.
+
+- STEP590E1 production deployment and Applications/Deals/Leads canary: operator PASS;
+- status: SOURCE READY / PRODUCTION BARTER CANARY PENDING;
+- new bounded domain: `src/bot/domains/barter/`;
+- newly extracted callback actions: 89 across discovery, official publication, conversations/proofs/reports and offer authoring/lifecycle;
+- cumulative ownership: 209 extracted, 351 legacy, 7 aliases, 0 unresolved;
+- `a:off_buy` and `a:off_buy_home` remain outside the Barter domain because they are payment checkout actions;
+- five registry-only/unreferenced Barter keys remain legacy-owned until an executable route exists;
+- existing DB, Redis, QStash, Telegram, audit, role/workspace and state-transition implementations remain canonical;
+- bounded wiring repair: existing `verifyOfficialPublishState` helper is now imported for the extracted official verification action;
+- SQL/ENV/API-route changes: none;
+- source QA: 492 Barter assertions, 2,624 router assertions, 560/560 action registry and all prior critical/domain regressions PASS;
+- source preflight and portable spine: PASS under temporary dependency shims; clean `npm ci` remains operator-side because the implementation mirror returned 404 for `xtend@4.0.2`;
+- next bounded architecture step after production canary: STEP590E3 Workspaces & Directory.
+
 ## STEP590E1 — Applications & Leads Domain Extraction (2026-08-01)
 
-**Current handoff-safe source baseline:** STEP590E1 on exact STEP590D.
+**Accepted production baseline:** STEP590E1H5 / commit `af56af594c1de6d6c8a950f4168be7a2c397320f`.
 
-- status: SOURCE READY / PRODUCTION APPLICATIONS-LEADS CANARY PENDING;
+- status: PRODUCTION ACCEPTED;
 - new bounded domains: `src/bot/domains/applications/` and `src/bot/domains/leads/`;
 - newly extracted callback actions: 53 across creator applications, brand review, deals, lead acquisition, lead workflow and lead audit;
 - cumulative ownership: 120 extracted, 440 legacy, 0 unresolved;
@@ -12,7 +30,7 @@
 - SQL/ENV changes: none;
 - source QA: 302 domain assertions, 2,574 router assertions, action/callback registries and 316 JavaScript syntax checks PASS;
 - source preflight and portable spine: PASS under temporary dependency shims; clean `npm ci` remains operator-side because the implementation mirror returned 404 for `xtend@4.0.2`;
-- next bounded architecture step after production canary: STEP590E2 Barter.
+- production deployment and representative Applications/Deals/Leads canary: operator PASS;
 
 ## STEP590D — Navigation & Shared Telegram UX (2026-08-01)
 

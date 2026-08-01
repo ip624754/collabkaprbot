@@ -23,5 +23,9 @@ export const CALLBACK_ROUTE = Object.freeze({
   LEAD_ACQUISITION: 'lead_acquisition',
   LEAD_WORKFLOW: 'lead_workflow',
   LEAD_AUDIT: 'lead_audit',
+  BARTER_DISCOVERY: 'barter_discovery',
+  BARTER_OFFICIAL: 'barter_official',
+  BARTER_CONVERSATIONS: 'barter_conversations',
+  BARTER_OFFERS: 'barter_offers',
   LEGACY: 'legacy',
 });

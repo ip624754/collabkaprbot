@@ -347,6 +347,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): navigation/shared Telegram UX source contract", "smoke:navigation-shared-ux-contract"],
   ["Preflight (source-only): applications/leads bounded-domain executable tests", "test:applications-leads-domain-extraction"],
   ["Preflight (source-only): applications/leads bounded-domain source contract", "smoke:applications-leads-domain-extraction-contract"],
+  ["Preflight (source-only): barter bounded-domain executable tests", "test:barter-domain-extraction"],
+  ["Preflight (source-only): barter bounded-domain source contract", "smoke:barter-domain-extraction-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

@@ -10,3 +10,6 @@ artifacts/runtime_acceptance/*.md
 artifacts/telegram_acceptance/*.json
 artifacts/telegram_acceptance/*.md
 artifacts/telegram_acceptance/evidence/**
+
+.vercel
+.env*

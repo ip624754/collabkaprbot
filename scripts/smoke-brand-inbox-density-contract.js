@@ -11,6 +11,8 @@ const ROOT = path.resolve(__dirname, '..');
 
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
+const barterCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'barter', 'callbacks.js'), 'utf8');
+const runtimeSrc = `${botSrc}\n${barterCallbacksSrc}`;
 
 assert.ok(
   botSrc.includes('💬 <b>Диалоги</b>') &&
@@ -40,9 +42,9 @@ assert.ok(
 
 assert.ok(
   botSrc.includes('const built = await buildBxThreadView(userId, threadId, { flash: opts.flash });') &&
-    botSrc.includes('const flash = `Стадия: ${bxThreadStageTitle(stage) || stage}`;') &&
-    botSrc.includes('flash = `Обработка: ${bxThreadTriageTitle(triage)}`;') &&
-    botSrc.includes('await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h, flash });'),
+    runtimeSrc.includes('const flash = `Стадия: ${bxThreadStageTitle(stage) || stage}`;') &&
+    runtimeSrc.includes('flash = `Обработка: ${bxThreadTriageTitle(triage)}`;') &&
+    runtimeSrc.includes('await renderBxThread(ctx, bmRes.userId, wsId, threadId, { back, offerId, page, h, flash });'),
   'Expected stage/triage changes in brand Inbox threads to rerender with a clear inline flash state'
 );
 

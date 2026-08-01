@@ -17,6 +17,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 const botSrc = read('src/bot/bot.js');
+const barterCallbacksSrc = read('src/bot/domains/barter/callbacks.js');
+const runtimeSrc = `${botSrc}\n${barterCallbacksSrc}`;
 const gwAccessSrc = read('src/bot/gwAccess.js');
 const recoverySrc = read('src/bot/recoveryCopy.js');
 
@@ -102,7 +104,7 @@ for (const required of [
   "return answerRecovery(ctx, 'giveaway');",
   "await renderRecovery(ctx, 'role', { backCb: 'a:menu' });",
 ]) {
-  assert.ok(botSrc.includes(required), `Missing classified recovery boundary: ${required}`);
+  assert.ok(runtimeSrc.includes(required), `Missing classified recovery boundary: ${required}`);
 }
 assert.ok(gwAccessSrc.includes("recoveryToast('giveaway')"));
 assert.ok(gwAccessSrc.includes("recoveryPlain('giveaway')"));
@@ -136,7 +138,7 @@ for (const required of [
   "action: 'Нажми «➕ Ссылка» или «📎 Скрин», когда появится подтверждение.'",
   "title: 'Событий пока нет'",
 ]) {
-  assert.ok(botSrc.includes(required), `Missing recovery/empty-state contract: ${required}`);
+  assert.ok(runtimeSrc.includes(required), `Missing recovery/empty-state contract: ${required}`);
 }
 
 // Existing authorization and mutation boundaries stay authoritative.
@@ -158,7 +160,7 @@ for (const callback of [
   "'a:cur_ws'",
   "'a:bx_proof_link'",
 ]) {
-  assert.ok(botSrc.includes(callback), `Callback invariant missing: ${callback}`);
+  assert.ok(runtimeSrc.includes(callback), `Callback invariant missing: ${callback}`);
 }
 
 // Recovery copy is a pure presentation module; it must not query DB or external services.

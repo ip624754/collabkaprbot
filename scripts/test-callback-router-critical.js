@@ -35,8 +35,8 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 120, 'STEP590E1 must extract one hundred twenty exact actions');
-equal(summary.legacy, registryKeys.length - 120, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 209, 'STEP590E2 must extract two hundred nine exact actions');
+equal(summary.legacy, registryKeys.length - 209, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
@@ -56,7 +56,11 @@ equal(summary.byRoute[CALLBACK_ROUTE.APPLICATION_DEALS], 10, 'application deals 
 equal(summary.byRoute[CALLBACK_ROUTE.LEAD_ACQUISITION], 5, 'lead acquisition owns five actions');
 equal(summary.byRoute[CALLBACK_ROUTE.LEAD_WORKFLOW], 14, 'lead workflow owns fourteen actions');
 equal(summary.byRoute[CALLBACK_ROUTE.LEAD_AUDIT], 1, 'lead audit owns one action');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 120, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.BARTER_DISCOVERY], 16, 'barter discovery owns sixteen actions');
+equal(summary.byRoute[CALLBACK_ROUTE.BARTER_OFFICIAL], 9, 'barter official publishing owns nine actions');
+equal(summary.byRoute[CALLBACK_ROUTE.BARTER_CONVERSATIONS], 16, 'barter conversations own sixteen actions');
+equal(summary.byRoute[CALLBACK_ROUTE.BARTER_OFFERS], 48, 'barter offers own forty-eight actions');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 209, 'legacy count must be exact');
 
 for (const action of registryKeys) {
   const owner = getCallbackOwnership(action);
@@ -137,6 +141,24 @@ for (const action of ['a:lead_assign', 'a:lead_del_do', 'a:lead_del_q', 'a:lead_
 }
 equal(getCallbackOwnership('a:ca').routeId, CALLBACK_ROUTE.LEAD_AUDIT, 'lead audit owner');
 equal(getCallbackOwnership('a:ca').phase, CALLBACK_PHASE.POST_USER, 'lead audit phase');
+for (const action of ['a:bx_home', 'a:bx_open', 'a:bx_feed', 'a:bx_filters', 'a:bx_pub', 'a:offer_open']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BARTER_DISCOVERY, `${action} barter discovery owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} barter discovery phase`);
+}
+for (const action of ['a:off_manage', 'a:off_req', 'a:off_pub', 'a:off_verify', 'a:off_queue']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BARTER_OFFICIAL, `${action} barter official owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} barter official phase`);
+}
+for (const action of ['a:bx_msg', 'a:bx_inbox', 'a:bx_thread', 'a:bx_proofs', 'a:bx_stage']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BARTER_CONVERSATIONS, `${action} barter conversation owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} barter conversation phase`);
+}
+for (const action of ['a:bx_new', 'a:bx_publish', 'a:bx_view', 'a:bx_pause', 'a:bx_restore', 'a:bx_pub_done']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BARTER_OFFERS, `${action} barter offer owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} barter offer phase`);
+}
+equal(getCallbackOwnership('a:off_buy').routeId, CALLBACK_ROUTE.LEGACY, 'official paid checkout stays legacy');
+equal(getCallbackOwnership('a:off_buy_home').routeId, CALLBACK_ROUTE.LEGACY, 'official paid checkout home stays legacy');
 equal(getCallbackOwnership('a:support').routeId, CALLBACK_ROUTE.LEGACY, 'non-extracted action stays legacy');
 equal(getCallbackOwnership('a:not_registered'), null, 'unknown action has no owner');
 

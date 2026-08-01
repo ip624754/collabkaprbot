@@ -1,30 +1,33 @@
-# AI Multi-Model Handoff — STEP590E1 Current Truth
+# AI Multi-Model Handoff — STEP590E2 Current Truth
 
-**Baseline:** STEP590E1 source architecture package on exact STEP590D
-**Status:** SOURCE READY / PRODUCTION APPLICATIONS-LEADS CANARY PENDING
+**Baseline:** STEP590E2 source architecture package on accepted STEP590E1H5
+**Accepted prior production commit:** `af56af594c1de6d6c8a950f4168be7a2c397320f`
+**Status:** SOURCE READY / PRODUCTION BARTER CANARY PENDING
 
 ## Verified
 
-- Applications and Leads bounded modules exist;
-- 53 actions have exact executable ownership across six post-user routes;
-- corresponding legacy callback branches are removed from `bot.js`;
-- `a:send_request_to_creator` retains canonical fall-through semantics through lead acquisition;
-- ownership is 120 extracted / 440 legacy / 0 unresolved;
-- dedicated domain, router, registry and prior critical regression suites pass;
-- no SQL, ENV, callback-key, visible-copy or workflow-state redesign was introduced.
+- STEP590E1 Applications & Leads is production-deployed and operator-canary accepted;
+- one Barter bounded module exists with four exact post-user owners;
+- 89 callback actions moved from legacy ownership;
+- corresponding inline callback branches are removed from `bot.js`;
+- ownership is 209 extracted / 351 legacy / 7 aliases / 0 unresolved;
+- payment checkout actions `a:off_buy*` remain outside the Barter module;
+- dedicated domain/router/registry and previous critical regression suites pass;
+- no SQL, ENV, API route, callback-key, visible-copy or lifecycle-state redesign was introduced;
+- repository dependency wiring is 98 required / 98 declared / 98 injected / 0 missing.
 
 ## Environment-limited evidence
 
 - source preflight and portable critical spine pass under declared temporary dependency shims;
-- clean `npm ci` failed because the available internal mirror returned HTTP 404 for `xtend@4.0.2`;
+- clean `npm ci --ignore-scripts` was blocked because the implementation mirror returned HTTP 404 for `xtend@4.0.2`;
 - temporary shims are not part of the package.
 
 ## Not verified
 
-- Vercel deployment of STEP590E1;
-- live application/lead mutation and notification parity;
-- production PostgreSQL/Redis/Telegram behavior on the extracted routes.
+- Vercel deployment of STEP590E2;
+- live Barter offer/thread/proof/report/official-publication parity;
+- production PostgreSQL/Redis/QStash/Telegram behavior on the extracted routes.
 
 ## Next
 
-After operator QA and bounded canary, implement `STEP590E2 — Barter Domain Extraction`.
+After operator local QA and bounded Barter canary, implement `STEP590E3 — Workspaces & Directory Domain Extraction`.

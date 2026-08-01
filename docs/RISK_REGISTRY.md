@@ -1,3 +1,14 @@
+# STEP590E2 — Active Architecture Risk Update
+
+| ID | Risk | Severity | State | Required control |
+|---|---|---:|---|---|
+| R-45 | Barter extraction weakens offer/thread/workspace authorization or trusts callback payload identity | HIGH | SOURCE MITIGATED / PROD OPEN | canonical hydrated actor, existing owner/manager/workspace checks, executable route parity, disposable cross-workspace negative canary |
+| R-46 | Official publication or retry orchestration duplicates external Telegram/QStash effects | CRITICAL | SOURCE MITIGATED / PROD OPEN | keep canonical publish/verify/remove/retry helpers, preserve audit/message IDs, bounded disposable official-post canary, reject duplicate effects |
+
+**Release gate:** R-45 and R-46 remain open until STEP590E2 deployment verifies representative discovery, offer, conversation/proof/report and official-publication paths without authorization drift, duplicate effects or payment-route capture.
+
+---
+
 # STEP590D — Active Architecture Risk Update
 
 | ID | Risk | Severity | State | Required control |
@@ -256,6 +267,8 @@ Residual risk:
 | R-42 | Architecture program delays production remediation/acceptance evidence | MEDIUM | ACTIVE | structural work proceeds while H1/X1–X7 production state remains unknown | retain explicit release HOLD and separate production acceptance lane | architecture claim used to imply production readiness |
 | R-43 | Application/lead extraction drifts actor, role or workspace authorization | HIGH | ACTIVE | record from another actor/workspace becomes readable or mutable; callback payload identity is trusted | keep Telegram/hydrated actor canonical, inject existing access guards, executable authorization/source parity tests | first cross-workspace access, actor mismatch or unaudited status transition |
 | R-44 | Canonical lead creation is split between public workspace and lead owners | HIGH | WATCH | `a:send_request_to_creator` and `a:wsp_lead_new` diverge or recurse across owners | own both actions in `lead_acquisition` and test normalization/reachability as one path | duplicate lead, cross-owner fallback or stale old-button regression |
+| R-45 | Barter extraction weakens offer/thread/workspace authorization or trusts callback payload identity | HIGH | ACTIVE | cross-owner/workspace offer or thread becomes readable/mutable | canonical hydrated actor, existing owner/manager/workspace checks, exact route tests and negative canary | first authorization bypass or actor mismatch |
+| R-46 | Official publication/retry extraction duplicates external effects or loses durable truth | CRITICAL | ACTIVE | duplicate official post, retry, remove or mismatched Telegram message ID/audit | canonical publish/verify/remove/retry helpers, durable audit/message IDs and disposable production canary | any duplicate external effect or durable/external divergence |
 
 ## Current STEP590A assessment
 
@@ -326,3 +339,17 @@ Residual risk:
 - Environment limitation: clean `npm ci` was blocked by internal mirror HTTP 404 for `xtend@4.0.2`; operator-side dependency/audit evidence remains required.
 - Runtime verification required: bounded creator/brand/deal/lead navigation and disposable mutation canary, including workspace isolation and no duplicate notifications.
 - Residual risk: broad capability injection remains a compatibility seam until repository decomposition and architecture import gates; `a:wsp_lead_new` ownership should remain explicitly tested because it moved from a public-workspace adjacency into canonical lead acquisition.
+
+
+## Current STEP590E2 assessment
+
+- Change type: Barter discovery, offer lifecycle, conversation/proof/report and official-publication callback orchestration extraction; no schema, ENV, API-route or status-model redesign.
+- Primary risks addressed: R-38, R-39, R-40, R-41, R-45 and R-46.
+- Runtime blast radius: 89 exact Barter callbacks across four post-user owners.
+- Canonical correctness boundary: existing DB/Redis/QStash/Telegram helpers, workspace/owner/manager/moderator checks, audit names, external message identifiers and payment fulfillment remain unchanged.
+- Explicit exclusion: `a:off_buy` and `a:off_buy_home` remain outside the Barter domain.
+- Rollback: code rollback to exact STEP590E1H5; preserve offers, threads, proofs, reports, official-publication rows, audit events and Telegram message IDs created after deployment.
+- Source verification: 492 domain assertions, 2,624 router assertions, 560/560 registry, 98/98 dependency parity, all prior domain/critical regressions, source preflight and portable spine PASS within the declared shim boundary.
+- Environment limitation: clean dependency installation was blocked by implementation-mirror HTTP 404 for `xtend@4.0.2`; operator-side dependency, audit, Vercel and live integration evidence remains required.
+- Runtime verification required: representative read-only paths plus disposable offer/thread/official-post mutation canary; explicitly verify no payment action is captured by Barter ownership.
+- Residual risk: broad capability injection remains a compatibility seam until STEP590F/STEP590I; five registry-only Barter keys remain legacy-owned because no executable branch exists.

@@ -11,6 +11,7 @@ const giveawayRoute = fs.readFileSync(new URL('../src/bot/domains/giveaways/rout
 const broadcastRoute = fs.readFileSync(new URL('../src/bot/domains/broadcasts/route.js', import.meta.url), 'utf8');
 const navigationRoute = fs.readFileSync(new URL('../src/bot/shared/navigation/route.js', import.meta.url), 'utf8');
 const telegramUxRoute = fs.readFileSync(new URL('../src/bot/shared/telegramUx/route.js', import.meta.url), 'utf8');
+const barterRoute = fs.readFileSync(new URL('../src/bot/domains/barter/route.js', import.meta.url), 'utf8');
 
 const requiredBotFragments = [
   'dispatchPreUserCallback(ctx, p',
@@ -24,6 +25,10 @@ const requiredBotFragments = [
   'broadcast_operations: (ctx2, p2, u2) => handleBroadcastOperationsCallback(',
   'navigation_shared: (ctx2, p2, u2) => handleNavigationCallback(',
   'telegram_ux_shared: (ctx2, p2, u2) => handleTelegramUxCallback(',
+  'barter_discovery: (ctx2, p2, u2) => handleBarterDiscoveryCallback(',
+  'barter_official: (ctx2, p2, u2) => handleBarterOfficialCallback(',
+  'barter_conversations: (ctx2, p2, u2) => handleBarterConversationCallback(',
+  'barter_offers: (ctx2, p2, u2) => handleBarterOfferCallback(',
   'await dispatchCallback(ctx, p, u',
 ];
 for (const fragment of requiredBotFragments) {
@@ -53,6 +58,11 @@ assert.ok(ownership.includes('NAVIGATION_CALLBACK_ROUTE_DEFINITIONS'), 'navigati
 assert.ok(navigationRoute.includes('NAVIGATION_SHARED_ROUTE_DEFINITION'), 'navigation shared route must be explicit');
 assert.ok(ownership.includes('TELEGRAM_UX_CALLBACK_ROUTE_DEFINITIONS'), 'Telegram UX ownership must come from shared route descriptors');
 assert.ok(telegramUxRoute.includes('TELEGRAM_UX_SHARED_ROUTE_DEFINITION'), 'Telegram UX shared route must be explicit');
+assert.ok(ownership.includes('BARTER_CALLBACK_ROUTE_DEFINITIONS'), 'barter ownership must come from bounded domain descriptors');
+assert.ok(barterRoute.includes('BARTER_DISCOVERY_ROUTE_DEFINITION'), 'barter discovery route must be explicit');
+assert.ok(barterRoute.includes('BARTER_OFFICIAL_ROUTE_DEFINITION'), 'barter official route must be explicit');
+assert.ok(barterRoute.includes('BARTER_CONVERSATION_ROUTE_DEFINITION'), 'barter conversation route must be explicit');
+assert.ok(barterRoute.includes('BARTER_OFFER_ROUTE_DEFINITION'), 'barter offer route must be explicit');
 assert.ok(ownership.includes('callback_route.duplicate_action_owner'), 'duplicate action ownership must hard fail');
 assert.ok(ownership.includes('callback_route.unknown_action'), 'unknown extracted action must hard fail');
 
