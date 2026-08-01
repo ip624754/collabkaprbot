@@ -1,3 +1,40 @@
+# AI Multi-Model Handoff — STEP590A Current Truth
+
+**Baseline:** STEP590A docs-only architecture package on STEP588X7H1
+**Runtime baseline:** STEP588X7H1
+**Status:** ARCHITECTURE BASELINE ACCEPTED / RUNTIME EXTRACTION NOT STARTED / GLOBAL RELEASE HOLD
+
+## Verified
+
+- exact STEP588X7H1 ZIP integrity and SHA-256;
+- 678 repository files and 267 JavaScript files inventoried;
+- 560 action registry entries and 328 DB exports classified into proposed target ownership;
+- callback concentration and top-file/function hotspots measured;
+- no static relative-import cycle detected;
+- modular-monolith dependency direction and STEP590B–J sequence documented;
+- STEP590A contains no runtime, migration, ENV, callback-key or product-copy change.
+
+## Not verified
+
+- behavior after future extraction;
+- final domain assignment for every heuristic row;
+- production acceptance of STEP588X7H1 or STEP588X1–X7;
+- strict PostgreSQL/Redis critical-spine integration.
+
+## Hard rules
+
+- begin runtime work with STEP590B, not a broad file split;
+- one action must have one executable owner or an explicit alias/tombstone;
+- preserve action keys, guard metadata, copy, DB exports and critical state machines during extraction;
+- keep `src/db/queries.js` as a temporary compatibility façade during STEP590F;
+- do not introduce microservices, ORM, TypeScript or framework migration in STEP590;
+- every extraction is independently deployable, testable and reversible;
+- unknown-callback, guard downgrade, DB export drift or critical-spine failure blocks the current extraction.
+
+Next implementation step: `STEP590B — Executable Callback Router & Unique Ownership Gate`.
+
+---
+
 # AI Multi-Model Handoff — STEP588X7H1 Current Truth
 
 **Baseline:** STEP588X7H1 hotfix on STEP588X7

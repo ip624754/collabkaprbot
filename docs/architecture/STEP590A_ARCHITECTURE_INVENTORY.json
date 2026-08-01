@@ -1,0 +1,1144 @@
+{
+  "baseline_zip_sha256": "0054f38c756ff943e978a2e6e3bfcc3eae9fcfe1fa852e046a1e643c1c0c5f5e",
+  "files_total": 678,
+  "js_files_total": 267,
+  "action_registry": {
+    "total": 560,
+    "types": {
+      "admin": 104,
+      "edit": 348,
+      "ops": 93,
+      "pay": 11,
+      "view": 4
+    },
+    "guards": {
+      "require_redis": 368,
+      "none": 185,
+      "db_truth": 5,
+      "queue_first": 2
+    },
+    "domains": {
+      "admin": 88,
+      "admin_auth": 1,
+      "admin_broadcast": 6,
+      "payments_admin": 9,
+      "audience": 4,
+      "broadcasts": 27,
+      "brand_directory": 10,
+      "leads": 19,
+      "brand_management": 12,
+      "applications": 33,
+      "brand_profile": 32,
+      "payments": 2,
+      "barter": 84,
+      "curation": 16,
+      "giveaways": 67,
+      "workspaces": 67,
+      "monetization_products": 11,
+      "founder": 2,
+      "navigation": 12,
+      "notifications": 3,
+      "onboarding": 4,
+      "moderation": 10,
+      "official_publish": 12,
+      "directory_search": 6,
+      "account": 3,
+      "sharing": 9,
+      "support": 3,
+      "verification": 3,
+      "workspace_public": 5
+    },
+    "current_owners": {
+      "src/bot/bot.js": 542,
+      "src/bot/adminWebAuthCallback.js": 1,
+      "unresolved_or_generated": 13,
+      "src/bot/routes/gwAccess.js": 4
+    }
+  },
+  "db_exports": {
+    "total": 328,
+    "domains": {
+      "users": 38,
+      "shared_or_unclear": 20,
+      "payments": 33,
+      "workspaces": 40,
+      "barter": 59,
+      "applications": 35,
+      "giveaways": 40,
+      "audit": 3,
+      "instagram": 4,
+      "official_publish": 6,
+      "brands": 11,
+      "verification": 5,
+      "broadcasts": 34
+    }
+  },
+  "callback_region": {
+    "start_line": 24830,
+    "dispatch_line": 37711,
+    "end_line": 37732,
+    "approx_lines": 12903
+  },
+  "top_files": [
+    {
+      "file": "src/bot/bot.js",
+      "lines": 41693,
+      "imports": 31,
+      "internal_imports": 29,
+      "external_imports": 2,
+      "named_function_declarations": 809,
+      "action_literals": 549
+    },
+    {
+      "file": "src/db/queries.js",
+      "lines": 9212,
+      "imports": 5,
+      "internal_imports": 5,
+      "external_imports": 0,
+      "named_function_declarations": 372,
+      "action_literals": 0
+    },
+    {
+      "file": "scripts/admin-web.js",
+      "lines": 4668,
+      "imports": 0,
+      "internal_imports": 0,
+      "external_imports": 0,
+      "named_function_declarations": 179,
+      "action_literals": 0
+    },
+    {
+      "file": "src/bot/cron.js",
+      "lines": 2217,
+      "imports": 18,
+      "internal_imports": 17,
+      "external_imports": 1,
+      "named_function_declarations": 53,
+      "action_literals": 4
+    },
+    {
+      "file": "src/lib/adminWeb/readModels.js",
+      "lines": 1214,
+      "imports": 8,
+      "internal_imports": 8,
+      "external_imports": 0,
+      "named_function_declarations": 37,
+      "action_literals": 0
+    },
+    {
+      "file": "src/lib/adminWeb/runtime.js",
+      "lines": 1151,
+      "imports": 6,
+      "internal_imports": 6,
+      "external_imports": 0,
+      "named_function_declarations": 28,
+      "action_literals": 0
+    },
+    {
+      "file": "api/health.js",
+      "lines": 1042,
+      "imports": 6,
+      "internal_imports": 6,
+      "external_imports": 0,
+      "named_function_declarations": 9,
+      "action_literals": 0
+    },
+    {
+      "file": "api/qstash/broadcast-deliver.js",
+      "lines": 924,
+      "imports": 9,
+      "internal_imports": 9,
+      "external_imports": 0,
+      "named_function_declarations": 28,
+      "action_literals": 0
+    },
+    {
+      "file": "api/qstash/monetization-retry.js",
+      "lines": 839,
+      "imports": 11,
+      "internal_imports": 11,
+      "external_imports": 0,
+      "named_function_declarations": 12,
+      "action_literals": 2
+    },
+    {
+      "file": "src/bot/paymentFulfillmentCore.js",
+      "lines": 712,
+      "imports": 1,
+      "internal_imports": 0,
+      "external_imports": 1,
+      "named_function_declarations": 29,
+      "action_literals": 0
+    },
+    {
+      "file": "src/lib/config.js",
+      "lines": 657,
+      "imports": 0,
+      "internal_imports": 0,
+      "external_imports": 0,
+      "named_function_declarations": 9,
+      "action_literals": 0
+    },
+    {
+      "file": "src/bot/actionRegistry.js",
+      "lines": 603,
+      "imports": 0,
+      "internal_imports": 0,
+      "external_imports": 0,
+      "named_function_declarations": 2,
+      "action_literals": 560
+    },
+    {
+      "file": "scripts/test-payment-fulfillment-critical.js",
+      "lines": 558,
+      "imports": 6,
+      "internal_imports": 1,
+      "external_imports": 5,
+      "named_function_declarations": 8,
+      "action_literals": 0
+    },
+    {
+      "file": "src/lib/adminWeb/auth.js",
+      "lines": 553,
+      "imports": 6,
+      "internal_imports": 6,
+      "external_imports": 0,
+      "named_function_declarations": 38,
+      "action_literals": 0
+    },
+    {
+      "file": "src/lib/redis.js",
+      "lines": 500,
+      "imports": 2,
+      "internal_imports": 1,
+      "external_imports": 1,
+      "named_function_declarations": 22,
+      "action_literals": 0
+    },
+    {
+      "file": "src/db/giveawayAtomicCore.js",
+      "lines": 481,
+      "imports": 1,
+      "internal_imports": 1,
+      "external_imports": 0,
+      "named_function_declarations": 13,
+      "action_literals": 0
+    },
+    {
+      "file": "scripts/test-giveaway-draw-critical.js",
+      "lines": 451,
+      "imports": 3,
+      "internal_imports": 1,
+      "external_imports": 2,
+      "named_function_declarations": 9,
+      "action_literals": 0
+    },
+    {
+      "file": "scripts/preflight.js",
+      "lines": 449,
+      "imports": 5,
+      "internal_imports": 0,
+      "external_imports": 5,
+      "named_function_declarations": 16,
+      "action_literals": 0
+    },
+    {
+      "file": "src/bot/payments/starsHandlers.js",
+      "lines": 408,
+      "imports": 1,
+      "internal_imports": 1,
+      "external_imports": 0,
+      "named_function_declarations": 1,
+      "action_literals": 5
+    },
+    {
+      "file": "src/bot/helpers.js",
+      "lines": 387,
+      "imports": 2,
+      "internal_imports": 1,
+      "external_imports": 1,
+      "named_function_declarations": 1,
+      "action_literals": 3
+    },
+    {
+      "file": "src/lib/operatorControls.js",
+      "lines": 320,
+      "imports": 3,
+      "internal_imports": 3,
+      "external_imports": 0,
+      "named_function_declarations": 16,
+      "action_literals": 0
+    },
+    {
+      "file": "scripts/telegram-mobile-acceptance.js",
+      "lines": 312,
+      "imports": 4,
+      "internal_imports": 0,
+      "external_imports": 4,
+      "named_function_declarations": 10,
+      "action_literals": 0
+    },
+    {
+      "file": "_ig_oauth_parked/api/ig/oauth/callback.js",
+      "lines": 305,
+      "imports": 6,
+      "internal_imports": 2,
+      "external_imports": 4,
+      "named_function_declarations": 10,
+      "action_literals": 0
+    },
+    {
+      "file": "src/bot/redactContacts.js",
+      "lines": 276,
+      "imports": 0,
+      "internal_imports": 0,
+      "external_imports": 0,
+      "named_function_declarations": 2,
+      "action_literals": 0
+    },
+    {
+      "file": "src/bot/opsAlerts.js",
+      "lines": 265,
+      "imports": 3,
+      "internal_imports": 2,
+      "external_imports": 1,
+      "named_function_declarations": 11,
+      "action_literals": 1
+    },
+    {
+      "file": "src/db/pool.js",
+      "lines": 260,
+      "imports": 6,
+      "internal_imports": 5,
+      "external_imports": 1,
+      "named_function_declarations": 8,
+      "action_literals": 0
+    },
+    {
+      "file": "scripts/critical-spine/postgres.js",
+      "lines": 257,
+      "imports": 6,
+      "internal_imports": 3,
+      "external_imports": 3,
+      "named_function_declarations": 8,
+      "action_literals": 0
+    },
+    {
+      "file": "src/bot/gwAccess.js",
+      "lines": 253,
+      "imports": 4,
+      "internal_imports": 3,
+      "external_imports": 1,
+      "named_function_declarations": 9,
+      "action_literals": 0
+    },
+    {
+      "file": "scripts/test-broadcast-delivery-unknown-critical.js",
+      "lines": 240,
+      "imports": 3,
+      "internal_imports": 2,
+      "external_imports": 1,
+      "named_function_declarations": 1,
+      "action_literals": 0
+    },
+    {
+      "file": "scripts/test-admin-web-auth-critical.js",
+      "lines": 237,
+      "imports": 3,
+      "internal_imports": 2,
+      "external_imports": 1,
+      "named_function_declarations": 3,
+      "action_literals": 2
+    }
+  ],
+  "function_hotspots": {
+    "src/bot/bot.js": [
+      {
+        "name": "getBot",
+        "start_line": 19622,
+        "end_line": 37735,
+        "lines": 18114
+      },
+      {
+        "name": "parseUrlsFromText",
+        "start_line": 10490,
+        "end_line": 10905,
+        "lines": 416
+      },
+      {
+        "name": "acceptBrandApplication",
+        "start_line": 14658,
+        "end_line": 14888,
+        "lines": 231
+      },
+      {
+        "name": "sendLeadTemplateReply",
+        "start_line": 15190,
+        "end_line": 15367,
+        "lines": 178
+      },
+      {
+        "name": "_expectedStarsForInvoicePayload",
+        "start_line": 1830,
+        "end_line": 1969,
+        "lines": 140
+      },
+      {
+        "name": "sendBrandAppTemplateReply",
+        "start_line": 14518,
+        "end_line": 14656,
+        "lines": 139
+      },
+      {
+        "name": "renderBxView",
+        "start_line": 16251,
+        "end_line": 16382,
+        "lines": 132
+      },
+      {
+        "name": "renderAdminUserCard",
+        "start_line": 40735,
+        "end_line": 40866,
+        "lines": 132
+      },
+      {
+        "name": "renderBrandLeadDialog",
+        "start_line": 12548,
+        "end_line": 12666,
+        "lines": 119
+      },
+      {
+        "name": "renderAdminUsers",
+        "start_line": 40615,
+        "end_line": 40733,
+        "lines": 119
+      },
+      {
+        "name": "renderOfficialManageView",
+        "start_line": 17524,
+        "end_line": 17639,
+        "lines": 116
+      },
+      {
+        "name": "renderAdminQStashStatus",
+        "start_line": 39743,
+        "end_line": 39856,
+        "lines": 114
+      },
+      {
+        "name": "renderBrandDealsList",
+        "start_line": 13515,
+        "end_line": 13625,
+        "lines": 111
+      },
+      {
+        "name": "doEligibilityCheck",
+        "start_line": 19511,
+        "end_line": 19606,
+        "lines": 96
+      },
+      {
+        "name": "renderAdminOutboxView",
+        "start_line": 39979,
+        "end_line": 40074,
+        "lines": 96
+      },
+      {
+        "name": "_renderTplFlowBrandApp",
+        "start_line": 14325,
+        "end_line": 14418,
+        "lines": 94
+      },
+      {
+        "name": "renderBroadcastView",
+        "start_line": 38284,
+        "end_line": 38376,
+        "lines": 93
+      },
+      {
+        "name": "renderAdminUserNote",
+        "start_line": 40868,
+        "end_line": 40960,
+        "lines": 93
+      },
+      {
+        "name": "renderWsLeadsList",
+        "start_line": 12109,
+        "end_line": 12199,
+        "lines": 91
+      },
+      {
+        "name": "renderAdminFounderTexts",
+        "start_line": 40207,
+        "end_line": 40295,
+        "lines": 89
+      },
+      {
+        "name": "startBrandAppReply",
+        "start_line": 13930,
+        "end_line": 14017,
+        "lines": 88
+      },
+      {
+        "name": "renderAdminMetrics",
+        "start_line": 40299,
+        "end_line": 40386,
+        "lines": 88
+      },
+      {
+        "name": "_renderTplFlowLead",
+        "start_line": 14420,
+        "end_line": 14505,
+        "lines": 86
+      },
+      {
+        "name": "renderCuratorInbox",
+        "start_line": 12237,
+        "end_line": 12318,
+        "lines": 82
+      },
+      {
+        "name": "renderVerifyHome",
+        "start_line": 37762,
+        "end_line": 37841,
+        "lines": 80
+      },
+      {
+        "name": "handleStatelessCallback",
+        "start_line": 4875,
+        "end_line": 4950,
+        "lines": 76
+      },
+      {
+        "name": "renderAdminSysNotice",
+        "start_line": 39668,
+        "end_line": 39741,
+        "lines": 74
+      },
+      {
+        "name": "buildWsIgTemplate",
+        "start_line": 11230,
+        "end_line": 11301,
+        "lines": 72
+      },
+      {
+        "name": "renderBrandAppsList",
+        "start_line": 13444,
+        "end_line": 13513,
+        "lines": 70
+      },
+      {
+        "name": "renderCuratorGiveawayOwnerNotifySend",
+        "start_line": 19179,
+        "end_line": 19248,
+        "lines": 70
+      }
+    ],
+    "src/db/queries.js": [
+      {
+        "name": "redeemInviteReward",
+        "start_line": 8190,
+        "end_line": 8294,
+        "lines": 105
+      },
+      {
+        "name": "listBrandsDirectory",
+        "start_line": 4533,
+        "end_line": 4620,
+        "lines": 88
+      },
+      {
+        "name": "getAdminMetricsSnapshot",
+        "start_line": 365,
+        "end_line": 421,
+        "lines": 57
+      },
+      {
+        "name": "listBrandDealsFiltered",
+        "start_line": 6382,
+        "end_line": 6436,
+        "lines": 55
+      },
+      {
+        "name": "listBroadcastUnsentRecipients",
+        "start_line": 7385,
+        "end_line": 7439,
+        "lines": 55
+      },
+      {
+        "name": "getUserCardById",
+        "start_line": 833,
+        "end_line": 884,
+        "lines": 52
+      },
+      {
+        "name": "countBrandDealsFiltered",
+        "start_line": 6331,
+        "end_line": 6379,
+        "lines": 49
+      },
+      {
+        "name": "drawWinnersDeterministic",
+        "start_line": 7455,
+        "end_line": 7503,
+        "lines": 49
+      },
+      {
+        "name": "updateBarterOffer",
+        "start_line": 3086,
+        "end_line": 3131,
+        "lines": 46
+      },
+      {
+        "name": "claimBroadcastDelivery",
+        "start_line": 6924,
+        "end_line": 6969,
+        "lines": 46
+      },
+      {
+        "name": "getInviteRewardsSummary",
+        "start_line": 8078,
+        "end_line": 8122,
+        "lines": 45
+      },
+      {
+        "name": "searchWorkspaceProfilesByMatrix",
+        "start_line": 6514,
+        "end_line": 6557,
+        "lines": 44
+      },
+      {
+        "name": "getInviteRewardsRecentHistory",
+        "start_line": 8124,
+        "end_line": 8167,
+        "lines": 44
+      },
+      {
+        "name": "getInviteAttributionByInvitedUserId",
+        "start_line": 8780,
+        "end_line": 8822,
+        "lines": 43
+      },
+      {
+        "name": "searchNetworkBarterOffersByBrief",
+        "start_line": 3998,
+        "end_line": 4038,
+        "lines": 41
+      },
+      {
+        "name": "addChannelFolderItems",
+        "start_line": 5236,
+        "end_line": 5276,
+        "lines": 41
+      },
+      {
+        "name": "getCuratorLeadStats",
+        "start_line": 1600,
+        "end_line": 1639,
+        "lines": 40
+      },
+      {
+        "name": "removeChannelFolderItems",
+        "start_line": 5278,
+        "end_line": 5317,
+        "lines": 40
+      },
+      {
+        "name": "markInviteActivatedIfEligible",
+        "start_line": 7955,
+        "end_line": 7994,
+        "lines": 40
+      },
+      {
+        "name": "revokeGiftedBrandCredits",
+        "start_line": 967,
+        "end_line": 1005,
+        "lines": 39
+      },
+      {
+        "name": "markBroadcastDeliveryUnknown",
+        "start_line": 7019,
+        "end_line": 7057,
+        "lines": 39
+      },
+      {
+        "name": "getUsersDirectoryByIds",
+        "start_line": 738,
+        "end_line": 775,
+        "lines": 38
+      },
+      {
+        "name": "createBarterOffer",
+        "start_line": 2900,
+        "end_line": 2937,
+        "lines": 38
+      },
+      {
+        "name": "getBrandLeadForActor",
+        "start_line": 5599,
+        "end_line": 5636,
+        "lines": 38
+      },
+      {
+        "name": "listBrandDeals",
+        "start_line": 6292,
+        "end_line": 6328,
+        "lines": 37
+      },
+      {
+        "name": "spendBrandCredits",
+        "start_line": 1008,
+        "end_line": 1043,
+        "lines": 36
+      },
+      {
+        "name": "enqueueWorkspaceAuditBuffered",
+        "start_line": 1798,
+        "end_line": 1833,
+        "lines": 36
+      },
+      {
+        "name": "hasBrandTeamUnlockPurchase",
+        "start_line": 4489,
+        "end_line": 4524,
+        "lines": 36
+      },
+      {
+        "name": "listBrandLeadsForCuratorFiltered",
+        "start_line": 5751,
+        "end_line": 5786,
+        "lines": 36
+      },
+      {
+        "name": "insertInviteEarnRewardIfMissing",
+        "start_line": 7861,
+        "end_line": 7896,
+        "lines": 36
+      }
+    ],
+    "src/bot/cron.js": [
+      {
+        "name": "broadcastTick",
+        "start_line": 1557,
+        "end_line": 2174,
+        "lines": 618
+      },
+      {
+        "name": "autoHealOrphanedPayments",
+        "start_line": 817,
+        "end_line": 1065,
+        "lines": 249
+      },
+      {
+        "name": "autoPublishDrawn",
+        "start_line": 561,
+        "end_line": 703,
+        "lines": 143
+      },
+      {
+        "name": "setBroadcastCooldown",
+        "start_line": 1217,
+        "end_line": 1332,
+        "lines": 116
+      },
+      {
+        "name": "igVerifyTick",
+        "start_line": 1393,
+        "end_line": 1499,
+        "lines": 107
+      },
+      {
+        "name": "issueIntroRetryCredits",
+        "start_line": 737,
+        "end_line": 814,
+        "lines": 78
+      },
+      {
+        "name": "autoDrawEnded",
+        "start_line": 495,
+        "end_line": 559,
+        "lines": 65
+      },
+      {
+        "name": "giveawaysTick",
+        "start_line": 1067,
+        "end_line": 1125,
+        "lines": 59
+      },
+      {
+        "name": "sendBroadcastMessage",
+        "start_line": 1342,
+        "end_line": 1390,
+        "lines": 49
+      },
+      {
+        "name": "auditFlushTick",
+        "start_line": 2183,
+        "end_line": 2216,
+        "lines": 34
+      },
+      {
+        "name": "expireOfficialPosts",
+        "start_line": 705,
+        "end_line": 735,
+        "lines": 31
+      },
+      {
+        "name": "getBroadcastCooldownUntilMs",
+        "start_line": 1191,
+        "end_line": 1215,
+        "lines": 25
+      },
+      {
+        "name": "setBroadcastHardSkip",
+        "start_line": 248,
+        "end_line": 271,
+        "lines": 24
+      },
+      {
+        "name": "withTimeout",
+        "start_line": 441,
+        "end_line": 461,
+        "lines": 21
+      },
+      {
+        "name": "getBroadcastHardSkipMap",
+        "start_line": 274,
+        "end_line": 293,
+        "lines": 20
+      },
+      {
+        "name": "getBroadcastQStashFanoutStatus",
+        "start_line": 355,
+        "end_line": 374,
+        "lines": 20
+      },
+      {
+        "name": "recordCronTickFailure",
+        "start_line": 398,
+        "end_line": 416,
+        "lines": 19
+      },
+      {
+        "name": "emitBroadcastTickDeferredRedis",
+        "start_line": 101,
+        "end_line": 117,
+        "lines": 17
+      },
+      {
+        "name": "parseHardSkipVal",
+        "start_line": 213,
+        "end_line": 228,
+        "lines": 16
+      },
+      {
+        "name": "normalizeHardSkipReasonKey",
+        "start_line": 156,
+        "end_line": 170,
+        "lines": 15
+      },
+      {
+        "name": "writeBroadcastPendingSnapshot",
+        "start_line": 316,
+        "end_line": 329,
+        "lines": 14
+      },
+      {
+        "name": "getGlobalBroadcastCooldown",
+        "start_line": 376,
+        "end_line": 387,
+        "lines": 12
+      },
+      {
+        "name": "extractIgVerifyCodes",
+        "start_line": 1501,
+        "end_line": 1512,
+        "lines": 12
+      },
+      {
+        "name": "isRedisOperationalForBroadcastTick",
+        "start_line": 119,
+        "end_line": 129,
+        "lines": 11
+      },
+      {
+        "name": "withGiveawayLock",
+        "start_line": 429,
+        "end_line": 439,
+        "lines": 11
+      },
+      {
+        "name": "withLock",
+        "start_line": 418,
+        "end_line": 427,
+        "lines": 10
+      },
+      {
+        "name": "bumpBroadcastQuarantineCount",
+        "start_line": 1180,
+        "end_line": 1189,
+        "lines": 10
+      },
+      {
+        "name": "normalizeBroadcastDeadChatReason",
+        "start_line": 230,
+        "end_line": 237,
+        "lines": 8
+      },
+      {
+        "name": "getBroadcastHardSkipReason",
+        "start_line": 239,
+        "end_line": 246,
+        "lines": 8
+      },
+      {
+        "name": "writeCronLastRun",
+        "start_line": 389,
+        "end_line": 396,
+        "lines": 8
+      }
+    ],
+    "scripts/admin-web.js": [
+      {
+        "name": "bindShell",
+        "start_line": 4120,
+        "end_line": 4618,
+        "lines": 499
+      },
+      {
+        "name": "usersView",
+        "start_line": 2400,
+        "end_line": 2785,
+        "lines": 386
+      },
+      {
+        "name": "runtimeView",
+        "start_line": 3638,
+        "end_line": 3860,
+        "lines": 223
+      },
+      {
+        "name": "commsView",
+        "start_line": 3254,
+        "end_line": 3460,
+        "lines": 207
+      },
+      {
+        "name": "founderView",
+        "start_line": 3463,
+        "end_line": 3636,
+        "lines": 174
+      },
+      {
+        "name": "paymentsView",
+        "start_line": 2899,
+        "end_line": 3070,
+        "lines": 172
+      },
+      {
+        "name": "paymentDetailView",
+        "start_line": 3073,
+        "end_line": 3182,
+        "lines": 110
+      },
+      {
+        "name": "userDetailView",
+        "start_line": 2787,
+        "end_line": 2894,
+        "lines": 108
+      },
+      {
+        "name": "usersOperatorPresets",
+        "start_line": 1795,
+        "end_line": 1894,
+        "lines": 100
+      },
+      {
+        "name": "render",
+        "start_line": 3879,
+        "end_line": 3956,
+        "lines": 78
+      },
+      {
+        "name": "helpView",
+        "start_line": 1167,
+        "end_line": 1225,
+        "lines": 59
+      },
+      {
+        "name": "overviewView",
+        "start_line": 1495,
+        "end_line": 1545,
+        "lines": 51
+      },
+      {
+        "name": "shell",
+        "start_line": 1061,
+        "end_line": 1104,
+        "lines": 44
+      },
+      {
+        "name": "bindLogin",
+        "start_line": 4621,
+        "end_line": 4663,
+        "lines": 43
+      },
+      {
+        "name": "ensureCopySheetHost",
+        "start_line": 97,
+        "end_line": 136,
+        "lines": 40
+      },
+      {
+        "name": "renderControlSurfaceSection",
+        "start_line": 624,
+        "end_line": 659,
+        "lines": 36
+      },
+      {
+        "name": "runtimeTextLabel",
+        "start_line": 480,
+        "end_line": 513,
+        "lines": 34
+      },
+      {
+        "name": "authErrorLabel",
+        "start_line": 882,
+        "end_line": 911,
+        "lines": 30
+      },
+      {
+        "name": "escapeHtml",
+        "start_line": 39,
+        "end_line": 66,
+        "lines": 28
+      },
+      {
+        "name": "runtimeCardLabel",
+        "start_line": 452,
+        "end_line": 478,
+        "lines": 27
+      },
+      {
+        "name": "normalizeCommsEditorState",
+        "start_line": 3202,
+        "end_line": 3226,
+        "lines": 25
+      },
+      {
+        "name": "renderControlStatusBar",
+        "start_line": 599,
+        "end_line": 622,
+        "lines": 24
+      },
+      {
+        "name": "readUsersStateFromUrl",
+        "start_line": 1652,
+        "end_line": 1672,
+        "lines": 21
+      },
+      {
+        "name": "renderUsersOperatorPresetCards",
+        "start_line": 1930,
+        "end_line": 1948,
+        "lines": 19
+      },
+      {
+        "name": "founderTextLabel",
+        "start_line": 433,
+        "end_line": 450,
+        "lines": 18
+      },
+      {
+        "name": "renderOverviewWorkspaceTabs",
+        "start_line": 1361,
+        "end_line": 1378,
+        "lines": 18
+      },
+      {
+        "name": "readUsersControlsState",
+        "start_line": 3971,
+        "end_line": 3988,
+        "lines": 18
+      },
+      {
+        "name": "downloadCsv",
+        "start_line": 68,
+        "end_line": 83,
+        "lines": 16
+      },
+      {
+        "name": "controlSurfaceLabel",
+        "start_line": 411,
+        "end_line": 426,
+        "lines": 16
+      },
+      {
+        "name": "routeInfo",
+        "start_line": 834,
+        "end_line": 847,
+        "lines": 14
+      }
+    ],
+    "api/health.js": [
+      {
+        "name": "handler",
+        "start_line": 21,
+        "end_line": 1041,
+        "lines": 1021
+      },
+      {
+        "name": "computeSystemStatus",
+        "start_line": 261,
+        "end_line": 407,
+        "lines": 147
+      },
+      {
+        "name": "makeBroadcastBase",
+        "start_line": 201,
+        "end_line": 216,
+        "lines": 16
+      },
+      {
+        "name": "respondWithHealth",
+        "start_line": 226,
+        "end_line": 237,
+        "lines": 12
+      },
+      {
+        "name": "makeCronBase",
+        "start_line": 191,
+        "end_line": 199,
+        "lines": 9
+      },
+      {
+        "name": "makeRefBase",
+        "start_line": 218,
+        "end_line": 224,
+        "lines": 7
+      },
+      {
+        "name": "sanitizePrefix",
+        "start_line": 252,
+        "end_line": 258,
+        "lines": 7
+      },
+      {
+        "name": "readMany",
+        "start_line": 575,
+        "end_line": 578,
+        "lines": 4
+      },
+      {
+        "name": "attachHealthTier",
+        "start_line": 14,
+        "end_line": 16,
+        "lines": 3
+      }
+    ]
+  },
+  "import_cycles": [],
+  "import_cycle_count": 0,
+  "internal_edges": 257,
+  "external_import_edges": 651
+}

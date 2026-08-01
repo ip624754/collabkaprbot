@@ -1,3 +1,33 @@
+## STEP590A — Architecture Baseline & Modular Monolith Plan (2026-08-01)
+
+**Current handoff-safe repository baseline:** STEP590A docs-only architecture package on top of STEP588X7H1.
+
+Repository truth:
+
+- STEP588X7H1 remains the runtime baseline; STEP590A changes no runtime, migration, ENV, callback key or user-facing flow;
+- the exact baseline ZIP SHA-256 is `0054f38c756ff943e978a2e6e3bfcc3eae9fcfe1fa852e046a1e643c1c0c5f5e`;
+- 678 files and 267 JavaScript files were inventoried;
+- `src/bot/bot.js` is 41,692 lines and contains an approximately 12,903-line callback region;
+- the action registry contains 560 entries; the ownership heuristic maps 542 directly to `bot.js`, 1 to admin-auth, 4 to giveaway-access and 13 to aliases/generated/registry-only review;
+- `src/db/queries.js` is 9,211 lines and exposes 328 values across multiple repository domains;
+- no static relative-import cycle was detected;
+- a modular-monolith target, dependency rules, action/DB ownership inventories and STEP590B–J extraction roadmap are now canonical;
+- the first runtime architecture step is STEP590B: executable callback router and unique ownership gate;
+- STEP589 feature expansion remains HOLD during critical router/domain extraction unless explicitly separated;
+- STEP588X7H1 production admin-auth canary remains pending and must not be represented as completed by this docs-only step.
+
+**Architecture decision:** proceed by bounded strangler extraction, preserving Grammy, PostgreSQL, Redis, Vercel, callback keys, DB schema and user behavior. No rewrite, ORM migration, TypeScript migration or microservice split is approved.
+
+Read first:
+
+- `docs/architecture/STEP590A_ARCHITECTURE_BASELINE_AND_DOMAIN_BOUNDARIES.md`;
+- `docs/architecture/STEP590A_DEPENDENCY_RULES.md`;
+- `docs/roadmap/STEP590_MODULAR_MONOLITH_ROADMAP.md`;
+- `docs/audit/STEP590A_ARCHITECTURE_BASELINE_REPORT.md`;
+- `docs/process/07_WORK_HISTORY_STEP590A.md`.
+
+---
+
 ## STEP588X7H1 — Admin Auth Callback Routing Hotfix (2026-07-20)
 
 **Current handoff-safe repository baseline:** STEP588X7H1 runtime hotfix on top of STEP588X7.

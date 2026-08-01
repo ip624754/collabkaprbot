@@ -220,3 +220,24 @@ Residual risk:
 - Rollback: rollback to STEP588X7 restores the known defect; prefer fix-forward or temporarily disable admin web.
 - Source verification: 63 auth assertions, auth source contracts, portable critical spine, callback/action registries and dependency preflight PASS.
 - Runtime verification required: one approve, one deny, no `unknown_callback`, successful originating-browser exchange.
+
+
+## STEP590 architecture-program risks
+
+| ID | Risk | Severity | State | Detection signal | Mitigation | Escalation trigger |
+|---|---|---:|---|---|---|---|
+| R-38 | Callback route ownership remains implicit or duplicated during extraction | CRITICAL | ACTIVE | one action resolves to zero or multiple executable handlers; moved route reaches `unknown_callback` | STEP590B unique ownership registry, executable dispatch tests, aliases declared explicitly | any duplicate owner, missing owner or guard mismatch |
+| R-39 | Structural refactor changes product behavior while presented as file movement | HIGH | ACTIVE | callback keys, copy, SQL, state transitions, audit or return shapes drift | before/after parity manifests; domain-specific regression; one bounded domain per STEP | any undeclared UX/schema/ENV/business-rule change |
+| R-40 | Compatibility façades become permanent second ownership layers | HIGH | WATCH | new behavior added to `bot.js`/`queries.js` after domain extraction | façade freeze rule and retirement criteria in STEP590J | extracted domain adds new legacy branch/export implementation |
+| R-41 | Module split creates circular or inverted dependencies | HIGH | WATCH | static cycle or repository/service/view direction violation | dependency rules and STEP590I automated import gates | first cycle or forbidden import |
+| R-42 | Architecture program delays production remediation/acceptance evidence | MEDIUM | ACTIVE | structural work proceeds while H1/X1–X7 production state remains unknown | retain explicit release HOLD and separate production acceptance lane | architecture claim used to imply production readiness |
+
+## Current STEP590A assessment
+
+- Change type: docs-only architecture baseline, ownership inventory and extraction governance.
+- Runtime blast radius: none.
+- Primary risks addressed: R-22, R-38, R-39, R-40, R-41 and R-42.
+- Rollback: remove the STEP590A documentation package; STEP588X7H1 runtime tree is unchanged.
+- Source verification: baseline ZIP integrity, action/export inventories, static import graph, docs-only scope, registries and portable critical spine.
+- Runtime verification required: none for STEP590A itself; STEP588X7H1 live admin-auth canary remains separate and pending.
+- Residual risk: action/export domain assignment is partly heuristic and must be confirmed in each bounded extraction STEP.
