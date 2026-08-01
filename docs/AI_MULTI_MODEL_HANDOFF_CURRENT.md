@@ -1,33 +1,36 @@
-# AI Multi-Model Handoff — STEP590E2 Current Truth
+# AI Multi-Model Handoff — STEP590E3A Current Truth
 
-**Baseline:** STEP590E2 source architecture package on accepted STEP590E1H5
-**Accepted prior production commit:** `af56af594c1de6d6c8a950f4168be7a2c397320f`
-**Status:** SOURCE READY / PRODUCTION BARTER CANARY PENDING
+**Baseline:** operator-confirmed `main` commit `117c3e8462d85e811a76beaf899f512ff7e3c84a`
+**Package:** `1.3.21`
+**Status:** SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY GATE PENDING
 
 ## Verified
 
-- STEP590E1 Applications & Leads is production-deployed and operator-canary accepted;
-- one Barter bounded module exists with four exact post-user owners;
-- 89 callback actions moved from legacy ownership;
+- one bounded Workspace module exists with two exact post-user owners;
+- 39 callback actions moved from legacy ownership;
 - corresponding inline callback branches are removed from `bot.js`;
-- ownership is 209 extracted / 351 legacy / 7 aliases / 0 unresolved;
-- payment checkout actions `a:off_buy*` remain outside the Barter module;
-- dedicated domain/router/registry and previous critical regression suites pass;
-- no SQL, ENV, API route, callback-key, visible-copy or lifecycle-state redesign was introduced;
-- repository dependency wiring is 98 required / 98 declared / 98 injected / 0 missing.
+- ownership is 248 extracted / 312 legacy / 7 aliases / 0 unresolved;
+- `workspace_control` owns 22 actions;
+- `workspace_folders` owns 17 actions;
+- payment checkout `a:ws_pro_buy` remains payment-owned;
+- public lead action `a:wsp_lead_new` remains lead-owned;
+- dedicated Workspace, router, registry and prior domain suites pass;
+- no SQL, ENV, API route, callback-key, visible-copy or role/state redesign was introduced;
+- all 334 JavaScript files in runtime/tooling scope pass syntax checks.
 
 ## Environment-limited evidence
 
-- source preflight and portable critical spine pass under declared temporary dependency shims;
-- clean `npm ci --ignore-scripts` was blocked because the implementation mirror returned HTTP 404 for `xtend@4.0.2`;
-- temporary shims are not part of the package.
+- source preflight passes all gates through the Workspace executable/source contracts and subsequent source linters;
+- the unpacked artifact has no installed dependencies and later stops at `test:bounded-safety-hardening` because `dotenv` is unavailable;
+- no temporary dependency shim is included in the artifacts.
 
 ## Not verified
 
-- Vercel deployment of STEP590E2;
-- live Barter offer/thread/proof/report/official-publication parity;
-- production PostgreSQL/Redis/QStash/Telegram behavior on the extracted routes.
+- clean operator `npm ci` on the exact artifact;
+- complete dependency-bound source preflight and portable critical spine;
+- Git commit/origin parity after applying the artifact;
+- Vercel deployment and production Workspace/folder behavior.
 
 ## Next
 
-After operator local QA and bounded Barter canary, implement `STEP590E3 — Workspaces & Directory Domain Extraction`.
+After the operator local gate and bounded STEP590E3A deployment, prepare `STEP590E3B — Workspace Profile, Instagram & Sharing Domain Extraction`.

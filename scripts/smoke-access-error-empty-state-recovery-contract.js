@@ -18,7 +18,8 @@ const root = path.resolve(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 const botSrc = read('src/bot/bot.js');
 const barterCallbacksSrc = read('src/bot/domains/barter/callbacks.js');
-const runtimeSrc = `${botSrc}\n${barterCallbacksSrc}`;
+const workspaceCallbacksSrc = read('src/bot/domains/workspaces/callbacks.js');
+const runtimeSrc = `${botSrc}\n${barterCallbacksSrc}\n${workspaceCallbacksSrc}`;
 const gwAccessSrc = read('src/bot/gwAccess.js');
 const recoverySrc = read('src/bot/recoveryCopy.js');
 
@@ -122,7 +123,7 @@ assert.ok(membershipAt >= 0 && unrestrictedAt >= 0, 'Curator workspace proof spi
 assert.ok(membershipAt < curatorWorkspace.lastIndexOf('db.getWorkspaceAny(wsIdNum)'), 'Membership proof must precede curator workspace lookup');
 assert.ok(curatorWorkspace.includes("await renderRecovery(ctx, 'channel', { backCb: 'a:cur_home' });"));
 
-const curatorLegacyAction = sliceBetween(botSrc, "if (p.a === 'a:cur_ws_off')", "if (p.a === 'a:cur_ws')");
+const curatorLegacyAction = sliceBetween(workspaceCallbacksSrc, "if (p.a === 'a:cur_ws_off')", "if (p.a === 'a:cur_ws')");
 assert.ok(curatorLegacyAction.includes('const flags = await getRoleFlags(u, ctx.from.id);'));
 assert.ok(curatorLegacyAction.indexOf('!flags.isCurator && !flags.isAdmin') < curatorLegacyAction.indexOf('renderCuratorWorkspace('));
 
@@ -142,7 +143,7 @@ for (const required of [
 }
 
 // Existing authorization and mutation boundaries stay authoritative.
-const folderMutation = sliceBetween(botSrc, "if (p.a === 'a:folder_add')", "if (p.a === 'a:folder_remove')");
+const folderMutation = sliceBetween(workspaceCallbacksSrc, "if (p.a === 'a:folder_add')", "if (p.a === 'a:folder_remove')");
 assert.ok(folderMutation.includes('if (!access || !access.canEdit)'));
 assert.ok(folderMutation.indexOf('if (!access || !access.canEdit)') < folderMutation.indexOf('db.isWorkspacePro'));
 assert.ok(folderMutation.indexOf('if (!access || !access.canEdit)') < folderMutation.indexOf('setExpectText'));

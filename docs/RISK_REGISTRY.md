@@ -1,3 +1,14 @@
+# STEP590E3A — Active Architecture Risk Update
+
+| ID | Risk | Severity | State | Required control |
+|---|---|---:|---|---|
+| R-47 | Workspace extraction weakens owner/editor/curator or cross-workspace authorization | HIGH | SOURCE MITIGATED / PROD OPEN | scoped Workspace loads, role checks before render, `getFolderAccess` before mutation, executable negative tests, bounded production smoke |
+| R-48 | Folder/editor or disconnect/network callback replay duplicates mutation/audit effects | HIGH | SOURCE MITIGATED / PROD OPEN | preserve canonical DB methods and audit names, exact route ownership, no parallel state core, representative runtime marker scan |
+
+**Release gate:** R-47 and R-48 remain production-open until the exact STEP590E3A artifact is dependency-gated, deployed and exercised through bounded owner/editor/curator/folder paths. No destructive production canary is mandatory unless the operator explicitly chooses it.
+
+---
+
 # STEP590E2 — Active Architecture Risk Update
 
 | ID | Risk | Severity | State | Required control |

@@ -23,8 +23,10 @@
 | STEP590C4 | Broadcast callback extraction | Implemented; production canary pending | 17/20 | Unknown-state/no-resend contract unchanged |
 | STEP590D | Navigation and shared Telegram UX | Implemented; production canary pending | 16/20 | Copy/key/action parity and degraded-mode navigation PASS |
 | STEP590E1 | Applications and leads | Production accepted | 17/20 | Deployment and representative application/deal/lead canary PASS |
-| STEP590E2 | Barter | Implemented; production canary pending | 18/20 | Offer/thread/report/official lifecycle parity PASS |
-| STEP590E3 | Workspaces and directory | Yes | 14/20 | Roles/contact unlock/folder contracts PASS |
+| STEP590E2 | Barter | Operator accepted for roadmap progression; mutation canary waived | 18/20 | Deployment identity + read-only runtime markers PASS |
+| STEP590E3A | Workspace control, roles and folders | Source implemented; operator dependency gate pending | 16/20 | Owner/editor/curator/folder contracts PASS |
+| STEP590E3B | Workspace profile, Instagram and sharing | Planned | 14/20 | Profile/share/IG route parity PASS |
+| STEP590E3C | Directory search and public Workspace | Planned | 15/20 | Search/public/contact ownership parity PASS |
 | STEP590E4 | Brands and curation | Yes | 13/20 | Profile/directory/curator contracts PASS |
 | STEP590E5 | Admin and moderation | Yes | 15/20 | Privilege and audit contracts PASS |
 | STEP590E6 | Support, verification, sharing and account | Yes | 12/20 | Input-mode and recovery contracts PASS |
@@ -69,7 +71,7 @@ Each extraction must remain deployable and reversible at its own commit/artifact
 STEP590 does not claim completion from smaller files alone. Completion requires explicit ownership, executable routing, preserved critical invariants, bounded dependency direction and removal of the legacy central dispatch/DB ownership only after all consumers are migrated.
 
 
-## Current program position — STEP590E2
+## Current program position — STEP590E3A
 
 - STEP590A architecture baseline: complete;
 - STEP590B executable router: deployed and operator canary accepted;
@@ -79,7 +81,8 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 - STEP590C4 broadcast extraction: source complete; production broadcast canary remains separately evidenced by operator;
 - STEP590D navigation/shared Telegram UX extraction: source complete; dedicated production navigation evidence remains separate;
 - STEP590E1 applications/leads extraction: production deployed and operator canary accepted;
-- STEP590E2 Barter extraction: source complete; production canary pending;
-- extracted owner count: 209;
-- legacy owner count: 351 and must continue to decrease monotonically;
-- next bounded architecture step after canary: STEP590E3 Workspaces & Directory.
+- STEP590E2 Barter extraction: operator accepted for roadmap progression; disposable mutation canary waived as residual risk;
+- STEP590E3A Workspace control/folders extraction: source implementation complete; operator dependency gate pending;
+- extracted owner count: 248;
+- legacy owner count: 312 and must continue to decrease monotonically;
+- next bounded architecture step after the local/deploy boundary: STEP590E3B Workspace Profile, Instagram & Sharing.

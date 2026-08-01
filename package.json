@@ -1,6 +1,6 @@
 {
   "name": "collabgirls-bot",
-  "version": "1.3.20",
+  "version": "1.3.21",
   "private": true,
   "type": "module",
   "engines": {
@@ -193,7 +193,9 @@
     "test:payment-domain-extraction": "node scripts/test-payment-domain-extraction.js",
     "test:payment-fulfillment-critical": "node scripts/test-payment-fulfillment-critical.js",
     "test:redact": "node scripts/test-redactContactsInText.js",
-    "zip": "bash scripts/zip.sh"
+    "zip": "bash scripts/zip.sh",
+    "smoke:workspaces-control-folders-domain-extraction-contract": "node scripts/smoke-workspaces-control-folders-domain-extraction-contract.js",
+    "test:workspaces-control-folders-domain-extraction": "node scripts/test-workspaces-control-folders-domain-extraction.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

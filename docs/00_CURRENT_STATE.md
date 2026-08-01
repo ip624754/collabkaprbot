@@ -1,3 +1,21 @@
+## STEP590E3A — Workspace Control, Roles & Folders Domain Extraction (2026-08-01)
+
+**Current source artifact baseline:** STEP590E3A on operator-confirmed `main` commit `117c3e8462d85e811a76beaf899f512ff7e3c84a`.
+
+- STEP590E2 production identity and bounded read-only runtime evidence: operator PASS for roadmap progression; disposable mutation canary explicitly waived as residual risk;
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY GATE PENDING;
+- new bounded domain: `src/bot/domains/workspaces/`;
+- newly extracted callback actions: 39 total, split into `workspace_control` (22) and `workspace_folders` (17);
+- cumulative ownership: 248 extracted, 312 legacy, 7 aliases, 0 unresolved;
+- `a:ws_pro_buy` remains payment-owned and `a:wsp_lead_new` remains lead-owned;
+- Workspace profile/Instagram/sharing and public directory/search remain outside this STEP for STEP590E3B/STEP590E3C;
+- existing DB, Redis, role/access, audit, input-mode and Telegram implementations remain canonical;
+- SQL/ENV/API-route/callback-key/product-copy changes: none;
+- package: `1.3.21`;
+- verified QA: 224 Workspace assertions, 2,706 router assertions, 560/560 action registry, prior domain suites PASS, 334 JavaScript syntax checks PASS;
+- source preflight passed through Workspace contracts and source linters, then stopped at dependency-bound `test:bounded-safety-hardening` because the unpacked artifact has no installed `dotenv`/`node_modules`;
+- next bounded architecture step after operator local gate: STEP590E3B Workspace Profile, Instagram & Sharing.
+
 ## STEP590E2 — Barter Domain Extraction (2026-08-01)
 
 **Current handoff-safe source baseline:** STEP590E2 on accepted STEP590E1H5 / production commit `af56af594c1de6d6c8a950f4168be7a2c397320f`.

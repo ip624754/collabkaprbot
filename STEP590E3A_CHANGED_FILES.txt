@@ -1,0 +1,44 @@
+STEP590E3A — Workspace Control, Roles & Folders Domain Extraction
+Changed Files
+
+Added (16):
++ INSTALL_STEP590E3A_WORKSPACE_CONTROL_ROLES_AND_FOLDERS_DOMAIN_EXTRACTION.md
++ STEP590E3A_CHANGED_FILES.txt
++ STEP590E3A_HANDOFF_NOTES.md
++ STEP590E3A_QA_checklist.md
++ docs/architecture/STEP590E3A_ACTION_OWNERSHIP_DELTA.csv
++ docs/architecture/STEP590E3A_WORKSPACE_CONTROL_FOLDERS_DOMAIN.md
++ docs/audit/STEP590E3A_WORKSPACE_DOMAIN_EXTRACTION_REPORT.md
++ docs/operations/STEP590E3A_WORKSPACE_ROLLOUT_RUNBOOK.md
++ docs/process/07_WORK_HISTORY_STEP590E3A.md
++ scripts/smoke-workspaces-control-folders-domain-extraction-contract.js
++ scripts/test-workspaces-control-folders-domain-extraction.js
++ src/bot/domains/workspaces/actions.js
++ src/bot/domains/workspaces/callbacks.js
++ src/bot/domains/workspaces/index.js
++ src/bot/domains/workspaces/policy.js
++ src/bot/domains/workspaces/route.js
+
+Modified (17):
+~ docs/00_CURRENT_STATE.md
+~ docs/15_NEW_CHAT_HANDOFF.md
+~ docs/AI_MULTI_MODEL_HANDOFF_CURRENT.md
+~ docs/RISK_REGISTRY.md
+~ docs/roadmap/STEP590_MODULAR_MONOLITH_ROADMAP.md
+~ package-lock.json
+~ package.json
+~ scripts/preflight.js
+~ scripts/smoke-access-error-empty-state-recovery-contract.js
+~ scripts/test-applications-leads-domain-extraction.js
+~ scripts/test-barter-domain-extraction.js
+~ scripts/test-callback-router-critical.js
+~ scripts/test-giveaway-domain-extraction.js
+~ scripts/test-payment-domain-extraction.js
+~ src/bot/bot.js
+~ src/bot/router/callbackContracts.js
+~ src/bot/router/callbackOwnership.js
+
+Deleted (0):
+(none)
+
+Total changed paths: 33

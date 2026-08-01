@@ -8,6 +8,7 @@ import { TELEGRAM_UX_CALLBACK_ROUTE_DEFINITIONS } from '../shared/telegramUx/rou
 import { APPLICATION_CALLBACK_ROUTE_DEFINITIONS } from '../domains/applications/route.js';
 import { LEAD_CALLBACK_ROUTE_DEFINITIONS } from '../domains/leads/route.js';
 import { BARTER_CALLBACK_ROUTE_DEFINITIONS } from '../domains/barter/route.js';
+import { WORKSPACE_CALLBACK_ROUTE_DEFINITIONS } from '../domains/workspaces/route.js';
 import { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
@@ -22,6 +23,7 @@ export const CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
   ...APPLICATION_CALLBACK_ROUTE_DEFINITIONS,
   ...LEAD_CALLBACK_ROUTE_DEFINITIONS,
   ...BARTER_CALLBACK_ROUTE_DEFINITIONS,
+  ...WORKSPACE_CALLBACK_ROUTE_DEFINITIONS,
 ]);
 
 function assertRouteDefinition(definition) {

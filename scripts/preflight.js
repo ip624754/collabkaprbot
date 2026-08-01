@@ -349,6 +349,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): applications/leads bounded-domain source contract", "smoke:applications-leads-domain-extraction-contract"],
   ["Preflight (source-only): barter bounded-domain executable tests", "test:barter-domain-extraction"],
   ["Preflight (source-only): barter bounded-domain source contract", "smoke:barter-domain-extraction-contract"],
+  ["Preflight (source-only): workspace control/folders bounded-domain executable tests", "test:workspaces-control-folders-domain-extraction"],
+  ["Preflight (source-only): workspace control/folders bounded-domain source contract", "smoke:workspaces-control-folders-domain-extraction-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],
