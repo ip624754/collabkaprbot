@@ -10,7 +10,11 @@ const authApi = read('api/admin-web-auth.js');
 const auth = read('src/lib/adminWeb/auth.js');
 const telegram = read('src/lib/adminWeb/telegram.js');
 const bot = read('src/bot/bot.js');
-const callbackRoute = read('src/bot/adminWebAuthCallback.js');
+const callbackRoute = read('src/bot/domains/adminAuth/callbacks.js');
+const callbackPolicy = read('src/bot/domains/adminAuth/policy.js');
+const callbackActions = read('src/bot/domains/adminAuth/actions.js');
+const callbackDomainRoute = read('src/bot/domains/adminAuth/route.js');
+const callbackService = read('src/bot/domains/adminAuth/service.js');
 const callbackOwnership = read('src/bot/router/callbackOwnership.js');
 
 for (const token of [
@@ -57,11 +61,15 @@ for (const token of [
 assert.ok(telegram.includes('callback_data: approveCallback'), 'Telegram approval must use callback_data');
 assert.ok(telegram.includes('callback_data: denyCallback'), 'Telegram denial must use callback_data');
 assert.equal(telegram.includes('url: approveUrl'), false, 'Telegram approval must not use transferable web URL');
-assert.ok(bot.includes("import { handleAdminWebAuthDecisionCallback } from './adminWebAuthCallback.js'"), 'Telegram callback router must import the admin auth route');
+assert.ok(bot.includes("from './domains/adminAuth/index.js'"), 'Telegram callback router must import the bounded admin-auth facade');
 assert.ok(bot.includes('dispatchPreUserCallback(ctx, p'), 'Telegram callback router must execute the pre-user ownership phase');
-assert.ok(bot.includes('admin_web_auth: (ctx2, p2) => handleAdminWebAuthDecisionCallback(ctx2, p2)'), 'Telegram callback router must wire the admin auth owner');
-assert.equal(bot.includes('if (await handleAdminWebAuthDecisionCallback(ctx, p)) return;'), false, 'direct callback bypass must be removed');
-assert.ok(callbackOwnership.includes("actions: Object.freeze(['a:aw_auth_dec'])"), 'ownership registry must assign the admin auth action');
-assert.ok(callbackRoute.includes("String(p?.a || '') === 'a:aw_auth_dec'"), 'admin auth callback module must own the action match');
+assert.ok(bot.includes('admin_web_auth: (ctx2, p2) => handleAdminAuthChallengeCallback(ctx2, p2)'), 'Telegram callback router must wire the admin auth owner');
+assert.equal(bot.includes('if (await handleAdminAuthChallengeCallback(ctx, p)) return;'), false, 'direct callback bypass must be removed');
+assert.ok(callbackOwnership.includes('ADMIN_AUTH_CALLBACK_ROUTE_DEFINITIONS'), 'ownership registry must consume the admin-auth domain descriptor');
+assert.ok(callbackActions.includes("DECIDE: 'a:aw_auth_dec'"), 'admin-auth domain must own the stable action key');
+assert.ok(callbackDomainRoute.includes('CALLBACK_PHASE.PRE_USER'), 'admin-auth domain route must remain pre-user');
+assert.ok(callbackRoute.includes('parseAdminAuthDecisionPayload(payload)'), 'admin auth callback module must delegate action validation to policy');
+assert.ok(callbackService.includes("../../../lib/adminWeb/auth.js"), 'bounded domain service must reuse canonical Redis auth core');
+assert.ok(callbackPolicy.includes('isAdminAuthCallbackAction'), 'admin auth policy must own exact action matching');
 
 console.log('✅ smoke admin-web login contract OK');

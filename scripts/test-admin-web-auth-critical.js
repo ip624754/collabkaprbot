@@ -9,7 +9,7 @@ import {
   isFallbackActorAllowed,
   normalizeAdminAuthDecision,
 } from '../src/lib/adminWeb/authPolicy.js';
-import { handleAdminWebAuthDecisionCallback } from '../src/bot/adminWebAuthCallback.js';
+import { handleAdminAuthChallengeCallback } from '../src/bot/domains/adminAuth/index.js';
 
 let assertions = 0;
 function ok(value, message) {
@@ -177,7 +177,7 @@ function makeCallbackCtx(actorTgId = 111) {
 }
 
 const unrelatedCtx = makeCallbackCtx();
-const unrelatedHandled = await handleAdminWebAuthDecisionCallback(
+const unrelatedHandled = await handleAdminAuthChallengeCallback(
   unrelatedCtx,
   { a: 'a:home' },
   { approve: async () => ({ ok: true }) }
@@ -187,7 +187,7 @@ equal(unrelatedCtx.events.length, 0, 'non-auth callback has no auth side effects
 
 let approveCalls = 0;
 const invalidCtx = makeCallbackCtx();
-const invalidHandled = await handleAdminWebAuthDecisionCallback(
+const invalidHandled = await handleAdminAuthChallengeCallback(
   invalidCtx,
   { a: 'a:aw_auth_dec', c: 'bad', d: 'a' },
   { approve: async () => { approveCalls += 1; return { ok: true }; } }
@@ -198,7 +198,7 @@ equal(invalidCtx.events[0]?.payload?.text, 'Некорректный запро�
 
 const approveCtx = makeCallbackCtx(222);
 let approvedInput = null;
-const approveHandled = await handleAdminWebAuthDecisionCallback(
+const approveHandled = await handleAdminAuthChallengeCallback(
   approveCtx,
   { a: 'a:aw_auth_dec', c: base.id, d: 'a' },
   { approve: async (input) => { approvedInput = input; return { ok: true, status: 'approved' }; } }
@@ -213,7 +213,7 @@ equal(approveCtx.events.find((event) => event.type === 'answer')?.payload?.text,
 
 const denyCtx = makeCallbackCtx(111);
 let deniedInput = null;
-await handleAdminWebAuthDecisionCallback(
+await handleAdminAuthChallengeCallback(
   denyCtx,
   { a: 'a:aw_auth_dec', c: base.id, d: 'd' },
   { approve: async (input) => { deniedInput = input; return { ok: true, status: 'denied' }; } }
@@ -222,7 +222,7 @@ equal(deniedInput?.decision, 'deny', 'compact deny decision is normalized');
 equal(denyCtx.events.find((event) => event.type === 'answer')?.payload?.text, 'Вход отклонён.', 'deny feedback is explicit');
 
 const rejectedCtx = makeCallbackCtx(333);
-await handleAdminWebAuthDecisionCallback(
+await handleAdminAuthChallengeCallback(
   rejectedCtx,
   { a: 'a:aw_auth_dec', c: base.id, d: 'a' },
   { approve: async () => ({ ok: false, error: 'approver_not_allowed' }) }

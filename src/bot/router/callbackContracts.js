@@ -1,0 +1,11 @@
+export const CALLBACK_PHASE = Object.freeze({
+  PRE_USER: 'pre_user',
+  POST_USER: 'post_user',
+});
+
+export const CALLBACK_ROUTE = Object.freeze({
+  ADMIN_WEB_AUTH: 'admin_web_auth',
+  ADMIN_WEB_AUTH_CONTROL: 'admin_web_auth_control',
+  GIVEAWAY_ACCESS: 'giveaway_access',
+  LEGACY: 'legacy',
+});

@@ -35,11 +35,12 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 5, 'STEP590B must extract five exact actions');
-equal(summary.legacy, registryKeys.length - 5, 'all remaining actions must be explicit legacy owners');
-equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth route owns one action');
+equal(summary.extracted, 6, 'STEP590C1 must extract six exact actions');
+equal(summary.legacy, registryKeys.length - 6, 'all remaining actions must be explicit legacy owners');
+equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
+equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 5, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 6, 'legacy count must be exact');
 
 for (const action of registryKeys) {
   const owner = getCallbackOwnership(action);
@@ -54,6 +55,8 @@ for (const action of registryKeys) {
 
 equal(getCallbackOwnership('a:aw_auth_dec').routeId, CALLBACK_ROUTE.ADMIN_WEB_AUTH, 'admin auth owner');
 equal(getCallbackOwnership('a:aw_auth_dec').phase, CALLBACK_PHASE.PRE_USER, 'admin auth phase');
+equal(getCallbackOwnership('a:admin_web_login_toggle').routeId, CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL, 'admin auth control owner');
+equal(getCallbackOwnership('a:admin_web_login_toggle').phase, CALLBACK_PHASE.POST_USER, 'admin auth control phase');
 for (const action of ['a:gw_access', 'a:gw_access_recheck', 'a:gw_access_checkme', 'a:gw_access_user_prompt']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.GIVEAWAY_ACCESS, `${action} owner`);
   equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} phase`);
@@ -129,6 +132,30 @@ const authPostResult = await dispatchOwnedCallback({
 });
 equal(authPostResult.status, CALLBACK_DISPATCH_STATUS.ERROR, 'missed pre-user route must fail closed');
 check(/phase_not_reached/.test(authPostResult.error?.message || ''), 'missed pre-user route error is explicit');
+
+const authControlPreResult = await dispatchOwnedCallback({
+  phase: CALLBACK_PHASE.PRE_USER,
+  p: { a: 'a:admin_web_login_toggle' },
+});
+equal(authControlPreResult.status, CALLBACK_DISPATCH_STATUS.DEFERRED, 'admin auth control defers during pre-user phase');
+
+let authControlCalls = 0;
+const authControlResult = await dispatchOwnedCallback({
+  phase: CALLBACK_PHASE.POST_USER,
+  ctx: authCtx,
+  p: { a: 'a:admin_web_login_toggle' },
+  u: { id: 12 },
+  handlers: {
+    [CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL]: async (_ctx, _p, u) => {
+      authControlCalls += 1;
+      equal(u.id, 12, 'hydrated user reaches admin auth control owner');
+      return true;
+    },
+  },
+  final: true,
+});
+equal(authControlResult.status, CALLBACK_DISPATCH_STATUS.HANDLED, 'admin auth control executes in post-user router');
+equal(authControlCalls, 1, 'admin auth control handler called exactly once');
 
 const gwPreResult = await dispatchOwnedCallback({
   phase: CALLBACK_PHASE.PRE_USER,

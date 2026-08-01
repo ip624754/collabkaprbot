@@ -1,8 +1,5 @@
-import {
-  CALLBACK_PHASE,
-  CALLBACK_ROUTE,
-  getCallbackOwnership,
-} from './callbackOwnership.js';
+import { getCallbackOwnership } from './callbackOwnership.js';
+import { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export const CALLBACK_DISPATCH_STATUS = Object.freeze({
   HANDLED: 'handled',

@@ -252,3 +252,16 @@ Residual risk:
 - Source verification: baseline ZIP integrity, action/export inventories, static import graph, docs-only scope, registries and portable critical spine.
 - Runtime verification required: none for STEP590A itself; STEP588X7H1 live admin-auth canary remains separate and pending.
 - Residual risk: action/export domain assignment is partly heuristic and must be confirmed in each bounded extraction STEP.
+
+
+## Current STEP590C1 assessment
+
+- Change type: critical admin/auth callback domain extraction; no schema or ENV change.
+- Primary risks addressed: R-38, R-39, R-40, R-41 and R-42.
+- Runtime blast radius: `a:aw_auth_dec` and `a:admin_web_login_toggle` only.
+- Security posture: actual Telegram approver, browser verifier binding, atomic Redis transitions, session consume, super-admin check and operator audit semantics remain canonical.
+- Rollback: exact STEP590B code rollback is possible because persistent contracts are unchanged; bounded fix-forward is preferred.
+- Source verification: 83 domain assertions, 2,299 router assertions, 63 auth assertions, 136/137 registered source checks and 280 JavaScript syntax checks PASS.
+- Environment limitation: `npm ci` was blocked by internal mirror HTTP 404 for `xtend@4.0.2`; `test:bounded-safety-hardening` and the complete portable spine are therefore not newly claimed on the final tree.
+- Runtime verification required: one fresh approve/exchange, one deny, one login-control toggle round trip and absence of unknown/ownership/phase errors.
+- Residual risk: `renderAdminSystem` and operator-control storage remain injected from the composition root until later admin-domain extraction; this is an explicit compatibility seam, not a second implementation.

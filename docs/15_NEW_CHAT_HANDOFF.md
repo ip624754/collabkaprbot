@@ -1,3 +1,32 @@
+## STEP590C1 — Critical Admin/Auth Callback Domain Extraction (2026-08-01)
+
+**Current handoff-safe repository baseline:** STEP590C1 source architecture package on exact STEP590B.
+
+Repository truth:
+
+- STEP590B production callback canary is operator-accepted; the supplied Vercel export shows `a:aw_auth_dec` reaching `update.ok` in 273 ms with HTTP 200 and no `unknown_callback` or callback-dispatch error signature;
+- `src/bot/domains/adminAuth/` now owns both critical admin-auth callback actions: browser challenge decision and web-login operator control;
+- `a:aw_auth_dec` remains a pre-user route and preserves real Telegram actor identity plus the canonical Redis challenge state machine;
+- `a:admin_web_login_toggle` is removed from the legacy inline dispatcher and is now a post-user exact owner;
+- callback ownership is now 6 extracted actions / 554 legacy actions;
+- the root `src/bot/adminWebAuthCallback.js` file is retired;
+- shared callback phase/route constants live in the cycle-safe `callbackContracts.js` module;
+- callback consistency now treats executable ownership as reachability evidence rather than requiring an inline equality expression;
+- callback keys, guards, auth state machine, operator-control ID/audit note, schema, ENV and user copy are unchanged;
+- local source QA: 83 STEP590C1 assertions, 2,299 router assertions, 63 auth assertions, 136/137 registered source checks and 280 JavaScript syntax checks PASS;
+- the remaining registered check is environment-blocked because `npm ci` could not fetch `xtend@4.0.2` from the available internal package mirror.
+
+**Architecture decision:** continue the critical-domain strangler sequence. Do not add new auth callback logic to `bot.js`; route it through `src/bot/domains/adminAuth/` and preserve the canonical auth service.
+
+Read first:
+
+- `docs/architecture/STEP590C1_ADMIN_AUTH_BOUNDED_DOMAIN.md`;
+- `docs/audit/STEP590C1_ADMIN_AUTH_DOMAIN_EXTRACTION_REPORT.md`;
+- `docs/operations/STEP590C1_ADMIN_AUTH_DOMAIN_ROLLOUT_RUNBOOK.md`;
+- `docs/process/07_WORK_HISTORY_STEP590C1.md`.
+
+---
+
 # STEP590B NEW CHAT HANDOFF
 
 **Current repository baseline:** STEP590B — Executable Callback Router & Unique Ownership Gate

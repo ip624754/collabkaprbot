@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ACTION_REGISTRY } from '../src/bot/actionRegistry.js';
+import { CALLBACK_OWNERSHIP } from '../src/bot/router/callbackOwnership.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -100,6 +101,14 @@ for (const abs of botFiles) {
   for (const action of extractExactHandlers(text)) exactHandled.add(action);
 }
 const aliasMap = extractAliasMap(botText);
+const extractedOwned = new Set(
+  Object.values(CALLBACK_OWNERSHIP || {})
+    .filter((entry) => entry?.extracted)
+    .map((entry) => String(entry.action || ''))
+    .filter((action) => action.startsWith('a:'))
+);
+for (const action of extractedOwned) exactHandled.add(action);
+
 
 const missingInRegistry = [...referenced].filter((a) => !registryKeys.has(a)).sort();
 const unresolved = [...referenced]
@@ -112,7 +121,8 @@ const registryOnly = [...registryKeys].filter((a) => !referenced.has(a)).sort();
 
 console.log(`Callback refs in bot-layer source: ${referenced.size}`);
 console.log(`Registry keys: ${registryKeys.size}`);
-console.log(`Exact handled actions: ${exactHandled.size}`);
+console.log(`Exact handled actions (source + executable ownership): ${exactHandled.size}`);
+console.log(`Extracted executable owners: ${extractedOwned.size}`);
 console.log(`Legacy aliases: ${aliasMap.size}`);
 console.log('');
 

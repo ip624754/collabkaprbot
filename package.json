@@ -11,6 +11,8 @@
     "callbacks:check": "node scripts/callback-consistency-check.js",
     "callbacks:ownership": "node scripts/test-callback-router-critical.js",
     "smoke:callback-router-ownership-contract": "node scripts/smoke-callback-router-ownership-contract.js",
+    "test:admin-auth-domain-extraction": "node scripts/test-admin-auth-domain-extraction.js",
+    "smoke:admin-auth-domain-extraction-contract": "node scripts/smoke-admin-auth-domain-extraction-contract.js",
     "actions:dump": "node scripts/actions-registry-check.js",
     "actions:md": "node scripts/actions-registry-export-md.js --out docs/02_ACTION_KEYS_REGISTRY.md",
     "dev": "node scripts/dev-polling.js",

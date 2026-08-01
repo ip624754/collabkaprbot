@@ -1,0 +1,3 @@
+action,previous_owner,previous_phase,new_owner,new_phase,target_module,behavior_change
+"a:aw_auth_dec","admin_web_auth","pre_user","admin_web_auth","pre_user","src/bot/domains/adminAuth/callbacks.js","none"
+"a:admin_web_login_toggle","legacy","post_user","admin_web_auth_control","post_user","src/bot/domains/adminAuth/callbacks.js","none"

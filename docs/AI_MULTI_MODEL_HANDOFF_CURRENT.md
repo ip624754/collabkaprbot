@@ -1,3 +1,38 @@
+# AI Multi-Model Handoff — STEP590C1 Current Truth
+
+**Baseline:** STEP590C1 source architecture package on exact STEP590B
+**Status:** SOURCE READY / PRODUCTION DOMAIN CANARY PENDING / GLOBAL RELEASE HOLD
+
+## Verified
+
+- STEP590B operator canary and supplied production log reachability for `a:aw_auth_dec`;
+- bounded `src/bot/domains/adminAuth/` module with explicit actions, policy, callbacks, service, views and route descriptors;
+- pre-user challenge and post-user login-control ownership;
+- 6 extracted actions / 554 explicit legacy owners;
+- real Telegram approver identity, browser binding and canonical Redis auth state machine preserved;
+- inline `a:admin_web_login_toggle` legacy branch removed;
+- 83 domain assertions, 2,299 router assertions, 63 auth assertions, 136/137 registered source checks and 280 syntax checks PASS.
+
+## Not verified
+
+- clean dependency installation in the execution environment;
+- final portable critical-spine run on STEP590C1;
+- Vercel deployment of STEP590C1;
+- live challenge approve/deny/exchange after extraction;
+- live operator-control toggle after extraction.
+
+## Hard rules
+
+- no auth state-machine duplication inside the Telegram domain;
+- `a:aw_auth_dec` stays pre-user and uses `ctx.from.id`;
+- `a:admin_web_login_toggle` stays post-user and super-admin only;
+- extracted owners may not silently fall back to legacy;
+- preserve callback keys, guards, control IDs, audit semantics and public copy.
+
+Next implementation step after canary: `STEP590C2 — Critical Payment Callback Domain Extraction`.
+
+---
+
 # AI Multi-Model Handoff — STEP590B Current Truth
 
 **Baseline:** STEP590B runtime architecture package on STEP590A

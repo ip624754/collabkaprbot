@@ -31,7 +31,10 @@ import { renderGwAccess } from './gwAccess.js';
 import { notifyGiveawayEnded, notifyGiveawayWinnersReady, notifyGiveawayWinnersDM } from './gwNotify.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { dispatchCallback, dispatchPreUserCallback } from './routes/callbacks.js';
-import { handleAdminWebAuthDecisionCallback } from './adminWebAuthCallback.js';
+import {
+  handleAdminAuthChallengeCallback,
+  handleAdminAuthControlCallback,
+} from './domains/adminAuth/index.js';
 import { handleGwAccessRoute } from './routes/gwAccess.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
@@ -25091,7 +25094,7 @@ ${DEGRADED_COPY.tips}
       safeEditOrReply,
       isAdmin: (c) => isSuperAdminTg(c?.from?.id),
       handlers: {
-        admin_web_auth: (ctx2, p2) => handleAdminWebAuthDecisionCallback(ctx2, p2),
+        admin_web_auth: (ctx2, p2) => handleAdminAuthChallengeCallback(ctx2, p2),
       },
     });
     if (preUserHandled) return;
@@ -33159,18 +33162,6 @@ if (p.a === 'a:bc_simple_btn_preset') {
       return;
     }
 
-    // Admin: Web-admin login gate
-    if (p.a === 'a:admin_web_login_toggle') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      const control = await getOperatorControlSnapshot({ limit: 1 });
-      const cur = !!control?.byId?.admin_web_login?.value;
-      await setOperatorControlToggle('admin_web_login', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
-      await renderAdminSystem(ctx);
-      return;
-    }
-
     // Admin: Payments toggles / ledger
     if (p.a === 'a:admin_pay_accept_toggle') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -37723,6 +37714,12 @@ ${actionHint}`;
       safeEditOrReply,
       isAdmin: (c) => isSuperAdminTg(c?.from?.id),
       handlers: {
+        admin_web_auth_control: (ctx2, p2, u2) => handleAdminAuthControlCallback(ctx2, p2, u2, {
+          isAdmin: (c) => isSuperAdminTg(c?.from?.id),
+          getControlSnapshot: getOperatorControlSnapshot,
+          setControlToggle: setOperatorControlToggle,
+          renderSystem: renderAdminSystem,
+        }),
         giveaway_access: (ctx2, p2, u2) => handleGwAccessRoute(ctx2, p2, u2, {
           renderGwAccess,
           redis,

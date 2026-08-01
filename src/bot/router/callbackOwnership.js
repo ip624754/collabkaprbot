@@ -1,22 +1,11 @@
 import { ACTION_REGISTRY } from '../actionRegistry.js';
+import { ADMIN_AUTH_CALLBACK_ROUTE_DEFINITIONS } from '../domains/adminAuth/route.js';
+import { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
-export const CALLBACK_PHASE = Object.freeze({
-  PRE_USER: 'pre_user',
-  POST_USER: 'post_user',
-});
-
-export const CALLBACK_ROUTE = Object.freeze({
-  ADMIN_WEB_AUTH: 'admin_web_auth',
-  GIVEAWAY_ACCESS: 'giveaway_access',
-  LEGACY: 'legacy',
-});
+export { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export const CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
-  Object.freeze({
-    id: CALLBACK_ROUTE.ADMIN_WEB_AUTH,
-    phase: CALLBACK_PHASE.PRE_USER,
-    actions: Object.freeze(['a:aw_auth_dec']),
-  }),
+  ...ADMIN_AUTH_CALLBACK_ROUTE_DEFINITIONS,
   Object.freeze({
     id: CALLBACK_ROUTE.GIVEAWAY_ACCESS,
     phase: CALLBACK_PHASE.POST_USER,
