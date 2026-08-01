@@ -428,3 +428,16 @@ Residual risk:
 - Environment limitation: clean `npm ci`/`npm audit` remain operator-side; shim-assisted evidence does not claim live Upstash behavior.
 - Runtime verification required: curator cabinet/inbox, one Workspace, one giveaway read path, checked/note cancellation, disposable invite and owner-side remove confirmation.
 - Residual risk: role mutations depend on DB/Redis parity and best-effort Telegram notification; production canary must use bounded disposable actors.
+
+
+## Current STEP590E5A assessment
+
+- Change type: moderation report/dispute and verification callback orchestration extraction.
+- Runtime blast radius: 10 callbacks split into `moderation_reports` (6) and `moderation_verification` (4).
+- Correctness boundary: existing moderator-role resolution, report/offer/thread DB helpers, audit writes, verification status writes and Telegram notifications remain canonical.
+- Bounded hardening: malformed/non-positive `rid` and `uid` values are rejected before DB mutations or verification state changes.
+- Explicit exclusions: moderator membership governance (`admin_mod_*`), admin users/support/comms/system/founder, payment-admin and public verification application flows are not modified.
+- Source verification: 84 domain assertions, 2,965 router assertions, 560/560 registry and all prior extracted-domain regressions PASS; source preflight and portable spine 6/6 PASS under declared temporary shims.
+- Environment limitation: clean `npm ci`/`npm audit` remain operator-side; shim-assisted evidence does not claim live Postgres, Redis or Telegram behavior.
+- Runtime verification required: moderator home, report queue/view, one disposable freeze/close/resolve path, verification queue/view and disposable approve/reject flow.
+- Residual risk: mutations are durable and notification delivery is best-effort; production canary must use bounded disposable records and avoid real-user verification state unless explicitly approved.

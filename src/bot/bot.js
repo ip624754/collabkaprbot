@@ -88,6 +88,10 @@ import {
   handleCuratorManagementCallback,
   handleCuratorOperationsCallback,
 } from './domains/curators/index.js';
+import {
+  handleModerationReportsCallback,
+  handleModerationVerificationCallback,
+} from './domains/moderation/index.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
@@ -28371,104 +28375,6 @@ if (p.a === 'a:admin_umsg_tpl_reset') {
       return;
     }
 
-    if (p.a === 'a:mod_home') {
-      await ctx.answerCallbackQuery();
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await renderModHome(ctx);
-      return;
-    }
-    if (p.a === 'a:mod_reports') {
-      await ctx.answerCallbackQuery();
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await renderModReports(ctx, Number(p.p || 0));
-      return;
-    }
-    if (p.a === 'a:mod_report') {
-      await ctx.answerCallbackQuery();
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await renderModReportView(ctx, Number(p.rid || 0));
-      return;
-    }
-    if (p.a === 'a:mod_r_freeze') {
-      await ctx.answerCallbackQuery();
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const rid = Number(p.rid || 0);
-      const rep = await db.getBarterReport(rid);
-      if (rep && rep.offer_id) {
-        await db.moderatorFreezeBarterOffer(rep.offer_id);
-        await db.auditBarterOffer(rep.offer_id, u.id, 'offer.frozen', { reportId: rid });
-      }
-      await renderModReportView(ctx, rid);
-      return;
-    }
-    if (p.a === 'a:mod_r_close') {
-      await ctx.answerCallbackQuery();
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const rid = Number(p.rid || 0);
-      const rep = await db.getBarterReport(rid);
-      if (rep && rep.thread_id) {
-        await db.moderatorCloseBarterThread(rep.thread_id);
-        await db.auditBarterThread(rep.thread_id, u.id, 'thread.closed_by_mod', { reportId: rid });
-      }
-      await renderModReportView(ctx, rid);
-      return;
-    }
-    if (p.a === 'a:mod_r_resolve') {
-      await ctx.answerCallbackQuery();
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const rid = Number(p.rid || 0);
-      await db.resolveBarterReport(rid, u.id);
-      await renderModReportView(ctx, rid);
-      return;
-    }
-
-    if (p.a === 'a:mod_verifs') {
-      await ctx.answerCallbackQuery();
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
-      await renderModVerifs(ctx, Number(p.p || 0));
-      return;
-    }
-    if (p.a === 'a:mod_verif_view') {
-      await ctx.answerCallbackQuery();
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
-      await renderModVerifView(ctx, Number(p.uid), Number(p.p || 0));
-      return;
-    }
-    if (p.a === 'a:mod_verif_approve') {
-      await ctx.answerCallbackQuery({ text: '✅ Одобрено' });
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
-      const targetUserId = Number(p.uid);
-      await safeUserVerifications(() => db.setVerificationStatus(targetUserId, 'APPROVED', u.id, null), async () => null);
-      try {
-        await ctx.api.sendMessage(Number((await db.getUserById(targetUserId))?.tg_id), '✅ Ты верифицирован(а)! Теперь рядом с твоими офферами будет значок ✅.', { parse_mode: 'HTML' });
-      } catch {}
-      await renderModVerifView(ctx, targetUserId, Number(p.p || 0));
-      return;
-    }
-    if (p.a === 'a:mod_verif_reject') {
-      await ctx.answerCallbackQuery();
-      const isMod = await isModerator(u, ctx.from.id);
-      if (!isMod) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Функция отключена.' });
-      const targetUserId = Number(p.uid);
-      await setExpectText(ctx.from.id, { type: 'mod_verif_reject_reason', targetUserId, page: Number(p.p || 0) });
-      await safeEditOrReply(ctx, '❌ Напиши причиной отказа одним сообщением (текст), и я отправлю пользователю.', { reply_markup: new InlineKeyboard().text('⬅️ Отмена', `a:mod_verif_view|uid:${targetUserId}|p:${Number(p.p || 0)}`) });
-      return;
-    }
-
-
     // Barters
 
     // Back-link helper: return to offer view (used by Brand Profile flow)
@@ -30345,6 +30251,22 @@ ${actionHint}`;
       wsLabelNice,
     };
 
+
+    const moderationDomainDeps = {
+      CFG,
+      InlineKeyboard,
+      db,
+      isModerator,
+      renderModHome,
+      renderModReportView,
+      renderModReports,
+      renderModVerifView,
+      renderModVerifs,
+      safeEditOrReply,
+      safeUserVerifications,
+      setExpectText,
+    };
+
     await dispatchCallback(ctx, p, u, {
       legacy,
       logger,
@@ -30554,6 +30476,18 @@ ${actionHint}`;
           p2,
           u2,
           curatorDomainDeps
+        ),
+        moderation_reports: (ctx2, p2, u2) => handleModerationReportsCallback(
+          ctx2,
+          p2,
+          u2,
+          moderationDomainDeps
+        ),
+        moderation_verification: (ctx2, p2, u2) => handleModerationVerificationCallback(
+          ctx2,
+          p2,
+          u2,
+          moderationDomainDeps
         ),
       },
     });

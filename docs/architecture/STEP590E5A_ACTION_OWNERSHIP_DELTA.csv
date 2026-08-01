@@ -1,0 +1,11 @@
+action,previous_owner,new_owner,phase
+a:mod_home,legacy,moderation_reports,post_user
+a:mod_reports,legacy,moderation_reports,post_user
+a:mod_report,legacy,moderation_reports,post_user
+a:mod_r_freeze,legacy,moderation_reports,post_user
+a:mod_r_close,legacy,moderation_reports,post_user
+a:mod_r_resolve,legacy,moderation_reports,post_user
+a:mod_verifs,legacy,moderation_verification,post_user
+a:mod_verif_view,legacy,moderation_verification,post_user
+a:mod_verif_approve,legacy,moderation_verification,post_user
+a:mod_verif_reject,legacy,moderation_verification,post_user

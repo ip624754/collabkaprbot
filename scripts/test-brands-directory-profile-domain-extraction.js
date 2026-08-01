@@ -205,8 +205,8 @@ await assert.rejects(
 assertions += 1;
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 359, 'STEP590E4C cumulative extracted ownership');
-equal(summary.legacy, 201, 'STEP590E4C cumulative legacy ownership');
+equal(summary.extracted, 369, 'STEP590E5A cumulative extracted ownership');
+equal(summary.legacy, 191, 'STEP590E5A cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_DIRECTORY], 10, 'brand directory route count');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_PROFILE], 28, 'brand profile route count');
 equal(getCallbackOwnership('a:brand_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'brand checkout remains payment-owned');
