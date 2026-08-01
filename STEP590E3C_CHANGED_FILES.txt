@@ -1,0 +1,49 @@
+STEP590E3C — Directory Search & Public Workspace
+
+Added: 16
+Modified: 20
+Deleted: 0
+Total changed paths: 36
+
+ADDED
+INSTALL_STEP590E3C_DIRECTORY_SEARCH_PUBLIC_WORKSPACE_DOMAIN_EXTRACTION.md
+STEP590E3C_CHANGED_FILES.txt
+STEP590E3C_HANDOFF_NOTES.md
+STEP590E3C_QA_checklist.md
+docs/architecture/STEP590E3C_ACTION_OWNERSHIP_DELTA.csv
+docs/architecture/STEP590E3C_DIRECTORY_SEARCH_PUBLIC_WORKSPACE_DOMAIN.md
+docs/audit/STEP590E3C_DIRECTORY_PUBLIC_WORKSPACE_EXTRACTION_REPORT.md
+docs/operations/STEP590E3C_DIRECTORY_PUBLIC_WORKSPACE_ROLLOUT_RUNBOOK.md
+docs/process/07_WORK_HISTORY_STEP590E3C.md
+scripts/smoke-directory-public-workspace-domain-extraction-contract.js
+scripts/test-directory-public-workspace-domain-extraction.js
+src/bot/domains/directory/actions.js
+src/bot/domains/directory/callbacks.js
+src/bot/domains/directory/index.js
+src/bot/domains/directory/policy.js
+src/bot/domains/directory/route.js
+
+MODIFIED
+docs/00_CURRENT_STATE.md
+docs/15_NEW_CHAT_HANDOFF.md
+docs/AI_MULTI_MODEL_HANDOFF_CURRENT.md
+docs/RISK_REGISTRY.md
+docs/roadmap/STEP590_MODULAR_MONOLITH_ROADMAP.md
+package-lock.json
+package.json
+scripts/preflight.js
+scripts/smoke-brand-lead-entrypoints-contract.js
+scripts/smoke-brand-lead-followups-contract.js
+scripts/test-applications-leads-domain-extraction.js
+scripts/test-barter-domain-extraction.js
+scripts/test-callback-router-critical.js
+scripts/test-giveaway-domain-extraction.js
+scripts/test-payment-domain-extraction.js
+scripts/test-workspaces-control-folders-domain-extraction.js
+scripts/test-workspaces-profile-social-domain-extraction.js
+src/bot/bot.js
+src/bot/router/callbackContracts.js
+src/bot/router/callbackOwnership.js
+
+DELETED
+(none)

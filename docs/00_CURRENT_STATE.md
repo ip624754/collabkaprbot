@@ -1,3 +1,22 @@
+## STEP590E3C — Directory Search & Public Workspace Domain Extraction (2026-08-01)
+
+**Current source artifact baseline:** STEP590E3C layered on the STEP590E3B_R2 source artifact.
+
+- STEP590E3B_R2: operator local `preflight:source` PASS; exact resulting Git commit/deployment identity was not supplied in this implementation environment;
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY GATE PENDING;
+- new bounded domain: `src/bot/domains/directory/`;
+- newly extracted callback actions: 10 total, split into `directory_search` (6) and `directory_public_workspace` (4);
+- cumulative ownership: 285 extracted, 275 legacy, 7 aliases, 0 unresolved;
+- truth correction: `a:wsp_contact_unlock` was legacy-owned in STEP590E3B_R2 and is now public-Workspace owned while retaining `pay / queue_first` metadata;
+- `a:wsp_lead_new` remains `lead_acquisition` owned;
+- existing matching state, public-profile visibility, DB debit/unlock, Redis lock/cache, QStash retry and Brand Pass helpers remain canonical;
+- SQL/ENV/API-route/callback-key/action-guard/product-copy changes: none;
+- package: `1.3.23`;
+- verified QA: 77 Directory assertions, 2,784 router assertions, 560/560 registry, all prior extracted-domain suites PASS and 353/353 JavaScript syntax checks PASS;
+- focused and dependency-free QA PASS; full `preflight:source` and portable critical spine 6/6 also PASS under temporary local dependency shims used only for execution evidence;
+- no shim or `node_modules` is included in the source tree or release artifacts; clean `npm ci`/`npm audit` on the exact final artifact remain operator-side because the implementation package mirror returned 404 for `xtend@4.0.2`;
+- next bounded architecture step after operator local/deploy gate: STEP590E4 Brands & Curation.
+
 ## STEP590E3B — Workspace Profile, Instagram & Sharing Domain Extraction (2026-08-01)
 
 **Current source artifact baseline:** STEP590E3B layered on the STEP590E3A source artifact.

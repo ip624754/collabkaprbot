@@ -35,8 +35,8 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 275, 'STEP590E3B must extract two hundred seventy-five exact actions');
-equal(summary.legacy, registryKeys.length - 275, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 285, 'STEP590E3C must extract two hundred eighty-five exact actions');
+equal(summary.legacy, registryKeys.length - 285, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
@@ -64,7 +64,9 @@ equal(summary.byRoute[CALLBACK_ROUTE.WORKSPACE_CONTROL], 22, 'workspace control 
 equal(summary.byRoute[CALLBACK_ROUTE.WORKSPACE_FOLDERS], 17, 'workspace folders own seventeen actions');
 equal(summary.byRoute[CALLBACK_ROUTE.WORKSPACE_PROFILE], 18, 'workspace profile owns eighteen actions');
 equal(summary.byRoute[CALLBACK_ROUTE.WORKSPACE_SOCIAL], 9, 'workspace social owns nine actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 275, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.DIRECTORY_SEARCH], 6, 'directory search owns six actions');
+equal(summary.byRoute[CALLBACK_ROUTE.DIRECTORY_PUBLIC_WORKSPACE], 4, 'public workspace owns four actions');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 285, 'legacy count must be exact');
 
 for (const action of ['a:cur_ws', 'a:cur_ws_off', 'a:net_q', 'a:net_set', 'a:setup', 'a:ws_disconnect_do', 'a:ws_disconnect_q', 'a:ws_history', 'a:ws_history_export', 'a:ws_leads', 'a:ws_list', 'a:ws_list_inactive', 'a:ws_open', 'a:ws_pro', 'a:ws_pro_pin', 'a:ws_pro_pin_clear', 'a:ws_pro_pin_set', 'a:ws_reconnect_do', 'a:ws_reconnect_q', 'a:ws_settings', 'a:ws_toggle_cur', 'a:ws_toggle_net']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.WORKSPACE_CONTROL, `${action} workspace control owner`);
@@ -83,6 +85,14 @@ for (const action of ['a:ws_share', 'a:ws_share_send', 'a:ws_ig_templates', 'a:w
   equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} workspace social phase`);
 }
 equal(getCallbackOwnership('a:ws_pro_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'workspace PRO checkout remains payment-owned');
+for (const action of ['a:pm_home', 'a:pm_reset', 'a:pm_pick', 'a:pm_tog', 'a:pm_run', 'a:pm_view']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.DIRECTORY_SEARCH, `${action} directory search owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} directory search phase`);
+}
+for (const action of ['a:wsp_preview', 'a:wsp_open', 'a:wsp_contact_req', 'a:wsp_contact_unlock']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.DIRECTORY_PUBLIC_WORKSPACE, `${action} public workspace owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} public workspace phase`);
+}
 equal(getCallbackOwnership('a:wsp_lead_new').routeId, CALLBACK_ROUTE.LEAD_ACQUISITION, 'public workspace lead remains lead-owned');
 
 for (const action of registryKeys) {

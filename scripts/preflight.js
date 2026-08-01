@@ -353,6 +353,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): workspace control/folders bounded-domain source contract", "smoke:workspaces-control-folders-domain-extraction-contract"],
   ["Preflight (source-only): workspace profile/social bounded-domain executable tests", "test:workspaces-profile-social-domain-extraction"],
   ["Preflight (source-only): workspace profile/social bounded-domain source contract", "smoke:workspaces-profile-social-domain-extraction-contract"],
+  ["Preflight (source-only): directory/public workspace bounded-domain executable tests", "test:directory-public-workspace-domain-extraction"],
+  ["Preflight (source-only): directory/public workspace bounded-domain source contract", "smoke:directory-public-workspace-domain-extraction-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

@@ -1,0 +1,11 @@
+action,type,guard,previous_owner,new_owner,phase,notes
+a:pm_home,edit,none,legacy,directory_search,post_user,Profile matching home
+a:pm_reset,edit,require_redis,legacy,directory_search,post_user,Reset matching state
+a:pm_pick,edit,require_redis,legacy,directory_search,post_user,Open matching selector
+a:pm_tog,edit,require_redis,legacy,directory_search,post_user,Toggle matching filter
+a:pm_run,edit,require_redis,legacy,directory_search,post_user,Run matching search
+a:pm_view,edit,none,legacy,directory_search,post_user,Open matched public Workspace
+a:wsp_preview,edit,none,legacy,directory_public_workspace,post_user,Owner preview of public Workspace
+a:wsp_open,edit,none,legacy,directory_public_workspace,post_user,Open public Workspace
+a:wsp_contact_req,edit,none,legacy,directory_public_workspace,post_user,Render contact unlock decision surface
+a:wsp_contact_unlock,pay,queue_first,legacy,directory_public_workspace,post_user,Queue-first DB-truth contact unlock; monetization core unchanged

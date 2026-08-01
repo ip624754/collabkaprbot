@@ -292,6 +292,8 @@ Residual risk:
 | R-44 | Canonical lead creation is split between public workspace and lead owners | HIGH | WATCH | `a:send_request_to_creator` and `a:wsp_lead_new` diverge or recurse across owners | own both actions in `lead_acquisition` and test normalization/reachability as one path | duplicate lead, cross-owner fallback or stale old-button regression |
 | R-45 | Barter extraction weakens offer/thread/workspace authorization or trusts callback payload identity | HIGH | ACTIVE | cross-owner/workspace offer or thread becomes readable/mutable | canonical hydrated actor, existing owner/manager/workspace checks, exact route tests and negative canary | first authorization bypass or actor mismatch |
 | R-46 | Official publication/retry extraction duplicates external effects or loses durable truth | CRITICAL | ACTIVE | duplicate official post, retry, remove or mismatched Telegram message ID/audit | canonical publish/verify/remove/retry helpers, durable audit/message IDs and disposable production canary | any duplicate external effect or durable/external divergence |
+| R-47 | Directory extraction leaks hidden contacts or crosses Workspace/lead context | CRITICAL | ACTIVE | public profile reveals contact surface without preview/owner/unlock authority; back navigation crosses lead/workspace | retain canonical renderer/options, actor context and lead-scoped return parameters; negative source/runtime canary | first unauthorized reveal or cross-context navigation |
+| R-48 | Contact-unlock extraction duplicates debit/retry or diverges Redis from durable DB truth | CRITICAL | ACTIVE | repeated charge, duplicate QStash job, unlock cache without durable state or durable unlock without UI recovery | preserve queue-first guard, dedup ID, token lock, atomic DB helper, retry and executable owner/queue/success tests | any duplicate debit, inconsistent unlock or lost retry evidence |
 
 ## Current STEP590A assessment
 
@@ -376,3 +378,16 @@ Residual risk:
 - Environment limitation: clean dependency installation was blocked by implementation-mirror HTTP 404 for `xtend@4.0.2`; operator-side dependency, audit, Vercel and live integration evidence remains required.
 - Runtime verification required: representative read-only paths plus disposable offer/thread/official-post mutation canary; explicitly verify no payment action is captured by Barter ownership.
 - Residual risk: broad capability injection remains a compatibility seam until STEP590F/STEP590I; five registry-only Barter keys remain legacy-owned because no executable branch exists.
+
+## Current STEP590E3C assessment
+
+- Change type: directory search and public Workspace callback orchestration extraction; no schema, ENV, pricing, action-guard or visible-copy change.
+- Primary risks addressed: R-38, R-39, R-40, R-41, R-43, R-44, R-47 and R-48.
+- Runtime blast radius: six `a:pm_*` matching callbacks and four public Workspace/contact callbacks.
+- Canonical correctness boundary: matching state helpers, `renderWsPublicProfile`, `db.unlockWorkspaceContactsWithCredits()`, monetization retry, Redis token lock/cache and Brand Pass helpers remain unchanged.
+- Truth correction: `a:wsp_contact_unlock` was legacy-owned in the baseline; it is now explicitly owned by `directory_public_workspace` while retaining `pay / queue_first` metadata.
+- Rollback: code rollback to exact STEP590E3B_R2; preserve durable debit/unlock, retry, lock, diagnostic and contact-pack evidence created after deployment.
+- Source verification: 77 directory assertions, 2,784 router assertions, 560/560 registry, all prior extracted-domain regressions and 353 JavaScript syntax checks PASS.
+- Environment limitation: clean `npm ci` is blocked by the implementation package mirror 404 for `xtend@4.0.2`; source preflight and portable spine stop only at missing `dotenv`.
+- Runtime verification required: bounded matching/public-profile navigation plus an explicitly approved disposable unlock that proves no owner charge, no duplicate debit and durable/Redis parity.
+- Residual risk: the public Workspace owner coordinates a broad monetization capability seam; STEP590F/STEP590I should narrow and statically enforce it.

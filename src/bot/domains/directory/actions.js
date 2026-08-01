@@ -1,0 +1,33 @@
+export const DIRECTORY_ACTION = Object.freeze({
+  PM_HOME: 'a:pm_home',
+  PM_RESET: 'a:pm_reset',
+  PM_PICK: 'a:pm_pick',
+  PM_TOG: 'a:pm_tog',
+  PM_RUN: 'a:pm_run',
+  PM_VIEW: 'a:pm_view',
+  WSP_PREVIEW: 'a:wsp_preview',
+  WSP_OPEN: 'a:wsp_open',
+  WSP_CONTACT_REQ: 'a:wsp_contact_req',
+  WSP_CONTACT_UNLOCK: 'a:wsp_contact_unlock',
+});
+
+export const DIRECTORY_SEARCH_ACTIONS = Object.freeze([
+  DIRECTORY_ACTION.PM_HOME,
+  DIRECTORY_ACTION.PM_RESET,
+  DIRECTORY_ACTION.PM_PICK,
+  DIRECTORY_ACTION.PM_TOG,
+  DIRECTORY_ACTION.PM_RUN,
+  DIRECTORY_ACTION.PM_VIEW,
+]);
+
+export const DIRECTORY_PUBLIC_WORKSPACE_ACTIONS = Object.freeze([
+  DIRECTORY_ACTION.WSP_PREVIEW,
+  DIRECTORY_ACTION.WSP_OPEN,
+  DIRECTORY_ACTION.WSP_CONTACT_REQ,
+  DIRECTORY_ACTION.WSP_CONTACT_UNLOCK,
+]);
+
+export const DIRECTORY_CALLBACK_ACTIONS = Object.freeze([
+  ...DIRECTORY_SEARCH_ACTIONS,
+  ...DIRECTORY_PUBLIC_WORKSPACE_ACTIONS,
+]);
