@@ -27,7 +27,7 @@ function registry(action, type = ACTION_TYPES.ADMIN, guard = ACTION_GUARD.REQUIR
 
 const list = between('async function renderAdminDmTemplates(ctx, page = 0) {', '\n\nasync function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {');
 const view = between('async function renderAdminDmTemplateView(ctx, tplId, backPage = 0) {', '\n\n  async function renderAdminOutbox(ctx, page = 0) {');
-const callbacks = between("if (p.a === 'a:admin_umsg_tpls') {", "\nif (p.a === 'a:bc_start') {");
+const callbacks = between("if (p.a === 'a:admin_umsg_tpls') {", "\n    // =====================================================\n    // 📜 Admin Audit Log: search + filters + export");
 
 assert.ok(list.includes('📌 <b>Шаблоны личных сообщений</b>'), 'DM template list title must exist');
 assert.ok(list.includes("${isCustom ? 'Redis custom' : 'default bundle'}"), 'DM template source truth must exist');

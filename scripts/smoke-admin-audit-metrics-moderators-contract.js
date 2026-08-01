@@ -61,7 +61,7 @@ const sendAdminAuditExportSrc = extractBetween(
 const auditMetricsModeratorsCallbacksSrc = extractBetween(
   botSource,
   "    if (p.a === 'a:aud') {",
-  "\n    // Admin: Broadcast delivery mode (QStash fan-out)"
+  "\n    // Admin: QStash status / signed ping (Redis-only metrics)"
 );
 
 const auditSearchExpectTextSrc = extractBetween(

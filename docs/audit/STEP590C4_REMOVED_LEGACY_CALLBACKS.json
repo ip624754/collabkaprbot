@@ -1,0 +1,43 @@
+{
+  "step": "STEP590C4",
+  "baseline": "STEP590C3",
+  "total": 28,
+  "owners": {
+    "broadcast_composer": [
+      "a:bc_start",
+      "a:bc_start_adv",
+      "a:bc_simple_text",
+      "a:bc_simple_media",
+      "a:bc_simple_media_clear",
+      "a:bc_simple_button",
+      "a:bc_simple_btn_preset",
+      "a:bc_simple_btn_custom",
+      "a:bc_simple_btn_clear",
+      "a:bc_preview",
+      "a:bc_send_q",
+      "a:bc_simple_clear",
+      "a:bc_buttons",
+      "a:bc_tpl_gw",
+      "a:bc_tpl_bp",
+      "a:bc_tpl_offer",
+      "a:bc_btn_done"
+    ],
+    "broadcast_audience": [
+      "a:bc_simple_audience",
+      "a:bc_audience"
+    ],
+    "broadcast_dispatch": [
+      "a:bc_confirm",
+      "a:bc_cancel"
+    ],
+    "broadcast_operations": [
+      "a:bc_list",
+      "a:bc_view",
+      "a:bc_blocked",
+      "a:bc_pause",
+      "a:bc_resume",
+      "a:bc_stop",
+      "a:admin_bc_qstash_toggle"
+    ]
+  }
+}

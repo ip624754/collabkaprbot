@@ -16,6 +16,8 @@
 //
 // Ignore (per-file): add a comment anywhere in the file:
 //   navlint: ignore
+// Ignore one intentional keyboard: put this marker in the constructor statement:
+//   navlint: ignore-next
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -74,6 +76,7 @@ function analyzeFile(file, text) {
     if (/\b(navKb|kbNavRow|kbAdminFooter)\s*\(/.test(window)) continue;
 
     const block = sliceToSemicolon(text, start);
+    if (/navlint\s*:\s*ignore-next/i.test(block)) continue;
 
     const hasBackLike = /['"`]⬅️\s*(Назад|Отмена|Админка|Операции|Коммуникации|Система)/.test(block);
     const hasAdminBack = /['"`]⬅️\s*(Админка|Операции|Коммуникации|Система)/.test(block);

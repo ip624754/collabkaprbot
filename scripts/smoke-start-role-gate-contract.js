@@ -33,6 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const navigationSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'shared', 'navigation', 'callbacks.js'), 'utf8');
 const helpersSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'helpers.js'), 'utf8');
 
 const startHandlerSrc = extractBetween(
@@ -48,15 +49,15 @@ const renderRoleSelectionSrc = extractBetween(
 );
 
 const homeModeHandlerSrc = extractBetween(
-  botSource,
-  "    if (p.a === 'a:home_mode') {",
-  "\n\n    if (p.a === 'a:main_menu') {"
+  navigationSource,
+  "  if (action === NAVIGATION_ACTION.HOME_MODE) {",
+  "\n\n  if (action === NAVIGATION_ACTION.MAIN_MENU) {"
 );
 
 const uiModeSetHandlerSrc = extractBetween(
-  botSource,
-  "if (p.a === 'a:ui_mode_set') {",
-  "\n\nif (p.a === 'a:guide') {"
+  navigationSource,
+  "  if (action === NAVIGATION_ACTION.UI_MODE_SET) {",
+  "\n\n  if (action === NAVIGATION_ACTION.GUIDE) {"
 );
 
 const setUiModeSrc = extractBetween(
@@ -131,12 +132,12 @@ assert.ok(homeModeHandlerSrc.includes('hadUiMode = true; // fail-open'), 'a:home
 assert.ok(homeModeHandlerSrc.includes('managerBrands = await db.listBrandsForManager(u.id);'), 'a:home_mode may query manager brands only on explicit click');
 assertMatch(
   homeModeHandlerSrc,
-  /if \(m === 'creator'\) \{[\s\S]*?await setUiMode\(ctx\.from\.id, UI_MODES\.CREATOR\);[\s\S]*?await disableBrandManagerState\(ctx\.from\.id\);[\s\S]*?await setCuratorMode\(ctx\.from\.id, false\);[\s\S]*?await renderRoleHub\(ctx, u, flags2\);[\s\S]*?return;[\s\S]*?\}/s,
+  /if \(m === 'creator'\) \{[\s\S]*?await setUiMode\(ctx\.from\.id, UI_MODES\.CREATOR\);[\s\S]*?await disableBrandManagerState\(ctx\.from\.id\);[\s\S]*?await setCuratorMode\(ctx\.from\.id, false\);[\s\S]*?await renderRoleHub\(ctx, u, flags2\);[\s\S]*?return true;[\s\S]*?\}/s,
   'a:home_mode creator path must persist creator mode, clear brand-manager/curator overlays, and render role hub'
 );
 assertMatch(
   homeModeHandlerSrc,
-  /if \(m === 'brand'\) \{[\s\S]*?await setUiMode\(ctx\.from\.id, UI_MODES\.BRAND\);[\s\S]*?await disableBrandManagerState\(ctx\.from\.id\);[\s\S]*?await setCuratorMode\(ctx\.from\.id, false\);[\s\S]*?await renderRoleHub\(ctx, u, flags2\);[\s\S]*?return;[\s\S]*?\}/s,
+  /if \(m === 'brand'\) \{[\s\S]*?await setUiMode\(ctx\.from\.id, UI_MODES\.BRAND\);[\s\S]*?await disableBrandManagerState\(ctx\.from\.id\);[\s\S]*?await setCuratorMode\(ctx\.from\.id, false\);[\s\S]*?await renderRoleHub\(ctx, u, flags2\);[\s\S]*?return true;[\s\S]*?\}/s,
   'a:home_mode brand path must persist brand mode, clear overlays, and render role hub'
 );
 

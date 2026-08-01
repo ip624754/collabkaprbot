@@ -11,5 +11,11 @@ export const CALLBACK_ROUTE = Object.freeze({
   GIVEAWAY_ACCESS: 'giveaway_access',
   GIVEAWAY_PARTICIPANT: 'giveaway_participant',
   GIVEAWAY_LIFECYCLE: 'giveaway_lifecycle',
+  BROADCAST_COMPOSER: 'broadcast_composer',
+  BROADCAST_AUDIENCE: 'broadcast_audience',
+  BROADCAST_DISPATCH: 'broadcast_dispatch',
+  BROADCAST_OPERATIONS: 'broadcast_operations',
+  NAVIGATION_SHARED: 'navigation_shared',
+  TELEGRAM_UX_SHARED: 'telegram_ux_shared',
   LEGACY: 'legacy',
 });

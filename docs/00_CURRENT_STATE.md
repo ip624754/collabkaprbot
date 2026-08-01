@@ -1,3 +1,36 @@
+## STEP590D — Navigation & Shared Telegram UX (2026-08-01)
+
+**Current handoff-safe source baseline:** STEP590D on exact STEP590C4.
+
+- status: SOURCE READY / PRODUCTION NAVIGATION CANARY PENDING;
+- new shared layers: `src/bot/shared/navigation/` and `src/bot/shared/telegramUx/`;
+- extracted callback ownership: 67 total, 493 legacy, 0 unresolved;
+- newly extracted actions: 9 navigation callbacks and `a:usr_ack`;
+- all seven old-message aliases now use one canonical shared alias map;
+- `/start`, global guards, user hydration, ban/tombstone and input-mode ordering are unchanged;
+- payment, giveaway, broadcast and auth cores are unchanged;
+- SQL/ENV changes: none;
+- source QA: 93 navigation/shared UX assertions, 2,462 router assertions and 313 JavaScript syntax checks PASS;
+- source preflight and portable spine: PASS under temporary dependency shims; clean `npm ci` remains operator-side because the implementation mirror returned 404 for `xtend@4.0.2`;
+- next bounded architecture step after production canary: STEP590E1 Applications & Leads.
+
+## STEP590C4 — Critical Broadcast Callback Domain Extraction (2026-08-01)
+
+**Current handoff-safe source baseline:** STEP590C4 on exact STEP590C3.
+
+- status: SOURCE READY / PRODUCTION BROADCAST CALLBACK CANARY PENDING;
+- STEP590C3 progression evidence: operator reported the deployed flow working normally; no dedicated C3 production log was supplied for independent parsing in this STEP;
+- new bounded domain: `src/bot/domains/broadcasts/`;
+- extracted callback ownership: 57 total, 503 legacy, 0 unresolved;
+- newly extracted actions: 28 composer, audience, dispatch and operations callbacks;
+- canonical delivery receipt/safety/worker paths are unchanged;
+- confirm remains `db.createBroadcastIdempotent()` with 8-second statement timeout and 45-second dedup window;
+- no direct recipient-send or QStash-publish path was added to the domain;
+- SQL/ENV changes: none;
+- source QA: 161 broadcast-domain assertions, 2440 router assertions and 35 broadcast-critical assertions PASS;
+- portable spine: 6/6 PASS under temporary dependency shims; clean `npm ci` remains operator-side;
+- next bounded architecture step after canary: STEP590D Navigation & Shared Telegram UX.
+
 ## STEP590C3 — Critical Giveaway Callback Domain Extraction (2026-08-01)
 
 **Current handoff-safe source baseline:** STEP590C3 on exact STEP590C2.

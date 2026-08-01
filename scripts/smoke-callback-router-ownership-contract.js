@@ -8,6 +8,9 @@ const ownership = fs.readFileSync(new URL('../src/bot/router/callbackOwnership.j
 const adminAuthActions = fs.readFileSync(new URL('../src/bot/domains/adminAuth/actions.js', import.meta.url), 'utf8');
 const adminAuthRoute = fs.readFileSync(new URL('../src/bot/domains/adminAuth/route.js', import.meta.url), 'utf8');
 const giveawayRoute = fs.readFileSync(new URL('../src/bot/domains/giveaways/route.js', import.meta.url), 'utf8');
+const broadcastRoute = fs.readFileSync(new URL('../src/bot/domains/broadcasts/route.js', import.meta.url), 'utf8');
+const navigationRoute = fs.readFileSync(new URL('../src/bot/shared/navigation/route.js', import.meta.url), 'utf8');
+const telegramUxRoute = fs.readFileSync(new URL('../src/bot/shared/telegramUx/route.js', import.meta.url), 'utf8');
 
 const requiredBotFragments = [
   'dispatchPreUserCallback(ctx, p',
@@ -15,6 +18,12 @@ const requiredBotFragments = [
   'giveaway_access: (ctx2, p2, u2) => handleGiveawayAccessCallback(',
   'giveaway_participant: (ctx2, p2, u2) => handleGiveawayParticipantCallback(',
   'giveaway_lifecycle: (ctx2, p2, u2) => handleGiveawayLifecycleCallback(',
+  'broadcast_composer: (ctx2, p2, u2) => handleBroadcastComposerCallback(',
+  'broadcast_audience: (ctx2, p2, u2) => handleBroadcastAudienceCallback(',
+  'broadcast_dispatch: (ctx2, p2, u2) => handleBroadcastDispatchCallback(',
+  'broadcast_operations: (ctx2, p2, u2) => handleBroadcastOperationsCallback(',
+  'navigation_shared: (ctx2, p2, u2) => handleNavigationCallback(',
+  'telegram_ux_shared: (ctx2, p2, u2) => handleTelegramUxCallback(',
   'await dispatchCallback(ctx, p, u',
 ];
 for (const fragment of requiredBotFragments) {
@@ -35,7 +44,16 @@ assert.ok(adminAuthRoute.includes('CALLBACK_PHASE.POST_USER'), 'admin auth contr
 assert.ok(ownership.includes('GIVEAWAY_CALLBACK_ROUTE_DEFINITIONS'), 'giveaway ownership must come from bounded domain descriptors');
 assert.ok(giveawayRoute.includes('GIVEAWAY_PARTICIPANT_ROUTE_DEFINITION'), 'giveaway participant route must be explicit');
 assert.ok(giveawayRoute.includes('GIVEAWAY_LIFECYCLE_ROUTE_DEFINITION'), 'giveaway lifecycle route must be explicit');
+assert.ok(ownership.includes('BROADCAST_CALLBACK_ROUTE_DEFINITIONS'), 'broadcast ownership must come from bounded domain descriptors');
+assert.ok(broadcastRoute.includes('BROADCAST_COMPOSER_ROUTE_DEFINITION'), 'broadcast composer route must be explicit');
+assert.ok(broadcastRoute.includes('BROADCAST_AUDIENCE_ROUTE_DEFINITION'), 'broadcast audience route must be explicit');
+assert.ok(broadcastRoute.includes('BROADCAST_DISPATCH_ROUTE_DEFINITION'), 'broadcast dispatch route must be explicit');
+assert.ok(broadcastRoute.includes('BROADCAST_OPERATIONS_ROUTE_DEFINITION'), 'broadcast operations route must be explicit');
+assert.ok(ownership.includes('NAVIGATION_CALLBACK_ROUTE_DEFINITIONS'), 'navigation ownership must come from shared route descriptors');
+assert.ok(navigationRoute.includes('NAVIGATION_SHARED_ROUTE_DEFINITION'), 'navigation shared route must be explicit');
+assert.ok(ownership.includes('TELEGRAM_UX_CALLBACK_ROUTE_DEFINITIONS'), 'Telegram UX ownership must come from shared route descriptors');
+assert.ok(telegramUxRoute.includes('TELEGRAM_UX_SHARED_ROUTE_DEFINITION'), 'Telegram UX shared route must be explicit');
 assert.ok(ownership.includes('callback_route.duplicate_action_owner'), 'duplicate action ownership must hard fail');
 assert.ok(ownership.includes('callback_route.unknown_action'), 'unknown extracted action must hard fail');
 
-console.log('PASS STEP590C3 callback router ownership source contract');
+console.log('PASS STEP590D callback router ownership source contract');

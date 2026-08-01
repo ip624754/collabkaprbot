@@ -44,6 +44,14 @@ import {
   handleGiveawayLifecycleCallback,
   handleGiveawayParticipantCallback,
 } from './domains/giveaways/index.js';
+import {
+  handleBroadcastAudienceCallback,
+  handleBroadcastComposerCallback,
+  handleBroadcastDispatchCallback,
+  handleBroadcastOperationsCallback,
+} from './domains/broadcasts/index.js';
+import { handleNavigationCallback } from './shared/navigation/index.js';
+import { handleTelegramUxCallback, resolveCallbackActionAlias } from './shared/telegramUx/index.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
@@ -24950,17 +24958,8 @@ UGC vs Интеграция
     }
     p = parseCb(full);
   }
-    // MENU ALIASES (no-break): support legacy action names from older messages
-    const _aliasA = {
-      'a:brand_managers': 'a:brand_team',
-      'a:brand_team_home': 'a:brand_team',
-      'a:team': 'a:brand_team',
-      'a:curators': 'a:cur_home',
-      'a:curators_home': 'a:cur_home',
-      'a:curator_home': 'a:cur_home',
-      'a:home_hub': 'a:home',
-    };
-    if (_aliasA[p.a]) p.a = _aliasA[p.a];
+    // Shared callback aliases preserve compatibility with older messages.
+    p.a = resolveCallbackActionAlias(p.a);
 
     // Harmless decorative callback surfaces must not fall into stale/unknown recovery.
     if (p.a === 'a:nop') {
@@ -25185,130 +25184,7 @@ if (p.a === 'a:nd') {
   return;
 }
 
-if (p.a === 'a:ui_mode_set') {
-  await ctx.answerCallbackQuery();
-  const mode = normalizeUiMode(p.m);
-  let hadUiMode = true;
-  try {
-    const rawMode = await redis.get(k(["ui_mode", ctx.from.id]));
-    hadUiMode = !!rawMode;
-  } catch {
-    hadUiMode = true; // fail-open
-  }
 
-  // Dual-role safety: switching UI mode must not keep manager-brand context around.
-  // Otherwise Home/Guide can show "Менеджер бренда" while user explicitly switched to Creator.
-  await disableBrandManagerState(ctx.from.id);
-
-  await setUiMode(ctx.from.id, mode);
-  if (!hadUiMode) { try { await trackAcqRole(ctx.from.id, mode); } catch {} }
-
-  const flags = await getRoleFlags(u, ctx.from.id);
-  const curMode = !!flags.isCurator && (await getCuratorMode(ctx.from.id));
-  if (curMode) {
-    await safeEditOrReply(ctx,
-      `🧹 <b>Режим куратора</b> включен.\n\nДля простоты я скрываю лишнее меню.\n\nТы сейчас в режиме: <b>Curator</b>`,
-      { parse_mode: 'HTML', reply_markup: curatorModeMenuKb(flags) }
-    );
-    return;
-  }
-
-  await renderMainMenu(ctx, flags, { edit: true, user: u, modeOverride: mode });
-  return;
-}
-
-if (p.a === 'a:guide') {
-  const flags = await getRoleFlags(u, ctx.from.id);
-  const mode = await resolveUiMode(ctx.from.id);
-  const bmMode = await getBrandManagerMode(ctx.from.id);
-  const isBrandish = normalizeUiMode(mode) === UI_MODES.BRAND || bmMode;
-
-  let text = `🧭 <b>Быстрый старт</b>
-
-<b>Карта</b>
-`;
-
-  if (isBrandish) {
-    text +=
-      `• 🎬 Офферы → лента и поиск креаторов
-` +
-      `• 💬 Диалоги → переписка по офферам
-` +
-      `• 📨 Заявки → запросы к бренду до принятия
-` +
-      `• 🤝 Сделки → принятые заявки и этапы работы
-
-`;
-  } else {
-    text +=
-      `• 🎬 Офферы → 📣 Мои каналы → выбери канал → 🎬 UGC / Офферы
-` +
-      `• 💬 Диалоги → 📣 Мои каналы → выбери канал → 💬 Диалоги
-` +
-      `• 📨 Заявки от брендов → 📣 Мои каналы → выбери канал → 📨 Заявки от брендов
-` +
-      `• 📨 Мои заявки → 🏷 Каталог брендов
-
-`;
-  }
-
-  if (isBrandish) {
-    text +=
-      `🏷 <b>Режим бренда</b>
-` +
-      `Заявка становится сделкой только после принятия.
-
-`;
-  } else {
-    text +=
-      `🤳 <b>Режим креатора</b>
-` +
-      `Подай заявку бренду или ответь на заявку от бренда.
-
-`;
-  }
-
-  text += `Навигация: ⬅️ Назад / 📋 Меню / 🏠 Домой`;
-
-  const kb = new InlineKeyboard();
-
-  // Map shortcuts (same as HOME HUB, mode-aware)
-  if (isBrandish) {
-    kb
-      .text('💬 Диалоги', 'a:go_dialogs')
-      .text('📨 Заявки', 'a:brand_apps|ws:0|s:new|p:0')
-      .row()
-      .text('🤝 Сделки', 'a:brand_deals|ws:0|st:negotiation|p:0')
-      .text('🎛 Фильтры', 'a:bx_filters|ws:0|p:0|h:mm|r:mm')
-      .row();
-  } else {
-    kb.text('📣 Мои каналы', 'a:ws_list').text('🏷 Каталог брендов', 'a:brands_home').row();
-  }
-
-  if (isBrandish) {
-    kb.text('🎬 Офферы (лента)', 'a:bx_feed|ws:0|p:0|h:mm')
-      .text('🔎 Поиск', 'a:pm_home|ws:0')
-      .row();
-  } else {
-    kb.text('🎬 Офферы', 'a:bx_home')
-      .text('🚀 Подключить канал', 'a:setup')
-      .row();
-  }
-
-  if (!isBrandish) {
-    kb.text('💬 Диалоги', 'a:go_dialogs').text('📨 Заявки от брендов', 'a:go_requests').row();
-  }
-
-  if (!isBrandish) {
-    kb.text('🏷 Режим бренда', 'a:ui_mode_set|m:brand|ret:menu').row();
-  }
-
-  kb.row().text('💬 Поддержка', 'a:support').text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
-
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb });
-  await maybeSendBanner(ctx, 'guide', CFG.GUIDE_BANNER_FILE_ID);
-  return;
-}
 
 if (p.a === 'a:more') {
   // Generic "More actions" submenu (STEP57)
@@ -26208,106 +26084,10 @@ if (p.a === 'a:brand_dir_open') {
     }
 
 
-if (p.a === 'a:menu_push') {
-  // If user opens Menu while we were expecting text input — cancel it.
-  // Menu is the canonical escape hatch for input-mode keyboards.
-  try { await clearExpectText(ctx.from.id); } catch {}
 
-  try { await ctx.answerCallbackQuery(); } catch {}
-
-  // Open Menu in a NEW message (do not overwrite original text).
-  // For admin-to-user receipts (src=admmsg) we MUST keep the original buttons (no dead-ends).
-  const srcChatId = ctx?.callbackQuery?.message?.chat?.id;
-  const srcMsgId = ctx?.callbackQuery?.message?.message_id;
-
-  const src = String(p?.src || '');
-  if (src !== 'admmsg') {
-    // For other service/system messages we can hide buttons to avoid repeat clicks.
-    try {
-      if (srcChatId && srcMsgId) {
-        await ctx.api.editMessageReplyMarkup(srcChatId, srcMsgId, { reply_markup: undefined });
-      }
-    } catch {}
-  }
-
-  // Create a new message that we can safely edit into the actual Menu.
-  // This avoids overwriting the original admin/system message text.
-  let uiMsg = null;
-  try {
-    uiMsg = await ctx.reply('⌛ Открываю меню…');
-  } catch {}
-
-  // Fallback: if we cannot send a new message, fall back to the regular Menu behavior (edit current message).
-  if (!uiMsg) {
-    const flags = await getRoleFlagsCached(u, ctx.from.id);
-    await renderRoleHub(ctx, u, flags);
-    return;
-  }
-
-  const ctxPush = makeUiCtxForMessage(ctx, uiMsg);
-
-  try {
-    const flags = await getRoleFlagsCached(u, ctx.from.id);
-    await renderRoleHub(ctxPush, u, flags);
-  } catch (e) {
-    console.error('menu_push_failed', {
-      cid: ctx?.state?.cid,
-      tgId: ctx?.from?.id,
-      err: String(e?.description || e?.message || e),
-    });
-    try {
-      const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home');
-      await safeEditOrReply(ctxPush, '⚠️ Не удалось открыть меню. Нажми /start и попробуй ещё раз.', { reply_markup: kb }, false);
-    } catch {}
-  }
-  return;
-}
-
-if (p.a === 'a:menu') {
-      await ctx.answerCallbackQuery();
-      // If user opens Menu while we were expecting text input — cancel it.
-      // Menu is the canonical escape hatch for input-mode keyboards.
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await clearSupportFollowupContext(ctx.from.id);
-      const flags = await getRoleFlagsCached(u, ctx.from.id);
-      await renderRoleHub(ctx, u, flags);
-      return;
-    }
 
 
 // User-friendly ack under service/system messages
-if (p.a === 'a:usr_ack') {
-  // Some older messages might not include src in callback_data.
-  // Best-effort: infer admin-receipt style by inspecting the current inline keyboard.
-  let src = String(p?.src || '');
-  if (!src) {
-    try {
-      const ik = ctx?.callbackQuery?.message?.reply_markup?.inline_keyboard || [];
-      const cbs = ik.flat().map((b) => String(b?.callback_data || '')).join(' ');
-      if (cbs.includes('src:admmsg') || cbs.includes('a:menu_push') || cbs.includes('a:support_push')) src = 'admmsg';
-    } catch {}
-  }
-
-  const ackText = '✅ Понятно';
-  try { await ctx.answerCallbackQuery({ text: ackText }); } catch {}
-
-  const chatId = ctx?.callbackQuery?.message?.chat?.id;
-  const msgId = ctx?.callbackQuery?.message?.message_id;
-  if (!chatId || !msgId) return;
-
-  // Admin-to-user receipts: keep navigation buttons, only remove the ack button.
-  if (src === 'admmsg') {
-    const kb = new InlineKeyboard()
-      .text('📋 Меню', 'a:menu_push|src:admmsg')
-      .text('💬 Поддержка', 'a:support_push|src:admmsg');
-    try { await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: kb }); } catch {}
-    return;
-  }
-
-  // Default behavior for other service messages: hide buttons completely.
-  try { await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined }); } catch {}
-  return;
-}
 
 // Users: open current System Notice again (without affecting seen)
 if (p.a === 'a:notice') {
@@ -26323,7 +26103,8 @@ if (p.a === 'a:notice') {
   const n = await getSysNotice();
   const avail = await getSysNoticeAvailabilityForUser(tgId, n);
   if (!avail.ok) {
-    const kb = new InlineKeyboard().text('📋 Меню', 'a:menu').text('💬 Поддержка', 'a:support');
+    const kb = new InlineKeyboard() /* navlint: ignore-next — notice footer intentionally keeps Menu + Support */
+      .text('📋 Меню', 'a:menu').text('💬 Поддержка', 'a:support');
     await safeEditOrReply(ctx, 'ℹ️ Сейчас нет активного объявления.', { reply_markup: kb });
     return;
   }
@@ -26360,118 +26141,10 @@ ${escapeHtml(safeText)}
     }
 
     // HOME HUB (Commit87)
-    if (p.a === 'a:role_pick') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      await renderRoleSelection(ctx, u, { edit: true });
-      return;
-    }
-
-    if (p.a === 'a:home') {
-      await ctx.answerCallbackQuery();
-      // If user navigates to Home while we were expecting text input — cancel it.
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await clearSupportFollowupContext(ctx.from.id);
-      const flags2 = await getRoleFlagsCached(u, ctx.from.id);
-      await renderHomeHub(ctx, u, flags2, { edit: true });
-      return;
-    }
-
-    if (p.a === 'a:home_hint_ack') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      try { await markHomeHubHintSeen(ctx.from.id); } catch {}
-      const flags2 = await getRoleFlagsCached(u, ctx.from.id);
-      await renderHomeHub(ctx, u, flags2, { edit: true, noHint: true });
-      return;
-    }
-
-    if (p.a === 'a:home_mode') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      const m = String(p.m || '');
-      // Acquisition role breakdown: count only first explicit role pick (when ui_mode was not set yet).
-      let hadUiMode = true;
-      try {
-        const rawMode = await redis.get(k(["ui_mode", ctx.from.id]));
-        hadUiMode = !!rawMode;
-      } catch {
-        hadUiMode = true; // fail-open
-      }
 
 
-      // Determine whether user can manage any brands
-      let managerBrands = [];
-      try {
-        managerBrands = await db.listBrandsForManager(u.id);
-      } catch {}
-      const canManager = Array.isArray(managerBrands) && managerBrands.length > 0;
 
-      // Mode switch is a strong intent: keep the UI consistent
-      // Curator overlay should not leak into Brand/Manager modes, and vice versa.
-      if (m === 'creator') {
-        await setUiMode(ctx.from.id, UI_MODES.CREATOR);
-        if (!hadUiMode) { try { await trackAcqRole(ctx.from.id, "creator"); } catch {} }
-        await disableBrandManagerState(ctx.from.id);
-        try { await setCuratorMode(ctx.from.id, false); } catch {}
-        const flags2 = await getRoleFlags(u, ctx.from.id);
-        await renderRoleHub(ctx, u, flags2);
-        return;
-      }
 
-      if (m === 'brand') {
-        await setUiMode(ctx.from.id, UI_MODES.BRAND);
-        await disableBrandManagerState(ctx.from.id);
-        if (!hadUiMode) { try { await trackAcqRole(ctx.from.id, "brand"); } catch {} }
-        try { await setCuratorMode(ctx.from.id, false); } catch {}
-        const flags2 = await getRoleFlags(u, ctx.from.id);
-        await renderRoleHub(ctx, u, flags2);
-        return;
-      }
-
-      if (m === 'brand_manager') {
-        if (!canManager) {
-          await safeEditOrReply(ctx, '⛔ Тебя ещё не добавили в «Менеджеры бренда».', { reply_markup: navKb('a:home') });
-          return;
-        }
-        await setUiMode(ctx.from.id, UI_MODES.BRAND);
-        await setBrandManagerMode(ctx.from.id, true);
-        try { await setCuratorMode(ctx.from.id, false); } catch {}
-        // If there is exactly one brand, set it as active to reduce clicks
-        try {
-          const active = await getBmActiveBrand(ctx.from.id);
-          if (!active && managerBrands.length === 1) {
-            await setBmActiveBrand(ctx.from.id, Number(managerBrands[0].brand_user_id || managerBrands[0].brandUserId || 0));
-          }
-        } catch {}
-        const flags2 = await getRoleFlags(u, ctx.from.id);
-        await renderRoleHub(ctx, u, flags2);
-        return;
-      }
-
-      if (m === 'curator') {
-        const flags2 = await getRoleFlags(u, ctx.from.id);
-        if (!flags2.isCurator) {
-          await safeEditOrReply(ctx, '⛔ Доступ к кабинету куратора не найден.', { reply_markup: navKb('a:home') });
-          return;
-        }
-        // Curator is a creator-side overlay: persist it explicitly
-        await setUiMode(ctx.from.id, UI_MODES.CREATOR);
-        await disableBrandManagerState(ctx.from.id);
-        try { await setCuratorMode(ctx.from.id, true); } catch {}
-        await renderRoleHub(ctx, u, flags2);
-        return;
-      }
-
-      // Unknown mode — just refresh the hub
-      const flags2 = await getRoleFlags(u, ctx.from.id);
-      await renderHomeHub(ctx, u, flags2, { edit: true });
-      return;
-    }
-
-    if (p.a === 'a:main_menu') {
-      try { await ctx.answerCallbackQuery(); } catch {}
-      const flags = await getRoleFlagsCached(u, ctx.from.id);
-      await renderRoleHub(ctx, u, flags);
-      return;
-    }
 
     // Toggle Curator UI mode (stored in Redis).
     if (p.a === 'a:cur_mode_set') {
@@ -32350,486 +32023,6 @@ if (p.a === 'a:admin_umsg_tpl_reset') {
   return;
 }
 
-if (p.a === 'a:bc_start') {
-  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-  await ctx.answerCallbackQuery();
-  try { await clearExpectText(ctx.from.id); } catch {}
-  await renderBroadcastSimpleComposer(ctx);
-  return;
-}
-
-if (p.a === 'a:bc_start_adv') {
-  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-  await ctx.answerCallbackQuery();
-  try { await clearDraft(ctx.from.id); } catch {}
-  await safeEditOrReply(ctx, `🧰 <b>Расширенный редактор</b>\n\nОтправь текст, фото, видео, GIF или документ.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Простой редактор', commsCb.bcStart()) });
-  await setExpectText(ctx.from.id, { type: 'bc_content' }, 30 * 60);
-  return;
-}
-
-if (p.a === 'a:bc_simple_text') {
-  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-  await ctx.answerCallbackQuery();
-  await safeEditOrReply(ctx, `📝 <b>Текст рассылки</b>\n\nОтправь текст одним сообщением.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ К редактору', commsCb.bcStart()) });
-  await setExpectText(ctx.from.id, { type: 'bc_simple_text' }, 30 * 60);
-  return;
-}
-
-if (p.a === 'a:bc_simple_media') {
-  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-  await ctx.answerCallbackQuery();
-  await safeEditOrReply(ctx, `🖼 <b>Картинка рассылки</b>\n\nОтправь фото одним сообщением.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ К редактору', commsCb.bcStart()) });
-  await setExpectText(ctx.from.id, { type: 'bc_simple_media' }, 30 * 60);
-  return;
-}
-
-if (p.a === 'a:bc_simple_media_clear') {
-  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-  await ctx.answerCallbackQuery({ text: 'Картинка удалена.' });
-  const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
-  const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
-  delete draft.mediaType; delete draft.fileId; delete draft.caption; draft.mode = 'simple';
-  await setDraft(ctx.from.id, draft, 30 * 60);
-  await renderBroadcastSimpleComposer(ctx);
-  return;
-}
-
-if (p.a === 'a:bc_simple_button') {
-  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-  await ctx.answerCallbackQuery();
-  const draft = await getDraft(ctx.from.id);
-  await renderBroadcastSimpleButtonPicker(ctx, draft || {});
-  return;
-}
-
-if (p.a === 'a:bc_simple_btn_preset') {
-  if (!isSuperAdminTg(ctx.from.id)) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-  const key = String(p.k || '');
-  const preset = broadcastSimpleButtonPresets().find((x) => x.key === key);
-  if (!preset) { await ctx.answerCallbackQuery({ text: 'Готовый вариант недоступен.' }); return; }
-  await ctx.answerCallbackQuery({ text: 'Кнопка сохранена.' });
-  const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
-  const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
-  draft.mode = 'simple';
-  if (!draft.audience) draft.audience = rememberedAudience || 'all';
-  draft.buttons = [{ text: preset.label, url: preset.url }];
-  await setDraft(ctx.from.id, draft, 30 * 60);
-  await renderBroadcastSimpleComposer(ctx, `✅ Кнопка preset: <b>${escapeHtml(preset.label)}</b>`);
-  return;
-}
-
-    if (p.a === 'a:bc_simple_btn_custom') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      await safeEditOrReply(ctx,
-        `✍️ <b>Своя кнопка</b>
-
-Отправь строку в формате:
-<code>Текст кнопки | https://...</code>
-
-Поддерживаются также:
-• <code>t.me/...</code>
-• shortcuts <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard()
-            .text('⬅️ К кнопкам', commsCb.bcSimpleButton())
-            .row()
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Домой', 'a:home')
-        }
-      );
-      await setExpectText(ctx.from.id, { type: 'bc_simple_button_input' }, 30 * 60);
-      return;
-    }
-
-    if (p.a === 'a:bc_simple_btn_clear') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery({ text: 'Кнопка очищена.' });
-      const rememberedAudience = await getBroadcastRememberedAudience(ctx.from.id);
-      const draft = (await getDraft(ctx.from.id)) || { mode: 'simple', audience: rememberedAudience || 'all', buttons: [] };
-      draft.mode = 'simple';
-      if (!draft.audience) draft.audience = rememberedAudience || 'all';
-      draft.buttons = [];
-      await setDraft(ctx.from.id, draft, 30 * 60);
-      await renderBroadcastSimpleComposer(ctx, '✅ Кнопка удалена.');
-      return;
-    }
-
-    if (p.a === 'a:bc_simple_audience') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      await renderBroadcastAudiencePicker(ctx);
-      return;
-    }
-
-    if (p.a === 'a:bc_preview') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      const draft = await getDraft(ctx.from.id);
-      if (!draft || !broadcastDraftHasContent(draft)) {
-        await ctx.answerCallbackQuery({ text: 'Нет контента для preview.' });
-        return;
-      }
-      await ctx.answerCallbackQuery({ text: 'Отправляю preview…' });
-      try {
-        await sendBroadcastPreviewToOperator(ctx, draft);
-        if (String(draft.mode || '') === 'simple') await renderBroadcastSimpleComposer(ctx, '👁 Предпросмотр отправлен в этот чат отдельным сообщением.');
-        else await renderBroadcastPreview(ctx, draft, { banner: '👁 Предпросмотр отправлен в этот чат отдельным сообщением.' });
-      } catch (e) {
-        await safeEditOrReply(ctx, `⚠️ Не удалось отправить предпросмотр: ${escapeHtml(String(e?.message || e).slice(0, 160))}`, {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard().text('⬅️ К редактору', String(draft?.mode || '') === 'simple' ? commsCb.bcStart() : commsCb.bcBtnDone())
-        });
-      }
-      return;
-    }
-
-    if (p.a === 'a:bc_send_q') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const draft = await getDraft(ctx.from.id);
-      if (!draft || !broadcastDraftHasContent(draft)) {
-        await safeEditOrReply(ctx, '⚠️ Нет контента для отправки.', {
-          reply_markup: new InlineKeyboard().text('⬅️ К редактору', commsCb.bcStart()).row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
-        });
-        return;
-      }
-      await renderBroadcastPreview(ctx, draft);
-      return;
-    }
-
-    if (p.a === 'a:bc_simple_clear') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery({ text: 'Черновик очищен.' });
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await setDraft(ctx.from.id, { mode: 'simple', audience: (await getBroadcastRememberedAudience(ctx.from.id)) || 'all', buttons: [] }, 30 * 60);
-      await renderBroadcastSimpleComposer(ctx, '✅ Draft очищен.');
-      return;
-    }
-
-    // Broadcast: pick audience
-    if (p.a === 'a:bc_audience') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const aud = String(p.aud || 'all').toLowerCase();
-      const draft = await getDraft(ctx.from.id);
-      if (!draft || !broadcastDraftHasContent(draft)) {
-        await safeEditOrReply(ctx, '⚠️ Нет черновика. Начни сначала.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
-        });
-        return;
-      }
-      draft.audience = aud;
-      await setDraft(ctx.from.id, draft, 30 * 60);
-      await setBroadcastRememberedAudience(ctx.from.id, aud);
-      if (String(draft.mode || '') === 'simple') await renderBroadcastSimpleComposer(ctx, `✅ Аудитория: <b>${escapeHtml(audienceLabel(aud))}</b>`);
-      else await renderBroadcastPreview(ctx, draft, { banner: `✅ Аудитория: <b>${escapeHtml(audienceLabel(aud))}</b>` });
-      return;
-    }
-
-    // Broadcast: add URL buttons step
-    if (p.a === 'a:bc_buttons') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const draft = await getDraft(ctx.from.id);
-      if (!draft || !broadcastDraftHasContent(draft)) {
-        await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
-        });
-        return;
-      }
-      await safeEditOrReply(ctx,
-        `🔗 <b>Кнопки</b>\n\nМожно двумя способами:\n1) <b>Шаблоны</b> — выбери ниже (Конкурс/Профиль/Оффер)\n2) <b>Вручную</b> — отправь до 3 строк:\n<code>Текст кнопки | ссылка</code>\n\nСсылка может быть любой:\n• <code>https://...</code> (любая внешняя)\n• <code>t.me/...</code>\n• shortcut <code>gw_123</code> / <code>bp_123</code> / <code>offer_123</code>\n\nПример:\n<code>Перейти в X | https://x.com/...</code>\n\nКогда готово — нажми «✅ Готово».`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard()
-            .text('🎁 Конкурс', 'a:bc_tpl_gw')
-            .text('🏷 Профиль', 'a:bc_tpl_bp')
-            .row()
-            .text('🎬 Оффер', 'a:bc_tpl_offer')
-            .text('✅ Готово', commsCb.bcBtnDone())
-            .row()
-            .text('⬅️ Отмена', commsCb.bcStart())
-            .text('⬅️ Админка', 'a:admin_home')
-            .row()
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Домой', 'a:home')
-        }
-      );
-      await setExpectText(ctx.from.id, { type: 'bc_button_input' }, 30 * 60);
-      return;
-    }
-
-    // Broadcast: button templates (gw/bp/offer)
-    if (p.a === 'a:bc_tpl_gw' || p.a === 'a:bc_tpl_bp' || p.a === 'a:bc_tpl_offer') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const draft = await getDraft(ctx.from.id);
-      if (!draft || !broadcastDraftHasContent(draft)) {
-        await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
-        });
-        return;
-      }
-
-      const kind = p.a === 'a:bc_tpl_gw' ? 'gw' : (p.a === 'a:bc_tpl_bp' ? 'bp' : 'offer');
-      const label = kind === 'gw' ? '🎁 Конкурс' : (kind === 'bp' ? '🏷 Профиль бренда' : '🎬 Оффер');
-      const hint = kind === 'gw'
-        ? 'ID конкурса (число), пример: <code>123</code>'
-        : (kind === 'bp' ? 'ID профиля бренда (число), пример: <code>123</code>' : 'ID оффера (число), пример: <code>123</code>');
-
-      await safeEditOrReply(ctx,
-        `🔗 <b>${escapeHtml(label)}</b>\n\nОтправь ${hint}.\n\nМожно указать свой текст кнопки так:\n<code>123 | Мой текст</code>\n\n⬅️ «Назад» вернёт к вводу кнопок.`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard()
-            .text('⬅️ Назад к кнопкам', commsCb.bcButtons())
-            .row()
-            .text('✅ Готово', commsCb.bcBtnDone())
-            .text('⬅️ Отмена', commsCb.bcStart())
-        }
-      );
-      await setExpectText(ctx.from.id, { type: 'bc_btn_tpl_id', kind }, 10 * 60);
-      return;
-    }
-
-    // Broadcast: done adding buttons → go to audience
-    if (p.a === 'a:bc_btn_done') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await renderBroadcastAudiencePicker(ctx);
-      return;
-    }
-
-    // Broadcast: confirm → create job
-    if (p.a === 'a:bc_confirm') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-
-      // Rate-limit: 1 broadcast per 60 sec
-      try {
-        const rl = await rateLimit(k(['rl', 'bc_confirm', ctx.from.id]), { limit: 1, windowSec: 60 });
-        if (!rl.ok && !rl.allowed) {
-          await safeEditOrReply(ctx, `⏳ Подожди минуту перед следующей рассылкой.`, {
-            reply_markup: (() => {
-          const kb = new InlineKeyboard();
-          kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-          return kb;
-        })()
-          });
-          return;
-        }
-      } catch {}
-
-      const u2 = await db.upsertUser(ctx.from.id, ctx.from.username ?? null);
-      const draft = await getDraft(ctx.from.id);
-      if (!draft || !draft.type) {
-        await safeEditOrReply(ctx, '⚠️ Нет черновика.', {
-          reply_markup: new InlineKeyboard().text('📣 Начать заново', commsCb.bcStart()).row().text('⬅️ Админка', 'a:admin_home').row().text('📋 Меню', 'a:menu').text('🏠 Домой', 'a:home')
-        });
-        return;
-      }
-      try {
-        const payload = buildBroadcastPayloadFromDraft(draft);
-        const total = await db.countBroadcastAudience(draft.audience || 'all');
-        const res = await db.createBroadcastIdempotent(
-          {
-            createdByUserId: u2.id,
-            audience: draft.audience || 'all',
-            draftType: payload.draftType || 'text',
-            draftText: payload.draftText || null,
-            draftFileId: payload.draftFileId || null,
-            draftCaption: payload.draftCaption || null,
-            buttonsJson: payload.buttons && payload.buttons.length ? JSON.stringify(payload.buttons) : null,
-            totalCount: total,
-          },
-          {
-            // Keep it snappy in serverless, and avoid queuing waiting connections in Neon.
-            statementTimeoutMs: 8000,
-            // Short window to prevent accidental double-click duplicates.
-            dedupWindowSec: 45,
-          }
-        );
-
-        if (!res?.ok) {
-          const busy = res?.error === 'busy';
-          await safeEditOrReply(ctx, busy ? '⏳ Уже создаю рассылку…' : '⚠️ Не удалось создать рассылку.', {
-            reply_markup: (() => {
-              const kb = new InlineKeyboard();
-              kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-              return kb;
-            })(),
-          });
-          return;
-        }
-
-        const bc = res?.broadcast;
-        if (!bc) {
-          await safeEditOrReply(ctx, '⚠️ Ошибка при создании рассылки.', {
-            reply_markup: (() => {
-              const kb = new InlineKeyboard();
-              kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-              return kb;
-            })(),
-          });
-          return;
-        }
-
-        try { await clearDraft(ctx.from.id); } catch {}
-        const safetyLines = buildBroadcastFirstBatchSafetyText();
-        const successHints = [
-          'Сначала открой карточку и дождись первой партии.',
-          'Потом обнови карточку и проверь отправлено / повтор / пропущено / ошибки.',
-          'Только после этого решай, нужен ли следующий шаг.',
-        ];
-        await safeEditOrReply(
-          ctx,
-          `✅ <b>Рассылка #${bc.id} ${res?.deduped ? 'уже создана' : 'создана'}</b>
-
-📊 Аудитория: <b>${audienceLabel(draft.audience)}</b>
-👥 Получателей: <b>${total}</b>
-📋 Статус: <b>PENDING</b>
-
-<b>Проверка первой партии</b>
-• ${escapeHtml(safetyLines[0])}
-• ${escapeHtml(safetyLines[1])}
-• ${escapeHtml(safetyLines[2])}
-
-<b>Итог доставки</b>
-• отправлено: <b>0</b>
-• повтор / ожидание: <b>0</b>
-• пропущено: <b>0</b>
-• ошибки: <b>0</b>
-• основные причины: —
-• следующее действие: открой карточку, проверь первую партию и обнови данные.
-
-<b>Что делать дальше</b>
-• ${escapeHtml(successHints[0])}
-• ${escapeHtml(successHints[1])}
-• ${escapeHtml(successHints[2])}
-
-⏳ Рассылка будет запущена при следующем тике cron.`,
-          {
-            parse_mode: 'HTML',
-            reply_markup: (() => {
-              const kb = new InlineKeyboard();
-              kb.text(`📊 Открыть #${bc.id}`, commsCb.bcView(bc.id)).text('📣 К списку', commsCb.bcList(0)).row();
-              kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-              return kb;
-            })(),
-          }
-        );
-      } catch (err) {
-        console.error('[ADMIN] broadcast confirm error', err);
-        await safeEditOrReply(ctx, '⚠️ Ошибка при создании рассылки.', {
-          reply_markup: (() => {
-          const kb = new InlineKeyboard();
-          kbAdminFooter(kb, '⬅️ Операции', 'a:admin_ops');
-          return kb;
-        })()
-        });
-      }
-      return;
-    }
-
-    // Broadcast: cancel
-    if (p.a === 'a:bc_cancel') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      try { await clearDraft(ctx.from.id); } catch {}
-      await renderAdminHome(ctx);
-      return;
-    }
-
-    // Broadcast: list active/recent broadcasts
-    if (p.a === 'a:bc_list') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      await renderBroadcastList(ctx, Number(p.p || 0));
-      return;
-    }
-
-    // Broadcast: view progress of specific broadcast
-    if (p.a === 'a:bc_view') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      await renderBroadcastView(ctx, Number(p.id || 0));
-      return;
-    }
-
-
-    // Broadcast: blocked / hard-skip recipients (report)
-    if (p.a === 'a:bc_blocked') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const page = Math.max(0, Number(p.p || 0) || 0);
-      const tab = String(p.t || 'hard');
-      await renderBroadcastBlocked(ctx, Number(p.id || 0), page, tab);
-      return;
-    }
-
-    // Broadcast: pause
-    if (p.a === 'a:bc_pause') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const bc = await db.getBroadcast(Number(p.id || 0));
-      if (bc && (bc.status === 'RUNNING' || bc.status === 'PENDING')) {
-        await db.updateBroadcast(bc.id, { status: 'PAUSED' });
-        await ctx.answerCallbackQuery({ text: '⏸ Рассылка приостановлена.' });
-      } else {
-        await ctx.answerCallbackQuery({ text: 'Нельзя приостановить.' });
-      }
-      await renderBroadcastView(ctx, Number(p.id || 0));
-      return;
-    }
-
-    // Broadcast: resume
-    if (p.a === 'a:bc_resume') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const bc = await db.getBroadcast(Number(p.id || 0));
-      if (bc && bc.status === 'PAUSED') {
-        await db.updateBroadcast(bc.id, { status: 'RUNNING' });
-        await ctx.answerCallbackQuery({ text: '▶️ Рассылка возобновлена.' });
-      } else {
-        await ctx.answerCallbackQuery({ text: 'Нельзя возобновить.' });
-      }
-      await renderBroadcastView(ctx, Number(p.id || 0));
-      return;
-    }
-
-    // Broadcast: stop
-    if (p.a === 'a:bc_stop') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const bc = await db.getBroadcast(Number(p.id || 0));
-      if (bc && (bc.status === 'RUNNING' || bc.status === 'PAUSED' || bc.status === 'PENDING')) {
-        await db.updateBroadcast(bc.id, { status: 'STOPPED', finished_at: new Date().toISOString() });
-        await ctx.answerCallbackQuery({ text: '🛑 Рассылка остановлена.' });
-      } else {
-        await ctx.answerCallbackQuery({ text: 'Нельзя остановить.' });
-      }
-      await renderBroadcastView(ctx, Number(p.id || 0));
-      return;
-    }
-
     // =====================================================
     // 📜 Admin Audit Log: search + filters + export
     // =====================================================
@@ -32928,18 +32121,6 @@ if (p.a === 'a:bc_simple_btn_preset') {
       await db.removeNetworkModerator(Number(p.uid));
       try { await invalidateRoleFlagsCache(Number(p.uid)); } catch {}
       await renderAdminModerators(ctx);
-      return;
-    }
-
-    // Admin: Broadcast delivery mode (QStash fan-out)
-    if (p.a === 'a:admin_bc_qstash_toggle') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      const control = await getOperatorControlSnapshot({ limit: 1 });
-      const cur = !!control?.byId?.broadcast_qstash_fanout?.value;
-      await setOperatorControlToggle('broadcast_qstash_fanout', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
-      await renderAdminSystem(ctx);
       return;
     }
 
@@ -37126,6 +36307,81 @@ ${actionHint}`;
       logger,
     };
 
+    const broadcastDomainDeps = {
+      InlineKeyboard,
+      commsCb,
+      db,
+      logger,
+      isAdmin: (c) => isSuperAdminTg(c?.from?.id),
+      key: k,
+      rateLimit,
+      safeEditOrReply,
+      clearExpectText,
+      setExpectText,
+      clearDraft,
+      getDraft,
+      setDraft,
+      renderBroadcastSimpleComposer,
+      renderBroadcastSimpleButtonPicker,
+      broadcastSimpleButtonPresets,
+      getBroadcastRememberedAudience,
+      setBroadcastRememberedAudience,
+      renderBroadcastAudiencePicker,
+      broadcastDraftHasContent,
+      sendBroadcastPreviewToOperator,
+      renderBroadcastPreview,
+      buildBroadcastPayloadFromDraft,
+      audienceLabel,
+      buildBroadcastFirstBatchSafetyText,
+      renderBroadcastList,
+      renderBroadcastView,
+      renderBroadcastBlocked,
+      renderAdminHome,
+      renderAdminSystem,
+      getOperatorControlSnapshot,
+      setOperatorControlToggle,
+      kbAdminFooter,
+      escapeHtml,
+    };
+
+    const navigationSharedDeps = {
+      InlineKeyboard,
+      cfg: CFG,
+      uiModes: UI_MODES,
+      db,
+      redis,
+      key: k,
+      normalizeUiMode,
+      disableBrandManagerState,
+      setUiMode,
+      trackAcqRole,
+      getRoleFlags,
+      getRoleFlagsCached,
+      getCuratorMode,
+      setCuratorMode,
+      getBrandManagerMode,
+      setBrandManagerMode,
+      getBmActiveBrand,
+      setBmActiveBrand,
+      resolveUiMode,
+      safeEditOrReply,
+      navKb,
+      curatorModeMenuKb,
+      renderMainMenu,
+      renderRoleHub,
+      renderRoleSelection,
+      renderHomeHub,
+      maybeSendBanner,
+      makeUiCtxForMessage,
+      clearExpectText,
+      clearSupportFollowupContext,
+      markHomeHubHintSeen,
+    };
+
+    const telegramUxSharedDeps = {
+      InlineKeyboard,
+    };
+
     await dispatchCallback(ctx, p, u, {
       legacy,
       logger,
@@ -37167,6 +36423,42 @@ ${actionHint}`;
           p2,
           u2,
           giveawayDomainDeps
+        ),
+        broadcast_composer: (ctx2, p2, u2) => handleBroadcastComposerCallback(
+          ctx2,
+          p2,
+          u2,
+          broadcastDomainDeps
+        ),
+        broadcast_audience: (ctx2, p2, u2) => handleBroadcastAudienceCallback(
+          ctx2,
+          p2,
+          u2,
+          broadcastDomainDeps
+        ),
+        broadcast_dispatch: (ctx2, p2, u2) => handleBroadcastDispatchCallback(
+          ctx2,
+          p2,
+          u2,
+          broadcastDomainDeps
+        ),
+        broadcast_operations: (ctx2, p2, u2) => handleBroadcastOperationsCallback(
+          ctx2,
+          p2,
+          u2,
+          broadcastDomainDeps
+        ),
+        navigation_shared: (ctx2, p2, u2) => handleNavigationCallback(
+          ctx2,
+          p2,
+          u2,
+          navigationSharedDeps
+        ),
+        telegram_ux_shared: (ctx2, p2, u2) => handleTelegramUxCallback(
+          ctx2,
+          p2,
+          u2,
+          telegramUxSharedDeps
         ),
       },
     });

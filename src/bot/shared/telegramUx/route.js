@@ -1,0 +1,12 @@
+import { CALLBACK_PHASE, CALLBACK_ROUTE } from '../../router/callbackContracts.js';
+import { TELEGRAM_UX_CALLBACK_ACTIONS } from './actions.js';
+
+export const TELEGRAM_UX_SHARED_ROUTE_DEFINITION = Object.freeze({
+  id: CALLBACK_ROUTE.TELEGRAM_UX_SHARED,
+  phase: CALLBACK_PHASE.POST_USER,
+  actions: TELEGRAM_UX_CALLBACK_ACTIONS,
+});
+
+export const TELEGRAM_UX_CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
+  TELEGRAM_UX_SHARED_ROUTE_DEFINITION,
+]);

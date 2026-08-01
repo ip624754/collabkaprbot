@@ -16,6 +16,7 @@ const web = read('scripts/admin-web.js');
 const models = read('src/lib/adminWeb/readModels.js');
 const telegram = read('src/lib/adminWeb/telegram.js');
 const auth = read('api/admin-web-auth.js');
+const broadcastActions = read('src/bot/domains/broadcasts/actions.js');
 
 function sliceBetween(source, start, end) {
   const from = source.indexOf(start);
@@ -128,7 +129,7 @@ for (const action of [
   'a:admin_web_login_toggle',
   'a:hs_home',
 ]) {
-  assert.ok(bot.includes(`'${action}`) || bot.includes(`\`${action}`), `Missing callback identity: ${action}`);
+  assert.ok(bot.includes(`'${action}`) || bot.includes(`\`${action}`) || broadcastActions.includes(`'${action}'`), `Missing callback identity: ${action}`);
 }
 expectRegistry('a:admin_outbox', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
 expectRegistry('a:admin_umsg_tpls', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });

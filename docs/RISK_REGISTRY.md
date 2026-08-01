@@ -1,3 +1,15 @@
+# STEP590D — Active Architecture Risk Update
+
+| ID | Risk | Severity | State | Required control |
+|---|---|---:|---|---|
+| R-40 | Shared navigation extraction changes role-mode state or input-mode escape semantics | HIGH | SOURCE MITIGATED / PROD OPEN | executable parity tests, role-gate source contract, live dual-role navigation canary |
+| R-41 | Legacy callback aliases drift between runtime and consistency tooling | MEDIUM | SOURCE MITIGATED / PROD OPEN | one canonical frozen alias map consumed by runtime and QA, old-message production canary |
+| R-42 | Shared Telegram receipt handling removes required recovery controls | MEDIUM | SOURCE MITIGATED / PROD OPEN | exact admin-receipt keyboard tests, service-message acknowledgement canary |
+
+**Release gate:** R-40 through R-42 remain open until STEP590D deployment verifies Home/Menu, role switching, Guide, menu-push, receipt acknowledgement and at least one old-message alias in production.
+
+---
+
 # STEP590B — Active Architecture Risk Update
 
 | ID | Risk | Severity | State | Required control |
@@ -289,3 +301,14 @@ Residual risk:
 - Source verification: dedicated domain/router/critical tests and source preflight PASS; portable spine PASS with temporary dependency shims.
 - Runtime verification required: bounded participant/owner canary; real draw only on a disposable or explicitly approved giveaway.
 - Residual risk: remaining giveaway sponsor/publish/results/reminder callbacks still reside in legacy ownership and will be extracted separately.
+
+## Current STEP590C4 assessment
+
+- Change type: critical broadcast callback transport/composition extraction; no schema, ENV or delivery-state change.
+- Primary risks addressed: route shadowing, duplicate ownership, direct-send duplication, implicit dispatch and monolith blast radius.
+- Runtime blast radius: composer, audience selection, confirmation/cancel, broadcast list/view/blocked diagnostics, pause/resume/stop and QStash operator control.
+- Canonical correctness boundary: idempotent broadcast-record creation plus existing delivery receipt/safety/worker paths remain unchanged.
+- Rollback: code rollback to STEP590C3; preserve broadcast jobs, recipient logs, delivery receipts, QStash/cron evidence and unknown-state records before rollback.
+- Source verification: 161 domain assertions, 2,440 router assertions, 35 broadcast-critical assertions, source preflight and portable spine PASS; dependency-backed runs are shim-assisted where declared.
+- Runtime verification required: bounded composer/preview/audience/cancel/list/view/blocked canary with no live send or fanout mutation by default.
+- Residual risk: target enumeration, worker execution, delivery reconciliation and some communications/admin flows remain outside this bounded callback domain and will be decomposed in later STEPs.

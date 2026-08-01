@@ -1,0 +1,11 @@
+action,previous_owner,new_owner,phase
+a:ui_mode_set,legacy,navigation_shared,post_user
+a:guide,legacy,navigation_shared,post_user
+a:menu_push,legacy,navigation_shared,post_user
+a:menu,legacy,navigation_shared,post_user
+a:role_pick,legacy,navigation_shared,post_user
+a:home,legacy,navigation_shared,post_user
+a:home_hint_ack,legacy,navigation_shared,post_user
+a:home_mode,legacy,navigation_shared,post_user
+a:main_menu,legacy,navigation_shared,post_user
+a:usr_ack,legacy,telegram_ux_shared,post_user

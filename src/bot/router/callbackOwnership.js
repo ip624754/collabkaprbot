@@ -2,6 +2,9 @@ import { ACTION_REGISTRY } from '../actionRegistry.js';
 import { ADMIN_AUTH_CALLBACK_ROUTE_DEFINITIONS } from '../domains/adminAuth/route.js';
 import { PAYMENT_CALLBACK_ROUTE_DEFINITIONS } from '../domains/payments/route.js';
 import { GIVEAWAY_CALLBACK_ROUTE_DEFINITIONS } from '../domains/giveaways/route.js';
+import { BROADCAST_CALLBACK_ROUTE_DEFINITIONS } from '../domains/broadcasts/route.js';
+import { NAVIGATION_CALLBACK_ROUTE_DEFINITIONS } from '../shared/navigation/route.js';
+import { TELEGRAM_UX_CALLBACK_ROUTE_DEFINITIONS } from '../shared/telegramUx/route.js';
 import { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
@@ -10,6 +13,9 @@ export const CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
   ...ADMIN_AUTH_CALLBACK_ROUTE_DEFINITIONS,
   ...PAYMENT_CALLBACK_ROUTE_DEFINITIONS,
   ...GIVEAWAY_CALLBACK_ROUTE_DEFINITIONS,
+  ...BROADCAST_CALLBACK_ROUTE_DEFINITIONS,
+  ...NAVIGATION_CALLBACK_ROUTE_DEFINITIONS,
+  ...TELEGRAM_UX_CALLBACK_ROUTE_DEFINITIONS,
 ]);
 
 function assertRouteDefinition(definition) {

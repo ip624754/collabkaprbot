@@ -1,0 +1,12 @@
+import { CALLBACK_PHASE, CALLBACK_ROUTE } from '../../router/callbackContracts.js';
+import { NAVIGATION_CALLBACK_ACTIONS } from './actions.js';
+
+export const NAVIGATION_SHARED_ROUTE_DEFINITION = Object.freeze({
+  id: CALLBACK_ROUTE.NAVIGATION_SHARED,
+  phase: CALLBACK_PHASE.POST_USER,
+  actions: NAVIGATION_CALLBACK_ACTIONS,
+});
+
+export const NAVIGATION_CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
+  NAVIGATION_SHARED_ROUTE_DEFINITION,
+]);

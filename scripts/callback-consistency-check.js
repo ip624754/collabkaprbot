@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { ACTION_REGISTRY } from '../src/bot/actionRegistry.js';
 import { CALLBACK_OWNERSHIP } from '../src/bot/router/callbackOwnership.js';
+import { CALLBACK_ACTION_ALIASES } from '../src/bot/shared/telegramUx/actions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,18 +72,8 @@ function extractExactHandlers(text) {
   return handled;
 }
 
-function extractAliasMap(botText) {
-  const out = new Map();
-  const block = botText.match(/const _aliasA = \{([\s\S]*?)\n\s*\};/);
-  if (!block) return out;
-  const re = /'([^']+)'\s*:\s*'([^']+)'/g;
-  let m;
-  while ((m = re.exec(block[1])) !== null) {
-    const from = String(m[1] || '');
-    const to = String(m[2] || '');
-    if (from.startsWith('a:') && to.startsWith('a:')) out.set(from, to);
-  }
-  return out;
+function extractAliasMap() {
+  return new Map(Object.entries(CALLBACK_ACTION_ALIASES || {}));
 }
 
 const botFiles = walkJsFiles(BOT_ROOT);
@@ -100,7 +91,7 @@ for (const abs of botFiles) {
   const text = readText(abs);
   for (const action of extractExactHandlers(text)) exactHandled.add(action);
 }
-const aliasMap = extractAliasMap(botText);
+const aliasMap = extractAliasMap();
 const extractedOwned = new Set(
   Object.values(CALLBACK_OWNERSHIP || {})
     .filter((entry) => entry?.extracted)

@@ -35,8 +35,8 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 29, 'STEP590C3 must extract twenty-nine exact actions');
-equal(summary.legacy, registryKeys.length - 29, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 67, 'STEP590D must extract sixty-seven exact actions');
+equal(summary.legacy, registryKeys.length - 67, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
@@ -44,7 +44,13 @@ equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_PARTICIPANT], 2, 'giveaway partici
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_LIFECYCLE], 5, 'giveaway lifecycle owns five actions');
 equal(summary.byRoute[CALLBACK_ROUTE.PAYMENT_PURCHASE], 6, 'payment purchase owns six actions');
 equal(summary.byRoute[CALLBACK_ROUTE.PAYMENT_ADMIN], 10, 'payment admin owns ten actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 29, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.BROADCAST_COMPOSER], 17, 'broadcast composer owns seventeen actions');
+equal(summary.byRoute[CALLBACK_ROUTE.BROADCAST_AUDIENCE], 2, 'broadcast audience owns two actions');
+equal(summary.byRoute[CALLBACK_ROUTE.BROADCAST_DISPATCH], 2, 'broadcast dispatch owns two actions');
+equal(summary.byRoute[CALLBACK_ROUTE.BROADCAST_OPERATIONS], 7, 'broadcast operations owns seven actions');
+equal(summary.byRoute[CALLBACK_ROUTE.NAVIGATION_SHARED], 9, 'shared navigation owns nine actions');
+equal(summary.byRoute[CALLBACK_ROUTE.TELEGRAM_UX_SHARED], 1, 'shared Telegram UX owns one action');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 67, 'legacy count must be exact');
 
 for (const action of registryKeys) {
   const owner = getCallbackOwnership(action);
@@ -81,7 +87,29 @@ for (const action of ['a:admin_pay_accept_toggle', 'a:admin_pay_auto_toggle', 'a
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.PAYMENT_ADMIN, `${action} payment admin owner`);
   equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} payment admin phase`);
 }
-equal(getCallbackOwnership('a:menu').routeId, CALLBACK_ROUTE.LEGACY, 'non-extracted action stays legacy');
+for (const action of ['a:bc_start', 'a:bc_start_adv', 'a:bc_simple_text', 'a:bc_simple_media', 'a:bc_simple_media_clear', 'a:bc_simple_button', 'a:bc_simple_btn_preset', 'a:bc_simple_btn_custom', 'a:bc_simple_btn_clear', 'a:bc_preview', 'a:bc_send_q', 'a:bc_simple_clear', 'a:bc_buttons', 'a:bc_tpl_gw', 'a:bc_tpl_bp', 'a:bc_tpl_offer', 'a:bc_btn_done']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BROADCAST_COMPOSER, `${action} broadcast composer owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} broadcast composer phase`);
+}
+for (const action of ['a:bc_simple_audience', 'a:bc_audience']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BROADCAST_AUDIENCE, `${action} broadcast audience owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} broadcast audience phase`);
+}
+for (const action of ['a:bc_confirm', 'a:bc_cancel']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BROADCAST_DISPATCH, `${action} broadcast dispatch owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} broadcast dispatch phase`);
+}
+for (const action of ['a:bc_list', 'a:bc_view', 'a:bc_blocked', 'a:bc_pause', 'a:bc_resume', 'a:bc_stop', 'a:admin_bc_qstash_toggle']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.BROADCAST_OPERATIONS, `${action} broadcast operations owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} broadcast operations phase`);
+}
+for (const action of ['a:ui_mode_set', 'a:guide', 'a:menu_push', 'a:menu', 'a:role_pick', 'a:home', 'a:home_hint_ack', 'a:home_mode', 'a:main_menu']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.NAVIGATION_SHARED, `${action} navigation owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} navigation phase`);
+}
+equal(getCallbackOwnership('a:usr_ack').routeId, CALLBACK_ROUTE.TELEGRAM_UX_SHARED, 'user ack shared UX owner');
+equal(getCallbackOwnership('a:usr_ack').phase, CALLBACK_PHASE.POST_USER, 'user ack shared UX phase');
+equal(getCallbackOwnership('a:support').routeId, CALLBACK_ROUTE.LEGACY, 'non-extracted action stays legacy');
 equal(getCallbackOwnership('a:not_registered'), null, 'unknown action has no owner');
 
 assert.throws(
@@ -277,10 +305,36 @@ const paymentAdminResult = await dispatchOwnedCallback({
 equal(paymentAdminResult.status, CALLBACK_DISPATCH_STATUS.HANDLED, 'payment admin executable owner handles callback');
 equal(paymentAdminCalls, 1, 'payment admin owner called exactly once');
 
+for (const [routeId, action] of [
+  [CALLBACK_ROUTE.BROADCAST_COMPOSER, 'a:bc_start'],
+  [CALLBACK_ROUTE.BROADCAST_AUDIENCE, 'a:bc_audience'],
+  [CALLBACK_ROUTE.BROADCAST_DISPATCH, 'a:bc_confirm'],
+  [CALLBACK_ROUTE.BROADCAST_OPERATIONS, 'a:bc_list'],
+]) {
+  let calls = 0;
+  const result = await dispatchOwnedCallback({
+    phase: CALLBACK_PHASE.POST_USER,
+    ctx: {},
+    p: { a: action },
+    u: { id: 17 },
+    handlers: {
+      [routeId]: async (_ctx, p, u) => {
+        calls += 1;
+        equal(p.a, action, `${routeId} action reaches exact owner`);
+        equal(u.id, 17, `${routeId} hydrated user reaches exact owner`);
+        return true;
+      },
+    },
+    final: true,
+  });
+  equal(result.status, CALLBACK_DISPATCH_STATUS.HANDLED, `${routeId} executable owner handles callback`);
+  equal(calls, 1, `${routeId} owner called exactly once`);
+}
+
 let legacyCalls = 0;
 const legacyHandled = await dispatchOwnedCallback({
   phase: CALLBACK_PHASE.POST_USER,
-  p: { a: 'a:menu' },
+  p: { a: 'a:support' },
   legacy: async () => {
     legacyCalls += 1;
     return undefined;
@@ -292,7 +346,7 @@ equal(legacyCalls, 1, 'legacy handler called exactly once');
 
 const legacyUnknown = await dispatchOwnedCallback({
   phase: CALLBACK_PHASE.POST_USER,
-  p: { a: 'a:menu' },
+  p: { a: 'a:support' },
   legacy: async () => false,
   final: true,
 });

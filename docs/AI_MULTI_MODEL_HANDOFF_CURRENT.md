@@ -1,24 +1,25 @@
-# AI Multi-Model Handoff — STEP590C3 Current Truth
+# AI Multi-Model Handoff — STEP590D Current Truth
 
-**Baseline:** STEP590C3 source architecture package on exact STEP590C2
-**Status:** SOURCE READY / PRODUCTION GIVEAWAY CALLBACK CANARY PENDING
+**Baseline:** STEP590D source architecture package on exact STEP590C4
+**Status:** SOURCE READY / PRODUCTION NAVIGATION CANARY PENDING
 
 ## Verified
 
-- bounded giveaway domain exists;
-- 11 giveaway actions have executable domain ownership;
-- seven critical actions no longer exist as inline legacy branches;
-- manual draw delegates to the canonical atomic DB function;
-- callback ownership is 29 extracted / 531 legacy / 0 unresolved;
-- source and critical regression evidence is recorded in the STEP590C3 audit report.
+- navigation and shared Telegram UX bounded modules exist;
+- nine navigation actions and one receipt-ack action have executable ownership;
+- corresponding inline legacy branches are removed from `bot.js`;
+- seven legacy aliases are centralized and consumed by runtime plus callback consistency tooling;
+- callback ownership is 67 extracted / 493 legacy / 0 unresolved;
+- all previously extracted domain suites and critical portable suites remain green under the stated truth boundary;
+- no SQL, ENV or business-core change was introduced.
 
 ## Not verified
 
 - clean dependency installation in the implementation environment;
-- Vercel deployment of STEP590C3;
-- live participant/check/end/draw-confirmation canary;
-- real production `a:gw_draw_do` execution.
+- Vercel deployment of STEP590D;
+- live Home/Menu/mode/Guide/receipt/alias canary;
+- Telegram phone-layout parity for all affected screens.
 
 ## Next
 
-After operator QA and bounded canary, implement `STEP590C4 — Critical Broadcast Callback Domain Extraction`.
+After operator QA and bounded canary, implement `STEP590E1 — Applications & Leads`.

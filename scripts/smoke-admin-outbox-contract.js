@@ -39,7 +39,7 @@ const renderView = extractBetween(
 const callbacks = extractBetween(
   botSource,
   '    // --- Admin: Outbox (Redis-only) (STEP193) ---',
-  '\n    // Broadcast: list active/recent broadcasts'
+  '\n    // =====================================================\n    // 📜 Admin Audit Log: search + filters + export'
 );
 
 assert.ok(renderList.includes('📤 <b>Исходящие</b>'), 'Outbox title must stay stable');
