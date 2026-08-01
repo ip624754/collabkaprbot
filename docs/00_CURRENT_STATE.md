@@ -1,3 +1,22 @@
+## STEP590E5C — Admin Communications, Notices & Outbox Domain Extraction (2026-08-02)
+
+**Current source artifact baseline:** operator-pushed STEP590E5B commit `fe20572`.
+
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY AND DEPLOY GATE PENDING;
+- new bounded domain: `src/bot/domains/adminCommunications/`;
+- newly extracted callback actions: 26 total, split into `admin_communications` (1), `admin_notice_management` (9), `admin_outbox` (7), and `admin_message_templates` (9);
+- cumulative ownership: 433 extracted, 127 legacy, 7 aliases, 0 unresolved;
+- admin communication hub, notice draft/publish controls, outbox review/clear/repeat/template conversion and reusable direct-message templates preserve existing DB/Redis/Telegram behavior;
+- user-facing `a:notice` remains legacy-owned and outside the admin communications boundary;
+- STEP590E5B direct-message send actions (`a:adm_umsg`, `a:adm_umsg_free`, `a:adm_umsg_send`) remain admin-users owned;
+- SQL/ENV/API-route/callback-key/action-guard/product-copy changes: none;
+- package: `1.3.29`;
+- verified QA: 184 E5C assertions, 2,965 router assertions, 560/560 registry and all prior extracted-domain suites PASS;
+- full `preflight:source` and portable critical spine 6/6 PASS under temporary execution-only shims; no shim or `node_modules` remains in the final tree;
+- clean `npm ci`/`npm audit`, Git commit/push, Vercel deployment and bounded Telegram communications smoke remain operator-side;
+- next bounded architecture step after acceptance: STEP590E5D Admin Operations, System & Founder Controls.
+
+
 ## STEP590E5B — Admin Users, Support & Moderator Governance Domain Extraction (2026-08-02)
 
 **Current source artifact baseline:** operator-pushed STEP590E5A commit `acbe16d`.

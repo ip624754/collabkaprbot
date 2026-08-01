@@ -1,3 +1,16 @@
+## STEP590E5C CURRENT HANDOFF — Admin Communications, Notices & Outbox
+
+- Baseline: operator-pushed STEP590E5B commit `fe20572`.
+- Result: package `1.3.29`; new `src/bot/domains/adminCommunications/`; 26 live callbacks extracted.
+- Ownership: 433 extracted / 127 legacy / 7 aliases / 0 unresolved.
+- Routes: `admin_communications` 1, `admin_notice_management` 9, `admin_outbox` 7, `admin_message_templates` 9.
+- QA: E5C 184 assertions PASS; router 2,965 PASS; all prior domain suites PASS; source preflight and portable spine 6/6 PASS under temporary execution-only shims.
+- Contracts unchanged: no SQL, ENV, API route, callback key, action guard or visible-copy change.
+- Explicit exclusions: user-facing `a:notice`, STEP590E5B direct-message send actions, broadcast delivery, payment-admin and system/founder controls remain outside this STEP.
+- Operator gate: `npm.cmd ci`, `npm.cmd audit`, E5C tests, critical spine, preflight, commit/push, Vercel Ready and bounded admin communications smoke.
+- Next: STEP590E5D Admin Operations, System & Founder Controls.
+
+
 ## STEP590E5B CURRENT HANDOFF — Admin Users, Support & Moderator Governance
 
 - Baseline: operator-pushed STEP590E5A commit `acbe16d`.

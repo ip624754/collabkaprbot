@@ -35,8 +35,8 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 407, 'STEP590E5B must extract four hundred seven exact actions');
-equal(summary.legacy, registryKeys.length - 407, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 433, 'STEP590E5C must extract four hundred thirty-three exact actions');
+equal(summary.legacy, registryKeys.length - 433, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
@@ -74,7 +74,7 @@ equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_OPERATIONS], 16, 'curator operation
 equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_MANAGEMENT], 7, 'curator management owns seven actions');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_REPORTS], 6, 'moderation reports own six actions');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_VERIFICATION], 4, 'moderation verification owns four actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 407, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 433, 'legacy count must be exact');
 
 for (const action of ['a:cur_ws', 'a:cur_ws_off', 'a:net_q', 'a:net_set', 'a:setup', 'a:ws_disconnect_do', 'a:ws_disconnect_q', 'a:ws_history', 'a:ws_history_export', 'a:ws_leads', 'a:ws_list', 'a:ws_list_inactive', 'a:ws_open', 'a:ws_pro', 'a:ws_pro_pin', 'a:ws_pro_pin_clear', 'a:ws_pro_pin_set', 'a:ws_reconnect_do', 'a:ws_reconnect_q', 'a:ws_settings', 'a:ws_toggle_cur', 'a:ws_toggle_net']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.WORKSPACE_CONTROL, `${action} workspace control owner`);

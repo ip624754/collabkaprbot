@@ -1,3 +1,15 @@
+# STEP590E5C — Active Architecture Risk Update
+
+| ID | Risk | Severity | State | Required control |
+|---|---|---:|---|---|
+| R-66 | Notice/outbox extraction changes audience, draft or visible publication semantics | HIGH | SOURCE MITIGATED / PROD OPEN | preserve canonical audience/expiry/CTA helpers, draft truth, explicit publish path, executable route parity and bounded production smoke |
+| R-67 | Outbox repeat/clear/template conversion duplicates delivery or destroys unresolved operator evidence | HIGH | SOURCE MITIGATED / PROD OPEN | preserve DB outbox truth, confirmation-before-clear, canonical repeat/template helpers, no delivery-engine rewrite |
+| R-68 | Admin message-template extraction weakens super-admin authorization or captures user-facing notice/message actions | HIGH | SOURCE MITIGATED / PROD OPEN | exact owner registry, super-admin guard before mutation, explicit exclusion of `a:notice` and E5B direct-message send actions |
+
+**Release gate:** R-66 through R-68 remain production-open until the exact STEP590E5C artifact is dependency-gated, deployed and exercised through bounded communications home, notice draft/view, outbox read-only/status and template-list paths. Destructive outbox clear or live notice publication is not mandatory unless explicitly approved.
+
+---
+
 # STEP590E3B — Active Architecture Risk Update
 
 | ID | Risk | Severity | State | Required control |

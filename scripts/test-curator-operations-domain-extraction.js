@@ -172,8 +172,8 @@ assertions += 1;
 }
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 407, 'STEP590E5B cumulative extracted ownership');
-equal(summary.legacy, 153, 'STEP590E5B cumulative legacy ownership');
+equal(summary.extracted, 433, 'STEP590E5C cumulative extracted ownership');
+equal(summary.legacy, 127, 'STEP590E5C cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_OPERATIONS], 16, 'curator operations route count');
 equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_MANAGEMENT], 7, 'curator management route count');
 equal(getCallbackOwnership('a:cur_ws').routeId, CALLBACK_ROUTE.WORKSPACE_CONTROL, 'curator workspace remains workspace-control owned');

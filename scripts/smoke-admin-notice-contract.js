@@ -33,6 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const noticeDomainSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'adminCommunications', 'noticeCallbacks.js'), 'utf8');
 
 const renderAdminNoticeSrc = extractBetween(
   botSource,
@@ -40,11 +41,7 @@ const renderAdminNoticeSrc = extractBetween(
   '\n\nasync function renderAdminQStashStatus(ctx) {'
 );
 
-const noticeCallbackSrc = extractBetween(
-  botSource,
-  "    // --- Admin: System Notice (Redis-only, no broadcast) ---",
-  "\n\n    // --- Admin: Gift Subscription ---"
-);
+const noticeCallbackSrc = noticeDomainSource;
 
 const noticeExpectSrc = extractBetween(
   botSource,

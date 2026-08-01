@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
-const [bot, actions, callbacks, route, ownership, contracts] = await Promise.all([
+const [bot, actions, callbacks, route, ownership, contracts, communicationsActions, communicationsCallbacks] = await Promise.all([
   read('src/bot/bot.js'),
   read('src/bot/domains/adminOperations/actions.js'),
   Promise.all([
@@ -15,6 +15,11 @@ const [bot, actions, callbacks, route, ownership, contracts] = await Promise.all
   read('src/bot/domains/adminOperations/route.js'),
   read('src/bot/router/callbackOwnership.js'),
   read('src/bot/router/callbackContracts.js'),
+  read('src/bot/domains/adminCommunications/actions.js'),
+  Promise.all([
+    read('src/bot/domains/adminCommunications/templateCallbacks.js'),
+    read('src/bot/domains/adminCommunications/outboxCallbacks.js'),
+  ]).then((parts) => parts.join('\n')),
 ]);
 
 const users = [
@@ -60,5 +65,9 @@ assert.match(callbacks, /markSupportThreadOperatorReply/);
 assert.doesNotMatch(actions, /a:adm_umsg_tpl/);
 assert.doesNotMatch(actions, /a:admin_umsg_tpls/);
 assert.doesNotMatch(actions, /a:admin_outbox/);
-assert.match(bot, /if \(p\.a === 'a:adm_umsg_tpl'\)/);
+assert.match(communicationsActions, /a:adm_umsg_tpl/);
+assert.match(communicationsActions, /a:admin_umsg_tpls/);
+assert.match(communicationsActions, /a:admin_outbox/);
+assert.match(communicationsCallbacks, /if \(p\.a === 'a:adm_umsg_tpl'\)/);
+assert.doesNotMatch(bot, /if \(p\.a === 'a:adm_umsg_tpl'\)/);
 console.log('PASS STEP590E5B admin users/support/moderator governance bounded-domain source contract');

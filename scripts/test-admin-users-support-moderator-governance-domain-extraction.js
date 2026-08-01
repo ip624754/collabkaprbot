@@ -247,14 +247,14 @@ assertions += 1;
 }
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 407, 'STEP590E5B cumulative extracted ownership');
-equal(summary.legacy, 153, 'STEP590E5B cumulative legacy ownership');
+equal(summary.extracted, 433, 'STEP590E5C cumulative extracted ownership');
+equal(summary.legacy, 127, 'STEP590E5C cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_USERS], 20, 'admin users route count');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_GIFTS], 8, 'admin gifts route count');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_SUPPORT], 7, 'admin support route count');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_MODERATOR_GOVERNANCE], 3, 'admin moderator governance route count');
-equal(getCallbackOwnership('a:adm_umsg_tpl').routeId, CALLBACK_ROUTE.LEGACY, 'message template selection remains legacy for STEP590E5C');
-equal(getCallbackOwnership('a:admin_umsg_tpls').routeId, CALLBACK_ROUTE.LEGACY, 'admin message templates remain legacy for STEP590E5C');
-equal(getCallbackOwnership('a:admin_outbox').routeId, CALLBACK_ROUTE.LEGACY, 'admin outbox remains legacy for STEP590E5C');
+equal(getCallbackOwnership('a:adm_umsg_tpl').routeId, CALLBACK_ROUTE.ADMIN_MESSAGE_TEMPLATES, 'message template selection extracted in STEP590E5C');
+equal(getCallbackOwnership('a:admin_umsg_tpls').routeId, CALLBACK_ROUTE.ADMIN_MESSAGE_TEMPLATES, 'admin message templates extracted in STEP590E5C');
+equal(getCallbackOwnership('a:admin_outbox').routeId, CALLBACK_ROUTE.ADMIN_OUTBOX, 'admin outbox extracted in STEP590E5C');
 
 console.log(`PASS STEP590E5B admin users/support/moderator governance extraction tests (${assertions} assertions)`);
