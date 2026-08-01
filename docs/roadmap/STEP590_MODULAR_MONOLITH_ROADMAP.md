@@ -18,7 +18,7 @@
 | STEP590A | Architecture baseline, ownership inventories, dependency rules | None | 9/20 | Reproducible map and approved sequence |
 | STEP590B | Executable callback router and ownership registry | Implemented; production canary pending | 15/20 | 560/560 unique owners; executable reachability PASS |
 | STEP590C1 | Admin-auth challenge and web-login control extraction | Implemented; production canary pending | 16/20 | Both phase-specific routes reachable; auth and ownership suites PASS |
-| STEP590C2 | Payment callback extraction | Yes, critical | 18/20 | Payment semantics and X1 suite unchanged |
+| STEP590C2 | Payment callback extraction | Implemented; production canary pending | 17/20 | Payment semantics and X1 suite unchanged |
 | STEP590C3 | Giveaway callback extraction | Yes, critical | 17/20 | Manual/cron atomic draw contract unchanged |
 | STEP590C4 | Broadcast callback extraction | Yes, critical | 17/20 | Unknown-state/no-resend contract unchanged |
 | STEP590D | Navigation and shared Telegram UX | Yes | 12/20 | Copy/key/action parity and degraded-mode navigation PASS |
@@ -69,12 +69,13 @@ Each extraction must remain deployable and reversible at its own commit/artifact
 STEP590 does not claim completion from smaller files alone. Completion requires explicit ownership, executable routing, preserved critical invariants, bounded dependency direction and removal of the legacy central dispatch/DB ownership only after all consumers are migrated.
 
 
-## Current program position — STEP590C1
+## Current program position — STEP590C2
 
 - STEP590A architecture baseline: complete;
 - STEP590B executable router: deployed and operator canary accepted;
-- STEP590C1 source extraction: complete;
-- STEP590C1 production challenge/control canary: pending;
-- extracted owner count: 6;
-- legacy owner count: 554 and must continue to decrease monotonically;
-- next bounded extraction after canary: STEP590C2 payment callbacks.
+- STEP590C1 login flow: deployed and operator-accepted; supplied evidence confirms approve/exchange/admin-read flow, while deny/control-toggle subpaths remain outside the provided log;
+- STEP590C2 source extraction: complete;
+- STEP590C2 production payment callback canary: pending;
+- extracted owner count: 22;
+- legacy owner count: 538 and must continue to decrease monotonically;
+- next bounded extraction after canary: STEP590C3 giveaway callbacks.

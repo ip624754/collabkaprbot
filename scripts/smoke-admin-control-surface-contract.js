@@ -42,6 +42,7 @@ for (const token of [
 }
 
 const bot = read('src/bot/bot.js');
+const botControlSurface = bot + '\n' + read('src/bot/domains/adminAuth/callbacks.js') + '\n' + read('src/bot/domains/payments/callbacks.js');
 for (const token of [
   'a:admin_web_login_toggle',
   '⚙️ Админка → Управление системой',
@@ -50,7 +51,7 @@ for (const token of [
   'appendOperatorControlAudit(',
   'getOperatorControlSnapshot(',
 ]) {
-  assert.ok(bot.includes(token), `bot.js must include ${token}`);
+  assert.ok(botControlSurface.includes(token), `Telegram control surface must include ${token}`);
 }
 
 const registry = read('src/bot/actionRegistry.js');

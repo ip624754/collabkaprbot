@@ -35,6 +35,10 @@ import {
   handleAdminAuthChallengeCallback,
   handleAdminAuthControlCallback,
 } from './domains/adminAuth/index.js';
+import {
+  handlePaymentAdminCallback,
+  handlePaymentPurchaseCallback,
+} from './domains/payments/index.js';
 import { handleGwAccessRoute } from './routes/gwAccess.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
@@ -26351,84 +26355,6 @@ ${escapeHtml(safeText)}
       return;
     }
 
-    if (p.a === 'a:founder_buy') {
-      const { accept } = await getPaymentsRuntimeFlags();
-      if (!accept) {
-        return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
-      }
-      await ctx.answerCallbackQuery();
-
-      const ret = String(p.ret || 'menu');
-      const st = await getFounderSaleState();
-      if (!st.active) {
-        try { await ctx.answerCallbackQuery({ text: 'Акция завершена', show_alert: true }); } catch {}
-        await renderFounderSale(ctx, u, { ret, edit: true });
-        return;
-      }
-
-      const productId = String(p.id || '').trim();
-      const prod = (st.products || []).find((x) => x.id === productId) || null;
-      if (!prod) {
-        try { await ctx.answerCallbackQuery({ text: 'Пакет не найден', show_alert: true }); } catch {}
-        await renderFounderSale(ctx, u, { ret, edit: true });
-        return;
-      }
-
-      const price = Number(prod.stars || 0);
-      if (!Number.isFinite(price) || price <= 0) {
-        try { await ctx.answerCallbackQuery({ text: 'Пакет временно недоступен', show_alert: true }); } catch {}
-        await renderFounderSale(ctx, u, { ret, edit: true });
-        return;
-      }
-
-      let wsId = 0;
-      if (prod.scope === 'creator') {
-        const ws = await ensureWorkspaceForOwner(ctx, u.id, { minimal: true, backCb: `a:founder|ret:${ret}` });
-        if (!ws) return;
-        wsId = Number(ws.id || 0);
-      }
-
-      const tokenRaw = randomToken(10);
-      const payloadPrefix = `${prod.id}_${u.id}_`;
-      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
-      await redis.set(
-        k(['pay_founder', token]),
-        {
-          tgId: ctx.from.id,
-          userId: u.id,
-          productId: prod.id,
-          durationDays: Number(prod.durationDays || 0),
-          credits: Number(prod.credits || 0),
-          wsId
-        },
-        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
-      );
-
-      const payload = `${payloadPrefix}${token}`;
-
-      const dur = Number(prod.durationDays || 0);
-      const credits = Number(prod.credits || 0);
-      const normal = Number(prod.normalStars || 0);
-
-      const descrLines = [];
-      if (prod.scope === 'brand') {
-        descrLines.push(`Brand Plan «Про» на ${dur} дней.`);
-        if (credits > 0) descrLines.push(`💳 При активации: +${credits} кредитов бренда.`);
-      } else {
-        descrLines.push(`PRO выбранного канала на ${dur} дней.`);
-      }
-      if (normal > 0) descrLines.push(`Обычно: ${normal}⭐️.`);
-
-      await sendStarsInvoice(ctx, {
-        title: `Founder Sale · ${prod.title} · ${prod.subtitle}`,
-        description: descrLines.join(' ') || 'Founder Sale',
-        payload,
-        amount: price,
-        backCb: `a:founder|ret:${ret}`
-      });
-      return;
-    }
-
     // HOME HUB (Commit87)
     if (p.a === 'a:role_pick') {
       try { await ctx.answerCallbackQuery(); } catch {}
@@ -29479,67 +29405,7 @@ if (p.a === 'a:ws_prof_mode') {
       await renderWsPro(ctx, u.id, Number(p.ws));
       return;
     }
-    if (p.a === 'a:ws_pro_buy') {
-      const { accept } = await getPaymentsRuntimeFlags();
-      if (!accept) {
-        return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
-      }
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.ws);
-      const ws = await db.getWorkspace(u.id, wsId);
-      if (!ws) return answerRecovery(ctx, 'channel');
-      const tokenRaw = randomToken(10);
-      const payloadPrefix = `pro_${wsId}_${u.id}_`;
-      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
-      await redis.set(k(['pay_pro', token]), { wsId, ownerUserId: u.id, tgId: ctx.from.id }, { ex: CFG.PAYMENT_SESSION_TTL_SEC });
-      const payload = `${payloadPrefix}${token}`;
-      await sendStarsInvoice(ctx, {
-        title: `${MONETIZATION_LABELS.CREATOR_PRO} · ${CFG.PRO_DURATION_DAYS} дней`,
-        description: `Для выбранного канала: ${CFG.PRO_DURATION_DAYS} дней, до ${CFG.BARTER_MAX_ACTIVE_OFFERS_PRO} активных офферов, повторное поднятие раз в ${CFG.BARTER_BUMP_COOLDOWN_HOURS_PRO} ч, пин и расширенная аналитика.`,
-        payload,
-        amount: CFG.PRO_STARS_PRICE,
-        backCb: `a:ws_pro|ws:${wsId}`,
-      });
-      return;
-    }
-
     // Brand Pass (Stars) - buy credits to open new threads as a brand
-    if (p.a === 'a:brand_buy') {
-      const { accept } = await getPaymentsRuntimeFlags();
-      if (!accept) {
-        return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
-      }
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const offerId = (p.o !== undefined && p.o !== null && p.o !== '') ? Number(p.o) : null;
-      const packId = String(p.pack || 'S');
-      const page = Number(p.p || 0); // legacy: used as picker page in old messages
-      const pack = getBrandPack(packId);
-      if (!pack) return ctx.answerCallbackQuery({ text: 'Пакет не найден.' });
-
-      const tokenRaw = randomToken(10);
-      const payloadPrefix = `brand_${u.id}_${pack.id}_`;
-      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
-      await redis.set(
-        k(['pay_brand', token]),
-        { tgId: ctx.from.id, userId: u.id, packId: pack.id, credits: pack.credits, wsId, offerId, page },
-        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
-      );
-
-      const payload = `${payloadPrefix}${token}`;
-      const back = offerId ? `a:bx_pub|ws:${wsId}|o:${offerId}|p:${page}|h:${h}` : `a:brand_pass|ws:${wsId}`;
-      await sendStarsInvoice(ctx, {
-        title: `${MONETIZATION_LABELS.BRAND_CREDITS} · ${pack.credits} шт.`,
-        description: `Начисление ${pack.credits} кредитов бренда. Кредиты расходуются на новые диалоги, принятие заявок и открытие контактов. Это не Brand Plan.`,
-        payload,
-        amount: pack.stars,
-        backCb: back,
-      });
-      return;
-    }
-
     // Brand Mode tools
 
 
@@ -30328,43 +30194,6 @@ ${link}`;
       return;
     }
 
-    if (p.a === 'a:brand_plan_buy') {
-      const { accept } = await getPaymentsRuntimeFlags();
-      if (!accept) {
-        return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
-      }
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const ret = String(p.ret || 'brand');
-      const plan = String(p.plan || 'start').toLowerCase();
-      const planDef = BRAND_PLANS.find(pl => pl.id === plan);
-      if (!planDef) {
-        return ctx.answerCallbackQuery({ text: 'План не найден.' });
-      }
-      const stars = planDef.stars;
-      const tokenRaw = randomToken(10);
-      const payloadPrefix = `bplan_${u.id}_${plan}_`;
-      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
-      await redis.set(
-        k(['pay_bplan', token]),
-        { tgId: ctx.from.id, userId: u.id, wsId, plan, stars, credits: planDef.credits || 0, ret },
-        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
-      );
-      const payload = `${payloadPrefix}${token}`;
-      const label = planDef.title;
-      await sendStarsInvoice(ctx, {
-        title: `${MONETIZATION_LABELS.BRAND_PLAN} · ${label} · ${CFG.BRAND_PLAN_DURATION_DAYS} дней`,
-        description: `Подписка для бренда на ${CFG.BRAND_PLAN_DURATION_DAYS} дней: CRM-этапы, до 3 менеджеров, 1 Умный подбор и 1 Продвижение за календарный месяц. При активации начисляется ${planDef.credits} кредитов.`,
-        payload,
-        amount: stars,
-        backCb: `a:brand_plan|ws:${wsId}|ret:${ret}`,
-      });
-      return;
-    }
-
-
     // Profile Matching (pm_*)
     if (p.a === 'a:pm_home') {
       await ctx.answerCallbackQuery();
@@ -30503,38 +30332,6 @@ if (p.a === 'a:match_home') {
       return;
     }
 
-    if (p.a === 'a:match_buy') {
-      const { accept } = await getPaymentsRuntimeFlags();
-      if (!accept) {
-        return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
-      }
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const tierId = String(p.tier || 'S').toUpperCase();
-      const tier = MATCH_TIERS.find(t => t.id === tierId);
-      if (!tier) return ctx.answerCallbackQuery({ text: 'Тариф не найден.' });
-
-      const tokenRaw = randomToken(10);
-      const payloadPrefix = `match_${u.id}_${tier.id}_`;
-      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
-      await redis.set(
-        k(['pay_match', token]),
-        { tgId: ctx.from.id, userId: u.id, wsId, tierId: tier.id, stars: tier.stars, count: tier.count, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
-        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
-      );
-      const payload = `${payloadPrefix}${token}`;
-      await sendStarsInvoice(ctx, {
-        title: `${MONETIZATION_LABELS.MATCHING} · ${tier.title}`,
-        description: `Один подбор до ${tier.count} каналов по твоему брифу. Это отдельная услуга: кредиты бренда не списываются. После оплаты пришли бриф одним сообщением.`,
-        payload,
-        amount: tier.stars,
-        backCb: cbJoin('a:match_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }),
-      });
-      return;
-    }
-
     if (p.a === 'a:feat_home') {
       await ctx.answerCallbackQuery();
       const wsId = Number(p.w || p.ws || 0);
@@ -30593,38 +30390,6 @@ if (p.a === 'a:match_home') {
 • последняя строка — контакт (@username / ссылка)`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
-      return;
-    }
-
-    if (p.a === 'a:feat_buy') {
-      const { accept } = await getPaymentsRuntimeFlags();
-      if (!accept) {
-        return ctx.answerCallbackQuery({ text: '💤 Платежи на паузе. Попробуй позже.', show_alert: true });
-      }
-      await ctx.answerCallbackQuery();
-      const wsId = Number(p.w || p.ws || 0);
-
-      const h = await resolveBxHomeFromUi(ctx, wsId, p.h, wsId ? BX_HOME.BX_OPEN : BX_HOME.MENU);
-      const durId = String(p.dur || '1d');
-      const d = FEATURED_DURATIONS.find(x => x.id === durId);
-      if (!d) return ctx.answerCallbackQuery({ text: 'Тариф не найден.' });
-
-      const tokenRaw = randomToken(10);
-      const payloadPrefix = `feat_${u.id}_${d.days}_`;
-      const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);
-      await redis.set(
-        k(['pay_feat', token]),
-        { tgId: ctx.from.id, userId: u.id, wsId, days: d.days, durId: d.id, stars: d.stars, ret: String(p.ret || ''), bpr: String(p.bpr || '') },
-        { ex: CFG.PAYMENT_SESSION_TTL_SEC }
-      );
-      const payload = `${payloadPrefix}${token}`;
-      await sendStarsInvoice(ctx, {
-        title: `${MONETIZATION_LABELS.FEATURED} · ${d.title}`,
-        description: `Промо-блок сверху в ленте на ${d.days} ${ruPlural(d.days,'день','дня','дней')}. Это отдельная услуга: кредиты бренда не списываются. После оплаты пришли контент.`,
-        payload,
-        amount: d.stars,
-        backCb: cbJoin('a:feat_home', { ws: wsId, ret: String(p.ret || ''), bpr: String(p.bpr || '') }),
-      });
       return;
     }
 
@@ -33162,96 +32927,6 @@ if (p.a === 'a:bc_simple_btn_preset') {
       return;
     }
 
-    // Admin: Payments toggles / ledger
-    if (p.a === 'a:admin_pay_accept_toggle') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      const control = await getOperatorControlSnapshot({ limit: 1 });
-      const cur = !!control?.byId?.pay_accept?.value;
-      await setOperatorControlToggle('pay_accept', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
-      await renderAdminSystem(ctx);
-      return;
-    }
-    if (p.a === 'a:admin_pay_auto_toggle') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      const control = await getOperatorControlSnapshot({ limit: 1 });
-      const cur = !!control?.byId?.pay_auto_apply?.value;
-      await setOperatorControlToggle('pay_auto_apply', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
-      await renderAdminSystem(ctx);
-      return;
-    }
-
-    // Admin: Payments fallback apply (runtime TTL override)
-    if (p.a === 'a:admin_pay_fb') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      await renderAdminPaymentsFallback(ctx);
-      return;
-    }
-    if (p.a === 'a:admin_pay_fb_set') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery({ text: '⏳ Ставлю…' });
-      const ttl = Number(p.ttl || 0) || 0;
-      const reason = String(p.r || '').slice(0, 40) || 'incident';
-      const byUser = ctx.from?.username ? `@${ctx.from.username}` : null;
-      const r = await setPaymentsFallbackRuntime({ enabled: true, ttlSec: ttl, byTgId: Number(ctx.from.id || 0) || null, byUser, reason });
-      if (!r.ok) {
-        await renderAdminPaymentsFallback(ctx, '⚠️ Redis недоступен — не удалось включить.');
-        return;
-      }
-      await appendOperatorControlAudit({
-        controlId: 'payments_fallback',
-        label: 'Payments fallback',
-        actorTgId: Number(ctx.from.id || 0) || 0,
-        actorUsername: ctx.from?.username || '',
-        action: 'toggle',
-        previousValue: false,
-        nextValue: true,
-        note: `telegram_admin:${reason}`,
-        extra: { ttlSec: Number(r.ttlSec || ttl) || ttl },
-      });
-      await renderAdminPaymentsFallback(ctx, `✅ Включено на ~${fmtWait(Number(r.ttlSec || ttl) || ttl)}.`);
-      return;
-    }
-    if (p.a === 'a:admin_pay_fb_off') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery({ text: '⏳ Выключаю…' });
-      const r = await setPaymentsFallbackRuntime({ enabled: false });
-      if (!r.ok && r.error) {
-        await renderAdminPaymentsFallback(ctx, '⚠️ Redis недоступен — не удалось выключить.');
-        return;
-      }
-      await appendOperatorControlAudit({
-        controlId: 'payments_fallback',
-        label: 'Payments fallback',
-        actorTgId: Number(ctx.from.id || 0) || 0,
-        actorUsername: ctx.from?.username || '',
-        action: 'toggle',
-        previousValue: true,
-        nextValue: false,
-        note: 'telegram_admin:disable',
-      });
-      await renderAdminPaymentsFallback(ctx, '🧹 Выключено.');
-      return;
-    }
-
-    if (p.a === 'a:admin_matchfeat_auto_toggle') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      const control = await getOperatorControlSnapshot({ limit: 1 });
-      const cur = !!control?.byId?.matchfeat_auto_apply?.value;
-      await setOperatorControlToggle('matchfeat_auto_apply', !cur, { actorTgId: Number(ctx.from.id || 0) || 0, actorUsername: ctx.from?.username || '', note: 'telegram_admin' });
-      await renderAdminSystem(ctx);
-      return;
-    }
-
     // Admin: Broadcast delivery mode (QStash fan-out)
     if (p.a === 'a:admin_bc_qstash_toggle') {
       const isAdmin = isSuperAdminTg(ctx.from.id);
@@ -33456,40 +33131,6 @@ if (p.a === 'a:bc_simple_btn_preset') {
       if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
       await ctx.answerCallbackQuery();
       await renderAdminFounderTexts(ctx);
-      return;
-    }
-
-    if (p.a === 'a:admin_payments') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await renderAdminPayments(ctx, String(p.st || 'ORPHANED'), Number(p.p || 0));
-      return;
-    }
-    if (p.a === 'a:admin_pay_view') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await renderAdminPaymentView(ctx, Number(p.id), String(p.st || 'ORPHANED'), Number(p.p || 0));
-      return;
-    }
-    if (p.a === 'a:admin_pay_apply') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await adminApplyPayment(ctx, u, Number(p.id), String(p.st || 'ORPHANED'), Number(p.p || 0));
-      return;
-    }
-
-    if (p.a === 'a:admin_pay_autoheal') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await adminAutoHealPayments(ctx, u, String(p.st || 'ORPHANED'), Number(p.p || 0));
       return;
     }
 
@@ -37708,6 +37349,43 @@ ${actionHint}`;
     return false;
   };
 
+    const paymentDomainDeps = {
+      getPaymentsRuntimeFlags,
+      getFounderSaleState,
+      renderFounderSale,
+      ensureWorkspaceForOwner,
+      randomToken,
+      signStarsInvoiceToken: _signStarsInvoiceToken,
+      redis,
+      key: k,
+      cfg: CFG,
+      sendStarsInvoice,
+      monetizationLabels: MONETIZATION_LABELS,
+      db,
+      answerRecovery,
+      resolveBxHomeFromUi,
+      bxHome: BX_HOME,
+      getBrandPack,
+      brandPlans: BRAND_PLANS,
+      matchTiers: MATCH_TIERS,
+      featuredDurations: FEATURED_DURATIONS,
+      ruPlural,
+      cbJoin,
+      isAdmin: (c) => isSuperAdminTg(c?.from?.id),
+      getOperatorControlSnapshot,
+      setOperatorControlToggle,
+      renderAdminSystem,
+      renderAdminPaymentsFallback,
+      setPaymentsFallbackRuntime,
+      appendOperatorControlAudit,
+      fmtWait,
+      clearExpectText,
+      renderAdminPayments,
+      renderAdminPaymentView,
+      adminApplyPayment,
+      adminAutoHealPayments,
+    };
+
     await dispatchCallback(ctx, p, u, {
       legacy,
       logger,
@@ -37720,6 +37398,18 @@ ${actionHint}`;
           setControlToggle: setOperatorControlToggle,
           renderSystem: renderAdminSystem,
         }),
+        payment_purchase: (ctx2, p2, u2) => handlePaymentPurchaseCallback(
+          ctx2,
+          p2,
+          u2,
+          paymentDomainDeps
+        ),
+        payment_admin: (ctx2, p2, u2) => handlePaymentAdminCallback(
+          ctx2,
+          p2,
+          u2,
+          paymentDomainDeps
+        ),
         giveaway_access: (ctx2, p2, u2) => handleGwAccessRoute(ctx2, p2, u2, {
           renderGwAccess,
           redis,

@@ -61,7 +61,7 @@ const sendAdminAuditExportSrc = extractBetween(
 const auditMetricsModeratorsCallbacksSrc = extractBetween(
   botSource,
   "    if (p.a === 'a:aud') {",
-  "\n    // Admin: Payments toggles / ledger"
+  "\n    // Admin: Broadcast delivery mode (QStash fan-out)"
 );
 
 const auditSearchExpectTextSrc = extractBetween(

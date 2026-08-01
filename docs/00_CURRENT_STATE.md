@@ -1,3 +1,32 @@
+## STEP590C2 — Critical Payment Callback Domain Extraction (2026-08-01)
+
+**Current handoff-safe repository baseline:** STEP590C2 source architecture package on exact STEP590C1.
+
+Repository truth:
+
+- STEP590C1 login canary is operator-accepted; supplied production evidence shows `a:aw_auth_dec → update.ok`, exchange HTTP 200 and authenticated admin reads HTTP 200;
+- `src/bot/domains/payments/` now owns six purchase actions and ten Telegram-admin payment actions;
+- payment callback ownership is split into `payment_purchase` and `payment_admin`, both in `post_user` phase;
+- 16 actions moved from the explicit legacy owner, raising extracted ownership from 6 to 22 and reducing legacy ownership from 554 to 538;
+- payment prices, signed payloads, Redis session TTL, callback keys, user copy and admin control semantics are unchanged;
+- `paymentFulfillmentCore.js` remains the single atomic fulfillment core; the new domain is a transport/composition adapter only;
+- the corresponding inline branches are removed from `src/bot/bot.js`;
+- source QA: 164 payment-domain assertions, 2,340 router assertions, 66 payment-critical assertions, 287 JavaScript syntax checks and 138/139 registered source checks PASS;
+- one source check and the complete portable spine are environment-blocked because the available package mirror returned HTTP 404 for `xtend@4.0.2` and `dotenv` was unavailable;
+- SQL and ENV changes are not required;
+- production invoice/admin callback canary remains pending.
+
+**Architecture decision:** all new payment callback behavior must enter through `src/bot/domains/payments/`; no payment side effect or fulfillment state machine may be reimplemented there.
+
+Read first:
+
+- `docs/architecture/STEP590C2_PAYMENT_BOUNDED_DOMAIN.md`;
+- `docs/audit/STEP590C2_PAYMENT_DOMAIN_EXTRACTION_REPORT.md`;
+- `docs/operations/STEP590C2_PAYMENT_DOMAIN_ROLLOUT_RUNBOOK.md`;
+- `docs/process/07_WORK_HISTORY_STEP590C2.md`.
+
+---
+
 ## STEP590C1 — Critical Admin/Auth Callback Domain Extraction (2026-08-01)
 
 **Current handoff-safe repository baseline:** STEP590C1 source architecture package on exact STEP590B.

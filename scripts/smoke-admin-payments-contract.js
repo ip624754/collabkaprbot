@@ -33,12 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
-
-const paymentsCallbacksSrc = extractBetween(
-  botSource,
-  "    if (p.a === 'a:admin_payments') {",
-  "\n\n    if (p.a === 'a:mod_home') {"
-);
+const paymentsCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'payments', 'callbacks.js'), 'utf8');
 
 const renderAdminPaymentsSrc = extractBetween(
   botSource,
@@ -128,30 +123,17 @@ assert.ok(adminAutoHealPaymentsSrc.includes('autoheal_manual_required:'), 'Admin
 assert.ok(adminAutoHealPaymentsSrc.includes('Auto-heal: applied ${applied}, failed ${failed}, skipped ${skipped}, validation ${validationFailed}, manual ${manualRequired}'), 'Admin → Payments auto-heal must keep summary alert text');
 assert.ok(adminAutoHealPaymentsSrc.includes('await renderAdminPayments(ctx, backStatus, page);'), 'Admin → Payments auto-heal must return to list render');
 
-assert.ok(paymentsCallbacksSrc.includes("if (p.a === 'a:admin_payments') {"), 'Admin → Payments list callback must exist');
-assert.ok(paymentsCallbacksSrc.includes("if (p.a === 'a:admin_pay_view') {"), 'Admin → Payments view callback must exist');
-assert.ok(paymentsCallbacksSrc.includes("if (p.a === 'a:admin_pay_apply') {"), 'Admin → Payments apply callback must exist');
-assert.ok(paymentsCallbacksSrc.includes("if (p.a === 'a:admin_pay_autoheal') {"), 'Admin → Payments auto-heal callback must exist');
-assertMatch(
-  paymentsCallbacksSrc,
-  /if \(p\.a === 'a:admin_payments'\) \{[\s\S]*?try \{ await clearExpectText\(ctx\.from\.id\); \} catch \{\}[\s\S]*?await renderAdminPayments\(ctx, String\(p\.st \|\| 'ORPHANED'\), Number\(p\.p \|\| 0\)\);[\s\S]*?\}/s,
-  'Admin → Payments list callback must clear expectText and rerender list'
-);
-assertMatch(
-  paymentsCallbacksSrc,
-  /if \(p\.a === 'a:admin_pay_view'\) \{[\s\S]*?try \{ await clearExpectText\(ctx\.from\.id\); \} catch \{\}[\s\S]*?await renderAdminPaymentView\(ctx, Number\(p\.id\), String\(p\.st \|\| 'ORPHANED'\), Number\(p\.p \|\| 0\)\);[\s\S]*?\}/s,
-  'Admin → Payments view callback must clear expectText and rerender view'
-);
-assertMatch(
-  paymentsCallbacksSrc,
-  /if \(p\.a === 'a:admin_pay_apply'\) \{[\s\S]*?try \{ await clearExpectText\(ctx\.from\.id\); \} catch \{\}[\s\S]*?await adminApplyPayment\(ctx, u, Number\(p\.id\), String\(p\.st \|\| 'ORPHANED'\), Number\(p\.p \|\| 0\)\);[\s\S]*?\}/s,
-  'Admin → Payments apply callback must clear expectText and call apply helper'
-);
-assertMatch(
-  paymentsCallbacksSrc,
-  /if \(p\.a === 'a:admin_pay_autoheal'\) \{[\s\S]*?try \{ await clearExpectText\(ctx\.from\.id\); \} catch \{\}[\s\S]*?await adminAutoHealPayments\(ctx, u, String\(p\.st \|\| 'ORPHANED'\), Number\(p\.p \|\| 0\)\);[\s\S]*?\}/s,
-  'Admin → Payments auto-heal callback must clear expectText and call auto-heal helper'
-);
+assert.ok(paymentsCallbacksSrc.includes('case PAYMENT_ACTION.ADMIN_LEDGER:'), 'Admin → Payments list callback must exist in bounded domain');
+assert.ok(paymentsCallbacksSrc.includes('case PAYMENT_ACTION.ADMIN_LEDGER_VIEW:'), 'Admin → Payments view callback must exist in bounded domain');
+assert.ok(paymentsCallbacksSrc.includes('case PAYMENT_ACTION.ADMIN_LEDGER_APPLY:'), 'Admin → Payments apply callback must exist in bounded domain');
+assert.ok(paymentsCallbacksSrc.includes('case PAYMENT_ACTION.ADMIN_LEDGER_AUTOHEAL:'), 'Admin → Payments auto-heal callback must exist in bounded domain');
+assert.ok(paymentsCallbacksSrc.includes("requireFunction(deps, 'clearExpectText')(ctx.from.id)"), 'Payment admin domain must clear expectText before ledger operations');
+assert.ok(paymentsCallbacksSrc.includes("requireFunction(deps, 'renderAdminPayments')"), 'Payment admin domain must delegate list rendering');
+assert.ok(paymentsCallbacksSrc.includes("requireFunction(deps, 'renderAdminPaymentView')"), 'Payment admin domain must delegate payment view rendering');
+assert.ok(paymentsCallbacksSrc.includes("requireFunction(deps, 'adminApplyPayment')"), 'Payment admin domain must delegate manual apply to canonical helper');
+assert.ok(paymentsCallbacksSrc.includes("requireFunction(deps, 'adminAutoHealPayments')"), 'Payment admin domain must delegate auto-heal to canonical helper');
+assert.equal(botSource.includes("if (p.a === 'a:admin_payments')"), false, 'Legacy admin payments callback branch must be removed');
+assert.equal(botSource.includes("if (p.a === 'a:admin_pay_apply')"), false, 'Legacy admin payment apply branch must be removed');
 
 expectRegistry('a:admin_payments', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS, breakGlass: true });
 expectRegistry('a:admin_pay_view', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.NONE });

@@ -1,3 +1,37 @@
+# NEW CHAT HANDOFF — STEP590C2
+
+## Current truth
+
+- Canonical source baseline: STEP590C2 on exact STEP590C1.
+- Status: SOURCE READY / PRODUCTION PAYMENT CALLBACK CANARY PENDING / GLOBAL RELEASE HOLD.
+- STEP590C1 login flow has operator and supplied-log evidence; deny and operator-toggle subpaths are not independently evidenced by that log.
+- Payment bounded domain owns 16 exact actions; total ownership is 22 extracted / 538 legacy.
+- Atomic fulfillment remains in `paymentFulfillmentCore.js`; no second money core exists.
+- No migration or ENV change belongs to STEP590C2.
+
+## Required first reads
+
+1. `docs/00_CURRENT_STATE.md`
+2. `docs/architecture/STEP590C2_PAYMENT_BOUNDED_DOMAIN.md`
+3. `docs/audit/STEP590C2_PAYMENT_DOMAIN_EXTRACTION_REPORT.md`
+4. `docs/operations/STEP590C2_PAYMENT_DOMAIN_ROLLOUT_RUNBOOK.md`
+5. `docs/roadmap/STEP590_MODULAR_MONOLITH_ROADMAP.md`
+
+## Do not regress
+
+- one callback action → one executable owner;
+- no extracted action may fall back to legacy;
+- no unsigned invoice payload;
+- missing ledger remains fail-closed;
+- no payment side effect outside the canonical atomic fulfillment path;
+- no payment/admin callback key, price or user-copy drift during architecture extraction.
+
+## Next step
+
+After local QA and bounded production canary: `STEP590C3 — Critical Giveaway Callback Domain Extraction`.
+
+---
+
 ## STEP590C1 — Critical Admin/Auth Callback Domain Extraction (2026-08-01)
 
 **Current handoff-safe repository baseline:** STEP590C1 source architecture package on exact STEP590B.

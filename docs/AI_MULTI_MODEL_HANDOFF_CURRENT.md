@@ -1,3 +1,37 @@
+# AI Multi-Model Handoff — STEP590C2 Current Truth
+
+**Baseline:** STEP590C2 source architecture package on exact STEP590C1
+**Status:** SOURCE READY / PRODUCTION PAYMENT CALLBACK CANARY PENDING / GLOBAL RELEASE HOLD
+
+## Verified
+
+- 16 payment actions extracted from legacy ownership into two executable payment owners;
+- 22 extracted actions / 538 explicit legacy owners across the full registry;
+- signed purchase-session and invoice construction preserved;
+- Telegram-admin payment controls, ledger view, apply and auto-heal delegate to existing services;
+- canonical `paymentFulfillmentCore.js` remains the only atomic fulfillment core;
+- 164 payment-domain assertions, 2,340 router assertions, 66 payment-critical assertions and 287 syntax checks PASS;
+- action/callback registry integrity and package-lock consistency PASS.
+
+## Not verified
+
+- clean dependency installation in the implementation environment;
+- bounded-safety suite and complete portable spine on the final tree;
+- Vercel deployment and live invoice/admin callback canary;
+- real Stars payment execution in this STEP.
+
+## Hard rules
+
+- do not add payment callback branches back into `bot.js`;
+- do not duplicate fulfillment, ledger or recovery logic in the payment domain;
+- preserve signed payloads, session TTLs, prices, guards and copy;
+- extracted payment owners may not silently fall back to legacy;
+- do not use a commercial purchase solely as routing evidence.
+
+Next implementation step after canary: `STEP590C3 — Critical Giveaway Callback Domain Extraction`.
+
+---
+
 # AI Multi-Model Handoff — STEP590C1 Current Truth
 
 **Baseline:** STEP590C1 source architecture package on exact STEP590B

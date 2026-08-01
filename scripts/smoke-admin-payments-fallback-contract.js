@@ -33,6 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const paymentsFallbackCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'payments', 'callbacks.js'), 'utf8');
 
 const renderAdminPaymentsFallbackSrc = extractBetween(
   botSource,
@@ -40,11 +41,6 @@ const renderAdminPaymentsFallbackSrc = extractBetween(
   '\n\n// =====================================================\n// Admin tool: Broadcast hard-skip list'
 );
 
-const paymentsFallbackCallbacksSrc = extractBetween(
-  botSource,
-  '    // Admin: Payments fallback apply (runtime TTL override)',
-  "\n\n    if (p.a === 'a:admin_matchfeat_auto_toggle') {"
-);
 
 assert.ok(renderAdminPaymentsFallbackSrc.includes('const st = await getPaymentsFallbackApplyState();'), 'Admin → Payments Fallback must read fallback apply state');
 assert.ok(renderAdminPaymentsFallbackSrc.includes('const envOn = !!st.envEnabled;'), 'Admin → Payments Fallback must keep ENV state');
@@ -75,24 +71,18 @@ assertMatch(
   'Admin → Payments Fallback footer must keep System/Admin/Menu/Home navigation'
 );
 
-assert.ok(paymentsFallbackCallbacksSrc.includes("if (p.a === 'a:admin_pay_fb') {"), 'Admin → Payments Fallback open callback must exist');
-assert.ok(paymentsFallbackCallbacksSrc.includes("if (p.a === 'a:admin_pay_fb_set') {"), 'Admin → Payments Fallback set callback must exist');
-assert.ok(paymentsFallbackCallbacksSrc.includes("if (p.a === 'a:admin_pay_fb_off') {"), 'Admin → Payments Fallback off callback must exist');
-assertMatch(
-  paymentsFallbackCallbacksSrc,
-  /if \(p\.a === 'a:admin_pay_fb'\) \{[\s\S]*?const isAdmin = isSuperAdminTg\(ctx\.from\.id\);[\s\S]*?if \(!isAdmin\) return ctx\.answerCallbackQuery\(\{ text: 'Нет доступа\.' \}\);[\s\S]*?await ctx\.answerCallbackQuery\(\);[\s\S]*?await renderAdminPaymentsFallback\(ctx\);[\s\S]*?return;[\s\S]*?\}/s,
-  'Admin → Payments Fallback open callback must keep admin gate and render helper'
-);
-assertMatch(
-  paymentsFallbackCallbacksSrc,
-  /if \(p\.a === 'a:admin_pay_fb_set'\) \{[\s\S]*?await ctx\.answerCallbackQuery\(\{ text: '⏳ Ставлю…' \}\);[\s\S]*?const ttl = Number\(p\.ttl \|\| 0\) \|\| 0;[\s\S]*?const reason = String\(p\.r \|\| ''\)\.slice\(0, 40\) \|\| 'incident';[\s\S]*?const byUser = ctx\.from\?\.username \? `@\$\{ctx\.from\.username\}` : null;[\s\S]*?const r = await setPaymentsFallbackRuntime\(\{ enabled: true, ttlSec: ttl, byTgId: Number\(ctx\.from\.id \|\| 0\) \|\| null, byUser, reason \}\);[\s\S]*?if \(!r\.ok\) \{[\s\S]*?await renderAdminPaymentsFallback\(ctx, '⚠️ Redis недоступен — не удалось включить\.'\);[\s\S]*?\}[\s\S]*?await renderAdminPaymentsFallback\(ctx, `✅ Включено на ~\$\{fmtWait\(Number\(r\.ttlSec \|\| ttl\) \|\| ttl\)\}\.`\);[\s\S]*?return;[\s\S]*?\}/s,
-  'Admin → Payments Fallback set callback must keep TTL presets, runtime helper call, and success/failure render'
-);
-assertMatch(
-  paymentsFallbackCallbacksSrc,
-  /if \(p\.a === 'a:admin_pay_fb_off'\) \{[\s\S]*?await ctx\.answerCallbackQuery\(\{ text: '⏳ Выключаю…' \}\);[\s\S]*?const r = await setPaymentsFallbackRuntime\(\{ enabled: false \}\);[\s\S]*?if \(!r\.ok && r\.error\) \{[\s\S]*?await renderAdminPaymentsFallback\(ctx, '⚠️ Redis недоступен — не удалось выключить\.'\);[\s\S]*?\}[\s\S]*?await renderAdminPaymentsFallback\(ctx, '🧹 Выключено\.'\);[\s\S]*?return;[\s\S]*?\}/s,
-  'Admin → Payments Fallback off callback must keep runtime disable helper and success/failure render'
-);
+assert.ok(paymentsFallbackCallbacksSrc.includes('case PAYMENT_ACTION.ADMIN_FALLBACK_HOME:'), 'Admin → Payments Fallback open callback must exist in bounded domain');
+assert.ok(paymentsFallbackCallbacksSrc.includes('case PAYMENT_ACTION.ADMIN_FALLBACK_ENABLE:'), 'Admin → Payments Fallback set callback must exist in bounded domain');
+assert.ok(paymentsFallbackCallbacksSrc.includes('case PAYMENT_ACTION.ADMIN_FALLBACK_DISABLE:'), 'Admin → Payments Fallback off callback must exist in bounded domain');
+assert.ok(paymentsFallbackCallbacksSrc.includes("requireFunction(deps, 'renderAdminPaymentsFallback')"), 'Fallback domain delegates rendering to canonical helper');
+assert.ok(paymentsFallbackCallbacksSrc.includes(`setPaymentsFallbackRuntime({
+    enabled: true`), 'Fallback enable keeps canonical runtime helper');
+assert.ok(paymentsFallbackCallbacksSrc.includes("setPaymentsFallbackRuntime({ enabled: false })"), 'Fallback disable keeps canonical runtime helper');
+assert.ok(paymentsFallbackCallbacksSrc.includes("note: `telegram_admin:${reason}`"), 'Fallback enable keeps operator audit reason');
+assert.ok(paymentsFallbackCallbacksSrc.includes("note: 'telegram_admin:disable'"), 'Fallback disable keeps operator audit note');
+assert.ok(paymentsFallbackCallbacksSrc.includes("`✅ Включено на ~${fmtWait(Number(result.ttlSec || ttl) || ttl)}.`"), 'Fallback enable success copy preserved');
+assert.ok(paymentsFallbackCallbacksSrc.includes("'🧹 Выключено.'"), 'Fallback disable success copy preserved');
+assert.equal(botSource.includes("if (p.a === 'a:admin_pay_fb')"), false, 'Legacy fallback callback branch must be removed');
 
 expectRegistry('a:admin_pay_fb', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });
 expectRegistry('a:admin_pay_fb_set', { type: ACTION_TYPES.ADMIN, guard: ACTION_GUARD.REQUIRE_REDIS });

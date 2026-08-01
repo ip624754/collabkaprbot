@@ -1,11 +1,13 @@
 import { ACTION_REGISTRY } from '../actionRegistry.js';
 import { ADMIN_AUTH_CALLBACK_ROUTE_DEFINITIONS } from '../domains/adminAuth/route.js';
+import { PAYMENT_CALLBACK_ROUTE_DEFINITIONS } from '../domains/payments/route.js';
 import { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export const CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
   ...ADMIN_AUTH_CALLBACK_ROUTE_DEFINITIONS,
+  ...PAYMENT_CALLBACK_ROUTE_DEFINITIONS,
   Object.freeze({
     id: CALLBACK_ROUTE.GIVEAWAY_ACCESS,
     phase: CALLBACK_PHASE.POST_USER,

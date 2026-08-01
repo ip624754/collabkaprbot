@@ -1,0 +1,17 @@
+action,previous_owner,new_owner,phase,behavior_change
+a:founder_buy,legacy,payment_purchase,post_user,no
+a:ws_pro_buy,legacy,payment_purchase,post_user,no
+a:brand_buy,legacy,payment_purchase,post_user,no
+a:brand_plan_buy,legacy,payment_purchase,post_user,no
+a:match_buy,legacy,payment_purchase,post_user,no
+a:feat_buy,legacy,payment_purchase,post_user,no
+a:admin_pay_accept_toggle,legacy,payment_admin,post_user,no
+a:admin_pay_auto_toggle,legacy,payment_admin,post_user,no
+a:admin_pay_fb,legacy,payment_admin,post_user,no
+a:admin_pay_fb_set,legacy,payment_admin,post_user,no
+a:admin_pay_fb_off,legacy,payment_admin,post_user,no
+a:admin_matchfeat_auto_toggle,legacy,payment_admin,post_user,no
+a:admin_payments,legacy,payment_admin,post_user,no
+a:admin_pay_view,legacy,payment_admin,post_user,no
+a:admin_pay_apply,legacy,payment_admin,post_user,no
+a:admin_pay_autoheal,legacy,payment_admin,post_user,no

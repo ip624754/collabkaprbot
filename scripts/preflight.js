@@ -300,6 +300,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): callback router ownership source contract", "smoke:callback-router-ownership-contract"],
   ["Preflight (source-only): admin/auth bounded-domain executable tests", "test:admin-auth-domain-extraction"],
   ["Preflight (source-only): admin/auth bounded-domain source contract", "smoke:admin-auth-domain-extraction-contract"],
+  ["Preflight (source-only): payment bounded-domain executable tests", "test:payment-domain-extraction"],
+  ["Preflight (source-only): payment bounded-domain source contract", "smoke:payment-domain-extraction-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

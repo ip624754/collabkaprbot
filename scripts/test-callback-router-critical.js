@@ -35,12 +35,14 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 6, 'STEP590C1 must extract six exact actions');
-equal(summary.legacy, registryKeys.length - 6, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 22, 'STEP590C2 must extract twenty-two exact actions');
+equal(summary.legacy, registryKeys.length - 22, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 6, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.PAYMENT_PURCHASE], 6, 'payment purchase owns six actions');
+equal(summary.byRoute[CALLBACK_ROUTE.PAYMENT_ADMIN], 10, 'payment admin owns ten actions');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 22, 'legacy count must be exact');
 
 for (const action of registryKeys) {
   const owner = getCallbackOwnership(action);
@@ -60,6 +62,14 @@ equal(getCallbackOwnership('a:admin_web_login_toggle').phase, CALLBACK_PHASE.POS
 for (const action of ['a:gw_access', 'a:gw_access_recheck', 'a:gw_access_checkme', 'a:gw_access_user_prompt']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.GIVEAWAY_ACCESS, `${action} owner`);
   equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} phase`);
+}
+for (const action of ['a:founder_buy', 'a:ws_pro_buy', 'a:brand_buy', 'a:brand_plan_buy', 'a:match_buy', 'a:feat_buy']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, `${action} payment purchase owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} payment purchase phase`);
+}
+for (const action of ['a:admin_pay_accept_toggle', 'a:admin_pay_auto_toggle', 'a:admin_pay_fb', 'a:admin_pay_fb_set', 'a:admin_pay_fb_off', 'a:admin_matchfeat_auto_toggle', 'a:admin_payments', 'a:admin_pay_view', 'a:admin_pay_apply', 'a:admin_pay_autoheal']) {
+  equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.PAYMENT_ADMIN, `${action} payment admin owner`);
+  equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} payment admin phase`);
 }
 equal(getCallbackOwnership('a:menu').routeId, CALLBACK_ROUTE.LEGACY, 'non-extracted action stays legacy');
 equal(getCallbackOwnership('a:not_registered'), null, 'unknown action has no owner');
@@ -181,6 +191,43 @@ const gwPostResult = await dispatchOwnedCallback({
 });
 equal(gwPostResult.status, CALLBACK_DISPATCH_STATUS.HANDLED, 'giveaway access executable owner handles callback');
 equal(gwCalls, 1, 'giveaway owner called exactly once');
+
+let paymentPurchaseCalls = 0;
+const paymentPurchaseResult = await dispatchOwnedCallback({
+  phase: CALLBACK_PHASE.POST_USER,
+  ctx: {},
+  p: { a: 'a:ws_pro_buy', ws: '7' },
+  u: { id: 15 },
+  handlers: {
+    [CALLBACK_ROUTE.PAYMENT_PURCHASE]: async (_ctx, p, u) => {
+      paymentPurchaseCalls += 1;
+      equal(p.ws, '7', 'payment purchase payload reaches owner');
+      equal(u.id, 15, 'hydrated user reaches payment purchase owner');
+      return true;
+    },
+  },
+  final: true,
+});
+equal(paymentPurchaseResult.status, CALLBACK_DISPATCH_STATUS.HANDLED, 'payment purchase executable owner handles callback');
+equal(paymentPurchaseCalls, 1, 'payment purchase owner called exactly once');
+
+let paymentAdminCalls = 0;
+const paymentAdminResult = await dispatchOwnedCallback({
+  phase: CALLBACK_PHASE.POST_USER,
+  ctx: {},
+  p: { a: 'a:admin_payments' },
+  u: { id: 16 },
+  handlers: {
+    [CALLBACK_ROUTE.PAYMENT_ADMIN]: async (_ctx, _p, u) => {
+      paymentAdminCalls += 1;
+      equal(u.id, 16, 'hydrated user reaches payment admin owner');
+      return true;
+    },
+  },
+  final: true,
+});
+equal(paymentAdminResult.status, CALLBACK_DISPATCH_STATUS.HANDLED, 'payment admin executable owner handles callback');
+equal(paymentAdminCalls, 1, 'payment admin owner called exactly once');
 
 let legacyCalls = 0;
 const legacyHandled = await dispatchOwnedCallback({

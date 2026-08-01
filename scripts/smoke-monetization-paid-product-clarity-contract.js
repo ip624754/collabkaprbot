@@ -22,6 +22,7 @@ const ROOT = path.resolve(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const botSrc = read('src/bot/bot.js');
+const paymentDomainSrc = read('src/bot/domains/payments/callbacks.js');
 const starsSrc = read('src/bot/payments/starsHandlers.js');
 const helpersSrc = read('src/bot/helpers.js');
 const fallbackSrc = read('src/bot/payments_fallback.js') + '\n' + read('src/bot/paymentFulfillmentCore.js');
@@ -70,11 +71,11 @@ assert.ok(botSrc.includes('Отличие тарифов сейчас — цен
 assert.ok(botSrc.includes('🎯 <b>Умный подбор</b>'));
 assert.ok(botSrc.includes('🔥 <b>Продвижение</b>'));
 assert.ok(botSrc.includes('Это отдельная услуга. Она не списывает кредиты бренда.'));
-assert.ok(botSrc.includes('title: `${MONETIZATION_LABELS.CREATOR_PRO} · ${CFG.PRO_DURATION_DAYS} дней`'));
-assert.ok(botSrc.includes('title: `${MONETIZATION_LABELS.BRAND_CREDITS} · ${pack.credits} шт.`'));
-assert.ok(botSrc.includes('title: `${MONETIZATION_LABELS.BRAND_PLAN} · ${label} · ${CFG.BRAND_PLAN_DURATION_DAYS} дней`'));
-assert.ok(botSrc.includes('title: `${MONETIZATION_LABELS.MATCHING} · ${tier.title}`'));
-assert.ok(botSrc.includes('title: `${MONETIZATION_LABELS.FEATURED} · ${d.title}`'));
+assert.ok(paymentDomainSrc.includes('title: `${labels.CREATOR_PRO} · ${cfg.PRO_DURATION_DAYS} дней`'));
+assert.ok(paymentDomainSrc.includes('title: `${labels.BRAND_CREDITS} · ${pack.credits} шт.`'));
+assert.ok(paymentDomainSrc.includes('title: `${labels.BRAND_PLAN} · ${planDef.title} · ${cfg.BRAND_PLAN_DURATION_DAYS} дней`'));
+assert.ok(paymentDomainSrc.includes('title: `${labels.MATCHING} · ${tier.title}`'));
+assert.ok(paymentDomainSrc.includes('title: `${labels.FEATURED} · ${duration.title}`'));
 assert.ok(botSrc.includes("{ id: 'S', credits: CFG.BRAND_TOPUP_S_CREDITS, stars: CFG.BRAND_TOPUP_S_PRICE }"));
 assert.ok(!botSrc.includes("title: '+10 кредитов'"));
 
@@ -124,14 +125,14 @@ for (const invariant of [
   "const payloadPrefix = `brand_${u.id}_${pack.id}_`;",
   "const payloadPrefix = `bplan_${u.id}_${plan}_`;",
   "const payloadPrefix = `match_${u.id}_${tier.id}_`;",
-  "const payloadPrefix = `feat_${u.id}_${d.days}_`;",
-  "const token = _signStarsInvoiceToken(payloadPrefix, tokenRaw);",
+  "const payloadPrefix = `feat_${u.id}_${duration.days}_`;",
+  "signStarsInvoiceToken(payloadPrefix, tokenRaw)",
   "a:ws_pro_buy|ws:${wsId}",
   "a:brand_buy|ws:${wsId}",
   "a:brand_plan_buy|ws:${wsId}",
   "a:match_buy",
   "a:feat_buy",
-]) assert.ok(botSrc.includes(invariant), `Payment callback/payload invariant missing: ${invariant}`);
+]) assert.ok((botSrc + '\n' + paymentDomainSrc).includes(invariant), `Payment callback/payload invariant missing: ${invariant}`);
 
 for (const mechanism of [
   'verifyPayloadHmac(payloadRaw, cfg)',

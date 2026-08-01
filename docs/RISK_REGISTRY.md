@@ -265,3 +265,16 @@ Residual risk:
 - Environment limitation: `npm ci` was blocked by internal mirror HTTP 404 for `xtend@4.0.2`; `test:bounded-safety-hardening` and the complete portable spine are therefore not newly claimed on the final tree.
 - Runtime verification required: one fresh approve/exchange, one deny, one login-control toggle round trip and absence of unknown/ownership/phase errors.
 - Residual risk: `renderAdminSystem` and operator-control storage remain injected from the composition root until later admin-domain extraction; this is an explicit compatibility seam, not a second implementation.
+
+
+## Current STEP590C2 assessment
+
+- Change type: critical payment callback transport extraction; no schema, ENV, pricing or fulfillment-state change.
+- Primary risks addressed: R-38, R-39, R-40, R-41 and R-42.
+- Runtime blast radius: six user purchase callbacks and ten Telegram-admin payment callbacks.
+- Financial posture: signed payloads, durable ledger, `APPLYING/APPLIED`, replay suppression and atomic fulfillment remain in their existing canonical services.
+- Rollback: exact STEP590C1 code rollback is possible because persistent contracts are unchanged; preserve payment/webhook evidence before rollback.
+- Source verification: 164 domain assertions, 2,340 router assertions, 66 payment-critical assertions, 287 JavaScript syntax checks and 138/139 registered source checks PASS.
+- Environment limitation: fresh `npm ci` was blocked by package-mirror HTTP 404 for `xtend@4.0.2`; bounded-safety and the complete portable spine are not newly claimed on the final tree.
+- Runtime verification required: cancelled invoice rendering for available product families, admin payment ledger navigation and absence of callback ownership/domain dependency errors.
+- Residual risk: the domain still receives a broad injected dependency object from the composition root; STEP590I must eventually enforce narrower capability interfaces.
