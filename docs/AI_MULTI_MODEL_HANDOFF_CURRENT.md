@@ -1,3 +1,13 @@
+## STEP590E4A CURRENT HANDOFF — Brand Directory & Profile
+
+- Baseline: STEP590E3C commit `858a0b1`; package `1.3.23`.
+- Result: package `1.3.24`; `src/bot/domains/brands/`; 38 actions extracted.
+- Ownership: 323 extracted / 237 legacy / 7 aliases / 0 unresolved.
+- Payment and applications/deals ownership unchanged; team/curation remain next.
+- No SQL, ENV, API route, callback key, guard, pricing or copy change.
+- Source QA PASS; operator clean dependency/deploy/runtime acceptance pending.
+- Next: STEP590E4B Brand Team & Manager Membership.
+
 # AI Multi-Model Handoff — STEP590E3C Current Truth
 
 **Baseline:** STEP590E3B_R2 source artifact

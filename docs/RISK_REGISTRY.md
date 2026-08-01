@@ -391,3 +391,15 @@ Residual risk:
 - Environment limitation: clean `npm ci` is blocked by the implementation package mirror 404 for `xtend@4.0.2`; source preflight and portable spine stop only at missing `dotenv`.
 - Runtime verification required: bounded matching/public-profile navigation plus an explicitly approved disposable unlock that proves no owner charge, no duplicate debit and durable/Redis parity.
 - Residual risk: the public Workspace owner coordinates a broad monetization capability seam; STEP590F/STEP590I should narrow and statically enforce it.
+
+## Current STEP590E4A assessment
+
+- Change type: Brand directory/filter and Brand profile callback orchestration extraction; no schema, ENV, pricing, action-guard or visible-copy change.
+- Runtime blast radius: 38 exact callbacks across `brand_directory` and `brand_profile`.
+- Canonical correctness boundary: existing Brand profile DB helpers, Redis filter state, input modes, copy-safety and application-return helpers remain unchanged.
+- Explicit exclusions: purchase callbacks remain payment-owned; applications/deals retain STEP590E1 owners; team and curator callbacks remain legacy.
+- Rollback: code rollback to exact STEP590E3C commit `858a0b1`; preserve durable Brand profile changes created after deployment.
+- Source verification: 212 domain assertions, 2,866 router assertions, 560/560 registry, prior domain regressions and 352 JavaScript syntax checks PASS; source preflight and portable spine 6/6 PASS under declared temporary dependency shims.
+- Environment limitation: clean `npm ci`/`npm audit` remain operator-side; shim-assisted evidence does not claim real Upstash behavior.
+- Runtime verification required: bounded directory/filter/application-return/profile navigation plus disposable profile mutation only with explicit operator intent.
+- Residual risk: broad injected capability seams remain until STEP590F/STEP590I; registry-only Brand/curator keys remain for STEP590J dead-code retirement.

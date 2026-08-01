@@ -33,5 +33,7 @@ export const CALLBACK_ROUTE = Object.freeze({
   WORKSPACE_SOCIAL: 'workspace_social',
   DIRECTORY_SEARCH: 'directory_search',
   DIRECTORY_PUBLIC_WORKSPACE: 'directory_public_workspace',
+  BRAND_DIRECTORY: 'brand_directory',
+  BRAND_PROFILE: 'brand_profile',
   LEGACY: 'legacy',
 });

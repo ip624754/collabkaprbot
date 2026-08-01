@@ -11,6 +11,8 @@ const ROOT = path.resolve(__dirname, '..');
 
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
+const brandDirectoryPath = path.join(ROOT, 'src', 'bot', 'domains', 'brands', 'directoryCallbacks.js');
+const brandDirectorySrc = fs.readFileSync(brandDirectoryPath, 'utf8');
 
 assert.ok(
   botSrc.includes("function creatorBrandAppDialogReturnButtonLabel(appId = 0) {") &&
@@ -35,7 +37,9 @@ assert.ok(
     botSrc.includes("kb.text(backLabel, backCb).row();") &&
     botSrc.includes("creatorBrandAppOpenBrandCallback(brandUserId, app.id, 0)") &&
     botSrc.includes("creatorBrandAppOpenBrandCallback(Number(brandUserId || 0), Number(appId || 0), 0)") &&
-    botSrc.includes("const brandAppId = Math.max(0, Number(p.ba || 0));"),
+    brandDirectorySrc.includes("const brandAppId = Math.max(0, Number(p.ba || 0));") &&
+    !botSrc.includes("if (p.a === 'a:brand_dir_open') {") &&
+    botSrc.includes('handleBrandDirectoryCallback'),
   'Expected creator-side open-brand actions to carry local application context and brand cards to return back into that application'
 );
 

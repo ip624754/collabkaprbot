@@ -159,8 +159,8 @@ for (const action of GIVEAWAY_LIFECYCLE_ACTIONS) {
 }
 check(!isGiveawayCriticalCallbackAction('a:menu'), 'foreign action not captured');
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 285, 'STEP590E3C cumulative extracted owner count');
-equal(summary.legacy, 275, 'STEP590E3C cumulative legacy owner count');
+equal(summary.extracted, 323, 'STEP590E4A cumulative extracted owner count');
+equal(summary.legacy, 237, 'STEP590E4A cumulative legacy owner count');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'access owner count');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_PARTICIPANT], 2, 'participant owner count');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_LIFECYCLE], 5, 'lifecycle owner count');

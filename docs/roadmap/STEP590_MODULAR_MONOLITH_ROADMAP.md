@@ -27,7 +27,9 @@
 | STEP590E3A | Workspace control, roles and folders | Operator accepted for roadmap progression | 16/20 | Owner/editor/curator/folder contracts PASS |
 | STEP590E3B | Workspace profile, Instagram and sharing | Operator local source acceptance PASS | 14/20 | Profile/share/IG route parity PASS |
 | STEP590E3C | Directory search and public Workspace | Source implemented; operator dependency gate pending | 15/20 | Search/public/contact ownership parity PASS |
-| STEP590E4 | Brands and curation | Yes | 13/20 | Profile/directory/curator contracts PASS |
+| STEP590E4A | Brand directory and profile | Source implemented; operator gate pending | 14/20 | Directory/profile/payment-exclusion contracts PASS |
+| STEP590E4B | Brand team and manager membership | Planned | 14/20 | Team membership and role-isolation contracts PASS |
+| STEP590E4C | Curator operations | Planned | 14/20 | Curator access/audit/lifecycle contracts PASS |
 | STEP590E5 | Admin and moderation | Yes | 15/20 | Privilege and audit contracts PASS |
 | STEP590E6 | Support, verification, sharing and account | Yes | 12/20 | Input-mode and recovery contracts PASS |
 | STEP590F | `queries.js` repository decomposition with façade | Yes, behavior-preserving | 16/20 | Export/signature/SQL parity; no transaction drift |
@@ -71,7 +73,7 @@ Each extraction must remain deployable and reversible at its own commit/artifact
 STEP590 does not claim completion from smaller files alone. Completion requires explicit ownership, executable routing, preserved critical invariants, bounded dependency direction and removal of the legacy central dispatch/DB ownership only after all consumers are migrated.
 
 
-## Current program position — STEP590E3C
+## Current program position — STEP590E4A
 
 - STEP590A architecture baseline: complete;
 - STEP590B executable router: deployed and operator canary accepted;
@@ -84,7 +86,8 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 - STEP590E2 Barter extraction: operator accepted for roadmap progression; disposable mutation canary waived as residual risk;
 - STEP590E3A Workspace control/folders extraction: operator accepted for roadmap progression;
 - STEP590E3B Workspace profile/Instagram/sharing extraction: operator local source acceptance PASS;
-- STEP590E3C Directory Search/Public Workspace extraction: source implementation complete; operator dependency/deploy gate pending;
-- extracted owner count: 285;
-- legacy owner count: 275 and must continue to decrease monotonically;
-- next bounded architecture step after the local/deploy boundary: STEP590E4 Brands & Curation.
+- STEP590E3C Directory Search/Public Workspace extraction: operator source/local gate PASS and commit `858a0b1` pushed to `main`;
+- STEP590E4A Brand Directory/Profile extraction: source implementation complete; operator dependency/deploy gate pending;
+- extracted owner count: 323;
+- legacy owner count: 237 and must continue to decrease monotonically;
+- next bounded architecture step after acceptance: STEP590E4B Brand Team & Manager Membership.

@@ -1,3 +1,21 @@
+## STEP590E4A — Brand Directory & Profile Domain Extraction (2026-08-01)
+
+**Current source artifact baseline:** operator-pushed STEP590E3C commit `858a0b1`.
+
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY AND DEPLOY GATE PENDING;
+- new bounded domain: `src/bot/domains/brands/`;
+- newly extracted callback actions: 38 total, split into `brand_directory` (10) and `brand_profile` (28);
+- cumulative ownership: 323 extracted, 237 legacy, 7 aliases, 0 unresolved;
+- payment actions `a:brand_buy` and `a:brand_plan_buy` remain payment-owned;
+- applications/deals remain STEP590E1-owned; Brand team and curator callbacks remain for STEP590E4B/E4C;
+- existing DB, Redis, input-mode, copy-safety, application-return and Telegram implementations remain canonical;
+- SQL/ENV/API-route/callback-key/action-guard/pricing/product-copy changes: none;
+- package: `1.3.24`;
+- verified QA: 212 Brands assertions, 2,866 router assertions, 560/560 registry, prior extracted-domain suites PASS and 352/352 JavaScript syntax checks PASS;
+- full `preflight:source` and portable critical spine 6/6 PASS under temporary execution-only `dotenv` and `@upstash/redis` shims; no shim or `node_modules` remains in the final tree;
+- clean `npm ci`/`npm audit`, Git identity, Vercel deployment and Telegram canary remain operator-side;
+- next bounded architecture step after acceptance: STEP590E4B Brand Team & Manager Membership.
+
 ## STEP590E3C — Directory Search & Public Workspace Domain Extraction (2026-08-01)
 
 **Current source artifact baseline:** STEP590E3C layered on the STEP590E3B_R2 source artifact.
