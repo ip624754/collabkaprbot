@@ -27,6 +27,7 @@ function extractBetween(src, startMarker, endMarker) {
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
 const barterCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'barter', 'callbacks.js'), 'utf8');
+const workspaceCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'workspaces', 'callbacks.js'), 'utf8');
 const dbSource = fs.readFileSync(path.join(ROOT, 'src', 'db', 'queries.js'), 'utf8');
 const migrationSource = fs.readFileSync(path.join(ROOT, 'migrations', '044_workspace_channel_disconnect.sql'), 'utf8');
 
@@ -200,10 +201,11 @@ assert.ok(resolveCurrentWorkspaceSrc.includes('const activeWsList = (wsList || [
 assert.ok(resolveCurrentWorkspaceSrc.includes('await setActiveWorkspace(tgId, Number(current.id));'), 'current workspace resolver must persist the resolved current channel in Redis');
 
 const disconnectHandlerSrc = extractBetween(
-  botSource,
+  workspaceCallbacksSource,
   "    if (p.a === 'a:ws_disconnect_q') {",
   "    if (p.a === 'a:net_q') {"
 );
+assert.ok(!botSource.includes("    if (p.a === 'a:ws_disconnect_q') {"), 'disconnect handlers must remain extracted from the legacy dispatcher');
 assert.ok(disconnectHandlerSrc.includes('await db.setWorkspaceChannelConnection(wsId, false);'), 'disconnect handler must persist DB-truth disconnect');
 assert.ok(disconnectHandlerSrc.includes("await db.auditWorkspace(wsId, u.id, 'ws.channel_disconnected'"), 'disconnect handler must audit action');
 assert.ok(disconnectHandlerSrc.includes('await invalidateWorkspacesCache(u.id);'), 'disconnect handler must invalidate cached ws list');
