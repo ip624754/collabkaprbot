@@ -35,8 +35,8 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 369, 'STEP590E5A must extract three hundred sixty-nine exact actions');
-equal(summary.legacy, registryKeys.length - 369, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 407, 'STEP590E5B must extract four hundred seven exact actions');
+equal(summary.legacy, registryKeys.length - 407, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
@@ -74,7 +74,7 @@ equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_OPERATIONS], 16, 'curator operation
 equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_MANAGEMENT], 7, 'curator management owns seven actions');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_REPORTS], 6, 'moderation reports own six actions');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_VERIFICATION], 4, 'moderation verification owns four actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 369, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 407, 'legacy count must be exact');
 
 for (const action of ['a:cur_ws', 'a:cur_ws_off', 'a:net_q', 'a:net_set', 'a:setup', 'a:ws_disconnect_do', 'a:ws_disconnect_q', 'a:ws_history', 'a:ws_history_export', 'a:ws_leads', 'a:ws_list', 'a:ws_list_inactive', 'a:ws_open', 'a:ws_pro', 'a:ws_pro_pin', 'a:ws_pro_pin_clear', 'a:ws_pro_pin_set', 'a:ws_reconnect_do', 'a:ws_reconnect_q', 'a:ws_settings', 'a:ws_toggle_cur', 'a:ws_toggle_net']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.WORKSPACE_CONTROL, `${action} workspace control owner`);
@@ -138,7 +138,7 @@ for (const action of ['a:mod_verifs', 'a:mod_verif_view', 'a:mod_verif_approve',
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.MODERATION_VERIFICATION, `${action} moderation verification owner`);
   equal(getCallbackOwnership(action).phase, CALLBACK_PHASE.POST_USER, `${action} moderation verification phase`);
 }
-equal(getCallbackOwnership('a:admin_mod_add').routeId, CALLBACK_ROUTE.LEGACY, 'admin moderator governance remains legacy');
+equal(getCallbackOwnership('a:admin_mod_add').routeId, CALLBACK_ROUTE.ADMIN_MODERATOR_GOVERNANCE, 'admin moderator governance extracted by STEP590E5B');
 
 for (const action of registryKeys) {
   const owner = getCallbackOwnership(action);

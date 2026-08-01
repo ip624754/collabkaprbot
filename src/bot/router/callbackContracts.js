@@ -41,5 +41,9 @@ export const CALLBACK_ROUTE = Object.freeze({
   CURATOR_MANAGEMENT: 'curator_management',
   MODERATION_REPORTS: 'moderation_reports',
   MODERATION_VERIFICATION: 'moderation_verification',
+  ADMIN_USERS: 'admin_users',
+  ADMIN_GIFTS: 'admin_gifts',
+  ADMIN_SUPPORT: 'admin_support',
+  ADMIN_MODERATOR_GOVERNANCE: 'admin_moderator_governance',
   LEGACY: 'legacy',
 });

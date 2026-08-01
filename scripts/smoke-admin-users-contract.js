@@ -33,6 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const adminUsersCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'adminOperations', 'usersCallbacks.js'), 'utf8');
 
 const renderAdminUsersSrc = extractBetween(
   botSource,
@@ -40,11 +41,7 @@ const renderAdminUsersSrc = extractBetween(
   "\n\nasync function renderAdminUserCard(ctx, userId, backFilter = 'all', backPage = 0) {"
 );
 
-const adminUsersCallbacksSrc = extractBetween(
-  botSource,
-  "    if (p.a === 'a:admin_users') {",
-  "\n    // --- Admin: User Note (Redis-only) (STEP194) ---"
-);
+const adminUsersCallbacksSrc = adminUsersCallbacksSource;
 
 const sendAdminUsersCsvSrc = extractBetween(
   botSource,

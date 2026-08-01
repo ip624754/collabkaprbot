@@ -33,6 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const adminUsersCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'adminOperations', 'usersCallbacks.js'), 'utf8');
 
 const renderAdminUserCardSrc = extractBetween(
   botSource,
@@ -46,11 +47,7 @@ const renderAdminUserNoteSrc = extractBetween(
   "\n\nfunction renderAdminDmUserMessageHtml(bodyHtml, opts = {}) {"
 );
 
-const adminUserCardCallbacksSrc = extractBetween(
-  botSource,
-  "    if (p.a === 'a:adm_ucard') {",
-  "\n    // Admin: placeholders helper (STEP191)"
-);
+const adminUserCardCallbacksSrc = adminUsersCallbacksSource;
 
 const adminUserNoteExpectTextSrc = extractBetween(
   botSource,

@@ -441,3 +441,15 @@ Residual risk:
 - Environment limitation: clean `npm ci`/`npm audit` remain operator-side; shim-assisted evidence does not claim live Postgres, Redis or Telegram behavior.
 - Runtime verification required: moderator home, report queue/view, one disposable freeze/close/resolve path, verification queue/view and disposable approve/reject flow.
 - Residual risk: mutations are durable and notification delivery is best-effort; production canary must use bounded disposable records and avoid real-user verification state unless explicitly approved.
+
+
+## Current STEP590E5B assessment
+
+- Change type: admin users, gifts/access, support and moderator-membership callback orchestration extraction.
+- Runtime blast radius: 38 callbacks split across four exact owners.
+- Correctness boundary: existing super-admin checks, DB helpers, Redis sessions/TTL, support-thread writes, role-cache invalidation and Telegram delivery remain canonical.
+- Explicit exclusions: communications templates/notices/outbox, admin system/founder, payment-admin and moderation reports/verification are not modified.
+- Source verification: 266 domain assertions, 2,965 router assertions, 560/560 registry and all prior extracted-domain regressions PASS; source preflight and portable spine 6/6 PASS under declared temporary shims.
+- Environment limitation: clean `npm ci`/`npm audit` remain operator-side; shim-assisted evidence does not claim live Postgres, Redis or Telegram behavior.
+- Runtime verification required: users list/card, note cancel, support read surface, moderator list and gift/revoke cancel paths.
+- Residual risk: these are privileged mutation surfaces; production smoke must avoid real bans, gifts, moderator removals and outbound user messages unless explicitly disposable.

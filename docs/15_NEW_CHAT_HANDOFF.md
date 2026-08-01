@@ -1,3 +1,16 @@
+## STEP590E5B CURRENT HANDOFF — Admin Users, Support & Moderator Governance
+
+- Baseline: operator-pushed STEP590E5A commit `acbe16d`.
+- Result: package `1.3.28`; new `src/bot/domains/adminOperations/`; 38 live callbacks extracted.
+- Ownership: 407 extracted / 153 legacy / 7 aliases / 0 unresolved.
+- Routes: `admin_users` 20, `admin_gifts` 8, `admin_support` 7, `admin_moderator_governance` 3.
+- QA: E5B 266 assertions PASS; router 2,965 PASS; all prior domain suites PASS; source preflight and portable spine 6/6 PASS under temporary execution-only shims.
+- Contracts unchanged: no SQL, ENV, API route, callback key, action guard or visible-copy change.
+- Explicit exclusions: message templates, notices, outbox, admin system/founder and payment-admin remain outside this STEP.
+- Operator gate: `npm.cmd ci`, `npm.cmd audit`, E5B tests, critical spine, preflight, commit/push, Vercel Ready and bounded admin smoke.
+- Next: STEP590E5C Admin Communications, Notices & Outbox.
+
+
 ## STEP590E5A CURRENT HANDOFF — Moderation Reports & Verification
 
 - Baseline: operator-pushed STEP590E4C commit `606028d`.

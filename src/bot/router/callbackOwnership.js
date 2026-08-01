@@ -13,6 +13,7 @@ import { DIRECTORY_CALLBACK_ROUTE_DEFINITIONS } from '../domains/directory/route
 import { BRAND_CALLBACK_ROUTE_DEFINITIONS } from '../domains/brands/route.js';
 import { CURATOR_CALLBACK_ROUTE_DEFINITIONS } from '../domains/curators/route.js';
 import { MODERATION_CALLBACK_ROUTE_DEFINITIONS } from '../domains/moderation/route.js';
+import { ADMIN_OPERATION_CALLBACK_ROUTE_DEFINITIONS } from '../domains/adminOperations/route.js';
 import { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
@@ -32,6 +33,7 @@ export const CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
   ...BRAND_CALLBACK_ROUTE_DEFINITIONS,
   ...CURATOR_CALLBACK_ROUTE_DEFINITIONS,
   ...MODERATION_CALLBACK_ROUTE_DEFINITIONS,
+  ...ADMIN_OPERATION_CALLBACK_ROUTE_DEFINITIONS,
 ]);
 
 function assertRouteDefinition(definition) {

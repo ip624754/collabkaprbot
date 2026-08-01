@@ -33,6 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const adminModeratorCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'adminOperations', 'moderatorCallbacks.js'), 'utf8');
 
 const renderAdminMetricsSrc = extractBetween(
   botSource,
@@ -62,7 +63,7 @@ const auditMetricsModeratorsCallbacksSrc = extractBetween(
   botSource,
   "    if (p.a === 'a:aud') {",
   "\n    // Admin: QStash status / signed ping (Redis-only metrics)"
-);
+) + '\n' + adminModeratorCallbacksSource;
 
 const auditSearchExpectTextSrc = extractBetween(
   botSource,

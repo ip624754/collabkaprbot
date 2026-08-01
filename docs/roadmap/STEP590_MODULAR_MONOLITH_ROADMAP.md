@@ -30,8 +30,8 @@
 | STEP590E4A | Brand directory and profile | Operator source implementation committed/pushed | 14/20 | Directory/profile/payment-exclusion contracts PASS |
 | STEP590E4B | Brand team and manager membership | Operator source implementation committed/pushed | 14/20 | Team membership and role-isolation contracts PASS |
 | STEP590E4C | Curator operations | Operator source implementation committed/pushed | 14/20 | Curator access/audit/lifecycle contracts PASS |
-| STEP590E5A | Moderation reports and verification | Source implemented; operator gate pending | 15/20 | Moderator privilege, identifier and audit contracts PASS |
-| STEP590E5B | Admin users, support and moderator governance | Yes | 16/20 | User/support/role governance contracts PASS |
+| STEP590E5A | Moderation reports and verification | Operator source implementation committed/pushed | 15/20 | Moderator privilege, identifier and audit contracts PASS |
+| STEP590E5B | Admin users, support and moderator governance | Source implemented; operator gate pending | 16/20 | User/support/role governance contracts PASS |
 | STEP590E5C | Admin communications, notices and outbox | Yes | 15/20 | Audience, draft and delivery-state contracts PASS |
 | STEP590E5D | Admin operations, system and founder controls | Yes | 16/20 | Privilege, toggle and audit contracts PASS |
 | STEP590E6 | Support, verification, sharing and account | Yes | 12/20 | Input-mode and recovery contracts PASS |
@@ -77,7 +77,7 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 
 
 
-## Current program position — STEP590E5A
+## Current program position — STEP590E5B
 
 - STEP590A architecture baseline: complete;
 - STEP590B executable router: deployed and operator canary accepted;
@@ -94,8 +94,9 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 - STEP590E4A Brand Directory/Profile extraction: operator commit `60f19ba` pushed to `main`;
 - STEP590E4B Brand Team/Manager extraction: operator commit `e738784` pushed to `main`;
 - STEP590E4C Curator Operations extraction: operator commit `606028d` pushed to `main`;
-- STEP590E5A Moderation Reports/Verification extraction: source implementation complete; operator dependency/deploy gate pending;
-- extracted owner count: 369;
-- legacy owner count: 191 and must continue to decrease monotonically;
-- next bounded architecture step after acceptance: STEP590E5B Admin Users, Support & Moderator Governance;
+- STEP590E5A Moderation Reports/Verification extraction: operator commit `acbe16d` pushed to `main`;
+- STEP590E5B Admin Users/Support/Moderator Governance extraction: source implementation complete; operator dependency/deploy gate pending;
+- extracted owner count: 407;
+- legacy owner count: 153 and must continue to decrease monotonically;
+- next bounded architecture step after acceptance: STEP590E5C Admin Communications, Notices & Outbox;
 - residual risk: broad capability injection remains a compatibility seam until STEP590F/STEP590I; registry-only aliases remain for STEP590J dead-code retirement.

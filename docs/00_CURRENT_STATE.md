@@ -1,3 +1,22 @@
+## STEP590E5B — Admin Users, Support & Moderator Governance Domain Extraction (2026-08-02)
+
+**Current source artifact baseline:** operator-pushed STEP590E5A commit `acbe16d`.
+
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY AND DEPLOY GATE PENDING;
+- new bounded domain: `src/bot/domains/adminOperations/`;
+- newly extracted callback actions: 38 total, split into `admin_users` (20), `admin_gifts` (8), `admin_support` (7), and `admin_moderator_governance` (3);
+- cumulative ownership: 407 extracted, 153 legacy, 7 aliases, 0 unresolved;
+- user directory/card/notes/access/direct-message, bulk gift/revoke, support and moderator membership behavior remains on existing DB/Redis/Telegram truth;
+- all 38 actions retain explicit super-admin authorization before protected work; unauthorized executable coverage confirms no DB mutation;
+- `adm_umsg_tpl`, admin template/notices/outbox, system/founder and payment-admin owners remain outside this STEP;
+- SQL/ENV/API-route/callback-key/action-guard/product-copy changes: none;
+- package: `1.3.28`;
+- verified QA: 266 E5B assertions, 2,965 router assertions, 560/560 registry and all prior extracted-domain suites PASS;
+- full `preflight:source` and portable critical spine 6/6 PASS under temporary execution-only shims; no shim or `node_modules` remains in the final tree;
+- clean `npm ci`/`npm audit`, Git commit/push, Vercel deployment and bounded Telegram admin smoke remain operator-side;
+- next bounded architecture step after acceptance: STEP590E5C Admin Communications, Notices & Outbox.
+
+
 ## STEP590E5A — Moderation Reports & Verification Domain Extraction (2026-08-02)
 
 **Current source artifact baseline:** operator-pushed STEP590E4C commit `606028d`.

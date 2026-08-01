@@ -214,8 +214,8 @@ await assert.rejects(
 assertions += 1;
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 369, 'STEP590E5A cumulative extracted ownership');
-equal(summary.legacy, 191, 'STEP590E5A cumulative legacy ownership');
+equal(summary.extracted, 407, 'STEP590E5B cumulative extracted ownership');
+equal(summary.legacy, 153, 'STEP590E5B cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.WORKSPACE_PROFILE], 18, 'workspace profile route count');
 equal(summary.byRoute[CALLBACK_ROUTE.WORKSPACE_SOCIAL], 9, 'workspace social route count');
 equal(getCallbackOwnership('a:ws_pro_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'workspace checkout remains payment-owned');

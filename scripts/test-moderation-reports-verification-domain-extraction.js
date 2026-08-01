@@ -161,12 +161,12 @@ assertions += 1;
 }
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 369, 'STEP590E5A cumulative extracted ownership');
-equal(summary.legacy, 191, 'STEP590E5A cumulative legacy ownership');
+equal(summary.extracted, 407, 'STEP590E5B cumulative extracted ownership');
+equal(summary.legacy, 153, 'STEP590E5B cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_REPORTS], 6, 'moderation reports route count');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_VERIFICATION], 4, 'moderation verification route count');
-equal(getCallbackOwnership('a:admin_mod_add').routeId, CALLBACK_ROUTE.LEGACY, 'admin moderator governance remains legacy');
-equal(getCallbackOwnership('a:admin_mod_list').routeId, CALLBACK_ROUTE.LEGACY, 'admin moderator list remains legacy');
-equal(getCallbackOwnership('a:admin_mod_rm').routeId, CALLBACK_ROUTE.LEGACY, 'admin moderator removal remains legacy');
+equal(getCallbackOwnership('a:admin_mod_add').routeId, CALLBACK_ROUTE.ADMIN_MODERATOR_GOVERNANCE, 'admin moderator governance extracted by STEP590E5B');
+equal(getCallbackOwnership('a:admin_mod_list').routeId, CALLBACK_ROUTE.ADMIN_MODERATOR_GOVERNANCE, 'admin moderator list extracted by STEP590E5B');
+equal(getCallbackOwnership('a:admin_mod_rm').routeId, CALLBACK_ROUTE.ADMIN_MODERATOR_GOVERNANCE, 'admin moderator removal extracted by STEP590E5B');
 
 console.log(`PASS STEP590E5A moderation reports/verification extraction tests (${assertions} assertions)`);
