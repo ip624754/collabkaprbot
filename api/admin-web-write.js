@@ -7,6 +7,7 @@ import {
   updateNoticeDraftForActor,
 } from '../src/lib/adminWeb/comms.js';
 import { clearAdminUserNote, getAdminUserNote, setAdminUserNote } from '../src/lib/adminWeb/notes.js';
+import { configureFoundingCohort, removeFoundingCohortMember, setFoundingCohortMember } from '../src/lib/adminWeb/foundingCohort.js';
 
 async function readBodyOrReply(req, res) {
   try {
@@ -60,6 +61,74 @@ export default async function handler(req, res) {
       reason: oldNote?.text ? 'update' : 'create',
       oldJson: oldNote || null,
       newJson: { text },
+    });
+    return json(res, 200, { ok: true });
+  }
+
+  if (action === 'configure_founding_cohort') {
+    if (!isFounderSession(session)) return json(res, 403, { ok: false, error: 'founder_only' });
+    const result = await configureFoundingCohort({
+      actorTgId: session.actorTgId,
+      launchWedge: body.launchWedge,
+      ownerLabel: body.ownerLabel,
+      ownerTgId: body.ownerTgId,
+      followUpCadenceDays: body.followUpCadenceDays,
+      nextReviewAt: body.nextReviewAt,
+    });
+    if (!result.ok) return json(res, result.error === 'cohort_busy' ? 409 : 400, result);
+    await appendAdminWebAudit({
+      section: 'users',
+      action: 'configure_founding_cohort',
+      actorTgId: session.actorTgId,
+      targetType: 'founding_cohort',
+      targetId: 'v1',
+      reason: 'bounded_launch_operations',
+      oldJson: result.previous?.config || result.previous || null,
+      newJson: result.state || null,
+    });
+    return json(res, 200, { ok: true });
+  }
+
+  if (action === 'set_founding_cohort_member') {
+    if (!isFounderSession(session)) return json(res, 403, { ok: false, error: 'founder_only' });
+    const result = await setFoundingCohortMember({
+      actorTgId: session.actorTgId,
+      userId: body.userId,
+      status: body.status,
+      profileReviewed: body.profileReviewed === true,
+      contactReviewed: body.contactReviewed === true,
+      termsReviewed: body.termsReviewed === true,
+      onboardingCanary: body.onboardingCanary,
+      blocker: body.blocker,
+      note: body.note,
+    });
+    if (!result.ok) return json(res, result.error === 'cohort_busy' ? 409 : 400, result);
+    await appendAdminWebAudit({
+      section: 'users',
+      action: 'set_founding_cohort_member',
+      actorTgId: session.actorTgId,
+      targetType: 'user',
+      targetId: String(Number(body.userId || 0) || 0),
+      reason: 'bounded_launch_operations',
+      oldJson: result.previous?.members?.[String(Number(body.userId || 0) || 0)] || null,
+      newJson: result.result?.member || null,
+    });
+    return json(res, 200, { ok: true });
+  }
+
+  if (action === 'remove_founding_cohort_member') {
+    if (!isFounderSession(session)) return json(res, 403, { ok: false, error: 'founder_only' });
+    const result = await removeFoundingCohortMember({ actorTgId: session.actorTgId, userId: body.userId });
+    if (!result.ok) return json(res, result.error === 'cohort_busy' ? 409 : 400, result);
+    await appendAdminWebAudit({
+      section: 'users',
+      action: 'remove_founding_cohort_member',
+      actorTgId: session.actorTgId,
+      targetType: 'user',
+      targetId: String(Number(body.userId || 0) || 0),
+      reason: 'bounded_launch_operations',
+      oldJson: result.result?.removed || null,
+      newJson: null,
     });
     return json(res, 200, { ok: true });
   }

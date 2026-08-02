@@ -5,6 +5,7 @@ import { getRuntimeSummary } from '../src/lib/adminWeb/runtime.js';
 import { buildUsersCsvExport } from '../src/lib/adminWeb/usersExport.js';
 import { buildUsersBulkPayload } from '../src/lib/adminWeb/usersBulk.js';
 import { getOperatorControlSnapshot } from '../src/lib/operatorControls.js';
+import { getFoundingCohortSummary } from '../src/lib/adminWeb/foundingCohort.js';
 
 function sendCsv(res, filename, body) {
   res.status(200);
@@ -110,6 +111,10 @@ export default async function handler(req, res) {
       },
     });
     return json(res, 200, { ok: true, data: payload });
+  }
+  if (section === 'founding_cohort') {
+    const data = await getFoundingCohortSummary({ candidateLimit: getSearchParam(req, 'candidate_limit', '12') });
+    return json(res, 200, { ok: true, data });
   }
   if (section === 'user') {
     const id = Number(getSearchParam(req, 'id', '0') || 0) || 0;

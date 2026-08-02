@@ -1,3 +1,23 @@
+## STEP592 — Founding Cohort and Marketplace Liquidity (2026-08-02)
+
+- canonical parent: production-accepted STEP591 commit `d0c2f10e328d3e1464649831bcbf67840e875703`, package `1.3.39`;
+- package: `1.3.40`;
+- implementation status: SOURCE IMPLEMENTED / RUNTIME ACCEPTANCE PENDING;
+- a persistent Redis-backed founding cohort workspace now lives inside existing Admin → Users; no new API route, Vercel function, SQL migration or ENV was added;
+- founder-only actions configure launch wedge, owner/cadence and cohort member state; every mutation uses the existing admin audit trail;
+- launch-ready definition is explicit: creator workspace + connected channel + profile/contact/terms reviews + no blocker + launch_ready/onboarded status;
+- active offers count only `barter_offers.status=ACTIVE`; aggregate and Redis availability are explicit and exit readiness fails closed when either evidence source is unavailable; cohort controls never create or mutate offers;
+- exit criteria remain 10 launch-ready creators, 5 active offers, zero blocker defects, one timestamped onboarding canary PASS no older than 14 days, named owner and future next review date;
+- this source step does not claim those targets are already achieved; operator must configure the cohort and collect runtime evidence;
+- next step after actual STEP592 exit: `STEP593_BRAND_DEMAND_AND_FIRST_DEAL_FUNNEL`.
+
+Canonical references:
+
+- `docs/product/STEP592_FOUNDING_COHORT_BASELINE.json`;
+- `docs/operations/STEP592_FOUNDING_COHORT_OPERATOR_PLAYBOOK.md`;
+- `docs/roadmap/STEP592_FOUNDING_COHORT_EXECUTION_PLAN.md`.
+
+
 ## STEP591 — Product and Operations Rebaseline (2026-08-02)
 
 - canonical parent: production-accepted STEP590I commit `10042b52519ee043e812ea541e34c0c5ff39248e`, package `1.3.38`;

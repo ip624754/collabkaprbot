@@ -1,3 +1,33 @@
+# STEP592 CURRENT HANDOFF
+
+## Canonical baseline
+
+- Parent commit: `d0c2f10e328d3e1464649831bcbf67840e875703`.
+- Parent verdict: `PRODUCTION_ACCEPT_STEP591_PRODUCT_AND_OPERATIONS_REBASELINE`.
+- Package: `1.3.40`.
+- Source status: implementation and focused QA complete; operator clean install/deploy/browser/persistence acceptance pending.
+
+## Implemented
+
+- Admin → Users founding cohort workspace.
+- Redis key `admin:founding_cohort:v1` under the existing environment namespace.
+- Founder-only config/member mutations with token lock and admin audit.
+- Explicit creator readiness, ACTIVE-offer count, onboarding canary and exit progress.
+- No Telegram send, payment, official publish, SQL, migration, ENV, route or function change.
+
+## Operator acceptance
+
+1. Run clean install/audit, STEP592 focused tests, architecture gates, critical spine and source preflight.
+2. Commit/push and wait for Vercel Ready.
+3. Open Admin → Users and confirm desktop/mobile rendering.
+4. Save owner/cadence, add one real creator candidate, refresh and confirm persistence.
+5. Remove the candidate and confirm user/profile/offers remain unchanged.
+6. Health must remain `ready / GO`.
+
+## Exit boundary
+
+Source acceptance is not marketplace-liquidity acceptance. STEP592 closes only when 10 launch-ready creators, 5 active offers, zero blockers, canary PASS, owner and cadence converge.
+
 # STEP591 CURRENT HANDOFF — Product and Operations Rebaseline
 
 - Canonical parent commit: `10042b52519ee043e812ea541e34c0c5ff39248e`.

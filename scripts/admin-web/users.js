@@ -874,6 +874,146 @@ export function createUsersModule(ctx) {
     `;
   }
 
+  function foundingCohortStatusMeta(value = 'candidate') {
+    const key = String(value || 'candidate').trim().toLowerCase();
+    if (key === 'reviewing') return { label: 'На проверке', tone: 'is-warn' };
+    if (key === 'launch_ready') return { label: 'Launch-ready', tone: 'is-good' };
+    if (key === 'onboarded') return { label: 'Canary пройден', tone: 'is-good' };
+    if (key === 'blocked') return { label: 'Блокер', tone: 'is-bad' };
+    return { label: 'Кандидат', tone: 'is-soft' };
+  }
+
+  function foundingCohortCanaryMeta(value = 'not_run') {
+    const key = String(value || 'not_run').trim().toLowerCase();
+    if (key === 'pass') return { label: 'PASS', tone: 'is-good' };
+    if (key === 'blocked') return { label: 'BLOCKED', tone: 'is-bad' };
+    return { label: 'Не запускался', tone: 'is-soft' };
+  }
+
+  function foundingCohortMemberByUserId(cohort = {}, userId = 0) {
+    const uid = Number(userId || 0) || 0;
+    return (Array.isArray(cohort.members) ? cohort.members : []).find((item) => Number(item.userId || 0) === uid) || null;
+  }
+
+  function renderFoundingCohortProgress(cohort = {}) {
+    const progress = cohort.progress || {};
+    const targets = cohort.targets || {};
+    const cards = [
+      ['Launch-ready creators', Number(progress.launchReadyCreators || 0), Number(targets.launchReadyCreators || 10), Number(progress.launchReadyCreators || 0) >= Number(targets.launchReadyCreators || 10)],
+      ['Active offers', progress.activeOffersEvidenceAvailable === false ? '—' : Number(progress.activeOffers || 0), Number(targets.activeOffers || 5), progress.activeOffersEvidenceAvailable !== false && Number(progress.activeOffers || 0) >= Number(targets.activeOffers || 5)],
+      ['Blocker defects', Number(progress.blockerDefects || 0), Number(targets.blockerDefects || 0), Number(progress.blockerDefects || 0) === 0],
+      ['Onboarding canary', progress.onboardingCanaryPass ? 1 : 0, 1, progress.onboardingCanaryPass === true],
+      ['Owner', progress.ownerConfigured ? 1 : 0, 1, progress.ownerConfigured === true],
+      ['Cadence', progress.cadenceConfigured ? 1 : 0, 1, progress.cadenceConfigured === true],
+    ];
+    return cards.map(([label, value, target, ok]) => `
+      <div class="aw-mini-card aw-cohort-progress-card">
+        <span>${escapeHtml(label)}</span>
+        <strong class="${ok ? 'aw-status good' : 'aw-status warn'}">${value} / ${target}</strong>
+      </div>
+    `).join('');
+  }
+
+  function renderFoundingCohortMemberCard(member = {}, canEdit = false) {
+    const statusMeta = foundingCohortStatusMeta(member.status);
+    const canaryMeta = foundingCohortCanaryMeta(member.onboardingCanary);
+    const readiness = member.readiness || {};
+    return `
+      <article class="aw-cohort-member-card" data-cohort-member="${Number(member.userId || 0)}">
+        <div class="aw-cohort-member-head">
+          <div>
+            <strong>${escapeHtml(member.displayName || `user #${Number(member.userId || 0) || '—'}`)}</strong>
+            <small>user_id ${Number(member.userId || 0) || '—'} · ${member.hasChannel ? 'канал подключён' : 'канала нет'} · active offers ${Number(member.activeOffers || 0)}</small>
+          </div>
+          <div class="aw-badges">
+            <span class="aw-badge ${escapeHtml(statusMeta.tone)}">${escapeHtml(statusMeta.label)}</span>
+            <span class="aw-badge ${escapeHtml(canaryMeta.tone)}">canary ${escapeHtml(canaryMeta.label)}${member.onboardingCanaryAt ? ` · ${formatDate(member.onboardingCanaryAt)}` : ''}</span>
+            <span class="aw-badge ${readiness.launchReady ? 'is-good' : 'is-warn'}">${readiness.launchReady ? 'готов' : 'не готов'}</span>
+          </div>
+        </div>
+        <div class="aw-cohort-member-grid">
+          <label class="aw-field"><span>Статус</span><select class="aw-select" data-cohort-field="status" ${canEdit ? '' : 'disabled'}>
+            ${[['candidate','Кандидат'],['reviewing','На проверке'],['launch_ready','Launch-ready'],['onboarded','Canary пройден'],['blocked','Блокер']].map(([value,label]) => `<option value="${value}" ${member.status === value ? 'selected' : ''}>${label}</option>`).join('')}
+          </select></label>
+          <label class="aw-field"><span>Onboarding canary</span><select class="aw-select" data-cohort-field="onboardingCanary" ${canEdit ? '' : 'disabled'}>
+            ${[['not_run','Не запускался'],['pass','PASS'],['blocked','BLOCKED']].map(([value,label]) => `<option value="${value}" ${member.onboardingCanary === value ? 'selected' : ''}>${label}</option>`).join('')}
+          </select></label>
+          <label class="aw-check"><input type="checkbox" data-cohort-field="profileReviewed" ${member.profileReviewed ? 'checked' : ''} ${canEdit ? '' : 'disabled'} /> Профиль проверен</label>
+          <label class="aw-check"><input type="checkbox" data-cohort-field="contactReviewed" ${member.contactReviewed ? 'checked' : ''} ${canEdit ? '' : 'disabled'} /> Контакт проверен</label>
+          <label class="aw-check"><input type="checkbox" data-cohort-field="termsReviewed" ${member.termsReviewed ? 'checked' : ''} ${canEdit ? '' : 'disabled'} /> Условия проверены</label>
+        </div>
+        <div class="aw-cohort-member-notes">
+          <label class="aw-field"><span>Blocker</span><input class="aw-input" data-cohort-field="blocker" maxlength="500" value="${escapeHtml(member.blocker || '')}" placeholder="Пусто = blocker отсутствует" ${canEdit ? '' : 'disabled'} /></label>
+          <label class="aw-field"><span>Follow-up note</span><input class="aw-input" data-cohort-field="note" maxlength="500" value="${escapeHtml(member.note || '')}" placeholder="Следующий конкретный шаг" ${canEdit ? '' : 'disabled'} /></label>
+        </div>
+        ${canEdit ? `<div class="aw-actions"><button class="aw-button" data-cohort-save="${Number(member.userId || 0)}">Сохранить</button><button class="aw-button ghost" data-cohort-remove="${Number(member.userId || 0)}">Убрать из когорты</button></div>` : ''}
+      </article>
+    `;
+  }
+
+  function renderFoundingCohortWorkspace(cohort = {}) {
+    const config = cohort.config || {};
+    const progress = cohort.progress || {};
+    const members = Array.isArray(cohort.members) ? cohort.members : [];
+    const candidates = Array.isArray(cohort.candidates) ? cohort.candidates : [];
+    const canEdit = window.__adminSession?.isFounder === true;
+    return `
+      <section class="aw-surface aw-stack aw-founding-cohort" id="foundingCohortWorkspace">
+        <div class="aw-section-head">
+          <div>
+            <h2>Founding cohort · marketplace liquidity</h2>
+            <p>Bounded launch workspace: 10 launch-ready creators, 5 active offers, zero blockers и один onboarding canary PASS не старше 14 дней.</p>
+          </div>
+          <span class="aw-badge ${progress.exitReady ? 'is-good' : 'is-warn'}">${progress.exitReady ? 'EXIT READY' : 'IN PROGRESS'}</span>
+        </div>
+        <div class="aw-mini-grid aw-mini-grid-3">${renderFoundingCohortProgress(cohort)}</div>
+        ${progress.cohortPersistenceAvailable === false ? '<div class="aw-alert bad">Cohort storage недоступен. Данные показаны как недостоверный empty fallback; founder writes должны завершаться ошибкой без перезаписи.</div>' : ''}
+        ${progress.activeOffersEvidenceAvailable === false ? '<div class="aw-alert warn">Active-offer aggregate недоступен. Exit readiness принудительно остаётся false; нулевое значение не считается подтверждённым.</div>' : ''}
+        <div class="aw-cohort-config-grid">
+          <label class="aw-field"><span>Launch wedge</span><input id="cohortLaunchWedge" class="aw-input" maxlength="160" value="${escapeHtml(config.launchWedge || '')}" ${canEdit ? '' : 'disabled'} /></label>
+          <label class="aw-field"><span>Owner label</span><input id="cohortOwnerLabel" class="aw-input" maxlength="120" value="${escapeHtml(config.ownerLabel || '')}" placeholder="Например: Rustam / Зарина" ${canEdit ? '' : 'disabled'} /></label>
+          <label class="aw-field"><span>Owner TG ID</span><input id="cohortOwnerTgId" class="aw-input" inputmode="numeric" value="${Number(config.ownerTgId || 0) || ''}" ${canEdit ? '' : 'disabled'} /></label>
+          <label class="aw-field"><span>Cadence, дней</span><input id="cohortCadenceDays" class="aw-input" type="number" min="1" max="30" value="${Number(config.followUpCadenceDays || 7)}" ${canEdit ? '' : 'disabled'} /></label>
+          <label class="aw-field"><span>Следующий review</span><input id="cohortNextReviewAt" class="aw-input" type="datetime-local" value="${config.nextReviewAt ? escapeHtml(String(config.nextReviewAt).slice(0,16)) : ''}" ${canEdit ? '' : 'disabled'} /></label>
+        </div>
+        ${canEdit ? '<div class="aw-actions"><button class="aw-button" id="saveFoundingCohortConfigBtn">Сохранить owner/cadence</button></div>' : '<div class="aw-muted">Изменение founding cohort доступно только founder-сессии.</div>'}
+        <div class="aw-split aw-cohort-workspace-split">
+          <section class="aw-stack">
+            <div class="aw-section-head"><h3>Участники когорты</h3><span class="aw-chip">${members.length} / ${Number(cohort.limits?.maxMembers || 50)}</span></div>
+            ${members.length ? members.map((member) => renderFoundingCohortMemberCard(member, canEdit)).join('') : '<div class="aw-empty">Когорта пока пуста. Добавь creator из списка кандидатов.</div>'}
+          </section>
+          <aside class="aw-stack">
+            <h3>Кандидаты с подключённым каналом</h3>
+            <div class="aw-list">
+              ${candidates.length ? candidates.map((candidate) => `
+                <div class="aw-list-item">
+                  <strong>${escapeHtml(candidate.displayName || `user #${Number(candidate.userId || 0)}`)}</strong>
+                  <small>user_id ${Number(candidate.userId || 0)} · ${candidate.hasChannel ? 'канал есть' : 'канала нет'} · активность ${formatDate(candidate.lastKnownActivityAt)}</small>
+                  ${canEdit ? `<div class="aw-actions"><button class="aw-button ghost" data-cohort-add="${Number(candidate.userId || 0)}">Добавить кандидата</button><a class="aw-button ghost" data-link href="/admin/users/${Number(candidate.userId || 0)}">Открыть карточку</a></div>` : ''}
+                </div>
+              `).join('') : '<div class="aw-empty">Новых подходящих candidates не найдено.</div>'}
+            </div>
+          </aside>
+        </div>
+        <div class="aw-muted">Truth Boundary: launch-ready считается только при creator role, подключённом канале, трёх review-флагах, отсутствии blocker и ручном статусе launch-ready/onboarded. Active offers берутся только из status=ACTIVE; canary PASS учитывается 14 дней; next review должен быть в будущем.</div>
+      </section>
+    `;
+  }
+
+  function renderFoundingCohortUserCard(cohort = {}, userId = 0) {
+    const member = foundingCohortMemberByUserId(cohort, userId);
+    const canEdit = window.__adminSession?.isFounder === true;
+    if (member) return renderFoundingCohortMemberCard(member, canEdit);
+    if (!canEdit) return '<section class="aw-surface aw-stack"><h2>Founding cohort</h2><div class="aw-empty">Пользователь не входит в founding cohort.</div></section>';
+    return `
+      <section class="aw-surface aw-stack">
+        <h2>Founding cohort</h2>
+        <p>Добавить этого creator как bounded launch candidate. Это не отправляет сообщения и не публикует offer.</p>
+        <button class="aw-button" data-cohort-add="${Number(userId || 0)}">Добавить кандидата</button>
+      </section>
+    `;
+  }
+
   function usersView(model) {
     const items = Array.isArray(model.items) ? model.items : [];
     const exportOptions = Array.isArray(model.exportOptions) ? model.exportOptions : [];
@@ -969,6 +1109,7 @@ export function createUsersModule(ctx) {
       recentCopy,
     });
     return sectionShell('users', `
+      ${renderFoundingCohortWorkspace(model.foundingCohort || {})}
       <section class="aw-surface aw-stack">
         <div class="aw-users-sticky-controls">
           <div class="aw-users-sticky-shell">
@@ -1268,6 +1409,7 @@ export function createUsersModule(ctx) {
     const activity = model.activity || {};
     const note = model.note || {};
     const recentAudit = Array.isArray(model.recentAdminAudit) ? model.recentAdminAudit : [];
+    const foundingCohort = model.foundingCohort || {};
     const displayName = user.displayName || (user.username ? '@' + user.username : 'user #' + (user.id || '—'));
     const workspaceLabel = Array.isArray(access.workspaces) && access.workspaces.length
       ? access.workspaces.map((w) => `${w.title || 'workspace'}${w.channel_username ? ` · @${String(w.channel_username).replace(/^@/, '')}` : ''}`).join(' · ')
@@ -1344,6 +1486,7 @@ export function createUsersModule(ctx) {
         </section>
 
         <aside class="aw-stack">
+          ${renderFoundingCohortUserCard(foundingCohort, user.id)}
           <section class="aw-surface aw-stack">
             <h2>Заметка оператора</h2>
             <textarea id="noteText" class="aw-textarea" maxlength="1000" placeholder="Внутренняя заметка для фаундера/admin">${escapeHtml(note.text || '')}</textarea>
@@ -1430,6 +1573,13 @@ export function createUsersModule(ctx) {
     renderUsersCompareCards,
     userRowPayload,
     renderUserRowQuickActions,
+    foundingCohortStatusMeta,
+    foundingCohortCanaryMeta,
+    foundingCohortMemberByUserId,
+    renderFoundingCohortProgress,
+    renderFoundingCohortMemberCard,
+    renderFoundingCohortWorkspace,
+    renderFoundingCohortUserCard,
     usersView,
     userDetailView
   };

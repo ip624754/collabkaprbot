@@ -1,0 +1,91 @@
+{
+  "step": "STEP592_FOUNDING_COHORT_AND_MARKETPLACE_LIQUIDITY",
+  "date": "2026-08-02",
+  "canonicalParentCommit": "d0c2f10e328d3e1464649831bcbf67840e875703",
+  "packageVersion": "1.3.40",
+  "programVerdict": "PRODUCTION_ACCEPT_STEP591_PRODUCT_AND_OPERATIONS_REBASELINE",
+  "implementationVerdict": "SOURCE_IMPLEMENTED_RUNTIME_ACCEPTANCE_PENDING",
+  "launchWedgeDefault": "creator offers → qualified brand request → accepted deal",
+  "truthBoundary": {
+    "verifiedBeforeStep": [
+      "21 production users",
+      "0 active offers",
+      "0 active leads",
+      "0 payment signals",
+      "admin desktop and mobile accepted",
+      "health ready/GO"
+    ],
+    "implementedByStep": [
+      "persistent founder-owned cohort workspace in existing Redis and admin routes",
+      "explicit member state machine",
+      "profile/contact/terms review flags",
+      "timestamped onboarding canary status with 14-day freshness gate",
+      "active offer aggregation for cohort creators",
+      "named owner and follow-up cadence",
+      "machine-computed exit readiness"
+    ],
+    "notClaimed": [
+      "10 launch-ready creators already exist",
+      "5 active offers already exist",
+      "fresh onboarding canary already passed",
+      "marketplace liquidity has been achieved",
+      "messages, payments or official publications were sent by this step"
+    ]
+  },
+  "persistence": {
+    "kind": "redis",
+    "keyContract": "mg:<env>:admin:founding_cohort:v1",
+    "maxMembers": 50,
+    "lock": "token-owned bounded Redis lock",
+    "sqlMigration": false
+  },
+  "security": {
+    "read": "authenticated admin session",
+    "write": "founder session only",
+    "audit": "admin_web_audit via existing appendAdminWebAudit",
+    "newRoute": false,
+    "newFunction": false
+  },
+  "memberStateMachine": [
+    "candidate",
+    "reviewing",
+    "launch_ready",
+    "onboarded",
+    "blocked"
+  ],
+  "onboardingCanaryStateMachine": [
+    "not_run",
+    "pass",
+    "blocked"
+  ],
+  "launchReadyDefinition": [
+    "user has creator workspace",
+    "creator has connected channel",
+    "profile reviewed",
+    "contact reviewed",
+    "terms reviewed",
+    "no blocker text",
+    "manual status launch_ready or onboarded"
+  ],
+  "exitCriteria": {
+    "launchReadyCreators": 10,
+    "activeOffers": 5,
+    "blockerDefects": 0,
+    "onboardingCanaryPass": true,
+    "ownerConfigured": true,
+    "cadenceConfigured": true,
+    "onboardingCanaryFreshnessDays": 14,
+    "nextReviewMustBeFuture": true
+  },
+  "runtimeAcceptance": [
+    "health remains ready/GO",
+    "Users page loads founding cohort workspace",
+    "founder saves owner and next review date",
+    "founder adds one existing creator candidate",
+    "candidate survives page refresh",
+    "canary PASS stores an explicit timestamp and expires from readiness after 14 days",
+    "candidate can be removed without changing user profile or offers",
+    "no Telegram send, payment or publication side effect"
+  ],
+  "nextStepAfterExit": "STEP593_BRAND_DEMAND_AND_FIRST_DEAL_FUNNEL"
+}

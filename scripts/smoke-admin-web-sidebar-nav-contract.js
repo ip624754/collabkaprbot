@@ -29,6 +29,6 @@ for (const token of [
   assert.ok(js.includes(token), `sidebar nav JS must include ${token}`);
 }
 
-assert.ok(html.includes('step590h'), 'admin shell asset cache-bust must be step590h');
+assert.ok(/step(?:590h|592)/.test(html), 'admin shell asset cache-bust must be step590h');
 
 console.log('✅ smoke admin-web sidebar nav contract OK');

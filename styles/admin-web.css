@@ -2266,3 +2266,75 @@ body.is-admin-nav-open {
 .aw-users-table-density th:nth-child(5) { min-width: 210px; }
 .aw-users-table-density th:nth-child(6) { min-width: 138px; }
 .aw-users-table-density th:nth-child(7) { min-width: 108px; }
+
+/* STEP592 — founding cohort and marketplace liquidity workspace */
+.aw-founding-cohort {
+  border-color: rgba(76, 132, 255, 0.42);
+  background: linear-gradient(180deg, rgba(16, 36, 78, 0.96), rgba(13, 29, 63, 0.96));
+}
+.aw-section-head,
+.aw-cohort-member-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.aw-section-head h2,
+.aw-section-head h3,
+.aw-cohort-member-head strong { margin: 0; }
+.aw-section-head p,
+.aw-cohort-member-head small { color: var(--soft); line-height: 1.45; }
+.aw-field { display: grid; gap: 7px; min-width: 0; }
+.aw-field > span { color: var(--soft); font-size: 12px; }
+.aw-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  color: var(--text);
+  font-size: 13px;
+}
+.aw-check input { width: 16px; height: 16px; }
+.aw-cohort-config-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.6fr) minmax(180px, 1fr) minmax(140px, .7fr) minmax(120px, .6fr) minmax(180px, 1fr);
+  gap: 12px;
+}
+.aw-cohort-workspace-split {
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, .8fr);
+  align-items: start;
+}
+.aw-cohort-member-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,.025);
+}
+.aw-cohort-member-card + .aw-cohort-member-card { margin-top: 12px; }
+.aw-cohort-member-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, .9fr) minmax(160px, .9fr) repeat(3, minmax(130px, .75fr));
+  gap: 10px;
+  align-items: end;
+}
+.aw-cohort-member-notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.aw-cohort-progress-card strong { font-size: 22px; }
+.aw-badge.is-soft { color: var(--soft); }
+@media (max-width: 1180px) {
+  .aw-cohort-config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aw-cohort-member-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 820px) {
+  .aw-section-head,
+  .aw-cohort-member-head { flex-direction: column; align-items: stretch; }
+  .aw-cohort-workspace-split,
+  .aw-cohort-config-grid,
+  .aw-cohort-member-grid,
+  .aw-cohort-member-notes { grid-template-columns: 1fr; }
+}

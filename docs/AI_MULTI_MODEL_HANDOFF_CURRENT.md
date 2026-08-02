@@ -1,3 +1,7 @@
+# STEP592 AI HANDOFF
+
+Current source package is `1.3.40` on parent `d0c2f10e328d3e1464649831bcbf67840e875703`. Treat founding cohort data as operational evidence, not inferred market traction. Never mark a creator launch-ready unless the machine definition is satisfied; canary PASS is valid for 14 days only and next review must remain in the future. Do not create offers, send messages or activate payments as part of cohort bookkeeping. STEP593 remains blocked until STEP592 exit evidence is real.
+
 # STEP591 AI HANDOFF
 
 Canonical source baseline is STEP591 package `1.3.39` over parent commit `10042b52519ee043e812ea541e34c0c5ff39248e`. STEP590 architecture is accepted and closed. The next authorized work is founding-cohort marketplace liquidity. Use `docs/product/STEP591_PRODUCT_OPERATIONS_BASELINE.json` as the machine-readable truth boundary. Do not infer real marketplace liquidity or paid conversion from source completeness.

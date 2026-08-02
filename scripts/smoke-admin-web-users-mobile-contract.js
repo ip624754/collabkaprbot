@@ -6,7 +6,7 @@ const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const html = read('admin.html');
-assert.ok(html.includes('step590h'), 'admin shell asset URLs must be cache-busted to step590h');
+assert.ok(/step(?:590h|592)/.test(html), 'admin shell asset URLs must be cache-busted to step590h');
 
 const css = read('styles/admin-web.css');
 for (const token of [

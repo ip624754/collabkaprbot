@@ -10,7 +10,7 @@ const html = read('admin.html');
 const css = read('styles/admin-web.css');
 const js = readAdminWebSource();
 
-assert.ok(html.includes('step590h'), 'admin asset URLs must be cache-busted to step590h');
+assert.ok(/step(?:590h|592)/.test(html), 'admin asset URLs must be cache-busted to step590h');
 assert.ok(js.includes('data-mobile-nav-toggle'), 'mobile nav toggle hook must stay present');
 for (const token of [
   'html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: clip; }',

@@ -1470,8 +1470,12 @@ async function render() {
     const state = hydrateUsersStateFromLocation();
     syncUsersUrlState(state, { replace: true });
     const params = new URLSearchParams({ q: state.q || '', segment: state.segment || 'all', plan_state: state.planState || 'all', credits_state: state.creditsState || 'all', channel_state: state.channelState || 'all', activity_window: state.activityWindow || 'all', payments_state: state.paymentsState || 'all', sort_by: state.sortBy || 'created_desc', cohort_view: state.cohortView || 'all', limit: String(state.pageSize || 20), page: String(state.page || 0), pins: normalizeUsersPinIds(state.pinIds || []).join(',') });
-    const res = await api(`/api/admin-web-read?section=users&${params}`);
+    const [res, cohortRes] = await Promise.all([
+      api(`/api/admin-web-read?section=users&${params}`),
+      api('/api/admin-web-read?section=founding_cohort&candidate_limit=12'),
+    ]);
     const model = res.data.data || { items: [] };
+    model.foundingCohort = cohortRes.ok ? (cohortRes.data.data || {}) : { members: [], candidates: [], progress: {} };
     const paginationPage = Number(model?.pagination?.page ?? state.page ?? 0) || 0;
     const paginationSize = Number(model?.pagination?.pageSize ?? state.pageSize ?? 20) || 20;
     const comparePinIds = normalizeUsersPinIds(model?.compareRail?.pinIds || state.pinIds || []);
@@ -1480,7 +1484,11 @@ async function render() {
     syncUsersUrlState(window.__usersState, { replace: true });
     app.innerHTML = usersView(model);
   } else if (route.page === 'userDetail') {
-    const res = await api(`/api/admin-web-read?section=user&id=${encodeURIComponent(route.userId)}`);
+    const [res, cohortRes] = await Promise.all([
+      api(`/api/admin-web-read?section=user&id=${encodeURIComponent(route.userId)}`),
+      api('/api/admin-web-read?section=founding_cohort&candidate_limit=12'),
+    ]);
+    if (res.ok) res.data.data = { ...(res.data.data || {}), foundingCohort: cohortRes.ok ? (cohortRes.data.data || {}) : {} };
     if (!res.ok) {
       app.innerHTML = shell('Пользователь не найден', 'Проверь user_id и попробуй снова.', `<div class="aw-surface aw-empty"><a href="${escapeHtml(userDetailBackHref())}" data-link class="aw-inline-back">← К списку пользователей</a><div class="aw-empty">Карточка пользователя не найдена.</div></div>`, session);
     } else {
@@ -2043,6 +2051,84 @@ function bindShell() {
       render();
     });
   });
+  document.getElementById('saveFoundingCohortConfigBtn')?.addEventListener('click', async () => {
+    const nextReviewRaw = document.getElementById('cohortNextReviewAt')?.value || '';
+    const payload = {
+      launchWedge: document.getElementById('cohortLaunchWedge')?.value || '',
+      ownerLabel: document.getElementById('cohortOwnerLabel')?.value || '',
+      ownerTgId: Number(document.getElementById('cohortOwnerTgId')?.value || 0) || 0,
+      followUpCadenceDays: Number(document.getElementById('cohortCadenceDays')?.value || 7) || 7,
+      nextReviewAt: nextReviewRaw ? new Date(nextReviewRaw).toISOString() : '',
+    };
+    const res = await api('/api/admin-web-write?action=configure_founding_cohort', { method: 'POST', body: JSON.stringify(payload) });
+    if (!res.ok) {
+      showToast(`Не удалось сохранить founding cohort config: ${res.data?.error || 'unknown'}`, 'error');
+      return;
+    }
+    showToast('Owner и follow-up cadence сохранены.', 'success');
+    await render();
+  });
+
+  app.querySelectorAll('[data-cohort-add]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const userId = Number(button.getAttribute('data-cohort-add') || 0) || 0;
+      if (!userId) return;
+      const res = await api('/api/admin-web-write?action=set_founding_cohort_member', {
+        method: 'POST',
+        body: JSON.stringify({ userId, status: 'candidate', onboardingCanary: 'not_run' }),
+      });
+      if (!res.ok) {
+        showToast(`Не удалось добавить creator в cohort: ${res.data?.error || 'unknown'}`, 'error');
+        return;
+      }
+      showToast('Creator добавлен как founding cohort candidate.', 'success');
+      await render();
+    });
+  });
+
+  app.querySelectorAll('[data-cohort-save]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const userId = Number(button.getAttribute('data-cohort-save') || 0) || 0;
+      const card = button.closest('[data-cohort-member]');
+      if (!userId || !card) return;
+      const field = (name) => card.querySelector(`[data-cohort-field="${name}"]`);
+      const payload = {
+        userId,
+        status: field('status')?.value || 'candidate',
+        onboardingCanary: field('onboardingCanary')?.value || 'not_run',
+        profileReviewed: field('profileReviewed')?.checked === true,
+        contactReviewed: field('contactReviewed')?.checked === true,
+        termsReviewed: field('termsReviewed')?.checked === true,
+        blocker: field('blocker')?.value || '',
+        note: field('note')?.value || '',
+      };
+      const res = await api('/api/admin-web-write?action=set_founding_cohort_member', { method: 'POST', body: JSON.stringify(payload) });
+      if (!res.ok) {
+        showToast(`Не удалось сохранить cohort member: ${res.data?.error || 'unknown'}`, 'error');
+        return;
+      }
+      showToast('Founding cohort member сохранён.', 'success');
+      await render();
+    });
+  });
+
+  app.querySelectorAll('[data-cohort-remove]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const userId = Number(button.getAttribute('data-cohort-remove') || 0) || 0;
+      if (!userId || !confirm('Убрать creator из founding cohort? Профиль и offers не изменятся.')) return;
+      const res = await api('/api/admin-web-write?action=remove_founding_cohort_member', {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+      });
+      if (!res.ok) {
+        showToast(`Не удалось убрать cohort member: ${res.data?.error || 'unknown'}`, 'error');
+        return;
+      }
+      showToast('Creator убран из founding cohort.', 'success');
+      await render();
+    });
+  });
+
   document.getElementById('saveNoteBtn')?.addEventListener('click', async () => {
     const userId = document.getElementById('saveNoteBtn').getAttribute('data-user-id');
     const text = document.getElementById('noteText')?.value || '';

@@ -24,9 +24,15 @@ const apiFiles = fs.readdirSync(path.join(ROOT, 'api'), { recursive: true })
   .filter((name) => String(name).endsWith('.js'))
   .map((name) => String(name).replaceAll('\\', '/'));
 
-check('package version 1.3.39', pkg.version === '1.3.39', pkg.version);
+const versionAtLeast = (actual, minimum) => {
+  const a = String(actual || '').split('.').map((x) => Number(x) || 0);
+  const b = String(minimum || '').split('.').map((x) => Number(x) || 0);
+  for (let i = 0; i < 3; i += 1) { if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0); }
+  return true;
+};
+check('package version >= STEP591 baseline', versionAtLeast(pkg.version, '1.3.39'), pkg.version);
 check('package-lock root parity', lock.version === pkg.version && lock.packages?.['']?.version === pkg.version, `${lock.version}/${lock.packages?.['']?.version}`);
-check('baseline package parity', baseline.packageVersion === pkg.version, baseline.packageVersion);
+check('baseline package remains 1.3.39', baseline.packageVersion === '1.3.39', baseline.packageVersion);
 check('canonical parent commit recorded', baseline.canonicalParentCommit === '10042b52519ee043e812ea541e34c0c5ff39248e');
 check('STEP590 close verdict recorded', baseline.programVerdict === 'PRODUCTION_ACCEPT_STEP590I_ARCHITECTURE_GATES_AND_CLOSE_STEP590');
 check('next step is liquidity', baseline.nextStep === 'STEP592_FOUNDING_COHORT_AND_MARKETPLACE_LIQUIDITY');
@@ -39,9 +45,9 @@ check('required docs exist', [
   'docs/roadmap/STEP591_PRODUCT_OPERATIONS_ROADMAP.md',
   'docs/process/08_WORK_HISTORY_STEP591.md',
 ].every(exists));
-check('current state advanced', currentState.startsWith('## STEP591 — Product and Operations Rebaseline'));
-check('boot advanced', boot.includes('Current canonical baseline: STEP591'));
-check('handoff advanced', handoff.startsWith('# STEP591 CURRENT HANDOFF'));
+check('current state retains STEP591 history', currentState.includes('## STEP591 — Product and Operations Rebaseline'));
+check('boot retains STEP591 baseline history', boot.includes('STEP591'));
+check('handoff retains STEP591 history', handoff.includes('# STEP591 CURRENT HANDOFF'));
 check('broad cleanup deferred', roadmap.includes('STEP590J') && roadmap.includes('не является launch blocker'));
 check('safe defaults remain documented in code',
   config.includes('FOUNDER_SALE_ENABLED: parseBoolSafe(process.env.FOUNDER_SALE_ENABLED, false)') &&

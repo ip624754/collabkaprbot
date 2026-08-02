@@ -1,6 +1,6 @@
 {
   "name": "collabgirls-bot",
-  "version": "1.3.39",
+  "version": "1.3.40",
   "private": true,
   "type": "module",
   "engines": {
@@ -236,7 +236,11 @@
     "report:architecture-health": "node scripts/check-step590-architecture-gates.js --report=artifacts/step590-architecture-health.json",
     "check:step591-rebaseline": "node scripts/check-step591-product-operations-rebaseline.js",
     "report:product-operations-baseline": "node scripts/check-step591-product-operations-rebaseline.js --json",
-    "smoke:step591-rebaseline-contract": "node scripts/smoke-step591-product-operations-rebaseline-contract.js"
+    "smoke:step591-rebaseline-contract": "node scripts/smoke-step591-product-operations-rebaseline-contract.js",
+    "test:step592-founding-cohort": "node scripts/test-step592-founding-cohort.js",
+    "smoke:step592-founding-cohort-contract": "node scripts/smoke-step592-founding-cohort-contract.js",
+    "check:step592-launch-readiness": "node scripts/check-step592-launch-readiness.js",
+    "smoke:step592-founding-cohort-esm-linkage-contract": "node scripts/smoke-step592-founding-cohort-esm-linkage-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

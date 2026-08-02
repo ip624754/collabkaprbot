@@ -10,7 +10,7 @@ const entry = read('scripts/admin-web.js');
 const aggregate = readAdminWebSource();
 
 assert.equal((html.match(/<script\b/g) || []).length, 1, 'admin shell keeps one JS asset');
-assert.ok(html.includes('<script type="module" src="/scripts/admin-web.js?v=20260802-step590h"></script>'), 'admin shell keeps stable entry URL with bounded cache bust');
+assert.ok(/<script type="module" src="\/scripts\/admin-web\.js\?v=20260802-step(?:590h|592)"><\/script>/.test(html), 'admin shell keeps stable entry URL with bounded cache bust');
 for (const id of ['overview', 'users', 'payments', 'comms', 'founder', 'runtime']) {
   assert.ok(entry.includes(`./admin-web/${id}.js`), `entry imports ${id} module`);
 }

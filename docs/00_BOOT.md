@@ -1,3 +1,12 @@
+# Current canonical baseline: STEP592
+
+- Parent production commit: `d0c2f10e328d3e1464649831bcbf67840e875703` (`STEP591`, package `1.3.39`).
+- Current source package: `1.3.40`.
+- Active goal: configure and validate a bounded founding creator cohort, then reach 10 launch-ready creators, 5 ACTIVE offers and one timestamped onboarding canary PASS no older than 14 days.
+- Runtime writes are founder-only, persistent in Redis, audited, limited to 50 members and fail closed on storage-read failure.
+- No new API route/function/SQL/ENV.
+- Do not advance to STEP593 until actual STEP592 exit evidence is captured.
+
 # 00 — BOOT (якорь контекста)
 
 **Current canonical baseline: STEP591.** Parent commit `10042b52519ee043e812ea541e34c0c5ff39248e`, package `1.3.39`. STEP590 architecture cycle is production accepted and closed. Current product priority is founding-cohort liquidity, not further broad refactoring.
