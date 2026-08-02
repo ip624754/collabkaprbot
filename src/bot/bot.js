@@ -112,6 +112,12 @@ import {
   handleAdminSystemNavigationCallback,
   handleAdminSystemOperationCallback,
 } from './domains/adminSystem/index.js';
+import {
+  handleUserAccountCallback,
+  handleUserSharingCallback,
+  handleUserSupportCallback,
+  handleUserVerificationCallback,
+} from './domains/userServices/index.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
@@ -25251,370 +25257,6 @@ if (p.a === 'a:more') {
   return;
 }
 
-if (p.a === 'a:share') {
-  try { await ctx.answerCallbackQuery(); } catch {}
-
-  const un = botUsernameNoAt();
-  if (!un) {
-    reportCopySafetyDiagnostic('invite_bot_username_missing', { config: 'BOT_USERNAME' });
-    await safeEditOrReply(ctx, copySafetyUnavailableHtml('Приглашения временно недоступны'), {
-      parse_mode: 'HTML',
-      reply_markup: copySafetyRecoveryKb('a:menu'),
-    });
-    return;
-  }
-
-  const inviteState = await loadInviteSurfaceStateForUser(u);
-  const text = renderInviteText({ inviteState });
-  await safeEditOrReply(ctx, text, {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: inviteKeyboardMarkup(inviteState),
-  });
-  return;
-}
-
-if (p.a === 'a:share_perf') {
-  try { await ctx.answerCallbackQuery(); } catch {}
-  const inviteState = await loadInviteSurfaceStateForUser(u);
-  await safeEditOrReply(ctx, renderInvitePerformanceText({ inviteState }), {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: renderInvitePerformanceKeyboard(inviteState),
-  });
-  return;
-}
-
-if (p.a === 'a:share_points') {
-  try { await ctx.answerCallbackQuery(); } catch {}
-  const inviteState = await loadInviteSurfaceStateForUser(u);
-  await safeEditOrReply(ctx, renderInvitePointsText({ inviteState }), {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: renderInvitePointsKeyboard(inviteState),
-  });
-  return;
-}
-
-if (p.a === 'a:share_link') {
-  try { await ctx.answerCallbackQuery(); } catch {}
-  const inviteState = await loadInviteSurfaceStateForUser(u);
-  await ctx.reply(renderInviteLinkText({ inviteState }), {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: renderInviteLinkKeyboard(),
-  });
-  return;
-}
-
-if (p.a === 'a:share_card') {
-  try { await ctx.answerCallbackQuery({ text: 'Карточка отправлена ниже. Можно переслать дальше.' }); } catch {}
-  const inviteState = await loadInviteSurfaceStateForUser(u);
-  await sendInviteCardMessage(ctx, inviteState);
-  return;
-}
-
-if (p.a === 'a:share_history') {
-  try { await ctx.answerCallbackQuery(); } catch {}
-  const { inviteState, history } = await loadInviteHistoryStateForUser(u);
-  await safeEditOrReply(ctx, renderInviteHistoryText({ inviteState, history }), {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: renderInviteHistoryKeyboard(inviteState),
-  });
-  return;
-}
-
-if (p.a === 'a:share_rewards') {
-  try { await ctx.answerCallbackQuery(); } catch {}
-  const inviteState = await loadInviteSurfaceStateForUser(u);
-  const history = await db.getInviteRewardsRecentHistory(Number(u?.id || 0), 8).catch(() => []);
-  await safeEditOrReply(ctx, renderInviteRewardsCenterText({ inviteState, history }), {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: inviteRewardsCenterKeyboard(inviteState),
-  });
-  return;
-}
-
-if (p.a === 'a:share_redeem') {
-  const reward = inviteRedeemOption(p.r);
-  const inviteState = await loadInviteSurfaceStateForUser(u);
-  if (!reward) {
-    try { await ctx.answerCallbackQuery({ text: 'Награда не найдена.', show_alert: true }); } catch {}
-    await safeEditOrReply(ctx, renderInviteText({ inviteState, notice: '⚠️ Награда не найдена.' }), {
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-      reply_markup: inviteKeyboardMarkup(inviteState),
-    });
-    return;
-  }
-  if (!inviteState?.rewards?.enabled) {
-    try { await ctx.answerCallbackQuery({ text: 'Баллы пока недоступны.', show_alert: true }); } catch {}
-    await safeEditOrReply(ctx, renderInviteText({ inviteState, notice: 'ℹ️ Награды временно недоступны. Попробуй позже или открой поддержку.' }), {
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-      reply_markup: inviteKeyboardMarkup(inviteState),
-    });
-    return;
-  }
-  if (Number(inviteState.rewards.availablePoints || 0) < Number(reward.costPoints || 0)) {
-    try { await ctx.answerCallbackQuery({ text: 'Недостаточно баллов.', show_alert: true }); } catch {}
-    await safeEditOrReply(ctx, renderInviteText({ inviteState, notice: 'ℹ️ Пока не хватает доступных баллов для этой награды.' }), {
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-      reply_markup: inviteKeyboardMarkup(inviteState),
-    });
-    return;
-  }
-  try { await ctx.answerCallbackQuery(); } catch {}
-  await safeEditOrReply(ctx, renderInviteRedeemConfirmText({ reward, rewards: inviteState.rewards }), {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: inviteRedeemConfirmKeyboard(reward.key),
-  });
-  return;
-}
-
-if (p.a === 'a:share_redeem_do') {
-  const reward = inviteRedeemOption(p.r);
-  if (!reward) {
-    try { await ctx.answerCallbackQuery({ text: 'Награда не найдена.', show_alert: true }); } catch {}
-    return;
-  }
-  const result = await db.redeemInviteReward(u.id, reward.key).catch((error) => ({ ok: false, reason: String(error?.message || error || 'redeem_failed') }));
-  const inviteState = await loadInviteSurfaceStateForUser(u);
-  let notice = '⚠️ Награду получить не удалось.';
-  if (result?.ok) {
-    try { await ctx.answerCallbackQuery({ text: '✅ Награда активирована', show_alert: false }); } catch {}
-    await safeEditOrReply(ctx, renderInviteRedeemSuccessText({ reward, rewards: inviteState.rewards, result }), {
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-      reply_markup: inviteRedeemSuccessKeyboard(),
-    });
-    return;
-  } else if (result?.reason === 'insufficient_points') {
-    notice = 'ℹ️ Недостаточно доступных баллов для этой награды.';
-    try { await ctx.answerCallbackQuery({ text: 'Недостаточно баллов.', show_alert: true }); } catch {}
-  } else if (result?.reason === 'redeem_busy') {
-    notice = '⏳ Награда уже активируется. Подожди пару секунд и обнови экран.';
-    try { await ctx.answerCallbackQuery({ text: 'Награда уже активируется.', show_alert: true }); } catch {}
-  } else if (result?.reason === 'invite_rewards_schema_missing') {
-    notice = 'ℹ️ Награды временно недоступны. Попробуй позже или открой поддержку.';
-    reportCopySafetyDiagnostic('invite_rewards_schema_missing', { relation: 'invite_reward_ledger' });
-    try { await ctx.answerCallbackQuery({ text: 'Награды временно недоступны.', show_alert: true }); } catch {}
-  } else {
-    reportCopySafetyDiagnostic('invite_reward_redeem_failed', { reason: String(result?.reason || 'redeem_failed').slice(0, 120) });
-    notice = '⚠️ Награду получить не удалось. Попробуй позже или открой поддержку.';
-    try { await ctx.answerCallbackQuery({ text: 'Награду получить не удалось.', show_alert: true }); } catch {}
-  }
-  await safeEditOrReply(ctx, renderInviteText({ inviteState, notice }), {
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-    reply_markup: inviteKeyboardMarkup(inviteState),
-  });
-  return;
-}
-
-
-if (p.a === 'a:support_push') {
-  try { await ctx.answerCallbackQuery(); } catch {}
-
-  const src = String(p?.src || '');
-
-  // For admin-to-user receipts (src=admmsg) we MUST keep the original buttons.
-  // For other service/system messages we can hide buttons to avoid repeat clicks.
-  if (src !== 'admmsg') {
-    try {
-      const chatId = ctx?.callbackQuery?.message?.chat?.id;
-      const msgId = ctx?.callbackQuery?.message?.message_id;
-      if (chatId && msgId) {
-        await ctx.api.editMessageReplyMarkup(chatId, msgId, { reply_markup: undefined });
-      }
-    } catch {}
-  }
-
-  const text = `💬 <b>Поддержка</b>
-
-` +
-    `Если что-то не работает или есть вопрос — напиши одним сообщением.
-` +
-    `Я отправлю это в поддержку и вернусь с ответом здесь.
-
-` +
-    `Что помогает быстрее решить:
-` +
-    `• в каком режиме ты был (Креатор / Бренд / Менеджер)
-` +
-    `• что нажимал (кнопки)
-` +
-    `• текст ошибки из логов/скрин (опиши)
-
-` +
-    `⚠️ Спам/реклама — бан.`;
-
-  // Minimal support screen when coming from admin DM receipt (no extra distractions).
-  const kb = (src === 'admmsg')
-    ? new InlineKeyboard()
-        .text('✍️ Написать в поддержку', 'a:support_write')
-        .row()
-        .text('📋 Меню', 'a:menu')
-    : new InlineKeyboard()
-        .text('✍️ Написать в поддержку', 'a:support_write')
-        .row()
-        .text('🧭 Быстрый старт', 'a:guide')
-        .text('📋 Меню', 'a:menu')
-        .text('🏠 Домой', 'a:home');
-
-  // Always send Support as a NEW message (do not edit the receipt message).
-  try {
-    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
-  } catch (e) {
-    // Fallback: if reply failed for some reason, try edit.
-    await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
-  }
-  return;
-}
-
-// Account deletion (tombstone/anonymize)
-if (p.a === 'a:acc_del_q') {
-  const text = `🗑 <b>Удалить аккаунт?</b>
-
-Это действие:
-• очистит контакты/профили в Collabka PR
-• отключит показ в каталогах
-• отзовёт роли менеджера/редактора/куратора
-
-В Telegram переписка у других пользователей останется.
-
-⚠️ Подтверждение ниже — необратимо.`;
-
-  const kb = new InlineKeyboard()
-    .text('✅ Да, удалить', 'a:acc_del_do')
-    .row()
-    .text('⬅️ Назад', 'a:support')
-    .text('🏠 Домой', 'a:home');
-
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
-  return;
-}
-
-if (p.a === 'a:acc_del_do') {
-  try { await ctx.answerCallbackQuery({ text: '⏳ Удаляю…' }); } catch {}
-
-  try {
-    await db.tombstoneUser(u.id);
-  } catch (e) {
-    const code = String(e?.code || '');
-    if (code === 'MISSING_SOFT_DELETE_COLUMNS') {
-      reportCopySafetyDiagnostic('soft_delete_columns_missing', {
-        columns: ['is_deleted', 'deleted_at'],
-        runner: 'migrations/run.js',
-      });
-      await safeEditOrReply(
-        ctx,
-        copySafetyUnavailableHtml('Управление аккаунтом временно недоступно'),
-        { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:support') }
-      );
-      return;
-    }
-    throw e;
-  }
-
-  // Best-effort: clear UI role/session hints in Redis (does not affect DB-truth).
-  try { await redis.del(k(['ui_mode', ctx.from.id])); } catch {}
-  try { await redis.del(k(['bm_mode', ctx.from.id])); } catch {}
-  try { await redis.del(k(['cur_mode', ctx.from.id])); } catch {}
-  try { await redis.del(bmActiveBrandKey(ctx.from.id)); } catch {}
-
-  try { await ctx.answerCallbackQuery({ text: '🗑 Аккаунт удалён' }); } catch {}
-  await renderAccountDeletedGate(ctx, { edit: true });
-  return;
-}
-
-if (p.a === 'a:acc_restore') {
-  try { await ctx.answerCallbackQuery({ text: '⏳ Восстанавливаю…' }); } catch {}
-
-  try {
-    await db.restoreUser(u.id);
-  } catch (e) {
-    const code = String(e?.code || '');
-    if (code === 'MISSING_SOFT_DELETE_COLUMNS') {
-      reportCopySafetyDiagnostic('soft_delete_columns_missing', {
-        columns: ['is_deleted', 'deleted_at'],
-        runner: 'migrations/run.js',
-      });
-      await safeEditOrReply(
-        ctx,
-        copySafetyUnavailableHtml('Управление аккаунтом временно недоступно'),
-        { parse_mode: 'HTML', reply_markup: copySafetyRecoveryKb('a:support') }
-      );
-      return;
-    }
-    throw e;
-  }
-
-  // Best-effort: drop persisted UI mode so user can pick a fresh role.
-  try { await redis.del(k(['ui_mode', ctx.from.id])); } catch {}
-  try { await redis.del(k(['bm_mode', ctx.from.id])); } catch {}
-  try { await redis.del(k(['cur_mode', ctx.from.id])); } catch {}
-  try { await redis.del(bmActiveBrandKey(ctx.from.id)); } catch {}
-
-  try { await ctx.answerCallbackQuery({ text: '✅ Аккаунт восстановлен' }); } catch {}
-  await renderRoleSelection(ctx, u, { edit: true });
-  return;
-}
-
-if (p.a === 'a:support') {
-  const text = `💬 <b>Поддержка</b>
-
-` +
-    `Если что-то не работает или есть вопрос — напиши одним сообщением.
-` +
-    `Я отправлю это в поддержку и вернусь с ответом здесь.
-
-` +
-    `Что помогает быстрее решить:
-` +
-    `• в каком режиме ты был (Креатор / Бренд / Менеджер)
-` +
-    `• что нажимал (кнопки)
-` +
-    `• текст ошибки из логов/скрин (опиши)
-
-` +
-    `⚠️ Спам/реклама — бан.`;
-
-  const kb = new InlineKeyboard()
-    .text('✍️ Написать в поддержку', 'a:support_write')
-    .row();
-
-  // Show delete option only for active accounts.
-  if (!u?.is_deleted) kb.text('🗑 Удалить аккаунт', 'a:acc_del_q').row();
-
-  kb.text('🧭 Быстрый старт', 'a:guide')
-    .text('📋 Меню', 'a:menu')
-    .text('🏠 Домой', 'a:home');
-
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
-  return;
-}
-
-if (p.a === 'a:support_write') {
-  await ctx.answerCallbackQuery();
-  await setExpectText(ctx.from.id, { type: 'support_any', backCb: 'a:support' });
-
-  const text = `✍️ <b>Пришли одним сообщением</b> текст или фото/скрин (можно с подписью).
-
-Пример: «В режиме Brand нажимаю X → ошибка Y».
-
-Я отправлю это в поддержку. После ответа поддержки можно будет просто ответить следующим сообщением.`;
-
-  await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: navKb('a:support') });
-  return;
-}
-
-
 // Brand Directory (Creator)
 
 
@@ -25771,182 +25413,6 @@ ${escapeHtml(safeText)}
         .row()
         .text('📋 Меню', 'a:menu');
       await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    // VERIFICATION (feature-flag)
-    if (p.a === 'a:verify_home') {
-      await ctx.answerCallbackQuery();
-      if (!CFG.VERIFICATION_ENABLED) {
-        await safeEditOrReply(ctx, '✅ Верификация сейчас отключена.', { reply_markup: mainMenuKb(await getRoleFlags(u, ctx.from.id)) });
-        return;
-      }
-      await renderVerifyHome(ctx, u);
-      return;
-    }
-    if (p.a === 'a:verify_info') {
-      await ctx.answerCallbackQuery();
-      await renderVerifyInfo(ctx);
-      return;
-    }
-    if (p.a === 'a:verify_kind') {
-      await ctx.answerCallbackQuery();
-      if (!CFG.VERIFICATION_ENABLED) return ctx.answerCallbackQuery({ text: 'Верификация отключена.' });
-      const uiMode = await getUiMode(ctx.from.id);
-      const kind = (uiMode === UI_MODES.BRAND) ? 'brand' : 'creator';
-
-      const existing = await safeUserVerifications(() => db.getUserVerification(u.id), async () => null);
-      const exStatus = String(existing?.status || '').toUpperCase();
-      const exKind = String(existing?.kind || '').toLowerCase();
-      if (existing && exKind && exKind !== kind) {
-        const want = kind === 'brand' ? '🏷 Бренд' : '🤳 Креатор';
-        const have = exKind === 'brand' ? '🏷 Бренд' : '🤳 Креатор';
-        const switchCb = exKind === 'brand' ? 'a:onb_brand' : 'a:onb_creator';
-        const switchLabel = exKind === 'brand' ? '🏷 Режим бренда' : '🤳 Режим креатора';
-        let what = 'заявка/статус';
-        if (exStatus === 'APPROVED') what = '✅ Verified';
-        else if (exStatus === 'PENDING') what = '⏳ заявка';
-        else if (exStatus === 'REJECTED') what = '❌ отклонённая заявка';
-
-        await safeEditOrReply(ctx, `✅ <b>Верификация</b>
-
-У тебя уже есть ${what} в другом режиме: <b>${have}</b>.
-
-В системе хранится <b>одна</b> верификация на пользователя.
-Чтобы не потерять текущий статус — переключись в нужный режим.
-
-Сейчас открыт режим: <b>${want}</b>.
-
-Если нужно поменять тип верификации — напиши администратору.`, {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard().text(switchLabel, switchCb).row().text('⬅️ Назад', 'a:verify_home')
-        });
-        return;
-      }
-
-
-      // Quality gate (anti-spam): require minimal profile completeness before accepting verification requests.
-      if (kind === 'creator') {
-        let ws = null;
-        let wsId = 0;
-
-        try { wsId = Number(await getActiveWorkspaceId(ctx.from.id)) || 0; } catch { wsId = 0; }
-
-        if (wsId) {
-          try { ws = await db.getWorkspace(u.id, wsId); } catch { ws = null; }
-        }
-
-        if (!ws) {
-          try {
-            const list = await db.listWorkspaces(u.id);
-            if (list && list.length) {
-              ws = list[0];
-              wsId = Number(ws.id) || wsId;
-            }
-          } catch {
-            ws = null;
-          }
-        }
-
-        if (!ws) {
-          await safeEditOrReply(ctx,
-            `✅ <b>Верификация креатора</b>
-
-Сначала подключи канал (workspace), потом заполни витрину — так модерации проще проверить.`,
-            {
-              parse_mode: 'HTML',
-              reply_markup: new InlineKeyboard()
-                .text('🚀 Подключить канал', 'a:setup')
-                .row()
-                .text('⬅️ Назад', 'a:verify_home')
-            }
-          );
-          return;
-        }
-
-        const prog = calcWsProfileProgress(ws);
-        const ok = !!(prog.aboutOk && (prog.portfolioOk || prog.igOk) && (prog.contactOk || !!ws.channel_username));
-        if (!ok) {
-          await safeEditOrReply(ctx,
-            `✅ <b>Верификация креатора</b>
-
-Чтобы подать заявку, заполни витрину минимум:
-• 📝 описание
-• 🔗 портфолио или 📸 Instagram
-• ✉️ контакт (или @канал)
-
-<i>Зачем:</i> меньше спама и быстрее проверка.`,
-            {
-              parse_mode: 'HTML',
-              reply_markup: new InlineKeyboard()
-                .text('👤 Профиль канала', `a:ws_profile|ws:${wsId || ws.id}`)
-                .row()
-                .text('⬅️ Назад', 'a:verify_home')
-            }
-          );
-          return;
-        }
-      }
-
-      if (kind === 'brand') {
-        const prof = await safeBrandProfiles(() => db.getBrandProfile(u.id), async () => null);
-
-        if (!isBrandBasicComplete(prof)) {
-          await safeEditOrReply(ctx,
-            `🏷 <b>Верификация Brand</b>
-
-Чтобы подать заявку как бренд, заполни базовый профиль:
-• название
-• ниша
-• контакт
-• ссылка`,
-            {
-              parse_mode: 'HTML',
-              reply_markup: new InlineKeyboard()
-                .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:verify')
-                .row()
-                .text('⬅️ Назад', 'a:verify_home')
-            }
-          );
-          return;
-        }
-
-        if (CFG.BRAND_VERIFY_REQUIRES_EXTENDED && !isBrandExtendedComplete(prof)) {
-          await safeEditOrReply(ctx,
-            `🏷 <b>Верификация Brand</b>
-
-Чтобы подать заявку как бренд, заполни расширенный профиль:
-• ниша
-• гео
-• форматы сотрудничества
-
-<i>Зачем:</i> модерации нужны факты, а креаторам — понятность.`,
-            {
-              parse_mode: 'HTML',
-              reply_markup: new InlineKeyboard()
-                .text('🏷 Профиль бренда', 'a:brand_profile|ws:0|ret:verify')
-                .row()
-                .text('⬅️ Назад', 'a:verify_home')
-            }
-          );
-          return;
-        }
-      }
-
-
-      await setExpectText(ctx.from.id, { type: 'verify_submit', kind });
-      await safeEditOrReply(ctx,
-        `✅ <b>Заявка на верификацию</b>
-
-Отправь одним сообщением:
-1) ссылку на твой канал/профиль
-2) 2–3 цифры/факта (охваты/подписчики/ниша)
-3) контакты для связи
-4) коротко: что предлагаешь / что ищешь
-
-<i>Важно:</i> только текст (1 сообщение).`,
-        { parse_mode: 'HTML', reply_markup: navKb('a:verify_home') }
-      );
       return;
     }
 
@@ -28312,6 +27778,57 @@ ${actionHint}`;
     };
 
 
+    const userServicesDomainDeps = {
+      CFG,
+      InlineKeyboard,
+      UI_MODES,
+      bmActiveBrandKey,
+      botUsernameNoAt,
+      calcWsProfileProgress,
+      copySafetyRecoveryKb,
+      copySafetyUnavailableHtml,
+      db,
+      getActiveWorkspaceId,
+      getRoleFlags,
+      getUiMode,
+      inviteKeyboardMarkup,
+      inviteRedeemConfirmKeyboard,
+      inviteRedeemOption,
+      inviteRedeemSuccessKeyboard,
+      inviteRewardsCenterKeyboard,
+      isBrandBasicComplete,
+      isBrandExtendedComplete,
+      k,
+      loadInviteHistoryStateForUser,
+      loadInviteSurfaceStateForUser,
+      mainMenuKb,
+      navKb,
+      redis,
+      renderAccountDeletedGate,
+      renderInviteHistoryKeyboard,
+      renderInviteHistoryText,
+      renderInviteLinkKeyboard,
+      renderInviteLinkText,
+      renderInvitePerformanceKeyboard,
+      renderInvitePerformanceText,
+      renderInvitePointsKeyboard,
+      renderInvitePointsText,
+      renderInviteRedeemConfirmText,
+      renderInviteRedeemSuccessText,
+      renderInviteRewardsCenterText,
+      renderInviteText,
+      renderRoleSelection,
+      renderVerifyHome,
+      renderVerifyInfo,
+      reportCopySafetyDiagnostic,
+      safeBrandProfiles,
+      safeEditOrReply,
+      safeUserVerifications,
+      sendInviteCardMessage,
+      setExpectText,
+    };
+
+
     const moderationDomainDeps = {
       CFG,
       InlineKeyboard,
@@ -28548,6 +28065,30 @@ ${actionHint}`;
           p2,
           u2,
           moderationDomainDeps
+        ),
+        user_support: (ctx2, p2, u2) => handleUserSupportCallback(
+          ctx2,
+          p2,
+          u2,
+          userServicesDomainDeps
+        ),
+        user_verification: (ctx2, p2, u2) => handleUserVerificationCallback(
+          ctx2,
+          p2,
+          u2,
+          userServicesDomainDeps
+        ),
+        user_sharing: (ctx2, p2, u2) => handleUserSharingCallback(
+          ctx2,
+          p2,
+          u2,
+          userServicesDomainDeps
+        ),
+        user_account: (ctx2, p2, u2) => handleUserAccountCallback(
+          ctx2,
+          p2,
+          u2,
+          userServicesDomainDeps
         ),
         admin_users: (ctx2, p2, u2) => handleAdminUsersCallback(
           ctx2,

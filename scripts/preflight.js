@@ -369,6 +369,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin communications/notices/outbox bounded-domain source contract", "smoke:admin-communications-notices-outbox-domain-extraction-contract"],
   ["Preflight (source-only): admin operations/system/founder bounded-domain executable tests", "test:admin-operations-system-founder-domain-extraction"],
   ["Preflight (source-only): admin operations/system/founder bounded-domain source contract", "smoke:admin-operations-system-founder-domain-extraction-contract"],
+  ["Preflight (source-only): user services bounded-domain executable tests", "test:user-services-domain-extraction"],
+  ["Preflight (source-only): user services bounded-domain source contract", "smoke:user-services-domain-extraction-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

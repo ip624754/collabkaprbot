@@ -161,8 +161,8 @@ assertions += 1;
 }
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 464, 'STEP590E5D cumulative extracted ownership');
-equal(summary.legacy, 96, 'STEP590E5D cumulative legacy ownership');
+equal(summary.extracted, 482, 'STEP590E6 cumulative extracted ownership');
+equal(summary.legacy, 78, 'STEP590E6 cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_REPORTS], 6, 'moderation reports route count');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_VERIFICATION], 4, 'moderation verification route count');
 equal(getCallbackOwnership('a:admin_mod_add').routeId, CALLBACK_ROUTE.ADMIN_MODERATOR_GOVERNANCE, 'admin moderator governance extracted by STEP590E5B');

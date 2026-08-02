@@ -34,7 +34,7 @@
 | STEP590E5B | Admin users, support and moderator governance | Operator source implementation committed/pushed | 16/20 | User/support/role governance contracts PASS |
 | STEP590E5C | Admin communications, notices and outbox | Source implemented; operator gate pending | 15/20 | Audience, draft and delivery-state contracts PASS |
 | STEP590E5D | Admin operations, system and founder controls | Source implemented; operator gate pending | 16/20 | Privilege, toggle and audit contracts PASS |
-| STEP590E6 | Support, verification, sharing and account | Yes | 12/20 | Input-mode and recovery contracts PASS |
+| STEP590E6 | Support, verification, sharing and account | Source implemented; operator gate pending | 15/20 | Input-mode, deleted-user recovery and reward-truth contracts PASS |
 | STEP590F | `queries.js` repository decomposition with façade | Yes, behavior-preserving | 16/20 | Export/signature/SQL parity; no transaction drift |
 | STEP590G | Cron/job decomposition | Yes | 16/20 | Lock/budget/receipt parity; function budget unchanged |
 | STEP590H | Admin-web client decomposition | Yes, UI parity | 11/20 | One asset, route/state/view parity, browser acceptance |
@@ -77,7 +77,7 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 
 
 
-## Current program position — STEP590E5D
+## Current program position — STEP590E6
 
 - STEP590A architecture baseline: complete;
 - STEP590B executable router: deployed and operator canary accepted;
@@ -99,7 +99,9 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 - STEP590E5C Admin Communications/Notices/Outbox extraction: source implementation complete; operator dependency/deploy gate pending;
 - STEP590E5D Admin Operations/System/Founder extraction: source implementation complete; operator dependency/deploy gate pending;
 - STEP590E5 Admin & Moderation source decomposition: complete;
-- extracted owner count: 464;
-- legacy owner count: 96 and must continue to decrease monotonically;
-- next bounded architecture step after acceptance: STEP590E6 Support, Verification, Sharing & Account;
+- STEP590E6 Support/Verification/Sharing/Account extraction: source implementation complete; operator dependency/deploy gate pending;
+- STEP590E callback-domain decomposition: source-complete;
+- extracted owner count: 482;
+- legacy owner count: 78 and must continue to decrease monotonically;
+- next bounded architecture step after acceptance: STEP590F `queries.js` repository decomposition with compatibility façade;
 - residual risk: broad capability injection remains a compatibility seam until STEP590F/STEP590I; registry-only aliases remain for STEP590J dead-code retirement.

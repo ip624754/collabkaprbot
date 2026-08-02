@@ -55,5 +55,9 @@ export const CALLBACK_ROUTE = Object.freeze({
   ADMIN_AUDIT_METRICS: 'admin_audit_metrics',
   ADMIN_QSTASH_CONTROLS: 'admin_qstash_controls',
   ADMIN_FOUNDER_CONTROLS: 'admin_founder_controls',
+  USER_SUPPORT: 'user_support',
+  USER_VERIFICATION: 'user_verification',
+  USER_SHARING: 'user_sharing',
+  USER_ACCOUNT: 'user_account',
   LEGACY: 'legacy',
 });

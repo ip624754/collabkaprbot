@@ -1,3 +1,27 @@
+## Current STEP590E6 assessment
+
+- Change type: user support, verification, invite sharing/rewards and account lifecycle callback orchestration extraction.
+- Runtime blast radius: 18 post-user callbacks across four exact owners.
+- Correctness boundary: existing deleted-user gate, role/profile verification gates, DB reward truth, Redis session cleanup, copy-safety diagnostics and Telegram rendering remain canonical.
+- Explicit exclusions: user notice, Founder Sale, admin support/moderation, broadcast, payments, admin web, SQL/ENV/routes and product copy are not modified.
+- Source verification: 121 domain assertions, 2,965 router assertions, 560/560 registry and all prior extracted-domain regressions PASS; source preflight and portable spine 6/6 PASS under declared temporary shims.
+- Runtime verification required: support home/write, verification home/info/kind, share/reward read paths, account delete confirmation and restore; destructive account tombstone should use a disposable test identity only.
+- Residual risk: the new orchestration domain still receives broad injected capabilities from `bot.js`; STEP590F/STEP590I must narrow repository/dependency direction, while production smoke must verify deleted-user recovery without exposing unrelated callbacks.
+
+
+# STEP590E6 — Active Architecture Risk Update
+
+| ID | Risk | Severity | State | Required control |
+|---|---|---:|---|---|
+| R-69 | User-services extraction weakens deleted-user recovery or allows blocked users to reach unrelated actions | HIGH | SOURCE MITIGATED / PROD OPEN | preserve pre-dispatch deleted-user gate, exact allowlist, executable recovery tests and bounded deleted-user smoke |
+| R-70 | Verification extraction changes role/profile eligibility or creates verification requests from incomplete profiles | HIGH | SOURCE MITIGATED / PROD OPEN | preserve feature flag, role-kind match and canonical profile-quality gates; exercise read-only verification paths |
+| R-71 | Sharing/reward extraction diverges from DB points truth or duplicates redemption | HIGH | SOURCE MITIGATED / PROD OPEN | preserve canonical reward loaders/redeemer, exact option validation, executable success/failure paths and disposable redemption smoke only if approved |
+| R-72 | Account tombstone/restore extraction leaves stale Redis/UI state or makes deletion replay unsafe | CRITICAL | SOURCE MITIGATED / PROD OPEN | preserve canonical DB methods, four-key cleanup, compact confirmation UX and disposable-account recovery canary |
+
+**Release gate:** R-69 through R-72 remain production-open until the exact STEP590E6 artifact is dependency-gated, deployed and exercised through bounded support, verification, sharing and account-recovery paths. Destructive account deletion and reward redemption are not mandatory unless a disposable identity/state is explicitly approved.
+
+---
+
 ## Current STEP590E5D assessment
 
 - Change type: privileged admin navigation, operational controls, invite visibility, hard-skip, audit/metrics, QStash and Founder runtime callback orchestration extraction.

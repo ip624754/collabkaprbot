@@ -1,3 +1,17 @@
+## STEP590E6 CURRENT HANDOFF — Support, Verification, Sharing & Account
+
+- Baseline: final STEP590E5D source tree (`1.3.30`); E5C/E5D operator commit/push was not evidenced at artifact time.
+- Result: package `1.3.31`; new `src/bot/domains/userServices/`; 18 live callbacks extracted.
+- Ownership: 482 extracted / 78 legacy / 7 aliases / 0 unresolved.
+- Routes: `user_support` 3, `user_verification` 3, `user_sharing` 9, `user_account` 3.
+- QA: E6 121 assertions PASS; router 2,965 PASS; all prior domain suites PASS; source preflight and portable spine 6/6 PASS under temporary execution-only shims.
+- Contracts unchanged: no SQL, ENV, API route, callback key, action guard or visible-copy change.
+- Recovery invariant: deleted-user gate remains in `bot.js` before dispatch and permits only support recovery plus `a:acc_restore`; account tombstone/restore keeps canonical DB and Redis cleanup.
+- Explicit exclusions: `a:notice`, `a:founder`, admin support/moderation, broadcast, payments and admin web remain outside this STEP.
+- Operator gate: ensure STEP590E5C and STEP590E5D are present, then run `npm.cmd ci`, `npm.cmd audit`, E6 tests, critical spine, preflight, commit/push, Vercel Ready and bounded support/verification/share/account smoke.
+- STEP590E callback-domain decomposition is source-complete. Next: STEP590F `queries.js` repository decomposition with compatibility façade.
+
+
 ## STEP590E5D CURRENT HANDOFF — Admin Operations, System & Founder Controls
 
 - Baseline: final STEP590E5C source tree (`1.3.29`); E5C operator commit/push not evidenced at artifact time.

@@ -16,6 +16,7 @@ import { MODERATION_CALLBACK_ROUTE_DEFINITIONS } from '../domains/moderation/rou
 import { ADMIN_OPERATION_CALLBACK_ROUTE_DEFINITIONS } from '../domains/adminOperations/route.js';
 import { ADMIN_COMMUNICATION_CALLBACK_ROUTE_DEFINITIONS } from '../domains/adminCommunications/route.js';
 import { ADMIN_SYSTEM_CALLBACK_ROUTE_DEFINITIONS } from '../domains/adminSystem/route.js';
+import { USER_SERVICE_CALLBACK_ROUTE_DEFINITIONS } from '../domains/userServices/route.js';
 import { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
 
 export { CALLBACK_PHASE, CALLBACK_ROUTE } from './callbackContracts.js';
@@ -38,6 +39,7 @@ export const CALLBACK_ROUTE_DEFINITIONS = Object.freeze([
   ...ADMIN_OPERATION_CALLBACK_ROUTE_DEFINITIONS,
   ...ADMIN_COMMUNICATION_CALLBACK_ROUTE_DEFINITIONS,
   ...ADMIN_SYSTEM_CALLBACK_ROUTE_DEFINITIONS,
+  ...USER_SERVICE_CALLBACK_ROUTE_DEFINITIONS,
 ]);
 
 function assertRouteDefinition(definition) {

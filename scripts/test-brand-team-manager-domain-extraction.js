@@ -166,8 +166,8 @@ assertions += 1;
 }
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 464, 'STEP590E5D cumulative extracted ownership');
-equal(summary.legacy, 96, 'STEP590E5D cumulative legacy ownership');
+equal(summary.extracted, 482, 'STEP590E6 cumulative extracted ownership');
+equal(summary.legacy, 78, 'STEP590E6 cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_MANAGER_MODE], 6, 'manager-mode route count');
 equal(summary.byRoute[CALLBACK_ROUTE.BRAND_TEAM_MEMBERSHIP], 7, 'team-membership route count');
 equal(getCallbackOwnership('a:brand_buy').routeId, CALLBACK_ROUTE.PAYMENT_PURCHASE, 'brand checkout remains payment-owned');

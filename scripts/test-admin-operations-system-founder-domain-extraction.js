@@ -230,8 +230,8 @@ await assert.rejects(
 ); assertions += 1;
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 464, 'STEP590E5D cumulative extracted ownership');
-equal(summary.legacy, 96, 'STEP590E5D cumulative legacy ownership');
+equal(summary.extracted, 482, 'STEP590E6 cumulative extracted ownership');
+equal(summary.legacy, 78, 'STEP590E6 cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_SYSTEM_NAVIGATION], 4, 'navigation route count');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_SYSTEM_OPERATIONS], 5, 'operations route count');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_DELIVERY_HARD_SKIP], 6, 'hard-skip route count');

@@ -7,7 +7,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const botSource = fs.readFileSync(path.join(root, 'src', 'bot', 'bot.js'), 'utf8');
 const workspaceSocialSource = fs.readFileSync(path.join(root, 'src', 'bot', 'domains', 'workspaces', 'socialCallbacks.js'), 'utf8');
-const runtimeSource = `${botSource}\n${workspaceSocialSource}`;
+const userSupportSource = fs.readFileSync(path.join(root, 'src', 'bot', 'domains', 'userServices', 'supportCallbacks.js'), 'utf8');
+const userSharingSource = fs.readFileSync(path.join(root, 'src', 'bot', 'domains', 'userServices', 'sharingCallbacks.js'), 'utf8');
+const userAccountSource = fs.readFileSync(path.join(root, 'src', 'bot', 'domains', 'userServices', 'accountCallbacks.js'), 'utf8');
+const userServiceSource = `${userSupportSource}
+${userSharingSource}
+${userAccountSource}`;
+const runtimeSource = `${botSource}
+${workspaceSocialSource}
+${userServiceSource}`;
 const dbSource = fs.readFileSync(path.join(root, 'src', 'db', 'queries.js'), 'utf8');
 
 function assertAbsent(source, needle, message) {
@@ -93,7 +101,7 @@ for (const needle of diagnostics) assertPresent(runtimeSource, needle);
 
 // This STEP changes labels and failure presentation, not action identities.
 for (const callback of ["'a:share_redeem_do'", "'a:support'", "'a:menu'", "'a:home'"]) {
-  assertPresent(botSource, callback, `callback contract must remain present: ${callback}`);
+  assertPresent(`${botSource}\n${userServiceSource}`, callback, `callback contract must remain present: ${callback}`);
 }
 
 console.log('OK: STEP586A copy safety and taxonomy foundation contract');

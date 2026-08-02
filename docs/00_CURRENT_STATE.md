@@ -1,3 +1,23 @@
+## STEP590E6 — Support, Verification, Sharing & Account Domain Extraction (2026-08-02)
+
+**Current source artifact baseline:** final STEP590E5D source tree, package `1.3.30`; operator commit/push of E5C/E5D was not evidenced at artifact time.
+
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY AND DEPLOY GATE PENDING;
+- new bounded domain: `src/bot/domains/userServices/`;
+- newly extracted callback actions: 18 total across user support (3), verification (3), sharing/rewards (9), and account lifecycle (3);
+- cumulative ownership: 482 extracted, 78 legacy, 7 aliases, 0 unresolved;
+- support entry/write flow, verification eligibility/kind selection, invite sharing/reward redemption, and account tombstone/restore preserve existing DB/Redis/Telegram behavior;
+- deleted-user recovery gate remains before post-user dispatch and continues to allow only account restore and support recovery actions;
+- user-facing `a:notice` and `a:founder` remain legacy-owned and outside this boundary; admin support/moderation, payments and broadcast remain with their existing owners;
+- SQL/ENV/API-route/callback-key/action-guard/product-copy changes: none;
+- package: `1.3.31`;
+- verified QA: 121 E6 assertions, 2,965 router assertions, 560/560 registry and all prior extracted-domain suites PASS;
+- full `preflight:source` and portable critical spine 6/6 PASS under temporary execution-only shims; no shim or `node_modules` remains in the final tree;
+- artifact-side clean `npm ci` is expected to remain subject to the internal package mirror gate and must be re-run by the operator;
+- clean operator `npm ci`/`npm audit`, Git commit/push, Vercel deployment and bounded Telegram user-services smoke remain operator-side;
+- STEP590E callback-domain decomposition is source-complete; next bounded architecture step: STEP590F `queries.js` repository decomposition with compatibility façade.
+
+
 ## STEP590E5D — Admin Operations, System & Founder Controls Domain Extraction (2026-08-02)
 
 **Current source artifact baseline:** final STEP590E5C source tree, package `1.3.29`; operator commit/push of E5C was not evidenced at artifact time.

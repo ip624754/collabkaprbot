@@ -35,8 +35,8 @@ const summary = summarizeCallbackOwnership();
 equal(ownershipKeys.length, registryKeys.length, 'every registered action must have one ownership row');
 equal(new Set(ownershipKeys).size, ownershipKeys.length, 'ownership action keys must be unique');
 equal(summary.total, registryKeys.length, 'summary total must match action registry');
-equal(summary.extracted, 464, 'STEP590E5D must extract four hundred sixty-four exact actions');
-equal(summary.legacy, registryKeys.length - 464, 'all remaining actions must be explicit legacy owners');
+equal(summary.extracted, 482, 'STEP590E6 must extract four hundred eighty-two exact actions');
+equal(summary.legacy, registryKeys.length - 482, 'all remaining actions must be explicit legacy owners');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH], 1, 'admin auth challenge route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_WEB_AUTH_CONTROL], 1, 'admin auth control route owns one action');
 equal(summary.byRoute[CALLBACK_ROUTE.GIVEAWAY_ACCESS], 4, 'giveaway access owns four actions');
@@ -74,7 +74,7 @@ equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_OPERATIONS], 16, 'curator operation
 equal(summary.byRoute[CALLBACK_ROUTE.CURATOR_MANAGEMENT], 7, 'curator management owns seven actions');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_REPORTS], 6, 'moderation reports own six actions');
 equal(summary.byRoute[CALLBACK_ROUTE.MODERATION_VERIFICATION], 4, 'moderation verification owns four actions');
-equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 464, 'legacy count must be exact');
+equal(summary.byRoute[CALLBACK_ROUTE.LEGACY], registryKeys.length - 482, 'legacy count must be exact');
 
 for (const action of ['a:cur_ws', 'a:cur_ws_off', 'a:net_q', 'a:net_set', 'a:setup', 'a:ws_disconnect_do', 'a:ws_disconnect_q', 'a:ws_history', 'a:ws_history_export', 'a:ws_leads', 'a:ws_list', 'a:ws_list_inactive', 'a:ws_open', 'a:ws_pro', 'a:ws_pro_pin', 'a:ws_pro_pin_clear', 'a:ws_pro_pin_set', 'a:ws_reconnect_do', 'a:ws_reconnect_q', 'a:ws_settings', 'a:ws_toggle_cur', 'a:ws_toggle_net']) {
   equal(getCallbackOwnership(action).routeId, CALLBACK_ROUTE.WORKSPACE_CONTROL, `${action} workspace control owner`);
@@ -237,7 +237,7 @@ for (const action of ['a:bx_new', 'a:bx_publish', 'a:bx_view', 'a:bx_pause', 'a:
 }
 equal(getCallbackOwnership('a:off_buy').routeId, CALLBACK_ROUTE.LEGACY, 'official paid checkout stays legacy');
 equal(getCallbackOwnership('a:off_buy_home').routeId, CALLBACK_ROUTE.LEGACY, 'official paid checkout home stays legacy');
-equal(getCallbackOwnership('a:support').routeId, CALLBACK_ROUTE.LEGACY, 'non-extracted action stays legacy');
+equal(getCallbackOwnership('a:notice').routeId, CALLBACK_ROUTE.LEGACY, 'non-extracted action stays legacy');
 equal(getCallbackOwnership('a:not_registered'), null, 'unknown action has no owner');
 
 assert.throws(
@@ -462,7 +462,7 @@ for (const [routeId, action] of [
 let legacyCalls = 0;
 const legacyHandled = await dispatchOwnedCallback({
   phase: CALLBACK_PHASE.POST_USER,
-  p: { a: 'a:support' },
+  p: { a: 'a:notice' },
   legacy: async () => {
     legacyCalls += 1;
     return undefined;
@@ -474,7 +474,7 @@ equal(legacyCalls, 1, 'legacy handler called exactly once');
 
 const legacyUnknown = await dispatchOwnedCallback({
   phase: CALLBACK_PHASE.POST_USER,
-  p: { a: 'a:support' },
+  p: { a: 'a:notice' },
   legacy: async () => false,
   final: true,
 });

@@ -216,8 +216,8 @@ await assert.rejects(
 assertions += 1;
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 464, 'STEP590E5D cumulative extracted ownership');
-equal(summary.legacy, 96, 'STEP590E5D cumulative legacy ownership');
+equal(summary.extracted, 482, 'STEP590E6 cumulative extracted ownership');
+equal(summary.legacy, 78, 'STEP590E6 cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.DIRECTORY_SEARCH], 6, 'directory search route count');
 equal(summary.byRoute[CALLBACK_ROUTE.DIRECTORY_PUBLIC_WORKSPACE], 4, 'public workspace route count');
 equal(getCallbackOwnership('a:wsp_contact_unlock').routeId, CALLBACK_ROUTE.DIRECTORY_PUBLIC_WORKSPACE, 'contact unlock is public-workspace owned');

@@ -22,6 +22,8 @@ function extractBetween(source, startMarker, endMarker) {
 }
 
 const botSource = read('src/bot/bot.js');
+const sharingSource = read('src/bot/domains/userServices/sharingCallbacks.js');
+const inviteRuntimeSource = `${botSource}\n${sharingSource}`;
 const queriesSource = read('src/db/queries.js');
 const registrySource = read('src/bot/actionRegistry.js');
 const migrationSource = read('migrations/046_invite_reward_ledger.sql');
@@ -140,7 +142,7 @@ for (const token of [
   'Применено к:',
   'renderInviteRedeemSuccessText({ reward, rewards: inviteState.rewards, result })',
 ]) {
-  assert.ok(botSource.includes(token), `redeem truth contract missing: ${token}`);
+  assert.ok(inviteRuntimeSource.includes(token), `redeem truth contract missing: ${token}`);
 }
 
 // Callback identities and persisted ledger schema stay stable.
@@ -155,7 +157,7 @@ for (const action of [
   'a:share_link',
   'a:share_card',
 ]) {
-  assert.ok(botSource.includes(action), `bot callback missing: ${action}`);
+  assert.ok(inviteRuntimeSource.includes(action), `bot callback missing: ${action}`);
   assert.ok(registrySource.includes(`"${action}"`), `action registry callback missing: ${action}`);
 }
 assert.ok(migrationSource.includes("reward_type in ('invite_join', 'invite_activation', 'pro_7d', 'pro_30d')"), 'reward_type DB contract changed');
