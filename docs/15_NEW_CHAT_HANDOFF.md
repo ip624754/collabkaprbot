@@ -1,4 +1,13 @@
-# Current New-Chat Handoff — STEP590F
+# Current New-Chat Handoff — STEP590F_R1 Production Recovery
+
+- Current package: `1.3.33`.
+- Production-blocking defect in STEP590F was a missing internal ESM export: `applicationsRepository.js` imported `isMissingBarterOffersMetaColumnError` from `bartersRepository.js`, but the helper was not exported.
+- R1 exports the helper internally, keeps the public `queries.js` façade at exactly 328 exports, and adds an executable named-import/export linkage gate.
+- SQL/function/transaction bodies are unchanged; reconstructed-body SHA parity remains canonical.
+- Focused repository tests and real `queries.js` ESM instantiation PASS under execution-only dependency shims.
+- Operator must commit/push R1 and confirm Vercel Ready, `/api/webhook` recovery and web-admin login recovery before STEP590G.
+
+## Previous Handoff — STEP590F
 
 - Current source result: package `1.3.32`.
 - `src/db/queries.js` is a thin compatibility façade with 328 explicit exports.

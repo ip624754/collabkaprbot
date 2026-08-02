@@ -1,3 +1,17 @@
+## STEP590F_R1 — Applications/Barters Internal Export Recovery (2026-08-02)
+
+- status: PRODUCTION-BLOCKING ESM LINKAGE DEFECT RECOVERED / SOURCE QA PASS / OPERATOR REDEPLOY REQUIRED;
+- production symptom: `/api/webhook` and web-admin bootstrap failed during ESM instantiation because `applicationsRepository.js` imported `isMissingBarterOffersMetaColumnError`, while `bartersRepository.js` defined but did not export it;
+- recovery: the existing helper is now an internal named export from `bartersRepository.js`; it remains absent from the public `queries.js` façade;
+- repository manifest now classifies the helper as an internal cross-repository export, preserving exact reconstructed-body SHA parity;
+- STEP590F executable QA now validates every named cross-repository import against actual exports, closing the gap that `node --check` cannot detect;
+- real `import('./src/db/queries.js')` under execution-only dependency shims instantiated successfully with exactly 328 public exports;
+- SQL, signatures, transactions, DB schema, ENV, API routes and product behavior: unchanged;
+- package: `1.3.33`;
+- operator action: apply R1, run focused tests, commit/push and confirm Vercel Ready plus `/api/webhook` no longer returns FUNCTION_INVOCATION_FAILED;
+- next architecture step remains STEP590G after production recovery.
+
+
 ## STEP590F — queries.js Repository Decomposition with Compatibility Façade (2026-08-02)
 
 **Current source artifact baseline:** final STEP590E6 source tree, package `1.3.31`; operator commit/push of E5C/E5D/E6 was not evidenced at artifact time.

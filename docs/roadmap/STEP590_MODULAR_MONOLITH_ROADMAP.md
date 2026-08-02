@@ -35,7 +35,7 @@
 | STEP590E5C | Admin communications, notices and outbox | Source implemented; operator gate pending | 15/20 | Audience, draft and delivery-state contracts PASS |
 | STEP590E5D | Admin operations, system and founder controls | Source implemented; operator gate pending | 16/20 | Privilege, toggle and audit contracts PASS |
 | STEP590E6 | Support, verification, sharing and account | Source implemented; operator gate pending | 15/20 | Input-mode, deleted-user recovery and reward-truth contracts PASS |
-| STEP590F | `queries.js` repository decomposition with façade | Source implemented; operator gate pending | 16/20 | 328/328 exports; exact body/SQL/transaction parity PASS |
+| STEP590F | `queries.js` repository decomposition with façade | Source implemented; R1 production recovery required | 16/20 | 328/328 public exports; internal ESM linkage recovered in STEP590F_R1 |
 | STEP590G | Cron/job decomposition | Yes | 16/20 | Lock/budget/receipt parity; function budget unchanged |
 | STEP590H | Admin-web client decomposition | Yes, UI parity | 11/20 | One asset, route/state/view parity, browser acceptance |
 | STEP590I | Architecture gates | Tooling | 10/20 | Gates block duplicate ownership/cycles/forbidden imports |
@@ -78,6 +78,8 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 
 
 ## Current program position — STEP590F
+
+- STEP590F_R1 production recovery: missing internal Applications → Barters named export fixed; package `1.3.33`; redeploy acceptance pending.
 
 - STEP590A architecture baseline: complete;
 - STEP590B executable router: deployed and operator canary accepted;

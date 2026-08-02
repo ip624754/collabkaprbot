@@ -733,6 +733,9 @@
     ],
     "monetizationRepository": [
       "isMissingRelationError"
+    ],
+    "bartersRepository": [
+      "isMissingBarterOffersMetaColumnError"
     ]
   },
   "compatibilityFacade": "src/db/queries.js"

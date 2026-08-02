@@ -75,6 +75,47 @@ for (const mod of manifest.modules) {
 assert(sha256(reconstructed) === manifest.bodySha256, 'moved query body changed: SQL/signature/transaction parity failed');
 assert(JSON.stringify(publicFromModules) === JSON.stringify(manifest.publicExports), 'repository public export parity drift');
 
+
+// Every named cross-repository import must resolve to a real module export.
+// This catches ESM-instantiation failures that `node --check` cannot detect.
+const repositoryDir = path.join(ROOT, 'src', 'db', 'repositories');
+const repositoryFiles = fs.readdirSync(repositoryDir)
+  .filter((name) => name.endsWith('.js'))
+  .sort();
+const repositoryExportMap = new Map();
+for (const name of repositoryFiles) {
+  const source = fs.readFileSync(path.join(repositoryDir, name), 'utf8');
+  const exports = new Set(
+    [...source.matchAll(/^export\s+(?:async\s+)?(?:function|const|let|class)\s+([A-Za-z_$][\w$]*)/gm)]
+      .map((match) => match[1])
+  );
+  for (const block of source.matchAll(/^export\s*\{([\s\S]*?)\}\s*;?$/gm)) {
+    for (const item of block[1].split(',')) {
+      const clean = item.trim();
+      if (!clean) continue;
+      exports.add(clean.split(/\s+as\s+/).at(-1).trim());
+    }
+  }
+  repositoryExportMap.set(name, exports);
+}
+for (const name of repositoryFiles) {
+  const source = fs.readFileSync(path.join(repositoryDir, name), 'utf8');
+  for (const match of source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]\.\/([^'"]+\.js)['"]/g)) {
+    const targetName = match[2];
+    const targetExports = repositoryExportMap.get(targetName);
+    assert(targetExports, `${name}: imported repository target does not exist: ${targetName}`);
+    for (const item of match[1].split(',')) {
+      const clean = item.trim();
+      if (!clean) continue;
+      const importedName = clean.split(/\s+as\s+/)[0].trim();
+      assert(
+        targetExports.has(importedName),
+        `${name}: ${targetName} does not export named import ${importedName}`
+      );
+    }
+  }
+}
+
 const allowedDirectRepositoryImportRoots = new Set(['src/db/repositories']);
 for (const top of ['src', 'api', 'migrations']) {
   const topAbs = path.join(ROOT, top);

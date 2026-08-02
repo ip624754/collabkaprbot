@@ -64,7 +64,7 @@ import { takeAvailableRetryCreditForUpdate, redeemRetryCredit } from './usersRep
 // Barters marketplace (v0.9.1)
 // -----------------------------
 
-function isMissingBarterOffersMetaColumnError(err) {
+export function isMissingBarterOffersMetaColumnError(err) {
   const code = String(err?.code || '');
   const msg = String(err?.message || '').toLowerCase();
   // 42703 = undefined_column (Postgres)
