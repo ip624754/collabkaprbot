@@ -115,3 +115,21 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 - exact query-body SHA-256 parity, source preflight and portable critical spine PASS;
 - next bounded architecture step after STEP590G3 production acceptance: STEP590H admin-web client decomposition;
 - residual risk: broad compatibility façade and cross-domain capability seams remain until STEP590I/STEP590J.
+
+## STEP590I — Architecture Gates
+
+Status: source implementation complete; operator QA/deploy gate pending.
+
+STEP590I adds fail-closed enforcement for the accepted STEP590F/G/H boundaries:
+
+- compatibility façade line budgets;
+- SQL-free query façade;
+- exact QStash route-to-worker ownership;
+- required bounded owner directories;
+- admin-web entry budget and single public asset;
+- prevention of moved view declarations returning to the entry;
+- prevention of direct API/fetch coupling inside bounded view modules;
+- package/package-lock parity;
+- mutation tests proving the gates reject regressions.
+
+Runtime semantics, API routes, Vercel function count, SQL, migrations, ENV, Telegram copy and product behavior remain unchanged.

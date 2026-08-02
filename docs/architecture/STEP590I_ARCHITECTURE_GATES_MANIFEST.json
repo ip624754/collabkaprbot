@@ -1,0 +1,175 @@
+{
+  "version": "STEP590I_v1",
+  "baseline": {
+    "acceptedCommit": "0defa47",
+    "minimumPackageVersion": "1.3.37",
+    "acceptedSteps": [
+      "STEP590F_R1",
+      "STEP590G1",
+      "STEP590G2",
+      "STEP590G3",
+      "STEP590H"
+    ]
+  },
+  "package": {
+    "minimumVersion": "1.3.37",
+    "requireLockParity": true
+  },
+  "facades": [
+    {
+      "id": "queries",
+      "path": "src/db/queries.js",
+      "maxLines": 420,
+      "allowedRelativeSpecifierPrefixes": ["./repositories/"],
+      "requiredTokens": [
+        "STEP590F compatibility façade",
+        "./repositories/usersRepository.js",
+        "./repositories/workspacesRepository.js",
+        "./repositories/giveawaysRepository.js",
+        "./repositories/bartersRepository.js",
+        "./repositories/applicationsRepository.js",
+        "./repositories/brandsRepository.js",
+        "./repositories/broadcastsRepository.js",
+        "./repositories/monetizationRepository.js",
+        "./repositories/socialRepository.js"
+      ],
+      "forbiddenPatterns": [
+        "\\bSELECT\\s+",
+        "\\bINSERT\\s+INTO\\b",
+        "\\bUPDATE\\s+[a-zA-Z_]+\\s+SET\\b",
+        "\\bDELETE\\s+FROM\\b",
+        "\\bBEGIN\\b",
+        "\\bCOMMIT\\b",
+        "\\bROLLBACK\\b"
+      ]
+    },
+    {
+      "id": "cron",
+      "path": "src/bot/cron.js",
+      "maxLines": 40,
+      "allowedRelativeSpecifiers": ["./jobs/index.js"],
+      "requiredTokens": [
+        "STEP590G1 compatibility façade",
+        "from './jobs/index.js'"
+      ],
+      "forbiddenPatterns": [
+        "\\bwithLock\\s*\\(",
+        "\\bqstashPublishJSON\\s*\\(",
+        "\\btgSendMessage\\s*\\(",
+        "\\bredis\\."
+      ]
+    }
+  ],
+  "routeOwnership": [
+    {
+      "route": "api/qstash/broadcast-deliver.js",
+      "owner": "../../src/jobs/broadcastDelivery/index.js",
+      "maxLines": 20,
+      "requireRawBodyConfig": true
+    },
+    {
+      "route": "api/qstash/monetization-retry.js",
+      "owner": "../../src/jobs/monetizationRetry/worker.js",
+      "maxLines": 20,
+      "requireRawBodyConfig": false
+    },
+    {
+      "route": "api/qstash/official-publish-deliver.js",
+      "owner": "../../src/jobs/officialPublish/deliverWorker.js",
+      "maxLines": 20,
+      "requireRawBodyConfig": false
+    },
+    {
+      "route": "api/qstash/official-publish-verify.js",
+      "owner": "../../src/jobs/officialPublish/verifyWorker.js",
+      "maxLines": 20,
+      "requireRawBodyConfig": false
+    },
+    {
+      "route": "api/qstash/ping.js",
+      "owner": "../../src/jobs/qstashPing/worker.js",
+      "maxLines": 20,
+      "requireRawBodyConfig": false
+    }
+  ],
+  "ownedDirectories": [
+    {
+      "id": "query_repositories",
+      "path": "src/db/repositories",
+      "requiredFiles": [
+        "applicationsRepository.js",
+        "bartersRepository.js",
+        "brandsRepository.js",
+        "broadcastsRepository.js",
+        "giveawaysRepository.js",
+        "monetizationRepository.js",
+        "socialRepository.js",
+        "usersRepository.js",
+        "workspacesRepository.js"
+      ]
+    },
+    {
+      "id": "cron_jobs",
+      "path": "src/bot/jobs",
+      "requiredFiles": [
+        "auditFlushJob.js",
+        "broadcastJob.js",
+        "cronRuntime.js",
+        "giveawayJob.js",
+        "index.js",
+        "instagramVerificationJob.js"
+      ]
+    },
+    {
+      "id": "broadcast_delivery_worker",
+      "path": "src/jobs/broadcastDelivery",
+      "requiredFiles": [
+        "cooldown.js",
+        "dbOverload.js",
+        "delivery.js",
+        "hardSkip.js",
+        "index.js",
+        "payload.js",
+        "quarantine.js",
+        "receipt.js"
+      ]
+    },
+    {
+      "id": "monetization_retry_worker",
+      "path": "src/jobs/monetizationRetry",
+      "requiredFiles": ["index.js", "worker.js"]
+    },
+    {
+      "id": "official_publish_worker",
+      "path": "src/jobs/officialPublish",
+      "requiredFiles": ["deliverWorker.js", "index.js", "verifyWorker.js"]
+    },
+    {
+      "id": "qstash_ping_worker",
+      "path": "src/jobs/qstashPing",
+      "requiredFiles": ["index.js", "worker.js"]
+    }
+  ],
+  "frontend": {
+    "entry": "scripts/admin-web.js",
+    "maxEntryLines": 2500,
+    "html": "admin.html",
+    "publicAsset": "/scripts/admin-web.js",
+    "moduleManifest": "docs/architecture/STEP590H_ADMIN_WEB_MODULE_MANIFEST.json",
+    "moduleDirectory": "scripts/admin-web",
+    "requiredFactories": [
+      "createOverviewModule",
+      "createUsersModule",
+      "createPaymentsModule",
+      "createCommsModule",
+      "createFounderModule",
+      "createRuntimeModule"
+    ],
+    "forbiddenModulePatterns": [
+      "\\bfetch\\s*\\(",
+      "['\"]\\/api\\/",
+      "from\\s+['\"][^'\"]*\\/api\\/",
+      "from\\s+['\"][^'\"]*\\/src\\/"
+    ]
+  }
+}

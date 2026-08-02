@@ -1,3 +1,12 @@
+# Current New-Chat Handoff — STEP590I
+
+- Baseline: production-accepted STEP590H commit `0defa47`, package `1.3.37`.
+- Current source: package `1.3.38`.
+- New enforcement: manifest-driven façade budgets, exact QStash route ownership, bounded owner-directory presence, admin-web single-entry/module boundary and package-lock parity.
+- Negative mutation tests prove gates fail closed.
+- No runtime/API/SQL/ENV/function/product behavior delta.
+- Operator gate: clean npm install/audit, full preflight, commit/push, Vercel Ready and bounded health/admin smoke.
+
 # Current New-Chat Handoff — STEP590H
 
 - Canonical baseline: production-accepted STEP590G3 commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`, package `1.3.36`.

@@ -22,9 +22,19 @@ equal(manifest.entry, 'scripts/admin-web.js', 'entry path');
 equal(manifest.asset, '/scripts/admin-web.js', 'public asset path');
 equal(manifest.modules.length, expectedModules.length, 'bounded module count');
 equal(ADMIN_WEB_SOURCE_FILES.length, expectedModules.length + 1, 'aggregate source file count');
-equal(pkg.version, '1.3.37', 'package version');
-equal(lock.version, '1.3.37', 'lock version');
-equal(lock.packages?.['']?.version, '1.3.37', 'root lock package version');
+const versionParts = (value) => String(value || '').split('.').map((part) => Number.parseInt(part, 10));
+const versionAtLeast = (value, minimum) => {
+  const actual = versionParts(value);
+  const floor = versionParts(minimum);
+  for (let i = 0; i < 3; i += 1) {
+    if ((actual[i] || 0) > (floor[i] || 0)) return true;
+    if ((actual[i] || 0) < (floor[i] || 0)) return false;
+  }
+  return true;
+};
+ok(versionAtLeast(pkg.version, '1.3.37'), 'package version must preserve STEP590H baseline');
+equal(lock.version, pkg.version, 'lock version parity');
+equal(lock.packages?.['']?.version, pkg.version, 'root lock package version parity');
 
 const moduleScripts = [...html.matchAll(/<script\b[^>]*type="module"[^>]*src="([^"]+)"[^>]*><\/script>/g)].map((m) => m[1]);
 equal(moduleScripts.length, 1, 'admin shell must expose one module entry asset');

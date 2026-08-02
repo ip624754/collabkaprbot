@@ -30,3 +30,4 @@
 
 
 - IG OAuth parked in STEP383: `api/ig/oauth/*` removed from deploy surface to stay under Vercel Hobby function cap; Instagram remains a normal profile link/contact after unlock.
+21) Текущий source handoff baseline: **STEP590I** поверх production-accepted STEP590H commit `0defa47`. Package `1.3.38`; архитектурные границы STEP590F/G/H закреплены manifest-driven source gates. Runtime-семантика не менялась; оператору нужны clean install/audit, полный preflight, commit/push и Ready/health smoke.

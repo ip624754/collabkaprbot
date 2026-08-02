@@ -1,3 +1,14 @@
+# Current New-Chat Handoff — STEP590I
+
+- Canonical baseline: production-accepted STEP590H commit `0defa47`, package `1.3.37`.
+- Current source result: package `1.3.38`.
+- STEP590H final verdict: `PRODUCTION_ACCEPT_STEP590H_ADMIN_WEB_FRONTEND_DECOMPOSITION`.
+- Architecture enforcement now protects queries, cron, QStash workers and admin-web modules against re-monolithization and owner drift.
+- Runtime behavior and deployable surface are unchanged.
+- Focused architecture QA and all F/G/H regressions PASS; critical spine 6/6 PASS under temporary shims removed before packaging.
+- Full preflight exceeded the artifact-environment timeout and remains an operator gate.
+- Operator next: clean install/audit, STEP590I gates, full preflight, commit/push, Vercel Ready and health/admin smoke.
+
 # Current New-Chat Handoff — STEP590H
 
 - Baseline: production-accepted STEP590G3 commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`, package `1.3.36`.

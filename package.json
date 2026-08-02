@@ -1,6 +1,6 @@
 {
   "name": "collabgirls-bot",
-  "version": "1.3.37",
+  "version": "1.3.38",
   "private": true,
   "type": "module",
   "engines": {
@@ -229,7 +229,11 @@
     "smoke:qstash-monetization-official-publish-esm-linkage-contract": "node scripts/smoke-qstash-monetization-official-publish-esm-linkage-contract.js",
     "test:admin-web-client-decomposition": "node scripts/test-admin-web-client-decomposition.js",
     "smoke:admin-web-client-compatibility-entry-contract": "node scripts/smoke-admin-web-client-compatibility-entry-contract.js",
-    "smoke:admin-web-client-esm-linkage-contract": "node scripts/smoke-admin-web-client-esm-linkage-contract.js"
+    "smoke:admin-web-client-esm-linkage-contract": "node scripts/smoke-admin-web-client-esm-linkage-contract.js",
+    "check:architecture-gates": "node scripts/check-step590-architecture-gates.js",
+    "test:architecture-gates": "node scripts/test-step590-architecture-gates.js",
+    "smoke:architecture-gates-contract": "node scripts/smoke-step590-architecture-gates-contract.js",
+    "report:architecture-health": "node scripts/check-step590-architecture-gates.js --report=artifacts/step590-architecture-health.json"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

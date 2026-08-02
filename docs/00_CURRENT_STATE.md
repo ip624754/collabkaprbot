@@ -1,3 +1,19 @@
+## STEP590I — Architecture Gates (2026-08-02)
+
+- canonical baseline: production-accepted STEP590H operator commit `0defa47`, package `1.3.37`;
+- STEP590H final verdict: `PRODUCTION_ACCEPT_STEP590H_ADMIN_WEB_FRONTEND_DECOMPOSITION`;
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR CLEAN INSTALL AND DEPLOY GATE PENDING;
+- package: `1.3.38`;
+- one manifest-driven gate now protects STEP590F/G/H boundaries: query and cron façade budgets, exact QStash route ownership, required bounded owner directories and admin-web entry/module boundaries;
+- mutation tests prove fail-closed behavior for façade growth, route-owner drift, frontend API coupling and package-lock drift;
+- source preflight includes checker, mutation tests and source contract;
+- runtime code, APIs, functions, SQL, migrations, ENV, callbacks, Telegram copy, payment behavior and frontend behavior: unchanged;
+- verified QA: architecture checker 16/16 PASS, mutation tests 11 assertions PASS, source contract 15 assertions PASS, F 278 / G1 162 / G2 108 / G3 99 / H 154 regressions PASS, critical spine 6/6 PASS under temporary execution-only shims, function budget 11 unchanged;
+- full `preflight:source` was launched twice and advanced through the callback/domain suite but exceeded the execution time limit of the artifact environment; no test failure was observed before timeout; operator must run the canonical full gate;
+- temporary dependency shims are removed before packaging;
+- operator gates: clean `npm ci`, `npm audit`, focused STEP590I QA, full `preflight:source`, commit/push, Vercel Ready and health/admin-login smoke.
+
+
 ## STEP590H — Admin Web Frontend Decomposition (2026-08-02)
 
 - canonical baseline: production-accepted STEP590G3, operator commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`, package `1.3.36`;
