@@ -26,9 +26,19 @@ check(manifest.baseline.routeSha256 === 'c084ef7af005e7058d4618fa01b51bf4515d170
 
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
-equal(pkg.version, '1.3.35', 'package.json version mismatch');
-equal(lock.version, '1.3.35', 'package-lock version mismatch');
-equal(lock.packages?.['']?.version, '1.3.35', 'package-lock root package mismatch');
+const versionParts = (value) => String(value || '').split('.').map((part) => Number(part) || 0);
+const versionAtLeast = (actual, minimum) => {
+  const a = versionParts(actual);
+  const b = versionParts(minimum);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if ((a[i] || 0) > (b[i] || 0)) return true;
+    if ((a[i] || 0) < (b[i] || 0)) return false;
+  }
+  return true;
+};
+equal(pkg.version, lock.version, 'package.json/package-lock version mismatch');
+equal(pkg.version, lock.packages?.['']?.version, 'package-lock root package mismatch');
+check(versionAtLeast(pkg.version, manifest.targetPackageVersion), 'current package version predates STEP590G2 target');
 
 const facade = read(manifest.facadePath);
 check(facade.split(/\r?\n/).length <= 12, 'QStash broadcast route façade is not thin');

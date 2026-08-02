@@ -21,7 +21,7 @@
 18) `callback_data` ≤ 64 байта: держим ключи короткими; если нужен контекст — токен → payload в Redis (TTL).
 
 19) Watchlist регрессий: см. `docs/00_CURRENT_STATE.md` → раздел «Выводы последнего регресс-аудита + watchlist».
-20) Текущий source handoff baseline: **STEP590G2** поверх production-accepted STEP590G1 commit `2fb27008e7f70ed194923df687dd68e6845f2521`. Package `1.3.35`; QStash broadcast route остаётся на прежнем URL и делегирует bounded worker-модулям. Production acceptance G2 ещё требуется; STEP590G3 до неё не начинать.
+20) Текущий source handoff baseline: **STEP590G3** поверх production-accepted STEP590G2 commit `e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a`. Package `1.3.36`; monetization retry, official publish deliver/verify и QStash ping API-файлы остаются на прежних URL как compatibility handlers и делегируют bounded workers. Production acceptance G3 ещё требуется; STEP590H до неё не начинать.
 21) Для AI-assisted работы обязательны project-specific contracts: `docs/AI_NATIVE_WORKFLOW.md`, `docs/SYSTEM_INVARIANTS.md`, `docs/RISK_REGISTRY.md`.
 22) `docs/CREATOR_OS_THESIS.md` — product north star, но не разрешение на broad rewrite: каждая продуктовая волна требует отдельный scoped STEP.
 

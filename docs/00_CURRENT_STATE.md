@@ -1,7 +1,24 @@
+## STEP590G3 — Monetization and Official Publish Workers Decomposition (2026-08-02)
+
+- canonical baseline: production-accepted STEP590G2, operator commit `e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a`, package `1.3.35`;
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED AND REGRESSION QA PASS / OPERATOR PRODUCTION GATE PENDING;
+- package: `1.3.36`;
+- four existing QStash API files are thin compatibility handlers preserving the same URLs, default exports, `bodyParser: false`, method guards and QStash signature boundaries;
+- implementation moved without business-logic rewrite to `src/jobs/monetizationRetry/worker.js`, `src/jobs/officialPublish/deliverWorker.js`, `src/jobs/officialPublish/verifyWorker.js` and `src/jobs/qstashPing/worker.js`;
+- monetization actions `brand_app_accept`, `wsp_contact_unlock`, `intro_open` and `orphaned_autoheal`, payment fallback validation/apply, lock release and bounded chain re-enqueue remain unchanged;
+- official publish reserve/deliver/locked retry, verify/self-heal, deduplication and `qstash_reschedule_failed` observability remain unchanged;
+- QStash ping test seams and Redis breadcrumbs remain exported through the compatibility handler;
+- SQL/migrations/ENV/API routes/callback keys/Telegram copy/function count: unchanged;
+- verified focused QA: 99 G3 assertions, compatibility handlers PASS, real ESM route graph 4/4 PASS, monetization/official-publish regression contracts PASS, STEP590G2 108 PASS, STEP590G1 162 PASS, STEP590F repository regression 278 PASS, runtime proof spine PASS and portable critical spine 6/6 PASS;
+- artifact-side clean `npm ci` is blocked by the internal package mirror returning 404 for `xtend@4.0.2`; operator must rerun clean install/audit;
+- operator-side gates: clean `npm ci`, `npm audit`, commit/push, Vercel Ready, four unsigned `signature_missing` boundaries, signed QStash ping and signed monetization unknown-action no-side-effect canaries;
+- STEP590H must not start before G3 production acceptance.
+
+
 ## STEP590G2 — QStash Broadcast Delivery Worker Decomposition (2026-08-02)
 
 - canonical baseline: production-accepted STEP590G1, operator commit `2fb27008e7f70ed194923df687dd68e6845f2521`, package `1.3.34`;
-- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED AND REGRESSION QA PASS / OPERATOR PRODUCTION GATE PENDING;
+- status: PRODUCTION ACCEPTED at operator commit `e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a`;
 - package: `1.3.35`;
 - `api/qstash/broadcast-deliver.js` reduced from 923 implementation lines to a 7-line compatibility route preserving the same URL, default handler and `bodyParser: false`;
 - bounded implementation lives under `src/jobs/broadcastDelivery/`: payload, cooldown, DB overload fuse, quarantine, hard-skip, receipt observability and delivery orchestration;
@@ -10,8 +27,9 @@
 - verified QA: 108 G2 assertions, compatibility handler PASS, real ESM route graph + 405 guard PASS, broadcast overload/local-fuse/429/unknown-state contracts PASS, critical spine 6/6 PASS, `preflight:source` PASS, function budget 11 unchanged;
 - previous STEP590G1 and STEP590F repository decomposition regressions PASS;
 - temporary execution-only dependency shims were removed before packaging;
-- operator-side gates: clean `npm ci`, `npm audit`, commit/push, Vercel Ready, unauthorized signature boundary and a bounded signed QStash delivery proof without duplicate Telegram side effects;
-- STEP590G3 must not start before G2 production acceptance.
+- production evidence: clean worktree and HEAD/origin parity; unsigned route returned `401 signature_missing`; signed no-send QStash canary converged `CREATED → ACTIVE → DELIVERED` with HTTP 200;
+- final verdict: `PRODUCTION_ACCEPT_STEP590G2_QSTASH_BROADCAST_DELIVERY_WORKER_DECOMPOSITION`;
+- STEP590G3 is the active source step.
 
 
 ## STEP590G1 — Cron Tick Decomposition with Compatibility Façade (2026-08-02)

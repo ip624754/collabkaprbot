@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ACTION_GUARD, ACTION_REGISTRY, ACTION_TYPES } from '../src/bot/actionRegistry.js';
+import { readOfficialPublishVerifyWorkerSource } from './lib/step590g3-source-reader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,7 +33,7 @@ function expectRegistry(action, { type, guard }) {
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
 const barterCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'barter', 'callbacks.js'), 'utf8');
 const helperSource = fs.readFileSync(path.join(ROOT, 'src', 'lib', 'officialPublishVerify.js'), 'utf8');
-const workerSource = fs.readFileSync(path.join(ROOT, 'api', 'qstash', 'official-publish-verify.js'), 'utf8');
+const workerSource = readOfficialPublishVerifyWorkerSource(ROOT);
 
 const renderOfficialManageViewSrc = extractBetween(
   botSource,

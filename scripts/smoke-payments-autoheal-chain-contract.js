@@ -3,16 +3,16 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { readCronImplementationSource } from './lib/cron-source-reader.js';
+import { readMonetizationRetryWorkerSource } from './lib/step590g3-source-reader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
-const monRetryPath = path.join(ROOT, 'api', 'qstash', 'monetization-retry.js');
 const configPath = path.join(ROOT, 'src', 'lib', 'config.js');
 const healthPath = path.join(ROOT, 'api', 'health.js');
 
-const monRetrySrc = fs.readFileSync(monRetryPath, 'utf8');
+const monRetrySrc = readMonetizationRetryWorkerSource(ROOT);
 const cronSrc = readCronImplementationSource(ROOT);
 const configSrc = fs.readFileSync(configPath, 'utf8');
 const healthSrc = fs.readFileSync(healthPath, 'utf8');

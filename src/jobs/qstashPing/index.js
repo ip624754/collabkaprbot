@@ -3,4 +3,4 @@ export {
   __setQStashPingDepsForTests,
   config,
   default,
-} from '../../src/jobs/qstashPing/worker.js';
+} from './worker.js';

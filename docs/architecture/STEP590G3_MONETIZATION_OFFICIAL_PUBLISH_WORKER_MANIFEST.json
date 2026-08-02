@@ -1,0 +1,35 @@
+{
+  "step": "STEP590G3",
+  "title": "Monetization and Official Publish Workers Decomposition",
+  "baseline": {
+    "operatorCommit": "e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a",
+    "packageVersion": "1.3.35",
+    "routes": [
+      {"path":"api/qstash/monetization-retry.js","lines":838,"sha256":"f6f3109ba47907aae5a83c5e2393f751cb990a822fe6279e37c4092c65a0d1c2"},
+      {"path":"api/qstash/official-publish-deliver.js","lines":209,"sha256":"85403d2417b3569f9d3fc142deba73100af69bbd66a658501b1421c562e09310"},
+      {"path":"api/qstash/official-publish-verify.js","lines":147,"sha256":"d940138b73d9ee08fba597e64b6bf8342d6428ebd8089b1a0dabde5f840ce78f"},
+      {"path":"api/qstash/ping.js","lines":114,"sha256":"47b6e0b0e10b080dd66a9b6b01a19fe9c00d17a6707309d835bdb9b5bd609c82"}
+    ]
+  },
+  "targetPackageVersion": "1.3.36",
+  "facades": [
+    {"path":"api/qstash/monetization-retry.js","worker":"src/jobs/monetizationRetry/worker.js"},
+    {"path":"api/qstash/official-publish-deliver.js","worker":"src/jobs/officialPublish/deliverWorker.js"},
+    {"path":"api/qstash/official-publish-verify.js","worker":"src/jobs/officialPublish/verifyWorker.js"},
+    {"path":"api/qstash/ping.js","worker":"src/jobs/qstashPing/worker.js"}
+  ],
+  "workers": [
+    {"path":"src/jobs/monetizationRetry/worker.js","lines":838,"sha256":"cf1c204b2f225a1c0488ac0227967752e883b95eda3a81d9f26bb4632ea9bd11"},
+    {"path":"src/jobs/officialPublish/deliverWorker.js","lines":209,"sha256":"e5a651aa524966db72fcf6eb2718667afaaa3d485f7f641d09ae65cc6666999e"},
+    {"path":"src/jobs/officialPublish/verifyWorker.js","lines":147,"sha256":"a3471860d30642efddcc59ee56c7e20b394873f73319bcb8b4cf3f2795a30166"},
+    {"path":"src/jobs/qstashPing/worker.js","lines":114,"sha256":"59518106447b2d35cf944230b1b7800b8cc80986a51ba1cda27c0bbdeec08f63"}
+  ],
+  "invariants": {
+    "newApiRoutes": 0,
+    "newEnv": 0,
+    "newMigrations": 0,
+    "functionBudgetChange": 0,
+    "telegramCopyChange": 0,
+    "sqlChange": 0
+  }
+}

@@ -4,15 +4,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readMonetizationRetryWorkerSource } from './lib/step590g3-source-reader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
-const workerPath = path.join(ROOT, 'api', 'qstash', 'monetization-retry.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
-const workerSrc = fs.readFileSync(workerPath, 'utf8');
+const workerSrc = readMonetizationRetryWorkerSource(ROOT);
 
 const acceptFnStart = botSrc.indexOf('async function acceptBrandApplication(');
 const creatorListStart = botSrc.indexOf("async function renderCreatorApplications(");

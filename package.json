@@ -1,6 +1,6 @@
 {
   "name": "collabgirls-bot",
-  "version": "1.3.35",
+  "version": "1.3.36",
   "private": true,
   "type": "module",
   "engines": {
@@ -223,7 +223,10 @@
     "smoke:cron-esm-linkage-contract": "node scripts/smoke-cron-esm-linkage-contract.js",
     "test:qstash-broadcast-delivery-worker-decomposition": "node scripts/test-qstash-broadcast-delivery-worker-decomposition.js",
     "smoke:qstash-broadcast-delivery-compatibility-handler-contract": "node scripts/smoke-qstash-broadcast-delivery-compatibility-handler-contract.js",
-    "smoke:qstash-broadcast-delivery-esm-linkage-contract": "node scripts/smoke-qstash-broadcast-delivery-esm-linkage-contract.js"
+    "smoke:qstash-broadcast-delivery-esm-linkage-contract": "node scripts/smoke-qstash-broadcast-delivery-esm-linkage-contract.js",
+    "test:qstash-monetization-official-publish-worker-decomposition": "node scripts/test-qstash-monetization-official-publish-worker-decomposition.js",
+    "smoke:qstash-monetization-official-publish-compatibility-handlers-contract": "node scripts/smoke-qstash-monetization-official-publish-compatibility-handlers-contract.js",
+    "smoke:qstash-monetization-official-publish-esm-linkage-contract": "node scripts/smoke-qstash-monetization-official-publish-esm-linkage-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

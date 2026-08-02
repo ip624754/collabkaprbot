@@ -1,13 +1,17 @@
-# Current New-Chat Handoff — STEP590G2
+# Current New-Chat Handoff — STEP590G3
 
-- Baseline: production-accepted STEP590G1 commit `2fb27008e7f70ed194923df687dd68e6845f2521`, package `1.3.34`.
-- Result: package `1.3.35`; `api/qstash/broadcast-deliver.js` is a 7-line compatibility route.
-- Delivery runtime is split into seven bounded modules under `src/jobs/broadcastDelivery/`.
-- Existing URL, raw-body config, QStash signature verification, retry/dedup, DB overload fuse, cooldown/hard-skip, 429 quarantine and unknown-delivery no-resend semantics remain unchanged.
-- SQL, migrations, ENV, routes, callbacks, Telegram copy and function count are unchanged.
-- QA: 108 G2 assertions, compatibility/real ESM linkage PASS, critical spine 6/6 and source preflight PASS.
-- Operator gates remain: clean npm install/audit, commit/push, Vercel Ready and bounded signed production worker evidence.
-- Next only after acceptance: STEP590G3 Monetization and Official Publish Workers.
+- Baseline: production-accepted STEP590G2 commit `e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a`, package `1.3.35`.
+- Result: package `1.3.36`; four QStash endpoint files are compatibility handlers delegating to bounded workers under `src/jobs/`.
+- Monetization payment/credit/unlock/intro/autoheal semantics and official publish reserve/deliver/verify/self-heal semantics remain unchanged.
+- Existing URLs, raw-body config, QStash signature verification, dedup/retry chains, SQL, ENV, callbacks, Telegram copy and function count remain unchanged.
+- QA: 99 G3 assertions; compatibility/real ESM 4/4 PASS; focused monetization and official-publish regressions PASS; G2/G1/F regressions PASS; runtime proof and critical spine 6/6 PASS.
+- Artifact-side clean npm install remains blocked by internal mirror `xtend@4.0.2` 404; operator dependency/audit and production evidence remain required.
+- Next only after acceptance: STEP590H Admin Web Frontend Decomposition.
+
+## Previous Handoff — STEP590G2
+
+- Commit `e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a`, package `1.3.35`, production accepted.
+- Signed no-send QStash broadcast canary reached `DELIVERED` with HTTP 200.
 
 ## Previous Handoff — STEP590G1
 

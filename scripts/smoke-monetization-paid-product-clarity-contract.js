@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readCronImplementationSource } from './lib/cron-source-reader.js';
+import { readMonetizationRetryWorkerSource } from './lib/step590g3-source-reader.js';
 import {
   MONETIZATION_LABELS,
   brandPlanTierLabel,
@@ -28,7 +29,7 @@ const starsSrc = read('src/bot/payments/starsHandlers.js');
 const helpersSrc = read('src/bot/helpers.js');
 const fallbackSrc = read('src/bot/payments_fallback.js') + '\n' + read('src/bot/paymentFulfillmentCore.js');
 const cronSrc = readCronImplementationSource(ROOT);
-const qstashSrc = read('api/qstash/monetization-retry.js');
+const qstashSrc = readMonetizationRetryWorkerSource(ROOT);
 const configSrc = read('src/lib/config.js');
 
 assert.deepEqual(MONETIZATION_LABELS, {

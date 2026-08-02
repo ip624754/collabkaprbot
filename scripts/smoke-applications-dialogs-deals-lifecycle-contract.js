@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readMonetizationRetryWorkerSource } from './lib/step590g3-source-reader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,7 +15,7 @@ const botSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
 const applicationCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'applications', 'callbacks.js'), 'utf8');
 const dbSrc = readQueryImplementationSource();
 const starsSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'payments', 'starsHandlers.js'), 'utf8');
-const retrySrc = fs.readFileSync(path.join(ROOT, 'api', 'qstash', 'monetization-retry.js'), 'utf8');
+const retrySrc = readMonetizationRetryWorkerSource(ROOT);
 const runtimeSrc = [botSrc, applicationCallbacksSrc, starsSrc, retrySrc].join('\n');
 
 function between(source, startMarker, endMarker) {
