@@ -1,4 +1,5 @@
 import { readQueryImplementationSource } from './lib/query-source-reader.js';
+import { readCronImplementationSource } from './lib/cron-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,7 +41,7 @@ for (const token of [
 }
 assert.ok(!qstash.includes('await redis.sadd(key'), '429 distinct-user accounting must not use split SADD/EXPIRE/SCARD calls');
 
-const cron = read('src/bot/cron.js');
+const cron = readCronImplementationSource(ROOT);
 for (const token of [
   'claimBroadcastDelivery',
   'persistBroadcastSentOrUnknown',

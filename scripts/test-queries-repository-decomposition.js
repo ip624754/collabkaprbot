@@ -141,7 +141,10 @@ for (const top of ['src', 'api', 'migrations']) {
 
 for (const rel of [
   'src/bot/bot.js',
-  'src/bot/cron.js',
+  'src/bot/jobs/auditFlushJob.js',
+  'src/bot/jobs/broadcastJob.js',
+  'src/bot/jobs/giveawayJob.js',
+  'src/bot/jobs/instagramVerificationJob.js',
   'src/lib/officialPublishVerify.js',
   'api/qstash/monetization-retry.js',
   'api/qstash/broadcast-deliver.js',

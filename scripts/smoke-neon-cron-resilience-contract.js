@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readCronImplementationSource } from './lib/cron-source-reader.js';
 
 import { acquireClientWithBoundedRetry } from '../src/db/connectionResilience.js';
 import { classifyDbError, annotateDbError } from '../src/db/errorClassification.js';
@@ -182,7 +183,7 @@ assert.equal(poolSource.includes('acquireClientWithBoundedRetry({\n    connect: 
 assert.ok(poolSource.includes('client.release(true)'));
 assert.ok(poolSource.includes('client.release(destroyClient)'));
 
-const cronSource = read('src/bot/cron.js');
+const cronSource = readCronImplementationSource(ROOT);
 assert.ok(cronSource.includes("recordCronTickFailure('giveaways_tick', 'giveaways-tick', e)"));
 assert.ok(cronSource.includes("recordCronTickFailure('broadcast_tick', 'broadcast-tick', e)"));
 assert.ok(cronSource.includes("status: 'error'"));

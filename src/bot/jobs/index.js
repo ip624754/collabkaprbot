@@ -1,16 +1,15 @@
-// STEP590G1 compatibility façade.
-// Keep all existing imports on src/bot/cron.js stable while bounded job modules own implementation.
+// STEP590G1 bounded cron job export surface.
+export { auditFlushTick } from './auditFlushJob.js';
 export {
-  auditFlushTick,
   broadcastTick,
   extractRetryAfterSec,
   getBroadcastCooldownUntilMs,
   getBroadcastHardSkipReason,
-  giveawaysTick,
-  igVerifyTick,
   logBroadcastHardSkipHit,
   normalizeBroadcastDeadChatReason,
   sendBroadcastMessage,
   setBroadcastCooldown,
   setBroadcastHardSkip,
-} from './jobs/index.js';
+} from './broadcastJob.js';
+export { giveawaysTick } from './giveawayJob.js';
+export { igVerifyTick } from './instagramVerificationJob.js';

@@ -1,11 +1,25 @@
-# Current New-Chat Handoff — STEP590F_R1 Production Recovery
+# Current New-Chat Handoff — STEP590G1
+
+- Canonical baseline: production-accepted STEP590F_R1, operator commit `2226269`, package `1.3.33`.
+- Current source result: package `1.3.34`.
+- `src/bot/cron.js` is a thin compatibility façade preserving exactly 12 exports.
+- Runtime, giveaway, broadcast, Instagram verification and audit-flush implementations live under `src/bot/jobs/`.
+- `api/cron_router.js` is byte-identical and preserves all four job names.
+- Exact moved-body/source contracts preserve Redis locks/TTL, giveaway transaction/advisory lock, broadcast cooldown/hard-skip, failure classification and duplicate-alert suppression.
+- No SQL, migration, ENV, API route, callback key, Telegram copy or function-count change.
+- QA: G1 162 assertions PASS, façade/real ESM linkage PASS, queries regression 263 assertions PASS, critical spine 6/6 PASS, source preflight PASS, function budget 11 unchanged.
+- Temporary execution-only shims were removed before packaging.
+- Operator evidence still required: clean `npm ci`, `npm audit`, commit/push, Vercel Ready and bounded production cron-health evidence.
+- Do not begin STEP590G2 until G1 production acceptance.
+
+## Previous Handoff — STEP590F_R1 Production Recovery
 
 - Current package: `1.3.33`.
 - Production-blocking defect in STEP590F was a missing internal ESM export: `applicationsRepository.js` imported `isMissingBarterOffersMetaColumnError` from `bartersRepository.js`, but the helper was not exported.
 - R1 exports the helper internally, keeps the public `queries.js` façade at exactly 328 exports, and adds an executable named-import/export linkage gate.
 - SQL/function/transaction bodies are unchanged; reconstructed-body SHA parity remains canonical.
 - Focused repository tests and real `queries.js` ESM instantiation PASS under execution-only dependency shims.
-- Operator must commit/push R1 and confirm Vercel Ready, `/api/webhook` recovery and web-admin login recovery before STEP590G.
+- R1 was committed/pushed as `2226269`; production `/api/webhook` reached the `401 Unauthorized` guard and web-admin recovery was operator-confirmed.
 
 ## Previous Handoff — STEP590F
 

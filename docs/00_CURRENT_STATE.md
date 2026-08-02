@@ -1,6 +1,22 @@
+## STEP590G1 — Cron Tick Decomposition with Compatibility Façade (2026-08-02)
+
+- canonical baseline: production-accepted STEP590F_R1, operator commit `2226269`, package `1.3.33`;
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED AND REGRESSION QA PASS / OPERATOR PRODUCTION GATE PENDING;
+- package: `1.3.34`;
+- `src/bot/cron.js` reduced from 2,216 implementation lines to a 16-line compatibility façade with 12/12 exports;
+- bounded implementation lives under `src/bot/jobs/`: cron runtime, giveaway, broadcast, Instagram verification and audit flush;
+- `api/cron_router.js` remains byte-identical and preserves `broadcast-tick`, `giveaways-tick`, `ig-verify-tick` and `audit-flush-tick`;
+- exact moved-body and source contracts preserve Redis lock/TTL, giveaway transaction/advisory-lock, broadcast cooldown/hard-skip, retry/failure classification and duplicate-alert suppression semantics;
+- SQL/migrations/ENV/API routes/callback keys/Telegram copy/function count: unchanged;
+- verified QA: 162 G1 assertions, façade contract PASS, real ESM façade linkage 12/12 PASS, queries regression 263 assertions, critical spine 6/6 PASS, `preflight:source` PASS, function budget 11 unchanged;
+- temporary execution-only dependency shims were removed before packaging;
+- operator-side gates: clean `npm ci`, `npm audit`, commit/push, Vercel Ready and bounded production cron-health evidence;
+- STEP590G2 must not start before G1 production acceptance.
+
+
 ## STEP590F_R1 — Applications/Barters Internal Export Recovery (2026-08-02)
 
-- status: PRODUCTION-BLOCKING ESM LINKAGE DEFECT RECOVERED / SOURCE QA PASS / OPERATOR REDEPLOY REQUIRED;
+- status: PRODUCTION ACCEPTED at operator commit `2226269`; ESM linkage defect recovered;
 - production symptom: `/api/webhook` and web-admin bootstrap failed during ESM instantiation because `applicationsRepository.js` imported `isMissingBarterOffersMetaColumnError`, while `bartersRepository.js` defined but did not export it;
 - recovery: the existing helper is now an internal named export from `bartersRepository.js`; it remains absent from the public `queries.js` façade;
 - repository manifest now classifies the helper as an internal cross-repository export, preserving exact reconstructed-body SHA parity;
@@ -8,8 +24,8 @@
 - real `import('./src/db/queries.js')` under execution-only dependency shims instantiated successfully with exactly 328 public exports;
 - SQL, signatures, transactions, DB schema, ENV, API routes and product behavior: unchanged;
 - package: `1.3.33`;
-- operator action: apply R1, run focused tests, commit/push and confirm Vercel Ready plus `/api/webhook` no longer returns FUNCTION_INVOCATION_FAILED;
-- next architecture step remains STEP590G after production recovery.
+- production evidence: `POST /api/webhook` returns `401 Unauthorized` instead of `500 FUNCTION_INVOCATION_FAILED`; web-admin recovery is OPERATOR-CONFIRMED;
+- STEP590G1 is the active source step.
 
 
 ## STEP590F — queries.js Repository Decomposition with Compatibility Façade (2026-08-02)

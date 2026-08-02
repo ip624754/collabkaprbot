@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readCronImplementationSource } from './lib/cron-source-reader.js';
 import {
   MONETIZATION_LABELS,
   brandPlanTierLabel,
@@ -26,7 +27,7 @@ const paymentDomainSrc = read('src/bot/domains/payments/callbacks.js');
 const starsSrc = read('src/bot/payments/starsHandlers.js');
 const helpersSrc = read('src/bot/helpers.js');
 const fallbackSrc = read('src/bot/payments_fallback.js') + '\n' + read('src/bot/paymentFulfillmentCore.js');
-const cronSrc = read('src/bot/cron.js');
+const cronSrc = readCronImplementationSource(ROOT);
 const qstashSrc = read('api/qstash/monetization-retry.js');
 const configSrc = read('src/lib/config.js');
 

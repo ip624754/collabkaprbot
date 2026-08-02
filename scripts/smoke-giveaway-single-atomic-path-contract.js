@@ -1,9 +1,10 @@
 import { readQueryImplementationSource } from './lib/query-source-reader.js';
+import { readCronImplementationSource } from './lib/cron-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const bot = fs.readFileSync(new URL('../src/bot/bot.js', import.meta.url), 'utf8');
-const cron = fs.readFileSync(new URL('../src/bot/cron.js', import.meta.url), 'utf8');
+const cron = readCronImplementationSource();
 const giveawayDomain = fs.readFileSync(new URL('../src/bot/domains/giveaways/callbacks.js', import.meta.url), 'utf8');
 const queries = readQueryImplementationSource();
 const core = fs.readFileSync(new URL('../src/db/giveawayAtomicCore.js', import.meta.url), 'utf8');

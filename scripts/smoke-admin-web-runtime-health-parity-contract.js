@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readCronImplementationSource } from './lib/cron-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const runtime = read('src/lib/adminWeb/runtime.js');
 const health = read('api/health.js');
-const cron = read('src/bot/cron.js');
+const cron = readCronImplementationSource(ROOT);
 
 for (const token of [
   "k(['ops', 'reasons', 'qstash_reschedule_failed', 'd', day])",

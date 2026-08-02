@@ -1,4 +1,16 @@
-# Current New-Chat Handoff — STEP590F
+# Current New-Chat Handoff — STEP590G1
+
+- Baseline: production-accepted STEP590F_R1 commit `2226269`, package `1.3.33`.
+- Result: package `1.3.34`; `src/bot/cron.js` is a 12-export compatibility façade.
+- Bounded runtime, giveaway, broadcast, Instagram verification and audit-flush modules live under `src/bot/jobs/`.
+- `api/cron_router.js` remains byte-identical with 4/4 jobs.
+- Exact moved-body/source contracts preserve locks, TTL, transactions, advisory locks, cooldown/hard-skip and failure-reporting semantics.
+- SQL, migrations, ENV, API routes, callbacks, Telegram copy and function count are unchanged.
+- QA: 162 G1 assertions, façade and real ESM linkage PASS, 263 queries regression assertions, critical spine 6/6, source preflight PASS.
+- Operator gates remain: clean dependency install/audit, commit/push, Vercel Ready and production cron-health evidence.
+- Next only after acceptance: STEP590G2 QStash Broadcast Delivery Worker Decomposition.
+
+## Previous Handoff — STEP590F
 
 - Current source result: package `1.3.32`.
 - `src/db/queries.js` is a thin compatibility façade with 328 explicit exports.

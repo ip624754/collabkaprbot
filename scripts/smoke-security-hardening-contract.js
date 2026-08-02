@@ -1,4 +1,5 @@
 import { readQueryImplementationSource } from './lib/query-source-reader.js';
+import { readCronImplementationSource } from './lib/cron-source-reader.js';
 import fs from 'fs';
 import path from 'path';
 import assert from 'assert';
@@ -21,10 +22,10 @@ assert.ok(bot.includes('This guard is load-shedding only, not the primary concur
 assert.ok(bot.includes("`a:brand_app_accept`, `a:wsp_contact_unlock`"), 'guarded critical actions must stay documented');
 
 const queries = readQueryImplementationSource();
-assert.ok(queries.includes("return { status: 'locked' };"), 'atomic giveaway draw must explicitly surface locked status');
-assert.ok(queries.includes('Explicit fail-fast signal for callers'), 'atomic giveaway draw lock comment must stay explicit');
+const giveawayAtomicCore = read('src/db/giveawayAtomicCore.js');
+assert.ok(giveawayAtomicCore.includes("return { status: 'locked' };"), 'atomic giveaway draw must explicitly surface locked status');
 
-const cron = read('src/bot/cron.js');
+const cron = readCronImplementationSource(repo);
 assert.ok(cron.includes("if (r.status === 'locked') {"), 'cron must explicitly branch on locked giveaway draw status');
 assert.ok(cron.includes('expected fail-fast path, not a silent success'), 'cron locked-path comment must stay explicit');
 

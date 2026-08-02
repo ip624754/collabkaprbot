@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readCronImplementationSource } from './lib/cron-source-reader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,7 +12,7 @@ const ROOT = path.resolve(__dirname, '..');
 
 const botSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
 const starsSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'payments', 'starsHandlers.js'), 'utf8');
-const cronSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'cron.js'), 'utf8');
+const cronSrc = readCronImplementationSource(ROOT);
 
 assert.ok(
   botSrc.includes('• Новый диалог по офферу: <b>${cost}</b>') &&
