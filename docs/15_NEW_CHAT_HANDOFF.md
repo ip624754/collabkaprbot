@@ -1,3 +1,16 @@
+## STEP590E5D CURRENT HANDOFF — Admin Operations, System & Founder Controls
+
+- Baseline: final STEP590E5C source tree (`1.3.29`); E5C operator commit/push not evidenced at artifact time.
+- Result: package `1.3.30`; new `src/bot/domains/adminSystem/`; 30 live callbacks extracted plus `a:adm_ph` ownership closure.
+- Ownership: 464 extracted / 96 legacy / 7 aliases / 0 unresolved.
+- Routes: navigation 4, operations/invites 5, hard-skip 6, audit/metrics 5, QStash 2, Founder controls 8; Admin Communications templates now own 10.
+- QA: E5D 224 assertions PASS; router 2,965 PASS; all prior domain suites PASS; source preflight and portable spine 6/6 PASS under temporary execution-only shims.
+- Contracts unchanged: no SQL, ENV, API route, callback key, action guard or visible-copy change.
+- Explicit exclusions: `a:founder`, `a:off_buy`, `a:off_buy_home`, broadcast, payments and admin web remain outside this STEP.
+- Operator gate: ensure E5C is present, then `npm.cmd ci`, `npm.cmd audit`, E5D tests, critical spine, preflight, commit/push, Vercel Ready and bounded admin-system smoke.
+- STEP590E5 source decomposition is complete. Next: STEP590E6 Support, Verification, Sharing & Account.
+
+
 ## STEP590E5C CURRENT HANDOFF — Admin Communications, Notices & Outbox
 
 - Baseline: operator-pushed STEP590E5B commit `fe20572`.

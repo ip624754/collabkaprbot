@@ -59,6 +59,7 @@ function makeDeps({ admin = true } = {}) {
     ],
     InlineKeyboard,
     TG_SAFE_BODY_MAX: 3000,
+    adminDmPlaceholdersHelpHtml: () => '<b>placeholders</b>',
     applyAdminDmPlaceholders: (text) => ({ text: String(text || ''), used: [], unknown: [] }),
     buildAdminDmPlaceholderValues: async () => ({}),
     clearAdminOutbox: call,
@@ -127,8 +128,8 @@ const all = [
 equal(ADMIN_COMMUNICATION_HOME_ACTIONS.length, 1, 'communications home action count');
 equal(ADMIN_NOTICE_ACTIONS.length, 9, 'notice action count');
 equal(ADMIN_OUTBOX_ACTIONS.length, 7, 'outbox action count');
-equal(ADMIN_MESSAGE_TEMPLATE_ACTIONS.length, 9, 'message template action count');
-equal(new Set(all).size, 26, 'STEP590E5C actions unique');
+equal(ADMIN_MESSAGE_TEMPLATE_ACTIONS.length, 10, 'message template action count after STEP590E5D ownership closure');
+equal(new Set(all).size, 27, 'communications actions unique after STEP590E5D ownership closure');
 
 for (const action of ADMIN_COMMUNICATION_HOME_ACTIONS) {
   check(isAdminCommunicationHomeAction(action), `${action} communications predicate`);
@@ -216,12 +217,12 @@ assertions += 1;
 }
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 433, 'STEP590E5C cumulative extracted ownership');
-equal(summary.legacy, 127, 'STEP590E5C cumulative legacy ownership');
+equal(summary.extracted, 464, 'STEP590E5D cumulative extracted ownership');
+equal(summary.legacy, 96, 'STEP590E5D cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_COMMUNICATIONS], 1, 'communications route count');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_NOTICE_MANAGEMENT], 9, 'notice route count');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_OUTBOX], 7, 'outbox route count');
-equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_MESSAGE_TEMPLATES], 9, 'message templates route count');
+equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_MESSAGE_TEMPLATES], 10, 'message templates route count');
 equal(getCallbackOwnership('a:notice').routeId, CALLBACK_ROUTE.LEGACY, 'user notice view remains outside admin communications boundary');
 
 console.log(`PASS STEP590E5C admin communications/notices/outbox extraction tests (${assertions} assertions)`);

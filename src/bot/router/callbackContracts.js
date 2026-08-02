@@ -49,5 +49,11 @@ export const CALLBACK_ROUTE = Object.freeze({
   ADMIN_NOTICE_MANAGEMENT: 'admin_notice_management',
   ADMIN_OUTBOX: 'admin_outbox',
   ADMIN_MESSAGE_TEMPLATES: 'admin_message_templates',
+  ADMIN_SYSTEM_NAVIGATION: 'admin_system_navigation',
+  ADMIN_SYSTEM_OPERATIONS: 'admin_system_operations',
+  ADMIN_DELIVERY_HARD_SKIP: 'admin_delivery_hard_skip',
+  ADMIN_AUDIT_METRICS: 'admin_audit_metrics',
+  ADMIN_QSTASH_CONTROLS: 'admin_qstash_controls',
+  ADMIN_FOUNDER_CONTROLS: 'admin_founder_controls',
   LEGACY: 'legacy',
 });

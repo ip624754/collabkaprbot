@@ -16,6 +16,7 @@ export const ADMIN_COMMUNICATION_ACTION = Object.freeze({
   ADMIN_OUTBOX_TO_TPL: 'a:admin_outbox_to_tpl',
   ADMIN_OUTBOX_CLEAR_Q: 'a:admin_outbox_clear_q',
   ADMIN_OUTBOX_CLEAR: 'a:admin_outbox_clear',
+  ADM_PH: 'a:adm_ph',
   ADM_UMSG_TPL: 'a:adm_umsg_tpl',
   ADMIN_UMSG_TPLS: 'a:admin_umsg_tpls',
   ADMIN_UMSG_TPL_VIEW: 'a:admin_umsg_tpl_view',
@@ -54,6 +55,7 @@ export const ADMIN_OUTBOX_ACTIONS = Object.freeze([
 ]);
 
 export const ADMIN_MESSAGE_TEMPLATE_ACTIONS = Object.freeze([
+  ADMIN_COMMUNICATION_ACTION.ADM_PH,
   ADMIN_COMMUNICATION_ACTION.ADM_UMSG_TPL,
   ADMIN_COMMUNICATION_ACTION.ADMIN_UMSG_TPLS,
   ADMIN_COMMUNICATION_ACTION.ADMIN_UMSG_TPL_VIEW,

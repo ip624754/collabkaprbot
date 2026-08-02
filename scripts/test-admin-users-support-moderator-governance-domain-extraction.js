@@ -247,8 +247,8 @@ assertions += 1;
 }
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 433, 'STEP590E5C cumulative extracted ownership');
-equal(summary.legacy, 127, 'STEP590E5C cumulative legacy ownership');
+equal(summary.extracted, 464, 'STEP590E5D cumulative extracted ownership');
+equal(summary.legacy, 96, 'STEP590E5D cumulative legacy ownership');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_USERS], 20, 'admin users route count');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_GIFTS], 8, 'admin gifts route count');
 equal(summary.byRoute[CALLBACK_ROUTE.ADMIN_SUPPORT], 7, 'admin support route count');

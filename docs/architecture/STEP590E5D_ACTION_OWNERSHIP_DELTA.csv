@@ -1,0 +1,8 @@
+route,delta,actions
+admin_system_navigation,4,"a:admin;a:admin_home;a:admin_ops;a:admin_sys"
+admin_system_operations,5,"a:admin_ops_flush;a:admin_ops_pending_clear;a:admin_ops_pending_clear_do;a:admin_invites;a:admin_invites_list"
+admin_delivery_hard_skip,6,"a:hs_home;a:hs_hits;a:hs_find;a:hs_view;a:hs_unskip;a:hs_hits_export"
+admin_audit_metrics,5,"a:aud;a:aud_search;a:aud_reset;a:aud_export;a:admin_metrics"
+admin_qstash_controls,2,"a:admin_qstash_status;a:admin_qstash_ping"
+admin_founder_controls,8,"a:admin_founder;a:admin_founder_toggle;a:admin_founder_reset;a:admin_founder_set_deadline;a:admin_founder_set_prices;a:admin_founder_set_credits;a:admin_founder_links;a:admin_founder_texts"
+admin_message_templates,1,"a:adm_ph"

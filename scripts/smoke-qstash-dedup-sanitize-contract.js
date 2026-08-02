@@ -11,8 +11,11 @@ const ROOT = path.resolve(__dirname, '..');
 
 const qstashPath = path.join(ROOT, 'src', 'lib', 'qstash.js');
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
+const adminSystemQStashPath = path.join(ROOT, 'src', 'bot', 'domains', 'adminSystem', 'qstashCallbacks.js');
 const qstashSrc = fs.readFileSync(qstashPath, 'utf8');
 const botSrc = fs.readFileSync(botPath, 'utf8');
+const adminSystemQStashSrc = fs.readFileSync(adminSystemQStashPath, 'utf8');
+const qstashCallsiteSrc = botSrc + '\n' + adminSystemQStashSrc;
 
 assert.ok(
   qstashSrc.includes('export function sanitizeQStashDeduplicationId(value) {'),
@@ -39,11 +42,11 @@ assert.ok(
   'Expected sanitize helper to trim separator noise from dedup edges'
 );
 assert.ok(
-  botSrc.includes("deduplicationId: `qping:${nonce}`"),
+  qstashCallsiteSrc.includes("deduplicationId: `qping:${nonce}`"),
   'Expected admin signed ping to keep readable raw qping:${nonce} dedup input at call-site'
 );
 assert.ok(
-  botSrc.includes('Подсказка: это не всегда ENV/signing keys.'),
+  qstashCallsiteSrc.includes('Подсказка: это не всегда ENV/signing keys.'),
   'Expected admin signed ping failure helper text to stop blaming only ENV/signing keys'
 );
 

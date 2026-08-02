@@ -13,6 +13,7 @@ const REQUIRED_DEPENDENCIES = Object.freeze([
   'DEFAULT_ADMIN_DM_TEMPLATES',
   'InlineKeyboard',
   'TG_SAFE_BODY_MAX',
+  'adminDmPlaceholdersHelpHtml',
   'applyAdminDmPlaceholders',
   'buildAdminDmPlaceholderValues',
   'clearExpectText',
@@ -43,6 +44,7 @@ export async function handleAdminMessageTemplateCallback(ctx, p, u, deps = {}) {
     DEFAULT_ADMIN_DM_TEMPLATES,
     InlineKeyboard,
     TG_SAFE_BODY_MAX,
+    adminDmPlaceholdersHelpHtml,
     applyAdminDmPlaceholders,
     buildAdminDmPlaceholderValues,
     clearExpectText,
@@ -259,6 +261,40 @@ if (p.a === 'a:admin_umsg_tpl_reset') {
   if (!isSuperAdminTg(ctx.from.id)) return;
   await resetAdminDmTemplates();
   await renderAdminDmTemplates(ctx, 0);
+  return;
+}
+if (p.a === 'a:adm_ph') {
+  await ctx.answerCallbackQuery();
+  if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
+
+  const ret = String(p.r || '').trim();
+  const uid = Number(p.id || 0);
+  const tplId = String(p.tid || '').trim();
+  const f = String(p.f || 'all').toLowerCase();
+  const page = Math.max(0, Number(p.p) || 0);
+
+  let backCb = 'a:admin_home';
+  if (ret === 'umsg') backCb = `a:adm_umsg|id:${uid}|f:${f}|p:${page}`;
+  else if (ret === 'umsg_free') backCb = `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`;
+  else if (ret === 'tpl_list') backCb = `a:admin_umsg_tpls|p:${page}`;
+  else if (ret === 'tpl_add') backCb = `a:admin_umsg_tpl_add|p:${page}`;
+  else if (ret === 'tpl_edit') backCb = `a:admin_umsg_tpl_edit|tid:${tplId}|p:${page}`;
+  else if (ret === 'tpl_view') backCb = `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`;
+
+  let sectionBackText = '⬅️ Админка';
+  let sectionBackCb = 'a:admin_home';
+  if (['tpl_list', 'tpl_add', 'tpl_edit', 'tpl_view'].includes(ret)) {
+    sectionBackText = '⬅️ Коммуникации';
+    sectionBackCb = 'a:admin_comms';
+  } else if (['umsg', 'umsg_free'].includes(ret)) {
+    sectionBackText = '⬅️ Операции';
+    sectionBackCb = 'a:admin_ops';
+  }
+
+  const kb = new InlineKeyboard().text('⬅️ Назад', backCb);
+  kbAdminFooter(kb, sectionBackText, sectionBackCb);
+
+  await safeEditOrReply(ctx, adminDmPlaceholdersHelpHtml(), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
   return;
 }
   })();

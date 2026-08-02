@@ -104,6 +104,14 @@ import {
   handleAdminNoticeCallback,
   handleAdminOutboxCallback,
 } from './domains/adminCommunications/index.js';
+import {
+  handleAdminAuditMetricCallback,
+  handleAdminDeliveryHardSkipCallback,
+  handleAdminFounderControlCallback,
+  handleAdminQStashCallback,
+  handleAdminSystemNavigationCallback,
+  handleAdminSystemOperationCallback,
+} from './domains/adminSystem/index.js';
 import { redactContactsInText } from './redactContacts.js';
 import { getActionMeta, ACTION_GUARD } from './actionRegistry.js';
 import { buildAdminOpsText } from './adminOpsText.js';
@@ -26200,241 +26208,15 @@ if (p.a === 'a:match_home') {
 
 
     // Admin / Moderation
-    if (p.a === 'a:admin') {
-      // Backward-compat alias
-      p.a = 'a:admin_home';
-    }
-
-    if (p.a === 'a:admin_home') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-
-      // If admin navigated here while we were expecting text input — cancel it.
-      try { await clearExpectText(ctx.from.id); } catch {}
-
-      await renderAdminHome(ctx);
-      return;
-    }
-
-    if (p.a === 'a:admin_ops') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      try { await clearDraft(ctx.from.id); } catch {}
-      await renderAdminOps(ctx);
-      return;
-    }
-
-    if (p.a === 'a:admin_ops_flush') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      try { await clearDraft(ctx.from.id); } catch {}
-
-      let res = null;
-      try {
-        // Force=true: operator explicitly requests an immediate digest flush.
-        res = await flushOpsAlerts(getBot().api, 'ops', { force: true });
-      } catch (e) {
-        res = { sent: 0, skipped: 'redis_error', error: String(e?.message || e) };
-      }
-
-      const skipped = res && res.skipped ? String(res.skipped) : '';
-      const map = {
-        locked: 'уже выполняется (locked)',
-        window: 'слишком рано (window)',
-        empty: 'нет событий (empty)',
-        no_targets: 'не настроены targets (no_targets)',
-        redis_error: 'Redis недоступен (redis_error)',
-      };
-
-      let banner = '';
-      if (res && res.flushed) {
-        const sent = Number(res.sent) || 0;
-        const ev = Number(res.events) || 0;
-        banner = `✅ OPS digest: sent ${sent} • events ${ev}`;
-      } else {
-        const reason = map[skipped] || (skipped ? skipped : 'failed');
-        banner = `⚠️ OPS digest: ${reason}`;
-        if (res && res.error && skipped === 'redis_error') {
-          banner += ` — ${String(res.error).slice(0, 90)}`;
-        }
-      }
-
-
-      await renderAdminOps(ctx, { banner });
-      return;
-    }
-
-    if (p.a === 'a:admin_ops_pending_clear') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      let text = '🧹 <b>Очистить снимок очереди?</b>\n\n';
-      text += 'Очистит только Redis snapshot <code>broadcast.pending_deliveries</code>.\n';
-      text += '<b>Не</b> останавливает реальную доставку и <b>не</b> меняет DB/QStash state.\n\n';
-      const st = await adminGetBroadcastPendingSnapshot();
-      if (!st.ok) {
-        text += '⚠️ Redis недоступен — сейчас подтверждать нечего.\n';
-      } else if (!st.snap) {
-        text += 'Сейчас snapshot пуст.\n';
-      } else {
-        const ts = st.snap.ts ? `<code>${escapeHtml(String(st.snap.ts).slice(0, 19))}</code>` : '—';
-        const bid = st.snap.broadcast_id ? `<b>#${st.snap.broadcast_id}</b>` : '—';
-        text += `Текущий snapshot: broadcast ${bid}; pending <b>${st.snap.pending_count}</b>; ts ${ts}\n`;
-      }
-      const kb = new InlineKeyboard()
-        .text('✅ Очистить snapshot', 'a:admin_ops_pending_clear_do')
-        .row()
-        .text('⬅️ Операции', 'a:admin_ops')
-        .row()
-        .text('📋 Меню', 'a:menu')
-        .text('🏠 Домой', 'a:home');
-      await safeEditOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: kb });
-      return;
-    }
-
-    if (p.a === 'a:admin_ops_pending_clear_do') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const out = await adminClearBroadcastPendingSnapshot();
-      const banner = out.ok
-        ? '✅ Broadcast pending snapshot cleared (Redis only)'
-        : `⚠️ Не удалось очистить снимок очереди: ${String(out.error || 'redis_error').slice(0, 90)}`;
-      await renderAdminOps(ctx, { banner });
-      return;
-    }
 
 
 
 
 
-    if (p.a === 'a:admin_invites') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await renderAdminInviteVisibilityHome(ctx);
-      return;
-    }
-    if (p.a === 'a:admin_invites_list') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await renderAdminInviteVisibilityList(ctx, String(p.k || 'top'), Math.max(0, Number(p.p || 0) || 0));
-      return;
-    }
 
-    if (p.a === 'a:admin_sys') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      try { await clearDraft(ctx.from.id); } catch {}
-      await renderAdminSystem(ctx);
-      return;
-    }
+
 
     // --- Admin: Broadcast hard-skip list (Redis-only, manage dead chats) ---
-    if (p.a === 'a:hs_home') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await renderAdminHardSkipHome(ctx, Math.max(0, Number(p.p || 0) || 0));
-      return;
-    }
-
-if (p.a === 'a:hs_hits') {
-  const isAdmin = isSuperAdminTg(ctx.from.id);
-  if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-  await ctx.answerCallbackQuery();
-  try { await clearExpectText(ctx.from.id); } catch {}
-  await renderAdminHardSkipHits(ctx, Math.max(0, Number(p.p || 0) || 0), p.r || 'all');
-  return;
-}
-
-    if (p.a === 'a:hs_find') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const page = Math.max(0, Number(p.p || 0) || 0);
-      await safeEditOrReply(ctx, '🔎 Введи Telegram ID, чтобы проверить статус доставки.\n\nПример: <code>222047659</code>', {
-        parse_mode: 'HTML',
-        reply_markup: navKb('a:hs_home|p:' + page)
-      });
-      try { await setExpectText(ctx.from.id, { type: 'hs_find', backCb: `a:hs_home|p:${page}` }, 10 * 60); } catch {}
-      return;
-    }
-    if (p.a === 'a:hs_view') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      await renderAdminHardSkipView(ctx, Number(p.tg || 0));
-      return;
-    }
-    if (p.a === 'a:hs_unskip') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const tgId = Number(p.tg || 0);
-      await adminHardSkipUnskip(tgId);
-      await renderAdminHardSkipView(ctx, tgId, { toast: '✅ Снято' });
-      return;
-    }
-
-    if (p.a === 'a:hs_hits_export') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery({ text: 'Готовлю экспорт…' });
-      const page = Math.max(0, Number(p.p || 0) || 0);
-      const rf = String(p.r || 'all').trim().toLowerCase() || 'all';
-      const ex = await adminHardSkipHitsExport(rf);
-      if (!ex.ok) {
-        await renderAdminHardSkipHits(ctx, page, rf, { toast: '⚠️ Redis недоступен — экспорт временно недоступен.' });
-        return;
-      }
-
-      const tag = String(rf || 'all').toLowerCase().replace(/[^a-z0-9_]+/g, '_').slice(0, 24) || 'all';
-      const ts = new Date().toISOString().slice(0, 10);
-      const header = [
-        'Collabka PR — Hard-skip HIT Export',
-        `Exported: ${new Date().toISOString()}`,
-        `Filter: ${tag}`,
-        `Rows: ${ex.items.length}/${ex.total}`,
-        `Scan window: ${ex.scanN}`,
-        '---',
-      ].join('\n');
-      const body = (ex.items || []).map((it) => {
-        const bc = it.broadcastId ? ` | bc:${it.broadcastId}` : '';
-        const uid = it.userId ? ` | uid:${it.userId}` : '';
-        const via = it.via ? ` | via:${it.via}` : '';
-        return `${it.at || '—'} | tg:${it.tgId} | ${it.r}${bc}${uid}${via}`;
-      }).join('\n');
-      const txt = header + '\n' + (body || 'EMPTY');
-      const filename = `hard_skip_hits_${tag}_${ts}.txt`;
-
-      await ctx.replyWithDocument(
-        new InputFile(Buffer.from(txt, 'utf-8'), filename),
-        {
-          caption: `📤 Экспорт: ${ex.items.length} событий · фильтр: ${tag}`,
-          reply_markup: new InlineKeyboard()
-            .text('🧾 Пропуски', `a:hs_hits|p:${page}|r:${rf}`)
-            .text('⬅️ Система', 'a:admin_sys')
-            .row()
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Домой', 'a:home')
-        }
-      );
-
-      await renderAdminHardSkipHits(ctx, page, rf, { toast: `📤 Экспорт готов: ${ex.items.length}` });
-      return;
-    }
 
 
     // --- Admin: System Notice (Redis-only, no broadcast) ---
@@ -26480,40 +26262,6 @@ if (p.a === 'a:hs_hits') {
 
 
     // Admin: placeholders helper (STEP191)
-    if (p.a === 'a:adm_ph') {
-      await ctx.answerCallbackQuery();
-      if (!isSuperAdminTg(ctx.from.id)) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-
-      const ret = String(p.r || '').trim();
-      const uid = Number(p.id || 0);
-      const tplId = String(p.tid || '').trim();
-      const f = String(p.f || 'all').toLowerCase();
-      const page = Math.max(0, Number(p.p) || 0);
-
-      let backCb = 'a:admin_home';
-      if (ret === 'umsg') backCb = `a:adm_umsg|id:${uid}|f:${f}|p:${page}`;
-      else if (ret === 'umsg_free') backCb = `a:adm_umsg_free|id:${uid}|f:${f}|p:${page}`;
-      else if (ret === 'tpl_list') backCb = `a:admin_umsg_tpls|p:${page}`;
-      else if (ret === 'tpl_add') backCb = `a:admin_umsg_tpl_add|p:${page}`;
-      else if (ret === 'tpl_edit') backCb = `a:admin_umsg_tpl_edit|tid:${tplId}|p:${page}`;
-      else if (ret === 'tpl_view') backCb = `a:admin_umsg_tpl_view|tid:${tplId}|p:${page}`;
-
-      let sectionBackText = '⬅️ Админка';
-      let sectionBackCb = 'a:admin_home';
-      if (['tpl_list', 'tpl_add', 'tpl_edit', 'tpl_view'].includes(ret)) {
-        sectionBackText = '⬅️ Коммуникации';
-        sectionBackCb = 'a:admin_comms';
-      } else if (['umsg', 'umsg_free'].includes(ret)) {
-        sectionBackText = '⬅️ Операции';
-        sectionBackCb = 'a:admin_ops';
-      }
-
-      const kb = new InlineKeyboard().text('⬅️ Назад', backCb);
-      kbAdminFooter(kb, sectionBackText, sectionBackCb);
-
-      await safeEditOrReply(ctx, adminDmPlaceholdersHelpHtml(), { parse_mode: 'HTML', reply_markup: kb, disable_web_page_preview: true });
-      return;
-    }
 
     // Admin: Message user from user card (MVP)
 
@@ -26552,273 +26300,11 @@ if (p.a === 'a:hs_hits') {
     // 📜 Admin Audit Log: search + filters + export
     // =====================================================
 
-    if (p.a === 'a:aud') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      const h = Number(p.h || 24);
-      const page = Math.max(0, Number(p.p) || 0);
-      await renderAdminAudit(ctx, { afterHours: h, page });
-      return;
-    }
-
-    // Audit: search input mode
-    if (p.a === 'a:aud_search') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const h = Number(p.h || 24);
-      await safeEditOrReply(ctx,
-        `🔎 <b>Поиск по журналу аудита</b>\n\nВведи одно из:\n• <code>action:</code> — поиск по типу действия (напр. <code>lead.status_changed</code>)\n• <code>ws:ID</code> — по workspace\n• <code>user:ID</code> — по actor user id\n\nПример: <code>lead.status</code>`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: new InlineKeyboard()
-            .text('⬅️ Отмена', `a:aud|h:${h}|p:0`)
-            .row()
-            .text('⬅️ Админка', 'a:admin_home')
-            .row()
-            .text('📋 Меню', 'a:menu')
-            .text('🏠 Домой', 'a:home')
-        }
-      );
-      await setExpectText(ctx.from.id, { type: 'aud_search', h }, 15 * 60);
-      return;
-    }
-
-    // Audit: reset search
-    if (p.a === 'a:aud_reset') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await clearAdminAuditQuery(ctx.from.id);
-      const h = Number(p.h || 24);
-      await renderAdminAudit(ctx, { afterHours: h, page: 0 });
-      return;
-    }
-
-    // Audit: export TXT
-    if (p.a === 'a:aud_export') {
-      await ctx.answerCallbackQuery({ text: '⏳ Генерирую…' });
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      const h = Number(p.h || 24);
-      try {
-        await sendAdminAuditExport(ctx, h);
-      } catch (err) {
-        console.error('[ADMIN] audit export error', err);
-        await safeEditOrReply(ctx, '⚠️ Ошибка при генерации экспорта.', {
-          reply_markup: new InlineKeyboard().text('⬅️ Журнал аудита', `a:aud|h:${h}|p:0`)
-        });
-      }
-      return;
-    }
-
-    if (p.a === 'a:admin_metrics') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) { await ctx.answerCallbackQuery({ text: 'Нет доступа.' }); return; }
-      await ctx.answerCallbackQuery();
-      const days = Math.max(1, Math.min(90, Number(p.d) || 14));
-      await renderAdminMetrics(ctx, days);
-      return;
-    }
 
 
     // Admin: QStash status / signed ping (Redis-only metrics)
-    if (p.a === 'a:admin_qstash_status') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      await renderAdminQStashStatus(ctx);
-      return;
-    }
-
-    if (p.a === 'a:admin_qstash_ping') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery({ text: 'Пинг отправляю…' });
-
-      const lib = getQStashLibHealth();
-      if (!lib.available) {
-        const em = String(lib?.error?.message || 'missing');
-        await safeEditOrReply(
-          ctx,
-          `⛔ QStash недоступен: пакет <code>@upstash/qstash</code> не установлен.
-
-Причина: <code>${escapeHtml(em.slice(0, 220))}</code>
-
-Решение: обнови <code>package.json</code> (dependencies) и сделай redeploy.`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
-        );
-        return;
-      }
-
-      if (!(process.env.QSTASH_TOKEN || '')) {
-        await safeEditOrReply(
-          ctx,
-          '⛔ QSTASH_TOKEN не задан в Vercel. Ping недоступен.',
-          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
-        );
-        return;
-      }
-
-      const url = getQStashDeliveryUrl('/api/qstash/ping');
-      if (!url) {
-        await safeEditOrReply(
-          ctx,
-          '⛔ PUBLIC_BASE_URL не задан. Ping недоступен.',
-          { reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
-        );
-        return;
-      }
-
-      const nonce = randomToken();
-      const nowIso = new Date().toISOString();
-
-      // Best-effort: remember what we enqueued (Redis-only).
-      try {
-        await redis.set(k(['qstash', 'ping', 'last_enqueued_at']), nowIso, { ex: 14 * 24 * 60 * 60 });
-        await redis.set(k(['qstash', 'ping', 'last_enqueued_nonce']), String(nonce), { ex: 14 * 24 * 60 * 60 });
-      } catch {}
-
-      try {
-        await qstashPublishJSON({
-          url,
-          body: {
-            kind: 'signed_ping',
-            ts: nowIso,
-            nonce,
-            by_tg_id: Number(ctx.from.id || 0) || 0,
-          },
-          deduplicationId: `qping:${nonce}`,
-          retries: 0,
-          timeout: '10s',
-        });
-      } catch (e) {
-        const msg = String(e?.message || e || 'error');
-        await safeEditOrReply(
-          ctx,
-          `⛔ Не удалось отправить ping через QStash.
-
-Причина: <code>${escapeHtml(msg)}</code>
-
-Подсказка: это не всегда ENV/signing keys. Часто причина — invalid DeduplicationId format, QStash/network сбой или неверный PUBLIC_BASE_URL.`,
-          { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Назад', 'a:admin_qstash_status') }
-        );
-        return;
-      }
-
-      await renderAdminQStashStatus(ctx);
-      return;
-    }
 
     // Admin: Founder Sale (runtime controls in Redis)
-    if (p.a === 'a:admin_founder') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      try { await clearExpectText(ctx.from.id); } catch {}
-      await renderAdminFounder(ctx);
-      return;
-    }
-
-    if (p.a === 'a:admin_founder_toggle') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      const st = await getFounderSaleState();
-      const cur = !!st.effective?.enabled;
-      const ov = (await getSysObj(SYS_KEYS.founder_sale)) || {};
-      ov.enabled = !cur;
-      await setSysObj(SYS_KEYS.founder_sale, ov);
-      await renderAdminFounder(ctx);
-      return;
-    }
-
-    if (p.a === 'a:admin_founder_reset') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      await delSysKey(SYS_KEYS.founder_sale);
-      await renderAdminFounder(ctx);
-      return;
-    }
-
-    if (p.a === 'a:admin_founder_set_deadline') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_founder');
-      kbAdminFooter(kb, '⬅️ Система', 'a:admin_sys');
-      await safeEditOrReply(ctx,
-        `🗓 <b>Founder Sale — дедлайн</b>
-
-Введи дату/время в формате ISO (UTC).
-Пример: <code>2026-03-01T23:59:59Z</code>
-
-Чтобы сбросить к ENV — отправь <code>-</code>.`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
-      await setExpectText(ctx.from.id, { type: 'admin_founder_deadline', backCb: 'a:admin_founder' }, 15 * 60);
-      return;
-    }
-
-    if (p.a === 'a:admin_founder_set_prices') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_founder');
-      kbAdminFooter(kb, '⬅️ Система', 'a:admin_sys');
-      await safeEditOrReply(ctx,
-        `💰 <b>Founder Sale — цены (Stars)</b>
-
-Введи 3 числа через пробел/запятую:
-<code>brand3 brand12 creator12</code>
-Пример: <code>1999 4999 2499</code>
-
-Чтобы сбросить к ENV — отправь <code>-</code>.`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
-      await setExpectText(ctx.from.id, { type: 'admin_founder_prices', backCb: 'a:admin_founder' }, 15 * 60);
-      return;
-    }
-
-    if (p.a === 'a:admin_founder_set_credits') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      const kb = new InlineKeyboard().text('⬅️ Назад', 'a:admin_founder');
-      kbAdminFooter(kb, '⬅️ Система', 'a:admin_sys');
-      await safeEditOrReply(ctx,
-        `💳 <b>Founder Sale — кредиты</b>
-
-Введи 2 числа через пробел/запятую:
-<code>brand3Credits brand12Credits</code>
-Пример: <code>100 200</code>
-
-Чтобы сбросить к ENV — отправь <code>-</code>.`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
-      await setExpectText(ctx.from.id, { type: 'admin_founder_credits', backCb: 'a:admin_founder' }, 15 * 60);
-      return;
-    }
-
-    if (p.a === 'a:admin_founder_links') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      await renderAdminFounderLinks(ctx);
-      return;
-    }
-
-    if (p.a === 'a:admin_founder_texts') {
-      const isAdmin = isSuperAdminTg(ctx.from.id);
-      if (!isAdmin) return ctx.answerCallbackQuery({ text: 'Нет доступа.' });
-      await ctx.answerCallbackQuery();
-      await renderAdminFounderTexts(ctx);
-      return;
-    }
 
     // Barters
 
@@ -28738,6 +28224,7 @@ ${actionHint}`;
       DEFAULT_ADMIN_DM_TEMPLATES,
       InlineKeyboard,
       TG_SAFE_BODY_MAX,
+      adminDmPlaceholdersHelpHtml,
       applyAdminDmPlaceholders,
       buildAdminDmPlaceholderValues,
       clearAdminOutbox,
@@ -28775,6 +28262,53 @@ ${actionHint}`;
       setAdminUserNoteReturn,
       setExpectText,
       setSysNotice,
+    };
+
+
+    const adminSystemDomainDeps = {
+      InputFile,
+      InlineKeyboard,
+      SYS_KEYS,
+      adminClearBroadcastPendingSnapshot,
+      adminGetBroadcastPendingSnapshot,
+      adminHardSkipHitsExport,
+      adminHardSkipUnskip,
+      clearAdminAuditQuery,
+      clearDraft,
+      clearExpectText,
+      delSysKey,
+      escapeHtml,
+      flushOpsAlerts,
+      getBot,
+      getFounderSaleState,
+      getQStashDeliveryUrl,
+      getQStashLibHealth,
+      getSysObj,
+      isSuperAdminTg,
+      k,
+      kbAdminFooter,
+      navKb,
+      qstashPublishJSON,
+      randomToken,
+      redis,
+      renderAdminAudit,
+      renderAdminFounder,
+      renderAdminFounderLinks,
+      renderAdminFounderTexts,
+      renderAdminHardSkipHits,
+      renderAdminHardSkipHome,
+      renderAdminHardSkipView,
+      renderAdminHome,
+      renderAdminInviteVisibilityHome,
+      renderAdminInviteVisibilityList,
+      renderAdminMetrics,
+      renderAdminOps,
+      renderAdminQStashStatus,
+      renderAdminSystem,
+      safeEditOrReply,
+      sendAdminAuditExport,
+      setExpectText,
+      setSysObj,
     };
 
 
@@ -29062,6 +28596,42 @@ ${actionHint}`;
           p2,
           u2,
           adminCommunicationsDomainDeps
+        ),
+        admin_system_navigation: (ctx2, p2, u2) => handleAdminSystemNavigationCallback(
+          ctx2,
+          p2,
+          u2,
+          adminSystemDomainDeps
+        ),
+        admin_system_operations: (ctx2, p2, u2) => handleAdminSystemOperationCallback(
+          ctx2,
+          p2,
+          u2,
+          adminSystemDomainDeps
+        ),
+        admin_delivery_hard_skip: (ctx2, p2, u2) => handleAdminDeliveryHardSkipCallback(
+          ctx2,
+          p2,
+          u2,
+          adminSystemDomainDeps
+        ),
+        admin_audit_metrics: (ctx2, p2, u2) => handleAdminAuditMetricCallback(
+          ctx2,
+          p2,
+          u2,
+          adminSystemDomainDeps
+        ),
+        admin_qstash_controls: (ctx2, p2, u2) => handleAdminQStashCallback(
+          ctx2,
+          p2,
+          u2,
+          adminSystemDomainDeps
+        ),
+        admin_founder_controls: (ctx2, p2, u2) => handleAdminFounderControlCallback(
+          ctx2,
+          p2,
+          u2,
+          adminSystemDomainDeps
         ),
       },
     });

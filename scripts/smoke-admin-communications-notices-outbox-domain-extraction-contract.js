@@ -14,6 +14,7 @@ const contracts = read('src/bot/router/callbackContracts.js');
 
 const expected = [
   'a:admin_comms',
+  'a:adm_ph',
   'a:admin_notice', 'a:admin_notice_toggle', 'a:admin_notice_sev', 'a:admin_notice_target',
   'a:admin_notice_cta', 'a:admin_notice_expire', 'a:admin_notice_clear',
   'a:admin_notice_publish', 'a:admin_notice_text',
@@ -28,7 +29,7 @@ for (const action of expected) {
   assert.ok(actions.includes(`'${action}'`), `action catalog contains ${action}`);
   assert.ok(!new RegExp(`if\\s*\\(p\\.a\\s*===\\s*['\"]${action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['\"]`).test(bot), `legacy branch removed for ${action}`);
 }
-assert.equal(new Set(expected).size, 26, '26 exact live callbacks');
+assert.equal(new Set(expected).size, 27, '27 communications callbacks after STEP590E5D ownership closure');
 assert.ok(route.includes('ADMIN_COMMUNICATIONS'), 'communications route declared');
 assert.ok(route.includes('ADMIN_NOTICE_MANAGEMENT'), 'notice route declared');
 assert.ok(route.includes('ADMIN_OUTBOX'), 'outbox route declared');
@@ -38,6 +39,7 @@ assert.ok(contracts.includes("ADMIN_COMMUNICATIONS: 'admin_communications'"), 'c
 assert.ok(communications.includes("if (p.a === 'a:admin_comms')"), 'communications callback moved');
 assert.ok(notices.includes("if (p.a === 'a:admin_notice_publish')"), 'notice publish moved');
 assert.ok(outbox.includes("if (p.a === 'a:admin_outbox_repeat')"), 'outbox repeat moved');
+assert.ok(templates.includes("if (p.a === 'a:adm_ph')"), 'placeholder helper moved');
 assert.ok(templates.includes("if (p.a === 'a:adm_umsg_tpl')"), 'template selection moved');
 assert.ok(templates.includes("if (p.a === 'a:admin_umsg_tpl_reset')"), 'template reset moved');
 assert.ok(new RegExp("if\\s*\\(p\\.a\\s*===\\s*['\"]a:notice['\"]").test(bot), 'user-facing notice view remains legacy-owned');

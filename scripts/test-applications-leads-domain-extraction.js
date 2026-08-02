@@ -256,7 +256,7 @@ assertions += 1;
 }
 
 const summary = summarizeCallbackOwnership();
-equal(summary.extracted, 433, 'STEP590E5C cumulative extracted ownership total');
-equal(summary.legacy, summary.total - 433, 'STEP590E5C cumulative legacy ownership total');
+equal(summary.extracted, 464, 'STEP590E5D cumulative extracted ownership total');
+equal(summary.legacy, summary.total - 464, 'STEP590E5D cumulative legacy ownership total');
 
 console.log(`PASS STEP590E1 applications/leads domain extraction tests (${assertions} assertions)`);

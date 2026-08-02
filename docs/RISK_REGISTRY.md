@@ -1,3 +1,15 @@
+## Current STEP590E5D assessment
+
+- Change type: privileged admin navigation, operational controls, invite visibility, hard-skip, audit/metrics, QStash and Founder runtime callback orchestration extraction.
+- Runtime blast radius: 30 callbacks across six new exact owners plus one `a:adm_ph` ownership closure in Admin Communications.
+- Correctness boundary: existing super-admin checks, Redis snapshots/hard-skip/system overrides, QStash signing/dedup, DB read helpers, audit export and Telegram rendering remain canonical.
+- Explicit exclusions: user-facing `a:founder`, payment-owned `a:off_buy*`, broadcast engine, admin web, SQL/ENV/routes and product copy are not modified.
+- Source verification: 224 domain assertions, 2,965 router assertions, 560/560 registry and all prior extracted-domain regressions PASS; source preflight and portable spine 6/6 PASS under declared temporary shims.
+- Environment limitation: clean artifact-side `npm ci` is blocked by internal package mirror HTTP 404 for `xtend@4.0.2`; operator dependency/audit evidence remains required.
+- Runtime verification required: read-only Admin/System/Ops/Invites/Hard-skip/Audit/Metrics/QStash/Founder navigation; mutations only with explicitly disposable Redis/QStash/runtime override state.
+- Residual risk: these are privileged operational surfaces with broad injected capability seams; STEP590I must enforce dependency direction, and production smoke must avoid real pending delivery, hard-skip, QStash or Founder configuration mutations unless explicitly approved.
+
+
 # STEP590E5C — Active Architecture Risk Update
 
 | ID | Risk | Severity | State | Required control |

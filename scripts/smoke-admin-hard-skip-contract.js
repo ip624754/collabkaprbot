@@ -33,6 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const adminSystemDeliverySource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'adminSystem', 'deliveryCallbacks.js'), 'utf8');
 
 const hardSkipExportHelperSrc = extractBetween(
   botSource,
@@ -54,11 +55,7 @@ const renderAdminHardSkipViewSrc = extractBetween(
   'async function renderAdminHardSkipView(ctx, tgId, opts = {}) {',
   '\n\nasync function renderAdminSysNotice(ctx) {'
 );
-const hardSkipCallbacksSrc = extractBetween(
-  botSource,
-  '    // --- Admin: Broadcast hard-skip list (Redis-only, manage dead chats) ---',
-  '\n\n    // --- Admin: System Notice (Redis-only, no broadcast) ---'
-);
+const hardSkipCallbacksSrc = adminSystemDeliverySource;
 const hardSkipExpectSrc = extractBetween(
   botSource,
   "    if (exp.type === 'hs_find') {",

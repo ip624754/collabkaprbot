@@ -33,6 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const adminSystemQStashSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'adminSystem', 'qstashCallbacks.js'), 'utf8');
 
 const renderAdminQStashStatusSrc = extractBetween(
   botSource,
@@ -40,11 +41,7 @@ const renderAdminQStashStatusSrc = extractBetween(
   '\n\nasync function renderAdminDmTemplates(ctx, page = 0) {'
 );
 
-const adminQStashCallbacksSrc = extractBetween(
-  botSource,
-  '    // Admin: QStash status / signed ping (Redis-only metrics)',
-  '\n\n    // Admin: Founder Sale (runtime controls in Redis)'
-);
+const adminQStashCallbacksSrc = adminSystemQStashSource;
 
 assert.ok(renderAdminQStashStatusSrc.includes('const fanout = await getSysBool(SYS_KEYS.broadcast_qstash_fanout, false);'), 'Admin → QStash status must keep broadcast fan-out sys toggle read');
 assert.ok(renderAdminQStashStatusSrc.includes('const lib = getQStashLibHealth();'), 'Admin → QStash status must keep QStash lib health read');

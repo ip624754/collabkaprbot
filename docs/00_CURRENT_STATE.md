@@ -1,3 +1,23 @@
+## STEP590E5D — Admin Operations, System & Founder Controls Domain Extraction (2026-08-02)
+
+**Current source artifact baseline:** final STEP590E5C source tree, package `1.3.29`; operator commit/push of E5C was not evidenced at artifact time.
+
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED QA PASS / OPERATOR DEPENDENCY AND DEPLOY GATE PENDING;
+- new bounded domain: `src/bot/domains/adminSystem/`;
+- newly extracted callback actions: 30 total across system navigation (4), operations/invites (5), hard-skip (6), audit/metrics (5), QStash (2), and Founder controls (8);
+- ownership closure: `a:adm_ph` now belongs to existing `admin_message_templates`, bringing that route to 10 actions;
+- cumulative ownership: 464 extracted, 96 legacy, 7 aliases, 0 unresolved;
+- `a:founder`, `a:off_buy`, and `a:off_buy_home` remain outside the admin-system boundary;
+- Redis-only pending/hard-skip operations, audit read/export, QStash guards/dedup, and Founder runtime override/reset semantics remain canonical;
+- SQL/ENV/API-route/callback-key/action-guard/product-copy changes: none;
+- package: `1.3.30`;
+- verified QA: 224 E5D assertions, 2,965 router assertions, 560/560 registry and all prior extracted-domain suites PASS;
+- full `preflight:source` and portable critical spine 6/6 PASS under temporary execution-only shims; no shim or `node_modules` remains in the final tree;
+- artifact-side clean `npm ci` is blocked only by internal mirror HTTP 404 for `xtend@4.0.2`;
+- clean operator `npm ci`/`npm audit`, Git commit/push, Vercel deployment and bounded Telegram admin-system smoke remain operator-side;
+- STEP590E5 Admin & Moderation source decomposition is complete; next bounded architecture step: STEP590E6 Support, Verification, Sharing & Account.
+
+
 ## STEP590E5C — Admin Communications, Notices & Outbox Domain Extraction (2026-08-02)
 
 **Current source artifact baseline:** operator-pushed STEP590E5B commit `fe20572`.

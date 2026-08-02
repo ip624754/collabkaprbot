@@ -33,6 +33,7 @@ function expectRegistry(action, { type, guard, breakGlass = undefined }) {
 }
 
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
+const adminSystemOperationsSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'adminSystem', 'operationsCallbacks.js'), 'utf8');
 
 const renderAdminOpsSrc = extractBetween(
   botSource,
@@ -77,7 +78,7 @@ assertMatch(
 );
 
 const pendingClearConfirmSrc = extractBetween(
-  botSource,
+  adminSystemOperationsSource,
   "if (p.a === 'a:admin_ops_pending_clear') {",
   "if (p.a === 'a:admin_ops_pending_clear_do') {"
 );
