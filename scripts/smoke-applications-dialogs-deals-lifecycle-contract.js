@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -11,7 +12,7 @@ const ROOT = path.resolve(__dirname, '..');
 
 const botSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
 const applicationCallbacksSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'applications', 'callbacks.js'), 'utf8');
-const dbSrc = fs.readFileSync(path.join(ROOT, 'src', 'db', 'queries.js'), 'utf8');
+const dbSrc = readQueryImplementationSource();
 const starsSrc = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'payments', 'starsHandlers.js'), 'utf8');
 const retrySrc = fs.readFileSync(path.join(ROOT, 'api', 'qstash', 'monetization-retry.js'), 'utf8');
 const runtimeSrc = [botSrc, applicationCallbacksSrc, starsSrc, retrySrc].join('\n');

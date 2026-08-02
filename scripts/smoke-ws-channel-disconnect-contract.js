@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -28,7 +29,7 @@ function extractBetween(src, startMarker, endMarker) {
 const botSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'bot.js'), 'utf8');
 const barterCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'barter', 'callbacks.js'), 'utf8');
 const workspaceCallbacksSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'domains', 'workspaces', 'callbacks.js'), 'utf8');
-const dbSource = fs.readFileSync(path.join(ROOT, 'src', 'db', 'queries.js'), 'utf8');
+const dbSource = readQueryImplementationSource();
 const migrationSource = fs.readFileSync(path.join(ROOT, 'migrations', '044_workspace_channel_disconnect.sql'), 'utf8');
 
 assert.match(migrationSource, /add column if not exists channel_connected boolean not null default true/i, 'migration must add channel_connected flag');

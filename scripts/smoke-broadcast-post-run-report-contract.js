@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import fs from 'fs';
 const bot = fs.readFileSync(new URL('../src/bot/bot.js', import.meta.url), 'utf8');
-const db = fs.readFileSync(new URL('../src/db/queries.js', import.meta.url), 'utf8');
+const db = readQueryImplementationSource();
 const checks = [
   [bot.includes('Итог доставки'), 'bot.js missing Post-run report text'],
   [bot.includes('buildBroadcastPostRunReport'), 'bot.js missing buildBroadcastPostRunReport'],

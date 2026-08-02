@@ -1,6 +1,6 @@
 {
   "name": "collabgirls-bot",
-  "version": "1.3.31",
+  "version": "1.3.32",
   "private": true,
   "type": "module",
   "engines": {
@@ -215,7 +215,9 @@
     "test:admin-operations-system-founder-domain-extraction": "node scripts/test-admin-operations-system-founder-domain-extraction.js",
     "smoke:admin-operations-system-founder-domain-extraction-contract": "node scripts/smoke-admin-operations-system-founder-domain-extraction-contract.js",
     "test:user-services-domain-extraction": "node scripts/test-user-services-domain-extraction.js",
-    "smoke:user-services-domain-extraction-contract": "node scripts/smoke-user-services-domain-extraction-contract.js"
+    "smoke:user-services-domain-extraction-contract": "node scripts/smoke-user-services-domain-extraction-contract.js",
+    "test:queries-repository-decomposition": "node scripts/test-queries-repository-decomposition.js",
+    "smoke:queries-compatibility-facade-contract": "node scripts/smoke-queries-compatibility-facade-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

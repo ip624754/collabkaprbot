@@ -1,3 +1,4 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -5,7 +6,7 @@ import assert from 'node:assert/strict';
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-const queries = read('src/db/queries.js');
+const queries = readQueryImplementationSource();
 for (const token of [
   'USERS_DIRECTORY_SORTS',
   'buildUsersDirectoryOrderSql',

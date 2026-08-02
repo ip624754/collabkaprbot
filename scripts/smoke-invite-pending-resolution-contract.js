@@ -1,8 +1,9 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const botSource = fs.readFileSync('src/bot/bot.js', 'utf8');
-const queriesSource = fs.readFileSync('src/db/queries.js', 'utf8');
+const queriesSource = readQueryImplementationSource();
 
 for (const token of [
   'inviteRewardPendingReasonLabel',

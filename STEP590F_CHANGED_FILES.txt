@@ -1,0 +1,65 @@
+STEP590F — Queries Repository Decomposition with Compatibility Façade
+Baseline: STEP590E6 package 1.3.31
+Result: package 1.3.32
+Changed files: 60 (37 modified, 23 added, 0 deleted)
+
+A	INSTALL_STEP590F_QUERIES_REPOSITORY_DECOMPOSITION_WITH_COMPATIBILITY_FACADE.md
+A	STEP590F_HANDOFF_NOTES.md
+A	STEP590F_QA_EVIDENCE_SUMMARY.md
+A	STEP590F_QA_checklist.md
+M	docs/00_CURRENT_STATE.md
+M	docs/15_NEW_CHAT_HANDOFF.md
+M	docs/AI_MULTI_MODEL_HANDOFF_CURRENT.md
+M	docs/RISK_REGISTRY.md
+A	docs/architecture/STEP590F_QUERIES_REPOSITORY_DECOMPOSITION.md
+A	docs/architecture/STEP590F_QUERY_EXPORT_MANIFEST.json
+A	docs/architecture/STEP590F_QUERY_EXPORT_OWNERSHIP.csv
+A	docs/audit/STEP590F_QUERIES_REPOSITORY_DECOMPOSITION_REPORT.md
+A	docs/operations/STEP590F_QUERIES_REPOSITORY_ROLLOUT_RUNBOOK.md
+A	docs/process/07_WORK_HISTORY_STEP590F.md
+M	docs/roadmap/STEP590_MODULAR_MONOLITH_ROADMAP.md
+M	package-lock.json
+M	package.json
+A	scripts/lib/query-source-reader.js
+M	scripts/preflight.js
+M	scripts/smoke-admin-web-users-bulk-contract.js
+M	scripts/smoke-admin-web-users-cohort-counters-contract.js
+M	scripts/smoke-admin-web-users-cohort-rail-contract.js
+M	scripts/smoke-admin-web-users-copy-unification-contract.js
+M	scripts/smoke-admin-web-users-export-contract.js
+M	scripts/smoke-admin-web-users-priority-rail-contract.js
+M	scripts/smoke-applications-dialogs-deals-lifecycle-contract.js
+M	scripts/smoke-bounded-safety-hardening-contract.js
+M	scripts/smoke-brand-app-accept-sql-contract.js
+M	scripts/smoke-brand-deal-stage-nav-contract.js
+M	scripts/smoke-broadcast-delivery-unknown-state-contract.js
+M	scripts/smoke-broadcast-draft-recap-contract.js
+M	scripts/smoke-broadcast-post-run-report-contract.js
+M	scripts/smoke-contact-unlock-workspace-settings-contract.js
+M	scripts/smoke-copy-safety-taxonomy-contract.js
+M	scripts/smoke-giveaway-single-atomic-path-contract.js
+M	scripts/smoke-invite-admin-visibility-contract.js
+M	scripts/smoke-invite-language-mechanism-honesty-contract.js
+M	scripts/smoke-invite-layer-contract.js
+M	scripts/smoke-invite-pending-resolution-contract.js
+M	scripts/smoke-invite-rewards-contract.js
+A	scripts/smoke-queries-compatibility-facade-contract.js
+M	scripts/smoke-security-hardening-contract.js
+M	scripts/smoke-support-close-reopen-canned-contract.js
+M	scripts/smoke-support-followup-context-contract.js
+M	scripts/smoke-support-operator-read-surface-contract.js
+M	scripts/smoke-support-threads-foundation-contract.js
+M	scripts/smoke-ws-channel-disconnect-contract.js
+M	scripts/test-payment-fulfillment-critical.js
+A	scripts/test-queries-repository-decomposition.js
+M	src/db/queries.js
+A	src/db/repositories/applicationsRepository.js
+A	src/db/repositories/bartersRepository.js
+A	src/db/repositories/brandsRepository.js
+A	src/db/repositories/broadcastsRepository.js
+A	src/db/repositories/giveawaysRepository.js
+A	src/db/repositories/monetizationRepository.js
+A	src/db/repositories/socialRepository.js
+A	src/db/repositories/usersRepository.js
+A	src/db/repositories/workspacesRepository.js
+A	STEP590F_CHANGED_FILES.txt

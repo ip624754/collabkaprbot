@@ -35,7 +35,7 @@
 | STEP590E5C | Admin communications, notices and outbox | Source implemented; operator gate pending | 15/20 | Audience, draft and delivery-state contracts PASS |
 | STEP590E5D | Admin operations, system and founder controls | Source implemented; operator gate pending | 16/20 | Privilege, toggle and audit contracts PASS |
 | STEP590E6 | Support, verification, sharing and account | Source implemented; operator gate pending | 15/20 | Input-mode, deleted-user recovery and reward-truth contracts PASS |
-| STEP590F | `queries.js` repository decomposition with façade | Yes, behavior-preserving | 16/20 | Export/signature/SQL parity; no transaction drift |
+| STEP590F | `queries.js` repository decomposition with façade | Source implemented; operator gate pending | 16/20 | 328/328 exports; exact body/SQL/transaction parity PASS |
 | STEP590G | Cron/job decomposition | Yes | 16/20 | Lock/budget/receipt parity; function budget unchanged |
 | STEP590H | Admin-web client decomposition | Yes, UI parity | 11/20 | One asset, route/state/view parity, browser acceptance |
 | STEP590I | Architecture gates | Tooling | 10/20 | Gates block duplicate ownership/cycles/forbidden imports |
@@ -77,7 +77,7 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 
 
 
-## Current program position — STEP590E6
+## Current program position — STEP590F
 
 - STEP590A architecture baseline: complete;
 - STEP590B executable router: deployed and operator canary accepted;
@@ -103,5 +103,7 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 - STEP590E callback-domain decomposition: source-complete;
 - extracted owner count: 482;
 - legacy owner count: 78 and must continue to decrease monotonically;
-- next bounded architecture step after acceptance: STEP590F `queries.js` repository decomposition with compatibility façade;
-- residual risk: broad capability injection remains a compatibility seam until STEP590F/STEP590I; registry-only aliases remain for STEP590J dead-code retirement.
+- STEP590F query repository decomposition: source implementation complete; 328/328 exports preserved across nine repositories behind `queries.js` façade;
+- exact query-body SHA-256 parity, source preflight and portable critical spine PASS;
+- next bounded architecture step after acceptance: STEP590G cron/job decomposition;
+- residual risk: broad compatibility façade and cross-domain capability seams remain until STEP590I/STEP590J.

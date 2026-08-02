@@ -1,3 +1,22 @@
+## STEP590F — queries.js Repository Decomposition with Compatibility Façade (2026-08-02)
+
+**Current source artifact baseline:** final STEP590E6 source tree, package `1.3.31`; operator commit/push of E5C/E5D/E6 was not evidenced at artifact time.
+
+- status: SOURCE IMPLEMENTATION COMPLETE / EXACT PARITY PASS / OPERATOR DEPENDENCY AND DEPLOY GATE PENDING;
+- `src/db/queries.js` reduced from 9,211 implementation lines to a 359-line explicit compatibility façade;
+- nine bounded repository modules now own all 328 public query exports;
+- public import contract remains `src/db/queries.js`; direct application imports from repository implementation files are prohibited;
+- exact reconstructed-body SHA-256 confirms zero drift in moved function bodies, SQL text, signatures and transaction statements;
+- existing SQL/source contracts now use a repository-aware source reader rather than assuming one monolithic file;
+- migrations/ENV/API routes/callback keys/product copy/data mutations: none;
+- package: `1.3.32`;
+- verified QA: 238 STEP590F assertions, 328/328 exports, package-lock PASS, full `preflight:source` PASS and portable critical spine 6/6 PASS under temporary execution-only shims;
+- temporary shims and `node_modules` are removed before final artifact packaging;
+- artifact-side clean `npm ci` remains subject to the internal package mirror gate and must be re-run by the operator;
+- clean operator `npm ci`/`npm audit`, Git commit/push, Vercel Ready and runtime module/health evidence remain operator-side;
+- next bounded architecture step: STEP590G cron/job decomposition.
+
+
 ## STEP590E6 — Support, Verification, Sharing & Account Domain Extraction (2026-08-02)
 
 **Current source artifact baseline:** final STEP590E5D source tree, package `1.3.30`; operator commit/push of E5C/E5D was not evidenced at artifact time.

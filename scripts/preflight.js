@@ -223,6 +223,7 @@ function buildNodeCheckList() {
   scanDir(path.join("src", "bot", "domains"), { maxDepth: 3 });
   scanDir(path.join("src", "bot", "router"), { maxDepth: 2 });
   scanDir(path.join("src", "bot", "payments"), { maxDepth: 2 });
+  scanDir(path.join("src", "db", "repositories"), { maxDepth: 1 });
   scanDir(path.join("src", "lib"), { maxDepth: 1 });
   scanDir("scripts", {
     maxDepth: 1,
@@ -371,6 +372,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): admin operations/system/founder bounded-domain source contract", "smoke:admin-operations-system-founder-domain-extraction-contract"],
   ["Preflight (source-only): user services bounded-domain executable tests", "test:user-services-domain-extraction"],
   ["Preflight (source-only): user services bounded-domain source contract", "smoke:user-services-domain-extraction-contract"],
+  ["Preflight (source-only): queries repository decomposition executable tests", "test:queries-repository-decomposition"],
+  ["Preflight (source-only): queries compatibility façade contract", "smoke:queries-compatibility-facade-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

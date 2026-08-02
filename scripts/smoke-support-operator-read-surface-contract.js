@@ -1,6 +1,7 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import fs from "fs";
 
-const q = fs.readFileSync("src/db/queries.js", "utf8");
+const q = readQueryImplementationSource();
 const b = fs.readFileSync("src/bot/bot.js", "utf8");
 const r = fs.readFileSync("src/bot/actionRegistry.js", "utf8");
 

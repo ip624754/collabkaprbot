@@ -1,3 +1,4 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const botSource = fs.readFileSync(path.join(root, 'src', 'bot', 'bot.js'), 'utf8');
 const registrySource = fs.readFileSync(path.join(root, 'src', 'bot', 'actionRegistry.js'), 'utf8');
-const queriesSource = fs.readFileSync(path.join(root, 'src', 'db', 'queries.js'), 'utf8');
+const queriesSource = readQueryImplementationSource();
 const migrationSource = fs.readFileSync(path.join(root, 'migrations', '046_invite_reward_ledger.sql'), 'utf8');
 
 assert.ok(botSource.includes('a:share_redeem'), 'Invite rewards CTA callback missing');

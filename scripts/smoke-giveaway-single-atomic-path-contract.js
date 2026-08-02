@@ -1,10 +1,11 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const bot = fs.readFileSync(new URL('../src/bot/bot.js', import.meta.url), 'utf8');
 const cron = fs.readFileSync(new URL('../src/bot/cron.js', import.meta.url), 'utf8');
 const giveawayDomain = fs.readFileSync(new URL('../src/bot/domains/giveaways/callbacks.js', import.meta.url), 'utf8');
-const queries = fs.readFileSync(new URL('../src/db/queries.js', import.meta.url), 'utf8');
+const queries = readQueryImplementationSource();
 const core = fs.readFileSync(new URL('../src/db/giveawayAtomicCore.js', import.meta.url), 'utf8');
 
 assert.match(giveawayDomain, /drawAndFinalizeGiveawayWinnersAtomic\(gwId,\s*\{[\s\S]*?source:\s*'manual'/);

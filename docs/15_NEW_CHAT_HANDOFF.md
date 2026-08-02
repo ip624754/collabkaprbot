@@ -1,3 +1,14 @@
+# Current New-Chat Handoff — STEP590F
+
+- Current source result: package `1.3.32`.
+- `src/db/queries.js` is a thin compatibility façade with 328 explicit exports.
+- Implementation lives in nine bounded `src/db/repositories/*Repository.js` modules.
+- Exact moved-body SHA-256 parity proves no SQL/signature/transaction-body drift.
+- Application callers continue importing `queries.js`; only repositories may use explicit internal cross-repository imports.
+- Source preflight PASS and portable critical spine 6/6 PASS under temporary shims removed before packaging.
+- Operator evidence still required: clean `npm ci`, `npm audit`, commit/push, Vercel Ready and runtime health/import check.
+- Next step: STEP590G cron/job decomposition.
+
 ## STEP590E6 CURRENT HANDOFF — Support, Verification, Sharing & Account
 
 - Baseline: final STEP590E5D source tree (`1.3.30`); E5C/E5D operator commit/push was not evidenced at artifact time.

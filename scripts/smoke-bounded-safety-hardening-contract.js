@@ -1,7 +1,8 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const queries = fs.readFileSync('src/db/queries.js', 'utf8');
+const queries = readQueryImplementationSource();
 const safePatch = fs.readFileSync('src/db/safePatch.js', 'utf8');
 const common = fs.readFileSync('src/lib/adminWeb/common.js', 'utf8');
 const authApi = fs.readFileSync('api/admin-web-auth.js', 'utf8');

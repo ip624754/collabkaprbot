@@ -1,3 +1,4 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,7 +17,7 @@ ${userAccountSource}`;
 const runtimeSource = `${botSource}
 ${workspaceSocialSource}
 ${userServiceSource}`;
-const dbSource = fs.readFileSync(path.join(root, 'src', 'db', 'queries.js'), 'utf8');
+const dbSource = readQueryImplementationSource();
 
 function assertAbsent(source, needle, message) {
   assert.equal(source.includes(needle), false, message || `legacy copy must be absent: ${needle}`);

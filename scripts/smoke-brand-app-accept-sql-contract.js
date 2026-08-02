@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,7 +11,7 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
 const queriesPath = path.join(ROOT, 'src', 'db', 'queries.js');
-const queriesSrc = fs.readFileSync(queriesPath, 'utf8');
+const queriesSrc = readQueryImplementationSource();
 
 const acceptFnStart = queriesSrc.indexOf('export async function acceptBrandApplicationWithCharge(');
 const dealsStart = queriesSrc.indexOf('export async function countBrandDealsByStage(', acceptFnStart);

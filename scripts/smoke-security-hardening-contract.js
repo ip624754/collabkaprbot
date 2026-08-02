@@ -1,3 +1,4 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import fs from 'fs';
 import path from 'path';
 import assert from 'assert';
@@ -19,7 +20,7 @@ const bot = read('src/bot/bot.js');
 assert.ok(bot.includes('This guard is load-shedding only, not the primary concurrency invariant.'), 'degraded click guard boundary note must stay documented');
 assert.ok(bot.includes("`a:brand_app_accept`, `a:wsp_contact_unlock`"), 'guarded critical actions must stay documented');
 
-const queries = read('src/db/queries.js');
+const queries = readQueryImplementationSource();
 assert.ok(queries.includes("return { status: 'locked' };"), 'atomic giveaway draw must explicitly surface locked status');
 assert.ok(queries.includes('Explicit fail-fast signal for callers'), 'atomic giveaway draw lock comment must stay explicit');
 

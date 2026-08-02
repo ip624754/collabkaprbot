@@ -1,11 +1,12 @@
 #!/usr/bin/env node
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const bot = fs.readFileSync(path.join(__dirname, '..', 'src', 'bot', 'bot.js'), 'utf8');
-const queries = fs.readFileSync(path.join(__dirname, '..', 'src', 'db', 'queries.js'), 'utf8');
+const queries = readQueryImplementationSource();
 function must(s, needle, label) {
   if (!s.includes(needle)) {
     console.error(`missing: ${label}`);

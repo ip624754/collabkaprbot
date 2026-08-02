@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -24,7 +25,7 @@ function extractBetween(source, startMarker, endMarker) {
 const botSource = read('src/bot/bot.js');
 const sharingSource = read('src/bot/domains/userServices/sharingCallbacks.js');
 const inviteRuntimeSource = `${botSource}\n${sharingSource}`;
-const queriesSource = read('src/db/queries.js');
+const queriesSource = readQueryImplementationSource();
 const registrySource = read('src/bot/actionRegistry.js');
 const migrationSource = read('migrations/046_invite_reward_ledger.sql');
 const inviteUserSource = extractBetween(

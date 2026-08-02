@@ -1,3 +1,4 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -341,7 +342,7 @@ async function run() {
 
   // Source boundary: a missing canonical payments ledger may never look like success.
   {
-    const queriesSource = fs.readFileSync(path.join(ROOT, 'src', 'db', 'queries.js'), 'utf8');
+    const queriesSource = readQueryImplementationSource();
     const starsSource = fs.readFileSync(path.join(ROOT, 'src', 'bot', 'payments', 'starsHandlers.js'), 'utf8');
     const migrationSource = fs.readFileSync(path.join(ROOT, 'migrations', '048_payment_fulfillment_atomicity.sql'), 'utf8');
     const reconcileSource = fs.readFileSync(path.join(ROOT, 'migration_pack', '01_reconcile.sql'), 'utf8');

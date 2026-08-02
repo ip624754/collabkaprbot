@@ -1,3 +1,4 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import fs from 'fs';
 
 function assertContains(haystack, needle, label) {
@@ -8,7 +9,7 @@ function assertContains(haystack, needle, label) {
 }
 
 const bot = fs.readFileSync(new URL('../src/bot/bot.js', import.meta.url), 'utf8');
-const db = fs.readFileSync(new URL('../src/db/queries.js', import.meta.url), 'utf8');
+const db = readQueryImplementationSource();
 
 assertContains(bot, 'buildBroadcastDraftRecap', 'draft recap helper');
 assertContains(bot, 'Что будет отправлено', 'preview recap heading');

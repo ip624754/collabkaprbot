@@ -1,3 +1,4 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const botSource = fs.readFileSync(path.join(root, 'src', 'bot', 'bot.js'), 'utf8');
 const registrySource = fs.readFileSync(path.join(root, 'src', 'bot', 'actionRegistry.js'), 'utf8');
-const queriesSource = fs.readFileSync(path.join(root, 'src', 'db', 'queries.js'), 'utf8');
+const queriesSource = readQueryImplementationSource();
 
 assert.ok(botSource.includes("bot.command('invite'"), 'Missing /invite command');
 assert.ok(botSource.includes("bot.inlineQuery(/^invite"), 'Missing invite inlineQuery handler');

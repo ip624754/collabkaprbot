@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -8,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
-const src = fs.readFileSync(path.join(ROOT, 'src/db/queries.js'), 'utf8');
+const src = readQueryImplementationSource(ROOT);
 
 const fnStart = src.indexOf('export async function unlockWorkspaceContactsWithCredits');
 assert.ok(fnStart >= 0, 'unlockWorkspaceContactsWithCredits must exist');

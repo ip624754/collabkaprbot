@@ -1,3 +1,27 @@
+## Current STEP590F assessment
+
+- Change type: structural persistence decomposition behind a stable compatibility façade.
+- Runtime blast radius: all DB query imports resolve through the same public module, while 328 implementations move into nine repository files.
+- Correctness boundary: export names/order, function bodies, SQL text, transaction statements and return behavior must remain exact.
+- Explicit exclusions: no ORM, schema migration, ENV, API route, callback, copy or data mutation changes.
+- Source verification: reconstructed moved-body SHA-256 parity, 238 STEP590F assertions, 328/328 exports, full source preflight PASS and portable spine 6/6 PASS.
+- Environment limitation: clean artifact-side dependency installation remains operator-gated by the package mirror.
+- Runtime verification required: Vercel Ready, health route, webhook/cron module imports and absence of missing-export/module-resolution errors.
+- Residual risk: the public façade remains intentionally broad; STEP590I should enforce repository dependency direction and STEP590J may retire compatibility exports only after consumers are narrowed.
+
+# STEP590F — Active Architecture Risk Update
+
+| ID | Risk | Severity | State | Required control |
+|---|---|---:|---|---|
+| R-73 | Export or signature drift breaks namespace/named query consumers | CRITICAL | SOURCE MITIGATED / PROD OPEN | explicit 328-name manifest, façade contract, Vercel runtime import evidence |
+| R-74 | File movement changes SQL or transaction boundaries | CRITICAL | SOURCE MITIGATED / PROD OPEN | reconstructed-body SHA-256 parity and critical-path execution |
+| R-75 | Application code bypasses façade and couples to repository internals | HIGH | SOURCE MITIGATED | import-direction assertion and STEP590I architecture gate |
+| R-76 | Cross-repository dependencies create cycles or hidden ownership | HIGH | SOURCE MITIGATED / PROD OPEN | explicit internal imports, no repository→façade imports, runtime module-load evidence |
+
+**Release gate:** R-73, R-74 and R-76 remain production-open until the exact artifact is dependency-gated, deployed and shows clean module import/health evidence. No destructive production mutation is required for this structural step.
+
+---
+
 ## Current STEP590E6 assessment
 
 - Change type: user support, verification, invite sharing/rewards and account lifecycle callback orchestration extraction.

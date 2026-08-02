@@ -1,3 +1,4 @@
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -49,7 +50,7 @@ for (const token of [
   assert.ok(models.includes(token), `users read model must include ${token}`);
 }
 
-const queries = read('src/db/queries.js');
+const queries = readQueryImplementationSource();
 assert.ok(queries.includes('export async function getUsersDirectoryByIds'), 'queries must expose selection basket lookup helper');
 
 console.log('✅ smoke admin-web users bulk utility contract OK');

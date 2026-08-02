@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readQueryImplementationSource } from './lib/query-source-reader.js';
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..');
 const botPath = path.join(ROOT, 'src', 'bot', 'bot.js');
 const dbPath = path.join(ROOT, 'src', 'db', 'queries.js');
 const botSrc = fs.readFileSync(botPath, 'utf8');
-const dbSrc = fs.readFileSync(dbPath, 'utf8');
+const dbSrc = readQueryImplementationSource();
 
 assert.ok(
   dbSrc.includes("jsonb_build_object('set_by_user_id',$3::bigint,'set_at',now())"),
