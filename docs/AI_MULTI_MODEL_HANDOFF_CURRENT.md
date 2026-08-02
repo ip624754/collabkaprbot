@@ -1,12 +1,19 @@
-# Current New-Chat Handoff — STEP590G3
+# Current New-Chat Handoff — STEP590H
 
-- Baseline: production-accepted STEP590G2 commit `e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a`, package `1.3.35`.
-- Result: package `1.3.36`; four QStash endpoint files are compatibility handlers delegating to bounded workers under `src/jobs/`.
-- Monetization payment/credit/unlock/intro/autoheal semantics and official publish reserve/deliver/verify/self-heal semantics remain unchanged.
-- Existing URLs, raw-body config, QStash signature verification, dedup/retry chains, SQL, ENV, callbacks, Telegram copy and function count remain unchanged.
-- QA: 99 G3 assertions; compatibility/real ESM 4/4 PASS; focused monetization and official-publish regressions PASS; G2/G1/F regressions PASS; runtime proof and critical spine 6/6 PASS.
-- Artifact-side clean npm install remains blocked by internal mirror `xtend@4.0.2` 404; operator dependency/audit and production evidence remain required.
-- Next only after acceptance: STEP590H Admin Web Frontend Decomposition.
+- Canonical baseline: production-accepted STEP590G3 commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`, package `1.3.36`.
+- Current source result: package `1.3.37`.
+- Public browser entry remains `/scripts/admin-web.js`; six bounded ES modules own Overview, Users, Payments, Communications, Founder and Runtime implementation.
+- Auth/session, route mapping, render orchestration, event binding, backend URLs and all write semantics remain unchanged.
+- Exact moved-source SHA parity covers 2,636 lines; entry reduced from 4,667 to 2,228 lines.
+- QA: H 154 PASS; real ESM graph PASS; 57 admin contracts PASS; G3/G2/G1/F regressions PASS; critical spine 6/6 and preflight source PASS.
+- No SQL, migration, ENV, API, Telegram, CSS or function-budget delta.
+- Operator gate: clean npm install/audit, commit/push, Vercel Ready and production desktop/mobile browser acceptance across all admin sections.
+- Next only after acceptance: STEP590I Architecture Gates.
+
+## Previous Handoff — STEP590G3
+
+- Commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`, package `1.3.36`, production accepted.
+- Four unsigned signature boundaries PASS; signed ping and monetization no-side-effect canaries reached `DELIVERED / HTTP 200`.
 
 ## Previous Handoff — STEP590G2
 

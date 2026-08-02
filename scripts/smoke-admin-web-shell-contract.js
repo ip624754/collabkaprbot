@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -42,7 +43,7 @@ const html = read('admin.html');
 assert.ok(html.includes('/styles/admin-web.css'), 'admin shell must reference admin css');
 assert.ok(html.includes('/scripts/admin-web.js'), 'admin shell must reference admin js');
 
-const js = read('scripts/admin-web.js');
+const js = readAdminWebSource();
 for (const token of ['/api/admin-web-read?section=overview', '/api/admin-web-read?section=users', '/api/admin-web-read?section=user', '/api/admin-web-read?section=runtime']) {
   assert.ok(js.includes(token), `admin web JS must call ${token}`);
 }

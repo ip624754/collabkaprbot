@@ -4,6 +4,7 @@ import { readBroadcastDeliveryImplementationSource } from './lib/broadcast-deliv
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -78,7 +79,7 @@ const apiWrite = read('api/admin-web-write.js');
 assert.ok(apiWrite.includes("action === 'resolve_broadcast_delivery_unknown'"), 'admin write must route reconciliation');
 assert.ok(apiWrite.includes('founder_only'), 'reconciliation must remain founder-only');
 
-const ui = read('scripts/admin-web.js');
+const ui = readAdminWebSource();
 for (const token of ['Неопределённые доставки', 'Повторной отправки не будет', 'data-resolve-unknown']) {
   assert.ok(ui.includes(token), `admin UI must include ${token}`);
 }

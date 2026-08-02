@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -30,7 +31,7 @@ assert.ok(auth.includes("admin_web_login_paused"), 'admin web auth must expose a
 assert.ok(auth.includes('getAdminWebLoginGateState'), 'admin web auth must guard start by fail-closed operator control state');
 assert.ok(controls.includes('getAdminWebLoginGateState'), 'operator control must expose strict login gate state');
 
-const webJs = read('scripts/admin-web.js');
+const webJs = readAdminWebSource();
 for (const token of [
   '/api/admin-web-read?section=control_surface',
   'renderControlStatusBar()',

@@ -38,8 +38,8 @@
 | STEP590F | `queries.js` repository decomposition with façade | Source implemented; R1 production recovery required | 16/20 | 328/328 public exports; internal ESM linkage recovered in STEP590F_R1 |
 | STEP590G1 | Cron tick decomposition | Production accepted | 16/20 | 12/12 exports, 4/4 jobs, bounded audit-flush production canary PASS |
 | STEP590G2 | QStash broadcast delivery worker decomposition | Production accepted | 18/20 | Signature/raw-body/retry/receipt/no-resend parity; function budget unchanged |
-| STEP590G3 | Monetization and official publish workers | Source implemented; operator gate pending | 18/20 | Payment/publish lock, dedup and retry-chain parity |
-| STEP590H | Admin-web client decomposition | Yes, UI parity | 11/20 | One asset, route/state/view parity, browser acceptance |
+| STEP590G3 | Monetization and official publish workers | Production accepted | 18/20 | Payment/publish lock, dedup and retry-chain parity |
+| STEP590H | Admin-web client decomposition | Source complete; browser/production gate pending | 11/20 | One public entry, route/state/view parity, browser acceptance |
 | STEP590I | Architecture gates | Tooling | 10/20 | Gates block duplicate ownership/cycles/forbidden imports |
 | STEP590J | Legacy façade and dead-code retirement | Yes | 14/20 | No legacy consumers; complete regression and production canary |
 
@@ -79,12 +79,13 @@ STEP590 does not claim completion from smaller files alone. Completion requires 
 
 
 
-## Current program position — STEP590G3
+## Current program position — STEP590H
 
 - STEP590F_R1 production recovery accepted at commit `2226269`, package `1.3.33`.
 - STEP590G1 cron tick decomposition production accepted at commit `2fb27008e7f70ed194923df687dd68e6845f2521`, package `1.3.34`.
 - STEP590G2 QStash broadcast delivery worker decomposition production accepted at commit `e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a`, package `1.3.35`.
-- STEP590G3 monetization and official publish worker decomposition is source-complete at package `1.3.36`; operator dependency/deploy/runtime gate pending.
+- STEP590G3 monetization and official publish worker decomposition is production accepted at commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`, package `1.3.36`.
+- STEP590H admin-web client decomposition is source-complete at package `1.3.37`; operator dependency, deploy and desktop/mobile browser acceptance remain pending.
 
 - STEP590A architecture baseline: complete;
 - STEP590B executable router: deployed and operator canary accepted;

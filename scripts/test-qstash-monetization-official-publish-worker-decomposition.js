@@ -26,9 +26,9 @@ check(manifest.targetPackageVersion === '1.3.36', 'target package mismatch');
 
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
-equal(pkg.version, '1.3.36', 'package.json version mismatch');
-equal(lock.version, '1.3.36', 'package-lock version mismatch');
-equal(lock.packages?.['']?.version, '1.3.36', 'package-lock root version mismatch');
+check(/^1\.3\.(?:3[6-9]|[4-9]\d|\d{3,})$/.test(pkg.version), 'package.json version must be >= 1.3.36');
+equal(lock.version, pkg.version, 'package-lock version mismatch');
+equal(lock.packages?.['']?.version, pkg.version, 'package-lock root version mismatch');
 
 const expectedFacades = new Map([
   ['api/qstash/monetization-retry.js', "export { config, default } from '../../src/jobs/monetizationRetry/worker.js';"],

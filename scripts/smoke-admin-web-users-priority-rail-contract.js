@@ -2,6 +2,7 @@ import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -20,7 +21,7 @@ for (const token of [
 const apiRead = read('api/admin-web-read.js');
 assert.ok(apiRead.includes('sort_by'), 'admin-web read API must include sort_by for users surfaces');
 
-const webJs = read('scripts/admin-web.js');
+const webJs = readAdminWebSource();
 for (const token of [
   'Сортировка и приоритет',
   'data-users-priority',

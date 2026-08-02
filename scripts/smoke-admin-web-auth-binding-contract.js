@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -19,7 +20,7 @@ const callbackOwnership = read('src/bot/router/callbackOwnership.js');
 const common = read('src/lib/adminWeb/common.js');
 const config = read('src/lib/config.js');
 const registry = read('src/bot/actionRegistry.js');
-const web = read('scripts/admin-web.js');
+const web = readAdminWebSource();
 const controls = read('src/lib/operatorControls.js');
 
 for (const token of [

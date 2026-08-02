@@ -1,15 +1,22 @@
-# Current New-Chat Handoff — STEP590G3
+# Current New-Chat Handoff — STEP590H
 
-- Canonical baseline: production-accepted STEP590G2, operator commit `e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a`, package `1.3.35`.
-- Current source result: package `1.3.36`.
-- Existing QStash URLs and Vercel function count remain unchanged; four API files are compatibility handlers with raw-body config and default-handler parity.
-- Workers: `src/jobs/monetizationRetry/worker.js`, `src/jobs/officialPublish/deliverWorker.js`, `src/jobs/officialPublish/verifyWorker.js`, `src/jobs/qstashPing/worker.js`.
-- Payment validation/fallback, monetization lock release, autoheal chain, official publish reserve/deliver/verify/self-heal, QStash signature/dedup/retries and ping breadcrumbs are unchanged.
-- No SQL, migration, ENV, callback, Telegram-copy or function-budget change.
-- QA: G3 99 assertions PASS; compatibility and real ESM graph 4/4 PASS; monetization/official-publish focused regressions PASS; G2 108, G1 162 and repository regression 278 PASS; runtime proof PASS; critical spine 6/6 PASS.
-- Artifact-side `npm ci` is NOT VERIFIED because the internal mirror returns 404 for `xtend@4.0.2`; clean operator install/audit is required.
-- Operator evidence required: commit/push, Vercel Ready, unsigned signature boundaries, signed ping and signed monetization unknown-action canaries.
-- Do not begin STEP590H until G3 production acceptance.
+- Baseline: production-accepted STEP590G3 commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`, package `1.3.36`.
+- Result: package `1.3.37`; `/scripts/admin-web.js` remains the single public module entry.
+- Six bounded client modules own Overview, Users, Payments, Communications, Founder and Runtime view/state implementation.
+- Shared auth, route resolution, render orchestration and event binding remain in the compatibility entry.
+- Exact moved-source SHA parity: 2,636 lines; baseline entry 4,667 lines → current entry 2,228 lines.
+- Backend APIs, auth policy, SQL, migrations, ENV, Telegram, CSS and function count remain unchanged.
+- QA: H 154 assertions; compatibility entry PASS; real ESM graph/login render PASS; 57 admin-web contracts PASS; G3/G2/G1/F regressions PASS; critical spine 6/6 and source preflight PASS.
+- Artifact-side clean npm install remains blocked by internal mirror `xtend@4.0.2` 404; operator dependency/audit and browser evidence remain required.
+- Operator acceptance: commit/push, Vercel Ready, production login, Overview/Users/Runtime/Payments/Communications/Help/Founder navigation, desktop/mobile browser acceptance.
+- Do not begin STEP590I until STEP590H acceptance.
+
+## Previous Handoff — STEP590G3 Production Acceptance
+
+- Commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`, package `1.3.36`, clean worktree and HEAD/origin parity.
+- Four unsigned QStash handlers returned `401 signature_missing`.
+- Signed ping and monetization unknown-action canaries each reached `CREATED → ACTIVE → DELIVERED` with HTTP 200.
+- Final verdict: `PRODUCTION_ACCEPT_STEP590G3_MONETIZATION_AND_OFFICIAL_PUBLISH_WORKERS_DECOMPOSITION`.
 
 ## Previous Handoff — STEP590G2 Production Acceptance
 

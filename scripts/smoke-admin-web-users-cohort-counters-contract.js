@@ -2,6 +2,7 @@ import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -26,7 +27,7 @@ for (const token of [
   assert.ok(readModels.includes(token), `readModels must include ${token}`);
 }
 
-const webJs = read('scripts/admin-web.js');
+const webJs = readAdminWebSource();
 for (const token of [
   'Маленькие счётчики по когортам',
   'usersCohortCounterCards',

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -8,7 +9,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const readModels = read('src/lib/adminWeb/readModels.js');
 assert.ok(readModels.includes('runtimeWarnings: Number(runtime?.summaryCards?.check || 0) || 0,'), 'overview summary must derive runtimeWarnings from runtime.summaryCards.check');
 
-const webJs = read('scripts/admin-web.js');
+const webJs = readAdminWebSource();
 for (const token of [
   'function overviewRuntimeWarnings(model = {}) {',
   "const summaryCheck = Number(runtime?.summaryCards?.check || 0) || 0;",

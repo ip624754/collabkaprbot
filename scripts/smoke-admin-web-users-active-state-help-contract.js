@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-const webJs = read('scripts/admin-web.js');
+const webJs = readAdminWebSource();
 for (const token of [
   "if (parts[1] === 'help') return { page: 'help' };",
   "label: 'Помощь'",
@@ -37,7 +38,7 @@ for (const token of [
 }
 
 const html = read('admin.html');
-assert.ok(html.includes('step545'), 'admin shell asset URLs must be cache-busted to step545');
+assert.ok(html.includes('step590h'), 'admin shell asset URLs must be cache-busted to step590h');
 
 const currentState = read('docs/00_CURRENT_STATE.md');
 assert.ok(currentState.includes('STEP535D'), 'current state must mention STEP535D');

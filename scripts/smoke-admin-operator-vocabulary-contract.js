@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,7 +13,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const bot = read('src/bot/bot.js');
 const ops = read('src/bot/adminOpsText.js');
-const web = read('scripts/admin-web.js');
+const web = readAdminWebSource();
 const models = read('src/lib/adminWeb/readModels.js');
 const telegram = read('src/lib/adminWeb/telegram.js');
 const auth = read('api/admin-web-auth.js');

@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-const js = read('scripts/admin-web.js');
+const js = readAdminWebSource();
 const authApi = read('api/admin-web-auth.js');
 const auth = read('src/lib/adminWeb/auth.js');
 const telegram = read('src/lib/adminWeb/telegram.js');

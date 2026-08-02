@@ -1,12 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const css = read('styles/admin-web.css');
-const js = read('scripts/admin-web.js');
+const js = readAdminWebSource();
 const html = read('admin.html');
 
 for (const token of [
@@ -28,6 +29,6 @@ for (const token of [
   assert.ok(js.includes(token), `sidebar nav JS must include ${token}`);
 }
 
-assert.ok(html.includes('step545'), 'admin shell asset cache-bust must be step545');
+assert.ok(html.includes('step590h'), 'admin shell asset cache-bust must be step590h');
 
 console.log('✅ smoke admin-web sidebar nav contract OK');

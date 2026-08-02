@@ -1,7 +1,24 @@
+## STEP590H — Admin Web Frontend Decomposition (2026-08-02)
+
+- canonical baseline: production-accepted STEP590G3, operator commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`, package `1.3.36`;
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED AND REGRESSION QA PASS / OPERATOR BROWSER AND PRODUCTION GATE PENDING;
+- package: `1.3.37`;
+- `admin.html` continues loading one public module entry `/scripts/admin-web.js`; cache-bust advanced to `20260802-step590h`;
+- the 4,667-line client was decomposed while retaining shared auth/routing/render/binding orchestration in the entry; entry is now 2,228 lines;
+- exact moved implementation totals 2,636 source lines across `scripts/admin-web/{overview,users,payments,comms,founder,runtime}.js`;
+- module dependencies are explicit and bounded; exact moved-source SHA parity is recorded in `docs/architecture/STEP590H_ADMIN_WEB_MODULE_MANIFEST.json`;
+- existing admin source contracts use `scripts/lib/admin-web-source-reader.js` to validate the complete entry/module graph;
+- backend APIs, auth policy, SQL, migrations, ENV, Telegram flows, CSS and Vercel function count: unchanged;
+- verified QA: 154 H assertions, compatibility entry PASS, real ESM graph/login render PASS, 57 admin-web contracts PASS, G3 99 / G2 108 / G1 162 / F 278 regressions PASS, critical spine 6/6 PASS, `preflight:source` PASS and PATCH/HOTFIX/FULL exact parity PASS;
+- artifact-side clean `npm ci` is blocked by internal mirror 404 for `xtend@4.0.2`; operator clean install/audit remains required;
+- operator gates: commit/push, Vercel Ready, production `/admin` login and all-section desktop/mobile browser acceptance;
+- STEP590I must not start before STEP590H production/browser acceptance.
+
+
 ## STEP590G3 — Monetization and Official Publish Workers Decomposition (2026-08-02)
 
 - canonical baseline: production-accepted STEP590G2, operator commit `e88ad931bf49c5bb9ebd55d134411d8aaf3a2e9a`, package `1.3.35`;
-- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED AND REGRESSION QA PASS / OPERATOR PRODUCTION GATE PENDING;
+- status: PRODUCTION ACCEPTED at operator commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`;
 - package: `1.3.36`;
 - four existing QStash API files are thin compatibility handlers preserving the same URLs, default exports, `bodyParser: false`, method guards and QStash signature boundaries;
 - implementation moved without business-logic rewrite to `src/jobs/monetizationRetry/worker.js`, `src/jobs/officialPublish/deliverWorker.js`, `src/jobs/officialPublish/verifyWorker.js` and `src/jobs/qstashPing/worker.js`;
@@ -11,8 +28,9 @@
 - SQL/migrations/ENV/API routes/callback keys/Telegram copy/function count: unchanged;
 - verified focused QA: 99 G3 assertions, compatibility handlers PASS, real ESM route graph 4/4 PASS, monetization/official-publish regression contracts PASS, STEP590G2 108 PASS, STEP590G1 162 PASS, STEP590F repository regression 278 PASS, runtime proof spine PASS and portable critical spine 6/6 PASS;
 - artifact-side clean `npm ci` is blocked by the internal package mirror returning 404 for `xtend@4.0.2`; operator must rerun clean install/audit;
-- operator-side gates: clean `npm ci`, `npm audit`, commit/push, Vercel Ready, four unsigned `signature_missing` boundaries, signed QStash ping and signed monetization unknown-action no-side-effect canaries;
-- STEP590H must not start before G3 production acceptance.
+- production evidence: clean worktree and HEAD/origin parity; four unsigned routes returned `401 signature_missing`; signed QStash ping and monetization unknown-action canaries each converged `CREATED → ACTIVE → DELIVERED` with HTTP 200;
+- final verdict: `PRODUCTION_ACCEPT_STEP590G3_MONETIZATION_AND_OFFICIAL_PUBLISH_WORKERS_DECOMPOSITION`;
+- STEP590H is the active source step.
 
 
 ## STEP590G2 — QStash Broadcast Delivery Worker Decomposition (2026-08-02)

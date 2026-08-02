@@ -1,15 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readAdminWebSource } from './lib/admin-web-source-reader.js';
 
 const ROOT = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const html = read('admin.html');
 const css = read('styles/admin-web.css');
-const js = read('scripts/admin-web.js');
+const js = readAdminWebSource();
 
-assert.ok(html.includes('step545'), 'admin asset URLs must be cache-busted to step545');
+assert.ok(html.includes('step590h'), 'admin asset URLs must be cache-busted to step590h');
 assert.ok(js.includes('data-mobile-nav-toggle'), 'mobile nav toggle hook must stay present');
 for (const token of [
   'html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: clip; }',
