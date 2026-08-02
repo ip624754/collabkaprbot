@@ -1,10 +1,4 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const ROOT = path.resolve(__dirname, '..');
+import { readBroadcastDeliveryImplementationSource } from './lib/broadcast-delivery-source-reader.js';
 
 function fail(msg) {
   // eslint-disable-next-line no-console
@@ -17,14 +11,7 @@ function ok(msg) {
   console.log(`[broadcast-overload-invariants] OK: ${msg}`);
 }
 
-const target = path.join(ROOT, 'api', 'qstash', 'broadcast-deliver.js');
-if (!fs.existsSync(target)) {
-  // eslint-disable-next-line no-console
-  console.warn('[broadcast-overload-invariants] api/qstash/broadcast-deliver.js not found (skipping)');
-  process.exit(0);
-}
-
-const src = fs.readFileSync(target, 'utf8');
+const src = readBroadcastDeliveryImplementationSource();
 
 // 1) Must set Retry-After headers via helper
 if (!src.includes('function setQStashRetryAfterHeaders')) {
@@ -77,11 +64,11 @@ function checkResponder(fnName, startNeedle, endNeedle) {
 
 checkResponder(
   'respondDbOverload',
-  'async function respondDbOverload',
-  'async function respondDbOverloadFuse'
+  'export async function respondDbOverload',
+  'export async function respondDbOverloadFuse'
 );
 
-checkResponder('respondDbOverloadFuse', 'async function respondDbOverloadFuse', 'export default');
+checkResponder('respondDbOverloadFuse', 'export async function respondDbOverloadFuse', null);
 
 if (process.exitCode) process.exit(process.exitCode);
 // eslint-disable-next-line no-console

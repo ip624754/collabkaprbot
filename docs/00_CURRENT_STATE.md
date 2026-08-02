@@ -1,7 +1,23 @@
+## STEP590G2 — QStash Broadcast Delivery Worker Decomposition (2026-08-02)
+
+- canonical baseline: production-accepted STEP590G1, operator commit `2fb27008e7f70ed194923df687dd68e6845f2521`, package `1.3.34`;
+- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED AND REGRESSION QA PASS / OPERATOR PRODUCTION GATE PENDING;
+- package: `1.3.35`;
+- `api/qstash/broadcast-deliver.js` reduced from 923 implementation lines to a 7-line compatibility route preserving the same URL, default handler and `bodyParser: false`;
+- bounded implementation lives under `src/jobs/broadcastDelivery/`: payload, cooldown, DB overload fuse, quarantine, hard-skip, receipt observability and delivery orchestration;
+- QStash signature verification, raw-body parsing, Retry-After, DB overload/local fuse, cooldown, hard-skip, 429 quarantine, DB claim, Telegram receipt and delivery-unknown/no-automatic-resend semantics are preserved;
+- SQL/migrations/ENV/API routes/callback keys/Telegram copy/function count: unchanged;
+- verified QA: 108 G2 assertions, compatibility handler PASS, real ESM route graph + 405 guard PASS, broadcast overload/local-fuse/429/unknown-state contracts PASS, critical spine 6/6 PASS, `preflight:source` PASS, function budget 11 unchanged;
+- previous STEP590G1 and STEP590F repository decomposition regressions PASS;
+- temporary execution-only dependency shims were removed before packaging;
+- operator-side gates: clean `npm ci`, `npm audit`, commit/push, Vercel Ready, unauthorized signature boundary and a bounded signed QStash delivery proof without duplicate Telegram side effects;
+- STEP590G3 must not start before G2 production acceptance.
+
+
 ## STEP590G1 — Cron Tick Decomposition with Compatibility Façade (2026-08-02)
 
 - canonical baseline: production-accepted STEP590F_R1, operator commit `2226269`, package `1.3.33`;
-- status: SOURCE IMPLEMENTATION COMPLETE / FOCUSED AND REGRESSION QA PASS / OPERATOR PRODUCTION GATE PENDING;
+- status: PRODUCTION ACCEPTED at operator commit `2fb27008e7f70ed194923df687dd68e6845f2521`;
 - package: `1.3.34`;
 - `src/bot/cron.js` reduced from 2,216 implementation lines to a 16-line compatibility façade with 12/12 exports;
 - bounded implementation lives under `src/bot/jobs/`: cron runtime, giveaway, broadcast, Instagram verification and audit flush;
@@ -10,8 +26,8 @@
 - SQL/migrations/ENV/API routes/callback keys/Telegram copy/function count: unchanged;
 - verified QA: 162 G1 assertions, façade contract PASS, real ESM façade linkage 12/12 PASS, queries regression 263 assertions, critical spine 6/6 PASS, `preflight:source` PASS, function budget 11 unchanged;
 - temporary execution-only dependency shims were removed before packaging;
-- operator-side gates: clean `npm ci`, `npm audit`, commit/push, Vercel Ready and bounded production cron-health evidence;
-- STEP590G2 must not start before G1 production acceptance.
+- production evidence: clean worktree and HEAD/origin parity; `/api/webhook` and unauthenticated `/api/cron_router` return `401`; authorized `audit-flush-tick` returned HTTP 200 with `status=ok`, `flushed=0`, `dropped=0`;
+- STEP590G2 is the active source step.
 
 
 ## STEP590F_R1 — Applications/Barters Internal Export Recovery (2026-08-02)

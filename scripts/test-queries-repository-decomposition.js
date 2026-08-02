@@ -147,7 +147,7 @@ for (const rel of [
   'src/bot/jobs/instagramVerificationJob.js',
   'src/lib/officialPublishVerify.js',
   'api/qstash/monetization-retry.js',
-  'api/qstash/broadcast-deliver.js',
+  'src/jobs/broadcastDelivery/delivery.js',
 ]) {
   assert(read(rel).includes('queries.js'), `${rel}: expected compatibility-facade import missing`);
 }

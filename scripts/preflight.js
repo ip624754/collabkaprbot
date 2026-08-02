@@ -224,6 +224,7 @@ function buildNodeCheckList() {
   scanDir(path.join("src", "bot", "router"), { maxDepth: 2 });
   scanDir(path.join("src", "bot", "payments"), { maxDepth: 2 });
   scanDir(path.join("src", "bot", "jobs"), { maxDepth: 2 });
+  scanDir(path.join("src", "jobs"), { maxDepth: 3 });
   scanDir(path.join("src", "db", "repositories"), { maxDepth: 1 });
   scanDir(path.join("src", "lib"), { maxDepth: 1 });
   scanDir("scripts", {
@@ -378,6 +379,9 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): cron tick decomposition executable tests", "test:cron-tick-decomposition"],
   ["Preflight (source-only): cron compatibility façade contract", "smoke:cron-compatibility-facade-contract"],
   ["Preflight (source-only): cron real ESM linkage contract", "smoke:cron-esm-linkage-contract"],
+  ["Preflight (source-only): QStash broadcast delivery decomposition executable tests", "test:qstash-broadcast-delivery-worker-decomposition"],
+  ["Preflight (source-only): QStash broadcast compatibility handler contract", "smoke:qstash-broadcast-delivery-compatibility-handler-contract"],
+  ["Preflight (source-only): QStash broadcast real ESM linkage contract", "smoke:qstash-broadcast-delivery-esm-linkage-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

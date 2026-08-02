@@ -1,0 +1,120 @@
+{
+  "step": "STEP590G2",
+  "name": "QSTASH_BROADCAST_DELIVERY_WORKER_DECOMPOSITION",
+  "baseline": {
+    "operatorCommit": "2fb27008e7f70ed194923df687dd68e6845f2521",
+    "packageVersion": "1.3.34",
+    "routePath": "api/qstash/broadcast-deliver.js",
+    "routeLineCount": 923,
+    "routeSha256": "c084ef7af005e7058d4618fa01b51bf4515d17055dd063b6dd0e9ae29478033d"
+  },
+  "targetPackageVersion": "1.3.35",
+  "facadePath": "api/qstash/broadcast-deliver.js",
+  "indexPath": "src/jobs/broadcastDelivery/index.js",
+  "implementationRoot": "src/jobs/broadcastDelivery",
+  "modules": [
+    {
+      "name": "payload",
+      "file": "src/jobs/broadcastDelivery/payload.js",
+      "role": "raw request body and header parsing",
+      "sha256": "4e54b7a31df390e1b1a5bc73193e7581ff7aed0566ee5fa411da80ddb807f1b5",
+      "ownedSymbols": [
+        "getHeader",
+        "readRawBody"
+      ]
+    },
+    {
+      "name": "cooldown",
+      "file": "src/jobs/broadcastDelivery/cooldown.js",
+      "role": "warm-instance cooldown memo and Redis-backed cooldown read",
+      "sha256": "82d73277badde89dbb41be17f8b4814de9a6470d5363b7edcd17d47b7d596004",
+      "ownedSymbols": [
+        "getCooldownMemo",
+        "setCooldownMemo",
+        "getCooldownUntilFast"
+      ]
+    },
+    {
+      "name": "dbOverload",
+      "file": "src/jobs/broadcastDelivery/dbOverload.js",
+      "role": "DB overload classification, Retry-After and local/Redis fuse",
+      "sha256": "d2ce146af0111f263f21a8bd7f46aa610127f543d707135316ac95eecd2db4ee",
+      "ownedSymbols": [
+        "getDbBackoffSec",
+        "getDbBackoffJitterSec",
+        "randIntInclusive",
+        "dbOverloadFuseKey",
+        "getDbOverloadFuseTtlSec",
+        "localDbDegradedUntilMs",
+        "getLocalDbOverloadFuseTtlMs",
+        "getLocalDbOverloadFuseUntilMs",
+        "armLocalDbOverloadFuse",
+        "isDbOverloadError",
+        "setQStashRetryAfterHeaders",
+        "respondDbOverload",
+        "respondDbOverloadFuse"
+      ]
+    },
+    {
+      "name": "quarantine",
+      "file": "src/jobs/broadcastDelivery/quarantine.js",
+      "role": "per-recipient quarantine and atomic distinct-429 accounting",
+      "sha256": "349f058442927cd38e7b5ce1ad2e2040b3918cb76734c68107367a158a4fa523",
+      "ownedSymbols": [
+        "broadcastQuarantineCountKey",
+        "resetBroadcastQuarantineCount",
+        "bumpBroadcastQuarantineCount",
+        "broadcast429DistinctUsersKey",
+        "getGlobal429WindowSec",
+        "getGlobal429Threshold",
+        "bumpBroadcast429DistinctUsers",
+        "getQuarantineThreshold",
+        "getQuarantineSec"
+      ]
+    },
+    {
+      "name": "hardSkip",
+      "file": "src/jobs/broadcastDelivery/hardSkip.js",
+      "role": "permanent dead-chat hard-skip handling",
+      "sha256": "39d5bc9fa9324661c7cbdb1316f5d00346934e03801a0394c21349f5c98bb022",
+      "ownedSymbols": [
+        "handleBroadcastHardSkip"
+      ]
+    },
+    {
+      "name": "receipt",
+      "file": "src/jobs/broadcastDelivery/receipt.js",
+      "role": "delivery-unknown operator observability",
+      "sha256": "f942a62c0eca3b832c0bc79536f5e0079eb8f38fd5b9c8cb75dfbef97ff50fac",
+      "ownedSymbols": [
+        "emitBroadcastDeliveryUnknown"
+      ]
+    },
+    {
+      "name": "delivery",
+      "file": "src/jobs/broadcastDelivery/delivery.js",
+      "role": "signature verification, DB claim, Telegram delivery and receipt orchestration",
+      "sha256": "ee7cdd9b6633c3922dde685c4ab7bfac9317ffdc14417e98b10910135e4f7c3c",
+      "ownedSymbols": [
+        "handler"
+      ]
+    }
+  ],
+  "routeContract": {
+    "method": "POST",
+    "bodyParser": false,
+    "pathname": "/api/qstash/broadcast-deliver"
+  },
+  "invariants": {
+    "newApiRoutes": 0,
+    "newEnv": 0,
+    "newMigrations": 0,
+    "functionBudgetChange": 0,
+    "qstashSignatureVerification": true,
+    "rawBodyParsing": true,
+    "retryAfterPreserved": true,
+    "dbOverloadFusePreserved": true,
+    "unknownDeliveryNoAutomaticResend": true,
+    "telegramReceiptPersistencePreserved": true
+  }
+}

@@ -1,16 +1,22 @@
-# Current New-Chat Handoff — STEP590G1
+# Current New-Chat Handoff — STEP590G2
 
-- Canonical baseline: production-accepted STEP590F_R1, operator commit `2226269`, package `1.3.33`.
-- Current source result: package `1.3.34`.
-- `src/bot/cron.js` is a thin compatibility façade preserving exactly 12 exports.
-- Runtime, giveaway, broadcast, Instagram verification and audit-flush implementations live under `src/bot/jobs/`.
-- `api/cron_router.js` is byte-identical and preserves all four job names.
-- Exact moved-body/source contracts preserve Redis locks/TTL, giveaway transaction/advisory lock, broadcast cooldown/hard-skip, failure classification and duplicate-alert suppression.
+- Canonical baseline: production-accepted STEP590G1, operator commit `2fb27008e7f70ed194923df687dd68e6845f2521`, package `1.3.34`.
+- Current source result: package `1.3.35`.
+- `api/qstash/broadcast-deliver.js` is a thin compatibility route preserving the existing endpoint, default export and raw-body config.
+- Bounded delivery implementation lives under `src/jobs/broadcastDelivery/` across payload, cooldown, DB overload, quarantine, hard-skip, receipt and orchestration modules.
+- QStash signature, raw-body, dedup/retry, Retry-After, DB overload fuse, cooldown, hard-skip, Telegram receipt and delivery-unknown/no-resend semantics are unchanged.
 - No SQL, migration, ENV, API route, callback key, Telegram copy or function-count change.
-- QA: G1 162 assertions PASS, façade/real ESM linkage PASS, queries regression 263 assertions PASS, critical spine 6/6 PASS, source preflight PASS, function budget 11 unchanged.
+- QA: G2 108 assertions PASS; compatibility and real ESM route linkage PASS; broadcast overload/local-fuse/429/unknown-state contracts PASS; critical spine 6/6 PASS; source preflight PASS; function budget remains 11.
 - Temporary execution-only shims were removed before packaging.
-- Operator evidence still required: clean `npm ci`, `npm audit`, commit/push, Vercel Ready and bounded production cron-health evidence.
-- Do not begin STEP590G2 until G1 production acceptance.
+- Operator evidence still required: clean dependency install/audit, commit/push, Vercel Ready, production signature boundary and one bounded signed worker execution.
+- Do not begin STEP590G3 until G2 production acceptance.
+
+## Previous Handoff — STEP590G1 Production Acceptance
+
+- Commit `2fb27008e7f70ed194923df687dd68e6845f2521`, package `1.3.34`, clean worktree and HEAD/origin parity.
+- `src/bot/cron.js` is a 12-export compatibility façade; `api/cron_router.js` preserves 4/4 jobs.
+- Production module/auth boundaries returned `401` without secret; authorized `audit-flush-tick` returned HTTP 200 and `status=ok`.
+- Final verdict: `PRODUCTION_ACCEPT_STEP590G1_CRON_TICK_DECOMPOSITION_WITH_COMPATIBILITY_FACADE`.
 
 ## Previous Handoff — STEP590F_R1 Production Recovery
 

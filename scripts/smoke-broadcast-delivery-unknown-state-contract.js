@@ -1,5 +1,6 @@
 import { readQueryImplementationSource } from './lib/query-source-reader.js';
 import { readCronImplementationSource } from './lib/cron-source-reader.js';
+import { readBroadcastDeliveryImplementationSource } from './lib/broadcast-delivery-source-reader.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,7 +26,7 @@ assert.ok(
   'stale sending must not be automatically reclaimed'
 );
 
-const qstash = read('api/qstash/broadcast-deliver.js');
+const qstash = readBroadcastDeliveryImplementationSource(ROOT);
 for (const token of [
   'persistBroadcastSentOrUnknown',
   'persistBroadcastRejectedOrUnknown',

@@ -1,24 +1,14 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readBroadcastDeliveryImplementationSource } from './lib/broadcast-delivery-source-reader.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const ROOT = path.resolve(__dirname, '..');
+const qstashSrc = readBroadcastDeliveryImplementationSource();
 
-const redisSrc = fs.readFileSync(path.join(ROOT, 'src', 'lib', 'redis.js'), 'utf8');
-const qstashSrc = fs.readFileSync(path.join(ROOT, 'api', 'qstash', 'broadcast-deliver.js'), 'utf8');
-
-assert.ok(redisSrc.includes('export async function saddCardWithExpire('), 'redis helper saddCardWithExpire must exist');
-assert.ok(/redis\.call\('SADD'/.test(redisSrc), 'saddCardWithExpire must use Lua SADD');
-assert.ok(/redis\.call\('EXPIRE'/.test(redisSrc), 'saddCardWithExpire must use Lua EXPIRE');
-assert.ok(/return redis\.call\('SCARD'/.test(redisSrc), 'saddCardWithExpire must return SCARD from Lua');
-
-assert.ok(qstashSrc.includes('saddCardWithExpire'), 'broadcast deliver must import/use saddCardWithExpire');
-assert.ok(/const n = await saddCardWithExpire\(key, String\(userId\), ttlSec\);/.test(qstashSrc), 'broadcast deliver must use atomic helper for 429 distinct users');
-assert.ok(!/await redis\.sadd\(key, String\(userId\)\);\s*await redis\.expire\(key, ttlSec\);/s.test(qstashSrc), 'broadcast deliver must not use raw redis.sadd + redis.expire sequence');
+assert.ok(/redis\.call\('SADD'/.test(qstashSrc), '429 distinct-user accounting must use atomic Lua SADD');
+assert.ok(/redis\.call\('EXPIRE'/.test(qstashSrc), '429 distinct-user accounting must set TTL in the same Lua script');
+assert.ok(/return redis\.call\('SCARD'/.test(qstashSrc), '429 distinct-user accounting must return SCARD atomically');
+assert.ok(/const n = await redis\.eval\(lua, \[key\], \[String\(userId\), String\(ttlSec\)\]\);/.test(qstashSrc), 'broadcast delivery must execute the bounded atomic Lua script');
+assert.ok(!/await redis\.sadd\(key, String\(userId\)\);\s*await redis\.expire\(key, ttlSec\);/s.test(qstashSrc), 'broadcast delivery must not use split SADD/EXPIRE calls');
 
 console.log('✅ broadcast 429 atomicity contract OK');

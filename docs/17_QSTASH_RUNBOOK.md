@@ -9,7 +9,7 @@
 
 Сейчас QStash используется для **Broadcast fan-out**:
 - cron `broadcast_tick` только **энкьюит** delivery‑jobs
-- доставка делается воркером `POST /api/qstash/broadcast-deliver`
+- доставка делается воркером `POST /api/qstash/broadcast-deliver`; endpoint остаётся compatibility route, implementation находится в `src/jobs/broadcastDelivery/`
 - идемпотентность держим через **DB guard** (`broadcast_sent_log`) + QStash dedup-id
 
 ---

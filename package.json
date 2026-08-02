@@ -1,6 +1,6 @@
 {
   "name": "collabgirls-bot",
-  "version": "1.3.34",
+  "version": "1.3.35",
   "private": true,
   "type": "module",
   "engines": {
@@ -220,7 +220,10 @@
     "smoke:queries-compatibility-facade-contract": "node scripts/smoke-queries-compatibility-facade-contract.js",
     "test:cron-tick-decomposition": "node scripts/test-cron-tick-decomposition.js",
     "smoke:cron-compatibility-facade-contract": "node scripts/smoke-cron-compatibility-facade-contract.js",
-    "smoke:cron-esm-linkage-contract": "node scripts/smoke-cron-esm-linkage-contract.js"
+    "smoke:cron-esm-linkage-contract": "node scripts/smoke-cron-esm-linkage-contract.js",
+    "test:qstash-broadcast-delivery-worker-decomposition": "node scripts/test-qstash-broadcast-delivery-worker-decomposition.js",
+    "smoke:qstash-broadcast-delivery-compatibility-handler-contract": "node scripts/smoke-qstash-broadcast-delivery-compatibility-handler-contract.js",
+    "smoke:qstash-broadcast-delivery-esm-linkage-contract": "node scripts/smoke-qstash-broadcast-delivery-esm-linkage-contract.js"
   },
   "dependencies": {
     "@upstash/qstash": "^2.7.5",

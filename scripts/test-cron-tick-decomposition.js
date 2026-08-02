@@ -45,9 +45,19 @@ assert(new Set(manifest.publicExports).size === 12, 'public cron exports must be
 
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
-assert(pkg.version === '1.3.34', 'package.json version mismatch');
-assert(lock.version === '1.3.34', 'package-lock root version mismatch');
-assert(lock.packages?.['']?.version === '1.3.34', 'package-lock packages root version mismatch');
+const versionParts = (value) => String(value || '').split('.').map((part) => Number(part) || 0);
+const versionAtLeast = (actual, minimum) => {
+  const a = versionParts(actual);
+  const b = versionParts(minimum);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if ((a[i] || 0) > (b[i] || 0)) return true;
+    if ((a[i] || 0) < (b[i] || 0)) return false;
+  }
+  return true;
+};
+assert(pkg.version === lock.version, 'package.json/package-lock version mismatch');
+assert(pkg.version === lock.packages?.['']?.version, 'package-lock packages root version mismatch');
+assert(versionAtLeast(pkg.version, manifest.targetPackageVersion), 'current package version predates STEP590G1 target');
 
 const facade = read(manifest.facadePath);
 assert(facade.split(/\r?\n/).length <= 24, 'cron compatibility façade is not thin');

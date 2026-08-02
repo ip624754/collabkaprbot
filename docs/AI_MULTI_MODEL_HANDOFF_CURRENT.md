@@ -1,14 +1,18 @@
-# Current New-Chat Handoff — STEP590G1
+# Current New-Chat Handoff — STEP590G2
 
-- Baseline: production-accepted STEP590F_R1 commit `2226269`, package `1.3.33`.
-- Result: package `1.3.34`; `src/bot/cron.js` is a 12-export compatibility façade.
-- Bounded runtime, giveaway, broadcast, Instagram verification and audit-flush modules live under `src/bot/jobs/`.
-- `api/cron_router.js` remains byte-identical with 4/4 jobs.
-- Exact moved-body/source contracts preserve locks, TTL, transactions, advisory locks, cooldown/hard-skip and failure-reporting semantics.
-- SQL, migrations, ENV, API routes, callbacks, Telegram copy and function count are unchanged.
-- QA: 162 G1 assertions, façade and real ESM linkage PASS, 263 queries regression assertions, critical spine 6/6, source preflight PASS.
-- Operator gates remain: clean dependency install/audit, commit/push, Vercel Ready and production cron-health evidence.
-- Next only after acceptance: STEP590G2 QStash Broadcast Delivery Worker Decomposition.
+- Baseline: production-accepted STEP590G1 commit `2fb27008e7f70ed194923df687dd68e6845f2521`, package `1.3.34`.
+- Result: package `1.3.35`; `api/qstash/broadcast-deliver.js` is a 7-line compatibility route.
+- Delivery runtime is split into seven bounded modules under `src/jobs/broadcastDelivery/`.
+- Existing URL, raw-body config, QStash signature verification, retry/dedup, DB overload fuse, cooldown/hard-skip, 429 quarantine and unknown-delivery no-resend semantics remain unchanged.
+- SQL, migrations, ENV, routes, callbacks, Telegram copy and function count are unchanged.
+- QA: 108 G2 assertions, compatibility/real ESM linkage PASS, critical spine 6/6 and source preflight PASS.
+- Operator gates remain: clean npm install/audit, commit/push, Vercel Ready and bounded signed production worker evidence.
+- Next only after acceptance: STEP590G3 Monetization and Official Publish Workers.
+
+## Previous Handoff — STEP590G1
+
+- Commit `2fb27008e7f70ed194923df687dd68e6845f2521`, package `1.3.34`, production accepted.
+- Cron façade 12/12 and router jobs 4/4; authorized `audit-flush-tick` production canary returned HTTP 200 with `status=ok`.
 
 ## Previous Handoff — STEP590F
 

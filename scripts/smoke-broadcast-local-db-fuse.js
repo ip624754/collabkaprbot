@@ -1,17 +1,14 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { readBroadcastDeliveryImplementationSource, readBroadcastDeliveryOrchestrationSource } from './lib/broadcast-delivery-source-reader.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const ROOT = path.resolve(__dirname, '..');
-const target = path.join(ROOT, 'api', 'qstash', 'broadcast-deliver.js');
-
-const src = fs.readFileSync(target, 'utf8');
+const src = readBroadcastDeliveryImplementationSource();
+const orchestration = readBroadcastDeliveryOrchestrationSource();
 
 function findIndex(needle) {
   return src.indexOf(needle);
+}
+function findOrchestrationIndex(needle) {
+  return orchestration.indexOf(needle);
 }
 
 function assertHas(needle, msg) {
@@ -26,17 +23,17 @@ assertHas('armLocalDbOverloadFuse();', 'Expected local fuse arming on Redis fuse
 assertHas("where: 'local_fuse_precheck'", 'Expected local fuse precheck response marker');
 assertHas('local_fuse: Boolean(localFuse)', 'Expected response payload to flag local fuse');
 
-const idxLocalPrecheck = findIndex('const localFuseUntilMs = getLocalDbOverloadFuseUntilMs();');
-const idxRedisPrecheck = findIndex('const v = await redis.get(dbOverloadFuseKey());');
-const idxDbTouch = findIndex('bcRow = await db.getBroadcast(broadcastId);');
+const idxLocalPrecheck = findOrchestrationIndex('const localFuseUntilMs = getLocalDbOverloadFuseUntilMs();');
+const idxRedisPrecheck = findOrchestrationIndex('const v = await redis.get(dbOverloadFuseKey());');
+const idxDbTouch = findOrchestrationIndex('bcRow = await db.getBroadcast(broadcastId);');
 assert.ok(idxLocalPrecheck >= 0, 'Expected local fuse precheck in handler');
 assert.ok(idxRedisPrecheck >= 0, 'Expected Redis fuse precheck in handler');
 assert.ok(idxDbTouch >= 0, 'Expected DB getBroadcast touch in handler');
 assert.ok(idxLocalPrecheck < idxRedisPrecheck, 'Expected local fuse precheck before Redis fuse read');
 assert.ok(idxLocalPrecheck < idxDbTouch, 'Expected local fuse precheck before DB touch');
 
-const respondBlockStart = findIndex('async function respondDbOverload({');
-const respondBlockEnd = findIndex('async function respondDbOverloadFuse({');
+const respondBlockStart = findIndex('export async function respondDbOverload({');
+const respondBlockEnd = findIndex('export async function respondDbOverloadFuse({');
 assert.ok(respondBlockStart >= 0 && respondBlockEnd > respondBlockStart, 'Expected respondDbOverload block');
 const respondBlock = src.slice(respondBlockStart, respondBlockEnd);
 assert.match(
