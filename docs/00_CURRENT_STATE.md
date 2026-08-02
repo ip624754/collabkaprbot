@@ -1,3 +1,24 @@
+## STEP591 — Product and Operations Rebaseline (2026-08-02)
+
+- canonical parent: production-accepted STEP590I commit `10042b52519ee043e812ea541e34c0c5ff39248e`, package `1.3.38`;
+- STEP590 final verdict: `PRODUCTION_ACCEPT_STEP590I_ARCHITECTURE_GATES_AND_CLOSE_STEP590`;
+- STEP591 package: `1.3.39`;
+- scope is documentation and source-only validation; runtime code, APIs, functions, SQL, migrations, ENV, callbacks, Telegram copy, payments and queues are unchanged;
+- production health is `200 / ready / GO`; database, Redis and payment payload verification are `ok`;
+- admin web desktop/mobile is accepted; production control surface shows web login, payment intake, auto-apply, matching/featured and fan-out ON, while payment fallback and Founder Sale are OFF;
+- observed product snapshot: 21 users, 0 active offers, 0 active leads, 0 payment signals, 0 runtime warnings, 7 recent announcements and 22 sent outgoing items;
+- conclusion: technical platform is ready, but marketplace liquidity and monetization are not yet proven;
+- next step: `STEP592_FOUNDING_COHORT_AND_MARKETPLACE_LIQUIDITY`;
+- broad `STEP590J` cleanup is deferred and is not a launch blocker.
+
+Canonical references:
+
+- `docs/product/STEP591_PRODUCT_OPERATIONS_BASELINE.json`;
+- `docs/product/STEP591_PRODUCT_CAPABILITY_MATRIX.md`;
+- `docs/operations/STEP591_LAUNCH_READINESS_BASELINE.md`;
+- `docs/roadmap/STEP591_PRODUCT_OPERATIONS_ROADMAP.md`.
+
+
 ## STEP590I — Architecture Gates (2026-08-02)
 
 - canonical baseline: production-accepted STEP590H operator commit `0defa47`, package `1.3.37`;

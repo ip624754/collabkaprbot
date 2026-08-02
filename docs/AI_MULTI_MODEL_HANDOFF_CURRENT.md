@@ -1,3 +1,9 @@
+# STEP591 AI HANDOFF
+
+Canonical source baseline is STEP591 package `1.3.39` over parent commit `10042b52519ee043e812ea541e34c0c5ff39248e`. STEP590 architecture is accepted and closed. The next authorized work is founding-cohort marketplace liquidity. Use `docs/product/STEP591_PRODUCT_OPERATIONS_BASELINE.json` as the machine-readable truth boundary. Do not infer real marketplace liquidity or paid conversion from source completeness.
+
+---
+
 # Current New-Chat Handoff — STEP590I
 
 - Baseline: production-accepted STEP590H commit `0defa47`, package `1.3.37`.

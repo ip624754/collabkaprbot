@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const baseline = JSON.parse(read('docs/product/STEP591_PRODUCT_OPERATIONS_BASELINE.json'));
+const matrix = read('docs/product/STEP591_PRODUCT_CAPABILITY_MATRIX.md');
+const ops = read('docs/operations/STEP591_LAUNCH_READINESS_BASELINE.md');
+const roadmap = read('docs/roadmap/STEP591_PRODUCT_OPERATIONS_ROADMAP.md');
+const pkg = JSON.parse(read('package.json'));
+
+assert.equal(baseline.step, 'STEP591_PRODUCT_AND_OPERATIONS_REBASELINE');
+assert.equal(baseline.packageVersion, '1.3.39');
+assert.equal(pkg.version, baseline.packageVersion);
+assert.equal(baseline.productionSnapshot.health.systemStatus, 'GO');
+assert.equal(baseline.productionSnapshot.observedCounts.users, 21);
+assert.equal(baseline.productionSnapshot.observedCounts.activeOffers, 0);
+assert.equal(baseline.productionSnapshot.observedCounts.paymentSignals, 0);
+assert.equal(baseline.productionSnapshot.controlSurface.paymentFallback, 'off');
+assert.equal(baseline.productionSnapshot.controlSurface.founderSale, 'off');
+assert.ok(matrix.includes('Техническая готовность, включённость флага, реальное использование и коммерческое доказательство'));
+assert.ok(ops.includes('MARKETPLACE_LIQUIDITY_NOT_PROVEN'));
+assert.ok(ops.includes('BOUNDED_COHORT_LAUNCH_RECOMMENDED'));
+assert.ok(roadmap.includes('Supply → qualified demand → accepted deal → real payment → repeat usage'));
+assert.ok(roadmap.includes('STEP592 — Founding Cohort and Marketplace Liquidity'));
+assert.ok(roadmap.includes('STEP596 — Retention Metrics and Operations Cadence'));
+assert.ok(roadmap.includes('new API routes при function budget 11/12'));
+assert.ok(!roadmap.includes('framework migration as next step'));
+console.log('[step591-contract] PASS 17 assertions');

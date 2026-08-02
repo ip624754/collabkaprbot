@@ -1,3 +1,5 @@
+> **Closed program notice (STEP591):** STEP590 is production accepted and closed at commit `10042b52519ee043e812ea541e34c0c5ff39248e`. STEP590J broad retirement is deferred and is not a launch blocker. Current authorized roadmap is `docs/roadmap/STEP591_PRODUCT_OPERATIONS_ROADMAP.md`.
+
 # STEP590 — Modular Monolith Architecture Program
 
 **Baseline:** STEP588X7H1

@@ -1,0 +1,264 @@
+{
+  "step": "STEP591_PRODUCT_AND_OPERATIONS_REBASELINE",
+  "date": "2026-08-02",
+  "canonicalParentCommit": "10042b52519ee043e812ea541e34c0c5ff39248e",
+  "packageVersion": "1.3.39",
+  "programVerdict": "PRODUCTION_ACCEPT_STEP590I_ARCHITECTURE_GATES_AND_CLOSE_STEP590",
+  "truthBoundary": {
+    "source": "canonical STEP590I source plus executable contracts",
+    "production": "operator-provided health, browser screenshots and QStash/Vercel evidence from 2026-08-02",
+    "notClaimed": [
+      "real marketplace liquidity",
+      "real paid conversion",
+      "real official-channel paid placement",
+      "full recent creator-and-brand end-to-end launch cohort",
+      "Instagram OAuth readiness"
+    ]
+  },
+  "productionSnapshot": {
+    "health": {
+      "httpStatus": 200,
+      "status": "ready",
+      "systemStatus": "GO",
+      "database": "ok",
+      "redis": "ok",
+      "paymentPayloadVerification": "ok"
+    },
+    "controlSurface": {
+      "adminWeb": "on",
+      "paymentsAccept": "on",
+      "paymentsAutoApply": "on",
+      "matchingFeaturedAutoApply": "on",
+      "qstashFanout": "on",
+      "paymentFallback": "off",
+      "founderSale": "off"
+    },
+    "observedCounts": {
+      "users": 21,
+      "activeOffers": 0,
+      "activeLeads": 0,
+      "paymentSignals": 0,
+      "runtimeWarnings": 0,
+      "communicationDrafts": 0,
+      "recentAnnouncements": 7,
+      "outgoingSent": 22
+    },
+    "adminBrowser": {
+      "desktop": "accepted",
+      "mobile": "accepted",
+      "sections": [
+        "overview",
+        "users",
+        "runtime",
+        "payments",
+        "communications",
+        "help",
+        "founder"
+      ]
+    }
+  },
+  "capabilities": [
+    {
+      "id": "core_telegram",
+      "name": "Telegram entry, role selection and session flow",
+      "status": "production_reachable",
+      "evidence": "production webhook and admin-auth/browser acceptance; source contracts",
+      "launchMeaning": "ready for bounded cohort canary",
+      "gap": "complete fresh creator+brand journey not repeated during STEP591"
+    },
+    {
+      "id": "creator_workspace_offers",
+      "name": "Creator workspace, profile and offers",
+      "status": "source_verified_low_activity",
+      "evidence": "workspace/offer domains and contracts; production snapshot activeOffers=0",
+      "launchMeaning": "supply surface exists",
+      "gap": "seed supply and live offer density are absent"
+    },
+    {
+      "id": "brand_directory_team",
+      "name": "Brand profile, directory, team and manager flows",
+      "status": "source_verified",
+      "evidence": "STEP590E4A/E4B contracts and ownership",
+      "launchMeaning": "controlled beta ready",
+      "gap": "no recent production mutation canary in STEP591"
+    },
+    {
+      "id": "applications_deals_leads",
+      "name": "Applications, dialogs, deals and leads",
+      "status": "production_accepted",
+      "evidence": "STEP590E1 production acceptance plus lifecycle contracts",
+      "launchMeaning": "primary launch wedge",
+      "gap": "activeLeads=0 in current snapshot"
+    },
+    {
+      "id": "barter",
+      "name": "Barter offers and inbox",
+      "status": "controlled_beta",
+      "evidence": "source/operator acceptance; mutation canary previously waived",
+      "launchMeaning": "optional secondary use case",
+      "gap": "do not lead launch with it until core deal funnel has usage"
+    },
+    {
+      "id": "directory_public_workspace",
+      "name": "Directory search and public workspace",
+      "status": "source_verified",
+      "evidence": "STEP590E3C source/operator commit and contracts",
+      "launchMeaning": "discovery surface available",
+      "gap": "recent public-flow production canary not captured"
+    },
+    {
+      "id": "giveaways",
+      "name": "Giveaways and deterministic draw operations",
+      "status": "runtime_ready_bounded_canary_needed",
+      "evidence": "critical spine and production cron 200 evidence",
+      "launchMeaning": "optional engagement tool",
+      "gap": "no recent real draw/publish canary"
+    },
+    {
+      "id": "communications_broadcast",
+      "name": "Drafts, announcements, outbox and broadcast fan-out",
+      "status": "production_operational",
+      "evidence": "admin communications surface, 7 recent announcements, 22 sent, G2 QStash acceptance",
+      "launchMeaning": "usable for cohort activation",
+      "gap": "must preserve explicit-only sending and audience review"
+    },
+    {
+      "id": "payments_brand_plan",
+      "name": "Telegram Stars, Brand Plan, credits and unlock fulfillment",
+      "status": "technically_ready_commercially_unproven",
+      "evidence": "health GO/payment verification ok; payment accept and auto-apply ON; atomicity contracts",
+      "launchMeaning": "ready for one bounded real-payment acceptance",
+      "gap": "paymentSignals=0; no real paid conversion evidence in current cohort"
+    },
+    {
+      "id": "matching_featured",
+      "name": "Smart Matching and Featured paid add-ons",
+      "status": "enabled_no_demand_evidence",
+      "evidence": "production control surface ON; G3 fulfillment contracts",
+      "launchMeaning": "do not market before first demand and payment acceptance",
+      "gap": "zero payment events and zero active offers"
+    },
+    {
+      "id": "official_publish",
+      "name": "Official-channel publishing",
+      "status": "implementation_ready_activation_pending",
+      "evidence": "G3 worker production acceptance; source reserve/deliver/verify contracts",
+      "launchMeaning": "candidate distribution lever after moderation/channel checklist",
+      "gap": "state-changing production canary intentionally not run"
+    },
+    {
+      "id": "admin_web",
+      "name": "Owner/operator web admin",
+      "status": "production_accepted",
+      "evidence": "STEP590H desktop/mobile acceptance and production API 200 evidence",
+      "launchMeaning": "operations control plane ready",
+      "gap": "manual refresh/read-first model is intentional"
+    },
+    {
+      "id": "cron_qstash",
+      "name": "Cron, QStash delivery, retries and audit flush",
+      "status": "production_accepted",
+      "evidence": "G1-G3 signed canaries, cron 200 evidence and health",
+      "launchMeaning": "serverless operations foundation ready",
+      "gap": "continue monitoring function budget 11/12"
+    },
+    {
+      "id": "founder_sale",
+      "name": "Founder Sale",
+      "status": "off",
+      "evidence": "production Founder/admin snapshot",
+      "launchMeaning": "not part of current launch",
+      "gap": "requires explicit commercial policy and activation STEP"
+    },
+    {
+      "id": "payment_fallback",
+      "name": "Payment fallback apply",
+      "status": "off_safe_default",
+      "evidence": "production control surface",
+      "launchMeaning": "incident-only recovery switch",
+      "gap": "must remain off unless bounded incident procedure is approved"
+    },
+    {
+      "id": "instagram_oauth",
+      "name": "Instagram OAuth and verification routes",
+      "status": "parked_off",
+      "evidence": "config defaults and launch documentation",
+      "launchMeaning": "not a launch dependency",
+      "gap": "Vercel function budget and Meta readiness"
+    },
+    {
+      "id": "verification",
+      "name": "Creator/brand verification workflow",
+      "status": "feature_flagged_not_launch_evidenced",
+      "evidence": "moderation domain and disabled-safe config default",
+      "launchMeaning": "manual/operator process only until activation",
+      "gap": "no current production activation evidence"
+    }
+  ],
+  "priorityRisks": [
+    {
+      "priority": "P0",
+      "risk": "marketplace liquidity",
+      "evidence": "21 users, 0 active offers, 0 active leads",
+      "response": "seed a narrow creator cohort and publish real offers before adding features"
+    },
+    {
+      "priority": "P0",
+      "risk": "commercial proof",
+      "evidence": "0 payment signals",
+      "response": "run one bounded real Stars payment and verify ledger plus fulfillment"
+    },
+    {
+      "priority": "P0",
+      "risk": "funnel observability",
+      "evidence": "technical health is strong but activation/conversion metrics are not canonical",
+      "response": "define cohort funnel counters and weekly owner review"
+    },
+    {
+      "priority": "P1",
+      "risk": "distribution",
+      "evidence": "communications works, official publish not activated",
+      "response": "use explicit cohort broadcasts first, then bounded official channel activation"
+    },
+    {
+      "priority": "P1",
+      "risk": "Vercel function ceiling",
+      "evidence": "11 of 12 deployable entrypoints",
+      "response": "no new API route without consolidation or removal"
+    },
+    {
+      "priority": "P2",
+      "risk": "residual compatibility debt",
+      "evidence": "legacy façade and callbacks remain by design",
+      "response": "do not start broad STEP590J; retire only when a concrete product change touches the area"
+    }
+  ],
+  "roadmap": [
+    {
+      "step": "STEP592_FOUNDING_COHORT_AND_MARKETPLACE_LIQUIDITY",
+      "goal": "choose one launch wedge and create measurable supply",
+      "exit": "at least 10 launch-ready creators, at least 5 active offers, zero blocker defects"
+    },
+    {
+      "step": "STEP593_BRAND_DEMAND_AND_FIRST_DEAL_FUNNEL",
+      "goal": "bring a bounded brand cohort through discovery to accepted deal",
+      "exit": "at least 3 qualified brand requests and 1 accepted deal lifecycle"
+    },
+    {
+      "step": "STEP594_REAL_PAYMENT_AND_MONETIZATION_ACCEPTANCE",
+      "goal": "prove one real Stars purchase and exactly-once fulfillment",
+      "exit": "payment ledger, Telegram charge, fulfillment and admin evidence converge"
+    },
+    {
+      "step": "STEP595_GROWTH_DISTRIBUTION_AND_OFFICIAL_PUBLISH_ACTIVATION",
+      "goal": "activate explicit distribution loops without broad mass-send",
+      "exit": "bounded broadcast and one moderated official publication with receipts"
+    },
+    {
+      "step": "STEP596_RETENTION_METRICS_AND_OPERATIONS_CADENCE",
+      "goal": "establish weekly operating rhythm and retention evidence",
+      "exit": "canonical funnel dashboard, incident cadence and repeat usage cohort"
+    }
+  ],
+  "nextStep": "STEP592_FOUNDING_COHORT_AND_MARKETPLACE_LIQUIDITY"
+}

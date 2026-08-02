@@ -391,6 +391,8 @@ const SOURCE_NPM_CHECKS = [
   ["Preflight (source-only): STEP590 architecture enforcement", "check:architecture-gates"],
   ["Preflight (source-only): STEP590 architecture mutation tests", "test:architecture-gates"],
   ["Preflight (source-only): STEP590 architecture source contract", "smoke:architecture-gates-contract"],
+  ["Preflight (source-only): STEP591 product/operations rebaseline", "check:step591-rebaseline"],
+  ["Preflight (source-only): STEP591 rebaseline source contract", "smoke:step591-rebaseline-contract"],
   ["Preflight (source-only): navigation lint", "lint:nav"],
   ["Preflight (source-only): redact tests", "test:redact"],
   ["Preflight (source-only): public render contact leak gate", "lint:public-contacts"],

@@ -1,0 +1,92 @@
+{
+  "step": "STEP591_PRODUCT_AND_OPERATIONS_REBASELINE",
+  "packageVersion": "1.3.39",
+  "pass": true,
+  "checks": [
+    {
+      "name": "package version 1.3.39",
+      "ok": true,
+      "detail": "1.3.39"
+    },
+    {
+      "name": "package-lock root parity",
+      "ok": true,
+      "detail": "1.3.39/1.3.39"
+    },
+    {
+      "name": "baseline package parity",
+      "ok": true,
+      "detail": "1.3.39"
+    },
+    {
+      "name": "canonical parent commit recorded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "STEP590 close verdict recorded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "next step is liquidity",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "capability matrix is broad enough",
+      "ok": true,
+      "detail": "17"
+    },
+    {
+      "name": "risk register exists",
+      "ok": true,
+      "detail": "6"
+    },
+    {
+      "name": "roadmap has STEP592-596",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "required docs exist",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "current state advanced",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "boot advanced",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "handoff advanced",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "broad cleanup deferred",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "safe defaults remain documented in code",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "deployable API surface remains 11",
+      "ok": true,
+      "detail": "11"
+    },
+    {
+      "name": "no runtime paths listed in STEP591 changed scope",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

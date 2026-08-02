@@ -1,3 +1,24 @@
+# STEP591 CURRENT HANDOFF — Product and Operations Rebaseline
+
+- Canonical parent commit: `10042b52519ee043e812ea541e34c0c5ff39248e`.
+- Package: `1.3.39`.
+- STEP590 is closed with `PRODUCTION_ACCEPT_STEP590I_ARCHITECTURE_GATES_AND_CLOSE_STEP590`.
+- Health/admin production evidence is green; desktop/mobile admin accepted.
+- Product truth: 21 users, 0 active offers, 0 active leads, 0 payment signals.
+- Control truth: payments/auto-apply/matching/fan-out ON; fallback and Founder Sale OFF.
+- Architecture work is no longer the primary bottleneck.
+- Next step: `STEP592_FOUNDING_COHORT_AND_MARKETPLACE_LIQUIDITY`.
+- Do not start broad legacy retirement, IG OAuth, Founder Sale or new API routes without a separate approved STEP.
+
+Read first:
+
+1. `docs/product/STEP591_PRODUCT_OPERATIONS_BASELINE.json`;
+2. `docs/product/STEP591_PRODUCT_CAPABILITY_MATRIX.md`;
+3. `docs/operations/STEP591_LAUNCH_READINESS_BASELINE.md`;
+4. `docs/roadmap/STEP591_PRODUCT_OPERATIONS_ROADMAP.md`.
+
+---
+
 # Current New-Chat Handoff — STEP590I
 
 - Canonical baseline: production-accepted STEP590H commit `0defa47`, package `1.3.37`.

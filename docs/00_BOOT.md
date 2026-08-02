@@ -1,5 +1,7 @@
 # 00 — BOOT (якорь контекста)
 
+**Current canonical baseline: STEP591.** Parent commit `10042b52519ee043e812ea541e34c0c5ff39248e`, package `1.3.39`. STEP590 architecture cycle is production accepted and closed. Current product priority is founding-cohort liquidity, not further broad refactoring.
+
 1) Мы в **serverless** (Vercel) → никаких “долгих” процессов, всё пакетами.
 2) **Neon** экономим: не добавляй лишние DB-запросы в горячие UI-рендеры (меню/кнопки).
 3) Любая “тяжёлая” операция: **SQL-side**, а не вытягивание 10–50k строк в Node.
@@ -21,7 +23,6 @@
 18) `callback_data` ≤ 64 байта: держим ключи короткими; если нужен контекст — токен → payload в Redis (TTL).
 
 19) Watchlist регрессий: см. `docs/00_CURRENT_STATE.md` → раздел «Выводы последнего регресс-аудита + watchlist».
-20) Текущий source handoff baseline: **STEP590H** поверх production-accepted STEP590G3 commit `7331fcb4403618e4f99cd70b98b1cf955ab67982`. Package `1.3.37`; `/scripts/admin-web.js` остаётся единственным публичным entry asset, а Overview, Users, Payments, Communications, Founder и Runtime вынесены в bounded client modules. Browser/production acceptance H ещё требуется; STEP590I до неё не начинать.
 21) Для AI-assisted работы обязательны project-specific contracts: `docs/AI_NATIVE_WORKFLOW.md`, `docs/SYSTEM_INVARIANTS.md`, `docs/RISK_REGISTRY.md`.
 22) `docs/CREATOR_OS_THESIS.md` — product north star, но не разрешение на broad rewrite: каждая продуктовая волна требует отдельный scoped STEP.
 
@@ -30,4 +31,3 @@
 
 
 - IG OAuth parked in STEP383: `api/ig/oauth/*` removed from deploy surface to stay under Vercel Hobby function cap; Instagram remains a normal profile link/contact after unlock.
-21) Текущий source handoff baseline: **STEP590I** поверх production-accepted STEP590H commit `0defa47`. Package `1.3.38`; архитектурные границы STEP590F/G/H закреплены manifest-driven source gates. Runtime-семантика не менялась; оператору нужны clean install/audit, полный preflight, commit/push и Ready/health smoke.
