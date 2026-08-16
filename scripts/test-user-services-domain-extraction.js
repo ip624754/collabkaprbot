@@ -73,7 +73,7 @@ function makeDeps(overrides = {}) {
       restoreUser: call,
       tombstoneUser: call,
     },
-    getActiveWorkspaceId: async () => 7,
+    getActiveWorkspace: async () => 7,
     getRoleFlags: async () => ({}),
     getUiMode: async () => 'creator',
     inviteKeyboardMarkup: () => ({}),

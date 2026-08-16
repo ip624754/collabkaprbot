@@ -15,7 +15,7 @@ const REQUIRED_DEPENDENCIES = Object.freeze([
   'UI_MODES',
   'calcWsProfileProgress',
   'db',
-  'getActiveWorkspaceId',
+  'getActiveWorkspace',
   'getRoleFlags',
   'getUiMode',
   'isBrandBasicComplete',
@@ -39,7 +39,7 @@ export async function handleUserVerificationCallback(ctx, p, u, deps = {}) {
     UI_MODES,
     calcWsProfileProgress,
     db,
-    getActiveWorkspaceId,
+    getActiveWorkspace,
     getRoleFlags,
     getUiMode,
     isBrandBasicComplete,
@@ -114,7 +114,7 @@ export async function handleUserVerificationCallback(ctx, p, u, deps = {}) {
         let ws = null;
         let wsId = 0;
 
-        try { wsId = Number(await getActiveWorkspaceId(ctx.from.id)) || 0; } catch { wsId = 0; }
+        try { wsId = Number(await getActiveWorkspace(ctx.from.id)) || 0; } catch { wsId = 0; }
 
         if (wsId) {
           try { ws = await db.getWorkspace(u.id, wsId); } catch { ws = null; }

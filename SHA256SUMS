@@ -1,0 +1,6 @@
+13f106afeb0f8f173bc089089ddaa143f732e5f7e16672f70fe99d550d6a3ed0  ./HOTFIX_GETACTIVEWORKSPACEID_NOT_DEFINED.md
+794eb6a42857539cdd15d178994c201eacc3a18834c61d46c9cc304da950f75a  ./MANIFEST.json
+0d792252e511a40e2fb81ef698791cf98a3da41b9b6e3288e47290350ccaadce  ./SHA256SUMS
+91990ee6800f43a6f660cb6b935f375c48937f987b168961908e61bf7a571cb9  ./scripts/test-user-services-domain-extraction.js
+df2d659de6a27c39510d20efd3f57debc8ce2fe46017ad952d6cb452230f0669  ./src/bot/bot.js
+845c65ff9d91f8896a38c6dd5343e2fef858ae886991401de36af92bf6a4dc72  ./src/bot/domains/userServices/verificationCallbacks.js
